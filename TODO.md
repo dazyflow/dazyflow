@@ -275,6 +275,19 @@ them visible so we don't re-litigate the design choices.
 - [x] **Engine fix: missing FromPort output = dormant edge** — was a
   latent footgun where downstream of a non-emitting port ran with
   empty input. Now correctly skipped.
+- [x] **HTTP/JSON gateway for browser/UI access.** Shipped:
+  `daemon.HTTPGateway` exposes `/api/v1/{modules,graphs,jobs}` over
+  REST with bearer-token auth (reuses the API-key chain), permissive
+  CORS (tightenable via `AllowedOrigins`), and `GET /jobs/{id}/events`
+  as Server-Sent Events for live node-status streaming. The SSE frame
+  set: `snapshot` (initial JobRecord), `progress` (engine events),
+  `terminal` (closes the stream). 25-second keep-alive pings prevent
+  proxy idle timeouts. Tested via 8 handler-level tests and one full
+  e2e (PUT graph → POST /run → SSE-stream-to-terminal → final
+  GET /jobs/{id}). `core.Node` gained an optional `Position{X,Y}`
+  field for UI layout that the engine ignores. Limitations: no
+  cookie/CSRF (bearer-only), no rate-limiting, no per-tenant origin
+  pinning (CORS is global).
 - [x] **Subgraph module — call-graph-as-step.** Shipped:
   `modules/flow/subgraph.go` is a declarative awaiting-style module
   (manifest flag `SubmitsChildGraph`). The worker hands the result to

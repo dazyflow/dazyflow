@@ -14,6 +14,18 @@ type Node struct {
 	Module string            `json:"module"`
 	Params map[string]any    `json:"params"`
 	Env    map[string]string `json:"env"`
+
+	// Position is layout metadata for the visual editor — ignored by
+	// the engine. Optional; nil-position nodes are auto-laid-out by
+	// the UI on first open.
+	Position *Position `json:"position,omitempty"`
+}
+
+// Position is a canvas X/Y coordinate. Pixels in the UI's coordinate
+// system; semantics are entirely up to the editor.
+type Position struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
 }
 
 type Edge struct {

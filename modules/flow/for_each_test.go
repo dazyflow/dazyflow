@@ -19,6 +19,15 @@ import (
 var (
 	stepsRegistered sync.Once
 	captureOnce     sync.Once
+
+	// captureMu + capturedParams are PROCESS-GLOBAL so the capture step
+	// registered once via captureOnce.Do can write into a buffer the
+	// current test owns. Without this, a second `go test -count=2` run
+	// would still hit the once-registered closure, which captured the
+	// FIRST run's `seen` slice — second-run invocations would silently
+	// vanish.
+	captureMu      sync.Mutex
+	capturedParams []map[string]any
 )
 
 func registerTestSteps(t *testing.T) {
@@ -283,10 +292,12 @@ func TestForEach_UnknownStepModuleFails(t *testing.T) {
 // you can't actually parameterize per-item HTTP calls / AI calls.
 func TestForEach_TemplatesItemFieldsIntoStepParams(t *testing.T) {
 	registerTestSteps(t)
-	// Capture the params seen by each invocation so we can assert that
-	// the substitution actually reached the step.
-	var mu sync.Mutex
-	seen := []map[string]any{}
+	// The capture step writes into the package-global capturedParams so
+	// it survives re-runs that re-execute the test body but not the
+	// one-shot module registration.
+	captureMu.Lock()
+	capturedParams = nil
+	captureMu.Unlock()
 	captureOnce.Do(func() {
 		engine.Register(engine.NativeNode{
 			Manifest: core.Manifest{
@@ -296,13 +307,13 @@ func TestForEach_TemplatesItemFieldsIntoStepParams(t *testing.T) {
 				Outputs: []core.Port{{Port: "out"}},
 			},
 			Execute: func(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-				mu.Lock()
+				captureMu.Lock()
 				cp := make(map[string]any, len(job.Params))
 				for k, v := range job.Params {
 					cp[k] = v
 				}
-				seen = append(seen, cp)
-				mu.Unlock()
+				capturedParams = append(capturedParams, cp)
+				captureMu.Unlock()
 				return core.Result{
 					JobID:  job.ID,
 					Status: core.StatusOK,
@@ -335,6 +346,9 @@ func TestForEach_TemplatesItemFieldsIntoStepParams(t *testing.T) {
 	if err != nil || res.Status != core.StatusOK {
 		t.Fatalf("execute: status=%q err=%v", res.Status, err)
 	}
+	captureMu.Lock()
+	seen := append([]map[string]any(nil), capturedParams...)
+	captureMu.Unlock()
 	if len(seen) != 2 {
 		t.Fatalf("captured %d invocations, want 2", len(seen))
 	}
