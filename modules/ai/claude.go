@@ -35,6 +35,10 @@ func init() {
 			Version:        "1.0",
 			Label:          "Claude (Anthropic Messages API)",
 			Color:          "#cc7755",
+			Category:       "ai",
+			Provider:       "anthropic",
+			Tags:           []string{"llm", "claude", "anthropic", "messages"},
+			Description:    "Call Anthropic's Messages API with a one-shot prompt. Returns the assistant's text on one port and the full response (usage tokens, stop reason) on another. The graph is the agent loop — for tool use, compose with mcp:* and branch nodes.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{{

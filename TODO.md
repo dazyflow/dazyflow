@@ -9,12 +9,14 @@ further down are quality, observability, and known-unknowns.
 These showed up while building the AP-invoice demo. Without them the
 platform can demonstrate but not actually power a real workflow.
 
-- [ ] **Webhook body → graph input.** Today's webhook fires the graph but
-  discards the body. Real webhooks carry the data the graph needs to act
-  on (invoice ID, GitHub PR number, Stripe event payload). Two ways to
-  fix: a `webhook_input` module the engine pre-completes with the body,
-  or a graph-level `initial_input` that the trigger can populate. The
-  second is more flexible (works for cron too — passing the fire time).
+- [x] **Webhook body → graph input.** Shipped: `webhook_input` marker
+  module in `modules/trigger/webhook_input.go` (outputs: body, headers).
+  `daemon.SubmitGraphWithSeed` accepts a `map[nodeID]Result` and writes
+  pre-completed node-records before normal dispatch takes over. Webhook
+  handler reads the body (1 MiB cap), parses by `Content-Type`
+  (`application/json` → object, `text/*` → string, else bytes), and
+  seeds every `webhook_input` node in the graph. Cron triggers could
+  reuse the same seeding path later.
 - [ ] **Template-style secret substitution.** Resolver is whole-string:
   `Authorization: env://KEY` resolves the *entire* header value. So an
   env var must already contain `Bearer <token>`, not just the token.

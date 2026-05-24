@@ -9,8 +9,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
-	"errors"
 	"fmt"
 
 	"git.sr.ht/~klahr/hazy-flow/auth"
@@ -144,90 +142,12 @@ func (s *Service) PromoteGraph(ctx context.Context, p core.Principal, tenant, ws
 // node-record for every root node, and returns the graph-run ID. Workers
 // pick up the root nodes, run them, and as each completes the worker
 // enqueues whatever downstream node has become ready.
+//
+// This is the manual-submission path (hzctl graph run). For trigger-fed
+// runs that need to deliver event data into the graph, see
+// SubmitGraphWithSeed.
 func (s *Service) SubmitGraph(ctx context.Context, p core.Principal, g core.Graph) (string, error) {
-	if err := core.AuthorizeGraphRun(p, g); err != nil {
-		return "", err
-	}
-	if err := core.Validate(g); err != nil {
-		return "", fmt.Errorf("invalid graph: %w", err)
-	}
-
-	graphRunID, err := newID()
-	if err != nil {
-		return "", fmt.Errorf("generate run id: %w", err)
-	}
-	payload, err := json.Marshal(g)
-	if err != nil {
-		return "", fmt.Errorf("marshal graph: %w", err)
-	}
-
-	// Graph-record: never claimed by a worker. Lives as a status container
-	// that whichever worker finalizes the run updates.
-	graphRec := core.JobRecord{
-		ID:           graphRunID,
-		Kind:         core.JobKindGraph,
-		GraphID:      g.ID,
-		NodeID:       "*",
-		Tenant:       g.Tenant,
-		Workspace:    g.Workspace,
-		Status:       core.JobStatusRunning,
-		GraphPayload: payload,
-		Job:          core.Job{ID: graphRunID, GraphID: g.ID},
-	}
-	if err := s.Jobs.Enqueue(ctx, graphRec); err != nil {
-		return "", fmt.Errorf("enqueue graph: %w", err)
-	}
-
-	// A graph with no nodes is trivially done — short-circuit so we don't
-	// leave the graph-record stuck in running.
-	if len(g.Nodes) == 0 {
-		_ = s.Jobs.Complete(ctx, graphRunID, core.JobStatusSucceeded, &core.Result{Status: core.StatusOK})
-		s.bus().Publish(graphRunID, BusEvent{Terminal: &TerminalEvent{
-			JobID: graphRunID, Status: core.JobStatusSucceeded,
-		}})
-		return graphRunID, nil
-	}
-
-	// Enqueue every root node (nodes with no incoming edges) as a node-record.
-	hasIncoming := make(map[string]bool, len(g.Nodes))
-	for _, e := range g.Edges {
-		hasIncoming[e.To] = true
-	}
-	var enqueueErrs []error
-	for _, node := range g.Nodes {
-		if hasIncoming[node.ID] {
-			continue
-		}
-		nodeRec := core.JobRecord{
-			ID:         NodeJobID(graphRunID, node.ID),
-			Kind:       core.JobKindNode,
-			GraphRunID: graphRunID,
-			GraphID:    g.ID,
-			NodeID:     node.ID,
-			Tenant:     g.Tenant,
-			Workspace:  g.Workspace,
-			Job:        core.Job{GraphID: g.ID, NodeID: node.ID},
-		}
-		if err := s.Jobs.Enqueue(ctx, nodeRec); err != nil {
-			enqueueErrs = append(enqueueErrs, fmt.Errorf("root %q: %w", node.ID, err))
-		}
-	}
-	if len(enqueueErrs) > 0 {
-		// Roll the graph back to a failed state so callers see something
-		// terminal rather than a record forever-running.
-		merged := errors.Join(enqueueErrs...)
-		_ = s.Jobs.Complete(ctx, graphRunID, core.JobStatusFailed, &core.Result{
-			Status: core.StatusError,
-			Error:  &core.JobError{Code: "enqueue_failed", Message: merged.Error()},
-		})
-		s.bus().Publish(graphRunID, BusEvent{Terminal: &TerminalEvent{
-			JobID:  graphRunID,
-			Status: core.JobStatusFailed,
-			Error:  &core.JobError{Code: "enqueue_failed", Message: merged.Error()},
-		}})
-		return graphRunID, fmt.Errorf("enqueue roots: %w", merged)
-	}
-	return graphRunID, nil
+	return s.SubmitGraphWithSeed(ctx, p, g, nil)
 }
 
 // NodeJobID is the stable ID a worker can derive for any node in a graph
@@ -381,6 +301,18 @@ func (s *Service) ListModules(ctx context.Context, p core.Principal) (map[string
 		return mp.Manifests(), nil
 	}
 	return map[string]core.Manifest{}, nil
+}
+
+// SearchModules applies the supplied filters and free-text query to the
+// resolver's manifest set, returning matches in relevance order (or
+// alphabetical when query is empty). Same tenant-visibility caveat as
+// ListModules.
+func (s *Service) SearchModules(ctx context.Context, p core.Principal, q ModuleSearch) ([]core.Manifest, error) {
+	manifests, err := s.ListModules(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+	return searchManifests(manifests, q), nil
 }
 
 func newID() (string, error) {

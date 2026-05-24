@@ -14,6 +14,8 @@ import (
 	"git.sr.ht/~klahr/hazy-flow/core"
 )
 
+const webhookInputModuleID = "webhook_input"
+
 // WebhookListener exposes an HTTP endpoint per graph that has a webhook
 // trigger. Layout:
 //
@@ -120,12 +122,34 @@ func (w *WebhookListener) handleTrigger(rw http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Body is read with a cap so an attacker can't fill our memory by
-	// posting 100 GB. The body is currently ignored — surfacing it as
-	// a graph input requires a dedicated webhook_input module (TODO).
+	// Read the body with a cap so an attacker can't OOM us by posting
+	// 100 GB. We *do* read it now (the previous implementation
+	// discarded it) so we can feed it to webhook_input nodes.
+	var rawBody []byte
 	if r.Body != nil {
-		_, _ = io.Copy(io.Discard, io.LimitReader(r.Body, w.MaxBodyBytes))
+		limited := io.LimitReader(r.Body, w.MaxBodyBytes+1)
+		data, err := io.ReadAll(limited)
 		_ = r.Body.Close()
+		if err != nil {
+			http.Error(rw, "read body", http.StatusBadRequest)
+			return
+		}
+		if int64(len(data)) > w.MaxBodyBytes {
+			http.Error(rw, fmt.Sprintf("body exceeds %d bytes", w.MaxBodyBytes), http.StatusRequestEntityTooLarge)
+			return
+		}
+		rawBody = data
+	}
+
+	// Build the seed result and apply it to every webhook_input node
+	// the graph declares. Multiple webhook_input nodes is unusual but
+	// not forbidden — they all receive the same payload.
+	seed := buildWebhookSeed(rawBody, r)
+	seeds := map[string]core.Result{}
+	for _, n := range g.Nodes {
+		if n.Module == webhookInputModuleID {
+			seeds[n.ID] = seed
+		}
 	}
 
 	// Fire the graph as a system principal scoped to the graph's tenant.
@@ -138,16 +162,75 @@ func (w *WebhookListener) handleTrigger(rw http.ResponseWriter, r *http.Request)
 			Permissions: []core.Permission{core.PermGraphRun},
 		}},
 	}
-	runID, err := w.svc.SubmitGraph(r.Context(), principal, g)
+	runID, err := w.svc.SubmitGraphWithSeed(r.Context(), principal, g, seeds)
 	if err != nil {
 		w.logger.Printf("submit %s/%s/%s: %v", tenant, workspace, graphID, err)
 		http.Error(rw, fmt.Sprintf("submit: %v", err), http.StatusInternalServerError)
 		return
 	}
-	w.logger.Printf("fired %s/%s/%s → %s", tenant, workspace, graphID, runID)
+	w.logger.Printf("fired %s/%s/%s → %s (%d webhook_input seed(s))",
+		tenant, workspace, graphID, runID, len(seeds))
 	rw.Header().Set("Content-Type", "application/json")
 	rw.WriteHeader(http.StatusAccepted)
 	_ = json.NewEncoder(rw).Encode(map[string]string{"job_id": runID})
+}
+
+// buildWebhookSeed constructs the Result that the webhook handler
+// pre-completes webhook_input nodes with. The result has two output
+// ports — body and headers — matching the webhook_input manifest.
+//
+// Body parsing follows Content-Type:
+//   - application/json    → map[string]any (parsed object) or whatever JSON.Unmarshal produces
+//   - text/* or no body   → string
+//   - everything else     → []byte
+//
+// Headers are flattened to a string map (first value per name) so
+// downstream nodes can read them with branch's field-path access.
+func buildWebhookSeed(rawBody []byte, r *http.Request) core.Result {
+	contentType := r.Header.Get("Content-Type")
+	mediaType := contentType
+	if i := strings.IndexByte(mediaType, ';'); i >= 0 {
+		mediaType = mediaType[:i]
+	}
+	mediaType = strings.TrimSpace(mediaType)
+
+	var bodyValue any
+	switch {
+	case len(rawBody) == 0:
+		bodyValue = ""
+	case mediaType == "application/json":
+		var parsed any
+		if err := json.Unmarshal(rawBody, &parsed); err == nil {
+			bodyValue = parsed
+		} else {
+			// Fall back to string when JSON is malformed — better to
+			// let the graph see the raw text than fail the trigger.
+			bodyValue = string(rawBody)
+		}
+	case strings.HasPrefix(mediaType, "text/"):
+		bodyValue = string(rawBody)
+	default:
+		bodyValue = rawBody
+	}
+
+	headers := make(map[string]any, len(r.Header))
+	for k, vs := range r.Header {
+		if len(vs) > 0 {
+			headers[k] = vs[0]
+		}
+	}
+
+	bodyMIME := contentType
+	if bodyMIME == "" {
+		bodyMIME = "text/plain"
+	}
+	return core.Result{
+		Status: core.StatusOK,
+		Output: map[string]core.Ref{
+			"body":    {MIME: bodyMIME, Inline: bodyValue},
+			"headers": {MIME: "application/json", Inline: headers},
+		},
+	}
 }
 
 func webhookSecret(g core.Graph) string {

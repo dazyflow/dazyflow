@@ -147,11 +147,19 @@ func contentSummary(content []ContentItem) string {
 // "mcp:<server>:<tool>" convention so graph authors see clearly where
 // the node lives.
 func synthesizeManifest(server string, tool Tool) core.Manifest {
+	desc := tool.Description
+	if desc == "" {
+		desc = "Tool " + tool.Name + " from MCP server " + server + "."
+	}
 	return core.Manifest{
 		ID:             "mcp:" + server + ":" + tool.Name,
 		Version:        "1.0",
 		Label:          server + " — " + tool.Name,
 		Color:          "#7a5",
+		Category:       "external",
+		Provider:       "mcp:" + server,
+		Tags:           []string{"mcp", server},
+		Description:    desc,
 		ExecutionModel: core.ExecutionBatch,
 		ProcessModel:   core.ProcessLongLived,
 		Inputs: []core.Port{{

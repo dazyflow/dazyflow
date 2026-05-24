@@ -16,6 +16,10 @@ func init() {
 			Version:        "1.0",
 			Label:          "Merge",
 			Color:          "#5a9bd4",
+			Category:       "flow_control",
+			Provider:       "internal",
+			Tags:           []string{"fan_in", "aggregate", "join"},
+			Description:    "Wait for N upstream inputs to arrive and emit them as a single list on the out port. Useful as a synchronization point in parallel branches.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{{

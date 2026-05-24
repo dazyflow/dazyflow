@@ -48,6 +48,39 @@ type Manifest struct {
 	Idempotent     bool            `json:"idempotent"`
 	RetryPolicy    RetryPolicy     `json:"retry_policy"`
 	CompatibleWith []string        `json:"compatible_with"`
+
+	// --- Discovery metadata (introduced for search + categorization) ---
+
+	// Category is a single-bucket classification. Recommended values:
+	//   "trigger"        — starts a graph (cron, webhook)
+	//   "flow_control"   — branch, merge, split, sleep
+	//   "transformation" — pure data manipulation
+	//   "io"             — filesystem operations
+	//   "network"        — HTTP and other network protocols
+	//   "ai"             — LLM calls (claude, openai, ...)
+	//   "external"       — MCP tools and remote gRPC modules
+	//   "system"         — internal / admin
+	// Empty is allowed but discouraged — the search API can't bucket
+	// a module without a category.
+	Category string `json:"category,omitempty"`
+
+	// Provider names the org/vendor behind the module. Examples:
+	//   "internal"          — built-in
+	//   "anthropic"         — Anthropic's LLMs
+	//   "mcp:<server-name>" — MCP-hosted, attributed to the server
+	//   "remote:<host>"     — customer-registered remote module
+	// This is metadata only — the daemon doesn't verify the claim.
+	// Real provider trust requires module signing (out of scope).
+	Provider string `json:"provider,omitempty"`
+
+	// Tags are free-form keywords for finer-grained discovery. Search
+	// filters match any tag (OR semantics within the tags slice).
+	Tags []string `json:"tags,omitempty"`
+
+	// Description is a longer human-readable description than Label.
+	// Used for tooltips and as a search target. Label is for chips/
+	// titles (short); Description can be 1–2 sentences.
+	Description string `json:"description,omitempty"`
 }
 
 func (m Manifest) Input(name string) (Port, bool) {

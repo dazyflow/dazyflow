@@ -88,6 +88,11 @@ message Manifest {
     repeated Port outputs  = 8;
     bool   idempotent      = 9;
     string retry_policy    = 10;
+    // Discovery metadata
+    string category        = 11;
+    string provider        = 12;
+    repeated string tags   = 13;
+    string description     = 14;
 }
 
 message JobRecord {
@@ -179,5 +184,14 @@ service ModuleService {
     rpc ListModules (ListModulesRequest) returns (ListModulesResponse);
 }
 
-message ListModulesRequest  {}
+message ListModulesRequest {
+    // query substring-matches against id, label, and description.
+    // Empty = no full-text filter.
+    string query = 1;
+    // Each filter is OR-within (any value matches) and AND-across-fields
+    // (categories AND providers AND tags must all pass).
+    repeated string categories = 2;
+    repeated string providers  = 3;
+    repeated string tags       = 4;
+}
 message ListModulesResponse { repeated Manifest modules = 1; }

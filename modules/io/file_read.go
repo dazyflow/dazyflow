@@ -19,6 +19,10 @@ func init() {
 			Version:        "1.0",
 			Label:          "File read",
 			Color:          "#4a8",
+			Category:       "io",
+			Provider:       "internal",
+			Tags:           []string{"filesystem", "read", "sandbox"},
+			Description:    "Read a file from the workspace sandbox. Path is workspace-relative. Set inline:true to embed file contents in the Ref for remote-module consumption.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{{

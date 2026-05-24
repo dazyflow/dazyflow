@@ -20,6 +20,10 @@ func init() {
 			Version:        "1.0",
 			Label:          "File write",
 			Color:          "#4a8",
+			Category:       "io",
+			Provider:       "internal",
+			Tags:           []string{"filesystem", "write", "sandbox"},
+			Description:    "Write a file to the workspace sandbox. Accepts inline data or a workspace-relative source Ref. Respects per-tenant disk quotas.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{{

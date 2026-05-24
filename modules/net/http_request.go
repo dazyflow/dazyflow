@@ -26,6 +26,10 @@ func init() {
 			Version:        "1.0",
 			Label:          "HTTP request",
 			Color:          "#5599ee",
+			Category:       "network",
+			Provider:       "internal",
+			Tags:           []string{"http", "rest", "api", "webhook"},
+			Description:    "Make an HTTP request (GET/POST/PUT/PATCH/DELETE) to any URL. Defaults block private-network addresses to prevent SSRF; the allow_private_networks param opts in for development. Returns the response body and status/header metadata on separate ports.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{{

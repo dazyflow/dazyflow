@@ -221,14 +221,34 @@ func (h *grpcHandlers) ListJobsForGraph(ctx context.Context, req *controlpb.List
 	return &controlpb.ListJobsResponse{Jobs: out}, nil
 }
 
-func (h *grpcHandlers) ListModules(ctx context.Context, _ *controlpb.ListModulesRequest) (*controlpb.ListModulesResponse, error) {
+func (h *grpcHandlers) ListModules(ctx context.Context, req *controlpb.ListModulesRequest) (*controlpb.ListModulesResponse, error) {
 	p, _ := PrincipalFromContext(ctx)
-	mans, err := h.svc.ListModules(ctx, p)
-	if err != nil {
-		return nil, toStatus(err)
+	// When any search field is set, route through the search path.
+	// Otherwise return everything in alphabetical-by-ID order so
+	// pre-filter clients keep getting sensible output.
+	hasFilter := req != nil && (req.Query != "" ||
+		len(req.Categories) > 0 || len(req.Providers) > 0 || len(req.Tags) > 0)
+	var results []core.Manifest
+	if hasFilter {
+		r, err := h.svc.SearchModules(ctx, p, ModuleSearch{
+			Query:      req.Query,
+			Categories: req.Categories,
+			Providers:  req.Providers,
+			Tags:       req.Tags,
+		})
+		if err != nil {
+			return nil, toStatus(err)
+		}
+		results = r
+	} else {
+		all, err := h.svc.ListModules(ctx, p)
+		if err != nil {
+			return nil, toStatus(err)
+		}
+		results = searchManifests(all, ModuleSearch{})
 	}
-	out := make([]*controlpb.Manifest, 0, len(mans))
-	for _, m := range mans {
+	out := make([]*controlpb.Manifest, 0, len(results))
+	for _, m := range results {
 		out = append(out, manifestToPB(m))
 	}
 	return &controlpb.ListModulesResponse{Modules: out}, nil
@@ -359,6 +379,10 @@ func manifestToPB(m core.Manifest) *controlpb.Manifest {
 		ProcessModel:   string(m.ProcessModel),
 		Idempotent:     m.Idempotent,
 		RetryPolicy:    string(m.RetryPolicy),
+		Category:       m.Category,
+		Provider:       m.Provider,
+		Tags:           append([]string(nil), m.Tags...),
+		Description:    m.Description,
 	}
 	for _, p := range m.Inputs {
 		out.Inputs = append(out.Inputs, portToPB(p))

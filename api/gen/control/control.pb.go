@@ -669,8 +669,13 @@ type Manifest struct {
 	Outputs        []*Port                `protobuf:"bytes,8,rep,name=outputs,proto3" json:"outputs,omitempty"`
 	Idempotent     bool                   `protobuf:"varint,9,opt,name=idempotent,proto3" json:"idempotent,omitempty"`
 	RetryPolicy    string                 `protobuf:"bytes,10,opt,name=retry_policy,json=retryPolicy,proto3" json:"retry_policy,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Discovery metadata
+	Category      string   `protobuf:"bytes,11,opt,name=category,proto3" json:"category,omitempty"`
+	Provider      string   `protobuf:"bytes,12,opt,name=provider,proto3" json:"provider,omitempty"`
+	Tags          []string `protobuf:"bytes,13,rep,name=tags,proto3" json:"tags,omitempty"`
+	Description   string   `protobuf:"bytes,14,opt,name=description,proto3" json:"description,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Manifest) Reset() {
@@ -769,6 +774,34 @@ func (x *Manifest) GetIdempotent() bool {
 func (x *Manifest) GetRetryPolicy() string {
 	if x != nil {
 		return x.RetryPolicy
+	}
+	return ""
+}
+
+func (x *Manifest) GetCategory() string {
+	if x != nil {
+		return x.Category
+	}
+	return ""
+}
+
+func (x *Manifest) GetProvider() string {
+	if x != nil {
+		return x.Provider
+	}
+	return ""
+}
+
+func (x *Manifest) GetTags() []string {
+	if x != nil {
+		return x.Tags
+	}
+	return nil
+}
+
+func (x *Manifest) GetDescription() string {
+	if x != nil {
+		return x.Description
 	}
 	return ""
 }
@@ -1657,7 +1690,15 @@ func (x *ListJobsResponse) GetJobs() []*JobRecord {
 }
 
 type ListModulesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// query substring-matches against id, label, and description.
+	// Empty = no full-text filter.
+	Query string `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
+	// Each filter is OR-within (any value matches) and AND-across-fields
+	// (categories AND providers AND tags must all pass).
+	Categories    []string `protobuf:"bytes,2,rep,name=categories,proto3" json:"categories,omitempty"`
+	Providers     []string `protobuf:"bytes,3,rep,name=providers,proto3" json:"providers,omitempty"`
+	Tags          []string `protobuf:"bytes,4,rep,name=tags,proto3" json:"tags,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1690,6 +1731,34 @@ func (x *ListModulesRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ListModulesRequest.ProtoReflect.Descriptor instead.
 func (*ListModulesRequest) Descriptor() ([]byte, []int) {
 	return file_control_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *ListModulesRequest) GetQuery() string {
+	if x != nil {
+		return x.Query
+	}
+	return ""
+}
+
+func (x *ListModulesRequest) GetCategories() []string {
+	if x != nil {
+		return x.Categories
+	}
+	return nil
+}
+
+func (x *ListModulesRequest) GetProviders() []string {
+	if x != nil {
+		return x.Providers
+	}
+	return nil
+}
+
+func (x *ListModulesRequest) GetTags() []string {
+	if x != nil {
+		return x.Tags
+	}
+	return nil
 }
 
 type ListModulesResponse struct {
@@ -1792,7 +1861,7 @@ const file_control_proto_rawDesc = "" +
 	"\brequired\x18\x04 \x01(\bR\brequired\x12\x1a\n" +
 	"\bvariadic\x18\x05 \x01(\bR\bvariadic\x12\x10\n" +
 	"\x03min\x18\x06 \x01(\x05R\x03min\x12\x10\n" +
-	"\x03max\x18\a \x01(\x05R\x03max\"\xd9\x02\n" +
+	"\x03max\x18\a \x01(\x05R\x03max\"\xc7\x03\n" +
 	"\bManifest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12\x14\n" +
@@ -1806,7 +1875,11 @@ const file_control_proto_rawDesc = "" +
 	"idempotent\x18\t \x01(\bR\n" +
 	"idempotent\x12!\n" +
 	"\fretry_policy\x18\n" +
-	" \x01(\tR\vretryPolicy\"\xea\x02\n" +
+	" \x01(\tR\vretryPolicy\x12\x1a\n" +
+	"\bcategory\x18\v \x01(\tR\bcategory\x12\x1a\n" +
+	"\bprovider\x18\f \x01(\tR\bprovider\x12\x12\n" +
+	"\x04tags\x18\r \x03(\tR\x04tags\x12 \n" +
+	"\vdescription\x18\x0e \x01(\tR\vdescription\"\xea\x02\n" +
 	"\tJobRecord\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x19\n" +
 	"\bgraph_id\x18\x02 \x01(\tR\agraphId\x12\x17\n" +
@@ -1865,8 +1938,14 @@ const file_control_proto_rawDesc = "" +
 	"\x17ListJobsForGraphRequest\x12\x19\n" +
 	"\bgraph_id\x18\x01 \x01(\tR\agraphId\"F\n" +
 	"\x10ListJobsResponse\x122\n" +
-	"\x04jobs\x18\x01 \x03(\v2\x1e.hazyflow.control.v1.JobRecordR\x04jobs\"\x14\n" +
-	"\x12ListModulesRequest\"N\n" +
+	"\x04jobs\x18\x01 \x03(\v2\x1e.hazyflow.control.v1.JobRecordR\x04jobs\"|\n" +
+	"\x12ListModulesRequest\x12\x14\n" +
+	"\x05query\x18\x01 \x01(\tR\x05query\x12\x1e\n" +
+	"\n" +
+	"categories\x18\x02 \x03(\tR\n" +
+	"categories\x12\x1c\n" +
+	"\tproviders\x18\x03 \x03(\tR\tproviders\x12\x12\n" +
+	"\x04tags\x18\x04 \x03(\tR\x04tags\"N\n" +
 	"\x13ListModulesResponse\x127\n" +
 	"\amodules\x18\x01 \x03(\v2\x1d.hazyflow.control.v1.ManifestR\amodules2\xe2\x03\n" +
 	"\fGraphService\x12Z\n" +

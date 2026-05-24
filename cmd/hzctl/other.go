@@ -11,9 +11,29 @@ import (
 
 func moduleCmd() *cobra.Command {
 	m := &cobra.Command{Use: "module", Short: "Module management"}
-	m.AddCommand(&cobra.Command{
+	m.AddCommand(moduleListCmd())
+	m.AddCommand(moduleShowCmd())
+	m.AddCommand(notImplemented("push", "register a module descriptor with the daemon"))
+	m.AddCommand(notImplemented("pull", "fetch a module descriptor from the registry"))
+	return m
+}
+
+func moduleListCmd() *cobra.Command {
+	var (
+		query      string
+		categories []string
+		providers  []string
+		tags       []string
+		verbose    bool
+	)
+	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List modules known to the daemon.",
+		Short: "List or search modules known to the daemon.",
+		Long: `List modules. Filters compose with AND across fields and OR within values, e.g.
+
+    hzctl module list --category=ai --provider=anthropic
+    hzctl module list --query "http"
+    hzctl module list --tag llm --tag mcp`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			conn, err := daemonConn(serverFlag)
 			if err != nil {
@@ -24,20 +44,127 @@ func moduleCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := controlpb.NewModuleServiceClient(conn).ListModules(ctx, &controlpb.ListModulesRequest{})
+			resp, err := controlpb.NewModuleServiceClient(conn).ListModules(ctx, &controlpb.ListModulesRequest{
+				Query:      query,
+				Categories: categories,
+				Providers:  providers,
+				Tags:       tags,
+			})
+			if err != nil {
+				return err
+			}
+			if len(resp.Modules) == 0 {
+				fmt.Println("no modules match the filter")
+				return nil
+			}
+			if verbose {
+				for _, m := range resp.Modules {
+					printModuleVerbose(m)
+				}
+				return nil
+			}
+			fmt.Printf("%-32s  %-14s  %-20s  %s\n", "ID", "CATEGORY", "PROVIDER", "LABEL")
+			for _, m := range resp.Modules {
+				fmt.Printf("%-32s  %-14s  %-20s  %s\n",
+					truncate(m.Id, 32),
+					truncate(m.Category, 14),
+					truncate(m.Provider, 20),
+					m.Label)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&query, "query", "", "substring match against id, label, description")
+	cmd.Flags().StringSliceVar(&categories, "category", nil, "filter by category (repeatable)")
+	cmd.Flags().StringSliceVar(&providers, "provider", nil, "filter by provider (repeatable)")
+	cmd.Flags().StringSliceVar(&tags, "tag", nil, "filter by tag (repeatable, OR semantics)")
+	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "show full per-module detail including tags and description")
+	return cmd
+}
+
+func moduleShowCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "show MODULE_ID",
+		Short: "Print detailed info for one module.",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			conn, err := daemonConn(serverFlag)
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+			ctx, err := authCtx(cmd.Context())
+			if err != nil {
+				return err
+			}
+			resp, err := controlpb.NewModuleServiceClient(conn).ListModules(ctx, &controlpb.ListModulesRequest{
+				Query: args[0],
+			})
 			if err != nil {
 				return err
 			}
 			for _, m := range resp.Modules {
-				fmt.Printf("%-20s  %-8s %s\n", m.Id, m.Version, m.Label)
+				if m.Id == args[0] {
+					printModuleVerbose(m)
+					return nil
+				}
 			}
-			return nil
+			return fmt.Errorf("module %q not found", args[0])
 		},
-	})
-	m.AddCommand(notImplemented("push", "register a module descriptor with the daemon"))
-	m.AddCommand(notImplemented("pull", "fetch a module descriptor from the registry"))
-	m.AddCommand(notImplemented("search", "search the registry for modules"))
-	return m
+	}
+}
+
+func printModuleVerbose(m *controlpb.Manifest) {
+	fmt.Printf("%s  (%s)\n", m.Id, m.Version)
+	fmt.Printf("  label:       %s\n", m.Label)
+	if m.Description != "" {
+		fmt.Printf("  description: %s\n", m.Description)
+	}
+	if m.Category != "" {
+		fmt.Printf("  category:    %s\n", m.Category)
+	}
+	if m.Provider != "" {
+		fmt.Printf("  provider:    %s\n", m.Provider)
+	}
+	if len(m.Tags) > 0 {
+		fmt.Printf("  tags:        %v\n", m.Tags)
+	}
+	if m.Idempotent {
+		fmt.Printf("  idempotent:  true\n")
+	}
+	if m.RetryPolicy != "" {
+		fmt.Printf("  retry:       %s\n", m.RetryPolicy)
+	}
+	if len(m.Inputs) > 0 {
+		fmt.Printf("  inputs:\n")
+		for _, p := range m.Inputs {
+			fmt.Printf("    - %s%s\n", p.Id, requiredMark(p.Required))
+		}
+	}
+	if len(m.Outputs) > 0 {
+		fmt.Printf("  outputs:\n")
+		for _, p := range m.Outputs {
+			fmt.Printf("    - %s\n", p.Id)
+		}
+	}
+	fmt.Println()
+}
+
+func requiredMark(req bool) string {
+	if req {
+		return " (required)"
+	}
+	return ""
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	if n <= 1 {
+		return s[:n]
+	}
+	return s[:n-1] + "…"
 }
 
 func jobCmd() *cobra.Command {
