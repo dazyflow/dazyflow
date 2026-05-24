@@ -31,6 +31,20 @@ type GraphResult struct {
 
 type Engine struct {
 	Resolver Resolver
+	// Sandbox is optional. When set, every Job built by the engine has
+	// its WorkspaceRoot populated from Sandbox.Root before Execute is
+	// called. Filesystem-touching modules refuse to run without a root.
+	Sandbox core.SandboxProvider
+	// Quota is optional. When set, the engine snapshots the tenant's
+	// byte budget onto each Job so modules can refuse writes that would
+	// exceed it.
+	Quota core.QuotaProvider
+	// Secrets is a registry of secret providers keyed by URI scheme.
+	// When set, the engine walks Job.Params/Env before each Execute and
+	// replaces any "scheme://path" string with the provider's value.
+	// Unresolved values stay in the JobStore so audit trails never
+	// capture cleartext secrets.
+	Secrets map[string]core.SecretProvider
 }
 
 // Run validates the graph, computes parallel execution layers, and executes
@@ -188,6 +202,20 @@ func (e *Engine) RunNode(
 		Env:     node.Env,
 		Cleanup: core.CleanupOnGraphComplete,
 	}
+	if err := e.populateSandbox(&job, graph); err != nil {
+		recordSpanError(span, err)
+		return core.Result{
+			Status: core.StatusError,
+			Error:  &core.JobError{Code: "sandbox", Message: err.Error()},
+		}, err
+	}
+	if err := resolveSecrets(ctx, e.Secrets, &job); err != nil {
+		recordSpanError(span, err)
+		return core.Result{
+			Status: core.StatusError,
+			Error:  &core.JobError{Code: "secret", Message: err.Error()},
+		}, err
+	}
 	jobIDsFromSpan(ctx, &job)
 
 	result, execErr := transport.Execute(ctx, job, progress)
@@ -240,6 +268,18 @@ func (e *Engine) runNode(
 		Env:     node.Env,
 		Cleanup: core.CleanupOnGraphComplete,
 	}
+	if err := e.populateSandbox(&job, graph); err != nil {
+		return core.Result{
+			Status: core.StatusError,
+			Error:  &core.JobError{Code: "sandbox", Message: err.Error()},
+		}, err
+	}
+	if err := resolveSecrets(ctx, e.Secrets, &job); err != nil {
+		return core.Result{
+			Status: core.StatusError,
+			Error:  &core.JobError{Code: "secret", Message: err.Error()},
+		}, err
+	}
 	jobIDsFromSpan(ctx, &job)
 
 	nodeProgress := make(chan core.Progress)
@@ -271,6 +311,12 @@ func assembleInput(graph core.Graph, nodeID string, manifest core.Manifest, prio
 
 	for _, edge := range graph.Edges {
 		if edge.To != nodeID {
+			continue
+		}
+		// Fallback edges never feed data into the downstream node — they
+		// exist purely to trigger activation when the source fails. Any
+		// data flow to this destination must come via separate edges.
+		if edge.OnError == core.OnErrorFallback {
 			continue
 		}
 		src, ok := prior[edge.From]
@@ -317,6 +363,34 @@ func forwardProgress(
 			return
 		}
 	}
+}
+
+// populateSandbox sets Job.WorkspaceRoot and snapshots quota state from
+// the configured providers. Failures here short-circuit before
+// transport.Execute so a misconfigured sandbox never lets a module run
+// unsandboxed, and a quota-lookup error fails the job rather than
+// silently allowing unmetered writes.
+func (e *Engine) populateSandbox(job *core.Job, graph core.Graph) error {
+	job.Tenant = graph.Tenant
+	if e.Sandbox != nil {
+		root, err := e.Sandbox.Root(graph.Tenant, graph.Workspace)
+		if err != nil {
+			return fmt.Errorf("sandbox for %s/%s: %w", graph.Tenant, graph.Workspace, err)
+		}
+		job.WorkspaceRoot = root
+	}
+	if e.Quota != nil {
+		limit := e.Quota.Limit(graph.Tenant)
+		job.QuotaLimit = limit
+		if limit > 0 {
+			used, err := e.Quota.Used(graph.Tenant)
+			if err != nil {
+				return fmt.Errorf("quota lookup for %s: %w", graph.Tenant, err)
+			}
+			job.QuotaUsed = used
+		}
+	}
+	return nil
 }
 
 func newJobID() (string, error) {

@@ -257,6 +257,13 @@ func graphToPB(g core.Graph) (*controlpb.Graph, error) {
 			OnError: string(e.OnError),
 		})
 	}
+	for _, t := range g.Triggers {
+		out.Triggers = append(out.Triggers, &controlpb.GraphTrigger{
+			Type:   t.Type,
+			Cron:   t.Cron,
+			Secret: t.Secret,
+		})
+	}
 	return out, nil
 }
 
@@ -284,6 +291,13 @@ func graphFromPB(g *controlpb.Graph) (core.Graph, error) {
 			From: e.From, FromPort: e.FromPort,
 			To: e.To, ToPort: e.ToPort,
 			OnError: core.OnError(e.OnError),
+		})
+	}
+	for _, t := range g.Triggers {
+		out.Triggers = append(out.Triggers, core.GraphTrigger{
+			Type:   t.Type,
+			Cron:   t.Cron,
+			Secret: t.Secret,
 		})
 	}
 	return out, nil

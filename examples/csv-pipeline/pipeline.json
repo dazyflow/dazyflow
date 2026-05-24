@@ -1,0 +1,26 @@
+{
+  "id": "csv-uppercase",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "nodes": [
+    {
+      "id": "load",
+      "module": "file_read",
+      "params": {"path": "input.csv", "mime": "text/csv", "inline": true}
+    },
+    {
+      "id": "transform",
+      "module": "csv_uppercase"
+    },
+    {
+      "id": "save",
+      "module": "file_write",
+      "params": {"path": "output.csv"}
+    }
+  ],
+  "edges": [
+    {"from": "load", "from_port": "out", "to": "transform", "to_port": "in"},
+    {"from": "transform", "from_port": "out", "to": "save", "to_port": "in"}
+  ]
+}

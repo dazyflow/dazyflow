@@ -265,10 +265,10 @@ func (w *Worker) fetchGraph(ctx context.Context, graphRunID string) (core.Graph,
 
 // fetchPredecessors collects the Result of every node that feeds into rec.NodeID,
 // keyed by upstream node ID so engine.assembleInput can look them up.
-// Predecessors that failed are silently omitted — isReady has already
-// verified those failures are tolerated via OnError=skip, so leaving them
-// out of the prior map means the downstream module sees no value on those
-// input ports.
+// Predecessors that didn't produce data (failed or skipped) are silently
+// omitted — analyzeDependent has already verified those non-success
+// states are tolerated by the edge's on_error, so omission means the
+// downstream module sees no value on those input ports.
 func (w *Worker) fetchPredecessors(ctx context.Context, graph core.Graph, rec core.JobRecord) (map[string]core.Result, error) {
 	prior := make(map[string]core.Result)
 	for _, edge := range graph.Edges {
@@ -283,9 +283,8 @@ func (w *Worker) fetchPredecessors(ctx context.Context, graph core.Graph, rec co
 		if err != nil {
 			return nil, fmt.Errorf("predecessor %q: %w", edge.From, err)
 		}
-		if predRec.Status == core.JobStatusFailed {
-			// Reaching here means every edge from this predecessor is
-			// OnErrorSkip (isReady's gate). Omit it from the prior map.
+		switch predRec.Status {
+		case core.JobStatusFailed, core.JobStatusSkipped:
 			continue
 		}
 		if predRec.Result == nil {
@@ -296,10 +295,10 @@ func (w *Worker) fetchPredecessors(ctx context.Context, graph core.Graph, rec co
 	return prior, nil
 }
 
-// dispatchReady enqueues every dependent of completedNodeID whose other
-// predecessors are also in succeeded state. Idempotent via deterministic
-// IDs: if a sibling worker already enqueued the same record we swallow
-// ErrConflict.
+// dispatchReady walks dependents of completedNodeID and, for each, decides
+// whether to enqueue it, mark it skipped, or wait. The Skipped path also
+// cascades: marking D skipped triggers a fresh dispatch from D so that
+// D's own downstream resolves (either enqueueing or further-skipping).
 func (w *Worker) dispatchReady(ctx context.Context, graph core.Graph, graphRunID, completedNodeID string) {
 	dependents := map[string]struct{}{}
 	for _, edge := range graph.Edges {
@@ -308,71 +307,189 @@ func (w *Worker) dispatchReady(ctx context.Context, graph core.Graph, graphRunID
 		}
 	}
 	for nodeID := range dependents {
-		ready, reason := w.isReady(ctx, graph, graphRunID, nodeID)
-		if !ready {
-			if reason != "" {
-				w.cfg.Logger.Printf("[%s] %s not ready: %s", w.cfg.ID, nodeID, reason)
+		switch decision, reason := w.analyzeDependent(ctx, graph, graphRunID, nodeID); decision {
+		case depEnqueue:
+			newRec := core.JobRecord{
+				ID:         NodeJobID(graphRunID, nodeID),
+				Kind:       core.JobKindNode,
+				GraphRunID: graphRunID,
+				GraphID:    graph.ID,
+				NodeID:     nodeID,
+				Tenant:     graph.Tenant,
+				Workspace:  graph.Workspace,
+				Job:        core.Job{GraphID: graph.ID, NodeID: nodeID},
 			}
-			continue
-		}
-		newRec := core.JobRecord{
-			ID:         NodeJobID(graphRunID, nodeID),
-			Kind:       core.JobKindNode,
-			GraphRunID: graphRunID,
-			GraphID:    graph.ID,
-			NodeID:     nodeID,
-			Tenant:     graph.Tenant,
-			Workspace:  graph.Workspace,
-			Job:        core.Job{GraphID: graph.ID, NodeID: nodeID},
-		}
-		if err := w.store.Enqueue(ctx, newRec); err != nil && !errors.Is(err, core.ErrConflict) {
-			w.cfg.Logger.Printf("[%s] enqueue dependent %s: %v", w.cfg.ID, nodeID, err)
+			if err := w.store.Enqueue(ctx, newRec); err != nil && !errors.Is(err, core.ErrConflict) {
+				w.cfg.Logger.Printf("[%s] enqueue dependent %s: %v", w.cfg.ID, nodeID, err)
+			}
+		case depSkipped:
+			w.recordSkipped(ctx, graph, graphRunID, nodeID, reason)
+		case depWaiting:
+			if reason != "" {
+				w.cfg.Logger.Printf("[%s] %s waiting: %s", w.cfg.ID, nodeID, reason)
+			}
 		}
 	}
 }
 
-func (w *Worker) isReady(ctx context.Context, graph core.Graph, graphRunID, nodeID string) (bool, string) {
+// recordSkipped writes a terminal Skipped record for a node that won't
+// run, then cascades: dispatches from the skipped node so transitively
+// blocked downstream is also resolved, and bumps the graph-completion
+// check in case this was the last outstanding node.
+func (w *Worker) recordSkipped(ctx context.Context, graph core.Graph, graphRunID, nodeID, reason string) {
+	rec := core.JobRecord{
+		ID:         NodeJobID(graphRunID, nodeID),
+		Kind:       core.JobKindNode,
+		GraphRunID: graphRunID,
+		GraphID:    graph.ID,
+		NodeID:     nodeID,
+		Tenant:     graph.Tenant,
+		Workspace:  graph.Workspace,
+		Status:     core.JobStatusSkipped,
+		Job:        core.Job{GraphID: graph.ID, NodeID: nodeID},
+	}
+	if err := w.store.Enqueue(ctx, rec); err != nil {
+		if !errors.Is(err, core.ErrConflict) {
+			w.cfg.Logger.Printf("[%s] record skipped %s: %v", w.cfg.ID, nodeID, err)
+		}
+		return
+	}
+	w.cfg.Logger.Printf("[%s] skipped %s: %s", w.cfg.ID, nodeID, reason)
+	w.dispatchReady(ctx, graph, graphRunID, nodeID)
+	w.maybeCompleteGraph(ctx, graph, graphRunID, nodeID, core.JobStatusSkipped, nil)
+}
+
+type dependentDecision int
+
+const (
+	depWaiting dependentDecision = iota
+	depEnqueue
+	depSkipped
+)
+
+// analyzeDependent classifies an incoming edge against its predecessor's
+// terminal state. Per-edge outcomes combine into a final decision: any
+// blocking edge or absence of an active edge means the dependent is
+// skipped; any waiting edge defers the decision.
+func (w *Worker) analyzeDependent(ctx context.Context, graph core.Graph, graphRunID, depID string) (dependentDecision, string) {
+	var anyActive, anyBlocked bool
+	var firstReason string
 	for _, edge := range graph.Edges {
-		if edge.To != nodeID {
+		if edge.To != depID {
 			continue
 		}
 		predRec, err := w.store.Get(ctx, NodeJobID(graphRunID, edge.From))
 		if err != nil {
-			return false, fmt.Sprintf("predecessor %q not yet recorded", edge.From)
+			return depWaiting, fmt.Sprintf("predecessor %q not yet recorded", edge.From)
 		}
-		switch predRec.Status {
-		case core.JobStatusSucceeded:
-			// fine
-		case core.JobStatusFailed:
-			// A failed predecessor is OK only when the edge says skip.
-			// Any other policy (abort, retry-exhausted, fallback)
-			// blocks this dependent — the graph as a whole will fail.
-			if edge.OnError != core.OnErrorSkip {
-				return false, fmt.Sprintf("predecessor %q failed (edge on_error=%q)", edge.From, edge.OnError)
+		if !core.IsTerminalStatus(predRec.Status) {
+			return depWaiting, fmt.Sprintf("predecessor %q is %s", edge.From, predRec.Status)
+		}
+		switch outcome := classifyEdge(predRec, edge); outcome {
+		case edgeActive:
+			anyActive = true
+		case edgeDormant:
+			// dormant: doesn't activate, doesn't block
+		case edgeBlocking:
+			if !anyBlocked {
+				firstReason = fmt.Sprintf("predecessor %q is %s via %q edge",
+					edge.From, predRec.Status, edge.OnError)
 			}
-		default:
-			return false, fmt.Sprintf("predecessor %q is %s", edge.From, predRec.Status)
+			anyBlocked = true
 		}
 	}
-	return true, ""
+	if anyBlocked {
+		return depSkipped, firstReason
+	}
+	if !anyActive {
+		return depSkipped, "all incoming edges dormant (no output on any FromPort, or fallback edges from succeeded preds)"
+	}
+	return depEnqueue, ""
+}
+
+type edgeOutcome int
+
+const (
+	edgeActive   edgeOutcome = iota // contributes to running this dependent
+	edgeDormant                     // does not contribute but does not block either
+	edgeBlocking                    // would prevent the dependent from running
+)
+
+// classifyEdge maps (predecessor terminal record, edge) → outcome. The
+// truth table covers the four terminal states crossed with the four
+// OnError values, plus an additional "did the source actually emit on
+// this FromPort?" check for succeeded sources — required so that a
+// branch-style module that emits on only one of several output ports
+// correctly skips the dependents wired to its unused ports.
+func classifyEdge(predRec core.JobRecord, edge core.Edge) edgeOutcome {
+	switch predRec.Status {
+	case core.JobStatusSucceeded:
+		if edge.OnError == core.OnErrorFallback {
+			return edgeDormant
+		}
+		// If the predecessor didn't actually emit on the port this
+		// edge reads from, treat the edge as dormant — there's no
+		// data to flow.
+		if predRec.Result == nil || predRec.Result.Output == nil {
+			return edgeDormant
+		}
+		if _, ok := predRec.Result.Output[edge.FromPort]; !ok {
+			return edgeDormant
+		}
+		return edgeActive
+	case core.JobStatusFailed:
+		switch edge.OnError {
+		case core.OnErrorSkip, core.OnErrorFallback:
+			return edgeActive
+		default:
+			return edgeBlocking
+		}
+	case core.JobStatusSkipped:
+		switch edge.OnError {
+		case core.OnErrorSkip:
+			return edgeActive
+		case core.OnErrorFallback:
+			return edgeDormant
+		default:
+			return edgeBlocking
+		}
+	default:
+		return edgeBlocking
+	}
 }
 
 // failurePropagates reports whether a failure of nodeID should abort the
-// graph. It does when any outgoing edge has non-skip semantics (default
-// abort, retry-exhausted, fallback) or when the node has no outgoing
-// edges at all — a leaf failure defaults to abort behaviour.
+// graph. The rule is asymmetric between skip and fallback:
+//
+//   - fallback is an explicit "alternative handler" declaration; if a
+//     fallback edge exists, the graph survives regardless of other
+//     outgoing edges. Paths going through abort-edges become skipped.
+//   - skip only tolerates failure locally. With [skip→A, abort→B] the
+//     abort sibling still propagates and the graph fails.
+//   - a leaf (no outgoing edges) defaults to abort.
 func (w *Worker) failurePropagates(graph core.Graph, nodeID string) bool {
-	var hasOutgoing bool
+	var hasOutgoing, hasFallback, hasNonTolerant bool
 	for _, edge := range graph.Edges {
 		if edge.From != nodeID {
 			continue
 		}
 		hasOutgoing = true
-		if edge.OnError != core.OnErrorSkip {
-			return true
+		switch edge.OnError {
+		case core.OnErrorFallback:
+			hasFallback = true
+		case core.OnErrorSkip:
+			// tolerated locally; doesn't on its own block propagation
+		default:
+			hasNonTolerant = true
 		}
 	}
-	return !hasOutgoing
+	if !hasOutgoing {
+		return true
+	}
+	if hasFallback {
+		return false
+	}
+	return hasNonTolerant
 }
 
 // maybeCompleteGraph updates the graph-record's terminal state. The first

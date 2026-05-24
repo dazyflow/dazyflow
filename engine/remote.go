@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
 	nodepb "git.sr.ht/~klahr/hazy-flow/api/gen/node"
@@ -16,12 +18,22 @@ import (
 )
 
 // RemoteDescriptor matches the on-disk descriptor for runtime="remote".
-// Auth is currently mTLS-or-insecure; OIDC bearer support belongs here in
-// a later iteration.
+// Auth is mTLS via the TLS field; OIDC bearer support belongs here in a
+// later iteration. When TLS is nil the connection runs in cleartext —
+// only acceptable for development.
 type RemoteDescriptor struct {
 	ID       string
 	Endpoint string
-	Insecure bool
+	Insecure bool      // explicit opt-in to cleartext for dev/test
+	TLS      *RemoteTLS
+}
+
+// RemoteTLS configures mTLS for a remote module. Callers build the
+// *tls.Config from cert/key/CA files (or any other source) and hand it
+// to engine — engine itself does no PEM I/O. See daemon.TLSFiles for the
+// standard loader.
+type RemoteTLS struct {
+	Config *tls.Config
 }
 
 // RemoteTransport calls a remote NodeService via gRPC. The manifest is
@@ -100,14 +112,11 @@ func (c *RemoteCatalog) Register(desc RemoteDescriptor) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	opts := []grpc.DialOption{}
-	if desc.Insecure {
-		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	} else {
-		// mTLS configuration belongs in a TransportCredentials slot on the
-		// descriptor (cert/key paths). Stub: dial insecurely with a TODO.
-		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	creds, err := credentialsForDescriptor(desc)
+	if err != nil {
+		return fmt.Errorf("remote %q: %w", desc.ID, err)
 	}
+	opts := []grpc.DialOption{grpc.WithTransportCredentials(creds)}
 	conn, err := grpc.NewClient(desc.Endpoint, opts...)
 	if err != nil {
 		return fmt.Errorf("dial %q: %w", desc.Endpoint, err)
@@ -163,6 +172,19 @@ func (c *RemoteCatalog) Close() error {
 	}
 	c.nodes = map[string]*RemoteTransport{}
 	return nil
+}
+
+// credentialsForDescriptor picks the right gRPC credentials based on the
+// descriptor's TLS/Insecure fields. Refuses to default to plaintext —
+// callers must explicitly set Insecure=true to opt in.
+func credentialsForDescriptor(desc RemoteDescriptor) (credentials.TransportCredentials, error) {
+	if desc.TLS != nil && desc.TLS.Config != nil {
+		return credentials.NewTLS(desc.TLS.Config), nil
+	}
+	if desc.Insecure {
+		return insecure.NewCredentials(), nil
+	}
+	return nil, fmt.Errorf("TLS not configured and Insecure=false; refusing to dial in cleartext")
 }
 
 // ----------------------------------------------------------- pb conversion

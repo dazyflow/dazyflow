@@ -40,7 +40,7 @@ type JobRecord struct {
 // the JobStore to make Complete idempotent and by callers polling for end.
 func IsTerminalStatus(s JobStatus) bool {
 	switch s {
-	case JobStatusSucceeded, JobStatusFailed, JobStatusCancelled:
+	case JobStatusSucceeded, JobStatusFailed, JobStatusCancelled, JobStatusSkipped:
 		return true
 	}
 	return false
@@ -61,6 +61,12 @@ const (
 	JobStatusSucceeded JobStatus = "succeeded"
 	JobStatusFailed    JobStatus = "failed"
 	JobStatusCancelled JobStatus = "cancelled"
+	// JobStatusSkipped marks a node that was intentionally not executed —
+	// either because all its incoming fallback edges were dormant
+	// (source succeeded) or because a non-tolerated predecessor failure
+	// blocked its only data path while a fallback elsewhere kept the
+	// graph alive.
+	JobStatusSkipped JobStatus = "skipped"
 )
 
 // JobStore is the persistence boundary for jobs. Production deployments

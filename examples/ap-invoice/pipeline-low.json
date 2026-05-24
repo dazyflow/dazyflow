@@ -1,0 +1,62 @@
+{
+  "id": "process-invoice-low",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "triggers": [{"type": "webhook", "secret": "webhook-secret"}],
+  "nodes": [
+    {
+      "id": "fetch_invoice",
+      "module": "http_request",
+      "params": {
+        "url": "http://127.0.0.1:60500/invoices/42",
+        "headers": {"Authorization": "env://INVOICE_API_KEY"},
+        "allow_private_networks": true
+      }
+    },
+    {
+      "id": "classify",
+      "module": "branch",
+      "params": {
+        "condition": {"field": "amount", "op": "greater_than", "value": 1000}
+      }
+    },
+    {
+      "id": "notify_cfo",
+      "module": "http_request",
+      "params": {
+        "url": "http://127.0.0.1:60500/notifications/cfo",
+        "method": "POST",
+        "headers": {
+          "Authorization": "env://SLACK_TOKEN",
+          "Content-Type": "application/json"
+        },
+        "allow_private_networks": true
+      }
+    },
+    {
+      "id": "auto_approve",
+      "module": "http_request",
+      "params": {
+        "url": "http://127.0.0.1:60500/approvals/auto",
+        "method": "POST",
+        "headers": {
+          "Authorization": "env://APPROVAL_API_KEY",
+          "Content-Type": "application/json"
+        },
+        "allow_private_networks": true
+      }
+    },
+    {
+      "id": "archive",
+      "module": "file_write",
+      "params": {"path": "archive/invoice-42.json", "mkdirs": true}
+    }
+  ],
+  "edges": [
+    {"from": "fetch_invoice", "from_port": "response_body", "to": "classify", "to_port": "in"},
+    {"from": "fetch_invoice", "from_port": "response_body", "to": "archive", "to_port": "in"},
+    {"from": "classify", "from_port": "then", "to": "notify_cfo", "to_port": "request_body"},
+    {"from": "classify", "from_port": "else", "to": "auto_approve", "to_port": "request_body"}
+  ]
+}

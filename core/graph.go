@@ -25,12 +25,27 @@ type Edge struct {
 }
 
 type Graph struct {
-	ID        string `json:"id"`
-	Version   string `json:"version"`
-	Tenant    string `json:"tenant"`
-	Workspace string `json:"workspace"`
-	Nodes     []Node `json:"nodes"`
-	Edges     []Edge `json:"edges"`
+	ID        string         `json:"id"`
+	Version   string         `json:"version"`
+	Tenant    string         `json:"tenant"`
+	Workspace string         `json:"workspace"`
+	Nodes     []Node         `json:"nodes"`
+	Edges     []Edge         `json:"edges"`
+	Triggers  []GraphTrigger `json:"triggers,omitempty"`
+}
+
+// GraphTrigger describes when the graph should fire automatically.
+// Currently two types are supported:
+//
+//	{"type": "cron", "cron": "0 9 * * *"}      — daily 09:00 (workspace tz)
+//	{"type": "webhook", "secret": "<token>"}   — POST /trigger/<tenant>/<workspace>/<graph>
+//
+// Multiple triggers can coexist on the same graph (e.g. a graph that
+// runs hourly AND can be manually triggered via webhook).
+type GraphTrigger struct {
+	Type   string `json:"type"`             // "cron" or "webhook"
+	Cron   string `json:"cron,omitempty"`   // for type=cron
+	Secret string `json:"secret,omitempty"` // for type=webhook (compared against Authorization header)
 }
 
 func (g Graph) Node(id string) (Node, bool) {

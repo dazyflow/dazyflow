@@ -33,6 +33,13 @@ message Graph {
     string workspace = 4;
     repeated Node nodes = 5;
     repeated Edge edges = 6;
+    repeated GraphTrigger triggers = 7;
+}
+
+message GraphTrigger {
+    string type   = 1; // "cron" or "webhook"
+    string cron   = 2;
+    string secret = 3;
 }
 
 message GraphProgress {

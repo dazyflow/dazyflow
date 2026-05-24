@@ -73,9 +73,13 @@ func executeSleep(ctx context.Context, job core.Job, progress chan<- core.Progre
 	}
 }
 
+// passthrough always emits on "out" so downstream nodes are activated
+// even when sleep is used as a pure delay (no input). When upstream did
+// feed something in we forward it; otherwise we emit a control-signal
+// ref so the edge classifier sees an active output.
 func passthrough(input map[string]core.Ref) map[string]core.Ref {
 	if ref, ok := input["in"]; ok {
 		return map[string]core.Ref{"out": ref}
 	}
-	return nil
+	return map[string]core.Ref{"out": {MIME: "application/x-control"}}
 }

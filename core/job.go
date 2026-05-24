@@ -25,6 +25,26 @@ type Job struct {
 	Output  map[string]Ref    `json:"output_hint"`
 	Env     map[string]string `json:"env"`
 	Cleanup CleanupPolicy     `json:"cleanup"`
+
+	// WorkspaceRoot is the absolute filesystem path the module is
+	// confined to. Filesystem-touching modules MUST treat this as their
+	// only writable surface and refuse to operate when it is empty.
+	// Populated by the engine from a SandboxProvider; module code does
+	// not have to (and cannot reliably) sandbox itself otherwise.
+	WorkspaceRoot string `json:"workspace_root,omitempty"`
+
+	// Tenant carries the principal's tenant for module-side accounting
+	// (e.g. quota checks). Set by the engine before Execute.
+	Tenant string `json:"tenant,omitempty"`
+
+	// QuotaLimit is the tenant's byte budget at the time the job
+	// started. Zero means unlimited.
+	QuotaLimit int64 `json:"quota_limit,omitempty"`
+
+	// QuotaUsed is the tenant's byte usage at job-start. Modules treat
+	// (QuotaLimit - QuotaUsed) as their remaining budget and refuse
+	// writes that would exceed it.
+	QuotaUsed int64 `json:"quota_used,omitempty"`
 }
 
 type JobError struct {

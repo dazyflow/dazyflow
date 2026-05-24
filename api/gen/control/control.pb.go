@@ -173,6 +173,7 @@ type Graph struct {
 	Workspace     string                 `protobuf:"bytes,4,opt,name=workspace,proto3" json:"workspace,omitempty"`
 	Nodes         []*Node                `protobuf:"bytes,5,rep,name=nodes,proto3" json:"nodes,omitempty"`
 	Edges         []*Edge                `protobuf:"bytes,6,rep,name=edges,proto3" json:"edges,omitempty"`
+	Triggers      []*GraphTrigger        `protobuf:"bytes,7,rep,name=triggers,proto3" json:"triggers,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -249,6 +250,73 @@ func (x *Graph) GetEdges() []*Edge {
 	return nil
 }
 
+func (x *Graph) GetTriggers() []*GraphTrigger {
+	if x != nil {
+		return x.Triggers
+	}
+	return nil
+}
+
+type GraphTrigger struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"` // "cron" or "webhook"
+	Cron          string                 `protobuf:"bytes,2,opt,name=cron,proto3" json:"cron,omitempty"`
+	Secret        string                 `protobuf:"bytes,3,opt,name=secret,proto3" json:"secret,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GraphTrigger) Reset() {
+	*x = GraphTrigger{}
+	mi := &file_control_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GraphTrigger) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GraphTrigger) ProtoMessage() {}
+
+func (x *GraphTrigger) ProtoReflect() protoreflect.Message {
+	mi := &file_control_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GraphTrigger.ProtoReflect.Descriptor instead.
+func (*GraphTrigger) Descriptor() ([]byte, []int) {
+	return file_control_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *GraphTrigger) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *GraphTrigger) GetCron() string {
+	if x != nil {
+		return x.Cron
+	}
+	return ""
+}
+
+func (x *GraphTrigger) GetSecret() string {
+	if x != nil {
+		return x.Secret
+	}
+	return ""
+}
+
 type GraphProgress struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	JobId         string                 `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
@@ -261,7 +329,7 @@ type GraphProgress struct {
 
 func (x *GraphProgress) Reset() {
 	*x = GraphProgress{}
-	mi := &file_control_proto_msgTypes[3]
+	mi := &file_control_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -273,7 +341,7 @@ func (x *GraphProgress) String() string {
 func (*GraphProgress) ProtoMessage() {}
 
 func (x *GraphProgress) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[3]
+	mi := &file_control_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -286,7 +354,7 @@ func (x *GraphProgress) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GraphProgress.ProtoReflect.Descriptor instead.
 func (*GraphProgress) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{3}
+	return file_control_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GraphProgress) GetJobId() string {
@@ -327,7 +395,7 @@ type JobError struct {
 
 func (x *JobError) Reset() {
 	*x = JobError{}
-	mi := &file_control_proto_msgTypes[4]
+	mi := &file_control_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -339,7 +407,7 @@ func (x *JobError) String() string {
 func (*JobError) ProtoMessage() {}
 
 func (x *JobError) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[4]
+	mi := &file_control_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -352,7 +420,7 @@ func (x *JobError) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobError.ProtoReflect.Descriptor instead.
 func (*JobError) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{4}
+	return file_control_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *JobError) GetCode() string {
@@ -380,7 +448,7 @@ type NodeResult struct {
 
 func (x *NodeResult) Reset() {
 	*x = NodeResult{}
-	mi := &file_control_proto_msgTypes[5]
+	mi := &file_control_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -392,7 +460,7 @@ func (x *NodeResult) String() string {
 func (*NodeResult) ProtoMessage() {}
 
 func (x *NodeResult) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[5]
+	mi := &file_control_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -405,7 +473,7 @@ func (x *NodeResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NodeResult.ProtoReflect.Descriptor instead.
 func (*NodeResult) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{5}
+	return file_control_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *NodeResult) GetNodeId() string {
@@ -441,7 +509,7 @@ type GraphResult struct {
 
 func (x *GraphResult) Reset() {
 	*x = GraphResult{}
-	mi := &file_control_proto_msgTypes[6]
+	mi := &file_control_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -453,7 +521,7 @@ func (x *GraphResult) String() string {
 func (*GraphResult) ProtoMessage() {}
 
 func (x *GraphResult) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[6]
+	mi := &file_control_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -466,7 +534,7 @@ func (x *GraphResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GraphResult.ProtoReflect.Descriptor instead.
 func (*GraphResult) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{6}
+	return file_control_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *GraphResult) GetGraphId() string {
@@ -512,7 +580,7 @@ type Port struct {
 
 func (x *Port) Reset() {
 	*x = Port{}
-	mi := &file_control_proto_msgTypes[7]
+	mi := &file_control_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -524,7 +592,7 @@ func (x *Port) String() string {
 func (*Port) ProtoMessage() {}
 
 func (x *Port) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[7]
+	mi := &file_control_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -537,7 +605,7 @@ func (x *Port) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Port.ProtoReflect.Descriptor instead.
 func (*Port) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{7}
+	return file_control_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *Port) GetId() string {
@@ -607,7 +675,7 @@ type Manifest struct {
 
 func (x *Manifest) Reset() {
 	*x = Manifest{}
-	mi := &file_control_proto_msgTypes[8]
+	mi := &file_control_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -619,7 +687,7 @@ func (x *Manifest) String() string {
 func (*Manifest) ProtoMessage() {}
 
 func (x *Manifest) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[8]
+	mi := &file_control_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -632,7 +700,7 @@ func (x *Manifest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Manifest.ProtoReflect.Descriptor instead.
 func (*Manifest) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{8}
+	return file_control_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *Manifest) GetId() string {
@@ -725,7 +793,7 @@ type JobRecord struct {
 
 func (x *JobRecord) Reset() {
 	*x = JobRecord{}
-	mi := &file_control_proto_msgTypes[9]
+	mi := &file_control_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -737,7 +805,7 @@ func (x *JobRecord) String() string {
 func (*JobRecord) ProtoMessage() {}
 
 func (x *JobRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[9]
+	mi := &file_control_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -750,7 +818,7 @@ func (x *JobRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobRecord.ProtoReflect.Descriptor instead.
 func (*JobRecord) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{9}
+	return file_control_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *JobRecord) GetId() string {
@@ -846,7 +914,7 @@ type SaveGraphRequest struct {
 
 func (x *SaveGraphRequest) Reset() {
 	*x = SaveGraphRequest{}
-	mi := &file_control_proto_msgTypes[10]
+	mi := &file_control_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -858,7 +926,7 @@ func (x *SaveGraphRequest) String() string {
 func (*SaveGraphRequest) ProtoMessage() {}
 
 func (x *SaveGraphRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[10]
+	mi := &file_control_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -871,7 +939,7 @@ func (x *SaveGraphRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SaveGraphRequest.ProtoReflect.Descriptor instead.
 func (*SaveGraphRequest) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{10}
+	return file_control_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *SaveGraphRequest) GetGraph() *Graph {
@@ -890,7 +958,7 @@ type SaveGraphResponse struct {
 
 func (x *SaveGraphResponse) Reset() {
 	*x = SaveGraphResponse{}
-	mi := &file_control_proto_msgTypes[11]
+	mi := &file_control_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -902,7 +970,7 @@ func (x *SaveGraphResponse) String() string {
 func (*SaveGraphResponse) ProtoMessage() {}
 
 func (x *SaveGraphResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[11]
+	mi := &file_control_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -915,7 +983,7 @@ func (x *SaveGraphResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SaveGraphResponse.ProtoReflect.Descriptor instead.
 func (*SaveGraphResponse) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{11}
+	return file_control_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *SaveGraphResponse) GetCommit() string {
@@ -937,7 +1005,7 @@ type LoadGraphRequest struct {
 
 func (x *LoadGraphRequest) Reset() {
 	*x = LoadGraphRequest{}
-	mi := &file_control_proto_msgTypes[12]
+	mi := &file_control_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -949,7 +1017,7 @@ func (x *LoadGraphRequest) String() string {
 func (*LoadGraphRequest) ProtoMessage() {}
 
 func (x *LoadGraphRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[12]
+	mi := &file_control_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -962,7 +1030,7 @@ func (x *LoadGraphRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LoadGraphRequest.ProtoReflect.Descriptor instead.
 func (*LoadGraphRequest) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{12}
+	return file_control_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *LoadGraphRequest) GetTenant() string {
@@ -1002,7 +1070,7 @@ type LoadGraphResponse struct {
 
 func (x *LoadGraphResponse) Reset() {
 	*x = LoadGraphResponse{}
-	mi := &file_control_proto_msgTypes[13]
+	mi := &file_control_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1014,7 +1082,7 @@ func (x *LoadGraphResponse) String() string {
 func (*LoadGraphResponse) ProtoMessage() {}
 
 func (x *LoadGraphResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[13]
+	mi := &file_control_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1027,7 +1095,7 @@ func (x *LoadGraphResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LoadGraphResponse.ProtoReflect.Descriptor instead.
 func (*LoadGraphResponse) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{13}
+	return file_control_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *LoadGraphResponse) GetGraph() *Graph {
@@ -1047,7 +1115,7 @@ type ListGraphsRequest struct {
 
 func (x *ListGraphsRequest) Reset() {
 	*x = ListGraphsRequest{}
-	mi := &file_control_proto_msgTypes[14]
+	mi := &file_control_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1059,7 +1127,7 @@ func (x *ListGraphsRequest) String() string {
 func (*ListGraphsRequest) ProtoMessage() {}
 
 func (x *ListGraphsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[14]
+	mi := &file_control_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1072,7 +1140,7 @@ func (x *ListGraphsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListGraphsRequest.ProtoReflect.Descriptor instead.
 func (*ListGraphsRequest) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{14}
+	return file_control_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ListGraphsRequest) GetTenant() string {
@@ -1098,7 +1166,7 @@ type ListGraphsResponse struct {
 
 func (x *ListGraphsResponse) Reset() {
 	*x = ListGraphsResponse{}
-	mi := &file_control_proto_msgTypes[15]
+	mi := &file_control_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1110,7 +1178,7 @@ func (x *ListGraphsResponse) String() string {
 func (*ListGraphsResponse) ProtoMessage() {}
 
 func (x *ListGraphsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[15]
+	mi := &file_control_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1123,7 +1191,7 @@ func (x *ListGraphsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListGraphsResponse.ProtoReflect.Descriptor instead.
 func (*ListGraphsResponse) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{15}
+	return file_control_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ListGraphsResponse) GetGraphIds() []string {
@@ -1146,7 +1214,7 @@ type PromoteGraphRequest struct {
 
 func (x *PromoteGraphRequest) Reset() {
 	*x = PromoteGraphRequest{}
-	mi := &file_control_proto_msgTypes[16]
+	mi := &file_control_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1158,7 +1226,7 @@ func (x *PromoteGraphRequest) String() string {
 func (*PromoteGraphRequest) ProtoMessage() {}
 
 func (x *PromoteGraphRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[16]
+	mi := &file_control_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1171,7 +1239,7 @@ func (x *PromoteGraphRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PromoteGraphRequest.ProtoReflect.Descriptor instead.
 func (*PromoteGraphRequest) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{16}
+	return file_control_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *PromoteGraphRequest) GetTenant() string {
@@ -1217,7 +1285,7 @@ type PromoteGraphResponse struct {
 
 func (x *PromoteGraphResponse) Reset() {
 	*x = PromoteGraphResponse{}
-	mi := &file_control_proto_msgTypes[17]
+	mi := &file_control_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1229,7 +1297,7 @@ func (x *PromoteGraphResponse) String() string {
 func (*PromoteGraphResponse) ProtoMessage() {}
 
 func (x *PromoteGraphResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[17]
+	mi := &file_control_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1242,7 +1310,7 @@ func (x *PromoteGraphResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PromoteGraphResponse.ProtoReflect.Descriptor instead.
 func (*PromoteGraphResponse) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{17}
+	return file_control_proto_rawDescGZIP(), []int{18}
 }
 
 type RunGraphRequest struct {
@@ -1259,7 +1327,7 @@ type RunGraphRequest struct {
 
 func (x *RunGraphRequest) Reset() {
 	*x = RunGraphRequest{}
-	mi := &file_control_proto_msgTypes[18]
+	mi := &file_control_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1271,7 +1339,7 @@ func (x *RunGraphRequest) String() string {
 func (*RunGraphRequest) ProtoMessage() {}
 
 func (x *RunGraphRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[18]
+	mi := &file_control_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1284,7 +1352,7 @@ func (x *RunGraphRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunGraphRequest.ProtoReflect.Descriptor instead.
 func (*RunGraphRequest) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{18}
+	return file_control_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *RunGraphRequest) GetGraph() *Graph {
@@ -1335,7 +1403,7 @@ type RunGraphEvent struct {
 
 func (x *RunGraphEvent) Reset() {
 	*x = RunGraphEvent{}
-	mi := &file_control_proto_msgTypes[19]
+	mi := &file_control_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1347,7 +1415,7 @@ func (x *RunGraphEvent) String() string {
 func (*RunGraphEvent) ProtoMessage() {}
 
 func (x *RunGraphEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[19]
+	mi := &file_control_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1360,7 +1428,7 @@ func (x *RunGraphEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunGraphEvent.ProtoReflect.Descriptor instead.
 func (*RunGraphEvent) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{19}
+	return file_control_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *RunGraphEvent) GetPayload() isRunGraphEvent_Payload {
@@ -1414,7 +1482,7 @@ type RunGraphCompleted struct {
 
 func (x *RunGraphCompleted) Reset() {
 	*x = RunGraphCompleted{}
-	mi := &file_control_proto_msgTypes[20]
+	mi := &file_control_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1426,7 +1494,7 @@ func (x *RunGraphCompleted) String() string {
 func (*RunGraphCompleted) ProtoMessage() {}
 
 func (x *RunGraphCompleted) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[20]
+	mi := &file_control_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1439,7 +1507,7 @@ func (x *RunGraphCompleted) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunGraphCompleted.ProtoReflect.Descriptor instead.
 func (*RunGraphCompleted) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{20}
+	return file_control_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *RunGraphCompleted) GetJobId() string {
@@ -1465,7 +1533,7 @@ type GetJobRequest struct {
 
 func (x *GetJobRequest) Reset() {
 	*x = GetJobRequest{}
-	mi := &file_control_proto_msgTypes[21]
+	mi := &file_control_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1477,7 +1545,7 @@ func (x *GetJobRequest) String() string {
 func (*GetJobRequest) ProtoMessage() {}
 
 func (x *GetJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[21]
+	mi := &file_control_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1490,7 +1558,7 @@ func (x *GetJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetJobRequest.ProtoReflect.Descriptor instead.
 func (*GetJobRequest) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{21}
+	return file_control_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *GetJobRequest) GetJobId() string {
@@ -1509,7 +1577,7 @@ type ListJobsForGraphRequest struct {
 
 func (x *ListJobsForGraphRequest) Reset() {
 	*x = ListJobsForGraphRequest{}
-	mi := &file_control_proto_msgTypes[22]
+	mi := &file_control_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1521,7 +1589,7 @@ func (x *ListJobsForGraphRequest) String() string {
 func (*ListJobsForGraphRequest) ProtoMessage() {}
 
 func (x *ListJobsForGraphRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[22]
+	mi := &file_control_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1534,7 +1602,7 @@ func (x *ListJobsForGraphRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListJobsForGraphRequest.ProtoReflect.Descriptor instead.
 func (*ListJobsForGraphRequest) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{22}
+	return file_control_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ListJobsForGraphRequest) GetGraphId() string {
@@ -1553,7 +1621,7 @@ type ListJobsResponse struct {
 
 func (x *ListJobsResponse) Reset() {
 	*x = ListJobsResponse{}
-	mi := &file_control_proto_msgTypes[23]
+	mi := &file_control_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1565,7 +1633,7 @@ func (x *ListJobsResponse) String() string {
 func (*ListJobsResponse) ProtoMessage() {}
 
 func (x *ListJobsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[23]
+	mi := &file_control_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1578,7 +1646,7 @@ func (x *ListJobsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListJobsResponse.ProtoReflect.Descriptor instead.
 func (*ListJobsResponse) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{23}
+	return file_control_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ListJobsResponse) GetJobs() []*JobRecord {
@@ -1596,7 +1664,7 @@ type ListModulesRequest struct {
 
 func (x *ListModulesRequest) Reset() {
 	*x = ListModulesRequest{}
-	mi := &file_control_proto_msgTypes[24]
+	mi := &file_control_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1608,7 +1676,7 @@ func (x *ListModulesRequest) String() string {
 func (*ListModulesRequest) ProtoMessage() {}
 
 func (x *ListModulesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[24]
+	mi := &file_control_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1621,7 +1689,7 @@ func (x *ListModulesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListModulesRequest.ProtoReflect.Descriptor instead.
 func (*ListModulesRequest) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{24}
+	return file_control_proto_rawDescGZIP(), []int{25}
 }
 
 type ListModulesResponse struct {
@@ -1633,7 +1701,7 @@ type ListModulesResponse struct {
 
 func (x *ListModulesResponse) Reset() {
 	*x = ListModulesResponse{}
-	mi := &file_control_proto_msgTypes[25]
+	mi := &file_control_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1645,7 +1713,7 @@ func (x *ListModulesResponse) String() string {
 func (*ListModulesResponse) ProtoMessage() {}
 
 func (x *ListModulesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[25]
+	mi := &file_control_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1658,7 +1726,7 @@ func (x *ListModulesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListModulesResponse.ProtoReflect.Descriptor instead.
 func (*ListModulesResponse) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{25}
+	return file_control_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ListModulesResponse) GetModules() []*Manifest {
@@ -1686,14 +1754,19 @@ const file_control_proto_rawDesc = "" +
 	"\tfrom_port\x18\x02 \x01(\tR\bfromPort\x12\x0e\n" +
 	"\x02to\x18\x03 \x01(\tR\x02to\x12\x17\n" +
 	"\ato_port\x18\x04 \x01(\tR\x06toPort\x12\x19\n" +
-	"\bon_error\x18\x05 \x01(\tR\aonError\"\xc9\x01\n" +
+	"\bon_error\x18\x05 \x01(\tR\aonError\"\x88\x02\n" +
 	"\x05Graph\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12\x16\n" +
 	"\x06tenant\x18\x03 \x01(\tR\x06tenant\x12\x1c\n" +
 	"\tworkspace\x18\x04 \x01(\tR\tworkspace\x12/\n" +
 	"\x05nodes\x18\x05 \x03(\v2\x19.hazyflow.control.v1.NodeR\x05nodes\x12/\n" +
-	"\x05edges\x18\x06 \x03(\v2\x19.hazyflow.control.v1.EdgeR\x05edges\"s\n" +
+	"\x05edges\x18\x06 \x03(\v2\x19.hazyflow.control.v1.EdgeR\x05edges\x12=\n" +
+	"\btriggers\x18\a \x03(\v2!.hazyflow.control.v1.GraphTriggerR\btriggers\"N\n" +
+	"\fGraphTrigger\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12\x12\n" +
+	"\x04cron\x18\x02 \x01(\tR\x04cron\x12\x16\n" +
+	"\x06secret\x18\x03 \x01(\tR\x06secret\"s\n" +
 	"\rGraphProgress\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12\x17\n" +
 	"\anode_id\x18\x02 \x01(\tR\x06nodeId\x12\x18\n" +
@@ -1822,75 +1895,77 @@ func file_control_proto_rawDescGZIP() []byte {
 	return file_control_proto_rawDescData
 }
 
-var file_control_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_control_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_control_proto_goTypes = []any{
 	(*Node)(nil),                    // 0: hazyflow.control.v1.Node
 	(*Edge)(nil),                    // 1: hazyflow.control.v1.Edge
 	(*Graph)(nil),                   // 2: hazyflow.control.v1.Graph
-	(*GraphProgress)(nil),           // 3: hazyflow.control.v1.GraphProgress
-	(*JobError)(nil),                // 4: hazyflow.control.v1.JobError
-	(*NodeResult)(nil),              // 5: hazyflow.control.v1.NodeResult
-	(*GraphResult)(nil),             // 6: hazyflow.control.v1.GraphResult
-	(*Port)(nil),                    // 7: hazyflow.control.v1.Port
-	(*Manifest)(nil),                // 8: hazyflow.control.v1.Manifest
-	(*JobRecord)(nil),               // 9: hazyflow.control.v1.JobRecord
-	(*SaveGraphRequest)(nil),        // 10: hazyflow.control.v1.SaveGraphRequest
-	(*SaveGraphResponse)(nil),       // 11: hazyflow.control.v1.SaveGraphResponse
-	(*LoadGraphRequest)(nil),        // 12: hazyflow.control.v1.LoadGraphRequest
-	(*LoadGraphResponse)(nil),       // 13: hazyflow.control.v1.LoadGraphResponse
-	(*ListGraphsRequest)(nil),       // 14: hazyflow.control.v1.ListGraphsRequest
-	(*ListGraphsResponse)(nil),      // 15: hazyflow.control.v1.ListGraphsResponse
-	(*PromoteGraphRequest)(nil),     // 16: hazyflow.control.v1.PromoteGraphRequest
-	(*PromoteGraphResponse)(nil),    // 17: hazyflow.control.v1.PromoteGraphResponse
-	(*RunGraphRequest)(nil),         // 18: hazyflow.control.v1.RunGraphRequest
-	(*RunGraphEvent)(nil),           // 19: hazyflow.control.v1.RunGraphEvent
-	(*RunGraphCompleted)(nil),       // 20: hazyflow.control.v1.RunGraphCompleted
-	(*GetJobRequest)(nil),           // 21: hazyflow.control.v1.GetJobRequest
-	(*ListJobsForGraphRequest)(nil), // 22: hazyflow.control.v1.ListJobsForGraphRequest
-	(*ListJobsResponse)(nil),        // 23: hazyflow.control.v1.ListJobsResponse
-	(*ListModulesRequest)(nil),      // 24: hazyflow.control.v1.ListModulesRequest
-	(*ListModulesResponse)(nil),     // 25: hazyflow.control.v1.ListModulesResponse
-	nil,                             // 26: hazyflow.control.v1.Node.EnvEntry
+	(*GraphTrigger)(nil),            // 3: hazyflow.control.v1.GraphTrigger
+	(*GraphProgress)(nil),           // 4: hazyflow.control.v1.GraphProgress
+	(*JobError)(nil),                // 5: hazyflow.control.v1.JobError
+	(*NodeResult)(nil),              // 6: hazyflow.control.v1.NodeResult
+	(*GraphResult)(nil),             // 7: hazyflow.control.v1.GraphResult
+	(*Port)(nil),                    // 8: hazyflow.control.v1.Port
+	(*Manifest)(nil),                // 9: hazyflow.control.v1.Manifest
+	(*JobRecord)(nil),               // 10: hazyflow.control.v1.JobRecord
+	(*SaveGraphRequest)(nil),        // 11: hazyflow.control.v1.SaveGraphRequest
+	(*SaveGraphResponse)(nil),       // 12: hazyflow.control.v1.SaveGraphResponse
+	(*LoadGraphRequest)(nil),        // 13: hazyflow.control.v1.LoadGraphRequest
+	(*LoadGraphResponse)(nil),       // 14: hazyflow.control.v1.LoadGraphResponse
+	(*ListGraphsRequest)(nil),       // 15: hazyflow.control.v1.ListGraphsRequest
+	(*ListGraphsResponse)(nil),      // 16: hazyflow.control.v1.ListGraphsResponse
+	(*PromoteGraphRequest)(nil),     // 17: hazyflow.control.v1.PromoteGraphRequest
+	(*PromoteGraphResponse)(nil),    // 18: hazyflow.control.v1.PromoteGraphResponse
+	(*RunGraphRequest)(nil),         // 19: hazyflow.control.v1.RunGraphRequest
+	(*RunGraphEvent)(nil),           // 20: hazyflow.control.v1.RunGraphEvent
+	(*RunGraphCompleted)(nil),       // 21: hazyflow.control.v1.RunGraphCompleted
+	(*GetJobRequest)(nil),           // 22: hazyflow.control.v1.GetJobRequest
+	(*ListJobsForGraphRequest)(nil), // 23: hazyflow.control.v1.ListJobsForGraphRequest
+	(*ListJobsResponse)(nil),        // 24: hazyflow.control.v1.ListJobsResponse
+	(*ListModulesRequest)(nil),      // 25: hazyflow.control.v1.ListModulesRequest
+	(*ListModulesResponse)(nil),     // 26: hazyflow.control.v1.ListModulesResponse
+	nil,                             // 27: hazyflow.control.v1.Node.EnvEntry
 }
 var file_control_proto_depIdxs = []int32{
-	26, // 0: hazyflow.control.v1.Node.env:type_name -> hazyflow.control.v1.Node.EnvEntry
+	27, // 0: hazyflow.control.v1.Node.env:type_name -> hazyflow.control.v1.Node.EnvEntry
 	0,  // 1: hazyflow.control.v1.Graph.nodes:type_name -> hazyflow.control.v1.Node
 	1,  // 2: hazyflow.control.v1.Graph.edges:type_name -> hazyflow.control.v1.Edge
-	4,  // 3: hazyflow.control.v1.NodeResult.error:type_name -> hazyflow.control.v1.JobError
-	5,  // 4: hazyflow.control.v1.GraphResult.nodes:type_name -> hazyflow.control.v1.NodeResult
-	4,  // 5: hazyflow.control.v1.GraphResult.error:type_name -> hazyflow.control.v1.JobError
-	7,  // 6: hazyflow.control.v1.Manifest.inputs:type_name -> hazyflow.control.v1.Port
-	7,  // 7: hazyflow.control.v1.Manifest.outputs:type_name -> hazyflow.control.v1.Port
-	4,  // 8: hazyflow.control.v1.JobRecord.error:type_name -> hazyflow.control.v1.JobError
-	2,  // 9: hazyflow.control.v1.SaveGraphRequest.graph:type_name -> hazyflow.control.v1.Graph
-	2,  // 10: hazyflow.control.v1.LoadGraphResponse.graph:type_name -> hazyflow.control.v1.Graph
-	2,  // 11: hazyflow.control.v1.RunGraphRequest.graph:type_name -> hazyflow.control.v1.Graph
-	3,  // 12: hazyflow.control.v1.RunGraphEvent.progress:type_name -> hazyflow.control.v1.GraphProgress
-	20, // 13: hazyflow.control.v1.RunGraphEvent.completed:type_name -> hazyflow.control.v1.RunGraphCompleted
-	6,  // 14: hazyflow.control.v1.RunGraphCompleted.result:type_name -> hazyflow.control.v1.GraphResult
-	9,  // 15: hazyflow.control.v1.ListJobsResponse.jobs:type_name -> hazyflow.control.v1.JobRecord
-	8,  // 16: hazyflow.control.v1.ListModulesResponse.modules:type_name -> hazyflow.control.v1.Manifest
-	10, // 17: hazyflow.control.v1.GraphService.SaveGraph:input_type -> hazyflow.control.v1.SaveGraphRequest
-	12, // 18: hazyflow.control.v1.GraphService.LoadGraph:input_type -> hazyflow.control.v1.LoadGraphRequest
-	14, // 19: hazyflow.control.v1.GraphService.ListGraphs:input_type -> hazyflow.control.v1.ListGraphsRequest
-	16, // 20: hazyflow.control.v1.GraphService.PromoteGraph:input_type -> hazyflow.control.v1.PromoteGraphRequest
-	18, // 21: hazyflow.control.v1.GraphService.RunGraph:input_type -> hazyflow.control.v1.RunGraphRequest
-	21, // 22: hazyflow.control.v1.JobService.GetJob:input_type -> hazyflow.control.v1.GetJobRequest
-	22, // 23: hazyflow.control.v1.JobService.ListJobsForGraph:input_type -> hazyflow.control.v1.ListJobsForGraphRequest
-	24, // 24: hazyflow.control.v1.ModuleService.ListModules:input_type -> hazyflow.control.v1.ListModulesRequest
-	11, // 25: hazyflow.control.v1.GraphService.SaveGraph:output_type -> hazyflow.control.v1.SaveGraphResponse
-	13, // 26: hazyflow.control.v1.GraphService.LoadGraph:output_type -> hazyflow.control.v1.LoadGraphResponse
-	15, // 27: hazyflow.control.v1.GraphService.ListGraphs:output_type -> hazyflow.control.v1.ListGraphsResponse
-	17, // 28: hazyflow.control.v1.GraphService.PromoteGraph:output_type -> hazyflow.control.v1.PromoteGraphResponse
-	19, // 29: hazyflow.control.v1.GraphService.RunGraph:output_type -> hazyflow.control.v1.RunGraphEvent
-	9,  // 30: hazyflow.control.v1.JobService.GetJob:output_type -> hazyflow.control.v1.JobRecord
-	23, // 31: hazyflow.control.v1.JobService.ListJobsForGraph:output_type -> hazyflow.control.v1.ListJobsResponse
-	25, // 32: hazyflow.control.v1.ModuleService.ListModules:output_type -> hazyflow.control.v1.ListModulesResponse
-	25, // [25:33] is the sub-list for method output_type
-	17, // [17:25] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	3,  // 3: hazyflow.control.v1.Graph.triggers:type_name -> hazyflow.control.v1.GraphTrigger
+	5,  // 4: hazyflow.control.v1.NodeResult.error:type_name -> hazyflow.control.v1.JobError
+	6,  // 5: hazyflow.control.v1.GraphResult.nodes:type_name -> hazyflow.control.v1.NodeResult
+	5,  // 6: hazyflow.control.v1.GraphResult.error:type_name -> hazyflow.control.v1.JobError
+	8,  // 7: hazyflow.control.v1.Manifest.inputs:type_name -> hazyflow.control.v1.Port
+	8,  // 8: hazyflow.control.v1.Manifest.outputs:type_name -> hazyflow.control.v1.Port
+	5,  // 9: hazyflow.control.v1.JobRecord.error:type_name -> hazyflow.control.v1.JobError
+	2,  // 10: hazyflow.control.v1.SaveGraphRequest.graph:type_name -> hazyflow.control.v1.Graph
+	2,  // 11: hazyflow.control.v1.LoadGraphResponse.graph:type_name -> hazyflow.control.v1.Graph
+	2,  // 12: hazyflow.control.v1.RunGraphRequest.graph:type_name -> hazyflow.control.v1.Graph
+	4,  // 13: hazyflow.control.v1.RunGraphEvent.progress:type_name -> hazyflow.control.v1.GraphProgress
+	21, // 14: hazyflow.control.v1.RunGraphEvent.completed:type_name -> hazyflow.control.v1.RunGraphCompleted
+	7,  // 15: hazyflow.control.v1.RunGraphCompleted.result:type_name -> hazyflow.control.v1.GraphResult
+	10, // 16: hazyflow.control.v1.ListJobsResponse.jobs:type_name -> hazyflow.control.v1.JobRecord
+	9,  // 17: hazyflow.control.v1.ListModulesResponse.modules:type_name -> hazyflow.control.v1.Manifest
+	11, // 18: hazyflow.control.v1.GraphService.SaveGraph:input_type -> hazyflow.control.v1.SaveGraphRequest
+	13, // 19: hazyflow.control.v1.GraphService.LoadGraph:input_type -> hazyflow.control.v1.LoadGraphRequest
+	15, // 20: hazyflow.control.v1.GraphService.ListGraphs:input_type -> hazyflow.control.v1.ListGraphsRequest
+	17, // 21: hazyflow.control.v1.GraphService.PromoteGraph:input_type -> hazyflow.control.v1.PromoteGraphRequest
+	19, // 22: hazyflow.control.v1.GraphService.RunGraph:input_type -> hazyflow.control.v1.RunGraphRequest
+	22, // 23: hazyflow.control.v1.JobService.GetJob:input_type -> hazyflow.control.v1.GetJobRequest
+	23, // 24: hazyflow.control.v1.JobService.ListJobsForGraph:input_type -> hazyflow.control.v1.ListJobsForGraphRequest
+	25, // 25: hazyflow.control.v1.ModuleService.ListModules:input_type -> hazyflow.control.v1.ListModulesRequest
+	12, // 26: hazyflow.control.v1.GraphService.SaveGraph:output_type -> hazyflow.control.v1.SaveGraphResponse
+	14, // 27: hazyflow.control.v1.GraphService.LoadGraph:output_type -> hazyflow.control.v1.LoadGraphResponse
+	16, // 28: hazyflow.control.v1.GraphService.ListGraphs:output_type -> hazyflow.control.v1.ListGraphsResponse
+	18, // 29: hazyflow.control.v1.GraphService.PromoteGraph:output_type -> hazyflow.control.v1.PromoteGraphResponse
+	20, // 30: hazyflow.control.v1.GraphService.RunGraph:output_type -> hazyflow.control.v1.RunGraphEvent
+	10, // 31: hazyflow.control.v1.JobService.GetJob:output_type -> hazyflow.control.v1.JobRecord
+	24, // 32: hazyflow.control.v1.JobService.ListJobsForGraph:output_type -> hazyflow.control.v1.ListJobsResponse
+	26, // 33: hazyflow.control.v1.ModuleService.ListModules:output_type -> hazyflow.control.v1.ListModulesResponse
+	26, // [26:34] is the sub-list for method output_type
+	18, // [18:26] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_control_proto_init() }
@@ -1898,7 +1973,7 @@ func file_control_proto_init() {
 	if File_control_proto != nil {
 		return
 	}
-	file_control_proto_msgTypes[19].OneofWrappers = []any{
+	file_control_proto_msgTypes[20].OneofWrappers = []any{
 		(*RunGraphEvent_Progress)(nil),
 		(*RunGraphEvent_Completed)(nil),
 	}
@@ -1908,7 +1983,7 @@ func file_control_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_control_proto_rawDesc), len(file_control_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   27,
+			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   3,
 		},

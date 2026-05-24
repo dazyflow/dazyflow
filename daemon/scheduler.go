@@ -1,0 +1,223 @@
+package daemon
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"sync"
+	"time"
+
+	"github.com/robfig/cron/v3"
+
+	"git.sr.ht/~klahr/hazy-flow/core"
+)
+
+// Scheduler reads graphs from the configured workspaces, finds those with
+// cron triggers, and fires SubmitGraph internally when each schedule is
+// due. One Scheduler runs per hzd instance. In a multi-node deployment
+// only one instance should run this (spec calls for a leader-election
+// step via pg_try_advisory_lock — still in TODO).
+type Scheduler struct {
+	svc      *Service
+	clock    func() time.Time
+	parser   cron.Parser
+	logger   *log.Logger
+	interval time.Duration
+
+	mu          sync.Mutex
+	tracked     map[string]*scheduledGraph // key = tenant/workspace/graphID
+	rescanEvery time.Duration
+
+	// principal used when the scheduler submits graphs internally; a
+	// real deployment would give the system a dedicated identity with
+	// tenant-scoped graph:run only.
+	systemPrincipal func(tenant, workspace string) core.Principal
+}
+
+type scheduledGraph struct {
+	graphID    string
+	tenant     string
+	workspace  string
+	scheduleAt time.Time
+	scheduleFn cron.Schedule
+}
+
+// NewScheduler wires a scheduler around the daemon Service. interval is
+// how often the scheduler checks for due triggers; rescanEvery is how
+// often it refreshes the list of tracked graphs (so workspace edits
+// take effect without restarting hzd).
+func NewScheduler(svc *Service) *Scheduler {
+	return &Scheduler{
+		svc:         svc,
+		clock:       time.Now,
+		parser:      cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow),
+		logger:      log.New(log.Writer(), "scheduler: ", log.LstdFlags),
+		interval:    1 * time.Second,
+		rescanEvery: 30 * time.Second,
+		tracked:     make(map[string]*scheduledGraph),
+		systemPrincipal: func(tenant, workspace string) core.Principal {
+			return core.Principal{
+				Subject:   "hazyflow-scheduler",
+				Tenant:    tenant,
+				Workspace: workspace,
+				Roles: []core.Role{{
+					Name:        "scheduler",
+					Permissions: []core.Permission{core.PermGraphRun},
+				}},
+			}
+		},
+	}
+}
+
+// Run blocks until ctx is cancelled. It alternates between scheduling
+// ticks (every interval) and full workspace rescans (every rescanEvery).
+func (s *Scheduler) Run(ctx context.Context) error {
+	s.logger.Printf("started (tick=%s, rescan=%s)", s.interval, s.rescanEvery)
+	if err := s.rescan(ctx); err != nil {
+		s.logger.Printf("initial rescan: %v", err)
+	}
+	tickT := time.NewTicker(s.interval)
+	rescanT := time.NewTicker(s.rescanEvery)
+	defer tickT.Stop()
+	defer rescanT.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			s.logger.Printf("stopped: %v", ctx.Err())
+			return ctx.Err()
+		case <-tickT.C:
+			s.fireDue(ctx)
+		case <-rescanT.C:
+			if err := s.rescan(ctx); err != nil {
+				s.logger.Printf("rescan: %v", err)
+			}
+		}
+	}
+}
+
+// rescan inspects the workspace lookup for graphs with cron triggers and
+// rebuilds the tracked map. Existing entries' next-fire time is preserved
+// when the spec didn't change so we don't double-fire.
+func (s *Scheduler) rescan(ctx context.Context) error {
+	lookup, ok := s.svc.Workspaces.(MapWorkspaces)
+	if !ok {
+		return fmt.Errorf("scheduler: workspace lookup must be MapWorkspaces (for now)")
+	}
+	now := s.clock()
+	next := make(map[string]*scheduledGraph)
+	for key, store := range lookup {
+		tenant, workspace, ok := splitKey(key)
+		if !ok {
+			continue
+		}
+		graphIDs, err := store.ListGraphs()
+		if err != nil {
+			s.logger.Printf("list graphs in %s/%s: %v", tenant, workspace, err)
+			continue
+		}
+		for _, gid := range graphIDs {
+			g, err := store.Load(gid)
+			if err != nil {
+				continue
+			}
+			for _, t := range g.Triggers {
+				if t.Type != "cron" || t.Cron == "" {
+					continue
+				}
+				sched, err := s.parser.Parse(t.Cron)
+				if err != nil {
+					s.logger.Printf("bad cron %q on %s/%s/%s: %v",
+						t.Cron, tenant, workspace, gid, err)
+					continue
+				}
+				k := tenant + "/" + workspace + "/" + gid
+				entry := &scheduledGraph{
+					graphID:    gid,
+					tenant:     tenant,
+					workspace:  workspace,
+					scheduleFn: sched,
+				}
+				// Preserve existing next-fire so a rescan doesn't shift it.
+				if existing, ok := s.tracked[k]; ok && !existing.scheduleAt.IsZero() {
+					entry.scheduleAt = existing.scheduleAt
+				} else {
+					entry.scheduleAt = sched.Next(now)
+				}
+				next[k] = entry
+			}
+		}
+	}
+	s.mu.Lock()
+	s.tracked = next
+	s.mu.Unlock()
+	_ = ctx // reserved for future cancellation hooks
+	return nil
+}
+
+func (s *Scheduler) fireDue(ctx context.Context) {
+	now := s.clock()
+	s.mu.Lock()
+	entries := make([]*scheduledGraph, 0, len(s.tracked))
+	for _, e := range s.tracked {
+		entries = append(entries, e)
+	}
+	s.mu.Unlock()
+
+	for _, e := range entries {
+		if !e.scheduleAt.After(now) {
+			s.fireGraph(ctx, e)
+			s.mu.Lock()
+			e.scheduleAt = e.scheduleFn.Next(now)
+			s.mu.Unlock()
+		}
+	}
+}
+
+func (s *Scheduler) fireGraph(ctx context.Context, e *scheduledGraph) {
+	store, err := s.svc.Workspaces.Open(e.tenant, e.workspace)
+	if err != nil {
+		s.logger.Printf("open ws %s/%s: %v", e.tenant, e.workspace, err)
+		return
+	}
+	g, err := store.Load(e.graphID)
+	if err != nil {
+		s.logger.Printf("load %s/%s/%s: %v", e.tenant, e.workspace, e.graphID, err)
+		return
+	}
+	p := s.systemPrincipal(e.tenant, e.workspace)
+	runID, err := s.svc.SubmitGraph(ctx, p, g)
+	if err != nil {
+		s.logger.Printf("fire %s/%s/%s: %v", e.tenant, e.workspace, e.graphID, err)
+		return
+	}
+	s.logger.Printf("fired %s/%s/%s → %s", e.tenant, e.workspace, e.graphID, runID)
+}
+
+func splitKey(key string) (tenant, workspace string, ok bool) {
+	for i := 0; i < len(key); i++ {
+		if key[i] == '/' {
+			return key[:i], key[i+1:], true
+		}
+	}
+	return "", "", false
+}
+
+// TrackedCount reports how many graphs the scheduler is currently
+// watching. Exposed for tests.
+func (s *Scheduler) TrackedCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.tracked)
+}
+
+// SetClock lets tests inject a deterministic clock. Production code
+// uses time.Now via the field default.
+func (s *Scheduler) SetClock(clock func() time.Time) {
+	s.clock = clock
+}
+
+// SetInterval lets tests tighten the tick rate.
+func (s *Scheduler) SetInterval(tick, rescan time.Duration) {
+	s.interval = tick
+	s.rescanEvery = rescan
+}
