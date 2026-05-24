@@ -1,0 +1,291 @@
+package flow
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazy-flow/engine"
+)
+
+// registerOnce makes the test helper modules idempotent against the global
+// registry — tests in the same binary share engine.Default so re-registering
+// would panic.
+var stepsRegistered sync.Once
+
+func registerTestSteps(t *testing.T) {
+	t.Helper()
+	stepsRegistered.Do(func() {
+		// Echo step: takes whatever is on input "in" and emits it on output "out".
+		engine.Register(engine.NativeNode{
+			Manifest: core.Manifest{
+				ID:      "test_echo_step",
+				Version: "1.0",
+				Inputs:  []core.Port{{Port: "in"}},
+				Outputs: []core.Port{{Port: "out"}},
+			},
+			Execute: func(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
+				in := job.Input["in"]
+				return core.Result{
+					JobID:  job.ID,
+					Status: core.StatusOK,
+					Output: map[string]core.Ref{"out": in},
+				}, nil
+			},
+		})
+
+		// Fail-on-target step: errors when the item value matches params["fail_when"].
+		engine.Register(engine.NativeNode{
+			Manifest: core.Manifest{
+				ID:      "test_fail_step",
+				Version: "1.0",
+				Inputs:  []core.Port{{Port: "in"}},
+				Outputs: []core.Port{{Port: "out"}},
+			},
+			Execute: func(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
+				want, _ := job.Params["fail_when"].(string)
+				got, _ := job.Input["in"].Inline.(string)
+				if got == want {
+					return core.Result{
+						JobID:  job.ID,
+						Status: core.StatusError,
+						Error:  &core.JobError{Code: "boom", Message: got},
+					}, nil
+				}
+				return core.Result{
+					JobID:  job.ID,
+					Status: core.StatusOK,
+					Output: map[string]core.Ref{"out": {Inline: got}},
+				}, nil
+			},
+		})
+
+		// Slow + counter step: bumps a shared counter, sleeps, then returns.
+		// Used to assert concurrency.
+		engine.Register(engine.NativeNode{
+			Manifest: core.Manifest{
+				ID:      "test_slow_step",
+				Version: "1.0",
+				Inputs:  []core.Port{{Port: "in"}},
+				Outputs: []core.Port{{Port: "out"}},
+			},
+			Execute: func(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
+				if cnt, ok := job.Params["__inflight"].(*atomic.Int32); ok {
+					n := cnt.Add(1)
+					if peak, ok := job.Params["__peak"].(*atomic.Int32); ok {
+						for {
+							p := peak.Load()
+							if n <= p || peak.CompareAndSwap(p, n) {
+								break
+							}
+						}
+					}
+					defer cnt.Add(-1)
+				}
+				select {
+				case <-time.After(40 * time.Millisecond):
+				case <-ctx.Done():
+				}
+				return core.Result{
+					JobID:  job.ID,
+					Status: core.StatusOK,
+					Output: map[string]core.Ref{"out": job.Input["in"]},
+				}, nil
+			},
+		})
+	})
+}
+
+func TestForEach_RunsStepPerItemInOrder(t *testing.T) {
+	registerTestSteps(t)
+	job := core.Job{
+		ID: "fe",
+		Input: map[string]core.Ref{
+			"items": {Inline: []any{"alpha", "beta", "gamma"}},
+		},
+		Params: map[string]any{
+			"step_module": "test_echo_step",
+			"item_port":   "in",
+		},
+	}
+	res, err := executeForEach(t.Context(), job, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if res.Status != core.StatusOK {
+		t.Fatalf("status = %q, want ok", res.Status)
+	}
+	results, ok := res.Output["results"].Inline.([]core.Ref)
+	if !ok {
+		t.Fatalf("results is %T, want []core.Ref", res.Output["results"].Inline)
+	}
+	if len(results) != 3 {
+		t.Fatalf("len(results) = %d, want 3", len(results))
+	}
+	for i, want := range []string{"alpha", "beta", "gamma"} {
+		payload, _ := results[i].Inline.(map[string]any)
+		output, _ := payload["output"].(map[string]core.Ref)
+		got, _ := output["out"].Inline.(string)
+		if got != want {
+			t.Errorf("results[%d] = %q, want %q", i, got, want)
+		}
+	}
+	errs, _ := res.Output["errors"].Inline.(map[string]any)
+	if len(errs) != 0 {
+		t.Errorf("errors = %+v, want empty", errs)
+	}
+}
+
+func TestForEach_CollectsPerItemErrorsWithoutFailFast(t *testing.T) {
+	registerTestSteps(t)
+	job := core.Job{
+		Input: map[string]core.Ref{
+			"items": {Inline: []any{"good", "bad", "also_good"}},
+		},
+		Params: map[string]any{
+			"step_module": "test_fail_step",
+			"step_params": map[string]any{"fail_when": "bad"},
+		},
+	}
+	res, err := executeForEach(t.Context(), job, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if res.Status != core.StatusOK {
+		t.Fatalf("status = %q, want ok (fail_fast=false)", res.Status)
+	}
+	errs, _ := res.Output["errors"].Inline.(map[string]any)
+	if len(errs) != 1 {
+		t.Fatalf("errors = %+v, want exactly index 1", errs)
+	}
+	got, ok := errs["1"].(map[string]any)
+	if !ok {
+		t.Fatalf("errors[1] = %+v", errs["1"])
+	}
+	if got["code"] != "boom" {
+		t.Errorf("code = %v, want boom", got["code"])
+	}
+}
+
+func TestForEach_FailFastStopsEarly(t *testing.T) {
+	registerTestSteps(t)
+	job := core.Job{
+		Input: map[string]core.Ref{
+			"items": {Inline: []any{"good", "bad", "also_good", "another"}},
+		},
+		Params: map[string]any{
+			"step_module": "test_fail_step",
+			"step_params": map[string]any{"fail_when": "bad"},
+			"fail_fast":   true,
+			"concurrency": 1,
+		},
+	}
+	res, err := executeForEach(t.Context(), job, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if res.Status != core.StatusError {
+		t.Fatalf("status = %q, want error", res.Status)
+	}
+	if res.Error == nil || res.Error.Code != "item_failed" {
+		t.Errorf("err = %+v, want item_failed", res.Error)
+	}
+	errs, _ := res.Output["errors"].Inline.(map[string]any)
+	if len(errs) == 0 || errs["1"] == nil {
+		t.Errorf("expected error on index 1, got %+v", errs)
+	}
+}
+
+func TestForEach_RespectsConcurrencyCap(t *testing.T) {
+	registerTestSteps(t)
+	var inflight, peak atomic.Int32
+	items := make([]any, 10)
+	for i := range items {
+		items[i] = fmt.Sprintf("v%d", i)
+	}
+	job := core.Job{
+		Input: map[string]core.Ref{"items": {Inline: items}},
+		Params: map[string]any{
+			"step_module": "test_slow_step",
+			"step_params": map[string]any{
+				"__inflight": &inflight,
+				"__peak":     &peak,
+			},
+			"concurrency": 3,
+		},
+	}
+	start := time.Now()
+	res, err := executeForEach(t.Context(), job, nil)
+	elapsed := time.Since(start)
+	if err != nil || res.Status != core.StatusOK {
+		t.Fatalf("status = %q, err = %v", res.Status, err)
+	}
+	if peak.Load() > 3 {
+		t.Errorf("peak in-flight = %d, want <= 3", peak.Load())
+	}
+	// 10 items / 3 parallel @ 40ms ≈ 4 waves ≈ 160ms minimum.
+	if elapsed < 120*time.Millisecond {
+		t.Errorf("ran in %v — too fast for concurrency cap of 3", elapsed)
+	}
+}
+
+func TestForEach_AcceptsRefList(t *testing.T) {
+	registerTestSteps(t)
+	job := core.Job{
+		Input: map[string]core.Ref{
+			"items": {
+				MIME: MIMEList,
+				Inline: []core.Ref{
+					{Inline: "x"},
+					{Inline: "y"},
+				},
+			},
+		},
+		Params: map[string]any{"step_module": "test_echo_step"},
+	}
+	res, err := executeForEach(t.Context(), job, nil)
+	if err != nil || res.Status != core.StatusOK {
+		t.Fatalf("execute: status=%q err=%v", res.Status, err)
+	}
+	results, _ := res.Output["results"].Inline.([]core.Ref)
+	if len(results) != 2 {
+		t.Fatalf("len = %d, want 2", len(results))
+	}
+}
+
+func TestForEach_UnknownStepModuleFails(t *testing.T) {
+	job := core.Job{
+		Input: map[string]core.Ref{"items": {Inline: []any{"x"}}},
+		Params: map[string]any{
+			"step_module": "definitely_not_a_real_module_xyz",
+		},
+	}
+	res, err := executeForEach(t.Context(), job, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if res.Status != core.StatusError || !strings.Contains(res.Error.Code, "unknown_step") {
+		t.Fatalf("res = %+v", res)
+	}
+}
+
+func TestForEach_EmptyListReturnsEmptyResults(t *testing.T) {
+	registerTestSteps(t)
+	job := core.Job{
+		Input:  map[string]core.Ref{"items": {Inline: []any{}}},
+		Params: map[string]any{"step_module": "test_echo_step"},
+	}
+	res, err := executeForEach(t.Context(), job, nil)
+	if err != nil || res.Status != core.StatusOK {
+		t.Fatalf("res = %+v err = %v", res, err)
+	}
+	results, _ := res.Output["results"].Inline.([]core.Ref)
+	if len(results) != 0 {
+		t.Errorf("len = %d, want 0", len(results))
+	}
+}

@@ -104,6 +104,14 @@ platform can demonstrate but not actually power a real workflow.
   is done; split (one input → N outputs) is still missing. Semantics
   TBD: does it require the input to be a list? What happens if N
   doesn't match list length?
+- [x] **`for_each` module.** Shipped in `modules/flow/for_each.go`.
+  Runs a configured step module once per item with bounded
+  `concurrency` and optional `fail_fast`. Outputs a `results` list
+  (one Result per item, in input order) plus an `errors` map keyed by
+  failing index. Step module is resolved from `engine.Default`, so it
+  must be a native module. Limitation: per-item step params are
+  static — real per-item parameterization needs template substitution
+  (top of list).
 - [ ] **HTTP modules: file upload / streaming download.** `http_request`
   handles small JSON / form bodies via inline. For multipart upload or
   large download streams it'd need a different shape — probably a
