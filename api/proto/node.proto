@@ -1,0 +1,85 @@
+syntax = "proto3";
+
+package hazyflow.node.v1;
+
+option go_package = "git.sr.ht/~klahr/hazy-flow/api/gen/node;nodepb";
+
+// NodeService is the contract every RemoteTransport speaks. A remote module
+// implements this server-side; the engine talks to it as a client via
+// engine.RemoteTransport.
+service NodeService {
+    rpc GetManifest (GetManifestRequest) returns (Manifest);
+    rpc Execute     (Job)                returns (stream Event);
+}
+
+message GetManifestRequest {}
+
+message Port {
+    string id        = 1;
+    repeated string mime = 2;
+    string label     = 3;
+    bool   required  = 4;
+    bool   variadic  = 5;
+    int32  min       = 6; // 0 means unset (no minimum)
+    int32  max       = 7; // 0 means unset (no maximum)
+}
+
+message Manifest {
+    string id                = 1;
+    string version           = 2;
+    string label             = 3;
+    string color             = 4;
+    string execution_model   = 5;
+    string process_model     = 6;
+    repeated Port inputs     = 7;
+    repeated Port outputs    = 8;
+    bytes  params_schema     = 9; // raw JSON
+    bool   idempotent        = 10;
+    string retry_policy      = 11;
+    repeated string compatible_with = 12;
+}
+
+message Ref {
+    string mime   = 1;
+    string ref    = 2;   // file path or URI
+    bytes  inline = 3;   // small inline payload, JSON-encoded
+}
+
+message Job {
+    string job_id   = 1;
+    string graph_id = 2;
+    string node_id  = 3;
+    string trace_id = 4;
+    string span_id  = 5;
+    map<string, Ref> input  = 6;
+    bytes  params           = 7; // JSON
+    map<string, string> env = 8;
+    string cleanup          = 9;
+}
+
+message Progress {
+    string job_id  = 1;
+    string node_id = 2;
+    double percent = 3;
+    string message = 4;
+    bytes  data    = 5; // JSON
+}
+
+message JobError {
+    string code    = 1;
+    string message = 2;
+}
+
+message Result {
+    string job_id = 1;
+    string status = 2; // "ok" | "error"
+    map<string, Ref> output = 3;
+    JobError error = 4;
+}
+
+message Event {
+    oneof payload {
+        Progress progress = 1;
+        Result   result   = 2;
+    }
+}
