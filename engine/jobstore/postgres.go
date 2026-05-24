@@ -64,8 +64,8 @@ func (s *Postgres) Enqueue(ctx context.Context, rec core.JobRecord) error {
 		graphPayload = rec.GraphPayload
 	}
 	const q = `
-		INSERT INTO jobs (id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, enqueued_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, COALESCE($11, now()))
+		INSERT INTO jobs (id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, enqueued_at, parent_node_rec_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, COALESCE($11, now()), $12)
 	`
 	var enqueued any
 	if !rec.EnqueuedAt.IsZero() {
@@ -73,7 +73,7 @@ func (s *Postgres) Enqueue(ctx context.Context, rec core.JobRecord) error {
 	}
 	_, err = s.pool.Exec(ctx, q,
 		rec.ID, string(kind), rec.GraphRunID, rec.GraphID, rec.NodeID,
-		rec.Tenant, rec.Workspace, string(status), jobJSON, graphPayload, enqueued)
+		rec.Tenant, rec.Workspace, string(status), jobJSON, graphPayload, enqueued, rec.ParentNodeRecID)
 	if err != nil {
 		return wrapPgErr(err)
 	}
@@ -100,7 +100,7 @@ func (s *Postgres) Claim(ctx context.Context, worker string, lease time.Duration
 		      LIMIT 1
 		 )
 		 RETURNING id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result,
-		           enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id
+		           enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id, parent_node_rec_id
 	`
 	row := s.pool.QueryRow(ctx, q, worker, lease.String())
 	rec, err := scanRecord(row)
@@ -151,7 +151,7 @@ func (s *Postgres) Renew(ctx context.Context, jobID, worker string, lease time.D
 }
 
 func (s *Postgres) Complete(ctx context.Context, jobID string, status core.JobStatus, result *core.Result) error {
-	if !core.IsTerminalStatus(status) {
+	if !core.IsTerminalStatus(status) && status != core.JobStatusAwaiting {
 		return core.ErrConflict
 	}
 	var resJSON any
@@ -162,10 +162,17 @@ func (s *Postgres) Complete(ctx context.Context, jobID string, status core.JobSt
 		}
 		resJSON = b
 	}
-	// Refuse to overwrite an already-terminal record. Racing workers can
-	// inspect RowsAffected to detect that another instance won the race.
-	const q = `
-		UPDATE jobs SET status = $2, result = $3::jsonb, finished_at = now(), lease_until = NULL
+	// Awaiting parks the record without finishing it — finished_at stays
+	// NULL so the resume path can mark it later. Terminal writes set it.
+	finishedClause := "finished_at = now()"
+	if status == core.JobStatusAwaiting {
+		finishedClause = "finished_at = finished_at"
+	}
+	// Refuse to overwrite an already-terminal record. Awaiting and skipped
+	// are NOT included in the guard so the resume path (awaiting → succeeded)
+	// works.
+	q := `
+		UPDATE jobs SET status = $2, result = $3::jsonb, ` + finishedClause + `, lease_until = NULL
 		 WHERE id = $1 AND status NOT IN ('succeeded','failed','cancelled')
 	`
 	ct, err := s.pool.Exec(ctx, q, jobID, string(status), resJSON)
@@ -187,7 +194,7 @@ func (s *Postgres) Complete(ctx context.Context, jobID string, status core.JobSt
 func (s *Postgres) Get(ctx context.Context, jobID string) (core.JobRecord, error) {
 	const q = `
 		SELECT id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result,
-		       enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id
+		       enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id, parent_node_rec_id
 		  FROM jobs WHERE id = $1
 	`
 	rec, err := scanRecord(s.pool.QueryRow(ctx, q, jobID))
@@ -200,7 +207,7 @@ func (s *Postgres) Get(ctx context.Context, jobID string) (core.JobRecord, error
 func (s *Postgres) ListByGraph(ctx context.Context, graphID string) ([]core.JobRecord, error) {
 	const q = `
 		SELECT id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result,
-		       enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id
+		       enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id, parent_node_rec_id
 		  FROM jobs WHERE graph_id = $1 ORDER BY enqueued_at DESC
 	`
 	rows, err := s.pool.Query(ctx, q, graphID)
@@ -241,6 +248,7 @@ func scanRecord(r row) (core.JobRecord, error) {
 		&rec.ID, &kind, &rec.GraphRunID, &rec.GraphID, &rec.NodeID, &rec.Tenant, &rec.Workspace,
 		&rec.Status, &jobJSON, &graphJSON, &resultJSON,
 		&rec.EnqueuedAt, &available, &started, &finished, &rec.Attempt, &lease, &rec.WorkerID,
+		&rec.ParentNodeRecID,
 	); err != nil {
 		return core.JobRecord{}, err
 	}

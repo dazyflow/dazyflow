@@ -17,17 +17,36 @@ platform can demonstrate but not actually power a real workflow.
   (`application/json` → object, `text/*` → string, else bytes), and
   seeds every `webhook_input` node in the graph. Cron triggers could
   reuse the same seeding path later.
-- [ ] **Template-style secret substitution.** Resolver is whole-string:
-  `Authorization: env://KEY` resolves the *entire* header value. So an
-  env var must already contain `Bearer <token>`, not just the token.
-  Add `${env:KEY}` or `{{ secret "..." }}` substitution so users can
-  write `Authorization: Bearer ${env:STRIPE_KEY}` and store only the
-  token in the secret store.
-- [ ] **`await_approval` pause/resume.** A graph that runs until a human
-  clicks "approve" then continues. Engine has no pause state today.
-  Requires: node-record status `awaiting`, external resume mechanism
-  (HTTP endpoint? signed token in approval link?), persistence across
-  worker restart.
+- [x] **Template-style secret substitution.** Shipped: `engine.SubstituteString`
+  / `engine.SubstituteValue` handle `${scheme:path}` inline anywhere in
+  a string, with composition across multiple placeholders in one value.
+  Wired into `resolveSecrets` so any string in `Job.Params` / `Job.Env`
+  picks it up; the legacy whole-string `env://KEY` form is preserved.
+  `for_each` adds `${item:path}` per-iteration on a deep-copy of
+  step_params (dot-separated path traversal over maps and lists; empty
+  path = whole item; missing-field errors surface in the `errors`
+  output keyed by iteration index). E2E proves
+  `url: "https://api/${item:id}"` + `Authorization: "Bearer ${env:TOKEN}"`
+  routes correctly per item.
+- [x] **`await_approval` pause/resume.** Shipped:
+  `core.JobStatusAwaiting` (not terminal) + `core.StatusAwaiting` Result
+  sentinel; `Memory.Complete` / `Postgres.Complete` accept awaiting and
+  the resume path (awaiting → succeeded). The `await_approval` module
+  in `modules/flow/` returns awaiting; the worker writes the awaiting
+  record and frees the worker without dispatching dependents. Resume
+  via `POST /approve/<graphRunID>/<nodeID>?token=<hmac>&decision=approve|reject`
+  on `daemon.ApprovalListener`. `daemon.HMACApprovalSigner` mints
+  deterministic per-(run, node) URLs so a worker that re-Executes
+  after a lease expiry emits the same URL. Output ports: decision,
+  approver, comment, approved/rejected control signals, context
+  passthrough. Worker + Service share a `daemon.Dispatcher` so the
+  edge-classifier (skip/fallback/dormant) applies identically whether
+  a node terminates via Execute or via external resume.
+  Persistence-across-restart is automatic when running against the
+  Postgres jobstore (in-memory store loses awaiting records on
+  restart, same as for queued/running). Caveats: token has no TTL
+  (out of scope for V1); multi-replica deployments must share the
+  HMAC secret out-of-band.
 
 ## Production blockers (security + correctness)
 
@@ -256,6 +275,19 @@ them visible so we don't re-litigate the design choices.
 - [x] **Engine fix: missing FromPort output = dormant edge** — was a
   latent footgun where downstream of a non-emitting port ran with
   empty input. Now correctly skipped.
+- [x] **Subgraph module — call-graph-as-step.** Shipped:
+  `modules/flow/subgraph.go` is a declarative awaiting-style module
+  (manifest flag `SubmitsChildGraph`). The worker hands the result to
+  `daemon.SubGraphRunner` (Service satisfies it via `SubmitChild`),
+  which loads the child from the parent's workspace and submits it
+  with `ParentNodeRecID` linkage on the graph-record. When the child
+  terminates, `Dispatcher.maybeResumeParent` projects the child's
+  named (node, port) outputs onto the parent node's output ports via
+  `pending_output_map`, then advances the parent's graph as usual.
+  Child failures surface to the parent as `child_failed` so OnError
+  rules apply normally. V1 limits: same-workspace only, no static
+  cycle detection. Three e2e tests (happy path, child failure
+  propagates, unknown child fails cleanly).
 - [x] **Realistic shape demo (`examples/ap-invoice/`)** — single
   graph, two webhook fires, branch routes on amount, secrets injected,
   archived to sandbox. 10/10 assertions pass.

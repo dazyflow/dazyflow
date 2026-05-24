@@ -135,7 +135,9 @@ func (m *Memory) Complete(_ context.Context, jobID string, status core.JobStatus
 	if !ok {
 		return core.ErrNotFound
 	}
-	if !core.IsTerminalStatus(status) {
+	// Accept terminal statuses (the common case) and JobStatusAwaiting
+	// (the pause path — caller will Complete again later to terminate).
+	if !core.IsTerminalStatus(status) && status != core.JobStatusAwaiting {
 		return core.ErrConflict
 	}
 	// Idempotent: once a record is terminal, refuse further writes so
@@ -146,8 +148,10 @@ func (m *Memory) Complete(_ context.Context, jobID string, status core.JobStatus
 	r.Status = status
 	r.Result = result
 	r.LeaseUntil = nil
-	now := m.clock()
-	r.FinishedAt = &now
+	if status != core.JobStatusAwaiting {
+		now := m.clock()
+		r.FinishedAt = &now
+	}
 	return nil
 }
 

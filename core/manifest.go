@@ -81,6 +81,20 @@ type Manifest struct {
 	// Used for tooltips and as a search target. Label is for chips/
 	// titles (short); Description can be 1–2 sentences.
 	Description string `json:"description,omitempty"`
+
+	// AwaitsApproval signals that this module pauses for external
+	// resume. When true, the engine populates Job.ApprovalURL before
+	// Execute and the worker treats a Result with Status="awaiting"
+	// as a pause (not a terminal write). Only await_approval sets it
+	// today.
+	AwaitsApproval bool `json:"awaits_approval,omitempty"`
+
+	// SubmitsChildGraph signals that this module returns awaiting plus
+	// child-graph metadata in its Result, and the worker should hand
+	// the result off to the SubGraphRunner to actually submit the
+	// child. The dispatcher will resume the parent when the child
+	// terminates. Only subgraph sets it today.
+	SubmitsChildGraph bool `json:"submits_child_graph,omitempty"`
 }
 
 func (m Manifest) Input(name string) (Port, bool) {

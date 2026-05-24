@@ -16,7 +16,10 @@ import (
 // registerOnce makes the test helper modules idempotent against the global
 // registry — tests in the same binary share engine.Default so re-registering
 // would panic.
-var stepsRegistered sync.Once
+var (
+	stepsRegistered sync.Once
+	captureOnce     sync.Once
+)
 
 func registerTestSteps(t *testing.T) {
 	t.Helper()
@@ -271,6 +274,142 @@ func TestForEach_UnknownStepModuleFails(t *testing.T) {
 	}
 	if res.Status != core.StatusError || !strings.Contains(res.Error.Code, "unknown_step") {
 		t.Fatalf("res = %+v", res)
+	}
+}
+
+// TestForEach_TemplatesItemFieldsIntoStepParams verifies the unlock —
+// each iteration gets its own copy of step_params with ${item:path}
+// placeholders substituted by the current item's fields. Without this,
+// you can't actually parameterize per-item HTTP calls / AI calls.
+func TestForEach_TemplatesItemFieldsIntoStepParams(t *testing.T) {
+	registerTestSteps(t)
+	// Capture the params seen by each invocation so we can assert that
+	// the substitution actually reached the step.
+	var mu sync.Mutex
+	seen := []map[string]any{}
+	captureOnce.Do(func() {
+		engine.Register(engine.NativeNode{
+			Manifest: core.Manifest{
+				ID:      "test_capture_step",
+				Version: "1.0",
+				Inputs:  []core.Port{{Port: "in"}},
+				Outputs: []core.Port{{Port: "out"}},
+			},
+			Execute: func(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
+				mu.Lock()
+				cp := make(map[string]any, len(job.Params))
+				for k, v := range job.Params {
+					cp[k] = v
+				}
+				seen = append(seen, cp)
+				mu.Unlock()
+				return core.Result{
+					JobID:  job.ID,
+					Status: core.StatusOK,
+					Output: map[string]core.Ref{"out": {Inline: "ok"}},
+				}, nil
+			},
+		})
+	})
+
+	items := []any{
+		map[string]any{"id": "u-1", "name": "alice"},
+		map[string]any{"id": "u-2", "name": "bob"},
+	}
+	job := core.Job{
+		Input: map[string]core.Ref{"items": {Inline: items}},
+		Params: map[string]any{
+			"step_module": "test_capture_step",
+			"step_params": map[string]any{
+				"url":   "https://api.example.com/users/${item:id}",
+				"label": "user=${item:name}",
+				"tags":  []any{"id:${item:id}"},
+				"nested": map[string]any{
+					"who": "${item:name}",
+				},
+			},
+			"concurrency": 1, // serialize for deterministic seen ordering
+		},
+	}
+	res, err := executeForEach(t.Context(), job, nil)
+	if err != nil || res.Status != core.StatusOK {
+		t.Fatalf("execute: status=%q err=%v", res.Status, err)
+	}
+	if len(seen) != 2 {
+		t.Fatalf("captured %d invocations, want 2", len(seen))
+	}
+	// Item 0
+	if got := seen[0]["url"]; got != "https://api.example.com/users/u-1" {
+		t.Errorf("seen[0].url = %q", got)
+	}
+	if got := seen[0]["label"]; got != "user=alice" {
+		t.Errorf("seen[0].label = %q", got)
+	}
+	if tags, ok := seen[0]["tags"].([]any); !ok || tags[0] != "id:u-1" {
+		t.Errorf("seen[0].tags = %+v", seen[0]["tags"])
+	}
+	if nest := seen[0]["nested"].(map[string]any); nest["who"] != "alice" {
+		t.Errorf("seen[0].nested.who = %v", nest["who"])
+	}
+	// Item 1
+	if got := seen[1]["url"]; got != "https://api.example.com/users/u-2" {
+		t.Errorf("seen[1].url = %q", got)
+	}
+}
+
+func TestForEach_TemplateMissingFieldFailsThatIteration(t *testing.T) {
+	registerTestSteps(t)
+	items := []any{
+		map[string]any{"id": "ok-1"},
+		map[string]any{"other": "x"}, // missing id
+	}
+	job := core.Job{
+		Input: map[string]core.Ref{"items": {Inline: items}},
+		Params: map[string]any{
+			"step_module": "test_echo_step",
+			"step_params": map[string]any{
+				"target": "/api/${item:id}",
+			},
+		},
+	}
+	res, err := executeForEach(t.Context(), job, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	// Without fail_fast the iteration should continue and surface the
+	// missing-field error keyed by the failing index.
+	errs, _ := res.Output["errors"].Inline.(map[string]any)
+	if errs["1"] == nil {
+		t.Fatalf("expected error for index 1, got %+v", errs)
+	}
+	errPayload := errs["1"].(map[string]any)
+	if errPayload["code"] != "template" {
+		t.Errorf("code = %v, want template", errPayload["code"])
+	}
+}
+
+func TestForEach_TemplatesScalarItems(t *testing.T) {
+	registerTestSteps(t)
+	items := []any{"alpha", "beta"}
+	job := core.Job{
+		Input: map[string]core.Ref{"items": {Inline: items}},
+		Params: map[string]any{
+			"step_module": "test_echo_step",
+			"step_params": map[string]any{
+				"who": "${item:}", // empty path = whole item
+			},
+		},
+	}
+	res, err := executeForEach(t.Context(), job, nil)
+	if err != nil || res.Status != core.StatusOK {
+		t.Fatalf("execute: %v / %q", err, res.Status)
+	}
+	// Echo just passes "in" through to "out", we can't assert on
+	// substituted params from outside the step. But the test will fail
+	// above if substitution errored (empty path used to be unsupported).
+	results, _ := res.Output["results"].Inline.([]core.Ref)
+	if len(results) != 2 {
+		t.Fatalf("len = %d", len(results))
 	}
 }
 

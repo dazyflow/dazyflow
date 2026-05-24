@@ -45,6 +45,14 @@ type Job struct {
 	// (QuotaLimit - QuotaUsed) as their remaining budget and refuse
 	// writes that would exceed it.
 	QuotaUsed int64 `json:"quota_used,omitempty"`
+
+	// ApprovalURL is the absolute URL an external approver hits to
+	// resume a paused node. Populated by the engine for modules whose
+	// manifest declares AwaitsApproval = true; empty otherwise. The
+	// module is expected to emit it as part of its pending Result so
+	// downstream notification nodes (email, Slack, etc.) can deliver
+	// the link to a human.
+	ApprovalURL string `json:"approval_url,omitempty"`
 }
 
 type JobError struct {
@@ -72,6 +80,11 @@ type Result struct {
 const (
 	StatusOK    = "ok"
 	StatusError = "error"
+	// StatusAwaiting is the sentinel a module returns to tell the
+	// worker "park this node and free me — I'm waiting for an
+	// external resume." The worker translates this into a
+	// JobStatusAwaiting record rather than a terminal write.
+	StatusAwaiting = "awaiting"
 )
 
 type Progress struct {

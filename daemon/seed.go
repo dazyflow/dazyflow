@@ -121,65 +121,7 @@ func (s *Service) SubmitGraphWithSeed(
 		return graphRunID, nil
 	}
 
-	// 1. Write pre-completed records for seeded nodes.
-	seededSet := make(map[string]struct{}, len(seeds))
-	for nodeID, result := range seeds {
-		resultCopy := result // capture before pointer
-		resultCopy.JobID = NodeJobID(graphRunID, nodeID)
-		if resultCopy.Status == "" {
-			resultCopy.Status = core.StatusOK
-		}
-		seedRec := core.JobRecord{
-			ID:         NodeJobID(graphRunID, nodeID),
-			Kind:       core.JobKindNode,
-			GraphRunID: graphRunID,
-			GraphID:    g.ID,
-			NodeID:     nodeID,
-			Tenant:     g.Tenant,
-			Workspace:  g.Workspace,
-			Status:     core.JobStatusSucceeded,
-			Result:     &resultCopy,
-			Job:        core.Job{GraphID: g.ID, NodeID: nodeID},
-		}
-		if err := s.Jobs.Enqueue(ctx, seedRec); err != nil {
-			return graphRunID, fmt.Errorf("seed %q: %w", nodeID, err)
-		}
-		seededSet[nodeID] = struct{}{}
-	}
-
-	// 2. Enqueue every non-seeded root node normally.
-	hasIncoming := make(map[string]bool, len(g.Nodes))
-	for _, e := range g.Edges {
-		hasIncoming[e.To] = true
-	}
-	var enqueueErrs []error
-	for _, node := range g.Nodes {
-		if hasIncoming[node.ID] {
-			continue
-		}
-		if _, isSeed := seededSet[node.ID]; isSeed {
-			continue
-		}
-		nodeRec := core.JobRecord{
-			ID:         NodeJobID(graphRunID, node.ID),
-			Kind:       core.JobKindNode,
-			GraphRunID: graphRunID,
-			GraphID:    g.ID,
-			NodeID:     node.ID,
-			Tenant:     g.Tenant,
-			Workspace:  g.Workspace,
-			Job:        core.Job{GraphID: g.ID, NodeID: node.ID},
-		}
-		if err := s.Jobs.Enqueue(ctx, nodeRec); err != nil {
-			enqueueErrs = append(enqueueErrs, fmt.Errorf("root %q: %w", node.ID, err))
-		}
-	}
-
-	// 3. For each seeded node, enqueue dependents whose preds are all done.
-	for seedID := range seededSet {
-		enqueueReadyDependents(ctx, s.Jobs, g, graphRunID, seedID)
-	}
-
+	enqueueErrs := populateSeededRun(ctx, s.Jobs, g, graphRunID, seeds)
 	if len(enqueueErrs) > 0 {
 		merged := errors.Join(enqueueErrs...)
 		_ = s.Jobs.Complete(ctx, graphRunID, core.JobStatusFailed, &core.Result{
@@ -208,6 +150,80 @@ func (s *Service) SubmitGraphWithSeed(
 		}
 	}
 	return graphRunID, nil
+}
+
+// populateSeededRun writes pre-completed records for every seeded node,
+// enqueues every non-seeded root, then kicks dependents whose
+// predecessors are already all done. Returns the list of enqueue
+// errors so the caller can decide to fail the whole submission.
+//
+// Used by both the webhook path (SubmitGraphWithSeed) and the subgraph
+// path (submitGraphWithParent) so they stay behavior-identical.
+func populateSeededRun(
+	ctx context.Context,
+	store core.JobStore,
+	g core.Graph,
+	graphRunID string,
+	seeds map[string]core.Result,
+) []error {
+	seededSet := make(map[string]struct{}, len(seeds))
+	var enqueueErrs []error
+
+	for nodeID, result := range seeds {
+		resultCopy := result
+		resultCopy.JobID = NodeJobID(graphRunID, nodeID)
+		if resultCopy.Status == "" {
+			resultCopy.Status = core.StatusOK
+		}
+		seedRec := core.JobRecord{
+			ID:         NodeJobID(graphRunID, nodeID),
+			Kind:       core.JobKindNode,
+			GraphRunID: graphRunID,
+			GraphID:    g.ID,
+			NodeID:     nodeID,
+			Tenant:     g.Tenant,
+			Workspace:  g.Workspace,
+			Status:     core.JobStatusSucceeded,
+			Result:     &resultCopy,
+			Job:        core.Job{GraphID: g.ID, NodeID: nodeID},
+		}
+		if err := store.Enqueue(ctx, seedRec); err != nil {
+			enqueueErrs = append(enqueueErrs, fmt.Errorf("seed %q: %w", nodeID, err))
+			continue
+		}
+		seededSet[nodeID] = struct{}{}
+	}
+
+	hasIncoming := make(map[string]bool, len(g.Nodes))
+	for _, e := range g.Edges {
+		hasIncoming[e.To] = true
+	}
+	for _, node := range g.Nodes {
+		if hasIncoming[node.ID] {
+			continue
+		}
+		if _, isSeed := seededSet[node.ID]; isSeed {
+			continue
+		}
+		nodeRec := core.JobRecord{
+			ID:         NodeJobID(graphRunID, node.ID),
+			Kind:       core.JobKindNode,
+			GraphRunID: graphRunID,
+			GraphID:    g.ID,
+			NodeID:     node.ID,
+			Tenant:     g.Tenant,
+			Workspace:  g.Workspace,
+			Job:        core.Job{GraphID: g.ID, NodeID: node.ID},
+		}
+		if err := store.Enqueue(ctx, nodeRec); err != nil {
+			enqueueErrs = append(enqueueErrs, fmt.Errorf("root %q: %w", node.ID, err))
+		}
+	}
+
+	for seedID := range seededSet {
+		enqueueReadyDependents(ctx, store, g, graphRunID, seedID)
+	}
+	return enqueueErrs
 }
 
 // allNodesAccountedFor returns true when every node in the graph has

@@ -69,21 +69,31 @@ func (c *WorkerConfig) withDefaults() WorkerConfig {
 
 // Worker drains node-level jobs from a JobStore. Each iteration claims a
 // single node job, executes it via Engine.RunNode, persists the result,
-// and dispatches any newly-ready downstream nodes. Multiple Workers
-// against the same store automatically share the load.
+// and dispatches any newly-ready downstream nodes via the shared
+// Dispatcher (which Service.Approve also uses). Multiple Workers against
+// the same store automatically share the load.
 type Worker struct {
-	cfg    WorkerConfig
-	store  core.JobStore
-	engine *engine.Engine
-	bus    Bus
+	cfg        WorkerConfig
+	store      core.JobStore
+	engine     *engine.Engine
+	bus        Bus
+	dispatcher *Dispatcher
+	// SubGraphRunner is optional. When nil and a module's manifest has
+	// SubmitsChildGraph=true, the worker still parks the node but logs
+	// a warning — the graph will hang because no one will submit the
+	// child. Production deployments must wire this (Service satisfies
+	// the interface).
+	SubGraphRunner SubGraphRunner
 }
 
 func NewWorker(cfg WorkerConfig, store core.JobStore, eng *engine.Engine, bus Bus) *Worker {
+	c := cfg.withDefaults()
 	return &Worker{
-		cfg:    cfg.withDefaults(),
-		store:  store,
-		engine: eng,
-		bus:    bus,
+		cfg:        c,
+		store:      store,
+		engine:     eng,
+		bus:        bus,
+		dispatcher: NewDispatcher(store, bus, eng, c.Logger),
 	}
 }
 
@@ -152,6 +162,24 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 	stopLease()
 	leaseWg.Wait()
 
+	// Pause path: the module asked to be parked until an external
+	// resume call. Write status=awaiting, drop the lease, and stop —
+	// do NOT dispatch dependents or check graph completion. The
+	// resume call (Service.Approve, or — for subgraph nodes — the
+	// dispatcher when the child terminates) is what advances those.
+	if runErr == nil && result.Status == core.StatusAwaiting {
+		if cerr := w.store.Complete(context.Background(), rec.ID, core.JobStatusAwaiting, &result); cerr != nil {
+			w.cfg.Logger.Printf("[%s] park %s: %v", w.cfg.ID, rec.ID, cerr)
+			return
+		}
+		w.cfg.Logger.Printf("[%s] parked %s awaiting external resume", w.cfg.ID, rec.ID)
+		// If the manifest declares it submits a child graph, hand the
+		// result off to the SubGraphRunner now. The dispatcher will
+		// resume the parent when the child terminates.
+		w.maybeSubmitChild(ctx, rec, result)
+		return
+	}
+
 	status := core.JobStatusSucceeded
 	if runErr != nil || result.Status == core.StatusError {
 		status = core.JobStatusFailed
@@ -174,14 +202,9 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 		w.cfg.Logger.Printf("[%s] complete %s: %v", w.cfg.ID, rec.ID, cerr)
 	}
 
-	// Dispatch dependents when the outcome can let downstream proceed:
-	// either a succeeded run, or a failure whose outgoing edges are all
-	// OnError=skip (a "tolerated" failure).
-	if status == core.JobStatusSucceeded ||
-		(status == core.JobStatusFailed && !w.failurePropagates(graph, rec.NodeID)) {
-		w.dispatchReady(ctx, graph, rec.GraphRunID, rec.NodeID)
-	}
-	w.maybeCompleteGraph(ctx, graph, rec.GraphRunID, rec.NodeID, status, result.Error)
+	// Dispatch dependents + check graph completion via the shared
+	// dispatcher (used by both worker and approval path).
+	w.dispatcher.AdvanceAfterCompletion(ctx, graph, rec.GraphRunID, rec.NodeID, status, result.Error)
 }
 
 // maybeScheduleRetry returns the time at which to retry the failed node,
@@ -241,7 +264,7 @@ func (w *Worker) runNode(ctx context.Context, graph core.Graph, rec core.JobReco
 			}})
 		}
 	}()
-	result, err := w.engine.RunNode(ctx, graph, rec.NodeID, prior, nodeProgress)
+	result, err := w.engine.RunNode(ctx, graph, rec.GraphRunID, rec.NodeID, prior, nodeProgress)
 	close(nodeProgress)
 	<-forwardDone
 	return result, err
@@ -295,287 +318,69 @@ func (w *Worker) fetchPredecessors(ctx context.Context, graph core.Graph, rec co
 	return prior, nil
 }
 
-// dispatchReady walks dependents of completedNodeID and, for each, decides
-// whether to enqueue it, mark it skipped, or wait. The Skipped path also
-// cascades: marking D skipped triggers a fresh dispatch from D so that
-// D's own downstream resolves (either enqueueing or further-skipping).
-func (w *Worker) dispatchReady(ctx context.Context, graph core.Graph, graphRunID, completedNodeID string) {
-	dependents := map[string]struct{}{}
-	for _, edge := range graph.Edges {
-		if edge.From == completedNodeID {
-			dependents[edge.To] = struct{}{}
+// maybeSubmitChild checks whether the parked node was produced by a
+// subgraph-style module and, if so, parses the metadata embedded in its
+// Result and asks the runner to submit the child graph.
+//
+// We re-resolve the manifest here rather than threading it through
+// processNodeJob — the registry lookup is cheap and keeps the awaiting
+// branch self-contained.
+func (w *Worker) maybeSubmitChild(ctx context.Context, rec core.JobRecord, result core.Result) {
+	node, ok := w.lookupNode(rec)
+	if !ok {
+		return
+	}
+	transport, err := w.engine.Resolver.Resolve(node.Module)
+	if err != nil {
+		return
+	}
+	if !transport.Manifest().SubmitsChildGraph {
+		return
+	}
+	if w.SubGraphRunner == nil {
+		w.cfg.Logger.Printf("[%s] subgraph %s parked but no SubGraphRunner configured — child will not run", w.cfg.ID, rec.ID)
+		return
+	}
+	childGraphID, _ := result.Output["pending_child_graph_id"].Inline.(string)
+	seedsJSON, _ := result.Output["pending_input_seeds"].Inline.(string)
+	if childGraphID == "" {
+		w.cfg.Logger.Printf("[%s] subgraph %s: missing pending_child_graph_id", w.cfg.ID, rec.ID)
+		return
+	}
+	var seeds map[string]core.Result
+	if seedsJSON != "" {
+		if err := json.Unmarshal([]byte(seedsJSON), &seeds); err != nil {
+			w.cfg.Logger.Printf("[%s] subgraph %s: bad seeds payload: %v", w.cfg.ID, rec.ID, err)
+			return
 		}
 	}
-	for nodeID := range dependents {
-		switch decision, reason := w.analyzeDependent(ctx, graph, graphRunID, nodeID); decision {
-		case depEnqueue:
-			newRec := core.JobRecord{
-				ID:         NodeJobID(graphRunID, nodeID),
-				Kind:       core.JobKindNode,
-				GraphRunID: graphRunID,
-				GraphID:    graph.ID,
-				NodeID:     nodeID,
-				Tenant:     graph.Tenant,
-				Workspace:  graph.Workspace,
-				Job:        core.Job{GraphID: graph.ID, NodeID: nodeID},
-			}
-			if err := w.store.Enqueue(ctx, newRec); err != nil && !errors.Is(err, core.ErrConflict) {
-				w.cfg.Logger.Printf("[%s] enqueue dependent %s: %v", w.cfg.ID, nodeID, err)
-			}
-		case depSkipped:
-			w.recordSkipped(ctx, graph, graphRunID, nodeID, reason)
-		case depWaiting:
-			if reason != "" {
-				w.cfg.Logger.Printf("[%s] %s waiting: %s", w.cfg.ID, nodeID, reason)
-			}
-		}
-	}
-}
-
-// recordSkipped writes a terminal Skipped record for a node that won't
-// run, then cascades: dispatches from the skipped node so transitively
-// blocked downstream is also resolved, and bumps the graph-completion
-// check in case this was the last outstanding node.
-func (w *Worker) recordSkipped(ctx context.Context, graph core.Graph, graphRunID, nodeID, reason string) {
-	rec := core.JobRecord{
-		ID:         NodeJobID(graphRunID, nodeID),
-		Kind:       core.JobKindNode,
-		GraphRunID: graphRunID,
-		GraphID:    graph.ID,
-		NodeID:     nodeID,
-		Tenant:     graph.Tenant,
-		Workspace:  graph.Workspace,
-		Status:     core.JobStatusSkipped,
-		Job:        core.Job{GraphID: graph.ID, NodeID: nodeID},
-	}
-	if err := w.store.Enqueue(ctx, rec); err != nil {
-		if !errors.Is(err, core.ErrConflict) {
-			w.cfg.Logger.Printf("[%s] record skipped %s: %v", w.cfg.ID, nodeID, err)
+	childRunID, err := w.SubGraphRunner.SubmitChild(ctx, rec, childGraphID, seeds)
+	if err != nil {
+		w.cfg.Logger.Printf("[%s] subgraph %s: submit child %q: %v", w.cfg.ID, rec.ID, childGraphID, err)
+		// Fail the parent — without a child, it'll hang forever.
+		jerr := &core.JobError{Code: "subgraph_submit", Message: err.Error()}
+		fail := &core.Result{Status: core.StatusError, Error: jerr}
+		// Force-complete the parent: the awaiting record is still
+		// resumable via Complete because we excluded awaiting from the
+		// terminal guard.
+		_ = w.store.Complete(context.Background(), rec.ID, core.JobStatusFailed, fail)
+		if g, gerr := w.fetchGraph(context.Background(), rec.GraphRunID); gerr == nil {
+			w.dispatcher.AdvanceAfterCompletion(ctx, g, rec.GraphRunID, rec.NodeID, core.JobStatusFailed, jerr)
 		}
 		return
 	}
-	w.cfg.Logger.Printf("[%s] skipped %s: %s", w.cfg.ID, nodeID, reason)
-	w.dispatchReady(ctx, graph, graphRunID, nodeID)
-	w.maybeCompleteGraph(ctx, graph, graphRunID, nodeID, core.JobStatusSkipped, nil)
+	w.cfg.Logger.Printf("[%s] subgraph %s submitted child %s (run=%s)", w.cfg.ID, rec.ID, childGraphID, childRunID)
 }
 
-type dependentDecision int
-
-const (
-	depWaiting dependentDecision = iota
-	depEnqueue
-	depSkipped
-)
-
-// analyzeDependent classifies an incoming edge against its predecessor's
-// terminal state. Per-edge outcomes combine into a final decision: any
-// blocking edge or absence of an active edge means the dependent is
-// skipped; any waiting edge defers the decision.
-func (w *Worker) analyzeDependent(ctx context.Context, graph core.Graph, graphRunID, depID string) (dependentDecision, string) {
-	var anyActive, anyBlocked bool
-	var firstReason string
-	for _, edge := range graph.Edges {
-		if edge.To != depID {
-			continue
-		}
-		predRec, err := w.store.Get(ctx, NodeJobID(graphRunID, edge.From))
-		if err != nil {
-			return depWaiting, fmt.Sprintf("predecessor %q not yet recorded", edge.From)
-		}
-		if !core.IsTerminalStatus(predRec.Status) {
-			return depWaiting, fmt.Sprintf("predecessor %q is %s", edge.From, predRec.Status)
-		}
-		switch outcome := classifyEdge(predRec, edge); outcome {
-		case edgeActive:
-			anyActive = true
-		case edgeDormant:
-			// dormant: doesn't activate, doesn't block
-		case edgeBlocking:
-			if !anyBlocked {
-				firstReason = fmt.Sprintf("predecessor %q is %s via %q edge",
-					edge.From, predRec.Status, edge.OnError)
-			}
-			anyBlocked = true
-		}
+// lookupNode finds the parent record's node definition in its graph
+// payload. Returns ok=false on any error — callers treat that as "no
+// subgraph linkage to set up."
+func (w *Worker) lookupNode(rec core.JobRecord) (core.Node, bool) {
+	g, err := w.fetchGraph(context.Background(), rec.GraphRunID)
+	if err != nil {
+		return core.Node{}, false
 	}
-	if anyBlocked {
-		return depSkipped, firstReason
-	}
-	if !anyActive {
-		return depSkipped, "all incoming edges dormant (no output on any FromPort, or fallback edges from succeeded preds)"
-	}
-	return depEnqueue, ""
-}
-
-type edgeOutcome int
-
-const (
-	edgeActive   edgeOutcome = iota // contributes to running this dependent
-	edgeDormant                     // does not contribute but does not block either
-	edgeBlocking                    // would prevent the dependent from running
-)
-
-// classifyEdge maps (predecessor terminal record, edge) → outcome. The
-// truth table covers the four terminal states crossed with the four
-// OnError values, plus an additional "did the source actually emit on
-// this FromPort?" check for succeeded sources — required so that a
-// branch-style module that emits on only one of several output ports
-// correctly skips the dependents wired to its unused ports.
-func classifyEdge(predRec core.JobRecord, edge core.Edge) edgeOutcome {
-	switch predRec.Status {
-	case core.JobStatusSucceeded:
-		if edge.OnError == core.OnErrorFallback {
-			return edgeDormant
-		}
-		// If the predecessor didn't actually emit on the port this
-		// edge reads from, treat the edge as dormant — there's no
-		// data to flow.
-		if predRec.Result == nil || predRec.Result.Output == nil {
-			return edgeDormant
-		}
-		if _, ok := predRec.Result.Output[edge.FromPort]; !ok {
-			return edgeDormant
-		}
-		return edgeActive
-	case core.JobStatusFailed:
-		switch edge.OnError {
-		case core.OnErrorSkip, core.OnErrorFallback:
-			return edgeActive
-		default:
-			return edgeBlocking
-		}
-	case core.JobStatusSkipped:
-		switch edge.OnError {
-		case core.OnErrorSkip:
-			return edgeActive
-		case core.OnErrorFallback:
-			return edgeDormant
-		default:
-			return edgeBlocking
-		}
-	default:
-		return edgeBlocking
-	}
-}
-
-// failurePropagates reports whether a failure of nodeID should abort the
-// graph. The rule is asymmetric between skip and fallback:
-//
-//   - fallback is an explicit "alternative handler" declaration; if a
-//     fallback edge exists, the graph survives regardless of other
-//     outgoing edges. Paths going through abort-edges become skipped.
-//   - skip only tolerates failure locally. With [skip→A, abort→B] the
-//     abort sibling still propagates and the graph fails.
-//   - a leaf (no outgoing edges) defaults to abort.
-func (w *Worker) failurePropagates(graph core.Graph, nodeID string) bool {
-	var hasOutgoing, hasFallback, hasNonTolerant bool
-	for _, edge := range graph.Edges {
-		if edge.From != nodeID {
-			continue
-		}
-		hasOutgoing = true
-		switch edge.OnError {
-		case core.OnErrorFallback:
-			hasFallback = true
-		case core.OnErrorSkip:
-			// tolerated locally; doesn't on its own block propagation
-		default:
-			hasNonTolerant = true
-		}
-	}
-	if !hasOutgoing {
-		return true
-	}
-	if hasFallback {
-		return false
-	}
-	return hasNonTolerant
-}
-
-// maybeCompleteGraph updates the graph-record's terminal state. The first
-// worker to win the race on Complete also publishes the terminal bus
-// event; later attempts get ErrConflict and stay quiet.
-//
-// Three outcomes are possible:
-//   - last node failed AND failure propagates → graph fails immediately
-//   - all nodes terminal AND none has a propagating failure → graph
-//     succeeds (failed-via-skip nodes are tolerated)
-//   - some node still pending → return; another invocation will close it
-func (w *Worker) maybeCompleteGraph(
-	ctx context.Context,
-	graph core.Graph,
-	graphRunID, lastNodeID string,
-	lastStatus core.JobStatus,
-	lastErr *core.JobError,
-) {
-	if lastStatus == core.JobStatusFailed && w.failurePropagates(graph, lastNodeID) {
-		w.markGraphFailed(ctx, graph, graphRunID, lastNodeID, lastErr)
-		return
-	}
-
-	nodeResults := make(map[string]core.Result, len(graph.Nodes))
-	for _, n := range graph.Nodes {
-		rec, err := w.store.Get(ctx, NodeJobID(graphRunID, n.ID))
-		if err != nil {
-			return
-		}
-		if !core.IsTerminalStatus(rec.Status) {
-			return
-		}
-		if rec.Status == core.JobStatusFailed && w.failurePropagates(graph, n.ID) {
-			// Defensive: should have been caught when that node failed.
-			var perr *core.JobError
-			if rec.Result != nil {
-				perr = rec.Result.Error
-			}
-			w.markGraphFailed(ctx, graph, graphRunID, n.ID, perr)
-			return
-		}
-		if rec.Result != nil {
-			nodeResults[n.ID] = *rec.Result
-		}
-	}
-
-	final := &core.Result{Status: core.StatusOK}
-	if cerr := w.store.Complete(ctx, graphRunID, core.JobStatusSucceeded, final); cerr == nil {
-		w.bus.Publish(graphRunID, BusEvent{Terminal: &TerminalEvent{
-			JobID:  graphRunID,
-			Status: core.JobStatusSucceeded,
-			GraphRes: engine.GraphResult{
-				GraphID: graph.ID,
-				Status:  core.StatusOK,
-				Nodes:   nodeResults,
-			},
-		}})
-	}
-}
-
-func (w *Worker) markGraphFailed(
-	ctx context.Context,
-	graph core.Graph,
-	graphRunID, blameNode string,
-	cause *core.JobError,
-) {
-	errPayload := cause
-	if errPayload == nil {
-		errPayload = &core.JobError{
-			Code:    "node_failed",
-			Message: fmt.Sprintf("node %q failed", blameNode),
-		}
-	}
-	result := &core.Result{Status: core.StatusError, Error: errPayload}
-	if cerr := w.store.Complete(ctx, graphRunID, core.JobStatusFailed, result); cerr == nil {
-		w.bus.Publish(graphRunID, BusEvent{Terminal: &TerminalEvent{
-			JobID:  graphRunID,
-			Status: core.JobStatusFailed,
-			Error:  errPayload,
-			GraphRes: engine.GraphResult{
-				GraphID: graph.ID,
-				Status:  core.StatusError,
-				Error:   errPayload,
-			},
-		}})
-	}
+	return g.Node(rec.NodeID)
 }
 
 func (w *Worker) failNode(ctx context.Context, rec core.JobRecord, code, msg string, graph *core.Graph) {
@@ -585,7 +390,7 @@ func (w *Worker) failNode(ctx context.Context, rec core.JobRecord, code, msg str
 		w.cfg.Logger.Printf("[%s] complete-failure %s: %v", w.cfg.ID, rec.ID, cerr)
 	}
 	if graph != nil {
-		w.maybeCompleteGraph(ctx, *graph, rec.GraphRunID, rec.NodeID, core.JobStatusFailed, jerr)
+		w.dispatcher.AdvanceAfterCompletion(ctx, *graph, rec.GraphRunID, rec.NodeID, core.JobStatusFailed, jerr)
 		return
 	}
 	// We never even loaded the graph, so we can't walk for completion.

@@ -45,6 +45,12 @@ type Engine struct {
 	// Unresolved values stay in the JobStore so audit trails never
 	// capture cleartext secrets.
 	Secrets map[string]core.SecretProvider
+	// ApprovalSigner is optional. When set and the resolved module's
+	// manifest has AwaitsApproval=true, the engine populates
+	// Job.ApprovalURL pre-Execute so the module can emit the URL on
+	// its output. Without a signer, awaiting-style modules still run
+	// but receive an empty ApprovalURL.
+	ApprovalSigner core.ApprovalSigner
 }
 
 // Run validates the graph, computes parallel execution layers, and executes
@@ -155,9 +161,14 @@ func (e *Engine) runLayer(
 // worker so different nodes of a graph can land on different workers.
 // progress receives core.Progress events directly (no GraphProgress
 // wrapping) — the caller decides how to surface them.
+//
+// graphRunID identifies the specific run (not the persistent graph ID)
+// and is used to scope the approval URL for await_approval modules.
+// Callers that aren't running per-run can pass graph.ID.
 func (e *Engine) RunNode(
 	ctx context.Context,
 	graph core.Graph,
+	graphRunID string,
 	nodeID string,
 	prior map[string]core.Result,
 	progress chan<- core.Progress,
@@ -186,7 +197,8 @@ func (e *Engine) RunNode(
 			Error:  &core.JobError{Code: "resolve_failed", Message: err.Error()},
 		}, err
 	}
-	input := assembleInput(graph, node.ID, transport.Manifest(), prior)
+	manifest := transport.Manifest()
+	input := assembleInput(graph, node.ID, manifest, prior)
 
 	jobID, err := newJobID()
 	if err != nil {
@@ -215,6 +227,9 @@ func (e *Engine) RunNode(
 			Status: core.StatusError,
 			Error:  &core.JobError{Code: "secret", Message: err.Error()},
 		}, err
+	}
+	if manifest.AwaitsApproval && e.ApprovalSigner != nil {
+		job.ApprovalURL = e.ApprovalSigner.SignApprovalURL(graphRunID, node.ID)
 	}
 	jobIDsFromSpan(ctx, &job)
 

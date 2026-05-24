@@ -2,6 +2,15 @@ package core
 
 import "context"
 
+// ApprovalSigner builds the URL an external approver hits to resume a
+// paused await_approval node. Production implementations sign the URL
+// with an HMAC so the link can be embedded in an outbound email or
+// Slack message without exposing the daemon's job IDs alone as the
+// shared secret. Tests can supply a deterministic stub.
+type ApprovalSigner interface {
+	SignApprovalURL(graphRunID, nodeID string) string
+}
+
 // SecretProvider resolves a single secret-reference scheme. The engine
 // keeps a registry keyed by Scheme; when it encounters a string like
 // "env://STRIPE_KEY" or "vault://prod/db-password" inside Job.Params or

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 
 	"git.sr.ht/~klahr/hazy-flow/core"
@@ -119,6 +121,19 @@ func executeForEach(ctx context.Context, job core.Job, progress chan<- core.Prog
 				return
 			}
 
+			resolvedParams, err := substituteItemParams(runCtx, stepParams, value)
+			if err != nil {
+				errorsMu.Lock()
+				errors[fmt.Sprintf("%d", idx)] = map[string]any{
+					"code":    "template",
+					"message": err.Error(),
+				}
+				errorsMu.Unlock()
+				if failFast {
+					cancel()
+				}
+				return
+			}
 			subJob := core.Job{
 				ID:            fmt.Sprintf("%s#%d", job.ID, idx),
 				GraphID:       job.GraphID,
@@ -126,7 +141,7 @@ func executeForEach(ctx context.Context, job core.Job, progress chan<- core.Prog
 				TraceID:       job.TraceID,
 				SpanID:        job.SpanID,
 				Input:         map[string]core.Ref{itemPort: value},
-				Params:        stepParams,
+				Params:        resolvedParams,
 				Env:           job.Env,
 				Cleanup:       core.CleanupOnNodeComplete,
 				WorkspaceRoot: job.WorkspaceRoot,
@@ -225,4 +240,130 @@ func errorPayload(e *core.JobError) map[string]any {
 		return nil
 	}
 	return map[string]any{"code": e.Code, "message": e.Message}
+}
+
+// substituteItemParams produces a per-iteration copy of params with every
+// ${item:path} placeholder replaced by the corresponding field of the
+// current item. The original params map is not mutated so concurrent
+// iterations don't race on each other's substitutions.
+//
+// Path syntax: dot-separated keys/indices. `${item:user.name}` walks
+// item.user.name; `${item:tags.0}` reads tags[0]; `${item:}` (empty path)
+// stringifies the whole item. Missing fields fail the iteration.
+func substituteItemParams(ctx context.Context, params map[string]any, item core.Ref) (map[string]any, error) {
+	if len(params) == 0 {
+		return params, nil
+	}
+	copied := deepCopyMap(params)
+	sub := itemSubstituter(item.Inline)
+	resolved, err := engine.SubstituteValue(ctx, copied, sub)
+	if err != nil {
+		return nil, err
+	}
+	return resolved.(map[string]any), nil
+}
+
+// itemSubstituter returns a Substituter that resolves ${item:path}. Any
+// other scheme is left alone — secret schemes were already resolved by
+// the engine on the parent for_each job's params.
+func itemSubstituter(item any) engine.Substituter {
+	return func(_ context.Context, scheme, path string) (string, bool, error) {
+		if scheme != "item" {
+			return "", false, nil
+		}
+		value, err := traverseItemPath(item, path)
+		if err != nil {
+			return "", true, err
+		}
+		return stringifyItemValue(value), true, nil
+	}
+}
+
+func traverseItemPath(root any, path string) (any, error) {
+	if path == "" {
+		return root, nil
+	}
+	current := root
+	parts := strings.Split(path, ".")
+	for i, part := range parts {
+		switch typed := current.(type) {
+		case map[string]any:
+			v, ok := typed[part]
+			if !ok {
+				return nil, fmt.Errorf("missing key %q at %s", part, strings.Join(parts[:i+1], "."))
+			}
+			current = v
+		case []any:
+			idx, err := strconv.Atoi(part)
+			if err != nil {
+				return nil, fmt.Errorf("index %q is not a number at %s", part, strings.Join(parts[:i+1], "."))
+			}
+			if idx < 0 || idx >= len(typed) {
+				return nil, fmt.Errorf("index %d out of range (len=%d) at %s", idx, len(typed), strings.Join(parts[:i+1], "."))
+			}
+			current = typed[idx]
+		default:
+			return nil, fmt.Errorf("cannot traverse %T at %s", current, strings.Join(parts[:i+1], "."))
+		}
+	}
+	return current, nil
+}
+
+// stringifyItemValue produces the string representation used to splice a
+// resolved item value into params. Strings pass through unquoted; numbers
+// and booleans use their natural form; complex values fall back to JSON
+// so they can be embedded into URL paths, headers, or templated bodies.
+func stringifyItemValue(v any) string {
+	switch t := v.(type) {
+	case string:
+		return t
+	case nil:
+		return ""
+	case bool:
+		if t {
+			return "true"
+		}
+		return "false"
+	case float64:
+		return strconv.FormatFloat(t, 'f', -1, 64)
+	case int:
+		return strconv.Itoa(t)
+	case int64:
+		return strconv.FormatInt(t, 10)
+	case json.Number:
+		return t.String()
+	default:
+		b, err := json.Marshal(v)
+		if err != nil {
+			return fmt.Sprintf("%v", v)
+		}
+		return string(b)
+	}
+}
+
+// deepCopyMap clones a map[string]any-shaped tree so iteration-time
+// substitution mutates a private copy. JSON-ish trees are common (the
+// shape we get from webhook bodies) so a JSON round-trip would also work,
+// but it'd discard non-JSON values like pointers passed in tests.
+func deepCopyMap(m map[string]any) map[string]any {
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		out[k] = deepCopyValue(v)
+	}
+	return out
+}
+
+func deepCopyValue(v any) any {
+	switch t := v.(type) {
+	case map[string]any:
+		return deepCopyMap(t)
+	case []any:
+		out := make([]any, len(t))
+		for i, e := range t {
+			out[i] = deepCopyValue(e)
+		}
+		return out
+	default:
+		return v
+	}
 }

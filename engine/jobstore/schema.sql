@@ -23,8 +23,13 @@ CREATE TABLE IF NOT EXISTS jobs (
     finished_at   TIMESTAMPTZ,
     attempt       INTEGER NOT NULL DEFAULT 0,
     lease_until   TIMESTAMPTZ,
-    worker_id     TEXT NOT NULL DEFAULT ''
+    worker_id     TEXT NOT NULL DEFAULT '',
+    parent_node_rec_id TEXT NOT NULL DEFAULT ''
 );
+
+-- Backfill for existing deployments (idempotent — schema is re-applied
+-- on every OpenPostgres).
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS parent_node_rec_id TEXT NOT NULL DEFAULT '';
 
 -- Workqueue index: only node-kind, queued (and available) or
 -- running-but-expired.

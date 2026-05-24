@@ -79,17 +79,30 @@ func resolveSlice(ctx context.Context, providers map[string]core.SecretProvider,
 	return nil
 }
 
-// resolveString looks up the scheme registry. If the string isn't a
-// secret reference (no "scheme://" prefix matching a registered
-// provider) it's returned unchanged.
+// resolveString resolves both placeholder forms:
+//
+//  1. Inline:        "Bearer ${env:STRIPE_KEY}"   →  "Bearer sk_live_xyz"
+//  2. Whole-string:  "env://STRIPE_KEY"           →  "sk_live_xyz"
+//
+// The inline form runs first so we can compose with surrounding literal
+// text (the original motivation: `Authorization: Bearer <token>` headers
+// where the token alone is the secret). The whole-string form is kept for
+// backwards compatibility with existing graphs.
+//
+// Unknown schemes (e.g. `${item:...}` outside for_each, or a literal
+// URL like `http://...`) are left unchanged.
 func resolveString(ctx context.Context, providers map[string]core.SecretProvider, s string) (string, error) {
-	scheme, path, ok := splitSecretRef(s)
+	resolved, err := SubstituteString(ctx, s, secretSubstituter(providers))
+	if err != nil {
+		return "", err
+	}
+	scheme, path, ok := splitSecretRef(resolved)
 	if !ok {
-		return s, nil
+		return resolved, nil
 	}
 	provider, ok := providers[scheme]
 	if !ok {
-		return s, nil
+		return resolved, nil
 	}
 	value, err := provider.Get(ctx, path)
 	if err != nil {

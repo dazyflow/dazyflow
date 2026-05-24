@@ -157,6 +157,73 @@ func TestResolveSecrets_DoesNotTouchNonString(t *testing.T) {
 	}
 }
 
+func TestResolveSecrets_InlinePlaceholder(t *testing.T) {
+	providers := newProviders(stubProvider{
+		scheme: "env",
+		values: map[string]string{"STRIPE_KEY": "sk_live_xyz"},
+	})
+	job := &core.Job{Params: map[string]any{
+		"headers": map[string]any{
+			"Authorization": "Bearer ${env:STRIPE_KEY}",
+		},
+	}}
+	if err := resolveSecrets(t.Context(), providers, job); err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	h := job.Params["headers"].(map[string]any)
+	if got := h["Authorization"]; got != "Bearer sk_live_xyz" {
+		t.Errorf("Authorization = %q, want Bearer sk_live_xyz", got)
+	}
+}
+
+func TestResolveSecrets_MultiplePlaceholdersInOneString(t *testing.T) {
+	providers := newProviders(stubProvider{
+		scheme: "env",
+		values: map[string]string{
+			"USER": "alice",
+			"PASS": "shh",
+		},
+	})
+	job := &core.Job{Params: map[string]any{
+		"dsn": "postgres://${env:USER}:${env:PASS}@db/app",
+	}}
+	if err := resolveSecrets(t.Context(), providers, job); err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if job.Params["dsn"] != "postgres://alice:shh@db/app" {
+		t.Errorf("dsn = %q", job.Params["dsn"])
+	}
+}
+
+func TestResolveSecrets_UnknownInlineSchemePassesThrough(t *testing.T) {
+	// ${item:foo} appears in a for_each step's params before iteration.
+	// The engine doesn't know "item" and must leave it untouched so
+	// for_each can substitute later.
+	providers := newProviders(stubProvider{scheme: "env"})
+	job := &core.Job{Params: map[string]any{
+		"url": "https://api/${item:id}",
+	}}
+	if err := resolveSecrets(t.Context(), providers, job); err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if job.Params["url"] != "https://api/${item:id}" {
+		t.Errorf("url mutated: %v", job.Params["url"])
+	}
+}
+
+func TestResolveSecrets_InlineFailureSurfaces(t *testing.T) {
+	providers := newProviders(stubProvider{
+		scheme: "env",
+		values: map[string]string{}, // MISSING_KEY isn't there
+	})
+	job := &core.Job{Params: map[string]any{
+		"x": "prefix ${env:MISSING_KEY} suffix",
+	}}
+	if err := resolveSecrets(t.Context(), providers, job); err == nil {
+		t.Fatal("expected error for missing secret in inline placeholder")
+	}
+}
+
 func TestSplitSecretRef(t *testing.T) {
 	cases := []struct {
 		input  string

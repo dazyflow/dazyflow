@@ -34,6 +34,12 @@ type JobRecord struct {
 	Attempt      int
 	LeaseUntil   *time.Time
 	WorkerID     string
+
+	// ParentNodeRecID links a child graph-record back to the parent
+	// node-record that submitted it (via the subgraph module). Empty
+	// for top-level graph submissions. The dispatcher uses it when the
+	// child graph terminates to resume the parent's awaiting record.
+	ParentNodeRecID string
 }
 
 // IsTerminalStatus reports whether s represents a final state — used by
@@ -67,6 +73,13 @@ const (
 	// blocked its only data path while a fallback elsewhere kept the
 	// graph alive.
 	JobStatusSkipped JobStatus = "skipped"
+	// JobStatusAwaiting parks a node mid-execution while it waits for
+	// an external signal — today only the await_approval module uses
+	// it. Awaiting is NOT terminal: graph completion holds, dependents
+	// are not dispatched, and the worker is freed. The resume path
+	// (daemon.Service.Approve) transitions the record to Succeeded
+	// once the external signal arrives.
+	JobStatusAwaiting JobStatus = "awaiting"
 )
 
 // JobStore is the persistence boundary for jobs. Production deployments
