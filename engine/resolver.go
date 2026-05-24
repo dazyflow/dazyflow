@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazy-flow/engine/mcp"
 )
 
 // Resolver looks up the Transport responsible for executing a given module
@@ -15,11 +16,12 @@ type Resolver interface {
 
 // NodeResolver is the default Resolver. It consults catalogs in the order
 // listed in the spec: native registry → local descriptors → remote
-// descriptors.
+// descriptors → MCP tools.
 type NodeResolver struct {
 	Native *Registry
 	Local  *LocalCatalog
 	Remote *RemoteCatalog
+	MCP    *mcp.Catalog
 }
 
 func (r *NodeResolver) Resolve(moduleID string) (core.Transport, error) {
@@ -35,6 +37,11 @@ func (r *NodeResolver) Resolve(moduleID string) (core.Transport, error) {
 	}
 	if r.Remote != nil {
 		if t, ok := r.Remote.Get(moduleID); ok {
+			return t, nil
+		}
+	}
+	if r.MCP != nil {
+		if t, ok := r.MCP.Get(moduleID); ok {
 			return t, nil
 		}
 	}
@@ -57,6 +64,11 @@ func (r *NodeResolver) Manifests() map[string]core.Manifest {
 	}
 	if r.Remote != nil {
 		for id, m := range r.Remote.Manifests() {
+			out[id] = m
+		}
+	}
+	if r.MCP != nil {
+		for id, m := range r.MCP.Manifests() {
 			out[id] = m
 		}
 	}

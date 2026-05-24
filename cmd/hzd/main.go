@@ -24,6 +24,7 @@ import (
 	"git.sr.ht/~klahr/hazy-flow/daemon"
 	"git.sr.ht/~klahr/hazy-flow/engine"
 	"git.sr.ht/~klahr/hazy-flow/engine/jobstore"
+	"git.sr.ht/~klahr/hazy-flow/engine/mcp"
 	_ "git.sr.ht/~klahr/hazy-flow/modules"
 	"git.sr.ht/~klahr/hazy-flow/workspace"
 )
@@ -42,6 +43,7 @@ func main() {
 	webhookListen := flag.String("webhook", "", "enable the webhook listener on this addr (e.g. :8080); empty disables")
 	enableEnvSecrets := flag.Bool("env-secrets", true, "enable env:// secret provider")
 	builtinSecretsFile := flag.String("builtin-secrets", "", "JSON file of {name: value} for builtin:// secret provider")
+	mcpServers := flag.String("mcp", "", "register MCP stdio servers, e.g. fs=server-filesystem /tmp;docs=npx -y @modelcontextprotocol/server-docs (semicolon-separated)")
 	flag.Parse()
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -87,10 +89,16 @@ func main() {
 		secrets[p.Scheme()] = p
 		log.Printf("loaded builtin secrets from %s", *builtinSecretsFile)
 	}
+	mcpCatalog := mcp.NewCatalog()
+	if err := registerMCPServers(mcpCatalog, *mcpServers); err != nil {
+		log.Fatalf("--mcp: %v", err)
+	}
+
 	eng := &engine.Engine{
 		Resolver: &engine.NodeResolver{
 			Native: engine.Default,
 			Remote: remoteCatalog,
+			MCP:    mcpCatalog,
 		},
 		Sandbox: sandbox,
 		Quota:   quota,
@@ -194,6 +202,43 @@ func main() {
 	if err := srv.Serve(lis); err != nil {
 		log.Fatalf("serve: %v", err)
 	}
+}
+
+// registerMCPServers parses an --mcp spec of the form
+// "name1=command and args;name2=command and args" and registers each
+// stdio MCP server with the catalog. Semicolon-separated so we don't
+// confuse the comma-separated args inside individual commands.
+func registerMCPServers(cat *mcp.Catalog, spec string) error {
+	spec = strings.TrimSpace(spec)
+	if spec == "" {
+		return nil
+	}
+	for _, entry := range strings.Split(spec, ";") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		eq := strings.IndexByte(entry, '=')
+		if eq < 0 {
+			return fmt.Errorf("entry %q: expected name=command [args...]", entry)
+		}
+		name := strings.TrimSpace(entry[:eq])
+		cmdline := strings.TrimSpace(entry[eq+1:])
+		fields := strings.Fields(cmdline)
+		if len(fields) == 0 {
+			return fmt.Errorf("entry %q: empty command", entry)
+		}
+		desc := mcp.StdioDescriptor{
+			Name:    name,
+			Command: fields[0],
+			Args:    fields[1:],
+		}
+		if err := cat.RegisterStdio(desc); err != nil {
+			return fmt.Errorf("register %q: %w", name, err)
+		}
+		log.Printf("registered MCP server %q (%s %v)", name, desc.Command, desc.Args)
+	}
+	return nil
 }
 
 // registerRemotes parses "id1=host:port,id2=host:port" and registers each

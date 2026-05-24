@@ -1,7 +1,31 @@
 # TODO
 
 Open items collected across iterations. Each entry notes the impact and a
-hint at what's needed.
+hint at what's needed. Items at the top section block real usage; items
+further down are quality, observability, and known-unknowns.
+
+## Top of the pile — biggest realism gaps
+
+These showed up while building the AP-invoice demo. Without them the
+platform can demonstrate but not actually power a real workflow.
+
+- [ ] **Webhook body → graph input.** Today's webhook fires the graph but
+  discards the body. Real webhooks carry the data the graph needs to act
+  on (invoice ID, GitHub PR number, Stripe event payload). Two ways to
+  fix: a `webhook_input` module the engine pre-completes with the body,
+  or a graph-level `initial_input` that the trigger can populate. The
+  second is more flexible (works for cron too — passing the fire time).
+- [ ] **Template-style secret substitution.** Resolver is whole-string:
+  `Authorization: env://KEY` resolves the *entire* header value. So an
+  env var must already contain `Bearer <token>`, not just the token.
+  Add `${env:KEY}` or `{{ secret "..." }}` substitution so users can
+  write `Authorization: Bearer ${env:STRIPE_KEY}` and store only the
+  token in the secret store.
+- [ ] **`await_approval` pause/resume.** A graph that runs until a human
+  clicks "approve" then continues. Engine has no pause state today.
+  Requires: node-record status `awaiting`, external resume mechanism
+  (HTTP endpoint? signed token in approval link?), persistence across
+  worker restart.
 
 ## Production blockers (security + correctness)
 
@@ -15,10 +39,28 @@ hint at what's needed.
   captured at job-start) lets two concurrent `file_write`s in the same
   tenant briefly exceed the limit. Per-tenant write mutex or OS-level
   quotas (XFS project quotas, ZFS) needed for hard enforcement.
-- [ ] **SecretProvider implementations.** Interface exists in
-  `core/secrets.go`, no backends. Spec lists builtin (encrypted file),
-  vault, gcp, aws, azure. None plumbed; Engine never resolves
-  `secret://` refs into params.
+- [ ] **Real secret providers (vault, gcp, aws, azure).** Interface +
+  scheme registry + env/builtin providers exist now. The cloud KMS
+  / vault implementations are real integrations we haven't done. Spec
+  lists all four.
+- [ ] **Per-tenant ACL on secrets.** Today any graph in any tenant can
+  resolve any secret the daemon knows about. Production needs
+  namespacing: tenant `acme` can only resolve secrets under `acme/...`,
+  enforced inside provider `Get`.
+- [ ] **Egress allowlist for `http_request`.** SSRF blocks private IPs
+  but a tenant can still reach any public IP. Production needs a
+  per-tenant allowlist of permitted domains/IPs above the SSRF layer.
+- [ ] **Idempotency keys on outbound HTTP.** Modules that POST to
+  payment / ERP systems should send an idempotency key derived from
+  (graph_run_id, node_id, attempt) so retries don't double-charge.
+- [ ] **Port-bind failures are silent.** When the webhook listener's
+  port is taken, `hzd` logs and continues. Should fail-loud on startup
+  so orchestration (k8s, systemd) restarts the process.
+- [ ] **Output sanitization for secrets.** Modules can write resolved
+  secret values into their `Result.Output`; downstream `file_write`
+  could persist them. No automatic redaction. Documenting at minimum,
+  ideally lint the graph for `file_write` connected downstream of
+  http_request response_body when a request used a secret.
 
 ## API surface — control plane gaps
 
@@ -40,9 +82,11 @@ hint at what's needed.
   instances can't share progress streams. Replace with Postgres
   LISTEN/NOTIFY (we already have the pgxpool) or NATS. Interface is
   designed for the swap.
-- [ ] **Scheduler role.** Spec mandates `pg_try_advisory_lock`-based
-  leader election so one hzd handles cron triggers, expired-lease
-  cleanup, etc. Workers are currently peers with no coordinator.
+- [ ] **Scheduler leader election.** Spec mandates
+  `pg_try_advisory_lock`-based leader election so only one hzd fires
+  cron triggers and handles expired-lease cleanup. Today each hzd runs
+  its own scheduler — fine for single-node, broken for multi-node
+  (every cron fires N times).
 - [ ] **Postgres JobStore real-DB tests.** Implementation exists
   (`engine/jobstore/postgres.go`) and tests are gated on
   `HAZYFLOW_TEST_DB`. Wire a CI service or docker-compose so the
@@ -54,16 +98,15 @@ hint at what's needed.
   process-level isolation beyond filesystem sandbox: nsjail, bubblewrap,
   Linux user namespaces, or a per-job container. Resource limits via
   ulimit/cgroups. Output capturing of stdout/stderr/exitcode per spec.
-- [ ] **`http_request` module.** Spec lists it. Needs egress allowlist
-  (otherwise tenants can SSRF internal services), TLS validation, body
-  size limits.
-- [ ] **`webhook_trigger`.** Trigger execution model exists only as a
-  `core.ExecutionTrigger` constant. Engine has no trigger-loop —
-  trigger nodes never get woken up by external events.
-- [ ] **`schedule` (cron).** Spec lists it. Belongs to whatever the
-  scheduler role becomes (see above).
-- [ ] **`split` / `branch`.** Spec lists them under `modules/flow/`. Not
-  implemented. Branch needs a small expression evaluator.
+- [ ] **`split` module.** Spec lists it under `modules/flow/`. Branch
+  is done; split (one input → N outputs) is still missing. Semantics
+  TBD: does it require the input to be a list? What happens if N
+  doesn't match list length?
+- [ ] **HTTP modules: file upload / streaming download.** `http_request`
+  handles small JSON / form bodies via inline. For multipart upload or
+  large download streams it'd need a different shape — probably a
+  separate `http_upload` / `http_download` to keep `http_request`
+  simple.
 
 ## OnError + retry refinements
 
@@ -87,6 +130,10 @@ hint at what's needed.
   matching.
 - [ ] **Service-mesh sidecar mode.** `--tls-disable` (or similar) for
   when Linkerd/Istio handles transport security.
+- [ ] **Webhook trigger authentication beyond a per-graph secret.**
+  Today the webhook compares one shared secret. HMAC-signed payloads
+  (GitHub, Stripe style) need verifying the request signature against
+  the body, not a bearer token.
 
 ## Reliability & cleanup
 
@@ -111,6 +158,11 @@ hint at what's needed.
 - [ ] **Richer variadic semantics.** Indexed keys (`items[0]`,
   `items[1]`) work but leak through to module authors. A nested
   list-Ref form would be cleaner but requires reworking `core.Ref`.
+- [ ] **Binary inline data wonky over gRPC.** Engine `json.Marshal`s
+  `Ref.Inline`, so `[]byte` becomes a base64 string the consumer must
+  decode. Text round-trips fine (use `string`). A first-class binary
+  path on the protobuf (`bytes` field that bypasses JSON wrapping)
+  would clean this up.
 
 ## Observability
 
@@ -119,22 +171,26 @@ hint at what's needed.
   metrics SDK so dashboards can show approaching-limit signals.
 - [ ] **Worker health / readiness.** No `/healthz` / `/readyz` surface
   on hzd. Add to the gRPC server (health-check service) or a sidecar
-  HTTP handler.
+  HTTP handler. Particularly important given the silent bind-failure
+  in the webhook listener — health check would catch that.
 - [ ] **Structured graph-progress audit log.** Right now progress only
   flows over the gRPC stream. Long-running graphs that disconnect
   lose history.
+- [ ] **Per-tenant rate limiting beyond disk quota.** Spec mentions
+  `max_concurrent_jobs`, `max_graph_nodes`, `max_job_duration_s` —
+  none enforced yet.
 
 ## Coverage gaps (the honest list)
 
-- [ ] `engine/` at 56% — `LocalCatalog.LoadDir`, `cancelledResult`,
+- [ ] `engine/` at 57% — `LocalCatalog.LoadDir`, `cancelledResult`,
   some error branches in `runProtocol`.
 - [ ] `engine/jobstore/` at 36% — Postgres path gated, exercised only
   when `HAZYFLOW_TEST_DB` is set.
 - [ ] `cmd/hzctl` / `cmd/hzd` at 0% — no tests.
 - [ ] `workspace/` at 59% — most missed branches are error paths in
   Save/Promote.
-- [ ] `modules/flow/` at 69% — primarily the lesser-used progress
-  branches in `sleep`.
+- [ ] `modules/io/` at 66% — copyFile branch and a few sandbox edge
+  cases.
 
 ## Architectural debt
 
@@ -162,3 +218,34 @@ These are *what we don't know we don't know*:
   settings; production needs sizing.
 - Lease durations vs. real-world worker crash recovery — current 30s
   is a guess; should validate against actual restart times.
+- Cron scheduler under clock skew — we use `time.Now`; haven't
+  reasoned about NTP jumps, daylight-saving transitions, or container
+  clock drift.
+
+## Recently shipped (delete-when-reviewed)
+
+For context — these were on this TODO list and are now done. Keeping
+them visible so we don't re-litigate the design choices.
+
+- [x] **`http_request` module** — done with SSRF blocks (loopback,
+  RFC1918, link-local incl. AWS metadata), body size cap, status
+  filter, timeout, JSON/text MIME detection. 17 tests.
+- [x] **`branch` module** — done with field-path + 10 ops. Engine
+  edge-classifier extended so unused output ports correctly mark
+  downstream as skipped.
+- [x] **Cron triggers** — `daemon.Scheduler` polls workspace stores
+  for graphs with `Triggers: [{Type: "cron", Cron: "..."}]` and fires
+  via `Service.SubmitGraph`.
+- [x] **Webhook triggers** — `daemon.WebhookListener` exposes
+  `POST /trigger/<tenant>/<workspace>/<graph>` with per-graph bearer
+  secret. (Body still discarded — see top of list.)
+- [x] **Secret injection (env + builtin)** — `env://` and
+  `builtin://` resolved just before `transport.Execute`. JobStore
+  and workspace Git retain symbolic references; resolved values
+  never persist.
+- [x] **Engine fix: missing FromPort output = dormant edge** — was a
+  latent footgun where downstream of a non-emitting port ran with
+  empty input. Now correctly skipped.
+- [x] **Realistic shape demo (`examples/ap-invoice/`)** — single
+  graph, two webhook fires, branch routes on amount, secrets injected,
+  archived to sandbox. 10/10 assertions pass.

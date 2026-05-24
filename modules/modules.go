@@ -3,6 +3,7 @@
 package modules
 
 import (
+	_ "git.sr.ht/~klahr/hazy-flow/modules/ai"
 	_ "git.sr.ht/~klahr/hazy-flow/modules/flow"
 	_ "git.sr.ht/~klahr/hazy-flow/modules/io"
 	_ "git.sr.ht/~klahr/hazy-flow/modules/net"

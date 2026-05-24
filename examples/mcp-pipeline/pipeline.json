@@ -1,0 +1,35 @@
+{
+  "id": "mcp-lookup-and-route",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "nodes": [
+    {
+      "id": "lookup",
+      "module": "mcp:ap-demo:lookup_user",
+      "params": {"id": "alice"}
+    },
+    {
+      "id": "route",
+      "module": "branch",
+      "params": {
+        "condition": {"field": "tier", "op": "equals", "value": "premium"}
+      }
+    },
+    {
+      "id": "save_premium",
+      "module": "file_write",
+      "params": {"path": "users/premium.json", "mkdirs": true}
+    },
+    {
+      "id": "save_regular",
+      "module": "file_write",
+      "params": {"path": "users/regular.json", "mkdirs": true}
+    }
+  ],
+  "edges": [
+    {"from": "lookup", "from_port": "out", "to": "route", "to_port": "in"},
+    {"from": "route", "from_port": "then", "to": "save_premium", "to_port": "in"},
+    {"from": "route", "from_port": "else", "to": "save_regular", "to_port": "in"}
+  ]
+}
