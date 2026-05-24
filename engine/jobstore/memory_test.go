@@ -10,7 +10,7 @@ import (
 
 func TestMemory_EnqueueAndClaim(t *testing.T) {
 	s := NewMemory()
-	job := core.JobRecord{ID: "j1", GraphID: "g", NodeID: "n", Tenant: "t"}
+	job := core.JobRecord{ID: "j1", Kind: core.JobKindNode, GraphID: "g", NodeID: "n", Tenant: "t"}
 	if err := s.Enqueue(t.Context(), job); err != nil {
 		t.Fatalf("Enqueue: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestMemory_LeaseExpiryReclaim(t *testing.T) {
 	now := time.Unix(0, 0)
 	s.clock = func() time.Time { return now }
 
-	_ = s.Enqueue(t.Context(), core.JobRecord{ID: "j1"})
+	_ = s.Enqueue(t.Context(), core.JobRecord{ID: "j1", Kind: core.JobKindNode})
 	if _, err := s.Claim(t.Context(), "w1", time.Minute); err != nil {
 		t.Fatalf("first claim: %v", err)
 	}
@@ -63,7 +63,7 @@ func TestMemory_LeaseExpiryReclaim(t *testing.T) {
 
 func TestMemory_RenewAndComplete(t *testing.T) {
 	s := NewMemory()
-	_ = s.Enqueue(t.Context(), core.JobRecord{ID: "j1"})
+	_ = s.Enqueue(t.Context(), core.JobRecord{ID: "j1", Kind: core.JobKindNode})
 	_, _ = s.Claim(t.Context(), "w", time.Minute)
 
 	if err := s.Renew(t.Context(), "j1", "w", time.Minute); err != nil {
@@ -87,9 +87,9 @@ func TestMemory_RenewAndComplete(t *testing.T) {
 func TestMemory_ListByGraph(t *testing.T) {
 	s := NewMemory()
 	for _, id := range []string{"a", "b", "c"} {
-		_ = s.Enqueue(t.Context(), core.JobRecord{ID: id, GraphID: "g1"})
+		_ = s.Enqueue(t.Context(), core.JobRecord{ID: id, Kind: core.JobKindNode, GraphID: "g1"})
 	}
-	_ = s.Enqueue(t.Context(), core.JobRecord{ID: "z", GraphID: "other"})
+	_ = s.Enqueue(t.Context(), core.JobRecord{ID: "z", Kind: core.JobKindNode, GraphID: "other"})
 
 	got, _ := s.ListByGraph(t.Context(), "g1")
 	if len(got) != 3 {

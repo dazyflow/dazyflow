@@ -103,6 +103,24 @@ func ValidateWithManifests(g Graph, manifests map[string]Manifest) error {
 		incoming[inputKey{e.To, e.ToPort}]++
 	}
 
+	// Per-edge OnError sanity check: retrying a non-idempotent module is a
+	// foot-gun (the partial side effects from a failed run may not be safe
+	// to replay). The spec flags this at validation time.
+	for i, e := range g.Edges {
+		if e.OnError != OnErrorRetry {
+			continue
+		}
+		src, ok := nodeManifest[e.From]
+		if !ok {
+			continue
+		}
+		if !src.Idempotent {
+			errs = append(errs, fmt.Errorf(
+				"edge %d (%s→%s): on_error=retry on a non-idempotent module %q is unsafe",
+				i, e.From, e.To, src.ID))
+		}
+	}
+
 	for _, n := range g.Nodes {
 		m, ok := nodeManifest[n.ID]
 		if !ok {

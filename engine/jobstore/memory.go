@@ -37,7 +37,16 @@ func (m *Memory) Enqueue(_ context.Context, rec core.JobRecord) error {
 	if rec.EnqueuedAt.IsZero() {
 		rec.EnqueuedAt = m.clock()
 	}
-	rec.Status = core.JobStatusQueued
+	if rec.Kind == "" {
+		rec.Kind = core.JobKindGraph
+	}
+	// Allow callers (e.g. Service.SubmitGraph creating a graph-record) to
+	// override the default queued status. Workers only claim queued
+	// node-records; graph-records sit at running for the lifetime of the
+	// run.
+	if rec.Status == "" {
+		rec.Status = core.JobStatusQueued
+	}
 	rec.Attempt = 0
 	copy := rec
 	m.records[rec.ID] = &copy
@@ -51,11 +60,19 @@ func (m *Memory) Claim(_ context.Context, worker string, lease time.Duration) (c
 
 	candidates := make([]*core.JobRecord, 0)
 	for _, r := range m.records {
+		// Workers only handle node-kind jobs. Graph-records are status
+		// containers updated by whichever worker finalizes the run.
+		if r.Kind != core.JobKindNode {
+			continue
+		}
+		// Honor delayed-retry scheduling.
+		if r.AvailableAt != nil && r.AvailableAt.After(now) {
+			continue
+		}
 		if r.Status == core.JobStatusQueued {
 			candidates = append(candidates, r)
 			continue
 		}
-		// Running jobs whose lease expired are reclaimable.
 		if r.Status == core.JobStatusRunning && r.LeaseUntil != nil && r.LeaseUntil.Before(now) {
 			candidates = append(candidates, r)
 		}
@@ -75,6 +92,25 @@ func (m *Memory) Claim(_ context.Context, worker string, lease time.Duration) (c
 	until := now.Add(lease)
 	picked.LeaseUntil = &until
 	return *picked, nil
+}
+
+func (m *Memory) Requeue(_ context.Context, jobID string, availableAt time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	r, ok := m.records[jobID]
+	if !ok {
+		return core.ErrNotFound
+	}
+	if core.IsTerminalStatus(r.Status) {
+		// Terminal records can't be revived; force callers to pick a new
+		// record ID if they want to try again.
+		return core.ErrConflict
+	}
+	r.Status = core.JobStatusQueued
+	r.AvailableAt = &availableAt
+	r.LeaseUntil = nil
+	r.Result = nil
+	return nil
 }
 
 func (m *Memory) Renew(_ context.Context, jobID, worker string, lease time.Duration) error {
@@ -99,7 +135,12 @@ func (m *Memory) Complete(_ context.Context, jobID string, status core.JobStatus
 	if !ok {
 		return core.ErrNotFound
 	}
-	if status != core.JobStatusSucceeded && status != core.JobStatusFailed && status != core.JobStatusCancelled {
+	if !core.IsTerminalStatus(status) {
+		return core.ErrConflict
+	}
+	// Idempotent: once a record is terminal, refuse further writes so
+	// racing workers can use ErrConflict to detect they were beaten to it.
+	if core.IsTerminalStatus(r.Status) {
 		return core.ErrConflict
 	}
 	r.Status = status

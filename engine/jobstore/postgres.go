@@ -51,16 +51,29 @@ func (s *Postgres) Enqueue(ctx context.Context, rec core.JobRecord) error {
 	if err != nil {
 		return fmt.Errorf("marshal job: %w", err)
 	}
+	kind := rec.Kind
+	if kind == "" {
+		kind = core.JobKindGraph
+	}
+	status := rec.Status
+	if status == "" {
+		status = core.JobStatusQueued
+	}
+	var graphPayload any
+	if len(rec.GraphPayload) > 0 {
+		graphPayload = rec.GraphPayload
+	}
 	const q = `
-		INSERT INTO jobs (id, graph_id, node_id, tenant, workspace, status, job, enqueued_at)
-		VALUES ($1, $2, $3, $4, $5, 'queued', $6::jsonb, COALESCE($7, now()))
+		INSERT INTO jobs (id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, enqueued_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, COALESCE($11, now()))
 	`
 	var enqueued any
 	if !rec.EnqueuedAt.IsZero() {
 		enqueued = rec.EnqueuedAt
 	}
 	_, err = s.pool.Exec(ctx, q,
-		rec.ID, rec.GraphID, rec.NodeID, rec.Tenant, rec.Workspace, jobJSON, enqueued)
+		rec.ID, string(kind), rec.GraphRunID, rec.GraphID, rec.NodeID,
+		rec.Tenant, rec.Workspace, string(status), jobJSON, graphPayload, enqueued)
 	if err != nil {
 		return wrapPgErr(err)
 	}
@@ -77,14 +90,17 @@ func (s *Postgres) Claim(ctx context.Context, worker string, lease time.Duration
 		       lease_until = now() + $2::interval
 		 WHERE id = (
 		     SELECT id FROM jobs
-		      WHERE status = 'queued'
-		         OR (status = 'running' AND lease_until < now())
+		      WHERE kind = 'node'
+		        AND (
+		              (status = 'queued' AND (available_at IS NULL OR available_at <= now()))
+		           OR (status = 'running' AND lease_until < now())
+		            )
 		      ORDER BY enqueued_at
 		      FOR UPDATE SKIP LOCKED
 		      LIMIT 1
 		 )
-		 RETURNING id, graph_id, node_id, tenant, workspace, status, job, result,
-		           enqueued_at, started_at, finished_at, attempt, lease_until, worker_id
+		 RETURNING id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result,
+		           enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id
 	`
 	row := s.pool.QueryRow(ctx, q, worker, lease.String())
 	rec, err := scanRecord(row)
@@ -92,6 +108,31 @@ func (s *Postgres) Claim(ctx context.Context, worker string, lease time.Duration
 		return core.JobRecord{}, core.ErrNoJobs
 	}
 	return rec, err
+}
+
+func (s *Postgres) Requeue(ctx context.Context, jobID string, availableAt time.Time) error {
+	const q = `
+		UPDATE jobs
+		   SET status = 'queued',
+		       available_at = $2,
+		       lease_until = NULL,
+		       result = NULL
+		 WHERE id = $1
+		   AND status NOT IN ('succeeded','failed','cancelled')
+	`
+	ct, err := s.pool.Exec(ctx, q, jobID, availableAt)
+	if err != nil {
+		return wrapPgErr(err)
+	}
+	if ct.RowsAffected() == 0 {
+		var exists bool
+		_ = s.pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM jobs WHERE id = $1)", jobID).Scan(&exists)
+		if !exists {
+			return core.ErrNotFound
+		}
+		return core.ErrConflict
+	}
+	return nil
 }
 
 func (s *Postgres) Renew(ctx context.Context, jobID, worker string, lease time.Duration) error {
@@ -110,7 +151,7 @@ func (s *Postgres) Renew(ctx context.Context, jobID, worker string, lease time.D
 }
 
 func (s *Postgres) Complete(ctx context.Context, jobID string, status core.JobStatus, result *core.Result) error {
-	if status != core.JobStatusSucceeded && status != core.JobStatusFailed && status != core.JobStatusCancelled {
+	if !core.IsTerminalStatus(status) {
 		return core.ErrConflict
 	}
 	var resJSON any
@@ -121,24 +162,32 @@ func (s *Postgres) Complete(ctx context.Context, jobID string, status core.JobSt
 		}
 		resJSON = b
 	}
+	// Refuse to overwrite an already-terminal record. Racing workers can
+	// inspect RowsAffected to detect that another instance won the race.
 	const q = `
 		UPDATE jobs SET status = $2, result = $3::jsonb, finished_at = now(), lease_until = NULL
-		 WHERE id = $1
+		 WHERE id = $1 AND status NOT IN ('succeeded','failed','cancelled')
 	`
 	ct, err := s.pool.Exec(ctx, q, jobID, string(status), resJSON)
 	if err != nil {
 		return wrapPgErr(err)
 	}
 	if ct.RowsAffected() == 0 {
-		return core.ErrNotFound
+		// Either the record doesn't exist or it's already terminal.
+		var exists bool
+		_ = s.pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM jobs WHERE id = $1)", jobID).Scan(&exists)
+		if !exists {
+			return core.ErrNotFound
+		}
+		return core.ErrConflict
 	}
 	return nil
 }
 
 func (s *Postgres) Get(ctx context.Context, jobID string) (core.JobRecord, error) {
 	const q = `
-		SELECT id, graph_id, node_id, tenant, workspace, status, job, result,
-		       enqueued_at, started_at, finished_at, attempt, lease_until, worker_id
+		SELECT id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result,
+		       enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id
 		  FROM jobs WHERE id = $1
 	`
 	rec, err := scanRecord(s.pool.QueryRow(ctx, q, jobID))
@@ -150,8 +199,8 @@ func (s *Postgres) Get(ctx context.Context, jobID string) (core.JobRecord, error
 
 func (s *Postgres) ListByGraph(ctx context.Context, graphID string) ([]core.JobRecord, error) {
 	const q = `
-		SELECT id, graph_id, node_id, tenant, workspace, status, job, result,
-		       enqueued_at, started_at, finished_at, attempt, lease_until, worker_id
+		SELECT id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result,
+		       enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id
 		  FROM jobs WHERE graph_id = $1 ORDER BY enqueued_at DESC
 	`
 	rows, err := s.pool.Query(ctx, q, graphID)
@@ -179,21 +228,29 @@ type row interface {
 func scanRecord(r row) (core.JobRecord, error) {
 	var (
 		rec        core.JobRecord
+		kind       string
 		jobJSON    []byte
+		graphJSON  []byte
 		resultJSON []byte
+		available  *time.Time
 		started    *time.Time
 		finished   *time.Time
 		lease      *time.Time
 	)
 	if err := r.Scan(
-		&rec.ID, &rec.GraphID, &rec.NodeID, &rec.Tenant, &rec.Workspace,
-		&rec.Status, &jobJSON, &resultJSON,
-		&rec.EnqueuedAt, &started, &finished, &rec.Attempt, &lease, &rec.WorkerID,
+		&rec.ID, &kind, &rec.GraphRunID, &rec.GraphID, &rec.NodeID, &rec.Tenant, &rec.Workspace,
+		&rec.Status, &jobJSON, &graphJSON, &resultJSON,
+		&rec.EnqueuedAt, &available, &started, &finished, &rec.Attempt, &lease, &rec.WorkerID,
 	); err != nil {
 		return core.JobRecord{}, err
 	}
+	rec.AvailableAt = available
+	rec.Kind = core.JobKind(kind)
 	if err := json.Unmarshal(jobJSON, &rec.Job); err != nil {
 		return core.JobRecord{}, fmt.Errorf("unmarshal job: %w", err)
+	}
+	if len(graphJSON) > 0 {
+		rec.GraphPayload = graphJSON
 	}
 	if len(resultJSON) > 0 {
 		var res core.Result

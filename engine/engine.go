@@ -136,6 +136,72 @@ func (e *Engine) runLayer(
 	return nil
 }
 
+// RunNode executes a single node using already-known predecessor results.
+// It is the per-node counterpart to Run, used by the daemon's distributed
+// worker so different nodes of a graph can land on different workers.
+// progress receives core.Progress events directly (no GraphProgress
+// wrapping) — the caller decides how to surface them.
+func (e *Engine) RunNode(
+	ctx context.Context,
+	graph core.Graph,
+	nodeID string,
+	prior map[string]core.Result,
+	progress chan<- core.Progress,
+) (core.Result, error) {
+	node, ok := graph.Node(nodeID)
+	if !ok {
+		return core.Result{
+			Status: core.StatusError,
+			Error:  &core.JobError{Code: "unknown_node", Message: fmt.Sprintf("node %q not in graph", nodeID)},
+		}, fmt.Errorf("node %q not in graph", nodeID)
+	}
+	if e.Resolver == nil {
+		return core.Result{
+			Status: core.StatusError,
+			Error:  &core.JobError{Code: "no_resolver", Message: "engine has no resolver"},
+		}, fmt.Errorf("engine has no resolver")
+	}
+	ctx, span := startNodeSpan(ctx, graph, node)
+	defer span.End()
+
+	transport, err := e.Resolver.Resolve(node.Module)
+	if err != nil {
+		recordSpanError(span, err)
+		return core.Result{
+			Status: core.StatusError,
+			Error:  &core.JobError{Code: "resolve_failed", Message: err.Error()},
+		}, err
+	}
+	input := assembleInput(graph, node.ID, transport.Manifest(), prior)
+
+	jobID, err := newJobID()
+	if err != nil {
+		recordSpanError(span, err)
+		return core.Result{Status: core.StatusError}, fmt.Errorf("generate job ID: %w", err)
+	}
+	job := core.Job{
+		ID:      jobID,
+		GraphID: graph.ID,
+		NodeID:  node.ID,
+		Input:   input,
+		Params:  node.Params,
+		Env:     node.Env,
+		Cleanup: core.CleanupOnGraphComplete,
+	}
+	jobIDsFromSpan(ctx, &job)
+
+	result, execErr := transport.Execute(ctx, job, progress)
+	if result.JobID == "" {
+		result.JobID = job.ID
+	}
+	if execErr != nil {
+		recordSpanError(span, execErr)
+	} else if result.Status == core.StatusError && result.Error != nil {
+		recordSpanError(span, fmt.Errorf("%s: %s", result.Error.Code, result.Error.Message))
+	}
+	return result, execErr
+}
+
 // runNode resolves the transport, assembles the Job from upstream outputs,
 // runs Execute with a per-node progress forwarder, and returns the result.
 func (e *Engine) runNode(

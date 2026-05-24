@@ -1,92 +1,99 @@
-// Command hzd is the Hazy Flow daemon. The step-4 build runs a single graph
-// passed on the command line (or a baked-in demo when none is given) and
-// prints the per-node results. Postgres-backed scheduling and the API
-// surface come in later steps.
+// Command hzd is the Hazy Flow daemon. It serves the control gRPC API
+// backed by a daemon.Service. For step-12 the storage layer is in-memory
+// and a single dev workspace is auto-provisioned; production deployments
+// will swap in Postgres + a real workspace lookup.
 package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
-	"os"
+	"net"
 	"os/signal"
 	"syscall"
 
+	"google.golang.org/grpc"
+
+	"git.sr.ht/~klahr/hazy-flow/auth"
 	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazy-flow/daemon"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/engine/jobstore"
 	_ "git.sr.ht/~klahr/hazy-flow/modules"
+	"git.sr.ht/~klahr/hazy-flow/workspace"
 )
 
 func main() {
-	graphPath := flag.String("graph", "", "path to graph JSON; empty runs the demo")
+	listen := flag.String("listen", ":50050", "gRPC listen address")
+	devKey := flag.Bool("dev-key", true, "issue a dev API key on startup (insecure; for local use only)")
+	workerCount := flag.Int("workers", 2, "number of worker goroutines")
 	flag.Parse()
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	graph, err := loadGraph(*graphPath)
+	ks := auth.NewMemKeyStore()
+	devWS, err := workspace.OpenFS("")
 	if err != nil {
-		log.Fatalf("load graph: %v", err)
+		log.Fatalf("open workspace: %v", err)
+	}
+	jobs := jobstore.NewMemory()
+	bus := daemon.NewMemoryBus()
+	eng := &engine.Engine{Resolver: &engine.NodeResolver{Native: engine.Default}}
+	svc := &daemon.Service{
+		Auth:       auth.Chain{&auth.APIKeyAuthenticator{Store: ks}},
+		Workspaces: daemon.MapWorkspaces{"dev/default": devWS},
+		Jobs:       jobs,
+		Engine:     eng,
+		Bus:        bus,
+		WorkerID:   "hzd-dev",
 	}
 
-	eng := &engine.Engine{Resolver: &engine.NodeResolver{Native: engine.Default}}
-
-	progress := make(chan engine.GraphProgress, 32)
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		for p := range progress {
-			pct := "?"
-			if p.Progress.Percent != nil {
-				pct = fmt.Sprintf("%.0f%%", *p.Progress.Percent*100)
+	// Spin up worker goroutines. Each is independent and competes for
+	// claims; the JobStore makes that contention safe.
+	for i := 0; i < *workerCount; i++ {
+		w := daemon.NewWorker(daemon.WorkerConfig{
+			ID: fmt.Sprintf("hzd-dev-w%d", i),
+		}, jobs, eng, bus)
+		go func() {
+			if err := w.Run(ctx); err != nil && err != context.Canceled {
+				log.Printf("worker stopped: %v", err)
 			}
-			log.Printf("[%s] %s: %s", p.NodeID, pct, p.Progress.Message)
+		}()
+	}
+
+	if *devKey {
+		adminRole := core.Role{Name: "admin", Permissions: []core.Permission{
+			core.PermTenantAdmin, core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
+		}}
+		_, ct, err := auth.IssueAPIKey(ks, ctx, "dev", "dev", "default", "dev@local", []core.Role{adminRole})
+		if err != nil {
+			log.Fatalf("issue dev key: %v", err)
 		}
+		fmt.Printf("DEV API KEY (set HZCTL_TOKEN=%s):\n%s\n", ct, ct)
+	}
+
+	unary, stream := daemon.AuthInterceptors(svc.Auth)
+	srv := grpc.NewServer(
+		grpc.UnaryInterceptor(unary),
+		grpc.StreamInterceptor(stream),
+	)
+	daemon.RegisterGRPC(srv, svc)
+
+	lis, err := net.Listen("tcp", *listen)
+	if err != nil {
+		log.Fatalf("listen %s: %v", *listen, err)
+	}
+	log.Printf("hzd listening on %s", *listen)
+
+	go func() {
+		<-ctx.Done()
+		log.Println("shutting down")
+		srv.GracefulStop()
 	}()
 
-	res, runErr := eng.Run(ctx, graph, progress)
-	<-done
-
-	if runErr != nil {
-		log.Printf("graph failed: %v", runErr)
-	}
-	if err := json.NewEncoder(os.Stdout).Encode(res); err != nil {
-		log.Fatalf("encode result: %v", err)
-	}
-	if runErr != nil {
-		os.Exit(1)
-	}
-}
-
-func loadGraph(path string) (core.Graph, error) {
-	if path == "" {
-		return demoGraph(), nil
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return core.Graph{}, fmt.Errorf("read %q: %w", path, err)
-	}
-	var g core.Graph
-	if err := json.Unmarshal(data, &g); err != nil {
-		return core.Graph{}, fmt.Errorf("parse %q: %w", path, err)
-	}
-	return g, nil
-}
-
-// demoGraph builds a small "sleep → sleep" pipeline so a fresh checkout can
-// be tested with just `go run ./cmd/hzd`.
-func demoGraph() core.Graph {
-	return core.Graph{
-		ID:      "demo",
-		Version: "1",
-		Nodes: []core.Node{
-			{ID: "warmup", Module: "sleep", Params: map[string]any{"ms": 100}},
-			{ID: "main", Module: "sleep", Params: map[string]any{"ms": 200}},
-		},
-		Edges: []core.Edge{
-			{From: "warmup", FromPort: "out", To: "main", ToPort: "in"},
-		},
+	if err := srv.Serve(lis); err != nil {
+		log.Fatalf("serve: %v", err)
 	}
 }

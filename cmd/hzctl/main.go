@@ -1,11 +1,9 @@
-// Command hzctl is the Hazy Flow CLI. The shipped commands are split into:
+// Command hzctl is the Hazy Flow CLI. Commands fall into two groups:
 //
-//   - "offline" commands that work against a local workspace Git repo
-//     (lint, list, save, load, promote)
-//   - "remote" commands that talk to hzd over gRPC. These are wired to the
-//     api/gen/node protocol, but a generic graph-management RPC service
-//     (separate from NodeService) is still to be defined — those commands
-//     currently print a "not implemented" notice.
+//   - "offline" — work against a local workspace Git repo (lint).
+//   - "remote"  — talk to hzd over gRPC via the control API. Configure
+//                  the server URL with --server and the bearer token with
+//                  the HZCTL_TOKEN environment variable.
 package main
 
 import (
@@ -15,6 +13,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var serverFlag string
+
 func main() {
 	root := &cobra.Command{
 		Use:           "hzctl",
@@ -22,6 +22,8 @@ func main() {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
+	root.PersistentFlags().StringVar(&serverFlag, "server", "localhost:50050", "hzd gRPC address")
+
 	root.AddCommand(graphCmd())
 	root.AddCommand(moduleCmd())
 	root.AddCommand(jobCmd())

@@ -1,0 +1,176 @@
+syntax = "proto3";
+
+package hazyflow.control.v1;
+
+option go_package = "git.sr.ht/~klahr/hazy-flow/api/gen/control;controlpb";
+
+// The control plane is what hzctl (and any future web UI) speaks to hzd
+// for graph/job/module/workspace management. Authentication is per-RPC
+// via "authorization: Bearer <token>" gRPC metadata, validated by the
+// daemon's auth.Authenticator.
+
+// ============================================================ messages
+
+message Node {
+    string id     = 1;
+    string module = 2;
+    bytes  params = 3; // JSON
+    map<string, string> env = 4;
+}
+
+message Edge {
+    string from      = 1;
+    string from_port = 2;
+    string to        = 3;
+    string to_port   = 4;
+    string on_error  = 5;
+}
+
+message Graph {
+    string id        = 1;
+    string version   = 2;
+    string tenant    = 3;
+    string workspace = 4;
+    repeated Node nodes = 5;
+    repeated Edge edges = 6;
+}
+
+message GraphProgress {
+    string job_id  = 1;
+    string node_id = 2;
+    double percent = 3;
+    string message = 4;
+}
+
+message JobError {
+    string code    = 1;
+    string message = 2;
+}
+
+message NodeResult {
+    string node_id = 1;
+    string status  = 2;
+    JobError error = 3;
+}
+
+message GraphResult {
+    string graph_id = 1;
+    string status   = 2;
+    repeated NodeResult nodes = 3;
+    JobError error = 4;
+}
+
+message Port {
+    string id        = 1;
+    repeated string mime = 2;
+    string label     = 3;
+    bool   required  = 4;
+    bool   variadic  = 5;
+    int32  min       = 6;
+    int32  max       = 7;
+}
+
+message Manifest {
+    string id              = 1;
+    string version         = 2;
+    string label           = 3;
+    string color           = 4;
+    string execution_model = 5;
+    string process_model   = 6;
+    repeated Port inputs   = 7;
+    repeated Port outputs  = 8;
+    bool   idempotent      = 9;
+    string retry_policy    = 10;
+}
+
+message JobRecord {
+    string id          = 1;
+    string graph_id    = 2;
+    string node_id     = 3;
+    string tenant      = 4;
+    string workspace   = 5;
+    string status      = 6;
+    int64  enqueued_at = 7; // unix nanos
+    int64  started_at  = 8;
+    int64  finished_at = 9;
+    int32  attempt     = 10;
+    string worker_id   = 11;
+    JobError error     = 12;
+}
+
+// =========================================================== GraphService
+
+service GraphService {
+    rpc SaveGraph    (SaveGraphRequest)    returns (SaveGraphResponse);
+    rpc LoadGraph    (LoadGraphRequest)    returns (LoadGraphResponse);
+    rpc ListGraphs   (ListGraphsRequest)   returns (ListGraphsResponse);
+    rpc PromoteGraph (PromoteGraphRequest) returns (PromoteGraphResponse);
+    rpc RunGraph     (RunGraphRequest)     returns (stream RunGraphEvent);
+}
+
+message SaveGraphRequest  { Graph graph = 1; }
+message SaveGraphResponse { string commit = 1; }
+
+message LoadGraphRequest {
+    string tenant    = 1;
+    string workspace = 2;
+    string graph_id  = 3;
+    string ref       = 4; // empty = HEAD
+}
+message LoadGraphResponse { Graph graph = 1; }
+
+message ListGraphsRequest {
+    string tenant    = 1;
+    string workspace = 2;
+}
+message ListGraphsResponse { repeated string graph_ids = 1; }
+
+message PromoteGraphRequest {
+    string tenant    = 1;
+    string workspace = 2;
+    string graph_id  = 3;
+    string env       = 4;
+    string commit    = 5;
+}
+message PromoteGraphResponse {}
+
+message RunGraphRequest {
+    // Either inline graph or load by ref.
+    Graph  graph     = 1;
+    string tenant    = 2;
+    string workspace = 3;
+    string graph_id  = 4;
+    string ref       = 5;
+}
+
+message RunGraphEvent {
+    oneof payload {
+        GraphProgress progress = 1;
+        RunGraphCompleted completed = 2;
+    }
+}
+
+message RunGraphCompleted {
+    string job_id = 1;
+    GraphResult result = 2;
+}
+
+// ============================================================ JobService
+
+service JobService {
+    rpc GetJob           (GetJobRequest)           returns (JobRecord);
+    rpc ListJobsForGraph (ListJobsForGraphRequest) returns (ListJobsResponse);
+}
+
+message GetJobRequest           { string job_id = 1; }
+message ListJobsForGraphRequest { string graph_id = 1; }
+message ListJobsResponse        { repeated JobRecord jobs = 1; }
+
+// ========================================================= ModuleService
+
+service ModuleService {
+    rpc ListModules (ListModulesRequest) returns (ListModulesResponse);
+}
+
+message ListModulesRequest  {}
+message ListModulesResponse { repeated Manifest modules = 1; }
