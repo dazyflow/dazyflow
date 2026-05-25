@@ -29,7 +29,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "Excel",
 			Tags:           []string{"excel", "xlsx", "spreadsheet", "write"},
-			Description:    "Write rows to a new .xlsx file in the workspace sandbox. Input 'rows' is a list of {column: value} records; optional 'headers' input fixes column order (otherwise inferred from row keys, sorted). Respects per-tenant disk quota.",
+			Description:    "Write rows to an .xlsx file in the workspace sandbox. Input 'rows' is a list of {column: value} records; optional 'headers' input fixes column order (otherwise inferred from row keys, sorted). With append=true, opens an existing file (or creates one) and adds rows below the existing data — the file's header row is the source of truth for column placement. Respects per-tenant disk quota.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
@@ -39,7 +39,7 @@ func init() {
 			Outputs: []core.Port{
 				{Port: "out", Label: "Written path", MIME: []string{"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}},
 			},
-			ParamsSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string","format":"workspace-path"},"sheet":{"type":"string"},"mkdirs":{"type":"boolean"},"autosize":{"type":"boolean"},"freezeRow":{"type":"integer"}},"required":["path"]}`),
+			ParamsSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string","format":"workspace-path"},"sheet":{"type":"string"},"mkdirs":{"type":"boolean"},"autosize":{"type":"boolean"},"freezeRow":{"type":"integer"},"append":{"type":"boolean"}},"required":["path"]}`),
 		},
 		Execute: executeExcelWrite,
 	})
@@ -91,24 +91,51 @@ func executeExcelWrite(_ context.Context, job core.Job, _ chan<- core.Progress) 
 		sheet = "Sheet1"
 	}
 
-	buf, err := renderXLSX(sheet, headers, rows, job.Params)
-	if err != nil {
-		return errResult(job, "render", err.Error()), nil
-	}
-
-	if job.QuotaLimit > 0 {
-		if job.QuotaUsed+int64(buf.Len()) > job.QuotaLimit {
-			return errResult(job, "quota_exceeded",
-				fmt.Sprintf("write of %d bytes would push tenant past %d (currently %d)",
-					buf.Len(), job.QuotaLimit, job.QuotaUsed)), nil
-		}
-	}
-
 	root, err := os.OpenRoot(job.WorkspaceRoot)
 	if err != nil {
 		return errResult(job, "sandbox", fmt.Sprintf("open root: %v", err)), nil
 	}
 	defer root.Close()
+
+	// Append path: only kicks in when append=true AND the file already
+	// exists with the target sheet populated. Otherwise we fall
+	// through to the fresh-write path — same as if append wasn't set
+	// — so "append" is safe to leave on for recurring graphs that
+	// sometimes start from nothing.
+	doAppend, _ := paramBool(job.Params, "append")
+	var buf *bytes.Buffer
+	var oldSize int64
+	if doAppend {
+		if info, err := root.Stat(dest); err == nil && !info.IsDir() {
+			appended, appendBuf, err := renderAppendedXLSX(root, dest, sheet, headers, rows, job.Params)
+			if err != nil {
+				return errResult(job, "render", err.Error()), nil
+			}
+			if appended {
+				buf = appendBuf
+				oldSize = info.Size()
+			}
+		}
+	}
+	if buf == nil {
+		freshBuf, err := renderXLSX(sheet, headers, rows, job.Params)
+		if err != nil {
+			return errResult(job, "render", err.Error()), nil
+		}
+		buf = freshBuf
+	}
+
+	// Quota: for an append-overwrite the cost is only the delta;
+	// charging the full new size would double-count the bytes that
+	// were already on disk and counted in QuotaUsed.
+	delta := int64(buf.Len()) - oldSize
+	if job.QuotaLimit > 0 && delta > 0 {
+		if job.QuotaUsed+delta > job.QuotaLimit {
+			return errResult(job, "quota_exceeded",
+				fmt.Sprintf("write of %d bytes (delta %d) would push tenant past %d (currently %d)",
+					buf.Len(), delta, job.QuotaLimit, job.QuotaUsed)), nil
+		}
+	}
 
 	if mkdirs, _ := paramBool(job.Params, "mkdirs"); mkdirs {
 		if err := root.MkdirAll(path.Dir(dest), 0o755); err != nil {
@@ -139,6 +166,102 @@ func executeExcelWrite(_ context.Context, job core.Job, _ chan<- core.Progress) 
 			"out": {MIME: excelMIME, Ref: dest},
 		},
 	}, nil
+}
+
+// renderAppendedXLSX opens an existing .xlsx through the workspace
+// sandbox, appends rows below the last data row of `sheet`, and
+// returns the serialized bytes ready to overwrite the file.
+//
+// Column placement: the file's first row is treated as the source of
+// truth for column ordering. Input row keys are looked up against the
+// file's headers, so the value for column "name" lands under
+// whatever Excel column "name" lives in — regardless of the order
+// the upstream node emitted them in. Input keys with no matching
+// file header are silently skipped (logging the user's column
+// shape would be the alternative; ignored for v1 simplicity).
+//
+// Returns (appended=false, nil, nil) — i.e. "fall through to fresh
+// write" — when the existing file lacks the target sheet or the
+// sheet is empty. That makes append safe to leave on for recurring
+// graphs that occasionally start from a blank slate.
+func renderAppendedXLSX(root *os.Root, dest, sheet string, inputHeaders []string, rows []map[string]any, params map[string]any) (bool, *bytes.Buffer, error) {
+	fh, err := root.Open(dest)
+	if err != nil {
+		if isSandboxEscape(err) {
+			return false, nil, fmt.Errorf("path %q escapes workspace", dest)
+		}
+		return false, nil, fmt.Errorf("open %q: %w", dest, err)
+	}
+	defer fh.Close()
+
+	f, err := excelize.OpenReader(fh)
+	if err != nil {
+		return false, nil, fmt.Errorf("parse existing xlsx %q: %w", dest, err)
+	}
+	defer f.Close()
+
+	// Sheet missing → fall through to fresh-write path. We could
+	// auto-create the sheet here, but then "append" silently morphs
+	// into "create" which is exactly the surprise users complain
+	// about in other tools; the fresh-write path makes it visible
+	// (the whole workbook gets rewritten with that sheet only).
+	if idx, _ := f.GetSheetIndex(sheet); idx < 0 {
+		return false, nil, nil
+	}
+
+	existing, err := f.GetRows(sheet)
+	if err != nil {
+		return false, nil, fmt.Errorf("read existing rows: %w", err)
+	}
+	if len(existing) == 0 {
+		// Empty sheet → no headers to align against. Fall through.
+		return false, nil, nil
+	}
+
+	fileHeaders := existing[0]
+	headerCol := make(map[string]int, len(fileHeaders))
+	for i, h := range fileHeaders {
+		if h != "" {
+			headerCol[h] = i + 1 // 1-based; excelize uses 1-indexed coords
+		}
+	}
+
+	// Write rows below the last existing row. len(existing) is the
+	// 1-based row number of the next empty row.
+	startRow := len(existing) + 1
+	for r, row := range rows {
+		for k, v := range row {
+			col, ok := headerCol[k]
+			if !ok {
+				continue // input column doesn't exist in the file; skip
+			}
+			if v == nil {
+				continue
+			}
+			cell, _ := excelize.CoordinatesToCellName(col, startRow+r)
+			if err := f.SetCellValue(sheet, cell, v); err != nil {
+				return false, nil, fmt.Errorf("write cell %s: %w", cell, err)
+			}
+		}
+	}
+
+	// Apply autosize / freezeRow if requested — same as fresh write,
+	// so re-running a graph that toggles these doesn't quietly stop
+	// applying them on subsequent appends.
+	if freeze, ok := paramInt(params, "freezeRow"); ok && freeze > 0 {
+		_ = f.SetPanes(sheet, &excelize.Panes{
+			Freeze: true, YSplit: freeze,
+			TopLeftCell: fmt.Sprintf("A%d", freeze+1),
+			ActivePane:  "bottomLeft",
+		})
+	}
+	_ = inputHeaders // inputHeaders intentionally ignored when appending — file's headers win.
+
+	var buf bytes.Buffer
+	if err := f.Write(&buf); err != nil {
+		return false, nil, fmt.Errorf("serialize: %w", err)
+	}
+	return true, &buf, nil
 }
 
 // renderXLSX writes the headers + rows into a fresh workbook and
