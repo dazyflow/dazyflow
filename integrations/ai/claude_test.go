@@ -154,6 +154,62 @@ func TestClaude_PromptInputPortOverridesParams(t *testing.T) {
 	}
 }
 
+// Wiring a Merge into Claude's prompt port used to silently fall
+// through to "no messages" because Merge publishes Inline as
+// []core.Ref, not a string. The coercion in buildClaudeRequest
+// flattens the list to a single user message with blank-line
+// separators — what the user almost certainly meant when fanning
+// in several blurbs.
+func TestClaude_PromptInputAcceptsMergeList(t *testing.T) {
+	srv, seen := mockClaude(t, okResponse(""), 200)
+	defer srv.Close()
+
+	_, _ = executeClaude(t.Context(), core.Job{
+		Params: map[string]any{"api_key": "k", "base_url": srv.URL},
+		Input: map[string]core.Ref{
+			// Same wire shape integrations/flow/merge.go emits:
+			// MIME=...hazyflow-list, Inline=[]core.Ref.
+			"prompt": {
+				MIME: "application/x-hazyflow-list+json",
+				Inline: []core.Ref{
+					{Inline: "first chunk"},
+					{Inline: "second chunk"},
+				},
+			},
+		},
+	}, nil)
+	if len(seen.body.Messages) != 1 {
+		t.Fatalf("got %d messages, want 1", len(seen.body.Messages))
+	}
+	want := "first chunk\n\nsecond chunk"
+	if seen.body.Messages[0].Content != want {
+		t.Errorf("content = %q, want %q", seen.body.Messages[0].Content, want)
+	}
+}
+
+// A structured object on the prompt port shouldn't break the node
+// either — JSON-stringify so the model can read what arrived. The
+// LLM is good at recovering meaning from a JSON blob; the
+// alternative (silently producing "no messages") sends the user
+// hunting for a phantom misconfiguration.
+func TestClaude_PromptInputAcceptsStructuredObject(t *testing.T) {
+	srv, seen := mockClaude(t, okResponse(""), 200)
+	defer srv.Close()
+
+	_, _ = executeClaude(t.Context(), core.Job{
+		Params: map[string]any{"api_key": "k", "base_url": srv.URL},
+		Input: map[string]core.Ref{
+			"prompt": {Inline: map[string]any{"question": "what is 2+2?"}},
+		},
+	}, nil)
+	if len(seen.body.Messages) != 1 {
+		t.Fatalf("got %d messages", len(seen.body.Messages))
+	}
+	if !strings.Contains(seen.body.Messages[0].Content, `"question":"what is 2+2?"`) {
+		t.Errorf("content = %q (expected JSON-stringified)", seen.body.Messages[0].Content)
+	}
+}
+
 func TestClaude_PromptParamsFallback(t *testing.T) {
 	srv, seen := mockClaude(t, okResponse(""), 200)
 	defer srv.Close()

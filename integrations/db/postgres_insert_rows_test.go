@@ -183,8 +183,12 @@ func TestPostgresInsert_NamedSchema(t *testing.T) {
 // the drop performs before opening any connection.
 // ----------------------------------------------------------------------
 
+// Only the genuinely-unsafe shapes are pre-rejected. Names like
+// "with space" or `"public; DROP"` are valid Postgres identifiers
+// when double-quoted — they used to trip the [A-Za-z0-9_] regex but
+// don't anymore; the drop quotes them and Postgres handles them.
 func TestPostgresInsert_RejectsUnsafeTableName(t *testing.T) {
-	for _, name := range []string{"t; DROP TABLE x", "with space", "with-dash", ""} {
+	for _, name := range []string{"", "tab\x00le"} {
 		t.Run(name, func(t *testing.T) {
 			res, _ := executePostgresInsertRows(t.Context(), core.Job{
 				Params: map[string]any{"dsn": "postgres://", "table": name},
@@ -192,8 +196,8 @@ func TestPostgresInsert_RejectsUnsafeTableName(t *testing.T) {
 					"rows": {Inline: []map[string]any{{"a": "1"}}},
 				},
 			}, nil)
-			if res.Status != core.StatusError || res.Error.Code != "bad_param" {
-				t.Errorf("status=%q code=%q, want bad_param", res.Status, res.Error.Code)
+			if res.Status != core.StatusError || res.Error == nil || res.Error.Code != "bad_param" {
+				t.Errorf("status=%q error=%+v, want bad_param", res.Status, res.Error)
 			}
 		})
 	}
@@ -204,14 +208,14 @@ func TestPostgresInsert_RejectsUnsafeSchemaName(t *testing.T) {
 		Params: map[string]any{
 			"dsn":    "postgres://",
 			"table":  "ok",
-			"schema": "public; DROP",
+			"schema": "sch\x00ema",
 		},
 		Input: map[string]core.Ref{
 			"rows": {Inline: []map[string]any{{"a": "1"}}},
 		},
 	}, nil)
-	if res.Status != core.StatusError || res.Error.Code != "bad_param" {
-		t.Errorf("status=%q code=%q, want bad_param", res.Status, res.Error.Code)
+	if res.Status != core.StatusError || res.Error == nil || res.Error.Code != "bad_param" {
+		t.Errorf("status=%q error=%+v, want bad_param", res.Status, res.Error)
 	}
 }
 
@@ -219,12 +223,12 @@ func TestPostgresInsert_RejectsUnsafeColumnName(t *testing.T) {
 	res, _ := executePostgresInsertRows(t.Context(), core.Job{
 		Params: map[string]any{"dsn": "postgres://", "table": "ok"},
 		Input: map[string]core.Ref{
-			"rows":    {Inline: []map[string]any{{"weird col": "x"}}},
-			"headers": {Inline: []string{"weird col"}},
+			"rows":    {Inline: []map[string]any{{"co\x00l": "x"}}},
+			"headers": {Inline: []string{"co\x00l"}},
 		},
 	}, nil)
-	if res.Status != core.StatusError || res.Error.Code != "bad_input" {
-		t.Errorf("status=%q code=%q, want bad_input", res.Status, res.Error.Code)
+	if res.Status != core.StatusError || res.Error == nil || res.Error.Code != "bad_input" {
+		t.Errorf("status=%q error=%+v, want bad_input", res.Status, res.Error)
 	}
 }
 

@@ -40,7 +40,7 @@ func init() {
 					"dsn":          {"type":"string"},
 					"schema":       {"type":"string","default":"public"},
 					"table":        {"type":"string"},
-					"create_table": {"type":"boolean"},
+					"create_table": {"type":"boolean","default":true,"description":"Auto-create the table from headers when missing. Defaults true."},
 					"column_types": {"type":"object","additionalProperties":{"type":"string"}}
 				},
 				"required":["dsn","table"]
@@ -82,17 +82,15 @@ func executePostgresInsertRows(ctx context.Context, job core.Job, _ chan<- core.
 	if err != nil {
 		return errResult(job, "bad_param", err.Error()), nil
 	}
-	if !isSafeIdent(table) {
-		return errResult(job, "bad_param",
-			fmt.Sprintf("table name %q contains characters other than [A-Za-z0-9_]", table)), nil
+	if err := validateIdent(table); err != nil {
+		return errResult(job, "bad_param", fmt.Sprintf("table name %q: %v", table, err)), nil
 	}
 	schema := "public"
 	if s, ok := paramStringOpt(job.Params, "schema"); ok && s != "" {
 		schema = s
 	}
-	if !isSafeIdent(schema) {
-		return errResult(job, "bad_param",
-			fmt.Sprintf("schema name %q contains characters other than [A-Za-z0-9_]", schema)), nil
+	if err := validateIdent(schema); err != nil {
+		return errResult(job, "bad_param", fmt.Sprintf("schema name %q: %v", schema, err)), nil
 	}
 
 	rowsRef, ok := job.Input["rows"]
@@ -115,9 +113,8 @@ func executePostgresInsertRows(ctx context.Context, job core.Job, _ chan<- core.
 		headers = deriveHeaders(rows)
 	}
 	for _, h := range headers {
-		if !isSafeIdent(h) {
-			return errResult(job, "bad_input",
-				fmt.Sprintf("column %q contains characters other than [A-Za-z0-9_]", h)), nil
+		if err := validateIdent(h); err != nil {
+			return errResult(job, "bad_input", fmt.Sprintf("column %q: %v", h, err)), nil
 		}
 	}
 
@@ -126,9 +123,13 @@ func executePostgresInsertRows(ctx context.Context, job core.Job, _ chan<- core.
 		return errResult(job, "db", fmt.Sprintf("connect: %v", err)), nil
 	}
 
-	qualified := fmt.Sprintf("%q.%q", schema, table)
+	qualified := fmt.Sprintf("%s.%s", quoteIdent(schema), quoteIdent(table))
 
-	if createTable, _ := paramBool(job.Params, "create_table"); createTable && len(headers) > 0 {
+	createTable := true
+	if v, present := paramBool(job.Params, "create_table"); present {
+		createTable = v
+	}
+	if createTable && len(headers) > 0 {
 		colTypes, _ := paramStringMap(job.Params, "column_types")
 		if err := pgEnsureTable(ctx, pool, qualified, headers, colTypes); err != nil {
 			return errResult(job, "db", err.Error()), nil
@@ -169,7 +170,7 @@ func pgEnsureTable(ctx context.Context, pool *pgxpool.Pool, qualified string, he
 		if v, ok := colTypes[h]; ok && v != "" {
 			t = v
 		}
-		cols[i] = fmt.Sprintf("%q %s", h, t)
+		cols[i] = fmt.Sprintf("%s %s", quoteIdent(h), t)
 	}
 	stmt := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (%s)", qualified, strings.Join(cols, ", "))
 	if _, err := pool.Exec(ctx, stmt); err != nil {
@@ -192,7 +193,7 @@ func pgInsertBatch(ctx context.Context, pool *pgxpool.Pool, qualified string, he
 	cols := make([]string, len(headers))
 	placeholders := make([]string, len(headers))
 	for i, h := range headers {
-		cols[i] = fmt.Sprintf("%q", h)
+		cols[i] = quoteIdent(h)
 		placeholders[i] = fmt.Sprintf("$%d", i+1)
 	}
 	stmt := fmt.Sprintf(

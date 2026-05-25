@@ -26,14 +26,20 @@ func init() {
 			Provider:       "internal",
 			Integration:    "Excel",
 			Tags:           []string{"excel", "xlsx", "spreadsheet", "read"},
-			Description:    "Read rows from an .xlsx sheet in the workspace sandbox. First row is treated as headers unless headers=false. Optional 'range' restricts to a cell rectangle like \"A1:D100\" — handy when data starts mid-sheet or there's a banner row to ignore. With typed=true, cell values come back as native types (int64/float64/bool/time.Time) inferred from each cell's stored Excel type; default is all strings (the displayed value).",
+			Description:    "Read rows from an .xlsx sheet in the workspace sandbox. The path can come from params.path or, for composable flows, from the 'path' input port (wired from file_picker etc.) — when both are present the input port wins. First row is treated as headers unless headers=false. Optional 'range' restricts to a cell rectangle like \"A1:D100\". With typed=true, cell values come back as native types (int64/float64/bool/time.Time) inferred from each cell's stored Excel type; default is all strings (the displayed value).",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
+			Inputs: []core.Port{
+				{Port: "path", Label: "Workspace-relative path (overrides params.path when wired)", MIME: []string{"text/plain"}},
+			},
 			Outputs: []core.Port{
 				{Port: "rows", Label: "Rows", MIME: []string{"application/json"}},
 				{Port: "headers", Label: "Headers", MIME: []string{"application/json"}},
 			},
-			ParamsSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string","format":"workspace-path"},"sheet":{"type":"string"},"headers":{"type":"boolean"},"skip":{"type":"integer"},"range":{"type":"string","pattern":"^[A-Z]+[0-9]+:[A-Z]+[0-9]+$"},"typed":{"type":"boolean"}},"required":["path"]}`),
+			// path is no longer strictly required at the schema level —
+			// it can arrive via the input port. The Execute function
+			// surfaces a clear bad_input error when neither is supplied.
+			ParamsSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string","format":"workspace-path","description":"Pick a file. Ignored if a 'path' input port is wired."},"sheet":{"type":"string"},"headers":{"type":"boolean"},"skip":{"type":"integer"},"range":{"type":"string","pattern":"^[A-Z]+[0-9]+:[A-Z]+[0-9]+$"},"typed":{"type":"boolean"}}}`),
 			Idempotent:   true,
 		},
 		Execute: executeExcelRead,
@@ -55,10 +61,15 @@ func init() {
 // fine for the typical office spreadsheet, but large files (10⁵+
 // rows) will want a streaming variant later.
 func executeExcelRead(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	path, err := paramString(job.Params, "path")
-	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+	// Path resolution: wired input wins over params so a composed
+	// flow (file_picker → excel_read) doesn't need the user to also
+	// edit excel_read's params. Falls back to params.path for the
+	// "drop one node and pick a file" flow which is still valid.
+	path := pickPath(job, "path")
+	if path == "" {
+		return errResult(job, "bad_param", "path is required — set params.path or wire the 'path' input port"), nil
 	}
+	var err error
 	if job.WorkspaceRoot == "" {
 		return errResult(job, "no_sandbox", "excel_read requires a workspace sandbox"), nil
 	}

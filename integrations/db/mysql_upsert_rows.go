@@ -41,7 +41,7 @@ func init() {
 					"table":            {"type":"string"},
 					"conflict_columns": {"type":"array","items":{"type":"string"}},
 					"update_columns":   {"type":"array","items":{"type":"string"}},
-					"create_table":     {"type":"boolean"},
+					"create_table":     {"type":"boolean","default":true,"description":"Auto-create the table (with a UNIQUE on conflict_columns) when missing. Defaults true."},
 					"column_types":     {"type":"object","additionalProperties":{"type":"string"}}
 				},
 				"required":["dsn","table","conflict_columns"]
@@ -76,9 +76,8 @@ func executeMySQLUpsertRows(ctx context.Context, job core.Job, _ chan<- core.Pro
 	if err != nil {
 		return errResult(job, "bad_param", err.Error()), nil
 	}
-	if !isSafeIdent(table) {
-		return errResult(job, "bad_param",
-			fmt.Sprintf("table name %q contains characters other than [A-Za-z0-9_]", table)), nil
+	if err := validateIdent(table); err != nil {
+		return errResult(job, "bad_param", fmt.Sprintf("table name %q: %v", table, err)), nil
 	}
 
 	conflictCols, err := paramStringArray(job.Params, "conflict_columns")
@@ -89,9 +88,8 @@ func executeMySQLUpsertRows(ctx context.Context, job core.Job, _ chan<- core.Pro
 		return errResult(job, "bad_param", "conflict_columns must list at least one column"), nil
 	}
 	for _, c := range conflictCols {
-		if !isSafeIdent(c) {
-			return errResult(job, "bad_param",
-				fmt.Sprintf("conflict column %q contains characters other than [A-Za-z0-9_]", c)), nil
+		if err := validateIdent(c); err != nil {
+			return errResult(job, "bad_param", fmt.Sprintf("conflict column %q: %v", c, err)), nil
 		}
 	}
 
@@ -105,9 +103,8 @@ func executeMySQLUpsertRows(ctx context.Context, job core.Job, _ chan<- core.Pro
 		}
 		updateCols = uc
 		for _, c := range updateCols {
-			if !isSafeIdent(c) {
-				return errResult(job, "bad_param",
-					fmt.Sprintf("update column %q contains characters other than [A-Za-z0-9_]", c)), nil
+			if err := validateIdent(c); err != nil {
+				return errResult(job, "bad_param", fmt.Sprintf("update column %q: %v", c, err)), nil
 			}
 		}
 	}
@@ -132,9 +129,8 @@ func executeMySQLUpsertRows(ctx context.Context, job core.Job, _ chan<- core.Pro
 		headers = deriveHeaders(rows)
 	}
 	for _, h := range headers {
-		if !isSafeIdent(h) {
-			return errResult(job, "bad_input",
-				fmt.Sprintf("column %q contains characters other than [A-Za-z0-9_]", h)), nil
+		if err := validateIdent(h); err != nil {
+			return errResult(job, "bad_input", fmt.Sprintf("column %q: %v", h, err)), nil
 		}
 	}
 	headerSet := map[string]struct{}{}
@@ -153,7 +149,11 @@ func executeMySQLUpsertRows(ctx context.Context, job core.Job, _ chan<- core.Pro
 		return errResult(job, "db", fmt.Sprintf("connect: %v", err)), nil
 	}
 
-	if createTable, _ := paramBool(job.Params, "create_table"); createTable && len(headers) > 0 {
+	createTable := true
+	if v, present := paramBool(job.Params, "create_table"); present {
+		createTable = v
+	}
+	if createTable && len(headers) > 0 {
 		colTypes, _ := paramStringMap(job.Params, "column_types")
 		if err := mysqlEnsureTableWithUnique(ctx, db, table, headers, colTypes, conflictCols); err != nil {
 			return errResult(job, "db", err.Error()), nil
@@ -199,7 +199,7 @@ func mysqlEnsureTableWithUnique(ctx context.Context, db *sql.DB, table string, h
 		if v, ok := colTypes[h]; ok && v != "" {
 			t = v
 		}
-		cols[i] = fmt.Sprintf("`%s` %s", h, t)
+		cols[i] = fmt.Sprintf("%s %s", quoteIdentBacktick(h), t)
 	}
 	// MySQL's UNIQUE on TEXT columns requires a key length: `UNIQUE
 	// (col(255))`. To keep the user from having to know that, we
@@ -209,10 +209,10 @@ func mysqlEnsureTableWithUnique(ctx context.Context, db *sql.DB, table string, h
 	// since TEXT primary keys are an anti-pattern.
 	uniqueCols := make([]string, len(conflictCols))
 	for i, c := range conflictCols {
-		uniqueCols[i] = fmt.Sprintf("`%s`", c)
+		uniqueCols[i] = quoteIdentBacktick(c)
 	}
-	stmt := fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%s` (%s, UNIQUE (%s))",
-		table, strings.Join(cols, ", "), strings.Join(uniqueCols, ", "))
+	stmt := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (%s, UNIQUE (%s))",
+		quoteIdentBacktick(table), strings.Join(cols, ", "), strings.Join(uniqueCols, ", "))
 	if _, err := db.ExecContext(ctx, stmt); err != nil {
 		return fmt.Errorf("create table: %w", err)
 	}
@@ -246,7 +246,7 @@ func mysqlUpsertBatch(ctx context.Context, db *sql.DB, table string, headers, co
 	cols := make([]string, len(headers))
 	placeholders := make([]string, len(headers))
 	for i, h := range headers {
-		cols[i] = fmt.Sprintf("`%s`", h)
+		cols[i] = quoteIdentBacktick(h)
 		placeholders[i] = "?"
 	}
 
@@ -258,12 +258,13 @@ func mysqlUpsertBatch(ctx context.Context, db *sql.DB, table string, headers, co
 	}
 	assignments := make([]string, len(effectiveUpdates))
 	for i, c := range effectiveUpdates {
-		assignments[i] = fmt.Sprintf("`%s` = VALUES(`%s`)", c, c)
+		q := quoteIdentBacktick(c)
+		assignments[i] = fmt.Sprintf("%s = VALUES(%s)", q, q)
 	}
 
 	stmt, err := tx.PrepareContext(ctx, fmt.Sprintf(
-		"INSERT INTO `%s` (%s) VALUES (%s) ON DUPLICATE KEY UPDATE %s",
-		table, strings.Join(cols, ", "), strings.Join(placeholders, ", "),
+		"INSERT INTO %s (%s) VALUES (%s) ON DUPLICATE KEY UPDATE %s",
+		quoteIdentBacktick(table), strings.Join(cols, ", "), strings.Join(placeholders, ", "),
 		strings.Join(assignments, ", "),
 	))
 	if err != nil {

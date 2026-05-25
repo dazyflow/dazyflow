@@ -40,7 +40,7 @@ func init() {
 				"properties":{
 					"dsn":          {"type":"string"},
 					"table":        {"type":"string"},
-					"create_table": {"type":"boolean"},
+					"create_table": {"type":"boolean","default":true,"description":"Auto-create the table from headers when missing. Defaults true."},
 					"column_types": {"type":"object","additionalProperties":{"type":"string"}}
 				},
 				"required":["dsn","table"]
@@ -71,9 +71,8 @@ func executeMySQLInsertRows(ctx context.Context, job core.Job, _ chan<- core.Pro
 	if err != nil {
 		return errResult(job, "bad_param", err.Error()), nil
 	}
-	if !isSafeIdent(table) {
-		return errResult(job, "bad_param",
-			fmt.Sprintf("table name %q contains characters other than [A-Za-z0-9_]", table)), nil
+	if err := validateIdent(table); err != nil {
+		return errResult(job, "bad_param", fmt.Sprintf("table name %q: %v", table, err)), nil
 	}
 
 	rowsRef, ok := job.Input["rows"]
@@ -96,9 +95,8 @@ func executeMySQLInsertRows(ctx context.Context, job core.Job, _ chan<- core.Pro
 		headers = deriveHeaders(rows)
 	}
 	for _, h := range headers {
-		if !isSafeIdent(h) {
-			return errResult(job, "bad_input",
-				fmt.Sprintf("column %q contains characters other than [A-Za-z0-9_]", h)), nil
+		if err := validateIdent(h); err != nil {
+			return errResult(job, "bad_input", fmt.Sprintf("column %q: %v", h, err)), nil
 		}
 	}
 
@@ -107,7 +105,11 @@ func executeMySQLInsertRows(ctx context.Context, job core.Job, _ chan<- core.Pro
 		return errResult(job, "db", fmt.Sprintf("connect: %v", err)), nil
 	}
 
-	if createTable, _ := paramBool(job.Params, "create_table"); createTable && len(headers) > 0 {
+	createTable := true
+	if v, present := paramBool(job.Params, "create_table"); present {
+		createTable = v
+	}
+	if createTable && len(headers) > 0 {
 		colTypes, _ := paramStringMap(job.Params, "column_types")
 		if err := mysqlEnsureTable(ctx, db, table, headers, colTypes); err != nil {
 			return errResult(job, "db", err.Error()), nil
@@ -149,9 +151,9 @@ func mysqlEnsureTable(ctx context.Context, db *sql.DB, table string, headers []s
 		if v, ok := colTypes[h]; ok && v != "" {
 			t = v
 		}
-		cols[i] = fmt.Sprintf("`%s` %s", h, t)
+		cols[i] = fmt.Sprintf("%s %s", quoteIdentBacktick(h), t)
 	}
-	stmt := fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%s` (%s)", table, strings.Join(cols, ", "))
+	stmt := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (%s)", quoteIdentBacktick(table), strings.Join(cols, ", "))
 	if _, err := db.ExecContext(ctx, stmt); err != nil {
 		return fmt.Errorf("create table: %w", err)
 	}
@@ -168,12 +170,12 @@ func mysqlInsertBatch(ctx context.Context, db *sql.DB, table string, headers []s
 	cols := make([]string, len(headers))
 	placeholders := make([]string, len(headers))
 	for i, h := range headers {
-		cols[i] = fmt.Sprintf("`%s`", h)
+		cols[i] = quoteIdentBacktick(h)
 		placeholders[i] = "?"
 	}
 	stmt, err := tx.PrepareContext(ctx, fmt.Sprintf(
-		"INSERT INTO `%s` (%s) VALUES (%s)",
-		table, strings.Join(cols, ", "), strings.Join(placeholders, ", "),
+		"INSERT INTO %s (%s) VALUES (%s)",
+		quoteIdentBacktick(table), strings.Join(cols, ", "), strings.Join(placeholders, ", "),
 	))
 	if err != nil {
 		_ = tx.Rollback()

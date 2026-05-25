@@ -83,6 +83,36 @@ type Service struct {
 	// the `-default-graph-timeout` flag on hzd; doesn't override an
 	// explicit per-graph value.
 	DefaultGraphTimeoutSeconds int
+
+	// AnthropicAPIKey powers the in-app chat agent (Service.ChatStream).
+	// Empty disables the chat endpoint. Configured via the
+	// `-anthropic-key` flag on hzd or $ANTHROPIC_API_KEY.
+	AnthropicAPIKey string
+
+	// AnthropicBaseURL overrides the Messages API host. Tests use it to
+	// point at httptest; production leaves it empty (defaulting to
+	// https://api.anthropic.com).
+	AnthropicBaseURL string
+
+	// AnthropicModelOverride pins a non-default model for the chat
+	// agent. Empty = use anthropic.DefaultModel.
+	AnthropicModelOverride string
+
+	// UseClaudeCLI flips the chat backend from the Anthropic API to a
+	// subprocess that spawns `claude -p` per turn, pointed at our
+	// hz-mcp server. Intended for local development — lets you test
+	// the chat surface end-to-end without an Anthropic API key.
+	UseClaudeCLI bool
+
+	// ClaudeCLIMCPBinary is the absolute path to the hz-mcp binary
+	// claude spawns. When empty, claude-cli mode falls back to
+	// $HZ_MCP_BIN, then a PATH lookup.
+	ClaudeCLIMCPBinary string
+
+	// ClaudeCLIHazydURL is the URL hz-mcp uses to call back into this
+	// hzd process. Defaults to http://localhost:8080 — set explicitly
+	// for non-loopback deployments.
+	ClaudeCLIHazydURL string
 }
 
 func (s *Service) workerID() string {

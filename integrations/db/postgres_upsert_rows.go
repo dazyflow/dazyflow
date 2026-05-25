@@ -42,7 +42,7 @@ func init() {
 					"table":            {"type":"string"},
 					"conflict_columns": {"type":"array","items":{"type":"string"}},
 					"update_columns":   {"type":"array","items":{"type":"string"}},
-					"create_table":     {"type":"boolean"},
+					"create_table":     {"type":"boolean","default":true,"description":"Auto-create the table (with a UNIQUE on conflict_columns) when missing. Defaults true."},
 					"column_types":     {"type":"object","additionalProperties":{"type":"string"}}
 				},
 				"required":["dsn","table","conflict_columns"]
@@ -76,17 +76,15 @@ func executePostgresUpsertRows(ctx context.Context, job core.Job, _ chan<- core.
 	if err != nil {
 		return errResult(job, "bad_param", err.Error()), nil
 	}
-	if !isSafeIdent(table) {
-		return errResult(job, "bad_param",
-			fmt.Sprintf("table name %q contains characters other than [A-Za-z0-9_]", table)), nil
+	if err := validateIdent(table); err != nil {
+		return errResult(job, "bad_param", fmt.Sprintf("table name %q: %v", table, err)), nil
 	}
 	schema := "public"
 	if s, ok := paramStringOpt(job.Params, "schema"); ok && s != "" {
 		schema = s
 	}
-	if !isSafeIdent(schema) {
-		return errResult(job, "bad_param",
-			fmt.Sprintf("schema name %q contains characters other than [A-Za-z0-9_]", schema)), nil
+	if err := validateIdent(schema); err != nil {
+		return errResult(job, "bad_param", fmt.Sprintf("schema name %q: %v", schema, err)), nil
 	}
 
 	conflictCols, err := paramStringArray(job.Params, "conflict_columns")
@@ -97,9 +95,8 @@ func executePostgresUpsertRows(ctx context.Context, job core.Job, _ chan<- core.
 		return errResult(job, "bad_param", "conflict_columns must list at least one column"), nil
 	}
 	for _, c := range conflictCols {
-		if !isSafeIdent(c) {
-			return errResult(job, "bad_param",
-				fmt.Sprintf("conflict column %q contains characters other than [A-Za-z0-9_]", c)), nil
+		if err := validateIdent(c); err != nil {
+			return errResult(job, "bad_param", fmt.Sprintf("conflict column %q: %v", c, err)), nil
 		}
 	}
 
@@ -117,9 +114,8 @@ func executePostgresUpsertRows(ctx context.Context, job core.Job, _ chan<- core.
 		}
 		updateCols = uc
 		for _, c := range updateCols {
-			if !isSafeIdent(c) {
-				return errResult(job, "bad_param",
-					fmt.Sprintf("update column %q contains characters other than [A-Za-z0-9_]", c)), nil
+			if err := validateIdent(c); err != nil {
+				return errResult(job, "bad_param", fmt.Sprintf("update column %q: %v", c, err)), nil
 			}
 		}
 	}
@@ -144,9 +140,8 @@ func executePostgresUpsertRows(ctx context.Context, job core.Job, _ chan<- core.
 		headers = deriveHeaders(rows)
 	}
 	for _, h := range headers {
-		if !isSafeIdent(h) {
-			return errResult(job, "bad_input",
-				fmt.Sprintf("column %q contains characters other than [A-Za-z0-9_]", h)), nil
+		if err := validateIdent(h); err != nil {
+			return errResult(job, "bad_input", fmt.Sprintf("column %q: %v", h, err)), nil
 		}
 	}
 	// conflict_columns must be present in headers — otherwise we have
@@ -167,9 +162,13 @@ func executePostgresUpsertRows(ctx context.Context, job core.Job, _ chan<- core.
 		return errResult(job, "db", fmt.Sprintf("connect: %v", err)), nil
 	}
 
-	qualified := fmt.Sprintf("%q.%q", schema, table)
+	qualified := fmt.Sprintf("%s.%s", quoteIdent(schema), quoteIdent(table))
 
-	if createTable, _ := paramBool(job.Params, "create_table"); createTable && len(headers) > 0 {
+	createTable := true
+	if v, present := paramBool(job.Params, "create_table"); present {
+		createTable = v
+	}
+	if createTable && len(headers) > 0 {
 		colTypes, _ := paramStringMap(job.Params, "column_types")
 		if err := pgEnsureTableWithUnique(ctx, pool, qualified, headers, colTypes, conflictCols); err != nil {
 			return errResult(job, "db", err.Error()), nil
@@ -218,11 +217,11 @@ func pgEnsureTableWithUnique(ctx context.Context, pool *pgxpool.Pool, qualified 
 		if v, ok := colTypes[h]; ok && v != "" {
 			t = v
 		}
-		cols[i] = fmt.Sprintf("%q %s", h, t)
+		cols[i] = fmt.Sprintf("%s %s", quoteIdent(h), t)
 	}
 	uniqueCols := make([]string, len(conflictCols))
 	for i, c := range conflictCols {
-		uniqueCols[i] = fmt.Sprintf("%q", c)
+		uniqueCols[i] = quoteIdent(c)
 	}
 	stmt := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (%s, UNIQUE (%s))",
 		qualified, strings.Join(cols, ", "), strings.Join(uniqueCols, ", "))
@@ -256,12 +255,12 @@ func pgUpsertBatch(ctx context.Context, pool *pgxpool.Pool, qualified string, he
 	cols := make([]string, len(headers))
 	placeholders := make([]string, len(headers))
 	for i, h := range headers {
-		cols[i] = fmt.Sprintf("%q", h)
+		cols[i] = quoteIdent(h)
 		placeholders[i] = fmt.Sprintf("$%d", i+1)
 	}
 	conflictList := make([]string, len(conflictCols))
 	for i, c := range conflictCols {
-		conflictList[i] = fmt.Sprintf("%q", c)
+		conflictList[i] = quoteIdent(c)
 	}
 
 	var conflictClause string
@@ -270,7 +269,8 @@ func pgUpsertBatch(ctx context.Context, pool *pgxpool.Pool, qualified string, he
 	} else {
 		assignments := make([]string, len(updateCols))
 		for i, c := range updateCols {
-			assignments[i] = fmt.Sprintf("%q = EXCLUDED.%q", c, c)
+			q := quoteIdent(c)
+			assignments[i] = fmt.Sprintf("%s = EXCLUDED.%s", q, q)
 		}
 		conflictClause = fmt.Sprintf("ON CONFLICT (%s) DO UPDATE SET %s",
 			strings.Join(conflictList, ", "), strings.Join(assignments, ", "))

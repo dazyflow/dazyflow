@@ -161,6 +161,17 @@ func (s *Store) Save(graph core.Graph, author string) (string, error) {
 		AllowEmptyCommits: false,
 	})
 	if err != nil {
+		// Re-saving identical content is a no-op, not a failure —
+		// callers (especially the AI chat's "apply" step after the
+		// agent already saved through MCP) hit this and shouldn't
+		// see an error. Surface the existing HEAD as the commit.
+		if errors.Is(err, git.ErrEmptyCommit) {
+			head, herr := s.repo.Head()
+			if herr != nil {
+				return "", fmt.Errorf("commit: %w (and head lookup: %v)", err, herr)
+			}
+			return head.Hash().String(), nil
+		}
 		return "", fmt.Errorf("commit: %w", err)
 	}
 	return hash.String(), nil

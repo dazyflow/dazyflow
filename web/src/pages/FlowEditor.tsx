@@ -24,7 +24,7 @@ import {
   type NodeChange,
   type ReactFlowInstance,
 } from "@xyflow/react";
-import { ArrowLeft, Play, Save, Settings as SettingsIcon, PanelsLeftBottom, Square } from "lucide-react";
+import { ArrowLeft, Play, Save, Settings as SettingsIcon, PanelsLeftBottom, Square, Sparkles } from "lucide-react";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import type { Graph, GraphTrigger, Manifest, JobStatus, Visibility } from "../types";
@@ -34,6 +34,7 @@ import { LiveConsole } from "../components/LiveConsole";
 import { HazyNode, type HazyNodeData } from "../components/NodeCard";
 import { RunHistory } from "../components/RunHistory";
 import { SettingsModal } from "../components/SettingsModal";
+import { ChatPanel } from "../components/ChatPanel";
 
 // Custom node-types registry. React Flow caches by reference, so this
 // is declared at module scope rather than inline in the component to
@@ -68,6 +69,7 @@ function EditorInner() {
   const [description, setDescription] = useState<string | undefined>(undefined);
   const [timeoutSeconds, setTimeoutSeconds] = useState<number | undefined>(undefined);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   // Per-node params kept outside React Flow's node-data so the inspector
   // can mutate them without forcing canvas re-layout. They're merged
   // back into the graph payload on save.
@@ -103,7 +105,11 @@ function EditorInner() {
   // globalLog mirrors every line across every node, prefixed with the
   // node ID, so the bottom-of-canvas console shows the whole pipeline.
   const [globalLog, setGlobalLog] = useState<string[]>([]);
-  const [logOpen, setLogOpen] = useState(true);
+  // The log strip is now always rendered as a collapsible header so
+  // users can find it before any run has produced output. Default
+  // collapsed to give the canvas back its vertical space until
+  // there's something to read.
+  const [logOpen, setLogOpen] = useState(false);
   // mobilePanel toggles which side panel shows on small viewports.
   const [mobilePanel, setMobilePanel] = useState<"catalog" | "inspector" | null>(null);
 
@@ -461,6 +467,14 @@ function EditorInner() {
           </button>
           <button
             className="ghost"
+            onClick={() => setChatOpen((v) => !v)}
+            title="AI assistant"
+            aria-pressed={chatOpen}
+          >
+            <Sparkles size={14} />
+          </button>
+          <button
+            className="ghost"
             onClick={() => setSettingsOpen(true)}
             title="Flow settings (triggers, etc.)"
           >
@@ -624,35 +638,41 @@ function EditorInner() {
             {error}
           </div>
         )}
-        {globalLog.length > 0 && (
-          <div className={"pipeline-log" + (logOpen ? " open" : " collapsed")}>
-            <div className="pipeline-log-bar">
-              <button
-                type="button"
-                className="ghost"
-                onClick={() => setLogOpen((v) => !v)}
-              >
-                {logOpen ? "▼" : "▲"} Pipeline log
-                <span className="muted" style={{ marginLeft: 8 }}>
-                  {globalLog.length} lines
-                </span>
-              </button>
-              <button
-                type="button"
-                className="ghost"
-                onClick={() => setGlobalLog([])}
-                title="Clear"
-              >
-                Clear
-              </button>
-            </div>
-            {logOpen && (
-              <div className="pipeline-log-body">
-                <LiveConsole lines={globalLog} />
-              </div>
-            )}
+        <div className={"pipeline-log" + (logOpen ? " open" : " collapsed")}>
+          <div className="pipeline-log-bar">
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => setLogOpen((v) => !v)}
+            >
+              {logOpen ? "▼" : "▲"} Pipeline log
+              <span className="muted" style={{ marginLeft: 8 }}>
+                {globalLog.length === 0 ? "empty" : `${globalLog.length} lines`}
+              </span>
+            </button>
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => setGlobalLog([])}
+              title="Clear"
+              disabled={globalLog.length === 0}
+            >
+              Clear
+            </button>
           </div>
-        )}
+          {logOpen && (
+            <div className="pipeline-log-body">
+              {globalLog.length === 0 ? (
+                <div className="pipeline-log-empty">
+                  No output yet — run a flow to see streamed stdout/stderr from
+                  every node here.
+                </div>
+              ) : (
+                <LiveConsole lines={globalLog} />
+              )}
+            </div>
+          )}
+        </div>
       </div>
       <div className="inspector">
         <Inspector
@@ -668,6 +688,29 @@ function EditorInner() {
           }
         />
       </div>
+      <ChatPanel
+        open={chatOpen}
+        onClose={() => setChatOpen(false)}
+        applyProposal={async (g) => {
+          // Force the proposal to land at THIS editor's flow ID so
+          // an LLM that misnames the flow can't overwrite a
+          // different one. The settings/triggers/visibility come
+          // straight from the proposal — the LLM owns those fields
+          // by construction.
+          if (!token || !id) throw new Error("not signed in");
+          const merged: Graph = {
+            ...g,
+            id,
+            tenant: activeTenant,
+            workspace: activeWorkspace,
+          };
+          await api.saveGraph(token, merged);
+          // Pull the new payload into the canvas. Cheap: just re-run
+          // the existing load effect by hard-reloading the page.
+          // A finer reload (replay loadGraph inline) is a follow-up.
+          window.location.reload();
+        }}
+      />
       {settingsOpen && me && id && (
         <SettingsModal
           graph={{

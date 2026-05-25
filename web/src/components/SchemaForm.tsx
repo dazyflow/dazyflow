@@ -112,6 +112,25 @@ function SchemaField({ name, schema, required, value, onChange, workspace }: Fie
           </FieldWrap>
         );
       }
+      // format:"multiline" gets a textarea — for things like LLM
+      // user prompts and system prompts where a single-line input
+      // hides anything past the right edge.
+      if (schema.format === "multiline") {
+        return (
+          <FieldWrap name={name} schema={schema} required={required}>
+            <textarea
+              rows={4}
+              value={(value as string) ?? (schema.default as string | undefined) ?? ""}
+              placeholder={schema.default ? String(schema.default) : undefined}
+              onChange={(e) => {
+                const v = e.target.value;
+                onChange(v === "" && !required ? undefined : v);
+              }}
+              style={{ resize: "vertical" }}
+            />
+          </FieldWrap>
+        );
+      }
       return (
         <FieldWrap name={name} schema={schema} required={required}>
           <input
@@ -580,20 +599,33 @@ function JSONField({
   value: unknown;
   onChange: (v: unknown) => void;
 }) {
-  const text = useMemo(() => {
+  // Snapshot the prop into local text state ONCE so the user's
+  // keystrokes survive mid-edit even when they're not yet valid
+  // JSON. The old version used `defaultValue` + commit-on-blur —
+  // clicking Save without first blurring silently dropped the
+  // edit. The "obvious" fix (a useEffect that re-syncs text from
+  // value) was worse: it ran after every keystroke that re-emitted
+  // the SAME value to flip dirty, wiping the user's in-progress
+  // text down to "". Instead we rely on the caller giving us a
+  // fresh component instance (via key) when the conceptual field
+  // identity changes — same trick the Inspector already uses for
+  // the raw-JSON outer textarea.
+  const [text, setText] = useState(() => {
     if (value === undefined) return "";
     try {
       return JSON.stringify(value, null, 2);
     } catch {
       return "";
     }
-  }, [value]);
+  });
   return (
     <textarea
       rows={3}
-      defaultValue={text}
-      onBlur={(e) => {
-        const v = e.target.value.trim();
+      value={text}
+      onChange={(e) => {
+        const next = e.target.value;
+        setText(next);
+        const v = next.trim();
         if (v === "") {
           onChange(undefined);
           return;
@@ -601,7 +633,11 @@ function JSONField({
         try {
           onChange(JSON.parse(v));
         } catch {
-          /* leave value alone — user can keep editing */
+          // Mid-typing — invalid JSON. Re-emit the last valid value
+          // so onParamsChange runs and dirty=true flips; the user's
+          // text is preserved by local state, and the eventual valid
+          // parse lands normally.
+          onChange(value);
         }
       }}
       style={{ fontFamily: "var(--font-mono)", fontSize: 12, resize: "vertical" }}

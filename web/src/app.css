@@ -801,6 +801,17 @@
 .pipeline-log .muted {
   color: var(--faint);
 }
+.pipeline-log-empty {
+  padding: var(--space-3);
+  color: var(--faint);
+  font-size: 12px;
+  font-style: italic;
+  text-align: center;
+}
+.pipeline-log-bar button[disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 
 /* Status badge (per-node run state) */
 .status-dot {
@@ -1618,4 +1629,180 @@
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   z-index: 5;
+}
+
+/* ───────── AI chat panel ─────────
+ * Right-edge sidebar. Fixed positioning rather than flex so it
+ * overlays the canvas without re-laying out React Flow (which
+ * would force a re-fit and break user pan/zoom). */
+.chat-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 380px;
+  max-width: 92vw;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  z-index: 50;
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.35);
+}
+.chat-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 13px;
+}
+.chat-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.chat-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  padding: var(--space-5);
+}
+.chat-msg {
+  border-radius: 10px;
+  padding: var(--space-2) var(--space-3);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.chat-msg.user {
+  align-self: flex-end;
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+  max-width: 85%;
+  white-space: pre-wrap;
+}
+.chat-msg.assistant {
+  align-self: flex-start;
+  background: color-mix(in srgb, var(--surface-strong, var(--border)) 35%, transparent);
+  max-width: 92%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.chat-msg.assistant .chat-text {
+  white-space: pre-wrap;
+}
+.chat-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--border) 40%, transparent);
+}
+.chat-tool.done {
+  color: var(--status-succeeded, #4a8);
+}
+.chat-tool.error {
+  color: var(--danger);
+}
+.chat-tool .spin {
+  animation: chat-spin 1.2s linear infinite;
+}
+@keyframes chat-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.chat-proposal {
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: var(--space-3);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.chat-proposal-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 12px;
+}
+.chat-proposal-summary {
+  font-size: 11px;
+  color: var(--muted);
+}
+.chat-proposal-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+.chat-proposal-actions button {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+.chat-proposal.applied {
+  border-color: var(--status-succeeded, #4a8);
+  background: color-mix(in srgb, var(--status-succeeded, #4a8) 8%, transparent);
+}
+.chat-proposal.discarded {
+  opacity: 0.6;
+}
+.chat-meta {
+  font-size: 11px;
+  color: var(--faint);
+  font-style: italic;
+}
+.chat-meta.success {
+  color: var(--status-succeeded, #4a8);
+  font-style: normal;
+}
+.chat-error {
+  font-size: 12px;
+  color: var(--danger);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.chat-input {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+.chat-input textarea {
+  flex: 1;
+  resize: none;
+  font-family: inherit;
+  font-size: 13px;
+  padding: var(--space-2);
+}
+.chat-input button {
+  padding: 8px 12px;
+}
+.dot.pulse {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: chat-pulse 1s ease-in-out infinite;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+@keyframes chat-pulse {
+  50% {
+    opacity: 0.3;
+  }
 }

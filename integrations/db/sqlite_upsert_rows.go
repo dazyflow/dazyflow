@@ -44,7 +44,7 @@ func init() {
 					"table":            {"type":"string"},
 					"conflict_columns": {"type":"array","items":{"type":"string"}},
 					"update_columns":   {"type":"array","items":{"type":"string"}},
-					"create_table":     {"type":"boolean"},
+					"create_table":     {"type":"boolean","default":true,"description":"Auto-create the table (with a UNIQUE on conflict_columns) when missing. Defaults true."},
 					"column_types":     {"type":"object","additionalProperties":{"type":"string"}}
 				},
 				"required":["path","table","conflict_columns"]
@@ -74,9 +74,8 @@ func executeSQLiteUpsertRows(_ context.Context, job core.Job, _ chan<- core.Prog
 	if err != nil {
 		return errResult(job, "bad_param", err.Error()), nil
 	}
-	if !isSafeIdent(table) {
-		return errResult(job, "bad_param",
-			fmt.Sprintf("table name %q contains characters other than [A-Za-z0-9_]", table)), nil
+	if err := validateIdent(table); err != nil {
+		return errResult(job, "bad_param", fmt.Sprintf("table name %q: %v", table, err)), nil
 	}
 	if job.WorkspaceRoot == "" {
 		return errResult(job, "no_sandbox", "sqlite_upsert_rows requires a workspace sandbox"), nil
@@ -90,9 +89,8 @@ func executeSQLiteUpsertRows(_ context.Context, job core.Job, _ chan<- core.Prog
 		return errResult(job, "bad_param", "conflict_columns must list at least one column"), nil
 	}
 	for _, c := range conflictCols {
-		if !isSafeIdent(c) {
-			return errResult(job, "bad_param",
-				fmt.Sprintf("conflict column %q contains characters other than [A-Za-z0-9_]", c)), nil
+		if err := validateIdent(c); err != nil {
+			return errResult(job, "bad_param", fmt.Sprintf("conflict column %q: %v", c, err)), nil
 		}
 	}
 
@@ -106,9 +104,8 @@ func executeSQLiteUpsertRows(_ context.Context, job core.Job, _ chan<- core.Prog
 		}
 		updateCols = uc
 		for _, c := range updateCols {
-			if !isSafeIdent(c) {
-				return errResult(job, "bad_param",
-					fmt.Sprintf("update column %q contains characters other than [A-Za-z0-9_]", c)), nil
+			if err := validateIdent(c); err != nil {
+				return errResult(job, "bad_param", fmt.Sprintf("update column %q: %v", c, err)), nil
 			}
 		}
 	}
@@ -133,9 +130,8 @@ func executeSQLiteUpsertRows(_ context.Context, job core.Job, _ chan<- core.Prog
 		headers = deriveHeaders(rows)
 	}
 	for _, h := range headers {
-		if !isSafeIdent(h) {
-			return errResult(job, "bad_input",
-				fmt.Sprintf("column %q contains characters other than [A-Za-z0-9_]", h)), nil
+		if err := validateIdent(h); err != nil {
+			return errResult(job, "bad_input", fmt.Sprintf("column %q: %v", h, err)), nil
 		}
 	}
 	headerSet := map[string]struct{}{}
@@ -180,7 +176,11 @@ func executeSQLiteUpsertRows(_ context.Context, job core.Job, _ chan<- core.Prog
 	}
 	defer db.Close()
 
-	if createTable, _ := paramBool(job.Params, "create_table"); createTable && len(headers) > 0 {
+	createTable := true
+	if v, present := paramBool(job.Params, "create_table"); present {
+		createTable = v
+	}
+	if createTable && len(headers) > 0 {
 		colTypes, _ := paramStringMap(job.Params, "column_types")
 		if err := sqliteEnsureTableWithUnique(db, table, headers, colTypes, conflictCols); err != nil {
 			return errResult(job, "db", err.Error()), nil
@@ -226,14 +226,14 @@ func sqliteEnsureTableWithUnique(db *sql.DB, table string, headers []string, col
 		if v, ok := colTypes[h]; ok && v != "" {
 			t = v
 		}
-		cols[i] = fmt.Sprintf("%q %s", h, t)
+		cols[i] = fmt.Sprintf("%s %s", quoteIdent(h), t)
 	}
 	uniqueCols := make([]string, len(conflictCols))
 	for i, c := range conflictCols {
-		uniqueCols[i] = fmt.Sprintf("%q", c)
+		uniqueCols[i] = quoteIdent(c)
 	}
-	stmt := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %q (%s, UNIQUE (%s))",
-		table, strings.Join(cols, ", "), strings.Join(uniqueCols, ", "))
+	stmt := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (%s, UNIQUE (%s))",
+		quoteIdent(table), strings.Join(cols, ", "), strings.Join(uniqueCols, ", "))
 	if _, err := db.Exec(stmt); err != nil {
 		return fmt.Errorf("create table: %w", err)
 	}
@@ -258,12 +258,12 @@ func sqliteUpsertBatch(db *sql.DB, table string, headers, conflictCols, updateCo
 	cols := make([]string, len(headers))
 	placeholders := make([]string, len(headers))
 	for i, h := range headers {
-		cols[i] = fmt.Sprintf("%q", h)
+		cols[i] = quoteIdent(h)
 		placeholders[i] = "?"
 	}
 	conflictList := make([]string, len(conflictCols))
 	for i, c := range conflictCols {
-		conflictList[i] = fmt.Sprintf("%q", c)
+		conflictList[i] = quoteIdent(c)
 	}
 
 	var conflictClause string
@@ -272,15 +272,16 @@ func sqliteUpsertBatch(db *sql.DB, table string, headers, conflictCols, updateCo
 	} else {
 		assignments := make([]string, len(updateCols))
 		for i, c := range updateCols {
-			assignments[i] = fmt.Sprintf("%q = excluded.%q", c, c)
+			q := quoteIdent(c)
+			assignments[i] = fmt.Sprintf("%s = excluded.%s", q, q)
 		}
 		conflictClause = fmt.Sprintf("ON CONFLICT (%s) DO UPDATE SET %s",
 			strings.Join(conflictList, ", "), strings.Join(assignments, ", "))
 	}
 
 	stmt, err := tx.Prepare(fmt.Sprintf(
-		"INSERT INTO %q (%s) VALUES (%s) %s",
-		table, strings.Join(cols, ", "), strings.Join(placeholders, ", "), conflictClause,
+		"INSERT INTO %s (%s) VALUES (%s) %s",
+		quoteIdent(table), strings.Join(cols, ", "), strings.Join(placeholders, ", "), conflictClause,
 	))
 	if err != nil {
 		_ = tx.Rollback()

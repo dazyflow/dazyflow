@@ -112,6 +112,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/jobs/{jobID}", h.requireAuth(h.jobSnapshot))
 	mux.HandleFunc("GET /api/v1/jobs/{jobID}/nodes/{nodeID}", h.requireAuth(h.nodeSnapshot))
 	mux.HandleFunc("GET /api/v1/jobs/{jobID}/events", h.requireAuth(h.jobEvents))
+	mux.HandleFunc("POST /api/v1/chat/stream", h.requireAuth(h.chatStream))
 }
 
 // ServeForTest exposes the mux without binding a port — analogous to
@@ -846,6 +847,62 @@ func writeJSON(rw http.ResponseWriter, status int, body any) {
 
 func writeJSONError(rw http.ResponseWriter, status int, msg string) {
 	writeJSON(rw, status, map[string]string{"error": msg})
+}
+
+// chatStream runs Service.ChatStream and forwards each ChatEvent
+// to the client as an SSE frame named after the event's Type
+// ("text", "tool_use_start", "tool_use_result", "proposal", "done",
+// "error"). The browser parses these and updates the chat panel.
+//
+// Body shape:
+//
+//	{
+//	  "messages": [{"role":"user","content":"plain text"}, ...]
+//	}
+//
+// On 500/timeout/aborted ctx, the handler emits one final "error"
+// frame before closing so the browser can show a banner.
+func (h *HTTPGateway) chatStream(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	if h.svc.AnthropicAPIKey == "" && !h.svc.UseClaudeCLI {
+		writeJSONError(rw, http.StatusServiceUnavailable, "chat is not enabled on this daemon (set ANTHROPIC_API_KEY or -claude-cli)")
+		return
+	}
+	// Grab the raw bearer for forwarding to hz-mcp in claude-cli mode.
+	// requireAuth already validated it; this is the same string.
+	bearerToken := credentialFromRequest(r)
+	var body struct {
+		Messages []ChatMessage `json:"messages"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSONError(rw, http.StatusBadRequest, "decode body: "+err.Error())
+		return
+	}
+	if len(body.Messages) == 0 {
+		writeJSONError(rw, http.StatusBadRequest, "messages must be non-empty")
+		return
+	}
+	flusher, ok := rw.(http.Flusher)
+	if !ok {
+		writeJSONError(rw, http.StatusInternalServerError, "streaming unsupported")
+		return
+	}
+	rw.Header().Set("Content-Type", "text/event-stream")
+	rw.Header().Set("Cache-Control", "no-cache")
+	rw.Header().Set("X-Accel-Buffering", "no")
+	rw.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	err := h.svc.ChatStream(r.Context(), p, bearerToken, body.Messages, func(ev ChatEvent) error {
+		// The event name doubles as the SSE `event:` field so the
+		// browser can dispatch on it without parsing the payload.
+		writeSSE(rw, ev.Type, ev)
+		flusher.Flush()
+		return r.Context().Err()
+	})
+	if err != nil && !errors.Is(err, context.Canceled) {
+		writeSSE(rw, "error", map[string]string{"error": err.Error()})
+		flusher.Flush()
+	}
 }
 
 func writeSSE(rw http.ResponseWriter, event string, payload any) {

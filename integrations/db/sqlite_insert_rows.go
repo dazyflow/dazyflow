@@ -31,7 +31,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "SQLite",
 			Tags:           []string{"sqlite", "sql", "database", "insert", "etl"},
-			Description:    "Insert rows into a SQLite table inside the workspace sandbox. Input 'rows' is a list of {column: value} records; optional 'headers' input fixes column order. When create_table=true the table is created from headers (TEXT by default, overridable via column_types).",
+			Description:    "Insert rows into a SQLite table inside the workspace sandbox. Input 'rows' is a list of {column: value} records; optional 'headers' input fixes column order. create_table defaults to true — the table is created from headers (TEXT columns by default, overridable via column_types). Set create_table=false to fail loudly when the table is missing (e.g. when you've pre-created it with indexes / constraints you don't want auto-clobbered).",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
@@ -44,10 +44,10 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"path":         {"type":"string","format":"workspace-path"},
-					"table":        {"type":"string"},
-					"create_table": {"type":"boolean"},
-					"column_types": {"type":"object","additionalProperties":{"type":"string"}}
+					"path":         {"type":"string","format":"workspace-path","description":"SQLite file path inside the workspace sandbox. Created on first insert."},
+					"table":        {"type":"string","description":"Target table. Created from headers when create_table=true (the default)."},
+					"create_table": {"type":"boolean","default":true,"description":"Auto-create the table from the supplied headers if it doesn't exist. Set false to fail loudly when the table is missing."},
+					"column_types": {"type":"object","additionalProperties":{"type":"string"},"description":"Override per-column type (e.g. {\"age\":\"INTEGER\",\"created_at\":\"DATETIME\"}). Defaults to TEXT for every header."}
 				},
 				"required":["path","table"]
 			}`),
@@ -87,9 +87,8 @@ func executeSQLiteInsertRows(_ context.Context, job core.Job, _ chan<- core.Prog
 	if err != nil {
 		return errResult(job, "bad_param", err.Error()), nil
 	}
-	if !isSafeIdent(table) {
-		return errResult(job, "bad_param",
-			fmt.Sprintf("table name %q contains characters other than [A-Za-z0-9_]", table)), nil
+	if err := validateIdent(table); err != nil {
+		return errResult(job, "bad_param", fmt.Sprintf("table name %q: %v", table, err)), nil
 	}
 	if job.WorkspaceRoot == "" {
 		return errResult(job, "no_sandbox", "sqlite_insert_rows requires a workspace sandbox"), nil
@@ -114,9 +113,8 @@ func executeSQLiteInsertRows(_ context.Context, job core.Job, _ chan<- core.Prog
 		headers = deriveHeaders(rows)
 	}
 	for _, h := range headers {
-		if !isSafeIdent(h) {
-			return errResult(job, "bad_input",
-				fmt.Sprintf("column %q contains characters other than [A-Za-z0-9_]", h)), nil
+		if err := validateIdent(h); err != nil {
+			return errResult(job, "bad_input", fmt.Sprintf("column %q: %v", h, err)), nil
 		}
 	}
 
@@ -159,7 +157,15 @@ func executeSQLiteInsertRows(_ context.Context, job core.Job, _ chan<- core.Prog
 	}
 	defer db.Close()
 
-	createTable, _ := paramBool(job.Params, "create_table")
+	// create_table defaults to true (matches the schema). The user
+	// only opts out when they've pre-created the table with custom
+	// indexes / constraints they don't want overwritten. paramBool
+	// returns (val, present) so we can distinguish "unset" from
+	// "explicit false."
+	createTable := true
+	if v, present := paramBool(job.Params, "create_table"); present {
+		createTable = v
+	}
 	if createTable && len(headers) > 0 {
 		colTypes, _ := paramStringMap(job.Params, "column_types")
 		if err := ensureTable(db, table, headers, colTypes); err != nil {
@@ -192,8 +198,10 @@ func executeSQLiteInsertRows(_ context.Context, job core.Job, _ chan<- core.Prog
 
 // ensureTable issues a CREATE TABLE IF NOT EXISTS sized to headers.
 // Column types default to TEXT (SQLite's universal storage class)
-// unless overridden by column_types. We quote identifiers in case a
-// column name shadows a SQL keyword (e.g. "order", "from").
+// unless overridden by column_types. Identifiers are wrapped in
+// proper SQL double-quotes (NOT Go's %q, which uses C-style escape
+// sequences SQLite doesn't understand) so non-ASCII names like
+// "FÖRETAG" and SQL keywords like "order" both round-trip safely.
 func ensureTable(db *sql.DB, table string, headers []string, colTypes map[string]string) error {
 	cols := make([]string, len(headers))
 	for i, h := range headers {
@@ -201,9 +209,9 @@ func ensureTable(db *sql.DB, table string, headers []string, colTypes map[string
 		if v, ok := colTypes[h]; ok && v != "" {
 			t = v
 		}
-		cols[i] = fmt.Sprintf("%q %s", h, t)
+		cols[i] = fmt.Sprintf("%s %s", quoteIdent(h), t)
 	}
-	stmt := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %q (%s)", table, strings.Join(cols, ", "))
+	stmt := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (%s)", quoteIdent(table), strings.Join(cols, ", "))
 	if _, err := db.Exec(stmt); err != nil {
 		return fmt.Errorf("create table: %w", err)
 	}
@@ -221,12 +229,12 @@ func insertBatch(db *sql.DB, table string, headers []string, rows []map[string]a
 	cols := make([]string, len(headers))
 	placeholders := make([]string, len(headers))
 	for i, h := range headers {
-		cols[i] = fmt.Sprintf("%q", h)
+		cols[i] = quoteIdent(h)
 		placeholders[i] = "?"
 	}
 	stmt, err := tx.Prepare(fmt.Sprintf(
-		"INSERT INTO %q (%s) VALUES (%s)",
-		table, strings.Join(cols, ", "), strings.Join(placeholders, ", "),
+		"INSERT INTO %s (%s) VALUES (%s)",
+		quoteIdent(table), strings.Join(cols, ", "), strings.Join(placeholders, ", "),
 	))
 	if err != nil {
 		_ = tx.Rollback()
@@ -252,24 +260,3 @@ func insertBatch(db *sql.DB, table string, headers []string, rows []map[string]a
 	return count, nil
 }
 
-// isSafeIdent restricts table and column names to [A-Za-z0-9_]. Real
-// production SQL uses quoted identifiers and can store any UTF-8, but
-// we don't want graph-author-controlled strings to ever become part
-// of an identifier we don't fully control — this is a defense-in-depth
-// check on top of the quoting we already do.
-func isSafeIdent(s string) bool {
-	if s == "" {
-		return false
-	}
-	for _, r := range s {
-		switch {
-		case r >= 'a' && r <= 'z':
-		case r >= 'A' && r <= 'Z':
-		case r >= '0' && r <= '9':
-		case r == '_':
-		default:
-			return false
-		}
-	}
-	return true
-}

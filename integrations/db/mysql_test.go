@@ -324,8 +324,12 @@ func TestMySQLUpsert_DoNothingEquivalent(t *testing.T) {
 // Unit tests — no MySQL required.
 // ----------------------------------------------------------------------
 
+// Only the genuinely-unsafe shapes are pre-rejected now. Names like
+// "with space" or "with-dash" are valid MySQL identifiers when
+// backtick-quoted, so they go through to the driver — which lands
+// at the connect stage in unit tests without a real MySQL server.
 func TestMySQLInsert_RejectsUnsafeTableName(t *testing.T) {
-	for _, name := range []string{"t; DROP TABLE x", "with space", "with-dash", ""} {
+	for _, name := range []string{"", "tab\x00le"} {
 		t.Run(name, func(t *testing.T) {
 			res, _ := executeMySQLInsertRows(t.Context(), core.Job{
 				Params: map[string]any{"dsn": "user:pw@tcp(localhost:3306)/db", "table": name},
@@ -333,8 +337,8 @@ func TestMySQLInsert_RejectsUnsafeTableName(t *testing.T) {
 					"rows": {Inline: []map[string]any{{"a": "1"}}},
 				},
 			}, nil)
-			if res.Status != core.StatusError || res.Error.Code != "bad_param" {
-				t.Errorf("status=%q code=%q, want bad_param", res.Status, res.Error.Code)
+			if res.Status != core.StatusError || res.Error == nil || res.Error.Code != "bad_param" {
+				t.Errorf("status=%q error=%+v, want bad_param", res.Status, res.Error)
 			}
 		})
 	}
@@ -344,12 +348,12 @@ func TestMySQLInsert_RejectsUnsafeColumnName(t *testing.T) {
 	res, _ := executeMySQLInsertRows(t.Context(), core.Job{
 		Params: map[string]any{"dsn": "x", "table": "t"},
 		Input: map[string]core.Ref{
-			"rows":    {Inline: []map[string]any{{"weird col": "x"}}},
-			"headers": {Inline: []string{"weird col"}},
+			"rows":    {Inline: []map[string]any{{"co\x00l": "x"}}},
+			"headers": {Inline: []string{"co\x00l"}},
 		},
 	}, nil)
-	if res.Status != core.StatusError || res.Error.Code != "bad_input" {
-		t.Errorf("status=%q code=%q, want bad_input", res.Status, res.Error.Code)
+	if res.Status != core.StatusError || res.Error == nil || res.Error.Code != "bad_input" {
+		t.Errorf("status=%q error=%+v, want bad_input", res.Status, res.Error)
 	}
 }
 

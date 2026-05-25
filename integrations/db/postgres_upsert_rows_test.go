@@ -340,21 +340,25 @@ func TestPostgresUpsert_UnsafeConflictColumn(t *testing.T) {
 	}
 }
 
+// `name; DROP` is now a legal column name — the drop quotes it, so
+// the embedded semicolon stays inside the identifier. The only
+// genuinely-unsafe shape that gets pre-rejected is the NUL byte
+// (and empty, which the array shape can't carry meaningfully here).
 func TestPostgresUpsert_UnsafeUpdateColumn(t *testing.T) {
 	res, _ := executePostgresUpsertRows(t.Context(), core.Job{
 		Params: map[string]any{
 			"dsn":              "postgres://",
 			"table":            "t",
 			"conflict_columns": []string{"id"},
-			"update_columns":   []string{"name; DROP"},
+			"update_columns":   []string{"co\x00l"},
 		},
 		Input: map[string]core.Ref{
 			"rows":    {Inline: []map[string]any{{"id": 1}}},
 			"headers": {Inline: []string{"id"}},
 		},
 	}, nil)
-	if res.Status != core.StatusError || res.Error.Code != "bad_param" {
-		t.Errorf("status=%q code=%q, want bad_param", res.Status, res.Error.Code)
+	if res.Status != core.StatusError || res.Error == nil || res.Error.Code != "bad_param" {
+		t.Errorf("status=%q error=%+v, want bad_param", res.Status, res.Error)
 	}
 }
 

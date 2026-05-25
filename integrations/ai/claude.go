@@ -33,7 +33,7 @@ func init() {
 		Manifest: core.Manifest{
 			ID:             "claude",
 			Version:        "1.0",
-			Label:          "Claude (Anthropic Messages API)",
+			Label:          "Claude",
 			Color:          "#cc7755",
 			Icon:           "claude",
 			Category:       "ai",
@@ -51,20 +51,29 @@ func init() {
 				{Port: "text", Label: "Assistant response text"},
 				{Port: "response", Label: "Full response object (usage, stop_reason, ...)"},
 			},
+			// Defaults mirror the Go constants in the package header so the
+			// SchemaForm pre-fills sensible values; the executor still
+			// applies the same defaults if params arrive without them.
+			//
+			// prompt + system get format:"multiline" so the UI gives
+			// them a textarea — the natural shape for LLM prompt text.
+			// The executor's precedence (prompt input port → messages
+			// → params.prompt) is unchanged; this just makes the
+			// "single-turn prompt" case discoverable in the inspector.
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"model":{"type":"string"},
-					"system":{"type":"string"},
-					"messages":{"type":"array"},
-					"max_tokens":{"type":"integer","minimum":1},
-					"temperature":{"type":"number","minimum":0,"maximum":1},
-					"stop_sequences":{"type":"array","items":{"type":"string"}},
-					"api_key":{"type":"string"},
-					"base_url":{"type":"string"},
-					"timeout_ms":{"type":"integer","minimum":1}
-				},
-				"required":["api_key"]
+					"model":{"type":"string","default":"claude-sonnet-4-6","description":"Model alias or full name. Defaults to claude-sonnet-4-6."},
+					"prompt":{"type":"string","format":"multiline","description":"Single user message. Used when no 'prompt' input port is wired AND params.messages is empty — the simplest path for one-shot calls."},
+					"system":{"type":"string","format":"multiline","description":"Optional system prompt — gives the model its persona / task framing."},
+					"messages":{"type":"array","description":"Full conversation history ({role, content}). When set, overrides params.prompt. For multi-turn calls."},
+					"max_tokens":{"type":"integer","minimum":1,"default":1024,"description":"Maximum tokens the assistant may produce."},
+					"temperature":{"type":"number","minimum":0,"maximum":1,"description":"Sampling temperature (0=deterministic, 1=creative). Leave unset to use the model's default."},
+					"stop_sequences":{"type":"array","items":{"type":"string"},"description":"Optional list of strings that stop generation when emitted."},
+					"api_key":{"type":"string","description":"Anthropic API key. Use ${secret:NAME} — never paste sk-ant-... literals into the graph. (Ignored when hzd is in --claude-cli mode.)"},
+					"base_url":{"type":"string","default":"https://api.anthropic.com","description":"Override the API host (proxy, sandbox)."},
+					"timeout_ms":{"type":"integer","minimum":1,"default":60000,"description":"HTTP timeout in milliseconds."}
+				}
 			}`),
 			// One-shot LLM calls are safe to retry — retries happen only
 			// when the network/HTTP layer failed before we received a
@@ -121,6 +130,15 @@ type claudeAPIErrorEnvelope struct {
 }
 
 func executeClaude(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
+	// claude-cli mode: hzd was started with -claude-cli, so route
+	// through the local Claude Code CLI (OAuth-based auth, no
+	// Anthropic API key needed). Same toggle the in-app chat agent
+	// uses, exposed to this drop via env so the integrations
+	// package doesn't have to import daemon.
+	if isClaudeCLIMode() {
+		return executeClaudeViaCLI(ctx, job, progress)
+	}
+
 	apiKey, err := paramString(job.Params, "api_key")
 	if err != nil {
 		return errResult(job, "bad_param", err.Error()), nil
@@ -214,9 +232,16 @@ func executeClaude(ctx context.Context, job core.Job, progress chan<- core.Progr
 
 // buildClaudeRequest assembles the API request from params and the
 // optional prompt input port. Precedence:
-//   - input.prompt (a string) → single user message, overrides params.messages
+//   - input.prompt (string, list, or object — coerced to text) →
+//     single user message, overrides params.messages
 //   - params.messages → used as-is
 //   - params.prompt (a string, fallback) → single user message
+//
+// The prompt input is coerced because upstream nodes commonly emit
+// non-string shapes — Merge publishes `[]core.Ref`, structured
+// transformers publish maps, etc. — and silently dropping those
+// would leave the user wondering why their wired node produced no
+// messages.
 func buildClaudeRequest(job core.Job) (claudeRequest, error) {
 	req := claudeRequest{
 		Model:     paramStringDefault(job.Params, "model", claudeDefaultModel),
@@ -233,7 +258,7 @@ func buildClaudeRequest(job core.Job) (claudeRequest, error) {
 
 	// Resolve messages with documented precedence.
 	if input, ok := job.Input["prompt"]; ok {
-		if s, ok := input.Inline.(string); ok && s != "" {
+		if s := coercePromptText(input.Inline); s != "" {
 			req.Messages = []claudeMessage{{Role: "user", Content: s}}
 		}
 	}
@@ -251,6 +276,61 @@ func buildClaudeRequest(job core.Job) (claudeRequest, error) {
 	}
 
 	return req, nil
+}
+
+// coercePromptText flattens whatever shape arrived on the prompt
+// input port into a single user-message string.
+//
+// Handled shapes:
+//   - string / []byte                          → use verbatim
+//   - []core.Ref (Merge fan-in)                → recurse into each
+//     ref's Inline and join with blank lines
+//   - []any (JSON array from a transform node) → same flattening
+//   - map / struct (structured object)         → JSON-encode
+//   - nil                                       → empty
+//
+// Blank-line separators between merged items match what an operator
+// would naturally write if combining several blurbs into one
+// prompt; they also keep markdown-style sections distinct so the
+// model doesn't read them as one run-on paragraph.
+func coercePromptText(v any) string {
+	switch x := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return x
+	case []byte:
+		return string(x)
+	case []core.Ref:
+		parts := make([]string, 0, len(x))
+		for _, r := range x {
+			if s := coercePromptText(r.Inline); s != "" {
+				parts = append(parts, s)
+			}
+		}
+		return strings.Join(parts, "\n\n")
+	case []any:
+		parts := make([]string, 0, len(x))
+		for _, item := range x {
+			if s := coercePromptText(item); s != "" {
+				parts = append(parts, s)
+			}
+		}
+		return strings.Join(parts, "\n\n")
+	case map[string]any:
+		b, err := json.Marshal(x)
+		if err != nil {
+			return ""
+		}
+		return string(b)
+	}
+	// Last resort — JSON-stringify whatever it is. Catches custom
+	// structs, numbers, bools, etc.
+	b, err := json.Marshal(v)
+	if err != nil {
+		return ""
+	}
+	return string(b)
 }
 
 func concatText(blocks []claudeContentBlock) string {

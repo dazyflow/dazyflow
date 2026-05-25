@@ -226,7 +226,13 @@ export function Inspector({
         )}
 
         {mode === "form" && canForm && schema && (
+          // key={selected.id} forces a fresh SchemaForm instance per
+          // node so internal text state in JSONField / ArrayField /
+          // etc. picks up the new node's value as its initial state
+          // — without needing a useEffect resync that would clobber
+          // the user's mid-typing keystrokes.
           <SchemaForm
+            key={selected.id}
             schema={schema}
             value={currentParams}
             workspace={workspace}

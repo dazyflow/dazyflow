@@ -11,6 +11,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"os/signal"
 	"strconv"
 	"strings"
@@ -51,6 +52,10 @@ func main() {
 	webOrigin := flag.String("web-origin", "http://localhost:5174", "comma-separated allowed origins for the web UI (CORS + cookie credentials)")
 	sessionTTL := flag.Duration("session-ttl", 24*time.Hour, "lifetime of a sign-in session before the user must re-authenticate")
 	defaultGraphTimeout := flag.Duration("default-graph-timeout", 0, "wall-time cap applied to runs whose graph has no timeout_seconds set (0 = no default; the per-graph value, when present, always wins)")
+	anthropicKey := flag.String("anthropic-key", os.Getenv("ANTHROPIC_API_KEY"), "Anthropic API key for the in-app chat agent (default $ANTHROPIC_API_KEY). Empty disables /api/v1/chat/stream unless --claude-cli is set.")
+	claudeCLI := flag.Bool("claude-cli", false, "Route the chat endpoint through the local `claude -p` CLI + hz-mcp instead of the Anthropic API. Test mode — lets you exercise the chat without an API key as long as `claude` is logged in.")
+	claudeCLIMCPBin := flag.String("claude-cli-mcp-bin", "", "Path to the hz-mcp binary used by --claude-cli (default: $HZ_MCP_BIN, then $PATH lookup).")
+	claudeCLIHazydURL := flag.String("claude-cli-hzd-url", "http://localhost:8080", "URL hz-mcp uses to call back into this hzd process under --claude-cli.")
 	flag.Parse()
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -140,6 +145,17 @@ func main() {
 		// from, so admin-issued keys are immediately recognized.
 		AdminKeys:                  ks,
 		DefaultGraphTimeoutSeconds: int(defaultGraphTimeout.Seconds()),
+		AnthropicAPIKey:            *anthropicKey,
+		UseClaudeCLI:               *claudeCLI,
+		ClaudeCLIMCPBinary:         daemon.ResolveClaudeMCPBinary(*claudeCLIMCPBin),
+		ClaudeCLIHazydURL:          *claudeCLIHazydURL,
+	}
+	// When claude-cli mode is on, also publish it as an env var so
+	// the Claude *drop* (integrations/ai/claude.go) reroutes through
+	// the local binary instead of the Anthropic API. Same toggle,
+	// two consumers — keeps dev environments from needing a real key.
+	if *claudeCLI {
+		_ = os.Setenv("HAZYFLOW_CLAUDE_CLI", "1")
 	}
 
 	// Spin up worker goroutines. Each is independent and competes for
