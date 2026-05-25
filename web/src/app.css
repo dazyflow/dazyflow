@@ -714,6 +714,30 @@
   background: transparent !important;
   color: inherit;
 }
+/* Brand logos shipped as raster/vector assets (e.g. Excel green X)
+   fill the icon box edge-to-edge, no backdrop. The image is
+   constrained to 100% × 100% so a 32×32 source looks right inside
+   the 28px node icon box and the 32px module-row box. */
+.hz-node .icon.brand-logo,
+.module-row .icon.brand-logo {
+  background: transparent !important;
+  padding: 0;
+}
+.hz-node .icon.brand-logo img,
+.module-row .icon.brand-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+/* Integration-header logos in the catalog tree sit inside the 20px
+   header icon slot. object-fit keeps them readable when the source
+   isn't square. */
+.catalog-integration-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
 .hz-node .label {
   font-weight: 500;
   color: var(--ink);

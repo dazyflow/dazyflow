@@ -51,7 +51,11 @@ export function HazyNode({ data, selected }: NodeProps) {
         />
       ))}
 
-      {isBrandedIcon(d.manifest?.icon) ? (
+      {d.manifest?.brand_logo ? (
+        <div className="icon brand-logo">
+          <img src={d.manifest.brand_logo} alt="" draggable={false} />
+        </div>
+      ) : isBrandedIcon(d.manifest?.icon) ? (
         <div className="icon branded">
           <Icon size={22} strokeWidth={2.2} />
         </div>

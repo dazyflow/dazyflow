@@ -17,6 +17,7 @@ func init() {
 			Label:          "Postgres query",
 			Color:          "#336791",
 			Icon:           "database",
+			BrandLogo:      "/brands/postgres.svg",
 			Category:       "io",
 			Provider:       "internal",
 			Integration:    "Postgres",

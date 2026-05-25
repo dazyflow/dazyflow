@@ -22,6 +22,7 @@ func init() {
 			Label:          "SQLite upsert rows",
 			Color:          "#0a6abf",
 			Icon:           "database",
+			BrandLogo:      "/brands/sqlite.svg",
 			Category:       "io",
 			Provider:       "internal",
 			Integration:    "SQLite",

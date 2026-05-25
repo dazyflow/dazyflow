@@ -64,6 +64,10 @@ export type Manifest = {
   label: string;
   color?: string;
   icon?: string;
+  // brand_logo, when set, is the asset path (or URL) of a vendor logo
+  // (e.g. "/brands/excel.svg") that the catalog and node card prefer
+  // over `icon`. Set on the Go side via core.Manifest.BrandLogo.
+  brand_logo?: string;
   category?: string;
   provider?: string;
   integration?: string;

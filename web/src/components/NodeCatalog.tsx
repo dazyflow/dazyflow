@@ -103,17 +103,32 @@ export function NodeCatalog({ drops }: Props) {
       key: string;
       label: string;
       icon?: string;
+      brandLogo?: string;
       drops: Manifest[];
       isStdlib: boolean;
     }> = Array.from(integrations.entries())
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([name, drops]) => ({
-        key: name,
-        label: name,
-        icon: integrationIcon(name),
-        drops,
-        isStdlib: false,
-      }));
+      .map(([name, drops]) => {
+        // Borrow the brand logo from the first drop in the group
+        // that has one. Within an Integration the drops are expected
+        // to share a vendor mark; this avoids hardcoding the
+        // integration→asset mapping a second time on the UI side.
+        let brandLogo: string | undefined;
+        for (const d of drops) {
+          if (d.brand_logo) {
+            brandLogo = d.brand_logo;
+            break;
+          }
+        }
+        return {
+          key: name,
+          label: name,
+          icon: integrationIcon(name),
+          brandLogo,
+          drops,
+          isStdlib: false,
+        };
+      });
     if (stdlib.length > 0) {
       ordered.push({
         key: STDLIB_KEY,
@@ -180,11 +195,20 @@ export function NodeCatalog({ drops }: Props) {
                 )}
                 {!s.isStdlib && (
                   <span className="catalog-integration-icon">
-                    <HeaderIcon
-                      size={headerBranded ? 18 : 14}
-                      color={headerBranded ? undefined : "currentColor"}
-                      strokeWidth={2}
-                    />
+                    {s.brandLogo ? (
+                      <img
+                        src={s.brandLogo}
+                        alt=""
+                        className="catalog-integration-logo"
+                        draggable={false}
+                      />
+                    ) : (
+                      <HeaderIcon
+                        size={headerBranded ? 18 : 14}
+                        color={headerBranded ? undefined : "currentColor"}
+                        strokeWidth={2}
+                      />
+                    )}
                   </span>
                 )}
                 <span className="catalog-group-label">{s.label}</span>
@@ -283,7 +307,11 @@ function DropRow({
       onDragStart={(e) => onDragStart(e, drop)}
       title={drop.description ?? drop.label}
     >
-      {branded ? (
+      {drop.brand_logo ? (
+        <div className="icon brand-logo">
+          <img src={drop.brand_logo} alt="" draggable={false} />
+        </div>
+      ) : branded ? (
         <div className="icon branded">
           <Icon size={24} strokeWidth={2.2} />
         </div>

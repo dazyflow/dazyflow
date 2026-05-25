@@ -19,6 +19,7 @@ func init() {
 			Label:          "Postgres upsert rows",
 			Color:          "#336791",
 			Icon:           "database",
+			BrandLogo:      "/brands/postgres.svg",
 			Category:       "io",
 			Provider:       "internal",
 			Integration:    "Postgres",
