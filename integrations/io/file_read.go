@@ -31,7 +31,7 @@ func init() {
 				Label: "File ref",
 			}},
 			ParamsSchema: json.RawMessage(
-				`{"type":"object","properties":{"path":{"type":"string"},"mime":{"type":"string"}},"required":["path"]}`,
+				`{"type":"object","properties":{"path":{"type":"string","format":"workspace-path"},"mime":{"type":"string"}},"required":["path"]}`,
 			),
 			Idempotent: true,
 		},

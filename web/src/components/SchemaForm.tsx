@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
-import { Plus, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Plus, Upload, X } from "lucide-react";
 import type { JSONSchema } from "../types";
+import { api, APIError } from "../api";
 
 // SchemaForm renders manifest.params_schema as a typed form. The
 // happy path: a top-level object whose properties resolve to one of
@@ -9,13 +10,25 @@ import type { JSONSchema } from "../types";
 // with required fields) falls through to a raw JSON textarea via the
 // supportsSchemaForm() check in the parent.
 
+// WorkspaceCtx is the bag of state the workspace-path widget needs
+// (token + active tenant/workspace) to upload via the daemon. It's
+// threaded through the form so individual fields don't have to reach
+// into a global; when absent, format:"workspace-path" degrades to a
+// plain text input so the form still works in tests/storybook.
+export type WorkspaceCtx = {
+  token: string;
+  tenant: string;
+  workspace: string;
+};
+
 type Props = {
   schema: JSONSchema;
   value: Record<string, unknown>;
   onChange: (next: Record<string, unknown>) => void;
+  workspace?: WorkspaceCtx;
 };
 
-export function SchemaForm({ schema, value, onChange }: Props) {
+export function SchemaForm({ schema, value, onChange, workspace }: Props) {
   if (schema.type !== "object" || !schema.properties) {
     return (
       <div className="sf-fallback-hint">
@@ -34,6 +47,7 @@ export function SchemaForm({ schema, value, onChange }: Props) {
           schema={propSchema}
           required={required.has(key)}
           value={value[key]}
+          workspace={workspace}
           onChange={(v) => {
             const next = { ...value };
             if (v === undefined) delete next[key];
@@ -52,9 +66,10 @@ type FieldProps = {
   required: boolean;
   value: unknown;
   onChange: (v: unknown) => void;
+  workspace?: WorkspaceCtx;
 };
 
-function SchemaField({ name, schema, required, value, onChange }: FieldProps) {
+function SchemaField({ name, schema, required, value, onChange, workspace }: FieldProps) {
   // oneOf takes precedence over `type` — it expresses a typed union
   // (e.g. branch.value: string | number | boolean). Render the
   // segmented picker; the selected branch is itself a SchemaField.
@@ -86,6 +101,17 @@ function SchemaField({ name, schema, required, value, onChange }: FieldProps) {
   }
   switch (schema.type) {
     case "string":
+      if (schema.format === "workspace-path" && workspace) {
+        return (
+          <FieldWrap name={name} schema={schema} required={required}>
+            <WorkspacePathField
+              value={(value as string) ?? ""}
+              onChange={(v) => onChange(v === "" && !required ? undefined : v)}
+              ctx={workspace}
+            />
+          </FieldWrap>
+        );
+      }
       return (
         <FieldWrap name={name} schema={schema} required={required}>
           <input
@@ -153,6 +179,7 @@ function SchemaField({ name, schema, required, value, onChange }: FieldProps) {
               <SchemaForm
                 schema={schema}
                 value={sub}
+                workspace={workspace}
                 onChange={(v) =>
                   onChange(Object.keys(v).length === 0 && !required ? undefined : v)
                 }
@@ -599,6 +626,102 @@ function defaultFor(schema: JSONSchema): unknown {
     default:
       return undefined;
   }
+}
+
+// WorkspacePathField renders the workspace-path widget: a text input
+// holding the current sandbox-relative path, plus a drop-zone +
+// file-picker that uploads the dropped/selected file via the daemon
+// and stores the returned path. Drag-and-drop uses native HTML5
+// events (no library) so it works alongside React Flow's own
+// drag handling — we stopPropagation so a drop on the input doesn't
+// also create a node.
+function WorkspacePathField({
+  value,
+  onChange,
+  ctx,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  ctx: WorkspaceCtx;
+}) {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const uploadFile = async (file: File) => {
+    setUploading(true);
+    setError(null);
+    try {
+      const res = await api.uploadWorkspaceFile(ctx.token, ctx.tenant, ctx.workspace, file);
+      onChange(res.path);
+    } catch (e) {
+      const msg = e instanceof APIError ? `${e.status}: ${e.message}` : (e as Error).message;
+      setError(msg);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div>
+      <div
+        className={`sf-dropzone${dragOver ? " drag-over" : ""}${uploading ? " uploading" : ""}`}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setDragOver(true);
+        }}
+        onDragLeave={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setDragOver(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setDragOver(false);
+          const f = e.dataTransfer.files?.[0];
+          if (f) void uploadFile(f);
+        }}
+        onClick={() => fileInputRef.current?.click()}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            fileInputRef.current?.click();
+          }
+        }}
+      >
+        <Upload size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+        {uploading ? "Uploading…" : "Drop a file here or click to browse"}
+      </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        style={{ display: "none" }}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) void uploadFile(f);
+          // Reset so picking the same file twice in a row still fires.
+          e.target.value = "";
+        }}
+      />
+      <input
+        type="text"
+        value={value}
+        placeholder="workspace-relative path"
+        onChange={(e) => onChange(e.target.value)}
+        style={{ marginTop: 6, fontFamily: "var(--font-mono)", fontSize: 12 }}
+      />
+      {error && (
+        <div style={{ color: "var(--danger)", fontSize: 12, marginTop: 4 }}>
+          {error}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // supportsSchemaForm answers "should the Inspector use the form, or

@@ -90,6 +90,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/auth/signout", h.signOut)
 	mux.HandleFunc("GET /api/v1/whoami", h.requireAuth(h.whoami))
 	mux.HandleFunc("GET /api/v1/workspaces", h.requireAuth(h.listWorkspaces))
+	mux.HandleFunc("POST /api/v1/workspaces/{tenant}/{workspace}/files", h.requireAuth(h.uploadWorkspaceFile))
 	mux.HandleFunc("GET /api/v1/drops", h.requireAuth(h.listModules))
 	// Legacy alias — hzctl and older proxies still hit /modules. Keep
 	// it pointing at the same handler so we can deprecate at our pace.

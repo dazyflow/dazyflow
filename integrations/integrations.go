@@ -14,4 +14,5 @@ import (
 	_ "git.sr.ht/~klahr/hazy-flow/integrations/notify"
 	_ "git.sr.ht/~klahr/hazy-flow/integrations/shell"
 	_ "git.sr.ht/~klahr/hazy-flow/integrations/trigger"
+	_ "git.sr.ht/~klahr/hazy-flow/integrations/value"
 )

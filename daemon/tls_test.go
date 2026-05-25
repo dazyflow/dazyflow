@@ -197,8 +197,8 @@ func TestMTLS_HappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListModules: %v", err)
 	}
-	if len(resp.Modules) == 0 {
-		t.Error("ListModules returned no modules")
+	if len(resp.Drops) == 0 {
+		t.Error("ListDrops returned no drops")
 	}
 }
 

@@ -31,7 +31,7 @@ func init() {
 				{Port: "rows", Label: "Rows"},
 				{Port: "headers", Label: "Headers"},
 			},
-			ParamsSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"sheet":{"type":"string"},"headers":{"type":"boolean"},"skip":{"type":"integer"}},"required":["path"]}`),
+			ParamsSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string","format":"workspace-path"},"sheet":{"type":"string"},"headers":{"type":"boolean"},"skip":{"type":"integer"}},"required":["path"]}`),
 			Idempotent:   true,
 		},
 		Execute: executeExcelRead,

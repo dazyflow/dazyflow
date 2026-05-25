@@ -298,11 +298,11 @@ func TestGRPC_ListModules(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListModules: %v", err)
 	}
-	if len(resp.Modules) == 0 {
+	if len(resp.Drops) == 0 {
 		t.Fatal("expected built-in modules to be listed")
 	}
 	seen := map[string]bool{}
-	for _, m := range resp.Modules {
+	for _, m := range resp.Drops {
 		seen[m.Id] = true
 	}
 	for _, want := range []string{"sleep", "merge", "file_read", "file_write"} {

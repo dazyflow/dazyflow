@@ -37,7 +37,7 @@ func init() {
 				Label: "Written path",
 			}},
 			ParamsSchema: json.RawMessage(
-				`{"type":"object","properties":{"path":{"type":"string"},"mkdirs":{"type":"boolean"}},"required":["path"]}`,
+				`{"type":"object","properties":{"path":{"type":"string","format":"workspace-path"},"mkdirs":{"type":"boolean"}},"required":["path"]}`,
 			),
 		},
 		Execute: executeFileWrite,

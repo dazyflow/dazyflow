@@ -89,6 +89,10 @@ export type JSONSchema = {
   minLength?: number;
   maxLength?: number;
   pattern?: string;
+  // format is a JSON Schema annotation we use for UI dispatch. Recognized
+  // today: "workspace-path" — renders an upload widget that puts the
+  // dropped file into the active workspace and stores its sandbox path.
+  format?: string;
   // number / integer
   minimum?: number;
   maximum?: number;

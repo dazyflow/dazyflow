@@ -582,6 +582,9 @@ function EditorInner() {
           currentRunID={currentRunID}
           statusRefreshKey={statusRefreshKey}
           liveLogs={inspectorSelected ? liveLogs[inspectorSelected.id] : undefined}
+          workspace={
+            token ? { token, tenant: activeTenant, workspace: activeWorkspace } : undefined
+          }
         />
       </div>
       {settingsOpen && me && id && (

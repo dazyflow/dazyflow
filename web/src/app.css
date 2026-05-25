@@ -973,6 +973,37 @@
   font-style: italic;
 }
 
+.sf-dropzone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-3);
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  background: var(--surface-2, transparent);
+  transition: background-color 0.1s ease, border-color 0.1s ease;
+  user-select: none;
+}
+.sf-dropzone:hover,
+.sf-dropzone:focus-visible {
+  border-color: var(--accent, #4a8);
+  color: var(--text);
+  outline: none;
+}
+.sf-dropzone.drag-over {
+  border-color: var(--accent, #4a8);
+  border-style: solid;
+  background: rgba(74, 136, 136, 0.08);
+  color: var(--text);
+}
+.sf-dropzone.uploading {
+  pointer-events: none;
+  opacity: 0.7;
+}
+
 /* Run history dropdown */
 .run-history-pop {
   position: absolute;

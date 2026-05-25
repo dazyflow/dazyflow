@@ -37,7 +37,7 @@ func init() {
 				{Port: "headers", Label: "Headers", Required: false},
 			},
 			Outputs: []core.Port{{Port: "out", Label: "Written path"}},
-			ParamsSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"sheet":{"type":"string"},"mkdirs":{"type":"boolean"},"autosize":{"type":"boolean"},"freezeRow":{"type":"integer"}},"required":["path"]}`),
+			ParamsSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string","format":"workspace-path"},"sheet":{"type":"string"},"mkdirs":{"type":"boolean"},"autosize":{"type":"boolean"},"freezeRow":{"type":"integer"}},"required":["path"]}`),
 		},
 		Execute: executeExcelWrite,
 	})

@@ -64,6 +64,42 @@ export type SignInResponse = {
 };
 
 export const api = {
+  // uploadWorkspaceFile sends a single file to a workspace sandbox via
+  // multipart/form-data — used by the workspace-path widget in the
+  // node param editor. `destPath` is optional; the daemon defaults to
+  // the file's name (with browser-supplied directories stripped).
+  uploadWorkspaceFile: async (
+    token: string,
+    tenant: string,
+    workspace: string,
+    file: File,
+    destPath?: string,
+  ): Promise<{ path: string; size: number }> => {
+    const form = new FormData();
+    form.append("file", file);
+    if (destPath) form.append("path", destPath);
+    const res = await fetch(
+      API_BASE + `/workspaces/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/files`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+        body: form,
+      },
+    );
+    if (!res.ok) {
+      const text = await res.text();
+      let message = text;
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed.error) message = parsed.error;
+      } catch {
+        // raw text
+      }
+      throw new APIError(res.status, message || res.statusText);
+    }
+    return res.json();
+  },
   signIn: (email: string, password: string) =>
     request<SignInResponse>(null, "POST", "/auth/signin", { email, password }),
   signOut: (token: string | null) =>

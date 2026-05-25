@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Node } from "@xyflow/react";
 import type { HazyNodeData } from "./NodeCard";
-import { SchemaForm, supportsSchemaForm } from "./SchemaForm";
+import { SchemaForm, supportsSchemaForm, type WorkspaceCtx } from "./SchemaForm";
 import { OutputPreview } from "./OutputPreview";
 import { LiveConsole } from "./LiveConsole";
 
@@ -22,6 +22,9 @@ type Props = {
   // node's in-flight run. When non-empty the inspector renders a
   // scrolling console above the static "Last run output" section.
   liveLogs?: string[];
+  // workspace gives form fields with format:"workspace-path" the
+  // context they need to upload files into the active sandbox.
+  workspace?: WorkspaceCtx;
 };
 
 type Mode = "form" | "json";
@@ -34,6 +37,7 @@ export function Inspector({
   currentRunID,
   statusRefreshKey,
   liveLogs,
+  workspace,
 }: Props) {
   const [mode, setMode] = useState<Mode>("form");
   const [jsonText, setJsonText] = useState("");
@@ -122,6 +126,7 @@ export function Inspector({
           <SchemaForm
             schema={schema}
             value={currentParams}
+            workspace={workspace}
             onChange={(v) => onParamsChange(selected.id, v)}
           />
         )}
