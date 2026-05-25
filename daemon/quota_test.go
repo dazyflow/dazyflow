@@ -175,7 +175,7 @@ func TestQuota_E2E_AllowsThenRefuses(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Submit %s: %v", graphID, err)
 		}
-		return waitForTerminalEvent(t, h.bus, graphRunID, 5*time.Second), graphRunID
+		return waitForTerminalEvent(t, h.bus, h.jobs, graphRunID, 5*time.Second), graphRunID
 	}
 
 	terminal, _ := run("first", "copy1.txt")
@@ -222,7 +222,7 @@ func TestQuota_E2E_UnlimitedTenant(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	terminal := waitForTerminalEvent(t, h.bus, graphRunID, 5*time.Second)
+	terminal := waitForTerminalEvent(t, h.bus, h.jobs, graphRunID, 5*time.Second)
 	if terminal.Status != core.JobStatusSucceeded {
 		t.Fatalf("status = %q (err=%+v)", terminal.Status, terminal.Error)
 	}

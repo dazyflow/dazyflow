@@ -1,7 +1,8 @@
 import { jsx as _jsx, Fragment as _Fragment, jsxs as _jsxs } from "react/jsx-runtime";
 import { useEffect, useState } from "react";
 import { SchemaForm, supportsSchemaForm } from "./SchemaForm";
-export function Inspector({ selected, onChange, paramsByID, onParamsChange, }) {
+import { OutputPreview } from "./OutputPreview";
+export function Inspector({ selected, onChange, paramsByID, onParamsChange, currentRunID, statusRefreshKey, }) {
     const [mode, setMode] = useState("form");
     const [jsonText, setJsonText] = useState("");
     const [jsonError, setJsonError] = useState(null);
@@ -45,5 +46,5 @@ export function Inspector({ selected, onChange, paramsByID, onParamsChange, }) {
                                     catch (e) {
                                         setJsonError(e.message);
                                     }
-                                }, style: { fontFamily: "var(--font-mono)", resize: "vertical" } }), jsonError && (_jsx("div", { style: { color: "var(--danger)", fontSize: 12, marginTop: 4 }, children: jsonError }))] })), d.manifest?.description && (_jsxs("div", { className: "sf-field", style: { marginTop: "var(--space-5)" }, children: [_jsx("div", { className: "label-row", children: _jsx("label", { children: "About" }) }), _jsx("div", { style: { fontSize: 13, color: "var(--muted)" }, children: d.manifest.description })] }))] })] }));
+                                }, style: { fontFamily: "var(--font-mono)", resize: "vertical" } }), jsonError && (_jsx("div", { style: { color: "var(--danger)", fontSize: 12, marginTop: 4 }, children: jsonError }))] })), currentRunID && (_jsxs("div", { className: "inspector-section", children: [_jsx("h4", { children: "Last run output" }), _jsx(OutputPreview, { runID: currentRunID, nodeID: selected.id, refreshKey: statusRefreshKey })] })), d.manifest?.description && (_jsxs("div", { className: "inspector-section", children: [_jsx("h4", { children: "About" }), _jsx("div", { style: { fontSize: 13, color: "var(--muted)" }, children: d.manifest.description })] }))] })] }));
 }

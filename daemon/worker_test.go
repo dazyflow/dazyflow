@@ -88,7 +88,7 @@ func TestPerNode_LinearChain_ProgressesThroughDependencies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	terminal := waitForTerminalEvent(t, h.bus, graphRunID, 5*time.Second)
+	terminal := waitForTerminalEvent(t, h.bus, h.jobs, graphRunID, 5*time.Second)
 	if terminal.Status != core.JobStatusSucceeded {
 		t.Fatalf("status = %q", terminal.Status)
 	}
@@ -128,7 +128,7 @@ func TestPerNode_DiamondSpreadsAcrossWorkers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	terminal := waitForTerminalEvent(t, h.bus, graphRunID, 5*time.Second)
+	terminal := waitForTerminalEvent(t, h.bus, h.jobs, graphRunID, 5*time.Second)
 	if terminal.Status != core.JobStatusSucceeded {
 		t.Fatalf("status = %q (err=%+v)", terminal.Status, terminal.Error)
 	}
@@ -165,7 +165,7 @@ func TestPerNode_FailedPredecessorAbortsDescendants(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	terminal := waitForTerminalEvent(t, h.bus, graphRunID, 5*time.Second)
+	terminal := waitForTerminalEvent(t, h.bus, h.jobs, graphRunID, 5*time.Second)
 	if terminal.Status != core.JobStatusFailed {
 		t.Fatalf("status = %q, want failed", terminal.Status)
 	}
@@ -198,7 +198,7 @@ func TestPerNode_NodesExecuteInDependencyOrder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	_ = waitForTerminalEvent(t, h.bus, graphRunID, 5*time.Second)
+	_ = waitForTerminalEvent(t, h.bus, h.jobs, graphRunID, 5*time.Second)
 	first, _ := h.jobs.Get(t.Context(), daemon.NodeJobID(graphRunID, "first"))
 	second, _ := h.jobs.Get(t.Context(), daemon.NodeJobID(graphRunID, "second"))
 	if first.FinishedAt == nil || second.StartedAt == nil {
@@ -264,7 +264,7 @@ func TestPerNode_LeaseExpiryAllowsReclaim(t *testing.T) {
 	}, jobs, eng, bus)
 	go func() { _ = w.Run(wctx) }()
 
-	terminal := waitForTerminalEvent(t, bus, graphRunID, 5*time.Second)
+	terminal := waitForTerminalEvent(t, bus, jobs, graphRunID, 5*time.Second)
 	if terminal.Status != core.JobStatusSucceeded {
 		t.Fatalf("status = %q", terminal.Status)
 	}
@@ -302,7 +302,7 @@ func TestPerNode_IdempotentDispatch_NoDoubleEnqueue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	terminal := waitForTerminalEvent(t, h.bus, graphRunID, 5*time.Second)
+	terminal := waitForTerminalEvent(t, h.bus, h.jobs, graphRunID, 5*time.Second)
 	if terminal.Status != core.JobStatusSucceeded {
 		t.Fatalf("status = %q (err=%+v)", terminal.Status, terminal.Error)
 	}
@@ -381,15 +381,41 @@ done:
 }
 
 // waitForTerminalEvent subscribes, waits, returns the terminal event.
-func waitForTerminalEvent(t *testing.T, bus *daemon.MemoryBus, graphRunID string, timeout time.Duration) daemon.TerminalEvent {
+// waitForTerminalEvent blocks until the graph run reaches a terminal
+// status. It subscribes to the bus FIRST so a fast-completing graph
+// doesn't escape, then re-checks the store — that ordering is critical
+// because the in-memory bus drops events for absent subscribers and
+// MemoryBus.Publish never replays history. If the store says the
+// graph is already terminal between Submit and Subscribe, we
+// synthesize a TerminalEvent from the record so tests don't hang.
+//
+// jobs may be nil; callers that don't pass one get the old subscribe-
+// only behaviour (and inherit the original race).
+func waitForTerminalEvent(t *testing.T, bus *daemon.MemoryBus, jobs core.JobStore, graphRunID string, timeout time.Duration) daemon.TerminalEvent {
 	t.Helper()
 	events, cancel := bus.Subscribe(graphRunID)
 	defer cancel()
+	// After subscribe, check the store — if the graph already finished
+	// between Submit and Subscribe, the bus already published and we'd
+	// wait forever otherwise.
+	if jobs != nil {
+		if rec, err := jobs.Get(t.Context(), graphRunID); err == nil && core.IsTerminalStatus(rec.Status) {
+			return synthesizeTerminal(rec)
+		}
+	}
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
 	for {
 		select {
 		case <-deadline.C:
+			// Last-chance store peek before failing — covers the case
+			// where the worker finished AFTER subscribe but the bus
+			// publish dropped (e.g. channel full).
+			if jobs != nil {
+				if rec, err := jobs.Get(t.Context(), graphRunID); err == nil && core.IsTerminalStatus(rec.Status) {
+					return synthesizeTerminal(rec)
+				}
+			}
 			t.Fatalf("timed out waiting for terminal event on %s", graphRunID)
 		case ev, ok := <-events:
 			if !ok {
@@ -400,6 +426,20 @@ func waitForTerminalEvent(t *testing.T, bus *daemon.MemoryBus, graphRunID string
 			}
 		}
 	}
+}
+
+// synthesizeTerminal builds a TerminalEvent from a JobRecord so tests
+// using the helper's store-fallback path get the same shape as a live
+// bus delivery.
+func synthesizeTerminal(rec core.JobRecord) daemon.TerminalEvent {
+	ev := daemon.TerminalEvent{
+		JobID:  rec.ID,
+		Status: rec.Status,
+	}
+	if rec.Result != nil {
+		ev.Error = rec.Result.Error
+	}
+	return ev
 }
 
 // silence linter if unused in some build configurations

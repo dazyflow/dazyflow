@@ -1,6 +1,6 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useCallback, useEffect, useMemo, useRef, useState, } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { ReactFlow, ReactFlowProvider, Background, Controls, MiniMap, addEdge, applyEdgeChanges, applyNodeChanges, useReactFlow, } from "@xyflow/react";
 import { ArrowLeft, Play, Save, PanelsLeftBottom } from "lucide-react";
 import { useAuth } from "../auth";
@@ -8,6 +8,7 @@ import { api } from "../api";
 import { NodeCatalog } from "../components/NodeCatalog";
 import { Inspector } from "../components/Inspector";
 import { HazyNode } from "../components/NodeCard";
+import { RunHistory } from "../components/RunHistory";
 // Custom node-types registry. React Flow caches by reference, so this
 // is declared at module scope rather than inline in the component to
 // avoid unnecessary remounts on each render.
@@ -15,6 +16,7 @@ const nodeTypes = { hazy: HazyNode };
 function EditorInner() {
     const { id } = useParams();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const { token, me, hasPerm } = useAuth();
     const [manifests, setManifests] = useState([]);
     const manifestByID = useMemo(() => {
@@ -34,6 +36,21 @@ function EditorInner() {
     const [saving, setSaving] = useState(false);
     const [running, setRunning] = useState(false);
     const [error, setError] = useState(null);
+    // The most-recent run for this graph in this session. Used by the
+    // Inspector's Output panel to fetch per-node results. Persisted via
+    // localStorage so a page refresh keeps the panel populated.
+    // Initial run resolves in priority order: URL ?run=... (deep link from
+    // the Runs page) → localStorage cached last-run for this graph → null.
+    const [currentRunID, setCurrentRunID] = useState(() => {
+        const fromURL = searchParams.get("run");
+        if (fromURL)
+            return fromURL;
+        return id ? localStorage.getItem(`hazyflow.lastRun.${id}`) : null;
+    });
+    // statusRefreshKey bumps every time the SSE stream delivers a node
+    // status event. The Inspector forwards it to OutputPreview so a
+    // running node's output card refreshes without the user re-selecting.
+    const [statusRefreshKey, setStatusRefreshKey] = useState(0);
     // mobilePanel toggles which side panel shows on small viewports.
     const [mobilePanel, setMobilePanel] = useState(null);
     const rfRef = useRef(null);
@@ -171,6 +188,37 @@ function EditorInner() {
             setSaving(false);
         }
     };
+    // subscribeToRun opens the SSE stream for runID and applies per-node
+    // status frames to the canvas. Shared by Run (new run just started)
+    // and by the history picker (load an old run). Returns a cancel
+    // function that aborts the stream.
+    const subscribeToRun = (runID) => {
+        if (!token)
+            return () => { };
+        // Clear status dots so we don't carry stale state across runs.
+        setNodes((nds) => nds.map((n) => ({ ...n, data: { ...n.data, status: undefined } })));
+        const abort = new AbortController();
+        api
+            .streamJob(token, runID, (kind, data) => {
+            if (kind === "node") {
+                const ev = data;
+                if (!ev.node_id || !ev.status)
+                    return;
+                setNodes((nds) => nds.map((n) => n.id === ev.node_id
+                    ? { ...n, data: { ...n.data, status: ev.status } }
+                    : n));
+                setStatusRefreshKey((k) => k + 1);
+            }
+            if (kind === "terminal") {
+                abort.abort();
+            }
+        }, abort.signal)
+            .catch(() => {
+            /* aborted on terminal — expected */
+        })
+            .finally(() => setRunning(false));
+        return () => abort.abort();
+    };
     const runWithLiveStatus = async () => {
         if (!token || !me || !id)
             return;
@@ -178,31 +226,40 @@ function EditorInner() {
         setError(null);
         try {
             const { job_id } = await api.runGraph(token, me.tenant, me.workspace, id);
-            const abort = new AbortController();
-            // Mark every node "running" as a starting point; SSE will overwrite
-            // with the truthful status. The granularity here is graph-level
-            // today; per-node updates require an engine-side bus enhancement
-            // (tracked in TODO).
-            setNodes((nds) => nds.map((n) => ({ ...n, data: { ...n.data, status: "running" } })));
-            api
-                .streamJob(token, job_id, (kind, data) => {
-                if (kind === "terminal") {
-                    const status = data?.status ?? "succeeded";
-                    setNodes((nds) => nds.map((n) => ({ ...n, data: { ...n.data, status } })));
-                    abort.abort();
-                }
-            }, abort.signal)
-                .catch(() => {
-                /* aborted on terminal */
-            })
-                .finally(() => setRunning(false));
+            setCurrentRunID(job_id);
+            if (id)
+                localStorage.setItem(`hazyflow.lastRun.${id}`, job_id);
+            subscribeToRun(job_id);
         }
         catch (e) {
             setError(e.message);
             setRunning(false);
         }
     };
-    return (_jsxs("div", { className: "editor", "data-panel": mobilePanel ?? "canvas", ref: wrapperRef, children: [_jsx("div", { className: "catalog", children: _jsx(NodeCatalog, { modules: manifests }) }), _jsxs("div", { className: "canvas", onDragOver: onDragOver, onDrop: onDrop, children: [_jsxs("div", { className: "editor-toolbar", children: [_jsx("button", { className: "ghost", onClick: () => navigate("/pipelines"), title: "Back", children: _jsx(ArrowLeft, { size: 16 }) }), _jsxs("button", { onClick: save, disabled: !dirty || saving || !hasPerm("graph:edit"), title: hasPerm("graph:edit") ? undefined : "Read-only — missing graph:edit", children: [_jsx(Save, { size: 14, style: { marginRight: 6, verticalAlign: -2 } }), saving ? "Saving…" : dirty ? "Save" : "Saved"] }), _jsxs("button", { className: "primary", onClick: runWithLiveStatus, disabled: running || dirty || !hasPerm("graph:run"), title: dirty
+    // selectHistoricalRun makes the chosen run "current" and re-subscribes
+    // to its SSE stream so per-node statuses + the Inspector's output
+    // preview reflect that run instead of the previously-loaded one.
+    const selectHistoricalRun = (runID) => {
+        setCurrentRunID(runID);
+        if (id)
+            localStorage.setItem(`hazyflow.lastRun.${id}`, runID);
+        subscribeToRun(runID);
+    };
+    // When the editor opens with a stashed last-run ID, pull its status
+    // into the canvas. The SSE handler emits initial node-snapshots for
+    // terminal runs too, so this populates the dots for a graph the user
+    // last viewed (or last ran from a different tab) without making them
+    // hit Run again.
+    useEffect(() => {
+        if (!currentRunID)
+            return;
+        const cancel = subscribeToRun(currentRunID);
+        return cancel;
+        // Intentionally only re-run when the graph (id) changes, not every
+        // render — subscribeToRun captures fresh setters via closure.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [id]);
+    return (_jsxs("div", { className: "editor", "data-panel": mobilePanel ?? "canvas", ref: wrapperRef, children: [_jsx("div", { className: "catalog", children: _jsx(NodeCatalog, { modules: manifests }) }), _jsxs("div", { className: "canvas", onDragOver: onDragOver, onDrop: onDrop, children: [_jsxs("div", { className: "editor-toolbar", children: [_jsx("button", { className: "ghost", onClick: () => navigate("/pipelines"), title: "Back", children: _jsx(ArrowLeft, { size: 16 }) }), _jsxs("button", { onClick: save, disabled: !dirty || saving || !hasPerm("graph:edit"), title: hasPerm("graph:edit") ? undefined : "Read-only — missing graph:edit", children: [_jsx(Save, { size: 14, style: { marginRight: 6, verticalAlign: -2 } }), saving ? "Saving…" : dirty ? "Save" : "Saved"] }), me && id && (_jsx(RunHistory, { tenant: me.tenant, workspace: me.workspace, graphID: id, currentRunID: currentRunID, onSelect: selectHistoricalRun })), _jsxs("button", { className: "primary", onClick: runWithLiveStatus, disabled: running || dirty || !hasPerm("graph:run"), title: dirty
                                     ? "Save first"
                                     : hasPerm("graph:run")
                                         ? undefined
@@ -226,7 +283,7 @@ function EditorInner() {
                             borderRadius: "var(--r-2)",
                             fontSize: 13,
                             maxWidth: 600,
-                        }, children: error }))] }), _jsx("div", { className: "inspector", children: _jsx(Inspector, { selected: inspectorSelected, onChange: onInspectorChange, paramsByID: paramsByID, onParamsChange: onParamsChange }) })] }));
+                        }, children: error }))] }), _jsx("div", { className: "inspector", children: _jsx(Inspector, { selected: inspectorSelected, onChange: onInspectorChange, paramsByID: paramsByID, onParamsChange: onParamsChange, currentRunID: currentRunID, statusRefreshKey: statusRefreshKey }) })] }));
 }
 // nextID generates a unique node ID for a freshly-dropped module by
 // counting existing nodes with the same module prefix.

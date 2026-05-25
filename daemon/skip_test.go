@@ -136,7 +136,7 @@ func TestSkip_FailureDoesNotPropagateThroughSkipEdge(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	terminal := waitForTerminalEvent(t, h.bus, graphRunID, 5*time.Second)
+	terminal := waitForTerminalEvent(t, h.bus, h.jobs, graphRunID, 5*time.Second)
 	if terminal.Status != core.JobStatusSucceeded {
 		t.Fatalf("graph status = %q, want succeeded (err=%+v)", terminal.Status, terminal.Error)
 	}
@@ -175,7 +175,7 @@ func TestSkip_AbortEdgeStillPropagatesEvenWithSkipSibling(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	terminal := waitForTerminalEvent(t, h.bus, graphRunID, 5*time.Second)
+	terminal := waitForTerminalEvent(t, h.bus, h.jobs, graphRunID, 5*time.Second)
 	if terminal.Status != core.JobStatusFailed {
 		t.Fatalf("graph status = %q, want failed (abort sibling wins)", terminal.Status)
 	}
@@ -202,7 +202,7 @@ func TestSkip_LeafFailureStillPropagates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	terminal := waitForTerminalEvent(t, h.bus, graphRunID, 5*time.Second)
+	terminal := waitForTerminalEvent(t, h.bus, h.jobs, graphRunID, 5*time.Second)
 	if terminal.Status != core.JobStatusFailed {
 		t.Errorf("leaf-only failed graph status = %q, want failed", terminal.Status)
 	}
@@ -231,7 +231,7 @@ func TestSkip_SurvivingPredecessorReachesNode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	terminal := waitForTerminalEvent(t, h.bus, graphRunID, 5*time.Second)
+	terminal := waitForTerminalEvent(t, h.bus, h.jobs, graphRunID, 5*time.Second)
 	if terminal.Status != core.JobStatusSucceeded {
 		t.Fatalf("graph status = %q (err=%+v)", terminal.Status, terminal.Error)
 	}
@@ -275,7 +275,7 @@ func TestSkip_ChainOfSkips_AllRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	terminal := waitForTerminalEvent(t, h.bus, graphRunID, 5*time.Second)
+	terminal := waitForTerminalEvent(t, h.bus, h.jobs, graphRunID, 5*time.Second)
 	if terminal.Status != core.JobStatusSucceeded {
 		t.Fatalf("status = %q", terminal.Status)
 	}

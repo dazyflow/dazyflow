@@ -126,7 +126,7 @@ func TestBranch_RoutesThroughDispatch(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Submit: %v", err)
 			}
-			terminal := waitForTerminalEvent(t, localBus, runID, 5*time.Second)
+			terminal := waitForTerminalEvent(t, localBus, localJobs, runID, 5*time.Second)
 			if terminal.Status != core.JobStatusSucceeded {
 				t.Fatalf("status=%q (%+v)", terminal.Status, terminal.Error)
 			}

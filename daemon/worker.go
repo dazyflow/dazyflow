@@ -133,6 +133,10 @@ func sleepOrDone(ctx context.Context, d time.Duration) bool {
 
 // processNodeJob runs a single node job end-to-end.
 func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
+	// Announce the transition into "running" right after the claim so the
+	// UI's per-node dot lights up before Execute returns.
+	w.dispatcher.PublishNodeStatus(rec.GraphRunID, rec.NodeID, core.JobStatusRunning, nil)
+
 	leaseCtx, stopLease := context.WithCancel(ctx)
 	defer stopLease()
 	var leaseWg sync.WaitGroup
@@ -173,6 +177,9 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 			return
 		}
 		w.cfg.Logger.Printf("[%s] parked %s awaiting external resume", w.cfg.ID, rec.ID)
+		// Park is a real status transition — the UI wants to show
+		// "awaiting" on this node while it sits.
+		w.dispatcher.PublishNodeStatus(rec.GraphRunID, rec.NodeID, core.JobStatusAwaiting, nil)
 		// If the manifest declares it submits a child graph, hand the
 		// result off to the SubGraphRunner now. The dispatcher will
 		// resume the parent when the child terminates.
@@ -394,7 +401,9 @@ func (w *Worker) failNode(ctx context.Context, rec core.JobRecord, code, msg str
 		return
 	}
 	// We never even loaded the graph, so we can't walk for completion.
-	// Mark the graph-record as failed best-effort.
+	// Publish a node-status anyway so the UI still sees the failure;
+	// mark the graph-record as failed best-effort.
+	w.dispatcher.PublishNodeStatus(rec.GraphRunID, rec.NodeID, core.JobStatusFailed, jerr)
 	if cerr := w.store.Complete(context.Background(), rec.GraphRunID, core.JobStatusFailed, result); cerr == nil {
 		w.bus.Publish(rec.GraphRunID, BusEvent{Terminal: &TerminalEvent{
 			JobID:  rec.GraphRunID,

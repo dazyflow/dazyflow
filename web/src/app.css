@@ -627,6 +627,192 @@
   font-style: italic;
 }
 
+/* Run history dropdown */
+.run-history-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 280px;
+  max-height: 360px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  box-shadow: var(--shadow-pop);
+  z-index: 100;
+  padding: 4px;
+}
+.run-history-head {
+  padding: var(--space-2) var(--space-3);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.run-history-empty {
+  padding: var(--space-3);
+  font-size: 12px;
+  color: var(--faint);
+  text-align: center;
+}
+.run-history-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: var(--r-2);
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  color: var(--ink);
+  font-size: 13px;
+}
+.run-history-row:hover {
+  background: var(--surface-2);
+}
+.run-history-row.active {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.run-history-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px var(--space-3);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.run-filter-chip {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  cursor: pointer;
+}
+.run-filter-chip:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.run-filter-chip.active {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--ink);
+  border-color: var(--accent);
+}
+.run-load-more {
+  width: calc(100% - 8px);
+  margin: 4px;
+  font-size: 12px;
+  padding: var(--space-2);
+}
+
+.run-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.run-table th {
+  text-align: left;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+  font-weight: 500;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+.run-table td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.run-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.run-table tbody tr:hover {
+  background: var(--surface-2);
+}
+
+/* Output preview (Inspector → recent run output for selected node) */
+.output-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.output-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.port-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.port-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  padding: var(--space-2) var(--space-3);
+  font-size: 12px;
+}
+.port-card.port-error {
+  border-color: color-mix(in srgb, var(--danger) 60%, transparent);
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+}
+.port-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+}
+.port-name {
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--ink);
+}
+.port-mime {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--faint);
+  padding: 1px 6px;
+  background: var(--surface-2);
+  border-radius: var(--r-pill);
+}
+.port-value {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink);
+  background: var(--surface-2);
+  border-radius: var(--r-1);
+  padding: var(--space-2);
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+/* Inspector section header */
+.inspector-section {
+  margin-top: var(--space-5);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+.inspector-section h4 {
+  margin: 0 0 var(--space-2) 0;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+  font-weight: 500;
+}
+
 /* Editor top toolbar */
 .editor-toolbar {
   position: absolute;

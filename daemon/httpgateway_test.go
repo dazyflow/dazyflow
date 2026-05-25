@@ -167,6 +167,261 @@ func TestHTTPGateway_JobSnapshotNotFound(t *testing.T) {
 	}
 }
 
+func TestHTTPGateway_NodeSnapshotMissingParentGraphIs404(t *testing.T) {
+	h := newGatewayHarness(t)
+	rw := h.do(t, "GET", "/api/v1/jobs/no-such-run/nodes/some-node", nil)
+	if rw.Code != http.StatusNotFound {
+		t.Errorf("code = %d, want 404", rw.Code)
+	}
+}
+
+func TestHTTPGateway_NodeSnapshotReturnsRecord(t *testing.T) {
+	h := newGatewayHarness(t)
+	// Seed both records directly so we exercise the endpoint without
+	// having to drive a worker through a graph here.
+	graphRec := core.JobRecord{
+		ID:           "run-xyz",
+		Kind:         core.JobKindGraph,
+		GraphID:      "g",
+		Tenant:       "t",
+		Workspace:    "ws",
+		Status:       core.JobStatusSucceeded,
+		GraphPayload: []byte(`{"id":"g","tenant":"t","workspace":"ws"}`),
+	}
+	_ = h.store.Enqueue(t.Context(), graphRec)
+
+	nodeRec := core.JobRecord{
+		ID:         NodeJobID("run-xyz", "step1"),
+		Kind:       core.JobKindNode,
+		GraphRunID: "run-xyz",
+		GraphID:    "g",
+		NodeID:     "step1",
+		Tenant:     "t",
+		Workspace:  "ws",
+		Status:     core.JobStatusSucceeded,
+		Result: &core.Result{
+			Status: core.StatusOK,
+			Output: map[string]core.Ref{
+				"out": {MIME: "text/plain", Inline: "hello"},
+			},
+		},
+	}
+	_ = h.store.Enqueue(t.Context(), nodeRec)
+
+	rw := h.do(t, "GET", "/api/v1/jobs/run-xyz/nodes/step1", nil)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("code = %d body = %s", rw.Code, rw.Body.String())
+	}
+	var got core.JobRecord
+	if err := json.Unmarshal(rw.Body.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.Status != core.JobStatusSucceeded {
+		t.Errorf("status = %q", got.Status)
+	}
+	if got.Result == nil || got.Result.Output["out"].Inline != "hello" {
+		t.Errorf("output = %+v", got.Result)
+	}
+}
+
+func TestHTTPGateway_ListRunsReturnsNewestFirst(t *testing.T) {
+	h := newGatewayHarness(t)
+	// First save the graph so the tenant-scope check passes.
+	if _, err := h.ws.Save(core.Graph{
+		ID: "g1", Tenant: "t", Workspace: "ws",
+	}, "test"); err != nil {
+		t.Fatalf("save graph: %v", err)
+	}
+	// Seed three graph-records and one bogus node-record (which must be
+	// filtered out of the runs list).
+	for i, id := range []string{"run-a", "run-b", "run-c"} {
+		_ = h.store.Enqueue(t.Context(), core.JobRecord{
+			ID: id, Kind: core.JobKindGraph, GraphID: "g1",
+			Tenant: "t", Workspace: "ws",
+			Status: core.JobStatusSucceeded,
+			// EnqueuedAt is set by the store; use ordering by relying on
+			// each Enqueue happening sequentially.
+		})
+		_ = i
+	}
+	_ = h.store.Enqueue(t.Context(), core.JobRecord{
+		ID: NodeJobID("run-a", "n1"), Kind: core.JobKindNode,
+		GraphID: "g1", Tenant: "t", Workspace: "ws",
+	})
+
+	rw := h.do(t, "GET", "/api/v1/graphs/t/ws/g1/runs", nil)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("code = %d body = %s", rw.Code, rw.Body.String())
+	}
+	var out struct {
+		Runs []struct {
+			ID string `json:"id"`
+		} `json:"runs"`
+	}
+	_ = json.Unmarshal(rw.Body.Bytes(), &out)
+	if len(out.Runs) != 3 {
+		t.Fatalf("runs = %+v, want 3 (no node-record)", out.Runs)
+	}
+	// Memory store sorts ListByGraph by enqueued_at DESC, so newest
+	// insertion comes first.
+	if out.Runs[0].ID != "run-c" {
+		t.Errorf("first = %q, want run-c", out.Runs[0].ID)
+	}
+}
+
+func TestHTTPGateway_ListRunsUnknownGraphIs404(t *testing.T) {
+	h := newGatewayHarness(t)
+	rw := h.do(t, "GET", "/api/v1/graphs/t/ws/no-such/runs", nil)
+	if rw.Code != http.StatusNotFound {
+		t.Errorf("code = %d, want 404", rw.Code)
+	}
+}
+
+func TestHTTPGateway_ListRunsStatusFilter(t *testing.T) {
+	h := newGatewayHarness(t)
+	if _, err := h.ws.Save(core.Graph{
+		ID: "g1", Tenant: "t", Workspace: "ws",
+	}, "test"); err != nil {
+		t.Fatalf("save graph: %v", err)
+	}
+	for _, e := range []struct {
+		id     string
+		status core.JobStatus
+	}{
+		{"run-1", core.JobStatusSucceeded},
+		{"run-2", core.JobStatusFailed},
+		{"run-3", core.JobStatusSucceeded},
+	} {
+		_ = h.store.Enqueue(t.Context(), core.JobRecord{
+			ID: e.id, Kind: core.JobKindGraph, GraphID: "g1",
+			Tenant: "t", Workspace: "ws", Status: e.status,
+		})
+	}
+	rw := h.do(t, "GET", "/api/v1/graphs/t/ws/g1/runs?status=failed", nil)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("code = %d", rw.Code)
+	}
+	var out struct {
+		Runs []struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+		} `json:"runs"`
+	}
+	_ = json.Unmarshal(rw.Body.Bytes(), &out)
+	if len(out.Runs) != 1 || out.Runs[0].ID != "run-2" {
+		t.Errorf("filtered = %+v, want only run-2", out.Runs)
+	}
+}
+
+func TestHTTPGateway_ListRunsOffsetLimit(t *testing.T) {
+	h := newGatewayHarness(t)
+	if _, err := h.ws.Save(core.Graph{ID: "g1", Tenant: "t", Workspace: "ws"}, "test"); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	for _, id := range []string{"r1", "r2", "r3", "r4", "r5"} {
+		_ = h.store.Enqueue(t.Context(), core.JobRecord{
+			ID: id, Kind: core.JobKindGraph, GraphID: "g1",
+			Tenant: "t", Workspace: "ws", Status: core.JobStatusSucceeded,
+		})
+	}
+	rw := h.do(t, "GET", "/api/v1/graphs/t/ws/g1/runs?limit=2&offset=2", nil)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("code = %d", rw.Code)
+	}
+	var out struct {
+		Runs []struct{ ID string } `json:"runs"`
+	}
+	_ = json.Unmarshal(rw.Body.Bytes(), &out)
+	if len(out.Runs) != 2 {
+		t.Fatalf("len = %d, want 2", len(out.Runs))
+	}
+	// newest first: r5, r4, [r3, r2], r1 — offset 2 + limit 2 = [r3, r2]
+	if out.Runs[0].ID != "r3" || out.Runs[1].ID != "r2" {
+		t.Errorf("got %+v, want [r3 r2]", out.Runs)
+	}
+}
+
+func TestHTTPGateway_ListAllRunsAcrossGraphs(t *testing.T) {
+	h := newGatewayHarness(t)
+	for i, e := range []struct {
+		id      string
+		graphID string
+	}{
+		{"r1", "gA"},
+		{"r2", "gB"},
+		{"r3", "gA"},
+	} {
+		_ = i
+		_ = h.store.Enqueue(t.Context(), core.JobRecord{
+			ID: e.id, Kind: core.JobKindGraph, GraphID: e.graphID,
+			Tenant: "t", Workspace: "ws", Status: core.JobStatusSucceeded,
+		})
+	}
+	// A node-record in the same tenant that must NOT appear.
+	_ = h.store.Enqueue(t.Context(), core.JobRecord{
+		ID: NodeJobID("r1", "n"), Kind: core.JobKindNode,
+		GraphID: "gA", Tenant: "t", Workspace: "ws",
+	})
+	rw := h.do(t, "GET", "/api/v1/runs", nil)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("code = %d body = %s", rw.Code, rw.Body.String())
+	}
+	var out struct {
+		Runs []struct {
+			ID      string `json:"id"`
+			GraphID string `json:"graph_id"`
+		} `json:"runs"`
+	}
+	_ = json.Unmarshal(rw.Body.Bytes(), &out)
+	if len(out.Runs) != 3 {
+		t.Fatalf("len = %d, want 3, got %+v", len(out.Runs), out.Runs)
+	}
+	// The cross-graph payload must carry graph_id so the UI can link
+	// to each run's editor.
+	if out.Runs[0].GraphID == "" {
+		t.Error("missing graph_id in cross-graph runs response")
+	}
+}
+
+func TestHTTPGateway_ListAllRunsScopedToTenant(t *testing.T) {
+	h := newGatewayHarness(t)
+	// Run in OUR tenant + workspace
+	_ = h.store.Enqueue(t.Context(), core.JobRecord{
+		ID: "ours", Kind: core.JobKindGraph, GraphID: "gA",
+		Tenant: "t", Workspace: "ws", Status: core.JobStatusSucceeded,
+	})
+	// Run belonging to a different tenant — must NOT show up.
+	_ = h.store.Enqueue(t.Context(), core.JobRecord{
+		ID: "theirs", Kind: core.JobKindGraph, GraphID: "gA",
+		Tenant: "other", Workspace: "ws", Status: core.JobStatusSucceeded,
+	})
+	rw := h.do(t, "GET", "/api/v1/runs", nil)
+	var out struct {
+		Runs []struct{ ID string } `json:"runs"`
+	}
+	_ = json.Unmarshal(rw.Body.Bytes(), &out)
+	if len(out.Runs) != 1 || out.Runs[0].ID != "ours" {
+		t.Errorf("cross-tenant leak: got %+v", out.Runs)
+	}
+}
+
+func TestHTTPGateway_NodeSnapshotUnknownNodeIs404(t *testing.T) {
+	h := newGatewayHarness(t)
+	// Parent graph exists; node doesn't.
+	_ = h.store.Enqueue(t.Context(), core.JobRecord{
+		ID:           "run-xyz",
+		Kind:         core.JobKindGraph,
+		Tenant:       "t",
+		Workspace:    "ws",
+		Status:       core.JobStatusRunning,
+		GraphPayload: []byte(`{"id":"g"}`),
+	})
+	rw := h.do(t, "GET", "/api/v1/jobs/run-xyz/nodes/ghost", nil)
+	if rw.Code != http.StatusNotFound {
+		t.Errorf("code = %d, want 404", rw.Code)
+	}
+}
+
 func TestHTTPGateway_CORSHeadersOnPreflight(t *testing.T) {
 	h := newGatewayHarness(t)
 	req := httptest.NewRequest("OPTIONS", "/api/v1/modules", nil)

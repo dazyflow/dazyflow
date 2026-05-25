@@ -127,7 +127,7 @@ func TestRetry_NodeSucceedsAfterFailures(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	terminal := waitForTerminalEvent(t, h.bus, graphRunID, 5*time.Second)
+	terminal := waitForTerminalEvent(t, h.bus, h.jobs, graphRunID, 5*time.Second)
 	if terminal.Status != core.JobStatusSucceeded {
 		t.Fatalf("status = %q (err=%+v)", terminal.Status, terminal.Error)
 	}
@@ -157,7 +157,7 @@ func TestRetry_ExhaustedFailsGraph(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	terminal := waitForTerminalEvent(t, h.bus, graphRunID, 5*time.Second)
+	terminal := waitForTerminalEvent(t, h.bus, h.jobs, graphRunID, 5*time.Second)
 	if terminal.Status != core.JobStatusFailed {
 		t.Fatalf("status = %q (want failed)", terminal.Status)
 	}
@@ -189,7 +189,7 @@ func TestRetry_HonorsBackoffDelay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	_ = waitForTerminalEvent(t, h.bus, graphRunID, 5*time.Second)
+	_ = waitForTerminalEvent(t, h.bus, h.jobs, graphRunID, 5*time.Second)
 	elapsed := time.Since(start)
 	if elapsed < backoff {
 		t.Errorf("completed in %v, expected at least %v from backoff", elapsed, backoff)
@@ -267,7 +267,7 @@ func TestRetry_NoRetryEdgeMeansNoRetry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	terminal := waitForTerminalEvent(t, bus, graphRunID, 5*time.Second)
+	terminal := waitForTerminalEvent(t, bus, jobs, graphRunID, 5*time.Second)
 	if terminal.Status != core.JobStatusFailed {
 		t.Fatalf("status = %q, want failed (no retry edge)", terminal.Status)
 	}

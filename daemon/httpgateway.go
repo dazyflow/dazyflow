@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -82,7 +83,10 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/graphs/{tenant}/{workspace}/{id}", h.requireAuth(h.loadGraph))
 	mux.HandleFunc("PUT /api/v1/graphs/{tenant}/{workspace}/{id}", h.requireAuth(h.saveGraph))
 	mux.HandleFunc("POST /api/v1/graphs/{tenant}/{workspace}/{id}/run", h.requireAuth(h.runGraph))
+	mux.HandleFunc("GET /api/v1/graphs/{tenant}/{workspace}/{id}/runs", h.requireAuth(h.listRuns))
+	mux.HandleFunc("GET /api/v1/runs", h.requireAuth(h.listAllRuns))
 	mux.HandleFunc("GET /api/v1/jobs/{jobID}", h.requireAuth(h.jobSnapshot))
+	mux.HandleFunc("GET /api/v1/jobs/{jobID}/nodes/{nodeID}", h.requireAuth(h.nodeSnapshot))
 	mux.HandleFunc("GET /api/v1/jobs/{jobID}/events", h.requireAuth(h.jobEvents))
 }
 
@@ -227,6 +231,94 @@ func (h *HTTPGateway) saveGraph(rw http.ResponseWriter, r *http.Request, p core.
 	writeJSON(rw, http.StatusOK, map[string]string{"commit": commit, "graph_id": g.ID})
 }
 
+// listRuns returns a slim summary of recent runs for a single graph,
+// newest first. Filter and paginate via ?status=&limit=&offset=. The
+// hard cap on limit is 200 so a misbehaving client can't drain the
+// table in one request.
+func (h *HTTPGateway) listRuns(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	tenant := r.PathValue("tenant")
+	workspace := r.PathValue("workspace")
+	id := r.PathValue("id")
+	// Tenant-scope check: confirm the graph exists for this principal.
+	if _, err := h.svc.LoadGraph(r.Context(), p, tenant, workspace, id, ""); err != nil {
+		writeJSONError(rw, http.StatusNotFound, err.Error())
+		return
+	}
+	opts := parseRunListOpts(r)
+	opts.Workspace = workspace
+	opts.GraphID = id
+	h.writeRunList(rw, r, p, opts)
+}
+
+// listAllRuns is the workspace-wide variant. tenant/workspace come from
+// the principal (Service.ListGraphRuns overrides any client-supplied
+// values), so this endpoint takes no path params — just query filters.
+func (h *HTTPGateway) listAllRuns(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	h.writeRunList(rw, r, p, parseRunListOpts(r))
+}
+
+func parseRunListOpts(r *http.Request) core.ListGraphRunsOpts {
+	opts := core.ListGraphRunsOpts{Limit: 20}
+	if s := r.URL.Query().Get("limit"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n > 0 {
+			opts.Limit = n
+		}
+	}
+	if opts.Limit > 200 {
+		opts.Limit = 200
+	}
+	if s := r.URL.Query().Get("offset"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n > 0 {
+			opts.Offset = n
+		}
+	}
+	if s := r.URL.Query().Get("status"); s != "" {
+		opts.Status = core.JobStatus(s)
+	}
+	return opts
+}
+
+func (h *HTTPGateway) writeRunList(rw http.ResponseWriter, r *http.Request, p core.Principal, opts core.ListGraphRunsOpts) {
+	recs, err := h.svc.ListGraphRuns(r.Context(), p, opts)
+	if err != nil {
+		writeJSONError(rw, http.StatusInternalServerError, err.Error())
+		return
+	}
+	out := make([]runSummary, 0, len(recs))
+	for _, rec := range recs {
+		out = append(out, runSummary{
+			ID:         rec.ID,
+			GraphID:    rec.GraphID,
+			Status:     rec.Status,
+			EnqueuedAt: rec.EnqueuedAt,
+			StartedAt:  rec.StartedAt,
+			FinishedAt: rec.FinishedAt,
+			ErrorCode:  errorCode(rec.Result),
+		})
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{"runs": out})
+}
+
+// runSummary is the slim payload listRuns emits — JobRecord has more
+// fields than the UI needs and serializing Result for every run wastes
+// bandwidth on a list view.
+type runSummary struct {
+	ID         string         `json:"id"`
+	GraphID    string         `json:"graph_id"`
+	Status     core.JobStatus `json:"status"`
+	EnqueuedAt time.Time      `json:"enqueued_at"`
+	StartedAt  *time.Time     `json:"started_at,omitempty"`
+	FinishedAt *time.Time     `json:"finished_at,omitempty"`
+	ErrorCode  string         `json:"error_code,omitempty"`
+}
+
+func errorCode(r *core.Result) string {
+	if r == nil || r.Error == nil {
+		return ""
+	}
+	return r.Error.Code
+}
+
 func (h *HTTPGateway) runGraph(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant := r.PathValue("tenant")
 	workspace := r.PathValue("workspace")
@@ -258,6 +350,38 @@ func (h *HTTPGateway) jobSnapshot(rw http.ResponseWriter, r *http.Request, p cor
 	writeJSON(rw, http.StatusOK, rec)
 }
 
+// nodeSnapshot returns the node-record (status + result) for a single
+// node within a graph run. Used by the output-preview pane in the UI
+// inspector so an operator can see exactly what each port emitted.
+//
+// Authz is enforced by reading the parent graph-record (which
+// Service.GetJob already checks) before exposing the node — otherwise
+// a leaked node-record ID would bypass the tenant scope.
+func (h *HTTPGateway) nodeSnapshot(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	runID := r.PathValue("jobID")
+	nodeID := r.PathValue("nodeID")
+	// Authz: load the parent graph-record through Service.GetJob so the
+	// principal-scope check fires before we hand back node data.
+	if _, err := h.svc.GetJob(r.Context(), p, runID); err != nil {
+		if errors.Is(err, core.ErrNotFound) {
+			writeJSONError(rw, http.StatusNotFound, err.Error())
+			return
+		}
+		writeJSONError(rw, http.StatusForbidden, err.Error())
+		return
+	}
+	nodeRec, err := h.svc.Jobs.Get(r.Context(), NodeJobID(runID, nodeID))
+	if err != nil {
+		if errors.Is(err, core.ErrNotFound) {
+			writeJSONError(rw, http.StatusNotFound, err.Error())
+			return
+		}
+		writeJSONError(rw, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(rw, http.StatusOK, nodeRec)
+}
+
 // jobEvents streams bus events for jobID as Server-Sent Events. Each
 // frame is `event: <kind>\ndata: <json>\n\n` where kind is "progress",
 // "terminal", or "snapshot" (the initial frame containing the current
@@ -286,6 +410,10 @@ func (h *HTTPGateway) jobEvents(rw http.ResponseWriter, r *http.Request, p core.
 	// Snapshot first so the UI has the current state without racing
 	// against subscriber delivery.
 	writeSSE(rw, "snapshot", rec)
+	// Followed by per-node status snapshots — late subscribers (the UI
+	// that connects after Submit returns) catch up on transitions that
+	// already happened.
+	h.emitNodeSnapshots(rw, r.Context(), rec)
 	flusher.Flush()
 	if core.IsTerminalStatus(rec.Status) {
 		writeSSE(rw, "terminal", map[string]any{"status": rec.Status})
@@ -318,12 +446,46 @@ func (h *HTTPGateway) jobEvents(rw http.ResponseWriter, r *http.Request, p core.
 				writeSSE(rw, "progress", ev.Progress)
 				flusher.Flush()
 			}
+			if ev.NodeStatus != nil {
+				writeSSE(rw, "node", ev.NodeStatus)
+				flusher.Flush()
+			}
 			if ev.Terminal != nil {
 				writeSSE(rw, "terminal", ev.Terminal)
 				flusher.Flush()
 				return
 			}
 		}
+	}
+}
+
+// emitNodeSnapshots walks the graph payload from the graph-record and
+// emits one `node` SSE frame per node that already has a stored record.
+// This catches up subscribers that connect after the worker has already
+// processed some nodes — without it, the canvas would show stale
+// statuses until the next live transition.
+func (h *HTTPGateway) emitNodeSnapshots(rw http.ResponseWriter, ctx context.Context, graphRec core.JobRecord) {
+	if graphRec.Kind != core.JobKindGraph || len(graphRec.GraphPayload) == 0 {
+		return
+	}
+	var g core.Graph
+	if err := json.Unmarshal(graphRec.GraphPayload, &g); err != nil {
+		return
+	}
+	for _, n := range g.Nodes {
+		nodeRec, err := h.svc.Jobs.Get(ctx, NodeJobID(graphRec.ID, n.ID))
+		if err != nil {
+			continue
+		}
+		var jerr *core.JobError
+		if nodeRec.Result != nil {
+			jerr = nodeRec.Result.Error
+		}
+		writeSSE(rw, "node", NodeStatusEvent{
+			NodeID: n.ID,
+			Status: nodeRec.Status,
+			Error:  jerr,
+		})
 	}
 }
 

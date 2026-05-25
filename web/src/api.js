@@ -41,7 +41,26 @@ export const api = {
     loadGraph: (token, tenant, workspace, id) => request(token, "GET", `/graphs/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/${encodeURIComponent(id)}`),
     saveGraph: (token, g) => request(token, "PUT", `/graphs/${encodeURIComponent(g.tenant)}/${encodeURIComponent(g.workspace)}/${encodeURIComponent(g.id)}`, g),
     runGraph: (token, tenant, workspace, id) => request(token, "POST", `/graphs/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/${encodeURIComponent(id)}/run`),
+    listRuns: (token, tenant, workspace, id, opts = {}) => {
+        const qs = new URLSearchParams();
+        qs.set("limit", String(opts.limit ?? 20));
+        if (opts.offset)
+            qs.set("offset", String(opts.offset));
+        if (opts.status)
+            qs.set("status", opts.status);
+        return request(token, "GET", `/graphs/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/${encodeURIComponent(id)}/runs?${qs.toString()}`);
+    },
+    listAllRuns: (token, opts = {}) => {
+        const qs = new URLSearchParams();
+        qs.set("limit", String(opts.limit ?? 50));
+        if (opts.offset)
+            qs.set("offset", String(opts.offset));
+        if (opts.status)
+            qs.set("status", opts.status);
+        return request(token, "GET", `/runs?${qs.toString()}`);
+    },
     getJob: (token, jobID) => request(token, "GET", `/jobs/${encodeURIComponent(jobID)}`),
+    getNodeRecord: (token, runID, nodeID) => request(token, "GET", `/jobs/${encodeURIComponent(runID)}/nodes/${encodeURIComponent(nodeID)}`),
     // SSE: EventSource doesn't support headers, so we proxy through fetch
     // with ReadableStream parsing instead. Caller cancels via AbortController.
     streamJob(token, jobID, onEvent, signal) {

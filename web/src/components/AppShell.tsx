@@ -1,6 +1,6 @@
 import { ReactNode, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { Menu, LogOut, Workflow, ShieldCheck } from "lucide-react";
+import { Menu, LogOut, Workflow, ShieldCheck, Activity } from "lucide-react";
 import { useAuth } from "../auth";
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -52,6 +52,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           <NavLink to="/pipelines" onClick={() => setNavOpen(false)}>
             <Workflow size={18} />
             Pipelines
+          </NavLink>
+          <NavLink to="/runs" onClick={() => setNavOpen(false)}>
+            <Activity size={18} />
+            Runs
           </NavLink>
           {showAdmin && (
             <>

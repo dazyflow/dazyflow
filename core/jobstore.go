@@ -112,6 +112,25 @@ type JobStore interface {
 
 	// ListByGraph returns all records for a graph, newest first.
 	ListByGraph(ctx context.Context, graphID string) ([]JobRecord, error)
+
+	// ListGraphRuns returns only graph-kind records (the runs, not the
+	// per-node records) matching the supplied scope. Used by the UI's
+	// per-graph history and the workspace-wide runs view. Sorted by
+	// EnqueuedAt DESC; pagination via Limit + Offset.
+	ListGraphRuns(ctx context.Context, opts ListGraphRunsOpts) ([]JobRecord, error)
+}
+
+// ListGraphRunsOpts scopes a ListGraphRuns call. Empty fields are
+// wildcards within their layer — Tenant is required, Workspace and
+// GraphID are optional. Status, when set, filters to that single
+// status. Limit=0 means "use the store's default" (typically 50).
+type ListGraphRunsOpts struct {
+	Tenant    string
+	Workspace string
+	GraphID   string
+	Status    JobStatus
+	Limit     int
+	Offset    int
 }
 
 var (

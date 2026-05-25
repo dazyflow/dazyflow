@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { Node } from "@xyflow/react";
 import type { HazyNodeData } from "./NodeCard";
 import { SchemaForm, supportsSchemaForm } from "./SchemaForm";
+import { OutputPreview } from "./OutputPreview";
 
 type Props = {
   selected: Node<HazyNodeData> | null;
@@ -11,6 +12,11 @@ type Props = {
   // round-trip through React Flow's internal state.
   paramsByID: Record<string, Record<string, unknown>>;
   onParamsChange: (id: string, params: Record<string, unknown>) => void;
+  // currentRunID is the most-recent run for this graph (set when the
+  // user clicks Run). When set, the inspector shows an Output section
+  // with the selected node's last result.
+  currentRunID: string | null;
+  statusRefreshKey?: number;
 };
 
 type Mode = "form" | "json";
@@ -20,6 +26,8 @@ export function Inspector({
   onChange,
   paramsByID,
   onParamsChange,
+  currentRunID,
+  statusRefreshKey,
 }: Props) {
   const [mode, setMode] = useState<Mode>("form");
   const [jsonText, setJsonText] = useState("");
@@ -144,11 +152,20 @@ export function Inspector({
           </div>
         )}
 
+        {currentRunID && (
+          <div className="inspector-section">
+            <h4>Last run output</h4>
+            <OutputPreview
+              runID={currentRunID}
+              nodeID={selected.id}
+              refreshKey={statusRefreshKey}
+            />
+          </div>
+        )}
+
         {d.manifest?.description && (
-          <div className="sf-field" style={{ marginTop: "var(--space-5)" }}>
-            <div className="label-row">
-              <label>About</label>
-            </div>
+          <div className="inspector-section">
+            <h4>About</h4>
             <div style={{ fontSize: 13, color: "var(--muted)" }}>
               {d.manifest.description}
             </div>

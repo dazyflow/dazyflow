@@ -123,7 +123,7 @@ func TestSandbox_E2E_FileReadWrite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	terminal := waitForTerminalEvent(t, bus, graphRunID, 5*time.Second)
+	terminal := waitForTerminalEvent(t, bus, jobs, graphRunID, 5*time.Second)
 	if terminal.Status != core.JobStatusSucceeded {
 		t.Fatalf("status=%q (err=%+v)", terminal.Status, terminal.Error)
 	}
@@ -188,7 +188,7 @@ func TestSandbox_E2E_CrossTenantIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	terminal := waitForTerminalEvent(t, bus, graphRunID, 5*time.Second)
+	terminal := waitForTerminalEvent(t, bus, jobs, graphRunID, 5*time.Second)
 	if terminal.Status != core.JobStatusFailed {
 		t.Fatalf("status=%q, want failed (cross-tenant read should be blocked)", terminal.Status)
 	}

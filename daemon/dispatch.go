@@ -46,9 +46,9 @@ func NewDispatcher(store core.JobStore, bus Bus, eng *engine.Engine, logger *log
 
 // AdvanceAfterCompletion is the single entry-point used by the worker
 // and the approval handler once a node has reached its final outcome.
-// It centralizes the "dispatch dependents if outcome can propagate" +
-// "check graph completion" pair so callers don't have to reason about
-// failure-propagation rules.
+// It centralizes the "publish node-status + dispatch dependents +
+// check graph completion" sequence so callers don't have to reason
+// about failure-propagation rules or remember to fire bus events.
 func (d *Dispatcher) AdvanceAfterCompletion(
 	ctx context.Context,
 	graph core.Graph,
@@ -56,11 +56,28 @@ func (d *Dispatcher) AdvanceAfterCompletion(
 	status core.JobStatus,
 	resultErr *core.JobError,
 ) {
+	d.PublishNodeStatus(graphRunID, nodeID, status, resultErr)
 	if status == core.JobStatusSucceeded ||
 		(status == core.JobStatusFailed && !d.failurePropagates(graph, nodeID)) {
 		d.dispatchReady(ctx, graph, graphRunID, nodeID)
 	}
 	d.maybeCompleteGraph(ctx, graph, graphRunID, nodeID, status, resultErr)
+}
+
+// PublishNodeStatus emits a NodeStatusEvent for subscribers (the SSE
+// stream is the primary consumer). Exported so worker paths that
+// don't go through AdvanceAfterCompletion (notably the awaiting park)
+// can publish their own status.
+func (d *Dispatcher) PublishNodeStatus(
+	graphRunID, nodeID string,
+	status core.JobStatus,
+	resultErr *core.JobError,
+) {
+	d.bus.Publish(graphRunID, BusEvent{NodeStatus: &NodeStatusEvent{
+		NodeID: nodeID,
+		Status: status,
+		Error:  resultErr,
+	}})
 }
 
 func (d *Dispatcher) dispatchReady(ctx context.Context, graph core.Graph, graphRunID, completedNodeID string) {
@@ -115,6 +132,7 @@ func (d *Dispatcher) recordSkipped(ctx context.Context, graph core.Graph, graphR
 		return
 	}
 	d.logger.Printf("skipped %s: %s", nodeID, reason)
+	d.PublishNodeStatus(graphRunID, nodeID, core.JobStatusSkipped, nil)
 	d.dispatchReady(ctx, graph, graphRunID, nodeID)
 	d.maybeCompleteGraph(ctx, graph, graphRunID, nodeID, core.JobStatusSkipped, nil)
 }

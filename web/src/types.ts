@@ -113,6 +113,24 @@ export type JobStatus =
   | "skipped"
   | "awaiting";
 
+export type Ref = {
+  mime?: string;
+  ref?: string;
+  data?: unknown; // serialized as Inline in Go
+};
+
+export type JobError = {
+  code: string;
+  message: string;
+};
+
+export type JobResult = {
+  job_id?: string;
+  status?: string;
+  output?: Record<string, Ref>;
+  error?: JobError;
+};
+
 export type JobRecord = {
   ID: string;
   Kind: string;
@@ -120,4 +138,18 @@ export type JobRecord = {
   GraphID: string;
   NodeID: string;
   Status: JobStatus;
+  Result?: JobResult;
+  StartedAt?: string | null;
+  FinishedAt?: string | null;
+  Attempt?: number;
+};
+
+export type RunSummary = {
+  id: string;
+  graph_id: string;
+  status: JobStatus;
+  enqueued_at: string;
+  started_at?: string | null;
+  finished_at?: string | null;
+  error_code?: string;
 };

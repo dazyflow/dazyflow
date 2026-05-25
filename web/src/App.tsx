@@ -4,6 +4,7 @@ import { AppShell } from "./components/AppShell";
 import { SignIn } from "./pages/SignIn";
 import { PipelineList } from "./pages/PipelineList";
 import { PipelineEditor } from "./pages/PipelineEditor";
+import { RunList } from "./pages/RunList";
 import { Admin } from "./pages/Admin";
 
 export function App() {
@@ -22,6 +23,7 @@ export function App() {
         <Route path="/" element={<Navigate to="/pipelines" replace />} />
         <Route path="/pipelines" element={<PipelineList />} />
         <Route path="/pipelines/:id" element={<PipelineEditor />} />
+        <Route path="/runs" element={<RunList />} />
         <Route path="/admin/*" element={<Admin />} />
         <Route path="*" element={<Navigate to="/pipelines" replace />} />
       </Routes>

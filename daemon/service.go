@@ -178,8 +178,18 @@ func (s *Service) WaitGraph(
 	events, cancel := s.bus().Subscribe(jobID)
 	defer cancel()
 
-	// If the worker already finished before we subscribed, the bus never
-	// fires — fall back to the stored record.
+	// Re-fetch AFTER subscribing: the worker might have finished
+	// between our initial Get and Subscribe (in-memory store + several
+	// workers race especially hard here), and that publish would have
+	// gone to no subscribers. Without the post-subscribe peek we'd
+	// then wait forever on the bus.
+	fresh, err := s.Jobs.Get(ctx, jobID)
+	if err == nil && isTerminal(fresh.Status) {
+		return graphResultFromRecord(fresh), nil
+	}
+	// Also keep the original check using the auth-time snapshot in
+	// case the re-fetch itself failed but the first read showed
+	// terminal — defensive, ~free.
 	if isTerminal(rec.Status) {
 		return graphResultFromRecord(rec), nil
 	}
@@ -289,6 +299,20 @@ func (s *Service) ListJobsForGraph(ctx context.Context, p core.Principal, graphI
 		}
 	}
 	return out, nil
+}
+
+// ListGraphRuns returns graph-kind records (the runs) scoped to the
+// principal's tenant. opts.Tenant is overridden to the principal's
+// tenant before hitting the store — clients can't read across tenant
+// boundaries even by passing a tenant they don't own.
+func (s *Service) ListGraphRuns(ctx context.Context, p core.Principal, opts core.ListGraphRunsOpts) ([]core.JobRecord, error) {
+	opts.Tenant = p.Tenant
+	// When p.Workspace is set, restrict to that workspace too — the
+	// principal can't see runs from siblings within their tenant.
+	if p.Workspace != "" {
+		opts.Workspace = p.Workspace
+	}
+	return s.Jobs.ListGraphRuns(ctx, opts)
 }
 
 // ListModules returns every manifest the engine's resolver knows about.

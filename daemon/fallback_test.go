@@ -37,7 +37,7 @@ func TestFallback_ActivatesOnFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	terminal := waitForTerminalEvent(t, h.bus, graphRunID, 5*time.Second)
+	terminal := waitForTerminalEvent(t, h.bus, h.jobs, graphRunID, 5*time.Second)
 	if terminal.Status != core.JobStatusSucceeded {
 		t.Fatalf("graph status = %q, want succeeded (err=%+v)", terminal.Status, terminal.Error)
 	}
@@ -70,7 +70,7 @@ func TestFallback_DormantOnSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	terminal := waitForTerminalEvent(t, h.bus, graphRunID, 5*time.Second)
+	terminal := waitForTerminalEvent(t, h.bus, h.jobs, graphRunID, 5*time.Second)
 	if terminal.Status != core.JobStatusSucceeded {
 		t.Fatalf("graph status = %q, want succeeded", terminal.Status)
 	}
@@ -103,7 +103,7 @@ func TestFallback_AbsorbsSiblingAbortEdge(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	terminal := waitForTerminalEvent(t, h.bus, graphRunID, 5*time.Second)
+	terminal := waitForTerminalEvent(t, h.bus, h.jobs, graphRunID, 5*time.Second)
 	if terminal.Status != core.JobStatusSucceeded {
 		t.Fatalf("graph status = %q, want succeeded (fallback absorbs abort sibling)", terminal.Status)
 	}
@@ -144,7 +144,7 @@ func TestFallback_CascadesSkipToDownstream(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	terminal := waitForTerminalEvent(t, h.bus, graphRunID, 5*time.Second)
+	terminal := waitForTerminalEvent(t, h.bus, h.jobs, graphRunID, 5*time.Second)
 	if terminal.Status != core.JobStatusSucceeded {
 		t.Fatalf("graph status = %q, want succeeded", terminal.Status)
 	}
@@ -180,7 +180,7 @@ func TestFallback_MixedInputs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	terminal := waitForTerminalEvent(t, h.bus, graphRunID, 5*time.Second)
+	terminal := waitForTerminalEvent(t, h.bus, h.jobs, graphRunID, 5*time.Second)
 	if terminal.Status != core.JobStatusSucceeded {
 		t.Fatalf("graph status = %q, want succeeded", terminal.Status)
 	}
@@ -214,7 +214,7 @@ func TestFallback_NoFallbackPathStillAborts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	terminal := waitForTerminalEvent(t, h.bus, graphRunID, 5*time.Second)
+	terminal := waitForTerminalEvent(t, h.bus, h.jobs, graphRunID, 5*time.Second)
 	if terminal.Status != core.JobStatusFailed {
 		t.Errorf("graph status = %q, want failed (no fallback path)", terminal.Status)
 	}
@@ -288,7 +288,7 @@ func TestEngine_FallbackEdgeDoesNotProvideInput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	terminal := waitForTerminalEvent(t, bus, graphRunID, 5*time.Second)
+	terminal := waitForTerminalEvent(t, bus, jobs, graphRunID, 5*time.Second)
 	if terminal.Status != core.JobStatusSucceeded {
 		t.Fatalf("status = %q", terminal.Status)
 	}

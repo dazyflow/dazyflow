@@ -8,10 +8,21 @@ import (
 )
 
 // BusEvent is what flows from a worker to subscribers waiting on a job.
-// Exactly one of Progress or Terminal is set per event.
+// Exactly one of Progress, NodeStatus, or Terminal is set per event.
 type BusEvent struct {
-	Progress *engine.GraphProgress
-	Terminal *TerminalEvent
+	Progress   *engine.GraphProgress
+	NodeStatus *NodeStatusEvent
+	Terminal   *TerminalEvent
+}
+
+// NodeStatusEvent fires whenever a single node-record transitions to a
+// new status (succeeded / failed / skipped / awaiting). The UI uses it
+// to light up nodes as they execute. Distinct from Progress, which is
+// in-flight percent/text updates from within a still-running node.
+type NodeStatusEvent struct {
+	NodeID string         `json:"node_id"`
+	Status core.JobStatus `json:"status"`
+	Error  *core.JobError `json:"error,omitempty"`
 }
 
 // TerminalEvent marks the end of a job. Subscribers should stop reading

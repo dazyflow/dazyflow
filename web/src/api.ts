@@ -1,4 +1,4 @@
-import type { Graph, Manifest, JobRecord, WhoAmI } from "./types";
+import type { Graph, Manifest, JobRecord, JobStatus, RunSummary, WhoAmI } from "./types";
 
 // API_BASE: dev defaults to relative "/api/v1" (proxied by Vite to the
 // daemon); prod builds can hardcode an absolute URL via VITE_API_BASE.
@@ -74,8 +74,45 @@ export const api = {
       "POST",
       `/graphs/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/${encodeURIComponent(id)}/run`,
     ),
+  listRuns: (
+    token: string,
+    tenant: string,
+    workspace: string,
+    id: string,
+    opts: { limit?: number; offset?: number; status?: JobStatus } = {},
+  ) => {
+    const qs = new URLSearchParams();
+    qs.set("limit", String(opts.limit ?? 20));
+    if (opts.offset) qs.set("offset", String(opts.offset));
+    if (opts.status) qs.set("status", opts.status);
+    return request<{ runs: RunSummary[] }>(
+      token,
+      "GET",
+      `/graphs/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/${encodeURIComponent(id)}/runs?${qs.toString()}`,
+    );
+  },
+  listAllRuns: (
+    token: string,
+    opts: { limit?: number; offset?: number; status?: JobStatus } = {},
+  ) => {
+    const qs = new URLSearchParams();
+    qs.set("limit", String(opts.limit ?? 50));
+    if (opts.offset) qs.set("offset", String(opts.offset));
+    if (opts.status) qs.set("status", opts.status);
+    return request<{ runs: RunSummary[] }>(
+      token,
+      "GET",
+      `/runs?${qs.toString()}`,
+    );
+  },
   getJob: (token: string, jobID: string) =>
     request<JobRecord>(token, "GET", `/jobs/${encodeURIComponent(jobID)}`),
+  getNodeRecord: (token: string, runID: string, nodeID: string) =>
+    request<JobRecord>(
+      token,
+      "GET",
+      `/jobs/${encodeURIComponent(runID)}/nodes/${encodeURIComponent(nodeID)}`,
+    ),
   // SSE: EventSource doesn't support headers, so we proxy through fetch
   // with ReadableStream parsing instead. Caller cancels via AbortController.
   streamJob(

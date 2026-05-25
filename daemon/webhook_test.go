@@ -97,7 +97,7 @@ func TestWebhook_FiresWithValidSecret(t *testing.T) {
 	}
 
 	// Wait for the graph to actually run.
-	terminal := waitForTerminalEvent(t, bus, out.JobID, 5*time.Second)
+	terminal := waitForTerminalEvent(t, bus, jobs, out.JobID, 5*time.Second)
 	if terminal.Status != core.JobStatusSucceeded {
 		t.Errorf("graph status = %q", terminal.Status)
 	}
