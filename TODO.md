@@ -28,6 +28,15 @@ platform can demonstrate but not actually power a real workflow.
   output keyed by iteration index). E2E proves
   `url: "https://api/${item:id}"` + `Authorization: "Bearer ${env:TOKEN}"`
   routes correctly per item.
+- [x] **Upstream-output templating.** Shipped: `${upstream:nodeID.port.path[idx]…}`
+  resolves against prior-node results passed into `Engine.RunNode`.
+  Dot-then-bracket path syntax over the port's Inline value (maps and
+  slices). `resolveSecrets` renamed to `resolveTemplates` and now
+  composes upstream + secret substituters in one pass — mixed strings
+  like `https://hooks/${upstream:q.meta.id}?token=${env:TOKEN}` resolve
+  in a single substitution. Maps/slices stringify as JSON for
+  embedding; primitives use `fmt.Sprint`. Unknown nodeID errors out so
+  typos don't silently produce empty values landing in DSNs/paths.
 - [x] **`await_approval` pause/resume.** Shipped:
   `core.JobStatusAwaiting` (not terminal) + `core.StatusAwaiting` Result
   sentinel; `Memory.Complete` / `Postgres.Complete` accept awaiting and
@@ -119,10 +128,12 @@ platform can demonstrate but not actually power a real workflow.
   process-level isolation beyond filesystem sandbox: nsjail, bubblewrap,
   Linux user namespaces, or a per-job container. Resource limits via
   ulimit/cgroups. Output capturing of stdout/stderr/exitcode per spec.
-- [ ] **`split` module.** Spec lists it under `modules/flow/`. Branch
-  is done; split (one input → N outputs) is still missing. Semantics
-  TBD: does it require the input to be a list? What happens if N
-  doesn't match list length?
+- [~] **`split` module.** Spec lists it under `modules/flow/` as
+  "one input → N outputs." Two-way predicate fork shipped as
+  `transform/split_rows` (matched / unmatched on a CEL predicate).
+  N-way variant (route each row to one of N ports by a lookup map
+  or per-port predicate) still open under
+  `Modules wishlist → route_rows / N-way split`.
 - [x] **`for_each` module.** Shipped in `modules/flow/for_each.go`.
   Runs a configured step module once per item with bounded
   `concurrency` and optional `fail_fast`. Outputs a `results` list
@@ -336,9 +347,83 @@ blocking, but listed so we don't lose them.
   for each, plus pooled connection registries keyed by (tenant, dsn)
   with lazy idle eviction — `pgxpool` for Postgres, `*sql.DB` for
   MySQL, no pool for SQLite since file-open is microseconds).
+- [x] **Row-transform module** — `integrations/transform/map_rows.go`.
+  Static field operations (select / drop / rename / default /
+  filter_eq / filter_neq / filter_in) with fixed application order
+  and string-based equality so int 30 matches "30". 19 tests.
+  Closes the "Excel column names don't match my DB schema" gap.
+- [x] **`compute_rows` module** — `integrations/transform/compute_rows.go`.
+  Per-row derived fields and filters via CEL (Google's Common
+  Expression Language). Each expression sees `row` as a
+  `map<string,dyn>`; `compute` adds/overwrites columns,
+  `filter` drops rows. Compiles expressions once before the row
+  loop, fails the whole batch on per-row runtime errors (same
+  contract as the SQL drops). 18 tests. Closes the gap `map_rows`
+  deliberately left open (string concat, arithmetic, conditionals,
+  multi-column predicates).
+- [x] **`sort_rows` / `dedupe_rows`** — `integrations/transform/`.
+  `sort_rows` does stable, multi-key, asc/desc sorts with
+  numeric-aware comparison so Excel-string "10" lands after "2".
+  `dedupe_rows` drops duplicates by an optional `by` column list
+  (default = whole row), `keep: first|last`, preserves input order
+  for survivors, and emits a `dropped` count for downstream alerting.
+  21 combined tests.
 - [ ] **Blob storage** — S3 / GCS / R2 with proper streaming via the
   Ref pointer (not Inline).
-- [ ] **`split` module** (still open from spec days).
+- [ ] **`join_rows`** — SQL JOIN equivalent between two row streams.
+  Two row-input ports, `on` param specifying the join keys
+  (`{left_col: right_col}`), `kind` (inner/left/right/outer).
+  The natural next ETL primitive after the dedupe/sort/split set —
+  unlocks "enrich the Excel rows with this DB lookup table" without
+  dropping into SQL.
+- [ ] **`group_aggregate`** — group rows by one or more columns and
+  emit one row per group with aggregated values. Aggregations:
+  count, sum, avg, min, max, first, last, collect-as-list. Static
+  config; CEL expressions for derived aggregates can come via a
+  follow-up `compute_rows` step. Covers the pivot-table use case
+  without inventing a Pivot drop yet.
+- [ ] **`route_rows` (N-way split)** — variadic output ports keyed
+  by a column value (or per-port CEL predicate). Picks up where
+  `split_rows` stops: instead of two ports, route to N named
+  destinations like `{SE: ..., NO: ..., default: ...}`. Needs the
+  variadic-output-port story sorted in the editor first
+  (per "Variadic input ports" under Editor).
+- [ ] **Excel polish on shipped drops** (`integrations/io/excel_*`):
+    - `start_cell` on `excel_write` — write the table starting at
+      e.g. `B5` instead of A1; templated reports with a banner row
+      can't do this today.
+    - Multi-sheet `excel_read` mode — output `{sheet_name: rows}`
+      for workbooks laid out as one tab per category. The single-
+      sheet path stays; new param `all_sheets: true` switches shape.
+    - Streaming reader for huge sheets — current path buffers the
+      whole workbook in memory. Only matters at 100k+ rows; would
+      flip `ExecutionModel` to `ExecutionStream` and use excelize's
+      `Rows()` iterator.
+- [ ] **DB drop polish**:
+    - Inserted-vs-updated split on `postgres_upsert_rows` — emit
+      separate counts via the `INSERT ... RETURNING (xmax = 0)`
+      trick. Same for MySQL (uses `ROW_COUNT()` semantics: 1 per
+      INSERT, 2 per UPDATE). Lets webhook notifications say
+      "loaded 245 new + updated 78 existing" instead of "processed
+      323."
+    - Streaming reads on `*_query` — current path accumulates all
+      rows in memory. Adding a streaming variant (cursor on
+      Postgres, batched fetch on MySQL/SQLite) matters once a
+      single SELECT returns >100k rows.
+- [ ] **Reusable sub-graph components in the UI.** `flow/subgraph`
+  already runs nested graphs, but there's no UI to save a graph as
+  a reusable component, give it inputs/outputs, drop it onto another
+  graph from the catalog. Would let users build "this is our
+  standard customer-cleanup pipeline, here's the node" — turns
+  ad-hoc graphs into a sharable library.
+- [x] **`split` module** — shipped as `split_rows`
+  (`integrations/transform/split_rows.go`). Forks a row stream by a
+  CEL predicate into `matched`/`unmatched` ports plus a shared
+  `headers` port. Same expression surface as `compute_rows.filter`
+  (reuses `compileOptionalFilter`/`evalFilter`). Real ETL win is
+  "route invalid records to a review queue instead of dropping
+  them" — previously required `map_rows` twice with opposite
+  filters, which walks the input twice. 14 tests.
 
 ## Recently shipped (delete-when-reviewed)
 

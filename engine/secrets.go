@@ -8,25 +8,46 @@ import (
 	"git.sr.ht/~klahr/hazy-flow/core"
 )
 
-// resolveSecrets walks job.Params and job.Env, replacing any string of
-// the form "scheme://path" with the value returned by the matching
-// SecretProvider. Strings whose scheme isn't registered (think
-// "http://api.example.com") are left alone — secret refs are detected by
-// the scheme registry, not by syntax.
+// resolveSecrets is the secret-only convenience wrapper around
+// resolveTemplates. Kept for code paths and tests that only care
+// about secret resolution; equivalent to passing prior=nil.
+func resolveSecrets(ctx context.Context, providers map[string]core.SecretProvider, job *core.Job) error {
+	return resolveTemplates(ctx, providers, nil, job)
+}
+
+// resolveTemplates walks job.Params and job.Env, replacing two kinds
+// of placeholder:
+//
+//	1. Secret refs: ${env:NAME} / ${secret:NAME} / env://NAME (legacy)
+//	   resolved against the registered SecretProviders.
+//	2. Upstream refs: ${upstream:nodeID.port.path…} resolved against
+//	   the prior-node results passed in by the engine.
+//
+// Either or both can be nil/empty — the substituter chain skips
+// schemes it doesn't recognize. Strings whose scheme isn't matched
+// (think "http://api.example.com") are left alone.
 //
 // Resolution happens on the in-memory Job inside Engine.RunNode after
 // the JobStore has already captured the unresolved reference. The
-// resolved value never lands in storage or in audit trails: it exists
-// only in the transport.Execute call.
-func resolveSecrets(ctx context.Context, providers map[string]core.SecretProvider, job *core.Job) error {
-	if len(providers) == 0 || job == nil {
+// resolved value never lands in storage or in audit trails: it
+// exists only in the transport.Execute call.
+func resolveTemplates(ctx context.Context, providers map[string]core.SecretProvider, prior map[string]core.Result, job *core.Job) error {
+	if job == nil {
 		return nil
 	}
-	if err := resolveMap(ctx, providers, job.Params); err != nil {
+	// Build the substituter chain once per job. The order matters:
+	// upstream first so a node ID that happens to share a name with
+	// a secret provider (e.g. a node called "env") doesn't get
+	// shadowed.
+	sub := chainSubstituters(
+		upstreamSubstituter(prior),
+		secretSubstituter(providers),
+	)
+	if err := resolveMap(ctx, providers, sub, job.Params); err != nil {
 		return fmt.Errorf("params: %w", err)
 	}
 	for k, v := range job.Env {
-		resolved, err := resolveString(ctx, providers, v)
+		resolved, err := resolveString(ctx, providers, sub, v)
 		if err != nil {
 			return fmt.Errorf("env[%q]: %w", k, err)
 		}
@@ -35,21 +56,39 @@ func resolveSecrets(ctx context.Context, providers map[string]core.SecretProvide
 	return nil
 }
 
-func resolveMap(ctx context.Context, providers map[string]core.SecretProvider, m map[string]any) error {
+// chainSubstituters runs each substituter in order, returning the
+// first hit. Errors propagate immediately; not-my-scheme (ok=false)
+// falls through to the next.
+func chainSubstituters(subs ...Substituter) Substituter {
+	return func(ctx context.Context, scheme, path string) (string, bool, error) {
+		for _, s := range subs {
+			v, ok, err := s(ctx, scheme, path)
+			if err != nil {
+				return "", true, err
+			}
+			if ok {
+				return v, true, nil
+			}
+		}
+		return "", false, nil
+	}
+}
+
+func resolveMap(ctx context.Context, providers map[string]core.SecretProvider, sub Substituter, m map[string]any) error {
 	for k, v := range m {
 		switch tv := v.(type) {
 		case string:
-			resolved, err := resolveString(ctx, providers, tv)
+			resolved, err := resolveString(ctx, providers, sub, tv)
 			if err != nil {
 				return fmt.Errorf("%s: %w", k, err)
 			}
 			m[k] = resolved
 		case map[string]any:
-			if err := resolveMap(ctx, providers, tv); err != nil {
+			if err := resolveMap(ctx, providers, sub, tv); err != nil {
 				return fmt.Errorf("%s.%w", k, err)
 			}
 		case []any:
-			if err := resolveSlice(ctx, providers, tv); err != nil {
+			if err := resolveSlice(ctx, providers, sub, tv); err != nil {
 				return fmt.Errorf("%s[%w]", k, err)
 			}
 		}
@@ -57,21 +96,21 @@ func resolveMap(ctx context.Context, providers map[string]core.SecretProvider, m
 	return nil
 }
 
-func resolveSlice(ctx context.Context, providers map[string]core.SecretProvider, items []any) error {
+func resolveSlice(ctx context.Context, providers map[string]core.SecretProvider, sub Substituter, items []any) error {
 	for i, v := range items {
 		switch tv := v.(type) {
 		case string:
-			resolved, err := resolveString(ctx, providers, tv)
+			resolved, err := resolveString(ctx, providers, sub, tv)
 			if err != nil {
 				return fmt.Errorf("[%d]: %w", i, err)
 			}
 			items[i] = resolved
 		case map[string]any:
-			if err := resolveMap(ctx, providers, tv); err != nil {
+			if err := resolveMap(ctx, providers, sub, tv); err != nil {
 				return err
 			}
 		case []any:
-			if err := resolveSlice(ctx, providers, tv); err != nil {
+			if err := resolveSlice(ctx, providers, sub, tv); err != nil {
 				return err
 			}
 		}
@@ -91,11 +130,15 @@ func resolveSlice(ctx context.Context, providers map[string]core.SecretProvider,
 //
 // Unknown schemes (e.g. `${item:...}` outside for_each, or a literal
 // URL like `http://...`) are left unchanged.
-func resolveString(ctx context.Context, providers map[string]core.SecretProvider, s string) (string, error) {
-	resolved, err := SubstituteString(ctx, s, secretSubstituter(providers))
+func resolveString(ctx context.Context, providers map[string]core.SecretProvider, sub Substituter, s string) (string, error) {
+	resolved, err := SubstituteString(ctx, s, sub)
 	if err != nil {
 		return "", err
 	}
+	// The whole-string `env://NAME` fallback is the legacy form,
+	// secret-only by design. Upstream refs don't get this treatment
+	// — they're inline-${...}-only because "upstream://node.field"
+	// reads like a URL and would be ambiguous.
 	scheme, path, ok := splitSecretRef(resolved)
 	if !ok {
 		return resolved, nil

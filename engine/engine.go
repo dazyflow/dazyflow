@@ -221,7 +221,7 @@ func (e *Engine) RunNode(
 			Error:  &core.JobError{Code: "sandbox", Message: err.Error()},
 		}, err
 	}
-	if err := resolveSecrets(ctx, e.Secrets, &job); err != nil {
+	if err := resolveTemplates(ctx, e.Secrets, prior, &job); err != nil {
 		recordSpanError(span, err)
 		return core.Result{
 			Status: core.StatusError,
@@ -289,7 +289,7 @@ func (e *Engine) runNode(
 			Error:  &core.JobError{Code: "sandbox", Message: err.Error()},
 		}, err
 	}
-	if err := resolveSecrets(ctx, e.Secrets, &job); err != nil {
+	if err := resolveTemplates(ctx, e.Secrets, prior, &job); err != nil {
 		return core.Result{
 			Status: core.StatusError,
 			Error:  &core.JobError{Code: "secret", Message: err.Error()},
