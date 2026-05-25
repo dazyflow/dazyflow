@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -41,19 +42,39 @@ func main() {
 	remotes := flag.String("remote", "", "register remote modules, e.g. id1=host:port,id2=host:port (uses insecure dial; intended for dev)")
 	enableCron := flag.Bool("cron", true, "enable the cron scheduler")
 	webhookListen := flag.String("webhook", "", "enable the webhook listener on this addr (e.g. :8080); empty disables")
+	httpListen := flag.String("http", "", "enable the HTTP /api/v1 gateway on this addr (e.g. :8080); empty disables")
 	enableEnvSecrets := flag.Bool("env-secrets", true, "enable env:// secret provider")
 	builtinSecretsFile := flag.String("builtin-secrets", "", "JSON file of {name: value} for builtin:// secret provider")
 	mcpServers := flag.String("mcp", "", "register MCP stdio servers, e.g. fs=server-filesystem /tmp;docs=npx -y @modelcontextprotocol/server-docs (semicolon-separated)")
+	workspaceDir := flag.String("workspace-dir", "./.hazyflow-workspace", "directory for the dev workspace's git-backed graph store; empty = in-memory (graphs lost on restart)")
+	usersFile := flag.String("users-file", "./.hazyflow-users.json", "JSON file backing the email+password user store; empty disables password sign-in")
+	webOrigin := flag.String("web-origin", "http://localhost:5174", "comma-separated allowed origins for the web UI (CORS + cookie credentials)")
+	sessionTTL := flag.Duration("session-ttl", 24*time.Hour, "lifetime of a sign-in session before the user must re-authenticate")
 	flag.Parse()
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	ks := auth.NewMemKeyStore()
-	devWS, err := workspace.OpenFS("")
+	devWS, err := workspace.OpenFS(*workspaceDir)
 	if err != nil {
 		log.Fatalf("open workspace: %v", err)
 	}
+	if *workspaceDir != "" {
+		log.Printf("workspace store: %s", *workspaceDir)
+	} else {
+		log.Println("workspace store: in-memory (graphs lost on restart)")
+	}
+
+	users, err := auth.OpenJSONUserStore(*usersFile)
+	if err != nil {
+		log.Fatalf("open users: %v", err)
+	}
+	if *usersFile != "" {
+		seedDefaultUser(ctx, users)
+		log.Printf("users store: %s", *usersFile)
+	}
+	sessions := auth.NewMemSessionStore()
 	jobs := jobstore.NewMemory()
 	bus := daemon.NewMemoryBus()
 	base := *sandboxBase
@@ -105,7 +126,10 @@ func main() {
 		Secrets: secrets,
 	}
 	svc := &daemon.Service{
-		Auth:       auth.Chain{&auth.APIKeyAuthenticator{Store: ks}},
+		Auth: auth.Chain{
+			&auth.APIKeyAuthenticator{Store: ks},
+			&auth.SessionAuthenticator{Store: sessions},
+		},
 		Workspaces: daemon.MapWorkspaces{"dev/default": devWS},
 		Jobs:       jobs,
 		Engine:     eng,
@@ -146,6 +170,26 @@ func main() {
 		go func() {
 			if err := wh.Serve(ctx, *webhookListen); err != nil && err != http.ErrServerClosed {
 				log.Printf("webhook listener stopped: %v", err)
+			}
+		}()
+	}
+
+	if *httpListen != "" {
+		gw := daemon.NewHTTPGateway(svc)
+		gw.Users = users
+		gw.Sessions = sessions
+		gw.SessionTTL = *sessionTTL
+		if *webOrigin != "" {
+			for _, o := range strings.Split(*webOrigin, ",") {
+				o = strings.TrimSpace(o)
+				if o != "" {
+					gw.AllowedOrigins = append(gw.AllowedOrigins, o)
+				}
+			}
+		}
+		go func() {
+			if err := gw.Serve(ctx, *httpListen); err != nil && err != http.ErrServerClosed {
+				log.Printf("http gateway stopped: %v", err)
 			}
 		}()
 	}
@@ -333,4 +377,41 @@ func parseSize(s string) (int64, error) {
 		return 0, fmt.Errorf("parse size: %w", err)
 	}
 	return n * mult, nil
+}
+
+// seedDefaultUser writes test@example.com / test into the user store if
+// no users exist yet. It's a dev convenience — there's nothing to sign
+// in with on a fresh deployment otherwise, and the user this seeds is
+// scoped to the same dev/default tenant the dev API key uses.
+func seedDefaultUser(ctx context.Context, users auth.UserStore) {
+	existing, err := users.ListUsers(ctx)
+	if err != nil {
+		log.Printf("seed user: list failed: %v", err)
+		return
+	}
+	if len(existing) > 0 {
+		return
+	}
+	hash, err := auth.HashPassword("test")
+	if err != nil {
+		log.Printf("seed user: hash failed: %v", err)
+		return
+	}
+	adminRole := core.Role{Name: "admin", Permissions: []core.Permission{
+		core.PermTenantAdmin, core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
+	}}
+	u := auth.User{
+		Email:        "test@example.com",
+		PasswordHash: hash,
+		Subject:      "test@example.com",
+		Tenant:       "dev",
+		Workspace:    "default",
+		Roles:        []core.Role{adminRole},
+		CreatedAt:    time.Now(),
+	}
+	if err := users.PutUser(ctx, u); err != nil {
+		log.Printf("seed user: put failed: %v", err)
+		return
+	}
+	log.Printf("seeded sign-in: %s / test", u.Email)
 }

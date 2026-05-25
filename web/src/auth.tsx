@@ -12,8 +12,8 @@ type AuthCtx = {
   me: WhoAmI | null;
   loading: boolean;
   error: string | null;
-  signIn: (token: string) => Promise<void>;
-  signOut: () => void;
+  signInWithPassword: (email: string, password: string) => Promise<void>;
+  signOut: () => Promise<void>;
   hasPerm: (p: Permission) => boolean;
   // Workspace state. `workspaces` is the list the principal can access
   // (single entry for scoped keys; many for tenant admins).
@@ -162,13 +162,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(WS_STORAGE_KEY);
   };
 
-  const signIn = async (newToken: string) => {
+  const signInWithPassword = async (email: string, password: string) => {
     setLoading(true);
     setError(null);
     try {
-      const who = await api.whoami(newToken);
-      localStorage.setItem(STORAGE_KEY, newToken);
-      setToken(newToken);
+      const r = await api.signIn(email, password);
+      // The signin endpoint also sets an HttpOnly session cookie, but
+      // we mirror the token in localStorage so the rest of the app
+      // keeps using its bearer-header code path unchanged.
+      localStorage.setItem(STORAGE_KEY, r.token);
+      setToken(r.token);
+      const who = await api.whoami(r.token);
       setMe(who);
     } catch (e) {
       setError((e as Error).message);
@@ -178,7 +182,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const signOut = () => {
+  const signOut = async () => {
+    // Best-effort: tell the daemon to invalidate the session. We don't
+    // wait on the result before clearing local state — the user-facing
+    // contract is "you're logged out now."
+    const t = token;
+    if (t) {
+      api.signOut(t).catch(() => {
+        /* ignored — local state still gets cleared */
+      });
+    }
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(WS_STORAGE_KEY);
     localStorage.removeItem(TENANT_STORAGE_KEY);
@@ -200,7 +213,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         me,
         loading,
         error,
-        signIn,
+        signInWithPassword,
         signOut,
         hasPerm,
         workspaces,

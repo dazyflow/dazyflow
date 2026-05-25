@@ -3,6 +3,7 @@ import type { Node } from "@xyflow/react";
 import type { HazyNodeData } from "./NodeCard";
 import { SchemaForm, supportsSchemaForm } from "./SchemaForm";
 import { OutputPreview } from "./OutputPreview";
+import { LiveConsole } from "./LiveConsole";
 
 type Props = {
   selected: Node<HazyNodeData> | null;
@@ -17,6 +18,10 @@ type Props = {
   // with the selected node's last result.
   currentRunID: string | null;
   statusRefreshKey?: number;
+  // liveLogs streams stdout/stderr lines from the currently-selected
+  // node's in-flight run. When non-empty the inspector renders a
+  // scrolling console above the static "Last run output" section.
+  liveLogs?: string[];
 };
 
 type Mode = "form" | "json";
@@ -28,6 +33,7 @@ export function Inspector({
   onParamsChange,
   currentRunID,
   statusRefreshKey,
+  liveLogs,
 }: Props) {
   const [mode, setMode] = useState<Mode>("form");
   const [jsonText, setJsonText] = useState("");
@@ -149,6 +155,13 @@ export function Inspector({
                 {jsonError}
               </div>
             )}
+          </div>
+        )}
+
+        {liveLogs && liveLogs.length > 0 && (
+          <div className="inspector-section">
+            <h4>Live output</h4>
+            <LiveConsole lines={liveLogs} />
           </div>
         )}
 

@@ -1,5 +1,5 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { iconFor } from "../icons";
+import { iconFor, isBrandedIcon } from "../icons";
 import type { Manifest, Port } from "../types";
 
 // HazyNodeData is the shape we stash on each React Flow node. We carry
@@ -34,8 +34,10 @@ export function HazyNode({ data, selected }: NodeProps) {
   const inputsMulti = inputs.length > 1;
   const outputsMulti = outputs.length > 1;
 
+  const statusClass = d.status ? " status-" + d.status : "";
+
   return (
-    <div className={"hz-node" + (selected ? " selected" : "")}>
+    <div className={"hz-node" + (selected ? " selected" : "") + statusClass}>
       {/* Inputs (left side). Single-port nodes get a centered dot;
           multi-port nodes get one handle per port spread vertically. */}
       {inputs.map((p, i) => (
@@ -48,14 +50,20 @@ export function HazyNode({ data, selected }: NodeProps) {
         />
       ))}
 
-      <div
-        className="icon"
-        style={{
-          background: `linear-gradient(135deg, ${color}, color-mix(in srgb, ${color} 70%, #fff))`,
-        }}
-      >
-        <Icon size={16} color="#140d30" strokeWidth={2.2} />
-      </div>
+      {isBrandedIcon(d.manifest?.icon) ? (
+        <div className="icon branded">
+          <Icon size={22} strokeWidth={2.2} />
+        </div>
+      ) : (
+        <div
+          className="icon"
+          style={{
+            background: `linear-gradient(135deg, ${color}, color-mix(in srgb, ${color} 70%, #fff))`,
+          }}
+        >
+          <Icon size={16} color="#140d30" strokeWidth={2.2} />
+        </div>
+      )}
       <div className="hz-node-body">
         <div className="label">{d.label}</div>
         <div className="module-id">{d.moduleID}</div>

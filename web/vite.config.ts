@@ -9,6 +9,13 @@ const target = process.env.HAZYFLOW_API ?? "http://localhost:8080";
 
 export default defineConfig({
   plugins: [react()],
+  // Prefer TypeScript over the stale .js shadows that live next to most
+  // sources. Vite's default order is [.mjs, .js, .mts, .ts, .jsx, .tsx,
+  // .json] — without this override an old `tsc` output silently wins
+  // over the newer .tsx.
+  resolve: {
+    extensions: [".tsx", ".ts", ".jsx", ".mts", ".mjs", ".js", ".json"],
+  },
   server: {
     port: 5173,
     proxy: {

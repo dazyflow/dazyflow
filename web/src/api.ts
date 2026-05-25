@@ -26,17 +26,18 @@ export class APIError extends Error {
 }
 
 async function request<T>(
-  token: string,
+  token: string | null,
   method: string,
   path: string,
   body?: unknown,
 ): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+  if (body) headers["Content-Type"] = "application/json";
   const res = await fetch(API_BASE + path, {
     method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      ...(body ? { "Content-Type": "application/json" } : {}),
-    },
+    headers,
+    credentials: "include",
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
@@ -54,8 +55,20 @@ async function request<T>(
   return res.json() as Promise<T>;
 }
 
+export type SignInResponse = {
+  token: string;
+  subject: string;
+  tenant: string;
+  workspace: string;
+  expires_at: string;
+};
+
 export const api = {
-  whoami: (token: string) => request<WhoAmI>(token, "GET", "/whoami"),
+  signIn: (email: string, password: string) =>
+    request<SignInResponse>(null, "POST", "/auth/signin", { email, password }),
+  signOut: (token: string | null) =>
+    request<void>(token, "POST", "/auth/signout"),
+  whoami: (token: string | null) => request<WhoAmI>(token, "GET", "/whoami"),
   listWorkspaces: (token: string, tenant?: string) => {
     const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
     return request<{ workspaces: string[] }>(token, "GET", "/workspaces" + qs);

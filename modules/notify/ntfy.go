@@ -1,0 +1,145 @@
+package notify
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"time"
+
+	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazy-flow/engine"
+)
+
+func init() {
+	engine.Register(engine.NativeNode{
+		Manifest: core.Manifest{
+			ID:             "ntfy",
+			Version:        "1.0",
+			Label:          "ntfy",
+			Color:          "#52bca6",
+			Icon:           "ntfy",
+			Category:       "network",
+			Provider:       "internal",
+			Tags:           []string{"ntfy", "push", "notify", "report"},
+			Description:    "Send a push notification via a ntfy.sh-compatible server. Posts to {server}/{topic} with the message as the body; optional title/priority/tags/click attach as ntfy headers. Body input port overrides params.message so upstream node output flows in directly.",
+			ExecutionModel: core.ExecutionBatch,
+			ProcessModel:   core.ProcessLongLived,
+			Inputs: []core.Port{
+				{Port: "body", Label: "Message body (overrides params.message)"},
+			},
+			Outputs: []core.Port{
+				{Port: "meta", Label: "Delivery metadata (JSON)"},
+			},
+			ParamsSchema: json.RawMessage(
+				`{
+					"type":"object",
+					"properties":{
+						"server":{"type":"string","default":"https://ntfy.sh","description":"ntfy server base URL. Use your self-hosted server (e.g. https://ntfy.klahr.se) for private topics."},
+						"topic":{"type":"string","description":"Topic name. Anyone subscribed to {server}/{topic} receives the notification."},
+						"message":{"type":"string","description":"Notification body. Overridden by the body input port if connected."},
+						"title":{"type":"string","description":"Optional title (rendered as the notification headline)."},
+						"priority":{"type":"string","enum":["min","low","default","high","max"],"default":"default","description":"Notification priority. max emits urgent alerts on most platforms."},
+						"tags":{"type":"array","items":{"type":"string"},"description":"Emoji shortcodes or words shown next to the title (e.g. [\"warning\",\"penguin\"])."},
+						"click":{"type":"string","description":"Optional URL to open when the notification is tapped."},
+						"token":{"type":"string","description":"Bearer token for authenticated topics. Use ${env:NAME} to pull from a secret."},
+						"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"HTTP timeout in milliseconds."}
+					},
+					"required":["topic"]
+				}`,
+			),
+			Idempotent:  false,
+			RetryPolicy: core.RetryExponentialBackoff,
+		},
+		Execute: executeNtfy,
+	})
+}
+
+func executeNtfy(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
+	topic, err := paramString(job.Params, "topic")
+	if err != nil {
+		return errResult(job, "bad_param", err.Error()), nil
+	}
+	server := paramStringDefault(job.Params, "server", "https://ntfy.sh")
+	server = strings.TrimRight(server, "/")
+
+	body := paramStringDefault(job.Params, "message", "")
+	if input, ok := job.Input["body"]; ok {
+		switch v := input.Inline.(type) {
+		case string:
+			if v != "" {
+				body = v
+			}
+		case []byte:
+			if len(v) > 0 {
+				body = string(v)
+			}
+		case nil:
+			// fall through
+		default:
+			raw, mErr := json.MarshalIndent(v, "", "  ")
+			if mErr != nil {
+				return errResult(job, "bad_input", mErr.Error()), nil
+			}
+			body = string(raw)
+		}
+	}
+
+	url := server + "/" + topic
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url,
+		bytes.NewReader([]byte(body)))
+	if err != nil {
+		return errResult(job, "bad_url", err.Error()), nil
+	}
+
+	if title := paramStringDefault(job.Params, "title", ""); title != "" {
+		req.Header.Set("Title", title)
+	}
+	if priority := paramStringDefault(job.Params, "priority", ""); priority != "" {
+		req.Header.Set("Priority", priority)
+	}
+	if tags := paramStringSlice(job.Params, "tags"); len(tags) > 0 {
+		req.Header.Set("Tags", strings.Join(tags, ","))
+	}
+	if click := paramStringDefault(job.Params, "click", ""); click != "" {
+		req.Header.Set("Click", click)
+	}
+	if token := paramStringDefault(job.Params, "token", ""); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+
+	timeoutMs := paramIntDefault(job.Params, "timeout_ms", 15000)
+	client := &http.Client{Timeout: time.Duration(timeoutMs) * time.Millisecond}
+
+	emitProgress(progress, job, 0.3, "POST "+url)
+	resp, err := client.Do(req)
+	if err != nil {
+		return errResult(job, "send_failed", err.Error()), nil
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return errResult(job, "ntfy_error",
+			fmt.Sprintf("ntfy returned %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))), nil
+	}
+	emitProgress(progress, job, 1.0, fmt.Sprintf("delivered (%d)", resp.StatusCode))
+
+	meta := map[string]any{
+		"server":     server,
+		"topic":      topic,
+		"url":        url,
+		"status":     resp.StatusCode,
+		"bytes_sent": len(body),
+	}
+	return core.Result{
+		JobID:  job.ID,
+		Status: core.StatusOK,
+		Output: map[string]core.Ref{
+			"meta": {MIME: "application/json", Inline: meta},
+		},
+	}, nil
+}

@@ -19,6 +19,7 @@ import (
 	"github.com/go-git/go-billy/v5/osfs"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/cache"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/storage"
 	"github.com/go-git/go-git/v5/storage/filesystem"
@@ -63,7 +64,7 @@ func openDisk(dir string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	storer := filesystem.NewStorage(gitDir, nil)
+	storer := filesystem.NewStorage(gitDir, cache.NewObjectLRUDefault())
 
 	repo, err := openOrInit(storer, wt)
 	if err != nil {
@@ -83,6 +84,33 @@ func openOrInit(storer storage.Storer, wt billy.Filesystem) (*git.Repository, er
 	repo, err = git.Init(storer, wt)
 	if err != nil {
 		return nil, fmt.Errorf("init repo: %w", err)
+	}
+	// Seed an initial commit with a .gitkeep so HEAD resolves to a
+	// real tree from the moment the store opens. Without this,
+	// ListGraphs walks a HEAD whose hash has no reachable object and
+	// go-git nil-derefs inside the filesystem object store.
+	tree, err := repo.Worktree()
+	if err != nil {
+		return nil, fmt.Errorf("seed worktree: %w", err)
+	}
+	f, err := wt.Create(".gitkeep")
+	if err != nil {
+		return nil, fmt.Errorf("seed gitkeep: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return nil, fmt.Errorf("seed gitkeep close: %w", err)
+	}
+	if _, err := tree.Add(".gitkeep"); err != nil {
+		return nil, fmt.Errorf("seed add: %w", err)
+	}
+	if _, err := tree.Commit("init", &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "hazy-flow",
+			Email: "hazy-flow@local",
+			When:  time.Now(),
+		},
+	}); err != nil {
+		return nil, fmt.Errorf("seed commit: %w", err)
 	}
 	return repo, nil
 }

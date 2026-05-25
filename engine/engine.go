@@ -13,9 +13,9 @@ import (
 // GraphProgress wraps a node-level Progress event with the graph context so
 // a single caller channel can multiplex progress from every node in the run.
 type GraphProgress struct {
-	JobID    string
-	NodeID   string
-	Progress core.Progress
+	JobID    string        `json:"job_id"`
+	NodeID   string        `json:"node_id"`
+	Progress core.Progress `json:"progress"`
 }
 
 // GraphResult is the final outcome of a graph run. Nodes contains the

@@ -342,6 +342,26 @@
   font-size: 24px;
   letter-spacing: -0.02em;
 }
+.signin-tabs {
+  display: flex;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+.signin-tabs button {
+  background: none;
+  border: none;
+  padding: var(--space-2) var(--space-3);
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.signin-tabs button.active {
+  color: var(--text);
+  border-bottom-color: var(--accent, currentColor);
+}
 .signin label {
   display: block;
   font-size: 13px;
@@ -433,6 +453,38 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--faint);
+}
+.catalog-group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 4px var(--space-2);
+  margin: 0 0 var(--space-2) 0;
+  border-radius: var(--r-2);
+  cursor: pointer;
+  color: var(--muted);
+  text-align: left;
+}
+.catalog-group-header:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.catalog-group-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 600;
+  flex: 1;
+}
+.catalog-group-count {
+  font-size: 11px;
+  color: var(--faint);
+  background: var(--surface-2);
+  padding: 1px 6px;
+  border-radius: 999px;
 }
 .module-row {
   display: flex;
@@ -564,6 +616,46 @@
   border-color: var(--accent);
   box-shadow: var(--glow-accent-hover);
 }
+/* Per-status border/glow on the whole node. Running pulses so it's
+   unmistakable mid-canvas; terminal states stay static. Selected wins
+   over status for border color so the user can still tell what's
+   focused, but the glow stays. */
+.hz-node.status-running {
+  border-color: var(--status-running);
+  border-width: 2.5px;
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--status-running) 25%, transparent),
+    var(--shadow);
+  animation: hz-running-pulse 1.4s ease-in-out infinite;
+}
+@keyframes hz-running-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 4px color-mix(in srgb, var(--status-running) 25%, transparent),
+      var(--shadow);
+  }
+  50% {
+    box-shadow:
+      0 0 0 9px color-mix(in srgb, var(--status-running) 40%, transparent),
+      var(--shadow);
+  }
+}
+.hz-node.status-succeeded {
+  border-color: var(--status-completed);
+}
+.hz-node.status-failed {
+  border-color: var(--status-failed);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--status-failed) 20%, transparent),
+    var(--shadow);
+}
+.hz-node.status-awaiting {
+  border-color: var(--status-awaiting);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--status-awaiting) 25%, transparent),
+    var(--shadow);
+}
 .hz-node .icon {
   width: 28px;
   height: 28px;
@@ -572,6 +664,13 @@
   border-radius: var(--r-2);
   color: var(--accent-ink);
   flex-shrink: 0;
+}
+/* Branded icons (e.g. Git's official orange mark) carry their own
+   colour and need no gradient backdrop — render them flush. */
+.hz-node .icon.branded,
+.module-row .icon.branded {
+  background: transparent !important;
+  color: inherit;
 }
 .hz-node .label {
   font-weight: 500;
@@ -583,6 +682,58 @@
   color: var(--faint);
   font-size: 11px;
   margin-top: 2px;
+}
+
+/* Live xterm.js console inside the inspector. Fixed height so the
+   terminal has a stable viewport to render into; xterm handles
+   scrollback internally. */
+.live-console {
+  height: 280px;
+  background: #0a0918;
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  padding: 4px;
+  overflow: hidden;
+}
+.live-console .xterm,
+.live-console .xterm-viewport {
+  background: transparent !important;
+}
+
+/* Pipeline log: pinned to the bottom of the canvas, spans full width,
+   collapses to a thin bar. Sits above ReactFlow's z-stack so the
+   minimap doesn't bleed through. */
+.pipeline-log {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+}
+.pipeline-log-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px var(--space-3);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.pipeline-log-bar button {
+  font-size: 12px;
+}
+.pipeline-log-body {
+  padding: var(--space-2);
+}
+.pipeline-log-body .live-console {
+  height: 240px;
+}
+.pipeline-log .muted {
+  color: var(--faint);
 }
 
 /* Status badge (per-node run state) */

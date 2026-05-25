@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"git.sr.ht/~klahr/hazy-flow/auth"
 	"git.sr.ht/~klahr/hazy-flow/core"
 )
 
@@ -34,6 +35,13 @@ type HTTPGateway struct {
 	svc            *Service
 	logger         *log.Logger
 	AllowedOrigins []string // empty = "*"
+
+	// Sessions and Users power the email+password sign-in flow. Both
+	// are optional — leaving them nil disables the /auth endpoints
+	// without breaking API-key auth.
+	Sessions   auth.SessionStore
+	Users      auth.UserStore
+	SessionTTL time.Duration // default 24h when zero
 }
 
 func NewHTTPGateway(svc *Service) *HTTPGateway {
@@ -77,6 +85,8 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 		rw.WriteHeader(http.StatusOK)
 		_, _ = rw.Write([]byte("ok"))
 	})
+	mux.HandleFunc("POST /api/v1/auth/signin", h.signIn)
+	mux.HandleFunc("POST /api/v1/auth/signout", h.signOut)
 	mux.HandleFunc("GET /api/v1/whoami", h.requireAuth(h.whoami))
 	mux.HandleFunc("GET /api/v1/workspaces", h.requireAuth(h.listWorkspaces))
 	mux.HandleFunc("GET /api/v1/modules", h.requireAuth(h.listModules))
@@ -112,11 +122,9 @@ type principalCtx struct{}
 
 func (h *HTTPGateway) requireAuth(next func(rw http.ResponseWriter, r *http.Request, p core.Principal)) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
-		auth := r.Header.Get("Authorization")
-		token := strings.TrimPrefix(auth, "Bearer ")
-		token = strings.TrimSpace(token)
+		token := credentialFromRequest(r)
 		if token == "" {
-			writeJSONError(rw, http.StatusUnauthorized, "missing Authorization: Bearer <token>")
+			writeJSONError(rw, http.StatusUnauthorized, "missing Authorization: Bearer <token> or session cookie")
 			return
 		}
 		p, err := h.svc.Authenticate(r.Context(), token)
@@ -128,13 +136,43 @@ func (h *HTTPGateway) requireAuth(next func(rw http.ResponseWriter, r *http.Requ
 	}
 }
 
+const sessionCookieName = "hazyflow_session"
+
+// credentialFromRequest extracts a bearer credential from either the
+// Authorization header (preferred, used by hzctl and API-key clients)
+// or the session cookie set by /auth/signin (used by the browser).
+func credentialFromRequest(r *http.Request) string {
+	if h := r.Header.Get("Authorization"); h != "" {
+		token := strings.TrimSpace(strings.TrimPrefix(h, "Bearer "))
+		if token != "" {
+			return token
+		}
+	}
+	if c, err := r.Cookie(sessionCookieName); err == nil && c.Value != "" {
+		return c.Value
+	}
+	return ""
+}
+
 func (h *HTTPGateway) withCORSAndLogging(next http.Handler) http.Handler {
 	allowed := "*"
+	allowCreds := false
 	if len(h.AllowedOrigins) > 0 {
 		allowed = strings.Join(h.AllowedOrigins, ", ")
+		// Cookie-based sessions require an explicit origin and
+		// Access-Control-Allow-Credentials: true. Wildcard "*" is
+		// incompatible with credentials per the CORS spec.
+		allowCreds = true
 	}
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		rw.Header().Set("Access-Control-Allow-Origin", allowed)
+		origin := r.Header.Get("Origin")
+		if allowCreds && origin != "" && originAllowed(origin, h.AllowedOrigins) {
+			rw.Header().Set("Access-Control-Allow-Origin", origin)
+			rw.Header().Set("Access-Control-Allow-Credentials", "true")
+			rw.Header().Set("Vary", "Origin")
+		} else {
+			rw.Header().Set("Access-Control-Allow-Origin", allowed)
+		}
 		rw.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
 		rw.Header().Set("Access-Control-Allow-Methods", "GET, PUT, POST, DELETE, OPTIONS")
 		if r.Method == http.MethodOptions {
@@ -145,7 +183,87 @@ func (h *HTTPGateway) withCORSAndLogging(next http.Handler) http.Handler {
 	})
 }
 
+func originAllowed(origin string, allowed []string) bool {
+	for _, a := range allowed {
+		if a == origin {
+			return true
+		}
+	}
+	return false
+}
+
 // --- Handlers ---------------------------------------------------------
+
+// signIn validates an email+password pair, mints a session, and sets
+// the session cookie. The session token is also returned in the body so
+// non-browser clients can hand it back via Authorization: Bearer.
+func (h *HTTPGateway) signIn(rw http.ResponseWriter, r *http.Request) {
+	if h.Sessions == nil || h.Users == nil {
+		writeJSONError(rw, http.StatusNotImplemented, "password sign-in not configured")
+		return
+	}
+	var body struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
+		return
+	}
+	user, err := auth.VerifyPassword(r.Context(), h.Users, body.Email, body.Password)
+	if err != nil {
+		writeJSONError(rw, http.StatusUnauthorized, "invalid email or password")
+		return
+	}
+	ttl := h.SessionTTL
+	if ttl <= 0 {
+		ttl = 24 * time.Hour
+	}
+	sess, token, err := auth.IssueSession(r.Context(), h.Sessions, user, ttl)
+	if err != nil {
+		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("issue session: %v", err))
+		return
+	}
+	http.SetCookie(rw, &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    token,
+		Path:     "/",
+		Expires:  sess.ExpiresAt,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   r.TLS != nil,
+	})
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"token":      token,
+		"subject":    sess.Subject,
+		"tenant":     sess.Tenant,
+		"workspace":  sess.Workspace,
+		"expires_at": sess.ExpiresAt,
+	})
+}
+
+// signOut deletes the server-side session and clears the cookie. It
+// silently no-ops when no session is attached so the browser can hit
+// this on logout without inspecting state first.
+func (h *HTTPGateway) signOut(rw http.ResponseWriter, r *http.Request) {
+	if h.Sessions == nil {
+		writeJSONError(rw, http.StatusNotImplemented, "sessions not configured")
+		return
+	}
+	if token := credentialFromRequest(r); strings.HasPrefix(token, auth.SessionTokenPrefix) {
+		_ = h.Sessions.DeleteSession(r.Context(), token)
+	}
+	http.SetCookie(rw, &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   r.TLS != nil,
+	})
+	rw.WriteHeader(http.StatusNoContent)
+}
 
 // whoami returns the authenticated principal's identity AND the flat
 // set of permissions any of their roles grant. The UI uses this for
