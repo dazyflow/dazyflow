@@ -10,7 +10,7 @@ import (
 
 func init() {
 	min := 1
-	engine.Register(engine.NativeNode{
+	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
 			ID:             "merge",
 			Version:        "1.0",

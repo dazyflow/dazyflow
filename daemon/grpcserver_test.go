@@ -21,7 +21,7 @@ import (
 	"git.sr.ht/~klahr/hazy-flow/daemon"
 	"git.sr.ht/~klahr/hazy-flow/engine"
 	"git.sr.ht/~klahr/hazy-flow/engine/jobstore"
-	_ "git.sr.ht/~klahr/hazy-flow/modules"
+	_ "git.sr.ht/~klahr/hazy-flow/integrations"
 	"git.sr.ht/~klahr/hazy-flow/workspace"
 )
 
@@ -290,11 +290,11 @@ func TestGRPC_GetJobNotFound(t *testing.T) {
 func TestGRPC_ListModules(t *testing.T) {
 	h := newHarness(t)
 	defer h.stop()
-	ms := controlpb.NewModuleServiceClient(h.conn)
+	ms := controlpb.NewDropServiceClient(h.conn)
 
 	ctx, cancel := h.ctxWithAuth(t)
 	defer cancel()
-	resp, err := ms.ListModules(ctx, &controlpb.ListModulesRequest{})
+	resp, err := ms.ListDrops(ctx, &controlpb.ListDropsRequest{})
 	if err != nil {
 		t.Fatalf("ListModules: %v", err)
 	}

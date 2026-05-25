@@ -75,12 +75,17 @@ export const api = {
   },
   listTenants: (token: string) =>
     request<{ tenants: string[] }>(token, "GET", "/admin/tenants"),
-  listModules: (token: string, query?: string) =>
-    request<{ modules: Manifest[] }>(
+  listDrops: async (token: string, query?: string) => {
+    // Daemon emits both "drops" (canonical) and "modules" (legacy alias)
+    // during the rename transition; accept either so older daemons keep
+    // working until we ship the final cutover.
+    const r = await request<{ drops?: Manifest[]; modules?: Manifest[] }>(
       token,
       "GET",
-      "/modules" + (query ? `?q=${encodeURIComponent(query)}` : ""),
-    ),
+      "/drops" + (query ? `?q=${encodeURIComponent(query)}` : ""),
+    );
+    return { drops: r.drops ?? r.modules ?? [] };
+  },
   listGraphs: (token: string, tenant: string, workspace: string) =>
     request<{ graphs: FlowSummary[] }>(
       token,

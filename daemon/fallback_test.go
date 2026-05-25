@@ -232,13 +232,13 @@ func TestEngine_FallbackEdgeDoesNotProvideInput(t *testing.T) {
 	// the captured Job.Input.
 	captured := make(map[string]map[string]core.Ref)
 	reg := engine.NewRegistry()
-	_ = reg.Register(engine.NativeNode{
+	_ = reg.Register(engine.NativeDrop{
 		Manifest: core.Manifest{ID: "src", Outputs: []core.Port{{Port: "out"}}},
 		Execute: func(_ context.Context, j core.Job, _ chan<- core.Progress) (core.Result, error) {
 			return core.Result{Status: core.StatusOK, Output: map[string]core.Ref{"out": {Ref: "src-data"}}}, nil
 		},
 	})
-	_ = reg.Register(engine.NativeNode{
+	_ = reg.Register(engine.NativeDrop{
 		Manifest: core.Manifest{ID: "sink", Inputs: []core.Port{{Port: "in"}}},
 		Execute: func(_ context.Context, j core.Job, _ chan<- core.Progress) (core.Result, error) {
 			captured[j.NodeID] = j.Input

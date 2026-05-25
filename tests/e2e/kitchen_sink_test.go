@@ -18,7 +18,7 @@ import (
 	"git.sr.ht/~klahr/hazy-flow/daemon"
 	"git.sr.ht/~klahr/hazy-flow/engine"
 	"git.sr.ht/~klahr/hazy-flow/engine/jobstore"
-	_ "git.sr.ht/~klahr/hazy-flow/modules"
+	_ "git.sr.ht/~klahr/hazy-flow/integrations"
 	"git.sr.ht/~klahr/hazy-flow/workspace"
 )
 
@@ -55,7 +55,7 @@ func newFullStack(t *testing.T, quotaBytes int64) *fullStack {
 
 	reg := engine.NewRegistry()
 	// "flaky" — uses exponential backoff retry policy.
-	_ = reg.Register(engine.NativeNode{
+	_ = reg.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
 			ID:             "flaky",
 			Version:        "1.0",
@@ -82,7 +82,7 @@ func newFullStack(t *testing.T, quotaBytes int64) *fullStack {
 		},
 	})
 	// "explode" — always fails; used as a fallback target's primary.
-	_ = reg.Register(engine.NativeNode{
+	_ = reg.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
 			ID:             "explode",
 			Version:        "1.0",
@@ -102,7 +102,7 @@ func newFullStack(t *testing.T, quotaBytes int64) *fullStack {
 	for id, m := range engine.Default.Manifests() {
 		nt, _ := engine.Default.Get(id)
 		nativeT := nt
-		_ = reg.Register(engine.NativeNode{
+		_ = reg.Register(engine.NativeDrop{
 			Manifest: m,
 			Execute: func(ctx context.Context, j core.Job, p chan<- core.Progress) (core.Result, error) {
 				return nativeT.Execute(ctx, j, p)

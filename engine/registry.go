@@ -11,16 +11,16 @@ import (
 // safe for concurrent reads; registration is expected to happen during init.
 type Registry struct {
 	mu    sync.RWMutex
-	nodes map[string]NativeNode
+	nodes map[string]NativeDrop
 }
 
 func NewRegistry() *Registry {
-	return &Registry{nodes: make(map[string]NativeNode)}
+	return &Registry{nodes: make(map[string]NativeDrop)}
 }
 
 // Register adds a native module. Returns an error if a module with the same
 // ID is already registered — caller chooses whether to panic or recover.
-func (r *Registry) Register(n NativeNode) error {
+func (r *Registry) Register(n NativeDrop) error {
 	if n.Manifest.ID == "" {
 		return fmt.Errorf("manifest ID is empty")
 	}
@@ -65,7 +65,7 @@ var Default = NewRegistry()
 // Register is a convenience wrapper that registers into Default. Panics on
 // error — registration mistakes should fail loud at startup, not silently
 // produce a half-built engine.
-func Register(n NativeNode) {
+func Register(n NativeDrop) {
 	if err := Default.Register(n); err != nil {
 		panic(err)
 	}

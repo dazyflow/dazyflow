@@ -20,7 +20,7 @@ var noopManifest = core.Manifest{
 	Outputs: []core.Port{{Port: "out"}},
 }
 
-func newEngineWith(t *testing.T, nodes ...NativeNode) *Engine {
+func newEngineWith(t *testing.T, nodes ...NativeDrop) *Engine {
 	t.Helper()
 	reg := NewRegistry()
 	for _, n := range nodes {
@@ -34,7 +34,7 @@ func newEngineWith(t *testing.T, nodes ...NativeNode) *Engine {
 func TestEngine_LinearChain(t *testing.T) {
 	var captured sync.Map // nodeID -> map[string]core.Ref
 
-	e := newEngineWith(t, NativeNode{
+	e := newEngineWith(t, NativeDrop{
 		Manifest: noopManifest,
 		Execute: func(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 			captured.Store(job.NodeID, job.Input)
@@ -106,8 +106,8 @@ func TestEngine_DiamondParallelism(t *testing.T) {
 	}
 
 	e := newEngineWith(t,
-		NativeNode{Manifest: noopManifest, Execute: exec},
-		NativeNode{Manifest: merge, Execute: exec},
+		NativeDrop{Manifest: noopManifest, Execute: exec},
+		NativeDrop{Manifest: merge, Execute: exec},
 	)
 
 	g := core.Graph{
@@ -143,7 +143,7 @@ func TestEngine_DiamondParallelism(t *testing.T) {
 func TestEngine_NodeErrorAborts(t *testing.T) {
 	var ranC atomic.Bool
 
-	e := newEngineWith(t, NativeNode{
+	e := newEngineWith(t, NativeDrop{
 		Manifest: noopManifest,
 		Execute: func(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 			switch job.NodeID {
@@ -188,7 +188,7 @@ func TestEngine_NodeErrorAborts(t *testing.T) {
 
 func TestEngine_ProgressForwarded(t *testing.T) {
 	pct := 0.5
-	e := newEngineWith(t, NativeNode{
+	e := newEngineWith(t, NativeDrop{
 		Manifest: noopManifest,
 		Execute: func(_ context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
 			progress <- core.Progress{JobID: job.ID, NodeID: job.NodeID, Percent: &pct, Message: "halfway"}
@@ -218,7 +218,7 @@ func TestEngine_ProgressForwarded(t *testing.T) {
 func TestEngine_ContextCancel(t *testing.T) {
 	started := make(chan struct{})
 
-	e := newEngineWith(t, NativeNode{
+	e := newEngineWith(t, NativeDrop{
 		Manifest: noopManifest,
 		Execute: func(ctx context.Context, _ core.Job, _ chan<- core.Progress) (core.Result, error) {
 			close(started)

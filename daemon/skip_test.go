@@ -11,7 +11,7 @@ import (
 	"git.sr.ht/~klahr/hazy-flow/daemon"
 	"git.sr.ht/~klahr/hazy-flow/engine"
 	"git.sr.ht/~klahr/hazy-flow/engine/jobstore"
-	_ "git.sr.ht/~klahr/hazy-flow/modules" // register sleep/merge
+	_ "git.sr.ht/~klahr/hazy-flow/integrations" // register sleep/merge
 	"git.sr.ht/~klahr/hazy-flow/workspace"
 )
 
@@ -42,7 +42,7 @@ func newSkipHarness(t *testing.T) *skipHarness {
 	executed := &atomic.Int32{}
 	reg := engine.NewRegistry()
 	// Boom — always errors.
-	_ = reg.Register(engine.NativeNode{
+	_ = reg.Register(engine.NativeDrop{
 		Manifest: alwaysFailManifest,
 		Execute: func(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 			executed.Add(1)
@@ -56,7 +56,7 @@ func newSkipHarness(t *testing.T) *skipHarness {
 	// Source — always emits a constant ref on its "out" port. Needed
 	// because sleep without an input produces no output, which would
 	// confuse merge-style downstream tests.
-	_ = reg.Register(engine.NativeNode{
+	_ = reg.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
 			ID:             "source",
 			Version:        "1.0",
@@ -77,7 +77,7 @@ func newSkipHarness(t *testing.T) *skipHarness {
 		mf := mf
 		nativeT, _ := engine.Default.Get(id)
 		nt := nativeT
-		_ = reg.Register(engine.NativeNode{
+		_ = reg.Register(engine.NativeDrop{
 			Manifest: mf,
 			Execute: func(ctx context.Context, j core.Job, p chan<- core.Progress) (core.Result, error) {
 				return nt.Execute(ctx, j, p)

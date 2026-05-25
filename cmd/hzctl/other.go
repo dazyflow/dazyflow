@@ -44,7 +44,7 @@ func moduleListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := controlpb.NewModuleServiceClient(conn).ListModules(ctx, &controlpb.ListModulesRequest{
+			resp, err := controlpb.NewDropServiceClient(conn).ListDrops(ctx, &controlpb.ListDropsRequest{
 				Query:      query,
 				Categories: categories,
 				Providers:  providers,
@@ -53,18 +53,18 @@ func moduleListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if len(resp.Modules) == 0 {
+			if len(resp.Drops) == 0 {
 				fmt.Println("no modules match the filter")
 				return nil
 			}
 			if verbose {
-				for _, m := range resp.Modules {
+				for _, m := range resp.Drops {
 					printModuleVerbose(m)
 				}
 				return nil
 			}
 			fmt.Printf("%-32s  %-14s  %-20s  %s\n", "ID", "CATEGORY", "PROVIDER", "LABEL")
-			for _, m := range resp.Modules {
+			for _, m := range resp.Drops {
 				fmt.Printf("%-32s  %-14s  %-20s  %s\n",
 					truncate(m.Id, 32),
 					truncate(m.Category, 14),
@@ -97,13 +97,13 @@ func moduleShowCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := controlpb.NewModuleServiceClient(conn).ListModules(ctx, &controlpb.ListModulesRequest{
+			resp, err := controlpb.NewDropServiceClient(conn).ListDrops(ctx, &controlpb.ListDropsRequest{
 				Query: args[0],
 			})
 			if err != nil {
 				return err
 			}
-			for _, m := range resp.Modules {
+			for _, m := range resp.Drops {
 				if m.Id == args[0] {
 					printModuleVerbose(m)
 					return nil

@@ -572,7 +572,7 @@ func (s *Service) ListPendingApprovals(ctx context.Context, p core.Principal, na
 // ListModules returns every manifest the engine's resolver knows about.
 // Module visibility is not currently filtered per tenant; that's a future
 // improvement once tenant-scoped module catalogs land.
-func (s *Service) ListModules(ctx context.Context, p core.Principal) (map[string]core.Manifest, error) {
+func (s *Service) ListDrops(ctx context.Context, p core.Principal) (map[string]core.Manifest, error) {
 	if mp, ok := s.Engine.Resolver.(interface {
 		Manifests() map[string]core.Manifest
 	}); ok {
@@ -581,12 +581,12 @@ func (s *Service) ListModules(ctx context.Context, p core.Principal) (map[string
 	return map[string]core.Manifest{}, nil
 }
 
-// SearchModules applies the supplied filters and free-text query to the
+// SearchDrops applies the supplied filters and free-text query to the
 // resolver's manifest set, returning matches in relevance order (or
 // alphabetical when query is empty). Same tenant-visibility caveat as
 // ListModules.
-func (s *Service) SearchModules(ctx context.Context, p core.Principal, q ModuleSearch) ([]core.Manifest, error) {
-	manifests, err := s.ListModules(ctx, p)
+func (s *Service) SearchDrops(ctx context.Context, p core.Principal, q DropSearch) ([]core.Manifest, error) {
+	manifests, err := s.ListDrops(ctx, p)
 	if err != nil {
 		return nil, err
 	}

@@ -10,7 +10,7 @@ import (
 )
 
 func init() {
-	engine.Register(engine.NativeNode{
+	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
 			ID:             "subgraph",
 			Version:        "1.0",

@@ -4,9 +4,7 @@ import { iconFor, isBrandedIcon } from "../icons";
 import type { Manifest } from "../types";
 
 type Props = {
-  // Kept as `modules` for backwards-compat with the parent prop, even
-  // though the vocabulary in the UI is now "drops" / "integrations".
-  modules: Manifest[];
+  drops: Manifest[];
 };
 
 // Display label for the standard-library fallback group (drops without
@@ -62,7 +60,7 @@ function stripPrefix(label: string, integration: string): string {
   return label;
 }
 
-export function NodeCatalog({ modules }: Props) {
+export function NodeCatalog({ drops }: Props) {
   const [query, setQuery] = useState("");
   const [collapsed, setCollapsed] =
     useState<Record<string, boolean>>(loadCollapsed);
@@ -76,8 +74,8 @@ export function NodeCatalog({ modules }: Props) {
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase().trim();
-    if (!q) return modules;
-    return modules.filter(
+    if (!q) return drops;
+    return drops.filter(
       (m) =>
         m.id.toLowerCase().includes(q) ||
         m.label.toLowerCase().includes(q) ||
@@ -85,7 +83,7 @@ export function NodeCatalog({ modules }: Props) {
         (m.description ?? "").toLowerCase().includes(q) ||
         (m.tags ?? []).some((t) => t.toLowerCase().includes(q)),
     );
-  }, [modules, query]);
+  }, [drops, query]);
 
   // Group by Integration when set; everything else lands in a single
   // "Standard library" bucket pinned to the bottom.
@@ -137,7 +135,7 @@ export function NodeCatalog({ modules }: Props) {
       <div className="panel-head">
         <span>Integrations</span>
         <span style={{ color: "var(--faint)", fontSize: 11 }}>
-          {modules.length}
+          {drops.length}
         </span>
       </div>
       <div className="catalog-search">

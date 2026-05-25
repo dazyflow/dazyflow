@@ -36,7 +36,7 @@ type retryHarness struct {
 	principal core.Principal
 }
 
-func newRetryHarness(t *testing.T, exec engine.NativeNode, workerCfg daemon.WorkerConfig) *retryHarness {
+func newRetryHarness(t *testing.T, exec engine.NativeDrop, workerCfg daemon.WorkerConfig) *retryHarness {
 	t.Helper()
 
 	reg := engine.NewRegistry()
@@ -87,10 +87,10 @@ func newRetryHarness(t *testing.T, exec engine.NativeNode, workerCfg daemon.Work
 	return &retryHarness{svc: svc, jobs: jobs, bus: bus, principal: p}
 }
 
-// flakyNode builds a NativeNode that fails the first `failCount` calls and
+// flakyNode builds a NativeDrop that fails the first `failCount` calls and
 // succeeds afterwards. Calls counter is shared across attempts.
-func flakyNode(failCount *atomic.Int32) engine.NativeNode {
-	return engine.NativeNode{
+func flakyNode(failCount *atomic.Int32) engine.NativeDrop {
+	return engine.NativeDrop{
 		Manifest: flakyManifest,
 		Execute: func(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 			calls := failCount.Add(-1)
@@ -218,7 +218,7 @@ func TestRetry_NoRetryEdgeMeansNoRetry(t *testing.T) {
 	}
 	reg := engine.NewRegistry()
 	_ = reg.Register(exec)
-	_ = reg.Register(engine.NativeNode{
+	_ = reg.Register(engine.NativeDrop{
 		Manifest: sinkManifest,
 		Execute: func(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 			return core.Result{JobID: job.ID, Status: core.StatusOK}, nil

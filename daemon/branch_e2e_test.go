@@ -10,7 +10,7 @@ import (
 	"git.sr.ht/~klahr/hazy-flow/daemon"
 	"git.sr.ht/~klahr/hazy-flow/engine"
 	"git.sr.ht/~klahr/hazy-flow/engine/jobstore"
-	_ "git.sr.ht/~klahr/hazy-flow/modules"
+	_ "git.sr.ht/~klahr/hazy-flow/integrations"
 	"git.sr.ht/~klahr/hazy-flow/workspace"
 )
 
@@ -79,7 +79,7 @@ func TestBranch_RoutesThroughDispatch(t *testing.T) {
 
 			// Replace source with a numeric emitter for this test.
 			reg := engine.NewRegistry()
-			_ = reg.Register(engine.NativeNode{
+			_ = reg.Register(engine.NativeDrop{
 				Manifest: core.Manifest{
 					ID:      "numeric_source",
 					Outputs: []core.Port{{Port: "out"}},
@@ -95,7 +95,7 @@ func TestBranch_RoutesThroughDispatch(t *testing.T) {
 				m := m
 				nt, _ := engine.Default.Get(id)
 				captured := nt
-				_ = reg.Register(engine.NativeNode{
+				_ = reg.Register(engine.NativeDrop{
 					Manifest: m,
 					Execute: func(ctx context.Context, j core.Job, p chan<- core.Progress) (core.Result, error) {
 						return captured.Execute(ctx, j, p)

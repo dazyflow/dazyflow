@@ -193,7 +193,7 @@ func TestMTLS_HappyPath(t *testing.T) {
 	ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+apiKey)
 
 	// Drive a real RPC to confirm the mTLS handshake actually flowed.
-	resp, err := controlpb.NewModuleServiceClient(conn).ListModules(ctx, &controlpb.ListModulesRequest{})
+	resp, err := controlpb.NewDropServiceClient(conn).ListDrops(ctx, &controlpb.ListDropsRequest{})
 	if err != nil {
 		t.Fatalf("ListModules: %v", err)
 	}
@@ -224,7 +224,7 @@ func TestMTLS_ClientWithoutCertRejected(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 	defer cancel()
-	_, err = controlpb.NewModuleServiceClient(conn).ListModules(ctx, &controlpb.ListModulesRequest{})
+	_, err = controlpb.NewDropServiceClient(conn).ListDrops(ctx, &controlpb.ListDropsRequest{})
 	if err == nil {
 		t.Fatal("RPC succeeded without a client cert")
 	}
@@ -253,7 +253,7 @@ func TestMTLS_WrongCARejected(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 	defer cancel()
-	_, err = controlpb.NewModuleServiceClient(conn).ListModules(ctx, &controlpb.ListModulesRequest{})
+	_, err = controlpb.NewDropServiceClient(conn).ListDrops(ctx, &controlpb.ListDropsRequest{})
 	if err == nil {
 		t.Fatal("RPC succeeded with untrusted client cert")
 	}
@@ -274,7 +274,7 @@ func TestMTLS_InsecureClientCannotTalkToTLSServer(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
-	_, err = controlpb.NewModuleServiceClient(conn).ListModules(ctx, &controlpb.ListModulesRequest{})
+	_, err = controlpb.NewDropServiceClient(conn).ListDrops(ctx, &controlpb.ListDropsRequest{})
 	if err == nil {
 		t.Fatal("insecure client succeeded against TLS server")
 	}

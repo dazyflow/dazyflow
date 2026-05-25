@@ -16,7 +16,7 @@ import (
 )
 
 func init() {
-	engine.Register(engine.NativeNode{
+	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
 			ID:             "git_log",
 			Version:        "1.0",

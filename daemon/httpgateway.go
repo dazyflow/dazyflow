@@ -19,7 +19,8 @@ import (
 // non-gRPC clients can drive Hazy Flow. The endpoint surface is small
 // on purpose — just enough to power a visual editor:
 //
-//	GET    /api/v1/modules                                    — list manifests
+//	GET    /api/v1/drops                                      — list drop manifests
+//	GET    /api/v1/modules                                    — alias of /drops (legacy)
 //	GET    /api/v1/graphs?tenant=X&workspace=Y                — list graph IDs
 //	GET    /api/v1/graphs/{tenant}/{workspace}/{id}           — load graph (head)
 //	PUT    /api/v1/graphs/{tenant}/{workspace}/{id}           — save graph
@@ -89,6 +90,9 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/auth/signout", h.signOut)
 	mux.HandleFunc("GET /api/v1/whoami", h.requireAuth(h.whoami))
 	mux.HandleFunc("GET /api/v1/workspaces", h.requireAuth(h.listWorkspaces))
+	mux.HandleFunc("GET /api/v1/drops", h.requireAuth(h.listModules))
+	// Legacy alias — hzctl and older proxies still hit /modules. Keep
+	// it pointing at the same handler so we can deprecate at our pace.
 	mux.HandleFunc("GET /api/v1/modules", h.requireAuth(h.listModules))
 	mux.HandleFunc("GET /api/v1/graphs", h.requireAuth(h.listGraphs))
 	mux.HandleFunc("GET /api/v1/graphs/{tenant}/{workspace}/{id}", h.requireAuth(h.loadGraph))
@@ -303,7 +307,7 @@ func (h *HTTPGateway) listWorkspaces(rw http.ResponseWriter, r *http.Request, p 
 }
 
 func (h *HTTPGateway) listModules(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	q := ModuleSearch{
+	q := DropSearch{
 		Query: r.URL.Query().Get("q"),
 	}
 	if c := r.URL.Query()["category"]; len(c) > 0 {
@@ -315,12 +319,15 @@ func (h *HTTPGateway) listModules(rw http.ResponseWriter, r *http.Request, p cor
 	if t := r.URL.Query()["tag"]; len(t) > 0 {
 		q.Tags = t
 	}
-	mans, err := h.svc.SearchModules(r.Context(), p, q)
+	mans, err := h.svc.SearchDrops(r.Context(), p, q)
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(rw, http.StatusOK, map[string]any{"modules": mans})
+	// Emit both keys: "drops" is the new canonical name; "modules" is
+	// kept for the legacy /api/v1/modules clients (and a transition
+	// window for anything that still reads the old key).
+	writeJSON(rw, http.StatusOK, map[string]any{"drops": mans, "modules": mans})
 }
 
 func (h *HTTPGateway) listGraphs(rw http.ResponseWriter, r *http.Request, p core.Principal) {

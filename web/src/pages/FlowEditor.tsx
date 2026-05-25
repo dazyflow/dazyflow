@@ -110,12 +110,12 @@ function EditorInner() {
     if (!token || !me || !id) return;
     let cancelled = false;
     setError(null);
-    Promise.all([api.listModules(token), api.loadGraph(token, activeTenant, activeWorkspace, id)])
-      .then(([modRes, g]) => {
+    Promise.all([api.listDrops(token), api.loadGraph(token, activeTenant, activeWorkspace, id)])
+      .then(([dropRes, g]) => {
         if (cancelled) return;
-        setManifests(modRes.modules ?? []);
+        setManifests(dropRes.drops);
         const mm = new Map<string, Manifest>();
-        for (const m of modRes.modules ?? []) mm.set(m.id, m);
+        for (const m of dropRes.drops) mm.set(m.id, m);
         setNodes(
           (g.nodes ?? []).map((n, i) => ({
             id: n.id,
@@ -406,7 +406,7 @@ function EditorInner() {
       ref={wrapperRef}
     >
       <div className="catalog">
-        <NodeCatalog modules={manifests} />
+        <NodeCatalog drops={manifests} />
       </div>
       <div className="canvas" onDragOver={onDragOver} onDrop={onDrop}>
         <div className="editor-toolbar">

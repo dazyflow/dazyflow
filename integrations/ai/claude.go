@@ -29,7 +29,7 @@ const (
 )
 
 func init() {
-	engine.Register(engine.NativeNode{
+	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
 			ID:             "claude",
 			Version:        "1.0",

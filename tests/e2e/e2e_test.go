@@ -15,7 +15,7 @@ import (
 	"git.sr.ht/~klahr/hazy-flow/daemon"
 	"git.sr.ht/~klahr/hazy-flow/engine"
 	"git.sr.ht/~klahr/hazy-flow/engine/jobstore"
-	_ "git.sr.ht/~klahr/hazy-flow/modules" // register sleep/merge/file_*
+	_ "git.sr.ht/~klahr/hazy-flow/integrations" // register sleep/merge/file_*
 	"git.sr.ht/~klahr/hazy-flow/workspace"
 )
 

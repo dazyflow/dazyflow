@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	engine.Register(engine.NativeNode{
+	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
 			ID:             "await_approval",
 			Version:        "1.0",

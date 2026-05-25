@@ -34,7 +34,7 @@ func registerTestSteps(t *testing.T) {
 	t.Helper()
 	stepsRegistered.Do(func() {
 		// Echo step: takes whatever is on input "in" and emits it on output "out".
-		engine.Register(engine.NativeNode{
+		engine.Register(engine.NativeDrop{
 			Manifest: core.Manifest{
 				ID:      "test_echo_step",
 				Version: "1.0",
@@ -52,7 +52,7 @@ func registerTestSteps(t *testing.T) {
 		})
 
 		// Fail-on-target step: errors when the item value matches params["fail_when"].
-		engine.Register(engine.NativeNode{
+		engine.Register(engine.NativeDrop{
 			Manifest: core.Manifest{
 				ID:      "test_fail_step",
 				Version: "1.0",
@@ -79,7 +79,7 @@ func registerTestSteps(t *testing.T) {
 
 		// Slow + counter step: bumps a shared counter, sleeps, then returns.
 		// Used to assert concurrency.
-		engine.Register(engine.NativeNode{
+		engine.Register(engine.NativeDrop{
 			Manifest: core.Manifest{
 				ID:      "test_slow_step",
 				Version: "1.0",
@@ -299,7 +299,7 @@ func TestForEach_TemplatesItemFieldsIntoStepParams(t *testing.T) {
 	capturedParams = nil
 	captureMu.Unlock()
 	captureOnce.Do(func() {
-		engine.Register(engine.NativeNode{
+		engine.Register(engine.NativeDrop{
 			Manifest: core.Manifest{
 				ID:      "test_capture_step",
 				Version: "1.0",

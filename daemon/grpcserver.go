@@ -23,7 +23,7 @@ func RegisterGRPC(srv *grpc.Server, s *Service) {
 	h := &grpcHandlers{svc: s}
 	controlpb.RegisterGraphServiceServer(srv, h)
 	controlpb.RegisterJobServiceServer(srv, h)
-	controlpb.RegisterModuleServiceServer(srv, h)
+	controlpb.RegisterDropServiceServer(srv, h)
 }
 
 // AuthInterceptors returns unary and stream interceptors that translate
@@ -91,7 +91,7 @@ func authenticate(ctx context.Context, authn auth.Authenticator) (context.Contex
 type grpcHandlers struct {
 	controlpb.UnimplementedGraphServiceServer
 	controlpb.UnimplementedJobServiceServer
-	controlpb.UnimplementedModuleServiceServer
+	controlpb.UnimplementedDropServiceServer
 
 	svc *Service
 }
@@ -221,7 +221,7 @@ func (h *grpcHandlers) ListJobsForGraph(ctx context.Context, req *controlpb.List
 	return &controlpb.ListJobsResponse{Jobs: out}, nil
 }
 
-func (h *grpcHandlers) ListModules(ctx context.Context, req *controlpb.ListModulesRequest) (*controlpb.ListModulesResponse, error) {
+func (h *grpcHandlers) ListModules(ctx context.Context, req *controlpb.ListDropsRequest) (*controlpb.ListDropsResponse, error) {
 	p, _ := PrincipalFromContext(ctx)
 	// When any search field is set, route through the search path.
 	// Otherwise return everything in alphabetical-by-ID order so
@@ -230,7 +230,7 @@ func (h *grpcHandlers) ListModules(ctx context.Context, req *controlpb.ListModul
 		len(req.Categories) > 0 || len(req.Providers) > 0 || len(req.Tags) > 0)
 	var results []core.Manifest
 	if hasFilter {
-		r, err := h.svc.SearchModules(ctx, p, ModuleSearch{
+		r, err := h.svc.SearchDrops(ctx, p, DropSearch{
 			Query:      req.Query,
 			Categories: req.Categories,
 			Providers:  req.Providers,
@@ -241,17 +241,17 @@ func (h *grpcHandlers) ListModules(ctx context.Context, req *controlpb.ListModul
 		}
 		results = r
 	} else {
-		all, err := h.svc.ListModules(ctx, p)
+		all, err := h.svc.ListDrops(ctx, p)
 		if err != nil {
 			return nil, toStatus(err)
 		}
-		results = searchManifests(all, ModuleSearch{})
+		results = searchManifests(all, DropSearch{})
 	}
 	out := make([]*controlpb.Manifest, 0, len(results))
 	for _, m := range results {
 		out = append(out, manifestToPB(m))
 	}
-	return &controlpb.ListModulesResponse{Modules: out}, nil
+	return &controlpb.ListDropsResponse{Drops: out}, nil
 }
 
 // ============================================================ conversion

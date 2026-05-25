@@ -18,7 +18,7 @@ func TestEngine_EmitsSpans(t *testing.T) {
 	defer otel.SetTracerProvider(prev)
 
 	var seenTraceID string
-	e := newEngineWith(t, NativeNode{
+	e := newEngineWith(t, NativeDrop{
 		Manifest: noopManifest,
 		Execute: func(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 			seenTraceID = job.TraceID

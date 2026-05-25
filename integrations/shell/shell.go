@@ -23,7 +23,7 @@ import (
 )
 
 func init() {
-	engine.Register(engine.NativeNode{
+	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
 			ID:             "shell",
 			Version:        "1.0",

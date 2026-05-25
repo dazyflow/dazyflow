@@ -7,9 +7,9 @@ import (
 	"git.sr.ht/~klahr/hazy-flow/core"
 )
 
-// ModuleSearch describes the filter set ListModules supports. Empty
-// fields are wildcards — an empty ModuleSearch returns everything.
-type ModuleSearch struct {
+// DropSearch describes the filter set ListModules supports. Empty
+// fields are wildcards — an empty DropSearch returns everything.
+type DropSearch struct {
 	// Query substring-matches against ID, Label, Description (case-
 	// insensitive). When present it also drives relevance scoring.
 	Query string
@@ -25,7 +25,7 @@ type ModuleSearch struct {
 // are sorted by relevance when Query is set (highest score first, ties
 // broken alphabetically by ID), or by ID alphabetically when Query is
 // empty.
-func searchManifests(manifests map[string]core.Manifest, q ModuleSearch) []core.Manifest {
+func searchManifests(manifests map[string]core.Manifest, q DropSearch) []core.Manifest {
 	type scored struct {
 		m     core.Manifest
 		score int
@@ -63,7 +63,7 @@ func searchManifests(manifests map[string]core.Manifest, q ModuleSearch) []core.
 
 // filtersPass checks the category/provider/tag filters. Each filter is
 // OR-within (matches any value); across fields the conditions AND.
-func filtersPass(m core.Manifest, q ModuleSearch) bool {
+func filtersPass(m core.Manifest, q DropSearch) bool {
 	if len(q.Categories) > 0 && !slicesContainsIgnoreCase(q.Categories, m.Category) {
 		return false
 	}

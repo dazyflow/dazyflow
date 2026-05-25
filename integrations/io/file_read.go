@@ -13,7 +13,7 @@ import (
 )
 
 func init() {
-	engine.Register(engine.NativeNode{
+	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
 			ID:             "file_read",
 			Version:        "1.0",

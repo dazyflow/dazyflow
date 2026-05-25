@@ -178,13 +178,13 @@ message GetJobRequest           { string job_id = 1; }
 message ListJobsForGraphRequest { string graph_id = 1; }
 message ListJobsResponse        { repeated JobRecord jobs = 1; }
 
-// ========================================================= ModuleService
+// ========================================================= DropService
 
-service ModuleService {
-    rpc ListModules (ListModulesRequest) returns (ListModulesResponse);
+service DropService {
+    rpc ListDrops (ListDropsRequest) returns (ListDropsResponse);
 }
 
-message ListModulesRequest {
+message ListDropsRequest {
     // query substring-matches against id, label, and description.
     // Empty = no full-text filter.
     string query = 1;
@@ -194,4 +194,4 @@ message ListModulesRequest {
     repeated string providers  = 3;
     repeated string tags       = 4;
 }
-message ListModulesResponse { repeated Manifest modules = 1; }
+message ListDropsResponse { repeated Manifest drops = 1; }

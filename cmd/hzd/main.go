@@ -26,7 +26,7 @@ import (
 	"git.sr.ht/~klahr/hazy-flow/engine"
 	"git.sr.ht/~klahr/hazy-flow/engine/jobstore"
 	"git.sr.ht/~klahr/hazy-flow/engine/mcp"
-	_ "git.sr.ht/~klahr/hazy-flow/modules"
+	_ "git.sr.ht/~klahr/hazy-flow/integrations"
 	"git.sr.ht/~klahr/hazy-flow/workspace"
 )
 
