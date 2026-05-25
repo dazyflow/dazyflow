@@ -275,6 +275,21 @@ them visible so we don't re-litigate the design choices.
 - [x] **Engine fix: missing FromPort output = dormant edge** — was a
   latent footgun where downstream of a non-emitting port ran with
   empty input. Now correctly skipped.
+- [x] **Browser UI scaffold (`web/`).** Shipped: Vite + React + TS +
+  React Flow + lucide-react. Synthwave dark palette ported from
+  `../hazy`. App shell (TopBar with mobile hamburger, sidebar nav),
+  bearer-token sign-in, persistent session in localStorage. Pages:
+  pipeline list, pipeline editor (drag-from-catalog onto canvas,
+  edge connect, per-node Inspector with JSON params, Save, Run with
+  live status from SSE), Admin (role-gated, stubbed cards for API
+  keys / users / audit). `core.Manifest.Icon` field populated for
+  every built-in module; the UI maps logical icon names to
+  lucide-react glyphs. `core.Node.Position` round-trips via
+  PUT /graphs. `/api/v1/whoami` returns the principal + flat
+  permission set so the UI can gate features. Production build
+  passes (`npm run build`); typecheck clean. Stubs:
+  schema-driven param form, granular per-node SSE updates, admin
+  endpoints (API keys / users / audit) — none wired yet.
 - [x] **HTTP/JSON gateway for browser/UI access.** Shipped:
   `daemon.HTTPGateway` exposes `/api/v1/{modules,graphs,jobs}` over
   REST with bearer-token auth (reuses the API-key chain), permissive

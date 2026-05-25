@@ -35,6 +35,7 @@ func init() {
 			Version:        "1.0",
 			Label:          "Claude (Anthropic Messages API)",
 			Color:          "#cc7755",
+			Icon:           "sparkles",
 			Category:       "ai",
 			Provider:       "anthropic",
 			Tags:           []string{"llm", "claude", "anthropic", "messages"},

@@ -16,6 +16,7 @@ func init() {
 			Version:        "1.0",
 			Label:          "Subgraph",
 			Color:          "#7d52c4",
+			Icon:           "square-stack",
 			Category:       "flow_control",
 			Provider:       "internal",
 			Tags:           []string{"compose", "reuse", "subgraph", "nested"},

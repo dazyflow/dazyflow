@@ -17,6 +17,7 @@ func init() {
 			Version:        "1.0",
 			Label:          "Sleep",
 			Color:          "#888888",
+			Icon:           "timer",
 			Category:       "flow_control",
 			Provider:       "internal",
 			Tags:           []string{"timing", "delay", "passthrough"},

@@ -20,6 +20,7 @@ func init() {
 			Version:        "1.0",
 			Label:          "Webhook input",
 			Color:          "#aa66dd",
+			Icon:           "webhook",
 			Category:       "trigger",
 			Provider:       "internal",
 			Tags:           []string{"webhook", "trigger", "http", "event"},

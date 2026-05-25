@@ -26,6 +26,7 @@ func init() {
 			Version:        "1.0",
 			Label:          "HTTP request",
 			Color:          "#5599ee",
+			Icon:           "globe",
 			Category:       "network",
 			Provider:       "internal",
 			Tags:           []string{"http", "rest", "api", "webhook"},
@@ -44,14 +45,14 @@ func init() {
 				`{
 					"type":"object",
 					"properties":{
-						"url":{"type":"string"},
-						"method":{"type":"string","default":"GET"},
-						"headers":{"type":"object","additionalProperties":{"type":"string"}},
-						"body":{"type":"string"},
-						"timeout_ms":{"type":"integer","default":30000,"minimum":1},
-						"expect_status":{"type":"array","items":{"type":"integer"}},
-						"max_body_bytes":{"type":"integer","default":10485760,"minimum":0},
-						"allow_private_networks":{"type":"boolean","default":false}
+						"url":{"type":"string","description":"Absolute URL of the resource to call."},
+						"method":{"type":"string","default":"GET","enum":["GET","POST","PUT","PATCH","DELETE","HEAD","OPTIONS"],"description":"HTTP verb. Methods with bodies (POST/PUT/PATCH) use the request_body input or the body param."},
+						"headers":{"type":"object","additionalProperties":{"type":"string"},"description":"Headers to send (one per key). Values may include ${env:NAME} placeholders that resolve to secrets."},
+						"body":{"type":"string","description":"Inline request body. The request_body input port overrides this when connected."},
+						"timeout_ms":{"type":"integer","default":30000,"minimum":1,"description":"Hard deadline for the full request, in milliseconds."},
+						"expect_status":{"type":"array","items":{"type":"integer"},"description":"Accepted response status codes. Empty defaults to 2xx."},
+						"max_body_bytes":{"type":"integer","default":10485760,"minimum":0,"description":"Truncate responses larger than this. Default 10 MiB."},
+						"allow_private_networks":{"type":"boolean","default":false,"description":"Disable the SSRF guard. Only enable when calling a local service intentionally."}
 					},
 					"required":["url"]
 				}`,

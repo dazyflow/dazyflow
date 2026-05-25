@@ -15,6 +15,7 @@ func init() {
 			Version:        "1.0",
 			Label:          "Await approval",
 			Color:          "#e2b14a",
+			Icon:           "user-check",
 			Category:       "flow_control",
 			Provider:       "internal",
 			Tags:           []string{"human_in_the_loop", "approval", "pause", "wait"},

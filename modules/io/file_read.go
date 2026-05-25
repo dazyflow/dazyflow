@@ -19,6 +19,7 @@ func init() {
 			Version:        "1.0",
 			Label:          "File read",
 			Color:          "#4a8",
+			Icon:           "file-input",
 			Category:       "io",
 			Provider:       "internal",
 			Tags:           []string{"filesystem", "read", "sandbox"},

@@ -1,0 +1,240 @@
+/* Hazy Flow visual editor theme.
+   Tokens ported from the sibling ../hazy project (synthwave/violet dark
+   palette). Light mode kept available for completeness but the editor
+   leans dark — the canvas reads better on a near-black surface. */
+
+:root,
+:root[data-theme="dark"] {
+  /* Brand violets */
+  --accent: #9f83fe;
+  --accent-2: #bf7ff8;
+  --accent-deep: #5d09c7;
+  --accent-ink: #140d30;
+  --btn: #470696;
+  --btn-hover: #5d09c7;
+
+  /* Ink */
+  --ink: #e9ecf3;
+  --ink-soft: #d2caff;
+  --muted: #9e9abb;
+  --faint: #706b8e;
+
+  /* Surfaces */
+  --bg: #070513;
+  --surface: #140d30;
+  --surface-2: #28243f;
+  --surface-3: #383451;
+
+  /* Borders */
+  --border: #383451;
+  --border-strong: #4f4a6a;
+
+  /* Status palette */
+  --status-pending: #6b7f96;
+  --status-running: #9f83fe;
+  --status-completed: #4ec96d;
+  --status-failed: #ff6464;
+  --status-on-hold: #e0a93a;
+  --status-warning: #f5a623;
+  --status-awaiting: #e2b14a;
+
+  --danger: var(--status-failed);
+  --success: var(--status-completed);
+
+  /* Shadows + synthwave glow */
+  --shadow: 0 1px 2px rgba(8, 2, 30, 0.45);
+  --shadow-lg: 0 2px 10px rgba(8, 2, 30, 0.55);
+  --shadow-pop: 0 6px 22px rgba(8, 2, 30, 0.65);
+  --glow-accent:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.25),
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 3px 8px color-mix(in srgb, var(--accent) 8%, transparent);
+  --glow-accent-hover:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.25),
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 4px 12px color-mix(in srgb, var(--accent) 16%, transparent);
+
+  /* Typography */
+  --font-sans:
+    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, "JetBrains Mono", "SF Mono", Menlo, monospace;
+
+  /* Spacing scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  /* Radii */
+  --r-1: 4px;
+  --r-2: 8px;
+  --r-3: 12px;
+  --r-pill: 999px;
+
+  /* Layout */
+  --topbar-h: 56px;
+  --sidebar-w: 240px;
+  --catalog-w: 280px;
+  --inspector-w: 320px;
+}
+
+/* Light mode — opt-in via data-theme="light" on <html>. */
+:root[data-theme="light"] {
+  --accent: #470696;
+  --accent-2: #7c24b4;
+  --accent-deep: #340469;
+  --accent-ink: #ffffff;
+  --btn: #470696;
+  --btn-hover: #340469;
+
+  --ink: #1a1f2c;
+  --ink-soft: #3d4456;
+  --muted: #4d5870;
+  --faint: #6c768d;
+
+  --bg: #fbfbfd;
+  --surface: #ffffff;
+  --surface-2: #f4f5f9;
+  --surface-3: #eaedf3;
+
+  --border: #d0d7e3;
+  --border-strong: #aab2c2;
+
+  --status-running: #2f6fea;
+  --status-completed: #1f8a3d;
+  --status-failed: #d23a3a;
+  --status-awaiting: #b07b00;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.45;
+}
+
+/* Background nebula on dark mode — pulled from ../hazy. Two radial
+   gradient washes that anchor the violet brand at the corners. */
+:root[data-theme="dark"] body {
+  background:
+    radial-gradient(
+      ellipse 60vw 40vh at 80% -10%,
+      color-mix(in srgb, var(--accent) 18%, transparent) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 50vw 50vh at -10% 110%,
+      color-mix(in srgb, var(--accent-2) 12%, transparent) 0%,
+      transparent 60%
+    ),
+    var(--bg);
+  background-attachment: fixed;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  background: var(--surface-2);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  padding: var(--space-2) var(--space-3);
+  transition: background 120ms, border-color 120ms;
+}
+button:hover:not(:disabled) {
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+}
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+button.primary {
+  background: var(--btn);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: var(--glow-accent);
+}
+button.primary:hover:not(:disabled) {
+  background: var(--btn-hover);
+  box-shadow: var(--glow-accent-hover);
+}
+button.ghost {
+  background: transparent;
+  border-color: transparent;
+}
+button.ghost:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+button.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+}
+
+input,
+textarea,
+select {
+  font: inherit;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  padding: var(--space-2) var(--space-3);
+  width: 100%;
+}
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--surface-3);
+  border-radius: var(--r-pill);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}

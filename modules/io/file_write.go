@@ -20,6 +20,7 @@ func init() {
 			Version:        "1.0",
 			Label:          "File write",
 			Color:          "#4a8",
+			Icon:           "file-output",
 			Category:       "io",
 			Provider:       "internal",
 			Tags:           []string{"filesystem", "write", "sandbox"},

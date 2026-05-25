@@ -16,6 +16,7 @@ func init() {
 			Version:        "1.0",
 			Label:          "Merge",
 			Color:          "#5a9bd4",
+			Icon:           "git-merge",
 			Category:       "flow_control",
 			Provider:       "internal",
 			Tags:           []string{"fan_in", "aggregate", "join"},

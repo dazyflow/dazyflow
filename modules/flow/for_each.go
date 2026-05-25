@@ -19,6 +19,7 @@ func init() {
 			Version:        "1.0",
 			Label:          "For each",
 			Color:          "#a679d4",
+			Icon:           "repeat",
 			Category:       "flow_control",
 			Provider:       "internal",
 			Tags:           []string{"iterate", "loop", "fan_out", "map"},

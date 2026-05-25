@@ -76,6 +76,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 		rw.WriteHeader(http.StatusOK)
 		_, _ = rw.Write([]byte("ok"))
 	})
+	mux.HandleFunc("GET /api/v1/whoami", h.requireAuth(h.whoami))
 	mux.HandleFunc("GET /api/v1/modules", h.requireAuth(h.listModules))
 	mux.HandleFunc("GET /api/v1/graphs", h.requireAuth(h.listGraphs))
 	mux.HandleFunc("GET /api/v1/graphs/{tenant}/{workspace}/{id}", h.requireAuth(h.loadGraph))
@@ -133,6 +134,30 @@ func (h *HTTPGateway) withCORSAndLogging(next http.Handler) http.Handler {
 }
 
 // --- Handlers ---------------------------------------------------------
+
+// whoami returns the authenticated principal's identity AND the flat
+// set of permissions any of their roles grant. The UI uses this for
+// role gating (whether to show the Admin link, the Edit button, etc.)
+// without re-implementing role unrolling client-side.
+func (h *HTTPGateway) whoami(rw http.ResponseWriter, _ *http.Request, p core.Principal) {
+	permSet := map[core.Permission]struct{}{}
+	for _, role := range p.Roles {
+		for _, perm := range role.Permissions {
+			permSet[perm] = struct{}{}
+		}
+	}
+	perms := make([]core.Permission, 0, len(permSet))
+	for perm := range permSet {
+		perms = append(perms, perm)
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"subject":     p.Subject,
+		"tenant":      p.Tenant,
+		"workspace":   p.Workspace,
+		"roles":       p.Roles,
+		"permissions": perms,
+	})
+}
 
 func (h *HTTPGateway) listModules(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	q := ModuleSearch{

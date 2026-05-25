@@ -82,6 +82,13 @@ type Manifest struct {
 	// titles (short); Description can be 1–2 sentences.
 	Description string `json:"description,omitempty"`
 
+	// Icon is a logical icon name the UI maps to a glyph in its icon
+	// set (today: lucide-react). Values are kebab-case lowercase, e.g.
+	// "webhook", "git-branch", "sparkles". When empty the UI falls
+	// back to a category-derived default. Keep this stable across
+	// versions — the UI relies on it for in-canvas node identity.
+	Icon string `json:"icon,omitempty"`
+
 	// AwaitsApproval signals that this module pauses for external
 	// resume. When true, the engine populates Job.ApprovalURL before
 	// Execute and the worker treats a Result with Status="awaiting"

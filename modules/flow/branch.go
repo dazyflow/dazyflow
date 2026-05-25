@@ -17,6 +17,7 @@ func init() {
 			Version:        "1.0",
 			Label:          "Branch",
 			Color:          "#dd9933",
+			Icon:           "git-branch",
 			Category:       "flow_control",
 			Provider:       "internal",
 			Tags:           []string{"conditional", "routing", "if-else"},
@@ -33,10 +34,18 @@ func init() {
 				"properties":{
 					"condition":{
 						"type":"object",
+						"description":"Test applied to the upstream input. The matching record routes to the 'then' port; the failing one (or any other) routes to 'else'.",
 						"properties":{
-							"field":{"type":"string"},
-							"op":{"type":"string","enum":["equals","not_equals","less_than","greater_than","less_or_equal","greater_or_equal","contains","not_contains","exists","not_exists"]},
-							"value":{}
+							"field":{"type":"string","description":"Dot-path into the input value. Empty matches against the whole input."},
+							"op":{"type":"string","enum":["equals","not_equals","less_than","greater_than","less_or_equal","greater_or_equal","contains","not_contains","exists","not_exists"],"description":"Comparison operator."},
+							"value":{
+								"description":"Comparison target. Type must match the field being compared.",
+								"oneOf":[
+									{"type":"string","title":"String"},
+									{"type":"number","title":"Number"},
+									{"type":"boolean","title":"Boolean"}
+								]
+							}
 						},
 						"required":["op"]
 					}
