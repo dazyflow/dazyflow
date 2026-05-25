@@ -7,6 +7,7 @@ package integrations
 
 import (
 	_ "git.sr.ht/~klahr/hazy-flow/integrations/ai"
+	_ "git.sr.ht/~klahr/hazy-flow/integrations/db"
 	_ "git.sr.ht/~klahr/hazy-flow/integrations/flow"
 	_ "git.sr.ht/~klahr/hazy-flow/integrations/git"
 	_ "git.sr.ht/~klahr/hazy-flow/integrations/io"
