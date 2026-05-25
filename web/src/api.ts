@@ -147,6 +147,13 @@ export const api = {
       "POST",
       `/graphs/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/${encodeURIComponent(id)}/run`,
     ),
+  cancelRun: (token: string, runID: string, reason?: string) =>
+    request<{ status: string }>(
+      token,
+      "POST",
+      `/runs/${encodeURIComponent(runID)}/cancel`,
+      reason ? { reason } : {},
+    ),
   listRuns: (
     token: string,
     tenant: string,

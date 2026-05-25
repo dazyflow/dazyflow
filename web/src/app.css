@@ -1214,6 +1214,18 @@
   font-weight: 500;
 }
 
+/* Inline approval panel — same wedge as inspector-section but tinted
+ * with the awaiting accent so it pops in a crowded inspector. */
+.inspector-section.approve-inline {
+  border-top-color: var(--status-awaiting);
+  background: color-mix(in srgb, var(--status-awaiting) 8%, transparent);
+  padding: var(--space-3);
+  border-radius: var(--r-md, 6px);
+}
+.inspector-section.approve-inline h4 {
+  color: var(--status-awaiting);
+}
+
 /* Role templates (issue-key modal) */
 .role-template-grid {
   display: grid;

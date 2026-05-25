@@ -103,6 +103,40 @@ func TestPerNode_LinearChain_ProgressesThroughDependencies(t *testing.T) {
 	}
 }
 
+// TestPerNode_TimeoutFailsTheNode uses the built-in sleep module to
+// guarantee a node exceeds its declared timeout. The node should land
+// in Failed with code=timeout — distinct enough from a generic
+// runtime error that dashboards can group on it.
+func TestPerNode_TimeoutFailsTheNode(t *testing.T) {
+	h := newWorkerHarness(t, 1)
+
+	g := core.Graph{
+		ID: "tmo", Tenant: "t", Workspace: "ws",
+		Nodes: []core.Node{
+			{
+				ID: "slow", Module: "sleep",
+				Params:         map[string]any{"ms": 2000},
+				TimeoutSeconds: 1,
+			},
+		},
+	}
+	graphRunID, err := h.svc.SubmitGraph(t.Context(), h.principal, g)
+	if err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	terminal := waitForTerminalEvent(t, h.bus, h.jobs, graphRunID, 5*time.Second)
+	if terminal.Status != core.JobStatusFailed {
+		t.Fatalf("graph status = %q, want failed", terminal.Status)
+	}
+	rec, _ := h.jobs.Get(t.Context(), daemon.NodeJobID(graphRunID, "slow"))
+	if rec.Status != core.JobStatusFailed {
+		t.Errorf("node status = %q, want failed", rec.Status)
+	}
+	if rec.Result == nil || rec.Result.Error == nil || rec.Result.Error.Code != "timeout" {
+		t.Errorf("error = %+v, want code=timeout", rec.Result.Error)
+	}
+}
+
 func TestPerNode_DiamondSpreadsAcrossWorkers(t *testing.T) {
 	h := newWorkerHarness(t, 3)
 

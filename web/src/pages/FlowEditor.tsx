@@ -24,7 +24,7 @@ import {
   type NodeChange,
   type ReactFlowInstance,
 } from "@xyflow/react";
-import { ArrowLeft, Play, Save, Settings as SettingsIcon, PanelsLeftBottom } from "lucide-react";
+import { ArrowLeft, Play, Save, Settings as SettingsIcon, PanelsLeftBottom, Square } from "lucide-react";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import type { Graph, GraphTrigger, Manifest, JobStatus, Visibility } from "../types";
@@ -66,6 +66,7 @@ function EditorInner() {
   const [name, setName] = useState<string | undefined>(undefined);
   const [icon, setIcon] = useState<string | undefined>(undefined);
   const [description, setDescription] = useState<string | undefined>(undefined);
+  const [timeoutSeconds, setTimeoutSeconds] = useState<number | undefined>(undefined);
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Per-node params kept outside React Flow's node-data so the inspector
   // can mutate them without forcing canvas re-layout. They're merged
@@ -76,6 +77,11 @@ function EditorInner() {
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // lockedRunID is set when ANY run of this flow (this tab or another)
+  // is still in-flight. Save is gated on it so two editors can't race
+  // a save against a live run.
+  const [lockedRunID, setLockedRunID] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState(false);
   // The most-recent run for this graph in this session. Used by the
   // Inspector's Output panel to fetch per-node results. Persisted via
   // localStorage so a page refresh keeps the panel populated.
@@ -146,6 +152,7 @@ function EditorInner() {
         setName(g.name);
         setIcon(g.icon);
         setDescription(g.description);
+        setTimeoutSeconds(g.timeout_seconds);
         setDirty(false);
       })
       .catch((e) => {
@@ -268,6 +275,7 @@ function EditorInner() {
     name,
     icon,
     description,
+    timeout_seconds: timeoutSeconds,
     ...overrides,
   });
 
@@ -279,11 +287,34 @@ function EditorInner() {
       await api.saveGraph(token, buildGraph());
       setDirty(false);
     } catch (e) {
-      setError((e as Error).message);
+      const msg = (e as Error).message;
+      setError(msg);
+      // A 409 from the gateway means another run started between the
+      // last lock check and this save. Re-pull so the UI catches up.
+      if (msg.toLowerCase().includes("active run") || msg.includes("409")) {
+        void refreshLock();
+      }
     } finally {
       setSaving(false);
     }
   };
+
+  // refreshLock asks the daemon whether any run of this flow is still
+  // active. The server is the source of truth — another tab or a
+  // scheduled trigger can have started a run this editor doesn't know
+  // about. Called on mount, after Run, and after every SSE terminal.
+  const refreshLock = useCallback(async () => {
+    if (!token || !id) return;
+    try {
+      const { runs } = await api.listRuns(token, activeTenant, activeWorkspace, id, { limit: 20 });
+      const active = runs.find(
+        (r) => r.status === "queued" || r.status === "running" || r.status === "awaiting",
+      );
+      setLockedRunID(active?.id ?? null);
+    } catch {
+      // Best-effort; a transient failure shouldn't break the editor.
+    }
+  }, [token, id, activeTenant, activeWorkspace]);
 
   // subscribeToRun opens the SSE stream for runID and applies per-node
   // status frames to the canvas. Shared by Run (new run just started)
@@ -350,6 +381,10 @@ function EditorInner() {
           }
           if (kind === "terminal") {
             abort.abort();
+            // The run that just held the lock might be the only active
+            // one; ask the server before clearing the editor lock so
+            // a parallel run from another tab keeps the gate up.
+            void refreshLock();
           }
         },
         abort.signal,
@@ -368,6 +403,7 @@ function EditorInner() {
     try {
       const { job_id } = await api.runGraph(token, activeTenant, activeWorkspace, id);
       setCurrentRunID(job_id);
+      setLockedRunID(job_id);
       if (id) localStorage.setItem(`hazyflow.lastRun.${id}`, job_id);
       subscribeToRun(job_id);
     } catch (e) {
@@ -390,6 +426,12 @@ function EditorInner() {
   // terminal runs too, so this populates the dots for a graph the user
   // last viewed (or last ran from a different tab) without making them
   // hit Run again.
+  // Pull the lock state on first paint so the Save button reflects an
+  // already-active run from another tab without waiting for SSE.
+  useEffect(() => {
+    void refreshLock();
+  }, [refreshLock]);
+
   useEffect(() => {
     if (!currentRunID) return;
     const cancel = subscribeToRun(currentRunID);
@@ -442,11 +484,17 @@ function EditorInner() {
           </button>
           <button
             onClick={save}
-            disabled={!dirty || saving || !hasPerm("graph:edit")}
-            title={hasPerm("graph:edit") ? undefined : "Read-only — missing graph:edit"}
+            disabled={!dirty || saving || !hasPerm("graph:edit") || !!lockedRunID}
+            title={
+              !hasPerm("graph:edit")
+                ? "Read-only — missing graph:edit"
+                : lockedRunID
+                ? `Locked — run ${lockedRunID.slice(0, 8)} is in progress`
+                : undefined
+            }
           >
             <Save size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-            {saving ? "Saving…" : dirty ? "Save" : "Saved"}
+            {lockedRunID ? "Locked" : saving ? "Saving…" : dirty ? "Save" : "Saved"}
           </button>
           {me && id && (
             <RunHistory
@@ -460,10 +508,12 @@ function EditorInner() {
           <button
             className="primary"
             onClick={runWithLiveStatus}
-            disabled={running || dirty || !hasPerm("graph:run")}
+            disabled={running || dirty || !hasPerm("graph:run") || !!lockedRunID}
             title={
               dirty
                 ? "Save first"
+                : lockedRunID
+                ? `Already running (${lockedRunID.slice(0, 8)})`
                 : hasPerm("graph:run")
                 ? undefined
                 : "Missing graph:run"
@@ -472,6 +522,37 @@ function EditorInner() {
             <Play size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
             {running ? "Running…" : "Run"}
           </button>
+          {lockedRunID && (
+            <button
+              className="ghost"
+              disabled={cancelling || !hasPerm("graph:run")}
+              title={
+                hasPerm("graph:run")
+                  ? `Cancel run ${lockedRunID.slice(0, 8)}`
+                  : "Missing graph:run"
+              }
+              onClick={async () => {
+                if (!token || !lockedRunID) return;
+                setCancelling(true);
+                setError(null);
+                try {
+                  await api.cancelRun(token, lockedRunID, "cancelled from editor");
+                  // The dispatcher's Terminal event will fire via SSE
+                  // and refreshLock will follow; just nudge the local
+                  // running flag so the Run button re-enables fast.
+                  setRunning(false);
+                  void refreshLock();
+                } catch (e) {
+                  setError((e as Error).message);
+                } finally {
+                  setCancelling(false);
+                }
+              }}
+            >
+              <Square size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+              {cancelling ? "Cancelling…" : "Cancel"}
+            </button>
+          )}
           <button
             className="ghost"
             onClick={() =>
@@ -601,6 +682,7 @@ function EditorInner() {
             name,
             icon,
             description,
+            timeout_seconds: timeoutSeconds,
           }}
           onClose={() => setSettingsOpen(false)}
           onSave={async (next) => {
@@ -609,6 +691,7 @@ function EditorInner() {
             setName(next.name);
             setIcon(next.icon);
             setDescription(next.description);
+            setTimeoutSeconds(next.timeout_seconds);
             // Owner stays as-is — UI doesn't expose transfer; only the
             // daemon (on admin save) can change it.
             // Persist immediately so the modal's Save button means what
@@ -625,6 +708,7 @@ function EditorInner() {
                   name: next.name,
                   icon: next.icon,
                   description: next.description,
+                  timeout_seconds: next.timeout_seconds,
                 }),
               );
               setDirty(false);

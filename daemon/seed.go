@@ -148,7 +148,13 @@ func (s *Service) SubmitGraphWithSeed(
 				Status: core.JobStatusSucceeded,
 			}})
 		}
+		return graphRunID, nil
 	}
+
+	// Arm the wall-time watchdog. The goroutine subscribes to the bus
+	// inside itself so a terminal event from the dispatcher exits it
+	// early; the timer is the safety net when nothing completes in time.
+	s.startGraphTimeoutWatchdog(graphRunID, g.Tenant, g.Workspace, s.effectiveGraphTimeout(g))
 	return graphRunID, nil
 }
 

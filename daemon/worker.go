@@ -192,7 +192,12 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 		status = core.JobStatusFailed
 	}
 
-	if status == core.JobStatusFailed {
+	// Timeouts are intentional caps, not transient blips — retrying
+	// would just waste the next budget too. Skip retry whenever the
+	// failure carries the synthesized timeout code so a 1s cap means 1s.
+	skipRetry := result.Error != nil && result.Error.Code == "timeout"
+
+	if status == core.JobStatusFailed && !skipRetry {
 		if when, reason := w.maybeScheduleRetry(graph, rec); !when.IsZero() {
 			if err := w.store.Requeue(context.Background(), rec.ID, when); err == nil {
 				w.cfg.Logger.Printf("[%s] retrying %s (attempt %d → next at %v)", w.cfg.ID, rec.ID, rec.Attempt, when.Format(time.RFC3339Nano))
@@ -271,9 +276,36 @@ func (w *Worker) runNode(ctx context.Context, graph core.Graph, rec core.JobReco
 			}})
 		}
 	}()
-	result, err := w.engine.RunNode(ctx, graph, rec.GraphRunID, rec.NodeID, prior, nodeProgress)
+	// Per-node wall-time cap. The context deadline reaches every
+	// well-behaved Execute (engine.RunNode passes it through to the
+	// transport, which passes it through to http.NewRequestWithContext,
+	// sandbox exec, etc.). Modules that ignore ctx will exceed the
+	// timeout — we still surface "timeout" as the failure code below
+	// so the dispatcher's failure-propagation rules can react cleanly.
+	execCtx := ctx
+	var cancelDeadline context.CancelFunc
+	if node, ok := graph.Node(rec.NodeID); ok && node.TimeoutSeconds > 0 {
+		execCtx, cancelDeadline = context.WithTimeout(ctx, time.Duration(node.TimeoutSeconds)*time.Second)
+		defer cancelDeadline()
+	}
+	result, err := w.engine.RunNode(execCtx, graph, rec.GraphRunID, rec.NodeID, prior, nodeProgress)
 	close(nodeProgress)
 	<-forwardDone
+
+	// Translate a deadline expiry into a structured failure. Without
+	// this, ctx.Err() bubbling up as a generic error makes per-node
+	// timeouts indistinguishable from a network blip in dashboards.
+	if execCtx != ctx && errors.Is(execCtx.Err(), context.DeadlineExceeded) {
+		node, _ := graph.Node(rec.NodeID)
+		return core.Result{
+			JobID:  rec.ID,
+			Status: core.StatusError,
+			Error: &core.JobError{
+				Code:    "timeout",
+				Message: fmt.Sprintf("node exceeded %ds timeout", node.TimeoutSeconds),
+			},
+		}, nil
+	}
 	return result, err
 }
 

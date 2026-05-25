@@ -8,6 +8,7 @@ export type Node = {
   params: Record<string, unknown>;
   env?: Record<string, string>;
   position?: Position;
+  timeout_seconds?: number;
 };
 
 export type Edge = {
@@ -48,6 +49,7 @@ export type Graph = {
   name?: string;
   icon?: string;
   description?: string;
+  timeout_seconds?: number;
 };
 
 export type Port = {

@@ -77,6 +77,12 @@ type Service struct {
 	// read-only Authenticator interface minimal; the admin path needs
 	// list + revoke + put which would bloat that contract otherwise.
 	AdminKeys auth.AdminKeyStore
+
+	// DefaultGraphTimeoutSeconds is applied to runs whose graph has no
+	// TimeoutSeconds set. Zero = no daemon-wide default. Configured by
+	// the `-default-graph-timeout` flag on hzd; doesn't override an
+	// explicit per-graph value.
+	DefaultGraphTimeoutSeconds int
 }
 
 func (s *Service) workerID() string {
@@ -104,6 +110,28 @@ func (s *Service) Authenticate(ctx context.Context, credential string) (core.Pri
 	return s.Auth.Authenticate(ctx, credential)
 }
 
+// hasActiveRun reports whether any non-terminal graph-record exists
+// for (tenant, workspace, graphID). One Limit=1 query per non-terminal
+// status keeps the cost bounded regardless of run history.
+func (s *Service) hasActiveRun(ctx context.Context, tenant, ws, graphID string) (bool, error) {
+	for _, st := range []core.JobStatus{core.JobStatusQueued, core.JobStatusRunning, core.JobStatusAwaiting} {
+		recs, err := s.Jobs.ListGraphRuns(ctx, core.ListGraphRunsOpts{
+			Tenant:    tenant,
+			Workspace: ws,
+			GraphID:   graphID,
+			Status:    st,
+			Limit:     1,
+		})
+		if err != nil {
+			return false, err
+		}
+		if len(recs) > 0 {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // SaveGraph persists a graph as principal. Tenant/workspace on the graph
 // must match the principal's scope. Returns the new commit hash.
 func (s *Service) SaveGraph(ctx context.Context, p core.Principal, g core.Graph) (string, error) {
@@ -129,6 +157,16 @@ func (s *Service) SaveGraph(ctx context.Context, p core.Principal, g core.Graph)
 		// permission check needs to land.
 		if err := core.AuthorizeGraphEdit(p, prior); err != nil {
 			return "", err
+		}
+		// Lock the flow while any run of it is still active. Runs pin
+		// the graph payload at submit time so edits aren't a
+		// correctness hazard, but the UX promise is "what you see is
+		// what's running" — a silent in-place edit while someone is
+		// staring at a live run breaks that.
+		if active, err := s.hasActiveRun(ctx, g.Tenant, g.Workspace, g.ID); err != nil {
+			return "", fmt.Errorf("check active runs: %w", err)
+		} else if active {
+			return "", fmt.Errorf("flow %q has an active run: %w", g.ID, core.ErrConflict)
 		}
 		// Preserve the original Owner unless an admin is explicitly
 		// transferring it. Mirror Visibility from the new payload so

@@ -57,6 +57,14 @@ func (d *Dispatcher) AdvanceAfterCompletion(
 	resultErr *core.JobError,
 ) {
 	d.PublishNodeStatus(graphRunID, nodeID, status, resultErr)
+	// Cancel guard: if Service.CancelGraphRun has already marked the
+	// graph-record terminal, the cancel path published its own Terminal
+	// event and the user's intent is "no more downstream work." Skip
+	// dispatchReady and maybeCompleteGraph so a node that finished mid
+	// cancel doesn't enqueue dependents or double-publish completion.
+	if grec, err := d.store.Get(ctx, graphRunID); err == nil && core.IsTerminalStatus(grec.Status) {
+		return
+	}
 	if status == core.JobStatusSucceeded ||
 		(status == core.JobStatusFailed && !d.failurePropagates(graph, nodeID)) {
 		d.dispatchReady(ctx, graph, graphRunID, nodeID)

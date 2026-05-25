@@ -101,6 +101,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/graphs/{tenant}/{workspace}/{id}/run", h.requireAuth(h.runGraph))
 	mux.HandleFunc("GET /api/v1/graphs/{tenant}/{workspace}/{id}/runs", h.requireAuth(h.listRuns))
 	mux.HandleFunc("GET /api/v1/runs", h.requireAuth(h.listAllRuns))
+	mux.HandleFunc("POST /api/v1/runs/{runID}/cancel", h.requireAuth(h.cancelRun))
 	mux.HandleFunc("GET /api/v1/approvals/pending", h.requireAuth(h.listPendingApprovals))
 	mux.HandleFunc("POST /api/v1/approvals/{runID}/{nodeID}", h.requireAuth(h.approveAuthed))
 	mux.HandleFunc("GET /api/v1/admin/api-keys", h.requireAuth(h.listAPIKeys))
@@ -372,6 +373,12 @@ func (h *HTTPGateway) saveGraph(rw http.ResponseWriter, r *http.Request, p core.
 	g.ID = r.PathValue("id")
 	commit, err := h.svc.SaveGraph(r.Context(), p, g)
 	if err != nil {
+		// 409 when the flow is locked by an in-flight run so the UI can
+		// surface "Locked — run in progress" instead of a generic 400.
+		if errors.Is(err, core.ErrConflict) {
+			writeJSONError(rw, http.StatusConflict, err.Error())
+			return
+		}
 		writeJSONError(rw, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -624,6 +631,39 @@ func (h *HTTPGateway) approveAuthed(rw http.ResponseWriter, r *http.Request, p c
 		return
 	}
 	writeJSON(rw, http.StatusOK, map[string]string{"status": "resumed", "decision": decision})
+}
+
+// cancelRun aborts an in-flight run. Body is an optional
+// {"reason":"..."} for the audit trail. Maps service-layer errors to
+// the conventional status codes: 404 unknown run, 409 already
+// terminal, 403 unauthorized.
+func (h *HTTPGateway) cancelRun(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	runID := r.PathValue("runID")
+	var body struct {
+		Reason string `json:"reason"`
+	}
+	// Empty body is fine — keep the API ergonomic for the UI's
+	// no-arg cancel click. Only fail on malformed JSON.
+	if r.ContentLength > 0 {
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
+			return
+		}
+	}
+	if err := h.svc.CancelGraphRun(r.Context(), p, runID, body.Reason); err != nil {
+		switch {
+		case errors.Is(err, core.ErrNotFound):
+			writeJSONError(rw, http.StatusNotFound, err.Error())
+		case errors.Is(err, core.ErrConflict):
+			writeJSONError(rw, http.StatusConflict, err.Error())
+		case errors.Is(err, core.ErrUnauthorized):
+			writeJSONError(rw, http.StatusForbidden, err.Error())
+		default:
+			writeJSONError(rw, http.StatusInternalServerError, err.Error())
+		}
+		return
+	}
+	writeJSON(rw, http.StatusOK, map[string]string{"status": "cancelled"})
 }
 
 func (h *HTTPGateway) runGraph(rw http.ResponseWriter, r *http.Request, p core.Principal) {

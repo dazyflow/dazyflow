@@ -19,6 +19,13 @@ type Node struct {
 	// the engine. Optional; nil-position nodes are auto-laid-out by
 	// the UI on first open.
 	Position *Position `json:"position,omitempty"`
+
+	// TimeoutSeconds bounds the per-execution wall-time of this node.
+	// On expiry the worker marks the node Failed with code=timeout —
+	// existing failure-propagation (on_error / fallback edges) then
+	// applies. Zero / unset = no per-node timeout; the graph-level
+	// TimeoutSeconds (if any) still applies.
+	TimeoutSeconds int `json:"timeout_seconds,omitempty"`
 }
 
 // Position is a canvas X/Y coordinate. Pixels in the UI's coordinate
@@ -66,6 +73,14 @@ type Graph struct {
 	// treat an empty Owner as "no private-mode owner exists" which
 	// effectively forces org mode regardless of Visibility.
 	Owner string `json:"owner,omitempty"`
+
+	// TimeoutSeconds caps the wall-time of any run of this graph. When
+	// elapsed, the daemon auto-cancels the run via the same path as a
+	// manual cancel — already-running nodes finish naturally, but no
+	// further downstream work is dispatched. Zero / unset = no cap.
+	// The hzd `-default-graph-timeout` flag is applied at SubmitGraph
+	// time when this field is unset.
+	TimeoutSeconds int `json:"timeout_seconds,omitempty"`
 }
 
 // Visibility enumerates the access modes a flow can have. Values are

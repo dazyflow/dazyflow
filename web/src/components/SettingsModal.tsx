@@ -175,6 +175,27 @@ export function SettingsModal({ graph, onClose, onSave }: Props) {
               </div>
               <div className="sf-field">
                 <div className="label-row">
+                  <label>Wall-time timeout (seconds)</label>
+                </div>
+                <input
+                  type="number"
+                  min={0}
+                  value={draft.timeout_seconds ?? 0}
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    setDraft({
+                      ...draft,
+                      timeout_seconds: Number.isFinite(n) && n > 0 ? n : undefined,
+                    });
+                  }}
+                />
+                <div className="desc">
+                  Auto-cancel the run if it hasn't finished by then. 0 / blank
+                  = no cap (the daemon's default still applies if one is set).
+                </div>
+              </div>
+              <div className="sf-field">
+                <div className="label-row">
                   <label>Flow ID</label>
                 </div>
                 <input
