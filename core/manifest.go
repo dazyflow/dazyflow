@@ -97,6 +97,18 @@ type Manifest struct {
 	// versions — the UI relies on it for in-canvas node identity.
 	Icon string `json:"icon,omitempty"`
 
+	// BrandLogo is an asset path (or URL) for a vendor mark — the
+	// recognizable logo for a third-party service (Excel's green X,
+	// GitHub's octocat, Slack's hash). When set, the UI prefers it
+	// over Icon in the catalog/palette and falls back to Icon inside
+	// the graph canvas (where a small glyph reads better than a
+	// detailed logo). Paths starting with "/" are resolved against
+	// the web app's static asset root (web/public); full URLs are
+	// also accepted but discouraged (offline reliability, brand
+	// guideline drift). Leave empty for first-party modules — Icon
+	// alone is the right choice for built-ins like branch/merge/file_*.
+	BrandLogo string `json:"brand_logo,omitempty"`
+
 	// AwaitsApproval signals that this module pauses for external
 	// resume. When true, the engine populates Job.ApprovalURL before
 	// Execute and the worker treats a Result with Status="awaiting"

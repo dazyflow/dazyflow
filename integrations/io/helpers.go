@@ -39,6 +39,24 @@ func paramBool(params map[string]any, key string) (bool, bool) {
 	return b, ok
 }
 
+// paramInt accepts JSON numbers (float64), Go ints, or int64.
+// Returns (value, true) when the key is present and numeric.
+func paramInt(params map[string]any, key string) (int, bool) {
+	v, ok := params[key]
+	if !ok {
+		return 0, false
+	}
+	switch n := v.(type) {
+	case float64:
+		return int(n), true
+	case int:
+		return n, true
+	case int64:
+		return int(n), true
+	}
+	return 0, false
+}
+
 func errResult(job core.Job, code, msg string) core.Result {
 	return core.Result{
 		JobID:  job.ID,
