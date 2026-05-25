@@ -1,4 +1,17 @@
-import type { Graph, Manifest, JobRecord, JobStatus, RunSummary, WhoAmI } from "./types";
+import type {
+  APIKeySummary,
+  FlowSummary,
+  Graph,
+  IssuedAPIKey,
+  Manifest,
+  JobRecord,
+  JobStatus,
+  PendingApproval,
+  Role,
+  RunSummary,
+  UserSummary,
+  WhoAmI,
+} from "./types";
 
 // API_BASE: dev defaults to relative "/api/v1" (proxied by Vite to the
 // daemon); prod builds can hardcode an absolute URL via VITE_API_BASE.
@@ -43,6 +56,12 @@ async function request<T>(
 
 export const api = {
   whoami: (token: string) => request<WhoAmI>(token, "GET", "/whoami"),
+  listWorkspaces: (token: string, tenant?: string) => {
+    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
+    return request<{ workspaces: string[] }>(token, "GET", "/workspaces" + qs);
+  },
+  listTenants: (token: string) =>
+    request<{ tenants: string[] }>(token, "GET", "/admin/tenants"),
   listModules: (token: string, query?: string) =>
     request<{ modules: Manifest[] }>(
       token,
@@ -50,7 +69,7 @@ export const api = {
       "/modules" + (query ? `?q=${encodeURIComponent(query)}` : ""),
     ),
   listGraphs: (token: string, tenant: string, workspace: string) =>
-    request<{ graphs: string[] }>(
+    request<{ graphs: FlowSummary[] }>(
       token,
       "GET",
       `/graphs?tenant=${encodeURIComponent(tenant)}&workspace=${encodeURIComponent(workspace)}`,
@@ -93,12 +112,20 @@ export const api = {
   },
   listAllRuns: (
     token: string,
-    opts: { limit?: number; offset?: number; status?: JobStatus } = {},
+    opts: {
+      limit?: number;
+      offset?: number;
+      status?: JobStatus;
+      workspace?: string;
+      tenant?: string;
+    } = {},
   ) => {
     const qs = new URLSearchParams();
     qs.set("limit", String(opts.limit ?? 50));
     if (opts.offset) qs.set("offset", String(opts.offset));
     if (opts.status) qs.set("status", opts.status);
+    if (opts.workspace) qs.set("workspace", opts.workspace);
+    if (opts.tenant) qs.set("tenant", opts.tenant);
     return request<{ runs: RunSummary[] }>(
       token,
       "GET",
@@ -107,6 +134,60 @@ export const api = {
   },
   getJob: (token: string, jobID: string) =>
     request<JobRecord>(token, "GET", `/jobs/${encodeURIComponent(jobID)}`),
+  listPendingApprovals: (token: string, opts: { workspace?: string; tenant?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.workspace) qs.set("workspace", opts.workspace);
+    if (opts.tenant) qs.set("tenant", opts.tenant);
+    const q = qs.toString();
+    return request<{ approvals: PendingApproval[] }>(
+      token,
+      "GET",
+      "/approvals/pending" + (q ? "?" + q : ""),
+    );
+  },
+  listAPIKeys: (token: string, tenant?: string) => {
+    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
+    return request<{ keys: APIKeySummary[] }>(
+      token,
+      "GET",
+      "/admin/api-keys" + qs,
+    );
+  },
+  issueAPIKey: (
+    token: string,
+    params: {
+      id?: string;
+      subject: string;
+      tenant?: string;
+      workspace?: string;
+      roles: Role[];
+    },
+  ) => request<IssuedAPIKey>(token, "POST", "/admin/api-keys", params),
+  revokeAPIKey: (token: string, id: string) =>
+    request<void>(token, "DELETE", `/admin/api-keys/${encodeURIComponent(id)}`),
+  listUsers: (token: string, tenant?: string) => {
+    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
+    return request<{ users: UserSummary[] }>(
+      token,
+      "GET",
+      "/admin/users" + qs,
+    );
+  },
+  approveNode: (
+    token: string,
+    runID: string,
+    nodeID: string,
+    decision: "approve" | "reject",
+    comment?: string,
+  ) => {
+    const qs = new URLSearchParams({ decision });
+    if (comment) qs.set("comment", comment);
+    return request<{ status: string; decision: string }>(
+      token,
+      "POST",
+      `/approvals/${encodeURIComponent(runID)}/${encodeURIComponent(nodeID)}?${qs.toString()}`,
+    );
+  },
   getNodeRecord: (token: string, runID: string, nodeID: string) =>
     request<JobRecord>(
       token,

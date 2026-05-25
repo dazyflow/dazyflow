@@ -35,8 +35,8 @@ src/
     Inspector.tsx — right panel: node id, label, params (JSON editor)
   pages/
     SignIn.tsx        — bearer-token entry
-    PipelineList.tsx  — graphs in current workspace
-    PipelineEditor.tsx — React Flow canvas, save, run, live status
+    FlowList.tsx      — flows in current workspace
+    FlowEditor.tsx    — React Flow canvas, save, run, live status
     Admin.tsx         — gated by tenant:admin / graph:admin; stubs
 ```
 

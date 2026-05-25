@@ -18,7 +18,7 @@ function EditorInner() {
     const { id } = useParams();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
-    const { token, me, hasPerm } = useAuth();
+    const { token, me, hasPerm, activeTenant, activeWorkspace } = useAuth();
     const [manifests, setManifests] = useState([]);
     const manifestByID = useMemo(() => {
         const m = new Map();
@@ -32,6 +32,8 @@ function EditorInner() {
     // save doesn't accidentally drop the webhook secret / cron expression
     // a user configured in the settings modal.
     const [triggers, setTriggers] = useState([]);
+    const [visibility, setVisibility] = useState(undefined);
+    const [owner, setOwner] = useState(undefined);
     const [settingsOpen, setSettingsOpen] = useState(false);
     // Per-node params kept outside React Flow's node-data so the inspector
     // can mutate them without forcing canvas re-layout. They're merged
@@ -68,7 +70,7 @@ function EditorInner() {
             return;
         let cancelled = false;
         setError(null);
-        Promise.all([api.listModules(token), api.loadGraph(token, me.tenant, me.workspace, id)])
+        Promise.all([api.listModules(token), api.loadGraph(token, activeTenant, activeWorkspace, id)])
             .then(([modRes, g]) => {
             if (cancelled)
                 return;
@@ -97,6 +99,8 @@ function EditorInner() {
             })));
             setParamsByID(Object.fromEntries((g.nodes ?? []).map((n) => [n.id, n.params ?? {}])));
             setTriggers(g.triggers ?? []);
+            setVisibility(g.visibility);
+            setOwner(g.owner);
             setDirty(false);
         })
             .catch((e) => {
@@ -178,8 +182,8 @@ function EditorInner() {
         try {
             const graph = {
                 id,
-                tenant: me.tenant,
-                workspace: me.workspace,
+                tenant: activeTenant,
+                workspace: activeWorkspace,
                 nodes: nodes.map((n) => ({
                     id: n.id,
                     module: n.data.moduleID,
@@ -193,6 +197,8 @@ function EditorInner() {
                     to_port: e.targetHandle ?? "in",
                 })),
                 triggers: triggers.length > 0 ? triggers : undefined,
+                visibility,
+                owner,
             };
             await api.saveGraph(token, graph);
             setDirty(false);
@@ -241,7 +247,7 @@ function EditorInner() {
         setRunning(true);
         setError(null);
         try {
-            const { job_id } = await api.runGraph(token, me.tenant, me.workspace, id);
+            const { job_id } = await api.runGraph(token, activeTenant, activeWorkspace, id);
             setCurrentRunID(job_id);
             if (id)
                 localStorage.setItem(`hazyflow.lastRun.${id}`, job_id);
@@ -275,7 +281,7 @@ function EditorInner() {
         // render — subscribeToRun captures fresh setters via closure.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id]);
-    return (_jsxs("div", { className: "editor", "data-panel": mobilePanel ?? "canvas", ref: wrapperRef, children: [_jsx("div", { className: "catalog", children: _jsx(NodeCatalog, { modules: manifests }) }), _jsxs("div", { className: "canvas", onDragOver: onDragOver, onDrop: onDrop, children: [_jsxs("div", { className: "editor-toolbar", children: [_jsx("button", { className: "ghost", onClick: () => navigate("/pipelines"), title: "Back", children: _jsx(ArrowLeft, { size: 16 }) }), _jsxs("button", { className: "ghost", onClick: () => setSettingsOpen(true), title: "Pipeline settings (triggers, etc.)", children: [_jsx(SettingsIcon, { size: 14 }), triggers.length > 0 && (_jsx("span", { className: "badge", style: {
+    return (_jsxs("div", { className: "editor", "data-panel": mobilePanel ?? "canvas", ref: wrapperRef, children: [_jsx("div", { className: "catalog", children: _jsx(NodeCatalog, { modules: manifests }) }), _jsxs("div", { className: "canvas", onDragOver: onDragOver, onDrop: onDrop, children: [_jsxs("div", { className: "editor-toolbar", children: [_jsx("button", { className: "ghost", onClick: () => navigate("/flows"), title: "Back", children: _jsx(ArrowLeft, { size: 16 }) }), _jsxs("button", { className: "ghost", onClick: () => setSettingsOpen(true), title: "Flow settings (triggers, etc.)", children: [_jsx(SettingsIcon, { size: 14 }), triggers.length > 0 && (_jsx("span", { className: "badge", style: {
                                             marginLeft: 6,
                                             padding: "0 6px",
                                             borderRadius: "var(--r-pill)",
@@ -283,7 +289,7 @@ function EditorInner() {
                                             color: "var(--accent)",
                                             fontSize: 10,
                                             fontWeight: 600,
-                                        }, children: triggers.length }))] }), _jsxs("button", { onClick: save, disabled: !dirty || saving || !hasPerm("graph:edit"), title: hasPerm("graph:edit") ? undefined : "Read-only — missing graph:edit", children: [_jsx(Save, { size: 14, style: { marginRight: 6, verticalAlign: -2 } }), saving ? "Saving…" : dirty ? "Save" : "Saved"] }), me && id && (_jsx(RunHistory, { tenant: me.tenant, workspace: me.workspace, graphID: id, currentRunID: currentRunID, onSelect: selectHistoricalRun })), _jsxs("button", { className: "primary", onClick: runWithLiveStatus, disabled: running || dirty || !hasPerm("graph:run"), title: dirty
+                                        }, children: triggers.length }))] }), _jsxs("button", { onClick: save, disabled: !dirty || saving || !hasPerm("graph:edit"), title: hasPerm("graph:edit") ? undefined : "Read-only — missing graph:edit", children: [_jsx(Save, { size: 14, style: { marginRight: 6, verticalAlign: -2 } }), saving ? "Saving…" : dirty ? "Save" : "Saved"] }), me && id && (_jsx(RunHistory, { tenant: activeTenant, workspace: activeWorkspace, graphID: id, currentRunID: currentRunID, onSelect: selectHistoricalRun })), _jsxs("button", { className: "primary", onClick: runWithLiveStatus, disabled: running || dirty || !hasPerm("graph:run"), title: dirty
                                     ? "Save first"
                                     : hasPerm("graph:run")
                                         ? undefined
@@ -309,13 +315,18 @@ function EditorInner() {
                             maxWidth: 600,
                         }, children: error }))] }), _jsx("div", { className: "inspector", children: _jsx(Inspector, { selected: inspectorSelected, onChange: onInspectorChange, paramsByID: paramsByID, onParamsChange: onParamsChange, currentRunID: currentRunID, statusRefreshKey: statusRefreshKey }) }), settingsOpen && me && id && (_jsx(SettingsModal, { graph: {
                     id,
-                    tenant: me.tenant,
-                    workspace: me.workspace,
+                    tenant: activeTenant,
+                    workspace: activeWorkspace,
                     nodes: [],
                     edges: [],
                     triggers,
+                    visibility,
+                    owner,
                 }, onClose: () => setSettingsOpen(false), onSave: (next) => {
                     setTriggers(next.triggers ?? []);
+                    setVisibility(next.visibility);
+                    // Owner stays as-is — UI doesn't expose transfer; only the
+                    // daemon (on admin save) can change it.
                     setDirty(true);
                 } }))] }));
 }
@@ -327,6 +338,6 @@ function nextID(existing, moduleID) {
         i++;
     return `${moduleID}_${i}`;
 }
-export function PipelineEditor() {
+export function FlowEditor() {
     return (_jsx(ReactFlowProvider, { children: _jsx(EditorInner, {}) }));
 }

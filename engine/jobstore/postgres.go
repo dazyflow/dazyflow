@@ -276,6 +276,49 @@ func (s *Postgres) ListGraphRuns(ctx context.Context, opts core.ListGraphRunsOpt
 	return out, rows.Err()
 }
 
+func (s *Postgres) ListNodeRecords(ctx context.Context, opts core.ListNodeRecordsOpts) ([]core.JobRecord, error) {
+	limit := opts.Limit
+	if limit <= 0 {
+		limit = 100
+	}
+	q := `SELECT id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result,
+	             enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id, parent_node_rec_id
+	        FROM jobs WHERE kind = 'node'`
+	args := []any{}
+	if opts.Tenant != "" {
+		args = append(args, opts.Tenant)
+		q += fmt.Sprintf(" AND tenant = $%d", len(args))
+	}
+	if opts.Workspace != "" {
+		args = append(args, opts.Workspace)
+		q += fmt.Sprintf(" AND workspace = $%d", len(args))
+	}
+	if opts.Status != "" {
+		args = append(args, string(opts.Status))
+		q += fmt.Sprintf(" AND status = $%d", len(args))
+	}
+	args = append(args, limit)
+	q += fmt.Sprintf(" ORDER BY enqueued_at DESC LIMIT $%d", len(args))
+	if opts.Offset > 0 {
+		args = append(args, opts.Offset)
+		q += fmt.Sprintf(" OFFSET $%d", len(args))
+	}
+	rows, err := s.pool.Query(ctx, q, args...)
+	if err != nil {
+		return nil, wrapPgErr(err)
+	}
+	defer rows.Close()
+	var out []core.JobRecord
+	for rows.Next() {
+		rec, err := scanRecord(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	return out, rows.Err()
+}
+
 // Row covers both pgx.Row (QueryRow) and pgx.Rows (Query) so scanRecord can
 // serve both call sites.
 type row interface {

@@ -21,7 +21,7 @@ const STATUS_CHIPS: { label: string; value: JobStatus | "" }[] = [
 const PAGE_SIZE = 50;
 
 export function RunList() {
-  const { token, me } = useAuth();
+  const { token, me, activeTenant, activeWorkspace } = useAuth();
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +34,12 @@ export function RunList() {
     setLoading(true);
     setError(null);
     api
-      .listAllRuns(token, { limit: PAGE_SIZE, status: filter || undefined })
+      .listAllRuns(token, {
+        limit: PAGE_SIZE,
+        status: filter || undefined,
+        workspace: activeWorkspace || undefined,
+        tenant: activeTenant || undefined,
+      })
       .then((r) => {
         if (cancelled) return;
         const page = r.runs ?? [];
@@ -50,7 +55,7 @@ export function RunList() {
     return () => {
       cancelled = true;
     };
-  }, [token, filter]);
+  }, [token, filter, activeWorkspace, activeTenant]);
 
   // Live polling whenever anything is in-flight. Same heuristic as the
   // RunHistory dropdown — refresh only the first PAGE_SIZE rows so a
@@ -69,6 +74,7 @@ export function RunList() {
         .listAllRuns(token, {
           limit: Math.max(PAGE_SIZE, runs.length),
           status: filter || undefined,
+          workspace: activeWorkspace || undefined,
         })
         .then((r) => {
           const page = r.runs ?? [];
@@ -78,7 +84,7 @@ export function RunList() {
         .catch(() => {});
     }, 3000);
     return () => window.clearInterval(t);
-  }, [token, runs, filter]);
+  }, [token, runs, filter, activeWorkspace, activeTenant]);
 
   const loadMore = async () => {
     if (!token || loading) return;
@@ -88,6 +94,8 @@ export function RunList() {
         limit: PAGE_SIZE,
         offset: runs.length,
         status: filter || undefined,
+        workspace: activeWorkspace || undefined,
+        tenant: activeTenant || undefined,
       });
       const next = r.runs ?? [];
       setRuns((prev) => [...prev, ...next]);
@@ -103,7 +111,8 @@ export function RunList() {
         <div>
           <h1>Runs</h1>
           <div className="sub">
-            All runs in {me?.tenant}/{me?.workspace}
+            All runs in {activeTenant || me?.tenant}/
+            {activeWorkspace || me?.workspace || "(any)"}
           </div>
         </div>
       </div>
@@ -146,7 +155,7 @@ export function RunList() {
               <tr>
                 <th style={{ width: 28 }}></th>
                 <th>Run</th>
-                <th>Pipeline</th>
+                <th>Flow</th>
                 <th>Started</th>
                 <th>Duration</th>
                 <th></th>
@@ -163,7 +172,7 @@ export function RunList() {
                   </td>
                   <td>
                     <Link
-                      to={`/pipelines/${encodeURIComponent(r.graph_id)}?run=${encodeURIComponent(r.id)}`}
+                      to={`/flows/${encodeURIComponent(r.graph_id)}?run=${encodeURIComponent(r.id)}`}
                       style={{
                         display: "inline-flex",
                         alignItems: "center",
@@ -191,7 +200,7 @@ export function RunList() {
                   </td>
                   <td style={{ textAlign: "right", paddingRight: 12 }}>
                     <Link
-                      to={`/pipelines/${encodeURIComponent(r.graph_id)}?run=${encodeURIComponent(r.id)}`}
+                      to={`/flows/${encodeURIComponent(r.graph_id)}?run=${encodeURIComponent(r.id)}`}
                       style={{ color: "var(--muted)" }}
                     >
                       <ExternalLink size={14} />

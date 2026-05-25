@@ -118,6 +118,22 @@ type JobStore interface {
 	// per-graph history and the workspace-wide runs view. Sorted by
 	// EnqueuedAt DESC; pagination via Limit + Offset.
 	ListGraphRuns(ctx context.Context, opts ListGraphRunsOpts) ([]JobRecord, error)
+
+	// ListNodeRecords returns only node-kind records matching the
+	// supplied scope. Used by the approval inbox (Status=awaiting) and
+	// future "all failed nodes" / "all running nodes" views. Sorted by
+	// EnqueuedAt DESC; pagination via Limit + Offset.
+	ListNodeRecords(ctx context.Context, opts ListNodeRecordsOpts) ([]JobRecord, error)
+}
+
+// ListNodeRecordsOpts scopes a ListNodeRecords call. Same shape as
+// ListGraphRunsOpts but for the node-kind half of the table.
+type ListNodeRecordsOpts struct {
+	Tenant    string
+	Workspace string
+	Status    JobStatus
+	Limit     int
+	Offset    int
 }
 
 // ListGraphRunsOpts scopes a ListGraphRuns call. Empty fields are

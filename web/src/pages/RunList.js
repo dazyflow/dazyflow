@@ -18,7 +18,7 @@ const STATUS_CHIPS = [
 ];
 const PAGE_SIZE = 50;
 export function RunList() {
-    const { token, me } = useAuth();
+    const { token, me, activeTenant, activeWorkspace } = useAuth();
     const [runs, setRuns] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -31,7 +31,12 @@ export function RunList() {
         setLoading(true);
         setError(null);
         api
-            .listAllRuns(token, { limit: PAGE_SIZE, status: filter || undefined })
+            .listAllRuns(token, {
+            limit: PAGE_SIZE,
+            status: filter || undefined,
+            workspace: activeWorkspace || undefined,
+            tenant: activeTenant || undefined,
+        })
             .then((r) => {
             if (cancelled)
                 return;
@@ -50,7 +55,7 @@ export function RunList() {
         return () => {
             cancelled = true;
         };
-    }, [token, filter]);
+    }, [token, filter, activeWorkspace, activeTenant]);
     // Live polling whenever anything is in-flight. Same heuristic as the
     // RunHistory dropdown — refresh only the first PAGE_SIZE rows so a
     // long scrollback isn't repeatedly fetched.
@@ -67,6 +72,7 @@ export function RunList() {
                 .listAllRuns(token, {
                 limit: Math.max(PAGE_SIZE, runs.length),
                 status: filter || undefined,
+                workspace: activeWorkspace || undefined,
             })
                 .then((r) => {
                 const page = r.runs ?? [];
@@ -76,7 +82,7 @@ export function RunList() {
                 .catch(() => { });
         }, 3000);
         return () => window.clearInterval(t);
-    }, [token, runs, filter]);
+    }, [token, runs, filter, activeWorkspace, activeTenant]);
     const loadMore = async () => {
         if (!token || loading)
             return;
@@ -86,6 +92,8 @@ export function RunList() {
                 limit: PAGE_SIZE,
                 offset: runs.length,
                 status: filter || undefined,
+                workspace: activeWorkspace || undefined,
+                tenant: activeTenant || undefined,
             });
             const next = r.runs ?? [];
             setRuns((prev) => [...prev, ...next]);
@@ -95,7 +103,7 @@ export function RunList() {
             setLoading(false);
         }
     };
-    return (_jsxs("div", { children: [_jsx("div", { className: "page-title", children: _jsxs("div", { children: [_jsx("h1", { children: "Runs" }), _jsxs("div", { className: "sub", children: ["All runs in ", me?.tenant, "/", me?.workspace] })] }) }), _jsx("div", { className: "run-history-filters", style: { marginBottom: "var(--space-4)" }, children: STATUS_CHIPS.map((c) => (_jsx("button", { type: "button", className: "run-filter-chip" + (filter === c.value ? " active" : ""), onClick: () => setFilter(c.value), children: c.label }, c.label))) }), error && (_jsx("div", { className: "card", style: { color: "var(--danger)" }, children: error })), !error && loading && runs.length === 0 && (_jsx("div", { className: "card", style: { color: "var(--muted)" }, children: "Loading\u2026" })), !error && !loading && runs.length === 0 && (_jsx("div", { className: "card", style: { color: "var(--muted)" }, children: "No runs match this filter." })), runs.length > 0 && (_jsx("div", { className: "card", style: { padding: 0, overflow: "hidden" }, children: _jsxs("table", { className: "run-table", children: [_jsx("thead", { children: _jsxs("tr", { children: [_jsx("th", { style: { width: 28 } }), _jsx("th", { children: "Run" }), _jsx("th", { children: "Pipeline" }), _jsx("th", { children: "Started" }), _jsx("th", { children: "Duration" }), _jsx("th", {})] }) }), _jsx("tbody", { children: runs.map((r) => (_jsxs("tr", { children: [_jsx("td", { children: _jsx("span", { className: "status-dot " + r.status }) }), _jsx("td", { style: { fontFamily: "var(--font-mono)", fontSize: 12 }, children: r.id.slice(0, 12) }), _jsx("td", { children: _jsxs(Link, { to: `/pipelines/${encodeURIComponent(r.graph_id)}?run=${encodeURIComponent(r.id)}`, style: {
+    return (_jsxs("div", { children: [_jsx("div", { className: "page-title", children: _jsxs("div", { children: [_jsx("h1", { children: "Runs" }), _jsxs("div", { className: "sub", children: ["All runs in ", activeTenant || me?.tenant, "/", activeWorkspace || me?.workspace || "(any)"] })] }) }), _jsx("div", { className: "run-history-filters", style: { marginBottom: "var(--space-4)" }, children: STATUS_CHIPS.map((c) => (_jsx("button", { type: "button", className: "run-filter-chip" + (filter === c.value ? " active" : ""), onClick: () => setFilter(c.value), children: c.label }, c.label))) }), error && (_jsx("div", { className: "card", style: { color: "var(--danger)" }, children: error })), !error && loading && runs.length === 0 && (_jsx("div", { className: "card", style: { color: "var(--muted)" }, children: "Loading\u2026" })), !error && !loading && runs.length === 0 && (_jsx("div", { className: "card", style: { color: "var(--muted)" }, children: "No runs match this filter." })), runs.length > 0 && (_jsx("div", { className: "card", style: { padding: 0, overflow: "hidden" }, children: _jsxs("table", { className: "run-table", children: [_jsx("thead", { children: _jsxs("tr", { children: [_jsx("th", { style: { width: 28 } }), _jsx("th", { children: "Run" }), _jsx("th", { children: "Flow" }), _jsx("th", { children: "Started" }), _jsx("th", { children: "Duration" }), _jsx("th", {})] }) }), _jsx("tbody", { children: runs.map((r) => (_jsxs("tr", { children: [_jsx("td", { children: _jsx("span", { className: "status-dot " + r.status }) }), _jsx("td", { style: { fontFamily: "var(--font-mono)", fontSize: 12 }, children: r.id.slice(0, 12) }), _jsx("td", { children: _jsxs(Link, { to: `/flows/${encodeURIComponent(r.graph_id)}?run=${encodeURIComponent(r.id)}`, style: {
                                                 display: "inline-flex",
                                                 alignItems: "center",
                                                 gap: 4,
@@ -103,7 +111,7 @@ export function RunList() {
                                                 ? formatDuration(r.started_at, r.finished_at)
                                                 : r.status === "running"
                                                     ? "in progress"
-                                                    : "—", r.error_code && (_jsxs("span", { style: { color: "var(--danger)", marginLeft: 6 }, children: ["\u00B7 ", r.error_code] }))] }), _jsx("td", { style: { textAlign: "right", paddingRight: 12 }, children: _jsx(Link, { to: `/pipelines/${encodeURIComponent(r.graph_id)}?run=${encodeURIComponent(r.id)}`, style: { color: "var(--muted)" }, children: _jsx(ExternalLink, { size: 14 }) }) })] }, r.id))) })] }) })), hasMore && (_jsx("div", { style: { textAlign: "center", marginTop: "var(--space-4)" }, children: _jsx("button", { onClick: loadMore, disabled: loading, children: loading ? "Loading…" : "Load more" }) }))] }));
+                                                    : "—", r.error_code && (_jsxs("span", { style: { color: "var(--danger)", marginLeft: 6 }, children: ["\u00B7 ", r.error_code] }))] }), _jsx("td", { style: { textAlign: "right", paddingRight: 12 }, children: _jsx(Link, { to: `/flows/${encodeURIComponent(r.graph_id)}?run=${encodeURIComponent(r.id)}`, style: { color: "var(--muted)" }, children: _jsx(ExternalLink, { size: 14 }) }) })] }, r.id))) })] }) })), hasMore && (_jsx("div", { style: { textAlign: "center", marginTop: "var(--space-4)" }, children: _jsx("button", { onClick: loadMore, disabled: loading, children: loading ? "Loading…" : "Load more" }) }))] }));
 }
 function formatTime(iso) {
     const t = Date.parse(iso);

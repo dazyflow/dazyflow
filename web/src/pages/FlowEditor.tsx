@@ -24,14 +24,15 @@ import {
   type NodeChange,
   type ReactFlowInstance,
 } from "@xyflow/react";
-import { ArrowLeft, Play, Save, PanelsLeftBottom } from "lucide-react";
+import { ArrowLeft, Play, Save, Settings as SettingsIcon, PanelsLeftBottom } from "lucide-react";
 import { useAuth } from "../auth";
 import { api } from "../api";
-import type { Graph, Manifest, JobStatus } from "../types";
+import type { Graph, GraphTrigger, Manifest, JobStatus, Visibility } from "../types";
 import { NodeCatalog } from "../components/NodeCatalog";
 import { Inspector } from "../components/Inspector";
 import { HazyNode, type HazyNodeData } from "../components/NodeCard";
 import { RunHistory } from "../components/RunHistory";
+import { SettingsModal } from "../components/SettingsModal";
 
 // Custom node-types registry. React Flow caches by reference, so this
 // is declared at module scope rather than inline in the component to
@@ -42,7 +43,7 @@ function EditorInner() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { token, me, hasPerm } = useAuth();
+  const { token, me, hasPerm, activeTenant, activeWorkspace } = useAuth();
   const [manifests, setManifests] = useState<Manifest[]>([]);
   const manifestByID = useMemo(() => {
     const m = new Map<string, Manifest>();
@@ -52,6 +53,13 @@ function EditorInner() {
 
   const [nodes, setNodes] = useState<FlowNode<HazyNodeData>[]>([]);
   const [edges, setEdges] = useState<FlowEdge[]>([]);
+  // Triggers live at graph-level (not per-node). Carried through so a
+  // save doesn't accidentally drop the webhook secret / cron expression
+  // a user configured in the settings modal.
+  const [triggers, setTriggers] = useState<GraphTrigger[]>([]);
+  const [visibility, setVisibility] = useState<Visibility | undefined>(undefined);
+  const [owner, setOwner] = useState<string | undefined>(undefined);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   // Per-node params kept outside React Flow's node-data so the inspector
   // can mutate them without forcing canvas re-layout. They're merged
   // back into the graph payload on save.
@@ -87,7 +95,7 @@ function EditorInner() {
     if (!token || !me || !id) return;
     let cancelled = false;
     setError(null);
-    Promise.all([api.listModules(token), api.loadGraph(token, me.tenant, me.workspace, id)])
+    Promise.all([api.listModules(token), api.loadGraph(token, activeTenant, activeWorkspace, id)])
       .then(([modRes, g]) => {
         if (cancelled) return;
         setManifests(modRes.modules ?? []);
@@ -117,6 +125,9 @@ function EditorInner() {
           })),
         );
         setParamsByID(Object.fromEntries((g.nodes ?? []).map((n) => [n.id, n.params ?? {}])));
+        setTriggers(g.triggers ?? []);
+        setVisibility(g.visibility);
+        setOwner(g.owner);
         setDirty(false);
       })
       .catch((e) => {
@@ -148,10 +159,18 @@ function EditorInner() {
   );
   const onConnect = useCallback(
     (params: Connection) => {
+      const fromPort = params.sourceHandle ?? "out";
+      const toPort = params.targetHandle ?? "in";
+      // Label non-default port wirings (e.g. branch.then → sleep.in) so
+      // edges remain readable when the canvas is zoomed out and the
+      // port labels on the node cards aren't legible. Default
+      // `out`→`in` stays unlabeled.
+      const labeled = !(fromPort === "out" && toPort === "in");
       setEdges((eds) =>
         addEdge(
           {
             ...params,
+            label: labeled ? `${fromPort} → ${toPort}` : undefined,
             style: { stroke: "var(--accent)", strokeWidth: 1.5 },
           },
           eds,
@@ -211,8 +230,8 @@ function EditorInner() {
     try {
       const graph: Graph = {
         id,
-        tenant: me.tenant,
-        workspace: me.workspace,
+        tenant: activeTenant,
+        workspace: activeWorkspace,
         nodes: nodes.map((n) => ({
           id: n.id,
           module: n.data.moduleID,
@@ -225,6 +244,9 @@ function EditorInner() {
           to: e.target,
           to_port: e.targetHandle ?? "in",
         })),
+        triggers: triggers.length > 0 ? triggers : undefined,
+        visibility,
+        owner,
       };
       await api.saveGraph(token, graph);
       setDirty(false);
@@ -281,7 +303,7 @@ function EditorInner() {
     setRunning(true);
     setError(null);
     try {
-      const { job_id } = await api.runGraph(token, me.tenant, me.workspace, id);
+      const { job_id } = await api.runGraph(token, activeTenant, activeWorkspace, id);
       setCurrentRunID(job_id);
       if (id) localStorage.setItem(`hazyflow.lastRun.${id}`, job_id);
       subscribeToRun(job_id);
@@ -327,10 +349,33 @@ function EditorInner() {
         <div className="editor-toolbar">
           <button
             className="ghost"
-            onClick={() => navigate("/pipelines")}
+            onClick={() => navigate("/flows")}
             title="Back"
           >
             <ArrowLeft size={16} />
+          </button>
+          <button
+            className="ghost"
+            onClick={() => setSettingsOpen(true)}
+            title="Flow settings (triggers, etc.)"
+          >
+            <SettingsIcon size={14} />
+            {triggers.length > 0 && (
+              <span
+                className="badge"
+                style={{
+                  marginLeft: 6,
+                  padding: "0 6px",
+                  borderRadius: "var(--r-pill)",
+                  background: "color-mix(in srgb, var(--accent) 22%, transparent)",
+                  color: "var(--accent)",
+                  fontSize: 10,
+                  fontWeight: 600,
+                }}
+              >
+                {triggers.length}
+              </span>
+            )}
           </button>
           <button
             onClick={save}
@@ -342,8 +387,8 @@ function EditorInner() {
           </button>
           {me && id && (
             <RunHistory
-              tenant={me.tenant}
-              workspace={me.workspace}
+              tenant={activeTenant}
+              workspace={activeWorkspace}
               graphID={id}
               currentRunID={currentRunID}
               onSelect={selectHistoricalRun}
@@ -446,6 +491,28 @@ function EditorInner() {
           statusRefreshKey={statusRefreshKey}
         />
       </div>
+      {settingsOpen && me && id && (
+        <SettingsModal
+          graph={{
+            id,
+            tenant: activeTenant,
+            workspace: activeWorkspace,
+            nodes: [],
+            edges: [],
+            triggers,
+            visibility,
+            owner,
+          }}
+          onClose={() => setSettingsOpen(false)}
+          onSave={(next) => {
+            setTriggers(next.triggers ?? []);
+            setVisibility(next.visibility);
+            // Owner stays as-is — UI doesn't expose transfer; only the
+            // daemon (on admin save) can change it.
+            setDirty(true);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -458,7 +525,7 @@ function nextID(existing: FlowNode<HazyNodeData>[], moduleID: string): string {
   return `${moduleID}_${i}`;
 }
 
-export function PipelineEditor() {
+export function FlowEditor() {
   return (
     <ReactFlowProvider>
       <EditorInner />

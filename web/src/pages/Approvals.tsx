@@ -1,0 +1,185 @@
+import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { CheckCircle2, XCircle, Workflow, Inbox } from "lucide-react";
+import { useAuth } from "../auth";
+import { api, APIError } from "../api";
+import type { PendingApproval } from "../types";
+
+// Approvals is the inbox for await_approval nodes parked across the
+// workspace. Polls every 5s so a freshly-pending node shows up without
+// manual refresh. Approve / Reject buttons call POST /approvals/...
+// which Service.Approve services (same code path as the HMAC endpoint).
+export function Approvals() {
+  const { token, me, activeTenant, activeWorkspace } = useAuth();
+  const [items, setItems] = useState<PendingApproval[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  // Track in-flight approve/reject per row so users can't double-click.
+  // The key is `${runID}/${nodeID}`. Once a decision posts the row
+  // disappears on the next refresh.
+  const [acting, setActing] = useState<Record<string, "approve" | "reject">>({});
+
+  const refresh = useCallback(async () => {
+    if (!token) return;
+    try {
+      // Narrow to the workspace currently selected in the switcher so
+      // an admin's inbox tracks the rest of the UI. Empty string =
+      // tenant-wide view (returns everything the principal can see).
+      const r = await api.listPendingApprovals(token, {
+        workspace: activeWorkspace || undefined,
+        tenant: activeTenant || undefined,
+      });
+      setItems(r.approvals ?? []);
+      setError(null);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, [token, activeTenant, activeWorkspace]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  // Live polling — 5 seconds is light enough to feel responsive but
+  // doesn't hammer the daemon. Stops only when the page unmounts.
+  useEffect(() => {
+    const t = window.setInterval(() => {
+      void refresh();
+    }, 5000);
+    return () => window.clearInterval(t);
+  }, [refresh]);
+
+  const decide = async (
+    item: PendingApproval,
+    decision: "approve" | "reject",
+  ) => {
+    if (!token) return;
+    const key = `${item.run_id}/${item.node_id}`;
+    setActing((s) => ({ ...s, [key]: decision }));
+    try {
+      // Optional comment prompt only on reject — the common-case
+      // approval is one-click. Reject benefits from a "why".
+      let comment: string | undefined;
+      if (decision === "reject") {
+        const note = window.prompt("Reason for rejecting? (optional)");
+        if (note) comment = note;
+      }
+      await api.approveNode(token, item.run_id, item.node_id, decision, comment);
+      await refresh();
+    } catch (e) {
+      const err = e as APIError | Error;
+      if (err instanceof APIError && err.status === 409) {
+        // Someone else (or an earlier click) already resumed it; just
+        // refresh and move on.
+        await refresh();
+        return;
+      }
+      setError((e as Error).message);
+    } finally {
+      setActing((s) => {
+        const next = { ...s };
+        delete next[key];
+        return next;
+      });
+    }
+  };
+
+  return (
+    <div>
+      <div className="page-title">
+        <div>
+          <h1>Approvals</h1>
+          <div className="sub">
+            Pending in {activeTenant || me?.tenant}/
+            {activeWorkspace || me?.workspace || "(any)"}
+            {items.length > 0 && (
+              <>
+                {" "}· <strong>{items.length}</strong> waiting
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {error && (
+        <div className="card" style={{ color: "var(--danger)" }}>
+          {error}
+        </div>
+      )}
+
+      {!error && loading && items.length === 0 && (
+        <div className="card" style={{ color: "var(--muted)" }}>
+          Loading…
+        </div>
+      )}
+
+      {!error && !loading && items.length === 0 && (
+        <div className="card approvals-empty">
+          <Inbox size={28} style={{ opacity: 0.5, marginBottom: 8 }} />
+          <div>Inbox zero — nothing waiting on your decision.</div>
+        </div>
+      )}
+
+      <div className="approval-list">
+        {items.map((item) => {
+          const key = `${item.run_id}/${item.node_id}`;
+          const inflight = acting[key];
+          return (
+            <div className="approval-card" key={key}>
+              <div className="approval-head">
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div className="approval-prompt">
+                    {item.prompt || "(no prompt — node ID: " + item.node_id + ")"}
+                  </div>
+                  <div className="approval-meta">
+                    <Link
+                      to={`/flows/${encodeURIComponent(item.graph_id)}?run=${encodeURIComponent(item.run_id)}`}
+                    >
+                      <Workflow size={11} style={{ verticalAlign: -1 }} />{" "}
+                      {item.graph_id}
+                    </Link>
+                    <span>·</span>
+                    <span title={item.since}>{formatTime(item.since)}</span>
+                    <span>·</span>
+                    <span style={{ fontFamily: "var(--font-mono)" }}>
+                      {item.node_id}
+                    </span>
+                  </div>
+                </div>
+                <div className="approval-actions">
+                  <button
+                    onClick={() => decide(item, "reject")}
+                    disabled={!!inflight}
+                  >
+                    <XCircle size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+                    {inflight === "reject" ? "Rejecting…" : "Reject"}
+                  </button>
+                  <button
+                    className="primary"
+                    onClick={() => decide(item, "approve")}
+                    disabled={!!inflight}
+                  >
+                    <CheckCircle2 size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+                    {inflight === "approve" ? "Approving…" : "Approve"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function formatTime(iso: string): string {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return iso;
+  const diffSec = Math.max(0, Math.round((Date.now() - t) / 1000));
+  if (diffSec < 60) return `${diffSec}s ago`;
+  if (diffSec < 3600) return `${Math.round(diffSec / 60)}m ago`;
+  if (diffSec < 86400) return `${Math.round(diffSec / 3600)}h ago`;
+  return `${Math.round(diffSec / 86400)}d ago`;
+}

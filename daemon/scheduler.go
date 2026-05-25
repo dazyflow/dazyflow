@@ -56,13 +56,17 @@ func NewScheduler(svc *Service) *Scheduler {
 		rescanEvery: 30 * time.Second,
 		tracked:     make(map[string]*scheduledGraph),
 		systemPrincipal: func(tenant, workspace string) core.Principal {
+			// graph:admin lets cron-fired runs bypass per-flow
+			// visibility: an admin who set up a schedule on a private
+			// flow shouldn't have that schedule break because they're
+			// not the active subject at fire time.
 			return core.Principal{
 				Subject:   "hazyflow-scheduler",
 				Tenant:    tenant,
 				Workspace: workspace,
 				Roles: []core.Role{{
 					Name:        "scheduler",
-					Permissions: []core.Permission{core.PermGraphRun},
+					Permissions: []core.Permission{core.PermGraphRun, core.PermGraphAdmin},
 				}},
 			}
 		},

@@ -24,6 +24,14 @@ export type GraphTrigger = {
   secret?: string;
 };
 
+export type Visibility = "org" | "private";
+
+export type FlowSummary = {
+  id: string;
+  owner?: string;
+  visibility?: Visibility;
+};
+
 export type Graph = {
   id: string;
   version?: string;
@@ -32,6 +40,8 @@ export type Graph = {
   nodes: Node[];
   edges: Edge[];
   triggers?: GraphTrigger[];
+  visibility?: Visibility;
+  owner?: string;
 };
 
 export type Port = {
@@ -94,7 +104,8 @@ export type Permission =
   | "module:register"
   | "secret:read"
   | "secret:write"
-  | "tenant:admin";
+  | "tenant:admin"
+  | "platform:admin";
 
 export type WhoAmI = {
   subject: string;
@@ -142,6 +153,47 @@ export type JobRecord = {
   StartedAt?: string | null;
   FinishedAt?: string | null;
   Attempt?: number;
+};
+
+export type Role = {
+  name: string;
+  permissions: Permission[];
+};
+
+export type APIKeySummary = {
+  id: string;
+  subject: string;
+  tenant: string;
+  workspace: string;
+  roles: Role[];
+  expires_at?: string | null;
+  revoked_at?: string | null;
+  status: "active" | "expired" | "revoked";
+};
+
+export type IssuedAPIKey = APIKeySummary & {
+  secret: string;
+};
+
+export type UserSummary = {
+  subject: string;
+  tenant: string;
+  active_keys: number;
+  revoked_keys: number;
+  permissions: Permission[];
+  role_names: string[];
+  key_ids: string[];
+  last_workspace?: string;
+};
+
+export type PendingApproval = {
+  run_id: string;
+  graph_id: string;
+  node_id: string;
+  prompt?: string;
+  url?: string;
+  since: string;
+  workspace: string;
 };
 
 export type RunSummary = {

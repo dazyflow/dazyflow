@@ -44,6 +44,41 @@ type Graph struct {
 	Nodes     []Node         `json:"nodes"`
 	Edges     []Edge         `json:"edges"`
 	Triggers  []GraphTrigger `json:"triggers,omitempty"`
+
+	// Visibility controls who in the workspace can see/run this flow:
+	//   - "org" (default): any principal in the tenant+workspace
+	//   - "private":       only the Owner and tenant:admin principals
+	// An empty value reads as "org" — keeps pre-visibility graphs
+	// behaving the way they always have.
+	Visibility Visibility `json:"visibility,omitempty"`
+
+	// Owner is the subject of the principal who created the flow. Set
+	// automatically by the daemon on first save and immutable through
+	// the normal save path. Empty for legacy flows; visibility checks
+	// treat an empty Owner as "no private-mode owner exists" which
+	// effectively forces org mode regardless of Visibility.
+	Owner string `json:"owner,omitempty"`
+}
+
+// Visibility enumerates the access modes a flow can have. Values are
+// stored as-is in the workspace Git repo, so additions are backwards-
+// compatible — but the daemon's visibility checks must explicitly
+// handle each value.
+type Visibility string
+
+const (
+	VisibilityOrg     Visibility = "org"
+	VisibilityPrivate Visibility = "private"
+)
+
+// EffectiveVisibility resolves the empty / missing value to the default.
+// Use this anywhere the on-disk record is consulted; never the raw
+// Visibility field.
+func (g Graph) EffectiveVisibility() Visibility {
+	if g.Visibility == VisibilityPrivate {
+		return VisibilityPrivate
+	}
+	return VisibilityOrg
 }
 
 // GraphTrigger describes when the graph should fire automatically.

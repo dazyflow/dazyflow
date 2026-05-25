@@ -6,7 +6,7 @@ import type { RunSummary, JobStatus } from "../types";
 
 // RunHistory shows the current run (status dot + short ID) and opens a
 // dropdown listing recent runs on click. Picking one calls onSelect,
-// which in PipelineEditor re-subscribes the SSE stream so node statuses
+// which in FlowEditor re-subscribes the SSE stream so node statuses
 // + output previews reflect the chosen run.
 type Props = {
   tenant: string;

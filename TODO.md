@@ -251,6 +251,88 @@ These are *what we don't know we don't know*:
   reasoned about NTP jumps, daylight-saving transitions, or container
   clock drift.
 
+## UI / gateway gaps (called out at ship time)
+
+Surfaced as "honest gaps" when individual UI features landed — none
+blocking, but listed so we don't lose them.
+
+### Admin
+- [ ] **Audit log.** Card is stubbed. Needs (a) a persistence model
+  for the events themselves, (b) instrumentation across graph saves,
+  run submissions, secret accesses, approval decisions, and (c) a list
+  endpoint + UI. Biggest of the remaining admin items.
+- [ ] **Workspace settings UI.** Card is stubbed. Quotas, sandbox
+  roots, retention — daemon already supports them at config time;
+  needs a CRUD endpoint and an admin form.
+- [ ] **Module registry admin view.** Card is stubbed. The editor's
+  catalog already lists modules; this would be the place to approve
+  remote / MCP modules once that gate exists.
+- [ ] **API key expiry-setting UI.** Data model has `ExpiresAt`; issue
+  modal doesn't surface it. One-line add.
+- [ ] **Role templates as a backend resource.** Today they're a
+  frontend constant in `web/src/components/IssueKeyModal.tsx`.
+  Promote to `/api/v1/admin/role-templates` when customer deployments
+  start needing per-tenant overrides.
+- [ ] **User rename / merge.** Subject is a free-text identifier baked
+  into each key at issue time. Renaming or merging two subjects'
+  key history isn't supported — would need an alias table or rewrite.
+
+### Editor
+- [ ] **Variadic input ports** (e.g. `merge.items`) render as a single
+  handle today. React Flow accepts multiple edges into one handle so
+  wiring works, but the UI doesn't show `items[0]`, `items[1]`
+  distinctly. Either render N handles dynamically as edges connect,
+  or surface a port count in the catalog.
+- [ ] **Cron expression validation** in the trigger settings modal.
+  Currently freeform; bad expressions silently never fire. Either
+  client-side parser or a daemon-side validate endpoint.
+- [ ] **Variadic step_params** in `for_each` — `step_params` is an
+  untyped object so the Inspector form falls back to JSON. A
+  schema-driven option (e.g. "use this manifest's schema for the
+  child step") would close the loop.
+
+### Output preview / runs
+- [ ] **Streaming large outputs.** Output preview fetches the whole
+  JobRecord as JSON. Fine for inline payloads; once blob storage
+  ships, large refs need a separate fetch path.
+- [ ] **Show node inputs alongside outputs.** Inspector preview shows
+  output ports only. Adding input previews is one fetch per incoming
+  edge.
+- [ ] **Cursor pagination for runs.** Currently offset-based. For
+  large run histories cursor (by enqueued_at) would be steadier under
+  concurrent writes.
+- [ ] **Date-range filter** on the RunList page.
+- [ ] **Per-row live updates in RunHistory dropdown.** Polls the
+  first page every 3s while open and any row is non-terminal — fine
+  for V1 but a per-run SSE would be tighter.
+- [ ] **Cross-workspace runs view for admins.** `/runs` is scoped to
+  the principal's workspace. A `tenant:admin` opt-out would let them
+  see runs across workspaces in their tenant.
+
+### Approvals
+- [ ] **Group + filter the inbox** (by graph, by age). Flat list is
+  fine for one workspace's worth; bigger orgs would want it.
+- [ ] **Sidebar approval badge** polls every 30s independently from
+  the `/approvals` page's 5s poll, so it briefly lags. Could share a
+  context provider or push from SSE.
+
+### Browser auth + transport
+- [ ] **Cookie / CSRF auth.** Today the gateway is bearer-only.
+  Tighten before exposing publicly — at minimum a same-site cookie
+  session for the UI, with CSRF tokens on writes.
+- [ ] **Rate limiting** on the gateway. None today.
+- [ ] **Per-tenant origin pinning** for CORS. Currently `*` (or
+  configurable globally).
+
+### Modules wishlist
+- [ ] **Notifier modules** — email, Slack, generic webhook-out.
+  Naturally pairs with `await_approval` (send the approval URL via
+  the channel the human reads).
+- [ ] **Database modules** — Postgres query, MySQL.
+- [ ] **Blob storage** — S3 / GCS / R2 with proper streaming via the
+  Ref pointer (not Inline).
+- [ ] **`split` module** (still open from spec days).
+
 ## Recently shipped (delete-when-reviewed)
 
 For context — these were on this TODO list and are now done. Keeping

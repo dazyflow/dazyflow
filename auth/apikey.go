@@ -7,6 +7,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -32,10 +33,27 @@ type APIKey struct {
 	RevokedAt  *time.Time
 }
 
-// APIKeyStore is the lookup boundary. Production impls back this with the
-// users/keys tables in Postgres; tests use MemKeyStore below.
+// APIKeyStore is the lookup boundary the Authenticator uses — read-only
+// from its perspective. Kept minimal so test mocks for Authenticate
+// don't have to implement admin write methods.
 type APIKeyStore interface {
 	GetKey(ctx context.Context, id string) (APIKey, error)
+}
+
+// AdminKeyStore is the richer interface admin tooling needs: read,
+// list (tenant-scoped), write, and revoke. MemKeyStore satisfies it;
+// production Postgres-backed implementations should as well. Daemon
+// admin endpoints wire to this — without it those endpoints 501.
+type AdminKeyStore interface {
+	APIKeyStore
+	PutKey(ctx context.Context, k APIKey) error
+	Revoke(ctx context.Context, id string, at time.Time) error
+	ListByTenant(ctx context.Context, tenant string) ([]APIKey, error)
+	// ListAll returns every key in the store regardless of tenant.
+	// Used by platform-admin paths that need to enumerate tenants
+	// (the only durable "set of tenants" today is the union of
+	// tenants represented in active keys).
+	ListAll(ctx context.Context) ([]APIKey, error)
 }
 
 type APIKeyAuthenticator struct {
@@ -163,4 +181,34 @@ func (m *MemKeyStore) Revoke(_ context.Context, id string, at time.Time) error {
 	k.RevokedAt = &at
 	m.keys[id] = k
 	return nil
+}
+
+// ListAll returns every key in the store. Used by platform admins to
+// derive the tenant catalog (no separate tenants table exists today).
+func (m *MemKeyStore) ListAll(_ context.Context) ([]APIKey, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make([]APIKey, 0, len(m.keys))
+	for _, k := range m.keys {
+		out = append(out, k)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, nil
+}
+
+// ListByTenant returns every key whose Tenant matches. Keys are
+// returned with their hash + salt intact — callers that don't need
+// those (the admin UI) should redact them on the way out. Sorted by ID
+// for deterministic test output.
+func (m *MemKeyStore) ListByTenant(_ context.Context, tenant string) ([]APIKey, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make([]APIKey, 0)
+	for _, k := range m.keys {
+		if k.Tenant == tenant {
+			out = append(out, k)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, nil
 }

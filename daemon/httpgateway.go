@@ -78,6 +78,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 		_, _ = rw.Write([]byte("ok"))
 	})
 	mux.HandleFunc("GET /api/v1/whoami", h.requireAuth(h.whoami))
+	mux.HandleFunc("GET /api/v1/workspaces", h.requireAuth(h.listWorkspaces))
 	mux.HandleFunc("GET /api/v1/modules", h.requireAuth(h.listModules))
 	mux.HandleFunc("GET /api/v1/graphs", h.requireAuth(h.listGraphs))
 	mux.HandleFunc("GET /api/v1/graphs/{tenant}/{workspace}/{id}", h.requireAuth(h.loadGraph))
@@ -85,6 +86,13 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/graphs/{tenant}/{workspace}/{id}/run", h.requireAuth(h.runGraph))
 	mux.HandleFunc("GET /api/v1/graphs/{tenant}/{workspace}/{id}/runs", h.requireAuth(h.listRuns))
 	mux.HandleFunc("GET /api/v1/runs", h.requireAuth(h.listAllRuns))
+	mux.HandleFunc("GET /api/v1/approvals/pending", h.requireAuth(h.listPendingApprovals))
+	mux.HandleFunc("POST /api/v1/approvals/{runID}/{nodeID}", h.requireAuth(h.approveAuthed))
+	mux.HandleFunc("GET /api/v1/admin/api-keys", h.requireAuth(h.listAPIKeys))
+	mux.HandleFunc("POST /api/v1/admin/api-keys", h.requireAuth(h.issueAPIKey))
+	mux.HandleFunc("DELETE /api/v1/admin/api-keys/{id}", h.requireAuth(h.revokeAPIKey))
+	mux.HandleFunc("GET /api/v1/admin/users", h.requireAuth(h.listUsers))
+	mux.HandleFunc("GET /api/v1/admin/tenants", h.requireAuth(h.listTenants))
 	mux.HandleFunc("GET /api/v1/jobs/{jobID}", h.requireAuth(h.jobSnapshot))
 	mux.HandleFunc("GET /api/v1/jobs/{jobID}/nodes/{nodeID}", h.requireAuth(h.nodeSnapshot))
 	mux.HandleFunc("GET /api/v1/jobs/{jobID}/events", h.requireAuth(h.jobEvents))
@@ -163,6 +171,19 @@ func (h *HTTPGateway) whoami(rw http.ResponseWriter, _ *http.Request, p core.Pri
 	})
 }
 
+// listWorkspaces returns the workspaces the bearer can access. The UI
+// uses it to drive the top-bar switcher. Platform admins may pass
+// ?tenant= to list workspaces in any tenant; everyone else's tenant
+// query is ignored (their principal binding wins).
+func (h *HTTPGateway) listWorkspaces(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	ws, err := h.svc.ListWorkspaces(r.Context(), p, r.URL.Query().Get("tenant"))
+	if err != nil {
+		writeJSONError(rw, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{"workspaces": ws})
+}
+
 func (h *HTTPGateway) listModules(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	q := ModuleSearch{
 		Query: r.URL.Query().Get("q"),
@@ -191,12 +212,12 @@ func (h *HTTPGateway) listGraphs(rw http.ResponseWriter, r *http.Request, p core
 		writeJSONError(rw, http.StatusBadRequest, "tenant and workspace query params required")
 		return
 	}
-	ids, err := h.svc.ListGraphs(r.Context(), p, tenant, workspace)
+	summaries, err := h.svc.ListFlowSummaries(r.Context(), p, tenant, workspace)
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(rw, http.StatusOK, map[string]any{"graphs": ids})
+	writeJSON(rw, http.StatusOK, map[string]any{"graphs": summaries})
 }
 
 func (h *HTTPGateway) loadGraph(rw http.ResponseWriter, r *http.Request, p core.Principal) {
@@ -275,6 +296,17 @@ func parseRunListOpts(r *http.Request) core.ListGraphRunsOpts {
 	if s := r.URL.Query().Get("status"); s != "" {
 		opts.Status = core.JobStatus(s)
 	}
+	// Optional ?workspace= and ?tenant= narrow admin views. Service
+	// layer enforces the actual scope: a scoped principal can't widen
+	// past their binding (their tenant/workspace overrides whatever
+	// the URL says), only platform admins can pass an arbitrary
+	// tenant.
+	if s := r.URL.Query().Get("workspace"); s != "" {
+		opts.Workspace = s
+	}
+	if s := r.URL.Query().Get("tenant"); s != "" {
+		opts.Tenant = s
+	}
 	return opts
 }
 
@@ -317,6 +349,155 @@ func errorCode(r *core.Result) string {
 		return ""
 	}
 	return r.Error.Code
+}
+
+// listAPIKeys, issueAPIKey, revokeAPIKey power the Admin UI's API
+// keys card. All three require tenant:admin (enforced in Service);
+// without an AdminKeys store wired up they return 501.
+func (h *HTTPGateway) listAPIKeys(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	// ?tenant= narrows to a specific tenant. Platform admins may pass
+	// any tenant; everyone else is force-scoped to their own.
+	keys, err := h.svc.ListAPIKeys(r.Context(), p, r.URL.Query().Get("tenant"))
+	if err != nil {
+		adminError(rw, err)
+		return
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{"keys": keys})
+}
+
+// listTenants returns the set of tenants on this hzd. Platform admins
+// only. Powers the tenant switcher in the top bar for super-admin UIs.
+func (h *HTTPGateway) listTenants(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	tenants, err := h.svc.ListTenants(r.Context(), p)
+	if err != nil {
+		adminError(rw, err)
+		return
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{"tenants": tenants})
+}
+
+func (h *HTTPGateway) issueAPIKey(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	var params IssueAPIKeyParams
+	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
+		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
+		return
+	}
+	issued, err := h.svc.IssueAPIKey(r.Context(), p, params)
+	if err != nil {
+		adminError(rw, err)
+		return
+	}
+	writeJSON(rw, http.StatusCreated, issued)
+}
+
+// listUsers derives one entry per distinct Subject from the API keys
+// in the principal's tenant. Roles + permissions are rolled up.
+func (h *HTTPGateway) listUsers(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	users, err := h.svc.ListUsers(r.Context(), p, r.URL.Query().Get("tenant"))
+	if err != nil {
+		adminError(rw, err)
+		return
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{"users": users})
+}
+
+func (h *HTTPGateway) revokeAPIKey(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	if err := h.svc.RevokeAPIKey(r.Context(), p, r.PathValue("id")); err != nil {
+		adminError(rw, err)
+		return
+	}
+	rw.WriteHeader(http.StatusNoContent)
+}
+
+// adminError maps known Service errors to HTTP statuses without
+// duplicating the message inspection at every handler.
+func adminError(rw http.ResponseWriter, err error) {
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "requires permission"):
+		writeJSONError(rw, http.StatusForbidden, msg)
+	case strings.Contains(msg, "not configured"):
+		writeJSONError(rw, http.StatusNotImplemented, msg)
+	case strings.Contains(msg, "is required"):
+		writeJSONError(rw, http.StatusBadRequest, msg)
+	default:
+		writeJSONError(rw, http.StatusInternalServerError, msg)
+	}
+}
+
+// listPendingApprovals returns the await_approval inbox: every node
+// in the principal's scope currently parked with Status=awaiting and
+// a `pending_url` output. Sorted newest-first by the service layer.
+//
+// Optional ?workspace= narrows the inbox to a single workspace.
+// Admins (whose principal carries no workspace binding) get the
+// tenant-wide view by default; the UI uses this query param to
+// reflect the workspace switcher's current selection.
+func (h *HTTPGateway) listPendingApprovals(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	approvals, err := h.svc.ListPendingApprovals(
+		r.Context(),
+		p,
+		r.URL.Query().Get("tenant"),
+		r.URL.Query().Get("workspace"),
+	)
+	if err != nil {
+		writeJSONError(rw, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{"approvals": approvals})
+}
+
+// approveAuthed is the bearer-token-authenticated approval path used
+// by the inbox UI. The principal's identity is trusted directly — no
+// HMAC token to validate, because by getting here they've already
+// proven workspace membership through the API key chain.
+//
+// The HMAC-based /approve/{runID}/{nodeID} endpoint stays available
+// for the email/Slack notification flow where the approver doesn't
+// have a session.
+func (h *HTTPGateway) approveAuthed(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	runID := r.PathValue("runID")
+	nodeID := r.PathValue("nodeID")
+	decision := r.URL.Query().Get("decision")
+	if decision == "" {
+		decision = "approve"
+	}
+	// Tenant scope: load the parent graph through GetJob, which already
+	// enforces the principal's tenant. Prevents a malicious-but-valid
+	// API key from approving someone else's pending node.
+	if _, err := h.svc.GetJob(r.Context(), p, runID); err != nil {
+		if errors.Is(err, core.ErrNotFound) {
+			writeJSONError(rw, http.StatusNotFound, err.Error())
+			return
+		}
+		writeJSONError(rw, http.StatusForbidden, err.Error())
+		return
+	}
+	approver := r.URL.Query().Get("approver")
+	if approver == "" {
+		approver = p.Subject
+	}
+	if err := h.svc.Approve(r.Context(), runID, nodeID, ApprovalDecision{
+		Decision: decision,
+		Approver: approver,
+		Comment:  r.URL.Query().Get("comment"),
+	}); err != nil {
+		if strings.Contains(err.Error(), "not awaiting") {
+			writeJSONError(rw, http.StatusConflict, err.Error())
+			return
+		}
+		if strings.Contains(err.Error(), "not found") {
+			writeJSONError(rw, http.StatusNotFound, err.Error())
+			return
+		}
+		if strings.Contains(err.Error(), "approve or reject") {
+			writeJSONError(rw, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeJSONError(rw, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(rw, http.StatusOK, map[string]string{"status": "resumed", "decision": decision})
 }
 
 func (h *HTTPGateway) runGraph(rw http.ResponseWriter, r *http.Request, p core.Principal) {

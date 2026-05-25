@@ -111,6 +111,9 @@ func main() {
 		Engine:     eng,
 		Bus:        bus,
 		WorkerID:   "hzd-dev",
+		// AdminKeys uses the same MemKeyStore the Authenticator reads
+		// from, so admin-issued keys are immediately recognized.
+		AdminKeys: ks,
 	}
 
 	// Spin up worker goroutines. Each is independent and competes for

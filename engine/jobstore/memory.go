@@ -206,6 +206,44 @@ func (m *Memory) ListGraphRuns(_ context.Context, opts core.ListGraphRunsOpts) (
 	return out, nil
 }
 
+func (m *Memory) ListNodeRecords(_ context.Context, opts core.ListNodeRecordsOpts) ([]core.JobRecord, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []core.JobRecord
+	for _, r := range m.records {
+		if r.Kind != core.JobKindNode {
+			continue
+		}
+		if opts.Tenant != "" && r.Tenant != opts.Tenant {
+			continue
+		}
+		if opts.Workspace != "" && r.Workspace != opts.Workspace {
+			continue
+		}
+		if opts.Status != "" && r.Status != opts.Status {
+			continue
+		}
+		out = append(out, *r)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].EnqueuedAt.After(out[j].EnqueuedAt)
+	})
+	if opts.Offset > 0 {
+		if opts.Offset >= len(out) {
+			return nil, nil
+		}
+		out = out[opts.Offset:]
+	}
+	limit := opts.Limit
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit < len(out) {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
 func (m *Memory) ListByGraph(_ context.Context, graphID string) ([]core.JobRecord, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

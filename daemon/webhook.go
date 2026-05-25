@@ -152,14 +152,18 @@ func (w *WebhookListener) handleTrigger(rw http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	// Fire the graph as a system principal scoped to the graph's tenant.
+	// Fire the graph as a system principal scoped to the graph's
+	// tenant. Trigger-driven runs bypass per-flow visibility because
+	// possession of the per-graph webhook secret already proves
+	// authorization — graph:admin lets the principal fire private
+	// flows without owning them.
 	principal := core.Principal{
 		Subject:   "hazyflow-webhook",
 		Tenant:    g.Tenant,
 		Workspace: g.Workspace,
 		Roles: []core.Role{{
 			Name:        "webhook",
-			Permissions: []core.Permission{core.PermGraphRun},
+			Permissions: []core.Permission{core.PermGraphRun, core.PermGraphAdmin},
 		}},
 	}
 	runID, err := w.svc.SubmitGraphWithSeed(r.Context(), principal, g, seeds)

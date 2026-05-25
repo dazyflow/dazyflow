@@ -57,6 +57,13 @@ func Require(p Principal, perms ...Permission) error {
 // one. Cross-tenant access is never allowed, even for tenant admins of a
 // different tenant.
 func RequireTenant(p Principal, tenant string) error {
+	// Platform admins cross tenant boundaries by design — the role's
+	// whole purpose is operating multiple tenants on one hzd. The
+	// principal itself may not even carry a tenant (operator keys
+	// often don't).
+	if p.Has(PermPlatformAdmin) {
+		return nil
+	}
 	if p.Tenant == "" {
 		return fmt.Errorf("%w: principal has no tenant", ErrUnauthorized)
 	}
@@ -89,5 +96,76 @@ func AuthorizeGraphRun(p Principal, graph Graph) error {
 	if err := RequireWorkspace(p, graph.Tenant, graph.Workspace); err != nil {
 		return err
 	}
+	if err := authorizeVisibility(p, graph); err != nil {
+		return err
+	}
 	return Require(p, PermGraphRun)
+}
+
+// AuthorizeGraphView returns nil if p may see this flow at all
+// (load, list, run). Org-visible flows allow any tenant/workspace
+// member; private flows require the principal to be the owner or
+// carry tenant:admin / graph:admin.
+//
+// Returns ErrUnauthorized when the principal lacks read access —
+// callers typically translate that to a 404 (NOT 403) at the HTTP
+// boundary so private flows don't leak their existence to others.
+func AuthorizeGraphView(p Principal, graph Graph) error {
+	if err := RequireWorkspace(p, graph.Tenant, graph.Workspace); err != nil {
+		return err
+	}
+	return authorizeVisibility(p, graph)
+}
+
+// AuthorizeGraphEdit gates save/delete. An org-visible flow is still
+// only writable by its owner (or admin) — sharing for read doesn't
+// imply shared write. New flows (Owner=="") are writable by anyone
+// with graph:edit in the workspace; that's the only path a flow gets
+// its initial Owner stamped.
+func AuthorizeGraphEdit(p Principal, graph Graph) error {
+	if err := RequireWorkspace(p, graph.Tenant, graph.Workspace); err != nil {
+		return err
+	}
+	if err := Require(p, PermGraphEdit); err != nil {
+		return err
+	}
+	// New-flow case: no owner yet, fall through. The save path will
+	// stamp the principal as owner.
+	if graph.Owner == "" {
+		return nil
+	}
+	if isOwner(p, graph) || IsFlowAdminPrincipal(p) {
+		return nil
+	}
+	return fmt.Errorf("%w: flow %q is owned by %q", ErrUnauthorized, graph.ID, graph.Owner)
+}
+
+// authorizeVisibility is the shared read-side check used by View and
+// (indirectly) Run.
+func authorizeVisibility(p Principal, graph Graph) error {
+	if graph.EffectiveVisibility() == VisibilityOrg {
+		return nil
+	}
+	// Private. Owner unset means the flow predates visibility — treat
+	// as org-visible so legacy flows keep working.
+	if graph.Owner == "" {
+		return nil
+	}
+	if isOwner(p, graph) || IsFlowAdminPrincipal(p) {
+		return nil
+	}
+	return fmt.Errorf("%w: flow %q is private", ErrUnauthorized, graph.ID)
+}
+
+func isOwner(p Principal, graph Graph) bool {
+	return graph.Owner != "" && p.Subject != "" && p.Subject == graph.Owner
+}
+
+// IsFlowAdminPrincipal is the override that lets administrators
+// recover otherwise-private flows — important when the original owner
+// leaves the tenant. graph:admin is the per-graph admin; tenant:admin
+// subsumes it. Exported so the daemon's save path can use it to gate
+// owner reassignment.
+func IsFlowAdminPrincipal(p Principal) bool {
+	return p.Has(PermTenantAdmin) || p.Has(PermGraphAdmin)
 }

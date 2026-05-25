@@ -19,12 +19,14 @@ import (
 // returning the Bearer token tests should send for an authenticated
 // principal scoped to t/ws.
 type gatewayHarness struct {
-	gw    *HTTPGateway
-	svc   *Service
-	store core.JobStore
-	ws    *workspace.Store
-	bus   *MemoryBus
-	token string
+	gw         *HTTPGateway
+	svc        *Service
+	store      core.JobStore
+	ws         *workspace.Store
+	bus        *MemoryBus
+	ks         *auth.MemKeyStore
+	token      string // editor token
+	adminToken string // tenant:admin token (issued lazily by ensureAdmin)
 }
 
 func newGatewayHarness(t *testing.T) *gatewayHarness {
@@ -47,10 +49,38 @@ func newGatewayHarness(t *testing.T) *gatewayHarness {
 		Jobs:       store,
 		Engine:     eng,
 		Bus:        bus,
+		AdminKeys:  ks,
 	}
 	return &gatewayHarness{
-		gw: NewHTTPGateway(svc), svc: svc, store: store, ws: wsStore, bus: bus, token: token,
+		gw: NewHTTPGateway(svc), svc: svc, store: store, ws: wsStore, bus: bus, ks: ks, token: token,
 	}
+}
+
+// adminDo runs the request with a tenant:admin bearer token, minting
+// one on first use so individual tests don't have to wire it.
+func (h *gatewayHarness) adminDo(t *testing.T, method, path string, body any) *httptest.ResponseRecorder {
+	t.Helper()
+	if h.adminToken == "" {
+		role := core.Role{Name: "admin", Permissions: []core.Permission{core.PermTenantAdmin}}
+		_, tok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-admin", "t", "ws", "root", []core.Role{role})
+		if err != nil {
+			t.Fatalf("issue admin key: %v", err)
+		}
+		h.adminToken = tok
+	}
+	var bodyReader *bytes.Buffer
+	if body != nil {
+		b, _ := json.Marshal(body)
+		bodyReader = bytes.NewBuffer(b)
+	} else {
+		bodyReader = bytes.NewBuffer(nil)
+	}
+	req := httptest.NewRequest(method, path, bodyReader)
+	req.Header.Set("Authorization", "Bearer "+h.adminToken)
+	req.Header.Set("Content-Type", "application/json")
+	rw := httptest.NewRecorder()
+	ServeForTest(h.gw, rw, req)
+	return rw
 }
 
 func (h *gatewayHarness) do(t *testing.T, method, path string, body any) *httptest.ResponseRecorder {
@@ -383,6 +413,277 @@ func TestHTTPGateway_ListAllRunsAcrossGraphs(t *testing.T) {
 	}
 }
 
+func TestHTTPGateway_ListPendingApprovals(t *testing.T) {
+	h := newGatewayHarness(t)
+	// Parent graph-record so any tenant-scope check downstream passes.
+	_ = h.store.Enqueue(t.Context(), core.JobRecord{
+		ID: "run-1", Kind: core.JobKindGraph, GraphID: "g1",
+		Tenant: "t", Workspace: "ws", Status: core.JobStatusRunning,
+	})
+	// Awaiting await_approval node — should appear.
+	_ = h.store.Enqueue(t.Context(), core.JobRecord{
+		ID: NodeJobID("run-1", "approval"), Kind: core.JobKindNode,
+		GraphRunID: "run-1", GraphID: "g1",
+		NodeID: "approval", Tenant: "t", Workspace: "ws",
+		Status: core.JobStatusAwaiting,
+		Result: &core.Result{
+			Status: core.StatusAwaiting,
+			Output: map[string]core.Ref{
+				"pending_url": {MIME: "text/plain", Inline: "https://hzd/approve/run-1/approval?token=abc"},
+				"prompt":      {MIME: "text/plain", Inline: "Approve invoice?"},
+			},
+		},
+	})
+	// Awaiting subgraph node — must NOT appear (no pending_url).
+	_ = h.store.Enqueue(t.Context(), core.JobRecord{
+		ID: NodeJobID("run-1", "subgraph"), Kind: core.JobKindNode,
+		GraphRunID: "run-1", GraphID: "g1",
+		NodeID: "subgraph", Tenant: "t", Workspace: "ws",
+		Status: core.JobStatusAwaiting,
+		Result: &core.Result{
+			Output: map[string]core.Ref{
+				"pending_child_graph_id": {Inline: "child"},
+			},
+		},
+	})
+	// Awaiting node in different tenant — must NOT appear.
+	_ = h.store.Enqueue(t.Context(), core.JobRecord{
+		ID: NodeJobID("run-other", "approval"), Kind: core.JobKindNode,
+		GraphRunID: "run-other", GraphID: "g2",
+		NodeID: "approval", Tenant: "other", Workspace: "ws",
+		Status: core.JobStatusAwaiting,
+		Result: &core.Result{
+			Output: map[string]core.Ref{
+				"pending_url": {Inline: "https://hzd/approve/run-other/approval?token=zzz"},
+			},
+		},
+	})
+
+	rw := h.do(t, "GET", "/api/v1/approvals/pending", nil)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("code = %d body = %s", rw.Code, rw.Body.String())
+	}
+	var out struct {
+		Approvals []struct {
+			RunID  string `json:"run_id"`
+			NodeID string `json:"node_id"`
+			Prompt string `json:"prompt"`
+			URL    string `json:"url"`
+		} `json:"approvals"`
+	}
+	_ = json.Unmarshal(rw.Body.Bytes(), &out)
+	if len(out.Approvals) != 1 {
+		t.Fatalf("approvals = %+v, want only the await_approval row", out.Approvals)
+	}
+	if out.Approvals[0].NodeID != "approval" {
+		t.Errorf("node_id = %q", out.Approvals[0].NodeID)
+	}
+	if out.Approvals[0].Prompt != "Approve invoice?" {
+		t.Errorf("prompt = %q", out.Approvals[0].Prompt)
+	}
+}
+
+func TestHTTPGateway_ApproveAuthedResumesAwaitingNode(t *testing.T) {
+	h := newGatewayHarness(t)
+	// Need a parent graph-record + the awaiting node-record + a
+	// payload so AdvanceAfterCompletion can load the graph and not
+	// no-op on the dispatch.
+	_ = h.store.Enqueue(t.Context(), core.JobRecord{
+		ID: "run-1", Kind: core.JobKindGraph,
+		GraphID: "g1", Tenant: "t", Workspace: "ws",
+		Status:       core.JobStatusRunning,
+		GraphPayload: []byte(`{"id":"g1","tenant":"t","workspace":"ws","nodes":[{"id":"a","module":"await_approval"}]}`),
+	})
+	_ = h.store.Enqueue(t.Context(), core.JobRecord{
+		ID: NodeJobID("run-1", "a"), Kind: core.JobKindNode,
+		GraphRunID: "run-1", GraphID: "g1",
+		NodeID: "a", Tenant: "t", Workspace: "ws",
+		Status: core.JobStatusAwaiting,
+		Result: &core.Result{
+			Status: core.StatusAwaiting,
+			Output: map[string]core.Ref{
+				"pending_url": {Inline: "https://hzd/approve/run-1/a?token=x"},
+			},
+		},
+	})
+	rw := h.do(t, "POST", "/api/v1/approvals/run-1/a?decision=approve&comment=looks+good", nil)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("code = %d body = %s", rw.Code, rw.Body.String())
+	}
+	// Record should now be succeeded with the decision recorded.
+	rec, _ := h.store.Get(t.Context(), NodeJobID("run-1", "a"))
+	if rec.Status != core.JobStatusSucceeded {
+		t.Errorf("status = %q, want succeeded", rec.Status)
+	}
+	if rec.Result == nil || rec.Result.Output["decision"].Inline != "approve" {
+		t.Errorf("decision missing: %+v", rec.Result)
+	}
+	if got, _ := rec.Result.Output["comment"].Inline.(string); got != "looks good" {
+		t.Errorf("comment = %q", got)
+	}
+	// Approver defaults to the principal's subject when not set.
+	if got, _ := rec.Result.Output["approver"].Inline.(string); got != "alice" {
+		t.Errorf("approver = %q, want alice (principal subject)", got)
+	}
+}
+
+func TestHTTPGateway_ApproveAuthedRejectsCrossTenant(t *testing.T) {
+	h := newGatewayHarness(t)
+	// Belongs to a different tenant — the bearer principal can't see it.
+	_ = h.store.Enqueue(t.Context(), core.JobRecord{
+		ID: "run-other", Kind: core.JobKindGraph,
+		GraphID: "g", Tenant: "other", Workspace: "ws",
+		Status:       core.JobStatusRunning,
+		GraphPayload: []byte(`{}`),
+	})
+	rw := h.do(t, "POST", "/api/v1/approvals/run-other/a?decision=approve", nil)
+	if rw.Code != http.StatusNotFound && rw.Code != http.StatusForbidden {
+		t.Errorf("code = %d, want 404 or 403", rw.Code)
+	}
+}
+
+func TestHTTPGateway_ListAllRunsAcceptsWorkspaceNarrow(t *testing.T) {
+	h := newGatewayHarness(t)
+	// One run in our workspace, one in a sibling workspace within the
+	// same tenant. An admin without a workspace binding should be
+	// able to narrow to either via ?workspace=.
+	_ = h.store.Enqueue(t.Context(), core.JobRecord{
+		ID: "r-ws", Kind: core.JobKindGraph, GraphID: "g",
+		Tenant: "t", Workspace: "ws", Status: core.JobStatusSucceeded,
+	})
+	_ = h.store.Enqueue(t.Context(), core.JobRecord{
+		ID: "r-ws2", Kind: core.JobKindGraph, GraphID: "g2",
+		Tenant: "t", Workspace: "ws2", Status: core.JobStatusSucceeded,
+	})
+
+	// Issue an unscoped admin key for this tenant.
+	role := core.Role{Name: "ta", Permissions: []core.Permission{core.PermTenantAdmin}}
+	_, adminTok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-narrow-admin", "t", "", "root3", []core.Role{role})
+	if err != nil {
+		t.Fatalf("issue: %v", err)
+	}
+	doAdmin := func(path string) []string {
+		req := httptest.NewRequest("GET", path, nil)
+		req.Header.Set("Authorization", "Bearer "+adminTok)
+		rw := httptest.NewRecorder()
+		ServeForTest(h.gw, rw, req)
+		if rw.Code != http.StatusOK {
+			t.Fatalf("%s: code=%d body=%s", path, rw.Code, rw.Body.String())
+		}
+		var out struct {
+			Runs []struct{ ID string } `json:"runs"`
+		}
+		_ = json.Unmarshal(rw.Body.Bytes(), &out)
+		ids := make([]string, len(out.Runs))
+		for i, r := range out.Runs {
+			ids[i] = r.ID
+		}
+		return ids
+	}
+	// Unfiltered: both visible.
+	all := doAdmin("/api/v1/runs")
+	if len(all) != 2 {
+		t.Errorf("unfiltered len = %d, want 2 (saw %v)", len(all), all)
+	}
+	// Narrow to ws.
+	onlyWS := doAdmin("/api/v1/runs?workspace=ws")
+	if len(onlyWS) != 1 || onlyWS[0] != "r-ws" {
+		t.Errorf("workspace=ws filtered: %v, want [r-ws]", onlyWS)
+	}
+	// Narrow to ws2.
+	onlyWS2 := doAdmin("/api/v1/runs?workspace=ws2")
+	if len(onlyWS2) != 1 || onlyWS2[0] != "r-ws2" {
+		t.Errorf("workspace=ws2 filtered: %v, want [r-ws2]", onlyWS2)
+	}
+}
+
+func TestHTTPGateway_ListAllRuns_ScopedPrincipalIgnoresWorkspaceQuery(t *testing.T) {
+	h := newGatewayHarness(t)
+	// Two workspaces with runs.
+	_ = h.store.Enqueue(t.Context(), core.JobRecord{
+		ID: "mine", Kind: core.JobKindGraph, GraphID: "g",
+		Tenant: "t", Workspace: "ws", Status: core.JobStatusSucceeded,
+	})
+	_ = h.store.Enqueue(t.Context(), core.JobRecord{
+		ID: "theirs", Kind: core.JobKindGraph, GraphID: "g",
+		Tenant: "t", Workspace: "ws2", Status: core.JobStatusSucceeded,
+	})
+	// h.do uses the bootstrap editor key bound to workspace "ws". Even
+	// if we pass ?workspace=ws2, the principal's binding wins and
+	// they only see their own workspace's runs.
+	rw := h.do(t, "GET", "/api/v1/runs?workspace=ws2", nil)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("code = %d", rw.Code)
+	}
+	var out struct {
+		Runs []struct{ ID string } `json:"runs"`
+	}
+	_ = json.Unmarshal(rw.Body.Bytes(), &out)
+	for _, r := range out.Runs {
+		if r.ID == "theirs" {
+			t.Error("scoped principal leaked across workspaces via ?workspace=")
+		}
+	}
+}
+
+func TestHTTPGateway_ListPendingApprovalsAcceptsWorkspaceNarrow(t *testing.T) {
+	h := newGatewayHarness(t)
+	// Pending approval in ws and ws2.
+	for _, e := range []struct {
+		runID string
+		ws    string
+	}{
+		{"r1", "ws"},
+		{"r2", "ws2"},
+	} {
+		_ = h.store.Enqueue(t.Context(), core.JobRecord{
+			ID: e.runID, Kind: core.JobKindGraph, GraphID: "g",
+			Tenant: "t", Workspace: e.ws, Status: core.JobStatusRunning,
+		})
+		_ = h.store.Enqueue(t.Context(), core.JobRecord{
+			ID: NodeJobID(e.runID, "a"), Kind: core.JobKindNode,
+			GraphRunID: e.runID, GraphID: "g", NodeID: "a",
+			Tenant: "t", Workspace: e.ws, Status: core.JobStatusAwaiting,
+			Result: &core.Result{Output: map[string]core.Ref{
+				"pending_url": {Inline: "https://hzd/approve"},
+			}},
+		})
+	}
+	role := core.Role{Name: "ta", Permissions: []core.Permission{core.PermTenantAdmin}}
+	_, adminTok, _ := auth.IssueAPIKey(h.ks, t.Context(), "k-narrow-app-admin", "t", "", "root4", []core.Role{role})
+
+	doAdmin := func(path string) []string {
+		req := httptest.NewRequest("GET", path, nil)
+		req.Header.Set("Authorization", "Bearer "+adminTok)
+		rw := httptest.NewRecorder()
+		ServeForTest(h.gw, rw, req)
+		if rw.Code != http.StatusOK {
+			t.Fatalf("%s: code=%d", path, rw.Code)
+		}
+		var out struct {
+			Approvals []struct {
+				RunID string `json:"run_id"`
+			} `json:"approvals"`
+		}
+		_ = json.Unmarshal(rw.Body.Bytes(), &out)
+		ids := make([]string, len(out.Approvals))
+		for i, a := range out.Approvals {
+			ids[i] = a.RunID
+		}
+		return ids
+	}
+	// Unfiltered: both visible.
+	all := doAdmin("/api/v1/approvals/pending")
+	if len(all) != 2 {
+		t.Errorf("unfiltered: %v, want 2", all)
+	}
+	// Narrow to ws.
+	narrow := doAdmin("/api/v1/approvals/pending?workspace=ws")
+	if len(narrow) != 1 || narrow[0] != "r1" {
+		t.Errorf("narrowed: %v, want [r1]", narrow)
+	}
+}
+
 func TestHTTPGateway_ListAllRunsScopedToTenant(t *testing.T) {
 	h := newGatewayHarness(t)
 	// Run in OUR tenant + workspace
@@ -435,5 +736,439 @@ func TestHTTPGateway_CORSHeadersOnPreflight(t *testing.T) {
 	}
 	if !strings.Contains(rw.Header().Get("Access-Control-Allow-Methods"), "PUT") {
 		t.Errorf("ACAM = %q, expected to include PUT", rw.Header().Get("Access-Control-Allow-Methods"))
+	}
+}
+
+// --- API key admin endpoints ------------------------------------------
+
+func TestHTTPGateway_AdminListAPIKeys_RequiresTenantAdmin(t *testing.T) {
+	h := newGatewayHarness(t)
+	// Editor token (no tenant:admin) should be denied.
+	rw := h.do(t, "GET", "/api/v1/admin/api-keys", nil)
+	if rw.Code != http.StatusForbidden {
+		t.Errorf("editor code = %d, want 403", rw.Code)
+	}
+	// Tenant-admin token succeeds and sees the bootstrap key.
+	rw = h.adminDo(t, "GET", "/api/v1/admin/api-keys", nil)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("admin code = %d body = %s", rw.Code, rw.Body.String())
+	}
+	var out struct {
+		Keys []APIKeySummary `json:"keys"`
+	}
+	_ = json.Unmarshal(rw.Body.Bytes(), &out)
+	if len(out.Keys) < 2 {
+		t.Errorf("keys = %d, want at least the editor + admin keys", len(out.Keys))
+	}
+	// Hash + salt are never exposed.
+	raw := rw.Body.String()
+	if strings.Contains(raw, "Hash") || strings.Contains(raw, "Salt") {
+		t.Error("payload leaks Hash/Salt field")
+	}
+}
+
+func TestHTTPGateway_AdminIssueAPIKey_ReturnsSecretOnce(t *testing.T) {
+	h := newGatewayHarness(t)
+	rw := h.adminDo(t, "POST", "/api/v1/admin/api-keys", map[string]any{
+		"subject": "bot-1",
+		"roles": []map[string]any{
+			{"name": "runner", "permissions": []string{"graph:run"}},
+		},
+	})
+	if rw.Code != http.StatusCreated {
+		t.Fatalf("code = %d body = %s", rw.Code, rw.Body.String())
+	}
+	var issued IssuedAPIKey
+	if err := json.Unmarshal(rw.Body.Bytes(), &issued); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if issued.Secret == "" {
+		t.Fatal("secret missing from issue response")
+	}
+	// The Authenticator should accept the brand-new key.
+	if _, err := h.svc.Authenticate(t.Context(), issued.Secret); err != nil {
+		t.Errorf("issued secret didn't authenticate: %v", err)
+	}
+}
+
+func TestHTTPGateway_AdminIssueAPIKey_RejectsMissingFields(t *testing.T) {
+	h := newGatewayHarness(t)
+	// Missing subject
+	rw := h.adminDo(t, "POST", "/api/v1/admin/api-keys", map[string]any{
+		"roles": []map[string]any{{"name": "r", "permissions": []string{"graph:run"}}},
+	})
+	if rw.Code != http.StatusBadRequest {
+		t.Errorf("missing-subject code = %d, want 400", rw.Code)
+	}
+	// Missing roles
+	rw = h.adminDo(t, "POST", "/api/v1/admin/api-keys", map[string]any{
+		"subject": "x",
+	})
+	if rw.Code != http.StatusBadRequest {
+		t.Errorf("missing-roles code = %d, want 400", rw.Code)
+	}
+}
+
+func TestHTTPGateway_AdminRevokeAPIKey(t *testing.T) {
+	h := newGatewayHarness(t)
+	// First create a fresh key we'll then revoke.
+	rw := h.adminDo(t, "POST", "/api/v1/admin/api-keys", map[string]any{
+		"id":      "doomed",
+		"subject": "doomed",
+		"roles":   []map[string]any{{"name": "r", "permissions": []string{"graph:run"}}},
+	})
+	if rw.Code != http.StatusCreated {
+		t.Fatalf("issue code = %d", rw.Code)
+	}
+	var issued IssuedAPIKey
+	_ = json.Unmarshal(rw.Body.Bytes(), &issued)
+
+	// Authenticates before revoke.
+	if _, err := h.svc.Authenticate(t.Context(), issued.Secret); err != nil {
+		t.Fatalf("pre-revoke auth: %v", err)
+	}
+
+	rw = h.adminDo(t, "DELETE", "/api/v1/admin/api-keys/doomed", nil)
+	if rw.Code != http.StatusNoContent {
+		t.Fatalf("revoke code = %d body = %s", rw.Code, rw.Body.String())
+	}
+	// Fails to authenticate after revoke.
+	if _, err := h.svc.Authenticate(t.Context(), issued.Secret); err == nil {
+		t.Error("revoked key still authenticated")
+	}
+}
+
+func TestHTTPGateway_ListWorkspaces_SingleForScopedKey(t *testing.T) {
+	h := newGatewayHarness(t)
+	// Default editor key is bound to workspace "ws" — listing returns
+	// just that one regardless of what else exists.
+	rw := h.do(t, "GET", "/api/v1/workspaces", nil)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("code = %d body = %s", rw.Code, rw.Body.String())
+	}
+	var out struct {
+		Workspaces []string `json:"workspaces"`
+	}
+	_ = json.Unmarshal(rw.Body.Bytes(), &out)
+	if len(out.Workspaces) != 1 || out.Workspaces[0] != "ws" {
+		t.Errorf("scoped key got %v, want [ws]", out.Workspaces)
+	}
+}
+
+func TestHTTPGateway_ListWorkspaces_PlatformAdminNarrowsByTenant(t *testing.T) {
+	h := newGatewayHarness(t)
+	// Set up workspaces in two tenants.
+	wsA, _ := workspace.OpenFS("")
+	wsB, _ := workspace.OpenFS("")
+	h.svc.Workspaces = MapWorkspaces{
+		"t/ws":          h.ws,
+		"t/ws2":         wsA,
+		"customer-a/p1": wsB,
+		"customer-a/p2": wsB,
+	}
+	// Platform admin (no tenant binding).
+	role := core.Role{Name: "platform", Permissions: []core.Permission{core.PermPlatformAdmin}}
+	_, tok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-platform-ws", "", "", "op", []core.Role{role})
+	if err != nil {
+		t.Fatalf("issue: %v", err)
+	}
+	get := func(path string) []string {
+		req := httptest.NewRequest("GET", path, nil)
+		req.Header.Set("Authorization", "Bearer "+tok)
+		rw := httptest.NewRecorder()
+		ServeForTest(h.gw, rw, req)
+		if rw.Code != http.StatusOK {
+			t.Fatalf("%s: code=%d body=%s", path, rw.Code, rw.Body.String())
+		}
+		var out struct {
+			Workspaces []string `json:"workspaces"`
+		}
+		_ = json.Unmarshal(rw.Body.Bytes(), &out)
+		return out.Workspaces
+	}
+	wsT := get("/api/v1/workspaces?tenant=t")
+	if len(wsT) != 2 || wsT[0] != "ws" || wsT[1] != "ws2" {
+		t.Errorf("?tenant=t = %v, want [ws ws2]", wsT)
+	}
+	wsCustomer := get("/api/v1/workspaces?tenant=customer-a")
+	if len(wsCustomer) != 2 || wsCustomer[0] != "p1" || wsCustomer[1] != "p2" {
+		t.Errorf("?tenant=customer-a = %v, want [p1 p2]", wsCustomer)
+	}
+}
+
+func TestHTTPGateway_ListWorkspaces_ScopedPrincipalIgnoresForeignTenant(t *testing.T) {
+	h := newGatewayHarness(t)
+	wsOther, _ := workspace.OpenFS("")
+	h.svc.Workspaces = MapWorkspaces{
+		"t/ws":         h.ws,
+		"other/secret": wsOther,
+	}
+	// Bootstrap key is bound to tenant "t" — asking for ?tenant=other
+	// must not leak its workspace list.
+	rw := h.do(t, "GET", "/api/v1/workspaces?tenant=other", nil)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("code = %d", rw.Code)
+	}
+	var out struct {
+		Workspaces []string `json:"workspaces"`
+	}
+	_ = json.Unmarshal(rw.Body.Bytes(), &out)
+	for _, w := range out.Workspaces {
+		if w == "secret" {
+			t.Errorf("scoped principal leaked foreign tenant's workspace %q", w)
+		}
+	}
+}
+
+func TestHTTPGateway_ListWorkspaces_AdminSeesAllInTenant(t *testing.T) {
+	h := newGatewayHarness(t)
+	// Register two more workspaces in the same tenant.
+	ws2, _ := workspace.OpenFS("")
+	ws3, _ := workspace.OpenFS("")
+	h.svc.Workspaces = MapWorkspaces{
+		"t/ws":     h.ws,
+		"t/ws-two": ws2,
+		"t/ws-3":   ws3,
+		"other/ws": ws2, // different tenant — must NOT appear
+	}
+	// Issue a tenant-admin key with NO workspace binding.
+	role := core.Role{Name: "tenant-admin", Permissions: []core.Permission{core.PermTenantAdmin}}
+	_, tok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-floating-admin", "t", "", "root2", []core.Role{role})
+	if err != nil {
+		t.Fatalf("issue: %v", err)
+	}
+	req := httptest.NewRequest("GET", "/api/v1/workspaces", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	rw := httptest.NewRecorder()
+	ServeForTest(h.gw, rw, req)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("code = %d body = %s", rw.Code, rw.Body.String())
+	}
+	var out struct {
+		Workspaces []string `json:"workspaces"`
+	}
+	_ = json.Unmarshal(rw.Body.Bytes(), &out)
+	// Expect ws, ws-3, ws-two — sorted. No "other-tenant" leak.
+	want := []string{"ws", "ws-3", "ws-two"}
+	if len(out.Workspaces) != len(want) {
+		t.Fatalf("workspaces = %v, want %v", out.Workspaces, want)
+	}
+	for i := range want {
+		if out.Workspaces[i] != want[i] {
+			t.Errorf("workspaces[%d] = %q, want %q", i, out.Workspaces[i], want[i])
+		}
+	}
+}
+
+func TestHTTPGateway_AdminListUsersGroupsBySubject(t *testing.T) {
+	h := newGatewayHarness(t)
+	// Two keys for charlie (editor + runner) and one for bob. Distinct
+	// from the harness's bootstrap subjects ("alice", "root") so the
+	// roll-up counts only see what this test produced.
+	for _, params := range []map[string]any{
+		{
+			"subject": "charlie",
+			"roles":   []map[string]any{{"name": "editor", "permissions": []string{"graph:edit", "graph:run"}}},
+		},
+		{
+			"subject": "charlie",
+			"roles":   []map[string]any{{"name": "runner", "permissions": []string{"graph:run", "secret:read"}}},
+		},
+		{
+			"subject": "bob",
+			"roles":   []map[string]any{{"name": "ops", "permissions": []string{"tenant:admin"}}},
+		},
+	} {
+		if rw := h.adminDo(t, "POST", "/api/v1/admin/api-keys", params); rw.Code != http.StatusCreated {
+			t.Fatalf("issue %v: %d %s", params, rw.Code, rw.Body.String())
+		}
+	}
+
+	rw := h.adminDo(t, "GET", "/api/v1/admin/users", nil)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("code = %d body = %s", rw.Code, rw.Body.String())
+	}
+	var out struct {
+		Users []UserSummary `json:"users"`
+	}
+	_ = json.Unmarshal(rw.Body.Bytes(), &out)
+
+	// Expect alice, bob, root (the admin harness key), and the editor
+	// bootstrap key — 4 distinct subjects.
+	bySubject := map[string]UserSummary{}
+	for _, u := range out.Users {
+		bySubject[u.Subject] = u
+	}
+	charlie, ok := bySubject["charlie"]
+	if !ok {
+		t.Fatalf("missing charlie in users = %+v", out.Users)
+	}
+	if charlie.ActiveKeys != 2 {
+		t.Errorf("charlie.ActiveKeys = %d, want 2", charlie.ActiveKeys)
+	}
+	// Permissions union: graph:edit + graph:run + secret:read
+	gotPerms := map[core.Permission]bool{}
+	for _, p := range charlie.Permissions {
+		gotPerms[p] = true
+	}
+	for _, want := range []core.Permission{"graph:edit", "graph:run", "secret:read"} {
+		if !gotPerms[want] {
+			t.Errorf("charlie missing permission %q in %+v", want, charlie.Permissions)
+		}
+	}
+	// Role names union: editor + runner
+	if len(charlie.RoleNames) != 2 {
+		t.Errorf("charlie.RoleNames = %v, want 2 entries", charlie.RoleNames)
+	}
+}
+
+func TestHTTPGateway_AdminListUsers_CountsRevokedSeparately(t *testing.T) {
+	h := newGatewayHarness(t)
+	rw := h.adminDo(t, "POST", "/api/v1/admin/api-keys", map[string]any{
+		"id":      "kill-me",
+		"subject": "doomed",
+		"roles":   []map[string]any{{"name": "r", "permissions": []string{"graph:run"}}},
+	})
+	if rw.Code != http.StatusCreated {
+		t.Fatalf("issue: %d", rw.Code)
+	}
+	if rw := h.adminDo(t, "DELETE", "/api/v1/admin/api-keys/kill-me", nil); rw.Code != http.StatusNoContent {
+		t.Fatalf("revoke: %d", rw.Code)
+	}
+	rw = h.adminDo(t, "GET", "/api/v1/admin/users", nil)
+	var out struct {
+		Users []UserSummary `json:"users"`
+	}
+	_ = json.Unmarshal(rw.Body.Bytes(), &out)
+	for _, u := range out.Users {
+		if u.Subject != "doomed" {
+			continue
+		}
+		if u.ActiveKeys != 0 || u.RevokedKeys != 1 {
+			t.Errorf("doomed = %+v, want 0 active / 1 revoked", u)
+		}
+		if len(u.Permissions) != 0 {
+			t.Errorf("revoked key shouldn't contribute permissions: %+v", u.Permissions)
+		}
+	}
+}
+
+func TestHTTPGateway_AdminListUsers_RequiresTenantAdmin(t *testing.T) {
+	h := newGatewayHarness(t)
+	rw := h.do(t, "GET", "/api/v1/admin/users", nil)
+	if rw.Code != http.StatusForbidden {
+		t.Errorf("editor code = %d, want 403", rw.Code)
+	}
+}
+
+// --- Platform admin ---------------------------------------------------
+
+func TestHTTPGateway_PlatformAdminListsAcrossTenants(t *testing.T) {
+	h := newGatewayHarness(t)
+	// Issue keys in two different tenants. The bootstrap key is in
+	// tenant "t" already; add one in "other-tenant".
+	role := core.Role{Name: "r", Permissions: []core.Permission{core.PermGraphRun}}
+	if _, _, err := auth.IssueAPIKey(h.ks, t.Context(), "k-other", "other-tenant", "ws", "stranger", []core.Role{role}); err != nil {
+		t.Fatalf("issue other-tenant: %v", err)
+	}
+	// Mint a platform admin key (no tenant binding).
+	platform := core.Role{Name: "platform", Permissions: []core.Permission{core.PermPlatformAdmin}}
+	_, platformTok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-platform", "", "", "op", []core.Role{platform})
+	if err != nil {
+		t.Fatalf("issue platform: %v", err)
+	}
+
+	doPlatform := func(path string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest("GET", path, nil)
+		req.Header.Set("Authorization", "Bearer "+platformTok)
+		rw := httptest.NewRecorder()
+		ServeForTest(h.gw, rw, req)
+		return rw
+	}
+
+	// /api/v1/admin/tenants: returns both tenants observed in the
+	// key store. Platform admin only.
+	rw := doPlatform("/api/v1/admin/tenants")
+	if rw.Code != http.StatusOK {
+		t.Fatalf("tenants code = %d body = %s", rw.Code, rw.Body.String())
+	}
+	var tOut struct {
+		Tenants []string `json:"tenants"`
+	}
+	_ = json.Unmarshal(rw.Body.Bytes(), &tOut)
+	if len(tOut.Tenants) < 2 {
+		t.Errorf("tenants = %v, want at least 2", tOut.Tenants)
+	}
+
+	// /api/v1/admin/api-keys?tenant=other-tenant should list the
+	// "stranger" key even though the platform admin has no tenant.
+	rw = doPlatform("/api/v1/admin/api-keys?tenant=other-tenant")
+	if rw.Code != http.StatusOK {
+		t.Fatalf("keys code = %d body = %s", rw.Code, rw.Body.String())
+	}
+	var kOut struct {
+		Keys []APIKeySummary `json:"keys"`
+	}
+	_ = json.Unmarshal(rw.Body.Bytes(), &kOut)
+	if len(kOut.Keys) != 1 || kOut.Keys[0].ID != "k-other" {
+		t.Errorf("keys for other-tenant = %+v, want [k-other]", kOut.Keys)
+	}
+}
+
+func TestHTTPGateway_PlatformAdminCanIssueInAnyTenant(t *testing.T) {
+	h := newGatewayHarness(t)
+	platform := core.Role{Name: "platform", Permissions: []core.Permission{core.PermPlatformAdmin}}
+	_, platformTok, _ := auth.IssueAPIKey(h.ks, t.Context(), "k-platform-issue", "", "", "op", []core.Role{platform})
+
+	body, _ := json.Marshal(map[string]any{
+		"subject": "first-customer-admin",
+		"tenant":  "brand-new-tenant",
+		"roles":   []map[string]any{{"name": "ta", "permissions": []string{"tenant:admin"}}},
+	})
+	req := httptest.NewRequest("POST", "/api/v1/admin/api-keys", bytes.NewBuffer(body))
+	req.Header.Set("Authorization", "Bearer "+platformTok)
+	req.Header.Set("Content-Type", "application/json")
+	rw := httptest.NewRecorder()
+	ServeForTest(h.gw, rw, req)
+	if rw.Code != http.StatusCreated {
+		t.Fatalf("issue code = %d body = %s", rw.Code, rw.Body.String())
+	}
+	var issued IssuedAPIKey
+	_ = json.Unmarshal(rw.Body.Bytes(), &issued)
+	if issued.Tenant != "brand-new-tenant" {
+		t.Errorf("issued tenant = %q, want brand-new-tenant", issued.Tenant)
+	}
+	// The new key works for its tenant.
+	if _, err := h.svc.Authenticate(t.Context(), issued.Secret); err != nil {
+		t.Errorf("new tenant's bootstrap key didn't authenticate: %v", err)
+	}
+}
+
+func TestHTTPGateway_TenantAdminCantSpecifyForeignTenant(t *testing.T) {
+	h := newGatewayHarness(t)
+	// h.adminDo uses a tenant-admin key bound to tenant "t". Try to
+	// list keys in tenant "elsewhere" — should be refused, not a leak.
+	rw := h.adminDo(t, "GET", "/api/v1/admin/api-keys?tenant=elsewhere", nil)
+	if rw.Code == http.StatusOK {
+		var out struct {
+			Keys []APIKeySummary `json:"keys"`
+		}
+		_ = json.Unmarshal(rw.Body.Bytes(), &out)
+		for _, k := range out.Keys {
+			if k.Tenant != "t" {
+				t.Errorf("tenant admin saw foreign tenant %q", k.Tenant)
+			}
+		}
+	}
+	// 500/400/403 are all acceptable refusals — we just need it NOT
+	// to silently return another tenant's keys.
+}
+
+func TestHTTPGateway_AdminEndpoints501WhenUnconfigured(t *testing.T) {
+	h := newGatewayHarness(t)
+	h.svc.AdminKeys = nil // simulate an hzd built without admin tooling
+	rw := h.adminDo(t, "GET", "/api/v1/admin/api-keys", nil)
+	if rw.Code != http.StatusNotImplemented {
+		t.Errorf("unconfigured code = %d, want 501", rw.Code)
 	}
 }
