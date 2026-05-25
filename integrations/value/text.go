@@ -26,7 +26,7 @@ func init() {
 			Description:    "Emit a literal string value. The 'text' param can be multi-line; downstream consumers see it as text/plain on the 'out' port.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
-			Outputs:        []core.Port{{Port: "out", Label: "Text"}},
+			Outputs:        []core.Port{{Port: "out", Label: "Text", MIME: []string{"text/plain"}}},
 			ParamsSchema:   json.RawMessage(`{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}`),
 			Idempotent:     true,
 		},

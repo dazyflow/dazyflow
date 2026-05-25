@@ -28,8 +28,8 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{
-				{Port: "rows", Label: "Rows"},
-				{Port: "headers", Label: "Headers"},
+				{Port: "rows", Label: "Rows", MIME: []string{"application/json"}},
+				{Port: "headers", Label: "Headers", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string","format":"workspace-path"},"sheet":{"type":"string"},"headers":{"type":"boolean"},"skip":{"type":"integer"}},"required":["path"]}`),
 			Idempotent:   true,

@@ -46,7 +46,8 @@ export function HazyNode({ data, selected }: NodeProps) {
           type="target"
           position={Position.Left}
           id={p.port}
-          style={portStyle(i, inputs.length, "left")}
+          style={portStyle(p, i, inputs.length, "left")}
+          title={portTooltip(p)}
         />
       ))}
 
@@ -104,24 +105,37 @@ export function HazyNode({ data, selected }: NodeProps) {
           type="source"
           position={Position.Right}
           id={p.port}
-          style={portStyle(i, outputs.length, "right")}
+          style={portStyle(p, i, outputs.length, "right")}
+          title={portTooltip(p)}
         />
       ))}
     </div>
   );
 }
 
-// portStyle places each handle's vertical center. Single ports sit at
-// the card's vertical midpoint; multiple ports spread evenly inside the
-// labels region (which we pad to match in CSS, see .hz-ports).
+// portStyle places each handle's vertical center and paints it
+// according to the port's MIME (color) and required-ness (filled vs
+// hollow). Single ports sit at the card's vertical midpoint; multiple
+// ports spread evenly inside the labels region (which we pad to match
+// in CSS, see .hz-ports).
 //
 // Geometry: the handle vertical position is computed in pixels off the
 // card top because React Flow's default Position.{Left,Right} centers
 // at top:50% — we override with style.top.
-function portStyle(index: number, count: number, side: "left" | "right") {
+//
+// Visual encoding:
+//   - color    → first listed MIME on the port (see portColor)
+//   - fill     → required ports are solid; optional ports are hollow
+//                rings of the same color, signalling "you don't have to
+//                wire this to make the graph valid"
+//   - missing MIME falls back to the neutral surface color so ports on
+//     legacy manifests without MIME annotations look unchanged
+function portStyle(port: Port, index: number, count: number, side: "left" | "right") {
+  const color = portColor(port.mime);
+  const required = port.required ?? false;
   const base = {
-    background: "var(--surface-3)",
-    border: "1px solid var(--border-strong)",
+    background: required ? color : "var(--surface)",
+    border: `1.5px solid ${color}`,
     width: 10,
     height: 10,
   } as const;
@@ -135,4 +149,31 @@ function portStyle(index: number, count: number, side: "left" | "right") {
     top: `${top}px`,
     ...(side === "left" ? { left: -5 } : { right: -5 }),
   } as const;
+}
+
+// portColor picks a hue from the port's first listed MIME. Three rules
+// of thumb apply: keep the palette small (≤5 hues) so the canvas stays
+// readable, prefer broad MIME prefixes over exact strings so unknown
+// subtypes still get a sensible color, and fall back to the neutral
+// border color for ports that don't declare a MIME (the common case for
+// legacy manifests we haven't yet annotated).
+function portColor(mime: string[] | undefined): string {
+  if (!mime || mime.length === 0) return "var(--border-strong)";
+  const m = mime[0];
+  if (m.startsWith("text/")) return "#4a8";              // green — plain text
+  if (m === "application/json") return "#5b8def";        // blue  — structured data
+  if (m.startsWith("image/")) return "#e8a85e";          // amber — images
+  if (m.startsWith("audio/") || m.startsWith("video/")) return "#c87fff"; // purple — media
+  if (m.startsWith("application/")) return "#9a9a9a";    // gray  — generic binary/file
+  return "var(--border-strong)";
+}
+
+// portTooltip is rendered as the handle's HTML title attribute — the
+// browser shows it on hover. Cheap discoverability for single-port
+// nodes where there's no in-card port label to read.
+function portTooltip(port: Port): string {
+  const parts = [port.label ? `${port.label} (${port.port})` : port.port];
+  if (port.mime && port.mime.length > 0) parts.push(port.mime.join(" | "));
+  parts.push(port.required ? "required" : "optional");
+  return parts.join(" — ");
 }

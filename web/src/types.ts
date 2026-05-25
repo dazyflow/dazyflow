@@ -55,6 +55,7 @@ export type Port = {
   label?: string;
   variadic?: boolean;
   mime?: string[];
+  required?: boolean;
 };
 
 export type Manifest = {

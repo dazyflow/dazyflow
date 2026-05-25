@@ -33,10 +33,12 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				{Port: "rows", Label: "Rows", Required: true},
-				{Port: "headers", Label: "Headers", Required: false},
+				{Port: "rows", Label: "Rows", Required: true, MIME: []string{"application/json"}},
+				{Port: "headers", Label: "Headers", Required: false, MIME: []string{"application/json"}},
 			},
-			Outputs: []core.Port{{Port: "out", Label: "Written path"}},
+			Outputs: []core.Port{
+				{Port: "out", Label: "Written path", MIME: []string{"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}},
+			},
 			ParamsSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string","format":"workspace-path"},"sheet":{"type":"string"},"mkdirs":{"type":"boolean"},"autosize":{"type":"boolean"},"freezeRow":{"type":"integer"}},"required":["path"]}`),
 		},
 		Execute: executeExcelWrite,

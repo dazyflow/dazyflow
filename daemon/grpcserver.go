@@ -221,7 +221,7 @@ func (h *grpcHandlers) ListJobsForGraph(ctx context.Context, req *controlpb.List
 	return &controlpb.ListJobsResponse{Jobs: out}, nil
 }
 
-func (h *grpcHandlers) ListModules(ctx context.Context, req *controlpb.ListDropsRequest) (*controlpb.ListDropsResponse, error) {
+func (h *grpcHandlers) ListDrops(ctx context.Context, req *controlpb.ListDropsRequest) (*controlpb.ListDropsResponse, error) {
 	p, _ := PrincipalFromContext(ctx)
 	// When any search field is set, route through the search path.
 	// Otherwise return everything in alphabetical-by-ID order so
