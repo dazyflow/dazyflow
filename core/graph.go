@@ -45,6 +45,14 @@ type Graph struct {
 	Edges     []Edge         `json:"edges"`
 	Triggers  []GraphTrigger `json:"triggers,omitempty"`
 
+	// Display metadata. None of these affect engine behaviour — they
+	// are surfaces the UI shows in the flow list, switcher, and
+	// settings panel. ID remains the immutable handle for runs and
+	// trigger URLs.
+	Name        string `json:"name,omitempty"`
+	Icon        string `json:"icon,omitempty"`
+	Description string `json:"description,omitempty"`
+
 	// Visibility controls who in the workspace can see/run this flow:
 	//   - "org" (default): any principal in the tenant+workspace
 	//   - "private":       only the Owner and tenant:admin principals

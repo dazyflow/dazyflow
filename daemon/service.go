@@ -250,9 +250,12 @@ func (s *Service) ListWorkspaces(ctx context.Context, p core.Principal, narrowTe
 // adds Visibility + Owner to the bare ID so the catalog can render
 // badges without a second round-trip per flow.
 type FlowSummary struct {
-	ID         string          `json:"id"`
-	Owner      string          `json:"owner,omitempty"`
-	Visibility core.Visibility `json:"visibility,omitempty"`
+	ID          string          `json:"id"`
+	Name        string          `json:"name,omitempty"`
+	Icon        string          `json:"icon,omitempty"`
+	Description string          `json:"description,omitempty"`
+	Owner       string          `json:"owner,omitempty"`
+	Visibility  core.Visibility `json:"visibility,omitempty"`
 }
 
 // ListFlowSummaries is the HTTP-list flavor of ListGraphs — same
@@ -282,9 +285,12 @@ func (s *Service) ListFlowSummaries(ctx context.Context, p core.Principal, tenan
 			continue
 		}
 		out = append(out, FlowSummary{
-			ID:         id,
-			Owner:      g.Owner,
-			Visibility: g.EffectiveVisibility(),
+			ID:          id,
+			Name:        g.Name,
+			Icon:        g.Icon,
+			Description: g.Description,
+			Owner:       g.Owner,
+			Visibility:  g.EffectiveVisibility(),
 		})
 	}
 	return out, nil

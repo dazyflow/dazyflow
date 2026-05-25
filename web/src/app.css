@@ -420,6 +420,14 @@
 .editor .canvas {
   position: relative;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* ReactFlow's outer div is a direct child of .canvas; tell it to fill
+   the space below the toolbar. */
+.editor .canvas > .react-flow {
+  flex: 1;
+  min-height: 0;
 }
 
 .panel-head {
@@ -485,6 +493,40 @@
   background: var(--surface-2);
   padding: 1px 6px;
   border-radius: 999px;
+}
+/* Integration icon in the section header, sized between chevron and
+   label. Keeps branded logos at their natural color. */
+.catalog-integration-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+/* Sub-headings inside the Standard library group: a small uppercase
+   label that splits Flow control / Files / Triggers apart. */
+.catalog-subhead {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin: 4px var(--space-1) 6px;
+}
+.catalog-group-body {
+  padding: 0;
+}
+/* Tiny capability pill on the right of each drop row. */
+.cat-pill {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--faint);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  text-transform: lowercase;
 }
 .module-row {
   display: flex;
@@ -1461,19 +1503,52 @@
 .trigger-row .sf-field {
   margin-bottom: 0;
 }
-
-/* Editor top toolbar */
-.editor-toolbar {
-  position: absolute;
-  top: var(--space-3);
-  right: var(--space-3);
-  z-index: 5;
-  display: flex;
-  gap: var(--space-2);
-  background: color-mix(in srgb, var(--surface) 90%, transparent);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+.curl-block {
+  position: relative;
+  background: #0a0918;
+  color: #d8d4ec;
   border: 1px solid var(--border);
   border-radius: var(--r-2);
-  padding: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+}
+.curl-block pre {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: all;
+}
+.curl-copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: var(--surface-2);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: var(--r-1);
+  padding: 2px 8px;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+.curl-copy:hover {
+  background: var(--surface);
+}
+
+/* Editor top toolbar — fixed-height bar pinned above the canvas, full
+   width. ReactFlow lives in the remaining flex space below. */
+.editor-toolbar {
+  flex: 0 0 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  z-index: 5;
 }

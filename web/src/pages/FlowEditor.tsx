@@ -60,6 +60,12 @@ function EditorInner() {
   const [triggers, setTriggers] = useState<GraphTrigger[]>([]);
   const [visibility, setVisibility] = useState<Visibility | undefined>(undefined);
   const [owner, setOwner] = useState<string | undefined>(undefined);
+  // Display metadata. Edited via the settings modal; doesn't affect
+  // engine behaviour but must round-trip through save() so the user's
+  // chosen name/icon/description survive reloads.
+  const [name, setName] = useState<string | undefined>(undefined);
+  const [icon, setIcon] = useState<string | undefined>(undefined);
+  const [description, setDescription] = useState<string | undefined>(undefined);
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Per-node params kept outside React Flow's node-data so the inspector
   // can mutate them without forcing canvas re-layout. They're merged
@@ -137,6 +143,9 @@ function EditorInner() {
         setTriggers(g.triggers ?? []);
         setVisibility(g.visibility);
         setOwner(g.owner);
+        setName(g.name);
+        setIcon(g.icon);
+        setDescription(g.description);
         setDirty(false);
       })
       .catch((e) => {
@@ -232,32 +241,42 @@ function EditorInner() {
     setDirty(true);
   };
 
+  // buildGraph constructs the wire payload from current React state.
+  // Overrides let callers (e.g. the settings modal save) substitute the
+  // freshly-edited fields without first having to round-trip through
+  // setState — useState is async, so reading state straight after a
+  // setter wouldn't see the new values.
+  const buildGraph = (overrides: Partial<Graph> = {}): Graph => ({
+    id: id ?? "",
+    tenant: activeTenant,
+    workspace: activeWorkspace,
+    nodes: nodes.map((n) => ({
+      id: n.id,
+      module: n.data.moduleID,
+      params: paramsByID[n.id] ?? {},
+      position: n.position,
+    })),
+    edges: edges.map((e) => ({
+      from: e.source,
+      from_port: e.sourceHandle ?? "out",
+      to: e.target,
+      to_port: e.targetHandle ?? "in",
+    })),
+    triggers: triggers.length > 0 ? triggers : undefined,
+    visibility,
+    owner,
+    name,
+    icon,
+    description,
+    ...overrides,
+  });
+
   const save = async () => {
     if (!token || !me || !id) return;
     setSaving(true);
     setError(null);
     try {
-      const graph: Graph = {
-        id,
-        tenant: activeTenant,
-        workspace: activeWorkspace,
-        nodes: nodes.map((n) => ({
-          id: n.id,
-          module: n.data.moduleID,
-          params: paramsByID[n.id] ?? {},
-          position: n.position,
-        })),
-        edges: edges.map((e) => ({
-          from: e.source,
-          from_port: e.sourceHandle ?? "out",
-          to: e.target,
-          to_port: e.targetHandle ?? "in",
-        })),
-        triggers: triggers.length > 0 ? triggers : undefined,
-        visibility,
-        owner,
-      };
-      await api.saveGraph(token, graph);
+      await api.saveGraph(token, buildGraph());
       setDirty(false);
     } catch (e) {
       setError((e as Error).message);
@@ -576,14 +595,41 @@ function EditorInner() {
             triggers,
             visibility,
             owner,
+            name,
+            icon,
+            description,
           }}
           onClose={() => setSettingsOpen(false)}
-          onSave={(next) => {
+          onSave={async (next) => {
             setTriggers(next.triggers ?? []);
             setVisibility(next.visibility);
+            setName(next.name);
+            setIcon(next.icon);
+            setDescription(next.description);
             // Owner stays as-is — UI doesn't expose transfer; only the
             // daemon (on admin save) can change it.
-            setDirty(true);
+            // Persist immediately so the modal's Save button means what
+            // it says — no extra trip through the toolbar Save.
+            if (!token) return;
+            setSaving(true);
+            setError(null);
+            try {
+              await api.saveGraph(
+                token,
+                buildGraph({
+                  triggers: (next.triggers ?? []).length > 0 ? next.triggers : undefined,
+                  visibility: next.visibility,
+                  name: next.name,
+                  icon: next.icon,
+                  description: next.description,
+                }),
+              );
+              setDirty(false);
+            } catch (e) {
+              setError((e as Error).message);
+            } finally {
+              setSaving(false);
+            }
           }}
         />
       )}

@@ -1,4 +1,8 @@
-package git
+// Package shell hosts the `shell` drop — runs a command in a
+// workspace-relative directory and streams its output. Used as the
+// build/test step in CI-shaped pipelines and as a generic escape hatch
+// when no first-class integration covers the operation a user wants.
+package shell
 
 import (
 	"bufio"
@@ -21,15 +25,15 @@ import (
 func init() {
 	engine.Register(engine.NativeNode{
 		Manifest: core.Manifest{
-			ID:             "git_build",
+			ID:             "shell",
 			Version:        "1.0",
-			Label:          "Build",
+			Label:          "Run command",
 			Color:          "#7f5af0",
-			Icon:           "hammer",
+			Icon:           "terminal",
 			Category:       "io",
 			Provider:       "internal",
-			Tags:           []string{"build", "exec", "shell", "git"},
-			Description:    "Run a build command inside a workspace-relative directory (typically a checked-out repo). Captures stdout/stderr and the exit code. Always returns ok so downstream notification nodes still fire on failure — branch on meta.success / meta.exit_code.",
+			Tags:           []string{"build", "exec", "shell", "command", "ci"},
+			Description:    "Run a shell command inside a workspace-relative directory (commonly fed by git_checkout). Captures stdout/stderr and the exit code. Always returns ok so downstream notification nodes still fire on failure — branch on meta.success / meta.exit_code.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
@@ -38,7 +42,7 @@ func init() {
 			Outputs: []core.Port{
 				{Port: "stdout", Label: "Standard output"},
 				{Port: "stderr", Label: "Standard error"},
-				{Port: "meta", Label: "Build metadata (JSON)"},
+				{Port: "meta", Label: "Command metadata (JSON)"},
 			},
 			ParamsSchema: json.RawMessage(
 				`{
@@ -47,30 +51,30 @@ func init() {
 						"path":{"type":"string","description":"Workspace-relative working directory. Overridden by the path input port if connected."},
 						"command":{"type":"string","description":"Executable to run. Resolved via PATH unless absolute."},
 						"args":{"type":"array","items":{"type":"string"},"description":"Argument vector. Defaults to []."},
-						"timeout_ms":{"type":"integer","default":600000,"minimum":1,"description":"Hard deadline for the build, in milliseconds. Default 10 min."},
-						"max_output_bytes":{"type":"integer","default":1048576,"minimum":0,"description":"Truncate stdout and stderr individually beyond this. Default 1 MiB."}
+						"timeout_ms":{"type":"integer","default":600000,"minimum":1,"description":"Hard deadline for the command, in milliseconds. Default 10 min."},
+						"max_output_bytes":{"type":"integer","default":1048576,"minimum":0,"description":"Truncate stdout/stderr beyond this. Default 1 MiB."}
 					},
 					"required":["command"]
 				}`,
 			),
 			Idempotent: false,
 		},
-		Execute: executeGitBuild,
+		Execute: executeShell,
 	})
 }
 
 const (
-	defaultBuildTimeoutMs = 10 * 60 * 1000
+	defaultTimeoutMs      = 10 * 60 * 1000
 	defaultMaxOutputBytes = 1024 * 1024
 )
 
-func executeGitBuild(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
+func executeShell(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
 	cmdName, err := paramString(job.Params, "command")
 	if err != nil {
 		return errResult(job, "bad_param", err.Error()), nil
 	}
 	if job.WorkspaceRoot == "" {
-		return errResult(job, "no_sandbox", "git_build requires a workspace sandbox"), nil
+		return errResult(job, "no_sandbox", "shell requires a workspace sandbox"), nil
 	}
 	relPath := paramStringDefault(job.Params, "path", "")
 	if input, ok := job.Input["path"]; ok {
@@ -91,7 +95,7 @@ func executeGitBuild(ctx context.Context, job core.Job, progress chan<- core.Pro
 	workdir := filepath.Join(job.WorkspaceRoot, cleanRel)
 
 	args := paramStringSlice(job.Params, "args")
-	timeoutMs := paramIntDefault(job.Params, "timeout_ms", defaultBuildTimeoutMs)
+	timeoutMs := paramIntDefault(job.Params, "timeout_ms", defaultTimeoutMs)
 	maxBytes := paramIntDefault(job.Params, "max_output_bytes", defaultMaxOutputBytes)
 
 	runCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
@@ -104,22 +108,17 @@ func executeGitBuild(ctx context.Context, job core.Job, progress chan<- core.Pro
 	emitProgress(progress, job, 0.1, "exec "+cmdName)
 	started := time.Now()
 
-	// Spawn the command attached to a PTY so build tools that switch
-	// to block-buffering when stdout is a pipe (make, gcc, cargo, …)
-	// instead flush line-by-line as if a user were watching. The
-	// tradeoff is that stdout and stderr arrive merged — separate
-	// capture is no longer available, so we route everything into the
-	// stdout output port and leave stderr empty.
+	// Spawn the command attached to a PTY so build tools that switch to
+	// block buffering when stdout is a pipe (make, gcc, cargo, …) flush
+	// line-by-line as if a user were watching. Tradeoff: stdout and
+	// stderr arrive merged, so we route everything to stdout and leave
+	// stderr empty.
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
 		return errResult(job, "start", err.Error()), nil
 	}
 	defer func() { _ = ptmx.Close() }()
 
-	// pumpStream returns when the PTY closes (EOF), which the kernel
-	// signals once the child fully exits and its tty side is closed.
-	// We run it synchronously after Wait — but Wait blocks on the
-	// child, so the read happens on its own goroutine first.
 	doneRead := make(chan struct{})
 	go func() {
 		pumpStream(ptmx, combined, progress, job, "stdout")
@@ -171,10 +170,6 @@ func executeGitBuild(ctx context.Context, job core.Job, progress chan<- core.Pro
 	}, nil
 }
 
-// pumpStream copies lines from src into both the bounded buffer (for
-// the final outputs) and the progress channel (for live SSE consumers).
-// scanner.Buffer caps individual lines at 64 KiB; longer lines are
-// silently split.
 func pumpStream(src io.Reader, dst *boundedBuffer, progress chan<- core.Progress, job core.Job, stream string) {
 	scanner := bufio.NewScanner(src)
 	scanner.Buffer(make([]byte, 4096), 64*1024)
@@ -186,9 +181,9 @@ func pumpStream(src io.Reader, dst *boundedBuffer, progress chan<- core.Progress
 	}
 }
 
-// boundedBuffer captures output up to limit bytes, silently discarding the
-// remainder so a runaway build can't OOM the daemon. A zero or negative
-// limit disables the cap.
+// boundedBuffer captures output up to limit bytes, silently discarding
+// the remainder so a runaway command can't OOM the daemon. A zero or
+// negative limit disables the cap.
 type boundedBuffer struct {
 	bytes.Buffer
 	limit int

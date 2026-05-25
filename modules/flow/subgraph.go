@@ -15,7 +15,7 @@ func init() {
 			ID:             "subgraph",
 			Version:        "1.0",
 			Label:          "Subgraph",
-			Color:          "#7d52c4",
+			Color:          "#5a9bd4",
 			Icon:           "square-stack",
 			Category:       "flow_control",
 			Provider:       "internal",

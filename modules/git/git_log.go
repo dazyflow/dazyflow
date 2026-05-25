@@ -25,6 +25,7 @@ func init() {
 			Icon:           "git",
 			Category:       "io",
 			Provider:       "internal",
+			Integration:    "Git",
 			Tags:           []string{"git", "log", "history", "vcs"},
 			Description:    "Walk the commit history of an already-checked-out repository starting at a given ref (default HEAD). Returns a list of {sha, author, email, when, summary} entries up to limit, plus the resolved start SHA in meta.",
 			ExecutionModel: core.ExecutionBatch,

@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Plus, Workflow, Lock, Globe } from "lucide-react";
 import { useAuth } from "../auth";
 import { api } from "../api";
+import { iconFor, isBrandedIcon } from "../icons";
 import type { FlowSummary } from "../types";
 
 export function FlowList() {
@@ -71,6 +72,8 @@ export function FlowList() {
         {flows.map((f) => {
           const isPrivate = f.visibility === "private";
           const ownedByMe = !!me && f.owner === me.subject;
+          const Icon = f.icon ? iconFor(f.icon) : Workflow;
+          const displayName = f.name || f.id;
           return (
             <Link
               key={f.id}
@@ -79,8 +82,24 @@ export function FlowList() {
             >
               <div className="graph-card">
                 <div className="name">
-                  <Workflow size={16} />
-                  <span style={{ flex: 1, minWidth: 0 }}>{f.id}</span>
+                  <Icon
+                    size={isBrandedIcon(f.icon) ? 20 : 16}
+                    color={isBrandedIcon(f.icon) ? undefined : "currentColor"}
+                  />
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: "block" }}>{displayName}</span>
+                    {f.name && (
+                      <span
+                        style={{
+                          fontFamily: "var(--font-mono)",
+                          fontSize: 11,
+                          color: "var(--faint)",
+                        }}
+                      >
+                        {f.id}
+                      </span>
+                    )}
+                  </span>
                   {isPrivate ? (
                     <span
                       className="vis-badge private"
@@ -100,6 +119,14 @@ export function FlowList() {
                     </span>
                   )}
                 </div>
+                {f.description && (
+                  <div
+                    className="meta"
+                    style={{ color: "var(--muted)", lineHeight: 1.4 }}
+                  >
+                    {f.description}
+                  </div>
+                )}
                 <div className="meta">
                   {f.owner && (
                     <>

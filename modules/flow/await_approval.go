@@ -14,7 +14,7 @@ func init() {
 			ID:             "await_approval",
 			Version:        "1.0",
 			Label:          "Await approval",
-			Color:          "#e2b14a",
+			Color:          "#5a9bd4",
 			Icon:           "user-check",
 			Category:       "flow_control",
 			Provider:       "internal",

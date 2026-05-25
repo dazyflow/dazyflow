@@ -16,7 +16,7 @@ func init() {
 			ID:             "sleep",
 			Version:        "1.0",
 			Label:          "Sleep",
-			Color:          "#888888",
+			Color:          "#5a9bd4",
 			Icon:           "timer",
 			Category:       "flow_control",
 			Provider:       "internal",

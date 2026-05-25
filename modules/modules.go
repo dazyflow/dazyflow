@@ -9,5 +9,6 @@ import (
 	_ "git.sr.ht/~klahr/hazy-flow/modules/io"
 	_ "git.sr.ht/~klahr/hazy-flow/modules/net"
 	_ "git.sr.ht/~klahr/hazy-flow/modules/notify"
+	_ "git.sr.ht/~klahr/hazy-flow/modules/shell"
 	_ "git.sr.ht/~klahr/hazy-flow/modules/trigger"
 )

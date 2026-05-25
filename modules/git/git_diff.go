@@ -23,6 +23,7 @@ func init() {
 			Icon:           "git",
 			Category:       "io",
 			Provider:       "internal",
+			Integration:    "Git",
 			Tags:           []string{"git", "diff", "patch", "vcs"},
 			Description:    "Compute a unified diff between two refs in an already-checked-out repository. Defaults to HEAD~1..HEAD (the most recent commit). Emits the patch text plus a metadata object with the resolved commit SHAs and a short summary.",
 			ExecutionModel: core.ExecutionBatch,

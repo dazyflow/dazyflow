@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { X, Plus, Trash2, Sparkles } from "lucide-react";
+import { X, Plus, Trash2, Sparkles, Copy, Check } from "lucide-react";
 import type { Graph, GraphTrigger } from "../types";
 
 // SettingsModal hosts graph-level configuration that doesn't fit in
@@ -10,7 +10,7 @@ import type { Graph, GraphTrigger } from "../types";
 type Props = {
   graph: Graph;
   onClose: () => void;
-  onSave: (next: Graph) => void;
+  onSave: (next: Graph) => void | Promise<void>;
 };
 
 type Tab = "triggers" | "general";
@@ -104,6 +104,7 @@ export function SettingsModal({ graph, onClose, onSave }: Props) {
                   <TriggerRow
                     key={idx}
                     trigger={t}
+                    graph={draft}
                     onChange={(patch) => patchAt(idx, patch)}
                     onRemove={() => removeAt(idx)}
                   />
@@ -123,6 +124,55 @@ export function SettingsModal({ graph, onClose, onSave }: Props) {
           )}
           {tab === "general" && (
             <div>
+              <div className="sf-field">
+                <div className="label-row">
+                  <label>Display name</label>
+                </div>
+                <input
+                  value={draft.name ?? ""}
+                  placeholder={draft.id}
+                  onChange={(e) =>
+                    setDraft({ ...draft, name: e.target.value || undefined })
+                  }
+                />
+                <div className="desc">
+                  Friendly name shown in the flow list. Defaults to the ID.
+                </div>
+              </div>
+              <div className="sf-field">
+                <div className="label-row">
+                  <label>Icon</label>
+                </div>
+                <input
+                  value={draft.icon ?? ""}
+                  placeholder="e.g. git, ntfy, claude, mail, globe, webhook"
+                  onChange={(e) =>
+                    setDraft({ ...draft, icon: e.target.value || undefined })
+                  }
+                />
+                <div className="desc">
+                  Logical icon name. Pick one of: git, ntfy, claude, mail,
+                  globe, webhook, sparkles, hammer, file-input, file-output,
+                  terminal, clock, database, cpu, workflow, git-branch,
+                  git-merge, repeat, timer, square-stack, user-check.
+                </div>
+              </div>
+              <div className="sf-field">
+                <div className="label-row">
+                  <label>Description</label>
+                </div>
+                <textarea
+                  value={draft.description ?? ""}
+                  placeholder="What does this flow do?"
+                  rows={3}
+                  onChange={(e) =>
+                    setDraft({
+                      ...draft,
+                      description: e.target.value || undefined,
+                    })
+                  }
+                />
+              </div>
               <div className="sf-field">
                 <div className="label-row">
                   <label>Flow ID</label>
@@ -223,10 +273,12 @@ export function SettingsModal({ graph, onClose, onSave }: Props) {
 
 function TriggerRow({
   trigger,
+  graph,
   onChange,
   onRemove,
 }: {
   trigger: GraphTrigger;
+  graph: Graph;
   onChange: (patch: Partial<GraphTrigger>) => void;
   onRemove: () => void;
 }) {
@@ -270,6 +322,19 @@ function TriggerRow({
             The value is stored plain in the graph file — for production
             consider rotating periodically.
           </div>
+          <div className="sf-field" style={{ marginTop: 12 }}>
+            <div className="label-row">
+              <label>Trigger via curl</label>
+            </div>
+            <CurlBlock
+              command={buildCurl(graph, trigger.secret ?? "")}
+            />
+            <div className="desc">
+              Webhook listener runs on the daemon's <code>--webhook</code>
+              port; default <code>http://localhost:8080</code>. Replace the
+              host with your public URL when calling from outside.
+            </div>
+          </div>
         </div>
       )}
       {trigger.type === "cron" && (
@@ -304,4 +369,50 @@ function randomHex(bytes: number): string {
   return Array.from(buf)
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
+}
+
+// buildCurl assembles a multi-line curl invocation that hits this
+// graph's webhook trigger. Pass-through string interpolation only — the
+// secret may legitimately contain shell metacharacters (it's our hex
+// alphabet) so quoting is enough.
+function buildCurl(graph: Graph, secret: string): string {
+  const host = "http://localhost:8089";
+  const url = `${host}/trigger/${graph.tenant}/${graph.workspace}/${graph.id}`;
+  const auth = secret || "<bearer-secret>";
+  return [
+    `curl -X POST '${url}' \\`,
+    `  -H 'Authorization: Bearer ${auth}' \\`,
+    `  -H 'Content-Type: application/json' \\`,
+    `  -d '{}'`,
+  ].join("\n");
+}
+
+// CurlBlock renders a copyable code block with a "Copy" button. Falls
+// back to a non-clipboard textarea select on browsers without
+// navigator.clipboard.
+function CurlBlock({ command }: { command: string }) {
+  const [copied, setCopied] = useState(false);
+  const onCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(command);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard unavailable — user can still select+copy manually */
+    }
+  };
+  return (
+    <div className="curl-block">
+      <button
+        type="button"
+        className="curl-copy"
+        onClick={onCopy}
+        title="Copy"
+      >
+        {copied ? <Check size={12} /> : <Copy size={12} />}
+        {copied ? " Copied" : " Copy"}
+      </button>
+      <pre>{command}</pre>
+    </div>
+  );
 }

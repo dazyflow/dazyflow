@@ -73,6 +73,14 @@ type Manifest struct {
 	// Real provider trust requires module signing (out of scope).
 	Provider string `json:"provider,omitempty"`
 
+	// Integration is the catalog grouping label — the vendor/service the
+	// node lives under in the palette UI (e.g. "Git", "ntfy",
+	// "Anthropic", "Email"). All modules with the same Integration string
+	// surface together under one heading. Leave empty for standard-
+	// library modules (branch, merge, file_read, ...) that don't belong
+	// to a specific vendor; those fall back to Category-based grouping.
+	Integration string `json:"integration,omitempty"`
+
 	// Tags are free-form keywords for finer-grained discovery. Search
 	// filters match any tag (OR semantics within the tags slice).
 	Tags []string `json:"tags,omitempty"`

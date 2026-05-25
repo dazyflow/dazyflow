@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { GitIcon } from "./components/GitIcon";
 import { NtfyIcon } from "./components/NtfyIcon";
+import { ClaudeIcon } from "./components/ClaudeIcon";
 
 // iconRegistry maps the kebab-case logical names manifests carry
 // (Manifest.Icon in Go) to concrete icon components. They share the
@@ -32,6 +33,7 @@ const iconRegistry: Record<string, LucideIcon> = {
   globe: Globe,
   git: GitIcon as unknown as LucideIcon,
   ntfy: NtfyIcon as unknown as LucideIcon,
+  claude: ClaudeIcon as unknown as LucideIcon,
   "git-branch": GitBranch,
   "git-merge": GitMerge,
   timer: Timer,
@@ -72,7 +74,7 @@ export function iconFor(name?: string, category?: string): LucideIcon {
 // brandedIcons are self-coloured logos (e.g. the official Git mark)
 // that look wrong inside a gradient backdrop. The node card and catalog
 // row skip the coloured box and render them at their native colour.
-const brandedIcons = new Set(["git", "ntfy"]);
+const brandedIcons = new Set(["git", "ntfy", "claude"]);
 
 export function isBrandedIcon(name?: string): boolean {
   return !!name && brandedIcons.has(name);

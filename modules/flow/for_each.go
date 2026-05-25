@@ -18,7 +18,7 @@ func init() {
 			ID:             "for_each",
 			Version:        "1.0",
 			Label:          "For each",
-			Color:          "#a679d4",
+			Color:          "#5a9bd4",
 			Icon:           "repeat",
 			Category:       "flow_control",
 			Provider:       "internal",

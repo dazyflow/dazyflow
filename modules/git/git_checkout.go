@@ -1,6 +1,6 @@
 // Package git provides nodes that clone repositories and run builds
 // against the resulting working tree. Output is workspace-relative so
-// downstream nodes (file_read, git_build, ...) can pick it up via the
+// downstream nodes (file_read, shell, ...) can pick it up via the
 // shared sandbox.
 package git
 
@@ -29,6 +29,7 @@ func init() {
 			Icon:           "git",
 			Category:       "io",
 			Provider:       "internal",
+			Integration:    "Git",
 			Tags:           []string{"git", "clone", "checkout", "vcs"},
 			Description:    "Clone a git repository into the workspace sandbox and optionally check out a branch, tag, or commit. Emits the relative repository path and a metadata blob (url, ref, resolved sha).",
 			ExecutionModel: core.ExecutionBatch,
@@ -216,7 +217,7 @@ func (s *progressSink) flush() {
 
 // emitLogProgress emits a line-shaped progress event the frontend
 // LiveConsole will display. Kept in this file so git_checkout doesn't
-// depend on internals of git_build.
+// depend on internals of shell.
 func emitLogProgress(ch chan<- core.Progress, job core.Job, stream, line string) {
 	if ch == nil {
 		return

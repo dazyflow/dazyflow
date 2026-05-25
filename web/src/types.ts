@@ -28,6 +28,9 @@ export type Visibility = "org" | "private";
 
 export type FlowSummary = {
   id: string;
+  name?: string;
+  icon?: string;
+  description?: string;
   owner?: string;
   visibility?: Visibility;
 };
@@ -42,6 +45,9 @@ export type Graph = {
   triggers?: GraphTrigger[];
   visibility?: Visibility;
   owner?: string;
+  name?: string;
+  icon?: string;
+  description?: string;
 };
 
 export type Port = {
@@ -59,6 +65,7 @@ export type Manifest = {
   icon?: string;
   category?: string;
   provider?: string;
+  integration?: string;
   tags?: string[];
   description?: string;
   inputs?: Port[];
