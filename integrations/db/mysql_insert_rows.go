@@ -1,0 +1,200 @@
+package db
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"strings"
+
+	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazy-flow/engine"
+	_ "github.com/go-sql-driver/mysql"
+)
+
+func init() {
+	engine.Register(engine.NativeDrop{
+		Manifest: core.Manifest{
+			ID:             "mysql_insert_rows",
+			Version:        "1.0",
+			Label:          "MySQL insert rows",
+			Color:          "#00758f",
+			Icon:           "database",
+			BrandLogo:      "/brands/mysql.svg",
+			Category:       "io",
+			Provider:       "internal",
+			Integration:    "MySQL",
+			Tags:           []string{"mysql", "mariadb", "sql", "database", "insert", "etl"},
+			Description:    "Insert rows into a MySQL table. DSN format: user:pass@tcp(host:port)/dbname?parseTime=true — use ${env:VAR} or ${secret:NAME} to keep credentials out of the graph. Input 'rows' is a list of {column: value} records; optional 'headers' fixes column order.",
+			ExecutionModel: core.ExecutionBatch,
+			ProcessModel:   core.ProcessLongLived,
+			Inputs: []core.Port{
+				{Port: "rows", Label: "Rows", Required: true, MIME: []string{"application/json"}},
+				{Port: "headers", Label: "Headers", Required: false, MIME: []string{"application/json"}},
+			},
+			Outputs: []core.Port{
+				{Port: "inserted", Label: "Inserted count", MIME: []string{"application/json"}},
+			},
+			ParamsSchema: json.RawMessage(`{
+				"type":"object",
+				"properties":{
+					"dsn":          {"type":"string"},
+					"table":        {"type":"string"},
+					"create_table": {"type":"boolean"},
+					"column_types": {"type":"object","additionalProperties":{"type":"string"}}
+				},
+				"required":["dsn","table"]
+			}`),
+		},
+		Execute: executeMySQLInsertRows,
+	})
+}
+
+// executeMySQLInsertRows mirrors postgres_insert_rows for the MySQL
+// world. Three notable syntactic differences:
+//
+//   - identifier quoting uses backticks: `col` not "col"
+//   - placeholders are ?, not $1/$2/...
+//   - no schema concept; the database lives in the DSN, so there's no
+//     `schema` param to qualify the table name
+//
+// Connection pooling: routed through defaultMySQLRegistry which caches
+// *sql.DB handles per (tenant, dsn). *sql.DB is already a connection
+// pool internally; caching the handle avoids per-job Ping + auth and
+// keeps connection re-use across drops in the same workspace.
+func executeMySQLInsertRows(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
+	dsn, err := paramString(job.Params, "dsn")
+	if err != nil {
+		return errResult(job, "bad_param", err.Error()), nil
+	}
+	table, err := paramString(job.Params, "table")
+	if err != nil {
+		return errResult(job, "bad_param", err.Error()), nil
+	}
+	if !isSafeIdent(table) {
+		return errResult(job, "bad_param",
+			fmt.Sprintf("table name %q contains characters other than [A-Za-z0-9_]", table)), nil
+	}
+
+	rowsRef, ok := job.Input["rows"]
+	if !ok {
+		return errResult(job, "missing_input", "input port 'rows' is required"), nil
+	}
+	rows, err := normalizeRows(rowsRef.Inline)
+	if err != nil {
+		return errResult(job, "bad_input", err.Error()), nil
+	}
+
+	var headers []string
+	if h, ok := job.Input["headers"]; ok && h.Inline != nil {
+		headers, err = normalizeHeaders(h.Inline)
+		if err != nil {
+			return errResult(job, "bad_input", err.Error()), nil
+		}
+	}
+	if headers == nil {
+		headers = deriveHeaders(rows)
+	}
+	for _, h := range headers {
+		if !isSafeIdent(h) {
+			return errResult(job, "bad_input",
+				fmt.Sprintf("column %q contains characters other than [A-Za-z0-9_]", h)), nil
+		}
+	}
+
+	db, err := defaultMySQLRegistry.sqlDB(ctx, job.Tenant, dsn)
+	if err != nil {
+		return errResult(job, "db", fmt.Sprintf("connect: %v", err)), nil
+	}
+
+	if createTable, _ := paramBool(job.Params, "create_table"); createTable && len(headers) > 0 {
+		colTypes, _ := paramStringMap(job.Params, "column_types")
+		if err := mysqlEnsureTable(ctx, db, table, headers, colTypes); err != nil {
+			return errResult(job, "db", err.Error()), nil
+		}
+	}
+
+	if len(rows) == 0 {
+		return core.Result{
+			JobID:  job.ID,
+			Status: core.StatusOK,
+			Output: map[string]core.Ref{
+				"inserted": {MIME: "application/json", Inline: 0},
+			},
+		}, nil
+	}
+
+	inserted, err := mysqlInsertBatch(ctx, db, table, headers, rows)
+	if err != nil {
+		return errResult(job, "db", err.Error()), nil
+	}
+	return core.Result{
+		JobID:  job.ID,
+		Status: core.StatusOK,
+		Output: map[string]core.Ref{
+			"inserted": {MIME: "application/json", Inline: inserted},
+		},
+	}, nil
+}
+
+// mysqlEnsureTable issues CREATE TABLE IF NOT EXISTS sized to
+// headers. Default column type is TEXT (which in MySQL stores up to
+// 65,535 bytes — plenty for Excel string columns). VARCHAR would
+// need a length and we don't know it; users who want VARCHAR(N)
+// pass it explicitly via column_types.
+func mysqlEnsureTable(ctx context.Context, db *sql.DB, table string, headers []string, colTypes map[string]string) error {
+	cols := make([]string, len(headers))
+	for i, h := range headers {
+		t := "TEXT"
+		if v, ok := colTypes[h]; ok && v != "" {
+			t = v
+		}
+		cols[i] = fmt.Sprintf("`%s` %s", h, t)
+	}
+	stmt := fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%s` (%s)", table, strings.Join(cols, ", "))
+	if _, err := db.ExecContext(ctx, stmt); err != nil {
+		return fmt.Errorf("create table: %w", err)
+	}
+	return nil
+}
+
+// mysqlInsertBatch runs all rows in one transaction. Per-row failure
+// rolls the whole batch back — same contract as the other db drops.
+func mysqlInsertBatch(ctx context.Context, db *sql.DB, table string, headers []string, rows []map[string]any) (int, error) {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("begin tx: %w", err)
+	}
+	cols := make([]string, len(headers))
+	placeholders := make([]string, len(headers))
+	for i, h := range headers {
+		cols[i] = fmt.Sprintf("`%s`", h)
+		placeholders[i] = "?"
+	}
+	stmt, err := tx.PrepareContext(ctx, fmt.Sprintf(
+		"INSERT INTO `%s` (%s) VALUES (%s)",
+		table, strings.Join(cols, ", "), strings.Join(placeholders, ", "),
+	))
+	if err != nil {
+		_ = tx.Rollback()
+		return 0, fmt.Errorf("prepare insert: %w", err)
+	}
+	defer stmt.Close()
+
+	count := 0
+	for i, row := range rows {
+		args := make([]any, len(headers))
+		for j, h := range headers {
+			args[j] = row[h]
+		}
+		if _, err := stmt.ExecContext(ctx, args...); err != nil {
+			_ = tx.Rollback()
+			return 0, fmt.Errorf("insert row %d: %w", i, err)
+		}
+		count++
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("commit: %w", err)
+	}
+	return count, nil
+}

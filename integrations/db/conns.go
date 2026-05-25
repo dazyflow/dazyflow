@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"sync"
 	"time"
 
@@ -129,5 +130,102 @@ func (r *pgPoolRegistry) closeAll() {
 			e.pool.Close()
 		}
 		delete(r.pools, k)
+	}
+}
+
+// --- *sql.DB registry (used by MySQL drops) -------------------------
+//
+// database/sql's *sql.DB is itself a connection pool, so the natural
+// unit to cache is the DB handle, not individual connections. The
+// shape mirrors pgPoolRegistry — separate types kept for type safety;
+// generalizing to one generic registry would save ~70 lines but adds
+// cognitive load that isn't justified at two pool types.
+
+type sqlDBEntry struct {
+	db      *sql.DB
+	lastUse time.Time
+}
+
+type sqlDBRegistry struct {
+	mu        sync.Mutex
+	dbs       map[pgPoolKey]*sqlDBEntry // reuses the {tenant, dsn} key shape
+	idle      time.Duration
+	sweepGap  time.Duration
+	lastSweep time.Time
+	// driverName lets us configure the registry for any database/sql
+	// driver. Today: "mysql". Future SQLite-via-pool would slot in
+	// with driverName="sqlite".
+	driverName string
+}
+
+func newSQLDBRegistry(driverName string, idle, sweepGap time.Duration) *sqlDBRegistry {
+	return &sqlDBRegistry{
+		dbs:        map[pgPoolKey]*sqlDBEntry{},
+		idle:       idle,
+		sweepGap:   sweepGap,
+		driverName: driverName,
+	}
+}
+
+// defaultMySQLRegistry is the registry the mysql_* drops use. Same
+// 15-minute idle / 1-minute sweep-gap defaults as the pg registry.
+var defaultMySQLRegistry = newSQLDBRegistry("mysql", 15*time.Minute, 1*time.Minute)
+
+// sqlDB returns a *sql.DB for (tenant, dsn), creating one on first
+// request. Like pgPool: callers MUST NOT Close the returned handle —
+// that's the registry's job. sql.Open is lazy (no connection until
+// first use), so the Ping below is what actually validates the DSN
+// reaches a live server. We Ping so a bad DSN errors at registration
+// time instead of much later inside the first query.
+func (r *sqlDBRegistry) sqlDB(ctx context.Context, tenant, dsn string) (*sql.DB, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if time.Since(r.lastSweep) >= r.sweepGap {
+		r.sweepLocked(time.Now())
+	}
+
+	key := pgPoolKey{tenant: tenant, dsn: dsn}
+	if e, ok := r.dbs[key]; ok {
+		e.lastUse = time.Now()
+		return e.db, nil
+	}
+
+	db, err := sql.Open(r.driverName, dsn)
+	if err != nil {
+		return nil, err
+	}
+	if err := db.PingContext(ctx); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	r.dbs[key] = &sqlDBEntry{db: db, lastUse: time.Now()}
+	return db, nil
+}
+
+func (r *sqlDBRegistry) sweepLocked(now time.Time) {
+	r.lastSweep = now
+	var victims []pgPoolKey
+	for k, e := range r.dbs {
+		if now.Sub(e.lastUse) > r.idle {
+			victims = append(victims, k)
+		}
+	}
+	for _, k := range victims {
+		if d := r.dbs[k].db; d != nil {
+			_ = d.Close()
+		}
+		delete(r.dbs, k)
+	}
+}
+
+func (r *sqlDBRegistry) closeAll() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for k, e := range r.dbs {
+		if e.db != nil {
+			_ = e.db.Close()
+		}
+		delete(r.dbs, k)
 	}
 }

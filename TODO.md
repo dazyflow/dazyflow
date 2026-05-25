@@ -325,10 +325,17 @@ blocking, but listed so we don't lose them.
   configurable globally).
 
 ### Modules wishlist
-- [ ] **Notifier modules** — email, Slack, generic webhook-out.
-  Naturally pairs with `await_approval` (send the approval URL via
-  the channel the human reads).
-- [ ] **Database modules** — Postgres query, MySQL.
+- [x] **Notifier modules** — email, Slack, generic webhook-out.
+  Shipped: `notify/email.go` (SMTP), `notify/ntfy.go` (push),
+  `notify/webhook_send.go` (generic POST/PUT/PATCH — covers Slack,
+  Discord, Teams, PagerDuty, and anything else with an incoming-
+  webhook URL). Pairs naturally with `await_approval` for sending
+  approval URLs to whichever channel the human reads.
+- [x] **Database modules** — Postgres, SQLite, and MySQL shipped
+  (`integrations/db/`: `*_insert_rows`, `*_query`, `*_upsert_rows`
+  for each, plus pooled connection registries keyed by (tenant, dsn)
+  with lazy idle eviction — `pgxpool` for Postgres, `*sql.DB` for
+  MySQL, no pool for SQLite since file-open is microseconds).
 - [ ] **Blob storage** — S3 / GCS / R2 with proper streaming via the
   Ref pointer (not Inline).
 - [ ] **`split` module** (still open from spec days).
