@@ -14,6 +14,12 @@ export default defineConfig({
     proxy: {
       "/api/v1": { target, changeOrigin: true },
     },
+    // Vite 5.4+ blocks unknown Host headers as a DNS-rebind defense.
+    // Allow the reverse-proxy hostnames we expect — comma-separated
+    // VITE_ALLOWED_HOSTS overrides the default localhost set.
+    allowedHosts: process.env.VITE_ALLOWED_HOSTS
+      ? process.env.VITE_ALLOWED_HOSTS.split(",").map((h) => h.trim())
+      : ["localhost", "127.0.0.1"],
   },
   build: {
     outDir: "dist",

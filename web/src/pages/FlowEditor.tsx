@@ -233,6 +233,31 @@ function EditorInner() {
     };
   }, [token, me, id]);
 
+  // Re-attach manifests to nodes whenever the drops catalog arrives or
+  // changes. The graph load and drops fetch race; if the graph wins,
+  // its nodes carry manifest:undefined and NodeCard falls back to bare
+  // in/out handles — so edges wired to real ports (rows, body,
+  // messages, …) find no matching handle and silently don't render.
+  // This patches the manifest in once drops land, which makes the real
+  // handles appear and React Flow draws the edges. Only `manifest` is
+  // touched so a user-edited label survives.
+  useEffect(() => {
+    if (manifests.length === 0) return;
+    const mm = new Map(manifests.map((m) => [m.id, m]));
+    setNodes((nds) => {
+      let changed = false;
+      const next = nds.map((n) => {
+        const m = mm.get(n.data.moduleID);
+        if (m && n.data.manifest !== m) {
+          changed = true;
+          return { ...n, data: { ...n.data, manifest: m } };
+        }
+        return n;
+      });
+      return changed ? next : nds;
+    });
+  }, [manifests]);
+
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
       setNodes((nds) => applyNodeChanges(changes, nds) as FlowNode<HazyNodeData>[]);

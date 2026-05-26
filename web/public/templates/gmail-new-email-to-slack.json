@@ -1,19 +1,16 @@
 {
   "id": "gmail-new-email-to-slack",
   "version": "1",
-  "name": "New Gmail → Slack (dedupe by cursor)",
+  "name": "New Gmail \u2192 Slack (dedupe by cursor)",
   "description": "Polls Gmail every 5 minutes; on each fire, only the messages newer than the last fire trigger a Slack post. Demonstrates the cursor-dedupe pattern: read prior cursor via ${tenant:...} template substitution, write next cursor via secret_set so the dedupe survives daemon restarts.",
   "icon": "mail",
   "triggers": [
-    {"type": "poll", "interval_seconds": 300}
+    {
+      "type": "poll",
+      "interval_seconds": 300
+    }
   ],
   "nodes": [
-    {
-      "id": "poll",
-      "module": "poll_trigger",
-      "params": {},
-      "position": {"x": 100, "y": 200}
-    },
     {
       "id": "search",
       "module": "gmail_search_messages",
@@ -22,7 +19,10 @@
         "max_results": 20,
         "account": "default"
       },
-      "position": {"x": 400, "y": 200}
+      "position": {
+        "x": 400,
+        "y": 200
+      }
     },
     {
       "id": "fetch",
@@ -35,7 +35,10 @@
           "format": "metadata"
         }
       },
-      "position": {"x": 700, "y": 200}
+      "position": {
+        "x": 700,
+        "y": 200
+      }
     },
     {
       "id": "format",
@@ -45,7 +48,10 @@
           "summary": "'New mail from ' + row.headers.From + ': ' + row.headers.Subject"
         }
       },
-      "position": {"x": 1000, "y": 200}
+      "position": {
+        "x": 1000,
+        "y": 200
+      }
     },
     {
       "id": "notify",
@@ -55,23 +61,33 @@
         "account": "default",
         "text": "${upstream:format.rows[0].summary}"
       },
-      "position": {"x": 1300, "y": 200}
-    },
-    {
-      "id": "save_cursor",
-      "module": "secret_set",
-      "params": {
-        "name": "gmail_cursor",
-        "value": "${upstream:poll.fired_at}"
-      },
-      "position": {"x": 1300, "y": 400}
+      "position": {
+        "x": 1300,
+        "y": 200
+      }
     }
   ],
   "edges": [
-    {"from": "poll", "from_port": "fired_at", "to": "search", "to_port": "in", "on_error": ""},
-    {"from": "search", "from_port": "messages", "to": "fetch", "to_port": "items", "on_error": ""},
-    {"from": "fetch", "from_port": "results", "to": "format", "to_port": "rows", "on_error": ""},
-    {"from": "format", "from_port": "rows", "to": "notify", "to_port": "body", "on_error": ""},
-    {"from": "poll", "from_port": "fired_at", "to": "save_cursor", "to_port": "value", "on_error": ""}
+    {
+      "from": "search",
+      "from_port": "messages",
+      "to": "fetch",
+      "to_port": "items",
+      "on_error": ""
+    },
+    {
+      "from": "fetch",
+      "from_port": "results",
+      "to": "format",
+      "to_port": "rows",
+      "on_error": ""
+    },
+    {
+      "from": "format",
+      "from_port": "rows",
+      "to": "notify",
+      "to_port": "body",
+      "on_error": ""
+    }
   ]
 }

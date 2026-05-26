@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -71,6 +73,13 @@ type HTTPGateway struct {
 	// Nil = the route returns 501. Wired by hzd when the GitHub
 	// webhook-secret flag/env is set.
 	GitHubEvents *GitHubEventsHandler
+
+	// WebDist, when non-empty, points at a directory containing the
+	// built React frontend (e.g. web/dist). Unknown GET paths under
+	// / are served from this directory, with index.html as the SPA
+	// fallback so client-side routes resolve. Empty = no static
+	// serving — the gateway is API-only and unknown paths 404.
+	WebDist string
 }
 
 func NewHTTPGateway(svc *Service) *HTTPGateway {
@@ -159,6 +168,57 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/jobs/{jobID}/nodes/{nodeID}", h.requireAuth(h.nodeSnapshot))
 	mux.HandleFunc("GET /api/v1/jobs/{jobID}/events", h.requireAuth(h.jobEvents))
 	mux.HandleFunc("POST /api/v1/chat/stream", h.requireAuth(h.chatStream))
+
+	// Static frontend bundle. Registered LAST so all explicit API
+	// routes above match first; `GET /` is a catch-all for any
+	// unknown GET path. Empty WebDist = no static serving.
+	if h.WebDist != "" {
+		mux.Handle("GET /", webDistHandler(h.WebDist))
+	}
+}
+
+// webDistHandler serves files from root with SPA fallback to
+// index.html for any path that doesn't resolve to an actual file —
+// matches what `nginx try_files $uri /index.html` does. The fallback
+// is the load-bearing piece for client-side routing (React Router's
+// /flows/foo and /runs/bar paths aren't real files on disk).
+//
+// We intentionally do NOT serve under /api/* — those paths belong to
+// the API and an unregistered /api/something should 404 as an API
+// error, not return the index.html (which would mislead a client
+// that's looking for JSON).
+func webDistHandler(root string) http.Handler {
+	fileServer := http.FileServer(http.Dir(root))
+	indexPath := filepath.Join(root, "index.html")
+	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		// /api/* never falls through to static; defense in depth in
+		// case a route was missed in mountRoutes.
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			http.NotFound(rw, r)
+			return
+		}
+		// filepath.Clean + Join already strip "..", but the request
+		// path is URL-formatted; FileServer handles the full
+		// translation when we hand off below. Here we only need the
+		// existence check.
+		clean := filepath.Clean(r.URL.Path)
+		p := filepath.Join(root, clean)
+		if info, err := os.Stat(p); err == nil && !info.IsDir() {
+			fileServer.ServeHTTP(rw, r)
+			return
+		}
+		// File doesn't exist. If the path looks like an asset
+		// request (has a file extension), 404 so a missing JS/CSS
+		// surfaces as a build-broken error rather than masquerading
+		// as HTML. Path-style requests (no extension, e.g. /flows,
+		// /runs/abc) fall through to index.html so React Router
+		// resolves them client-side.
+		if ext := filepath.Ext(clean); ext != "" && ext != "." {
+			http.NotFound(rw, r)
+			return
+		}
+		http.ServeFile(rw, r, indexPath)
+	})
 }
 
 // ServeForTest exposes the mux without binding a port — analogous to
@@ -211,8 +271,9 @@ func (h *HTTPGateway) verifyCookieOrigin(next http.Handler) http.Handler {
 			return
 		}
 		if !originAllowed(origin, h.AllowedOrigins) {
+			h.logger.Printf("CSRF reject: Origin=%q not in allowed=%v (host=%q)", origin, h.AllowedOrigins, r.Host)
 			writeJSONError(rw, http.StatusForbidden,
-				"cookie-authenticated request from disallowed origin (CSRF defense)")
+				fmt.Sprintf("cookie-authenticated request from disallowed origin %q (CSRF defense)", origin))
 			return
 		}
 		next.ServeHTTP(rw, r)

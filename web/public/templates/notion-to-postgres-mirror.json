@@ -1,19 +1,16 @@
 {
   "id": "notion-to-postgres-mirror",
   "version": "1",
-  "name": "Mirror Notion DB → Postgres",
+  "name": "Mirror Notion DB \u2192 Postgres",
   "description": "Hourly: read every page in a Notion database and upsert into a Postgres table. Keeps Postgres in sync as the source-of-truth for downstream analytics queries that Notion's API can't easily serve.",
   "icon": "database",
   "triggers": [
-    {"type": "cron", "cron": "0 * * * *"}
+    {
+      "type": "cron",
+      "cron": "0 * * * *"
+    }
   ],
   "nodes": [
-    {
-      "id": "tick",
-      "module": "cron_trigger",
-      "params": {},
-      "position": {"x": 100, "y": 200}
-    },
     {
       "id": "query",
       "module": "notion_query_database",
@@ -22,15 +19,26 @@
         "account": "default",
         "page_size": 100
       },
-      "position": {"x": 400, "y": 200}
+      "position": {
+        "x": 400,
+        "y": 200
+      }
     },
     {
       "id": "shape",
       "module": "map_rows",
       "params": {
-        "select": ["id", "created_time", "last_edited_time", "url"]
+        "select": [
+          "id",
+          "created_time",
+          "last_edited_time",
+          "url"
+        ]
       },
-      "position": {"x": 700, "y": 200}
+      "position": {
+        "x": 700,
+        "y": 200
+      }
     },
     {
       "id": "upsert",
@@ -38,15 +46,37 @@
       "params": {
         "dsn": "${tenant:postgres_dsn}",
         "table": "notion_pages",
-        "conflict": ["id"]
+        "conflict": [
+          "id"
+        ]
       },
-      "position": {"x": 1000, "y": 200}
+      "position": {
+        "x": 1000,
+        "y": 200
+      }
     }
   ],
   "edges": [
-    {"from": "tick", "from_port": "fired_at", "to": "query", "to_port": "in", "on_error": ""},
-    {"from": "query", "from_port": "pages", "to": "shape", "to_port": "rows", "on_error": ""},
-    {"from": "shape", "from_port": "rows", "to": "upsert", "to_port": "rows", "on_error": ""},
-    {"from": "shape", "from_port": "headers", "to": "upsert", "to_port": "headers", "on_error": ""}
+    {
+      "from": "query",
+      "from_port": "pages",
+      "to": "shape",
+      "to_port": "rows",
+      "on_error": ""
+    },
+    {
+      "from": "shape",
+      "from_port": "rows",
+      "to": "upsert",
+      "to_port": "rows",
+      "on_error": ""
+    },
+    {
+      "from": "shape",
+      "from_port": "headers",
+      "to": "upsert",
+      "to_port": "headers",
+      "on_error": ""
+    }
   ]
 }

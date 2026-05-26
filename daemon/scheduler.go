@@ -123,13 +123,13 @@ func (s *Scheduler) Run(ctx context.Context) error {
 // rebuilds the tracked map. Existing entries' next-fire time is preserved
 // when the spec didn't change so we don't double-fire.
 func (s *Scheduler) rescan(ctx context.Context) error {
-	lookup, ok := s.svc.Workspaces.(MapWorkspaces)
+	enum, ok := s.svc.Workspaces.(WorkspaceEnumerator)
 	if !ok {
-		return fmt.Errorf("scheduler: workspace lookup must be MapWorkspaces (for now)")
+		return fmt.Errorf("scheduler: workspace lookup does not support enumeration")
 	}
 	now := s.clock()
 	next := make(map[string]*scheduledGraph)
-	for key, store := range lookup {
+	for key, store := range enum.All() {
 		tenant, workspace, ok := splitKey(key)
 		if !ok {
 			continue

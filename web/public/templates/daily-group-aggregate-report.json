@@ -1,19 +1,16 @@
 {
   "id": "daily-group-aggregate-report",
   "version": "1",
-  "name": "Daily group-by report → Slack",
+  "name": "Daily group-by report \u2192 Slack",
   "description": "Every morning at 09:00, queries yesterday's orders from Postgres, groups them by country with sum/avg/count aggregations, formats a one-line summary per country, and posts to Slack. Demonstrates group_aggregate composing with compute_rows for the final string render.",
   "icon": "clock",
   "triggers": [
-    {"type": "cron", "cron": "0 9 * * *"}
+    {
+      "type": "cron",
+      "cron": "0 9 * * *"
+    }
   ],
   "nodes": [
-    {
-      "id": "tick",
-      "module": "cron_trigger",
-      "params": {},
-      "position": {"x": 100, "y": 200}
-    },
     {
       "id": "query",
       "module": "postgres_query",
@@ -21,20 +18,36 @@
         "dsn": "${tenant:postgres_dsn}",
         "sql": "SELECT country, amount FROM orders WHERE created_at::date = current_date - 1"
       },
-      "position": {"x": 400, "y": 200}
+      "position": {
+        "x": 400,
+        "y": 200
+      }
     },
     {
       "id": "summarize",
       "module": "group_aggregate",
       "params": {
-        "by": ["country"],
+        "by": [
+          "country"
+        ],
         "aggregate": {
-          "orders": {"op": "count"},
-          "revenue": {"op": "sum", "column": "amount"},
-          "avg_ticket": {"op": "avg", "column": "amount"}
+          "orders": {
+            "op": "count"
+          },
+          "revenue": {
+            "op": "sum",
+            "column": "amount"
+          },
+          "avg_ticket": {
+            "op": "avg",
+            "column": "amount"
+          }
         }
       },
-      "position": {"x": 700, "y": 200}
+      "position": {
+        "x": 700,
+        "y": 200
+      }
     },
     {
       "id": "render",
@@ -44,7 +57,10 @@
           "line": "row.country + ': ' + string(row.orders) + ' orders, $' + string(row.revenue) + ' total, avg $' + string(row.avg_ticket)"
         }
       },
-      "position": {"x": 1000, "y": 200}
+      "position": {
+        "x": 1000,
+        "y": 200
+      }
     },
     {
       "id": "notify",
@@ -54,15 +70,47 @@
         "account": "default",
         "text": "${upstream:render.rows[0].line}"
       },
-      "position": {"x": 1300, "y": 200}
+      "position": {
+        "x": 1300,
+        "y": 200
+      }
     }
   ],
   "edges": [
-    {"from": "tick", "from_port": "fired_at", "to": "query", "to_port": "in", "on_error": ""},
-    {"from": "query", "from_port": "rows", "to": "summarize", "to_port": "rows", "on_error": ""},
-    {"from": "query", "from_port": "headers", "to": "summarize", "to_port": "headers", "on_error": ""},
-    {"from": "summarize", "from_port": "rows", "to": "render", "to_port": "rows", "on_error": ""},
-    {"from": "summarize", "from_port": "headers", "to": "render", "to_port": "headers", "on_error": ""},
-    {"from": "render", "from_port": "rows", "to": "notify", "to_port": "body", "on_error": ""}
+    {
+      "from": "query",
+      "from_port": "rows",
+      "to": "summarize",
+      "to_port": "rows",
+      "on_error": ""
+    },
+    {
+      "from": "query",
+      "from_port": "columns",
+      "to": "summarize",
+      "to_port": "headers",
+      "on_error": ""
+    },
+    {
+      "from": "summarize",
+      "from_port": "rows",
+      "to": "render",
+      "to_port": "rows",
+      "on_error": ""
+    },
+    {
+      "from": "summarize",
+      "from_port": "headers",
+      "to": "render",
+      "to_port": "headers",
+      "on_error": ""
+    },
+    {
+      "from": "render",
+      "from_port": "rows",
+      "to": "notify",
+      "to_port": "body",
+      "on_error": ""
+    }
   ]
 }

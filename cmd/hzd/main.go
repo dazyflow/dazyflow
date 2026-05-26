@@ -35,7 +35,6 @@ import (
 	secretsdrop "git.sr.ht/~klahr/hazy-flow/integrations/secrets"
 	"git.sr.ht/~klahr/hazy-flow/integrations/sheets"
 	"git.sr.ht/~klahr/hazy-flow/integrations/slack"
-	"git.sr.ht/~klahr/hazy-flow/workspace"
 )
 
 func main() {
@@ -51,6 +50,7 @@ func main() {
 	enableCron := flag.Bool("cron", true, "enable the cron scheduler")
 	webhookListen := flag.String("webhook", "", "enable the webhook listener on this addr (e.g. :8080); empty disables")
 	httpListen := flag.String("http", "", "enable the HTTP /api/v1 gateway on this addr (e.g. :8080); empty disables")
+	webDist := flag.String("web-dist", "", "serve a built React frontend bundle from this directory (e.g. web/dist). Empty = API-only. When set, the daemon serves the SPA from the same port as the API with index.html fallback for client-side routes.")
 	enableEnvSecrets := flag.Bool("env-secrets", true, "enable env:// secret provider")
 	builtinSecretsFile := flag.String("builtin-secrets", "", "JSON file of {name: value} for builtin:// secret provider")
 	isolateSharedSecrets := flag.Bool("isolate-shared-secrets", false, "require env:// and builtin:// names to be of the form <tenant>.<key> matching the caller's tenant. Off by default for backward compatibility with single-tenant deployments; turn on for shared multi-tenant deployments so tenant A can't read tenant B's shared secrets.")
@@ -75,12 +75,13 @@ func main() {
 	defer stop()
 
 	ks := auth.NewMemKeyStore()
-	devWS, err := workspace.OpenFS(*workspaceDir)
-	if err != nil {
-		log.Fatalf("open workspace: %v", err)
-	}
+	// Auto-provisioning workspace lookup: every (tenant, workspace) pair
+	// gets a git-backed store under workspaceDir/<tenant>/<workspace> on
+	// first access. This lets self-serve signups (tenant usr_<hex>) save
+	// graphs without pre-registration. Empty workspaceDir = in-memory.
+	workspaces := daemon.NewAutoFSWorkspaces(*workspaceDir)
 	if *workspaceDir != "" {
-		log.Printf("workspace store: %s", *workspaceDir)
+		log.Printf("workspace store: %s/<tenant>/<workspace> (auto-provisioned)", *workspaceDir)
 	} else {
 		log.Println("workspace store: in-memory (graphs lost on restart)")
 	}
@@ -155,7 +156,7 @@ func main() {
 			&auth.APIKeyAuthenticator{Store: ks},
 			&auth.SessionAuthenticator{Store: sessions},
 		},
-		Workspaces: daemon.MapWorkspaces{"dev/default": devWS},
+		Workspaces: workspaces,
 		Jobs:       jobs,
 		Engine:     eng,
 		Bus:        bus,
@@ -226,6 +227,10 @@ func main() {
 		gw.EncryptedSecrets = encryptedSecrets // nil disables /api/v1/secrets endpoints
 		gw.OAuth = oauthRegistry               // nil disables /api/v1/oauth/* endpoints
 		gw.EnableSignup = *enableSignup        // false disables POST /api/v1/auth/signup
+		gw.WebDist = *webDist                  // empty disables static frontend serving
+		if *webDist != "" {
+			log.Printf("serving frontend bundle from %s", *webDist)
+		}
 		if *slackSigningSecret != "" {
 			gw.SlackEvents = daemon.NewSlackEventsHandler(svc, *slackSigningSecret)
 			log.Print("Slack events endpoint enabled at /api/v1/events/slack/<tenant>")

@@ -11,8 +11,11 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"git.sr.ht/~klahr/hazy-flow/auth"
@@ -30,6 +33,16 @@ type WorkspaceLookup interface {
 	// tenant. Used by Service.ListWorkspaces to populate the admin
 	// workspace switcher.
 	List(tenant string) ([]string, error)
+}
+
+// WorkspaceEnumerator is the optional capability the cron/poll scheduler
+// needs: walk every known (tenant, workspace) store so it can scan their
+// graphs for time-based triggers. Keyed "tenant/workspace". Both
+// MapWorkspaces and AutoFSWorkspaces implement it; a lookup that can't
+// enumerate (e.g. a lazy remote registry) simply won't drive the
+// scheduler.
+type WorkspaceEnumerator interface {
+	All() map[string]*workspace.Store
 }
 
 // MapWorkspaces is a static lookup keyed by "tenant/workspace".
@@ -55,6 +68,152 @@ func (m MapWorkspaces) List(tenant string) ([]string, error) {
 	}
 	sort.Strings(out)
 	return out, nil
+}
+
+// All returns the underlying map directly — MapWorkspaces already keys
+// by "tenant/workspace", which is exactly what the scheduler wants.
+func (m MapWorkspaces) All() map[string]*workspace.Store { return m }
+
+// AutoFSWorkspaces lazily provisions a git-backed workspace.Store per
+// (tenant, workspace) under a base directory. The first access to a
+// new pair opens (and, if absent, initializes) its store — so a
+// self-serve signup that mints tenant usr_<hex> can save graphs
+// without any pre-registration step. This is the single-node FS
+// stand-in for the eventual Postgres-backed workspace registry.
+//
+// Path components are sanitized to a conservative charset so a
+// crafted tenant/workspace name can't escape the base directory.
+type AutoFSWorkspaces struct {
+	base string
+	mu   sync.Mutex
+	open map[string]*workspace.Store
+}
+
+// NewAutoFSWorkspaces returns a lookup rooted at base. Each tenant
+// gets base/<tenant>/<workspace> as its git store directory.
+func NewAutoFSWorkspaces(base string) *AutoFSWorkspaces {
+	return &AutoFSWorkspaces{base: base, open: map[string]*workspace.Store{}}
+}
+
+func (a *AutoFSWorkspaces) Open(tenant, ws string) (*workspace.Store, error) {
+	st, wsClean, err := safeWorkspaceSegment(tenant, ws)
+	if err != nil {
+		return nil, err
+	}
+	key := st + "/" + wsClean
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if s, ok := a.open[key]; ok {
+		return s, nil
+	}
+	// Empty base = in-memory mode: OpenFS("") returns a memory store.
+	// We still cache per key so a tenant's graphs persist across
+	// requests within the process lifetime.
+	dir := ""
+	if a.base != "" {
+		dir = filepath.Join(a.base, st, wsClean)
+	}
+	s, err := workspace.OpenFS(dir)
+	if err != nil {
+		return nil, fmt.Errorf("provision workspace %q/%q: %w", tenant, ws, err)
+	}
+	a.open[key] = s
+	return s, nil
+}
+
+// List returns the workspace directories present under base/<tenant>.
+// A tenant with no directory yet (never saved anything) lists empty
+// rather than erroring — the switcher then shows the default. In
+// memory mode (empty base) it reports the workspaces opened so far.
+func (a *AutoFSWorkspaces) List(tenant string) ([]string, error) {
+	st, _, err := safeWorkspaceSegment(tenant, "default")
+	if err != nil {
+		return nil, err
+	}
+	if a.base == "" {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		out := make([]string, 0)
+		prefix := st + "/"
+		for k := range a.open {
+			if strings.HasPrefix(k, prefix) {
+				out = append(out, k[len(prefix):])
+			}
+		}
+		sort.Strings(out)
+		return out, nil
+	}
+	entries, err := os.ReadDir(filepath.Join(a.base, st))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []string{}, nil
+		}
+		return nil, err
+	}
+	out := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir() {
+			out = append(out, e.Name())
+		}
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+// All enumerates every (tenant, workspace) store on disk under base,
+// opening (and caching) each. Used by the scheduler's periodic rescan
+// to discover cron/poll triggers across all tenants. In memory mode
+// (empty base) it returns the stores opened so far this process.
+func (a *AutoFSWorkspaces) All() map[string]*workspace.Store {
+	if a.base == "" {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		out := make(map[string]*workspace.Store, len(a.open))
+		for k, v := range a.open {
+			out[k] = v
+		}
+		return out
+	}
+	out := make(map[string]*workspace.Store)
+	tenants, err := os.ReadDir(a.base)
+	if err != nil {
+		return out // base not created yet → nothing scheduled
+	}
+	for _, te := range tenants {
+		if !te.IsDir() {
+			continue
+		}
+		tenant := te.Name()
+		wsEntries, err := os.ReadDir(filepath.Join(a.base, tenant))
+		if err != nil {
+			continue
+		}
+		for _, we := range wsEntries {
+			if !we.IsDir() {
+				continue
+			}
+			ws := we.Name()
+			s, err := a.Open(tenant, ws)
+			if err != nil {
+				continue
+			}
+			out[tenant+"/"+ws] = s
+		}
+	}
+	return out
+}
+
+// safeWorkspaceSegment validates tenant and workspace as single path
+// segments — no empty, no separators, no "." / ".." — so joining them
+// under a base directory can't traverse outside it.
+func safeWorkspaceSegment(tenant, ws string) (string, string, error) {
+	for _, v := range []string{tenant, ws} {
+		if v == "" || v == "." || v == ".." ||
+			strings.ContainsAny(v, "/\\") {
+			return "", "", fmt.Errorf("invalid workspace path segment %q", v)
+		}
+	}
+	return tenant, ws, nil
 }
 
 // Service is the daemon's business logic. Each method enforces authz,
