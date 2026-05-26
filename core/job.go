@@ -58,6 +58,12 @@ type Job struct {
 type JobError struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+	// Details carries technical context (type signatures, library
+	// error strings, stack-trace-like info) that helps a developer
+	// debug but would confuse a non-technical user reading Message.
+	// UIs should hide it behind a "Details" expander; the Message
+	// field alone must be actionable. Optional.
+	Details string `json:"details,omitempty"`
 }
 
 func (e *JobError) Error() string {

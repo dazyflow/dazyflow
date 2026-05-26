@@ -275,6 +275,14 @@ export function RunDetail() {
                     <div className="node-err-block">
                       <div className="node-err-code">{n.Result.error.code}</div>
                       <div>{n.Result.error.message}</div>
+                      {n.Result.error.details && (
+                        <details className="node-err-details">
+                          <summary>Details</summary>
+                          <pre className="node-err-pre">
+                            {n.Result.error.details}
+                          </pre>
+                        </details>
+                      )}
                     </div>
                   )}
                   {n.Result?.output && Object.keys(n.Result.output).length > 0 && (

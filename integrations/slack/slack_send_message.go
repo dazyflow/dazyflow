@@ -26,11 +26,12 @@ func init() {
 			Provider:       "internal",
 			Integration:    "Slack",
 			Tags:           []string{"slack", "chat", "notify", "send"},
-			Description:    "Post a message to a Slack channel. The message text comes from the 'body' input port if connected, otherwise from params.text. Authentication uses an OAuth-connected account (set 'account', default \"default\") or a raw 'token' for one-off use. 'channel' accepts a channel ID (C…) or name (#data-ops).",
+			Description:    "Post a message to a Slack channel. Message content comes from the 'blocks' input port (Block Kit array) if connected, otherwise the 'body' input port (string) or params.text. 'blocks' always wins over text — Slack treats text as the push-notification fallback when blocks are set. Authentication uses an OAuth-connected account (set 'account', default \"default\") or a raw 'token' for one-off use. 'channel' accepts a channel ID (C…) or name (#data-ops).",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
 				{Port: "body", Label: "Message text (overrides params.text)"},
+				{Port: "blocks", Label: "Block Kit array (overrides params.blocks; wins over body/text — text becomes the push-notification fallback)"},
 			},
 			Outputs: []core.Port{
 				{Port: "meta", Label: "Delivery metadata", MIME: []string{"application/json"}},
@@ -79,8 +80,9 @@ func executeSlackSendMessage(ctx context.Context, job core.Job, _ chan<- core.Pr
 		case []byte:
 			text = string(v)
 		default:
-			return errResult(job, "bad_input",
-				fmt.Sprintf("body: Slack messages need a string; got %T (use a transformer to render objects first)", v)), nil
+			return errResultDetails(job, "bad_input",
+				"The Slack message needs text on its 'body' input, but the upstream node is sending a structured value. Wire a transform between them that renders the value as a string (e.g. a Template node, or a JSON-encode step).",
+				fmt.Sprintf("Received type %T on input port 'body'; expected string or []byte.", v)), nil
 		}
 	}
 
@@ -91,7 +93,11 @@ func executeSlackSendMessage(ctx context.Context, job core.Job, _ chan<- core.Pr
 	if ts, ok := paramStringOpt(job.Params, "thread_ts"); ok && ts != "" {
 		payload["thread_ts"] = ts
 	}
-	if blocks, ok := job.Params["blocks"]; ok && blocks != nil {
+	blocks, blocksErr := resolveBlocks(job)
+	if blocksErr != nil {
+		return core.Result{JobID: job.ID, Status: core.StatusError, Error: blocksErr}, nil
+	}
+	if blocks != nil {
 		payload["blocks"] = blocks
 	}
 	// Slack accepts an empty text when blocks are set, but not both
@@ -99,7 +105,7 @@ func executeSlackSendMessage(ctx context.Context, job core.Job, _ chan<- core.Pr
 	// upfront with a clearer message.
 	if text == "" && payload["blocks"] == nil {
 		return errResult(job, "bad_input",
-			"no message text — set params.text, wire the 'body' input port, or provide blocks"), nil
+			"This Slack message has no content. Set the 'text' param on the node, wire something into its 'body' input, or provide Block Kit blocks."), nil
 	}
 
 	body, err := json.Marshal(payload)

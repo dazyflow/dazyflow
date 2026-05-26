@@ -168,6 +168,22 @@ export const api = {
       "POST",
       `/graphs/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/${encodeURIComponent(id)}/run`,
     ),
+  // sampleNode fires a partial run that ends at nodeID — the daemon
+  // strips every node and edge outside nodeID's upstream chain before
+  // submitting. Returns the run_id so the caller can subscribe to the
+  // same SSE stream the regular Run button uses.
+  sampleNode: (
+    token: string,
+    tenant: string,
+    workspace: string,
+    id: string,
+    nodeID: string,
+  ) =>
+    request<{ job_id: string; sampled_node: string }>(
+      token,
+      "POST",
+      `/graphs/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/${encodeURIComponent(id)}/nodes/${encodeURIComponent(nodeID)}/sample`,
+    ),
   cancelRun: (token: string, runID: string, reason?: string) =>
     request<{ status: string }>(
       token,

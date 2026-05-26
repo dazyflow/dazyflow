@@ -1172,3 +1172,104 @@ func TestHTTPGateway_AdminEndpoints501WhenUnconfigured(t *testing.T) {
 		t.Errorf("unconfigured code = %d, want 501", rw.Code)
 	}
 }
+
+// ---- Sample-node endpoint ------------------------------------------
+//
+// The "Sample this node" affordance fires a partial run that ends at
+// the chosen node. The handler filters the graph through
+// core.UpstreamSubset before calling SubmitGraph; these tests pin the
+// HTTP contract (accept / not-found / authz) and that the submitted
+// run carries the subset, not the full graph.
+
+func TestHTTPGateway_SampleNode_Accepts(t *testing.T) {
+	h := newGatewayHarness(t)
+	// Three-node chain a → b → c. Sampling b should run a + b only;
+	// c stays untouched.
+	g := core.Graph{
+		ID: "chain", Tenant: "t", Workspace: "ws",
+		Nodes: []core.Node{
+			{ID: "a", Module: "noop"},
+			{ID: "b", Module: "noop"},
+			{ID: "c", Module: "noop"},
+		},
+		Edges: []core.Edge{
+			{From: "a", To: "b", FromPort: "out", ToPort: "in"},
+			{From: "b", To: "c", FromPort: "out", ToPort: "in"},
+		},
+	}
+	if _, err := h.ws.Save(g, "test"); err != nil {
+		t.Fatalf("save graph: %v", err)
+	}
+	rw := h.do(t, "POST", "/api/v1/graphs/t/ws/chain/nodes/b/sample", nil)
+	if rw.Code != http.StatusAccepted {
+		t.Fatalf("code = %d body = %s", rw.Code, rw.Body.String())
+	}
+	var out struct {
+		JobID       string `json:"job_id"`
+		SampledNode string `json:"sampled_node"`
+	}
+	if err := json.Unmarshal(rw.Body.Bytes(), &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out.JobID == "" {
+		t.Error("job_id empty")
+	}
+	if out.SampledNode != "b" {
+		t.Errorf("sampled_node = %q, want b", out.SampledNode)
+	}
+	// The submitted run's graph payload must be the SUBSET — c
+	// should not appear. Loading the graph-record proves the
+	// daemon kept only the upstream chain of b.
+	rec, err := h.store.Get(t.Context(), out.JobID)
+	if err != nil {
+		t.Fatalf("get job: %v", err)
+	}
+	var submitted core.Graph
+	if err := json.Unmarshal(rec.GraphPayload, &submitted); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	ids := map[string]bool{}
+	for _, n := range submitted.Nodes {
+		ids[n.ID] = true
+	}
+	if !ids["a"] || !ids["b"] {
+		t.Errorf("subset missing a/b: %v", ids)
+	}
+	if ids["c"] {
+		t.Error("subset leaked downstream node c")
+	}
+}
+
+func TestHTTPGateway_SampleNode_UnknownNodeIs404(t *testing.T) {
+	h := newGatewayHarness(t)
+	if _, err := h.ws.Save(core.Graph{
+		ID: "g", Tenant: "t", Workspace: "ws",
+		Nodes: []core.Node{{ID: "only", Module: "noop"}},
+	}, "test"); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	rw := h.do(t, "POST", "/api/v1/graphs/t/ws/g/nodes/ghost/sample", nil)
+	if rw.Code != http.StatusNotFound {
+		t.Errorf("code = %d, want 404; body=%s", rw.Code, rw.Body.String())
+	}
+}
+
+func TestHTTPGateway_SampleNode_UnknownGraphIs404(t *testing.T) {
+	h := newGatewayHarness(t)
+	// No save — graph doesn't exist.
+	rw := h.do(t, "POST", "/api/v1/graphs/t/ws/missing/nodes/x/sample", nil)
+	if rw.Code != http.StatusNotFound {
+		t.Errorf("code = %d, want 404", rw.Code)
+	}
+}
+
+func TestHTTPGateway_SampleNode_RequiresAuth(t *testing.T) {
+	h := newGatewayHarness(t)
+	req := httptest.NewRequest("POST", "/api/v1/graphs/t/ws/g/nodes/x/sample", nil)
+	// no Authorization header
+	rw := httptest.NewRecorder()
+	ServeForTest(h.gw, rw, req)
+	if rw.Code != http.StatusUnauthorized {
+		t.Errorf("code = %d, want 401", rw.Code)
+	}
+}

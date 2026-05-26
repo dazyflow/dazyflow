@@ -27,6 +27,13 @@ type Props = {
   // workspace gives form fields with format:"workspace-path" the
   // context they need to upload files into the active sandbox.
   workspace?: WorkspaceCtx;
+  // onSample fires a partial run that ends at the selected node —
+  // the parent submits a graph-subset run via /sample and pipes the
+  // result back through the same SSE channel the regular Run button
+  // uses, so the inspector's existing Output section lights up.
+  // Returns the run ID on success (or throws). When omitted the
+  // button is hidden.
+  onSample?: (nodeID: string) => Promise<string>;
 };
 
 type Mode = "form" | "json";
@@ -40,7 +47,10 @@ export function Inspector({
   statusRefreshKey,
   liveLogs,
   workspace,
+  onSample,
 }: Props) {
+  const [sampling, setSampling] = useState(false);
+  const [sampleError, setSampleError] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>("form");
   const [jsonText, setJsonText] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
@@ -112,6 +122,41 @@ export function Inspector({
             onChange={(e) => onChange(selected.id, { label: e.target.value })}
           />
         </div>
+
+        {onSample && (
+          <div className="sf-field">
+            <button
+              type="button"
+              className="ghost"
+              disabled={sampling}
+              onClick={async () => {
+                if (!onSample) return;
+                setSampling(true);
+                setSampleError(null);
+                try {
+                  await onSample(selected.id);
+                } catch (e) {
+                  setSampleError((e as Error).message);
+                } finally {
+                  setSampling(false);
+                }
+              }}
+              title="Run this node and its upstream chain — skip everything downstream. Useful when wiring fields against real upstream data."
+            >
+              {sampling ? "Sampling…" : "Sample this node"}
+            </button>
+            {sampleError && (
+              <div className="desc" style={{ color: "var(--danger)" }}>
+                {sampleError}
+              </div>
+            )}
+            <div className="desc">
+              Fires only this node and what feeds it — stops before
+              anything downstream. The output below updates when the
+              partial run finishes.
+            </div>
+          </div>
+        )}
 
         {d.moduleID === "await_approval" && d.status === "awaiting" && currentRunID && (
           <div className="inspector-section approve-inline">

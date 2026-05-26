@@ -98,23 +98,59 @@ this no customer can try" to "needed before paid conversion."
   Events API) deferred — needs a separate signing-secret
   verification path + multi-tenant event routing by team_id;
   worth its own T1 entry.
-- [ ] **`secret_set` drop + cursor-based polling.** Deferred from
-  the poll_trigger landing. Two pieces: (a) a `secret_set` drop
-  that takes a `name`+`value` and writes to the `tenant://` store
-  during graph execution (the missing inverse of secret READ),
-  (b) optional polling-state semantics where the daemon scrapes
-  a designated node's output as the next "cursor" and feeds it
-  back to `poll_trigger` on the next fire. Together they unlock
-  the Zapier "fire only on new items" shape without per-connector
-  bookkeeping. ~2 days.
-- [ ] **`slack_on_mention` trigger.** Deferred from the Slack
-  connector landing. Needs (a) a `POST
-  /api/v1/events/slack/{tenant}` webhook endpoint that verifies
-  Slack's HMAC-SHA256 signature against the app's signing secret,
-  (b) URL-verification challenge handling on first subscription,
-  (c) team_id → tenant routing (which connected account this
-  team belongs to), (d) marshaling the event into a job that
-  graphs with `slack_on_mention` triggers consume. ~2 days.
+- [~] **`secret_set` drop + cursor-based polling.** Piece (a)
+  shipped: new `integrations/secrets/` package with a `secret_set`
+  drop. Inputs: `value` (string; overrides params.value). Params:
+  `name` (required, validated [A-Za-z0-9_.-], ≤128 chars), `value`
+  (optional fallback). Outputs: `name` echo (never the value, so
+  a misroute can't leak the secret into a persisted Result).
+  Cross-cutting hook: `secrets.SetSecretWriter` mirrors the
+  Slack/Gmail `SetTokenLookup` pattern — hzd installs a closure
+  over `EncryptedSecrets.Put` next to the existing token-lookup
+  wiring. The drop's `Description` and `poll_trigger`'s existing
+  description document the explicit cursor pattern: read the
+  prior fire's cursor via `${tenant://...}` template
+  substitution, write the new one with a downstream `secret_set`
+  node. 11 tests cover happy path, input-port-wins-over-param,
+  bytes input, structured-input rejection (friendly Message +
+  technical Details split), missing tenant/name/value, bad-name
+  validator, unwired-hook clear error pointing at `--master-key`,
+  write-failure detail surfacing, and tenant isolation.
+  Piece (b) — daemon-side automatic cursor scraping after
+  successful runs — still deferred; the explicit pattern is
+  enough for V1 and avoids inventing a "designated cursor port"
+  manifest concept.
+- [x] **`slack_on_mention` trigger.** Shipped:
+  `integrations/slack/slack_on_mention.go` — trigger drop with
+  outputs `text` / `user` / `channel` / `team` / `ts` / `event`
+  (full raw payload for advanced use). Daemon side:
+  `daemon/slack_events.go` mounts
+  `POST /api/v1/events/slack/{tenant}` (no bearer auth — HMAC is
+  the auth), with Slack's documented HMAC-SHA256 scheme
+  (`v0:<timestamp>:<body>` over the signing secret) plus a
+  ±5-minute replay window, `url_verification` challenge echo,
+  and event_callback fanout that iterates every workspace in the
+  tenant, loads every graph, and `SubmitGraphWithSeed`s any
+  graph with at least one `slack_on_mention` node — same model
+  the webhook listener uses for `webhook_input`. Fanout runs in
+  a background goroutine so the HTTP ack stays well under
+  Slack's 3-second retry budget. Standalone execution returns
+  `no_trigger_data` with a friendly Message + technical Details
+  (same pattern as `webhook_input`). hzd flag
+  `--slack-signing-secret` (default
+  `$HAZYFLOW_SLACK_SIGNING_SECRET`); empty leaves the endpoint
+  returning 501 so misconfiguration shows clearly. 10 tests:
+  URL verification challenge, bad/missing/stale/future
+  signatures, 501 when unconfigured, end-to-end app_mention
+  fires a subscribed graph (verifies the trigger node's output
+  ports), reaction_added is acked-without-dispatch, unknown
+  envelope types acked, standalone-run errors with
+  `no_trigger_data`. **Out of scope for V1:** team_id ↔
+  connected-OAuth-account verification (the per-tenant URL
+  + signing secret is the auth model; a hosted shared-app
+  deployment would need to layer team_id routing on top); per-
+  graph filtering at the gateway (every subscribed graph fires
+  for every mention; graphs route downstream via branch).
 - [x] **Gmail launch connector.** Three action drops shipped:
   `integrations/gmail/gmail_send_email.go` (RFC822 construction
   with CRLF + header-injection defense, base64-URL-no-pad
@@ -231,10 +267,31 @@ this no customer can try" to "needed before paid conversion."
   deferred to when there's a clean per-tenant-token plumbing
   story (those would invoke the existing connector drops; v1
   picks the smallest blast radius).
-- [ ] **Trigger test/preview UX.** "Run trigger now" button that
-  fetches sample data from the connected account without firing
-  downstream. Critical for the field-mapping workflow — users need
-  to see real shapes when wiring fields. ~3 days.
+- [~] **Trigger test/preview UX.** Shipped: "Sample this node"
+  button in the editor's Inspector that fires a partial run
+  ending at the selected node. Backend: new
+  `core.UpstreamSubset(target) (Graph, bool)` helper computes the
+  target plus every transitive predecessor via BFS over edges in
+  reverse, preserving on_error / port metadata; new endpoint
+  `POST /api/v1/graphs/{tenant}/{workspace}/{id}/nodes/{nodeID}/sample`
+  loads the graph, filters to the subset, submits via the
+  existing `SubmitGraph` (so authz, run records, SSE, failure
+  notifications all work unchanged). Frontend: `onSample`
+  callback on the Inspector that saves the in-flight edits first
+  (so unsaved param changes participate in the partial run),
+  POSTs to the sample endpoint, then swaps `currentRunID` and
+  resubscribes to the existing SSE channel — the existing
+  OutputPreview lights up automatically. 7 tests on the helper
+  (leaf, mid-node parallel-branch drop, source-singleton, edge
+  metadata preservation, missing target, identity/authz field
+  carry-through, cyclic-edges no-hang); 4 handler tests (accept
+  + subset payload verification, unknown node 404, unknown graph
+  404, requires auth). **Out of scope for V1:** filtering sample
+  vs production runs in the RunList (samples blend in today),
+  rendering a separate "sample" badge on the run, synthetic
+  webhook bodies (webhook_input nodes in the subset fail
+  standalone with `no_trigger_data` — flow authors test those by
+  firing the real trigger via curl).
 
 ### T3 — Monetization (needed before charging)
 

@@ -144,14 +144,24 @@ function PortCard({ port, ref0 }: { port: string; ref0: Ref }) {
   );
 }
 
-function ErrorBlock({ error }: { error: { code: string; message: string } }) {
+function ErrorBlock({
+  error,
+}: {
+  error: { code: string; message: string; details?: string };
+}) {
   return (
     <div className="port-card port-error">
       <div className="port-head">
         <span className="port-name">error</span>
         <span className="port-mime">{error.code}</span>
       </div>
-      <pre className="port-value">{error.message}</pre>
+      <div className="port-error-msg">{error.message}</div>
+      {error.details && (
+        <details className="port-error-details">
+          <summary>Details</summary>
+          <pre className="port-value">{error.details}</pre>
+        </details>
+      )}
     </div>
   );
 }

@@ -686,6 +686,33 @@ function EditorInner() {
           workspace={
             token ? { token, tenant: activeTenant, workspace: activeWorkspace } : undefined
           }
+          onSample={
+            token && id
+              ? async (nodeID) => {
+                  // Save the in-flight graph first — sample fires
+                  // against the persisted version, so an unsaved edit
+                  // to params/wiring would otherwise be invisible to
+                  // the partial run.
+                  await save();
+                  const { job_id } = await api.sampleNode(
+                    token,
+                    activeTenant,
+                    activeWorkspace,
+                    id,
+                    nodeID,
+                  );
+                  // Reuse the same SSE plumbing the regular Run uses.
+                  // The Inspector's OutputPreview reads from
+                  // currentRunID, so swapping it here makes the
+                  // sample's output land in the same spot.
+                  setCurrentRunID(job_id);
+                  setLockedRunID(job_id);
+                  localStorage.setItem(`hazyflow.lastRun.${id}`, job_id);
+                  subscribeToRun(job_id);
+                  return job_id;
+                }
+              : undefined
+          }
         />
       </div>
       <ChatPanel

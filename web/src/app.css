@@ -692,6 +692,32 @@
   font-weight: 600;
   margin-bottom: 2px;
 }
+.node-err-details {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.node-err-details > summary {
+  cursor: pointer;
+  user-select: none;
+  font-size: 11px;
+  color: var(--faint);
+  font-weight: 500;
+}
+.node-err-details > summary:hover {
+  color: var(--ink);
+}
+.node-err-pre {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--surface-2);
+  border-radius: var(--r-1);
+  padding: 6px 8px;
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--ink);
+}
 .node-output {
   margin-top: 10px;
 }
@@ -1548,6 +1574,29 @@
 .port-card.port-error {
   border-color: color-mix(in srgb, var(--danger) 60%, transparent);
   background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+}
+.port-error-msg {
+  font-size: 12px;
+  color: var(--ink);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.port-error-details {
+  margin-top: 8px;
+}
+.port-error-details > summary {
+  cursor: pointer;
+  user-select: none;
+  font-size: 11px;
+  color: var(--faint);
+  font-weight: 500;
+}
+.port-error-details > summary:hover {
+  color: var(--ink);
+}
+.port-error-details > .port-value {
+  margin-top: 6px;
 }
 .port-head {
   display: flex;

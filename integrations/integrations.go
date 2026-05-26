@@ -15,6 +15,7 @@ import (
 	_ "git.sr.ht/~klahr/hazy-flow/integrations/io"
 	_ "git.sr.ht/~klahr/hazy-flow/integrations/net"
 	_ "git.sr.ht/~klahr/hazy-flow/integrations/notify"
+	_ "git.sr.ht/~klahr/hazy-flow/integrations/secrets"
 	_ "git.sr.ht/~klahr/hazy-flow/integrations/sheets"
 	_ "git.sr.ht/~klahr/hazy-flow/integrations/shell"
 	_ "git.sr.ht/~klahr/hazy-flow/integrations/slack"

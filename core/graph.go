@@ -171,3 +171,58 @@ func (g Graph) Node(id string) (Node, bool) {
 	}
 	return Node{}, false
 }
+
+// UpstreamSubset returns a copy of g containing only target plus every
+// node that target transitively depends on (BFS over edges in reverse).
+// Edges between included nodes are preserved verbatim, including
+// on_error semantics — the subset must run with the same dispatch
+// rules as the full graph or "sample this node" would behave
+// differently from "fire the whole graph and look at this output."
+//
+// Used by the sample-node endpoint to fire a partial run that ends at
+// the target. Edges leaving included nodes toward excluded nodes are
+// dropped — the dispatcher then sees no downstream and finalizes the
+// run once target completes.
+//
+// Returns (Graph{}, false) when target isn't in g. Other graph fields
+// (Tenant, Workspace, ID, Visibility, Owner, Triggers, FailureNotify,
+// display metadata) are copied unchanged so the submitted run carries
+// the same identity and authz context as the source.
+func (g Graph) UpstreamSubset(target string) (Graph, bool) {
+	if _, ok := g.Node(target); !ok {
+		return Graph{}, false
+	}
+	// Reverse adjacency: dst → []src. Built once so the BFS is O(E)
+	// rather than O(N·E).
+	predecessors := make(map[string][]string, len(g.Nodes))
+	for _, e := range g.Edges {
+		predecessors[e.To] = append(predecessors[e.To], e.From)
+	}
+	included := map[string]bool{target: true}
+	queue := []string{target}
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		for _, pred := range predecessors[cur] {
+			if included[pred] {
+				continue
+			}
+			included[pred] = true
+			queue = append(queue, pred)
+		}
+	}
+	sub := g
+	sub.Nodes = make([]Node, 0, len(included))
+	for _, n := range g.Nodes {
+		if included[n.ID] {
+			sub.Nodes = append(sub.Nodes, n)
+		}
+	}
+	sub.Edges = make([]Edge, 0, len(g.Edges))
+	for _, e := range g.Edges {
+		if included[e.From] && included[e.To] {
+			sub.Edges = append(sub.Edges, e)
+		}
+	}
+	return sub, true
+}

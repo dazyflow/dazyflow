@@ -31,6 +31,7 @@ import (
 	_ "git.sr.ht/~klahr/hazy-flow/integrations"
 	"git.sr.ht/~klahr/hazy-flow/integrations/github"
 	"git.sr.ht/~klahr/hazy-flow/integrations/gmail"
+	secretsdrop "git.sr.ht/~klahr/hazy-flow/integrations/secrets"
 	"git.sr.ht/~klahr/hazy-flow/integrations/sheets"
 	"git.sr.ht/~klahr/hazy-flow/integrations/slack"
 	"git.sr.ht/~klahr/hazy-flow/workspace"
@@ -64,6 +65,7 @@ func main() {
 	claudeCLI := flag.Bool("claude-cli", false, "Route the chat endpoint through the local `claude -p` CLI + hz-mcp instead of the Anthropic API. Test mode — lets you exercise the chat without an API key as long as `claude` is logged in.")
 	claudeCLIMCPBin := flag.String("claude-cli-mcp-bin", "", "Path to the hz-mcp binary used by --claude-cli (default: $HZ_MCP_BIN, then $PATH lookup).")
 	claudeCLIHazydURL := flag.String("claude-cli-hzd-url", "http://localhost:8080", "URL hz-mcp uses to call back into this hzd process under --claude-cli.")
+	slackSigningSecret := flag.String("slack-signing-secret", os.Getenv("HAZYFLOW_SLACK_SIGNING_SECRET"), "Slack app Signing Secret (default $HAZYFLOW_SLACK_SIGNING_SECRET). Required for /api/v1/events/slack/* to accept Slack Events API POSTs. Empty disables the endpoint with 501.")
 	flag.Parse()
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -142,6 +144,13 @@ func main() {
 		secrets[es.Scheme()] = es
 		encryptedSecrets = es
 		log.Printf("encrypted secret store enabled (scheme: %s://)", es.Scheme())
+		// Wire the write path into the secret_set drop. Mirrors the
+		// SetTokenLookup hook pattern — keeps the integrations
+		// package free of a daemon import while letting graphs write
+		// cursors / per-tenant state during execution.
+		secretsdrop.SetSecretWriter(func(ctx context.Context, tenant, name, value string) error {
+			return es.Put(ctx, tenant, name, value)
+		})
 	}
 	// OAuth registry — built only if both the encrypted store and a
 	// public base URL are set. Providers register themselves from env
@@ -280,6 +289,10 @@ func main() {
 		gw.EncryptedSecrets = encryptedSecrets // nil disables /api/v1/secrets endpoints
 		gw.OAuth = oauthRegistry               // nil disables /api/v1/oauth/* endpoints
 		gw.EnableSignup = *enableSignup        // false disables POST /api/v1/auth/signup
+		if *slackSigningSecret != "" {
+			gw.SlackEvents = daemon.NewSlackEventsHandler(svc, *slackSigningSecret)
+			log.Print("Slack events endpoint enabled at /api/v1/events/slack/<tenant>")
+		}
 		if *webOrigin != "" {
 			for _, o := range strings.Split(*webOrigin, ",") {
 				o = strings.TrimSpace(o)

@@ -61,6 +61,11 @@ type HTTPGateway struct {
 	// often want admin-invite-only signup. The hzd binary opts in
 	// via --signup or $HAZYFLOW_ENABLE_SIGNUP.
 	EnableSignup bool
+
+	// SlackEvents handles Slack Events API POSTs (app_mention etc.).
+	// Nil = the route returns 501. Wired by hzd when the Slack
+	// signing-secret flag/env is set.
+	SlackEvents *SlackEventsHandler
 }
 
 func NewHTTPGateway(svc *Service) *HTTPGateway {
@@ -128,6 +133,10 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/graphs/{tenant}/{workspace}/{id}", h.requireAuth(h.loadGraph))
 	mux.HandleFunc("PUT /api/v1/graphs/{tenant}/{workspace}/{id}", h.requireAuth(h.saveGraph))
 	mux.HandleFunc("POST /api/v1/graphs/{tenant}/{workspace}/{id}/run", h.requireAuth(h.runGraph))
+	mux.HandleFunc("POST /api/v1/graphs/{tenant}/{workspace}/{id}/nodes/{nodeID}/sample", h.requireAuth(h.sampleNode))
+	// Slack Events API endpoint. NOT under requireAuth — Slack POSTs
+	// as a stranger; the HMAC signature is the auth.
+	mux.HandleFunc("POST /api/v1/events/slack/{tenant}", h.slackEvents)
 	mux.HandleFunc("GET /api/v1/graphs/{tenant}/{workspace}/{id}/runs", h.requireAuth(h.listRuns))
 	mux.HandleFunc("GET /api/v1/runs", h.requireAuth(h.listAllRuns))
 	mux.HandleFunc("POST /api/v1/runs/{runID}/cancel", h.requireAuth(h.cancelRun))
@@ -712,6 +721,61 @@ func (h *HTTPGateway) runGraph(rw http.ResponseWriter, r *http.Request, p core.P
 		return
 	}
 	writeJSON(rw, http.StatusAccepted, map[string]string{"job_id": runID})
+}
+
+// sampleNode runs a partial graph that ends at the requested nodeID.
+// The submitted run contains only nodeID + its transitive predecessors
+// — every other node and every edge that would lead out of the subset
+// is dropped before submission. This lets a graph author "preview"
+// what one node emits without firing downstream side effects.
+//
+// Identity is preserved end-to-end: the same graph ID, tenant, and
+// workspace are reused, so the run shows up in the normal RunList
+// (filtering "sample vs production" runs is a follow-up). Authz
+// flows through SubmitGraph unchanged — sampling a node you can't
+// run is rejected at the same gate as a full run would be.
+//
+// Limitations called out for V1: webhook_input nodes in the subset
+// will fail standalone with code=no_trigger_data (no body was POSTed
+// to the webhook listener for this run). Users on a webhook flow
+// should hit the trigger via curl; "sample with a synthetic body"
+// is a separate follow-up.
+// slackEvents dispatches a Slack Events API POST to the configured
+// handler. Returns 501 if the handler isn't wired (so a misconfigured
+// deployment surfaces clearly instead of silently rejecting on bad
+// signature).
+func (h *HTTPGateway) slackEvents(rw http.ResponseWriter, r *http.Request) {
+	if h.SlackEvents == nil {
+		http.Error(rw, "Slack events endpoint not configured (set --slack-signing-secret on hzd)", http.StatusNotImplemented)
+		return
+	}
+	h.SlackEvents.ServeHTTP(rw, r)
+}
+
+func (h *HTTPGateway) sampleNode(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	tenant := r.PathValue("tenant")
+	workspace := r.PathValue("workspace")
+	id := r.PathValue("id")
+	nodeID := r.PathValue("nodeID")
+	g, err := h.svc.LoadGraph(r.Context(), p, tenant, workspace, id, "")
+	if err != nil {
+		writeJSONError(rw, http.StatusNotFound, err.Error())
+		return
+	}
+	sub, ok := g.UpstreamSubset(nodeID)
+	if !ok {
+		writeJSONError(rw, http.StatusNotFound, fmt.Sprintf("node %q not in graph %q", nodeID, id))
+		return
+	}
+	runID, err := h.svc.SubmitGraph(r.Context(), p, sub)
+	if err != nil {
+		writeJSONError(rw, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(rw, http.StatusAccepted, map[string]string{
+		"job_id":      runID,
+		"sampled_node": nodeID,
+	})
 }
 
 func (h *HTTPGateway) jobSnapshot(rw http.ResponseWriter, r *http.Request, p core.Principal) {

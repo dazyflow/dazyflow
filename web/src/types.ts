@@ -172,6 +172,11 @@ export type Ref = {
 export type JobError = {
   code: string;
   message: string;
+  // Optional technical context (type signatures, library errors, etc.)
+  // that helps a developer debug but would confuse a non-technical
+  // user reading `message`. UI surfaces should hide it behind a
+  // "Details" expander.
+  details?: string;
 };
 
 export type JobResult = {

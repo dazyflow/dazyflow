@@ -134,6 +134,65 @@ func errResult(job core.Job, code, msg string) core.Result {
 	}
 }
 
+// errResultDetails is errResult with a technical-detail payload. Use
+// when the user-facing Message is too vague to debug from alone — the
+// Details string carries the type signature, library error string, or
+// other developer hint the UI tucks behind an expander.
+func errResultDetails(job core.Job, code, msg, details string) core.Result {
+	return core.Result{
+		JobID:  job.ID,
+		Status: core.StatusError,
+		Error:  &core.JobError{Code: code, Message: msg, Details: details},
+	}
+}
+
+// resolveBlocks pulls the Block Kit array off the job in priority
+// order: 'blocks' input port → params.blocks. Returns (nil, nil) when
+// neither is set so the caller can fall through to text-only.
+//
+// Accepted port shapes: []any (already-decoded array, the common case
+// from a transform), string / []byte (JSON-encoded array, parsed
+// here). Anything else is a wiring mistake — return a JobError with a
+// friendly Message and a typed Details so the UI can split the two.
+func resolveBlocks(job core.Job) (any, *core.JobError) {
+	if input, ok := job.Input["blocks"]; ok && input.Inline != nil {
+		switch v := input.Inline.(type) {
+		case []any:
+			return v, nil
+		case string:
+			var arr []any
+			if err := json.Unmarshal([]byte(v), &arr); err != nil {
+				return nil, &core.JobError{
+					Code:    "bad_input",
+					Message: "Slack Block Kit needs an array of block objects. The upstream node is wiring a string, but it isn't valid JSON.",
+					Details: fmt.Sprintf("JSON parse on input port 'blocks' failed: %v", err),
+				}
+			}
+			return arr, nil
+		case []byte:
+			var arr []any
+			if err := json.Unmarshal(v, &arr); err != nil {
+				return nil, &core.JobError{
+					Code:    "bad_input",
+					Message: "Slack Block Kit needs an array of block objects. The upstream node is wiring raw bytes, but they aren't valid JSON.",
+					Details: fmt.Sprintf("JSON parse on input port 'blocks' failed: %v", err),
+				}
+			}
+			return arr, nil
+		default:
+			return nil, &core.JobError{
+				Code:    "bad_input",
+				Message: "Slack Block Kit needs an array of block objects. The upstream node is sending a different shape.",
+				Details: fmt.Sprintf("Received type %T on input port 'blocks'; expected []any, string (JSON), or []byte (JSON).", v),
+			}
+		}
+	}
+	if v, ok := job.Params["blocks"]; ok && v != nil {
+		return v, nil
+	}
+	return nil, nil
+}
+
 // httpBase is the Slack API root. Tests override via SetHTTPBase to
 // point at an httptest server.
 var (
