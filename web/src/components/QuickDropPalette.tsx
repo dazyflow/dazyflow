@@ -75,6 +75,33 @@ export function QuickDropPalette({ drops, onClose, onPick }: Props) {
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
+  // Always call the latest onClose from the mount-once popstate effect
+  // without making that effect depend on (and re-run with) onClose.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  // Make the device/browser Back button close the palette instead of
+  // navigating away from the editor. We push a throwaway history entry
+  // on open; Back pops it and we treat that as "close". Closing by any
+  // other route (Esc, pick, backdrop) pops our entry back off so the
+  // next real Back behaves normally. Matters most for the fullscreen
+  // mobile variant, where Back is the instinctive way to dismiss it.
+  useEffect(() => {
+    window.history.pushState({ hazyPalette: true }, "");
+    const onPop = () => onCloseRef.current();
+    window.addEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      // If we're unmounting for a reason OTHER than the Back-button pop
+      // (Esc/pick/backdrop), our pushed entry is still on top — remove
+      // it. The listener is already gone, so this back() won't re-fire
+      // onClose. After a real Back pop the entry is gone and state no
+      // longer carries our marker, so we skip (no double-pop).
+      if (window.history.state?.hazyPalette) {
+        window.history.back();
+      }
+    };
+  }, []);
 
   // Build the ranked match list. When the query is empty we still want a
   // useful default ordering — surface drops alphabetically by integration

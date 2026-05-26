@@ -10,6 +10,7 @@ import {
 import { useParams, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useActiveFlow } from "../activeFlow";
+import { saveRecentFlow } from "../recentFlow";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -277,6 +278,13 @@ function EditorInner() {
     setOpenSettings(() => () => setSettingsOpen(true));
     return () => setOpenSettings(null);
   }, [setOpenSettings]);
+
+  // Remember this as the most-recently-opened flow so the start screen
+  // can offer a "continue working" link. Falls back to the id until
+  // the display name loads.
+  useEffect(() => {
+    if (id) saveRecentFlow({ id, name: name || id });
+  }, [id, name]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {

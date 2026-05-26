@@ -27,6 +27,11 @@
   font-weight: 600;
   font-size: 16px;
   color: var(--ink);
+  text-decoration: none;
+  cursor: pointer;
+}
+.topbar .brand:hover .brand-title {
+  color: var(--accent);
 }
 .topbar .brand-mark {
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
@@ -593,6 +598,50 @@
   border-radius: 3px;
   font-family: var(--font-mono);
   font-size: 12px;
+}
+/* "Continue where you left off" resume card — the most-recent flow,
+   pulled from localStorage. Reads as a prominent button at the top of
+   the welcome screen. */
+.welcome-resume {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  border-radius: var(--r-2);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  text-decoration: none;
+  color: var(--ink);
+  transition: background 120ms, border-color 120ms;
+}
+.welcome-resume:hover {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: var(--accent);
+}
+.welcome-resume-icon {
+  display: inline-flex;
+  color: var(--accent);
+}
+.welcome-resume-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.welcome-resume-lede {
+  font-size: 12px;
+  color: var(--muted);
+}
+.welcome-resume-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.welcome-resume-arrow {
+  color: var(--muted);
+  flex-shrink: 0;
 }
 .welcome-steps {
   list-style: none;
@@ -2859,7 +2908,7 @@
   outline: none;
   color: var(--ink);
   font-size: 15px;
-  padding: 4px 0;
+  padding: 4px 0 4px var(--space-2);
 }
 .quick-palette-search input::placeholder {
   color: var(--faint);
@@ -2981,4 +3030,41 @@
   padding: 1px 5px;
   margin: 0 2px;
   color: var(--muted);
+}
+
+/* Fullscreen palette on small screens: a centred float with a backdrop
+   makes no sense on a phone (the dialog is most of the viewport anyway
+   and the soft keyboard eats the rest). Go edge-to-edge — search pinned
+   to the top, results filling the space, no rounded float. The
+   keyboard-shortcut hint is hidden since there's no hardware keyboard to
+   speak of; tap-to-pick still works. Uses 100dvh so the mobile URL bar
+   collapsing doesn't clip the bottom. */
+@media (max-width: 768px) {
+  .quick-palette-backdrop {
+    padding-top: 0;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .quick-palette {
+    width: 100vw;
+    height: 100dvh;
+    max-height: none;
+    border: none;
+    border-radius: 0;
+  }
+  .quick-palette-search {
+    padding: var(--space-4);
+    /* Pin the search row while results scroll under it. */
+    position: sticky;
+    top: 0;
+    background: var(--surface);
+    z-index: 1;
+  }
+  .quick-palette-search input {
+    /* 16px avoids iOS Safari's auto-zoom on focus for <16px inputs. */
+    font-size: 16px;
+  }
+  .quick-palette-hint {
+    display: none;
+  }
 }

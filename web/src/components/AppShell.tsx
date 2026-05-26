@@ -148,7 +148,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         >
           <Menu size={20} />
         </button>
-        <div className="brand">
+        {/* The logo is the home affordance — clicking it lands on the
+            start/welcome screen (where no flow is selected), matching
+            the sibling `hazy` app's brand-click-goes-home behaviour. */}
+        <NavLink to="/welcome" className="brand" title="Hazy Flow">
           <img
             src="/favicon.png"
             alt=""
@@ -160,10 +163,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           {/* In the editor, the open flow's name takes the wordmark's
               slot so the operator always knows which flow they're in.
               Elsewhere it's the product wordmark. */}
-          <span className="brand-title" title={inEditor && activeFlowName ? activeFlowName : undefined}>
+          <span className="brand-title">
             {inEditor && activeFlowName ? activeFlowName : "Hazy Flow"}
           </span>
-        </div>
+        </NavLink>
         <div className="spacer" />
         {me && (
           <div className="user">

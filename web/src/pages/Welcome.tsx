@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
 import { Trans, useTranslation } from "react-i18next";
+import { ArrowRight, Workflow } from "lucide-react";
 import { useAuth } from "../auth";
+import { loadRecentFlow } from "../recentFlow";
 
 // Welcome is the post-signup landing wizard — the "first-run"
 // surface from the T0-3 TODO. Intentionally simple: three CTAs that
@@ -12,6 +14,9 @@ import { useAuth } from "../auth";
 export function Welcome() {
   const { t } = useTranslation();
   const { me } = useAuth();
+  // Resolved once on mount — localStorage only changes when the editor
+  // mounts, which can't happen while this page is showing.
+  const recent = loadRecentFlow();
   return (
     <div className="welcome">
       <div className="card welcome-card">
@@ -32,6 +37,23 @@ export function Welcome() {
             )}
             .
           </p>
+        )}
+        {recent && (
+          <Link
+            to={`/flows/${encodeURIComponent(recent.id)}`}
+            className="welcome-resume"
+          >
+            <span className="welcome-resume-icon">
+              <Workflow size={18} />
+            </span>
+            <span className="welcome-resume-body">
+              <span className="welcome-resume-lede">
+                {t("welcome.continueTitle")}
+              </span>
+              <span className="welcome-resume-name">{recent.name}</span>
+            </span>
+            <ArrowRight size={16} className="welcome-resume-arrow" />
+          </Link>
         )}
         <p>{t("welcome.intro")}</p>
         <ol className="welcome-steps">
