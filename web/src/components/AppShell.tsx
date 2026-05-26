@@ -8,6 +8,8 @@ import {
   Activity,
   Inbox,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   FolderTree,
   Building2,
   Boxes,
@@ -15,6 +17,15 @@ import {
 import { useTranslation } from "react-i18next";
 import { api } from "../api";
 import { useAuth } from "../auth";
+
+// COLLAPSE_KEY persists the sidebar collapsed/expanded choice across
+// reloads. The sidebar is always visible; small viewports just default
+// to the icons-only rail until the user expands it.
+const COLLAPSE_KEY = "hazyflow.sidebar.collapsed";
+// MOBILE_BREAK mirrors the @media (max-width: 768px) rule in app.css —
+// AppShell uses it to default new visitors on small viewports to the
+// rail layout on first paint.
+const MOBILE_BREAK = 768;
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
@@ -30,7 +41,32 @@ export function AppShell({ children }: { children: ReactNode }) {
     activeTenant,
     setActiveTenant,
   } = useAuth();
-  const [navOpen, setNavOpen] = useState(false);
+  // navCollapsed drives the icons-only rail. We persist the user's
+  // explicit choice across reloads; if they haven't picked one yet we
+  // default to collapsed on small viewports (where the full sidebar
+  // would eat too much of a phone/tablet screen) and expanded on
+  // desktops. The initial read runs synchronously so the first paint
+  // matches — no flicker between the two widths.
+  const [navCollapsed, setNavCollapsed] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem(COLLAPSE_KEY);
+      if (saved === "1") return true;
+      if (saved === "0") return false;
+    } catch {
+      /* fall through to viewport default */
+    }
+    if (typeof window !== "undefined" && window.innerWidth <= MOBILE_BREAK) {
+      return true;
+    }
+    return false;
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(COLLAPSE_KEY, navCollapsed ? "1" : "0");
+    } catch {
+      /* localStorage might be blocked in a strict-mode iframe */
+    }
+  }, [navCollapsed]);
   const location = useLocation();
   // Pending approvals count — surfaces a badge on the sidebar nav so
   // operators see "you have N decisions waiting" without visiting the
@@ -68,19 +104,32 @@ export function AppShell({ children }: { children: ReactNode }) {
   const showAdmin =
     hasPerm("tenant:admin") || hasPerm("graph:admin");
 
+  // The hamburger toggles between the full sidebar and the icons-only
+  // rail at every viewport — the sidebar is now always visible, with
+  // small screens just defaulting to the rail variant.
+  const toggleNav = () => setNavCollapsed((x) => !x);
+
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-nav-collapsed={navCollapsed ? "true" : "false"}>
       <header className="topbar">
         <button
           className="icon ghost hamburger"
-          onClick={() => setNavOpen((x) => !x)}
+          onClick={toggleNav}
           aria-label={t("nav.toggleNav")}
+          aria-expanded={!navCollapsed}
         >
           <Menu size={20} />
         </button>
         <div className="brand">
-          <span className="brand-mark">∼</span>
-          <span>Hazy Flow</span>
+          <img
+            src="/favicon.png"
+            alt=""
+            className="brand-mark-img"
+            width={24}
+            height={24}
+            draggable={false}
+          />
+          <span className="brand-title">Hazy Flow</span>
         </div>
         <div className="spacer" />
         {me && (
@@ -92,15 +141,17 @@ export function AppShell({ children }: { children: ReactNode }) {
                 onPick={setActiveTenant}
               />
             )}
-            <WorkspaceSwitcher
-              tenant={activeTenant || me.tenant}
-              activeWorkspace={activeWorkspace || me.workspace}
-              workspaces={workspaces}
-              onPick={setActiveWorkspace}
-              hideTenantPrefix={tenants.length > 1}
-            />
-            <span style={{ color: "var(--faint)" }}>·</span>
-            <span className="who">{me.subject || t("nav.noSubject")}</span>
+            <span className="topbar-workspace">
+              <WorkspaceSwitcher
+                tenant={activeTenant || me.tenant}
+                activeWorkspace={activeWorkspace || me.workspace}
+                workspaces={workspaces}
+                onPick={setActiveWorkspace}
+                hideTenantPrefix={tenants.length > 1}
+              />
+            </span>
+            <span className="topbar-sep" style={{ color: "var(--faint)" }}>·</span>
+            <span className="who topbar-email">{me.subject || t("nav.noSubject")}</span>
             <button className="icon ghost" onClick={signOut} aria-label={t("nav.signOut")}>
               <LogOut size={18} />
             </button>
@@ -108,42 +159,88 @@ export function AppShell({ children }: { children: ReactNode }) {
         )}
       </header>
       <div className="body">
-        {navOpen && (
-          <div
-            className="sidebar-backdrop"
-            onClick={() => setNavOpen(false)}
-          />
-        )}
-        <aside className="sidebar" data-open={navOpen ? "true" : "false"}>
+        <aside
+          className="sidebar"
+          data-collapsed={navCollapsed ? "true" : "false"}
+        >
           <div className="group-label">{t("nav.workspaceGroup")}</div>
-          <NavLink to="/flows" onClick={() => setNavOpen(false)}>
+          <NavLink
+            to="/flows"
+            title={t("nav.flows")}
+          >
             <Workflow size={18} />
-            {t("nav.flows")}
+            <span className="nav-label">{t("nav.flows")}</span>
           </NavLink>
-          <NavLink to="/runs" onClick={() => setNavOpen(false)}>
+          <NavLink
+            to="/runs"
+            title={t("nav.runs")}
+          >
             <Activity size={18} />
-            {t("nav.runs")}
+            <span className="nav-label">{t("nav.runs")}</span>
           </NavLink>
-          <NavLink to="/approvals" onClick={() => setNavOpen(false)}>
+          <NavLink
+            to="/approvals"
+            title={t("nav.approvals")}
+          >
             <Inbox size={18} />
-            <span style={{ flex: 1 }}>{t("nav.approvals")}</span>
+            <span className="nav-label" style={{ flex: 1 }}>
+              {t("nav.approvals")}
+            </span>
             {pendingCount > 0 && (
               <span className="nav-badge">{pendingCount}</span>
             )}
           </NavLink>
-          <NavLink to="/integrations" onClick={() => setNavOpen(false)}>
+          <NavLink
+            to="/integrations"
+            title={t("nav.integrations")}
+          >
             <Boxes size={18} />
-            {t("nav.integrations")}
+            <span className="nav-label">{t("nav.integrations")}</span>
           </NavLink>
           {showAdmin && (
             <>
               <div className="group-label">{t("nav.settingsGroup")}</div>
-              <NavLink to="/admin" onClick={() => setNavOpen(false)}>
+              <NavLink
+                to="/admin"
+                title={t("nav.admin")}
+              >
                 <ShieldCheck size={18} />
-                {t("nav.admin")}
+                <span className="nav-label">{t("nav.admin")}</span>
               </NavLink>
             </>
           )}
+          <div className="sidebar-spacer" />
+          {/* Classical collapse arrow pinned to the bottom of the rail.
+              Duplicates the hamburger's collapse action so the affordance
+              sits next to the panel it controls — the standard pattern
+              in VS Code, Linear, etc. Hidden on mobile where the
+              hamburger drives a slide-over instead of a rail. */}
+          <button
+            type="button"
+            className="sidebar-collapse-toggle"
+            onClick={() => setNavCollapsed((x) => !x)}
+            aria-label={
+              navCollapsed
+                ? t("nav.expandSidebar")
+                : t("nav.collapseSidebar")
+            }
+            title={
+              navCollapsed
+                ? t("nav.expandSidebar")
+                : t("nav.collapseSidebar")
+            }
+          >
+            {navCollapsed ? (
+              <ChevronRight size={16} />
+            ) : (
+              <ChevronLeft size={16} />
+            )}
+            <span className="nav-label">
+              {navCollapsed
+                ? t("nav.expandSidebar")
+                : t("nav.collapseSidebar")}
+            </span>
+          </button>
         </aside>
         <main className={"main" + (inEditor ? " no-pad" : "")}>
           {children}

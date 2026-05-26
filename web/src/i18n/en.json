@@ -18,6 +18,8 @@
     "integrations": "Integrations",
     "admin": "Admin",
     "toggleNav": "toggle navigation",
+    "collapseSidebar": "Collapse sidebar",
+    "expandSidebar": "Expand sidebar",
     "signOut": "sign out",
     "switchWorkspace": "Switch workspace",
     "switchTenant": "Switch tenant",
@@ -359,6 +361,17 @@
     "categorySystem": "System",
     "rowCategoryTooltip": "category: {{category}}"
   },
+  "quickPalette": {
+    "title": "Quick add a drop",
+    "placeholder": "Search drops…",
+    "count": "{{count}} results",
+    "count_one": "{{count}} result",
+    "noResults": "No drops match \"{{query}}\".",
+    "hintNavigate": "navigate",
+    "hintInsert": "insert",
+    "hintClose": "close",
+    "enter": "Enter"
+  },
   "schemaForm": {
     "enabled": "Enabled",
     "disabled": "Disabled",
@@ -373,6 +386,7 @@
   "inspector": {
     "title": "Inspector",
     "empty": "Select a node to edit.",
+    "close": "Close inspector",
     "nodeId": "Node ID",
     "label": "Label",
     "sampleTitle": "Run this node and its upstream chain — skip everything downstream. Useful when wiring fields against real upstream data.",
@@ -395,6 +409,8 @@
   },
   "editor": {
     "back": "Back",
+    "addDrop": "Add drop",
+    "addDropTitle": "Search and insert a drop (Ctrl/Cmd+K)",
     "aiAssistant": "AI assistant",
     "flowSettings": "Flow settings (triggers, etc.)",
     "inspector": "Inspector",

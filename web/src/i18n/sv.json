@@ -18,6 +18,8 @@
     "integrations": "Integrationer",
     "admin": "Admin",
     "toggleNav": "växla navigering",
+    "collapseSidebar": "Fäll ihop sidofältet",
+    "expandSidebar": "Fäll ut sidofältet",
     "signOut": "logga ut",
     "switchWorkspace": "Byt arbetsyta",
     "switchTenant": "Byt tenant",
@@ -359,6 +361,17 @@
     "categorySystem": "System",
     "rowCategoryTooltip": "kategori: {{category}}"
   },
+  "quickPalette": {
+    "title": "Snabblägg till en drop",
+    "placeholder": "Sök drops…",
+    "count": "{{count}} träffar",
+    "count_one": "{{count}} träff",
+    "noResults": "Inga drops matchar \"{{query}}\".",
+    "hintNavigate": "navigera",
+    "hintInsert": "lägg till",
+    "hintClose": "stäng",
+    "enter": "Retur"
+  },
   "schemaForm": {
     "enabled": "Aktiverad",
     "disabled": "Avaktiverad",
@@ -373,6 +386,7 @@
   "inspector": {
     "title": "Inspector",
     "empty": "Välj en nod för att redigera.",
+    "close": "Stäng inspektorn",
     "nodeId": "Nod-ID",
     "label": "Etikett",
     "sampleTitle": "Kör den här noden och dess upstream-kedja — hoppa över allt nedströms. Användbart när du kopplar fält mot verklig upstream-data.",
@@ -395,6 +409,8 @@
   },
   "editor": {
     "back": "Tillbaka",
+    "addDrop": "Lägg till drop",
+    "addDropTitle": "Sök och infoga en drop (Ctrl/Cmd+K)",
     "aiAssistant": "AI-assistent",
     "flowSettings": "Flödesinställningar (triggers m.m.)",
     "inspector": "Inspector",

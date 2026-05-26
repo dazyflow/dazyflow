@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Node } from "@xyflow/react";
 import { useTranslation } from "react-i18next";
+import { X } from "lucide-react";
 import type { HazyNodeData } from "./NodeCard";
 import { SchemaForm, supportsSchemaForm, type WorkspaceCtx } from "./SchemaForm";
 import { OutputPreview } from "./OutputPreview";
@@ -35,6 +36,12 @@ type Props = {
   // Returns the run ID on success (or throws). When omitted the
   // button is hidden.
   onSample?: (nodeID: string) => Promise<string>;
+  // onClose dismisses the inspector. Used by the mobile bottom-sheet
+  // layout to let the user reclaim the canvas; clears the selection
+  // so the same selection-driven open logic doesn't reopen instantly.
+  // The close affordance is only rendered when this prop is set so
+  // desktop layouts (where the inspector is always visible) stay clean.
+  onClose?: () => void;
 };
 
 type Mode = "form" | "json";
@@ -49,6 +56,7 @@ export function Inspector({
   liveLogs,
   workspace,
   onSample,
+  onClose,
 }: Props) {
   const { t } = useTranslation();
   const [sampling, setSampling] = useState(false);
@@ -89,7 +97,20 @@ export function Inspector({
   if (!selected) {
     return (
       <>
-        <div className="panel-head">{t("inspector.title")}</div>
+        <div className="panel-head">
+          <span>{t("inspector.title")}</span>
+          {onClose && (
+            <button
+              type="button"
+              className="ghost icon inspector-close"
+              onClick={onClose}
+              aria-label={t("inspector.close")}
+              title={t("inspector.close")}
+            >
+              <X size={16} />
+            </button>
+          )}
+        </div>
         <div className="empty">{t("inspector.empty")}</div>
       </>
     );
@@ -102,7 +123,20 @@ export function Inspector({
     <>
       <div className="panel-head">
         <span>{t("inspector.title")}</span>
-        <span style={{ color: "var(--faint)", fontSize: 11 }}>{d.moduleID}</span>
+        <span className="inspector-head-right">
+          <span style={{ color: "var(--faint)", fontSize: 11 }}>{d.moduleID}</span>
+          {onClose && (
+            <button
+              type="button"
+              className="ghost icon inspector-close"
+              onClick={onClose}
+              aria-label={t("inspector.close")}
+              title={t("inspector.close")}
+            >
+              <X size={16} />
+            </button>
+          )}
+        </span>
       </div>
       <div className="inspector-body">
         <div className="sf-field">

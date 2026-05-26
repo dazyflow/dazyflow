@@ -81,6 +81,7 @@
   /* Layout */
   --topbar-h: 56px;
   --sidebar-w: 240px;
+  --sidebar-rail-w: 56px;
   --catalog-w: 280px;
   --inspector-w: 320px;
 }

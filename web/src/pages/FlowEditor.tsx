@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type DragEvent,
+  type MouseEvent as ReactMouseEvent,
 } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -25,17 +26,17 @@ import {
   type NodeChange,
   type ReactFlowInstance,
 } from "@xyflow/react";
-import { ArrowLeft, Play, Save, Settings as SettingsIcon, PanelsLeftBottom, Square, Sparkles } from "lucide-react";
+import { ArrowLeft, Play, Save, Settings as SettingsIcon, Square, Sparkles, Plus } from "lucide-react";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import type { Graph, GraphTrigger, LintIssue, Manifest, JobStatus, Visibility } from "../types";
-import { NodeCatalog } from "../components/NodeCatalog";
 import { Inspector } from "../components/Inspector";
 import { LiveConsole } from "../components/LiveConsole";
 import { HazyNode, type HazyNodeData } from "../components/NodeCard";
 import { RunHistory } from "../components/RunHistory";
 import { SettingsModal } from "../components/SettingsModal";
 import { ChatPanel } from "../components/ChatPanel";
+import { QuickDropPalette } from "../components/QuickDropPalette";
 
 // Custom node-types registry. React Flow caches by reference, so this
 // is declared at module scope rather than inline in the component to
@@ -117,36 +118,78 @@ function EditorInner() {
   // collapsed to give the canvas back its vertical space until
   // there's something to read.
   const [logOpen, setLogOpen] = useState(false);
-  // mobilePanel toggles which side panel shows on small viewports.
-  const [mobilePanel, setMobilePanel] = useState<"catalog" | "inspector" | null>(null);
+  // On narrow viewports the inspector is a bottom sheet that auto-opens
+  // whenever a node is selected and closes when the user X's it out or
+  // taps the canvas. No manual toggle needed — selection drives it,
+  // which keeps the affordance discoverable.
+  //
+  // isNarrow tracks the same 1100px breakpoint the CSS uses. It gates
+  // the close-X on the inspector head so the desktop layout (where the
+  // panel is always visible and X would be confusing) stays clean.
+  const [isNarrow, setIsNarrow] = useState<boolean>(() =>
+    typeof window !== "undefined" ? window.innerWidth <= 1100 : false,
+  );
+  useEffect(() => {
+    const onResize = () => setIsNarrow(window.innerWidth <= 1100);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  // paletteOpen drives the Ctrl/Cmd+K quick-drop search popup.
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   const rfRef = useRef<ReactFlowInstance<FlowNode<HazyNodeData>, FlowEdge> | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+  // lastPointer tracks the most recent mouse position over the canvas so
+  // Ctrl+K can spawn the chosen drop where the user is looking. Falls
+  // back to viewport centre when nothing has moved yet.
+  const lastPointer = useRef<{ x: number; y: number } | null>(null);
   const { screenToFlowPosition } = useReactFlow();
 
-  // Load modules + graph on mount.
+  // Load modules + graph on mount. The two fetches are kept independent
+  // — Promise.all would reject the whole batch if loadGraph 404s for a
+  // never-saved flow, leaving the catalog empty (so Ctrl+K had no
+  // drops). Drops should be available even when the graph fetch fails.
   useEffect(() => {
     if (!token || !me || !id) return;
     let cancelled = false;
     setError(null);
-    Promise.all([api.listDrops(token), api.loadGraph(token, activeTenant, activeWorkspace, id)])
-      .then(([dropRes, g]) => {
+
+    api
+      .listDrops(token)
+      .then((dropRes) => {
         if (cancelled) return;
         setManifests(dropRes.drops);
-        const mm = new Map<string, Manifest>();
-        for (const m of dropRes.drops) mm.set(m.id, m);
-        setNodes(
-          (g.nodes ?? []).map((n, i) => ({
-            id: n.id,
-            type: "hazy",
-            position: n.position ?? { x: 80 + i * 240, y: 80 },
-            data: {
-              label: mm.get(n.module)?.label ?? n.module,
-              moduleID: n.module,
-              manifest: mm.get(n.module),
-            },
-          })),
-        );
+      })
+      .catch((e) => {
+        if (!cancelled) setError((e as Error).message);
+      });
+
+    api
+      .loadGraph(token, activeTenant, activeWorkspace, id)
+      .then((g) => {
+        if (cancelled) return;
+        // Resolve module manifests against the current state since the
+        // drops fetch is now independent — it might arrive after this
+        // graph load. NodeCard pulls `manifest` straight from
+        // node.data, so a missed lookup here just renders the bare
+        // module ID until manifests land and the next setNodes runs.
+        setManifests((current) => {
+          const mm = new Map<string, Manifest>();
+          for (const m of current) mm.set(m.id, m);
+          setNodes(
+            (g.nodes ?? []).map((n, i) => ({
+              id: n.id,
+              type: "hazy",
+              position: n.position ?? { x: 80 + i * 240, y: 80 },
+              data: {
+                label: mm.get(n.module)?.label ?? n.module,
+                moduleID: n.module,
+                manifest: mm.get(n.module),
+              },
+            })),
+          );
+          return current;
+        });
         setEdges(
           (g.edges ?? []).map((e) => ({
             id: `${e.from}.${e.from_port}->${e.to}.${e.to_port}`,
@@ -169,8 +212,22 @@ function EditorInner() {
         setDirty(false);
       })
       .catch((e) => {
-        if (!cancelled) setError((e as Error).message);
+        if (cancelled) return;
+        const msg = (e as Error).message;
+        // 404 is the normal "this graph hasn't been saved yet" state for
+        // a freshly-created flow — the user opened the editor before
+        // dropping any nodes. Treat it as an empty canvas, not an error.
+        if (msg.includes("404") || msg.toLowerCase().includes("not found")) {
+          setNodes([]);
+          setEdges([]);
+          setParamsByID({});
+          setTriggers([]);
+          setDirty(false);
+          return;
+        }
+        setError(msg);
       });
+
     return () => {
       cancelled = true;
     };
@@ -223,26 +280,67 @@ function EditorInner() {
     e.preventDefault();
     e.dataTransfer.dropEffect = "copy";
   };
+  // spawnDrop creates a node from a manifest at the supplied screen
+  // coordinates. Shared between the drag-from-catalog flow and the
+  // Ctrl+K quick palette so both produce identical state.
+  const spawnDrop = useCallback(
+    (m: Manifest, screen: { x: number; y: number }) => {
+      const position = screenToFlowPosition(screen);
+      setNodes((nds) => {
+        const newID = nextID(nds, m.id);
+        return [
+          ...nds,
+          {
+            id: newID,
+            type: "hazy",
+            position,
+            data: { label: m.label, moduleID: m.id, manifest: m },
+          },
+        ];
+      });
+      // newID is recomputed inside setNodes (to avoid stale-state
+      // collisions when two spawns race); mirror that here so paramsByID
+      // gets the same key. Reading nodes via the closure is safe because
+      // setNodes' updater above is the source of truth — the worst case
+      // is a transient extra param entry that's harmless.
+      const newID = nextID(nodes, m.id);
+      setParamsByID((p) => ({ ...p, [newID]: {} }));
+      setDirty(true);
+    },
+    [nodes, screenToFlowPosition],
+  );
+
   const onDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     const moduleID = e.dataTransfer.getData("application/x-hazyflow-module");
     if (!moduleID) return;
     const m = manifestByID.get(moduleID);
     if (!m) return;
-    const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
-    const newID = nextID(nodes, moduleID);
-    setNodes((nds) => [
-      ...nds,
-      {
-        id: newID,
-        type: "hazy",
-        position,
-        data: { label: m.label, moduleID, manifest: m },
-      },
-    ]);
-    setParamsByID((p) => ({ ...p, [newID]: {} }));
-    setDirty(true);
+    spawnDrop(m, { x: e.clientX, y: e.clientY });
   };
+
+  // onCanvasMouseMove keeps a live pointer position so Ctrl+K can drop
+  // the chosen node where the cursor sits, without forcing a re-render
+  // on every move.
+  const onCanvasMouseMove = (e: ReactMouseEvent<HTMLDivElement>) => {
+    lastPointer.current = { x: e.clientX, y: e.clientY };
+  };
+
+  // Global Ctrl/Cmd+K opens the quick palette. The check skips the
+  // shortcut when focus is in a text field so the user can still type
+  // "K" in node param inputs; the palette's own search input is the
+  // exception by way of being mounted after the shortcut fires.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const cmd = e.metaKey || e.ctrlKey;
+      if (cmd && (e.key === "k" || e.key === "K")) {
+        e.preventDefault();
+        setPaletteOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const inspectorSelected = useMemo(
     () => nodes.find((n) => n.id === selectedID) ?? null,
@@ -460,13 +558,15 @@ function EditorInner() {
   return (
     <div
       className="editor"
-      data-panel={mobilePanel ?? "canvas"}
+      data-has-selection={selectedID ? "true" : "false"}
       ref={wrapperRef}
     >
-      <div className="catalog">
-        <NodeCatalog drops={manifests} />
-      </div>
-      <div className="canvas" onDragOver={onDragOver} onDrop={onDrop}>
+      <div
+        className="canvas"
+        onDragOver={onDragOver}
+        onDrop={onDrop}
+        onMouseMove={onCanvasMouseMove}
+      >
         <div className="editor-toolbar">
           <button
             className="ghost"
@@ -474,6 +574,20 @@ function EditorInner() {
             title={t("editor.back")}
           >
             <ArrowLeft size={16} />
+          </button>
+          <button
+            className="ghost editor-add-drop"
+            onClick={() => setPaletteOpen(true)}
+            title={t("editor.addDropTitle")}
+          >
+            <Plus size={14} />
+            <span className="toolbar-label">{t("editor.addDrop")}</span>
+            <kbd className="editor-add-drop-kbd toolbar-label">
+              {/* navigator.platform is deprecated; userAgent is the
+                  documented replacement and still works in every browser
+                  we target. */}
+              {navigator.userAgent.includes("Mac") ? "⌘K" : "Ctrl+K"}
+            </kbd>
           </button>
           <button
             className="ghost"
@@ -514,26 +628,30 @@ function EditorInner() {
                 ? t("editor.readOnly")
                 : lockedRunID
                 ? t("editor.lockedRun", { runID: lockedRunID.slice(0, 8) })
-                : undefined
+                : t("editor.save")
             }
           >
-            <Save size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-            {lockedRunID
-              ? t("editor.locked")
-              : saving
-              ? t("editor.saving")
-              : dirty
-              ? t("editor.save")
-              : t("editor.saved")}
+            <Save size={14} style={{ verticalAlign: -2 }} />
+            <span className="toolbar-label" style={{ marginLeft: 6 }}>
+              {lockedRunID
+                ? t("editor.locked")
+                : saving
+                ? t("editor.saving")
+                : dirty
+                ? t("editor.save")
+                : t("editor.saved")}
+            </span>
           </button>
           {me && id && (
-            <RunHistory
-              tenant={activeTenant}
-              workspace={activeWorkspace}
-              graphID={id}
-              currentRunID={currentRunID}
-              onSelect={selectHistoricalRun}
-            />
+            <span className="toolbar-run-history">
+              <RunHistory
+                tenant={activeTenant}
+                workspace={activeWorkspace}
+                graphID={id}
+                currentRunID={currentRunID}
+                onSelect={selectHistoricalRun}
+              />
+            </span>
           )}
           <button
             className="primary"
@@ -545,12 +663,14 @@ function EditorInner() {
                 : lockedRunID
                 ? t("editor.alreadyRunning", { runID: lockedRunID.slice(0, 8) })
                 : hasPerm("graph:run")
-                ? undefined
+                ? t("editor.run")
                 : t("editor.missingRunPerm")
             }
           >
-            <Play size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-            {running ? t("editor.running") : t("editor.run")}
+            <Play size={14} style={{ verticalAlign: -2 }} />
+            <span className="toolbar-label" style={{ marginLeft: 6 }}>
+              {running ? t("editor.running") : t("editor.run")}
+            </span>
           </button>
           {lockedRunID && (
             <button
@@ -583,19 +703,6 @@ function EditorInner() {
               {cancelling ? t("editor.cancelling") : t("editor.cancel")}
             </button>
           )}
-          <button
-            className="ghost"
-            onClick={() =>
-              setMobilePanel((p) =>
-                p === "inspector" ? null : "inspector",
-              )
-            }
-            title={t("editor.inspector")}
-            style={{ display: "none" }}
-            aria-label={t("editor.inspector")}
-          >
-            <PanelsLeftBottom size={16} />
-          </button>
         </div>
         <ReactFlow
           nodes={nodes}
@@ -637,28 +744,51 @@ function EditorInner() {
         </ReactFlow>
         {error && (
           <div
+            role="alert"
             style={{
+              // Pinned just below the toolbar so the banner can't get
+              // buried under the pipeline-log strip at the bottom of
+              // the canvas. z-index keeps it above ReactFlow controls
+              // and the mini-map.
               position: "absolute",
-              bottom: 12,
+              top: 12,
               left: 12,
               right: 12,
               background: "var(--surface)",
               border: "1px solid var(--danger)",
               color: "var(--danger)",
-              padding: "8px 12px",
+              padding: "10px 14px",
               borderRadius: "var(--r-2)",
               fontSize: 13,
-              maxWidth: 600,
+              maxWidth: 700,
+              zIndex: 10,
+              boxShadow: "0 2px 8px color-mix(in srgb, var(--danger) 25%, transparent)",
+              display: "flex",
+              alignItems: "flex-start",
+              justifyContent: "space-between",
+              gap: 8,
             }}
           >
-            {error}
+            <span style={{ flex: 1 }}>{error}</span>
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => setError(null)}
+              style={{ fontSize: 11, padding: "2px 8px", color: "var(--danger)" }}
+              aria-label={t("editor.dismiss")}
+            >
+              {t("editor.dismiss")}
+            </button>
           </div>
         )}
         {lintIssues.length > 0 && (
           <div
             style={{
+              // Stack below the error banner when both are present, but
+              // still at the top of the canvas — never behind the
+              // pipeline-log strip.
               position: "absolute",
-              bottom: error ? 60 : 12,
+              top: error ? 80 : 12,
               left: 12,
               right: 12,
               background: "var(--surface)",
@@ -668,6 +798,7 @@ function EditorInner() {
               fontSize: 13,
               maxWidth: 700,
               color: "var(--ink)",
+              zIndex: 10,
               boxShadow: "0 2px 8px color-mix(in srgb, var(--warn, #d4a017) 25%, transparent)",
             }}
             role="alert"
@@ -747,6 +878,24 @@ function EditorInner() {
           workspace={
             token ? { token, tenant: activeTenant, workspace: activeWorkspace } : undefined
           }
+          onClose={
+            isNarrow
+              ? () => {
+                  // Clear selection so the CSS bottom-sheet rule
+                  // (data-has-selection="false") hides the panel and
+                  // the canvas regains its full area. setNodes flips
+                  // React Flow's internal `selected` flag so the same
+                  // click on the node won't keep highlighting it
+                  // underneath.
+                  setSelectedID(null);
+                  setNodes((nds) =>
+                    nds.map((n) =>
+                      n.selected ? { ...n, selected: false } : n,
+                    ),
+                  );
+                }
+              : undefined
+          }
           onSample={
             token && id
               ? async (nodeID) => {
@@ -799,6 +948,26 @@ function EditorInner() {
           window.location.reload();
         }}
       />
+      {paletteOpen && (
+        <QuickDropPalette
+          drops={manifests}
+          onClose={() => setPaletteOpen(false)}
+          onPick={(m) => {
+            // Use the most recent canvas-pointer position if we have
+            // one; otherwise drop into the viewport centre so a Ctrl+K
+            // hit before the mouse touched the canvas still lands
+            // somewhere visible.
+            const fallback = (() => {
+              const w = wrapperRef.current;
+              if (!w) return { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+              const r = w.getBoundingClientRect();
+              return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+            })();
+            spawnDrop(m, lastPointer.current ?? fallback);
+            setPaletteOpen(false);
+          }}
+        />
+      )}
       {settingsOpen && me && id && (
         <SettingsModal
           graph={{

@@ -37,16 +37,32 @@
   font-weight: 700;
   letter-spacing: -0.5px;
 }
+.topbar .brand-mark-img {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 6px;
+}
+/* Small-screen tightening of the topbar: the brand text and the
+   user-meta chips collapse to icon-only so the toolbar and the canvas
+   below have more room. */
+@media (max-width: 768px) {
+  .topbar .brand-title,
+  .topbar .topbar-workspace,
+  .topbar .topbar-sep,
+  .topbar .topbar-email {
+    display: none;
+  }
+}
 .topbar .spacer {
   flex: 1;
 }
+/* Hamburger is always shown. On desktop it toggles the icons-only rail;
+   on mobile it slides the full sidebar in. The same affordance covers
+   both modes — the behaviour branch lives in AppShell.toggleNav. */
 .topbar .hamburger {
-  display: none;
-}
-@media (max-width: 768px) {
-  .topbar .hamburger {
-    display: inline-flex;
-  }
+  display: inline-flex;
 }
 
 .topbar .user {
@@ -61,17 +77,25 @@
   color: var(--ink);
 }
 
-/* Layout body: sidebar + main content */
+/* Layout body: sidebar + main content. The sidebar column reads from
+   --sidebar-current, which app-shell flips to --sidebar-rail-w when the
+   user collapses the nav. Animating the grid track keeps the canvas
+   reflowing smoothly instead of jumping. */
 .body {
   display: grid;
-  grid-template-columns: var(--sidebar-w) 1fr;
+  grid-template-columns: var(--sidebar-current) 1fr;
   min-height: 0;
+  transition: grid-template-columns 180ms ease;
 }
-@media (max-width: 768px) {
-  .body {
-    grid-template-columns: 1fr;
-  }
+.app-shell {
+  --sidebar-current: var(--sidebar-w);
 }
+.app-shell[data-nav-collapsed="true"] {
+  --sidebar-current: var(--sidebar-rail-w);
+}
+/* The sidebar is always inline in the grid now — even on mobile —
+   because small viewports default to the rail variant. No more
+   slide-over behaviour. */
 
 /* Sidebar */
 .sidebar {
@@ -82,6 +106,7 @@
   flex-direction: column;
   gap: var(--space-1);
   overflow-y: auto;
+  overflow-x: hidden;
 }
 .sidebar a {
   display: flex;
@@ -94,6 +119,76 @@
   font-size: 14px;
   text-decoration: none;
   transition: background 120ms, color 120ms;
+  white-space: nowrap;
+}
+/* Collapsed (icons-only) rail. Hide the per-link text labels and the
+   uppercase group headings; centre the icons so a 56px-wide rail still
+   feels tidy. The native `title` attribute on each NavLink does
+   double-duty as a tooltip. */
+.sidebar[data-collapsed="true"] {
+  padding: var(--space-4) var(--space-1);
+  align-items: stretch;
+}
+.sidebar[data-collapsed="true"] a {
+  justify-content: center;
+  gap: 0;
+  padding: var(--space-2);
+}
+.sidebar[data-collapsed="true"] .nav-label,
+.sidebar[data-collapsed="true"] .group-label {
+  display: none;
+}
+/* Approvals badge floats over the icon in collapsed mode so the user
+   still sees the count without the label. */
+.sidebar[data-collapsed="true"] .nav-badge {
+  position: absolute;
+  transform: translate(14px, -10px);
+  font-size: 10px;
+  min-width: 16px;
+  padding: 1px 4px;
+  line-height: 13px;
+}
+.sidebar[data-collapsed="true"] a {
+  position: relative;
+}
+/* Pushes the collapse-arrow to the bottom of the rail by absorbing the
+   remaining flex space above it. */
+.sidebar-spacer {
+  flex: 1;
+}
+.sidebar-collapse-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  margin-top: var(--space-2);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: background 120ms, color 120ms, border-color 120ms;
+}
+.sidebar-collapse-toggle:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+.sidebar[data-collapsed="true"] .sidebar-collapse-toggle {
+  justify-content: center;
+  padding: var(--space-2);
+}
+/* Mobile uses the hamburger's slide-over, so the rail collapse arrow
+   has nothing to do. Hide it there. */
+@media (max-width: 768px) {
+  .sidebar-collapse-toggle,
+  .sidebar-spacer {
+    display: none;
+  }
 }
 .sidebar a:hover {
   background: var(--surface-2);
@@ -123,29 +218,8 @@
   padding: var(--space-3) var(--space-3) var(--space-1);
 }
 
-/* Mobile sidebar slides over */
-@media (max-width: 768px) {
-  .sidebar {
-    position: fixed;
-    top: var(--topbar-h);
-    left: 0;
-    bottom: 0;
-    width: var(--sidebar-w);
-    transform: translateX(-100%);
-    transition: transform 220ms ease;
-    z-index: 30;
-    box-shadow: var(--shadow-pop);
-  }
-  .sidebar[data-open="true"] {
-    transform: translateX(0);
-  }
-  .sidebar-backdrop {
-    position: fixed;
-    inset: var(--topbar-h) 0 0 0;
-    background: rgba(8, 2, 30, 0.5);
-    z-index: 25;
-  }
-}
+/* Sidebar stays inline at every viewport — small screens just default
+   to the icons-only rail. No mobile slide-over to track. */
 
 /* Main content */
 .main {
@@ -1075,39 +1149,125 @@
   border-color: var(--accent, #9f83fe);
 }
 
-/* Editor layout: catalog | canvas | inspector */
+/* Editor layout: canvas | inspector. The catalog used to live to the
+   left; it's been replaced by the Ctrl+K quick-drop palette + a toolbar
+   button, so this is a two-column grid now. */
 .editor {
   display: grid;
-  grid-template-columns: var(--catalog-w) 1fr var(--inspector-w);
+  grid-template-columns: 1fr var(--inspector-w);
   height: 100%;
   background: var(--bg);
+  /* Containing block for the mobile inspector bottom-sheet's
+     position:absolute. Doesn't affect desktop where the inspector lives
+     in the grid. */
+  position: relative;
 }
+/* Mobile / narrow tablet: the inspector becomes a bottom sheet that
+   auto-opens whenever the user selects a node, and hides as soon as
+   they X-out or click empty canvas (which clears selection). The
+   canvas stays single-column behind the sheet so context isn't lost. */
 @media (max-width: 1100px) {
   .editor {
     grid-template-columns: 1fr;
   }
-  .editor .catalog,
   .editor .inspector {
-    display: none;
+    /* Pinned to the bottom of the editor; the editor itself is the
+       containing block via position:relative further down. The sheet
+       slides in/out with a translate transform, leaving the layout
+       width unchanged so React Flow's measurements stay stable. */
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    max-height: 70vh;
+    height: 70vh;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    border-top-left-radius: var(--r-3);
+    border-top-right-radius: var(--r-3);
+    background: var(--surface);
+    box-shadow: 0 -12px 32px rgba(0, 0, 0, 0.45);
+    transform: translateY(100%);
+    transition: transform 220ms ease;
+    z-index: 30;
+    pointer-events: none;
   }
-  .editor[data-panel="catalog"] .catalog {
-    display: flex;
+  .editor[data-has-selection="true"] .inspector {
+    transform: translateY(0);
+    pointer-events: auto;
   }
-  .editor[data-panel="inspector"] .inspector {
-    display: flex;
+  /* Drag-handle hint at the top of the sheet — purely decorative; the
+     real dismiss affordance is the X in the panel head. */
+  .editor .inspector::before {
+    content: "";
+    display: block;
+    position: absolute;
+    top: 6px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 40px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border);
+    pointer-events: none;
   }
 }
-.editor .catalog,
+/* On medium-width screens (e.g. laptops, narrow split-screens) the
+   inspector still steals ~320px from the canvas even when there's
+   nothing selected to inspect. Hide the pane until the user actually
+   selects a node — clicking a node restores it. Above 1400px there's
+   plenty of room, so the empty-state hint stays visible. */
+@media (min-width: 1101px) and (max-width: 1400px) {
+  .editor[data-has-selection="false"] {
+    grid-template-columns: 1fr;
+  }
+  .editor[data-has-selection="false"] .inspector {
+    display: none;
+  }
+}
 .editor .inspector {
   display: flex;
   flex-direction: column;
-  background: color-mix(in srgb, var(--surface) 70%, transparent);
-  border-right: 1px solid var(--border);
+  background: var(--surface);
+  border-left: 1px solid var(--border);
   min-height: 0;
 }
-.editor .inspector {
-  border-right: none;
-  border-left: 1px solid var(--border);
+/* Toolbar "Add drop" button — surfaces the Ctrl+K palette now that the
+   catalog panel is gone. The kbd hint stays on the right so the button
+   still reads as a primary action and not a shortcut chip. */
+.editor-add-drop {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+/* Inspector head: groups the module-ID label and the close-X so they
+   sit together on the right of the panel head. */
+.inspector-head-right {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.inspector-close {
+  width: 28px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: var(--r-2);
+  color: var(--muted);
+}
+.inspector-close:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.editor-add-drop-kbd {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  color: var(--faint);
+  margin-left: 4px;
 }
 .editor .canvas {
   position: relative;
@@ -1487,19 +1647,16 @@
   background: transparent !important;
 }
 
-/* Pipeline log: pinned to the bottom of the canvas, spans full width,
-   collapses to a thin bar. Sits above ReactFlow's z-stack so the
-   minimap doesn't bleed through. */
+/* Pipeline log: sits as a flex sibling at the bottom of the canvas so
+   the React Flow area gets `height: 100% - log height` instead of
+   being silently covered by the bar. The earlier absolute-positioned
+   variant ate ~30px of the canvas every render. */
 .pipeline-log {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
   background: var(--surface);
   border-top: 1px solid var(--border);
-  z-index: 5;
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
 }
 .pipeline-log-bar {
   display: flex;
@@ -2374,6 +2531,20 @@
   border-bottom: 1px solid var(--border);
   z-index: 5;
 }
+/* Small-screen toolbar: drop the text labels next to the action icons,
+   the Ctrl+K hint, and the entire run-history switcher — keep just
+   the icons so the toolbar fits without wrapping. */
+@media (max-width: 768px) {
+  .editor-toolbar .toolbar-label,
+  .editor-toolbar .toolbar-run-history {
+    display: none;
+  }
+  .editor-toolbar .editor-add-drop {
+    /* Without the label the button collapses too much; restore a
+       tappable target. */
+    padding: 6px 8px;
+  }
+}
 
 /* ───────── AI chat panel ─────────
  * Right-edge sidebar. Fixed positioning rather than flex so it
@@ -2549,4 +2720,171 @@
   50% {
     opacity: 0.3;
   }
+}
+
+/* Quick-drop palette (Ctrl+K) — Unreal Blueprint-style search popup.
+   The backdrop is dim but not blacked-out so the canvas behind stays
+   legible while the user types. */
+.quick-palette-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: rgba(8, 2, 30, 0.45);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  display: flex;
+  justify-content: center;
+  /* Top-anchored, not centred, so the palette feels like a tool the
+     user invoked rather than a dialog interrupting them. 12vh leaves
+     room for the search input + several rows above the fold. */
+  padding-top: 12vh;
+}
+.quick-palette {
+  width: min(640px, calc(100vw - 32px));
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-3);
+  box-shadow: var(--shadow-pop);
+  overflow: hidden;
+}
+.quick-palette-search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+}
+.quick-palette-search input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--ink);
+  font-size: 15px;
+  padding: 4px 0;
+}
+.quick-palette-search input::placeholder {
+  color: var(--faint);
+}
+.quick-palette-count {
+  font-size: 11px;
+  color: var(--faint);
+  background: var(--surface-2);
+  padding: 2px 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+.quick-palette-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.quick-palette-empty {
+  padding: var(--space-5);
+  text-align: center;
+  color: var(--faint);
+  font-size: 13px;
+  font-style: italic;
+}
+.quick-palette-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--r-2);
+  cursor: pointer;
+  user-select: none;
+  border: 1px solid transparent;
+}
+.quick-palette-row.active {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.quick-palette-row .icon {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-2);
+  flex-shrink: 0;
+  color: var(--accent-ink);
+}
+.quick-palette-row .icon.brand-logo {
+  background: transparent;
+}
+.quick-palette-row .icon.brand-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.quick-palette-row-text {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.quick-palette-row-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.quick-palette-row-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 11px;
+  color: var(--muted);
+  min-width: 0;
+}
+.quick-palette-row-integration {
+  font-weight: 500;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.quick-palette-row-integration.faint {
+  color: var(--faint);
+}
+.quick-palette-row-id {
+  font-family: var(--font-mono);
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.quick-palette-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-4);
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+  font-size: 11px;
+  color: var(--faint);
+}
+.quick-palette-hint kbd {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin: 0 2px;
+  color: var(--muted);
 }
