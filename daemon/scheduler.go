@@ -34,12 +34,32 @@ type Scheduler struct {
 	systemPrincipal func(tenant, workspace string) core.Principal
 }
 
+// scheduledGraph represents one tracked trigger. Discriminated by
+// which scheduling field is set:
+//
+//	scheduleFn != nil  → cron-driven (wall-clock anchored)
+//	interval   != 0    → poll-driven (interval-anchored from last fire)
+//
+// Both fields being set at once would be a programming error; the
+// rescan path sets exactly one based on the trigger Type.
 type scheduledGraph struct {
 	graphID    string
 	tenant     string
 	workspace  string
 	scheduleAt time.Time
-	scheduleFn cron.Schedule
+	scheduleFn cron.Schedule // for cron triggers
+	interval   time.Duration // for poll triggers (zero when not used)
+}
+
+// nextFireFrom returns the next time this entry should fire, given
+// the current time. Cron entries delegate to the cron parser; poll
+// entries add their interval to now (interval-anchored — see the
+// GraphTrigger doc comment).
+func (e *scheduledGraph) nextFireFrom(now time.Time) time.Time {
+	if e.scheduleFn != nil {
+		return e.scheduleFn.Next(now)
+	}
+	return now.Add(e.interval)
 }
 
 // NewScheduler wires a scheduler around the daemon Service. interval is
@@ -124,28 +144,50 @@ func (s *Scheduler) rescan(ctx context.Context) error {
 			if err != nil {
 				continue
 			}
-			for _, t := range g.Triggers {
-				if t.Type != "cron" || t.Cron == "" {
+			for triggerIdx, t := range g.Triggers {
+				var entry *scheduledGraph
+				switch t.Type {
+				case "cron":
+					if t.Cron == "" {
+						continue
+					}
+					sched, err := s.parser.Parse(t.Cron)
+					if err != nil {
+						s.logger.Printf("bad cron %q on %s/%s/%s: %v",
+							t.Cron, tenant, workspace, gid, err)
+						continue
+					}
+					entry = &scheduledGraph{
+						graphID:    gid,
+						tenant:     tenant,
+						workspace:  workspace,
+						scheduleFn: sched,
+					}
+				case "poll":
+					if t.IntervalSeconds <= 0 {
+						s.logger.Printf("bad poll interval %d on %s/%s/%s",
+							t.IntervalSeconds, tenant, workspace, gid)
+						continue
+					}
+					entry = &scheduledGraph{
+						graphID:   gid,
+						tenant:    tenant,
+						workspace: workspace,
+						interval:  time.Duration(t.IntervalSeconds) * time.Second,
+					}
+				default:
+					// "webhook" and any other type aren't scheduler-driven.
 					continue
 				}
-				sched, err := s.parser.Parse(t.Cron)
-				if err != nil {
-					s.logger.Printf("bad cron %q on %s/%s/%s: %v",
-						t.Cron, tenant, workspace, gid, err)
-					continue
-				}
-				k := tenant + "/" + workspace + "/" + gid
-				entry := &scheduledGraph{
-					graphID:    gid,
-					tenant:     tenant,
-					workspace:  workspace,
-					scheduleFn: sched,
-				}
-				// Preserve existing next-fire so a rescan doesn't shift it.
+
+				// Key includes the trigger index so a graph with both a
+				// cron AND a poll trigger gets two scheduler entries (one
+				// per trigger) instead of clobbering one with the other.
+				k := fmt.Sprintf("%s/%s/%s#%d", tenant, workspace, gid, triggerIdx)
 				if existing, ok := s.tracked[k]; ok && !existing.scheduleAt.IsZero() {
 					entry.scheduleAt = existing.scheduleAt
 				} else {
-					entry.scheduleAt = sched.Next(now)
+					entry.scheduleAt = entry.nextFireFrom(now)
 				}
 				next[k] = entry
 			}
@@ -171,7 +213,7 @@ func (s *Scheduler) fireDue(ctx context.Context) {
 		if !e.scheduleAt.After(now) {
 			s.fireGraph(ctx, e)
 			s.mu.Lock()
-			e.scheduleAt = e.scheduleFn.Next(now)
+			e.scheduleAt = e.nextFireFrom(now)
 			s.mu.Unlock()
 		}
 	}

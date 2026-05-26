@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "../auth";
 
 export function SignIn() {
@@ -51,6 +52,9 @@ export function SignIn() {
           {busy ? "Signing in…" : "Sign in"}
         </button>
         {error && <div className="error">{error}</div>}
+        <div className="signin-alt">
+          New here? <Link to="/signup">Create an account</Link>
+        </div>
       </form>
     </div>
   );

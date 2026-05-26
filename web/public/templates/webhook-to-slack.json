@@ -1,0 +1,30 @@
+{
+  "id": "webhook-to-slack",
+  "version": "1",
+  "name": "Webhook to Slack notification",
+  "description": "Posts the body of an inbound webhook to a Slack channel.",
+  "icon": "webhook",
+  "triggers": [
+    {"type": "webhook", "secret": ""}
+  ],
+  "nodes": [
+    {
+      "id": "trigger",
+      "module": "webhook_input",
+      "params": {},
+      "position": {"x": 100, "y": 200}
+    },
+    {
+      "id": "notify",
+      "module": "slack_send_message",
+      "params": {
+        "channel": "#data-ops",
+        "account": "default"
+      },
+      "position": {"x": 450, "y": 200}
+    }
+  ],
+  "edges": [
+    {"from": "trigger", "from_port": "body", "to": "notify", "to_port": "body", "on_error": ""}
+  ]
+}

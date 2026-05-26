@@ -297,6 +297,10 @@ func (s *Postgres) ListNodeRecords(ctx context.Context, opts core.ListNodeRecord
 		args = append(args, string(opts.Status))
 		q += fmt.Sprintf(" AND status = $%d", len(args))
 	}
+	if opts.GraphRunID != "" {
+		args = append(args, opts.GraphRunID)
+		q += fmt.Sprintf(" AND graph_run_id = $%d", len(args))
+	}
 	args = append(args, limit)
 	q += fmt.Sprintf(" ORDER BY enqueued_at DESC LIMIT $%d", len(args))
 	if opts.Offset > 0 {

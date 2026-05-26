@@ -43,6 +43,24 @@ type HTTPGateway struct {
 	Sessions   auth.SessionStore
 	Users      auth.UserStore
 	SessionTTL time.Duration // default 24h when zero
+
+	// EncryptedSecrets powers the /api/v1/secrets CRUD endpoints. Nil
+	// means the encrypted store isn't configured for this deployment;
+	// the routes return 501 in that case so callers can detect the
+	// feature is off.
+	EncryptedSecrets *EncryptedSecrets
+
+	// OAuth powers the /api/v1/oauth/{provider}/authorize and
+	// /callback endpoints. Nil = OAuth flows disabled (returns 501).
+	// Setting it implies EncryptedSecrets is also set, since OAuth
+	// writes tokens into the encrypted store.
+	OAuth *OAuthRegistry
+
+	// EnableSignup opens POST /api/v1/auth/signup for self-serve
+	// account creation. Defaults to false — production deployments
+	// often want admin-invite-only signup. The hzd binary opts in
+	// via --signup or $HAZYFLOW_ENABLE_SIGNUP.
+	EnableSignup bool
 }
 
 func NewHTTPGateway(svc *Service) *HTTPGateway {
@@ -87,10 +105,21 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 		_, _ = rw.Write([]byte("ok"))
 	})
 	mux.HandleFunc("POST /api/v1/auth/signin", h.signIn)
+	mux.HandleFunc("POST /api/v1/auth/signup", h.signUp)
 	mux.HandleFunc("POST /api/v1/auth/signout", h.signOut)
 	mux.HandleFunc("GET /api/v1/whoami", h.requireAuth(h.whoami))
 	mux.HandleFunc("GET /api/v1/workspaces", h.requireAuth(h.listWorkspaces))
 	mux.HandleFunc("POST /api/v1/workspaces/{tenant}/{workspace}/files", h.requireAuth(h.uploadWorkspaceFile))
+	mux.HandleFunc("GET /api/v1/secrets", h.requireAuth(h.listSecrets))
+	mux.HandleFunc("PUT /api/v1/secrets/{name}", h.requireAuth(h.putSecret))
+	mux.HandleFunc("DELETE /api/v1/secrets/{name}", h.requireAuth(h.deleteSecret))
+	mux.HandleFunc("GET /api/v1/oauth/providers", h.requireAuth(h.oauthListProviders))
+	mux.HandleFunc("GET /api/v1/oauth/{provider}/authorize", h.requireAuth(h.oauthAuthorize))
+	// Callback is UNAUTHENTICATED — the OAuth provider redirects the
+	// user's browser back here without a Bearer token. State-token
+	// validation in the handler is what binds the callback to the
+	// original principal.
+	mux.HandleFunc("GET /api/v1/oauth/{provider}/callback", h.oauthCallback)
 	mux.HandleFunc("GET /api/v1/drops", h.requireAuth(h.listModules))
 	// Legacy alias — hzctl and older proxies still hit /modules. Keep
 	// it pointing at the same handler so we can deprecate at our pace.
@@ -110,6 +139,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/admin/users", h.requireAuth(h.listUsers))
 	mux.HandleFunc("GET /api/v1/admin/tenants", h.requireAuth(h.listTenants))
 	mux.HandleFunc("GET /api/v1/jobs/{jobID}", h.requireAuth(h.jobSnapshot))
+	mux.HandleFunc("GET /api/v1/jobs/{jobID}/nodes", h.requireAuth(h.listRunNodes))
 	mux.HandleFunc("GET /api/v1/jobs/{jobID}/nodes/{nodeID}", h.requireAuth(h.nodeSnapshot))
 	mux.HandleFunc("GET /api/v1/jobs/{jobID}/events", h.requireAuth(h.jobEvents))
 	mux.HandleFunc("POST /api/v1/chat/stream", h.requireAuth(h.chatStream))
@@ -728,6 +758,39 @@ func (h *HTTPGateway) nodeSnapshot(rw http.ResponseWriter, r *http.Request, p co
 		return
 	}
 	writeJSON(rw, http.StatusOK, nodeRec)
+}
+
+// listRunNodes returns every per-node record for a single run. The
+// run-detail UI calls this once on page load to draw the per-node
+// timeline + status dots in one round trip, instead of N nodeSnapshot
+// calls. Authz mirrors nodeSnapshot — the run-record GetJob check is
+// what gates access; node records inherit that scope.
+func (h *HTTPGateway) listRunNodes(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	runID := r.PathValue("jobID")
+	// Authz: load the parent run-record through Service.GetJob first.
+	runRec, err := h.svc.GetJob(r.Context(), p, runID)
+	if err != nil {
+		if errors.Is(err, core.ErrNotFound) {
+			writeJSONError(rw, http.StatusNotFound, err.Error())
+			return
+		}
+		writeJSONError(rw, http.StatusForbidden, err.Error())
+		return
+	}
+	nodes, err := h.svc.Jobs.ListNodeRecords(r.Context(), core.ListNodeRecordsOpts{
+		Tenant:     runRec.Tenant,
+		Workspace:  runRec.Workspace,
+		GraphRunID: runID,
+		Limit:      1000, // typical graphs have <100 nodes; cap defensively
+	})
+	if err != nil {
+		writeJSONError(rw, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if nodes == nil {
+		nodes = []core.JobRecord{}
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{"nodes": nodes})
 }
 
 // jobEvents streams bus events for jobID as Server-Sent Events. Each

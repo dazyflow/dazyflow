@@ -4,6 +4,7 @@ import type {
   Graph,
   IssuedAPIKey,
   Manifest,
+  TemplateSummary,
   JobRecord,
   JobStatus,
   PendingApproval,
@@ -102,6 +103,26 @@ export const api = {
   },
   signIn: (email: string, password: string) =>
     request<SignInResponse>(null, "POST", "/auth/signin", { email, password }),
+  // signUp returns the same shape as signIn — the server issues a
+  // session immediately so the UI can land the user on the welcome
+  // page without an extra round trip.
+  signUp: (email: string, password: string) =>
+    request<SignInResponse>(null, "POST", "/auth/signup", { email, password }),
+  // Template gallery: index lives at /templates/index.json under the
+  // web app's static assets (NOT /api/v1/...). Each template entry
+  // points at its own graph file, fetched lazily when the user
+  // clicks "Use this template" so the gallery page loads fast even
+  // with dozens of templates.
+  listTemplates: async (): Promise<{ templates: TemplateSummary[] }> => {
+    const res = await fetch("/templates/index.json", { credentials: "same-origin" });
+    if (!res.ok) throw new APIError(res.status, await res.text());
+    return res.json();
+  },
+  loadTemplateGraph: async (graphFile: string): Promise<Graph> => {
+    const res = await fetch(graphFile, { credentials: "same-origin" });
+    if (!res.ok) throw new APIError(res.status, await res.text());
+    return res.json();
+  },
   signOut: (token: string | null) =>
     request<void>(token, "POST", "/auth/signout"),
   whoami: (token: string | null) => request<WhoAmI>(token, "GET", "/whoami"),
@@ -254,6 +275,14 @@ export const api = {
       token,
       "GET",
       `/jobs/${encodeURIComponent(runID)}/nodes/${encodeURIComponent(nodeID)}`,
+    ),
+  // listRunNodes returns every per-node record for a run in one
+  // round trip — the run-detail page draws its timeline from this.
+  listRunNodes: (token: string, runID: string) =>
+    request<{ nodes: JobRecord[] }>(
+      token,
+      "GET",
+      `/jobs/${encodeURIComponent(runID)}/nodes`,
     ),
   // streamChat opens the agentic chat against POST /chat/stream and
   // forwards each SSE event to the caller. messages is the full

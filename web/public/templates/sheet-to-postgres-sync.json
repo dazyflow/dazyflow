@@ -1,0 +1,47 @@
+{
+  "id": "sheet-to-postgres-sync",
+  "version": "1",
+  "name": "Sheet → Postgres sync",
+  "description": "Daily upsert from a Google Sheet into Postgres. Re-runnable without duplicates.",
+  "icon": "database",
+  "triggers": [
+    {"type": "cron", "cron": "*/15 * * * *"}
+  ],
+  "nodes": [
+    {
+      "id": "read",
+      "module": "sheets_read_range",
+      "params": {
+        "spreadsheet_id": "REPLACE_WITH_YOUR_SHEET_ID",
+        "range": "Master List",
+        "account": "default"
+      },
+      "position": {"x": 100, "y": 200}
+    },
+    {
+      "id": "shape",
+      "module": "map_rows",
+      "params": {
+        "select": ["id", "name", "email", "status"]
+      },
+      "position": {"x": 400, "y": 200}
+    },
+    {
+      "id": "load",
+      "module": "postgres_upsert_rows",
+      "params": {
+        "dsn": "${env:DATABASE_URL}",
+        "table": "customers",
+        "conflict_columns": ["id"],
+        "create_table": true
+      },
+      "position": {"x": 700, "y": 200}
+    }
+  ],
+  "edges": [
+    {"from": "read", "from_port": "rows", "to": "shape", "to_port": "rows", "on_error": ""},
+    {"from": "read", "from_port": "headers", "to": "shape", "to_port": "headers", "on_error": ""},
+    {"from": "shape", "from_port": "rows", "to": "load", "to_port": "rows", "on_error": ""},
+    {"from": "shape", "from_port": "headers", "to": "load", "to_port": "headers", "on_error": ""}
+  ]
+}

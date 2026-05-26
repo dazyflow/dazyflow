@@ -10,6 +10,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"time"
@@ -113,6 +114,17 @@ type Service struct {
 	// hzd process. Defaults to http://localhost:8080 — set explicitly
 	// for non-loopback deployments.
 	ClaudeCLIHazydURL string
+
+	// PublicBaseURL is the externally-reachable origin of the daemon,
+	// used by failure_notify to construct UI links to the failing
+	// run. Empty = no link in the notification payload. Same value
+	// hzd already collects via --public-base-url for the OAuth flow.
+	PublicBaseURL string
+
+	// Logger receives daemon-side warnings (failure-notify delivery
+	// failures, etc.). Nil disables those logs — handy in tests
+	// that don't want stderr noise.
+	Logger *log.Logger
 }
 
 func (s *Service) workerID() string {

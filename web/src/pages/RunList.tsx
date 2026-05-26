@@ -168,7 +168,16 @@ export function RunList() {
                     <span className={"status-dot " + r.status} />
                   </td>
                   <td style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>
-                    {r.id.slice(0, 12)}
+                    {/* Primary action: open the run-detail page, the
+                        "what happened" surface (T2). The graph-name
+                        link below still goes to the editor for
+                        "make changes" flows. */}
+                    <Link
+                      to={`/runs/${encodeURIComponent(r.id)}`}
+                      style={{ textDecoration: "none" }}
+                    >
+                      {r.id.slice(0, 12)}
+                    </Link>
                   </td>
                   <td>
                     <Link
@@ -200,8 +209,9 @@ export function RunList() {
                   </td>
                   <td style={{ textAlign: "right", paddingRight: 12 }}>
                     <Link
-                      to={`/flows/${encodeURIComponent(r.graph_id)}?run=${encodeURIComponent(r.id)}`}
+                      to={`/runs/${encodeURIComponent(r.id)}`}
                       style={{ color: "var(--muted)" }}
+                      title="Open run details"
                     >
                       <ExternalLink size={14} />
                     </Link>

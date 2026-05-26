@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"flag"
 	"fmt"
 	"log"
@@ -28,6 +29,10 @@ import (
 	"git.sr.ht/~klahr/hazy-flow/engine/jobstore"
 	"git.sr.ht/~klahr/hazy-flow/engine/mcp"
 	_ "git.sr.ht/~klahr/hazy-flow/integrations"
+	"git.sr.ht/~klahr/hazy-flow/integrations/github"
+	"git.sr.ht/~klahr/hazy-flow/integrations/gmail"
+	"git.sr.ht/~klahr/hazy-flow/integrations/sheets"
+	"git.sr.ht/~klahr/hazy-flow/integrations/slack"
 	"git.sr.ht/~klahr/hazy-flow/workspace"
 )
 
@@ -46,6 +51,9 @@ func main() {
 	httpListen := flag.String("http", "", "enable the HTTP /api/v1 gateway on this addr (e.g. :8080); empty disables")
 	enableEnvSecrets := flag.Bool("env-secrets", true, "enable env:// secret provider")
 	builtinSecretsFile := flag.String("builtin-secrets", "", "JSON file of {name: value} for builtin:// secret provider")
+	masterKeyB64 := flag.String("master-key", os.Getenv("HAZYFLOW_MASTER_KEY"), "base64-encoded 32-byte AES-256 master key for the tenant:// encrypted secret store (default $HAZYFLOW_MASTER_KEY). When empty the tenant:// scheme and /api/v1/secrets CRUD endpoints stay disabled.")
+	publicBaseURL := flag.String("public-base-url", os.Getenv("HAZYFLOW_PUBLIC_BASE_URL"), "externally-reachable origin of this daemon (e.g. https://app.example.com). Required for OAuth — must match the redirect_uri registered with each OAuth provider.")
+	enableSignup := flag.Bool("signup", os.Getenv("HAZYFLOW_ENABLE_SIGNUP") == "1", "enable POST /api/v1/auth/signup for self-serve account creation. Off by default; production deployments often prefer admin-invite-only.")
 	mcpServers := flag.String("mcp", "", "register MCP stdio servers, e.g. fs=server-filesystem /tmp;docs=npx -y @modelcontextprotocol/server-docs (semicolon-separated)")
 	workspaceDir := flag.String("workspace-dir", "./.hazyflow-workspace", "directory for the dev workspace's git-backed graph store; empty = in-memory (graphs lost on restart)")
 	usersFile := flag.String("users-file", "./.hazyflow-users.json", "JSON file backing the email+password user store; empty disables password sign-in")
@@ -116,6 +124,71 @@ func main() {
 		secrets[p.Scheme()] = p
 		log.Printf("loaded builtin secrets from %s", *builtinSecretsFile)
 	}
+	// Encrypted per-tenant secret store. Without a master key the
+	// feature stays off (no provider registered, /api/v1/secrets
+	// returns 501). With one, we wire up an in-memory store today;
+	// production deployments swap NewMemSecretsStore() for
+	// NewPgSecretsStore once the Postgres jobstore is in use.
+	var encryptedSecrets *daemon.EncryptedSecrets
+	if *masterKeyB64 != "" {
+		key, err := base64.StdEncoding.DecodeString(*masterKeyB64)
+		if err != nil {
+			log.Fatalf("--master-key: not valid base64: %v", err)
+		}
+		es, err := daemon.NewEncryptedSecrets(key, daemon.NewMemSecretsStore())
+		if err != nil {
+			log.Fatalf("encrypted secrets: %v", err)
+		}
+		secrets[es.Scheme()] = es
+		encryptedSecrets = es
+		log.Printf("encrypted secret store enabled (scheme: %s://)", es.Scheme())
+	}
+	// OAuth registry — built only if both the encrypted store and a
+	// public base URL are set. Providers register themselves from env
+	// vars (HAZYFLOW_OAUTH_<NAME>_CLIENT_ID / _CLIENT_SECRET); the
+	// hardcoded URL+scopes per provider live in registerOAuthProviders.
+	var oauthRegistry *daemon.OAuthRegistry
+	if encryptedSecrets != nil && *publicBaseURL != "" {
+		oauthRegistry = daemon.NewOAuthRegistry(*publicBaseURL, encryptedSecrets)
+		registerOAuthProviders(oauthRegistry)
+		if len(oauthRegistry.Providers()) > 0 {
+			log.Printf("OAuth enabled: %v", oauthRegistry.Providers())
+		}
+		// Wire the OAuth registry into per-connector token lookup
+		// hooks. Each launch connector (Slack, then Gmail, GitHub,
+		// Notion as T1 progresses) exposes its own
+		// SetTokenLookup so this stays a one-liner per connector
+		// instead of pushing them all into a shared interface.
+		slack.SetTokenLookup(func(ctx context.Context, account string) (string, error) {
+			tok, err := oauthRegistry.GetOAuthToken(ctx, "slack", account)
+			if err != nil {
+				return "", err
+			}
+			return tok.AccessToken, nil
+		})
+		// Gmail and Sheets share the "google" OAuth app — same access
+		// token, different scope requested at authorize time. Each
+		// connector exposes its own SetTokenLookup so the per-package
+		// init isn't gated on a shared registry interface.
+		googleLookup := func(ctx context.Context, account string) (string, error) {
+			tok, err := oauthRegistry.GetOAuthToken(ctx, "google", account)
+			if err != nil {
+				return "", err
+			}
+			return tok.AccessToken, nil
+		}
+		gmail.SetTokenLookup(googleLookup)
+		sheets.SetTokenLookup(googleLookup)
+		// GitHub has its own OAuth app — different provider, same
+		// hook shape.
+		github.SetTokenLookup(func(ctx context.Context, account string) (string, error) {
+			tok, err := oauthRegistry.GetOAuthToken(ctx, "github", account)
+			if err != nil {
+				return "", err
+			}
+			return tok.AccessToken, nil
+		})
+	}
 	mcpCatalog := mcp.NewCatalog()
 	if err := registerMCPServers(mcpCatalog, *mcpServers); err != nil {
 		log.Fatalf("--mcp: %v", err)
@@ -149,6 +222,13 @@ func main() {
 		UseClaudeCLI:               *claudeCLI,
 		ClaudeCLIMCPBinary:         daemon.ResolveClaudeMCPBinary(*claudeCLIMCPBin),
 		ClaudeCLIHazydURL:          *claudeCLIHazydURL,
+		// PublicBaseURL feeds the failure-notify payload's run_url
+		// field (deep-link to /runs/{id}). Same value already used
+		// by the OAuth flow's redirect_uri builder.
+		PublicBaseURL: *publicBaseURL,
+		// Default logger threads daemon-side warnings to the same
+		// log writer the gateway uses for HTTP request logs.
+		Logger: log.New(log.Writer(), "service: ", log.LstdFlags),
 	}
 	// When claude-cli mode is on, also publish it as an env var so
 	// the Claude *drop* (integrations/ai/claude.go) reroutes through
@@ -197,6 +277,9 @@ func main() {
 		gw.Users = users
 		gw.Sessions = sessions
 		gw.SessionTTL = *sessionTTL
+		gw.EncryptedSecrets = encryptedSecrets // nil disables /api/v1/secrets endpoints
+		gw.OAuth = oauthRegistry               // nil disables /api/v1/oauth/* endpoints
+		gw.EnableSignup = *enableSignup        // false disables POST /api/v1/auth/signup
 		if *webOrigin != "" {
 			for _, o := range strings.Split(*webOrigin, ",") {
 				o = strings.TrimSpace(o)
@@ -432,4 +515,68 @@ func seedDefaultUser(ctx context.Context, users auth.UserStore) {
 		return
 	}
 	log.Printf("seeded sign-in: %s / test", u.Email)
+}
+
+// registerOAuthProviders wires the per-service OAuth configs into the
+// registry. URLs and scopes are hardcoded per provider (they don't
+// vary per deployment); client_id and client_secret come from env
+// vars (HAZYFLOW_OAUTH_<NAME>_CLIENT_ID / _CLIENT_SECRET). A provider
+// is skipped silently when its credentials aren't set — that way a
+// dev daemon stays useful even when only one OAuth app is configured.
+func registerOAuthProviders(r *daemon.OAuthRegistry) {
+	maybe := func(p daemon.OAuthProvider) {
+		if p.ClientID == "" || p.ClientSecret == "" {
+			return
+		}
+		r.Register(p)
+	}
+	// Slack — first launch connector (T1).
+	maybe(daemon.OAuthProvider{
+		Name:         "slack",
+		AuthorizeURL: "https://slack.com/oauth/v2/authorize",
+		TokenURL:     "https://slack.com/api/oauth.v2.access",
+		Scopes:       []string{"chat:write", "channels:read", "channels:history"},
+		ClientID:     os.Getenv("HAZYFLOW_OAUTH_SLACK_CLIENT_ID"),
+		ClientSecret: os.Getenv("HAZYFLOW_OAUTH_SLACK_CLIENT_SECRET"),
+	})
+	// GitHub — adds when T1 continues.
+	maybe(daemon.OAuthProvider{
+		Name:         "github",
+		AuthorizeURL: "https://github.com/login/oauth/authorize",
+		TokenURL:     "https://github.com/login/oauth/access_token",
+		Scopes:       []string{"repo", "read:user"},
+		ClientID:     os.Getenv("HAZYFLOW_OAUTH_GITHUB_CLIENT_ID"),
+		ClientSecret: os.Getenv("HAZYFLOW_OAUTH_GITHUB_CLIENT_SECRET"),
+	})
+	// Google (Gmail + Sheets share the same OAuth app).
+	// access_type=offline + prompt=consent are required to receive a
+	// refresh_token. Without them the access token lasts ~1 hour and
+	// the user has to re-authorize — the prompt=consent re-trigger
+	// is the canonical workaround for Google's "only return refresh
+	// on first consent" quirk.
+	maybe(daemon.OAuthProvider{
+		Name:         "google",
+		AuthorizeURL: "https://accounts.google.com/o/oauth2/v2/auth",
+		TokenURL:     "https://oauth2.googleapis.com/token",
+		Scopes: []string{
+			"https://www.googleapis.com/auth/gmail.send",
+			"https://www.googleapis.com/auth/gmail.readonly",
+			"https://www.googleapis.com/auth/spreadsheets",
+		},
+		AuthorizeExtras: map[string]string{
+			"access_type": "offline",
+			"prompt":      "consent",
+		},
+		ClientID:     os.Getenv("HAZYFLOW_OAUTH_GOOGLE_CLIENT_ID"),
+		ClientSecret: os.Getenv("HAZYFLOW_OAUTH_GOOGLE_CLIENT_SECRET"),
+	})
+	// Notion.
+	maybe(daemon.OAuthProvider{
+		Name:         "notion",
+		AuthorizeURL: "https://api.notion.com/v1/oauth/authorize",
+		TokenURL:     "https://api.notion.com/v1/oauth/token",
+		Scopes:       nil, // Notion uses workspace-scope, no per-scope list
+		ClientID:     os.Getenv("HAZYFLOW_OAUTH_NOTION_CLIENT_ID"),
+		ClientSecret: os.Getenv("HAZYFLOW_OAUTH_NOTION_CLIENT_SECRET"),
+	})
 }

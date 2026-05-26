@@ -1,0 +1,131 @@
+package github
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
+
+	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazy-flow/engine"
+)
+
+func init() {
+	engine.Register(engine.NativeDrop{
+		Manifest: core.Manifest{
+			ID:             "github_list_issues",
+			Version:        "1.0",
+			Label:          "GitHub list issues",
+			Color:          "#24292f",
+			Icon:           "git-branch",
+			BrandLogo:      "/brands/github.svg",
+			Category:       "network",
+			Provider:       "internal",
+			Integration:    "GitHub",
+			Tags:           []string{"github", "issue", "list", "poll", "query"},
+			Description:    "List issues on a GitHub repo. Supports state/labels/assignee/since filters — pair with poll_trigger and the 'since' param for 'fire on new issue' workflows. NB: GitHub's issues endpoint also returns pull requests (PRs are issues with a pull_request field); filter via map_rows downstream if you only want one or the other.",
+			ExecutionModel: core.ExecutionBatch,
+			ProcessModel:   core.ProcessLongLived,
+			Outputs: []core.Port{
+				{Port: "issues", Label: "Issues (and PRs)", MIME: []string{"application/json"}},
+			},
+			ParamsSchema: json.RawMessage(`{
+				"type":"object",
+				"properties":{
+					"account":   {"type":"string","default":"default"},
+					"token":     {"type":"string","description":"Raw access token; overrides 'account'."},
+					"owner":     {"type":"string"},
+					"repo":      {"type":"string"},
+					"state":     {"type":"string","enum":["open","closed","all"],"default":"open"},
+					"labels":    {"type":"array","items":{"type":"string"},"description":"Comma-joined into the labels filter; multiple labels are AND-ed by GitHub."},
+					"assignee":  {"type":"string","description":"Filter to issues assigned to this user. Use \"none\" for unassigned, \"*\" for any assignee."},
+					"since":     {"type":"string","description":"ISO-8601 / RFC3339 timestamp; only issues updated after this time. The right param for poll_trigger composition."},
+					"per_page":  {"type":"integer","default":30,"minimum":1,"maximum":100},
+					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
+				},
+				"required":["owner","repo"]
+			}`),
+			Idempotent: true,
+		},
+		Execute: executeGitHubListIssues,
+	})
+}
+
+// executeGitHubListIssues calls GET /repos/{owner}/{repo}/issues
+// with the listed filters. Returns the raw issue array — same
+// shape GitHub gives — so downstream nodes can pick the fields
+// they need (number, title, user.login, html_url, etc.) via
+// map_rows or compute_rows.
+func executeGitHubListIssues(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
+	owner, err := paramString(job.Params, "owner")
+	if err != nil {
+		return errResult(job, "bad_param", err.Error()), nil
+	}
+	repo, err := paramString(job.Params, "repo")
+	if err != nil {
+		return errResult(job, "bad_param", err.Error()), nil
+	}
+	token, err := resolveToken(ctx, job)
+	if err != nil {
+		return errResult(job, "auth", err.Error()), nil
+	}
+
+	q := url.Values{}
+	q.Set("state", paramStringDefault(job.Params, "state", "open"))
+	if labels := paramStringSlice(job.Params, "labels"); len(labels) > 0 {
+		// GitHub joins labels with commas in the query value
+		// (URL-encoded), and AND-s them server-side.
+		q.Set("labels", strings.Join(labels, ","))
+	}
+	if assignee := paramStringDefault(job.Params, "assignee", ""); assignee != "" {
+		q.Set("assignee", assignee)
+	}
+	if since := paramStringDefault(job.Params, "since", ""); since != "" {
+		q.Set("since", since)
+	}
+	q.Set("per_page", strconv.Itoa(paramIntDefault(job.Params, "per_page", 30)))
+
+	endpoint := fmt.Sprintf("%s/repos/%s/%s/issues?%s",
+		currentHTTPBase(), url.PathEscape(owner), url.PathEscape(repo), q.Encode())
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return errResult(job, "internal", err.Error()), nil
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+	timeoutMs := paramIntDefault(job.Params, "timeout_ms", 15000)
+	client := &http.Client{Timeout: time.Duration(timeoutMs) * time.Millisecond}
+	resp, err := client.Do(req)
+	if err != nil {
+		return errResult(job, "send_failed", err.Error()), nil
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 5<<20))
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return errResult(job, "github_error",
+			fmt.Sprintf("GitHub returned %d: %s", resp.StatusCode, extractGitHubError(body))), nil
+	}
+
+	var issues []any
+	if err := json.Unmarshal(body, &issues); err != nil {
+		return errResult(job, "parse", err.Error()), nil
+	}
+	if issues == nil {
+		issues = []any{}
+	}
+	return core.Result{
+		JobID:  job.ID,
+		Status: core.StatusOK,
+		Output: map[string]core.Ref{
+			"issues": {MIME: "application/json", Inline: issues},
+		},
+	}, nil
+}

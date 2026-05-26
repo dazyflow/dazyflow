@@ -1,0 +1,44 @@
+{
+  "templates": [
+    {
+      "id": "excel-to-sqlite",
+      "title": "Excel to database",
+      "description": "Load rows from an .xlsx file in your workspace into a SQLite table. Renames the 'first_name' column to 'name' on the way through; remove or extend the map_rows node to match your own schema.",
+      "icon": "database",
+      "tags": ["etl", "excel", "sqlite", "starter"],
+      "graph_file": "/templates/excel-to-sqlite.json"
+    },
+    {
+      "id": "webhook-to-slack",
+      "title": "Webhook to Slack notification",
+      "description": "Catches an incoming HTTP POST and posts the body as a message to a Slack channel. Useful for piping alerts from external systems (monitoring, build CI, Stripe events) into your team chat.",
+      "icon": "webhook",
+      "tags": ["webhook", "slack", "notify"],
+      "graph_file": "/templates/webhook-to-slack.json"
+    },
+    {
+      "id": "daily-postgres-report",
+      "title": "Daily Postgres → Slack digest",
+      "description": "Runs a SELECT every morning, formats the result with a CEL expression, and posts the summary line to Slack. Wire your own SQL + channel; the rest stays.",
+      "icon": "clock",
+      "tags": ["cron", "postgres", "slack", "report"],
+      "graph_file": "/templates/daily-postgres-report.json"
+    },
+    {
+      "id": "gmail-to-sheet",
+      "title": "New Gmail → log to Sheet",
+      "description": "Polls Gmail every 5 minutes for new messages matching your query and appends them to a Google Sheet. The classic 'archive incoming form/invoice emails for later'.",
+      "icon": "mail",
+      "tags": ["poll", "gmail", "sheets", "archive"],
+      "graph_file": "/templates/gmail-to-sheet.json"
+    },
+    {
+      "id": "sheet-to-postgres-sync",
+      "title": "Sheet → Postgres sync",
+      "description": "Reads a Google Sheet on a schedule, upserts every row into a Postgres table (so re-runs don't create duplicates). Perfect for ops teams maintaining a master list in Sheets that downstream services consume from the DB.",
+      "icon": "database",
+      "tags": ["cron", "sheets", "postgres", "etl", "upsert"],
+      "graph_file": "/templates/sheet-to-postgres-sync.json"
+    }
+  ]
+}

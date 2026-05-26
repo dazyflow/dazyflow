@@ -1,0 +1,39 @@
+{
+  "id": "excel-to-sqlite",
+  "version": "1",
+  "name": "Excel to database",
+  "description": "Load rows from an Excel file into a SQLite table.",
+  "icon": "database",
+  "nodes": [
+    {
+      "id": "read",
+      "module": "excel_read",
+      "params": {"path": "input.xlsx"},
+      "position": {"x": 100, "y": 200}
+    },
+    {
+      "id": "shape",
+      "module": "map_rows",
+      "params": {
+        "rename": {"first_name": "name"}
+      },
+      "position": {"x": 400, "y": 200}
+    },
+    {
+      "id": "load",
+      "module": "sqlite_insert_rows",
+      "params": {
+        "path": "customers.db",
+        "table": "customers",
+        "create_table": true
+      },
+      "position": {"x": 700, "y": 200}
+    }
+  ],
+  "edges": [
+    {"from": "read", "from_port": "rows", "to": "shape", "to_port": "rows", "on_error": ""},
+    {"from": "read", "from_port": "headers", "to": "shape", "to_port": "headers", "on_error": ""},
+    {"from": "shape", "from_port": "rows", "to": "load", "to_port": "rows", "on_error": ""},
+    {"from": "shape", "from_port": "headers", "to": "load", "to_port": "headers", "on_error": ""}
+  ]
+}

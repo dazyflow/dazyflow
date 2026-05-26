@@ -13,7 +13,7 @@ type Props = {
   onSave: (next: Graph) => void | Promise<void>;
 };
 
-type Tab = "triggers" | "general";
+type Tab = "triggers" | "notifications" | "general";
 
 export function SettingsModal({ graph, onClose, onSave }: Props) {
   const [tab, setTab] = useState<Tab>("triggers");
@@ -78,6 +78,13 @@ export function SettingsModal({ graph, onClose, onSave }: Props) {
           </button>
           <button
             type="button"
+            className={tab === "notifications" ? "active" : ""}
+            onClick={() => setTab("notifications")}
+          >
+            Notifications
+          </button>
+          <button
+            type="button"
             className={tab === "general" ? "active" : ""}
             onClick={() => setTab("general")}
           >
@@ -119,6 +126,39 @@ export function SettingsModal({ graph, onClose, onSave }: Props) {
                   <Plus size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
                   Add cron
                 </button>
+              </div>
+            </div>
+          )}
+          {tab === "notifications" && (
+            <div>
+              <p className="settings-help">
+                Get pinged when a run of this flow fails. The daemon
+                POSTs a JSON payload to the webhook URL — works
+                with Slack incoming-webhook URLs, Discord, Teams,
+                PagerDuty events API, or any custom receiver.
+              </p>
+              <div className="sf-field">
+                <div className="label-row">
+                  <label>Failure webhook URL</label>
+                </div>
+                <input
+                  type="url"
+                  placeholder="https://hooks.slack.com/services/…"
+                  value={draft.failure_notify?.webhook ?? ""}
+                  onChange={(e) => {
+                    const v = e.target.value.trim();
+                    setDraft({
+                      ...draft,
+                      failure_notify: v ? { webhook: v } : undefined,
+                    });
+                  }}
+                />
+                <div className="desc">
+                  POSTed payload includes <code>graph_id</code>,
+                  {" "}<code>run_id</code>, <code>error_code</code>,
+                  {" "}<code>error_message</code>, <code>failed_node</code>,
+                  {" "}<code>run_url</code>. Leave blank to disable.
+                </div>
               </div>
             </div>
           )}

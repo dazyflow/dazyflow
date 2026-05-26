@@ -155,6 +155,12 @@ func (s *Service) SubmitGraphWithSeed(
 	// inside itself so a terminal event from the dispatcher exits it
 	// early; the timer is the safety net when nothing completes in time.
 	s.startGraphTimeoutWatchdog(graphRunID, g.Tenant, g.Workspace, s.effectiveGraphTimeout(g))
+
+	// Arm the per-graph failure notifier. Same per-run pattern as the
+	// timeout watchdog — subscribes to the bus, exits on the first
+	// terminal event (firing the notification if status=failed).
+	// No-op when the graph has no FailureNotify configured.
+	s.startFailureNotifier(g, graphRunID)
 	return graphRunID, nil
 }
 

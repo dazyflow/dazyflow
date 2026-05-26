@@ -128,12 +128,17 @@ type JobStore interface {
 
 // ListNodeRecordsOpts scopes a ListNodeRecords call. Same shape as
 // ListGraphRunsOpts but for the node-kind half of the table.
+//
+// GraphRunID, when set, narrows to a single run's node records —
+// used by the run-detail UI to draw a per-node timeline without
+// fetching nodes by ID one at a time.
 type ListNodeRecordsOpts struct {
-	Tenant    string
-	Workspace string
-	Status    JobStatus
-	Limit     int
-	Offset    int
+	Tenant     string
+	Workspace  string
+	Status     JobStatus
+	GraphRunID string
+	Limit      int
+	Offset     int
 }
 
 // ListGraphRunsOpts scopes a ListGraphRuns call. Empty fields are

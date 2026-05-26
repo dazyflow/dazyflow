@@ -382,6 +382,381 @@
   color: var(--danger);
   font-size: 13px;
 }
+/* Cross-link between signin and signup pages — small text at the
+   bottom of the form. */
+.signin-alt {
+  margin-top: var(--space-3);
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+}
+.signin-alt a {
+  color: var(--accent, #9f83fe);
+  text-decoration: none;
+}
+.signin-alt a:hover {
+  text-decoration: underline;
+}
+
+/* Welcome / first-run wizard. Centered card with a three-step list
+   of CTAs — the lightest version of an onboarding flow that still
+   signals "you're in, here's what to do next." */
+.welcome {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-5) var(--space-3);
+}
+.welcome-card {
+  max-width: 720px;
+  width: 100%;
+  padding: var(--space-5);
+}
+.welcome-sub {
+  color: var(--muted);
+  margin-bottom: var(--space-4);
+}
+.welcome-sub code {
+  background: var(--surface-2, rgba(255,255,255,0.05));
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.welcome-steps {
+  list-style: none;
+  padding: 0;
+  margin: var(--space-4) 0;
+}
+.welcome-steps > li {
+  border-top: 1px solid var(--border);
+  padding: var(--space-4) 0;
+}
+.welcome-steps > li:last-child {
+  border-bottom: 1px solid var(--border);
+}
+.welcome-steps h2 {
+  font-size: 16px;
+  margin: 0 0 var(--space-1);
+}
+.welcome-steps p {
+  color: var(--muted);
+  margin: 0 0 var(--space-3);
+  font-size: 14px;
+}
+.welcome-cta {
+  display: inline-block;
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 13px;
+  background: var(--surface-2, transparent);
+}
+.welcome-cta:hover {
+  border-color: var(--accent, #9f83fe);
+}
+.welcome-cta.primary {
+  background: var(--accent, #9f83fe);
+  border-color: var(--accent, #9f83fe);
+  color: var(--accent-ink, #140d30);
+  font-weight: 500;
+}
+.welcome-foot {
+  color: var(--faint);
+  font-size: 12px;
+  margin-top: var(--space-3);
+}
+
+/* Templates gallery: a responsive grid of forkable workflows.
+   Cards size to roughly two-up on a typical viewport. */
+.templates-page .page-sub {
+  color: var(--muted);
+  margin: -8px 0 var(--space-4);
+}
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--space-3);
+}
+.template-card {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: var(--space-4);
+  background: var(--surface, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  transition: border-color 0.1s ease;
+}
+.template-card:hover {
+  border-color: var(--accent, #9f83fe);
+}
+.template-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.template-card-head h2 {
+  font-size: 15px;
+  margin: 0;
+}
+.template-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, var(--accent, #9f83fe), color-mix(in srgb, var(--accent, #9f83fe) 70%, #fff));
+  color: var(--accent-ink, #140d30);
+}
+.template-desc {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+  line-height: 1.5;
+  flex: 1;
+}
+.template-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.template-tag {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: var(--surface-2, rgba(255,255,255,0.05));
+  border: 1px solid var(--border);
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--faint);
+}
+.template-cta {
+  margin-top: var(--space-2);
+  align-self: flex-start;
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--accent, #9f83fe);
+  background: var(--accent, #9f83fe);
+  color: var(--accent-ink, #140d30);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.template-cta:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* Run-detail page: failure banner, node timeline, expandable
+   per-node output blocks. Visual priority is "what went wrong" —
+   failed nodes get a red border, the top banner names the failing
+   step explicitly. */
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--faint);
+  text-decoration: none;
+  margin-bottom: 4px;
+}
+.back-link:hover {
+  color: var(--accent, #9f83fe);
+}
+.run-error-banner {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  border: 1px solid var(--danger);
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin-bottom: var(--space-4);
+  color: var(--danger);
+}
+.run-error-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+.run-error-code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  opacity: 0.8;
+  font-weight: 400;
+}
+.run-error-msg {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--ink);
+  opacity: 0.85;
+}
+.run-summary {
+  padding: var(--space-3) var(--space-4);
+}
+.run-summary-row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  padding: 6px 0;
+  font-size: 13px;
+  border-top: 1px solid var(--border);
+}
+.run-summary-row:first-child {
+  border-top: 0;
+}
+.run-summary-label {
+  color: var(--muted);
+}
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-2, rgba(255,255,255,0.05));
+  border: 1px solid var(--border);
+  font-size: 12px;
+  text-transform: capitalize;
+}
+.node-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: var(--space-2);
+}
+.node-row {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface, transparent);
+}
+.node-row.failed {
+  border-color: var(--danger);
+}
+.node-row-head {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 16px 16px 1fr auto auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  color: var(--ink);
+}
+.node-row-head:hover {
+  background: var(--surface-2, rgba(255,255,255,0.03));
+}
+.node-id {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.node-status {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: capitalize;
+}
+.node-dur {
+  color: var(--faint);
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+.node-err {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.node-body {
+  padding: 0 14px 14px 38px;
+  border-top: 1px solid var(--border);
+}
+.node-err-block {
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin: 10px 0;
+  font-size: 13px;
+  color: var(--ink);
+}
+.node-err-code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--danger);
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.node-output {
+  margin-top: 10px;
+}
+.node-section-head {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--faint);
+  margin-bottom: 6px;
+}
+.node-port {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin-bottom: 6px;
+  background: var(--surface-2, rgba(255,255,255,0.02));
+}
+.node-port > summary {
+  cursor: pointer;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  user-select: none;
+  list-style: none;
+}
+.node-port > summary::-webkit-details-marker {
+  display: none;
+}
+.node-port-name {
+  font-family: var(--font-mono);
+  color: var(--ink);
+}
+.node-port-mime {
+  color: var(--faint);
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+.node-port-value {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 8px 12px;
+  margin: 0;
+  background: var(--surface-3, rgba(255,255,255,0.03));
+  border-top: 1px solid var(--border);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 400px;
+  overflow: auto;
+}
+
+/* Generic secondary button for the "From template" CTA on the
+   flow list — pairs visually with the primary "New flow" button. */
+.secondary {
+  padding: 8px 14px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--ink);
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.secondary:hover {
+  border-color: var(--accent, #9f83fe);
+}
 
 /* Editor layout: catalog | canvas | inspector */
 .editor {

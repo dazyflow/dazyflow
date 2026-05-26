@@ -223,6 +223,9 @@ func (m *Memory) ListNodeRecords(_ context.Context, opts core.ListNodeRecordsOpt
 		if opts.Status != "" && r.Status != opts.Status {
 			continue
 		}
+		if opts.GraphRunID != "" && r.GraphRunID != opts.GraphRunID {
+			continue
+		}
 		out = append(out, *r)
 	}
 	sort.Slice(out, func(i, j int) bool {

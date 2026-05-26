@@ -4,6 +4,266 @@ Open items collected across iterations. Each entry notes the impact and a
 hint at what's needed. Items at the top section block real usage; items
 further down are quality, observability, and known-unknowns.
 
+## Path to product-market fit (Zapier-shaped sell)
+
+Active roadmap. Hazy-flow has the engine; the gap vs. Zapier is the
+**integrations × OAuth × templates** flywheel and the **self-serve UX**
+around it. These are the things a paying SMB/SaaS-ops customer expects
+when they sign up to try the product. Tiered T0 → T3 from "without
+this no customer can try" to "needed before paid conversion."
+
+### T0 — Foundation that unblocks everything else
+
+- [x] **Built-in encrypted secret store.** Shipped:
+  `daemon/encrypted_secrets.go` (envelope encryption — AES-256-GCM
+  KEK in process memory wraps per-tenant DEKs; ciphertexts stored
+  via a `secretsStore` interface). Two backends: `MemSecretsStore`
+  (dev / single-binary deployments) and `PgSecretsStore`
+  (Postgres-backed for multi-replica). CRUD at
+  `GET/PUT/DELETE /api/v1/secrets[/{name}]` — no GET-by-name
+  (values write-only from outside), permission-gated on
+  `secret:read`/`secret:write`. Scheme `tenant://<name>` resolves
+  at job time via the new `core.WithTenant` context plumbing —
+  tenant isolation enforced both at the store layer (WHERE
+  tenant=$1) and the AEAD layer (distinct DEKs). 33 tests
+  including tamper detection, DEK caching, race-safe provisioning,
+  and end-to-end "PUT via API → resolves in graph params." Wired
+  into `hzd` behind `--master-key` / `$HAZYFLOW_MASTER_KEY`; off
+  by default. BYO cloud providers (Vault/AWS/GCP) deferred to T3.
+- [x] **OAuth 2.0 handshake + per-tenant token store.** Shipped:
+  `daemon/oauth.go` + `daemon/httpoauth.go`. Authorization-code
+  flow with a per-provider config (URLs hardcoded, client_id /
+  secret from env). Endpoints:
+  `GET /api/v1/oauth/{provider}/authorize` (auth-required, mints a
+  256-bit single-use state token, 302s to the provider) and
+  `GET /api/v1/oauth/{provider}/callback` (unauth, validates state,
+  exchanges code, stores `{access_token, refresh_token, expires_at,
+  scope, extras…}` JSON as `tenant://oauth.<provider>.<account>`,
+  redirects to `return_to` with `?oauth=success|error`).
+  `GET /api/v1/oauth/providers` lists registered providers + each
+  tenant's connected accounts. Defenses: same-origin `return_to`
+  only, single-use replay-proof state, 10-min TTL, account-name
+  validated through the secret-name validator. `hzd` wires Slack,
+  GitHub, Google, Notion from `HAZYFLOW_OAUTH_<NAME>_CLIENT_ID/
+  SECRET` env vars — providers without credentials skip silently.
+  19 tests covering state machine, exchange (success + non-2xx +
+  provider-200-with-error), HTTP flow (happy path, replay, denied
+  consent, bad state), and 501 when not configured. Refresh-on-
+  expiry deferred; tokens are whatever was last stored.
+- [~] **Self-serve signup + first-run wizard.** Shipped:
+  `POST /api/v1/auth/signup` (`daemon/httpsignup.go`) creates a
+  bcrypt-hashed user with an auto-minted `usr_<hex>` tenant slug
+  (keeps email out of URLs/logs), grants `editor` + `tenant_owner`
+  roles (graph:run/edit/admin + secret:read/write + tenant:admin),
+  and immediately issues a session so the UI lands the user
+  in-app without a round trip. Behind `--signup` /
+  `$HAZYFLOW_ENABLE_SIGNUP` so production deployments default to
+  admin-invite-only. 11 backend tests including
+  duplicate-rejection-preserves-original-password (the critical
+  security pin), email normalization, 7 bad-email variants,
+  tenant-ID uniqueness, perm grants. Frontend: `SignUp.tsx` page
+  with confirm-password, link to/from signin, `Welcome.tsx`
+  3-step landing wizard, routes wired for both authenticated and
+  unauthenticated paths. Email verification deliberately deferred
+  (needs an SES/SendGrid/SMTP story); rate-limiting + captcha
+  open under Browser auth + transport.
+- [~] **`poll_trigger` primitive.** Interval-anchored firing
+  shipped: new `GraphTrigger{Type: "poll", IntervalSeconds: N}`,
+  `daemon/scheduler.go` extended (cron + poll share the same
+  tracking map, discriminated on `scheduleFn != nil` vs
+  `interval != 0`; trigger-index suffix in the tracked key so
+  cron + poll on the same graph get separate entries),
+  `integrations/trigger/poll_trigger.go` drop emitting `fired_at`
+  RFC3339 UTC. 7 tests including the multi-fire interval check
+  and the "bad interval is skipped, not tight-looped" defense.
+  **Cursor-based dedupe** (the Zapier "fire only on new items"
+  shape) is the follow-up: needs a graph-side `secret_set` drop
+  + a daemon hook that scrapes a designated output port after
+  successful runs. The v1 here is enough for "run my graph every
+  N minutes" — Gmail/Sheets connectors will use it directly with
+  cursor storage in `tenant://` secrets they manage themselves.
+
+### T1 — The "looks and feels like Zapier" gap
+
+- [~] **Slack launch connector.** Action drops shipped:
+  `integrations/slack/slack_send_message.go` (chat.postMessage —
+  text, thread_ts, Block Kit, body-port-wins-over-params with
+  object-input rejection, Slack-envelope error mapping, retry
+  policy) and `slack_list_channels.go` (conversations.list with
+  types/limit/exclude_archived). Token resolution via either an
+  explicit `token` param OR a `SetTokenLookup` hook that `hzd`
+  wires to `OAuthRegistry.GetOAuthToken("slack", account)`.
+  Brand asset at `/brands/slack.svg`. 17 tests using an
+  httptest fake of the Slack API. **Trigger** (`slack_on_mention`,
+  Events API) deferred — needs a separate signing-secret
+  verification path + multi-tenant event routing by team_id;
+  worth its own T1 entry.
+- [ ] **`secret_set` drop + cursor-based polling.** Deferred from
+  the poll_trigger landing. Two pieces: (a) a `secret_set` drop
+  that takes a `name`+`value` and writes to the `tenant://` store
+  during graph execution (the missing inverse of secret READ),
+  (b) optional polling-state semantics where the daemon scrapes
+  a designated node's output as the next "cursor" and feeds it
+  back to `poll_trigger` on the next fire. Together they unlock
+  the Zapier "fire only on new items" shape without per-connector
+  bookkeeping. ~2 days.
+- [ ] **`slack_on_mention` trigger.** Deferred from the Slack
+  connector landing. Needs (a) a `POST
+  /api/v1/events/slack/{tenant}` webhook endpoint that verifies
+  Slack's HMAC-SHA256 signature against the app's signing secret,
+  (b) URL-verification challenge handling on first subscription,
+  (c) team_id → tenant routing (which connected account this
+  team belongs to), (d) marshaling the event into a job that
+  graphs with `slack_on_mention` triggers consume. ~2 days.
+- [x] **Gmail launch connector.** Three action drops shipped:
+  `integrations/gmail/gmail_send_email.go` (RFC822 construction
+  with CRLF + header-injection defense, base64-URL-no-pad
+  encoding, format=text|html, thread_id for replies),
+  `gmail_search_messages.go` (Gmail query syntax + pagination via
+  page_token), `gmail_get_message.go` (flattens Gmail's nested
+  MIME tree into convenience fields: headers as map, body_text
+  and body_html base64-decoded, raw passthrough). Daemon-wide:
+  added `AuthorizeExtras` to `OAuthProvider` so Google's
+  `access_type=offline` + `prompt=consent` (required to get a
+  refresh_token) ride along on the authorize redirect. Brand
+  asset at `/brands/gmail.svg`. 17 tests using an httptest fake
+  of the Gmail API. "Fire on new email" is composable via
+  `poll_trigger → gmail_search_messages (q:newer_than:5m) →
+  for_each → gmail_get_message` — no dedicated trigger drop
+  needed since the composition is cleaner than another drop with
+  its own state.
+- [x] **Google Sheets launch connector.** Two action drops shipped:
+  `integrations/sheets/sheets_append_row.go` (POST values:append
+  with USER_ENTERED parsing so "30" lands as number 30 and
+  "=SUM(A:A)" as a formula; INSERT_ROWS vs OVERWRITE; emits
+  meta.updated_range for follow-up writes) and
+  `sheets_read_range.go` (GET values with FORMATTED_VALUE default,
+  UNFORMATTED_VALUE preserves numeric/bool types). Both speak the
+  canonical `rows`+`headers` shape — interchangeable with
+  excel_read/postgres_query downstream. Shares the "google" OAuth
+  app with Gmail (one lookup function in hzd, factored into a
+  shared `googleLookup` closure). Brand asset at
+  `/brands/sheets.svg`. 16 tests including the empty-rows
+  short-circuit (avoids Sheets' 400 on empty appends), short-row
+  padding both directions, and a contract test pinning output
+  shape compatibility with excel_read. `sheets_on_new_row` trigger
+  uses the same poll_trigger composition pattern as gmail's
+  on_new_email — no dedicated drop needed.
+- [~] **GitHub launch connector.** Three action drops shipped:
+  `integrations/github/github_create_issue.go` (title + body +
+  labels + assignees + milestone; **object-input bodies become
+  fenced JSON code blocks** so a "payload was: …" issue renders
+  cleanly in Markdown), `github_list_issues.go` (state /
+  labels / assignee / since filters, `since` is what
+  poll_trigger composition uses for "fire on new issue"),
+  `github_add_comment.go` (works for both issues and PRs since
+  GitHub treats them in one number space). Shares OAuth wiring
+  with the others — `github.SetTokenLookup` reads from the
+  existing OAuth registry's `github` provider. Pins the REST v3
+  `Accept: application/vnd.github+json` +
+  `X-GitHub-Api-Version: 2022-11-28` headers so a future API
+  bump can't silently change behavior. Error extractor handles
+  the nested `errors[].message` shape so "Validation Failed:
+  title is required" makes it through, not just "Validation
+  Failed". Brand asset at `/brands/github.svg`. 17 tests.
+  **Webhook triggers** (`github_on_push`, `github_on_new_pr`)
+  still deferred alongside slack_on_mention — they share the
+  same HMAC + tenant-routing follow-up.
+- [ ] **Notion launch connector.** OAuth, drops:
+  `notion_create_page`, `notion_query_database`,
+  `notion_on_db_change` (polling trigger). ~3 days.
+- [~] **Template gallery in the editor.** Shipped: static gallery
+  at `/templates`. `web/public/templates/index.json` lists
+  available templates; each template's graph lives in its own
+  `<id>.json` file fetched lazily on "Use this template" (so the
+  gallery page loads fast even with dozens of templates). Fork
+  flow: clone the graph payload, generate a `<id>-<suffix>` ID,
+  fill in tenant/workspace, PUT through the existing saveGraph
+  endpoint, redirect to the new flow editor. No new daemon
+  endpoint — just JSON files behind the web app's static asset
+  server. Welcome wizard reordered so "Browse templates" is step
+  1; FlowList has a "From template" button next to "New flow".
+  Five seed templates cover the breadth (Excel→DB,
+  webhook→Slack, daily Postgres digest, Gmail→Sheets,
+  Sheet→Postgres upsert sync). Open follow-up: 15+ more
+  templates to fill the gallery, and an admin UI to add custom
+  templates per tenant.
+
+### T2 — Retention (failing-quietly is what kills trials)
+
+- [~] **Run-history UI polish.** Shipped: new `/runs/{runID}`
+  page (`web/src/pages/RunDetail.tsx`) with a failure banner
+  that names the failing node + error code at the top, a run
+  summary card (status / started / finished / duration / node
+  count breakdown), a per-node timeline (status dot + duration +
+  expandable input/output preview), and a Replay button that
+  re-fires the same graph. Backend: extended
+  `ListNodeRecordsOpts` with a `GraphRunID` filter (memory +
+  Postgres both implement it) and added `GET
+  /api/v1/jobs/{runID}/nodes` so the page draws the timeline in
+  ONE round trip. Live-polls while anything's still in flight,
+  same heuristic as RunList. 3 backend tests pin the
+  "doesn't-leak-across-runs" + 404 + empty-array contracts. The
+  /runs list page now links rows into the detail page first
+  (editor link still available). **Side-by-side input/output
+  diffs across reruns** and **replay-with-modifications**
+  deferred — both useful but lower-leverage than the basic
+  "what happened" surface that landed here.
+- [~] **Failure notifications.** Shipped: new
+  `core.Graph.FailureNotify{Webhook}` field + daemon dispatcher
+  in `daemon/failure_notify.go`. Per-run goroutine subscribes
+  to the bus at SubmitGraph time (subscribe-then-spawn so the
+  dispatcher can't race past it); on terminal+failed, POSTs a
+  compact payload (graph_id, run_id, tenant, workspace,
+  error_code, error_message, failed_node, run_url, finished_at)
+  to the configured URL. `failed_node` is filled by querying
+  `ListNodeRecords` with the new GraphRunID filter when the
+  TerminalEvent doesn't carry it. `run_url` deep-links to the
+  run-detail page when `PublicBaseURL` is set on the Service.
+  Race-recheck handles the "worker finished before subscribe"
+  case. SettingsModal gets a new "Notifications" tab with the
+  webhook URL field. 11 tests covering happy path, no-fire-on-
+  success, no-spawn-when-unconfigured, failed-node lookup,
+  race-recheck firing without a bus event, 500-from-webhook
+  doesn't panic, payload-shape pinning. Webhook-only v1 covers
+  Slack (incoming-webhook URLs), Discord, Teams, PagerDuty,
+  custom receivers — typed Slack-channel / email pickers
+  deferred to when there's a clean per-tenant-token plumbing
+  story (those would invoke the existing connector drops; v1
+  picks the smallest blast radius).
+- [ ] **Trigger test/preview UX.** "Run trigger now" button that
+  fetches sample data from the connected account without firing
+  downstream. Critical for the field-mapping workflow — users need
+  to see real shapes when wiring fields. ~3 days.
+
+### T3 — Monetization (needed before charging)
+
+- [ ] **Per-tenant metering.** Count graph runs + node executions
+  per tenant per month. Surface a usage page in the UI. Persistence
+  in Postgres (a new `usage_counters` table). Reset on the tenant's
+  billing day. ~4 days.
+- [ ] **Stripe integration + plan gates.** Free tier (e.g. 100
+  runs/month, no polling triggers, no premium connectors), paid
+  tier unlocks polling + premium apps. Stripe Checkout for upgrades,
+  webhook on payment events updates tenant plan. ~3 days.
+- [ ] **Team features.** Multiple users per tenant, shared
+  workflows, basic role split (owner / editor / viewer — the RBAC
+  primitives already exist server-side, this is the UX). ~3 days.
+- [ ] **BYO cloud secret providers** (Vault / AWS Secrets Manager /
+  GCP Secret Manager). Same `core.SecretProvider` interface, new
+  schemes (`vault://`, `aws://`, `gcp://`). Enterprise-tier feature
+  for customers who insist on holding their own keys in their own
+  KMS. ~2-3 days per provider.
+
+### Out of scope for this push (deliberate)
+
+- Mobile app (Zapier has one, almost nobody uses it for setup)
+- SSO / SAML (enterprise tier; later)
+- White-label / embed (much later)
+- Most production-blockers from the section below (mTLS rotation,
+  scheduler election, multi-node bus) — they matter at scale, not
+  at "first 100 paying SMBs"
+
 ## Top of the pile — biggest realism gaps
 
 These showed up while building the AP-invoice demo. Without them the

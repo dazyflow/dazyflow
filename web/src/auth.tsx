@@ -13,6 +13,11 @@ type AuthCtx = {
   loading: boolean;
   error: string | null;
   signInWithPassword: (email: string, password: string) => Promise<void>;
+  // signUpWithPassword creates a new account, auto-signs the user in,
+  // and lands them in the same authenticated state as a sign-in call.
+  // Errors surface on the context (`error`) and are re-thrown so the
+  // caller can branch on success.
+  signUpWithPassword: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   hasPerm: (p: Permission) => boolean;
   // Workspace state. `workspaces` is the list the principal can access
@@ -182,6 +187,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // signUpWithPassword: same wire shape as signInWithPassword (the
+  // backend issues a session immediately on signup), so we can
+  // collapse the two code paths after the initial API call.
+  const signUpWithPassword = async (email: string, password: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await api.signUp(email, password);
+      localStorage.setItem(STORAGE_KEY, r.token);
+      setToken(r.token);
+      const who = await api.whoami(r.token);
+      setMe(who);
+    } catch (e) {
+      setError((e as Error).message);
+      throw e;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const signOut = async () => {
     // Best-effort: tell the daemon to invalidate the session. We don't
     // wait on the result before clearing local state — the user-facing
@@ -214,6 +239,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         error,
         signInWithPassword,
+        signUpWithPassword,
         signOut,
         hasPerm,
         workspaces,

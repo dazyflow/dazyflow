@@ -27,6 +27,19 @@ export type GraphTrigger = {
 
 export type Visibility = "org" | "private";
 
+// TemplateSummary is one row in the gallery's index file. Each entry
+// points at its own graph file under /templates/<id>.json so the
+// gallery page loads fast (only metadata) and the graph payload is
+// fetched lazily on "Use this template".
+export type TemplateSummary = {
+  id: string;
+  title: string;
+  description: string;
+  icon?: string;
+  tags?: string[];
+  graph_file: string;
+};
+
 export type FlowSummary = {
   id: string;
   name?: string;
@@ -50,6 +63,14 @@ export type Graph = {
   icon?: string;
   description?: string;
   timeout_seconds?: number;
+  failure_notify?: FailureNotify;
+};
+
+// FailureNotify mirrors core.FailureNotify in Go — the daemon's
+// failure-notify dispatcher POSTs a payload to the webhook URL
+// when a run of this graph terminates with status=failed.
+export type FailureNotify = {
+  webhook?: string;
 };
 
 export type Port = {

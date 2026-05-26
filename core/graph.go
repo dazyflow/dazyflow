@@ -74,6 +74,17 @@ type Graph struct {
 	// effectively forces org mode regardless of Visibility.
 	Owner string `json:"owner,omitempty"`
 
+	// FailureNotify, when set, configures where the daemon sends a
+	// notification when a run of this graph terminates with
+	// status=failed. Webhook is the only delivery channel today —
+	// works with Slack incoming-webhook URLs, Discord, PagerDuty
+	// events API, generic receivers, anything that takes an HTTP
+	// POST. Per-channel typed UX (Slack-channel picker, etc.) lands
+	// when there's a clean per-tenant-token plumbing path; until
+	// then the webhook URL covers every case via the
+	// service-provided incoming-webhook surfaces.
+	FailureNotify *FailureNotify `json:"failure_notify,omitempty"`
+
 	// TimeoutSeconds caps the wall-time of any run of this graph. When
 	// elapsed, the daemon auto-cancels the run via the same path as a
 	// manual cancel — already-running nodes finish naturally, but no
@@ -105,17 +116,51 @@ func (g Graph) EffectiveVisibility() Visibility {
 }
 
 // GraphTrigger describes when the graph should fire automatically.
-// Currently two types are supported:
+// Currently three types are supported:
 //
-//	{"type": "cron", "cron": "0 9 * * *"}      — daily 09:00 (workspace tz)
-//	{"type": "webhook", "secret": "<token>"}   — POST /trigger/<tenant>/<workspace>/<graph>
+//	{"type": "cron",    "cron": "0 9 * * *"}              — daily 09:00 (workspace tz)
+//	{"type": "webhook", "secret": "<token>"}              — POST /trigger/<tenant>/<workspace>/<graph>
+//	{"type": "poll",    "interval_seconds": 300}          — fire every 5 minutes (interval-anchored)
 //
-// Multiple triggers can coexist on the same graph (e.g. a graph that
-// runs hourly AND can be manually triggered via webhook).
+// Poll differs from cron in two ways: (a) the interval is anchored
+// to the last fire, not to wall-clock boundaries (a 300-second
+// poll trigger started at 09:01:23 fires at 09:06:23, not 09:05:00);
+// (b) it's expressed as a simple integer interval rather than a
+// 5-field cron expression — purpose-built for "check for new data
+// every N minutes" semantics where exact wall-clock timing isn't
+// what you want.
+//
+// Multiple triggers can coexist on the same graph (e.g. a graph
+// that runs hourly AND can be manually triggered via webhook).
 type GraphTrigger struct {
-	Type   string `json:"type"`             // "cron" or "webhook"
-	Cron   string `json:"cron,omitempty"`   // for type=cron
-	Secret string `json:"secret,omitempty"` // for type=webhook (compared against Authorization header)
+	Type            string `json:"type"`                       // "cron", "webhook", or "poll"
+	Cron            string `json:"cron,omitempty"`             // for type=cron
+	Secret          string `json:"secret,omitempty"`           // for type=webhook (compared against Authorization header)
+	IntervalSeconds int    `json:"interval_seconds,omitempty"` // for type=poll; must be > 0
+}
+
+// FailureNotify configures where the daemon sends a notification
+// when a graph run terminates with status=failed. Today only the
+// webhook channel is supported; the typed schema leaves room for
+// {email, slack, ...} variants without breaking older graph JSON.
+//
+// Payload shape (POSTed as application/json):
+//
+//	{
+//	  "graph_id":     "my-flow",
+//	  "run_id":       "run-abc",
+//	  "tenant":       "acme",
+//	  "workspace":    "main",
+//	  "error_code":   "timeout",
+//	  "error_message": "node 'enrich' exceeded 30s",
+//	  "failed_node":  "enrich",
+//	  "run_url":      "https://app.example.com/runs/run-abc",  // when PublicBaseURL is set
+//	  "finished_at":  "2026-05-26T14:23:01Z"
+//	}
+type FailureNotify struct {
+	// Webhook is the URL to POST the failure payload to. Empty means
+	// "no notification" — same as not setting FailureNotify at all.
+	Webhook string `json:"webhook,omitempty"`
 }
 
 func (g Graph) Node(id string) (Node, bool) {

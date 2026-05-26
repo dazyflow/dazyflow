@@ -1,0 +1,44 @@
+{
+  "id": "daily-postgres-report",
+  "version": "1",
+  "name": "Daily Postgres → Slack digest",
+  "description": "Cron-fired SELECT, formatted summary line posted to Slack.",
+  "icon": "clock",
+  "triggers": [
+    {"type": "cron", "cron": "0 9 * * *"}
+  ],
+  "nodes": [
+    {
+      "id": "query",
+      "module": "postgres_query",
+      "params": {
+        "dsn": "${env:DATABASE_URL}",
+        "sql": "SELECT count(*) AS total FROM orders WHERE created_at > now() - interval '24 hours'"
+      },
+      "position": {"x": 100, "y": 200}
+    },
+    {
+      "id": "format",
+      "module": "compute_rows",
+      "params": {
+        "compute": {
+          "text": "'Last 24h: ' + string(row.total) + ' new orders'"
+        }
+      },
+      "position": {"x": 450, "y": 200}
+    },
+    {
+      "id": "notify",
+      "module": "slack_send_message",
+      "params": {
+        "channel": "#metrics",
+        "text": "${upstream:format.rows[0].text}",
+        "account": "default"
+      },
+      "position": {"x": 800, "y": 200}
+    }
+  ],
+  "edges": [
+    {"from": "query", "from_port": "rows", "to": "format", "to_port": "rows", "on_error": ""}
+  ]
+}

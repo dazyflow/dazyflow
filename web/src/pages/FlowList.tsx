@@ -56,10 +56,21 @@ export function FlowList() {
             {activeTenant || me?.tenant}/{activeWorkspace}
           </div>
         </div>
-        <button className="primary" onClick={createNew}>
-          <Plus size={16} style={{ marginRight: 6, verticalAlign: -3 }} />
-          New flow
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Link
+            to="/templates"
+            style={{ textDecoration: "none" }}
+            className="secondary-link"
+          >
+            <button type="button" className="secondary">
+              From template
+            </button>
+          </Link>
+          <button className="primary" onClick={createNew}>
+            <Plus size={16} style={{ marginRight: 6, verticalAlign: -3 }} />
+            New flow
+          </button>
+        </div>
       </div>
       {loading && <div className="card">Loading…</div>}
       {error && <div className="card" style={{ color: "var(--danger)" }}>{error}</div>}

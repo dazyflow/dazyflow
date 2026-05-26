@@ -31,3 +31,28 @@ type SecretProvider interface {
 	// resolved secret.
 	Get(ctx context.Context, path string) (string, error)
 }
+
+// tenantCtxKey carries the principal's tenant through to providers
+// that need it for scoping (the encrypted built-in store reads it to
+// pick the right per-tenant DEK). Global providers like env:// can
+// ignore the value entirely.
+type tenantCtxKey struct{}
+
+// WithTenant returns a derived context carrying the tenant ID. The
+// engine wraps the job's ctx with this before invoking the secret
+// substituter so tenant-scoped providers can read it during Get().
+func WithTenant(ctx context.Context, tenant string) context.Context {
+	if tenant == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, tenantCtxKey{}, tenant)
+}
+
+// TenantFromContext returns the tenant carried by WithTenant. The
+// second return is false when no tenant was set — providers that
+// require one return an error in that case so an empty tenant
+// never silently lands on the global namespace.
+func TenantFromContext(ctx context.Context) (string, bool) {
+	v, ok := ctx.Value(tenantCtxKey{}).(string)
+	return v, ok && v != ""
+}
