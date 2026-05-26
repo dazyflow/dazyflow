@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Node } from "@xyflow/react";
 import { useTranslation } from "react-i18next";
-import { X } from "lucide-react";
+import { X, Trash2 } from "lucide-react";
 import type { HazyNodeData } from "./NodeCard";
 import { SchemaForm, supportsSchemaForm, type WorkspaceCtx } from "./SchemaForm";
 import { OutputPreview } from "./OutputPreview";
@@ -42,6 +42,10 @@ type Props = {
   // The close affordance is only rendered when this prop is set so
   // desktop layouts (where the inspector is always visible) stay clean.
   onClose?: () => void;
+  // onDelete removes the selected node (and its edges). This is the
+  // only delete affordance on touch devices, where there's no
+  // Delete/Backspace key to trigger React Flow's built-in removal.
+  onDelete?: (id: string) => void;
 };
 
 type Mode = "form" | "json";
@@ -57,6 +61,7 @@ export function Inspector({
   workspace,
   onSample,
   onClose,
+  onDelete,
 }: Props) {
   const { t } = useTranslation();
   const [sampling, setSampling] = useState(false);
@@ -375,6 +380,27 @@ export function Inspector({
             <div style={{ fontSize: 13, color: "var(--muted)" }}>
               {d.manifest.description}
             </div>
+          </div>
+        )}
+
+        {onDelete && (
+          <div className="inspector-section">
+            <button
+              type="button"
+              className="inspector-delete"
+              onClick={() => {
+                if (
+                  window.confirm(
+                    t("inspector.deleteConfirm", { id: selected.id }),
+                  )
+                ) {
+                  onDelete(selected.id);
+                }
+              }}
+            >
+              <Trash2 size={14} />
+              {t("inspector.deleteNode")}
+            </button>
           </div>
         )}
       </div>

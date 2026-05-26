@@ -423,7 +423,9 @@
     "mustBeObject": "måste vara ett JSON-objekt",
     "liveOutput": "Live-output",
     "lastRunOutput": "Output från senaste körningen",
-    "about": "Om"
+    "about": "Om",
+    "deleteNode": "Ta bort nod",
+    "deleteConfirm": "Ta bort noden \"{{id}}\" och dess kopplingar?"
   },
   "editor": {
     "back": "Tillbaka",

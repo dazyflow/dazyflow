@@ -423,7 +423,9 @@
     "mustBeObject": "must be a JSON object",
     "liveOutput": "Live output",
     "lastRunOutput": "Last run output",
-    "about": "About"
+    "about": "About",
+    "deleteNode": "Delete node",
+    "deleteConfirm": "Delete node \"{{id}}\" and its connections?"
   },
   "editor": {
     "back": "Back",

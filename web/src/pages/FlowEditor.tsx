@@ -899,6 +899,22 @@ function EditorInner() {
           onParamsChange={onParamsChange}
           currentRunID={currentRunID}
           statusRefreshKey={statusRefreshKey}
+          onDelete={(nodeID) => {
+            // Remove the node and any edge touching it, drop its stashed
+            // params, and clear selection. This is the touch-device
+            // delete path (no Delete/Backspace key).
+            setNodes((nds) => nds.filter((n) => n.id !== nodeID));
+            setEdges((eds) =>
+              eds.filter((e) => e.source !== nodeID && e.target !== nodeID),
+            );
+            setParamsByID((p) => {
+              const next = { ...p };
+              delete next[nodeID];
+              return next;
+            });
+            setSelectedID(null);
+            setDirty(true);
+          }}
           liveLogs={inspectorSelected ? liveLogs[inspectorSelected.id] : undefined}
           workspace={
             token ? { token, tenant: activeTenant, workspace: activeWorkspace } : undefined
