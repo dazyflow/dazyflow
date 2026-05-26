@@ -12,6 +12,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 )
 
 func init() {
@@ -57,13 +58,13 @@ func init() {
 }
 
 func executeNotionQueryDatabase(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	dbID, err := paramString(job.Params, "database_id")
+	dbID, err := params.String(job.Params, "database_id")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	token, err := resolveToken(ctx, job)
 	if err != nil {
-		return errResult(job, "auth", err.Error()), nil
+		return params.Err(job, "auth", err.Error()), nil
 	}
 
 	payload := map[string]any{}
@@ -73,38 +74,38 @@ func executeNotionQueryDatabase(ctx context.Context, job core.Job, _ chan<- core
 	if sorts, ok := job.Params["sorts"]; ok && sorts != nil {
 		payload["sorts"] = sorts
 	}
-	if cur, ok := paramStringOpt(job.Params, "start_cursor"); ok && cur != "" {
+	if cur, ok := params.StringOpt(job.Params, "start_cursor"); ok && cur != "" {
 		payload["start_cursor"] = cur
 	}
-	if ps := paramIntDefault(job.Params, "page_size", 0); ps > 0 {
+	if ps := params.IntDefault(job.Params, "page_size", 0); ps > 0 {
 		payload["page_size"] = ps
 	}
 
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return errResult(job, "internal", fmt.Sprintf("marshal: %v", err)), nil
+		return params.Err(job, "internal", fmt.Sprintf("marshal: %v", err)), nil
 	}
 
 	endpoint := fmt.Sprintf("%s/databases/%s/query", currentHTTPBase(), url.PathEscape(dbID))
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
-		return errResult(job, "internal", err.Error()), nil
+		return params.Err(job, "internal", err.Error()), nil
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Notion-Version", notionAPIVersion)
 
-	timeoutMs := paramIntDefault(job.Params, "timeout_ms", 15000)
+	timeoutMs := params.IntDefault(job.Params, "timeout_ms", 15000)
 	client := &http.Client{Timeout: time.Duration(timeoutMs) * time.Millisecond}
 	resp, err := client.Do(req)
 	if err != nil {
-		return errResult(job, "send_failed", err.Error()), nil
+		return params.Err(job, "send_failed", err.Error()), nil
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024))
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return errResult(job, "notion_error", decodeNotionError(respBody, resp.StatusCode)), nil
+		return params.Err(job, "notion_error", decodeNotionError(respBody, resp.StatusCode)), nil
 	}
 
 	var parsed struct {
@@ -113,7 +114,7 @@ func executeNotionQueryDatabase(ctx context.Context, job core.Job, _ chan<- core
 		HasMore    bool             `json:"has_more"`
 	}
 	if err := json.Unmarshal(respBody, &parsed); err != nil {
-		return errResult(job, "parse", fmt.Sprintf("parse response: %v", err)), nil
+		return params.Err(job, "parse", fmt.Sprintf("parse response: %v", err)), nil
 	}
 	var raw any
 	_ = json.Unmarshal(respBody, &raw)

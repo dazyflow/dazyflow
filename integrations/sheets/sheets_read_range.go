@@ -11,6 +11,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 )
 
 func init() {
@@ -64,18 +65,18 @@ func init() {
 // type-juggle between sources. UNFORMATTED_VALUE returns proper
 // number/bool types if the downstream code prefers them.
 func executeSheetsReadRange(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	spreadsheetID, err := paramString(job.Params, "spreadsheet_id")
+	spreadsheetID, err := params.String(job.Params, "spreadsheet_id")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	token, err := resolveToken(ctx, job)
 	if err != nil {
-		return errResult(job, "auth", err.Error()), nil
+		return params.Err(job, "auth", err.Error()), nil
 	}
 
-	rangeRef := paramStringDefault(job.Params, "range", "Sheet1")
+	rangeRef := params.StringDefault(job.Params, "range", "Sheet1")
 	q := url.Values{}
-	q.Set("valueRenderOption", paramStringDefault(job.Params, "value_render_option", "FORMATTED_VALUE"))
+	q.Set("valueRenderOption", params.StringDefault(job.Params, "value_render_option", "FORMATTED_VALUE"))
 	// Always use ROWS as major dimension — matches every other
 	// tabular drop's "row-of-values" mental model.
 	q.Set("majorDimension", "ROWS")
@@ -87,21 +88,21 @@ func executeSheetsReadRange(ctx context.Context, job core.Job, _ chan<- core.Pro
 		q.Encode())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return errResult(job, "internal", err.Error()), nil
+		return params.Err(job, "internal", err.Error()), nil
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 
-	timeoutMs := paramIntDefault(job.Params, "timeout_ms", 15000)
+	timeoutMs := params.IntDefault(job.Params, "timeout_ms", 15000)
 	client := &http.Client{Timeout: time.Duration(timeoutMs) * time.Millisecond}
 	resp, err := client.Do(req)
 	if err != nil {
-		return errResult(job, "send_failed", err.Error()), nil
+		return params.Err(job, "send_failed", err.Error()), nil
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 5<<20)) // 5 MiB cap; bigger sheets need pagination by range
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return errResult(job, "sheets_error",
+		return params.Err(job, "sheets_error",
 			fmt.Sprintf("Sheets returned %d: %s", resp.StatusCode, extractSheetsError(body))), nil
 	}
 
@@ -109,10 +110,10 @@ func executeSheetsReadRange(ctx context.Context, job core.Job, _ chan<- core.Pro
 		Values [][]any `json:"values"`
 	}
 	if err := json.Unmarshal(body, &parsed); err != nil {
-		return errResult(job, "parse", err.Error()), nil
+		return params.Err(job, "parse", err.Error()), nil
 	}
 
-	useHeaders := paramBoolDefault(job.Params, "headers", true)
+	useHeaders := params.BoolDefault(job.Params, "headers", true)
 	headers, rows := flattenSheetsValues(parsed.Values, useHeaders)
 	return core.Result{
 		JobID:  job.ID,

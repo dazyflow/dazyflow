@@ -8,6 +8,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 )
 
 func init() {
@@ -76,25 +77,25 @@ type branchCondition struct {
 func executeBranch(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	input, ok := job.Input["in"]
 	if !ok {
-		return errResult(job, "missing_input", "input port 'in' is required"), nil
+		return params.Err(job, "missing_input", "input port 'in' is required"), nil
 	}
 	condRaw, ok := job.Params["condition"]
 	if !ok {
-		return errResult(job, "bad_param", "param 'condition' is required"), nil
+		return params.Err(job, "bad_param", "param 'condition' is required"), nil
 	}
 	cond, err := parseCondition(condRaw)
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 
 	value, err := extractField(input, cond.Field)
 	if err != nil {
-		return errResult(job, "bad_input", err.Error()), nil
+		return params.Err(job, "bad_input", err.Error()), nil
 	}
 
 	matched, err := evaluate(value, cond.Op, cond.Value)
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 
 	output := map[string]core.Ref{}

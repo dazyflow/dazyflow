@@ -17,6 +17,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 )
 
 func init() {
@@ -58,38 +59,38 @@ func init() {
 }
 
 func executeGitCheckout(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
-	url, err := paramString(job.Params, "url")
+	url, err := params.String(job.Params, "url")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
-	relPath, err := paramString(job.Params, "path")
+	relPath, err := params.String(job.Params, "path")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	if job.WorkspaceRoot == "" {
-		return errResult(job, "no_sandbox", "git_checkout requires a workspace sandbox"), nil
+		return params.Err(job, "no_sandbox", "git_checkout requires a workspace sandbox"), nil
 	}
-	ref := paramStringDefault(job.Params, "ref", "")
-	depth := paramIntDefault(job.Params, "depth", 0)
+	ref := params.StringDefault(job.Params, "ref", "")
+	depth := params.IntDefault(job.Params, "depth", 0)
 
 	cleanRel, err := sandboxRel(relPath)
 	if err != nil {
-		return errResult(job, "sandbox_escape", err.Error()), nil
+		return params.Err(job, "sandbox_escape", err.Error()), nil
 	}
 	if cleanRel == "." {
-		return errResult(job, "bad_param", "path must be a subdirectory, not the workspace root"), nil
+		return params.Err(job, "bad_param", "path must be a subdirectory, not the workspace root"), nil
 	}
 	dst := filepath.Join(job.WorkspaceRoot, cleanRel)
 
 	repo, mode, err := openOrClone(ctx, dst, url, depth, progress, job)
 	if err != nil {
-		return errResult(job, mode, err.Error()), nil
+		return params.Err(job, mode, err.Error()), nil
 	}
 
 	if ref != "" {
 		wt, wErr := repo.Worktree()
 		if wErr != nil {
-			return errResult(job, "worktree", wErr.Error()), nil
+			return params.Err(job, "worktree", wErr.Error()), nil
 		}
 		co := &gogit.CheckoutOptions{Force: true}
 		if hash, hErr := repo.ResolveRevision(plumbing.Revision(ref)); hErr == nil {
@@ -98,7 +99,7 @@ func executeGitCheckout(ctx context.Context, job core.Job, progress chan<- core.
 			co.Branch = plumbing.NewBranchReferenceName(ref)
 		}
 		if cErr := wt.Checkout(co); cErr != nil {
-			return errResult(job, "checkout_failed", cErr.Error()), nil
+			return params.Err(job, "checkout_failed", cErr.Error()), nil
 		}
 	}
 

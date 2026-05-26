@@ -11,6 +11,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -59,41 +60,41 @@ func init() {
 // must wire the "headers" port (excel_read emits one) or pass it
 // through a transformer that produces a []string.
 func executeExcelWrite(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	dest, err := paramString(job.Params, "path")
+	dest, err := params.String(job.Params, "path")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	if job.WorkspaceRoot == "" {
-		return errResult(job, "no_sandbox", "excel_write requires a workspace sandbox"), nil
+		return params.Err(job, "no_sandbox", "excel_write requires a workspace sandbox"), nil
 	}
 	rowsInput, ok := job.Input["rows"]
 	if !ok {
-		return errResult(job, "missing_input", "input port 'rows' is required"), nil
+		return params.Err(job, "missing_input", "input port 'rows' is required"), nil
 	}
 	rows, err := normalizeRows(rowsInput.Inline)
 	if err != nil {
-		return errResult(job, "bad_input", err.Error()), nil
+		return params.Err(job, "bad_input", err.Error()), nil
 	}
 
 	var headers []string
 	if h, ok := job.Input["headers"]; ok && h.Inline != nil {
 		headers, err = normalizeHeaders(h.Inline)
 		if err != nil {
-			return errResult(job, "bad_input", err.Error()), nil
+			return params.Err(job, "bad_input", err.Error()), nil
 		}
 	}
 	if headers == nil {
 		headers = deriveHeaders(rows)
 	}
 
-	sheet, _ := paramStringOpt(job.Params, "sheet")
+	sheet, _ := params.StringOpt(job.Params, "sheet")
 	if sheet == "" {
 		sheet = "Sheet1"
 	}
 
 	root, err := os.OpenRoot(job.WorkspaceRoot)
 	if err != nil {
-		return errResult(job, "sandbox", fmt.Sprintf("open root: %v", err)), nil
+		return params.Err(job, "sandbox", fmt.Sprintf("open root: %v", err)), nil
 	}
 	defer root.Close()
 
@@ -109,7 +110,7 @@ func executeExcelWrite(_ context.Context, job core.Job, _ chan<- core.Progress) 
 		if info, err := root.Stat(dest); err == nil && !info.IsDir() {
 			appended, appendBuf, err := renderAppendedXLSX(root, dest, sheet, headers, rows, job.Params)
 			if err != nil {
-				return errResult(job, "render", err.Error()), nil
+				return params.Err(job, "render", err.Error()), nil
 			}
 			if appended {
 				buf = appendBuf
@@ -120,7 +121,7 @@ func executeExcelWrite(_ context.Context, job core.Job, _ chan<- core.Progress) 
 	if buf == nil {
 		freshBuf, err := renderXLSX(sheet, headers, rows, job.Params)
 		if err != nil {
-			return errResult(job, "render", err.Error()), nil
+			return params.Err(job, "render", err.Error()), nil
 		}
 		buf = freshBuf
 	}
@@ -131,7 +132,7 @@ func executeExcelWrite(_ context.Context, job core.Job, _ chan<- core.Progress) 
 	delta := int64(buf.Len()) - oldSize
 	if job.QuotaLimit > 0 && delta > 0 {
 		if job.QuotaUsed+delta > job.QuotaLimit {
-			return errResult(job, "quota_exceeded",
+			return params.Err(job, "quota_exceeded",
 				fmt.Sprintf("write of %d bytes (delta %d) would push tenant past %d (currently %d)",
 					buf.Len(), delta, job.QuotaLimit, job.QuotaUsed)), nil
 		}
@@ -140,23 +141,23 @@ func executeExcelWrite(_ context.Context, job core.Job, _ chan<- core.Progress) 
 	if mkdirs, _ := paramBool(job.Params, "mkdirs"); mkdirs {
 		if err := root.MkdirAll(path.Dir(dest), 0o755); err != nil {
 			if isSandboxEscape(err) {
-				return errResult(job, "sandbox_escape", fmt.Sprintf("mkdirs %q escapes workspace", dest)), nil
+				return params.Err(job, "sandbox_escape", fmt.Sprintf("mkdirs %q escapes workspace", dest)), nil
 			}
-			return errResult(job, "io", fmt.Sprintf("mkdir: %v", err)), nil
+			return params.Err(job, "io", fmt.Sprintf("mkdir: %v", err)), nil
 		}
 	}
 
 	out, err := root.Create(dest)
 	if err != nil {
 		if isSandboxEscape(err) {
-			return errResult(job, "sandbox_escape", fmt.Sprintf("dest %q escapes workspace", dest)), nil
+			return params.Err(job, "sandbox_escape", fmt.Sprintf("dest %q escapes workspace", dest)), nil
 		}
-		return errResult(job, "io", fmt.Sprintf("create %q: %v", dest, err)), nil
+		return params.Err(job, "io", fmt.Sprintf("create %q: %v", dest, err)), nil
 	}
 	defer out.Close()
 
 	if _, err := out.Write(buf.Bytes()); err != nil {
-		return errResult(job, "io", fmt.Sprintf("write %q: %v", dest, err)), nil
+		return params.Err(job, "io", fmt.Sprintf("write %q: %v", dest, err)), nil
 	}
 
 	return core.Result{

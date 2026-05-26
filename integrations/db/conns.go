@@ -218,14 +218,3 @@ func (r *sqlDBRegistry) sweepLocked(now time.Time) {
 		delete(r.dbs, k)
 	}
 }
-
-func (r *sqlDBRegistry) closeAll() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for k, e := range r.dbs {
-		if e.db != nil {
-			_ = e.db.Close()
-		}
-		delete(r.dbs, k)
-	}
-}

@@ -10,6 +10,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 )
 
 func init() {
@@ -54,9 +55,9 @@ func init() {
 }
 
 func executeForEach(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
-	stepModule, err := paramString(job.Params, "step_module")
+	stepModule, err := params.String(job.Params, "step_module")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	stepParams, _ := job.Params["step_params"].(map[string]any)
 	itemPort, _ := job.Params["item_port"].(string)
@@ -71,16 +72,16 @@ func executeForEach(ctx context.Context, job core.Job, progress chan<- core.Prog
 
 	itemsRef, ok := job.Input["items"]
 	if !ok {
-		return errResult(job, "missing_input", "items input is required"), nil
+		return params.Err(job, "missing_input", "items input is required"), nil
 	}
 	items, err := normalizeItems(itemsRef)
 	if err != nil {
-		return errResult(job, "bad_input", err.Error()), nil
+		return params.Err(job, "bad_input", err.Error()), nil
 	}
 
 	transport, ok := engine.Default.Get(stepModule)
 	if !ok {
-		return errResult(job, "unknown_step", fmt.Sprintf("step module %q is not registered", stepModule)), nil
+		return params.Err(job, "unknown_step", fmt.Sprintf("step module %q is not registered", stepModule)), nil
 	}
 
 	if len(items) == 0 {

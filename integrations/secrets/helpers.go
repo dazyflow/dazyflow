@@ -18,8 +18,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-
-	"git.sr.ht/~klahr/hazy-flow/core"
 )
 
 // SecretWriter writes a value to the tenant:// secret store under
@@ -70,32 +68,4 @@ func validSecretName(name string) error {
 		}
 	}
 	return nil
-}
-
-func paramString(params map[string]any, key string) (string, bool) {
-	v, ok := params[key]
-	if !ok {
-		return "", false
-	}
-	s, ok := v.(string)
-	if !ok {
-		return "", false
-	}
-	return s, true
-}
-
-func errResult(job core.Job, code, msg string) core.Result {
-	return core.Result{
-		JobID:  job.ID,
-		Status: core.StatusError,
-		Error:  &core.JobError{Code: code, Message: msg},
-	}
-}
-
-func errResultDetails(job core.Job, code, msg, details string) core.Result {
-	return core.Result{
-		JobID:  job.ID,
-		Status: core.StatusError,
-		Error:  &core.JobError{Code: code, Message: msg, Details: details},
-	}
 }

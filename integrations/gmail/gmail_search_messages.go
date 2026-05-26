@@ -12,6 +12,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 )
 
 func init() {
@@ -64,42 +65,42 @@ func init() {
 func executeGmailSearchMessages(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	token, err := resolveToken(ctx, job)
 	if err != nil {
-		return errResult(job, "auth", err.Error()), nil
+		return params.Err(job, "auth", err.Error()), nil
 	}
 
 	q := url.Values{}
-	if query, ok := paramStringOpt(job.Params, "query"); ok && query != "" {
+	if query, ok := params.StringOpt(job.Params, "query"); ok && query != "" {
 		q.Set("q", query)
 	}
-	q.Set("maxResults", strconv.Itoa(paramIntDefault(job.Params, "max_results", 50)))
-	if pt, ok := paramStringOpt(job.Params, "page_token"); ok && pt != "" {
+	q.Set("maxResults", strconv.Itoa(params.IntDefault(job.Params, "max_results", 50)))
+	if pt, ok := params.StringOpt(job.Params, "page_token"); ok && pt != "" {
 		q.Set("pageToken", pt)
 	}
 
 	endpoint := currentHTTPBase() + "/users/me/messages?" + q.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return errResult(job, "internal", err.Error()), nil
+		return params.Err(job, "internal", err.Error()), nil
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 
-	timeoutMs := paramIntDefault(job.Params, "timeout_ms", 15000)
+	timeoutMs := params.IntDefault(job.Params, "timeout_ms", 15000)
 	client := &http.Client{Timeout: time.Duration(timeoutMs) * time.Millisecond}
 	resp, err := client.Do(req)
 	if err != nil {
-		return errResult(job, "send_failed", err.Error()), nil
+		return params.Err(job, "send_failed", err.Error()), nil
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return errResult(job, "gmail_error",
+		return params.Err(job, "gmail_error",
 			fmt.Sprintf("Gmail returned %d: %s", resp.StatusCode, extractGmailError(body))), nil
 	}
 
 	var parsed map[string]any
 	if err := json.Unmarshal(body, &parsed); err != nil {
-		return errResult(job, "parse", err.Error()), nil
+		return params.Err(job, "parse", err.Error()), nil
 	}
 	messages, _ := parsed["messages"].([]any)
 	if messages == nil {

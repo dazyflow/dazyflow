@@ -49,18 +49,18 @@ func TestValidateIdent_RejectsUnsafe(t *testing.T) {
 func TestQuoteIdent_DoublesEmbeddedQuotes(t *testing.T) {
 	cases := map[string]string{
 		// Common cases — round-trip cleanly.
-		"FÖRETAG":     `"FÖRETAG"`,
-		"normal":      `"normal"`,
-		"MOMS%":       `"MOMS%"`,
-		"with space":  `"with space"`,
-		"with-dash":   `"with-dash"`,
-		"order":       `"order"`,
+		"FÖRETAG":    `"FÖRETAG"`,
+		"normal":     `"normal"`,
+		"MOMS%":      `"MOMS%"`,
+		"with space": `"with space"`,
+		"with-dash":  `"with-dash"`,
+		"order":      `"order"`,
 		// Adversarial: embedded double quote. Go's %q would produce
 		// `"weird\"col"` (C-escape) which SQL parsers misread.
 		// quoteIdent must double the quote: `"weird""col"`.
-		`weird"col`:   `"weird""col"`,
+		`weird"col`: `"weird""col"`,
 		// And the doubled-quote nested case.
-		`a""b`:        `"a""""b"`,
+		`a""b`: `"a""""b"`,
 	}
 	for in, want := range cases {
 		if got := quoteIdent(in); got != want {

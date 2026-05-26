@@ -18,6 +18,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 )
 
 const (
@@ -139,37 +140,37 @@ func executeClaude(ctx context.Context, job core.Job, progress chan<- core.Progr
 		return executeClaudeViaCLI(ctx, job, progress)
 	}
 
-	apiKey, err := paramString(job.Params, "api_key")
+	apiKey, err := params.String(job.Params, "api_key")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	if apiKey == "" {
-		return errResult(job, "bad_param", "api_key is required (use a secret reference like env://ANTHROPIC_API_KEY)"), nil
+		return params.Err(job, "bad_param", "api_key is required (use a secret reference like env://ANTHROPIC_API_KEY)"), nil
 	}
 
 	body, err := buildClaudeRequest(job)
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	if len(body.Messages) == 0 {
-		return errResult(job, "bad_input", "no messages — provide params.messages or the prompt input port"), nil
+		return params.Err(job, "bad_input", "no messages — provide params.messages or the prompt input port"), nil
 	}
 
-	baseURL := paramStringDefault(job.Params, "base_url", claudeDefaultBaseURL)
-	timeoutMs := paramIntDefault(job.Params, "timeout_ms", claudeDefaultTimeoutMS)
+	baseURL := params.StringDefault(job.Params, "base_url", claudeDefaultBaseURL)
+	timeoutMs := params.IntDefault(job.Params, "timeout_ms", claudeDefaultTimeoutMS)
 
 	emitProgress(progress, job, 0.1, fmt.Sprintf("calling %s/v1/messages (model=%s)", baseURL, body.Model))
 
 	reqJSON, err := json.Marshal(body)
 	if err != nil {
-		return errResult(job, "marshal", err.Error()), nil
+		return params.Err(job, "marshal", err.Error()), nil
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST",
 		strings.TrimRight(baseURL, "/")+"/v1/messages",
 		bytes.NewReader(reqJSON))
 	if err != nil {
-		return errResult(job, "bad_url", err.Error()), nil
+		return params.Err(job, "bad_url", err.Error()), nil
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-api-key", apiKey)
@@ -179,15 +180,15 @@ func executeClaude(ctx context.Context, job core.Job, progress chan<- core.Progr
 	resp, err := client.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
-			return errResult(job, "cancelled", ctx.Err().Error()), ctx.Err()
+			return params.Err(job, "cancelled", ctx.Err().Error()), ctx.Err()
 		}
-		return errResult(job, "http", err.Error()), nil
+		return params.Err(job, "http", err.Error()), nil
 	}
 	defer resp.Body.Close()
 
 	rawResp, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return errResult(job, "io", err.Error()), nil
+		return params.Err(job, "io", err.Error()), nil
 	}
 
 	if resp.StatusCode >= 400 {
@@ -197,14 +198,14 @@ func executeClaude(ctx context.Context, job core.Job, progress chan<- core.Progr
 			if resp.StatusCode == 429 {
 				code = "claude_rate_limited"
 			}
-			return errResult(job, code, fmt.Sprintf("%d %s: %s", resp.StatusCode, env.Error.Type, env.Error.Message)), nil
+			return params.Err(job, code, fmt.Sprintf("%d %s: %s", resp.StatusCode, env.Error.Type, env.Error.Message)), nil
 		}
-		return errResult(job, "claude_api", fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(rawResp))), nil
+		return params.Err(job, "claude_api", fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(rawResp))), nil
 	}
 
 	var parsed claudeResponse
 	if err := json.Unmarshal(rawResp, &parsed); err != nil {
-		return errResult(job, "unmarshal", err.Error()), nil
+		return params.Err(job, "unmarshal", err.Error()), nil
 	}
 
 	emitProgress(progress, job, 0.9, fmt.Sprintf("in=%d out=%d tokens",
@@ -244,9 +245,9 @@ func executeClaude(ctx context.Context, job core.Job, progress chan<- core.Progr
 // messages.
 func buildClaudeRequest(job core.Job) (claudeRequest, error) {
 	req := claudeRequest{
-		Model:     paramStringDefault(job.Params, "model", claudeDefaultModel),
-		System:    paramStringDefault(job.Params, "system", ""),
-		MaxTokens: paramIntDefault(job.Params, "max_tokens", claudeDefaultMaxTokens),
+		Model:     params.StringDefault(job.Params, "model", claudeDefaultModel),
+		System:    params.StringDefault(job.Params, "system", ""),
+		MaxTokens: params.IntDefault(job.Params, "max_tokens", claudeDefaultMaxTokens),
 	}
 
 	if t, ok := paramFloat(job.Params, "temperature"); ok {
@@ -270,7 +271,7 @@ func buildClaudeRequest(job core.Job) (claudeRequest, error) {
 		}
 	}
 	if len(req.Messages) == 0 {
-		if s, ok := paramStringOpt(job.Params, "prompt"); ok && s != "" {
+		if s, ok := params.StringOpt(job.Params, "prompt"); ok && s != "" {
 			req.Messages = []claudeMessage{{Role: "user", Content: s}}
 		}
 	}

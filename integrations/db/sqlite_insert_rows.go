@@ -15,6 +15,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 	_ "modernc.org/sqlite"
 )
 
@@ -79,34 +80,34 @@ func init() {
 // front. A daily quota sweep is the right place for that, not this
 // drop.
 func executeSQLiteInsertRows(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	path, err := paramString(job.Params, "path")
+	path, err := params.String(job.Params, "path")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
-	table, err := paramString(job.Params, "table")
+	table, err := params.String(job.Params, "table")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	if err := validateIdent(table); err != nil {
-		return errResult(job, "bad_param", fmt.Sprintf("table name %q: %v", table, err)), nil
+		return params.Err(job, "bad_param", fmt.Sprintf("table name %q: %v", table, err)), nil
 	}
 	if job.WorkspaceRoot == "" {
-		return errResult(job, "no_sandbox", "sqlite_insert_rows requires a workspace sandbox"), nil
+		return params.Err(job, "no_sandbox", "sqlite_insert_rows requires a workspace sandbox"), nil
 	}
 	rowsRef, ok := job.Input["rows"]
 	if !ok {
-		return errResult(job, "missing_input", "input port 'rows' is required"), nil
+		return params.Err(job, "missing_input", "input port 'rows' is required"), nil
 	}
 	rows, err := normalizeRows(rowsRef.Inline)
 	if err != nil {
-		return errResult(job, "bad_input", err.Error()), nil
+		return params.Err(job, "bad_input", err.Error()), nil
 	}
 
 	var headers []string
 	if h, ok := job.Input["headers"]; ok && h.Inline != nil {
 		headers, err = normalizeHeaders(h.Inline)
 		if err != nil {
-			return errResult(job, "bad_input", err.Error()), nil
+			return params.Err(job, "bad_input", err.Error()), nil
 		}
 	}
 	if headers == nil {
@@ -114,7 +115,7 @@ func executeSQLiteInsertRows(_ context.Context, job core.Job, _ chan<- core.Prog
 	}
 	for _, h := range headers {
 		if err := validateIdent(h); err != nil {
-			return errResult(job, "bad_input", fmt.Sprintf("column %q: %v", h, err)), nil
+			return params.Err(job, "bad_input", fmt.Sprintf("column %q: %v", h, err)), nil
 		}
 	}
 
@@ -123,7 +124,7 @@ func executeSQLiteInsertRows(_ context.Context, job core.Job, _ chan<- core.Prog
 	// the workspace.
 	root, err := os.OpenRoot(job.WorkspaceRoot)
 	if err != nil {
-		return errResult(job, "sandbox", fmt.Sprintf("open root: %v", err)), nil
+		return params.Err(job, "sandbox", fmt.Sprintf("open root: %v", err)), nil
 	}
 	// We can't pass the *os.Root handle to database/sql.Open — it
 	// needs a filename. Close the root immediately after the safety
@@ -132,9 +133,9 @@ func executeSQLiteInsertRows(_ context.Context, job core.Job, _ chan<- core.Prog
 		if err := root.MkdirAll(dir, 0o755); err != nil {
 			root.Close()
 			if isSandboxEscape(err) {
-				return errResult(job, "sandbox_escape", fmt.Sprintf("path %q escapes workspace", path)), nil
+				return params.Err(job, "sandbox_escape", fmt.Sprintf("path %q escapes workspace", path)), nil
 			}
-			return errResult(job, "io", fmt.Sprintf("mkdir: %v", err)), nil
+			return params.Err(job, "io", fmt.Sprintf("mkdir: %v", err)), nil
 		}
 	}
 	// Touch the file through the sandbox root so os.Root validates
@@ -144,16 +145,16 @@ func executeSQLiteInsertRows(_ context.Context, job core.Job, _ chan<- core.Prog
 	root.Close()
 	if probeErr != nil {
 		if isSandboxEscape(probeErr) {
-			return errResult(job, "sandbox_escape", fmt.Sprintf("path %q escapes workspace", path)), nil
+			return params.Err(job, "sandbox_escape", fmt.Sprintf("path %q escapes workspace", path)), nil
 		}
-		return errResult(job, "io", fmt.Sprintf("open %q: %v", path, probeErr)), nil
+		return params.Err(job, "io", fmt.Sprintf("open %q: %v", path, probeErr)), nil
 	}
 	probe.Close()
 
 	absPath := filepath.Join(job.WorkspaceRoot, path)
 	db, err := sql.Open("sqlite", absPath)
 	if err != nil {
-		return errResult(job, "db", fmt.Sprintf("open sqlite %q: %v", path, err)), nil
+		return params.Err(job, "db", fmt.Sprintf("open sqlite %q: %v", path, err)), nil
 	}
 	defer db.Close()
 
@@ -169,7 +170,7 @@ func executeSQLiteInsertRows(_ context.Context, job core.Job, _ chan<- core.Prog
 	if createTable && len(headers) > 0 {
 		colTypes, _ := paramStringMap(job.Params, "column_types")
 		if err := ensureTable(db, table, headers, colTypes); err != nil {
-			return errResult(job, "db", err.Error()), nil
+			return params.Err(job, "db", err.Error()), nil
 		}
 	}
 
@@ -185,7 +186,7 @@ func executeSQLiteInsertRows(_ context.Context, job core.Job, _ chan<- core.Prog
 
 	inserted, err := insertBatch(db, table, headers, rows)
 	if err != nil {
-		return errResult(job, "db", err.Error()), nil
+		return params.Err(job, "db", err.Error()), nil
 	}
 	return core.Result{
 		JobID:  job.ID,
@@ -259,4 +260,3 @@ func insertBatch(db *sql.DB, table string, headers []string, rows []map[string]a
 	}
 	return count, nil
 }
-

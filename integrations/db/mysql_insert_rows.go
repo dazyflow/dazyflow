@@ -9,6 +9,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 	_ "github.com/go-sql-driver/mysql"
 )
 
@@ -63,32 +64,32 @@ func init() {
 // pool internally; caching the handle avoids per-job Ping + auth and
 // keeps connection re-use across drops in the same workspace.
 func executeMySQLInsertRows(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	dsn, err := paramString(job.Params, "dsn")
+	dsn, err := params.String(job.Params, "dsn")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
-	table, err := paramString(job.Params, "table")
+	table, err := params.String(job.Params, "table")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	if err := validateIdent(table); err != nil {
-		return errResult(job, "bad_param", fmt.Sprintf("table name %q: %v", table, err)), nil
+		return params.Err(job, "bad_param", fmt.Sprintf("table name %q: %v", table, err)), nil
 	}
 
 	rowsRef, ok := job.Input["rows"]
 	if !ok {
-		return errResult(job, "missing_input", "input port 'rows' is required"), nil
+		return params.Err(job, "missing_input", "input port 'rows' is required"), nil
 	}
 	rows, err := normalizeRows(rowsRef.Inline)
 	if err != nil {
-		return errResult(job, "bad_input", err.Error()), nil
+		return params.Err(job, "bad_input", err.Error()), nil
 	}
 
 	var headers []string
 	if h, ok := job.Input["headers"]; ok && h.Inline != nil {
 		headers, err = normalizeHeaders(h.Inline)
 		if err != nil {
-			return errResult(job, "bad_input", err.Error()), nil
+			return params.Err(job, "bad_input", err.Error()), nil
 		}
 	}
 	if headers == nil {
@@ -96,13 +97,13 @@ func executeMySQLInsertRows(ctx context.Context, job core.Job, _ chan<- core.Pro
 	}
 	for _, h := range headers {
 		if err := validateIdent(h); err != nil {
-			return errResult(job, "bad_input", fmt.Sprintf("column %q: %v", h, err)), nil
+			return params.Err(job, "bad_input", fmt.Sprintf("column %q: %v", h, err)), nil
 		}
 	}
 
 	db, err := defaultMySQLRegistry.sqlDB(ctx, job.Tenant, dsn)
 	if err != nil {
-		return errResult(job, "db", fmt.Sprintf("connect: %v", err)), nil
+		return params.Err(job, "db", fmt.Sprintf("connect: %v", err)), nil
 	}
 
 	createTable := true
@@ -112,7 +113,7 @@ func executeMySQLInsertRows(ctx context.Context, job core.Job, _ chan<- core.Pro
 	if createTable && len(headers) > 0 {
 		colTypes, _ := paramStringMap(job.Params, "column_types")
 		if err := mysqlEnsureTable(ctx, db, table, headers, colTypes); err != nil {
-			return errResult(job, "db", err.Error()), nil
+			return params.Err(job, "db", err.Error()), nil
 		}
 	}
 
@@ -128,7 +129,7 @@ func executeMySQLInsertRows(ctx context.Context, job core.Job, _ chan<- core.Pro
 
 	inserted, err := mysqlInsertBatch(ctx, db, table, headers, rows)
 	if err != nil {
-		return errResult(job, "db", err.Error()), nil
+		return params.Err(job, "db", err.Error()), nil
 	}
 	return core.Result{
 		JobID:  job.ID,

@@ -12,6 +12,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 )
 
 // slackPostURL is the chat.postMessage endpoint. Declared as a var so
@@ -70,9 +71,9 @@ func init() {
 //     come back as "slack_api_error" with the error code so dashboards
 //     can group on it.
 func executeSlackPost(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
-	token, err := paramString(job.Params, "token")
+	token, err := params.String(job.Params, "token")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	if !strings.HasPrefix(token, "xox") {
 		// Loose sanity check — Slack bot tokens are xoxb-..., user
@@ -80,11 +81,11 @@ func executeSlackPost(ctx context.Context, job core.Job, progress chan<- core.Pr
 		// Slack token so a misconfigured ${secret:...} (resolved to
 		// "" or to the wrong secret) fails fast with a clear message
 		// instead of returning a confusing 401 from Slack.
-		return errResult(job, "bad_param", "token does not look like a Slack token (expected xox...)"), nil
+		return params.Err(job, "bad_param", "token does not look like a Slack token (expected xox...)"), nil
 	}
-	channel, err := paramString(job.Params, "channel")
+	channel, err := params.String(job.Params, "channel")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 
 	// Text resolution: input port beats params; missing entirely is OK
@@ -99,11 +100,11 @@ func executeSlackPost(ctx context.Context, job core.Job, progress chan<- core.Pr
 			text = string(b)
 		}
 	} else {
-		text = paramStringDefault(job.Params, "text", "")
+		text = params.StringDefault(job.Params, "text", "")
 	}
 	blocks, hasBlocks := job.Params["blocks"]
 	if text == "" && !hasBlocks {
-		return errResult(job, "bad_param", "either text or blocks must be set"), nil
+		return params.Err(job, "bad_param", "either text or blocks must be set"), nil
 	}
 
 	payload := map[string]any{"channel": channel}
@@ -113,34 +114,34 @@ func executeSlackPost(ctx context.Context, job core.Job, progress chan<- core.Pr
 	if hasBlocks {
 		payload["blocks"] = blocks
 	}
-	if thread := paramStringDefault(job.Params, "thread_ts", ""); thread != "" {
+	if thread := params.StringDefault(job.Params, "thread_ts", ""); thread != "" {
 		payload["thread_ts"] = thread
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return errResult(job, "marshal_payload", err.Error()), nil
+		return params.Err(job, "marshal_payload", err.Error()), nil
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, slackPostURL, bytes.NewReader(body))
 	if err != nil {
-		return errResult(job, "bad_url", err.Error()), nil
+		return params.Err(job, "bad_url", err.Error()), nil
 	}
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	req.Header.Set("Authorization", "Bearer "+token)
 
-	timeoutMs := paramIntDefault(job.Params, "timeout_ms", 15000)
+	timeoutMs := params.IntDefault(job.Params, "timeout_ms", 15000)
 	client := &http.Client{Timeout: time.Duration(timeoutMs) * time.Millisecond}
 
 	emitProgress(progress, job, 0.3, "POST chat.postMessage")
 	resp, err := client.Do(req)
 	if err != nil {
-		return errResult(job, "send_failed", err.Error()), nil
+		return params.Err(job, "send_failed", err.Error()), nil
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return errResult(job, "slack_http_error",
+		return params.Err(job, "slack_http_error",
 			fmt.Sprintf("slack returned %d: %s",
 				resp.StatusCode, strings.TrimSpace(string(respBody)))), nil
 	}
@@ -159,10 +160,10 @@ func executeSlackPost(ctx context.Context, job core.Job, progress chan<- core.Pr
 		} `json:"message"`
 	}
 	if err := json.Unmarshal(respBody, &apiResp); err != nil {
-		return errResult(job, "slack_bad_response", "decode slack response: "+err.Error()), nil
+		return params.Err(job, "slack_bad_response", "decode slack response: "+err.Error()), nil
 	}
 	if !apiResp.OK {
-		return errResult(job, "slack_api_error", apiResp.Error), nil
+		return params.Err(job, "slack_api_error", apiResp.Error), nil
 	}
 
 	emitProgress(progress, job, 1.0, "posted ts="+apiResp.TS)

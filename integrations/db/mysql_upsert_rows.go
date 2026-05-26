@@ -9,6 +9,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 )
 
 func init() {
@@ -68,28 +69,28 @@ func init() {
 //     when update_columns is empty — same observable behavior as DO
 //     NOTHING for the typical case.
 func executeMySQLUpsertRows(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	dsn, err := paramString(job.Params, "dsn")
+	dsn, err := params.String(job.Params, "dsn")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
-	table, err := paramString(job.Params, "table")
+	table, err := params.String(job.Params, "table")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	if err := validateIdent(table); err != nil {
-		return errResult(job, "bad_param", fmt.Sprintf("table name %q: %v", table, err)), nil
+		return params.Err(job, "bad_param", fmt.Sprintf("table name %q: %v", table, err)), nil
 	}
 
 	conflictCols, err := paramStringArray(job.Params, "conflict_columns")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	if len(conflictCols) == 0 {
-		return errResult(job, "bad_param", "conflict_columns must list at least one column"), nil
+		return params.Err(job, "bad_param", "conflict_columns must list at least one column"), nil
 	}
 	for _, c := range conflictCols {
 		if err := validateIdent(c); err != nil {
-			return errResult(job, "bad_param", fmt.Sprintf("conflict column %q: %v", c, err)), nil
+			return params.Err(job, "bad_param", fmt.Sprintf("conflict column %q: %v", c, err)), nil
 		}
 	}
 
@@ -99,30 +100,30 @@ func executeMySQLUpsertRows(ctx context.Context, job core.Job, _ chan<- core.Pro
 		updateColsExplicit = true
 		uc, err := normalizeStringArray(raw, "update_columns")
 		if err != nil {
-			return errResult(job, "bad_param", err.Error()), nil
+			return params.Err(job, "bad_param", err.Error()), nil
 		}
 		updateCols = uc
 		for _, c := range updateCols {
 			if err := validateIdent(c); err != nil {
-				return errResult(job, "bad_param", fmt.Sprintf("update column %q: %v", c, err)), nil
+				return params.Err(job, "bad_param", fmt.Sprintf("update column %q: %v", c, err)), nil
 			}
 		}
 	}
 
 	rowsRef, ok := job.Input["rows"]
 	if !ok {
-		return errResult(job, "missing_input", "input port 'rows' is required"), nil
+		return params.Err(job, "missing_input", "input port 'rows' is required"), nil
 	}
 	rows, err := normalizeRows(rowsRef.Inline)
 	if err != nil {
-		return errResult(job, "bad_input", err.Error()), nil
+		return params.Err(job, "bad_input", err.Error()), nil
 	}
 
 	var headers []string
 	if h, ok := job.Input["headers"]; ok && h.Inline != nil {
 		headers, err = normalizeHeaders(h.Inline)
 		if err != nil {
-			return errResult(job, "bad_input", err.Error()), nil
+			return params.Err(job, "bad_input", err.Error()), nil
 		}
 	}
 	if headers == nil {
@@ -130,7 +131,7 @@ func executeMySQLUpsertRows(ctx context.Context, job core.Job, _ chan<- core.Pro
 	}
 	for _, h := range headers {
 		if err := validateIdent(h); err != nil {
-			return errResult(job, "bad_input", fmt.Sprintf("column %q: %v", h, err)), nil
+			return params.Err(job, "bad_input", fmt.Sprintf("column %q: %v", h, err)), nil
 		}
 	}
 	headerSet := map[string]struct{}{}
@@ -139,14 +140,14 @@ func executeMySQLUpsertRows(ctx context.Context, job core.Job, _ chan<- core.Pro
 	}
 	for _, c := range conflictCols {
 		if _, ok := headerSet[c]; !ok {
-			return errResult(job, "bad_param",
+			return params.Err(job, "bad_param",
 				fmt.Sprintf("conflict_column %q is not in headers", c)), nil
 		}
 	}
 
 	db, err := defaultMySQLRegistry.sqlDB(ctx, job.Tenant, dsn)
 	if err != nil {
-		return errResult(job, "db", fmt.Sprintf("connect: %v", err)), nil
+		return params.Err(job, "db", fmt.Sprintf("connect: %v", err)), nil
 	}
 
 	createTable := true
@@ -156,7 +157,7 @@ func executeMySQLUpsertRows(ctx context.Context, job core.Job, _ chan<- core.Pro
 	if createTable && len(headers) > 0 {
 		colTypes, _ := paramStringMap(job.Params, "column_types")
 		if err := mysqlEnsureTableWithUnique(ctx, db, table, headers, colTypes, conflictCols); err != nil {
-			return errResult(job, "db", err.Error()), nil
+			return params.Err(job, "db", err.Error()), nil
 		}
 	}
 
@@ -176,7 +177,7 @@ func executeMySQLUpsertRows(ctx context.Context, job core.Job, _ chan<- core.Pro
 
 	processed, err := mysqlUpsertBatch(ctx, db, table, headers, conflictCols, updateCols, rows)
 	if err != nil {
-		return errResult(job, "db", err.Error()), nil
+		return params.Err(job, "db", err.Error()), nil
 	}
 	return core.Result{
 		JobID:  job.ID,

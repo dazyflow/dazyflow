@@ -93,10 +93,8 @@ func executeJoinRows(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 	// headers — an empty rows slice with declared headers is a
 	// legitimate "no matches" outcome, not a configuration error.
 	leftKeys := make([]string, 0, len(on))
-	rightKeys := make([]string, 0, len(on))
-	for lk, rk := range on {
+	for lk := range on {
 		leftKeys = append(leftKeys, lk)
-		rightKeys = append(rightKeys, rk)
 	}
 	// Stable order for the key columns so the hash-join key string
 	// is reproducible regardless of map iteration order.

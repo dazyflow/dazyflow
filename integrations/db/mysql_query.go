@@ -7,6 +7,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 )
 
 func init() {
@@ -57,23 +58,23 @@ func init() {
 // DSN and use INTEGER/DECIMAL/DATETIME column types on the source
 // table.
 func executeMySQLQuery(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	dsn, err := paramString(job.Params, "dsn")
+	dsn, err := params.String(job.Params, "dsn")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
-	sqlText, err := paramString(job.Params, "sql")
+	sqlText, err := params.String(job.Params, "sql")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	if sqlText == "" {
-		return errResult(job, "bad_param", "sql is empty"), nil
+		return params.Err(job, "bad_param", "sql is empty"), nil
 	}
 
 	var args []any
 	if v, ok := job.Params["params"]; ok && v != nil {
 		raw, ok := v.([]any)
 		if !ok {
-			return errResult(job, "bad_param",
+			return params.Err(job, "bad_param",
 				fmt.Sprintf("params: expected array, got %T", v)), nil
 		}
 		args = raw
@@ -82,25 +83,25 @@ func executeMySQLQuery(ctx context.Context, job core.Job, _ chan<- core.Progress
 	limit := 0
 	if n, ok := paramInt(job.Params, "limit"); ok {
 		if n < 0 {
-			return errResult(job, "bad_param", "limit must be >= 0"), nil
+			return params.Err(job, "bad_param", "limit must be >= 0"), nil
 		}
 		limit = n
 	}
 
 	db, err := defaultMySQLRegistry.sqlDB(ctx, job.Tenant, dsn)
 	if err != nil {
-		return errResult(job, "db", fmt.Sprintf("connect: %v", err)), nil
+		return params.Err(job, "db", fmt.Sprintf("connect: %v", err)), nil
 	}
 
 	rows, err := db.QueryContext(ctx, sqlText, args...)
 	if err != nil {
-		return errResult(job, "db", fmt.Sprintf("query: %v", err)), nil
+		return params.Err(job, "db", fmt.Sprintf("query: %v", err)), nil
 	}
 	defer rows.Close()
 
 	columns, err := rows.Columns()
 	if err != nil {
-		return errResult(job, "db", fmt.Sprintf("columns: %v", err)), nil
+		return params.Err(job, "db", fmt.Sprintf("columns: %v", err)), nil
 	}
 
 	out := make([]map[string]any, 0, 16)
@@ -111,7 +112,7 @@ func executeMySQLQuery(ctx context.Context, job core.Job, _ chan<- core.Progress
 			ptrs[i] = &vals[i]
 		}
 		if err := rows.Scan(ptrs...); err != nil {
-			return errResult(job, "db", fmt.Sprintf("scan row %d: %v", len(out), err)), nil
+			return params.Err(job, "db", fmt.Sprintf("scan row %d: %v", len(out), err)), nil
 		}
 		rec := make(map[string]any, len(columns))
 		for i, c := range columns {
@@ -130,7 +131,7 @@ func executeMySQLQuery(ctx context.Context, job core.Job, _ chan<- core.Progress
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return errResult(job, "db", fmt.Sprintf("iterate: %v", err)), nil
+		return params.Err(job, "db", fmt.Sprintf("iterate: %v", err)), nil
 	}
 
 	return core.Result{

@@ -11,6 +11,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 )
 
 func init() {
@@ -63,16 +64,16 @@ func init() {
 // Block Kit, not arbitrary JSON) — non-string input is rejected
 // with a clear error.
 func executeSlackSendMessage(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	channel, err := paramString(job.Params, "channel")
+	channel, err := params.String(job.Params, "channel")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	token, err := resolveToken(ctx, job)
 	if err != nil {
-		return errResult(job, "auth", err.Error()), nil
+		return params.Err(job, "auth", err.Error()), nil
 	}
 
-	text, _ := paramStringOpt(job.Params, "text")
+	text, _ := params.StringOpt(job.Params, "text")
 	if input, ok := job.Input["body"]; ok && input.Inline != nil {
 		switch v := input.Inline.(type) {
 		case string:
@@ -80,7 +81,7 @@ func executeSlackSendMessage(ctx context.Context, job core.Job, _ chan<- core.Pr
 		case []byte:
 			text = string(v)
 		default:
-			return errResultDetails(job, "bad_input",
+			return params.ErrDetails(job, "bad_input",
 				"The Slack message needs text on its 'body' input, but the upstream node is sending a structured value. Wire a transform between them that renders the value as a string (e.g. a Template node, or a JSON-encode step).",
 				fmt.Sprintf("Received type %T on input port 'body'; expected string or []byte.", v)), nil
 		}
@@ -90,7 +91,7 @@ func executeSlackSendMessage(ctx context.Context, job core.Job, _ chan<- core.Pr
 	if text != "" {
 		payload["text"] = text
 	}
-	if ts, ok := paramStringOpt(job.Params, "thread_ts"); ok && ts != "" {
+	if ts, ok := params.StringOpt(job.Params, "thread_ts"); ok && ts != "" {
 		payload["thread_ts"] = ts
 	}
 	blocks, blocksErr := resolveBlocks(job)
@@ -104,20 +105,20 @@ func executeSlackSendMessage(ctx context.Context, job core.Job, _ chan<- core.Pr
 	// empty — that's a guaranteed `no_text` error, surface it
 	// upfront with a clearer message.
 	if text == "" && payload["blocks"] == nil {
-		return errResult(job, "bad_input",
+		return params.Err(job, "bad_input",
 			"This Slack message has no content. Set the 'text' param on the node, wire something into its 'body' input, or provide Block Kit blocks."), nil
 	}
 
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return errResult(job, "internal", fmt.Sprintf("marshal: %v", err)), nil
+		return params.Err(job, "internal", fmt.Sprintf("marshal: %v", err)), nil
 	}
 
-	timeoutMs := paramIntDefault(job.Params, "timeout_ms", 15000)
+	timeoutMs := params.IntDefault(job.Params, "timeout_ms", 15000)
 	url := currentHTTPBase() + "/chat.postMessage"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return errResult(job, "internal", err.Error()), nil
+		return params.Err(job, "internal", err.Error()), nil
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
@@ -129,24 +130,24 @@ func executeSlackSendMessage(ctx context.Context, job core.Job, _ chan<- core.Pr
 	client := &http.Client{Timeout: time.Duration(timeoutMs) * time.Millisecond}
 	resp, err := client.Do(req)
 	if err != nil {
-		return errResult(job, "send_failed", err.Error()), nil
+		return params.Err(job, "send_failed", err.Error()), nil
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return errResult(job, "slack_http_error",
+		return params.Err(job, "slack_http_error",
 			fmt.Sprintf("Slack returned %d: %s", resp.StatusCode, string(respBody))), nil
 	}
 
 	env, raw, err := decodeSlackJSON(respBody)
 	if err != nil {
-		return errResult(job, "parse", err.Error()), nil
+		return params.Err(job, "parse", err.Error()), nil
 	}
 	if !env.OK {
 		// Slack-specific error envelope. Surface the error code (e.g.
 		// channel_not_found, invalid_auth) so users can debug.
-		return errResult(job, "slack_error",
+		return params.Err(job, "slack_error",
 			fmt.Sprintf("Slack rejected message: %s", env.Error)), nil
 	}
 

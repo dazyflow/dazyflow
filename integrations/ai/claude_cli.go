@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 )
 
 // isClaudeCLIMode reports whether hzd was started with -claude-cli
@@ -49,10 +50,10 @@ var runClaudeCLI = invokeClaudeCLI
 func executeClaudeViaCLI(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	req, err := buildClaudeRequest(job)
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	if len(req.Messages) == 0 {
-		return errResult(job, "bad_input",
+		return params.Err(job, "bad_input",
 			"no messages — provide params.messages or the prompt input port"), nil
 	}
 
@@ -80,7 +81,7 @@ func executeClaudeViaCLI(ctx context.Context, job core.Job, _ chan<- core.Progre
 
 	stdout, err := runClaudeCLI(ctx, args)
 	if err != nil {
-		return errResult(job, "cli_failed", err.Error()), nil
+		return params.Err(job, "cli_failed", err.Error()), nil
 	}
 
 	// claude -p --output-format json emits a single envelope like
@@ -106,7 +107,7 @@ func executeClaudeViaCLI(ctx context.Context, job core.Job, _ chan<- core.Progre
 		}, nil
 	}
 	if env.IsError {
-		return errResult(job, "cli_error", env.Result), nil
+		return params.Err(job, "cli_error", env.Result), nil
 	}
 	respMap := map[string]any{
 		"result":     env.Result,

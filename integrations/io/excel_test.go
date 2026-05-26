@@ -583,11 +583,11 @@ func TestExcelRead_BadRange(t *testing.T) {
 	})
 	for _, attempt := range []string{
 		"not-a-range",
-		"A1",          // no colon
-		"D5:A1",       // reversed
-		"A:A",         // whole-column form, not supported
-		"A1:",         // missing end
-		"foo:bar",     // garbage
+		"A1",      // no colon
+		"D5:A1",   // reversed
+		"A:A",     // whole-column form, not supported
+		"A1:",     // missing end
+		"foo:bar", // garbage
 	} {
 		t.Run(attempt, func(t *testing.T) {
 			res, _ := executeExcelRead(t.Context(), core.Job{

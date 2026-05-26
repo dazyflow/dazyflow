@@ -231,10 +231,10 @@ func TestMapRows_AllFiltersAreAND(t *testing.T) {
 			"filter_in": map[string]any{"plan": []any{"pro", "enterprise"}},
 		},
 		[]map[string]any{
-			{"id": 1, "status": "active", "country": "SE", "plan": "pro"},        // keep
-			{"id": 2, "status": "active", "country": "NO", "plan": "pro"},        // wrong country
-			{"id": 3, "status": "active", "country": "SE", "plan": "free"},       // wrong plan
-			{"id": 4, "status": "disabled", "country": "SE", "plan": "pro"},      // wrong status
+			{"id": 1, "status": "active", "country": "SE", "plan": "pro"},   // keep
+			{"id": 2, "status": "active", "country": "NO", "plan": "pro"},   // wrong country
+			{"id": 3, "status": "active", "country": "SE", "plan": "free"},  // wrong plan
+			{"id": 4, "status": "disabled", "country": "SE", "plan": "pro"}, // wrong status
 		},
 		nil)
 	if len(rows) != 1 || rows[0]["id"] != 1 {

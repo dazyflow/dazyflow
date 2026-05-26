@@ -154,7 +154,7 @@ func TestGmailSendEmail_HTMLFormat(t *testing.T) {
 	fg := newFakeGmail(t)
 	_, _ = executeGmailSendEmail(t.Context(), core.Job{
 		Params: map[string]any{
-			"token":  "x", "to": "a@b", "format": "html",
+			"token": "x", "to": "a@b", "format": "html",
 			"body": "<b>hi</b>",
 		},
 	}, nil)

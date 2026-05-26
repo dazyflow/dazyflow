@@ -13,6 +13,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 )
 
 func init() {
@@ -67,16 +68,16 @@ func init() {
 // users/me/messages/send. The "me" alias means "the authorized
 // user", so the sender is implicitly the OAuth-connected account.
 func executeGmailSendEmail(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	to, err := paramString(job.Params, "to")
+	to, err := params.String(job.Params, "to")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	token, err := resolveToken(ctx, job)
 	if err != nil {
-		return errResult(job, "auth", err.Error()), nil
+		return params.Err(job, "auth", err.Error()), nil
 	}
 
-	body, _ := paramStringOpt(job.Params, "body")
+	body, _ := params.StringOpt(job.Params, "body")
 	if input, ok := job.Input["body"]; ok && input.Inline != nil {
 		switch v := input.Inline.(type) {
 		case string:
@@ -84,16 +85,16 @@ func executeGmailSendEmail(ctx context.Context, job core.Job, _ chan<- core.Prog
 		case []byte:
 			body = string(v)
 		default:
-			return errResult(job, "bad_input",
+			return params.Err(job, "bad_input",
 				fmt.Sprintf("body: expected string (text or HTML); got %T", v)), nil
 		}
 	}
 	if body == "" {
-		return errResult(job, "bad_input", "no body — set params.body or wire the 'body' input port"), nil
+		return params.Err(job, "bad_input", "no body — set params.body or wire the 'body' input port"), nil
 	}
 
-	subject := paramStringDefault(job.Params, "subject", "(no subject)")
-	format := paramStringDefault(job.Params, "format", "text")
+	subject := params.StringDefault(job.Params, "subject", "(no subject)")
+	format := params.StringDefault(job.Params, "format", "text")
 	contentType := "text/plain; charset=\"utf-8\""
 	if format == "html" {
 		contentType = "text/html; charset=\"utf-8\""
@@ -101,14 +102,14 @@ func executeGmailSendEmail(ctx context.Context, job core.Job, _ chan<- core.Prog
 
 	raw, err := buildRFC822(rfc822Headers{
 		To:          to,
-		Cc:          paramStringDefault(job.Params, "cc", ""),
-		Bcc:         paramStringDefault(job.Params, "bcc", ""),
+		Cc:          params.StringDefault(job.Params, "cc", ""),
+		Bcc:         params.StringDefault(job.Params, "bcc", ""),
 		Subject:     subject,
-		ReplyTo:     paramStringDefault(job.Params, "reply_to", ""),
+		ReplyTo:     params.StringDefault(job.Params, "reply_to", ""),
 		ContentType: contentType,
 	}, body)
 	if err != nil {
-		return errResult(job, "internal", fmt.Sprintf("build rfc822: %v", err)), nil
+		return params.Err(job, "internal", fmt.Sprintf("build rfc822: %v", err)), nil
 	}
 
 	payload := map[string]any{
@@ -116,7 +117,7 @@ func executeGmailSendEmail(ctx context.Context, job core.Job, _ chan<- core.Prog
 		// wire format for raw messages.
 		"raw": base64.URLEncoding.WithPadding(base64.NoPadding).EncodeToString(raw),
 	}
-	if tid, ok := paramStringOpt(job.Params, "thread_id"); ok && tid != "" {
+	if tid, ok := params.StringOpt(job.Params, "thread_id"); ok && tid != "" {
 		payload["threadId"] = tid
 	}
 	jsonBody, _ := json.Marshal(payload)
@@ -124,7 +125,7 @@ func executeGmailSendEmail(ctx context.Context, job core.Job, _ chan<- core.Prog
 	url := currentHTTPBase() + "/users/me/messages/send"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonBody))
 	if err != nil {
-		return errResult(job, "internal", err.Error()), nil
+		return params.Err(job, "internal", err.Error()), nil
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
@@ -134,17 +135,17 @@ func executeGmailSendEmail(ctx context.Context, job core.Job, _ chan<- core.Prog
 	// if Google starts deduping (the Cloud APIs they front do).
 	req.Header.Set("Idempotency-Key", job.IdempotencyKey())
 
-	timeoutMs := paramIntDefault(job.Params, "timeout_ms", 15000)
+	timeoutMs := params.IntDefault(job.Params, "timeout_ms", 15000)
 	client := &http.Client{Timeout: time.Duration(timeoutMs) * time.Millisecond}
 	resp, err := client.Do(req)
 	if err != nil {
-		return errResult(job, "send_failed", err.Error()), nil
+		return params.Err(job, "send_failed", err.Error()), nil
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return errResult(job, "gmail_error",
+		return params.Err(job, "gmail_error",
 			fmt.Sprintf("Gmail returned %d: %s", resp.StatusCode, extractGmailError(respBody))), nil
 	}
 

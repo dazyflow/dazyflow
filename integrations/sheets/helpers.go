@@ -21,6 +21,7 @@ import (
 	"sync"
 
 	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 )
 
 // TokenLookup matches the per-connector shape used by slack/gmail.
@@ -41,10 +42,10 @@ func SetTokenLookup(fn TokenLookup) {
 }
 
 func resolveToken(ctx context.Context, job core.Job) (string, error) {
-	if t, _ := paramStringOpt(job.Params, "token"); t != "" {
+	if t, _ := params.StringOpt(job.Params, "token"); t != "" {
 		return t, nil
 	}
-	account, _ := paramStringOpt(job.Params, "account")
+	account, _ := params.StringOpt(job.Params, "account")
 	if account == "" {
 		account = "default"
 	}
@@ -59,7 +60,7 @@ func resolveToken(ctx context.Context, job core.Job) (string, error) {
 		return "", fmt.Errorf("lookup token for account %q: %w", account, err)
 	}
 	if tok == "" {
-		return "", fmt.Errorf("Google account %q is not connected", account)
+		return "", fmt.Errorf("google account %q is not connected", account)
 	}
 	return tok, nil
 }
@@ -79,72 +80,6 @@ func currentHTTPBase() string {
 	httpBaseMu.RLock()
 	defer httpBaseMu.RUnlock()
 	return httpBase
-}
-
-func paramString(params map[string]any, key string) (string, error) {
-	v, ok := params[key]
-	if !ok {
-		return "", fmt.Errorf("missing param %q", key)
-	}
-	s, ok := v.(string)
-	if !ok {
-		return "", fmt.Errorf("param %q: expected string, got %T", key, v)
-	}
-	return s, nil
-}
-
-func paramStringOpt(params map[string]any, key string) (string, bool) {
-	v, ok := params[key]
-	if !ok {
-		return "", false
-	}
-	s, ok := v.(string)
-	if !ok {
-		return "", false
-	}
-	return s, true
-}
-
-func paramStringDefault(params map[string]any, key, def string) string {
-	if v, ok := paramStringOpt(params, key); ok && v != "" {
-		return v
-	}
-	return def
-}
-
-func paramBoolDefault(params map[string]any, key string, def bool) bool {
-	v, ok := params[key]
-	if !ok {
-		return def
-	}
-	if b, ok := v.(bool); ok {
-		return b
-	}
-	return def
-}
-
-func paramIntDefault(params map[string]any, key string, def int) int {
-	v, ok := params[key]
-	if !ok {
-		return def
-	}
-	switch n := v.(type) {
-	case int:
-		return n
-	case int64:
-		return int(n)
-	case float64:
-		return int(n)
-	}
-	return def
-}
-
-func errResult(job core.Job, code, msg string) core.Result {
-	return core.Result{
-		JobID:  job.ID,
-		Status: core.StatusError,
-		Error:  &core.JobError{Code: code, Message: msg},
-	}
 }
 
 // ---- shared row/header normalization --------------------------------

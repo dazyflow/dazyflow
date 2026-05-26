@@ -401,11 +401,9 @@ func (d *Dispatcher) maybeResumeParent(
 		d.logger.Printf("load parent graph for %s: %v", parentRec.ID, err)
 		return
 	}
-	var resumeErr *core.JobError
-	if parentResult != nil {
-		resumeErr = parentResult.Error
-	}
-	d.AdvanceAfterCompletion(ctx, parentGraph, parentRec.GraphRunID, parentRec.NodeID, parentStatus, resumeErr)
+	// parentResult is assigned in every branch above (child failure,
+	// projection failure, success) — no nil check needed.
+	d.AdvanceAfterCompletion(ctx, parentGraph, parentRec.GraphRunID, parentRec.NodeID, parentStatus, parentResult.Error)
 }
 
 func childErrMessage(e *core.JobError) string {

@@ -258,7 +258,7 @@ func TestDedupeRows_MultipleByColumns(t *testing.T) {
 		map[string]any{"by": []string{"tenant", "id"}},
 		[]map[string]any{
 			{"tenant": "acme", "id": int64(1)},
-			{"tenant": "acme", "id": int64(1)}, // dupe
+			{"tenant": "acme", "id": int64(1)},  // dupe
 			{"tenant": "other", "id": int64(1)}, // different tenant, keep
 		},
 		nil)

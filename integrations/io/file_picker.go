@@ -10,19 +10,20 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 )
 
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "file_picker",
-			Version:        "1.0",
-			Label:          "File picker",
-			Color:          "#7a8cff",
-			Icon:           "file-input",
-			Category:       "io",
-			Provider:       "internal",
-			Tags:           []string{"filesystem", "picker", "input", "sandbox"},
+			ID:       "file_picker",
+			Version:  "1.0",
+			Label:    "File picker",
+			Color:    "#7a8cff",
+			Icon:     "file-input",
+			Category: "io",
+			Provider: "internal",
+			Tags:     []string{"filesystem", "picker", "input", "sandbox"},
 			// A "source" drop: it doesn't read the file's contents,
 			// it just publishes a stable reference so downstream
 			// readers (excel_read, file_read, sqlite_*) can open it
@@ -64,30 +65,30 @@ func init() {
 // the contract; downstream nodes re-resolve through their own sandbox
 // root, same pattern file_read uses.
 func executeFilePicker(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	path, err := paramString(job.Params, "path")
+	path, err := params.String(job.Params, "path")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	if job.WorkspaceRoot == "" {
-		return errResult(job, "no_sandbox", "file_picker requires a workspace sandbox"), nil
+		return params.Err(job, "no_sandbox", "file_picker requires a workspace sandbox"), nil
 	}
 	root, err := os.OpenRoot(job.WorkspaceRoot)
 	if err != nil {
-		return errResult(job, "sandbox", fmt.Sprintf("open root: %v", err)), nil
+		return params.Err(job, "sandbox", fmt.Sprintf("open root: %v", err)), nil
 	}
 	defer root.Close()
 	info, err := root.Stat(path)
 	if err != nil {
 		if isSandboxEscape(err) {
-			return errResult(job, "sandbox_escape", fmt.Sprintf("path %q escapes workspace", path)), nil
+			return params.Err(job, "sandbox_escape", fmt.Sprintf("path %q escapes workspace", path)), nil
 		}
-		return errResult(job, "io", fmt.Sprintf("stat %q: %v", path, err)), nil
+		return params.Err(job, "io", fmt.Sprintf("stat %q: %v", path, err)), nil
 	}
 	if info.IsDir() {
-		return errResult(job, "io", fmt.Sprintf("%q is a directory", path)), nil
+		return params.Err(job, "io", fmt.Sprintf("%q is a directory", path)), nil
 	}
 
-	mime, _ := paramStringOpt(job.Params, "mime")
+	mime, _ := params.StringOpt(job.Params, "mime")
 	if mime == "" {
 		mime = guessMIMEByExt(path)
 	}
@@ -96,13 +97,13 @@ func executeFilePicker(_ context.Context, job core.Job, _ chan<- core.Progress) 
 	if inline, _ := paramBool(job.Params, "inline"); inline {
 		f, err := root.Open(path)
 		if err != nil {
-			return errResult(job, "io", fmt.Sprintf("open %q: %v", path, err)), nil
+			return params.Err(job, "io", fmt.Sprintf("open %q: %v", path, err)), nil
 		}
 		defer f.Close()
 		buf := make([]byte, info.Size())
 		n, err := f.Read(buf)
 		if err != nil && err.Error() != "EOF" {
-			return errResult(job, "io", fmt.Sprintf("read %q: %v", path, err)), nil
+			return params.Err(job, "io", fmt.Sprintf("read %q: %v", path, err)), nil
 		}
 		buf = buf[:n]
 		// Same convention as file_read: text MIMEs get a string so

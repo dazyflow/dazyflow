@@ -8,6 +8,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -74,39 +75,39 @@ func init() {
 // the regex wouldn't open a SQL-injection path because the identifier
 // would still be quoted in the right place.
 func executePostgresInsertRows(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	dsn, err := paramString(job.Params, "dsn")
+	dsn, err := params.String(job.Params, "dsn")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
-	table, err := paramString(job.Params, "table")
+	table, err := params.String(job.Params, "table")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	if err := validateIdent(table); err != nil {
-		return errResult(job, "bad_param", fmt.Sprintf("table name %q: %v", table, err)), nil
+		return params.Err(job, "bad_param", fmt.Sprintf("table name %q: %v", table, err)), nil
 	}
 	schema := "public"
-	if s, ok := paramStringOpt(job.Params, "schema"); ok && s != "" {
+	if s, ok := params.StringOpt(job.Params, "schema"); ok && s != "" {
 		schema = s
 	}
 	if err := validateIdent(schema); err != nil {
-		return errResult(job, "bad_param", fmt.Sprintf("schema name %q: %v", schema, err)), nil
+		return params.Err(job, "bad_param", fmt.Sprintf("schema name %q: %v", schema, err)), nil
 	}
 
 	rowsRef, ok := job.Input["rows"]
 	if !ok {
-		return errResult(job, "missing_input", "input port 'rows' is required"), nil
+		return params.Err(job, "missing_input", "input port 'rows' is required"), nil
 	}
 	rows, err := normalizeRows(rowsRef.Inline)
 	if err != nil {
-		return errResult(job, "bad_input", err.Error()), nil
+		return params.Err(job, "bad_input", err.Error()), nil
 	}
 
 	var headers []string
 	if h, ok := job.Input["headers"]; ok && h.Inline != nil {
 		headers, err = normalizeHeaders(h.Inline)
 		if err != nil {
-			return errResult(job, "bad_input", err.Error()), nil
+			return params.Err(job, "bad_input", err.Error()), nil
 		}
 	}
 	if headers == nil {
@@ -114,13 +115,13 @@ func executePostgresInsertRows(ctx context.Context, job core.Job, _ chan<- core.
 	}
 	for _, h := range headers {
 		if err := validateIdent(h); err != nil {
-			return errResult(job, "bad_input", fmt.Sprintf("column %q: %v", h, err)), nil
+			return params.Err(job, "bad_input", fmt.Sprintf("column %q: %v", h, err)), nil
 		}
 	}
 
 	pool, err := defaultPGRegistry.pgPool(ctx, job.Tenant, dsn)
 	if err != nil {
-		return errResult(job, "db", fmt.Sprintf("connect: %v", err)), nil
+		return params.Err(job, "db", fmt.Sprintf("connect: %v", err)), nil
 	}
 
 	qualified := fmt.Sprintf("%s.%s", quoteIdent(schema), quoteIdent(table))
@@ -132,7 +133,7 @@ func executePostgresInsertRows(ctx context.Context, job core.Job, _ chan<- core.
 	if createTable && len(headers) > 0 {
 		colTypes, _ := paramStringMap(job.Params, "column_types")
 		if err := pgEnsureTable(ctx, pool, qualified, headers, colTypes); err != nil {
-			return errResult(job, "db", err.Error()), nil
+			return params.Err(job, "db", err.Error()), nil
 		}
 	}
 
@@ -148,7 +149,7 @@ func executePostgresInsertRows(ctx context.Context, job core.Job, _ chan<- core.
 
 	inserted, err := pgInsertBatch(ctx, pool, qualified, headers, rows)
 	if err != nil {
-		return errResult(job, "db", err.Error()), nil
+		return params.Err(job, "db", err.Error()), nil
 	}
 	return core.Result{
 		JobID:  job.ID,

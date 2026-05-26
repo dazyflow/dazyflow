@@ -1,34 +1,10 @@
 package net
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 )
-
-func paramString(params map[string]any, key string) (string, error) {
-	v, ok := params[key]
-	if !ok {
-		return "", fmt.Errorf("missing param %q", key)
-	}
-	s, ok := v.(string)
-	if !ok {
-		return "", fmt.Errorf("param %q: expected string, got %T", key, v)
-	}
-	return s, nil
-}
-
-func paramStringDefault(params map[string]any, key, def string) string {
-	v, ok := params[key]
-	if !ok {
-		return def
-	}
-	if s, ok := v.(string); ok && s != "" {
-		return s
-	}
-	return def
-}
 
 func paramBool(params map[string]any, key string) (bool, bool) {
 	v, ok := params[key]
@@ -37,29 +13,6 @@ func paramBool(params map[string]any, key string) (bool, bool) {
 	}
 	b, ok := v.(bool)
 	return b, ok
-}
-
-func paramIntDefault(params map[string]any, key string, def int) int {
-	v, ok := params[key]
-	if !ok {
-		return def
-	}
-	switch x := v.(type) {
-	case int:
-		return x
-	case int64:
-		return int(x)
-	case float64:
-		return int(x)
-	case json.Number:
-		i, err := x.Int64()
-		if err != nil {
-			return def
-		}
-		return int(i)
-	default:
-		return def
-	}
 }
 
 func paramIntSlice(params map[string]any, key string) []int {
@@ -103,14 +56,6 @@ func paramHeaders(params map[string]any, key string) (map[string]string, error) 
 		out[k] = s
 	}
 	return out, nil
-}
-
-func errResult(job core.Job, code, msg string) core.Result {
-	return core.Result{
-		JobID:  job.ID,
-		Status: core.StatusError,
-		Error:  &core.JobError{Code: code, Message: msg},
-	}
 }
 
 func emitProgress(ch chan<- core.Progress, job core.Job, pct float64, msg string) {

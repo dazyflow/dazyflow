@@ -8,6 +8,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 )
 
 func init() {
@@ -39,10 +40,10 @@ func init() {
 func executeSleep(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
 	ms, err := paramInt(job.Params, "ms")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	if ms < 0 {
-		return errResult(job, "bad_param", "ms must be non-negative"), nil
+		return params.Err(job, "bad_param", "ms must be non-negative"), nil
 	}
 
 	total := time.Duration(ms) * time.Millisecond
@@ -60,7 +61,7 @@ func executeSleep(ctx context.Context, job core.Job, progress chan<- core.Progre
 	for {
 		select {
 		case <-ctx.Done():
-			return errResult(job, "cancelled", ctx.Err().Error()), ctx.Err()
+			return params.Err(job, "cancelled", ctx.Err().Error()), ctx.Err()
 		case <-timer.C:
 			emitProgress(progress, job, 1.0, "done")
 			return core.Result{

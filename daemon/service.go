@@ -127,13 +127,6 @@ type Service struct {
 	Logger *log.Logger
 }
 
-func (s *Service) workerID() string {
-	if s.WorkerID == "" {
-		return "hzd"
-	}
-	return s.WorkerID
-}
-
 func (s *Service) bus() Bus {
 	if s.Bus == nil {
 		// Sensible default so single-process tests don't have to wire one.

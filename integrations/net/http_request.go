@@ -17,6 +17,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 )
 
 func init() {
@@ -74,35 +75,35 @@ const (
 )
 
 func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
-	url, err := paramString(job.Params, "url")
+	url, err := params.String(job.Params, "url")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	if strings.TrimSpace(url) == "" {
-		return errResult(job, "bad_param", "url is required"), nil
+		return params.Err(job, "bad_param", "url is required"), nil
 	}
 
-	method := paramStringDefault(job.Params, "method", "GET")
+	method := params.StringDefault(job.Params, "method", "GET")
 	method = strings.ToUpper(method)
-	timeoutMs := paramIntDefault(job.Params, "timeout_ms", defaultTimeoutMs)
-	maxBodyBytes := int64(paramIntDefault(job.Params, "max_body_bytes", defaultMaxBodyBytes))
+	timeoutMs := params.IntDefault(job.Params, "timeout_ms", defaultTimeoutMs)
+	maxBodyBytes := int64(params.IntDefault(job.Params, "max_body_bytes", defaultMaxBodyBytes))
 	allowPrivate, _ := paramBool(job.Params, "allow_private_networks")
 
 	headers, err := paramHeaders(job.Params, "headers")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 
 	bodyReader, err := buildRequestBody(job)
 	if err != nil {
-		return errResult(job, "bad_input", err.Error()), nil
+		return params.Err(job, "bad_input", err.Error()), nil
 	}
 
 	expectStatus := paramIntSlice(job.Params, "expect_status")
 
 	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
 	if err != nil {
-		return errResult(job, "bad_url", err.Error()), nil
+		return params.Err(job, "bad_url", err.Error()), nil
 	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
@@ -114,31 +115,31 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 	resp, err := client.Do(req)
 	if err != nil {
 		if isSSRFError(err) {
-			return errResult(job, "ssrf_blocked", err.Error()), nil
+			return params.Err(job, "ssrf_blocked", err.Error()), nil
 		}
 		if ctx.Err() != nil {
-			return errResult(job, "cancelled", ctx.Err().Error()), ctx.Err()
+			return params.Err(job, "cancelled", ctx.Err().Error()), ctx.Err()
 		}
-		return errResult(job, "http", err.Error()), nil
+		return params.Err(job, "http", err.Error()), nil
 	}
 	defer resp.Body.Close()
 
 	emitProgress(progress, job, 0.7, fmt.Sprintf("received %d", resp.StatusCode))
 
 	if !statusAccepted(resp.StatusCode, expectStatus) {
-		return errResult(job, "unexpected_status",
+		return params.Err(job, "unexpected_status",
 			fmt.Sprintf("got %d, expected %s", resp.StatusCode, formatExpectStatus(expectStatus))), nil
 	}
 
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes+1))
 	if err != nil {
 		if ctx.Err() != nil {
-			return errResult(job, "cancelled", ctx.Err().Error()), ctx.Err()
+			return params.Err(job, "cancelled", ctx.Err().Error()), ctx.Err()
 		}
-		return errResult(job, "io", fmt.Sprintf("read body: %v", err)), nil
+		return params.Err(job, "io", fmt.Sprintf("read body: %v", err)), nil
 	}
 	if int64(len(raw)) > maxBodyBytes {
-		return errResult(job, "body_too_large",
+		return params.Err(job, "body_too_large",
 			fmt.Sprintf("response exceeds %d bytes", maxBodyBytes)), nil
 	}
 

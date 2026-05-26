@@ -14,6 +14,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 )
 
 func init() {
@@ -62,28 +63,28 @@ func init() {
 }
 
 func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
-	host, err := paramString(job.Params, "host")
+	host, err := params.String(job.Params, "host")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
-	from, err := paramString(job.Params, "from")
+	from, err := params.String(job.Params, "from")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
-	subject, err := paramString(job.Params, "subject")
+	subject, err := params.String(job.Params, "subject")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	to := paramStringSlice(job.Params, "to")
 	if len(to) == 0 {
-		return errResult(job, "bad_param", "to: at least one recipient required"), nil
+		return params.Err(job, "bad_param", "to: at least one recipient required"), nil
 	}
-	port := paramIntDefault(job.Params, "port", 587)
-	tlsMode := paramStringDefault(job.Params, "tls", "starttls")
-	username := paramStringDefault(job.Params, "username", "")
-	password := paramStringDefault(job.Params, "password", "")
+	port := params.IntDefault(job.Params, "port", 587)
+	tlsMode := params.StringDefault(job.Params, "tls", "starttls")
+	username := params.StringDefault(job.Params, "username", "")
+	password := params.StringDefault(job.Params, "password", "")
 
-	body := paramStringDefault(job.Params, "body", "")
+	body := params.StringDefault(job.Params, "body", "")
 	if input, ok := job.Input["body"]; ok {
 		switch v := input.Inline.(type) {
 		case string:
@@ -99,7 +100,7 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 		default:
 			raw, mErr := json.MarshalIndent(v, "", "  ")
 			if mErr != nil {
-				return errResult(job, "bad_input", mErr.Error()), nil
+				return params.Err(job, "bad_input", mErr.Error()), nil
 			}
 			body = string(raw)
 		}
@@ -115,7 +116,7 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 
 	emitProgress(progress, job, 0.3, "dial "+addr)
 	if err := sendEmail(ctx, addr, host, tlsMode, auth, from, to, msg); err != nil {
-		return errResult(job, "send_failed", err.Error()), nil
+		return params.Err(job, "send_failed", err.Error()), nil
 	}
 	emitProgress(progress, job, 1.0, "delivered")
 

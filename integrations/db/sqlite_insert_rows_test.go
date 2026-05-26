@@ -86,7 +86,7 @@ func TestSQLiteInsert_ColumnTypes(t *testing.T) {
 			"column_types": map[string]any{"count": "INTEGER", "name": "TEXT"},
 		},
 		Input: map[string]core.Ref{
-			"rows": {Inline: []map[string]any{{"name": "click", "count": 42}}},
+			"rows":    {Inline: []map[string]any{{"name": "click", "count": 42}}},
 			"headers": {Inline: []string{"name", "count"}},
 		},
 	}, nil)

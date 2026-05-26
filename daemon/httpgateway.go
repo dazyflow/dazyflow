@@ -219,10 +219,6 @@ func (h *HTTPGateway) verifyCookieOrigin(next http.Handler) http.Handler {
 	})
 }
 
-// principalCtx is the type used to stash an authenticated principal
-// onto the request context. requireAuth populates it; handlers extract it.
-type principalCtx struct{}
-
 func (h *HTTPGateway) requireAuth(next func(rw http.ResponseWriter, r *http.Request, p core.Principal)) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
 		token := credentialFromRequest(r)

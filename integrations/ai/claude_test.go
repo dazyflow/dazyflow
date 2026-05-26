@@ -17,11 +17,11 @@ import (
 // claudeRequestSeen captures everything the module sent to the
 // (mocked) Anthropic endpoint so tests can assert on each piece.
 type claudeRequestSeen struct {
-	method    string
-	apiKey    string
-	version   string
-	body      claudeRequest
-	rawBody   []byte
+	method  string
+	apiKey  string
+	version string
+	body    claudeRequest
+	rawBody []byte
 }
 
 func mockClaude(t *testing.T, response any, status int) (*httptest.Server, *claudeRequestSeen) {

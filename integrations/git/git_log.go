@@ -13,6 +13,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 )
 
 func init() {
@@ -55,9 +56,9 @@ func init() {
 
 func executeGitLog(_ context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
 	if job.WorkspaceRoot == "" {
-		return errResult(job, "no_sandbox", "git_log requires a workspace sandbox"), nil
+		return params.Err(job, "no_sandbox", "git_log requires a workspace sandbox"), nil
 	}
-	relPath := paramStringDefault(job.Params, "path", "")
+	relPath := params.StringDefault(job.Params, "path", "")
 	if input, ok := job.Input["path"]; ok {
 		if s, ok := input.Inline.(string); ok && s != "" {
 			relPath = s
@@ -67,10 +68,10 @@ func executeGitLog(_ context.Context, job core.Job, progress chan<- core.Progres
 	}
 	cleanRel, err := sandboxRel(relPath)
 	if err != nil {
-		return errResult(job, "sandbox_escape", err.Error()), nil
+		return params.Err(job, "sandbox_escape", err.Error()), nil
 	}
-	ref := paramStringDefault(job.Params, "ref", "HEAD")
-	limit := paramIntDefault(job.Params, "limit", 20)
+	ref := params.StringDefault(job.Params, "ref", "HEAD")
+	limit := params.IntDefault(job.Params, "limit", 20)
 	if limit < 1 {
 		limit = 1
 	}
@@ -80,15 +81,15 @@ func executeGitLog(_ context.Context, job core.Job, progress chan<- core.Progres
 
 	repo, err := gogit.PlainOpen(filepath.Join(job.WorkspaceRoot, cleanRel))
 	if err != nil {
-		return errResult(job, "open", err.Error()), nil
+		return params.Err(job, "open", err.Error()), nil
 	}
 	startHash, err := repo.ResolveRevision(plumbing.Revision(ref))
 	if err != nil {
-		return errResult(job, "bad_ref", err.Error()), nil
+		return params.Err(job, "bad_ref", err.Error()), nil
 	}
 	iter, err := repo.Log(&gogit.LogOptions{From: *startHash})
 	if err != nil {
-		return errResult(job, "log_failed", err.Error()), nil
+		return params.Err(job, "log_failed", err.Error()), nil
 	}
 	defer iter.Close()
 
@@ -107,7 +108,7 @@ func executeGitLog(_ context.Context, job core.Job, progress chan<- core.Progres
 				truncated = true
 				break
 			}
-			return errResult(job, "iter_failed", nErr.Error()), nil
+			return params.Err(job, "iter_failed", nErr.Error()), nil
 		}
 		summary := firstLine(c.Message)
 		commits = append(commits, map[string]any{

@@ -20,6 +20,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 )
 
 func init() {
@@ -69,14 +70,14 @@ const (
 )
 
 func executeShell(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
-	cmdName, err := paramString(job.Params, "command")
+	cmdName, err := params.String(job.Params, "command")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	if job.WorkspaceRoot == "" {
-		return errResult(job, "no_sandbox", "shell requires a workspace sandbox"), nil
+		return params.Err(job, "no_sandbox", "shell requires a workspace sandbox"), nil
 	}
-	relPath := paramStringDefault(job.Params, "path", "")
+	relPath := params.StringDefault(job.Params, "path", "")
 	if input, ok := job.Input["path"]; ok {
 		switch v := input.Inline.(type) {
 		case string:
@@ -90,13 +91,13 @@ func executeShell(ctx context.Context, job core.Job, progress chan<- core.Progre
 	}
 	cleanRel, err := sandboxRel(relPath)
 	if err != nil {
-		return errResult(job, "sandbox_escape", err.Error()), nil
+		return params.Err(job, "sandbox_escape", err.Error()), nil
 	}
 	workdir := filepath.Join(job.WorkspaceRoot, cleanRel)
 
 	args := paramStringSlice(job.Params, "args")
-	timeoutMs := paramIntDefault(job.Params, "timeout_ms", defaultTimeoutMs)
-	maxBytes := paramIntDefault(job.Params, "max_output_bytes", defaultMaxOutputBytes)
+	timeoutMs := params.IntDefault(job.Params, "timeout_ms", defaultTimeoutMs)
+	maxBytes := params.IntDefault(job.Params, "max_output_bytes", defaultMaxOutputBytes)
 
 	runCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
 	defer cancel()
@@ -115,7 +116,7 @@ func executeShell(ctx context.Context, job core.Job, progress chan<- core.Progre
 	// stderr empty.
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
-		return errResult(job, "start", err.Error()), nil
+		return params.Err(job, "start", err.Error()), nil
 	}
 	defer func() { _ = ptmx.Close() }()
 
@@ -129,7 +130,7 @@ func executeShell(ctx context.Context, job core.Job, progress chan<- core.Progre
 	duration := time.Since(started)
 
 	if errors.Is(runCtx.Err(), context.DeadlineExceeded) {
-		return errResult(job, "timeout",
+		return params.Err(job, "timeout",
 			fmt.Sprintf("command exceeded %dms", timeoutMs)), nil
 	}
 

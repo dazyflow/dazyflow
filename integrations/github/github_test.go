@@ -21,20 +21,20 @@ type fakeGitHub struct {
 	mu sync.Mutex
 
 	// create issue
-	lastCreatePath string
-	lastCreateBody []byte
-	lastCreateAuth string
+	lastCreatePath   string
+	lastCreateBody   []byte
+	lastCreateAuth   string
 	lastCreateAccept string
 	lastCreateAPIVer string
-	createStatus int
-	createResp   string
+	createStatus     int
+	createResp       string
 
 	// list issues
-	lastListPath string
+	lastListPath  string
 	lastListQuery string
-	lastListAuth string
-	listStatus   int
-	listResp     string
+	lastListAuth  string
+	listStatus    int
+	listResp      string
 
 	// add comment
 	lastCommentPath string
@@ -47,14 +47,14 @@ func newFakeGitHub(t *testing.T) *fakeGitHub {
 	t.Helper()
 	f := &fakeGitHub{
 		createStatus: 201,
-		createResp: `{"id":123456,"number":42,"node_id":"I_kwDO","html_url":"https://github.com/octo/repo/issues/42","state":"open"}`,
-		listStatus: 200,
+		createResp:   `{"id":123456,"number":42,"node_id":"I_kwDO","html_url":"https://github.com/octo/repo/issues/42","state":"open"}`,
+		listStatus:   200,
 		listResp: `[
 			{"number":1,"title":"first","state":"open","user":{"login":"alice"}},
 			{"number":2,"title":"second","state":"open","user":{"login":"bob"}}
 		]`,
 		commentStatus: 201,
-		commentResp: `{"id":99,"node_id":"IC_kw","html_url":"https://github.com/octo/repo/issues/42#issuecomment-99"}`,
+		commentResp:   `{"id":99,"node_id":"IC_kw","html_url":"https://github.com/octo/repo/issues/42#issuecomment-99"}`,
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)

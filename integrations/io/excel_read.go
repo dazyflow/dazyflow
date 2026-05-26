@@ -10,6 +10,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -67,42 +68,42 @@ func executeExcelRead(_ context.Context, job core.Job, _ chan<- core.Progress) (
 	// "drop one node and pick a file" flow which is still valid.
 	path := pickPath(job, "path")
 	if path == "" {
-		return errResult(job, "bad_param", "path is required — set params.path or wire the 'path' input port"), nil
+		return params.Err(job, "bad_param", "path is required — set params.path or wire the 'path' input port"), nil
 	}
 	var err error
 	if job.WorkspaceRoot == "" {
-		return errResult(job, "no_sandbox", "excel_read requires a workspace sandbox"), nil
+		return params.Err(job, "no_sandbox", "excel_read requires a workspace sandbox"), nil
 	}
 	root, err := os.OpenRoot(job.WorkspaceRoot)
 	if err != nil {
-		return errResult(job, "sandbox", fmt.Sprintf("open root: %v", err)), nil
+		return params.Err(job, "sandbox", fmt.Sprintf("open root: %v", err)), nil
 	}
 	defer root.Close()
 
 	fh, err := root.Open(path)
 	if err != nil {
 		if isSandboxEscape(err) {
-			return errResult(job, "sandbox_escape", fmt.Sprintf("path %q escapes workspace", path)), nil
+			return params.Err(job, "sandbox_escape", fmt.Sprintf("path %q escapes workspace", path)), nil
 		}
-		return errResult(job, "io", fmt.Sprintf("open %q: %v", path, err)), nil
+		return params.Err(job, "io", fmt.Sprintf("open %q: %v", path, err)), nil
 	}
 	defer fh.Close()
 
 	xl, err := excelize.OpenReader(fh)
 	if err != nil {
-		return errResult(job, "parse", fmt.Sprintf("open xlsx %q: %v", path, err)), nil
+		return params.Err(job, "parse", fmt.Sprintf("open xlsx %q: %v", path, err)), nil
 	}
 	defer xl.Close()
 
-	sheet, _ := paramStringOpt(job.Params, "sheet")
+	sheet, _ := params.StringOpt(job.Params, "sheet")
 	if sheet == "" {
 		sheets := xl.GetSheetList()
 		if len(sheets) == 0 {
-			return errResult(job, "parse", "workbook has no sheets"), nil
+			return params.Err(job, "parse", "workbook has no sheets"), nil
 		}
 		sheet = sheets[0]
 	} else if idx, _ := xl.GetSheetIndex(sheet); idx < 0 {
-		return errResult(job, "bad_param", fmt.Sprintf("sheet %q not found", sheet)), nil
+		return params.Err(job, "bad_param", fmt.Sprintf("sheet %q not found", sheet)), nil
 	}
 
 	typed, _ := paramBool(job.Params, "typed")
@@ -119,7 +120,7 @@ func executeExcelRead(_ context.Context, job core.Job, _ chan<- core.Progress) (
 		raw, err = xl.GetRows(sheet)
 	}
 	if err != nil {
-		return errResult(job, "parse", fmt.Sprintf("read rows: %v", err)), nil
+		return params.Err(job, "parse", fmt.Sprintf("read rows: %v", err)), nil
 	}
 
 	// Track the sheet coordinates of the upper-left cell of the data
@@ -129,10 +130,10 @@ func executeExcelRead(_ context.Context, job core.Job, _ chan<- core.Progress) (
 	// information unless we carry it through.
 	sheetCol0, sheetRow0 := 1, 1
 
-	if rangeStr, ok := paramStringOpt(job.Params, "range"); ok && rangeStr != "" {
+	if rangeStr, ok := params.StringOpt(job.Params, "range"); ok && rangeStr != "" {
 		clipped, c1, r1, err := clipToRange(raw, rangeStr)
 		if err != nil {
-			return errResult(job, "bad_param", err.Error()), nil
+			return params.Err(job, "bad_param", err.Error()), nil
 		}
 		raw = clipped
 		sheetCol0 = c1
@@ -413,13 +414,13 @@ func isDateFormattedCell(f *excelize.File, sheet, cellName string) bool {
 //
 // Excel format syntax in a nutshell:
 //
-//	- Up to four `;`-separated sections (positive ; negative ; zero ; text).
-//	  Only the positive section affects "is this a date?".
-//	- "..."        : literal text; date chars inside are inert
-//	- \X           : escape; the next char is a literal
-//	- [Red] [$-409] [Yellow]: color / locale tags; ignored
-//	- [h] [mm] [ss]: elapsed-time markers; counts as date/time
-//	- y/m/d/h/s    : date/time tokens when outside quotes/escapes
+//   - Up to four `;`-separated sections (positive ; negative ; zero ; text).
+//     Only the positive section affects "is this a date?".
+//   - "..."        : literal text; date chars inside are inert
+//   - \X           : escape; the next char is a literal
+//   - [Red] [$-409] [Yellow]: color / locale tags; ignored
+//   - [h] [mm] [ss]: elapsed-time markers; counts as date/time
+//   - y/m/d/h/s    : date/time tokens when outside quotes/escapes
 //
 // The famous "m is minutes or month" question is moot for *detection*
 // — both meanings make it a date/time format. We only need that

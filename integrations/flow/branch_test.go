@@ -30,7 +30,7 @@ func TestBranch_NumericGreaterThan(t *testing.T) {
 		want   string
 	}{
 		{50, "else"},
-		{10000, "else"},   // not strictly greater
+		{10000, "else"}, // not strictly greater
 		{10001, "then"},
 		{99999, "then"},
 	}

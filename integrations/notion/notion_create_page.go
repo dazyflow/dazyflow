@@ -11,6 +11,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 )
 
 func init() {
@@ -55,19 +56,19 @@ func init() {
 }
 
 func executeNotionCreatePage(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	dbID, _ := paramStringOpt(job.Params, "parent_database_id")
-	pgID, _ := paramStringOpt(job.Params, "parent_page_id")
+	dbID, _ := params.StringOpt(job.Params, "parent_database_id")
+	pgID, _ := params.StringOpt(job.Params, "parent_page_id")
 	if (dbID == "") == (pgID == "") {
-		return errResult(job, "bad_param",
+		return params.Err(job, "bad_param",
 			"set exactly one of parent_database_id (page becomes a database row) or parent_page_id (page becomes a child of an existing page)"), nil
 	}
 	propsRaw, ok := job.Params["properties"]
 	if !ok || propsRaw == nil {
-		return errResult(job, "bad_param", "missing param \"properties\""), nil
+		return params.Err(job, "bad_param", "missing param \"properties\""), nil
 	}
 	token, err := resolveToken(ctx, job)
 	if err != nil {
-		return errResult(job, "auth", err.Error()), nil
+		return params.Err(job, "auth", err.Error()), nil
 	}
 
 	payload := map[string]any{"properties": propsRaw}
@@ -82,34 +83,34 @@ func executeNotionCreatePage(ctx context.Context, job core.Job, _ chan<- core.Pr
 
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return errResult(job, "internal", fmt.Sprintf("marshal: %v", err)), nil
+		return params.Err(job, "internal", fmt.Sprintf("marshal: %v", err)), nil
 	}
 
 	url := currentHTTPBase() + "/pages"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return errResult(job, "internal", err.Error()), nil
+		return params.Err(job, "internal", err.Error()), nil
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Notion-Version", notionAPIVersion)
 
-	timeoutMs := paramIntDefault(job.Params, "timeout_ms", 15000)
+	timeoutMs := params.IntDefault(job.Params, "timeout_ms", 15000)
 	client := &http.Client{Timeout: time.Duration(timeoutMs) * time.Millisecond}
 	resp, err := client.Do(req)
 	if err != nil {
-		return errResult(job, "send_failed", err.Error()), nil
+		return params.Err(job, "send_failed", err.Error()), nil
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 256*1024))
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return errResult(job, "notion_error", decodeNotionError(respBody, resp.StatusCode)), nil
+		return params.Err(job, "notion_error", decodeNotionError(respBody, resp.StatusCode)), nil
 	}
 
 	var page map[string]any
 	if err := json.Unmarshal(respBody, &page); err != nil {
-		return errResult(job, "parse", fmt.Sprintf("parse response: %v", err)), nil
+		return params.Err(job, "parse", fmt.Sprintf("parse response: %v", err)), nil
 	}
 	id, _ := page["id"].(string)
 	pageURL, _ := page["url"].(string)

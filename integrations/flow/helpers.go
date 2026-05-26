@@ -30,26 +30,6 @@ func paramInt(params map[string]any, key string) (int, error) {
 	}
 }
 
-func paramString(params map[string]any, key string) (string, error) {
-	v, ok := params[key]
-	if !ok {
-		return "", fmt.Errorf("missing param %q", key)
-	}
-	s, ok := v.(string)
-	if !ok {
-		return "", fmt.Errorf("param %q: expected string, got %T", key, v)
-	}
-	return s, nil
-}
-
-func errResult(job core.Job, code, msg string) core.Result {
-	return core.Result{
-		JobID:  job.ID,
-		Status: core.StatusError,
-		Error:  &core.JobError{Code: code, Message: msg},
-	}
-}
-
 func emitProgress(ch chan<- core.Progress, job core.Job, pct float64, msg string) {
 	if ch == nil {
 		return

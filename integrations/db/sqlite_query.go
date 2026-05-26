@@ -10,6 +10,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 	_ "modernc.org/sqlite"
 )
 
@@ -65,26 +66,26 @@ func init() {
 // sandbox root before sqlite (which accepts unconstrained filenames)
 // is allowed to see it.
 func executeSQLiteQuery(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	path, err := paramString(job.Params, "path")
+	path, err := params.String(job.Params, "path")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
-	sqlText, err := paramString(job.Params, "sql")
+	sqlText, err := params.String(job.Params, "sql")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	if sqlText == "" {
-		return errResult(job, "bad_param", "sql is empty"), nil
+		return params.Err(job, "bad_param", "sql is empty"), nil
 	}
 	if job.WorkspaceRoot == "" {
-		return errResult(job, "no_sandbox", "sqlite_query requires a workspace sandbox"), nil
+		return params.Err(job, "no_sandbox", "sqlite_query requires a workspace sandbox"), nil
 	}
 
 	var args []any
 	if v, ok := job.Params["params"]; ok && v != nil {
 		raw, ok := v.([]any)
 		if !ok {
-			return errResult(job, "bad_param",
+			return params.Err(job, "bad_param",
 				fmt.Sprintf("params: expected array, got %T", v)), nil
 		}
 		args = raw
@@ -93,7 +94,7 @@ func executeSQLiteQuery(ctx context.Context, job core.Job, _ chan<- core.Progres
 	limit := 0
 	if n, ok := paramInt(job.Params, "limit"); ok {
 		if n < 0 {
-			return errResult(job, "bad_param", "limit must be >= 0"), nil
+			return params.Err(job, "bad_param", "limit must be >= 0"), nil
 		}
 		limit = n
 	}
@@ -102,34 +103,34 @@ func executeSQLiteQuery(ctx context.Context, job core.Job, _ chan<- core.Progres
 	// can't read a sqlite database outside the workspace.
 	root, err := os.OpenRoot(job.WorkspaceRoot)
 	if err != nil {
-		return errResult(job, "sandbox", fmt.Sprintf("open root: %v", err)), nil
+		return params.Err(job, "sandbox", fmt.Sprintf("open root: %v", err)), nil
 	}
 	probe, probeErr := root.Open(path)
 	root.Close()
 	if probeErr != nil {
 		if isSandboxEscape(probeErr) {
-			return errResult(job, "sandbox_escape", fmt.Sprintf("path %q escapes workspace", path)), nil
+			return params.Err(job, "sandbox_escape", fmt.Sprintf("path %q escapes workspace", path)), nil
 		}
-		return errResult(job, "io", fmt.Sprintf("open %q: %v", path, probeErr)), nil
+		return params.Err(job, "io", fmt.Sprintf("open %q: %v", path, probeErr)), nil
 	}
 	probe.Close()
 
 	absPath := filepath.Join(job.WorkspaceRoot, path)
 	db, err := sql.Open("sqlite", absPath)
 	if err != nil {
-		return errResult(job, "db", fmt.Sprintf("open sqlite %q: %v", path, err)), nil
+		return params.Err(job, "db", fmt.Sprintf("open sqlite %q: %v", path, err)), nil
 	}
 	defer db.Close()
 
 	rows, err := db.QueryContext(ctx, sqlText, args...)
 	if err != nil {
-		return errResult(job, "db", fmt.Sprintf("query: %v", err)), nil
+		return params.Err(job, "db", fmt.Sprintf("query: %v", err)), nil
 	}
 	defer rows.Close()
 
 	columns, err := rows.Columns()
 	if err != nil {
-		return errResult(job, "db", fmt.Sprintf("columns: %v", err)), nil
+		return params.Err(job, "db", fmt.Sprintf("columns: %v", err)), nil
 	}
 
 	out := make([]map[string]any, 0, 16)
@@ -143,7 +144,7 @@ func executeSQLiteQuery(ctx context.Context, job core.Job, _ chan<- core.Progres
 			ptrs[i] = &vals[i]
 		}
 		if err := rows.Scan(ptrs...); err != nil {
-			return errResult(job, "db", fmt.Sprintf("scan row %d: %v", len(out), err)), nil
+			return params.Err(job, "db", fmt.Sprintf("scan row %d: %v", len(out), err)), nil
 		}
 		rec := make(map[string]any, len(columns))
 		for i, c := range columns {
@@ -155,7 +156,7 @@ func executeSQLiteQuery(ctx context.Context, job core.Job, _ chan<- core.Progres
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return errResult(job, "db", fmt.Sprintf("iterate: %v", err)), nil
+		return params.Err(job, "db", fmt.Sprintf("iterate: %v", err)), nil
 	}
 
 	return core.Result{

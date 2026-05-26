@@ -1,61 +1,10 @@
 package ai
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 )
-
-func paramString(params map[string]any, key string) (string, error) {
-	v, ok := params[key]
-	if !ok {
-		return "", fmt.Errorf("missing param %q", key)
-	}
-	s, ok := v.(string)
-	if !ok {
-		return "", fmt.Errorf("param %q: expected string, got %T", key, v)
-	}
-	return s, nil
-}
-
-func paramStringOpt(params map[string]any, key string) (string, bool) {
-	v, ok := params[key]
-	if !ok {
-		return "", false
-	}
-	s, ok := v.(string)
-	return s, ok
-}
-
-func paramStringDefault(params map[string]any, key, def string) string {
-	if v, ok := params[key]; ok {
-		if s, ok := v.(string); ok && s != "" {
-			return s
-		}
-	}
-	return def
-}
-
-func paramIntDefault(params map[string]any, key string, def int) int {
-	v, ok := params[key]
-	if !ok {
-		return def
-	}
-	switch x := v.(type) {
-	case int:
-		return x
-	case int64:
-		return int(x)
-	case float64:
-		return int(x)
-	case json.Number:
-		if i, err := x.Int64(); err == nil {
-			return int(i)
-		}
-	}
-	return def
-}
 
 func paramFloat(params map[string]any, key string) (float64, bool) {
 	v, ok := params[key]
@@ -121,14 +70,6 @@ func paramMessages(params map[string]any, key string) ([]claudeMessage, error) {
 		out = append(out, claudeMessage{Role: role, Content: content})
 	}
 	return out, nil
-}
-
-func errResult(job core.Job, code, msg string) core.Result {
-	return core.Result{
-		JobID:  job.ID,
-		Status: core.StatusError,
-		Error:  &core.JobError{Code: code, Message: msg},
-	}
 }
 
 func emitProgress(ch chan<- core.Progress, job core.Job, pct float64, msg string) {

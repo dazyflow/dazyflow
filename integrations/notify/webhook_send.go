@@ -12,6 +12,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 )
 
 func init() {
@@ -75,35 +76,35 @@ func init() {
 // in the response body, so swallowing it would lose the only useful
 // diagnostic.
 func executeWebhookSend(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
-	url, err := paramString(job.Params, "url")
+	url, err := params.String(job.Params, "url")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
-	method := strings.ToUpper(paramStringDefault(job.Params, "method", "POST"))
+	method := strings.ToUpper(params.StringDefault(job.Params, "method", "POST"))
 	switch method {
 	case http.MethodPost, http.MethodPut, http.MethodPatch:
 	default:
-		return errResult(job, "bad_param",
+		return params.Err(job, "bad_param",
 			fmt.Sprintf("method %q: only POST, PUT, PATCH allowed", method)), nil
 	}
 
-	contentType := paramStringDefault(job.Params, "content_type", "application/json")
+	contentType := params.StringDefault(job.Params, "content_type", "application/json")
 	var body []byte
 	if input, ok := job.Input["body"]; ok && input.Inline != nil {
 		body, contentType, err = encodeWebhookBody(input.Inline, contentType)
 		if err != nil {
-			return errResult(job, "bad_input", err.Error()), nil
+			return params.Err(job, "bad_input", err.Error()), nil
 		}
 	} else if v, ok := job.Params["body"]; ok && v != nil {
 		body, contentType, err = encodeWebhookBody(v, contentType)
 		if err != nil {
-			return errResult(job, "bad_param", err.Error()), nil
+			return params.Err(job, "bad_param", err.Error()), nil
 		}
 	}
 
 	req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(body))
 	if err != nil {
-		return errResult(job, "bad_url", err.Error()), nil
+		return params.Err(job, "bad_url", err.Error()), nil
 	}
 	if len(body) > 0 {
 		req.Header.Set("Content-Type", contentType)
@@ -117,19 +118,19 @@ func executeWebhookSend(ctx context.Context, job core.Job, progress chan<- core.
 		req.Header.Set(k, v)
 	}
 
-	timeoutMs := paramIntDefault(job.Params, "timeout_ms", 15000)
+	timeoutMs := params.IntDefault(job.Params, "timeout_ms", 15000)
 	client := &http.Client{Timeout: time.Duration(timeoutMs) * time.Millisecond}
 
 	emitProgress(progress, job, 0.3, method+" "+url)
 	resp, err := client.Do(req)
 	if err != nil {
-		return errResult(job, "send_failed", err.Error()), nil
+		return params.Err(job, "send_failed", err.Error()), nil
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return errResult(job, "webhook_error",
+		return params.Err(job, "webhook_error",
 			fmt.Sprintf("webhook returned %d: %s",
 				resp.StatusCode, strings.TrimSpace(string(respBody)))), nil
 	}

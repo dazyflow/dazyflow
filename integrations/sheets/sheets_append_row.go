@@ -12,6 +12,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 )
 
 func init() {
@@ -72,29 +73,29 @@ func init() {
 // ETL into a human-edited sheet. Pass value_input_option=RAW to
 // preserve literal strings.
 func executeSheetsAppendRow(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	spreadsheetID, err := paramString(job.Params, "spreadsheet_id")
+	spreadsheetID, err := params.String(job.Params, "spreadsheet_id")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	token, err := resolveToken(ctx, job)
 	if err != nil {
-		return errResult(job, "auth", err.Error()), nil
+		return params.Err(job, "auth", err.Error()), nil
 	}
 
 	rowsRef, ok := job.Input["rows"]
 	if !ok {
-		return errResult(job, "missing_input", "input port 'rows' is required"), nil
+		return params.Err(job, "missing_input", "input port 'rows' is required"), nil
 	}
 	rows, err := normalizeRows(rowsRef.Inline)
 	if err != nil {
-		return errResult(job, "bad_input", err.Error()), nil
+		return params.Err(job, "bad_input", err.Error()), nil
 	}
 
 	var headers []string
 	if h, ok := job.Input["headers"]; ok && h.Inline != nil {
 		headers, err = normalizeHeaders(h.Inline)
 		if err != nil {
-			return errResult(job, "bad_input", err.Error()), nil
+			return params.Err(job, "bad_input", err.Error()), nil
 		}
 	}
 	if headers == nil {
@@ -131,7 +132,7 @@ func executeSheetsAppendRow(ctx context.Context, job core.Job, _ chan<- core.Pro
 		}, nil
 	}
 
-	rangeRef := paramStringDefault(job.Params, "range", "Sheet1")
+	rangeRef := params.StringDefault(job.Params, "range", "Sheet1")
 	payload := map[string]any{
 		"range":          rangeRef,
 		"majorDimension": "ROWS",
@@ -140,8 +141,8 @@ func executeSheetsAppendRow(ctx context.Context, job core.Job, _ chan<- core.Pro
 	body, _ := json.Marshal(payload)
 
 	q := url.Values{}
-	q.Set("valueInputOption", paramStringDefault(job.Params, "value_input_option", "USER_ENTERED"))
-	q.Set("insertDataOption", paramStringDefault(job.Params, "insert_data_option", "INSERT_ROWS"))
+	q.Set("valueInputOption", params.StringDefault(job.Params, "value_input_option", "USER_ENTERED"))
+	q.Set("insertDataOption", params.StringDefault(job.Params, "insert_data_option", "INSERT_ROWS"))
 
 	endpoint := fmt.Sprintf("%s/spreadsheets/%s/values/%s:append?%s",
 		currentHTTPBase(),
@@ -150,22 +151,22 @@ func executeSheetsAppendRow(ctx context.Context, job core.Job, _ chan<- core.Pro
 		q.Encode())
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
-		return errResult(job, "internal", err.Error()), nil
+		return params.Err(job, "internal", err.Error()), nil
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 
-	timeoutMs := paramIntDefault(job.Params, "timeout_ms", 15000)
+	timeoutMs := params.IntDefault(job.Params, "timeout_ms", 15000)
 	client := &http.Client{Timeout: time.Duration(timeoutMs) * time.Millisecond}
 	resp, err := client.Do(req)
 	if err != nil {
-		return errResult(job, "send_failed", err.Error()), nil
+		return params.Err(job, "send_failed", err.Error()), nil
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 256*1024))
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return errResult(job, "sheets_error",
+		return params.Err(job, "sheets_error",
 			fmt.Sprintf("Sheets returned %d: %s", resp.StatusCode, extractSheetsError(respBody))), nil
 	}
 

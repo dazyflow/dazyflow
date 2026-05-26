@@ -173,12 +173,12 @@ func TestFileWrite_PathTraversalBlocked(t *testing.T) {
 
 func TestFileWrite_QuotaCheck(t *testing.T) {
 	cases := []struct {
-		name      string
-		limit     int64
-		used      int64
-		payload   string
-		wantOK    bool
-		wantCode  string
+		name     string
+		limit    int64
+		used     int64
+		payload  string
+		wantOK   bool
+		wantCode string
 	}{
 		{name: "under limit", limit: 100, used: 0, payload: "hello", wantOK: true},
 		{name: "exactly at limit", limit: 5, used: 0, payload: "hello", wantOK: true},

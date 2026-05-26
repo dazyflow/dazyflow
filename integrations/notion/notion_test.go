@@ -36,10 +36,10 @@ type fakeNotion struct {
 func newFakeNotion(t *testing.T) *fakeNotion {
 	t.Helper()
 	f := &fakeNotion{
-		createPageResp: `{"object":"page","id":"page-uuid-1","url":"https://notion.so/page-1","properties":{}}`,
+		createPageResp:   `{"object":"page","id":"page-uuid-1","url":"https://notion.so/page-1","properties":{}}`,
 		createPageStatus: 200,
-		queryDBResp:    `{"object":"list","results":[{"id":"row-1"},{"id":"row-2"}],"next_cursor":"cur-2","has_more":true}`,
-		queryDBStatus:  200,
+		queryDBResp:      `{"object":"list","results":[{"id":"row-1"},{"id":"row-2"}],"next_cursor":"cur-2","has_more":true}`,
+		queryDBStatus:    200,
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/pages", func(w http.ResponseWriter, r *http.Request) {
@@ -271,10 +271,10 @@ func TestNotionQueryDatabase_FilterAndSortsRoundTrip(t *testing.T) {
 	fn := newFakeNotion(t)
 	_, _ = executeNotionQueryDatabase(t.Context(), core.Job{
 		Params: map[string]any{
-			"token":       "secret_test",
-			"database_id": "db-1",
-			"filter":      map[string]any{"property": "Status", "select": map[string]any{"equals": "Done"}},
-			"sorts":       []any{map[string]any{"property": "Created", "direction": "descending"}},
+			"token":        "secret_test",
+			"database_id":  "db-1",
+			"filter":       map[string]any{"property": "Status", "select": map[string]any{"equals": "Done"}},
+			"sorts":        []any{map[string]any{"property": "Created", "direction": "descending"}},
 			"start_cursor": "prev-cursor",
 		},
 	}, nil)

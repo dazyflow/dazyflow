@@ -7,6 +7,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 )
 
 func init() {
@@ -76,16 +77,16 @@ func init() {
 func executeSubgraph(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	graphID, ok := job.Params["graph_id"].(string)
 	if !ok || graphID == "" {
-		return errResult(job, "bad_param", "graph_id is required"), nil
+		return params.Err(job, "bad_param", "graph_id is required"), nil
 	}
 
 	inputMap, err := parseInputMap(job.Params["input_map"])
 	if err != nil {
-		return errResult(job, "bad_param", fmt.Sprintf("input_map: %v", err)), nil
+		return params.Err(job, "bad_param", fmt.Sprintf("input_map: %v", err)), nil
 	}
 	outputMap, err := parseOutputMap(job.Params["output_map"])
 	if err != nil {
-		return errResult(job, "bad_param", fmt.Sprintf("output_map: %v", err)), nil
+		return params.Err(job, "bad_param", fmt.Sprintf("output_map: %v", err)), nil
 	}
 
 	// Build the per-child-node seeds from the parent's input map.

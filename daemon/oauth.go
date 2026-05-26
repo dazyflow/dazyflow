@@ -3,7 +3,6 @@ package daemon
 import (
 	"context"
 	"crypto/rand"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -378,17 +377,3 @@ func (r *OAuthRegistry) GetOAuthToken(ctx context.Context, provider, account str
 	return &tok, nil
 }
 
-// randomState exposes the state-token format for tests that need to
-// fabricate a callback without going through mint.
-func randomState() (string, error) {
-	b := make([]byte, 32)
-	if _, err := io.ReadFull(rand.Reader, b); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(b), nil
-}
-
-// base64URLNoPad is the canonical encoding for OAuth code_verifier
-// (PKCE) and similar fields. Not used in v1 but kept here so the
-// PKCE follow-up doesn't need to add another tiny helper.
-var base64URLNoPad = base64.URLEncoding.WithPadding(base64.NoPadding)

@@ -11,6 +11,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 )
 
 func init() {
@@ -53,9 +54,9 @@ func init() {
 
 func executeGitDiff(_ context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
 	if job.WorkspaceRoot == "" {
-		return errResult(job, "no_sandbox", "git_diff requires a workspace sandbox"), nil
+		return params.Err(job, "no_sandbox", "git_diff requires a workspace sandbox"), nil
 	}
-	relPath := paramStringDefault(job.Params, "path", "")
+	relPath := params.StringDefault(job.Params, "path", "")
 	if input, ok := job.Input["path"]; ok {
 		if s, ok := input.Inline.(string); ok && s != "" {
 			relPath = s
@@ -65,38 +66,38 @@ func executeGitDiff(_ context.Context, job core.Job, progress chan<- core.Progre
 	}
 	cleanRel, err := sandboxRel(relPath)
 	if err != nil {
-		return errResult(job, "sandbox_escape", err.Error()), nil
+		return params.Err(job, "sandbox_escape", err.Error()), nil
 	}
-	from := paramStringDefault(job.Params, "from", "HEAD~1")
-	to := paramStringDefault(job.Params, "to", "HEAD")
+	from := params.StringDefault(job.Params, "from", "HEAD~1")
+	to := params.StringDefault(job.Params, "to", "HEAD")
 
 	repo, err := gogit.PlainOpen(filepath.Join(job.WorkspaceRoot, cleanRel))
 	if err != nil {
-		return errResult(job, "open", err.Error()), nil
+		return params.Err(job, "open", err.Error()), nil
 	}
 
 	fromHash, err := repo.ResolveRevision(plumbing.Revision(from))
 	if err != nil {
-		return errResult(job, "bad_ref", fmt.Sprintf("from %q: %v", from, err)), nil
+		return params.Err(job, "bad_ref", fmt.Sprintf("from %q: %v", from, err)), nil
 	}
 	toHash, err := repo.ResolveRevision(plumbing.Revision(to))
 	if err != nil {
-		return errResult(job, "bad_ref", fmt.Sprintf("to %q: %v", to, err)), nil
+		return params.Err(job, "bad_ref", fmt.Sprintf("to %q: %v", to, err)), nil
 	}
 
 	fromCommit, err := repo.CommitObject(*fromHash)
 	if err != nil {
-		return errResult(job, "no_commit", fmt.Sprintf("from: %v", err)), nil
+		return params.Err(job, "no_commit", fmt.Sprintf("from: %v", err)), nil
 	}
 	toCommit, err := repo.CommitObject(*toHash)
 	if err != nil {
-		return errResult(job, "no_commit", fmt.Sprintf("to: %v", err)), nil
+		return params.Err(job, "no_commit", fmt.Sprintf("to: %v", err)), nil
 	}
 
 	emitLogProgress(progress, job, "git", fmt.Sprintf("diff %s..%s", fromHash.String()[:8], toHash.String()[:8]))
 	patch, err := fromCommit.Patch(toCommit)
 	if err != nil {
-		return errResult(job, "diff_failed", err.Error()), nil
+		return params.Err(job, "diff_failed", err.Error()), nil
 	}
 	diffText := patch.String()
 

@@ -7,6 +7,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 )
 
 func init() {
@@ -56,22 +57,22 @@ func init() {
 // the run-detail page persists.
 func executeSecretSet(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	if job.Tenant == "" {
-		return errResult(job, "bad_input",
+		return params.Err(job, "bad_input",
 			"secret_set needs to know which tenant to write under, but this run has no tenant attached. This usually means the run was started outside a tenant-scoped context (e.g. an internal system fire); set a tenant on the principal or workspace before retrying."), nil
 	}
 
-	name, ok := paramString(job.Params, "name")
+	name, ok := params.StringOpt(job.Params, "name")
 	if !ok || name == "" {
-		return errResult(job, "bad_input",
+		return params.Err(job, "bad_input",
 			"secret_set needs a 'name' param — the key it will store the value under in this tenant's secret store."), nil
 	}
 	if err := validSecretName(name); err != nil {
-		return errResultDetails(job, "bad_input",
+		return params.ErrDetails(job, "bad_input",
 			"The secret name is invalid. Names may contain letters, digits, '.', '_' and '-' only, and must be 1–128 characters.",
 			fmt.Sprintf("Validator rejected name %q: %v", name, err)), nil
 	}
 
-	value, hasParamValue := paramString(job.Params, "value")
+	value, hasParamValue := params.StringOpt(job.Params, "value")
 	if input, ok := job.Input["value"]; ok && input.Inline != nil {
 		switch v := input.Inline.(type) {
 		case string:
@@ -79,24 +80,24 @@ func executeSecretSet(ctx context.Context, job core.Job, _ chan<- core.Progress)
 		case []byte:
 			value = string(v)
 		default:
-			return errResultDetails(job, "bad_input",
+			return params.ErrDetails(job, "bad_input",
 				"secret_set's 'value' input needs a string, but the upstream node is sending a structured value. Wire a transform between them that renders the value as a string (e.g. a Template node, or a JSON-encode step).",
 				fmt.Sprintf("Received type %T on input port 'value'; expected string or []byte.", v)), nil
 		}
 		hasParamValue = true
 	}
 	if !hasParamValue {
-		return errResult(job, "bad_input",
+		return params.Err(job, "bad_input",
 			"secret_set has nothing to store: wire something into its 'value' input or set the 'value' param."), nil
 	}
 
 	write := currentWriter()
 	if write == nil {
-		return errResult(job, "not_configured",
+		return params.Err(job, "not_configured",
 			"This deployment doesn't have an encrypted secret store wired up, so secret_set can't write anything. Start hzd with --master-key (or $HAZYFLOW_MASTER_KEY) to enable the tenant:// store."), nil
 	}
 	if err := write(ctx, job.Tenant, name, value); err != nil {
-		return errResultDetails(job, "write_failed",
+		return params.ErrDetails(job, "write_failed",
 			"Writing the secret failed.",
 			err.Error()), nil
 	}

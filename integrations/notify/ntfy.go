@@ -12,6 +12,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 )
 
 func init() {
@@ -60,14 +61,14 @@ func init() {
 }
 
 func executeNtfy(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
-	topic, err := paramString(job.Params, "topic")
+	topic, err := params.String(job.Params, "topic")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
-	server := paramStringDefault(job.Params, "server", "https://ntfy.sh")
+	server := params.StringDefault(job.Params, "server", "https://ntfy.sh")
 	server = strings.TrimRight(server, "/")
 
-	body := paramStringDefault(job.Params, "message", "")
+	body := params.StringDefault(job.Params, "message", "")
 	if input, ok := job.Input["body"]; ok {
 		switch v := input.Inline.(type) {
 		case string:
@@ -83,7 +84,7 @@ func executeNtfy(ctx context.Context, job core.Job, progress chan<- core.Progres
 		default:
 			raw, mErr := json.MarshalIndent(v, "", "  ")
 			if mErr != nil {
-				return errResult(job, "bad_input", mErr.Error()), nil
+				return params.Err(job, "bad_input", mErr.Error()), nil
 			}
 			body = string(raw)
 		}
@@ -93,38 +94,38 @@ func executeNtfy(ctx context.Context, job core.Job, progress chan<- core.Progres
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url,
 		bytes.NewReader([]byte(body)))
 	if err != nil {
-		return errResult(job, "bad_url", err.Error()), nil
+		return params.Err(job, "bad_url", err.Error()), nil
 	}
 
-	if title := paramStringDefault(job.Params, "title", ""); title != "" {
+	if title := params.StringDefault(job.Params, "title", ""); title != "" {
 		req.Header.Set("Title", title)
 	}
-	if priority := paramStringDefault(job.Params, "priority", ""); priority != "" {
+	if priority := params.StringDefault(job.Params, "priority", ""); priority != "" {
 		req.Header.Set("Priority", priority)
 	}
 	if tags := paramStringSlice(job.Params, "tags"); len(tags) > 0 {
 		req.Header.Set("Tags", strings.Join(tags, ","))
 	}
-	if click := paramStringDefault(job.Params, "click", ""); click != "" {
+	if click := params.StringDefault(job.Params, "click", ""); click != "" {
 		req.Header.Set("Click", click)
 	}
-	if token := paramStringDefault(job.Params, "token", ""); token != "" {
+	if token := params.StringDefault(job.Params, "token", ""); token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
-	timeoutMs := paramIntDefault(job.Params, "timeout_ms", 15000)
+	timeoutMs := params.IntDefault(job.Params, "timeout_ms", 15000)
 	client := &http.Client{Timeout: time.Duration(timeoutMs) * time.Millisecond}
 
 	emitProgress(progress, job, 0.3, "POST "+url)
 	resp, err := client.Do(req)
 	if err != nil {
-		return errResult(job, "send_failed", err.Error()), nil
+		return params.Err(job, "send_failed", err.Error()), nil
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return errResult(job, "ntfy_error",
+		return params.Err(job, "ntfy_error",
 			fmt.Sprintf("ntfy returned %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))), nil
 	}
 	emitProgress(progress, job, 1.0, fmt.Sprintf("delivered (%d)", resp.StatusCode))

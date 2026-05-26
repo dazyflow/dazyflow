@@ -21,6 +21,7 @@ import (
 	"sync"
 
 	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 )
 
 // TokenLookup resolves an account name to a Slack access token by
@@ -48,10 +49,10 @@ func SetTokenLookup(fn TokenLookup) {
 // Returns a clear error code so users see "connect your Slack
 // account first" rather than a generic auth failure.
 func resolveToken(ctx context.Context, job core.Job) (string, error) {
-	if t, _ := paramStringOpt(job.Params, "token"); t != "" {
+	if t, _ := params.StringOpt(job.Params, "token"); t != "" {
 		return t, nil
 	}
-	account, _ := paramStringOpt(job.Params, "account")
+	account, _ := params.StringOpt(job.Params, "account")
 	if account == "" {
 		account = "default"
 	}
@@ -66,84 +67,9 @@ func resolveToken(ctx context.Context, job core.Job) (string, error) {
 		return "", fmt.Errorf("lookup token for account %q: %w", account, err)
 	}
 	if tok == "" {
-		return "", fmt.Errorf("Slack account %q is not connected", account)
+		return "", fmt.Errorf("slack account %q is not connected", account)
 	}
 	return tok, nil
-}
-
-// paramString / paramStringOpt / errResult mirror the pattern used
-// across integrations — duplicated rather than imported so this
-// package doesn't depend on the io/notify/db packages.
-
-func paramString(params map[string]any, key string) (string, error) {
-	v, ok := params[key]
-	if !ok {
-		return "", fmt.Errorf("missing param %q", key)
-	}
-	s, ok := v.(string)
-	if !ok {
-		return "", fmt.Errorf("param %q: expected string, got %T", key, v)
-	}
-	return s, nil
-}
-
-func paramStringOpt(params map[string]any, key string) (string, bool) {
-	v, ok := params[key]
-	if !ok {
-		return "", false
-	}
-	s, ok := v.(string)
-	if !ok {
-		return "", false
-	}
-	return s, true
-}
-
-func paramIntDefault(params map[string]any, key string, def int) int {
-	v, ok := params[key]
-	if !ok {
-		return def
-	}
-	switch n := v.(type) {
-	case int:
-		return n
-	case int64:
-		return int(n)
-	case float64:
-		return int(n)
-	}
-	return def
-}
-
-func paramBoolDefault(params map[string]any, key string, def bool) bool {
-	v, ok := params[key]
-	if !ok {
-		return def
-	}
-	if b, ok := v.(bool); ok {
-		return b
-	}
-	return def
-}
-
-func errResult(job core.Job, code, msg string) core.Result {
-	return core.Result{
-		JobID:  job.ID,
-		Status: core.StatusError,
-		Error:  &core.JobError{Code: code, Message: msg},
-	}
-}
-
-// errResultDetails is errResult with a technical-detail payload. Use
-// when the user-facing Message is too vague to debug from alone — the
-// Details string carries the type signature, library error string, or
-// other developer hint the UI tucks behind an expander.
-func errResultDetails(job core.Job, code, msg, details string) core.Result {
-	return core.Result{
-		JobID:  job.ID,
-		Status: core.StatusError,
-		Error:  &core.JobError{Code: code, Message: msg, Details: details},
-	}
 }
 
 // resolveBlocks pulls the Block Kit array off the job in priority

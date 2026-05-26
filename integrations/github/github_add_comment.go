@@ -12,6 +12,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 )
 
 func init() {
@@ -57,24 +58,24 @@ func init() {
 }
 
 func executeGitHubAddComment(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	owner, err := paramString(job.Params, "owner")
+	owner, err := params.String(job.Params, "owner")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
-	repo, err := paramString(job.Params, "repo")
+	repo, err := params.String(job.Params, "repo")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
-	issueNumber := paramIntDefault(job.Params, "issue_number", 0)
+	issueNumber := params.IntDefault(job.Params, "issue_number", 0)
 	if issueNumber <= 0 {
-		return errResult(job, "bad_param", "issue_number must be a positive integer"), nil
+		return params.Err(job, "bad_param", "issue_number must be a positive integer"), nil
 	}
 	token, err := resolveToken(ctx, job)
 	if err != nil {
-		return errResult(job, "auth", err.Error()), nil
+		return params.Err(job, "auth", err.Error()), nil
 	}
 
-	body, _ := paramStringOpt(job.Params, "body")
+	body, _ := params.StringOpt(job.Params, "body")
 	if input, ok := job.Input["body"]; ok && input.Inline != nil {
 		switch v := input.Inline.(type) {
 		case string:
@@ -84,13 +85,13 @@ func executeGitHubAddComment(ctx context.Context, job core.Job, _ chan<- core.Pr
 		default:
 			raw, mErr := json.MarshalIndent(v, "", "  ")
 			if mErr != nil {
-				return errResult(job, "bad_input", mErr.Error()), nil
+				return params.Err(job, "bad_input", mErr.Error()), nil
 			}
 			body = "```json\n" + string(raw) + "\n```"
 		}
 	}
 	if body == "" {
-		return errResult(job, "bad_input", "comment body is empty"), nil
+		return params.Err(job, "bad_input", "comment body is empty"), nil
 	}
 
 	payload := map[string]any{"body": body}
@@ -100,7 +101,7 @@ func executeGitHubAddComment(ctx context.Context, job core.Job, _ chan<- core.Pr
 		currentHTTPBase(), url.PathEscape(owner), url.PathEscape(repo), issueNumber)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(jsonBody))
 	if err != nil {
-		return errResult(job, "internal", err.Error()), nil
+		return params.Err(job, "internal", err.Error()), nil
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/vnd.github+json")
@@ -109,17 +110,17 @@ func executeGitHubAddComment(ctx context.Context, job core.Job, _ chan<- core.Pr
 	// Idempotency-Key dedupes retries of the same node-record.
 	req.Header.Set("Idempotency-Key", job.IdempotencyKey())
 
-	timeoutMs := paramIntDefault(job.Params, "timeout_ms", 15000)
+	timeoutMs := params.IntDefault(job.Params, "timeout_ms", 15000)
 	client := &http.Client{Timeout: time.Duration(timeoutMs) * time.Millisecond}
 	resp, err := client.Do(req)
 	if err != nil {
-		return errResult(job, "send_failed", err.Error()), nil
+		return params.Err(job, "send_failed", err.Error()), nil
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 256*1024))
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return errResult(job, "github_error",
+		return params.Err(job, "github_error",
 			fmt.Sprintf("GitHub returned %d: %s", resp.StatusCode, extractGitHubError(respBody))), nil
 	}
 	var parsed map[string]any

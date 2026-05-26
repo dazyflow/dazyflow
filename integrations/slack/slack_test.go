@@ -19,11 +19,11 @@ import (
 type fakeSlack struct {
 	server *httptest.Server
 
-	mu                       sync.Mutex
-	lastPostMessageReq       map[string]any
-	lastPostMessageAuth      string
+	mu                         sync.Mutex
+	lastPostMessageReq         map[string]any
+	lastPostMessageAuth        string
 	lastPostMessageIdempotency string
-	postMessageResp          string
+	postMessageResp            string
 
 	lastListChannelsQ    string
 	lastListChannelsAuth string

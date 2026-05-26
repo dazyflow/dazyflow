@@ -13,6 +13,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 )
 
 func init() {
@@ -62,61 +63,61 @@ func init() {
 // they need (number, title, user.login, html_url, etc.) via
 // map_rows or compute_rows.
 func executeGitHubListIssues(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	owner, err := paramString(job.Params, "owner")
+	owner, err := params.String(job.Params, "owner")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
-	repo, err := paramString(job.Params, "repo")
+	repo, err := params.String(job.Params, "repo")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	token, err := resolveToken(ctx, job)
 	if err != nil {
-		return errResult(job, "auth", err.Error()), nil
+		return params.Err(job, "auth", err.Error()), nil
 	}
 
 	q := url.Values{}
-	q.Set("state", paramStringDefault(job.Params, "state", "open"))
+	q.Set("state", params.StringDefault(job.Params, "state", "open"))
 	if labels := paramStringSlice(job.Params, "labels"); len(labels) > 0 {
 		// GitHub joins labels with commas in the query value
 		// (URL-encoded), and AND-s them server-side.
 		q.Set("labels", strings.Join(labels, ","))
 	}
-	if assignee := paramStringDefault(job.Params, "assignee", ""); assignee != "" {
+	if assignee := params.StringDefault(job.Params, "assignee", ""); assignee != "" {
 		q.Set("assignee", assignee)
 	}
-	if since := paramStringDefault(job.Params, "since", ""); since != "" {
+	if since := params.StringDefault(job.Params, "since", ""); since != "" {
 		q.Set("since", since)
 	}
-	q.Set("per_page", strconv.Itoa(paramIntDefault(job.Params, "per_page", 30)))
+	q.Set("per_page", strconv.Itoa(params.IntDefault(job.Params, "per_page", 30)))
 
 	endpoint := fmt.Sprintf("%s/repos/%s/%s/issues?%s",
 		currentHTTPBase(), url.PathEscape(owner), url.PathEscape(repo), q.Encode())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return errResult(job, "internal", err.Error()), nil
+		return params.Err(job, "internal", err.Error()), nil
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 
-	timeoutMs := paramIntDefault(job.Params, "timeout_ms", 15000)
+	timeoutMs := params.IntDefault(job.Params, "timeout_ms", 15000)
 	client := &http.Client{Timeout: time.Duration(timeoutMs) * time.Millisecond}
 	resp, err := client.Do(req)
 	if err != nil {
-		return errResult(job, "send_failed", err.Error()), nil
+		return params.Err(job, "send_failed", err.Error()), nil
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 5<<20))
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return errResult(job, "github_error",
+		return params.Err(job, "github_error",
 			fmt.Sprintf("GitHub returned %d: %s", resp.StatusCode, extractGitHubError(body))), nil
 	}
 
 	var issues []any
 	if err := json.Unmarshal(body, &issues); err != nil {
-		return errResult(job, "parse", err.Error()), nil
+		return params.Err(job, "parse", err.Error()), nil
 	}
 	if issues == nil {
 		issues = []any{}

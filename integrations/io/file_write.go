@@ -11,6 +11,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 )
 
 func init() {
@@ -53,20 +54,20 @@ func init() {
 // through the same root: cross-workspace data flow must round-trip
 // through a graph-level mechanism (TBD), not through the filesystem.
 func executeFileWrite(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	dest, err := paramString(job.Params, "path")
+	dest, err := params.String(job.Params, "path")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	if job.WorkspaceRoot == "" {
-		return errResult(job, "no_sandbox", "file_write requires a workspace sandbox"), nil
+		return params.Err(job, "no_sandbox", "file_write requires a workspace sandbox"), nil
 	}
 	input, ok := job.Input["in"]
 	if !ok {
-		return errResult(job, "missing_input", "input port 'in' is required"), nil
+		return params.Err(job, "missing_input", "input port 'in' is required"), nil
 	}
 	root, err := os.OpenRoot(job.WorkspaceRoot)
 	if err != nil {
-		return errResult(job, "sandbox", fmt.Sprintf("open root: %v", err)), nil
+		return params.Err(job, "sandbox", fmt.Sprintf("open root: %v", err)), nil
 	}
 	defer root.Close()
 
@@ -75,10 +76,10 @@ func executeFileWrite(_ context.Context, job core.Job, _ chan<- core.Progress) (
 	if job.QuotaLimit > 0 {
 		size, sizeErr := determineWriteSize(root, input)
 		if sizeErr != nil {
-			return errResult(job, "io", fmt.Sprintf("size input: %v", sizeErr)), nil
+			return params.Err(job, "io", fmt.Sprintf("size input: %v", sizeErr)), nil
 		}
 		if job.QuotaUsed+size > job.QuotaLimit {
-			return errResult(job, "quota_exceeded",
+			return params.Err(job, "quota_exceeded",
 				fmt.Sprintf("write of %d bytes would push tenant past %d (currently %d)",
 					size, job.QuotaLimit, job.QuotaUsed)), nil
 		}
@@ -87,40 +88,40 @@ func executeFileWrite(_ context.Context, job core.Job, _ chan<- core.Progress) (
 	if mkdirs, _ := paramBool(job.Params, "mkdirs"); mkdirs {
 		if err := root.MkdirAll(path.Dir(dest), 0o755); err != nil {
 			if isSandboxEscape(err) {
-				return errResult(job, "sandbox_escape", fmt.Sprintf("mkdirs %q escapes workspace", dest)), nil
+				return params.Err(job, "sandbox_escape", fmt.Sprintf("mkdirs %q escapes workspace", dest)), nil
 			}
-			return errResult(job, "io", fmt.Sprintf("mkdir: %v", err)), nil
+			return params.Err(job, "io", fmt.Sprintf("mkdir: %v", err)), nil
 		}
 	}
 
 	out, err := root.Create(dest)
 	if err != nil {
 		if isSandboxEscape(err) {
-			return errResult(job, "sandbox_escape", fmt.Sprintf("dest %q escapes workspace", dest)), nil
+			return params.Err(job, "sandbox_escape", fmt.Sprintf("dest %q escapes workspace", dest)), nil
 		}
-		return errResult(job, "io", fmt.Sprintf("create %q: %v", dest, err)), nil
+		return params.Err(job, "io", fmt.Sprintf("create %q: %v", dest, err)), nil
 	}
 	defer out.Close()
 
 	if input.Ref == "" && input.Inline != nil {
 		data, err := inlineToBytes(input.Inline)
 		if err != nil {
-			return errResult(job, "io", err.Error()), nil
+			return params.Err(job, "io", err.Error()), nil
 		}
 		if _, err := out.Write(data); err != nil {
-			return errResult(job, "io", fmt.Sprintf("write %q: %v", dest, err)), nil
+			return params.Err(job, "io", fmt.Sprintf("write %q: %v", dest, err)), nil
 		}
 	} else if input.Ref != "" {
 		in, err := root.Open(input.Ref)
 		if err != nil {
 			if isSandboxEscape(err) {
-				return errResult(job, "sandbox_escape", fmt.Sprintf("input ref %q escapes workspace", input.Ref)), nil
+				return params.Err(job, "sandbox_escape", fmt.Sprintf("input ref %q escapes workspace", input.Ref)), nil
 			}
-			return errResult(job, "io", fmt.Sprintf("open input %q: %v", input.Ref, err)), nil
+			return params.Err(job, "io", fmt.Sprintf("open input %q: %v", input.Ref, err)), nil
 		}
 		defer in.Close()
 		if _, err := io.Copy(out, in); err != nil {
-			return errResult(job, "io", fmt.Sprintf("copy %q→%q: %v", input.Ref, dest, err)), nil
+			return params.Err(job, "io", fmt.Sprintf("copy %q→%q: %v", input.Ref, dest, err)), nil
 		}
 	}
 
@@ -147,11 +148,7 @@ func isSandboxEscape(err error) bool {
 	if errors.Is(err, os.ErrInvalid) {
 		return true
 	}
-	msg := err.Error()
-	if containsAny(msg, "path escapes", "outside root", "invalid argument") {
-		return true
-	}
-	return false
+	return containsAny(err.Error(), "path escapes", "outside root", "invalid argument")
 }
 
 func containsAny(s string, parts ...string) bool {

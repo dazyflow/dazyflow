@@ -7,6 +7,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 )
 
 func init() {
@@ -69,23 +70,23 @@ func init() {
 // pgxpool.Pool reused across all postgres_* drops for a given
 // (tenant, dsn).
 func executePostgresQuery(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	dsn, err := paramString(job.Params, "dsn")
+	dsn, err := params.String(job.Params, "dsn")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
-	sqlText, err := paramString(job.Params, "sql")
+	sqlText, err := params.String(job.Params, "sql")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	if sqlText == "" {
-		return errResult(job, "bad_param", "sql is empty"), nil
+		return params.Err(job, "bad_param", "sql is empty"), nil
 	}
 
 	var args []any
 	if v, ok := job.Params["params"]; ok && v != nil {
 		raw, ok := v.([]any)
 		if !ok {
-			return errResult(job, "bad_param",
+			return params.Err(job, "bad_param",
 				fmt.Sprintf("params: expected array, got %T", v)), nil
 		}
 		args = raw
@@ -94,19 +95,19 @@ func executePostgresQuery(ctx context.Context, job core.Job, _ chan<- core.Progr
 	limit := 0 // 0 = unlimited
 	if n, ok := paramInt(job.Params, "limit"); ok {
 		if n < 0 {
-			return errResult(job, "bad_param", "limit must be >= 0"), nil
+			return params.Err(job, "bad_param", "limit must be >= 0"), nil
 		}
 		limit = n
 	}
 
 	pool, err := defaultPGRegistry.pgPool(ctx, job.Tenant, dsn)
 	if err != nil {
-		return errResult(job, "db", fmt.Sprintf("connect: %v", err)), nil
+		return params.Err(job, "db", fmt.Sprintf("connect: %v", err)), nil
 	}
 
 	rows, err := pool.Query(ctx, sqlText, args...)
 	if err != nil {
-		return errResult(job, "db", fmt.Sprintf("query: %v", err)), nil
+		return params.Err(job, "db", fmt.Sprintf("query: %v", err)), nil
 	}
 	defer rows.Close()
 
@@ -123,7 +124,7 @@ func executePostgresQuery(ctx context.Context, job core.Job, _ chan<- core.Progr
 	for rows.Next() {
 		vals, err := rows.Values()
 		if err != nil {
-			return errResult(job, "db", fmt.Sprintf("scan row %d: %v", len(out), err)), nil
+			return params.Err(job, "db", fmt.Sprintf("scan row %d: %v", len(out), err)), nil
 		}
 		rec := make(map[string]any, len(columns))
 		for i, c := range columns {
@@ -135,7 +136,7 @@ func executePostgresQuery(ctx context.Context, job core.Job, _ chan<- core.Progr
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return errResult(job, "db", fmt.Sprintf("iterate: %v", err)), nil
+		return params.Err(job, "db", fmt.Sprintf("iterate: %v", err)), nil
 	}
 
 	return core.Result{

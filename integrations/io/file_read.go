@@ -10,6 +10,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
 )
 
 func init() {
@@ -53,30 +54,30 @@ func init() {
 //
 // Attempts to escape via ".." or absolute paths fail with sandbox_escape.
 func executeFileRead(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	path, err := paramString(job.Params, "path")
+	path, err := params.String(job.Params, "path")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	if job.WorkspaceRoot == "" {
-		return errResult(job, "no_sandbox", "file_read requires a workspace sandbox"), nil
+		return params.Err(job, "no_sandbox", "file_read requires a workspace sandbox"), nil
 	}
 	root, err := os.OpenRoot(job.WorkspaceRoot)
 	if err != nil {
-		return errResult(job, "sandbox", fmt.Sprintf("open root: %v", err)), nil
+		return params.Err(job, "sandbox", fmt.Sprintf("open root: %v", err)), nil
 	}
 	defer root.Close()
 
 	info, err := root.Stat(path)
 	if err != nil {
 		if isSandboxEscape(err) {
-			return errResult(job, "sandbox_escape", fmt.Sprintf("path %q escapes workspace", path)), nil
+			return params.Err(job, "sandbox_escape", fmt.Sprintf("path %q escapes workspace", path)), nil
 		}
-		return errResult(job, "io", fmt.Sprintf("stat %q: %v", path, err)), nil
+		return params.Err(job, "io", fmt.Sprintf("stat %q: %v", path, err)), nil
 	}
 	if info.IsDir() {
-		return errResult(job, "io", fmt.Sprintf("%q is a directory", path)), nil
+		return params.Err(job, "io", fmt.Sprintf("%q is a directory", path)), nil
 	}
-	mime, _ := paramStringOpt(job.Params, "mime")
+	mime, _ := params.StringOpt(job.Params, "mime")
 	if mime == "" {
 		mime = "application/octet-stream"
 	}
@@ -85,12 +86,12 @@ func executeFileRead(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 	if inline, _ := paramBool(job.Params, "inline"); inline {
 		f, err := root.Open(path)
 		if err != nil {
-			return errResult(job, "io", fmt.Sprintf("open %q: %v", path, err)), nil
+			return params.Err(job, "io", fmt.Sprintf("open %q: %v", path, err)), nil
 		}
 		defer f.Close()
 		data, err := io.ReadAll(f)
 		if err != nil {
-			return errResult(job, "io", fmt.Sprintf("read %q: %v", path, err)), nil
+			return params.Err(job, "io", fmt.Sprintf("read %q: %v", path, err)), nil
 		}
 		out.Ref = "" // inline mode does not also publish a path
 		if isTextMIME(mime) {
