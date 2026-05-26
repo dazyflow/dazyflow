@@ -133,86 +133,8 @@ func main() {
 	if *isolateSharedSecrets {
 		log.Print("shared secret providers (env://, builtin://) running in tenant-isolated mode — names must be <tenant>.<key>")
 	}
-	// Encrypted per-tenant secret store. Without a master key the
-	// feature stays off (no provider registered, /api/v1/secrets
-	// returns 501). With one, we wire up an in-memory store today;
-	// production deployments swap NewMemSecretsStore() for
-	// NewPgSecretsStore once the Postgres jobstore is in use.
-	var encryptedSecrets *daemon.EncryptedSecrets
-	if *masterKeyB64 != "" {
-		key, err := base64.StdEncoding.DecodeString(*masterKeyB64)
-		if err != nil {
-			log.Fatalf("--master-key: not valid base64: %v", err)
-		}
-		es, err := daemon.NewEncryptedSecrets(key, daemon.NewMemSecretsStore())
-		if err != nil {
-			log.Fatalf("encrypted secrets: %v", err)
-		}
-		secrets[es.Scheme()] = es
-		encryptedSecrets = es
-		log.Printf("encrypted secret store enabled (scheme: %s://)", es.Scheme())
-		// Wire the write path into the secret_set drop. Mirrors the
-		// SetTokenLookup hook pattern — keeps the integrations
-		// package free of a daemon import while letting graphs write
-		// cursors / per-tenant state during execution.
-		secretsdrop.SetSecretWriter(func(ctx context.Context, tenant, name, value string) error {
-			return es.Put(ctx, tenant, name, value)
-		})
-	}
-	// OAuth registry — built only if both the encrypted store and a
-	// public base URL are set. Providers register themselves from env
-	// vars (HAZYFLOW_OAUTH_<NAME>_CLIENT_ID / _CLIENT_SECRET); the
-	// hardcoded URL+scopes per provider live in registerOAuthProviders.
-	var oauthRegistry *daemon.OAuthRegistry
-	if encryptedSecrets != nil && *publicBaseURL != "" {
-		oauthRegistry = daemon.NewOAuthRegistry(*publicBaseURL, encryptedSecrets)
-		registerOAuthProviders(oauthRegistry)
-		if len(oauthRegistry.Providers()) > 0 {
-			log.Printf("OAuth enabled: %v", oauthRegistry.Providers())
-		}
-		// Wire the OAuth registry into per-connector token lookup
-		// hooks. Each launch connector (Slack, then Gmail, GitHub,
-		// Notion as T1 progresses) exposes its own
-		// SetTokenLookup so this stays a one-liner per connector
-		// instead of pushing them all into a shared interface.
-		slack.SetTokenLookup(func(ctx context.Context, account string) (string, error) {
-			tok, err := oauthRegistry.GetOAuthToken(ctx, "slack", account)
-			if err != nil {
-				return "", err
-			}
-			return tok.AccessToken, nil
-		})
-		// Gmail and Sheets share the "google" OAuth app — same access
-		// token, different scope requested at authorize time. Each
-		// connector exposes its own SetTokenLookup so the per-package
-		// init isn't gated on a shared registry interface.
-		googleLookup := func(ctx context.Context, account string) (string, error) {
-			tok, err := oauthRegistry.GetOAuthToken(ctx, "google", account)
-			if err != nil {
-				return "", err
-			}
-			return tok.AccessToken, nil
-		}
-		gmail.SetTokenLookup(googleLookup)
-		sheets.SetTokenLookup(googleLookup)
-		// GitHub has its own OAuth app — different provider, same
-		// hook shape.
-		github.SetTokenLookup(func(ctx context.Context, account string) (string, error) {
-			tok, err := oauthRegistry.GetOAuthToken(ctx, "github", account)
-			if err != nil {
-				return "", err
-			}
-			return tok.AccessToken, nil
-		})
-		// Notion — same one-liner pattern.
-		notion.SetTokenLookup(func(ctx context.Context, account string) (string, error) {
-			tok, err := oauthRegistry.GetOAuthToken(ctx, "notion", account)
-			if err != nil {
-				return "", err
-			}
-			return tok.AccessToken, nil
-		})
-	}
+	encryptedSecrets := setupEncryptedSecrets(*masterKeyB64, secrets)
+	oauthRegistry := setupOAuth(encryptedSecrets, *publicBaseURL)
 	mcpCatalog := mcp.NewCatalog()
 	if err := registerMCPServers(mcpCatalog, *mcpServers); err != nil {
 		log.Fatalf("--mcp: %v", err)
@@ -555,6 +477,82 @@ func seedDefaultUser(ctx context.Context, users auth.UserStore) {
 // vars (HAZYFLOW_OAUTH_<NAME>_CLIENT_ID / _CLIENT_SECRET). A provider
 // is skipped silently when its credentials aren't set — that way a
 // dev daemon stays useful even when only one OAuth app is configured.
+
+// setupEncryptedSecrets wires the tenant:// encrypted store when a
+// master key is configured. The store provides per-tenant secret
+// isolation (separate DEK per tenant, AES-GCM wrapped by the KEK
+// in process memory) AND the write path for the secret_set drop —
+// both gated on the same flag because they're useless without the
+// underlying encryption. Returns nil when --master-key is empty
+// so downstream callers can skip OAuth (which needs the store).
+func setupEncryptedSecrets(masterKeyB64 string, secrets map[string]core.SecretProvider) *daemon.EncryptedSecrets {
+	if masterKeyB64 == "" {
+		return nil
+	}
+	key, err := base64.StdEncoding.DecodeString(masterKeyB64)
+	if err != nil {
+		log.Fatalf("--master-key: not valid base64: %v", err)
+	}
+	es, err := daemon.NewEncryptedSecrets(key, daemon.NewMemSecretsStore())
+	if err != nil {
+		log.Fatalf("encrypted secrets: %v", err)
+	}
+	secrets[es.Scheme()] = es
+	log.Printf("encrypted secret store enabled (scheme: %s://)", es.Scheme())
+	// secret_set drop's write hook — mirrors the SetTokenLookup
+	// pattern; keeps the integrations package free of a daemon
+	// import while still letting graphs write tenant cursors.
+	secretsdrop.SetSecretWriter(func(ctx context.Context, tenant, name, value string) error {
+		return es.Put(ctx, tenant, name, value)
+	})
+	return es
+}
+
+// setupOAuth builds the OAuth registry and binds the per-connector
+// SetTokenLookup hooks. Returns nil when prerequisites are missing
+// (no encrypted store → no token storage; no public base URL → no
+// redirect_uri for the OAuth dance). When non-nil, every shipped
+// connector (Slack, Gmail, Sheets, GitHub, Notion) is bound to its
+// matching provider — adding a sixth connector means one extra line
+// here, not five files.
+func setupOAuth(secrets *daemon.EncryptedSecrets, publicBaseURL string) *daemon.OAuthRegistry {
+	if secrets == nil || publicBaseURL == "" {
+		return nil
+	}
+	reg := daemon.NewOAuthRegistry(publicBaseURL, secrets)
+	registerOAuthProviders(reg)
+	if len(reg.Providers()) > 0 {
+		log.Printf("OAuth enabled: %v", reg.Providers())
+	}
+	wireConnectorTokenHooks(reg)
+	return reg
+}
+
+// wireConnectorTokenHooks binds every shipped launch connector to
+// the OAuth registry. The closure is identical per connector except
+// for the provider name; the per-provider hook lives in the
+// connector package so the integrations layer doesn't grow a shared
+// interface (deliberate looseness — adding a new connector is a
+// one-liner here, no signature change).
+func wireConnectorTokenHooks(reg *daemon.OAuthRegistry) {
+	bind := func(provider string) func(ctx context.Context, account string) (string, error) {
+		return func(ctx context.Context, account string) (string, error) {
+			tok, err := reg.GetOAuthToken(ctx, provider, account)
+			if err != nil {
+				return "", err
+			}
+			return tok.AccessToken, nil
+		}
+	}
+	slack.SetTokenLookup(bind("slack"))
+	// Gmail and Sheets share the "google" OAuth app — one client,
+	// two scope sets requested at authorize time.
+	google := bind("google")
+	gmail.SetTokenLookup(google)
+	sheets.SetTokenLookup(google)
+	github.SetTokenLookup(bind("github"))
+	notion.SetTokenLookup(bind("notion"))
+}
 func registerOAuthProviders(r *daemon.OAuthRegistry) {
 	maybe := func(p daemon.OAuthProvider) {
 		if p.ClientID == "" || p.ClientSecret == "" {

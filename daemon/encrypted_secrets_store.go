@@ -101,20 +101,20 @@ func (m *MemSecretsStore) getWrappedDEK(_ context.Context, tenant string) ([]byt
 		append([]byte(nil), row.nonce...), nil
 }
 
-func (m *MemSecretsStore) setWrappedDEK(_ context.Context, tenant string, wrapped, nonce []byte) error {
+func (m *MemSecretsStore) setWrappedDEK(_ context.Context, tenant string, wrapped, nonce []byte) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.deks[tenant]; ok {
-		// Don't overwrite — preserves the race-safe behavior the
-		// provider depends on (loser of the provisioning race
-		// re-reads and sees the winner's DEK).
-		return nil
+		// Don't overwrite — preserves race-safety. Signal
+		// wrote=false so the caller knows to re-read the winning
+		// DEK before encrypting.
+		return false, nil
 	}
 	m.deks[tenant] = memDEKRow{
 		wrapped: append([]byte(nil), wrapped...),
 		nonce:   append([]byte(nil), nonce...),
 	}
-	return nil
+	return true, nil
 }
 
 // ---- Postgres backend -----------------------------------------------
@@ -225,16 +225,22 @@ func (p *PgSecretsStore) getWrappedDEK(ctx context.Context, tenant string) ([]by
 	return w, n, nil
 }
 
-func (p *PgSecretsStore) setWrappedDEK(ctx context.Context, tenant string, wrapped, nonce []byte) error {
+func (p *PgSecretsStore) setWrappedDEK(ctx context.Context, tenant string, wrapped, nonce []byte) (bool, error) {
 	// ON CONFLICT DO NOTHING preserves the existing DEK if two
-	// goroutines race — the loser sees the winner's DEK on retry.
+	// goroutines race. RowsAffected() distinguishes "I wrote"
+	// (1 row affected) from "another writer was first" (0 rows
+	// affected, no error) — the caller relies on this to decide
+	// whether to use its local DEK or re-read the winner's.
 	const q = `
 		INSERT INTO encrypted_secret_deks (tenant, wrapped_dek, nonce)
 		VALUES ($1, $2, $3)
 		ON CONFLICT (tenant) DO NOTHING
 	`
-	_, err := p.pool.Exec(ctx, q, tenant, wrapped, nonce)
-	return err
+	tag, err := p.pool.Exec(ctx, q, tenant, wrapped, nonce)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
 }
 
 // isPgNoRows detects pgx's no-rows sentinel without importing pgx

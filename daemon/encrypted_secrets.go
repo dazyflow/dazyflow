@@ -90,12 +90,20 @@ type secretsStore interface {
 	// hit the EncryptedSecrets in-memory cache.
 	getWrappedDEK(ctx context.Context, tenant string) (wrapped, nonce []byte, err error)
 
-	// setWrappedDEK persists a freshly-generated wrapped DEK. Race
-	// note: two goroutines racing to provision a DEK for the same
-	// tenant is possible; the store implementation MAY fail the
-	// second writer (unique constraint) and the provider retries
-	// with a Get.
-	setWrappedDEK(ctx context.Context, tenant string, wrapped, nonce []byte) error
+	// setWrappedDEK persists a freshly-generated wrapped DEK.
+	// Returns (true, nil) when THIS call persisted the DEK — the
+	// caller can safely use its local wrappedDEK/nonce as the
+	// authoritative store contents.
+	// Returns (false, nil) when a concurrent writer's DEK was
+	// already in the store; the caller MUST re-read via
+	// getWrappedDEK to observe the winning DEK before encrypting
+	// or decrypting (otherwise the local DEK is orphaned and any
+	// ciphertext written with it can't be decrypted by future
+	// readers, who will load the winner's DEK).
+	// Returns (_, non-nil) on transient/structural failure (DB
+	// connection, etc.); the caller propagates as a provisioning
+	// error.
+	setWrappedDEK(ctx context.Context, tenant string, wrapped, nonce []byte) (wrote bool, err error)
 }
 
 // ErrSecretNotFound is the sentinel for "no such secret/DEK exists"
@@ -239,15 +247,22 @@ func (e *EncryptedSecrets) dekFor(ctx context.Context, tenant string) (cipher.AE
 			return nil, fmt.Errorf("dek nonce: %w", err)
 		}
 		wrappedDEK := e.kek.Seal(nil, wrapNonce, dekBytes, nil)
-		if err := e.store.setWrappedDEK(ctx, tenant, wrappedDEK, wrapNonce); err != nil {
-			// Race-safe retry: if a concurrent writer beat us, re-read.
+		wrote, err := e.store.setWrappedDEK(ctx, tenant, wrappedDEK, wrapNonce)
+		if err != nil {
+			return nil, fmt.Errorf("provision DEK for %q: %w", tenant, err)
+		}
+		if wrote {
+			wrapped, nonce = wrappedDEK, wrapNonce
+		} else {
+			// A concurrent writer beat us; the local wrappedDEK is now
+			// orphaned. Re-read the store so we encrypt under the
+			// winner's DEK — otherwise our Put would write ciphertext
+			// future readers can't decrypt.
 			w, n, getErr := e.store.getWrappedDEK(ctx, tenant)
 			if getErr != nil {
-				return nil, fmt.Errorf("provision DEK for %q: %w (re-read: %v)", tenant, err, getErr)
+				return nil, fmt.Errorf("re-read winning DEK for %q after lost race: %w", tenant, getErr)
 			}
 			wrapped, nonce = w, n
-		} else {
-			wrapped, nonce = wrappedDEK, wrapNonce
 		}
 	case err != nil:
 		return nil, fmt.Errorf("load DEK for %q: %w", tenant, err)

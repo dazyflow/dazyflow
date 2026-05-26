@@ -148,7 +148,10 @@ func TestWebhookBody_E2E_TextBody(t *testing.T) {
 		bytes.NewReader([]byte("hello plain text")))
 	req.Header.Set("Authorization", "Bearer s")
 	req.Header.Set("Content-Type", "text/plain")
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("do: %v", err)
+	}
 	defer resp.Body.Close()
 	var out struct {
 		JobID string `json:"job_id"`

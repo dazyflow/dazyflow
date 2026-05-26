@@ -212,7 +212,10 @@ func TestHTTPGateway_E2E_PerNodeSSE(t *testing.T) {
 
 	runReq, _ := http.NewRequest("POST", ts.URL+"/api/v1/graphs/t/ws/node-sse/run", nil)
 	runReq.Header.Set("Authorization", "Bearer "+token)
-	runResp, _ := http.DefaultClient.Do(runReq)
+	runResp, err := http.DefaultClient.Do(runReq)
+	if err != nil {
+		t.Fatalf("run request: %v", err)
+	}
 	defer runResp.Body.Close()
 	var runOut struct {
 		JobID string `json:"job_id"`

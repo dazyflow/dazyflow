@@ -399,6 +399,6 @@ func (c *countingStore) getWrappedDEK(ctx context.Context, tenant string) ([]byt
 	c.mu.Unlock()
 	return c.inner.getWrappedDEK(ctx, tenant)
 }
-func (c *countingStore) setWrappedDEK(ctx context.Context, tenant string, wrapped, nonce []byte) error {
+func (c *countingStore) setWrappedDEK(ctx context.Context, tenant string, wrapped, nonce []byte) (bool, error) {
 	return c.inner.setWrappedDEK(ctx, tenant, wrapped, nonce)
 }

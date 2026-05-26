@@ -119,7 +119,7 @@ func errorResultOrErr(err error) (ToolCallResult, error) {
 func listDrops(c *HazydClient) Tool {
 	return Tool{
 		Name: "list_drops",
-		Description: "List every flow node ('drop') the daemon knows about. The returned map keys are module IDs (e.g. 'http_request', 'await_approval', 'slack_post'); the values are the full manifest including label, description, inputs/outputs, and params_schema. Call this BEFORE create_flow so you know what modules exist and what params each one accepts.",
+		Description: "List every flow node ('drop') the daemon knows about. The returned map keys are module IDs (e.g. 'http_request', 'await_approval', 'slack_send_message'); the values are the full manifest including label, description, inputs/outputs, and params_schema. Call this BEFORE create_flow so you know what modules exist and what params each one accepts.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{}}`),
 		Handler: func(ctx context.Context, _ json.RawMessage) (ToolCallResult, error) {
 			var out map[string]any

@@ -145,7 +145,10 @@ func TestWebhook_UnknownGraph(t *testing.T) {
 
 	req, _ := http.NewRequest("POST", ts.URL+"/trigger/acme/ws1/missing", nil)
 	req.Header.Set("Authorization", "Bearer whatever")
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("do: %v", err)
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("status=%d, want 404", resp.StatusCode)
@@ -169,7 +172,10 @@ func TestWebhook_GraphWithoutWebhookTriggerRejected(t *testing.T) {
 
 	req, _ := http.NewRequest("POST", ts.URL+"/trigger/acme/ws1/no-trigger", nil)
 	req.Header.Set("Authorization", "Bearer x")
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("do: %v", err)
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("status=%d, want 404", resp.StatusCode)
@@ -185,7 +191,10 @@ func TestWebhook_RejectsGET(t *testing.T) {
 	ts := httptest.NewServer(mux)
 	defer ts.Close()
 
-	resp, _ := http.Get(ts.URL + "/trigger/acme/ws1/anything")
+	resp, err := http.Get(ts.URL + "/trigger/acme/ws1/anything")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusMethodNotAllowed {
 		t.Errorf("status=%d, want 405", resp.StatusCode)
@@ -205,7 +214,10 @@ func TestWebhook_MalformedPath(t *testing.T) {
 		t.Run(p, func(t *testing.T) {
 			req, _ := http.NewRequest("POST", ts.URL+p, nil)
 			req.Header.Set("Authorization", "Bearer x")
-			resp, _ := http.DefaultClient.Do(req)
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("do: %v", err)
+			}
 			defer resp.Body.Close()
 			if resp.StatusCode != http.StatusBadRequest && resp.StatusCode != http.StatusNotFound {
 				t.Errorf("path=%q status=%d, want 400 or 404", p, resp.StatusCode)
