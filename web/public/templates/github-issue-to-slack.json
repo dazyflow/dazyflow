@@ -1,0 +1,42 @@
+{
+  "id": "github-issue-to-slack",
+  "version": "1",
+  "name": "GitHub issue webhook → Slack",
+  "description": "Receives a GitHub issue webhook (configure the repo's webhook URL to the daemon's /trigger endpoint with the per-flow secret), formats the payload into a Slack-friendly line, and posts to your channel. Use case: route new issues from a busy repo into a triage channel.",
+  "icon": "git-branch",
+  "triggers": [
+    {"type": "webhook", "secret": ""}
+  ],
+  "nodes": [
+    {
+      "id": "trigger",
+      "module": "webhook_input",
+      "params": {},
+      "position": {"x": 100, "y": 200}
+    },
+    {
+      "id": "format",
+      "module": "compute_rows",
+      "params": {
+        "compute": {
+          "line": "'[' + row.repository.full_name + '] #' + string(row.issue.number) + ' ' + row.action + ' by ' + row.sender.login + ': ' + row.issue.title"
+        }
+      },
+      "position": {"x": 400, "y": 200}
+    },
+    {
+      "id": "notify",
+      "module": "slack_send_message",
+      "params": {
+        "channel": "#triage",
+        "account": "default",
+        "text": "${upstream:format.rows[0].line}"
+      },
+      "position": {"x": 700, "y": 200}
+    }
+  ],
+  "edges": [
+    {"from": "trigger", "from_port": "body", "to": "format", "to_port": "rows", "on_error": ""},
+    {"from": "format", "from_port": "rows", "to": "notify", "to_port": "body", "on_error": ""}
+  ]
+}

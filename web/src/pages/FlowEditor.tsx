@@ -27,7 +27,7 @@ import {
 import { ArrowLeft, Play, Save, Settings as SettingsIcon, PanelsLeftBottom, Square, Sparkles } from "lucide-react";
 import { useAuth } from "../auth";
 import { api } from "../api";
-import type { Graph, GraphTrigger, Manifest, JobStatus, Visibility } from "../types";
+import type { Graph, GraphTrigger, LintIssue, Manifest, JobStatus, Visibility } from "../types";
 import { NodeCatalog } from "../components/NodeCatalog";
 import { Inspector } from "../components/Inspector";
 import { LiveConsole } from "../components/LiveConsole";
@@ -79,6 +79,11 @@ function EditorInner() {
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // lintIssues holds the most recent save's advisory findings. Cleared
+  // when the user makes a new edit (so resolving a finding by editing
+  // dismisses the warning visually until the next save confirms) or
+  // when the user explicitly dismisses.
+  const [lintIssues, setLintIssues] = useState<LintIssue[]>([]);
   // lockedRunID is set when ANY run of this flow (this tab or another)
   // is still in-flight. Save is gated on it so two editors can't race
   // a save against a live run.
@@ -290,8 +295,11 @@ function EditorInner() {
     setSaving(true);
     setError(null);
     try {
-      await api.saveGraph(token, buildGraph());
+      const res = await api.saveGraph(token, buildGraph());
       setDirty(false);
+      // Lint findings are advisory — the save already succeeded.
+      // Show them; the user can fix-and-resave or dismiss.
+      setLintIssues(res.lint ?? []);
     } catch (e) {
       const msg = (e as Error).message;
       setError(msg);
@@ -636,6 +644,51 @@ function EditorInner() {
             }}
           >
             {error}
+          </div>
+        )}
+        {lintIssues.length > 0 && (
+          <div
+            style={{
+              position: "absolute",
+              bottom: error ? 60 : 12,
+              left: 12,
+              right: 12,
+              background: "var(--surface)",
+              border: "1px solid var(--warn, #d4a017)",
+              padding: "10px 14px",
+              borderRadius: "var(--r-2)",
+              fontSize: 13,
+              maxWidth: 700,
+              color: "var(--ink)",
+              boxShadow: "0 2px 8px color-mix(in srgb, var(--warn, #d4a017) 25%, transparent)",
+            }}
+            role="alert"
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>
+              <strong style={{ color: "var(--warn, #d4a017)" }}>
+                Saved with {lintIssues.length} warning
+                {lintIssues.length > 1 ? "s" : ""}
+              </strong>
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => setLintIssues([])}
+                style={{ fontSize: 11, padding: "2px 8px" }}
+                aria-label="dismiss lint"
+              >
+                Dismiss
+              </button>
+            </div>
+            <ul style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 6 }}>
+              {lintIssues.map((issue, i) => (
+                <li key={i}>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)" }}>
+                    {issue.code}
+                  </span>{" "}
+                  {issue.message}
+                </li>
+              ))}
+            </ul>
           </div>
         )}
         <div className={"pipeline-log" + (logOpen ? " open" : " collapsed")}>

@@ -518,6 +518,33 @@
   line-height: 1.5;
   flex: 1;
 }
+/* Row of vendor brand miniatures on each template card. Sized so
+   the row is recognizable at a glance ("this one touches Slack +
+   Gmail") without competing with the title or description. */
+.template-integrations {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 -2px;
+}
+.template-integration-logo {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  background: var(--surface-2, rgba(255,255,255,0.06));
+  padding: 2px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.template-integration-more {
+  font-size: 10px;
+  color: var(--faint);
+  background: var(--surface-2, rgba(255,255,255,0.05));
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+}
 .template-tags {
   display: flex;
   flex-wrap: wrap;

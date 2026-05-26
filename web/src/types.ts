@@ -38,6 +38,11 @@ export type TemplateSummary = {
   icon?: string;
   tags?: string[];
   graph_file: string;
+  // integrations is the list of brand slugs whose mini logos render
+  // on the card (e.g. ["gmail", "slack"]). Maps 1:1 to the files in
+  // web/public/brands/<slug>.svg — so adding a connector with a brand
+  // asset automatically makes it usable here.
+  integrations?: string[];
 };
 
 export type FlowSummary = {
@@ -167,6 +172,18 @@ export type Ref = {
   mime?: string;
   ref?: string;
   data?: unknown; // serialized as Inline in Go
+};
+
+// Mirrors core.LintIssue. severity is "warn" or "error"; the UI
+// treats both as non-blocking and surfaces them in a banner after
+// save — even "error" findings don't reject persistence today, since
+// the lint is heuristic. Tightening some rules to blocking is a
+// future call.
+export type LintIssue = {
+  code: string;
+  severity: "warn" | "error";
+  message: string;
+  node_ids?: string[];
 };
 
 export type JobError = {

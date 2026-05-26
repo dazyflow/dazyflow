@@ -3,6 +3,7 @@ import type {
   FlowSummary,
   Graph,
   IssuedAPIKey,
+  LintIssue,
   Manifest,
   TemplateSummary,
   JobRecord,
@@ -156,7 +157,11 @@ export const api = {
       `/graphs/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/${encodeURIComponent(id)}`,
     ),
   saveGraph: (token: string, g: Graph) =>
-    request<{ commit: string; graph_id: string }>(
+    request<{
+      commit: string;
+      graph_id: string;
+      lint?: LintIssue[];
+    }>(
       token,
       "PUT",
       `/graphs/${encodeURIComponent(g.tenant)}/${encodeURIComponent(g.workspace)}/${encodeURIComponent(g.id)}`,

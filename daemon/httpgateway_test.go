@@ -1352,6 +1352,72 @@ func TestHTTPGateway_ValidateCron_RequiresAuth(t *testing.T) {
 	}
 }
 
+func TestHTTPGateway_SaveGraph_IncludesLintInResponse(t *testing.T) {
+	h := newGatewayHarness(t)
+	// Save a graph that should trigger the secret_to_persistence
+	// lint: an http_request reading from a tenant secret, feeding
+	// directly into file_write.
+	g := core.Graph{
+		ID: "leaky", Tenant: "t", Workspace: "ws",
+		Nodes: []core.Node{
+			{
+				ID: "call", Module: "http_request",
+				Params: map[string]any{
+					"url":     "https://api.example.com",
+					"headers": map[string]any{"Authorization": "Bearer ${tenant:api_key}"},
+				},
+			},
+			{ID: "save", Module: "file_write", Params: map[string]any{"path": "out.txt"}},
+		},
+		Edges: []core.Edge{
+			{From: "call", To: "save", FromPort: "body", ToPort: "data"},
+		},
+	}
+	rw := h.do(t, "PUT", "/api/v1/graphs/t/ws/leaky", g)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("code = %d body = %s", rw.Code, rw.Body.String())
+	}
+	var out struct {
+		Commit  string           `json:"commit"`
+		GraphID string           `json:"graph_id"`
+		Lint    []core.LintIssue `json:"lint"`
+	}
+	if err := json.Unmarshal(rw.Body.Bytes(), &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out.GraphID != "leaky" {
+		t.Errorf("graph_id=%q", out.GraphID)
+	}
+	if len(out.Lint) != 1 {
+		t.Fatalf("expected 1 lint issue in response, got %d (%+v)", len(out.Lint), out.Lint)
+	}
+	if out.Lint[0].Code != "secret_to_persistence" {
+		t.Errorf("code=%q", out.Lint[0].Code)
+	}
+	if out.Lint[0].Severity != core.LintWarn {
+		t.Errorf("severity=%q want warn", out.Lint[0].Severity)
+	}
+}
+
+func TestHTTPGateway_SaveGraph_NoLintReturnsEmpty(t *testing.T) {
+	h := newGatewayHarness(t)
+	g := core.Graph{
+		ID: "clean", Tenant: "t", Workspace: "ws",
+		Nodes: []core.Node{{ID: "n", Module: "noop"}},
+	}
+	rw := h.do(t, "PUT", "/api/v1/graphs/t/ws/clean", g)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("code = %d", rw.Code)
+	}
+	var out struct {
+		Lint []core.LintIssue `json:"lint"`
+	}
+	_ = json.Unmarshal(rw.Body.Bytes(), &out)
+	if len(out.Lint) != 0 {
+		t.Errorf("clean graph should have no lint, got %+v", out.Lint)
+	}
+}
+
 func TestHTTPGateway_ValidateCron_AgreesWithSchedulerParser(t *testing.T) {
 	// The validate endpoint MUST use the same parser config the
 	// scheduler does — otherwise users get a green "valid" hint on

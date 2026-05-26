@@ -1,0 +1,43 @@
+{
+  "id": "webhook-to-postgres-insert",
+  "version": "1",
+  "name": "Webhook → Postgres insert",
+  "description": "Receives a JSON webhook POST and inserts the body as a row in a Postgres events table. Use case: collect events from external systems (Stripe, GitHub, internal services) into a single audit/analytics table without writing a custom HTTP collector.",
+  "icon": "database",
+  "triggers": [
+    {"type": "webhook", "secret": ""}
+  ],
+  "nodes": [
+    {
+      "id": "trigger",
+      "module": "webhook_input",
+      "params": {},
+      "position": {"x": 100, "y": 200}
+    },
+    {
+      "id": "wrap",
+      "module": "compute_rows",
+      "params": {
+        "compute": {
+          "received_at": "string(timestamp(string(row.event_ts)))",
+          "payload": "row"
+        }
+      },
+      "position": {"x": 400, "y": 200}
+    },
+    {
+      "id": "insert",
+      "module": "postgres_insert_rows",
+      "params": {
+        "dsn": "${tenant:postgres_dsn}",
+        "table": "events"
+      },
+      "position": {"x": 700, "y": 200}
+    }
+  ],
+  "edges": [
+    {"from": "trigger", "from_port": "body", "to": "wrap", "to_port": "rows", "on_error": ""},
+    {"from": "wrap", "from_port": "rows", "to": "insert", "to_port": "rows", "on_error": ""},
+    {"from": "wrap", "from_port": "headers", "to": "insert", "to_port": "headers", "on_error": ""}
+  ]
+}

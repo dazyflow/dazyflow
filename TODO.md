@@ -219,11 +219,18 @@ this no customer can try" to "needed before paid conversion."
   endpoint — just JSON files behind the web app's static asset
   server. Welcome wizard reordered so "Browse templates" is step
   1; FlowList has a "From template" button next to "New flow".
-  Five seed templates cover the breadth (Excel→DB,
+  Eleven seed templates now cover both breadth (Excel→DB,
   webhook→Slack, daily Postgres digest, Gmail→Sheets,
-  Sheet→Postgres upsert sync). Open follow-up: 15+ more
-  templates to fill the gallery, and an admin UI to add custom
-  templates per tenant.
+  Sheet→Postgres upsert sync) AND depth (Gmail→Slack with
+  cursor dedupe via `secret_set`, GitHub-issue→Slack webhook,
+  Sheet×DB join→upsert exercising `join_rows`, daily group-by
+  report exercising `group_aggregate`, webhook→Postgres event
+  log, clean-Excel→email pipeline). Each entry carries an
+  `integrations: [...]` array of brand slugs that render as
+  small vendor logos on the card so users can scan
+  "this one touches Slack + Gmail" without reading titles.
+  Open follow-up: an admin UI to add custom per-tenant
+  templates beyond the shipped set.
 
 ### T2 — Retention (failing-quietly is what kills trials)
 
@@ -403,11 +410,30 @@ platform can demonstrate but not actually power a real workflow.
 - [ ] **Port-bind failures are silent.** When the webhook listener's
   port is taken, `hzd` logs and continues. Should fail-loud on startup
   so orchestration (k8s, systemd) restarts the process.
-- [ ] **Output sanitization for secrets.** Modules can write resolved
-  secret values into their `Result.Output`; downstream `file_write`
-  could persist them. No automatic redaction. Documenting at minimum,
-  ideally lint the graph for `file_write` connected downstream of
-  http_request response_body when a request used a secret.
+- [~] **Output sanitization for secrets.** V1 shipped:
+  `core.LintGraph(g) []LintIssue` runs at every `PUT /graphs`
+  save. The first rule, `secret_to_persistence`, detects nodes
+  whose Params or Env reference `${env|tenant|builtin:...}`
+  placeholders and have a forward edge path (any number of
+  intermediate transforms) into a persistence sink
+  (`file_write`, `excel_write`, `*_insert_rows`,
+  `*_upsert_rows`, `sheets_append_row`, `secret_set`). Each
+  reached pair emits a `LintIssue` with severity `warn` naming
+  both nodes and explaining why it matters. Lint is advisory:
+  save still succeeds, the response includes
+  `lint: []LintIssue`, and the FlowEditor's bottom banner
+  surfaces findings with a Dismiss button. External-API sends
+  (Slack/Gmail/GitHub/HTTP-post) are intentionally NOT
+  persistence sinks — they exchange the secret with the
+  service that holds it. 12 core tests pin direct/transitive
+  paths, multiple sinks, nested-in-array params, secret in env,
+  every secret scheme, non-secret placeholder rejection,
+  external-API send not triggering, BFS-stops-at-first-sink.
+  2 handler tests pin the save-response shape (lint present +
+  empty case). **Open follow-ups:** more rules (e.g. lint when
+  `sheets_append_row` is downstream of a secret-bearing call,
+  surface in the inspector with per-node markers, allow
+  selective dismissal vs dismiss-all).
 
 ## API surface — control plane gaps
 
@@ -746,12 +772,27 @@ blocking, but listed so we don't lose them.
   first-seen ordering pinned, header sort stability under
   Go's map randomization, every error-path
   (missing/empty/unknown params, missing/unknown columns).
-- [ ] **`route_rows` (N-way split)** — variadic output ports keyed
-  by a column value (or per-port CEL predicate). Picks up where
-  `split_rows` stops: instead of two ports, route to N named
-  destinations like `{SE: ..., NO: ..., default: ...}`. Needs the
-  variadic-output-port story sorted in the editor first
-  (per "Variadic input ports" under Editor).
+- [~] **`route_rows` (N-way split)** — shipped V1:
+  `integrations/transform/route_rows.go`. Eight fixed routing
+  slots (`rows_1`..`rows_8`) + `default` catch-all + `headers`
+  passthrough; param `routes: [{slot, filter}, ...]` is an
+  ordered list of (CEL predicate, target slot) rules with
+  first-match-wins semantics. Rows matching no route land on
+  the configurable `default_slot` (default `default`).
+  Validation rejects unknown slot names, empty filters, and
+  collisions between an explicit route and the default slot.
+  Dormant slots (declared in manifest but not referenced in
+  params) emit no output, so downstream of them is correctly
+  skipped by the existing edge-classifier. 13 tests cover
+  3-way split, first-match-wins, custom default, empty inputs,
+  headers passthrough, dormant-slot absence, and every error
+  path. **Open follow-up (the original "variadic by name"
+  design):** the editor can't render per-name output handles
+  yet, so the user's semantic names (`SE`, `NO`, `UK`) live in
+  the downstream node labels rather than on the port itself.
+  Same fix that unblocks variadic INPUT port rendering would
+  unlock this — both share the "draw N handles from a
+  manifest-declared list at runtime" need.
 - [ ] **Excel polish on shipped drops** (`integrations/io/excel_*`):
     - `start_cell` on `excel_write` — write the table starting at
       e.g. `B5` instead of A1; templated reports with a banner row

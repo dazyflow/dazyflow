@@ -1,0 +1,66 @@
+{
+  "id": "sheet-join-postgres-upsert",
+  "version": "1",
+  "name": "Sheet × DB join → upsert",
+  "description": "Reads a Google Sheet, joins each row against a Postgres lookup table (e.g. enriches sales rows with customer details), and upserts the result back into Postgres. Demonstrates join_rows with kind=left — Sheet rows missing a DB match still flow through with nil enrichment columns. Runs hourly.",
+  "icon": "database",
+  "triggers": [
+    {"type": "cron", "cron": "0 * * * *"}
+  ],
+  "nodes": [
+    {
+      "id": "tick",
+      "module": "cron_trigger",
+      "params": {},
+      "position": {"x": 100, "y": 200}
+    },
+    {
+      "id": "sheet",
+      "module": "sheets_read_range",
+      "params": {
+        "spreadsheet_id": "REPLACE_WITH_YOUR_SHEET_ID",
+        "range": "Sales!A1:E1000",
+        "account": "default"
+      },
+      "position": {"x": 400, "y": 100}
+    },
+    {
+      "id": "lookup",
+      "module": "postgres_query",
+      "params": {
+        "dsn": "${tenant:postgres_dsn}",
+        "sql": "SELECT customer_id, name AS customer_name, tier FROM customers"
+      },
+      "position": {"x": 400, "y": 300}
+    },
+    {
+      "id": "join",
+      "module": "join_rows",
+      "params": {
+        "on": {"customer_id": "customer_id"},
+        "kind": "left"
+      },
+      "position": {"x": 700, "y": 200}
+    },
+    {
+      "id": "upsert",
+      "module": "postgres_upsert_rows",
+      "params": {
+        "dsn": "${tenant:postgres_dsn}",
+        "table": "sales_enriched",
+        "conflict": ["customer_id", "sale_id"]
+      },
+      "position": {"x": 1000, "y": 200}
+    }
+  ],
+  "edges": [
+    {"from": "tick", "from_port": "fired_at", "to": "sheet", "to_port": "in", "on_error": ""},
+    {"from": "tick", "from_port": "fired_at", "to": "lookup", "to_port": "in", "on_error": ""},
+    {"from": "sheet", "from_port": "rows", "to": "join", "to_port": "left_rows", "on_error": ""},
+    {"from": "sheet", "from_port": "headers", "to": "join", "to_port": "left_headers", "on_error": ""},
+    {"from": "lookup", "from_port": "rows", "to": "join", "to_port": "right_rows", "on_error": ""},
+    {"from": "lookup", "from_port": "headers", "to": "join", "to_port": "right_headers", "on_error": ""},
+    {"from": "join", "from_port": "rows", "to": "upsert", "to_port": "rows", "on_error": ""},
+    {"from": "join", "from_port": "headers", "to": "upsert", "to_port": "headers", "on_error": ""}
+  ]
+}

@@ -99,6 +99,9 @@ export function Templates() {
                 </span>
                 <h2>{tpl.title}</h2>
               </div>
+              {tpl.integrations && tpl.integrations.length > 0 && (
+                <TemplateIntegrationRow slugs={tpl.integrations} />
+              )}
               <p className="template-desc">{tpl.description}</p>
               {tpl.tags && tpl.tags.length > 0 && (
                 <div className="template-tags">
@@ -121,6 +124,42 @@ export function Templates() {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// templateIntegrationCap is how many brand logos we render before
+// collapsing the rest into a "+N" indicator. Four keeps cards visually
+// tidy at the most common widths; templates with more integrations
+// still surface that they're touching multiple services.
+const templateIntegrationCap = 4;
+
+// TemplateIntegrationRow draws a small row of vendor brand icons on
+// the template card so users can scan "this template touches Gmail
+// and Slack" without reading the title. Each slug maps 1:1 to
+// /brands/<slug>.svg under the public assets root; missing files
+// produce a broken-image (caught at content-curation time, not a
+// render hazard).
+function TemplateIntegrationRow({ slugs }: { slugs: string[] }) {
+  const shown = slugs.slice(0, templateIntegrationCap);
+  const overflow = slugs.length - shown.length;
+  return (
+    <div className="template-integrations" aria-label="integrations used">
+      {shown.map((slug) => (
+        <img
+          key={slug}
+          src={`/brands/${slug}.svg`}
+          alt={slug}
+          title={slug}
+          className="template-integration-logo"
+          draggable={false}
+        />
+      ))}
+      {overflow > 0 && (
+        <span className="template-integration-more" title={slugs.slice(templateIntegrationCap).join(", ")}>
+          +{overflow}
+        </span>
+      )}
     </div>
   );
 }

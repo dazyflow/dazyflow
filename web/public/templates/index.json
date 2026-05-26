@@ -6,6 +6,7 @@
       "description": "Load rows from an .xlsx file in your workspace into a SQLite table. Renames the 'first_name' column to 'name' on the way through; remove or extend the map_rows node to match your own schema.",
       "icon": "database",
       "tags": ["etl", "excel", "sqlite", "starter"],
+      "integrations": ["excel", "sqlite"],
       "graph_file": "/templates/excel-to-sqlite.json"
     },
     {
@@ -14,6 +15,7 @@
       "description": "Catches an incoming HTTP POST and posts the body as a message to a Slack channel. Useful for piping alerts from external systems (monitoring, build CI, Stripe events) into your team chat.",
       "icon": "webhook",
       "tags": ["webhook", "slack", "notify"],
+      "integrations": ["slack"],
       "graph_file": "/templates/webhook-to-slack.json"
     },
     {
@@ -22,6 +24,7 @@
       "description": "Runs a SELECT every morning, formats the result with a CEL expression, and posts the summary line to Slack. Wire your own SQL + channel; the rest stays.",
       "icon": "clock",
       "tags": ["cron", "postgres", "slack", "report"],
+      "integrations": ["postgres", "slack"],
       "graph_file": "/templates/daily-postgres-report.json"
     },
     {
@@ -30,6 +33,7 @@
       "description": "Polls Gmail every 5 minutes for new messages matching your query and appends them to a Google Sheet. The classic 'archive incoming form/invoice emails for later'.",
       "icon": "mail",
       "tags": ["poll", "gmail", "sheets", "archive"],
+      "integrations": ["gmail", "sheets"],
       "graph_file": "/templates/gmail-to-sheet.json"
     },
     {
@@ -38,7 +42,62 @@
       "description": "Reads a Google Sheet on a schedule, upserts every row into a Postgres table (so re-runs don't create duplicates). Perfect for ops teams maintaining a master list in Sheets that downstream services consume from the DB.",
       "icon": "database",
       "tags": ["cron", "sheets", "postgres", "etl", "upsert"],
+      "integrations": ["sheets", "postgres"],
       "graph_file": "/templates/sheet-to-postgres-sync.json"
+    },
+    {
+      "id": "gmail-new-email-to-slack",
+      "title": "New Gmail → Slack (dedupe)",
+      "description": "Poll Gmail every 5 minutes; new messages since the last fire trigger a Slack post. The cursor is persisted via secret_set so dedupe survives daemon restarts — exercises the cursor-based polling pattern end-to-end.",
+      "icon": "mail",
+      "tags": ["poll", "gmail", "slack", "dedupe", "cursor"],
+      "integrations": ["gmail", "slack"],
+      "graph_file": "/templates/gmail-new-email-to-slack.json"
+    },
+    {
+      "id": "github-issue-to-slack",
+      "title": "GitHub issue webhook → Slack",
+      "description": "Receive a GitHub issue webhook, format the payload into one Slack line, post to your triage channel. Configure the repo's webhook URL to the flow's /trigger endpoint and you're routing.",
+      "icon": "git-branch",
+      "tags": ["webhook", "github", "slack", "triage"],
+      "integrations": ["github", "slack"],
+      "graph_file": "/templates/github-issue-to-slack.json"
+    },
+    {
+      "id": "sheet-join-postgres-upsert",
+      "title": "Sheet × DB join → upsert",
+      "description": "Hourly: read a Google Sheet, left-join each row against a Postgres lookup table, upsert the enriched result back to Postgres. Shows join_rows in a real ETL position.",
+      "icon": "database",
+      "tags": ["cron", "sheets", "postgres", "join", "etl"],
+      "integrations": ["sheets", "postgres"],
+      "graph_file": "/templates/sheet-join-postgres-upsert.json"
+    },
+    {
+      "id": "daily-group-aggregate-report",
+      "title": "Daily group-by report → Slack",
+      "description": "Every morning, query yesterday's orders, group by country with sum/avg/count, render a per-country summary line, post to Slack. Exercises group_aggregate composed with compute_rows.",
+      "icon": "clock",
+      "tags": ["cron", "postgres", "group", "report", "slack"],
+      "integrations": ["postgres", "slack"],
+      "graph_file": "/templates/daily-group-aggregate-report.json"
+    },
+    {
+      "id": "webhook-to-postgres-insert",
+      "title": "Webhook → Postgres event log",
+      "description": "Receive a JSON webhook POST and insert it as a row in an events table. Use case: collect Stripe / GitHub / internal-service events into one analytics table without writing a custom collector.",
+      "icon": "database",
+      "tags": ["webhook", "postgres", "ingest", "events"],
+      "integrations": ["postgres"],
+      "graph_file": "/templates/webhook-to-postgres-insert.json"
+    },
+    {
+      "id": "excel-clean-and-email",
+      "title": "Clean Excel → email summary",
+      "description": "Read an .xlsx, rename + drop columns, filter incomplete rows, aggregate totals, email the summary line via Gmail. Pipeline pattern with a non-Slack outbound.",
+      "icon": "mail",
+      "tags": ["excel", "transform", "gmail", "etl"],
+      "integrations": ["excel", "gmail"],
+      "graph_file": "/templates/excel-clean-and-email.json"
     }
   ]
 }

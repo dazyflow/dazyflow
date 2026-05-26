@@ -423,7 +423,15 @@ func (h *HTTPGateway) saveGraph(rw http.ResponseWriter, r *http.Request, p core.
 		writeJSONError(rw, http.StatusBadRequest, err.Error())
 		return
 	}
-	writeJSON(rw, http.StatusOK, map[string]string{"commit": commit, "graph_id": g.ID})
+	// Run the advisory lint on the saved graph and include findings in
+	// the response. Lint is non-blocking — a failed lint doesn't stop
+	// the save; the UI surfaces the warnings post-save so the user can
+	// fix-and-resave or dismiss.
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"commit":   commit,
+		"graph_id": g.ID,
+		"lint":     core.LintGraph(g),
+	})
 }
 
 // listRuns returns a slim summary of recent runs for a single graph,

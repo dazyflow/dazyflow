@@ -1,0 +1,80 @@
+{
+  "id": "excel-clean-and-email",
+  "version": "1",
+  "name": "Clean Excel → email summary",
+  "description": "Reads an .xlsx file from the workspace, normalizes the rows (rename columns, drop incomplete rows), aggregates totals, formats a plain-text summary, and emails it via Gmail. Demonstrates the row-cleaning pipeline plus a non-Slack outbound channel.",
+  "icon": "mail",
+  "nodes": [
+    {
+      "id": "read",
+      "module": "excel_read",
+      "params": {
+        "path": "input/data.xlsx",
+        "sheet": "Sheet1",
+        "header_row": 1
+      },
+      "position": {"x": 100, "y": 200}
+    },
+    {
+      "id": "clean",
+      "module": "map_rows",
+      "params": {
+        "rename": {"FirstName": "name", "Email Address": "email", "Amount Paid": "amount"},
+        "select": ["name", "email", "amount"]
+      },
+      "position": {"x": 400, "y": 200}
+    },
+    {
+      "id": "filter",
+      "module": "compute_rows",
+      "params": {
+        "filter": "row.email != '' && row.amount > 0"
+      },
+      "position": {"x": 700, "y": 200}
+    },
+    {
+      "id": "totals",
+      "module": "group_aggregate",
+      "params": {
+        "by": [],
+        "aggregate": {
+          "n": {"op": "count"},
+          "revenue": {"op": "sum", "column": "amount"}
+        }
+      },
+      "position": {"x": 1000, "y": 200}
+    },
+    {
+      "id": "render",
+      "module": "compute_rows",
+      "params": {
+        "compute": {
+          "subject": "'Daily import summary: ' + string(row.n) + ' rows, $' + string(row.revenue) + ' total'"
+        }
+      },
+      "position": {"x": 1300, "y": 200}
+    },
+    {
+      "id": "email",
+      "module": "gmail_send_email",
+      "params": {
+        "to": "ops@example.com",
+        "subject": "${upstream:render.rows[0].subject}",
+        "format": "text",
+        "account": "default",
+        "body": "See attached file or run the flow detail for the breakdown."
+      },
+      "position": {"x": 1600, "y": 200}
+    }
+  ],
+  "edges": [
+    {"from": "read", "from_port": "rows", "to": "clean", "to_port": "rows", "on_error": ""},
+    {"from": "read", "from_port": "headers", "to": "clean", "to_port": "headers", "on_error": ""},
+    {"from": "clean", "from_port": "rows", "to": "filter", "to_port": "rows", "on_error": ""},
+    {"from": "clean", "from_port": "headers", "to": "filter", "to_port": "headers", "on_error": ""},
+    {"from": "filter", "from_port": "rows", "to": "totals", "to_port": "rows", "on_error": ""},
+    {"from": "filter", "from_port": "headers", "to": "totals", "to_port": "headers", "on_error": ""},
+    {"from": "totals", "from_port": "rows", "to": "render", "to_port": "rows", "on_error": ""},
+    {"from": "totals", "from_port": "headers", "to": "render", "to_port": "headers", "on_error": ""}
+  ]
+}
