@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
-import { X, Plus, Trash2, Sparkles, Copy, Check } from "lucide-react";
+import { X, Plus, Trash2, Sparkles, Copy, Check, AlertCircle } from "lucide-react";
 import type { Graph, GraphTrigger } from "../types";
+import { api } from "../api";
+import { useAuth } from "../auth";
 
 // SettingsModal hosts graph-level configuration that doesn't fit in
 // the per-node Inspector. Today only the Triggers tab exists — wiring
@@ -408,22 +410,10 @@ function TriggerRow({
         </div>
       )}
       {trigger.type === "cron" && (
-        <div className="sf-field">
-          <div className="label-row">
-            <label>Cron expression</label>
-          </div>
-          <input
-            type="text"
-            value={trigger.cron ?? ""}
-            onChange={(e) => onChange({ cron: e.target.value })}
-            placeholder="0 9 * * *"
-            style={{ fontFamily: "var(--font-mono)" }}
-          />
-          <div className="desc">
-            5-field cron: minute hour day-of-month month day-of-week. Example:
-            <code> 0 9 * * 1-5</code> = 09:00 weekdays.
-          </div>
-        </div>
+        <CronField
+          value={trigger.cron ?? ""}
+          onChange={(v) => onChange({ cron: v })}
+        />
       )}
     </div>
   );
@@ -489,5 +479,113 @@ function CurlBlock({ command }: { command: string }) {
       </button>
       <pre>{command}</pre>
     </div>
+  );
+}
+
+// CronField wraps the cron-expression input with live validation.
+// On every change we debounce a POST to /api/v1/validate/cron, the
+// same parser the scheduler uses, and surface either a red error
+// line or a green "Next: <times>" preview. Catches bad expressions
+// at edit-time instead of after the user wonders why the flow
+// never fires.
+//
+// The debounce (250ms) keeps the request rate reasonable as the
+// user types while still feeling immediate — typing `0 9 * * 1-5`
+// only triggers one validation after the burst, not five.
+function CronField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const { token } = useAuth();
+  const [state, setState] = useState<
+    | { kind: "idle" }
+    | { kind: "checking" }
+    | { kind: "valid"; nextFires: string[] }
+    | { kind: "invalid"; error: string }
+  >({ kind: "idle" });
+
+  // Validate after a typing pause. Empty value clears the state —
+  // we don't want a red "expression is empty" on a fresh form.
+  useEffect(() => {
+    if (!token) return;
+    const expr = value.trim();
+    if (!expr) {
+      setState({ kind: "idle" });
+      return;
+    }
+    setState({ kind: "checking" });
+    const handle = setTimeout(async () => {
+      try {
+        const res = await api.validateCron(token, expr);
+        if (res.valid) {
+          setState({ kind: "valid", nextFires: res.next_fires ?? [] });
+        } else {
+          setState({ kind: "invalid", error: res.error ?? "invalid" });
+        }
+      } catch (e) {
+        // Network/transport error — keep the user editing rather
+        // than locking the field. Treat as idle so the desc stays
+        // out of their way; they'll see the real error on save.
+        setState({ kind: "idle" });
+        void e;
+      }
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [value, token]);
+
+  const isInvalid = state.kind === "invalid";
+
+  return (
+    <div className="sf-field">
+      <div className="label-row">
+        <label>Cron expression</label>
+      </div>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="0 9 * * *"
+        style={{
+          fontFamily: "var(--font-mono)",
+          borderColor: isInvalid ? "var(--danger)" : undefined,
+        }}
+        aria-invalid={isInvalid}
+      />
+      {state.kind === "invalid" && (
+        <div
+          className="desc"
+          style={{ color: "var(--danger)", display: "flex", gap: 6, alignItems: "flex-start" }}
+        >
+          <AlertCircle size={13} style={{ flexShrink: 0, marginTop: 2 }} />
+          <span>{state.error}</span>
+        </div>
+      )}
+      {state.kind === "valid" && state.nextFires.length > 0 && (
+        <div className="desc" style={{ color: "var(--muted)" }}>
+          Next: {state.nextFires.map(formatCronTime).join(" · ")}
+        </div>
+      )}
+      <div className="desc">
+        5-field cron: minute hour day-of-month month day-of-week. Example:
+        <code> 0 9 * * 1-5</code> = 09:00 weekdays.
+      </div>
+    </div>
+  );
+}
+
+// formatCronTime renders a daemon-reported ISO timestamp in the
+// user's local time as a short YYYY-MM-DD HH:mm — enough to confirm
+// the cadence without timezone noise. The daemon sends RFC3339 UTC
+// so Date can parse it directly.
+function formatCronTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+    ` ${pad(d.getHours())}:${pad(d.getMinutes())}`
   );
 }

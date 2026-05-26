@@ -611,9 +611,20 @@ blocking, but listed so we don't lose them.
   wiring works, but the UI doesn't show `items[0]`, `items[1]`
   distinctly. Either render N handles dynamically as edges connect,
   or surface a port count in the catalog.
-- [ ] **Cron expression validation** in the trigger settings modal.
-  Currently freeform; bad expressions silently never fire. Either
-  client-side parser or a daemon-side validate endpoint.
+- [x] **Cron expression validation** in the trigger settings modal.
+  Shipped: new `POST /api/v1/validate/cron` endpoint
+  (`daemon/httpcron.go`) reuses the EXACT
+  `robfig/cron`-with-`Minute|Hour|Dom|Month|Dow`-flags parser the
+  scheduler uses, so a green "valid" hint guarantees the
+  scheduler will accept the expression. Returns
+  `{valid, error?, next_fires?: [3 RFC3339 UTC timestamps]}`.
+  Frontend: new `CronField` component in SettingsModal debounces
+  validation (250ms) on every keystroke, draws a red border +
+  inline error message when the daemon rejects, and shows a
+  "Next: YYYY-MM-DD HH:mm · ..." preview rendered in local time
+  when accepted — confirms the cadence without timezone noise.
+  5 backend tests (valid + invalid + empty + auth + parser-
+  agreement-with-scheduler).
 - [ ] **Variadic step_params** in `for_each` — `step_params` is an
   untyped object so the Inspector form falls back to JSON. A
   schema-driven option (e.g. "use this manifest's schema for the
@@ -712,12 +723,29 @@ blocking, but listed so we don't lose them.
   collisions (default + custom suffix), shared-key-name
   deduplication, empty-side cases, missing-key-column errors
   on either side, bad params.
-- [ ] **`group_aggregate`** — group rows by one or more columns and
-  emit one row per group with aggregated values. Aggregations:
-  count, sum, avg, min, max, first, last, collect-as-list. Static
-  config; CEL expressions for derived aggregates can come via a
-  follow-up `compute_rows` step. Covers the pivot-table use case
-  without inventing a Pivot drop yet.
+- [x] **`group_aggregate`** — shipped:
+  `integrations/transform/group_aggregate.go`. `by` param picks
+  the group columns ([] = single total group covering all
+  rows); `aggregate` maps each output column to `{op, column}`
+  with ops `count` / `sum` / `avg` / `min` / `max` / `first` /
+  `last` / `collect`. Numeric ops coerce string-numeric values
+  via `strconv.ParseFloat` (Excel "30" sums alongside int 30 /
+  float 30.0); `min`/`max` falls back to lexical comparison
+  when values aren't all numeric. Sums down-cast to int64 when
+  the float result is integral (avoids "30.0" cosmetics
+  downstream). Groups emitted in first-seen order;
+  aggregation-output headers alphabetized so map iteration
+  randomness doesn't leak. Numeric extrema reuse a single
+  float accumulator alongside the running sum to keep memory
+  flat per group. Per-row errors (sum on a non-numeric column)
+  surface with code `eval` mentioning the column and row index.
+  20 tests: single + multi-column `by`, count, sum/avg with
+  string/int coercion, sum-on-non-numeric fails, avg of all-nil
+  group → nil, numeric vs lexical min/max, first/last/collect
+  preservation, empty `by` total-group, empty input rows,
+  first-seen ordering pinned, header sort stability under
+  Go's map randomization, every error-path
+  (missing/empty/unknown params, missing/unknown columns).
 - [ ] **`route_rows` (N-way split)** — variadic output ports keyed
   by a column value (or per-port CEL predicate). Picks up where
   `split_rows` stops: instead of two ports, route to N named

@@ -1273,3 +1273,103 @@ func TestHTTPGateway_SampleNode_RequiresAuth(t *testing.T) {
 		t.Errorf("code = %d, want 401", rw.Code)
 	}
 }
+
+// ---- Cron validate endpoint ----------------------------------------
+//
+// The SettingsModal hits this on every keystroke to give users an
+// inline "this cron is bad" / "next fires" hint. The handler MUST
+// agree with the scheduler's parser — these tests pin the contract.
+
+func TestHTTPGateway_ValidateCron_ValidExpression(t *testing.T) {
+	h := newGatewayHarness(t)
+	rw := h.do(t, "POST", "/api/v1/validate/cron", map[string]any{"expr": "0 9 * * 1-5"})
+	if rw.Code != http.StatusOK {
+		t.Fatalf("code = %d body = %s", rw.Code, rw.Body.String())
+	}
+	var out struct {
+		Valid     bool     `json:"valid"`
+		Error     string   `json:"error"`
+		NextFires []string `json:"next_fires"`
+	}
+	if err := json.Unmarshal(rw.Body.Bytes(), &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !out.Valid {
+		t.Errorf("valid expression rejected: %q", out.Error)
+	}
+	if len(out.NextFires) != 3 {
+		t.Errorf("expected 3 next fires, got %d (%v)", len(out.NextFires), out.NextFires)
+	}
+}
+
+func TestHTTPGateway_ValidateCron_InvalidExpression(t *testing.T) {
+	h := newGatewayHarness(t)
+	// 7 fields where 5 are allowed.
+	rw := h.do(t, "POST", "/api/v1/validate/cron", map[string]any{"expr": "totally not a cron"})
+	if rw.Code != http.StatusOK {
+		t.Fatalf("code = %d (validate endpoint returns 200 even for invalid input)", rw.Code)
+	}
+	var out struct {
+		Valid bool   `json:"valid"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(rw.Body.Bytes(), &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out.Valid {
+		t.Errorf("invalid expression accepted")
+	}
+	if out.Error == "" {
+		t.Errorf("invalid expression missing error message")
+	}
+}
+
+func TestHTTPGateway_ValidateCron_EmptyExpression(t *testing.T) {
+	h := newGatewayHarness(t)
+	rw := h.do(t, "POST", "/api/v1/validate/cron", map[string]any{"expr": "   "})
+	if rw.Code != http.StatusOK {
+		t.Fatalf("code = %d", rw.Code)
+	}
+	var out struct {
+		Valid bool   `json:"valid"`
+		Error string `json:"error"`
+	}
+	_ = json.Unmarshal(rw.Body.Bytes(), &out)
+	if out.Valid {
+		t.Errorf("empty expression should be invalid")
+	}
+}
+
+func TestHTTPGateway_ValidateCron_RequiresAuth(t *testing.T) {
+	h := newGatewayHarness(t)
+	req := httptest.NewRequest("POST", "/api/v1/validate/cron", bytes.NewBufferString(`{"expr":"0 9 * * *"}`))
+	req.Header.Set("Content-Type", "application/json")
+	// no Authorization header
+	rw := httptest.NewRecorder()
+	ServeForTest(h.gw, rw, req)
+	if rw.Code != http.StatusUnauthorized {
+		t.Errorf("code = %d, want 401", rw.Code)
+	}
+}
+
+func TestHTTPGateway_ValidateCron_AgreesWithSchedulerParser(t *testing.T) {
+	// The validate endpoint MUST use the same parser config the
+	// scheduler does — otherwise users get a green "valid" hint on
+	// an expression the scheduler then refuses at rescan time.
+	// Spot-check by trying a "@yearly"-style expression that
+	// robfig/cron supports only with the optional Descriptor flag —
+	// the scheduler doesn't enable that, so the endpoint shouldn't
+	// either.
+	h := newGatewayHarness(t)
+	rw := h.do(t, "POST", "/api/v1/validate/cron", map[string]any{"expr": "@yearly"})
+	if rw.Code != http.StatusOK {
+		t.Fatalf("code = %d", rw.Code)
+	}
+	var out struct {
+		Valid bool `json:"valid"`
+	}
+	_ = json.Unmarshal(rw.Body.Bytes(), &out)
+	if out.Valid {
+		t.Errorf("@yearly accepted but scheduler's 5-field parser doesn't allow descriptors")
+	}
+}

@@ -168,6 +168,18 @@ export const api = {
       "POST",
       `/graphs/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/${encodeURIComponent(id)}/run`,
     ),
+  // validateCron asks the daemon to parse a 5-field cron expression
+  // using the SAME parser the scheduler uses, and returns the next
+  // few fire times when it's valid. UI uses this to surface "bad
+  // cron silently never fires" issues at save-time instead of after
+  // the user wonders why nothing ran.
+  validateCron: (token: string, expr: string) =>
+    request<{ valid: boolean; error?: string; next_fires?: string[] }>(
+      token,
+      "POST",
+      "/validate/cron",
+      { expr },
+    ),
   // sampleNode fires a partial run that ends at nodeID — the daemon
   // strips every node and edge outside nodeID's upstream chain before
   // submitting. Returns the run_id so the caller can subscribe to the

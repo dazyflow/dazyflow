@@ -134,6 +134,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/v1/graphs/{tenant}/{workspace}/{id}", h.requireAuth(h.saveGraph))
 	mux.HandleFunc("POST /api/v1/graphs/{tenant}/{workspace}/{id}/run", h.requireAuth(h.runGraph))
 	mux.HandleFunc("POST /api/v1/graphs/{tenant}/{workspace}/{id}/nodes/{nodeID}/sample", h.requireAuth(h.sampleNode))
+	mux.HandleFunc("POST /api/v1/validate/cron", h.requireAuth(h.validateCron))
 	// Slack Events API endpoint. NOT under requireAuth — Slack POSTs
 	// as a stranger; the HMAC signature is the auth.
 	mux.HandleFunc("POST /api/v1/events/slack/{tenant}", h.slackEvents)
