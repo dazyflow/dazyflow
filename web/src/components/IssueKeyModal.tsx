@@ -1,37 +1,37 @@
 import { useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import type { IssuedAPIKey, Permission, Role } from "../types";
 
 // Role templates — common shapes admins reach for. "Custom" disables
 // the template effect so the checkbox grid is the source of truth.
-// Keeping templates on the frontend is fine for V1; if customer
-// deployments end up needing per-tenant overrides, promote to a
-// backend `/api/v1/admin/role-templates` endpoint.
+// The display name + description are i18n keys (resolved at render
+// time) so the picker tracks the active locale.
 type Template = {
   id: string;
-  name: string;
-  desc: string;
+  nameKey: string;
+  descKey: string;
   permissions: Permission[];
 };
 
 export const ROLE_TEMPLATES: Template[] = [
   {
     id: "viewer",
-    name: "Viewer",
-    desc: "Trigger graph runs. No editing, no secrets.",
+    nameKey: "issueKey.templateViewer",
+    descKey: "issueKey.templateViewerDesc",
     permissions: ["graph:run"],
   },
   {
     id: "operator",
-    name: "Operator",
-    desc: "Run and edit flows. Read secrets.",
+    nameKey: "issueKey.templateOperator",
+    descKey: "issueKey.templateOperatorDesc",
     permissions: ["graph:run", "graph:edit", "secret:read"],
   },
   {
     id: "admin",
-    name: "Tenant admin",
-    desc: "Everything operator can do, plus tenant management (other keys + secrets).",
+    nameKey: "issueKey.templateAdmin",
+    descKey: "issueKey.templateAdminDesc",
     permissions: [
       "graph:run",
       "graph:edit",
@@ -67,6 +67,7 @@ export function IssueKeyModal({
   onIssued,
   onError,
 }: Props) {
+  const { t } = useTranslation();
   const { token, activeTenant } = useAuth();
   const [subject, setSubject] = useState(initialSubject ?? "");
   const [templateID, setTemplateID] = useState<string>("custom");
@@ -100,11 +101,11 @@ export function IssueKeyModal({
     e.preventDefault();
     if (!token) return;
     if (!subject.trim()) {
-      onError("Subject is required.");
+      onError(t("issueKey.subjectRequired"));
       return;
     }
     if (perms.size === 0) {
-      onError("Pick at least one permission.");
+      onError(t("issueKey.needAtLeastOnePerm"));
       return;
     }
     setSubmitting(true);
@@ -139,37 +140,37 @@ export function IssueKeyModal({
         onSubmit={submit}
       >
         <div className="settings-head">
-          <h2>Issue API key</h2>
+          <h2>{t("issueKey.title")}</h2>
         </div>
         <div className="settings-body">
           <div className="sf-field">
             <div className="label-row">
-              <label>Subject (who owns this key) *</label>
+              <label>{t("issueKey.subjectLabel")}</label>
             </div>
             <input
               autoFocus={!initialSubject}
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              placeholder="alice@example.com"
+              placeholder={t("issueKey.subjectPlaceholder")}
             />
           </div>
 
           <div className="sf-field">
             <div className="label-row">
-              <label>Role template</label>
+              <label>{t("issueKey.roleTemplate")}</label>
             </div>
             <div className="role-template-grid">
-              {ROLE_TEMPLATES.map((t) => (
+              {ROLE_TEMPLATES.map((tpl) => (
                 <button
-                  key={t.id}
+                  key={tpl.id}
                   type="button"
                   className={
-                    "role-template" + (templateID === t.id ? " active" : "")
+                    "role-template" + (templateID === tpl.id ? " active" : "")
                   }
-                  onClick={() => applyTemplate(t.id)}
+                  onClick={() => applyTemplate(tpl.id)}
                 >
-                  <div className="role-template-name">{t.name}</div>
-                  <div className="role-template-desc">{t.desc}</div>
+                  <div className="role-template-name">{t(tpl.nameKey)}</div>
+                  <div className="role-template-desc">{t(tpl.descKey)}</div>
                 </button>
               ))}
               <button
@@ -179,9 +180,9 @@ export function IssueKeyModal({
                 }
                 onClick={() => applyTemplate("custom")}
               >
-                <div className="role-template-name">Custom</div>
+                <div className="role-template-name">{t("issueKey.templateCustom")}</div>
                 <div className="role-template-desc">
-                  Pick individual permissions below.
+                  {t("issueKey.templateCustomDesc")}
                 </div>
               </button>
             </div>
@@ -189,21 +190,21 @@ export function IssueKeyModal({
 
           <div className="sf-field">
             <div className="label-row">
-              <label>Role name</label>
+              <label>{t("issueKey.roleName")}</label>
             </div>
             <input
               value={roleName}
               onChange={(e) => setRoleName(e.target.value)}
-              placeholder="custom"
+              placeholder={t("issueKey.rolePlaceholder")}
             />
             <div className="desc">
-              Cosmetic — shown in the keys list to group similar keys.
+              {t("issueKey.roleNameDesc")}
             </div>
           </div>
 
           <div className="sf-field">
             <div className="label-row">
-              <label>Permissions *</label>
+              <label>{t("issueKey.permissions")}</label>
             </div>
             <div className="perm-grid">
               {ALL_PERMISSIONS.map((p) => (
@@ -220,17 +221,16 @@ export function IssueKeyModal({
               ))}
             </div>
             <div className="desc">
-              <strong>tenant:admin</strong> grants this key the power to
-              issue more keys — only assign to fully-trusted operators.
+              <Trans i18nKey="issueKey.tenantAdminWarning" components={[<strong />]} />
             </div>
           </div>
         </div>
         <div className="settings-foot">
           <button type="button" onClick={onCancel}>
-            Cancel
+            {t("issueKey.cancel")}
           </button>
           <button type="submit" className="primary" disabled={submitting}>
-            {submitting ? "Issuing…" : "Issue"}
+            {submitting ? t("issueKey.issuing") : t("issueKey.issue")}
           </button>
         </div>
       </form>

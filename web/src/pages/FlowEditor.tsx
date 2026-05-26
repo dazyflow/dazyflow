@@ -7,6 +7,7 @@ import {
   type DragEvent,
 } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -42,6 +43,7 @@ import { ChatPanel } from "../components/ChatPanel";
 const nodeTypes = { hazy: HazyNode };
 
 function EditorInner() {
+  const { t } = useTranslation();
   const { id } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -469,14 +471,14 @@ function EditorInner() {
           <button
             className="ghost"
             onClick={() => navigate("/flows")}
-            title="Back"
+            title={t("editor.back")}
           >
             <ArrowLeft size={16} />
           </button>
           <button
             className="ghost"
             onClick={() => setChatOpen((v) => !v)}
-            title="AI assistant"
+            title={t("editor.aiAssistant")}
             aria-pressed={chatOpen}
           >
             <Sparkles size={14} />
@@ -484,7 +486,7 @@ function EditorInner() {
           <button
             className="ghost"
             onClick={() => setSettingsOpen(true)}
-            title="Flow settings (triggers, etc.)"
+            title={t("editor.flowSettings")}
           >
             <SettingsIcon size={14} />
             {triggers.length > 0 && (
@@ -509,14 +511,20 @@ function EditorInner() {
             disabled={!dirty || saving || !hasPerm("graph:edit") || !!lockedRunID}
             title={
               !hasPerm("graph:edit")
-                ? "Read-only — missing graph:edit"
+                ? t("editor.readOnly")
                 : lockedRunID
-                ? `Locked — run ${lockedRunID.slice(0, 8)} is in progress`
+                ? t("editor.lockedRun", { runID: lockedRunID.slice(0, 8) })
                 : undefined
             }
           >
             <Save size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-            {lockedRunID ? "Locked" : saving ? "Saving…" : dirty ? "Save" : "Saved"}
+            {lockedRunID
+              ? t("editor.locked")
+              : saving
+              ? t("editor.saving")
+              : dirty
+              ? t("editor.save")
+              : t("editor.saved")}
           </button>
           {me && id && (
             <RunHistory
@@ -533,16 +541,16 @@ function EditorInner() {
             disabled={running || dirty || !hasPerm("graph:run") || !!lockedRunID}
             title={
               dirty
-                ? "Save first"
+                ? t("editor.saveFirst")
                 : lockedRunID
-                ? `Already running (${lockedRunID.slice(0, 8)})`
+                ? t("editor.alreadyRunning", { runID: lockedRunID.slice(0, 8) })
                 : hasPerm("graph:run")
                 ? undefined
-                : "Missing graph:run"
+                : t("editor.missingRunPerm")
             }
           >
             <Play size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-            {running ? "Running…" : "Run"}
+            {running ? t("editor.running") : t("editor.run")}
           </button>
           {lockedRunID && (
             <button
@@ -550,8 +558,8 @@ function EditorInner() {
               disabled={cancelling || !hasPerm("graph:run")}
               title={
                 hasPerm("graph:run")
-                  ? `Cancel run ${lockedRunID.slice(0, 8)}`
-                  : "Missing graph:run"
+                  ? t("editor.cancelRunTooltip", { runID: lockedRunID.slice(0, 8) })
+                  : t("editor.missingRunPerm")
               }
               onClick={async () => {
                 if (!token || !lockedRunID) return;
@@ -572,7 +580,7 @@ function EditorInner() {
               }}
             >
               <Square size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-              {cancelling ? "Cancelling…" : "Cancel"}
+              {cancelling ? t("editor.cancelling") : t("editor.cancel")}
             </button>
           )}
           <button
@@ -582,9 +590,9 @@ function EditorInner() {
                 p === "inspector" ? null : "inspector",
               )
             }
-            title="Inspector"
+            title={t("editor.inspector")}
             style={{ display: "none" }}
-            aria-label="inspector"
+            aria-label={t("editor.inspector")}
           >
             <PanelsLeftBottom size={16} />
           </button>
@@ -666,17 +674,16 @@ function EditorInner() {
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>
               <strong style={{ color: "var(--warn, #d4a017)" }}>
-                Saved with {lintIssues.length} warning
-                {lintIssues.length > 1 ? "s" : ""}
+                {t("editor.lintWarning", { count: lintIssues.length })}
               </strong>
               <button
                 type="button"
                 className="ghost"
                 onClick={() => setLintIssues([])}
                 style={{ fontSize: 11, padding: "2px 8px" }}
-                aria-label="dismiss lint"
+                aria-label={t("editor.dismissLint")}
               >
-                Dismiss
+                {t("editor.dismiss")}
               </button>
             </div>
             <ul style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 6 }}>
@@ -698,27 +705,28 @@ function EditorInner() {
               className="ghost"
               onClick={() => setLogOpen((v) => !v)}
             >
-              {logOpen ? "▼" : "▲"} Pipeline log
+              {logOpen ? "▼" : "▲"} {t("editor.pipelineLog")}
               <span className="muted" style={{ marginLeft: 8 }}>
-                {globalLog.length === 0 ? "empty" : `${globalLog.length} lines`}
+                {globalLog.length === 0
+                  ? t("editor.logEmpty")
+                  : t("editor.logLines", { count: globalLog.length })}
               </span>
             </button>
             <button
               type="button"
               className="ghost"
               onClick={() => setGlobalLog([])}
-              title="Clear"
+              title={t("editor.logClearTitle")}
               disabled={globalLog.length === 0}
             >
-              Clear
+              {t("editor.logClear")}
             </button>
           </div>
           {logOpen && (
             <div className="pipeline-log-body">
               {globalLog.length === 0 ? (
                 <div className="pipeline-log-empty">
-                  No output yet — run a flow to see streamed stdout/stderr from
-                  every node here.
+                  {t("editor.logEmptyHint")}
                 </div>
               ) : (
                 <LiveConsole lines={globalLog} />

@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import i18n from "../i18n";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
 import type { JobRecord, Ref } from "../types";
@@ -17,6 +19,7 @@ type Props = {
 };
 
 export function OutputPreview({ runID, nodeID, refreshKey }: Props) {
+  const { t } = useTranslation();
   const { token } = useAuth();
   const [rec, setRec] = useState<JobRecord | null>(null);
   const [loading, setLoading] = useState(false);
@@ -53,7 +56,7 @@ export function OutputPreview({ runID, nodeID, refreshKey }: Props) {
   }, [token, runID, nodeID, refreshKey]);
 
   if (loading) {
-    return <div style={{ color: "var(--muted)", fontSize: 12 }}>Loading…</div>;
+    return <div style={{ color: "var(--muted)", fontSize: 12 }}>{t("outputPreview.loading")}</div>;
   }
   if (error) {
     return <div style={{ color: "var(--danger)", fontSize: 12 }}>{error}</div>;
@@ -61,7 +64,7 @@ export function OutputPreview({ runID, nodeID, refreshKey }: Props) {
   if (!rec) {
     return (
       <div style={{ color: "var(--faint)", fontSize: 12, fontStyle: "italic" }}>
-        No run output for this node yet. Click Run to execute.
+        {t("outputPreview.noOutputYet")}
       </div>
     );
   }
@@ -72,7 +75,7 @@ export function OutputPreview({ runID, nodeID, refreshKey }: Props) {
         <span style={{ fontSize: 13, fontWeight: 500 }}>{rec.Status}</span>
         {rec.Attempt && rec.Attempt > 1 && (
           <span style={{ fontSize: 11, color: "var(--faint)" }}>
-            attempt {rec.Attempt}
+            {t("outputPreview.attempt", { n: rec.Attempt })}
           </span>
         )}
         {rec.FinishedAt && (
@@ -87,7 +90,7 @@ export function OutputPreview({ runID, nodeID, refreshKey }: Props) {
       )}
       {rec.Result?.output && Object.keys(rec.Result.output).length === 0 && !rec.Result.error && (
         <div style={{ fontSize: 12, color: "var(--faint)", fontStyle: "italic" }}>
-          (no output ports emitted)
+          {t("outputPreview.noOutputPorts")}
         </div>
       )}
     </div>
@@ -106,6 +109,7 @@ function PortList({ output }: { output: Record<string, Ref> }) {
 }
 
 function PortCard({ port, ref0 }: { port: string; ref0: Ref }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const value = ref0.data;
   const isPrimitive =
@@ -137,7 +141,7 @@ function PortCard({ port, ref0 }: { port: string; ref0: Ref }) {
           style={{ fontSize: 11, padding: "2px 8px", marginTop: 4 }}
           onClick={() => setExpanded((v) => !v)}
         >
-          {expanded ? "Collapse" : `Show all (${json.length.toLocaleString()} chars)`}
+          {expanded ? t("outputPreview.collapse") : t("outputPreview.showAll", { chars: json.length.toLocaleString() })}
         </button>
       )}
     </div>
@@ -149,16 +153,17 @@ function ErrorBlock({
 }: {
   error: { code: string; message: string; details?: string };
 }) {
+  const { t } = useTranslation();
   return (
     <div className="port-card port-error">
       <div className="port-head">
-        <span className="port-name">error</span>
+        <span className="port-name">{t("outputPreview.errorLabel")}</span>
         <span className="port-mime">{error.code}</span>
       </div>
       <div className="port-error-msg">{error.message}</div>
       {error.details && (
         <details className="port-error-details">
-          <summary>Details</summary>
+          <summary>{t("outputPreview.errorDetails")}</summary>
           <pre className="port-value">{error.details}</pre>
         </details>
       )}
@@ -167,7 +172,7 @@ function ErrorBlock({
 }
 
 function formatValue(v: unknown): string {
-  if (v === undefined) return "(empty)";
+  if (v === undefined) return i18n.t("outputPreview.emptyValue");
   try {
     return JSON.stringify(v, null, 2);
   } catch {
@@ -175,14 +180,14 @@ function formatValue(v: unknown): string {
   }
 }
 
-// formatRelative produces a short, human-friendly age string like "2s
-// ago" or "5m ago". Falls back to the raw timestamp on parse failure.
+// formatRelative produces a short, human-friendly age string. Falls
+// back to the raw timestamp on parse failure.
 function formatRelative(iso: string): string {
-  const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return iso;
-  const diffSec = Math.max(0, Math.round((Date.now() - t) / 1000));
-  if (diffSec < 60) return `${diffSec}s ago`;
-  if (diffSec < 3600) return `${Math.round(diffSec / 60)}m ago`;
-  if (diffSec < 86400) return `${Math.round(diffSec / 3600)}h ago`;
-  return `${Math.round(diffSec / 86400)}d ago`;
+  const ts = Date.parse(iso);
+  if (!Number.isFinite(ts)) return iso;
+  const diffSec = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (diffSec < 60) return i18n.t("runList.secondsAgo", { count: diffSec });
+  if (diffSec < 3600) return i18n.t("runList.minutesAgo", { count: Math.round(diffSec / 60) });
+  if (diffSec < 86400) return i18n.t("runList.hoursAgo", { count: Math.round(diffSec / 3600) });
+  return i18n.t("runList.daysAgo", { count: Math.round(diffSec / 86400) });
 }

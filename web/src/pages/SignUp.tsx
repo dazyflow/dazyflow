@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 
 // SignUp is the self-serve account creation page. It mirrors the
@@ -11,6 +12,7 @@ import { useAuth } from "../auth";
 // adds a "passwords match" check so users catch a typo before the
 // round-trip.
 export function SignUp() {
+  const { t } = useTranslation();
   const { signUpWithPassword, error, loading } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
@@ -30,11 +32,11 @@ export function SignUp() {
           setLocalErr(null);
           if (!email.trim() || !password) return;
           if (password.length < 8) {
-            setLocalErr("Password must be at least 8 characters.");
+            setLocalErr(t("signUp.tooShort"));
             return;
           }
           if (password !== confirm) {
-            setLocalErr("Passwords don't match.");
+            setLocalErr(t("signUp.mismatch"));
             return;
           }
           setBusy(true);
@@ -49,8 +51,8 @@ export function SignUp() {
           }
         }}
       >
-        <h1>Create your account</h1>
-        <label htmlFor="email">Email</label>
+        <h1>{t("signUp.title")}</h1>
+        <label htmlFor="email">{t("signUp.email")}</label>
         <input
           id="email"
           type="email"
@@ -60,7 +62,7 @@ export function SignUp() {
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com"
         />
-        <label htmlFor="password">Password</label>
+        <label htmlFor="password">{t("signUp.password")}</label>
         <input
           id="password"
           type="password"
@@ -68,9 +70,9 @@ export function SignUp() {
           minLength={8}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder="At least 8 characters"
+          placeholder={t("signUp.passwordPlaceholder")}
         />
-        <label htmlFor="confirm">Confirm password</label>
+        <label htmlFor="confirm">{t("signUp.confirm")}</label>
         <input
           id="confirm"
           type="password"
@@ -85,11 +87,11 @@ export function SignUp() {
             busy || loading || !email.trim() || !password || passwordMismatch
           }
         >
-          {busy ? "Creating account…" : "Create account"}
+          {busy ? t("signUp.submitting") : t("signUp.submit")}
         </button>
         {(localErr || error) && <div className="error">{localErr ?? error}</div>}
         <div className="signin-alt">
-          Already have an account? <Link to="/signin">Sign in</Link>
+          {t("signUp.haveAccount")} <Link to="/signin">{t("signUp.signInLink")}</Link>
         </div>
       </form>
     </div>

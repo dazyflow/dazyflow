@@ -1,4 +1,5 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
+import i18n from "../i18n";
 import { iconFor, isBrandedIcon } from "../icons";
 import type { Manifest, Port } from "../types";
 
@@ -98,7 +99,7 @@ export function HazyNode({ data, selected }: NodeProps) {
       {d.status && (
         <div
           className={"status-dot " + d.status}
-          title={`status: ${d.status}`}
+          title={i18n.t("nodeCard.statusTooltip", { status: d.status })}
         />
       )}
 
@@ -178,6 +179,6 @@ function portColor(mime: string[] | undefined): string {
 function portTooltip(port: Port): string {
   const parts = [port.label ? `${port.label} (${port.port})` : port.port];
   if (port.mime && port.mime.length > 0) parts.push(port.mime.join(" | "));
-  parts.push(port.required ? "required" : "optional");
+  parts.push(port.required ? i18n.t("nodeCard.portRequired") : i18n.t("nodeCard.portOptional"));
   return parts.join(" — ");
 }

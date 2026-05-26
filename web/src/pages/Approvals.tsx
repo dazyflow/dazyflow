@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { CheckCircle2, XCircle, Workflow, Inbox } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
+import i18n from "../i18n";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
 import type { PendingApproval } from "../types";
@@ -10,6 +12,7 @@ import type { PendingApproval } from "../types";
 // manual refresh. Approve / Reject buttons call POST /approvals/...
 // which Service.Approve services (same code path as the HMAC endpoint).
 export function Approvals() {
+  const { t } = useTranslation();
   const { token, me, activeTenant, activeWorkspace } = useAuth();
   const [items, setItems] = useState<PendingApproval[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,7 +66,7 @@ export function Approvals() {
       // approval is one-click. Reject benefits from a "why".
       let comment: string | undefined;
       if (decision === "reject") {
-        const note = window.prompt("Reason for rejecting? (optional)");
+        const note = window.prompt(t("approvals.rejectReasonPrompt"));
         if (note) comment = note;
       }
       await api.approveNode(token, item.run_id, item.node_id, decision, comment);
@@ -90,13 +93,20 @@ export function Approvals() {
     <div>
       <div className="page-title">
         <div>
-          <h1>Approvals</h1>
+          <h1>{t("approvals.title")}</h1>
           <div className="sub">
-            Pending in {activeTenant || me?.tenant}/
-            {activeWorkspace || me?.workspace || "(any)"}
+            {t("approvals.subtitle", {
+              tenant: activeTenant || me?.tenant,
+              workspace: activeWorkspace || me?.workspace || t("approvals.anyWorkspace"),
+            })}
             {items.length > 0 && (
               <>
-                {" "}· <strong>{items.length}</strong> waiting
+                {" · "}
+                <Trans
+                  i18nKey="approvals.waitingSuffix"
+                  values={{ count: items.length }}
+                  components={[<strong />]}
+                />
               </>
             )}
           </div>
@@ -111,14 +121,14 @@ export function Approvals() {
 
       {!error && loading && items.length === 0 && (
         <div className="card" style={{ color: "var(--muted)" }}>
-          Loading…
+          {t("common.loading")}
         </div>
       )}
 
       {!error && !loading && items.length === 0 && (
         <div className="card approvals-empty">
           <Inbox size={28} style={{ opacity: 0.5, marginBottom: 8 }} />
-          <div>Inbox zero — nothing waiting on your decision.</div>
+          <div>{t("approvals.inboxZero")}</div>
         </div>
       )}
 
@@ -131,7 +141,7 @@ export function Approvals() {
               <div className="approval-head">
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div className="approval-prompt">
-                    {item.prompt || "(no prompt — node ID: " + item.node_id + ")"}
+                    {item.prompt || t("approvals.noPrompt", { nodeId: item.node_id })}
                   </div>
                   <div className="approval-meta">
                     <Link
@@ -154,7 +164,7 @@ export function Approvals() {
                     disabled={!!inflight}
                   >
                     <XCircle size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-                    {inflight === "reject" ? "Rejecting…" : "Reject"}
+                    {inflight === "reject" ? t("approvals.rejecting") : t("approvals.reject")}
                   </button>
                   <button
                     className="primary"
@@ -162,7 +172,7 @@ export function Approvals() {
                     disabled={!!inflight}
                   >
                     <CheckCircle2 size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-                    {inflight === "approve" ? "Approving…" : "Approve"}
+                    {inflight === "approve" ? t("approvals.approving") : t("approvals.approve")}
                   </button>
                 </div>
               </div>
@@ -175,11 +185,11 @@ export function Approvals() {
 }
 
 function formatTime(iso: string): string {
-  const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return iso;
-  const diffSec = Math.max(0, Math.round((Date.now() - t) / 1000));
-  if (diffSec < 60) return `${diffSec}s ago`;
-  if (diffSec < 3600) return `${Math.round(diffSec / 60)}m ago`;
-  if (diffSec < 86400) return `${Math.round(diffSec / 3600)}h ago`;
-  return `${Math.round(diffSec / 86400)}d ago`;
+  const ts = Date.parse(iso);
+  if (!Number.isFinite(ts)) return iso;
+  const diffSec = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (diffSec < 60) return i18n.t("runList.secondsAgo", { count: diffSec });
+  if (diffSec < 3600) return i18n.t("runList.minutesAgo", { count: Math.round(diffSec / 60) });
+  if (diffSec < 86400) return i18n.t("runList.hoursAgo", { count: Math.round(diffSec / 3600) });
+  return i18n.t("runList.daysAgo", { count: Math.round(diffSec / 86400) });
 }

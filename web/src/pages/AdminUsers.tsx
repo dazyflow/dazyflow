@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { AlertCircle, KeyRound, Plus, Users, UserCircle2 } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
 import type { IssuedAPIKey, UserSummary } from "../types";
@@ -16,6 +17,7 @@ import { RevealSecretModal } from "../components/RevealSecretModal";
 // "Issue another key" prefills the subject so common-case admin work
 // (rotation, multi-device key) is one fewer click.
 export function AdminUsers() {
+  const { t } = useTranslation();
   const { token, hasPerm, activeTenant } = useAuth();
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,7 +35,7 @@ export function AdminUsers() {
     } catch (e) {
       const err = e as APIError | Error;
       if (err instanceof APIError && err.status === 501) {
-        setError("User admin not configured on this hzd instance.");
+        setError(t("admin.users.notConfigured"));
       } else {
         setError(err.message);
       }
@@ -49,7 +51,7 @@ export function AdminUsers() {
   if (!hasPerm("tenant:admin")) {
     return (
       <div className="card" style={{ color: "var(--danger)" }}>
-        You need <code>tenant:admin</code> to manage users.
+        <Trans i18nKey="admin.users.needAdmin" components={[<code />]} />
       </div>
     );
   }
@@ -60,15 +62,15 @@ export function AdminUsers() {
         <div>
           <h1>
             <Users size={20} style={{ marginRight: 8, verticalAlign: -3 }} />
-            Users &amp; roles
+            {t("admin.users.title")}
           </h1>
           <div className="sub">
-            Derived from API keys — one user per distinct subject.
+            {t("admin.users.subtitle")}
           </div>
         </div>
         <button className="primary" onClick={() => setCreating("")}>
           <Plus size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-          Add user
+          {t("admin.users.addUser")}
         </button>
       </div>
 
@@ -80,12 +82,12 @@ export function AdminUsers() {
       )}
 
       {loading && users.length === 0 && (
-        <div className="card" style={{ color: "var(--muted)" }}>Loading…</div>
+        <div className="card" style={{ color: "var(--muted)" }}>{t("common.loading")}</div>
       )}
 
       {!loading && users.length === 0 && !error && (
         <div className="card" style={{ color: "var(--muted)" }}>
-          No users yet. Add one to issue them an API key.
+          {t("admin.users.empty")}
         </div>
       )}
 
@@ -100,18 +102,18 @@ export function AdminUsers() {
               <div className="meta">
                 {u.role_names.length > 0
                   ? u.role_names.join(", ")
-                  : "(no active roles)"}
+                  : t("admin.users.noRoles")}
                 {u.last_workspace && (
-                  <> · workspace <code>{u.last_workspace}</code></>
+                  <> · {t("admin.users.workspaceLabel")} <code>{u.last_workspace}</code></>
                 )}
               </div>
               <div className="count-pills">
                 <span className="count-pill active">
-                  {u.active_keys} active
+                  {t("admin.users.activePill", { count: u.active_keys })}
                 </span>
                 {u.revoked_keys > 0 && (
                   <span className="count-pill revoked">
-                    {u.revoked_keys} revoked
+                    {t("admin.users.revokedPill", { count: u.revoked_keys })}
                   </span>
                 )}
               </div>
@@ -145,14 +147,14 @@ export function AdminUsers() {
                 }}
               >
                 <KeyRound size={12} />
-                {u.key_ids.length} key{u.key_ids.length === 1 ? "" : "s"}
+                {t("admin.users.keys", { count: u.key_ids.length })}
               </Link>
               <button
                 onClick={() => setCreating(u.subject)}
-                title="Issue another key for this subject"
+                title={t("admin.users.issueKeyTitle")}
               >
                 <Plus size={12} style={{ marginRight: 4, verticalAlign: -1 }} />
-                Issue key
+                {t("admin.users.issueKey")}
               </button>
             </div>
           </div>

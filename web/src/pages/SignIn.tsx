@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 
 export function SignIn() {
+  const { t } = useTranslation();
   const { signInWithPassword, error, loading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -25,8 +27,8 @@ export function SignIn() {
           }
         }}
       >
-        <h1>Sign in</h1>
-        <label htmlFor="email">Email</label>
+        <h1>{t("signIn.title")}</h1>
+        <label htmlFor="email">{t("signIn.email")}</label>
         <input
           id="email"
           type="email"
@@ -36,7 +38,7 @@ export function SignIn() {
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com"
         />
-        <label htmlFor="password">Password</label>
+        <label htmlFor="password">{t("signIn.password")}</label>
         <input
           id="password"
           type="password"
@@ -49,11 +51,11 @@ export function SignIn() {
           className="primary"
           disabled={busy || loading || !email.trim() || !password}
         >
-          {busy ? "Signing in…" : "Sign in"}
+          {busy ? t("signIn.submitting") : t("signIn.submit")}
         </button>
         {error && <div className="error">{error}</div>}
         <div className="signin-alt">
-          New here? <Link to="/signup">Create an account</Link>
+          {t("signIn.newHere")} <Link to="/signup">{t("signIn.createAccount")}</Link>
         </div>
       </form>
     </div>

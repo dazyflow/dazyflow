@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Upload, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { JSONSchema } from "../types";
 import { api, APIError } from "../api";
 
@@ -29,10 +30,11 @@ type Props = {
 };
 
 export function SchemaForm({ schema, value, onChange, workspace }: Props) {
+  const { t } = useTranslation();
   if (schema.type !== "object" || !schema.properties) {
     return (
       <div className="sf-fallback-hint">
-        Top-level schema isn't a property bag; using JSON editor instead.
+        {t("schemaForm.fallbackHint")}
       </div>
     );
   }
@@ -70,6 +72,7 @@ type FieldProps = {
 };
 
 function SchemaField({ name, schema, required, value, onChange, workspace }: FieldProps) {
+  const { t } = useTranslation();
   // oneOf takes precedence over `type` — it expresses a typed union
   // (e.g. branch.value: string | number | boolean). Render the
   // segmented picker; the selected branch is itself a SchemaField.
@@ -183,7 +186,7 @@ function SchemaField({ name, schema, required, value, onChange, workspace }: Fie
               checked={cur}
               onChange={(e) => onChange(e.target.checked)}
             />
-            <span>{cur ? "Enabled" : "Disabled"}</span>
+            <span>{cur ? t("schemaForm.enabled") : t("schemaForm.disabled")}</span>
           </label>
         </FieldWrap>
       );
@@ -414,6 +417,7 @@ function DictField({
   value: Record<string, unknown>;
   onChange: (v: Record<string, unknown>) => void;
 }) {
+  const { t } = useTranslation();
   // entries ordering — preserve insertion via stable keys, but render
   // in insertion order. Re-keying on rename is unavoidable; we accept a
   // focus blip when the user finishes editing the key.
@@ -449,7 +453,7 @@ function DictField({
           <input
             value={k}
             onChange={(e) => updateAt(idx, e.target.value, v)}
-            placeholder="key"
+            placeholder={t("schemaForm.keyPlaceholder")}
             style={{ fontFamily: "var(--font-mono)" }}
           />
           <ScalarValue
@@ -461,7 +465,7 @@ function DictField({
             type="button"
             className="ghost sf-remove"
             onClick={() => removeAt(idx)}
-            aria-label="remove"
+            aria-label={t("schemaForm.remove")}
           >
             <X size={14} />
           </button>
@@ -469,7 +473,7 @@ function DictField({
       ))}
       <button type="button" className="sf-add" onClick={addEmpty}>
         <Plus size={12} style={{ marginRight: 4, verticalAlign: -1 }} />
-        Add
+        {t("schemaForm.add")}
       </button>
     </div>
   );
@@ -484,6 +488,7 @@ function ArrayField({
   value: unknown[];
   onChange: (v: unknown[]) => void;
 }) {
+  const { t } = useTranslation();
   const updateAt = (idx: number, nv: unknown) => {
     const next = value.slice();
     next[idx] = nv;
@@ -509,7 +514,7 @@ function ArrayField({
             type="button"
             className="ghost sf-remove"
             onClick={() => removeAt(idx)}
-            aria-label="remove"
+            aria-label={t("schemaForm.remove")}
           >
             <X size={14} />
           </button>
@@ -517,7 +522,7 @@ function ArrayField({
       ))}
       <button type="button" className="sf-add" onClick={addEmpty}>
         <Plus size={12} style={{ marginRight: 4, verticalAlign: -1 }} />
-        Add
+        {t("schemaForm.add")}
       </button>
     </div>
   );
@@ -535,6 +540,7 @@ function ScalarValue({
   value: unknown;
   onChange: (v: unknown) => void;
 }) {
+  const { t } = useTranslation();
   if (schema.enum) {
     return (
       <select
@@ -574,7 +580,7 @@ function ScalarValue({
             checked={!!value}
             onChange={(e) => onChange(e.target.checked)}
           />
-          <span>{value ? "Enabled" : "Disabled"}</span>
+          <span>{value ? t("schemaForm.enabled") : t("schemaForm.disabled")}</span>
         </label>
       );
     case "object":
@@ -680,6 +686,7 @@ function WorkspacePathField({
   onChange: (v: string) => void;
   ctx: WorkspaceCtx;
 }) {
+  const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -731,7 +738,7 @@ function WorkspacePathField({
         }}
       >
         <Upload size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-        {uploading ? "Uploading…" : "Drop a file here or click to browse"}
+        {uploading ? t("schemaForm.uploading") : t("schemaForm.dropOrBrowse")}
       </div>
       <input
         ref={fileInputRef}
@@ -747,7 +754,7 @@ function WorkspacePathField({
       <input
         type="text"
         value={value}
-        placeholder="workspace-relative path"
+        placeholder={t("schemaForm.workspacePathPlaceholder")}
         onChange={(e) => onChange(e.target.value)}
         style={{ marginTop: 6, fontFamily: "var(--font-mono)", fontSize: 12 }}
       />

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { Link } from "react-router-dom";
 import { ChevronDown, ChevronRight, Search, Box, Info } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { iconFor, isBrandedIcon } from "../icons";
 import { integrationSlug } from "../integrationMeta";
 import type { Manifest } from "../types";
@@ -12,19 +13,19 @@ type Props = {
 // Display label for the standard-library fallback group (drops without
 // an Integration). Goes at the bottom and starts collapsed.
 const STDLIB_KEY = "__stdlib__";
-const STDLIB_LABEL = "Standard library";
 
-// Map category keys → friendly labels for the standard-library section's
-// sub-headings.
-const categoryLabel: Record<string, string> = {
-  trigger: "Triggers",
-  flow_control: "Flow control",
-  network: "Network",
-  io: "Files & I/O",
-  ai: "AI",
-  transformation: "Transform",
-  external: "External",
-  system: "System",
+// Map category keys → i18n keys for the standard-library section's
+// sub-headings. Resolved at render time so locale switches refresh
+// the labels.
+const categoryLabelKey: Record<string, string> = {
+  trigger: "nodeCatalog.categoryTrigger",
+  flow_control: "nodeCatalog.categoryFlowControl",
+  network: "nodeCatalog.categoryNetwork",
+  io: "nodeCatalog.categoryIo",
+  ai: "nodeCatalog.categoryAi",
+  transformation: "nodeCatalog.categoryTransformation",
+  external: "nodeCatalog.categoryExternal",
+  system: "nodeCatalog.categorySystem",
 };
 
 // integrationIcon maps an Integration display name to one of the icons
@@ -63,6 +64,8 @@ function stripPrefix(label: string, integration: string): string {
 }
 
 export function NodeCatalog({ drops }: Props) {
+  const { t } = useTranslation();
+  const STDLIB_LABEL = t("nodeCatalog.stdLibLabel");
   const [query, setQuery] = useState("");
   const [collapsed, setCollapsed] =
     useState<Record<string, boolean>>(loadCollapsed);
@@ -150,7 +153,7 @@ export function NodeCatalog({ drops }: Props) {
   return (
     <>
       <div className="panel-head">
-        <span>Integrations</span>
+        <span>{t("nodeCatalog.title")}</span>
         <span style={{ color: "var(--faint)", fontSize: 11 }}>
           {drops.length}
         </span>
@@ -168,7 +171,7 @@ export function NodeCatalog({ drops }: Props) {
             }}
           />
           <input
-            placeholder="Search integrations…"
+            placeholder={t("nodeCatalog.search")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             style={{ paddingLeft: 30 }}
@@ -226,8 +229,8 @@ export function NodeCatalog({ drops }: Props) {
                     s.isStdlib ? "standard-library" : integrationSlug(s.label),
                   )}`}
                   className="catalog-learn-more"
-                  title={`About ${s.label}`}
-                  aria-label={`About ${s.label}`}
+                  title={t("nodeCatalog.aboutTitle", { name: s.label })}
+                  aria-label={t("nodeCatalog.aboutTitle", { name: s.label })}
                 >
                   <Info size={13} />
                 </Link>
@@ -235,7 +238,7 @@ export function NodeCatalog({ drops }: Props) {
               {!isCollapsed && (
                 <div className="catalog-group-body">
                   {s.isStdlib
-                    ? renderStdlib(s.drops, onDragStart)
+                    ? renderStdlib(s.drops, onDragStart, t)
                     : renderDrops(s.label, s.drops, onDragStart)}
                 </div>
               )}
@@ -270,11 +273,15 @@ function renderDrops(
 
 // renderStdlib renders the standard-library section, sub-grouped by
 // category so flow-control / files / triggers each get their own
-// labelled run inside.
+// labelled run inside. Takes a translator so subheadings reflect the
+// active locale.
 function renderStdlib(
   drops: Manifest[],
   onDragStart: (e: DragEvent<HTMLDivElement>, m: Manifest) => void,
+  t: (key: string, opts?: { category?: string }) => string,
 ) {
+  const labelFor = (cat: string) =>
+    categoryLabelKey[cat] ? t(categoryLabelKey[cat]) : cat;
   const byCat = new Map<string, Manifest[]>();
   for (const m of drops) {
     const k = m.category ?? "other";
@@ -283,13 +290,13 @@ function renderStdlib(
     byCat.set(k, arr);
   }
   const cats = Array.from(byCat.entries()).sort(([a], [b]) =>
-    (categoryLabel[a] ?? a).localeCompare(categoryLabel[b] ?? b),
+    labelFor(a).localeCompare(labelFor(b)),
   );
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {cats.map(([cat, items]) => (
         <div key={cat}>
-          <div className="catalog-subhead">{categoryLabel[cat] ?? cat}</div>
+          <div className="catalog-subhead">{labelFor(cat)}</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {items.map((m) => (
               <DropRow
@@ -315,6 +322,7 @@ function DropRow({
   shortLabel: string;
   onDragStart: (e: DragEvent<HTMLDivElement>, m: Manifest) => void;
 }) {
+  const { t } = useTranslation();
   const Icon = iconFor(drop.icon, drop.category);
   const color = drop.color ?? "#9f83fe";
   const branded = isBrandedIcon(drop.icon);
@@ -348,7 +356,7 @@ function DropRow({
         <div className="meta">{drop.id}</div>
       </div>
       {drop.category && (
-        <span className="cat-pill" title={`category: ${drop.category}`}>
+        <span className="cat-pill" title={t("nodeCatalog.rowCategoryTooltip", { category: drop.category })}>
           {drop.category}
         </span>
       )}

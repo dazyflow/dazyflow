@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { X, Plus, Trash2, Sparkles, Copy, Check, AlertCircle } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import type { Graph, GraphTrigger } from "../types";
 import { api } from "../api";
 import { useAuth } from "../auth";
@@ -18,6 +19,7 @@ type Props = {
 type Tab = "triggers" | "notifications" | "general";
 
 export function SettingsModal({ graph, onClose, onSave }: Props) {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>("triggers");
   // Local working copy: edits only commit to the parent on Save.
   // Cancel discards by simply not calling onSave.
@@ -65,8 +67,8 @@ export function SettingsModal({ graph, onClose, onSave }: Props) {
     <div className="settings-backdrop" onClick={onClose}>
       <div className="settings-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="settings-head">
-          <h2>Flow settings</h2>
-          <button className="icon ghost" onClick={onClose} aria-label="close">
+          <h2>{t("settings.title")}</h2>
+          <button className="icon ghost" onClick={onClose} aria-label={t("settings.close")}>
             <X size={18} />
           </button>
         </div>
@@ -76,36 +78,40 @@ export function SettingsModal({ graph, onClose, onSave }: Props) {
             className={tab === "triggers" ? "active" : ""}
             onClick={() => setTab("triggers")}
           >
-            Triggers
+            {t("settings.tabTriggers")}
           </button>
           <button
             type="button"
             className={tab === "notifications" ? "active" : ""}
             onClick={() => setTab("notifications")}
           >
-            Notifications
+            {t("settings.tabNotifications")}
           </button>
           <button
             type="button"
             className={tab === "general" ? "active" : ""}
             onClick={() => setTab("general")}
           >
-            General
+            {t("settings.tabGeneral")}
           </button>
         </div>
         <div className="settings-body">
           {tab === "triggers" && (
             <div>
               <p className="settings-help">
-                Triggers fire this flow automatically. Webhook triggers
-                expose <code>POST /trigger/{graph.tenant}/{graph.workspace}/{graph.id}</code> —
-                callers send the per-graph secret as a bearer token. Cron
-                triggers run on a workspace-local schedule.
+                <Trans
+                  i18nKey="settings.triggers.help"
+                  values={{
+                    tenant: graph.tenant,
+                    workspace: graph.workspace,
+                    id: graph.id,
+                  }}
+                  components={[<code />]}
+                />
               </p>
               {triggers.length === 0 && (
                 <div className="settings-empty">
-                  No triggers yet. Add one to fire this flow without a
-                  manual run.
+                  {t("settings.triggers.empty")}
                 </div>
               )}
               <div className="trigger-list">
@@ -122,11 +128,11 @@ export function SettingsModal({ graph, onClose, onSave }: Props) {
               <div className="settings-row">
                 <button onClick={() => addTrigger("webhook")}>
                   <Plus size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-                  Add webhook
+                  {t("settings.triggers.addWebhook")}
                 </button>
                 <button onClick={() => addTrigger("cron")}>
                   <Plus size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-                  Add cron
+                  {t("settings.triggers.addCron")}
                 </button>
               </div>
             </div>
@@ -134,14 +140,11 @@ export function SettingsModal({ graph, onClose, onSave }: Props) {
           {tab === "notifications" && (
             <div>
               <p className="settings-help">
-                Get pinged when a run of this flow fails. The daemon
-                POSTs a JSON payload to the webhook URL — works
-                with Slack incoming-webhook URLs, Discord, Teams,
-                PagerDuty events API, or any custom receiver.
+                {t("settings.notifications.help")}
               </p>
               <div className="sf-field">
                 <div className="label-row">
-                  <label>Failure webhook URL</label>
+                  <label>{t("settings.notifications.webhookLabel")}</label>
                 </div>
                 <input
                   type="url"
@@ -156,10 +159,10 @@ export function SettingsModal({ graph, onClose, onSave }: Props) {
                   }}
                 />
                 <div className="desc">
-                  POSTed payload includes <code>graph_id</code>,
-                  {" "}<code>run_id</code>, <code>error_code</code>,
-                  {" "}<code>error_message</code>, <code>failed_node</code>,
-                  {" "}<code>run_url</code>. Leave blank to disable.
+                  <Trans
+                    i18nKey="settings.notifications.webhookDesc"
+                    components={[<code />]}
+                  />
                 </div>
               </div>
             </div>
@@ -168,7 +171,7 @@ export function SettingsModal({ graph, onClose, onSave }: Props) {
             <div>
               <div className="sf-field">
                 <div className="label-row">
-                  <label>Display name</label>
+                  <label>{t("settings.general.displayName")}</label>
                 </div>
                 <input
                   value={draft.name ?? ""}
@@ -178,34 +181,31 @@ export function SettingsModal({ graph, onClose, onSave }: Props) {
                   }
                 />
                 <div className="desc">
-                  Friendly name shown in the flow list. Defaults to the ID.
+                  {t("settings.general.displayNameDesc")}
                 </div>
               </div>
               <div className="sf-field">
                 <div className="label-row">
-                  <label>Icon</label>
+                  <label>{t("settings.general.icon")}</label>
                 </div>
                 <input
                   value={draft.icon ?? ""}
-                  placeholder="e.g. git, ntfy, claude, mail, globe, webhook"
+                  placeholder={t("settings.general.iconPlaceholder")}
                   onChange={(e) =>
                     setDraft({ ...draft, icon: e.target.value || undefined })
                   }
                 />
                 <div className="desc">
-                  Logical icon name. Pick one of: git, ntfy, claude, mail,
-                  globe, webhook, sparkles, hammer, file-input, file-output,
-                  terminal, clock, database, cpu, workflow, git-branch,
-                  git-merge, repeat, timer, square-stack, user-check.
+                  {t("settings.general.iconDesc")}
                 </div>
               </div>
               <div className="sf-field">
                 <div className="label-row">
-                  <label>Description</label>
+                  <label>{t("settings.general.description")}</label>
                 </div>
                 <textarea
                   value={draft.description ?? ""}
-                  placeholder="What does this flow do?"
+                  placeholder={t("settings.general.descriptionPlaceholder")}
                   rows={3}
                   onChange={(e) =>
                     setDraft({
@@ -217,7 +217,7 @@ export function SettingsModal({ graph, onClose, onSave }: Props) {
               </div>
               <div className="sf-field">
                 <div className="label-row">
-                  <label>Wall-time timeout (seconds)</label>
+                  <label>{t("settings.general.timeout")}</label>
                 </div>
                 <input
                   type="number"
@@ -232,13 +232,12 @@ export function SettingsModal({ graph, onClose, onSave }: Props) {
                   }}
                 />
                 <div className="desc">
-                  Auto-cancel the run if it hasn't finished by then. 0 / blank
-                  = no cap (the daemon's default still applies if one is set).
+                  {t("settings.general.timeoutDesc")}
                 </div>
               </div>
               <div className="sf-field">
                 <div className="label-row">
-                  <label>Flow ID</label>
+                  <label>{t("settings.general.flowId")}</label>
                 </div>
                 <input
                   value={draft.id}
@@ -246,13 +245,12 @@ export function SettingsModal({ graph, onClose, onSave }: Props) {
                   style={{ fontFamily: "var(--font-mono)" }}
                 />
                 <div className="desc">
-                  Changing the ID would orphan past runs; rename by creating
-                  a new flow and copying nodes.
+                  {t("settings.general.flowIdDesc")}
                 </div>
               </div>
               <div className="sf-field">
                 <div className="label-row">
-                  <label>Tenant / Workspace</label>
+                  <label>{t("settings.general.tenantWorkspace")}</label>
                 </div>
                 <input
                   value={`${draft.tenant} / ${draft.workspace}`}
@@ -261,7 +259,7 @@ export function SettingsModal({ graph, onClose, onSave }: Props) {
               </div>
               <div className="sf-field">
                 <div className="label-row">
-                  <label>Visibility</label>
+                  <label>{t("settings.general.visibility")}</label>
                 </div>
                 <div className="visibility-choice">
                   <label className="visibility-option">
@@ -274,10 +272,9 @@ export function SettingsModal({ graph, onClose, onSave }: Props) {
                       }
                     />
                     <div>
-                      <div className="visibility-option-name">Org-visible</div>
+                      <div className="visibility-option-name">{t("settings.general.orgVisible")}</div>
                       <div className="visibility-option-desc">
-                        Anyone in this workspace can see and run the flow.
-                        Only you (the owner) can edit it.
+                        {t("settings.general.orgVisibleDesc")}
                       </div>
                     </div>
                   </label>
@@ -291,10 +288,9 @@ export function SettingsModal({ graph, onClose, onSave }: Props) {
                       }
                     />
                     <div>
-                      <div className="visibility-option-name">Private</div>
+                      <div className="visibility-option-name">{t("settings.general.privateVisible")}</div>
                       <div className="visibility-option-desc">
-                        Only you (and tenant admins, for recovery) can see
-                        the flow. Triggers still fire it.
+                        {t("settings.general.privateVisibleDesc")}
                       </div>
                     </div>
                   </label>
@@ -302,23 +298,22 @@ export function SettingsModal({ graph, onClose, onSave }: Props) {
               </div>
               <div className="sf-field">
                 <div className="label-row">
-                  <label>Owner</label>
+                  <label>{t("settings.general.owner")}</label>
                 </div>
                 <input
-                  value={draft.owner ?? "(set on first save)"}
+                  value={draft.owner ?? t("settings.general.ownerPlaceholder")}
                   disabled
                   style={{ fontFamily: "var(--font-mono)" }}
                 />
                 <div className="desc">
-                  Stamped by the daemon when the flow is first saved.
-                  Only tenant admins can transfer ownership.
+                  {t("settings.general.ownerDesc")}
                 </div>
               </div>
             </div>
           )}
         </div>
         <div className="settings-foot">
-          <button onClick={onClose}>Cancel</button>
+          <button onClick={onClose}>{t("settings.cancel")}</button>
           <button
             className="primary"
             onClick={() => {
@@ -326,7 +321,7 @@ export function SettingsModal({ graph, onClose, onSave }: Props) {
               onClose();
             }}
           >
-            Save
+            {t("settings.save")}
           </button>
         </div>
       </div>
@@ -345,6 +340,7 @@ function TriggerRow({
   onChange: (patch: Partial<GraphTrigger>) => void;
   onRemove: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="trigger-row">
       <div className="trigger-head">
@@ -353,7 +349,7 @@ function TriggerRow({
           type="button"
           className="ghost"
           onClick={onRemove}
-          aria-label="remove trigger"
+          aria-label={t("settings.triggers.removeAria")}
           style={{ marginLeft: "auto" }}
         >
           <Trash2 size={14} />
@@ -362,16 +358,16 @@ function TriggerRow({
       {trigger.type === "webhook" && (
         <div className="sf-field">
           <div className="label-row">
-            <label>Bearer secret</label>
+            <label>{t("settings.triggers.bearerSecret")}</label>
             <button
               type="button"
               className="ghost"
               style={{ fontSize: 11, padding: "2px 8px" }}
               onClick={() => onChange({ secret: randomHex(16) })}
-              title="Generate a new random secret"
+              title={t("settings.triggers.generateTitle")}
             >
               <Sparkles size={11} style={{ marginRight: 4, verticalAlign: -1 }} />
-              Generate
+              {t("settings.triggers.generate")}
             </button>
           </div>
           <input
@@ -381,30 +377,23 @@ function TriggerRow({
             style={{ fontFamily: "var(--font-mono)" }}
           />
           <div className="desc">
-            Callers must send <code>Authorization: Bearer &lt;this&gt;</code>.
-            The value is stored plain in the graph file — for production
-            consider rotating periodically.
+            <Trans
+              i18nKey="settings.triggers.bearerSecretDesc"
+              components={[<code />]}
+            />
           </div>
           <div className="sf-field" style={{ marginTop: 12 }}>
             <div className="label-row">
-              <label>Trigger via curl</label>
+              <label>{t("settings.triggers.curlLabel")}</label>
             </div>
             <CurlBlock
               command={buildCurl(graph, trigger.secret ?? "")}
             />
             <div className="desc">
-              The webhook listener runs on whatever address the daemon
-              was started with via <code>--webhook</code> (off by default;
-              we use <code>:8089</code> here). Replace the host with your
-              public URL when calling from outside.
-              {" "}
-              The request body lands on the <code>webhook_input</code>
-              node's <code>body</code> port: plain-text bodies arrive as
-              a string (works directly with string-consuming drops like
-              Slack send-message), JSON bodies arrive as a parsed object
-              (use a transform drop to extract a field, or switch{" "}
-              <code>Content-Type</code> to <code>application/json</code>{" "}
-              with a JSON payload if downstream expects structure).
+              <Trans
+                i18nKey="settings.triggers.curlDesc"
+                components={[<code />]}
+              />
             </div>
           </div>
         </div>
@@ -456,6 +445,7 @@ function buildCurl(graph: Graph, secret: string): string {
 // back to a non-clipboard textarea select on browsers without
 // navigator.clipboard.
 function CurlBlock({ command }: { command: string }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const onCopy = async () => {
     try {
@@ -472,10 +462,10 @@ function CurlBlock({ command }: { command: string }) {
         type="button"
         className="curl-copy"
         onClick={onCopy}
-        title="Copy"
+        title={t("settings.triggers.copyTitle")}
       >
         {copied ? <Check size={12} /> : <Copy size={12} />}
-        {copied ? " Copied" : " Copy"}
+        {copied ? " " + t("settings.triggers.copied") : " " + t("settings.triggers.copy")}
       </button>
       <pre>{command}</pre>
     </div>
@@ -499,6 +489,7 @@ function CronField({
   value: string;
   onChange: (next: string) => void;
 }) {
+  const { t } = useTranslation();
   const { token } = useAuth();
   const [state, setState] = useState<
     | { kind: "idle" }
@@ -541,7 +532,7 @@ function CronField({
   return (
     <div className="sf-field">
       <div className="label-row">
-        <label>Cron expression</label>
+        <label>{t("settings.triggers.cronExpression")}</label>
       </div>
       <input
         type="text"
@@ -565,12 +556,15 @@ function CronField({
       )}
       {state.kind === "valid" && state.nextFires.length > 0 && (
         <div className="desc" style={{ color: "var(--muted)" }}>
-          Next: {state.nextFires.map(formatCronTime).join(" · ")}
+          {t("settings.triggers.cronNext")}{" "}
+          {state.nextFires.map(formatCronTime).join(" · ")}
         </div>
       )}
       <div className="desc">
-        5-field cron: minute hour day-of-month month day-of-week. Example:
-        <code> 0 9 * * 1-5</code> = 09:00 weekdays.
+        <Trans
+          i18nKey="settings.triggers.cronHelp"
+          components={[<code />]}
+        />
       </div>
     </div>
   );

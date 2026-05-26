@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Node } from "@xyflow/react";
+import { useTranslation } from "react-i18next";
 import type { HazyNodeData } from "./NodeCard";
 import { SchemaForm, supportsSchemaForm, type WorkspaceCtx } from "./SchemaForm";
 import { OutputPreview } from "./OutputPreview";
@@ -49,6 +50,7 @@ export function Inspector({
   workspace,
   onSample,
 }: Props) {
+  const { t } = useTranslation();
   const [sampling, setSampling] = useState(false);
   const [sampleError, setSampleError] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>("form");
@@ -87,8 +89,8 @@ export function Inspector({
   if (!selected) {
     return (
       <>
-        <div className="panel-head">Inspector</div>
-        <div className="empty">Select a node to edit.</div>
+        <div className="panel-head">{t("inspector.title")}</div>
+        <div className="empty">{t("inspector.empty")}</div>
       </>
     );
   }
@@ -99,13 +101,13 @@ export function Inspector({
   return (
     <>
       <div className="panel-head">
-        <span>Inspector</span>
+        <span>{t("inspector.title")}</span>
         <span style={{ color: "var(--faint)", fontSize: 11 }}>{d.moduleID}</span>
       </div>
       <div className="inspector-body">
         <div className="sf-field">
           <div className="label-row">
-            <label>Node ID</label>
+            <label>{t("inspector.nodeId")}</label>
           </div>
           <input
             value={selected.id}
@@ -115,7 +117,7 @@ export function Inspector({
         </div>
         <div className="sf-field">
           <div className="label-row">
-            <label>Label</label>
+            <label>{t("inspector.label")}</label>
           </div>
           <input
             value={d.label}
@@ -141,9 +143,9 @@ export function Inspector({
                   setSampling(false);
                 }
               }}
-              title="Run this node and its upstream chain — skip everything downstream. Useful when wiring fields against real upstream data."
+              title={t("inspector.sampleTitle")}
             >
-              {sampling ? "Sampling…" : "Sample this node"}
+              {sampling ? t("inspector.sampling") : t("inspector.sample")}
             </button>
             {sampleError && (
               <div className="desc" style={{ color: "var(--danger)" }}>
@@ -151,16 +153,14 @@ export function Inspector({
               </div>
             )}
             <div className="desc">
-              Fires only this node and what feeds it — stops before
-              anything downstream. The output below updates when the
-              partial run finishes.
+              {t("inspector.sampleDesc")}
             </div>
           </div>
         )}
 
         {d.moduleID === "await_approval" && d.status === "awaiting" && currentRunID && (
           <div className="inspector-section approve-inline">
-            <h4>Awaiting approval</h4>
+            <h4>{t("inspector.awaitingApproval")}</h4>
             {typeof currentParams.prompt === "string" && currentParams.prompt && (
               <div
                 style={{
@@ -175,7 +175,7 @@ export function Inspector({
             )}
             <div className="sf-field">
               <div className="label-row">
-                <label>Comment (optional)</label>
+                <label>{t("inspector.commentOptional")}</label>
               </div>
               <textarea
                 rows={2}
@@ -211,7 +211,7 @@ export function Inspector({
                   }
                 }}
               >
-                {approving === "approve" ? "Approving…" : "Approve"}
+                {approving === "approve" ? t("inspector.approving") : t("inspector.approve")}
               </button>
               <button
                 className="ghost"
@@ -236,7 +236,7 @@ export function Inspector({
                   }
                 }}
               >
-                {approving === "reject" ? "Rejecting…" : "Reject"}
+                {approving === "reject" ? t("inspector.rejecting") : t("inspector.reject")}
               </button>
             </div>
             {approveError && (
@@ -254,7 +254,7 @@ export function Inspector({
               className={mode === "form" ? "active" : ""}
               onClick={() => setMode("form")}
             >
-              Form
+              {t("inspector.modeForm")}
             </button>
             <button
               type="button"
@@ -265,7 +265,7 @@ export function Inspector({
                 setMode("json");
               }}
             >
-              Raw JSON
+              {t("inspector.modeJson")}
             </button>
           </div>
         )}
@@ -288,7 +288,7 @@ export function Inspector({
         {(mode === "json" || !canForm) && (
           <div className="sf-field">
             <div className="label-row">
-              <label>Params (JSON)</label>
+              <label>{t("inspector.paramsJson")}</label>
             </div>
             <textarea
               rows={10}
@@ -299,7 +299,7 @@ export function Inspector({
                 try {
                   const parsed = JSON.parse(v);
                   if (typeof parsed !== "object" || Array.isArray(parsed) || parsed === null) {
-                    throw new Error("must be a JSON object");
+                    throw new Error(t("inspector.mustBeObject"));
                   }
                   setJsonError(null);
                   onParamsChange(selected.id, parsed);
@@ -319,14 +319,14 @@ export function Inspector({
 
         {liveLogs && liveLogs.length > 0 && (
           <div className="inspector-section">
-            <h4>Live output</h4>
+            <h4>{t("inspector.liveOutput")}</h4>
             <LiveConsole lines={liveLogs} />
           </div>
         )}
 
         {currentRunID && (
           <div className="inspector-section">
-            <h4>Last run output</h4>
+            <h4>{t("inspector.lastRunOutput")}</h4>
             <OutputPreview
               runID={currentRunID}
               nodeID={selected.id}
@@ -337,7 +337,7 @@ export function Inspector({
 
         {d.manifest?.description && (
           <div className="inspector-section">
-            <h4>About</h4>
+            <h4>{t("inspector.about")}</h4>
             <div style={{ fontSize: 13, color: "var(--muted)" }}>
               {d.manifest.description}
             </div>

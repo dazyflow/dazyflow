@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 
 // Welcome is the post-signup landing wizard — the "first-run"
@@ -9,64 +10,58 @@ import { useAuth } from "../auth";
 // templates ship; for now this is the right surface for "you're in,
 // here's what you can do."
 export function Welcome() {
+  const { t } = useTranslation();
   const { me } = useAuth();
   return (
     <div className="welcome">
       <div className="card welcome-card">
-        <h1>Welcome to Hazy Flow</h1>
+        <h1>{t("welcome.title")}</h1>
         {me?.subject && (
           <p className="welcome-sub">
-            Signed in as <strong>{me.subject}</strong>
+            <Trans
+              i18nKey="welcome.signedInAs"
+              values={{ subject: me.subject }}
+              components={[<strong />]}
+            />
             {me.tenant && (
-              <>
-                {" "}
-                in tenant <code>{me.tenant}</code>
-              </>
+              <Trans
+                i18nKey="welcome.inTenant"
+                values={{ tenant: me.tenant }}
+                components={[<code />]}
+              />
             )}
             .
           </p>
         )}
-        <p>
-          You're ready to build. Three ways to start:
-        </p>
+        <p>{t("welcome.intro")}</p>
         <ol className="welcome-steps">
           <li>
-            <h2>1. Start from a template</h2>
-            <p>
-              Pre-built workflows you can fork in one click — Excel
-              → DB, webhook → Slack, daily reports, and more.
-              Fastest way to see what's possible.
-            </p>
+            <h2>{t("welcome.step1Title")}</h2>
+            <p>{t("welcome.step1Body")}</p>
             <Link to="/templates" className="primary welcome-cta">
-              Browse templates
+              {t("welcome.step1Cta")}
             </Link>
           </li>
           <li>
-            <h2>2. Build from scratch</h2>
-            <p>
-              Drag nodes from the catalog onto a blank canvas and
-              wire them up. Connect Slack / Gmail / Sheets / Postgres
-              and the rest from the integrations catalog.
-            </p>
+            <h2>{t("welcome.step2Title")}</h2>
+            <p>{t("welcome.step2Body")}</p>
             <Link to="/flows" className="welcome-cta">
-              Open editor
+              {t("welcome.step2Cta")}
             </Link>
           </li>
           <li>
-            <h2>3. Skim a recent run</h2>
-            <p>
-              When workflows fire (on a schedule, a webhook, or
-              manually), every step's input and output is captured
-              here for debugging.
-            </p>
+            <h2>{t("welcome.step3Title")}</h2>
+            <p>{t("welcome.step3Body")}</p>
             <Link to="/runs" className="welcome-cta">
-              See runs
+              {t("welcome.step3Cta")}
             </Link>
           </li>
         </ol>
         <p className="welcome-foot">
-          You can come back to this page any time at{" "}
-          <Link to="/welcome">/welcome</Link>.
+          <Trans
+            i18nKey="welcome.foot"
+            components={[<Link to="/welcome" />]}
+          />
         </p>
       </div>
     </div>

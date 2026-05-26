@@ -1,26 +1,25 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Activity, ExternalLink } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import i18n from "../i18n";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import type { RunSummary, JobStatus } from "../types";
 
-// RunList shows every run across every graph in the principal's
-// workspace. Filterable by status, paginated with a Load-more button,
-// and live-polls the first page when something is mid-flight. Each row
-// links to the editor for that graph with the run pre-selected so the
-// canvas pre-fills with that run's node statuses + output preview.
-const STATUS_CHIPS: { label: string; value: JobStatus | "" }[] = [
-  { label: "All", value: "" },
-  { label: "Running", value: "running" },
-  { label: "Awaiting", value: "awaiting" },
-  { label: "Failed", value: "failed" },
-  { label: "Succeeded", value: "succeeded" },
-];
-
 const PAGE_SIZE = 50;
 
 export function RunList() {
+  const { t } = useTranslation();
+  // Status filter chips. Label keys (not literals) are resolved against
+  // i18n at render time so the chips switch with the active locale.
+  const STATUS_CHIPS: { labelKey: string; value: JobStatus | "" }[] = [
+    { labelKey: "runList.filterAll", value: "" },
+    { labelKey: "runList.filterRunning", value: "running" },
+    { labelKey: "runList.filterAwaiting", value: "awaiting" },
+    { labelKey: "runList.filterFailed", value: "failed" },
+    { labelKey: "runList.filterSucceeded", value: "succeeded" },
+  ];
   const { token, me, activeTenant, activeWorkspace } = useAuth();
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -109,10 +108,12 @@ export function RunList() {
     <div>
       <div className="page-title">
         <div>
-          <h1>Runs</h1>
+          <h1>{t("runList.title")}</h1>
           <div className="sub">
-            All runs in {activeTenant || me?.tenant}/
-            {activeWorkspace || me?.workspace || "(any)"}
+            {t("runList.subtitle", {
+              tenant: activeTenant || me?.tenant,
+              workspace: activeWorkspace || me?.workspace || t("runList.anyWorkspace"),
+            })}
           </div>
         </div>
       </div>
@@ -120,14 +121,14 @@ export function RunList() {
       <div className="run-history-filters" style={{ marginBottom: "var(--space-4)" }}>
         {STATUS_CHIPS.map((c) => (
           <button
-            key={c.label}
+            key={c.labelKey}
             type="button"
             className={
               "run-filter-chip" + (filter === c.value ? " active" : "")
             }
             onClick={() => setFilter(c.value)}
           >
-            {c.label}
+            {t(c.labelKey)}
           </button>
         ))}
       </div>
@@ -139,12 +140,12 @@ export function RunList() {
       )}
       {!error && loading && runs.length === 0 && (
         <div className="card" style={{ color: "var(--muted)" }}>
-          Loading…
+          {t("common.loading")}
         </div>
       )}
       {!error && !loading && runs.length === 0 && (
         <div className="card" style={{ color: "var(--muted)" }}>
-          No runs match this filter.
+          {t("runList.empty")}
         </div>
       )}
 
@@ -154,10 +155,10 @@ export function RunList() {
             <thead>
               <tr>
                 <th style={{ width: 28 }}></th>
-                <th>Run</th>
-                <th>Flow</th>
-                <th>Started</th>
-                <th>Duration</th>
+                <th>{t("runList.colRun")}</th>
+                <th>{t("runList.colFlow")}</th>
+                <th>{t("runList.colStarted")}</th>
+                <th>{t("runList.colDuration")}</th>
                 <th></th>
               </tr>
             </thead>
@@ -199,7 +200,7 @@ export function RunList() {
                     {r.started_at && r.finished_at
                       ? formatDuration(r.started_at, r.finished_at)
                       : r.status === "running"
-                      ? "in progress"
+                      ? t("runList.inProgress")
                       : "—"}
                     {r.error_code && (
                       <span style={{ color: "var(--danger)", marginLeft: 6 }}>
@@ -211,7 +212,7 @@ export function RunList() {
                     <Link
                       to={`/runs/${encodeURIComponent(r.id)}`}
                       style={{ color: "var(--muted)" }}
-                      title="Open run details"
+                      title={t("runList.openDetails")}
                     >
                       <ExternalLink size={14} />
                     </Link>
@@ -226,7 +227,7 @@ export function RunList() {
       {hasMore && (
         <div style={{ textAlign: "center", marginTop: "var(--space-4)" }}>
           <button onClick={loadMore} disabled={loading}>
-            {loading ? "Loading…" : "Load more"}
+            {loading ? t("common.loading") : t("runList.loadMore")}
           </button>
         </div>
       )}
@@ -234,14 +235,17 @@ export function RunList() {
   );
 }
 
+// formatTime renders a relative time string ("3m ago", "2h ago", …).
+// Pulls the active locale via the singleton i18n instance — avoids
+// threading `t` through table-row helpers.
 function formatTime(iso: string): string {
-  const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return iso;
-  const diffSec = Math.max(0, Math.round((Date.now() - t) / 1000));
-  if (diffSec < 60) return `${diffSec}s ago`;
-  if (diffSec < 3600) return `${Math.round(diffSec / 60)}m ago`;
-  if (diffSec < 86400) return `${Math.round(diffSec / 3600)}h ago`;
-  return `${Math.round(diffSec / 86400)}d ago`;
+  const ts = Date.parse(iso);
+  if (!Number.isFinite(ts)) return iso;
+  const diffSec = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (diffSec < 60) return i18n.t("runList.secondsAgo", { count: diffSec });
+  if (diffSec < 3600) return i18n.t("runList.minutesAgo", { count: Math.round(diffSec / 60) });
+  if (diffSec < 86400) return i18n.t("runList.hoursAgo", { count: Math.round(diffSec / 3600) });
+  return i18n.t("runList.daysAgo", { count: Math.round(diffSec / 86400) });
 }
 
 function formatDuration(startedISO: string, finishedISO: string): string {

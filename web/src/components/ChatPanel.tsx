@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Send, Sparkles, Square, X, Wrench, CheckCircle2, AlertCircle } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import i18n from "../i18n";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import type { Graph } from "../types";
@@ -37,6 +39,7 @@ type Props = {
 // state (per-tab ephemeral, by design — full persistence comes
 // later).
 export function ChatPanel({ open, onClose, applyProposal }: Props) {
+  const { t } = useTranslation();
   const { token } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -132,7 +135,7 @@ export function ChatPanel({ open, onClose, applyProposal }: Props) {
             case "error":
               updated.events.push({
                 kind: "error",
-                message: data?.error_text ?? data?.error ?? "unknown error",
+                message: data?.error_text ?? data?.error ?? i18n.t("chatPanel.unknownError"),
               });
               updated.done = true;
               break;
@@ -199,8 +202,8 @@ export function ChatPanel({ open, onClose, applyProposal }: Props) {
     <aside className="chat-panel">
       <header className="chat-head">
         <Sparkles size={14} />
-        <span style={{ flex: 1 }}>AI assistant</span>
-        <button className="icon ghost" onClick={onClose} aria-label="close">
+        <span style={{ flex: 1 }}>{t("chatPanel.title")}</span>
+        <button className="icon ghost" onClick={onClose} aria-label={t("chatPanel.close")}>
           <X size={14} />
         </button>
       </header>
@@ -208,13 +211,9 @@ export function ChatPanel({ open, onClose, applyProposal }: Props) {
         {messages.length === 0 && (
           <div className="chat-empty">
             <Sparkles size={20} />
-            <p>
-              Describe the pipeline you want to build. I'll propose a graph;
-              you decide whether to apply it.
-            </p>
+            <p>{t("chatPanel.emptyP1")}</p>
             <p style={{ fontSize: 12, color: "var(--faint)" }}>
-              Examples: "send every new GitHub issue to Slack", "summarize
-              the daily csv and email it".
+              {t("chatPanel.emptyP2")}
             </p>
           </div>
         )}
@@ -228,7 +227,7 @@ export function ChatPanel({ open, onClose, applyProposal }: Props) {
         ))}
         {streaming && (
           <div className="chat-meta">
-            <span className="dot pulse" /> thinking…
+            <span className="dot pulse" /> {t("chatPanel.thinking")}
           </div>
         )}
       </div>
@@ -248,12 +247,12 @@ export function ChatPanel({ open, onClose, applyProposal }: Props) {
               void sendMessage();
             }
           }}
-          placeholder={streaming ? "Streaming…" : "Describe the pipeline…"}
+          placeholder={streaming ? t("chatPanel.placeholderStreaming") : t("chatPanel.placeholderIdle")}
           rows={2}
           disabled={streaming}
         />
         {streaming ? (
-          <button type="button" className="ghost" onClick={stop} title="Stop">
+          <button type="button" className="ghost" onClick={stop} title={t("chatPanel.stop")}>
             <Square size={14} />
           </button>
         ) : (
@@ -275,6 +274,7 @@ function ChatMessageView({
   onApply: (propID: string) => void;
   onDiscard: (propID: string) => void;
 }) {
+  const { t } = useTranslation();
   if (msg.role === "user") {
     return <div className="chat-msg user">{msg.text}</div>;
   }
@@ -294,7 +294,9 @@ function ChatMessageView({
           );
         }
         if (e.kind === "proposal") {
-          const headLabel = e.autoApplied ? "Saved flow" : "Proposed flow";
+          const headLabel = e.autoApplied
+            ? t("chatPanel.savedFlow")
+            : t("chatPanel.proposedFlow");
           return (
             <div key={i} className={`chat-proposal ${e.status}`}>
               <div className="chat-proposal-head">
@@ -302,8 +304,10 @@ function ChatMessageView({
                 <span>{headLabel}: <code>{e.graph.id}</code></span>
               </div>
               <div className="chat-proposal-summary">
-                {e.graph.nodes?.length ?? 0} nodes,{" "}
-                {e.graph.edges?.length ?? 0} edges
+                {t("chatPanel.nodesEdges", {
+                  nodes: e.graph.nodes?.length ?? 0,
+                  edges: e.graph.edges?.length ?? 0,
+                })}
               </div>
               {e.error && (
                 <div className="chat-error">{e.error}</div>
@@ -311,25 +315,25 @@ function ChatMessageView({
               {e.status === "pending" && !e.autoApplied && (
                 <div className="chat-proposal-actions">
                   <button className="primary" onClick={() => onApply(e.id)}>
-                    Apply
+                    {t("chatPanel.apply")}
                   </button>
                   <button className="ghost" onClick={() => onDiscard(e.id)}>
-                    Discard
+                    {t("chatPanel.discard")}
                   </button>
                 </div>
               )}
-              {e.status === "applying" && <div className="chat-meta">Applying…</div>}
+              {e.status === "applying" && <div className="chat-meta">{t("chatPanel.applying")}</div>}
               {e.status === "applied" && (
                 <div className="chat-proposal-actions">
                   <div className="chat-meta success" style={{ flex: 1 }}>
-                    {e.autoApplied ? "Saved by agent." : "Applied."}
+                    {e.autoApplied ? t("chatPanel.savedByAgent") : t("chatPanel.applied")}
                   </div>
                   <button className="ghost" onClick={() => window.location.reload()}>
-                    Reload canvas
+                    {t("chatPanel.reloadCanvas")}
                   </button>
                 </div>
               )}
-              {e.status === "discarded" && <div className="chat-meta">Discarded.</div>}
+              {e.status === "discarded" && <div className="chat-meta">{t("chatPanel.discarded")}</div>}
             </div>
           );
         }

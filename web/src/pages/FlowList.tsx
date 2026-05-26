@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Plus, Workflow, Lock, Globe } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import { iconFor, isBrandedIcon } from "../icons";
 import type { FlowSummary } from "../types";
 
 export function FlowList() {
+  const { t } = useTranslation();
   const { token, me, activeTenant, activeWorkspace } = useAuth();
   const [flows, setFlows] = useState<FlowSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,7 +37,7 @@ export function FlowList() {
 
   const createNew = async () => {
     if (!token || !me || !activeWorkspace) return;
-    const id = window.prompt("New flow ID:");
+    const id = window.prompt(t("flowList.newFlowPrompt"));
     if (!id) return;
     await api.saveGraph(token, {
       id,
@@ -51,7 +53,7 @@ export function FlowList() {
     <div>
       <div className="page-title">
         <div>
-          <h1>Flows</h1>
+          <h1>{t("flowList.title")}</h1>
           <div className="sub">
             {activeTenant || me?.tenant}/{activeWorkspace}
           </div>
@@ -63,20 +65,20 @@ export function FlowList() {
             className="secondary-link"
           >
             <button type="button" className="secondary">
-              From template
+              {t("flowList.fromTemplate")}
             </button>
           </Link>
           <button className="primary" onClick={createNew}>
             <Plus size={16} style={{ marginRight: 6, verticalAlign: -3 }} />
-            New flow
+            {t("flowList.newFlow")}
           </button>
         </div>
       </div>
-      {loading && <div className="card">Loading…</div>}
+      {loading && <div className="card">{t("common.loading")}</div>}
       {error && <div className="card" style={{ color: "var(--danger)" }}>{error}</div>}
       {!loading && !error && flows.length === 0 && (
         <div className="card" style={{ color: "var(--muted)" }}>
-          No flows yet. Create one to get started.
+          {t("flowList.empty")}
         </div>
       )}
       <div className="graph-list">
@@ -116,17 +118,22 @@ export function FlowList() {
                       className="vis-badge private"
                       title={
                         ownedByMe
-                          ? "Private — only you can see this flow"
-                          : `Private — owned by ${f.owner ?? "(unknown)"}`
+                          ? t("flowList.privateOwnedByYou")
+                          : t("flowList.privateOwnedBy", {
+                              owner: f.owner ?? t("common.unknownParen"),
+                            })
                       }
                     >
                       <Lock size={11} />
-                      Private
+                      {t("common.private")}
                     </span>
                   ) : (
-                    <span className="vis-badge org" title="Visible to everyone in this workspace">
+                    <span
+                      className="vis-badge org"
+                      title={t("flowList.orgTooltip")}
+                    >
                       <Globe size={11} />
-                      Org
+                      {t("common.org")}
                     </span>
                   )}
                 </div>
@@ -141,7 +148,7 @@ export function FlowList() {
                 <div className="meta">
                   {f.owner && (
                     <>
-                      Owner: <code>{f.owner}</code>
+                      {t("flowList.ownerLabel")} <code>{f.owner}</code>
                     </>
                   )}
                 </div>

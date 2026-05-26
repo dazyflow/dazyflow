@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Copy } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { IssuedAPIKey } from "../types";
 
 // RevealSecretModal renders the one-time view of a freshly-minted API
@@ -12,6 +13,7 @@ export function RevealSecretModal({
   issued: IssuedAPIKey;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try {
@@ -26,22 +28,20 @@ export function RevealSecretModal({
     <div className="settings-backdrop">
       <div className="settings-dialog" style={{ maxWidth: 540 }}>
         <div className="settings-head">
-          <h2>Save this secret — it's shown once</h2>
+          <h2>{t("revealSecret.title")}</h2>
         </div>
         <div className="settings-body">
           <p className="settings-help">
-            The bearer token below is the only chance to see it. Hazy Flow
-            stores a salted hash; if you lose this string, revoke the key
-            and issue a new one.
+            {t("revealSecret.warning")}
           </p>
           <div className="secret-reveal">{issued.secret}</div>
           <button onClick={copy} style={{ marginTop: "var(--space-3)" }}>
             <Copy size={12} style={{ marginRight: 6, verticalAlign: -1 }} />
-            {copied ? "Copied" : "Copy to clipboard"}
+            {copied ? t("revealSecret.copied") : t("revealSecret.copy")}
           </button>
           <div className="sf-field" style={{ marginTop: "var(--space-4)" }}>
             <div className="label-row">
-              <label>Key ID</label>
+              <label>{t("revealSecret.keyIdLabel")}</label>
             </div>
             <input
               value={issued.id}
@@ -52,7 +52,7 @@ export function RevealSecretModal({
         </div>
         <div className="settings-foot">
           <button className="primary" onClick={onClose}>
-            I've saved it
+            {t("revealSecret.done")}
           </button>
         </div>
       </div>

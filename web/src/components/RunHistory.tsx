@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, History } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import i18n from "../i18n";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import type { RunSummary, JobStatus } from "../types";
@@ -16,12 +18,13 @@ type Props = {
   onSelect: (runID: string) => void;
 };
 
-// Status filter chips — single-select, "All" clears.
-const STATUS_CHIPS: { label: string; value: JobStatus | "" }[] = [
-  { label: "All", value: "" },
-  { label: "Running", value: "running" },
-  { label: "Failed", value: "failed" },
-  { label: "Succeeded", value: "succeeded" },
+// Status filter chips — single-select, "All" clears. Labels are i18n
+// keys resolved at render time so the chips track the active locale.
+const STATUS_CHIPS: { labelKey: string; value: JobStatus | "" }[] = [
+  { labelKey: "runList.filterAll", value: "" },
+  { labelKey: "runList.filterRunning", value: "running" },
+  { labelKey: "runList.filterFailed", value: "failed" },
+  { labelKey: "runList.filterSucceeded", value: "succeeded" },
 ];
 
 const PAGE_SIZE = 20;
@@ -33,6 +36,7 @@ export function RunHistory({
   currentRunID,
   onSelect,
 }: Props) {
+  const { t } = useTranslation();
   const { token } = useAuth();
   const [open, setOpen] = useState(false);
   const [runs, setRuns] = useState<RunSummary[]>([]);
@@ -152,32 +156,32 @@ export function RunHistory({
             </span>
           </>
         ) : (
-          <span style={{ fontSize: 12, color: "var(--muted)" }}>No run</span>
+          <span style={{ fontSize: 12, color: "var(--muted)" }}>{t("runHistory.noRun")}</span>
         )}
         <ChevronDown size={12} />
       </button>
       {open && (
         <div className="run-history-pop">
-          <div className="run-history-head">Recent runs</div>
+          <div className="run-history-head">{t("runHistory.head")}</div>
           <div className="run-history-filters">
             {STATUS_CHIPS.map((c) => (
               <button
-                key={c.label}
+                key={c.labelKey}
                 type="button"
                 className={
                   "run-filter-chip" + (filter === c.value ? " active" : "")
                 }
                 onClick={() => setFilter(c.value)}
               >
-                {c.label}
+                {t(c.labelKey)}
               </button>
             ))}
           </div>
           {loading && runs.length === 0 && (
-            <div className="run-history-empty">Loading…</div>
+            <div className="run-history-empty">{t("common.loading")}</div>
           )}
           {!loading && runs.length === 0 && (
-            <div className="run-history-empty">No runs yet.</div>
+            <div className="run-history-empty">{t("runHistory.empty")}</div>
           )}
           {runs.map((r) => (
             <button
@@ -223,7 +227,7 @@ export function RunHistory({
               disabled={loading}
               onClick={loadMore}
             >
-              {loading ? "Loading…" : "Load more"}
+              {loading ? t("common.loading") : t("runHistory.loadMore")}
             </button>
           )}
         </div>
@@ -233,13 +237,13 @@ export function RunHistory({
 }
 
 function formatTime(iso: string): string {
-  const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return iso;
-  const diffSec = Math.max(0, Math.round((Date.now() - t) / 1000));
-  if (diffSec < 60) return `${diffSec}s ago`;
-  if (diffSec < 3600) return `${Math.round(diffSec / 60)}m ago`;
-  if (diffSec < 86400) return `${Math.round(diffSec / 3600)}h ago`;
-  return `${Math.round(diffSec / 86400)}d ago`;
+  const ts = Date.parse(iso);
+  if (!Number.isFinite(ts)) return iso;
+  const diffSec = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (diffSec < 60) return i18n.t("runList.secondsAgo", { count: diffSec });
+  if (diffSec < 3600) return i18n.t("runList.minutesAgo", { count: Math.round(diffSec / 60) });
+  if (diffSec < 86400) return i18n.t("runList.hoursAgo", { count: Math.round(diffSec / 3600) });
+  return i18n.t("runList.daysAgo", { count: Math.round(diffSec / 86400) });
 }
 
 function formatDuration(startedISO: string, finishedISO: string): string {

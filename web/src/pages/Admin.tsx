@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { KeyRound, Users, Settings2, Boxes, ShieldAlert } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 
 // Admin is the gating point for tenant-level configuration. Each card
@@ -8,12 +9,12 @@ import { useAuth } from "../auth";
 // (the right one) or graph:admin (a coarser fallback so power users
 // who set the system up can land here even before refining roles).
 export function Admin() {
+  const { t } = useTranslation();
   const { me, hasPerm, activeTenant, activeWorkspace } = useAuth();
   if (!hasPerm("tenant:admin") && !hasPerm("graph:admin")) {
     return (
       <div className="card" style={{ color: "var(--danger)" }}>
-        You need <code>tenant:admin</code> or <code>graph:admin</code> to
-        view this page.
+        <Trans i18nKey="admin.needAdmin" components={[<code />]} />
       </div>
     );
   }
@@ -21,10 +22,16 @@ export function Admin() {
     <div>
       <div className="page-title">
         <div>
-          <h1>Admin</h1>
+          <h1>{t("admin.title")}</h1>
           <div className="sub">
-            Tenant <strong>{activeTenant || me?.tenant}</strong> · workspace{" "}
-            <strong>{activeWorkspace || me?.workspace || "(any)"}</strong>
+            <Trans
+              i18nKey="admin.subtitle"
+              values={{
+                tenant: activeTenant || me?.tenant,
+                workspace: activeWorkspace || me?.workspace || t("admin.anyWorkspace"),
+              }}
+              components={[<strong />, <strong />]}
+            />
           </div>
         </div>
       </div>
@@ -33,33 +40,33 @@ export function Admin() {
         <AdminCard
           to="/admin/api-keys"
           icon={<KeyRound size={16} />}
-          title="API keys"
-          desc="Issue, list, and revoke bearer tokens for this tenant."
+          title={t("admin.cardApiKeysTitle")}
+          desc={t("admin.cardApiKeysDesc")}
           status="ready"
         />
         <AdminCard
           to="/admin/users"
           icon={<Users size={16} />}
-          title="Users & roles"
-          desc="Subjects derived from API keys, grouped with their effective permissions."
+          title={t("admin.cardUsersTitle")}
+          desc={t("admin.cardUsersDesc")}
           status="ready"
         />
         <AdminCard
           icon={<Settings2 size={16} />}
-          title="Workspace settings"
-          desc="Quotas, sandbox roots, retention. Reads/writes to the daemon's tenant config."
+          title={t("admin.cardWorkspaceTitle")}
+          desc={t("admin.cardWorkspaceDesc")}
           status="stub"
         />
         <AdminCard
           icon={<Boxes size={16} />}
-          title="Module registry"
-          desc="Inspect installed modules and (later) approve remote/MCP modules."
+          title={t("admin.cardModulesTitle")}
+          desc={t("admin.cardModulesDesc")}
           status="stub"
         />
         <AdminCard
           icon={<ShieldAlert size={16} />}
-          title="Audit log"
-          desc="Graph saves, runs, secret accesses, approval decisions — needs persistence + instrumentation."
+          title={t("admin.cardAuditTitle")}
+          desc={t("admin.cardAuditDesc")}
           status="stub"
         />
       </div>
@@ -80,6 +87,7 @@ function AdminCard({
   status: "stub" | "ready";
   to?: string;
 }) {
+  const { t } = useTranslation();
   const body = (
     <div className="admin-card">
       <h3>
@@ -87,7 +95,7 @@ function AdminCard({
         {title}
       </h3>
       <div className="desc">{desc}</div>
-      <span className="badge">{status === "stub" ? "Stub" : "Ready"}</span>
+      <span className="badge">{status === "stub" ? t("admin.statusStub") : t("admin.statusReady")}</span>
     </div>
   );
   return to ? (

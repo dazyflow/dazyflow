@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { api, APIError } from "../api";
 import { useAuth } from "../auth";
 import { iconFor } from "../icons";
@@ -16,6 +17,7 @@ import type { Graph, TemplateSummary } from "../types";
 // Adding a template is a JSON file + a one-line index entry; no
 // daemon code change.
 export function Templates() {
+  const { t } = useTranslation();
   const { token, activeTenant, activeWorkspace } = useAuth();
   const navigate = useNavigate();
   const [templates, setTemplates] = useState<TemplateSummary[] | null>(null);
@@ -31,7 +33,7 @@ export function Templates() {
 
   const useTemplate = async (tpl: TemplateSummary) => {
     if (!token || !activeTenant || !activeWorkspace) {
-      setError("Not signed in.");
+      setError(t("templates.notSignedIn"));
       return;
     }
     setBusy(tpl.id);
@@ -56,7 +58,7 @@ export function Templates() {
       navigate(`/flows/${encodeURIComponent(newID)}`);
     } catch (e) {
       const msg = e instanceof APIError ? `${e.status}: ${e.message}` : (e as Error).message;
-      setError(`Couldn't fork "${tpl.title}": ${msg}`);
+      setError(t("templates.forkFailed", { title: tpl.title, error: msg }));
     } finally {
       setBusy(null);
     }
@@ -65,7 +67,7 @@ export function Templates() {
   if (error && !templates) {
     return (
       <div className="page">
-        <h1>Templates</h1>
+        <h1>{t("templates.title")}</h1>
         <div className="card error">{error}</div>
       </div>
     );
@@ -73,20 +75,16 @@ export function Templates() {
   if (!templates) {
     return (
       <div className="page">
-        <h1>Templates</h1>
-        <div className="card">Loading…</div>
+        <h1>{t("templates.title")}</h1>
+        <div className="card">{t("common.loading")}</div>
       </div>
     );
   }
 
   return (
     <div className="page templates-page">
-      <h1>Templates</h1>
-      <p className="page-sub">
-        Pre-built workflows you can fork in one click. Each one lands
-        in your workspace as a normal graph — edit, run, or rename it
-        like any other.
-      </p>
+      <h1>{t("templates.title")}</h1>
+      <p className="page-sub">{t("templates.intro")}</p>
       {error && <div className="card error" style={{ marginBottom: 12 }}>{error}</div>}
       <div className="template-grid">
         {templates.map((tpl) => {
@@ -118,7 +116,7 @@ export function Templates() {
                 onClick={() => useTemplate(tpl)}
                 disabled={busy !== null}
               >
-                {busy === tpl.id ? "Forking…" : "Use this template"}
+                {busy === tpl.id ? t("templates.forking") : t("templates.useTemplate")}
               </button>
             </div>
           );
@@ -141,10 +139,11 @@ const templateIntegrationCap = 4;
 // produce a broken-image (caught at content-curation time, not a
 // render hazard).
 function TemplateIntegrationRow({ slugs }: { slugs: string[] }) {
+  const { t } = useTranslation();
   const shown = slugs.slice(0, templateIntegrationCap);
   const overflow = slugs.length - shown.length;
   return (
-    <div className="template-integrations" aria-label="integrations used">
+    <div className="template-integrations" aria-label={t("templates.integrationsUsed")}>
       {shown.map((slug) => (
         <img
           key={slug}

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, AlertCircle, ChevronDown, ChevronRight, RotateCw } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import i18n from "../i18n";
 import { api, APIError } from "../api";
 import { useAuth } from "../auth";
 import type { JobRecord, JobStatus, Ref } from "../types";
@@ -27,6 +29,7 @@ import type { JobRecord, JobStatus, Ref } from "../types";
 // "Replay" re-fires the graph from scratch and navigates to the
 // new run's detail page.
 export function RunDetail() {
+  const { t } = useTranslation();
   const { runID } = useParams<{ runID: string }>();
   const { token } = useAuth();
   const [run, setRun] = useState<JobRecord | null>(null);
@@ -99,7 +102,7 @@ export function RunDetail() {
       }
     } catch (e) {
       const msg = e instanceof APIError ? `${e.status}: ${e.message}` : (e as Error).message;
-      setError(`Replay failed: ${msg}`);
+      setError(t("runDetail.replayFailed", { error: msg }));
     } finally {
       setReplaying(false);
     }
@@ -108,7 +111,7 @@ export function RunDetail() {
   if (loading) {
     return (
       <div className="page">
-        <div className="card">Loading run…</div>
+        <div className="card">{t("runDetail.loading")}</div>
       </div>
     );
   }
@@ -118,12 +121,12 @@ export function RunDetail() {
         <div className="page-title">
           <div>
             <Link to="/runs" className="back-link">
-              <ArrowLeft size={14} /> Back to runs
+              <ArrowLeft size={14} /> {t("runDetail.backToRuns")}
             </Link>
-            <h1>Run not found</h1>
+            <h1>{t("runDetail.notFoundTitle")}</h1>
           </div>
         </div>
-        <div className="card error">{error ?? "No run with that ID."}</div>
+        <div className="card error">{error ?? t("runDetail.notFoundBody")}</div>
       </div>
     );
   }
@@ -144,14 +147,15 @@ export function RunDetail() {
       <div className="page-title">
         <div>
           <Link to="/runs" className="back-link">
-            <ArrowLeft size={14} /> Back to runs
+            <ArrowLeft size={14} /> {t("runDetail.backToRuns")}
           </Link>
           <h1 style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span className={"status-dot " + run.Status} />
             {run.GraphID}
           </h1>
           <div className="sub">
-            Run <code style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>{run.ID}</code>
+            {t("runDetail.runIdLabel")}{" "}
+            <code style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>{run.ID}</code>
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
@@ -159,17 +163,17 @@ export function RunDetail() {
             to={`/flows/${encodeURIComponent(run.GraphID)}?run=${encodeURIComponent(run.ID)}`}
             className="secondary-link"
           >
-            <button type="button" className="secondary">Open in editor</button>
+            <button type="button" className="secondary">{t("runDetail.openInEditor")}</button>
           </Link>
           <button
             type="button"
             className="primary"
             onClick={replay}
             disabled={replaying}
-            title="Re-run this graph from scratch"
+            title={t("runDetail.replayTitle")}
           >
             <RotateCw size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-            {replaying ? "Replaying…" : "Replay"}
+            {replaying ? t("runDetail.replaying") : t("runDetail.replay")}
           </button>
         </div>
       </div>
@@ -182,7 +186,9 @@ export function RunDetail() {
           <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 2 }} />
           <div>
             <div className="run-error-title">
-              Failed{failedNode ? ` at "${failedNode.NodeID}"` : ""}
+              {failedNode
+                ? t("runDetail.failedAt", { node: failedNode.NodeID })
+                : t("runDetail.failed")}
               {run.Result?.error?.code && (
                 <span className="run-error-code"> · {run.Result.error.code}</span>
               )}
@@ -196,34 +202,38 @@ export function RunDetail() {
 
       {/* Run-level summary card. */}
       <div className="run-summary card">
-        <SummaryRow label="Status" value={<StatusChip status={run.Status} />} />
-        <SummaryRow label="Started" value={formatAbs(run.StartedAt ?? null)} />
-        <SummaryRow label="Finished" value={formatAbs(run.FinishedAt ?? null)} />
+        <SummaryRow label={t("runDetail.summaryStatus")} value={<StatusChip status={run.Status} />} />
+        <SummaryRow label={t("runDetail.summaryStarted")} value={formatAbs(run.StartedAt ?? null)} />
+        <SummaryRow label={t("runDetail.summaryFinished")} value={formatAbs(run.FinishedAt ?? null)} />
         <SummaryRow
-          label="Duration"
+          label={t("runDetail.summaryDuration")}
           value={
             run.StartedAt && run.FinishedAt
               ? formatDuration(run.StartedAt, run.FinishedAt)
               : run.Status === "running"
-              ? "in progress"
+              ? t("runDetail.inProgress")
               : "—"
           }
         />
         <SummaryRow
-          label="Nodes"
+          label={t("runDetail.summaryNodes")}
           value={
             <span>
-              {orderedNodes.length} total
+              {t("runDetail.nodesTotal", { count: orderedNodes.length })}
               {orderedNodes.filter((n) => n.Status === "succeeded").length > 0 && (
                 <span style={{ color: "var(--muted)" }}>
-                  {" "}
-                  · {orderedNodes.filter((n) => n.Status === "succeeded").length} succeeded
+                  {" · "}
+                  {t("runDetail.nodesSucceeded", {
+                    count: orderedNodes.filter((n) => n.Status === "succeeded").length,
+                  })}
                 </span>
               )}
               {orderedNodes.filter((n) => n.Status === "failed").length > 0 && (
                 <span style={{ color: "var(--danger)" }}>
-                  {" "}
-                  · {orderedNodes.filter((n) => n.Status === "failed").length} failed
+                  {" · "}
+                  {t("runDetail.nodesFailed", {
+                    count: orderedNodes.filter((n) => n.Status === "failed").length,
+                  })}
                 </span>
               )}
             </span>
@@ -231,13 +241,10 @@ export function RunDetail() {
         />
       </div>
 
-      {/* Node timeline. Each row is a single node + status; click
-          to expand and see input/output/error JSON inline. */}
-      <h2 style={{ marginTop: "var(--space-4)" }}>Timeline</h2>
+      <h2 style={{ marginTop: "var(--space-4)" }}>{t("runDetail.timeline")}</h2>
       {orderedNodes.length === 0 && (
         <div className="card" style={{ color: "var(--muted)" }}>
-          No node records for this run. Either the run is still
-          queued, or the graph has no nodes that produced records.
+          {t("runDetail.noNodes")}
         </div>
       )}
       <div className="node-timeline">
@@ -247,7 +254,7 @@ export function RunDetail() {
             n.StartedAt && n.FinishedAt
               ? formatDuration(n.StartedAt, n.FinishedAt)
               : n.Status === "running"
-              ? "in progress"
+              ? t("runDetail.inProgress")
               : "—";
           return (
             <div
@@ -262,7 +269,7 @@ export function RunDetail() {
               >
                 {isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                 <span className={"status-dot " + n.Status} />
-                <span className="node-id">{n.NodeID}</span>
+                  <span className="node-id">{n.NodeID}</span>
                 <span className="node-status">{n.Status}</span>
                 <span className="node-dur">{dur}</span>
                 {n.Result?.error?.code && (
@@ -277,7 +284,7 @@ export function RunDetail() {
                       <div>{n.Result.error.message}</div>
                       {n.Result.error.details && (
                         <details className="node-err-details">
-                          <summary>Details</summary>
+                          <summary>{t("runDetail.details")}</summary>
                           <pre className="node-err-pre">
                             {n.Result.error.details}
                           </pre>
@@ -287,7 +294,7 @@ export function RunDetail() {
                   )}
                   {n.Job?.Input && Object.keys(n.Job.Input).length > 0 && (
                     <div className="node-output">
-                      <div className="node-section-head">Inputs</div>
+                      <div className="node-section-head">{t("runDetail.inputs")}</div>
                       {Object.entries(n.Job.Input).map(([port, ref]) => (
                         <details key={port} className="node-port">
                           <summary>
@@ -305,7 +312,7 @@ export function RunDetail() {
                   )}
                   {n.Result?.output && Object.keys(n.Result.output).length > 0 && (
                     <div className="node-output">
-                      <div className="node-section-head">Output</div>
+                      <div className="node-section-head">{t("runDetail.output")}</div>
                       {Object.entries(n.Result.output).map(([port, ref]) => (
                         <details key={port} className="node-port">
                           <summary>
@@ -323,8 +330,7 @@ export function RunDetail() {
                   )}
                   {!n.Result?.error && !n.Result?.output && !(n.Job?.Input && Object.keys(n.Job.Input).length > 0) && (
                     <div style={{ color: "var(--faint)", fontSize: 12 }}>
-                      No result recorded — node may not have produced
-                      output, or is still in flight.
+                      {t("runDetail.noResult")}
                     </div>
                   )}
                 </div>
@@ -389,7 +395,7 @@ function timestamp(rec: JobRecord, ...keys: string[]): string {
 function previewValue(ref: Ref): string {
   if (ref.ref) return `→ ${ref.ref}`;
   const v = ref.data;
-  if (v === undefined || v === null) return "(empty)";
+  if (v === undefined || v === null) return i18n.t("runDetail.emptyValue");
   if (typeof v === "string") return v;
   try {
     return JSON.stringify(v, null, 2);

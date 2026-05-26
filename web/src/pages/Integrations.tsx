@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Box } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { api, APIError } from "../api";
 import { useAuth } from "../auth";
 import { iconFor, isBrandedIcon } from "../icons";
@@ -23,6 +24,7 @@ import type { Manifest } from "../types";
 //   - short description (curated; truncated; full prose on detail)
 //   - drop count
 export function Integrations() {
+  const { t } = useTranslation();
   const { token } = useAuth();
   const [drops, setDrops] = useState<Manifest[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +48,7 @@ export function Integrations() {
   if (error) {
     return (
       <div className="page">
-        <h1>Integrations</h1>
+        <h1>{t("integrations.title")}</h1>
         <div className="card error">{error}</div>
       </div>
     );
@@ -54,20 +56,16 @@ export function Integrations() {
   if (!drops) {
     return (
       <div className="page">
-        <h1>Integrations</h1>
-        <div className="card">Loading…</div>
+        <h1>{t("integrations.title")}</h1>
+        <div className="card">{t("common.loading")}</div>
       </div>
     );
   }
 
   return (
     <div className="page integrations-page">
-      <h1>Integrations</h1>
-      <p className="page-sub">
-        Every connector and built-in family the daemon knows about.
-        Click an integration to see its drops, descriptions, and
-        usage notes.
-      </p>
+      <h1>{t("integrations.title")}</h1>
+      <p className="page-sub">{t("integrations.intro")}</p>
       <div className="integration-grid">
         {groups.map(({ slug, meta, drops }) => {
           // Logo fallback chain: curated override → any drop's
@@ -113,7 +111,7 @@ export function Integrations() {
                 </p>
                 <div className="integration-card-meta">
                   <span className="integration-card-count">
-                    {drops.length} {drops.length === 1 ? "drop" : "drops"}
+                    {t("integrations.drop", { count: drops.length })}
                   </span>
                 </div>
               </div>
@@ -130,6 +128,7 @@ export function Integrations() {
 // every drop the integration ships, each with its description,
 // input/output ports, and a collapsed params hint.
 export function IntegrationDetail() {
+  const { t } = useTranslation();
   const slugRaw = window.location.pathname.split("/").pop() ?? "";
   const slug = decodeURIComponent(slugRaw);
   const { token } = useAuth();
@@ -168,7 +167,7 @@ export function IntegrationDetail() {
   if (!drops) {
     return (
       <div className="page">
-        <div className="card">Loading…</div>
+        <div className="card">{t("common.loading")}</div>
       </div>
     );
   }
@@ -177,10 +176,10 @@ export function IntegrationDetail() {
       <div className="page">
         <h1>{meta.name}</h1>
         <Link to="/integrations" className="back-link">
-          ← All integrations
+          {t("integrations.backAll")}
         </Link>
         <div className="card" style={{ marginTop: 12 }}>
-          No drops registered for this integration.
+          {t("integrations.noDrops")}
         </div>
       </div>
     );
@@ -194,7 +193,7 @@ export function IntegrationDetail() {
   return (
     <div className="page integration-detail">
       <Link to="/integrations" className="back-link">
-        ← All integrations
+        {t("integrations.backAll")}
       </Link>
       <header className="integration-hero">
         {brandLogo && (
@@ -212,21 +211,21 @@ export function IntegrationDetail() {
           )}
           {meta.technical_notes && (
             <details className="integration-hero-technical">
-              <summary>Technical details</summary>
+              <summary>{t("integrations.technicalDetails")}</summary>
               <p>{meta.technical_notes}</p>
             </details>
           )}
           {meta.docs_url && (
             <p className="integration-hero-docs">
               <a href={meta.docs_url} target="_blank" rel="noreferrer noopener">
-                Official documentation ↗
+                {t("integrations.officialDocs")}
               </a>
             </p>
           )}
         </div>
       </header>
 
-      <h2 className="integration-drops-head">Drops</h2>
+      <h2 className="integration-drops-head">{t("integrations.dropsHead")}</h2>
       <div className="integration-drops">
         {integrationDrops.map((d) => (
           <DropCard key={d.id} drop={d} />
@@ -240,6 +239,7 @@ export function IntegrationDetail() {
 // ID, full description, input + output ports, and a collapsed view
 // of the params schema (rendered as a JSON dump under a <details>).
 function DropCard({ drop }: { drop: Manifest }) {
+  const { t } = useTranslation();
   const Icon = iconFor(drop.icon, drop.category);
   const branded = isBrandedIcon(drop.icon);
   const color = drop.color ?? "#9f83fe";
@@ -279,17 +279,17 @@ function DropCard({ drop }: { drop: Manifest }) {
           a developer who clicks through. */}
       {hasWiringDetails(drop) && (
         <details className="drop-card-wiring">
-          <summary>Wiring details</summary>
+          <summary>{t("integrations.wiringDetails")}</summary>
           <div className="drop-card-ports">
             {drop.inputs && drop.inputs.length > 0 && (
               <div>
-                <div className="drop-card-port-head">Inputs</div>
+                <div className="drop-card-port-head">{t("integrations.inputs")}</div>
                 <ul>
                   {drop.inputs.map((p) => (
                     <li key={p.port}>
                       <code>{p.port}</code>
                       {p.required && (
-                        <span className="port-required"> required</span>
+                        <span className="port-required"> {t("integrations.required")}</span>
                       )}
                       {p.label && (
                         <span className="port-label"> — {p.label}</span>
@@ -301,7 +301,7 @@ function DropCard({ drop }: { drop: Manifest }) {
             )}
             {drop.outputs && drop.outputs.length > 0 && (
               <div>
-                <div className="drop-card-port-head">Outputs</div>
+                <div className="drop-card-port-head">{t("integrations.outputs")}</div>
                 <ul>
                   {drop.outputs.map((p) => (
                     <li key={p.port}>
@@ -317,7 +317,7 @@ function DropCard({ drop }: { drop: Manifest }) {
           </div>
           {drop.params_schema && (
             <div className="drop-card-params-block">
-              <div className="drop-card-port-head">Params schema</div>
+              <div className="drop-card-port-head">{t("integrations.paramsSchema")}</div>
               <pre>{JSON.stringify(drop.params_schema, null, 2)}</pre>
             </div>
           )}

@@ -12,10 +12,12 @@ import {
   Building2,
   Boxes,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { api } from "../api";
 import { useAuth } from "../auth";
 
 export function AppShell({ children }: { children: ReactNode }) {
+  const { t } = useTranslation();
   const {
     token,
     me,
@@ -72,7 +74,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <button
           className="icon ghost hamburger"
           onClick={() => setNavOpen((x) => !x)}
-          aria-label="toggle navigation"
+          aria-label={t("nav.toggleNav")}
         >
           <Menu size={20} />
         </button>
@@ -98,8 +100,8 @@ export function AppShell({ children }: { children: ReactNode }) {
               hideTenantPrefix={tenants.length > 1}
             />
             <span style={{ color: "var(--faint)" }}>·</span>
-            <span className="who">{me.subject || "(no subject)"}</span>
-            <button className="icon ghost" onClick={signOut} aria-label="sign out">
+            <span className="who">{me.subject || t("nav.noSubject")}</span>
+            <button className="icon ghost" onClick={signOut} aria-label={t("nav.signOut")}>
               <LogOut size={18} />
             </button>
           </div>
@@ -113,32 +115,32 @@ export function AppShell({ children }: { children: ReactNode }) {
           />
         )}
         <aside className="sidebar" data-open={navOpen ? "true" : "false"}>
-          <div className="group-label">Workspace</div>
+          <div className="group-label">{t("nav.workspaceGroup")}</div>
           <NavLink to="/flows" onClick={() => setNavOpen(false)}>
             <Workflow size={18} />
-            Flows
+            {t("nav.flows")}
           </NavLink>
           <NavLink to="/runs" onClick={() => setNavOpen(false)}>
             <Activity size={18} />
-            Runs
+            {t("nav.runs")}
           </NavLink>
           <NavLink to="/approvals" onClick={() => setNavOpen(false)}>
             <Inbox size={18} />
-            <span style={{ flex: 1 }}>Approvals</span>
+            <span style={{ flex: 1 }}>{t("nav.approvals")}</span>
             {pendingCount > 0 && (
               <span className="nav-badge">{pendingCount}</span>
             )}
           </NavLink>
           <NavLink to="/integrations" onClick={() => setNavOpen(false)}>
             <Boxes size={18} />
-            Integrations
+            {t("nav.integrations")}
           </NavLink>
           {showAdmin && (
             <>
-              <div className="group-label">Settings</div>
+              <div className="group-label">{t("nav.settingsGroup")}</div>
               <NavLink to="/admin" onClick={() => setNavOpen(false)}>
                 <ShieldCheck size={18} />
-                Admin
+                {t("nav.admin")}
               </NavLink>
             </>
           )}
@@ -172,6 +174,7 @@ function WorkspaceSwitcher({
   onPick: (ws: string) => void;
   hideTenantPrefix?: boolean;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const multi = workspaces.length > 1;
   useEffect(() => {
@@ -184,10 +187,10 @@ function WorkspaceSwitcher({
     return () => document.removeEventListener("mousedown", onDown);
   }, [open]);
   const label = hideTenantPrefix ? (
-    <strong>{activeWorkspace || "(none)"}</strong>
+    <strong>{activeWorkspace || t("common.noneParen")}</strong>
   ) : (
     <>
-      {tenant}/<strong>{activeWorkspace || "(none)"}</strong>
+      {tenant}/<strong>{activeWorkspace || t("common.noneParen")}</strong>
     </>
   );
   if (!multi) {
@@ -208,7 +211,7 @@ function WorkspaceSwitcher({
           fontSize: 13,
           padding: "4px 10px",
         }}
-        title="Switch workspace"
+        title={t("nav.switchWorkspace")}
       >
         <FolderTree size={13} />
         <span>{label}</span>
@@ -250,6 +253,7 @@ function TenantSwitcher({
   activeTenant: string;
   onPick: (t: string) => void;
 }) {
+  const { t: tr } = useTranslation();
   const [open, setOpen] = useState(false);
   useEffect(() => {
     if (!open) return;
@@ -273,15 +277,15 @@ function TenantSwitcher({
           fontSize: 13,
           padding: "4px 10px",
         }}
-        title="Switch tenant"
+        title={tr("nav.switchTenant")}
       >
         <Building2 size={13} />
-        <strong>{activeTenant || "(pick tenant)"}</strong>
+        <strong>{activeTenant || tr("nav.pickTenant")}</strong>
         <ChevronDown size={12} />
       </button>
       {open && (
         <div className="workspace-pop">
-          <div className="workspace-pop-head">Tenants</div>
+          <div className="workspace-pop-head">{tr("nav.tenants")}</div>
           {tenants.map((t) => (
             <button
               key={t}

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { KeyRound, Plus, Trash2, AlertCircle } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
 import type { APIKeySummary, IssuedAPIKey } from "../types";
@@ -7,6 +8,7 @@ import { IssueKeyModal } from "../components/IssueKeyModal";
 import { RevealSecretModal } from "../components/RevealSecretModal";
 
 export function AdminAPIKeys() {
+  const { t } = useTranslation();
   const { token, hasPerm, activeTenant } = useAuth();
   const [keys, setKeys] = useState<APIKeySummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,7 +28,7 @@ export function AdminAPIKeys() {
     } catch (e) {
       const err = e as APIError | Error;
       if (err instanceof APIError && err.status === 501) {
-        setError("API key admin not configured on this hzd instance.");
+        setError(t("admin.apiKeys.notConfigured"));
       } else {
         setError(err.message);
       }
@@ -42,14 +44,14 @@ export function AdminAPIKeys() {
   if (!hasPerm("tenant:admin")) {
     return (
       <div className="card" style={{ color: "var(--danger)" }}>
-        You need <code>tenant:admin</code> to manage API keys.
+        <Trans i18nKey="admin.apiKeys.needAdmin" components={[<code />]} />
       </div>
     );
   }
 
   const revoke = async (id: string) => {
     if (!token) return;
-    if (!window.confirm(`Revoke key ${id}? Existing sessions will stop authenticating immediately.`)) {
+    if (!window.confirm(t("admin.apiKeys.confirmRevoke", { id }))) {
       return;
     }
     try {
@@ -66,15 +68,15 @@ export function AdminAPIKeys() {
         <div>
           <h1>
             <KeyRound size={20} style={{ marginRight: 8, verticalAlign: -3 }} />
-            API keys
+            {t("admin.apiKeys.title")}
           </h1>
           <div className="sub">
-            Issue, list, and revoke bearer tokens for this tenant.
+            {t("admin.apiKeys.subtitle")}
           </div>
         </div>
         <button className="primary" onClick={() => setCreating(true)}>
           <Plus size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-          Issue key
+          {t("admin.apiKeys.issueKey")}
         </button>
       </div>
 
@@ -86,12 +88,12 @@ export function AdminAPIKeys() {
       )}
 
       {loading && keys.length === 0 && (
-        <div className="card" style={{ color: "var(--muted)" }}>Loading…</div>
+        <div className="card" style={{ color: "var(--muted)" }}>{t("common.loading")}</div>
       )}
 
       {!loading && keys.length === 0 && !error && (
         <div className="card" style={{ color: "var(--muted)" }}>
-          No API keys issued yet.
+          {t("admin.apiKeys.empty")}
         </div>
       )}
 
@@ -100,11 +102,11 @@ export function AdminAPIKeys() {
           <table className="run-table">
             <thead>
               <tr>
-                <th>ID</th>
-                <th>Subject</th>
-                <th>Workspace</th>
-                <th>Roles</th>
-                <th>Status</th>
+                <th>{t("admin.apiKeys.colId")}</th>
+                <th>{t("admin.apiKeys.colSubject")}</th>
+                <th>{t("admin.apiKeys.colWorkspace")}</th>
+                <th>{t("admin.apiKeys.colRoles")}</th>
+                <th>{t("admin.apiKeys.colStatus")}</th>
                 <th></th>
               </tr>
             </thead>
@@ -116,7 +118,7 @@ export function AdminAPIKeys() {
                   </td>
                   <td>{k.subject}</td>
                   <td style={{ color: "var(--muted)", fontSize: 12 }}>
-                    {k.workspace || "(any)"}
+                    {k.workspace || t("admin.apiKeys.anyWorkspace")}
                   </td>
                   <td style={{ fontSize: 12 }}>
                     {k.roles.map((r) => r.name).join(", ")}
@@ -129,7 +131,7 @@ export function AdminAPIKeys() {
                       <button
                         className="ghost"
                         onClick={() => revoke(k.id)}
-                        title="Revoke this key"
+                        title={t("admin.apiKeys.revokeTitle")}
                       >
                         <Trash2 size={14} />
                       </button>
