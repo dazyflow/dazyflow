@@ -428,8 +428,8 @@
     "liveOutput": "Live-output",
     "lastRunOutput": "Output från senaste körningen",
     "about": "Om",
-    "deleteNode": "Ta bort nod",
-    "deleteConfirm": "Ta bort noden \"{{id}}\" och dess kopplingar?"
+    "deleteNode": "Ta bort drop",
+    "deleteConfirm": "Ta bort drop \"{{id}}\" och dess kopplingar?"
   },
   "editor": {
     "back": "Tillbaka",

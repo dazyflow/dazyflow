@@ -428,8 +428,8 @@
     "liveOutput": "Live output",
     "lastRunOutput": "Last run output",
     "about": "About",
-    "deleteNode": "Delete node",
-    "deleteConfirm": "Delete node \"{{id}}\" and its connections?"
+    "deleteNode": "Delete drop",
+    "deleteConfirm": "Delete drop \"{{id}}\" and its connections?"
   },
   "editor": {
     "back": "Back",
