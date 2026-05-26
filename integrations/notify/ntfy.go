@@ -27,7 +27,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "ntfy",
 			Tags:           []string{"ntfy", "push", "notify", "report"},
-			Description:    "Send a push notification via a ntfy.sh-compatible server. Posts to {server}/{topic} with the message as the body; optional title/priority/tags/click attach as ntfy headers. Body input port overrides params.message so upstream node output flows in directly.",
+			Description:    "Push a notification through ntfy.sh (or a self-hosted ntfy server). Set the server, the topic, and the message. Optional title, priority, tags, and a click-URL attach extras for richer notifications on the receiving device.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

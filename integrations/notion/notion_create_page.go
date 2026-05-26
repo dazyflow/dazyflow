@@ -27,7 +27,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "Notion",
 			Tags:           []string{"notion", "page", "create", "database", "write"},
-			Description:    "Create a Notion page. Set exactly one of `parent_database_id` (page becomes a row in that database — `properties` must match the database schema) or `parent_page_id` (page becomes a child of that page — typically `title` plus optional `children` blocks). `properties` is a Notion property-value object; `children` is an optional array of Block objects. Outputs the created page's id, url, and the full Notion response for advanced use.",
+			Description:    "Create a Notion page. Set the parent — a database, in which case the page becomes a row, or another page, in which case it becomes a child. Properties define the field values; optional child blocks fill the page body. Outputs the new page's id and URL.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

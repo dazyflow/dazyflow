@@ -32,7 +32,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "HTTP",
 			Tags:           []string{"http", "rest", "api", "webhook"},
-			Description:    "Make an HTTP request (GET/POST/PUT/PATCH/DELETE) to any URL. Defaults block private-network addresses to prevent SSRF; the allow_private_networks param opts in for development. Returns the response body and status/header metadata on separate ports.",
+			Description:    "Make an HTTP request to any URL — GET, POST, PUT, PATCH, or DELETE. Useful when the service you want to call doesn't have a dedicated connector here yet. Returns the response body on one port and status/headers on another. Private-network addresses are blocked by default to prevent accidental internal calls.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{{

@@ -21,7 +21,7 @@ func init() {
 			Category:       "system",
 			Provider:       "internal",
 			Tags:           []string{"secret", "cursor", "state", "store", "write"},
-			Description:    "Writes a value to this tenant's encrypted secret store under params.name. The value comes from the 'value' input port (string) if connected, otherwise params.value. Pairs with the existing ${tenant://name} template substitution to read the value back from a downstream graph or the next fire — the missing inverse of secret READ. Typical use: cursor storage for poll_trigger graphs that want 'fire only on new items' semantics.",
+			Description:    "Save a value to your tenant's encrypted secret store under the given name. Pair it with template substitution (${tenant:name}) to read the value back from later flow runs — the classic use is cursor storage for polling flows that need to remember 'what was the last thing I processed' across restarts.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

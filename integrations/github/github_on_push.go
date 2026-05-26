@@ -21,7 +21,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "GitHub",
 			Tags:           []string{"github", "trigger", "push", "webhook", "events"},
-			Description:    "Fires when commits are pushed to a repository whose webhook points at this daemon. Configure the repo's webhook URL to POST /api/v1/events/github/<tenant>, content type application/json, with a Secret matching the daemon's --github-webhook-secret. Subscribe to the 'push' event. Outputs the ref, before/after commit SHAs, the commits list, the repo, and the pusher.",
+			Description:    "Fires when commits are pushed to your repo. Receives the branch (ref), the before/after commit SHAs, the commits list, the repo, and the pusher. Common uses: post a deploy alert when commits land on main, or kick off a CI-shaped pipeline.",
 			ExecutionModel: core.ExecutionTrigger,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

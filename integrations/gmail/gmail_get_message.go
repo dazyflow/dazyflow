@@ -28,7 +28,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "Gmail",
 			Tags:           []string{"gmail", "email", "fetch", "google"},
-			Description:    "Fetch a single Gmail message by ID. Outputs commonly-needed headers (from/to/subject/date) plus snippet, plus the decoded plain-text body when present. Pair with gmail_search_messages + for_each to walk a search result set.",
+			Description:    "Fetch one Gmail message by ID. Outputs the common headers (from, to, subject, date), a short snippet, and the plain-text body when one's present. Typically used after the search drop with a for_each to expand the IDs into full messages.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

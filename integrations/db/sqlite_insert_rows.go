@@ -32,7 +32,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "SQLite",
 			Tags:           []string{"sqlite", "sql", "database", "insert", "etl"},
-			Description:    "Insert rows into a SQLite table inside the workspace sandbox. Input 'rows' is a list of {column: value} records; optional 'headers' input fixes column order. create_table defaults to true — the table is created from headers (TEXT columns by default, overridable via column_types). Set create_table=false to fail loudly when the table is missing (e.g. when you've pre-created it with indexes / constraints you don't want auto-clobbered).",
+			Description:    "Insert rows into a SQLite table in your workspace. The table is auto-created from the row shape by default — flip create_table off if you've already set up the schema with indexes or constraints you don't want overwritten.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

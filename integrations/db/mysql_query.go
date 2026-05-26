@@ -23,7 +23,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "MySQL",
 			Tags:           []string{"mysql", "mariadb", "sql", "database", "query", "select"},
-			Description:    "Execute a SELECT against MySQL and emit the result. SQL is freeform — use ? placeholders and pass values via the 'params' array. DSN supports ${env:VAR} / ${secret:NAME} substitution. 'limit' caps the row count.",
+			Description:    "Run a SELECT against your MySQL or MariaDB database and get rows back. Use ? placeholders in the SQL and pass values through the params array so user-supplied data is safely escaped. Set a row limit to keep large result sets bounded.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

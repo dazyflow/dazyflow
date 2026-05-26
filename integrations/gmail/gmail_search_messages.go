@@ -28,7 +28,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "Gmail",
 			Tags:           []string{"gmail", "email", "search", "query", "google", "poll"},
-			Description:    "List Gmail messages matching a query. 'query' uses Gmail's search syntax (`is:unread newer_than:5m label:invoices`). Returns IDs only — pair with gmail_get_message via for_each to fetch full bodies. Pairs naturally with poll_trigger for the 'fire on new email' shape: poll every 5 min with query `newer_than:5m` to see fresh arrivals.",
+			Description:    "Search your Gmail inbox using normal Gmail search syntax (e.g. `is:unread newer_than:5m label:invoices`). Returns message IDs — pair with the get-message drop in a for_each loop to fetch full content. Natural fit for the 'react to new email' pattern with a polling trigger.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

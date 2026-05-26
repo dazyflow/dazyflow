@@ -28,7 +28,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "GitHub",
 			Tags:           []string{"github", "issue", "pr", "comment"},
-			Description:    "Add a comment to a GitHub issue or pull request. GitHub treats PR comments and issue comments identically at the API level (a PR IS an issue with extra metadata), so this drop works for both. Body comes from the 'body' input port or params.body — Markdown supported.",
+			Description:    "Add a comment to a GitHub issue or pull request. Works for both — GitHub treats them as the same thing under the hood. Comment body supports Markdown and can come from the 'body' input or from params.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

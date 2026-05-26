@@ -21,7 +21,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "Slack",
 			Tags:           []string{"slack", "trigger", "mention", "event", "events-api"},
-			Description:    "Fires when this app is @-mentioned in Slack. Configure your Slack app's Event Subscription URL at POST /api/v1/events/slack/<tenant>, subscribe to the app_mention event, and copy the app's Signing Secret to the daemon's --slack-signing-secret flag. Outputs the mention text, channel, user, team, and the raw event payload — wire downstream branches/transforms to filter by channel or content.",
+			Description:    "Fires when someone @-mentions your bot in Slack. Each fire receives the message text, the channel, the user who sent it, and the raw event for advanced use. Filter by channel via the channel_filter param if you only want to react in certain rooms.",
 			ExecutionModel: core.ExecutionTrigger,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

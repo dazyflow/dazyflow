@@ -28,7 +28,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "Git",
 			Tags:           []string{"git", "log", "history", "vcs"},
-			Description:    "Walk the commit history of an already-checked-out repository starting at a given ref (default HEAD). Returns a list of {sha, author, email, when, summary} entries up to limit, plus the resolved start SHA in meta.",
+			Description:    "List recent commits in a checked-out repo. Returns each commit's SHA, author, time, and summary. Useful for showing release notes, attributing changes, or building 'what landed today' reports.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

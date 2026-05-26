@@ -26,7 +26,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "Git",
 			Tags:           []string{"git", "diff", "patch", "vcs"},
-			Description:    "Compute a unified diff between two refs in an already-checked-out repository. Defaults to HEAD~1..HEAD (the most recent commit). Emits the patch text plus a metadata object with the resolved commit SHAs and a short summary.",
+			Description:    "Get a unified diff between two refs in a checked-out repo. Default compares the most recent commit (HEAD~1..HEAD), but you can specify any two refs. Returns the patch text plus a short summary of what changed.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

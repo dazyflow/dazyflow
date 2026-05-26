@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState, type DragEvent } from "react";
-import { ChevronDown, ChevronRight, Search, Box } from "lucide-react";
+import { Link } from "react-router-dom";
+import { ChevronDown, ChevronRight, Search, Box, Info } from "lucide-react";
 import { iconFor, isBrandedIcon } from "../icons";
+import { integrationSlug } from "../integrationMeta";
 import type { Manifest } from "../types";
 
 type Props = {
@@ -182,38 +184,54 @@ export function NodeCatalog({ drops }: Props) {
           const headerBranded = isBrandedIcon(s.icon);
           return (
             <div key={s.key} className="catalog-group">
-              <button
-                type="button"
-                className="catalog-group-header"
-                onClick={() => toggle(s.key)}
-                aria-expanded={!isCollapsed}
-              >
-                {isCollapsed ? (
-                  <ChevronRight size={12} />
-                ) : (
-                  <ChevronDown size={12} />
-                )}
-                {!s.isStdlib && (
-                  <span className="catalog-integration-icon">
-                    {s.brandLogo ? (
-                      <img
-                        src={s.brandLogo}
-                        alt=""
-                        className="catalog-integration-logo"
-                        draggable={false}
-                      />
-                    ) : (
-                      <HeaderIcon
-                        size={headerBranded ? 18 : 14}
-                        color={headerBranded ? undefined : "currentColor"}
-                        strokeWidth={2}
-                      />
-                    )}
-                  </span>
-                )}
-                <span className="catalog-group-label">{s.label}</span>
-                <span className="catalog-group-count">{s.drops.length}</span>
-              </button>
+              <div className="catalog-group-header-row">
+                <button
+                  type="button"
+                  className="catalog-group-header"
+                  onClick={() => toggle(s.key)}
+                  aria-expanded={!isCollapsed}
+                >
+                  {isCollapsed ? (
+                    <ChevronRight size={12} />
+                  ) : (
+                    <ChevronDown size={12} />
+                  )}
+                  {!s.isStdlib && (
+                    <span className="catalog-integration-icon">
+                      {s.brandLogo ? (
+                        <img
+                          src={s.brandLogo}
+                          alt=""
+                          className="catalog-integration-logo"
+                          draggable={false}
+                        />
+                      ) : (
+                        <HeaderIcon
+                          size={headerBranded ? 18 : 14}
+                          color={headerBranded ? undefined : "currentColor"}
+                          strokeWidth={2}
+                        />
+                      )}
+                    </span>
+                  )}
+                  <span className="catalog-group-label">{s.label}</span>
+                  <span className="catalog-group-count">{s.drops.length}</span>
+                </button>
+                {/* Sibling rather than nested — a <Link> (<a>) inside a
+                    <button> is invalid HTML. Clicking goes to the
+                    integration profile page; the collapse toggle on
+                    the button stays distinct. */}
+                <Link
+                  to={`/integrations/${encodeURIComponent(
+                    s.isStdlib ? "standard-library" : integrationSlug(s.label),
+                  )}`}
+                  className="catalog-learn-more"
+                  title={`About ${s.label}`}
+                  aria-label={`About ${s.label}`}
+                >
+                  <Info size={13} />
+                </Link>
+              </div>
               {!isCollapsed && (
                 <div className="catalog-group-body">
                   {s.isStdlib

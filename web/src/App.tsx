@@ -5,6 +5,7 @@ import { SignIn } from "./pages/SignIn";
 import { SignUp } from "./pages/SignUp";
 import { Welcome } from "./pages/Welcome";
 import { Templates } from "./pages/Templates";
+import { Integrations, IntegrationDetail } from "./pages/Integrations";
 import { FlowList } from "./pages/FlowList";
 import { FlowEditor } from "./pages/FlowEditor";
 import { RunList } from "./pages/RunList";
@@ -45,6 +46,8 @@ export function App() {
           element={<LegacyPipelineRedirect />}
         />
         <Route path="/templates" element={<Templates />} />
+        <Route path="/integrations" element={<Integrations />} />
+        <Route path="/integrations/:slug" element={<IntegrationDetail />} />
         <Route path="/runs" element={<RunList />} />
         <Route path="/runs/:runID" element={<RunDetail />} />
         <Route path="/approvals" element={<Approvals />} />

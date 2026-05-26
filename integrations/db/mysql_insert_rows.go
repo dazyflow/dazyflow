@@ -26,7 +26,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "MySQL",
 			Tags:           []string{"mysql", "mariadb", "sql", "database", "insert", "etl"},
-			Description:    "Insert rows into a MySQL table. DSN format: user:pass@tcp(host:port)/dbname?parseTime=true — use ${env:VAR} or ${secret:NAME} to keep credentials out of the graph. Input 'rows' is a list of {column: value} records; optional 'headers' fixes column order.",
+			Description:    "Insert rows into a MySQL or MariaDB table. Drops in rows from Sheets, Excel, or any transform node — the shape is interchangeable across the family.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

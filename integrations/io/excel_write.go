@@ -30,7 +30,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "Excel",
 			Tags:           []string{"excel", "xlsx", "spreadsheet", "write"},
-			Description:    "Write rows to an .xlsx file in the workspace sandbox. Input 'rows' is a list of {column: value} records; optional 'headers' input fixes column order (otherwise inferred from row keys, sorted). With append=true, opens an existing file (or creates one) and adds rows below the existing data — the file's header row is the source of truth for column placement. Respects per-tenant disk quota.",
+			Description:    "Write rows to an .xlsx file in your workspace. Use this to deliver a downloadable report, or to round-trip data through Excel for someone to review. Append mode lets you add rows to an existing file without overwriting it — the existing header row decides the column order.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

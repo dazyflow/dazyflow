@@ -27,7 +27,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "SQLite",
 			Tags:           []string{"sqlite", "sql", "database", "query", "select"},
-			Description:    "Execute a SELECT against a SQLite file in the workspace sandbox. SQL is freeform — use ? placeholders and pass values via the 'params' array. 'limit' caps the row count.",
+			Description:    "Run a SELECT against a SQLite file in your workspace and get rows back. Use ? placeholders in the SQL and pass values through the params array so user-supplied data is safely escaped.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

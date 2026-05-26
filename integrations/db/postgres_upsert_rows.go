@@ -25,7 +25,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "Postgres",
 			Tags:           []string{"postgres", "postgresql", "sql", "database", "upsert", "merge", "etl"},
-			Description:    "INSERT ... ON CONFLICT (...) DO UPDATE against Postgres. 'conflict_columns' lists the unique/PK columns Postgres matches on; 'update_columns' (optional) restricts which columns get updated — default is all non-conflict columns. When create_table=true the table is created with a UNIQUE constraint on the conflict columns.",
+			Description:    "Upsert (insert-or-update) rows into a Postgres table. Set the conflict columns — Postgres matches existing rows on those, updating them in place, while new rows get inserted. Pick which columns get updated on a match if you want to preserve some existing values.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

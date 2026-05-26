@@ -29,7 +29,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "Email",
 			Tags:           []string{"email", "smtp", "notify", "report"},
-			Description:    "Send an email via SMTP. The body input port overrides params.body so upstream node output (e.g. a build's stdout or meta JSON) can be reported directly. Use ${env:NAME} placeholders for credentials.",
+			Description:    "Send an email through an SMTP server. The body can come from an upstream node or from the body param — useful for reporting a build's stdout or a daily summary directly into someone's inbox.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

@@ -21,7 +21,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "GitHub",
 			Tags:           []string{"github", "trigger", "pull-request", "pr", "webhook", "events"},
-			Description:    "Fires when a pull request is OPENED in a repository whose webhook points at this daemon. Subscribes to the pull_request event with action=opened — reopened or synchronized PRs don't fire here (filter downstream if you need them). Configure the repo's webhook URL to POST /api/v1/events/github/<tenant> with a Secret matching --github-webhook-secret.",
+			Description:    "Fires when a pull request is opened. Reopens and pushed-updates don't fire this trigger — it's specifically the 'new PR' moment. Outputs the PR number, title, body, author, source/target branches, and the web URL.",
 			ExecutionModel: core.ExecutionTrigger,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

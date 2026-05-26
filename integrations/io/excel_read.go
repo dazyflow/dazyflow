@@ -27,7 +27,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "Excel",
 			Tags:           []string{"excel", "xlsx", "spreadsheet", "read"},
-			Description:    "Read rows from an .xlsx sheet in the workspace sandbox. The path can come from params.path or, for composable flows, from the 'path' input port (wired from file_picker etc.) — when both are present the input port wins. First row is treated as headers unless headers=false. Optional 'range' restricts to a cell rectangle like \"A1:D100\". With typed=true, cell values come back as native types (int64/float64/bool/time.Time) inferred from each cell's stored Excel type; default is all strings (the displayed value).",
+			Description:    "Read rows from an .xlsx workbook in your workspace. The first row becomes the headers by default. Restrict to a cell range (e.g. \"A1:D100\") if the sheet has a banner you want to skip. Flip on typed mode to get native numbers/dates/booleans instead of strings.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

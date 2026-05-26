@@ -28,7 +28,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "Google Sheets",
 			Tags:           []string{"sheets", "google", "append", "log", "etl"},
-			Description:    "Append rows to a Google Sheets tab. Speaks the same {column: value} rows shape as excel_read/postgres_query — wire any tabular source straight in. Range is usually just the sheet name (e.g. \"Sheet1\"); Sheets finds the first empty row automatically. value_input_option=USER_ENTERED (default) lets Sheets parse \"30\" as a number and \"=SUM(A:A)\" as a formula; RAW keeps everything as literal strings.",
+			Description:    "Append rows to a Google Sheet. Useful for logging events into a spreadsheet teammates can inspect, or for keeping a Sheet in sync with another source. By default Sheets parses '30' as a number and '=SUM(A:A)' as a formula — switch to RAW mode if you want everything stored as literal strings.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

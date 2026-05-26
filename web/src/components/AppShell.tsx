@@ -10,6 +10,7 @@ import {
   ChevronDown,
   FolderTree,
   Building2,
+  Boxes,
 } from "lucide-react";
 import { api } from "../api";
 import { useAuth } from "../auth";
@@ -127,6 +128,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             {pendingCount > 0 && (
               <span className="nav-badge">{pendingCount}</span>
             )}
+          </NavLink>
+          <NavLink to="/integrations" onClick={() => setNavOpen(false)}>
+            <Boxes size={18} />
+            Integrations
           </NavLink>
           {showAdmin && (
             <>

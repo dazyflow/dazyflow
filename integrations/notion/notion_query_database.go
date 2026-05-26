@@ -28,7 +28,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "Notion",
 			Tags:           []string{"notion", "database", "query", "filter", "list"},
-			Description:    "Query a Notion database. `filter` and `sorts` follow Notion's database-query schema. `page_size` defaults to 100 (max per Notion). Pair with `start_cursor` and the emitted `next_cursor` / `has_more` outputs to paginate, or with secret_set + poll_trigger to dedupe across runs (fire-on-new-row pattern). Returns the raw page objects on `pages`; rows are easier to consume via a downstream compute_rows that pulls out the properties you care about.",
+			Description:    "Query a Notion database with optional filters and sorting. Pair with a polling trigger to react to new rows — the cursor outputs let you keep track of what's been seen. Page objects come back raw; a downstream compute_rows extracts the properties you care about.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

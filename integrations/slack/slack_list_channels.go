@@ -28,7 +28,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "Slack",
 			Tags:           []string{"slack", "channels", "list", "discover"},
-			Description:    "List Slack channels visible to the connected workspace. Useful for populating channel pickers in the UI and for ETL graphs that enumerate channels (e.g. \"post the digest to every #project-* channel\"). Returns the first page of results — Slack's limit caps at 1000 per page; multi-page enumeration is a follow-up.",
+			Description:    "List the channels your Slack bot can see. Useful for filling a channel picker in your UI, or for flows that fan out to every matching channel — e.g. \"post the daily digest to every channel starting with #project-\".",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

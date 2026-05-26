@@ -32,7 +32,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "Git",
 			Tags:           []string{"git", "clone", "checkout", "vcs"},
-			Description:    "Clone a git repository into the workspace sandbox and optionally check out a branch, tag, or commit. Emits the relative repository path and a metadata blob (url, ref, resolved sha).",
+			Description:    "Clone a git repository into your workspace, optionally checking out a specific branch, tag, or commit. The cloned files become available to downstream nodes — useful for inspecting source code, pulling templates, or staging files for processing.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

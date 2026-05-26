@@ -29,7 +29,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "GitHub",
 			Tags:           []string{"github", "issue", "list", "poll", "query"},
-			Description:    "List issues on a GitHub repo. Supports state/labels/assignee/since filters — pair with poll_trigger and the 'since' param for 'fire on new issue' workflows. NB: GitHub's issues endpoint also returns pull requests (PRs are issues with a pull_request field); filter via map_rows downstream if you only want one or the other.",
+			Description:    "List issues on a GitHub repo with optional filters (state, labels, assignee, since-date). Pair with a polling trigger to react to new issues as they appear. Heads-up: pull requests also come back from this endpoint — filter them out downstream if you only want issues.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

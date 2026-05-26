@@ -27,7 +27,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "Google Sheets",
 			Tags:           []string{"sheets", "google", "read", "etl"},
-			Description:    "Read a range from a Google Sheet. Emits the same `rows` ([]{column:value}) + `headers` ([]string) shape as excel_read and postgres_query — wire any of them into the same downstream nodes interchangeably. By default the first row becomes the headers; pass headers=false to get synthetic col_0/col_1 names.",
+			Description:    "Read a range from a Google Sheet into rows. The first row becomes the headers by default (override with headers=false for synthetic col_0/col_1 names). The output drops straight into Excel, Postgres, and the transform drops — same shape across the family.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

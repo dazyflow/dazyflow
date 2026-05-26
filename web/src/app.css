@@ -479,6 +479,270 @@
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: var(--space-3);
 }
+
+/* ----- Integrations index + detail ----- */
+.integration-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-3);
+}
+/* Match .graph-card visually so the Integrations index and the
+   Flows index feel like the same product surface. The wrapping
+   Link gets inline textDecoration:none + color:inherit; the inner
+   div carries the visible styling. */
+.integration-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-3);
+  padding: var(--space-4);
+  cursor: pointer;
+  transition: border-color 120ms, transform 120ms;
+}
+.integration-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+.integration-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.integration-card-head h2 {
+  margin: 0;
+  font-size: 17px;
+}
+.integration-card-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.06));
+  padding: 4px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.integration-card-fallback-icon {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.06));
+  color: var(--muted);
+}
+.integration-card-desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+  flex: 1;
+}
+.integration-card-meta {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--faint);
+}
+.integration-card-count {
+  font-family: var(--font-mono);
+  background: var(--surface-2, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--border);
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+
+.integration-hero {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  margin: 12px 0 24px;
+}
+.integration-hero-logo {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.06));
+  padding: 8px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.integration-hero h1 {
+  margin: 0 0 8px;
+}
+.integration-hero-desc {
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted);
+  line-height: 1.6;
+  max-width: 70ch;
+}
+.integration-hero-docs {
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+.integration-hero-docs a {
+  color: var(--accent, #9f83fe);
+  text-decoration: none;
+}
+.integration-hero-docs a:hover {
+  text-decoration: underline;
+}
+/* Hero's "Technical details" disclosure — tucks protocol names and
+   env-var references behind a single click so the friendly hero
+   description stays the focused-by-default surface. */
+.integration-hero-technical {
+  margin: 10px 0 0;
+}
+.integration-hero-technical > summary {
+  cursor: pointer;
+  user-select: none;
+  font-size: 12px;
+  color: var(--faint);
+  font-weight: 500;
+}
+.integration-hero-technical > summary:hover {
+  color: var(--ink);
+}
+.integration-hero-technical > p {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.55;
+  max-width: 70ch;
+}
+.integration-drops-head {
+  margin: 24px 0 12px;
+  font-size: 18px;
+}
+.integration-drops {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.drop-card {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface, transparent);
+}
+.drop-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.drop-card-head .icon {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.drop-card-head .icon.brand-logo {
+  background: var(--surface-2, rgba(255, 255, 255, 0.06));
+  padding: 4px;
+}
+.drop-card-head .icon.brand-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.drop-card-head .icon.branded {
+  background: var(--surface-2, rgba(255, 255, 255, 0.06));
+  color: var(--muted);
+}
+.drop-card-title h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.drop-card-id {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--faint);
+}
+.drop-card-desc {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+.drop-card-ports {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  font-size: 12px;
+}
+.drop-card-port-head {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--faint);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.drop-card-ports ul {
+  margin: 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.drop-card-ports code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink);
+}
+.drop-card-ports .port-required {
+  font-size: 10px;
+  color: var(--accent, #9f83fe);
+  margin-left: 4px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.drop-card-ports .port-label {
+  color: var(--muted);
+}
+/* One disclosure groups ports + params schema together. The
+   summary is the only "technical" surface on a drop card by
+   default; clicking expands to the full wiring contract. */
+.drop-card-wiring {
+  margin-top: 12px;
+}
+.drop-card-wiring > summary {
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--faint);
+  user-select: none;
+  letter-spacing: 0.04em;
+}
+.drop-card-wiring > summary:hover {
+  color: var(--ink);
+}
+.drop-card-wiring > .drop-card-ports {
+  margin-top: 10px;
+}
+.drop-card-params-block {
+  margin-top: 14px;
+}
+.drop-card-params-block > pre {
+  margin: 6px 0 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.06));
+  border-radius: 4px;
+  padding: 10px 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 320px;
+  overflow: auto;
+  color: var(--ink);
+}
 .template-card {
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -890,19 +1154,50 @@
   text-transform: uppercase;
   color: var(--faint);
 }
+/* Header row wraps the collapse-toggle button and the per-integration
+   "info" link side by side. They can't nest (a <Link> inside a
+   <button> is invalid HTML), so a flex row separates the two. */
+.catalog-group-header-row {
+  display: flex;
+  align-items: center;
+  margin: 0 0 var(--space-2) 0;
+  border-radius: var(--r-2);
+}
+.catalog-group-header-row:hover {
+  background: var(--surface-2);
+}
+.catalog-group-header-row:hover .catalog-group-header {
+  background: transparent; /* the row owns the hover bg now */
+  color: var(--ink);
+}
 .catalog-group-header {
   display: flex;
   align-items: center;
   gap: 6px;
-  width: 100%;
+  flex: 1;
   background: none;
   border: none;
   padding: 4px var(--space-2);
-  margin: 0 0 var(--space-2) 0;
   border-radius: var(--r-2);
   cursor: pointer;
   color: var(--muted);
   text-align: left;
+}
+.catalog-learn-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-right: var(--space-2);
+  border-radius: 4px;
+  color: var(--faint);
+  text-decoration: none;
+  flex-shrink: 0;
+}
+.catalog-learn-more:hover {
+  background: var(--surface);
+  color: var(--ink);
 }
 .catalog-group-header:hover {
   background: var(--surface-2);

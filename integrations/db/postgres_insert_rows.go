@@ -25,7 +25,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "Postgres",
 			Tags:           []string{"postgres", "postgresql", "sql", "database", "insert", "etl"},
-			Description:    "Insert rows into a Postgres table. Connection is a DSN (postgres://user:pass@host/db) — use ${env:VAR} or ${secret:name} to avoid embedding credentials in the graph. Input 'rows' is a list of {column: value} records; optional 'headers' fixes column order.",
+			Description:    "Insert rows into a Postgres table. Drops in rows from Sheets, Excel, or any transform node — the shape is interchangeable across the family, so no extra mapping needed.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

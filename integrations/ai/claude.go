@@ -41,7 +41,7 @@ func init() {
 			Provider:       "anthropic",
 			Integration:    "Claude",
 			Tags:           []string{"llm", "claude", "anthropic", "messages"},
-			Description:    "Call Anthropic's Messages API with a one-shot prompt. Returns the assistant's text on one port and the full response (usage tokens, stop reason) on another. The graph is the agent loop — for tool use, compose with mcp:* and branch nodes.",
+			Description:    "Send a prompt to Claude and get a response back. Useful for summarising upstream text, classifying inputs, generating responses, or any step where you want a language model in the loop. The graph itself is your agent loop — combine with branch nodes for multi-turn flows.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{{

@@ -23,7 +23,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "Postgres",
 			Tags:           []string{"postgres", "postgresql", "sql", "database", "query", "select"},
-			Description:    "Execute a SELECT against Postgres and emit the result. SQL is freeform — use $1, $2 placeholders and pass values via the 'params' array. DSN supports ${env:VAR} / ${secret:NAME} substitution. 'limit' caps the row count.",
+			Description:    "Run a SELECT against your Postgres database and get rows back. Use $1, $2 placeholders in the SQL and pass values through the params array so user-supplied data is safely escaped. Set a row limit to keep large result sets bounded.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

@@ -25,7 +25,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "MySQL",
 			Tags:           []string{"mysql", "mariadb", "sql", "database", "upsert", "merge", "etl"},
-			Description:    "INSERT ... ON DUPLICATE KEY UPDATE against MySQL. 'conflict_columns' lists the UNIQUE/PK columns MySQL matches on; 'update_columns' (optional) restricts which columns get updated — default is all non-conflict columns. With create_table=true the table is created with a UNIQUE constraint on the conflict columns.",
+			Description:    "Upsert (insert-or-update) rows into a MySQL or MariaDB table. Set the conflict columns — MySQL matches existing rows on those, updating them in place, while new rows get inserted. Reports separate insert vs update counts so downstream notifications can say 'X new + Y updated'.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

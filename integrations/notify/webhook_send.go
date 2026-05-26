@@ -27,7 +27,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "Webhook",
 			Tags:           []string{"webhook", "http", "post", "notify", "slack", "discord", "teams"},
-			Description:    "POST (or PUT/PATCH) a payload to any webhook URL — Slack, Discord, Teams, PagerDuty, ntfy, or any custom endpoint. Body comes from the input port if connected (objects auto-marshal to JSON; strings/bytes sent as-is), otherwise from params.body. URL supports ${env:NAME} / ${secret:NAME} substitution so credentials don't land in graph JSON.",
+			Description:    "Send a payload to any webhook URL — Slack, Discord, Teams, PagerDuty, ntfy, or your own custom receiver. Body can come from an upstream node (objects are auto-converted to JSON) or from params.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

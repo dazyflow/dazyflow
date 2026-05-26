@@ -29,7 +29,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "Gmail",
 			Tags:           []string{"gmail", "email", "send", "google"},
-			Description:    "Send an email via Gmail. The body comes from the 'body' input port if connected, otherwise from params.body. format=html sets the Content-Type so HTML renders. From-address is the authorized Google account (Gmail doesn't let you spoof a different sender via the API).",
+			Description:    "Send an email through your connected Gmail account. The body comes from the 'body' input or from the 'body' param; set format to html for rich content. The 'from' address is fixed to your authorized Google account — Gmail's API doesn't allow spoofing.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

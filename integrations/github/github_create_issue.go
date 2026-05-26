@@ -29,7 +29,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "GitHub",
 			Tags:           []string{"github", "issue", "create"},
-			Description:    "Open a new issue on a GitHub repo. Body comes from the 'body' input port if connected, otherwise from params.body (Markdown supported). Common shape: a webhook or poll trigger detects something noteworthy, this drop opens an issue on the team's tracker.",
+			Description:    "Open a new issue on a GitHub repo. The body supports Markdown and can come from the 'body' input or from params. Common pattern: a trigger detects something noteworthy and this drop opens a tracked issue for the team to handle.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

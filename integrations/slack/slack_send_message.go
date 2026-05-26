@@ -27,7 +27,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "Slack",
 			Tags:           []string{"slack", "chat", "notify", "send"},
-			Description:    "Post a message to a Slack channel. Message content comes from the 'blocks' input port (Block Kit array) if connected, otherwise the 'body' input port (string) or params.text. 'blocks' always wins over text — Slack treats text as the push-notification fallback when blocks are set. Authentication uses an OAuth-connected account (set 'account', default \"default\") or a raw 'token' for one-off use. 'channel' accepts a channel ID (C…) or name (#data-ops).",
+			Description:    "Post a message to a Slack channel. The simplest path: set the channel and either type your message in 'text' or wire upstream text into the 'body' input. For richer formatting — buttons, dividers, images — use Block Kit blocks instead of plain text.",
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
