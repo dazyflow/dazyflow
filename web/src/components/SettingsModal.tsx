@@ -391,9 +391,18 @@ function TriggerRow({
               command={buildCurl(graph, trigger.secret ?? "")}
             />
             <div className="desc">
-              Webhook listener runs on the daemon's <code>--webhook</code>
-              port; default <code>http://localhost:8080</code>. Replace the
-              host with your public URL when calling from outside.
+              The webhook listener runs on whatever address the daemon
+              was started with via <code>--webhook</code> (off by default;
+              we use <code>:8089</code> here). Replace the host with your
+              public URL when calling from outside.
+              {" "}
+              The request body lands on the <code>webhook_input</code>
+              node's <code>body</code> port: plain-text bodies arrive as
+              a string (works directly with string-consuming drops like
+              Slack send-message), JSON bodies arrive as a parsed object
+              (use a transform drop to extract a field, or switch{" "}
+              <code>Content-Type</code> to <code>application/json</code>{" "}
+              with a JSON payload if downstream expects structure).
             </div>
           </div>
         </div>
@@ -436,6 +445,11 @@ function randomHex(bytes: number): string {
 // graph's webhook trigger. Pass-through string interpolation only — the
 // secret may legitimately contain shell metacharacters (it's our hex
 // alphabet) so quoting is enough.
+//
+// We default to a plain-text body so webhook_input.body lands as a
+// string — drops like slack_send_message that take a string on their
+// 'body' port can be wired directly without a transform. For JSON
+// payloads, see the note under the curl block.
 function buildCurl(graph: Graph, secret: string): string {
   const host = "http://localhost:8089";
   const url = `${host}/trigger/${graph.tenant}/${graph.workspace}/${graph.id}`;
@@ -443,8 +457,8 @@ function buildCurl(graph: Graph, secret: string): string {
   return [
     `curl -X POST '${url}' \\`,
     `  -H 'Authorization: Bearer ${auth}' \\`,
-    `  -H 'Content-Type: application/json' \\`,
-    `  -d '{}'`,
+    `  -H 'Content-Type: text/plain' \\`,
+    `  -d 'Hello from the webhook'`,
   ].join("\n");
 }
 
