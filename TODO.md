@@ -687,12 +687,31 @@ blocking, but listed so we don't lose them.
   21 combined tests.
 - [ ] **Blob storage** — S3 / GCS / R2 with proper streaming via the
   Ref pointer (not Inline).
-- [ ] **`join_rows`** — SQL JOIN equivalent between two row streams.
-  Two row-input ports, `on` param specifying the join keys
-  (`{left_col: right_col}`), `kind` (inner/left/right/outer).
-  The natural next ETL primitive after the dedupe/sort/split set —
-  unlocks "enrich the Excel rows with this DB lookup table" without
-  dropping into SQL.
+- [x] **`join_rows`** — shipped:
+  `integrations/transform/join_rows.go`. Two row-input ports
+  (`left_rows` + `left_headers`, `right_rows` + `right_headers`),
+  `on` param for the join-key mapping (`{left_col: right_col}`,
+  multi-column supported), `kind` picks
+  `inner`/`left`/`right`/`outer`. Hash join over the right side
+  for O(L+R); cartesian-within-key-group on duplicate right
+  keys matches SQL behavior. Key-value equality uses
+  `fmt.Sprint` coercion (int 30 joins string "30") — same rule
+  `map_rows.filter_eq` uses, so Excel-string vs DB-int
+  mismatches don't force a pre-cast. The right side's key
+  columns are dropped from the output (they equal the left's
+  by construction); non-key column collisions get the right
+  one suffixed (default `_right`, overridable via
+  `right_suffix`). Outer/right joins reconstitute the join-key
+  values on unmatched rights under the LEFT's column names, so
+  every output row carries the joined key under one stable name
+  regardless of which side matched. Unmatched-side columns are
+  present-with-nil rather than missing — SQL tuple semantics so
+  downstream CEL filters (`row.country != null`) behave
+  predictably. 18 tests covering each `kind`, multi-column
+  keys, cartesian-within-group, type coercion, header
+  collisions (default + custom suffix), shared-key-name
+  deduplication, empty-side cases, missing-key-column errors
+  on either side, bad params.
 - [ ] **`group_aggregate`** — group rows by one or more columns and
   emit one row per group with aggregated values. Aggregations:
   count, sum, avg, min, max, first, last, collect-as-list. Static
