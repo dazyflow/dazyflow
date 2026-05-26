@@ -7,7 +7,7 @@ import {
   type DragEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useActiveFlow } from "../activeFlow";
 import {
@@ -27,7 +27,7 @@ import {
   type NodeChange,
   type ReactFlowInstance,
 } from "@xyflow/react";
-import { ArrowLeft, Play, Save, Settings as SettingsIcon, Square, Sparkles, Plus } from "lucide-react";
+import { Play, Save, Square, Sparkles, Plus } from "lucide-react";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import type { Graph, GraphTrigger, LintIssue, Manifest, JobStatus, Visibility } from "../types";
@@ -46,9 +46,8 @@ const nodeTypes = { hazy: HazyNode };
 
 function EditorInner() {
   const { t } = useTranslation();
-  const { setName: setActiveFlowName } = useActiveFlow();
+  const { setName: setActiveFlowName, setOpenSettings } = useActiveFlow();
   const { id } = useParams();
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { token, me, hasPerm, activeTenant, activeWorkspace } = useAuth();
   const [manifests, setManifests] = useState<Manifest[]>([]);
@@ -270,6 +269,14 @@ function EditorInner() {
   useEffect(() => {
     return () => setActiveFlowName(null);
   }, [setActiveFlowName]);
+
+  // Register the flow-settings opener so the top-bar three-dots menu
+  // can open this editor's settings modal. setSettingsOpen is stable
+  // (useState setter), so registering once on mount is enough.
+  useEffect(() => {
+    setOpenSettings(() => () => setSettingsOpen(true));
+    return () => setOpenSettings(null);
+  }, [setOpenSettings]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
@@ -607,13 +614,6 @@ function EditorInner() {
       >
         <div className="editor-toolbar">
           <button
-            className="ghost"
-            onClick={() => navigate("/flows")}
-            title={t("editor.back")}
-          >
-            <ArrowLeft size={16} />
-          </button>
-          <button
             className="ghost editor-add-drop"
             onClick={() => setPaletteOpen(true)}
             title={t("editor.addDropTitle")}
@@ -635,29 +635,8 @@ function EditorInner() {
           >
             <Sparkles size={14} />
           </button>
-          <button
-            className="ghost"
-            onClick={() => setSettingsOpen(true)}
-            title={t("editor.flowSettings")}
-          >
-            <SettingsIcon size={14} />
-            {triggers.length > 0 && (
-              <span
-                className="badge"
-                style={{
-                  marginLeft: 6,
-                  padding: "0 6px",
-                  borderRadius: "var(--r-pill)",
-                  background: "color-mix(in srgb, var(--accent) 22%, transparent)",
-                  color: "var(--accent)",
-                  fontSize: 10,
-                  fontWeight: 600,
-                }}
-              >
-                {triggers.length}
-              </span>
-            )}
-          </button>
+          {/* Flow settings moved to the top-bar three-dots menu (single
+              entry point). The toolbar gear used to live here. */}
           <button
             onClick={save}
             disabled={!dirty || saving || !hasPerm("graph:edit") || !!lockedRunID}

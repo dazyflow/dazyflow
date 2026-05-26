@@ -258,6 +258,21 @@
   font-size: 13px;
   margin-top: 2px;
 }
+/* Pages that put a bare <h1> straight under .page (Integrations,
+   Settings, Templates) should match the .page-title h1 size used by
+   the list pages — without this they fall back to the browser default
+   (~2em) and read oversized next to the others. */
+.page > h1 {
+  margin: 0 0 var(--space-2);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.page-sub {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0 0 var(--space-4);
+}
 
 /* Card */
 .card {
@@ -342,6 +357,81 @@
 .workspace-pop-row.active {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   color: var(--ink);
+}
+.workspace-pop-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+/* Account control (lower-left sidebar footer). Trigger looks like a
+   sidebar nav row; the email hides via .nav-label in the collapsed
+   rail, leaving the user icon. The menu pops UPWARD so it doesn't run
+   off the bottom of the viewport. */
+.account-menu {
+  position: relative;
+  /* Pin to the bottom of the sidebar's flex column directly, rather
+     than relying on .sidebar-spacer — the spacer is display:none on
+     mobile, so without this the account control floated up under the
+     nav items there. margin-top:auto absorbs the free space on every
+     viewport. */
+  margin-top: auto;
+}
+.account-menu-trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  margin-top: var(--space-2);
+  background: transparent;
+  border: none;
+  border-radius: var(--r-2);
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+.account-menu-trigger:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.account-email {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sidebar[data-collapsed="true"] .account-menu-trigger {
+  justify-content: center;
+  padding: var(--space-2);
+}
+/* Account pop is portaled to <body> and positioned with inline
+   fixed coords (see AccountMenu) so the sidebar's overflow/stacking
+   context can't clip it or paint the editor canvas over it. */
+.account-pop {
+  min-width: 200px;
+}
+/* Account menu rows are prose, not identifiers — drop the monospace
+   the workspace rows use and lay out icon + label on a line. */
+.account-pop-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: inherit;
+}
+.account-pop-row.danger {
+  color: var(--danger);
+}
+.account-pop-row.danger:hover {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
+/* App settings page (per-user prefs). Constrains the form column so a
+   single control doesn't stretch edge to edge on wide monitors. */
+.settings-page .settings-card {
+  max-width: 520px;
 }
 
 /* Visibility radio rows (Settings → General) */
@@ -552,10 +642,6 @@
 
 /* Templates gallery: a responsive grid of forkable workflows.
    Cards size to roughly two-up on a typical viewport. */
-.templates-page .page-sub {
-  color: var(--muted);
-  margin: -8px 0 var(--space-4);
-}
 .template-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));

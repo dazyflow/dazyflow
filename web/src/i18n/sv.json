@@ -27,6 +27,23 @@
     "pickTenant": "(välj tenant)",
     "noSubject": "(inget subjekt)"
   },
+  "account": {
+    "menu": "Kontomeny",
+    "settings": "Inställningar",
+    "signOut": "Logga ut"
+  },
+  "flowMenu": {
+    "label": "Flödesåtgärder",
+    "settings": "Flödesinställningar"
+  },
+  "appSettings": {
+    "title": "Inställningar",
+    "subtitle": "Inställningar för ditt konto i den här webbläsaren.",
+    "languageLabel": "Språk",
+    "languageDesc": "Ändrar gränssnittets språk. Sparas i den här webbläsaren; standard är webbläsarens språk.",
+    "langEnglish": "English",
+    "langSwedish": "Svenska"
+  },
   "signIn": {
     "title": "Logga in",
     "email": "E-post",

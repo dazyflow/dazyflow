@@ -1,5 +1,6 @@
-import { ReactNode, useEffect, useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { ReactNode, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   Menu,
   LogOut,
@@ -13,6 +14,8 @@ import {
   FolderTree,
   Building2,
   Boxes,
+  Settings as SettingsIcon,
+  MoreVertical,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api";
@@ -110,8 +113,15 @@ export function AppShell({ children }: { children: ReactNode }) {
   // Cleared whenever we navigate away from an editor route so a stale
   // name never lingers on the flow list / runs / admin pages.
   const [activeFlowName, setActiveFlowName] = useState<string | null>(null);
+  // openSettings is registered by the editor so the top-right "current
+  // flow" three-dots can open the flow-settings modal it owns. Stored
+  // as a 0-arg callback; null when no editor is mounted.
+  const [openSettings, setOpenSettings] = useState<(() => void) | null>(null);
   useEffect(() => {
-    if (!inEditor) setActiveFlowName(null);
+    if (!inEditor) {
+      setActiveFlowName(null);
+      setOpenSettings(null);
+    }
   }, [inEditor]);
 
   // The hamburger toggles between the full sidebar and the icons-only
@@ -121,7 +131,12 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <ActiveFlowContext.Provider
-      value={{ name: activeFlowName, setName: setActiveFlowName }}
+      value={{
+        name: activeFlowName,
+        setName: setActiveFlowName,
+        openSettings,
+        setOpenSettings,
+      }}
     >
     <div className="app-shell" data-nav-collapsed={navCollapsed ? "true" : "false"}>
       <header className="topbar">
@@ -168,11 +183,9 @@ export function AppShell({ children }: { children: ReactNode }) {
                 hideTenantPrefix={tenants.length > 1}
               />
             </span>
-            <span className="topbar-sep" style={{ color: "var(--faint)" }}>·</span>
-            <span className="who topbar-email">{me.subject || t("nav.noSubject")}</span>
-            <button className="icon ghost" onClick={signOut} aria-label={t("nav.signOut")}>
-              <LogOut size={18} />
-            </button>
+            {inEditor && openSettings && (
+              <FlowMenu onOpenSettings={openSettings} />
+            )}
           </div>
         )}
       </header>
@@ -228,11 +241,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             </>
           )}
           <div className="sidebar-spacer" />
-          {/* Classical collapse arrow pinned to the bottom of the rail.
-              Duplicates the hamburger's collapse action so the affordance
-              sits next to the panel it controls — the standard pattern
-              in VS Code, Linear, etc. Hidden on mobile where the
-              hamburger drives a slide-over instead of a rail. */}
+          {/* Classical collapse arrow. Duplicates the hamburger's
+              collapse action so the affordance sits next to the panel it
+              controls — the standard pattern in VS Code, Linear, etc.
+              Hidden on mobile where the hamburger drives a slide-over. */}
           <button
             type="button"
             className="sidebar-collapse-toggle"
@@ -259,6 +271,17 @@ export function AppShell({ children }: { children: ReactNode }) {
                 : t("nav.collapseSidebar")}
             </span>
           </button>
+          {/* Account control pinned to the very bottom of the sidebar —
+              the entry point to per-user actions (Settings, Sign out).
+              Mirrors the sibling `hazy` app's sidebar-footer account
+              menu. Shows just the user icon in the collapsed rail. */}
+          {me && (
+            <AccountMenu
+              email={me.subject || t("nav.noSubject")}
+              onSignOut={signOut}
+              collapsed={navCollapsed}
+            />
+          )}
         </aside>
         <main className={"main" + (inEditor ? " no-pad" : "")}>
           {children}
@@ -417,6 +440,177 @@ function TenantSwitcher({
               {t}
             </button>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// AccountMenu is the lower-left sidebar account control — the entry
+// point to per-user actions (Settings, Sign out). Modelled on the
+// sibling `hazy` app, whose account/settings menu lives in the sidebar
+// footer. The trigger shows a user icon + email (the email hides via
+// .nav-label in the collapsed rail, leaving just the icon); the menu
+// pops upward so it doesn't run off the bottom of the viewport.
+function AccountMenu({
+  email,
+  onSignOut,
+  collapsed,
+}: {
+  email: string;
+  onSignOut: () => void;
+  collapsed: boolean;
+}) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  // The pop is rendered in a portal at document.body (see below) so the
+  // sidebar's overflow clip + stacking context can't hide it behind the
+  // editor canvas. That means we position it ourselves from the
+  // trigger's on-screen rect: anchored above the trigger (bottom-up).
+  const [pos, setPos] = useState<{ left: number; bottom: number } | null>(null);
+  const place = () => {
+    const r = triggerRef.current?.getBoundingClientRect();
+    if (!r) return;
+    setPos({ left: r.left, bottom: window.innerHeight - r.top + 6 });
+  };
+  useEffect(() => {
+    if (!open) return;
+    place();
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest(".account-menu") && !target.closest(".account-pop")) {
+        setOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    // Re-place on resize/scroll so the fixed pop tracks the trigger.
+    const onReflow = () => place();
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("resize", onReflow);
+    window.addEventListener("scroll", onReflow, true);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", onReflow);
+      window.removeEventListener("scroll", onReflow, true);
+    };
+  }, [open]);
+  return (
+    <div className="account-menu">
+      <button
+        ref={triggerRef}
+        type="button"
+        className="account-menu-trigger"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={t("account.menu")}
+        title={collapsed ? email : undefined}
+      >
+        <SettingsIcon size={18} />
+        <span className="nav-label account-email">{email}</span>
+        <ChevronDown size={14} className="nav-label account-chevron" />
+      </button>
+      {open && pos &&
+        createPortal(
+          <div
+            className="workspace-pop account-pop"
+            role="menu"
+            style={{
+              position: "fixed",
+              left: pos.left,
+              bottom: pos.bottom,
+              top: "auto",
+              right: "auto",
+            }}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              className="workspace-pop-row account-pop-row"
+              onClick={() => {
+                setOpen(false);
+                navigate("/settings");
+              }}
+            >
+              <SettingsIcon size={14} />
+              {t("account.settings")}
+            </button>
+            <div className="workspace-pop-sep" role="separator" />
+            <button
+              type="button"
+              role="menuitem"
+              className="workspace-pop-row account-pop-row danger"
+              onClick={() => {
+                setOpen(false);
+                onSignOut();
+              }}
+            >
+              <LogOut size={14} />
+              {t("account.signOut")}
+            </button>
+          </div>,
+          document.body,
+        )}
+    </div>
+  );
+}
+
+// FlowMenu is the top-right three-dots menu acting on the current flow
+// (mirrors hazy's per-context menu). Today it has one action — open the
+// flow-settings modal, which lives inside the editor and is invoked via
+// the callback the editor registered on ActiveFlowContext.
+function FlowMenu({ onOpenSettings }: { onOpenSettings: () => void }) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest(".flow-menu")) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  return (
+    <div className="flow-menu" style={{ position: "relative" }}>
+      <button
+        type="button"
+        className="icon ghost"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={t("flowMenu.label")}
+        title={t("flowMenu.label")}
+      >
+        <MoreVertical size={18} />
+      </button>
+      {open && (
+        <div className="workspace-pop account-pop" role="menu">
+          <button
+            type="button"
+            role="menuitem"
+            className="workspace-pop-row account-pop-row"
+            onClick={() => {
+              setOpen(false);
+              onOpenSettings();
+            }}
+          >
+            <SettingsIcon size={14} />
+            {t("flowMenu.settings")}
+          </button>
         </div>
       )}
     </div>

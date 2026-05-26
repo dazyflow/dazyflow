@@ -11,6 +11,7 @@ import { FlowEditor } from "./pages/FlowEditor";
 import { RunList } from "./pages/RunList";
 import { RunDetail } from "./pages/RunDetail";
 import { Approvals } from "./pages/Approvals";
+import { Settings } from "./pages/Settings";
 import { Admin } from "./pages/Admin";
 import { AdminAPIKeys } from "./pages/AdminAPIKeys";
 import { AdminUsers } from "./pages/AdminUsers";
@@ -51,6 +52,7 @@ export function App() {
         <Route path="/runs" element={<RunList />} />
         <Route path="/runs/:runID" element={<RunDetail />} />
         <Route path="/approvals" element={<Approvals />} />
+        <Route path="/settings" element={<Settings />} />
         <Route path="/admin" element={<Admin />} />
         <Route path="/admin/api-keys" element={<AdminAPIKeys />} />
         <Route path="/admin/users" element={<AdminUsers />} />

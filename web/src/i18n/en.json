@@ -27,6 +27,23 @@
     "pickTenant": "(pick tenant)",
     "noSubject": "(no subject)"
   },
+  "account": {
+    "menu": "Account menu",
+    "settings": "Settings",
+    "signOut": "Sign out"
+  },
+  "flowMenu": {
+    "label": "Flow actions",
+    "settings": "Flow settings"
+  },
+  "appSettings": {
+    "title": "Settings",
+    "subtitle": "Preferences for your account in this browser.",
+    "languageLabel": "Language",
+    "languageDesc": "Changes the interface language. Saved in this browser; defaults to your browser's language.",
+    "langEnglish": "English",
+    "langSwedish": "Svenska"
+  },
   "signIn": {
     "title": "Sign in",
     "email": "Email",
