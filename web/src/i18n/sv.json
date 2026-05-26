@@ -39,6 +39,10 @@
   "appSettings": {
     "title": "Inställningar",
     "subtitle": "Inställningar för ditt konto i den här webbläsaren.",
+    "themeLabel": "Utseende",
+    "themeDesc": "Välj ett färgtema. Sparas i den här webbläsaren.",
+    "themeDark": "Mörkt",
+    "themeLight": "Ljust",
     "languageLabel": "Språk",
     "languageDesc": "Ändrar gränssnittets språk. Sparas i den här webbläsaren; standard är webbläsarens språk.",
     "langEnglish": "English",

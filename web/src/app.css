@@ -438,6 +438,60 @@
 .settings-page .settings-card {
   max-width: 520px;
 }
+.settings-page .sf-field + .sf-field {
+  margin-top: var(--space-5);
+}
+
+/* Theme picker — two selectable cards rather than a dropdown, so the
+   choice reads visually (a dark swatch vs a light one). */
+.theme-choice {
+  display: flex;
+  gap: var(--space-3);
+}
+.theme-option {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 120ms, background 120ms, box-shadow 120ms;
+}
+.theme-option:hover {
+  border-color: var(--border-strong);
+}
+.theme-option.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.theme-swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-2);
+  flex-shrink: 0;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+/* The swatches are fixed previews of each theme's canvas, independent
+   of the active theme, so both always show their true colour. */
+.theme-swatch-dark {
+  background: #140d30;
+  color: #cbb8ff;
+}
+.theme-swatch-light {
+  background: #ffffff;
+  color: #6d28d9;
+}
+.theme-option-label {
+  font-size: 14px;
+  font-weight: 500;
+}
 
 /* Visibility radio rows (Settings → General) */
 .visibility-choice {

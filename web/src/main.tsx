@@ -7,9 +7,14 @@ import { AuthProvider } from "./auth";
 // component renders, so the first paint uses the user's locale. Must
 // run before any useTranslation() call.
 import "./i18n";
+import { initTheme } from "./theme";
 import "./theme.css";
 import "./app.css";
 import "@xyflow/react/dist/style.css";
+
+// Apply the saved theme before first paint so there's no dark→light
+// flash for users who picked light.
+initTheme();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

@@ -41,6 +41,10 @@
   --danger: var(--status-failed);
   --success: var(--status-completed);
 
+  /* React Flow canvas dot-grid colour (faint light dots on the
+     near-black canvas). Themed so light mode can flip it to dark. */
+  --canvas-dot: rgba(255, 255, 255, 0.05);
+
   /* Shadows + synthwave glow */
   --shadow: 0 1px 2px rgba(8, 2, 30, 0.45);
   --shadow-lg: 0 2px 10px rgba(8, 2, 30, 0.55);
@@ -86,32 +90,74 @@
   --inspector-w: 320px;
 }
 
-/* Light mode — opt-in via data-theme="light" on <html>. */
+/* ============================================================
+   Light theme — designed from scratch, not an inversion of the
+   dark palette. A soft cool-gray canvas with crisp white cards for
+   depth, a deepened violet accent that holds AA contrast on white,
+   and soft neutral shadows in place of the synthwave glow. Opt in
+   via data-theme="light" on <html>.
+   ============================================================ */
 :root[data-theme="light"] {
-  --accent: #470696;
-  --accent-2: #7c24b4;
-  --accent-deep: #340469;
+  /* Brand violet, deepened for legibility on light surfaces — reads
+     as a premium indigo-violet rather than the neon dark-mode lilac. */
+  --accent: #6d28d9;       /* violet-700 — links, active accents */
+  --accent-2: #9333ea;     /* purple-600 — gradient partner */
+  --accent-deep: #4c1d95;  /* violet-900 */
   --accent-ink: #ffffff;
-  --btn: #470696;
-  --btn-hover: #340469;
+  --btn: #6d28d9;
+  --btn-hover: #5b21b6;    /* violet-800 */
 
-  --ink: #1a1f2c;
-  --ink-soft: #3d4456;
-  --muted: #4d5870;
-  --faint: #6c768d;
+  /* Ink — slate rather than pure black, softer and more professional. */
+  --ink: #1b2233;
+  --ink-soft: #39415a;
+  --muted: #5b6577;
+  --faint: #8b93a7;
 
-  --bg: #fbfbfd;
+  /* Surfaces — a tinted off-white app canvas with pure-white cards
+     floating on top, plus two progressively deeper neutral fills for
+     hovers and wells. The slight cool cast keeps it from feeling
+     clinical. */
+  --bg: #f6f7fb;
   --surface: #ffffff;
-  --surface-2: #f4f5f9;
-  --surface-3: #eaedf3;
+  --surface-2: #f0f2f8;
+  --surface-3: #e6e9f2;
 
-  --border: #d0d7e3;
-  --border-strong: #aab2c2;
+  /* Borders — hairline cool grays; the strong one is for inputs and
+     emphasized dividers. */
+  --border: #e4e8f0;
+  --border-strong: #ccd3e0;
 
-  --status-running: #2f6fea;
-  --status-completed: #1f8a3d;
-  --status-failed: #d23a3a;
-  --status-awaiting: #b07b00;
+  /* Status palette retuned to 600-level hues so the dots/chips stay
+     vivid and AA-legible on white (the dark-mode pastels would wash
+     out). */
+  --status-pending: #8590a3;
+  --status-running: #4f46e5;   /* indigo-600 */
+  --status-completed: #16a34a; /* green-600 */
+  --status-failed: #dc2626;    /* red-600 */
+  --status-on-hold: #d97706;   /* amber-600 */
+  --status-warning: #d97706;
+  --status-awaiting: #ca8a04;  /* yellow-600 */
+
+  /* Faint dark dots for the canvas grid (light-on-dark flips to
+     dark-on-light). */
+  --canvas-dot: rgba(28, 35, 51, 0.07);
+
+  /* Soft, neutral elevation — light themes want diffuse gray shadows,
+     not the heavy near-black drops the dark theme uses. */
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-lg: 0 4px 14px rgba(16, 24, 40, 0.08);
+  --shadow-pop: 0 10px 30px rgba(16, 24, 40, 0.12);
+  /* Primary-button elevation: a top inner highlight for a subtle
+     "pressed plastic" sheen plus a tinted violet shadow so the CTA
+     lifts off the page. */
+  --glow-accent:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    0 1px 2px rgba(76, 29, 149, 0.28),
+    0 2px 8px color-mix(in srgb, var(--accent) 28%, transparent);
+  --glow-accent-hover:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    0 2px 4px rgba(76, 29, 149, 0.3),
+    0 6px 16px color-mix(in srgb, var(--accent) 40%, transparent);
 }
 
 * {
@@ -151,6 +197,30 @@ body {
     ),
     var(--bg);
   background-attachment: fixed;
+}
+
+/* Light mode gets the same two-corner brand wash, dialled way down so
+   it reads as a faint tint behind the white cards rather than a glow. */
+:root[data-theme="light"] body {
+  background:
+    radial-gradient(
+      ellipse 60vw 40vh at 85% -10%,
+      color-mix(in srgb, var(--accent) 6%, transparent) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 50vw 50vh at -10% 110%,
+      color-mix(in srgb, var(--accent-2) 5%, transparent) 0%,
+      transparent 55%
+    ),
+    var(--bg);
+  background-attachment: fixed;
+}
+
+/* Canvas dot-grid colour is themed — drive the React Flow background
+   pattern from --canvas-dot so it flips with the theme. */
+.react-flow__background circle {
+  fill: var(--canvas-dot);
 }
 
 a {

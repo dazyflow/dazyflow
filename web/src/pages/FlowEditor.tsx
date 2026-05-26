@@ -745,7 +745,9 @@ function EditorInner() {
           proOptions={{ hideAttribution: true }}
           colorMode="dark"
         >
-          <Background gap={20} size={1} color="rgba(255,255,255,0.04)" />
+          {/* Dot colour is themed via CSS (.react-flow__background circle
+              → var(--canvas-dot)); the prop is just a fallback. */}
+          <Background gap={20} size={1} color="var(--canvas-dot)" />
           <Controls
             showInteractive={false}
             style={{
