@@ -66,6 +66,11 @@ type HTTPGateway struct {
 	// Nil = the route returns 501. Wired by hzd when the Slack
 	// signing-secret flag/env is set.
 	SlackEvents *SlackEventsHandler
+
+	// GitHubEvents handles GitHub webhook POSTs (push, pull_request).
+	// Nil = the route returns 501. Wired by hzd when the GitHub
+	// webhook-secret flag/env is set.
+	GitHubEvents *GitHubEventsHandler
 }
 
 func NewHTTPGateway(svc *Service) *HTTPGateway {
@@ -82,7 +87,7 @@ func (h *HTTPGateway) Serve(ctx context.Context, listenAddr string) error {
 	h.mountRoutes(mux)
 	srv := &http.Server{
 		Addr:              listenAddr,
-		Handler:           h.withCORSAndLogging(mux),
+		Handler:           h.withCORSAndLogging(h.verifyCookieOrigin(mux)),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		// No WriteTimeout — SSE responses are long-lived. Per-request
@@ -138,6 +143,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// Slack Events API endpoint. NOT under requireAuth — Slack POSTs
 	// as a stranger; the HMAC signature is the auth.
 	mux.HandleFunc("POST /api/v1/events/slack/{tenant}", h.slackEvents)
+	mux.HandleFunc("POST /api/v1/events/github/{tenant}", h.githubEvents)
 	mux.HandleFunc("GET /api/v1/graphs/{tenant}/{workspace}/{id}/runs", h.requireAuth(h.listRuns))
 	mux.HandleFunc("GET /api/v1/runs", h.requireAuth(h.listAllRuns))
 	mux.HandleFunc("POST /api/v1/runs/{runID}/cancel", h.requireAuth(h.cancelRun))
@@ -160,7 +166,57 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 func ServeForTest(h *HTTPGateway, rw http.ResponseWriter, r *http.Request) {
 	mux := http.NewServeMux()
 	h.mountRoutes(mux)
-	h.withCORSAndLogging(mux).ServeHTTP(rw, r)
+	h.withCORSAndLogging(h.verifyCookieOrigin(mux)).ServeHTTP(rw, r)
+}
+
+// verifyCookieOrigin is the CSRF defense layer for cookie-authenticated
+// requests. The session cookie already has SameSite=Lax + HttpOnly, which
+// in modern browsers blocks the classical fetch-driven CSRF attack on its
+// own. This middleware adds belt-and-suspenders defense for older browsers
+// and for the small set of fetch shapes Lax doesn't cover (e.g. some
+// top-level POST navigations in older Safari): every cookie-auth POST /
+// PUT / PATCH / DELETE must carry an Origin header that matches one of
+// the configured AllowedOrigins.
+//
+// Behaviour:
+//   - GET / HEAD / OPTIONS pass through (they shouldn't mutate state; the
+//     CORS preflight needs to land first anyway).
+//   - Requests with no session cookie pass through (Bearer-auth clients
+//     have no cookies attached, so there's no CSRF surface).
+//   - Cookie-auth state-changing requests must have an Origin header
+//     present and matching AllowedOrigins. Missing or mismatched Origin
+//     returns 403.
+//
+// When AllowedOrigins is empty (single-tenant dev mode without web-origin
+// configured), cookie-auth state-changing requests fall back to refusing —
+// "no allowed origins" implies no browser-served origin should be
+// performing writes; the deployment hasn't opted into browser auth.
+func (h *HTTPGateway) verifyCookieOrigin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet, http.MethodHead, http.MethodOptions:
+			next.ServeHTTP(rw, r)
+			return
+		}
+		cookie, err := r.Cookie(sessionCookieName)
+		if err != nil || cookie.Value == "" {
+			// No session cookie → not a CSRF target.
+			next.ServeHTTP(rw, r)
+			return
+		}
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			writeJSONError(rw, http.StatusForbidden,
+				"cookie-authenticated state-changing requests require an Origin header (CSRF defense)")
+			return
+		}
+		if !originAllowed(origin, h.AllowedOrigins) {
+			writeJSONError(rw, http.StatusForbidden,
+				"cookie-authenticated request from disallowed origin (CSRF defense)")
+			return
+		}
+		next.ServeHTTP(rw, r)
+	})
 }
 
 // principalCtx is the type used to stash an authenticated principal
@@ -759,6 +815,14 @@ func (h *HTTPGateway) slackEvents(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.SlackEvents.ServeHTTP(rw, r)
+}
+
+func (h *HTTPGateway) githubEvents(rw http.ResponseWriter, r *http.Request) {
+	if h.GitHubEvents == nil {
+		http.Error(rw, "GitHub events endpoint not configured (set --github-webhook-secret on hzd)", http.StatusNotImplemented)
+		return
+	}
+	h.GitHubEvents.ServeHTTP(rw, r)
 }
 
 func (h *HTTPGateway) sampleNode(rw http.ResponseWriter, r *http.Request, p core.Principal) {

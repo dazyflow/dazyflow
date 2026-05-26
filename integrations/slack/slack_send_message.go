@@ -121,6 +121,10 @@ func executeSlackSendMessage(ctx context.Context, job core.Job, _ chan<- core.Pr
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	// Idempotency-Key prevents double-post on worker retry: a failed
+	// graph that re-Executes the same node-record reuses Job.ID, so
+	// Slack sees the same key on the retry and dedupes server-side.
+	req.Header.Set("Idempotency-Key", job.IdempotencyKey())
 
 	client := &http.Client{Timeout: time.Duration(timeoutMs) * time.Millisecond}
 	resp, err := client.Do(req)

@@ -19,10 +19,11 @@ import (
 type fakeSlack struct {
 	server *httptest.Server
 
-	mu                  sync.Mutex
-	lastPostMessageReq  map[string]any
-	lastPostMessageAuth string
-	postMessageResp     string
+	mu                       sync.Mutex
+	lastPostMessageReq       map[string]any
+	lastPostMessageAuth      string
+	lastPostMessageIdempotency string
+	postMessageResp          string
 
 	lastListChannelsQ    string
 	lastListChannelsAuth string
@@ -41,6 +42,7 @@ func newFakeSlack(t *testing.T) *fakeSlack {
 		f.mu.Lock()
 		_ = json.Unmarshal(body, &f.lastPostMessageReq)
 		f.lastPostMessageAuth = r.Header.Get("Authorization")
+		f.lastPostMessageIdempotency = r.Header.Get("Idempotency-Key")
 		resp := f.postMessageResp
 		f.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
@@ -400,5 +402,56 @@ func TestSlackListChannels_UsesOAuthLookup(t *testing.T) {
 	defer fs.mu.Unlock()
 	if fs.lastListChannelsAuth != "Bearer xoxb-from-oauth" {
 		t.Errorf("auth = %q", fs.lastListChannelsAuth)
+	}
+}
+
+func TestSlackSendMessage_IdempotencyKeyStableAcrossAttempts(t *testing.T) {
+	// Two Execute calls with the SAME Job.ID (= same node-record on
+	// worker retry) MUST produce the same Idempotency-Key header so
+	// Slack's server-side dedupe can recognize them as the same
+	// logical message. Different Job.IDs MUST produce different keys
+	// (otherwise unrelated messages would silently merge).
+	fs := newFakeSlack(t)
+	job := core.Job{
+		ID: "node-rec-12345",
+		Params: map[string]any{
+			"token":   "xoxb-test",
+			"channel": "#c",
+			"text":    "hi",
+		},
+	}
+	if _, err := executeSlackSendMessage(t.Context(), job, nil); err != nil {
+		t.Fatalf("first send: %v", err)
+	}
+	fs.mu.Lock()
+	first := fs.lastPostMessageIdempotency
+	fs.mu.Unlock()
+	if first != "hazyflow:node-rec-12345" {
+		t.Fatalf("first key = %q, want hazyflow:node-rec-12345", first)
+	}
+
+	// Same job (= worker retry) — key must be identical.
+	if _, err := executeSlackSendMessage(t.Context(), job, nil); err != nil {
+		t.Fatalf("second send: %v", err)
+	}
+	fs.mu.Lock()
+	second := fs.lastPostMessageIdempotency
+	fs.mu.Unlock()
+	if second != first {
+		t.Errorf("retry key drifted: first=%q second=%q", first, second)
+	}
+
+	// Different job.ID — key must differ so unrelated messages
+	// don't collide.
+	jobOther := job
+	jobOther.ID = "node-rec-99999"
+	if _, err := executeSlackSendMessage(t.Context(), jobOther, nil); err != nil {
+		t.Fatalf("third send: %v", err)
+	}
+	fs.mu.Lock()
+	third := fs.lastPostMessageIdempotency
+	fs.mu.Unlock()
+	if third == first {
+		t.Errorf("different job IDs produced the same key: %q", third)
 	}
 }

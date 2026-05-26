@@ -32,7 +32,12 @@ func init() {
 				{Port: "ts", Label: "Message timestamp (Slack ts; use this to reply in thread)", MIME: []string{"text/plain"}},
 				{Port: "event", Label: "Full Slack event payload as JSON — advanced use", MIME: []string{"application/json"}},
 			},
-			ParamsSchema: json.RawMessage(`{"type":"object"}`),
+			ParamsSchema: json.RawMessage(`{
+				"type":"object",
+				"properties":{
+					"channel_filter": {"type":"string","description":"Optional channel ID (e.g. C0123) the graph should fire for. When set, mentions in other channels DO NOT fire this graph — the events handler skips dispatch at the gateway, saving the worker round-trip. Empty (default) means fire for every channel the bot is mentioned in."}
+				}
+			}`),
 			// Same shape as webhook_input: retry of a trigger is
 			// meaningless because the fire moment carries the data;
 			// the daemon pre-completes the node, so Execute below is

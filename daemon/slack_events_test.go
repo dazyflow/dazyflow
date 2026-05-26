@@ -210,6 +210,103 @@ func TestSlackEvents_AppMentionFiresSubscribedGraphs(t *testing.T) {
 	t.Fatal("no graph-record materialized within 2s")
 }
 
+func TestSlackEvents_ChannelFilterSkipsMismatchedGraphs(t *testing.T) {
+	h := newSlackHarness(t)
+	// Two graphs, both subscribed to slack_on_mention. Graph A
+	// filters on channel C111, graph B filters on C222. An event
+	// in C111 should fire ONLY graph A.
+	graphA := core.Graph{
+		ID: "graph-a", Tenant: "t", Workspace: "ws",
+		Nodes: []core.Node{{
+			ID: "trig", Module: "slack_on_mention",
+			Params: map[string]any{"channel_filter": "C111"},
+		}},
+	}
+	graphB := core.Graph{
+		ID: "graph-b", Tenant: "t", Workspace: "ws",
+		Nodes: []core.Node{{
+			ID: "trig", Module: "slack_on_mention",
+			Params: map[string]any{"channel_filter": "C222"},
+		}},
+	}
+	if _, err := h.ws.Save(graphA, "test"); err != nil {
+		t.Fatalf("save A: %v", err)
+	}
+	if _, err := h.ws.Save(graphB, "test"); err != nil {
+		t.Fatalf("save B: %v", err)
+	}
+
+	event := map[string]any{
+		"type":    "event_callback",
+		"team_id": "T",
+		"event": map[string]any{
+			"type":    "app_mention",
+			"channel": "C111",
+			"text":    "<@U> ping",
+		},
+	}
+	body, _ := json.Marshal(event)
+	rw := h.post(t, "/api/v1/events/slack/t", body, 0)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("code=%d body=%s", rw.Code, rw.Body.String())
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	var fired map[string]bool
+	for time.Now().Before(deadline) {
+		fired = map[string]bool{}
+		runs, _ := h.store.ListGraphRuns(t.Context(), core.ListGraphRunsOpts{
+			Tenant: "t", Workspace: "ws",
+		})
+		for _, r := range runs {
+			fired[r.GraphID] = true
+		}
+		if fired["graph-a"] {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !fired["graph-a"] {
+		t.Errorf("graph-a (channel_filter=C111) should fire for C111 event")
+	}
+	if fired["graph-b"] {
+		t.Errorf("graph-b (channel_filter=C222) should NOT fire for C111 event")
+	}
+}
+
+func TestSlackEvents_EmptyChannelFilterMatchesAll(t *testing.T) {
+	// Backward compat: graphs without channel_filter param must
+	// still fire for any channel. Pre-filter authoring depended
+	// on this behavior.
+	h := newSlackHarness(t)
+	g := core.Graph{
+		ID: "old-graph", Tenant: "t", Workspace: "ws",
+		Nodes: []core.Node{{ID: "trig", Module: "slack_on_mention"}},
+	}
+	if _, err := h.ws.Save(g, "test"); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	event := map[string]any{
+		"type":    "event_callback",
+		"team_id": "T",
+		"event":   map[string]any{"type": "app_mention", "channel": "C-any", "text": "hi"},
+	}
+	body, _ := json.Marshal(event)
+	h.post(t, "/api/v1/events/slack/t", body, 0)
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		runs, _ := h.store.ListGraphRuns(t.Context(), core.ListGraphRunsOpts{
+			Tenant: "t", Workspace: "ws", GraphID: "old-graph",
+		})
+		if len(runs) > 0 {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("unfiltered graph should fire for any channel")
+}
+
 func TestSlackEvents_NonAppMentionEventIsAcked(t *testing.T) {
 	h := newSlackHarness(t)
 	// reaction_added isn't subscribed — handler should 200 and not

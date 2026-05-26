@@ -1,0 +1,67 @@
+{
+  "id": "notion-poll-to-slack",
+  "version": "1",
+  "name": "New Notion row → Slack (dedupe)",
+  "description": "Polls a Notion database every 5 minutes, posts new rows to Slack. Dedupe via cursor stored in secret_set so only rows added since the last fire trigger a post. Wire your database_id + Slack channel; the rest is composition.",
+  "icon": "database",
+  "triggers": [
+    {"type": "poll", "interval_seconds": 300}
+  ],
+  "nodes": [
+    {
+      "id": "poll",
+      "module": "poll_trigger",
+      "params": {},
+      "position": {"x": 100, "y": 200}
+    },
+    {
+      "id": "query",
+      "module": "notion_query_database",
+      "params": {
+        "database_id": "REPLACE_WITH_DATABASE_UUID",
+        "account": "default",
+        "filter": {
+          "timestamp": "created_time",
+          "created_time": {"after": "${tenant:notion_cursor}"}
+        },
+        "page_size": 20
+      },
+      "position": {"x": 400, "y": 200}
+    },
+    {
+      "id": "format",
+      "module": "compute_rows",
+      "params": {
+        "compute": {
+          "summary": "'New Notion page: ' + string(row.id)"
+        }
+      },
+      "position": {"x": 700, "y": 200}
+    },
+    {
+      "id": "notify",
+      "module": "slack_send_message",
+      "params": {
+        "channel": "#notion",
+        "account": "default",
+        "text": "${upstream:format.rows[0].summary}"
+      },
+      "position": {"x": 1000, "y": 200}
+    },
+    {
+      "id": "save_cursor",
+      "module": "secret_set",
+      "params": {
+        "name": "notion_cursor",
+        "value": "${upstream:poll.fired_at}"
+      },
+      "position": {"x": 1000, "y": 400}
+    }
+  ],
+  "edges": [
+    {"from": "poll", "from_port": "fired_at", "to": "query", "to_port": "in", "on_error": ""},
+    {"from": "query", "from_port": "pages", "to": "format", "to_port": "rows", "on_error": ""},
+    {"from": "format", "from_port": "rows", "to": "notify", "to_port": "body", "on_error": ""},
+    {"from": "poll", "from_port": "fired_at", "to": "save_cursor", "to_port": "value", "on_error": ""}
+  ]
+}

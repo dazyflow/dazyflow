@@ -220,7 +220,7 @@ func (h *SlackEventsHandler) dispatchEvent(_ context.Context, tenant string, env
 	// fanout in a background goroutine and ack immediately. Errors
 	// during fanout go to the daemon log; the user sees them on
 	// the run record.
-	go h.fanoutSeed(context.Background(), tenant, seed)
+	go h.fanoutSeed(context.Background(), tenant, ev.Channel, seed)
 
 	rw.WriteHeader(http.StatusOK)
 	_, _ = rw.Write([]byte("ok"))
@@ -228,9 +228,17 @@ func (h *SlackEventsHandler) dispatchEvent(_ context.Context, tenant string, env
 
 // fanoutSeed walks every workspace under the tenant, loads each
 // graph, and submits a run for any that declares a slack_on_mention
-// node. Each graph gets its own runID; the bus + workers handle
-// dispatch normally from there.
-func (h *SlackEventsHandler) fanoutSeed(ctx context.Context, tenant string, seed core.Result) {
+// node WHOSE channel_filter param matches the event's channel (or
+// has no filter set). Per-node filtering at the gateway cuts the
+// worker-side churn for tenants who run many channel-specific
+// graphs against one Slack app.
+//
+// eventChannel is the Slack channel ID the mention happened in
+// (e.g. C0123). channel_filter param semantics: empty/missing =
+// match anything; non-empty = exact match required. A graph with
+// multiple slack_on_mention nodes only includes the ones whose
+// filter matches — others stay dormant for this event.
+func (h *SlackEventsHandler) fanoutSeed(ctx context.Context, tenant, eventChannel string, seed core.Result) {
 	workspaces, err := h.svc.Workspaces.List(tenant)
 	if err != nil {
 		h.logger.Printf("list workspaces for %s: %v", tenant, err)
@@ -268,9 +276,13 @@ func (h *SlackEventsHandler) fanoutSeed(ctx context.Context, tenant string, seed
 			}
 			seeds := map[string]core.Result{}
 			for _, n := range g.Nodes {
-				if n.Module == slackOnMentionModuleID {
-					seeds[n.ID] = seed
+				if n.Module != slackOnMentionModuleID {
+					continue
 				}
+				if !nodeChannelFilterMatches(n.Params, eventChannel) {
+					continue
+				}
+				seeds[n.ID] = seed
 			}
 			if len(seeds) == 0 {
 				continue
@@ -284,6 +296,26 @@ func (h *SlackEventsHandler) fanoutSeed(ctx context.Context, tenant string, seed
 				tenant, ws, id, runID, len(seeds))
 		}
 	}
+}
+
+// nodeChannelFilterMatches checks the slack_on_mention node's
+// channel_filter param against the event's channel. Empty filter
+// (or missing param, or non-string value) matches every channel —
+// preserves backward compatibility with graphs authored before this
+// param existed.
+func nodeChannelFilterMatches(params map[string]any, eventChannel string) bool {
+	if params == nil {
+		return true
+	}
+	raw, ok := params["channel_filter"]
+	if !ok {
+		return true
+	}
+	f, ok := raw.(string)
+	if !ok || f == "" {
+		return true
+	}
+	return f == eventChannel
 }
 
 // verifySignature implements the Slack signing-secret scheme:

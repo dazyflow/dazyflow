@@ -108,6 +108,11 @@ func executeWebhookSend(ctx context.Context, job core.Job, progress chan<- core.
 	if len(body) > 0 {
 		req.Header.Set("Content-Type", contentType)
 	}
+	// Idempotency-Key dedupes retries on the receiving side for
+	// providers that honor the convention (Stripe, Slack, GitHub
+	// app webhooks). Set BEFORE user-supplied headers so the user
+	// can override or clear if their endpoint mishandles it.
+	req.Header.Set("Idempotency-Key", job.IdempotencyKey())
 	for k, v := range webhookHeaders(job.Params) {
 		req.Header.Set(k, v)
 	}

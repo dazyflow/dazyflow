@@ -128,6 +128,11 @@ func executeGmailSendEmail(ctx context.Context, job core.Job, _ chan<- core.Prog
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	// Idempotency-Key prevents double-send on worker retry. Gmail
+	// itself doesn't fully honor the header today, but sending it
+	// is harmless to APIs that ignore it and forward-compatible
+	// if Google starts deduping (the Cloud APIs they front do).
+	req.Header.Set("Idempotency-Key", job.IdempotencyKey())
 
 	timeoutMs := paramIntDefault(job.Params, "timeout_ms", 15000)
 	client := &http.Client{Timeout: time.Duration(timeoutMs) * time.Millisecond}

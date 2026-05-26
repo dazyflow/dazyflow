@@ -1399,6 +1399,87 @@ func TestHTTPGateway_SaveGraph_IncludesLintInResponse(t *testing.T) {
 	}
 }
 
+// ---- CSRF defense (cookie-auth + verifyCookieOrigin) -----------------
+//
+// The middleware adds Origin-header verification to cookie-auth POST/PUT
+// /DELETE requests. Bearer-auth requests (no cookie) are unaffected.
+
+func TestHTTPGateway_CSRF_BearerAuthUnaffectedByOrigin(t *testing.T) {
+	h := newGatewayHarness(t)
+	// Bearer-auth POST with arbitrary or no Origin — should pass
+	// (the new middleware only kicks in for cookie-auth).
+	rw := h.do(t, "PUT", "/api/v1/graphs/t/ws/g-bearer", core.Graph{
+		ID: "g-bearer", Tenant: "t", Workspace: "ws",
+	})
+	if rw.Code != http.StatusOK {
+		t.Fatalf("bearer-auth PUT should pass: code=%d body=%s", rw.Code, rw.Body.String())
+	}
+}
+
+func TestHTTPGateway_CSRF_CookieAuthRequiresOrigin(t *testing.T) {
+	h := newGatewayHarness(t)
+	h.gw.AllowedOrigins = []string{"https://app.example.com"}
+	// Build a request that LOOKS like a CSRF attack: a session cookie
+	// is attached but no Origin header is set.
+	req := httptest.NewRequest("PUT", "/api/v1/graphs/t/ws/g-csrf", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "hazyflow_session", Value: "any-session"})
+	rw := httptest.NewRecorder()
+	ServeForTest(h.gw, rw, req)
+	if rw.Code != http.StatusForbidden {
+		t.Errorf("cookie-auth POST without Origin should be 403, got %d (%s)", rw.Code, rw.Body.String())
+	}
+}
+
+func TestHTTPGateway_CSRF_AllowedOriginPasses(t *testing.T) {
+	h := newGatewayHarness(t)
+	h.gw.AllowedOrigins = []string{"https://app.example.com"}
+	g := core.Graph{ID: "g-allowed", Tenant: "t", Workspace: "ws"}
+	body, _ := json.Marshal(g)
+	req := httptest.NewRequest("PUT", "/api/v1/graphs/t/ws/g-allowed", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+h.token) // still need real auth
+	req.Header.Set("Origin", "https://app.example.com")
+	req.AddCookie(&http.Cookie{Name: "hazyflow_session", Value: "any-session"})
+	rw := httptest.NewRecorder()
+	ServeForTest(h.gw, rw, req)
+	if rw.Code != http.StatusOK {
+		t.Errorf("cookie-auth POST with allowed Origin should pass, got %d (%s)", rw.Code, rw.Body.String())
+	}
+}
+
+func TestHTTPGateway_CSRF_DisallowedOriginRejected(t *testing.T) {
+	h := newGatewayHarness(t)
+	h.gw.AllowedOrigins = []string{"https://app.example.com"}
+	req := httptest.NewRequest("PUT", "/api/v1/graphs/t/ws/g-evil", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "https://evil.example.com")
+	req.AddCookie(&http.Cookie{Name: "hazyflow_session", Value: "any-session"})
+	rw := httptest.NewRecorder()
+	ServeForTest(h.gw, rw, req)
+	if rw.Code != http.StatusForbidden {
+		t.Errorf("cookie-auth POST from disallowed origin should be 403, got %d", rw.Code)
+	}
+}
+
+func TestHTTPGateway_CSRF_GetMethodNotAffected(t *testing.T) {
+	// GET is allowed-through regardless of cookie/Origin — the
+	// middleware only guards state-changing methods. Reading data
+	// from a malicious origin still loses to CORS (which the
+	// browser enforces), so this is safe.
+	h := newGatewayHarness(t)
+	h.gw.AllowedOrigins = []string{"https://app.example.com"}
+	req := httptest.NewRequest("GET", "/api/v1/whoami", nil)
+	req.Header.Set("Authorization", "Bearer "+h.token)
+	req.AddCookie(&http.Cookie{Name: "hazyflow_session", Value: "any"})
+	// No Origin header — should still pass since it's a GET.
+	rw := httptest.NewRecorder()
+	ServeForTest(h.gw, rw, req)
+	if rw.Code == http.StatusForbidden {
+		t.Errorf("GET should be allowed through CSRF middleware regardless of Origin")
+	}
+}
+
 func TestHTTPGateway_SaveGraph_NoLintReturnsEmpty(t *testing.T) {
 	h := newGatewayHarness(t)
 	g := core.Graph{

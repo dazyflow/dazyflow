@@ -1,0 +1,62 @@
+{
+  "id": "github-push-to-slack-deploy",
+  "version": "1",
+  "name": "Push to main → Slack deploy alert",
+  "description": "Listens to GitHub push webhooks; when commits land on main, posts a one-line summary to a Slack channel. Branch is filtered downstream so feature-branch pushes don't notify. Use as the foundation for a deploy-bot pattern.",
+  "icon": "git-branch",
+  "nodes": [
+    {
+      "id": "trigger",
+      "module": "github_on_push",
+      "params": {},
+      "position": {"x": 100, "y": 200}
+    },
+    {
+      "id": "wrap",
+      "module": "compute_rows",
+      "params": {
+        "compute": {
+          "ref":    "row.ref",
+          "after":  "row.after",
+          "pusher": "row.pusher.name",
+          "n":      "size(row.commits)"
+        }
+      },
+      "position": {"x": 400, "y": 200}
+    },
+    {
+      "id": "filter_main",
+      "module": "split_rows",
+      "params": {
+        "filter": "row.ref == 'refs/heads/main'"
+      },
+      "position": {"x": 700, "y": 200}
+    },
+    {
+      "id": "render",
+      "module": "compute_rows",
+      "params": {
+        "compute": {
+          "msg": "'🚀 ' + string(row.n) + ' commit(s) pushed to main by ' + row.pusher + ' (' + row.after[0:7] + ')'"
+        }
+      },
+      "position": {"x": 1000, "y": 200}
+    },
+    {
+      "id": "notify",
+      "module": "slack_send_message",
+      "params": {
+        "channel": "#deploys",
+        "account": "default",
+        "text": "${upstream:render.rows[0].msg}"
+      },
+      "position": {"x": 1300, "y": 200}
+    }
+  ],
+  "edges": [
+    {"from": "trigger", "from_port": "event", "to": "wrap", "to_port": "rows", "on_error": ""},
+    {"from": "wrap", "from_port": "rows", "to": "filter_main", "to_port": "rows", "on_error": ""},
+    {"from": "filter_main", "from_port": "matched", "to": "render", "to_port": "rows", "on_error": ""},
+    {"from": "render", "from_port": "rows", "to": "notify", "to_port": "body", "on_error": ""}
+  ]
+}

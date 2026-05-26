@@ -64,9 +64,13 @@ this no customer can try" to "needed before paid conversion."
   tenant-ID uniqueness, perm grants. Frontend: `SignUp.tsx` page
   with confirm-password, link to/from signin, `Welcome.tsx`
   3-step landing wizard, routes wired for both authenticated and
-  unauthenticated paths. Email verification deliberately deferred
-  (needs an SES/SendGrid/SMTP story); rate-limiting + captcha
-  open under Browser auth + transport.
+  unauthenticated paths. **Open follow-ups (need product
+  decision):** email verification (needs an SMTP / SES /
+  SendGrid choice — the operator picks delivery infra),
+  rate-limiting + captcha (needs a deployment-policy call —
+  global throttling vs per-IP vs CAPTCHA). Neither blocks the
+  signup story; production deployments today wire their own
+  rate-limit reverse-proxy and admin-approve the invite list.
 - [~] **`poll_trigger` primitive.** Interval-anchored firing
   shipped: new `GraphTrigger{Type: "poll", IntervalSeconds: N}`,
   `daemon/scheduler.go` extended (cron + poll share the same
@@ -116,10 +120,14 @@ this no customer can try" to "needed before paid conversion."
   technical Details split), missing tenant/name/value, bad-name
   validator, unwired-hook clear error pointing at `--master-key`,
   write-failure detail surfacing, and tenant isolation.
-  Piece (b) — daemon-side automatic cursor scraping after
-  successful runs — still deferred; the explicit pattern is
-  enough for V1 and avoids inventing a "designated cursor port"
-  manifest concept.
+  **Open follow-up (needs design decision):** piece (b) —
+  daemon-side automatic cursor scraping after successful runs —
+  would require inventing a "designated cursor port" manifest
+  concept. Skipping for now because the explicit pattern via
+  `secret_set` works end-to-end (used by gmail-new-email-to-
+  slack and notion-poll-to-slack templates); an implicit cursor
+  port adds magic without removing user work for the common
+  case.
 - [x] **`slack_on_mention` trigger.** Shipped:
   `integrations/slack/slack_on_mention.go` — trigger drop with
   outputs `text` / `user` / `channel` / `team` / `ts` / `event`
@@ -145,12 +153,18 @@ this no customer can try" to "needed before paid conversion."
   fires a subscribed graph (verifies the trigger node's output
   ports), reaction_added is acked-without-dispatch, unknown
   envelope types acked, standalone-run errors with
-  `no_trigger_data`. **Out of scope for V1:** team_id ↔
-  connected-OAuth-account verification (the per-tenant URL
-  + signing secret is the auth model; a hosted shared-app
-  deployment would need to layer team_id routing on top); per-
-  graph filtering at the gateway (every subscribed graph fires
-  for every mention; graphs route downstream via branch).
+  `no_trigger_data`. **Channel filter shipped as a follow-up:**
+  optional `channel_filter` param on the trigger node — when
+  set, the events handler skips dispatch to graphs whose
+  filter doesn't match the event's channel ID. Empty/missing
+  filter preserves the old "fire for any channel" behavior.
+  2 additional tests pin the filter (mismatched-graph skipped,
+  unfiltered-graph still fires for any channel). **Still
+  open (needs hosted-app decision):** team_id ↔
+  connected-OAuth-account verification — the per-tenant URL +
+  signing secret is the V1 auth model; layered team_id
+  routing is the right add for a hosted shared-Slack-app
+  deployment if/when that shape ships.
 - [x] **Gmail launch connector.** Three action drops shipped:
   `integrations/gmail/gmail_send_email.go` (RFC822 construction
   with CRLF + header-injection defense, base64-URL-no-pad
@@ -202,12 +216,45 @@ this no customer can try" to "needed before paid conversion."
   the nested `errors[].message` shape so "Validation Failed:
   title is required" makes it through, not just "Validation
   Failed". Brand asset at `/brands/github.svg`. 17 tests.
-  **Webhook triggers** (`github_on_push`, `github_on_new_pr`)
-  still deferred alongside slack_on_mention — they share the
-  same HMAC + tenant-routing follow-up.
-- [ ] **Notion launch connector.** OAuth, drops:
-  `notion_create_page`, `notion_query_database`,
-  `notion_on_db_change` (polling trigger). ~3 days.
+  **Webhook triggers**: shipped — `github_on_push` +
+  `github_on_new_pr` drops, plus
+  `POST /api/v1/events/github/{tenant}` in
+  `daemon/github_events.go` (GitHub's `X-Hub-Signature-256`
+  HMAC scheme, no replay window — GitHub relies on TLS +
+  per-delivery UUIDs). One endpoint serves both triggers,
+  dispatched by the `X-GitHub-Event` header. `ping` responds
+  "pong" so GitHub's "test delivery" button works.
+  `pull_request` only dispatches when `action == "opened"`
+  (matching the drop's "new PR" name; other actions ack
+  without dispatch — future drops like
+  `github_on_pr_merged` can claim those). New hzd flag
+  `--github-webhook-secret` (default
+  `$HAZYFLOW_GITHUB_WEBHOOK_SECRET`); empty leaves the
+  endpoint returning 501. 10 tests cover the matrix
+  (ping/bad-sig/missing-sig/unconfigured/end-to-end push +
+  PR/non-opened-acks/unknown-event-acks/both-standalone-runs).
+- [~] **Notion launch connector.** Shipped V1:
+  `integrations/notion/notion_create_page.go` (POST /pages with
+  either `parent_database_id` OR `parent_page_id` — exactly one;
+  outputs id/url/meta) and
+  `integrations/notion/notion_query_database.go` (POST
+  /databases/<id>/query with filter + sorts + cursor pagination;
+  outputs pages/next_cursor/has_more/meta). Notion-Version pinned
+  to 2022-06-28 so a future API bump can't silently change
+  behavior. Error extractor decodes Notion's `{code, message}`
+  envelope and surfaces the code in user-facing errors
+  ("validation_error", "object_not_found", etc.) instead of a
+  generic HTTP status. OAuth wiring identical to the other
+  connectors: `SetTokenLookup` hook in `helpers.go`, hzd reads
+  `HAZYFLOW_OAUTH_NOTION_CLIENT_ID/SECRET` (the registry slot
+  was already declared). Brand asset at `/brands/notion.svg`.
+  11 tests using an httptest fake of the Notion API.
+  **`notion_on_db_change` (the "fire on new database row"
+  pattern)** doesn't need a dedicated drop — the existing
+  poll_trigger + notion_query_database + secret_set
+  cursor-dedupe composition handles it (same pattern Gmail
+  uses). A seed template that demonstrates the composition is
+  the natural follow-up.
 - [~] **Template gallery in the editor.** Shipped: static gallery
   at `/templates`. `web/public/templates/index.json` lists
   available templates; each template's graph lives in its own
@@ -219,18 +266,25 @@ this no customer can try" to "needed before paid conversion."
   endpoint — just JSON files behind the web app's static asset
   server. Welcome wizard reordered so "Browse templates" is step
   1; FlowList has a "From template" button next to "New flow".
-  Eleven seed templates now cover both breadth (Excel→DB,
+  Fifteen seed templates now cover both breadth (Excel→DB,
   webhook→Slack, daily Postgres digest, Gmail→Sheets,
   Sheet→Postgres upsert sync) AND depth (Gmail→Slack with
   cursor dedupe via `secret_set`, GitHub-issue→Slack webhook,
   Sheet×DB join→upsert exercising `join_rows`, daily group-by
   report exercising `group_aggregate`, webhook→Postgres event
-  log, clean-Excel→email pipeline). Each entry carries an
-  `integrations: [...]` array of brand slugs that render as
-  small vendor logos on the card so users can scan
-  "this one touches Slack + Gmail" without reading titles.
-  Open follow-up: an admin UI to add custom per-tenant
-  templates beyond the shipped set.
+  log, clean-Excel→email pipeline, Notion-poll-to-Slack with
+  cursor dedupe, Notion→Postgres mirror, Slack-mention→GitHub-
+  issue using slack_on_mention, push-to-main→Slack using
+  github_on_push). Each entry carries an `integrations: [...]`
+  array of brand slugs that render as small vendor logos on
+  the card so users can scan "this one touches Slack +
+  Gmail" without reading titles. Real brand logos in place
+  (Gmail, GitHub, Notion, Sheets, Slack from Wikimedia/SVG
+  Repo; Excel/MySQL/Postgres/SQLite as placeholder stubs).
+  **Open follow-up (needs product decision):** an admin UI
+  to add custom per-tenant templates beyond the shipped set
+  — small backend (CRUD on a tenant://templates blob) but
+  the UX shape isn't decided.
 
 ### T2 — Retention (failing-quietly is what kills trials)
 
@@ -248,10 +302,19 @@ this no customer can try" to "needed before paid conversion."
   same heuristic as RunList. 3 backend tests pin the
   "doesn't-leak-across-runs" + 404 + empty-array contracts. The
   /runs list page now links rows into the detail page first
-  (editor link still available). **Side-by-side input/output
-  diffs across reruns** and **replay-with-modifications**
-  deferred — both useful but lower-leverage than the basic
-  "what happened" surface that landed here.
+  (editor link still available). **Inputs alongside outputs
+  shipped as a follow-up:** each node body in the timeline
+  now renders an "Inputs" section above "Output", reading
+  from the JobRecord's serialized Job.Input field — no extra
+  round trip since the listRunNodes response already carries
+  it. **Still open (need product decisions):**
+  side-by-side input/output diffs across reruns (needs a UX
+  call: side-by-side vs unified vs hover-to-compare) and
+  replay-with-modifications (needs scope decision: which
+  fields can be edited at replay time — params only, or also
+  wiring?). Both are higher-effort polish; the "what
+  happened" surface that landed here was the load-bearing
+  retention work.
 - [~] **Failure notifications.** Shipped: new
   `core.Graph.FailureNotify{Webhook}` field + daemon dispatcher
   in `daemon/failure_notify.go`. Per-run goroutine subscribes
@@ -270,10 +333,15 @@ this no customer can try" to "needed before paid conversion."
   race-recheck firing without a bus event, 500-from-webhook
   doesn't panic, payload-shape pinning. Webhook-only v1 covers
   Slack (incoming-webhook URLs), Discord, Teams, PagerDuty,
-  custom receivers — typed Slack-channel / email pickers
-  deferred to when there's a clean per-tenant-token plumbing
-  story (those would invoke the existing connector drops; v1
-  picks the smallest blast radius).
+  custom receivers. **Open follow-up (needs product
+  decision):** typed Slack-channel / email pickers — the
+  user picks a connected Slack account + channel, the
+  daemon dispatches via `slack_send_message` instead of an
+  incoming-webhook URL. Needs a UX call on the picker shape
+  AND a decision on whether failure notification should
+  share token plumbing with the action drops (vs its own
+  config). The webhook-URL V1 covers the realistic ops
+  receiver set today; the picker UI is sugar on top.
 - [~] **Trigger test/preview UX.** Shipped: "Sample this node"
   button in the editor's Inspector that fires a partial run
   ending at the selected node. Backend: new
@@ -293,12 +361,17 @@ this no customer can try" to "needed before paid conversion."
   metadata preservation, missing target, identity/authz field
   carry-through, cyclic-edges no-hang); 4 handler tests (accept
   + subset payload verification, unknown node 404, unknown graph
-  404, requires auth). **Out of scope for V1:** filtering sample
-  vs production runs in the RunList (samples blend in today),
-  rendering a separate "sample" badge on the run, synthetic
-  webhook bodies (webhook_input nodes in the subset fail
-  standalone with `no_trigger_data` — flow authors test those by
-  firing the real trigger via curl).
+  404, requires auth). **Open follow-up (needs schema
+  decision):** filtering sample vs production runs in the
+  RunList. The clean way needs a `Sample bool` field on
+  `core.JobRecord` so list endpoints can filter by it without
+  decoding GraphPayloads — the alternatives (Graph.Name marker,
+  ID prefix hack) all fight other parts of the system. Punted
+  until someone decides the migration shape (mem store +
+  Postgres column + SubmitGraph signature). **Also out of
+  scope:** synthetic webhook bodies (webhook_input nodes in
+  the subset fail standalone with `no_trigger_data` — flow
+  authors test those by firing the real trigger via curl).
 
 ### T3 — Monetization (needed before charging)
 
@@ -397,16 +470,43 @@ platform can demonstrate but not actually power a real workflow.
   scheme registry + env/builtin providers exist now. The cloud KMS
   / vault implementations are real integrations we haven't done. Spec
   lists all four.
-- [ ] **Per-tenant ACL on secrets.** Today any graph in any tenant can
-  resolve any secret the daemon knows about. Production needs
-  namespacing: tenant `acme` can only resolve secrets under `acme/...`,
-  enforced inside provider `Get`.
+- [~] **Per-tenant ACL on secrets.** Shipped: `Namespaced bool` on
+  `EnvProvider` and `BuiltinProvider`. When set (via the new hzd
+  `--isolate-shared-secrets` flag, default off for backward
+  compat), every `Get(ctx, name)` requires the name to be of the
+  form `<tenant>.<key>` matching the caller's tenant from
+  `core.TenantFromContext`. Names without a prefix and
+  cross-tenant prefixes are both rejected at the provider before
+  the underlying env/builtin lookup runs — so tenant A's graph
+  can't read `${env:globex.api_key}` even if the env var exists.
+  tenant:// was already isolated (per-tenant DEKs in
+  `EncryptedSecrets`). 7 tests pin the matrix: matching prefix
+  resolves, cross-tenant rejected, unprefixed rejected,
+  missing-tenant rejected, backward-compat mode (Namespaced
+  false) unchanged, builtin same behavior. **Open follow-up:**
+  document the per-tenant env var convention (e.g.
+  `HAZYFLOW_TENANT_<UPPER>_<KEY>`) in the README; today the
+  provider just looks up the full prefixed name verbatim.
 - [ ] **Egress allowlist for `http_request`.** SSRF blocks private IPs
   but a tenant can still reach any public IP. Production needs a
   per-tenant allowlist of permitted domains/IPs above the SSRF layer.
-- [ ] **Idempotency keys on outbound HTTP.** Modules that POST to
-  payment / ERP systems should send an idempotency key derived from
-  (graph_run_id, node_id, attempt) so retries don't double-charge.
+- [~] **Idempotency keys on outbound HTTP.** Shipped:
+  `core.Job.IdempotencyKey()` returns `"hazyflow:<job_id>"` — and
+  Job.ID is the stable per-node-record identifier (worker
+  retries Requeue under the same ID, so a retried call carries
+  the same key). Wired into the outbound modules where retry-
+  causes-double-effect matters: `slack_send_message`,
+  `gmail_send_email`, `github_create_issue`, `github_add_comment`,
+  and the generic `webhook_send` (set BEFORE user-supplied
+  headers so users can override for endpoints that mishandle
+  the convention). Slack and Stripe-shaped APIs honor the
+  `Idempotency-Key` header; APIs that don't recognize it ignore
+  it harmlessly. Contract test verifies same Job.ID → same key
+  across attempts, different Job.IDs → different keys. **Open
+  follow-up:** add to `http_request` once we figure out the
+  signature-based-auth edge case (some signed-request schemes
+  hash all headers, so an unexpected Idempotency-Key could
+  break the signature; safer to gate behind a param).
 - [ ] **Port-bind failures are silent.** When the webhook listener's
   port is taken, `hzd` logs and continues. Should fail-loud on startup
   so orchestration (k8s, systemd) restarts the process.
@@ -682,9 +782,23 @@ blocking, but listed so we don't lose them.
   context provider or push from SSE.
 
 ### Browser auth + transport
-- [ ] **Cookie / CSRF auth.** Today the gateway is bearer-only.
-  Tighten before exposing publicly — at minimum a same-site cookie
-  session for the UI, with CSRF tokens on writes.
+- [~] **Cookie / CSRF auth.** SameSite=Lax + HttpOnly session
+  cookie was already in place from the password sign-in flow.
+  Added: `verifyCookieOrigin` middleware that gates every
+  cookie-authenticated POST/PUT/PATCH/DELETE on an Origin header
+  matching the configured `--web-origin` allowlist. Bearer-auth
+  requests pass through unchanged (no cookies = no CSRF surface);
+  GET/HEAD/OPTIONS pass through (no state change). Defense-in-
+  depth on top of modern browsers' SameSite enforcement —
+  catches the older-browser edge cases Lax doesn't fully cover.
+  5 tests pin the matrix: bearer-only POST passes, cookie POST
+  without Origin → 403, cookie POST with allowed Origin → 200,
+  cookie POST from disallowed Origin → 403, cookie GET still
+  passes. **Open follow-up:** explicit CSRF tokens
+  (double-submit cookie pattern) would add another layer for
+  the rare browsers that don't enforce SameSite — not load-
+  bearing today but worth a follow-up if customer security
+  reviews ask.
 - [ ] **Rate limiting** on the gateway. None today.
 - [ ] **Per-tenant origin pinning** for CORS. Currently `*` (or
   configurable globally).

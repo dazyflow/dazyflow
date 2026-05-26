@@ -285,6 +285,24 @@ export function RunDetail() {
                       )}
                     </div>
                   )}
+                  {n.Job?.Input && Object.keys(n.Job.Input).length > 0 && (
+                    <div className="node-output">
+                      <div className="node-section-head">Inputs</div>
+                      {Object.entries(n.Job.Input).map(([port, ref]) => (
+                        <details key={port} className="node-port">
+                          <summary>
+                            <span className="node-port-name">{port}</span>
+                            {ref?.mime && (
+                              <span className="node-port-mime">{ref.mime}</span>
+                            )}
+                          </summary>
+                          <pre className="node-port-value">
+                            {previewValue(ref)}
+                          </pre>
+                        </details>
+                      ))}
+                    </div>
+                  )}
                   {n.Result?.output && Object.keys(n.Result.output).length > 0 && (
                     <div className="node-output">
                       <div className="node-section-head">Output</div>
@@ -303,7 +321,7 @@ export function RunDetail() {
                       ))}
                     </div>
                   )}
-                  {!n.Result?.error && !n.Result?.output && (
+                  {!n.Result?.error && !n.Result?.output && !(n.Job?.Input && Object.keys(n.Job.Input).length > 0) && (
                     <div style={{ color: "var(--faint)", fontSize: 12 }}>
                       No result recorded — node may not have produced
                       output, or is still in flight.

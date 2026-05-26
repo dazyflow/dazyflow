@@ -98,6 +98,42 @@
       "tags": ["excel", "transform", "gmail", "etl"],
       "integrations": ["excel", "gmail"],
       "graph_file": "/templates/excel-clean-and-email.json"
+    },
+    {
+      "id": "notion-poll-to-slack",
+      "title": "New Notion row → Slack (dedupe)",
+      "description": "Poll a Notion database every 5 minutes; new rows since last fire post to Slack. Cursor persisted via secret_set so dedupe survives daemon restarts. Same cursor pattern Gmail uses.",
+      "icon": "database",
+      "tags": ["poll", "notion", "slack", "dedupe", "cursor"],
+      "integrations": ["notion", "slack"],
+      "graph_file": "/templates/notion-poll-to-slack.json"
+    },
+    {
+      "id": "notion-to-postgres-mirror",
+      "title": "Mirror Notion DB → Postgres",
+      "description": "Hourly upsert every Notion page from a database into a Postgres table. Lets you run analytics queries Notion's API can't easily serve.",
+      "icon": "database",
+      "tags": ["cron", "notion", "postgres", "etl", "mirror"],
+      "integrations": ["notion", "postgres"],
+      "graph_file": "/templates/notion-to-postgres-mirror.json"
+    },
+    {
+      "id": "slack-mention-to-github-issue",
+      "title": "Slack mention → GitHub issue",
+      "description": "When @-mentioned in Slack, create a GitHub issue with the mention text. Routes 'hey can someone look at X' into a tracked queue instead of chat scrollback.",
+      "icon": "git-branch",
+      "tags": ["slack", "github", "trigger", "triage"],
+      "integrations": ["slack", "github"],
+      "graph_file": "/templates/slack-mention-to-github-issue.json"
+    },
+    {
+      "id": "github-push-to-slack-deploy",
+      "title": "Push to main → Slack deploy alert",
+      "description": "Listen to GitHub push webhooks; commits to main post a Slack alert. Branch filtered downstream so feature-branch pushes stay quiet. Foundation for a deploy-bot pattern.",
+      "icon": "git-branch",
+      "tags": ["github", "webhook", "slack", "deploy"],
+      "integrations": ["github", "slack"],
+      "graph_file": "/templates/github-push-to-slack-deploy.json"
     }
   ]
 }

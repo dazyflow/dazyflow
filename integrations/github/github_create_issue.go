@@ -133,6 +133,11 @@ func executeGitHubCreateIssue(ctx context.Context, job core.Job, _ chan<- core.P
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	req.Header.Set("Content-Type", "application/json")
+	// Idempotency-Key dedupes retries of the same node-record.
+	// GitHub doesn't currently honor the header but it's harmless;
+	// keeping it consistent across connectors and forward-
+	// compatible if GitHub adopts the convention later.
+	req.Header.Set("Idempotency-Key", job.IdempotencyKey())
 
 	timeoutMs := paramIntDefault(job.Params, "timeout_ms", 15000)
 	client := &http.Client{Timeout: time.Duration(timeoutMs) * time.Millisecond}

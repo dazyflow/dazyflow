@@ -31,6 +31,7 @@ import (
 	_ "git.sr.ht/~klahr/hazy-flow/integrations"
 	"git.sr.ht/~klahr/hazy-flow/integrations/github"
 	"git.sr.ht/~klahr/hazy-flow/integrations/gmail"
+	"git.sr.ht/~klahr/hazy-flow/integrations/notion"
 	secretsdrop "git.sr.ht/~klahr/hazy-flow/integrations/secrets"
 	"git.sr.ht/~klahr/hazy-flow/integrations/sheets"
 	"git.sr.ht/~klahr/hazy-flow/integrations/slack"
@@ -52,6 +53,7 @@ func main() {
 	httpListen := flag.String("http", "", "enable the HTTP /api/v1 gateway on this addr (e.g. :8080); empty disables")
 	enableEnvSecrets := flag.Bool("env-secrets", true, "enable env:// secret provider")
 	builtinSecretsFile := flag.String("builtin-secrets", "", "JSON file of {name: value} for builtin:// secret provider")
+	isolateSharedSecrets := flag.Bool("isolate-shared-secrets", false, "require env:// and builtin:// names to be of the form <tenant>.<key> matching the caller's tenant. Off by default for backward compatibility with single-tenant deployments; turn on for shared multi-tenant deployments so tenant A can't read tenant B's shared secrets.")
 	masterKeyB64 := flag.String("master-key", os.Getenv("HAZYFLOW_MASTER_KEY"), "base64-encoded 32-byte AES-256 master key for the tenant:// encrypted secret store (default $HAZYFLOW_MASTER_KEY). When empty the tenant:// scheme and /api/v1/secrets CRUD endpoints stay disabled.")
 	publicBaseURL := flag.String("public-base-url", os.Getenv("HAZYFLOW_PUBLIC_BASE_URL"), "externally-reachable origin of this daemon (e.g. https://app.example.com). Required for OAuth — must match the redirect_uri registered with each OAuth provider.")
 	enableSignup := flag.Bool("signup", os.Getenv("HAZYFLOW_ENABLE_SIGNUP") == "1", "enable POST /api/v1/auth/signup for self-serve account creation. Off by default; production deployments often prefer admin-invite-only.")
@@ -66,6 +68,7 @@ func main() {
 	claudeCLIMCPBin := flag.String("claude-cli-mcp-bin", "", "Path to the hz-mcp binary used by --claude-cli (default: $HZ_MCP_BIN, then $PATH lookup).")
 	claudeCLIHazydURL := flag.String("claude-cli-hzd-url", "http://localhost:8080", "URL hz-mcp uses to call back into this hzd process under --claude-cli.")
 	slackSigningSecret := flag.String("slack-signing-secret", os.Getenv("HAZYFLOW_SLACK_SIGNING_SECRET"), "Slack app Signing Secret (default $HAZYFLOW_SLACK_SIGNING_SECRET). Required for /api/v1/events/slack/* to accept Slack Events API POSTs. Empty disables the endpoint with 501.")
+	githubWebhookSecret := flag.String("github-webhook-secret", os.Getenv("HAZYFLOW_GITHUB_WEBHOOK_SECRET"), "GitHub repo webhook Secret value (default $HAZYFLOW_GITHUB_WEBHOOK_SECRET). Required for /api/v1/events/github/* to accept push and pull_request webhook POSTs. Empty disables the endpoint with 501.")
 	flag.Parse()
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -115,7 +118,7 @@ func main() {
 	}
 	secrets := map[string]core.SecretProvider{}
 	if *enableEnvSecrets {
-		p := daemon.EnvProvider{}
+		p := daemon.EnvProvider{Namespaced: *isolateSharedSecrets}
 		secrets[p.Scheme()] = p
 	}
 	if *builtinSecretsFile != "" {
@@ -123,8 +126,12 @@ func main() {
 		if err != nil {
 			log.Fatalf("builtin secrets: %v", err)
 		}
+		p.Namespaced = *isolateSharedSecrets
 		secrets[p.Scheme()] = p
 		log.Printf("loaded builtin secrets from %s", *builtinSecretsFile)
+	}
+	if *isolateSharedSecrets {
+		log.Print("shared secret providers (env://, builtin://) running in tenant-isolated mode — names must be <tenant>.<key>")
 	}
 	// Encrypted per-tenant secret store. Without a master key the
 	// feature stays off (no provider registered, /api/v1/secrets
@@ -192,6 +199,14 @@ func main() {
 		// hook shape.
 		github.SetTokenLookup(func(ctx context.Context, account string) (string, error) {
 			tok, err := oauthRegistry.GetOAuthToken(ctx, "github", account)
+			if err != nil {
+				return "", err
+			}
+			return tok.AccessToken, nil
+		})
+		// Notion — same one-liner pattern.
+		notion.SetTokenLookup(func(ctx context.Context, account string) (string, error) {
+			tok, err := oauthRegistry.GetOAuthToken(ctx, "notion", account)
 			if err != nil {
 				return "", err
 			}
@@ -292,6 +307,10 @@ func main() {
 		if *slackSigningSecret != "" {
 			gw.SlackEvents = daemon.NewSlackEventsHandler(svc, *slackSigningSecret)
 			log.Print("Slack events endpoint enabled at /api/v1/events/slack/<tenant>")
+		}
+		if *githubWebhookSecret != "" {
+			gw.GitHubEvents = daemon.NewGitHubEventsHandler(svc, *githubWebhookSecret)
+			log.Print("GitHub events endpoint enabled at /api/v1/events/github/<tenant>")
 		}
 		if *webOrigin != "" {
 			for _, o := range strings.Split(*webOrigin, ",") {

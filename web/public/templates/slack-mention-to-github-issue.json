@@ -1,0 +1,43 @@
+{
+  "id": "slack-mention-to-github-issue",
+  "version": "1",
+  "name": "Slack mention → GitHub issue",
+  "description": "When your bot is @-mentioned in Slack, create a GitHub issue with the mention text as the body. Useful for routing 'hey can someone look at X' moments into a tracked queue instead of losing them in chat scrollback.",
+  "icon": "git-branch",
+  "nodes": [
+    {
+      "id": "mention",
+      "module": "slack_on_mention",
+      "params": {},
+      "position": {"x": 100, "y": 200}
+    },
+    {
+      "id": "shape",
+      "module": "compute_rows",
+      "params": {
+        "compute": {
+          "title": "'Slack mention from @' + row.user",
+          "body":  "'Channel: ' + row.channel + '\\n\\n' + row.text"
+        }
+      },
+      "position": {"x": 400, "y": 200}
+    },
+    {
+      "id": "ticket",
+      "module": "github_create_issue",
+      "params": {
+        "account": "default",
+        "owner":   "REPLACE_OWNER",
+        "repo":    "REPLACE_REPO",
+        "title":   "${upstream:shape.rows[0].title}",
+        "body":    "${upstream:shape.rows[0].body}",
+        "labels":  ["from-slack"]
+      },
+      "position": {"x": 700, "y": 200}
+    }
+  ],
+  "edges": [
+    {"from": "mention", "from_port": "event", "to": "shape", "to_port": "rows", "on_error": ""},
+    {"from": "shape", "from_port": "rows", "to": "ticket", "to_port": "body", "on_error": ""}
+  ]
+}

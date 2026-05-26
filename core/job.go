@@ -55,6 +55,20 @@ type Job struct {
 	ApprovalURL string `json:"approval_url,omitempty"`
 }
 
+// IdempotencyKey returns a stable per-node-record identifier suitable
+// as the value of an `Idempotency-Key` HTTP header on outbound POST/PUT
+// calls. The same Job (= same JobRecord.ID) produces the same key
+// across retries — when a worker re-Executes a failed job, the record
+// ID stays the same, so the receiving service can dedupe by storing
+// the key and rejecting repeat requests.
+//
+// Format: "hazyflow:<job_id>". Slack, Stripe, GitHub, and most modern
+// REST APIs honor this header convention; APIs that don't recognize
+// it ignore the header without erroring.
+func (j Job) IdempotencyKey() string {
+	return "hazyflow:" + j.ID
+}
+
 type JobError struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`

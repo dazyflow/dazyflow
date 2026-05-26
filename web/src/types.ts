@@ -214,6 +214,14 @@ export type JobRecord = {
   StartedAt?: string | null;
   FinishedAt?: string | null;
   Attempt?: number;
+  // Job is the per-node-record dispatch payload. Its `Input` map
+  // carries the resolved input refs the worker passed to Execute —
+  // the upstream values that flowed INTO this node. RunDetail uses
+  // this to render an "Inputs" section alongside outputs.
+  Job?: {
+    Input?: Record<string, Ref>;
+    Params?: Record<string, unknown>;
+  };
 };
 
 export type Role = {
