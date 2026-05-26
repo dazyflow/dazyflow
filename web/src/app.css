@@ -44,16 +44,24 @@
   flex-shrink: 0;
   border-radius: 6px;
 }
-/* Small-screen tightening of the topbar: the brand text and the
-   user-meta chips collapse to icon-only so the toolbar and the canvas
-   below have more room. */
+/* Small-screen tightening of the topbar: the user-meta chips collapse
+   to icon-only so the toolbar and the canvas below have more room. The
+   brand title stays visible — on a small screen it's the only label
+   telling you which flow you're in. It truncates rather than hides. */
 @media (max-width: 768px) {
-  .topbar .brand-title,
   .topbar .topbar-workspace,
   .topbar .topbar-sep,
   .topbar .topbar-email {
     display: none;
   }
+}
+/* Keep the brand title on one line and let it shrink/ellipsize instead
+   of pushing the toolbar off-screen when a long flow name lands here. */
+.topbar .brand-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40vw;
 }
 .topbar .spacer {
   flex: 1;

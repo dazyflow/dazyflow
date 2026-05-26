@@ -17,6 +17,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import { ActiveFlowContext } from "../activeFlow";
 
 // COLLAPSE_KEY persists the sidebar collapsed/expanded choice across
 // reloads. The sidebar is always visible; small viewports just default
@@ -104,12 +105,24 @@ export function AppShell({ children }: { children: ReactNode }) {
   const showAdmin =
     hasPerm("tenant:admin") || hasPerm("graph:admin");
 
+  // activeFlowName is published by the editor (via ActiveFlowContext) so
+  // the top bar can show which flow is open in place of the wordmark.
+  // Cleared whenever we navigate away from an editor route so a stale
+  // name never lingers on the flow list / runs / admin pages.
+  const [activeFlowName, setActiveFlowName] = useState<string | null>(null);
+  useEffect(() => {
+    if (!inEditor) setActiveFlowName(null);
+  }, [inEditor]);
+
   // The hamburger toggles between the full sidebar and the icons-only
   // rail at every viewport — the sidebar is now always visible, with
   // small screens just defaulting to the rail variant.
   const toggleNav = () => setNavCollapsed((x) => !x);
 
   return (
+    <ActiveFlowContext.Provider
+      value={{ name: activeFlowName, setName: setActiveFlowName }}
+    >
     <div className="app-shell" data-nav-collapsed={navCollapsed ? "true" : "false"}>
       <header className="topbar">
         <button
@@ -129,7 +142,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             height={24}
             draggable={false}
           />
-          <span className="brand-title">Hazy Flow</span>
+          {/* In the editor, the open flow's name takes the wordmark's
+              slot so the operator always knows which flow they're in.
+              Elsewhere it's the product wordmark. */}
+          <span className="brand-title" title={inEditor && activeFlowName ? activeFlowName : undefined}>
+            {inEditor && activeFlowName ? activeFlowName : "Hazy Flow"}
+          </span>
         </div>
         <div className="spacer" />
         {me && (
@@ -247,6 +265,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </main>
       </div>
     </div>
+    </ActiveFlowContext.Provider>
   );
 }
 

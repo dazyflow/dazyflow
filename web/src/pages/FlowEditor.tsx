@@ -9,6 +9,7 @@ import {
 } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { useActiveFlow } from "../activeFlow";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -45,6 +46,7 @@ const nodeTypes = { hazy: HazyNode };
 
 function EditorInner() {
   const { t } = useTranslation();
+  const { setName: setActiveFlowName } = useActiveFlow();
   const { id } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -257,6 +259,17 @@ function EditorInner() {
       return changed ? next : nds;
     });
   }, [manifests]);
+
+  // Publish the open flow's label to the top bar. Falls back to the
+  // route id until the graph's display name loads. A dedicated
+  // unmount-only cleanup clears it so the wordmark returns when the
+  // user leaves the editor (without flashing null on every rename).
+  useEffect(() => {
+    setActiveFlowName(name || id || null);
+  }, [name, id, setActiveFlowName]);
+  useEffect(() => {
+    return () => setActiveFlowName(null);
+  }, [setActiveFlowName]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
