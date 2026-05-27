@@ -38,14 +38,27 @@ ENV GOTOOLCHAIN=local
 ARG GOPROXY=https://proxy.golang.org,direct
 ENV GOPROXY=${GOPROXY}
 WORKDIR /src
-# Module graph first for layer caching.
+# Module graph first for layer caching. The cache mount keeps the
+# downloaded module tree across builds so a go.mod/go.sum change
+# re-resolves rather than re-fetches the whole graph.
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 COPY . .
 # Static, stripped binary. CGO is off (pure-Go pgx + go-git, no sqlite
 # in the daemon path) so it runs on distroless static-nonroot.
+#
+# The two cache mounts are the difference between a 2-3 minute build and
+# a few seconds: /root/.cache/go-build persists the COMPILED-package
+# cache (the ~660-package graph: go-git, pgx, gRPC, otel, protobuf)
+# across builds, so only changed packages recompile. Without it every
+# `docker build` recompiles the whole graph cold. (/go/pkg/mod is shared
+# with the download step above.) Cache mounts are local to the builder —
+# add registry cache-to/cache-from for ephemeral CI runners.
 ENV CGO_ENABLED=0 GOOS=linux
-RUN go build -trimpath -ldflags="-s -w" -o /out/hzd ./cmd/hzd
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go build -trimpath -ldflags="-s -w" -o /out/hzd ./cmd/hzd
 # Pre-create the data dirs here (the distroless final stage has no shell
 # to mkdir) so the default CMD's --workspace-dir/--sandbox-base paths
 # exist and are writable by the nonroot user.
