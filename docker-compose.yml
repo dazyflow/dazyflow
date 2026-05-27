@@ -42,6 +42,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # Build RUN steps (go mod download, npm ci) use the host network.
+      # Required under LXC, where Docker's default build bridge can't
+      # route out ("dial tcp …: network is unreachable"); harmless on a
+      # normal host where the bridge works fine.
+      network: host
     restart: unless-stopped
     # Optional: defaults below boot as-is, so the very first
     # `docker compose up -d` works with no .env present.
