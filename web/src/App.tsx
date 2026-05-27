@@ -35,7 +35,7 @@ export function App() {
   return (
     <AppShell>
       <Routes>
-        <Route path="/" element={<Navigate to="/flows" replace />} />
+        <Route path="/" element={<RootRedirect />} />
         <Route path="/welcome" element={<Welcome />} />
         <Route path="/flows" element={<FlowList />} />
         <Route path="/flows/:id" element={<FlowEditor />} />
@@ -66,6 +66,17 @@ export function App() {
 // the canonical /flows/:id, preserving any query string (e.g.
 // ?run=<jobID> from a deep-linked run).
 import { useLocation, useParams } from "react-router-dom";
+
+// RootRedirect decides where a logged-in user lands on the bare root.
+// With no path and no query string, that's a fresh "I just typed the
+// domain" visit → /welcome. Anything carrying a query is treated as an
+// intentional deep-link and forwarded to /flows (preserving the search).
+function RootRedirect() {
+  const loc = useLocation();
+  if (!loc.search) return <Navigate to="/welcome" replace />;
+  return <Navigate to={{ pathname: "/flows", search: loc.search }} replace />;
+}
+
 function LegacyPipelineRedirect() {
   const { id } = useParams();
   const loc = useLocation();

@@ -718,24 +718,33 @@
   margin: 0 0 var(--space-3);
   font-size: 14px;
 }
+/* These CTAs are <Link> anchors, so they don't inherit the global
+   button {} rules — mirror those tokens here so they read as the app's
+   standard buttons rather than a one-off welcome-only style. */
 .welcome-cta {
   display: inline-block;
-  padding: 8px 16px;
-  border-radius: 6px;
-  border: 1px solid var(--border-strong);
+  font-size: inherit;
   color: var(--ink);
   text-decoration: none;
-  font-size: 13px;
-  background: var(--surface-2, transparent);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  padding: var(--space-2) var(--space-3);
+  transition: background 120ms, border-color 120ms;
 }
 .welcome-cta:hover {
-  border-color: var(--accent, #9f83fe);
+  background: var(--surface-3);
+  border-color: var(--border-strong);
 }
 .welcome-cta.primary {
-  background: var(--accent, #9f83fe);
-  border-color: var(--accent, #9f83fe);
-  color: var(--accent-ink, #140d30);
-  font-weight: 500;
+  background: var(--btn);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: var(--glow-accent);
+}
+.welcome-cta.primary:hover {
+  background: var(--btn-hover);
+  box-shadow: var(--glow-accent-hover);
 }
 .welcome-foot {
   color: var(--faint);
