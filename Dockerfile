@@ -20,7 +20,23 @@ COPY web/ ./
 RUN npm run build
 
 # ---- 2. Go build ------------------------------------------------------
-FROM golang:1.26-alpine AS build
+# Pin the exact patch that go.mod's `go 1.26.3` line requires. With the
+# floating `golang:1.26-alpine` tag, a builder whose Go is older than
+# 1.26.3 would (under the default GOTOOLCHAIN=auto) try to DOWNLOAD the
+# 1.26.3 toolchain during `go mod download` — which fails in a
+# network-restricted prod build. GOTOOLCHAIN=local forbids that implicit
+# fetch so any future drift fails loud at build time instead.
+FROM golang:1.26.3-alpine AS build
+ENV GOTOOLCHAIN=local
+# Optional Go module proxy. The build fetches dependencies from here at
+# `go mod download`; when the build host can't reach the public
+# proxy.golang.org, point this at a reachable internal mirror:
+#   docker compose build --build-arg GOPROXY=https://goproxy.internal
+# Unset keeps the standard public default, so this is a no-op locally.
+# (Corporate HTTP_PROXY/HTTPS_PROXY/NO_PROXY are well-known buildkit
+# args and reach RUN steps automatically — no Dockerfile change needed.)
+ARG GOPROXY=https://proxy.golang.org,direct
+ENV GOPROXY=${GOPROXY}
 WORKDIR /src
 # Module graph first for layer caching.
 COPY go.mod go.sum ./
