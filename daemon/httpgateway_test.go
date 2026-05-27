@@ -2,7 +2,9 @@ package daemon
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -109,6 +111,29 @@ func TestHTTPGateway_HealthzNoAuth(t *testing.T) {
 		t.Errorf("code = %d, want 200", rw.Code)
 	}
 }
+
+func TestHTTPGateway_ReadyzNoCheckIsReady(t *testing.T) {
+	h := newGatewayHarness(t)
+	req := httptest.NewRequest("GET", "/readyz", nil)
+	rw := httptest.NewRecorder()
+	ServeForTest(h.gw, rw, req)
+	if rw.Code != http.StatusOK {
+		t.Errorf("code = %d, want 200 (nil ReadyCheck == ready)", rw.Code)
+	}
+}
+
+func TestHTTPGateway_ReadyzFailingCheck503(t *testing.T) {
+	h := newGatewayHarness(t)
+	h.gw.ReadyCheck = func(context.Context) error { return errReadyTest }
+	req := httptest.NewRequest("GET", "/readyz", nil)
+	rw := httptest.NewRecorder()
+	ServeForTest(h.gw, rw, req)
+	if rw.Code != http.StatusServiceUnavailable {
+		t.Errorf("code = %d, want 503 when ReadyCheck fails", rw.Code)
+	}
+}
+
+var errReadyTest = errors.New("dep down")
 
 func TestHTTPGateway_RejectsMissingBearer(t *testing.T) {
 	h := newGatewayHarness(t)

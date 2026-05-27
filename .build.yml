@@ -1,0 +1,41 @@
+# sourcehut CI manifest (builds.sr.ht). Runs the Go suite — including
+# the Postgres-gated jobstore/auth tests via a local Postgres service —
+# and the web typecheck + production build.
+#
+# The Postgres path was historically un-exercised (tests gated on
+# HAZYFLOW_TEST_DB with no DB in CI); this wires one up so a schema or
+# query regression fails the build instead of lurking until deploy.
+image: archlinux
+packages:
+  - go
+  - nodejs
+  - npm
+  - postgresql
+sources:
+  - https://git.sr.ht/~klahr/hazy-flow
+environment:
+  HAZYFLOW_TEST_DB: postgres://hazyflow:hazyflow@localhost:5432/hazyflow_test
+tasks:
+  - postgres: |
+      # Spin a throwaway Postgres for the integration-gated tests.
+      sudo -iu postgres initdb -D /var/lib/postgres/data
+      sudo -iu postgres pg_ctl -D /var/lib/postgres/data -l /tmp/pg.log -o "-p 5432" start
+      # Wait for it to accept connections.
+      for i in $(seq 1 30); do pg_isready -h localhost -p 5432 && break; sleep 1; done
+      sudo -iu postgres psql -c "CREATE USER hazyflow WITH PASSWORD 'hazyflow';"
+      sudo -iu postgres psql -c "CREATE DATABASE hazyflow_test OWNER hazyflow;"
+  - build: |
+      cd hazy-flow
+      go build ./...
+  - test: |
+      cd hazy-flow
+      # HAZYFLOW_TEST_DB is set in the environment, so the Postgres-gated
+      # jobstore + auth tests run for real here.
+      go test ./...
+  - vet: |
+      cd hazy-flow
+      go vet ./...
+  - web: |
+      cd hazy-flow/web
+      npm ci
+      npm run build

@@ -1,0 +1,10 @@
+# Keep the build context lean — these are regenerated in-image or
+# irrelevant to the build.
+.git
+**/node_modules
+web/dist
+.hazyflow-workspace
+.hazyflow-sandbox
+.hazyflow-users.json
+*.log
+OVERNIGHT.md

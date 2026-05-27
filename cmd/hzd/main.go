@@ -19,6 +19,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
@@ -39,7 +40,7 @@ import (
 
 func main() {
 	listen := flag.String("listen", ":50050", "gRPC listen address")
-	devKey := flag.Bool("dev-key", true, "issue a dev API key on startup (insecure; for local use only)")
+	devKey := flag.Bool("dev-key", os.Getenv("HAZYFLOW_DEV_KEY") == "1", "issue a dev API key on startup (insecure; local use only). Default OFF — opt in with --dev-key or HAZYFLOW_DEV_KEY=1.")
 	workerCount := flag.Int("workers", 2, "number of worker goroutines")
 	sandboxBase := flag.String("sandbox-base", "", "base directory for per-workspace sandboxes (default: ./.hazyflow-sandbox)")
 	quotaSpec := flag.String("quota", "", "per-tenant quotas, e.g. acme=10MB,globex=1GB (no flag = unlimited)")
@@ -50,6 +51,7 @@ func main() {
 	enableCron := flag.Bool("cron", true, "enable the cron scheduler")
 	webhookListen := flag.String("webhook", "", "enable the webhook listener on this addr (e.g. :8080); empty disables")
 	httpListen := flag.String("http", "", "enable the HTTP /api/v1 gateway on this addr (e.g. :8080); empty disables")
+	postgresDSN := flag.String("postgres-dsn", os.Getenv("HAZYFLOW_POSTGRES_DSN"), "Postgres connection string (default $HAZYFLOW_POSTGRES_DSN). When set, jobs, API keys, sessions, users, and encrypted secrets persist to Postgres (survive restart). When empty, those run in-memory/JSON — dev only, lost on restart.")
 	webDist := flag.String("web-dist", "", "serve a built React frontend bundle from this directory (e.g. web/dist). Empty = API-only. When set, the daemon serves the SPA from the same port as the API with index.html fallback for client-side routes.")
 	enableEnvSecrets := flag.Bool("env-secrets", true, "enable env:// secret provider")
 	builtinSecretsFile := flag.String("builtin-secrets", "", "JSON file of {name: value} for builtin:// secret provider")
@@ -61,6 +63,8 @@ func main() {
 	workspaceDir := flag.String("workspace-dir", "./.hazyflow-workspace", "directory for the dev workspace's git-backed graph store; empty = in-memory (graphs lost on restart)")
 	usersFile := flag.String("users-file", "./.hazyflow-users.json", "JSON file backing the email+password user store; empty disables password sign-in")
 	webOrigin := flag.String("web-origin", "http://localhost:5174", "comma-separated allowed origins for the web UI (CORS + cookie credentials)")
+	authRatePerMin := flag.Int("auth-rate-per-min", 20, "per-IP requests/minute allowed on /api/v1/auth/{signin,signup} before 429. 0 disables throttling.")
+	authRateBurst := flag.Int("auth-rate-burst", 10, "per-IP burst capacity for the auth rate limiter")
 	sessionTTL := flag.Duration("session-ttl", 24*time.Hour, "lifetime of a sign-in session before the user must re-authenticate")
 	defaultGraphTimeout := flag.Duration("default-graph-timeout", 0, "wall-time cap applied to runs whose graph has no timeout_seconds set (0 = no default; the per-graph value, when present, always wins)")
 	anthropicKey := flag.String("anthropic-key", os.Getenv("ANTHROPIC_API_KEY"), "Anthropic API key for the in-app chat agent (default $ANTHROPIC_API_KEY). Empty disables /api/v1/chat/stream unless --claude-cli is set.")
@@ -74,7 +78,60 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	ks := auth.NewMemKeyStore()
+	// Durable stores: when --postgres-dsn is set, keys / sessions /
+	// users / jobs / secrets all persist to one shared pgxpool and
+	// survive a restart. When empty, they fall back to the in-memory /
+	// JSON-file stores — fine for dev, but everything is lost on
+	// restart. Declared as interfaces so either backend slots in.
+	var (
+		ks       auth.AdminKeyStore
+		users    auth.UserStore
+		sessions auth.SessionStore
+		jobs     core.JobStore
+		pgPool   *pgxpool.Pool
+	)
+	if *postgresDSN != "" {
+		pool, err := pgxpool.New(ctx, *postgresDSN)
+		if err != nil {
+			log.Fatalf("postgres connect: %v", err)
+		}
+		pgPool = pool
+		defer pool.Close()
+		pgKeys, err := auth.NewPgKeyStore(ctx, pool)
+		if err != nil {
+			log.Fatalf("postgres key store: %v", err)
+		}
+		pgUsers, err := auth.NewPgUserStore(ctx, pool)
+		if err != nil {
+			log.Fatalf("postgres user store: %v", err)
+		}
+		pgSessions, err := auth.NewPgSessionStore(ctx, pool)
+		if err != nil {
+			log.Fatalf("postgres session store: %v", err)
+		}
+		pgJobs, err := jobstore.NewPostgresFromPool(ctx, pool)
+		if err != nil {
+			log.Fatalf("postgres job store: %v", err)
+		}
+		ks, users, sessions, jobs = pgKeys, pgUsers, pgSessions, pgJobs
+		seedDefaultUser(ctx, users)
+		log.Print("postgres stores enabled: jobs, api-keys, sessions, users (durable across restart)")
+	} else {
+		ks = auth.NewMemKeyStore()
+		jsonUsers, err := auth.OpenJSONUserStore(*usersFile)
+		if err != nil {
+			log.Fatalf("open users: %v", err)
+		}
+		users = jsonUsers
+		if *usersFile != "" {
+			seedDefaultUser(ctx, users)
+			log.Printf("users store: %s", *usersFile)
+		}
+		sessions = auth.NewMemSessionStore()
+		jobs = jobstore.NewMemory()
+		log.Print("WARNING: in-memory stores (jobs/api-keys/sessions) — lost on restart; set --postgres-dsn for durability")
+	}
+
 	// Auto-provisioning workspace lookup: every (tenant, workspace) pair
 	// gets a git-backed store under workspaceDir/<tenant>/<workspace> on
 	// first access. This lets self-serve signups (tenant usr_<hex>) save
@@ -86,16 +143,6 @@ func main() {
 		log.Println("workspace store: in-memory (graphs lost on restart)")
 	}
 
-	users, err := auth.OpenJSONUserStore(*usersFile)
-	if err != nil {
-		log.Fatalf("open users: %v", err)
-	}
-	if *usersFile != "" {
-		seedDefaultUser(ctx, users)
-		log.Printf("users store: %s", *usersFile)
-	}
-	sessions := auth.NewMemSessionStore()
-	jobs := jobstore.NewMemory()
 	bus := daemon.NewMemoryBus()
 	base := *sandboxBase
 	if base == "" {
@@ -134,7 +181,7 @@ func main() {
 	if *isolateSharedSecrets {
 		log.Print("shared secret providers (env://, builtin://) running in tenant-isolated mode — names must be <tenant>.<key>")
 	}
-	encryptedSecrets := setupEncryptedSecrets(*masterKeyB64, secrets)
+	encryptedSecrets := setupEncryptedSecrets(ctx, *masterKeyB64, secrets, pgPool)
 	oauthRegistry := setupOAuth(encryptedSecrets, *publicBaseURL)
 	mcpCatalog := mcp.NewCatalog()
 	if err := registerMCPServers(mcpCatalog, *mcpServers); err != nil {
@@ -210,10 +257,17 @@ func main() {
 
 	// Webhook listener (separate port from gRPC). Each graph with a
 	// webhook trigger gets POST /trigger/<tenant>/<workspace>/<graph>.
+	// Bind on the main goroutine so a port-in-use error fails startup
+	// loudly (orchestration restarts) instead of silently dropping the
+	// listener — then serve in the background on the live listener.
 	if *webhookListen != "" {
+		whLn, err := net.Listen("tcp", *webhookListen)
+		if err != nil {
+			log.Fatalf("webhook listener: cannot bind %s: %v", *webhookListen, err)
+		}
 		wh := daemon.NewWebhookListener(svc)
 		go func() {
-			if err := wh.Serve(ctx, *webhookListen); err != nil && err != http.ErrServerClosed {
+			if err := wh.ServeListener(ctx, whLn); err != nil && err != http.ErrServerClosed {
 				log.Printf("webhook listener stopped: %v", err)
 			}
 		}()
@@ -227,7 +281,16 @@ func main() {
 		gw.EncryptedSecrets = encryptedSecrets // nil disables /api/v1/secrets endpoints
 		gw.OAuth = oauthRegistry               // nil disables /api/v1/oauth/* endpoints
 		gw.EnableSignup = *enableSignup        // false disables POST /api/v1/auth/signup
-		gw.WebDist = *webDist                  // empty disables static frontend serving
+		gw.AuthRateLimit = daemon.NewAuthRateLimiter(*authRatePerMin, *authRateBurst)
+		if gw.AuthRateLimit != nil {
+			log.Printf("auth rate limit: %d/min per IP (burst %d)", *authRatePerMin, *authRateBurst)
+		}
+		gw.WebDist = *webDist // empty disables static frontend serving
+		if pgPool != nil {
+			// Readiness gates on the DB being reachable.
+			pool := pgPool
+			gw.ReadyCheck = func(ctx context.Context) error { return pool.Ping(ctx) }
+		}
 		if *webDist != "" {
 			log.Printf("serving frontend bundle from %s", *webDist)
 		}
@@ -247,8 +310,12 @@ func main() {
 				}
 			}
 		}
+		gwLn, err := net.Listen("tcp", *httpListen)
+		if err != nil {
+			log.Fatalf("http gateway: cannot bind %s: %v", *httpListen, err)
+		}
 		go func() {
-			if err := gw.Serve(ctx, *httpListen); err != nil && err != http.ErrServerClosed {
+			if err := gw.ServeListener(ctx, gwLn); err != nil && err != http.ErrServerClosed {
 				log.Printf("http gateway stopped: %v", err)
 			}
 		}()
@@ -490,7 +557,7 @@ func seedDefaultUser(ctx context.Context, users auth.UserStore) {
 // both gated on the same flag because they're useless without the
 // underlying encryption. Returns nil when --master-key is empty
 // so downstream callers can skip OAuth (which needs the store).
-func setupEncryptedSecrets(masterKeyB64 string, secrets map[string]core.SecretProvider) *daemon.EncryptedSecrets {
+func setupEncryptedSecrets(ctx context.Context, masterKeyB64 string, secrets map[string]core.SecretProvider, pool *pgxpool.Pool) *daemon.EncryptedSecrets {
 	if masterKeyB64 == "" {
 		return nil
 	}
@@ -498,7 +565,21 @@ func setupEncryptedSecrets(masterKeyB64 string, secrets map[string]core.SecretPr
 	if err != nil {
 		log.Fatalf("--master-key: not valid base64: %v", err)
 	}
-	es, err := daemon.NewEncryptedSecrets(key, daemon.NewMemSecretsStore())
+	// Persist ciphertext + wrapped DEKs to Postgres when a pool is
+	// available (survives restart); otherwise memory (dev only — losing
+	// the store means losing every tenant's secrets on restart).
+	var store daemon.SecretsBackend
+	if pool != nil {
+		pg, err := daemon.NewPgSecretsStore(ctx, pool)
+		if err != nil {
+			log.Fatalf("encrypted secrets (postgres): %v", err)
+		}
+		store = pg
+		log.Print("encrypted secret store: postgres-backed (durable)")
+	} else {
+		store = daemon.NewMemSecretsStore()
+	}
+	es, err := daemon.NewEncryptedSecrets(key, store)
 	if err != nil {
 		log.Fatalf("encrypted secrets: %v", err)
 	}

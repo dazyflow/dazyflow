@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -61,7 +62,12 @@ func (c *WorkerConfig) withDefaults() WorkerConfig {
 			if attempt < 1 {
 				attempt = 1
 			}
-			return time.Second * time.Duration(1<<uint(attempt-1))
+			base := time.Second * time.Duration(1<<uint(attempt-1))
+			// ±25% jitter so a wave of sibling nodes that fail together
+			// (e.g. a shared dependency blips) don't all retry on the
+			// same tick and re-synchronize the thundering herd.
+			factor := 0.75 + rand.Float64()*0.5 // [0.75, 1.25)
+			return time.Duration(float64(base) * factor)
 		}
 	}
 	return out

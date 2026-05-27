@@ -12,7 +12,7 @@ import (
 // Integration test against a real Postgres. Skipped unless HAZYFLOW_TEST_DB
 // is set, e.g.
 //
-//   HAZYFLOW_TEST_DB=postgres://localhost/hazyflow_test go test ./...
+//	HAZYFLOW_TEST_DB=postgres://localhost/hazyflow_test go test ./...
 func TestPostgres_RoundTrip(t *testing.T) {
 	url := os.Getenv("HAZYFLOW_TEST_DB")
 	if url == "" {
@@ -30,7 +30,9 @@ func TestPostgres_RoundTrip(t *testing.T) {
 	// Clean slate within the test's namespace.
 	_, _ = store.pool.Exec(ctx, "TRUNCATE jobs")
 
-	rec := core.JobRecord{ID: "pg-1", GraphID: "g", NodeID: "n", Tenant: "t"}
+	// Kind must be node — Claim only hands out node-kind work units
+	// (graph-kind records are the parent submission, never claimed).
+	rec := core.JobRecord{ID: "pg-1", Kind: core.JobKindNode, GraphID: "g", NodeID: "n", Tenant: "t"}
 	if err := store.Enqueue(ctx, rec); err != nil {
 		t.Fatalf("Enqueue: %v", err)
 	}

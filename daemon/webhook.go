@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -55,6 +56,17 @@ func NewWebhookListener(svc *Service) *WebhookListener {
 // Service.SubmitGraph. The listener is intentionally tiny — no admin
 // UI, no metrics, no rate-limiting yet (TODO).
 func (w *WebhookListener) Serve(ctx context.Context, listenAddr string) error {
+	ln, err := net.Listen("tcp", listenAddr)
+	if err != nil {
+		return fmt.Errorf("bind %s: %w", listenAddr, err)
+	}
+	return w.ServeListener(ctx, ln)
+}
+
+// ServeListener serves on an already-bound listener. Lets cmd/hzd bind
+// on the main goroutine and fail-loud on a port-in-use error instead of
+// the bind error vanishing into a background goroutine.
+func (w *WebhookListener) ServeListener(ctx context.Context, ln net.Listener) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/trigger/", w.handleTrigger)
 	mux.HandleFunc("/healthz", func(rw http.ResponseWriter, _ *http.Request) {
@@ -63,7 +75,6 @@ func (w *WebhookListener) Serve(ctx context.Context, listenAddr string) error {
 	})
 
 	srv := &http.Server{
-		Addr:              listenAddr,
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
@@ -73,8 +84,8 @@ func (w *WebhookListener) Serve(ctx context.Context, listenAddr string) error {
 
 	errC := make(chan error, 1)
 	go func() {
-		w.logger.Printf("listening on %s", listenAddr)
-		errC <- srv.ListenAndServe()
+		w.logger.Printf("listening on %s", ln.Addr())
+		errC <- srv.Serve(ln)
 	}()
 
 	select {

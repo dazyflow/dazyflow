@@ -59,6 +59,13 @@ type EncryptedSecrets struct {
 	deks  map[string]cipher.AEAD // tenant → AEAD; cached after first unwrap
 }
 
+// SecretsBackend is the exported alias for the persistence boundary so
+// callers outside this package (cmd/hzd) can hold a variable of the
+// store type and pass either backend to NewEncryptedSecrets. The
+// methods stay unexported, so only this package's MemSecretsStore /
+// PgSecretsStore can implement it.
+type SecretsBackend = secretsStore
+
 // secretsStore is the persistence boundary. We split storage out so
 // tests can run against an in-memory map without spinning up
 // Postgres, and so the same crypto wraps a Postgres backend in
@@ -219,13 +226,13 @@ func (e *EncryptedSecrets) List(ctx context.Context, tenant string) ([]string, e
 // dekFor returns the AEAD for a tenant's DEK, lazily provisioning
 // one on first call (per process). The three states:
 //
-//	1. Cache hit             → return immediately, no I/O.
-//	2. DEK exists in store   → fetch wrapped form, unwrap with KEK,
-//	                            cache, return.
-//	3. DEK doesn't exist     → generate, wrap, persist, cache, return.
-//	                            Race-safe: if another caller wrote
-//	                            first, we observe the existing one
-//	                            on the next pass.
+//  1. Cache hit             → return immediately, no I/O.
+//  2. DEK exists in store   → fetch wrapped form, unwrap with KEK,
+//     cache, return.
+//  3. DEK doesn't exist     → generate, wrap, persist, cache, return.
+//     Race-safe: if another caller wrote
+//     first, we observe the existing one
+//     on the next pass.
 func (e *EncryptedSecrets) dekFor(ctx context.Context, tenant string) (cipher.AEAD, error) {
 	e.mu.Lock()
 	cached, ok := e.deks[tenant]

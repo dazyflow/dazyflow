@@ -26,6 +26,10 @@ var schemaSQL string
 // tests. See postgres_test.go for the integration gate.
 type Postgres struct {
 	pool *pgxpool.Pool
+	// ownsPool is true only when OpenPostgres created the pool, so
+	// Close() knows whether it may shut it down (shared pools are
+	// owned by the daemon, not the JobStore).
+	ownsPool bool
 }
 
 // OpenPostgres connects via the supplied connection string and applies the
@@ -37,14 +41,38 @@ func OpenPostgres(ctx context.Context, url string) (*Postgres, error) {
 	if err != nil {
 		return nil, fmt.Errorf("connect: %w", err)
 	}
-	if _, err := pool.Exec(ctx, schemaSQL); err != nil {
+	store, err := NewPostgresFromPool(ctx, pool)
+	if err != nil {
 		pool.Close()
+		return nil, err
+	}
+	store.ownsPool = true
+	return store, nil
+}
+
+// NewPostgresFromPool builds a JobStore on an already-open pgxpool,
+// applying the schema. Lets the daemon share one pool across the
+// JobStore, the secret store, and the auth stores (one connection
+// budget instead of N). The caller retains ownership of the pool —
+// Close() here is a no-op so closing the JobStore doesn't yank the
+// pool out from under the other stores.
+func NewPostgresFromPool(ctx context.Context, pool *pgxpool.Pool) (*Postgres, error) {
+	if pool == nil {
+		return nil, fmt.Errorf("nil pool")
+	}
+	if _, err := pool.Exec(ctx, schemaSQL); err != nil {
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
 	return &Postgres{pool: pool}, nil
 }
 
-func (s *Postgres) Close() { s.pool.Close() }
+// Close releases the pool only when this store opened it (OpenPostgres).
+// When the pool was injected via NewPostgresFromPool the owner closes it.
+func (s *Postgres) Close() {
+	if s.ownsPool {
+		s.pool.Close()
+	}
+}
 
 func (s *Postgres) Enqueue(ctx context.Context, rec core.JobRecord) error {
 	jobJSON, err := json.Marshal(rec.Job)

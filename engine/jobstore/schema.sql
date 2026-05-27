@@ -31,15 +31,13 @@ CREATE TABLE IF NOT EXISTS jobs (
 -- on every OpenPostgres).
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS parent_node_rec_id TEXT NOT NULL DEFAULT '';
 
--- Workqueue index: only node-kind, queued (and available) or
--- running-but-expired.
+-- Workqueue index: node-kind rows in a claimable state. The predicate
+-- must be IMMUTABLE, so it can't reference now() — the time-window
+-- filters (available_at <= now(), lease_until < now()) live in the
+-- Claim query's WHERE clause and run against this narrowed subset.
 CREATE INDEX IF NOT EXISTS jobs_queue_idx
     ON jobs (enqueued_at)
-    WHERE kind = 'node'
-      AND (
-            (status = 'queued' AND (available_at IS NULL OR available_at <= now()))
-         OR (status = 'running' AND lease_until < now())
-          );
+    WHERE kind = 'node' AND status IN ('queued', 'running');
 
 -- Per-graph-run index so workers can quickly find sibling/predecessor
 -- records when dispatching downstream nodes.

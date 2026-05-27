@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -74,6 +75,16 @@ type HTTPGateway struct {
 	// webhook-secret flag/env is set.
 	GitHubEvents *GitHubEventsHandler
 
+	// AuthRateLimit, when set, throttles the sign-in / sign-up
+	// endpoints per client IP. Nil disables throttling (dev default).
+	AuthRateLimit *ipRateLimiter
+
+	// ReadyCheck, when set, is invoked by GET /readyz to verify
+	// dependencies (e.g. a Postgres ping) before reporting ready. Nil
+	// means "ready == alive" (the dev/in-memory deployment has no
+	// external dep to gate on).
+	ReadyCheck func(ctx context.Context) error
+
 	// WebDist, when non-empty, points at a directory containing the
 	// built React frontend (e.g. web/dist). Unknown GET paths under
 	// / are served from this directory, with index.html as the SPA
@@ -91,11 +102,27 @@ func NewHTTPGateway(svc *Service) *HTTPGateway {
 
 // Serve binds the gateway on listenAddr and blocks until ctx is cancelled.
 // Production deployments terminate TLS at an ingress layer.
+//
+// The bind happens synchronously here so a port-in-use failure is
+// returned to the caller (not swallowed in a goroutine). Callers that
+// launch Serve in a goroutine should instead Listen + ServeListener so
+// the bind error fails startup loudly — see cmd/hzd.
 func (h *HTTPGateway) Serve(ctx context.Context, listenAddr string) error {
+	ln, err := net.Listen("tcp", listenAddr)
+	if err != nil {
+		return fmt.Errorf("bind %s: %w", listenAddr, err)
+	}
+	return h.ServeListener(ctx, ln)
+}
+
+// ServeListener serves on an already-bound listener and blocks until
+// ctx is cancelled. Lets the daemon bind on the main goroutine (so a
+// bind failure can fail-loud at startup) and hand the live listener
+// here to serve in the background.
+func (h *HTTPGateway) ServeListener(ctx context.Context, ln net.Listener) error {
 	mux := http.NewServeMux()
 	h.mountRoutes(mux)
 	srv := &http.Server{
-		Addr:              listenAddr,
 		Handler:           h.withCORSAndLogging(h.verifyCookieOrigin(mux)),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
@@ -105,8 +132,8 @@ func (h *HTTPGateway) Serve(ctx context.Context, listenAddr string) error {
 	}
 	errC := make(chan error, 1)
 	go func() {
-		h.logger.Printf("listening on %s", listenAddr)
-		errC <- srv.ListenAndServe()
+		h.logger.Printf("listening on %s", ln.Addr())
+		errC <- srv.Serve(ln)
 	}()
 	select {
 	case <-ctx.Done():
@@ -119,12 +146,29 @@ func (h *HTTPGateway) Serve(ctx context.Context, listenAddr string) error {
 }
 
 func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
+	// Liveness: the process is up and serving. Never touches deps.
 	mux.HandleFunc("GET /healthz", func(rw http.ResponseWriter, _ *http.Request) {
 		rw.WriteHeader(http.StatusOK)
 		_, _ = rw.Write([]byte("ok"))
 	})
-	mux.HandleFunc("POST /api/v1/auth/signin", h.signIn)
-	mux.HandleFunc("POST /api/v1/auth/signup", h.signUp)
+	// Readiness: can the process actually serve requests (deps reachable)?
+	// ReadyCheck is nil for the dev/in-memory deployment — then ready ==
+	// alive. With Postgres, cmd/hzd wires a pool ping so orchestration
+	// holds traffic until the DB is reachable.
+	mux.HandleFunc("GET /readyz", func(rw http.ResponseWriter, r *http.Request) {
+		if h.ReadyCheck != nil {
+			ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+			defer cancel()
+			if err := h.ReadyCheck(ctx); err != nil {
+				writeJSONError(rw, http.StatusServiceUnavailable, "not ready: "+err.Error())
+				return
+			}
+		}
+		rw.WriteHeader(http.StatusOK)
+		_, _ = rw.Write([]byte("ready"))
+	})
+	mux.HandleFunc("POST /api/v1/auth/signin", h.rateLimitAuth(h.signIn))
+	mux.HandleFunc("POST /api/v1/auth/signup", h.rateLimitAuth(h.signUp))
 	mux.HandleFunc("POST /api/v1/auth/signout", h.signOut)
 	mux.HandleFunc("GET /api/v1/whoami", h.requireAuth(h.whoami))
 	mux.HandleFunc("GET /api/v1/workspaces", h.requireAuth(h.listWorkspaces))
@@ -903,7 +947,7 @@ func (h *HTTPGateway) sampleNode(rw http.ResponseWriter, r *http.Request, p core
 		return
 	}
 	writeJSON(rw, http.StatusAccepted, map[string]string{
-		"job_id":      runID,
+		"job_id":       runID,
 		"sampled_node": nodeID,
 	})
 }

@@ -4,6 +4,118 @@ Open items collected across iterations. Each entry notes the impact and a
 hint at what's needed. Items at the top section block real usage; items
 further down are quality, observability, and known-unknowns.
 
+## Production readiness — phased action plan (reviewed 2026-05-27)
+
+Sequencing layer to go from "feature-complete alpha" to "deployable paid
+SaaS." Most line-items are detailed in the sections further down
+(Production blockers, Distribution & HA, T3, Observability); this orders
+them and names the one gap those sections don't already call out: **the
+daemon binary runs entirely on in-memory stores today, so a restart wipes
+runs, sessions, API keys, and secrets.**
+
+Rough state at review: features ~8/10, tests ~8/10 (all green), but
+durability ~3/10, HA ~2/10, monetization ~1/10 → about **45% to
+production**. (Update 2026-05-27: Phase 0 shipped — durability now ~7/10
+with Postgres-backed jobs/keys/sessions/users/secrets.)
+
+### Phase 0 — Durability: stop losing data on restart (DONE · 2026-05-27)
+
+Shipped. `hzd` now persists everything to Postgres behind a single
+shared `pgxpool` when `--postgres-dsn` / `$HAZYFLOW_POSTGRES_DSN` is set;
+absent the flag it keeps the in-memory/JSON stores (dev only) and logs a
+loud "lost on restart" warning.
+
+- [x] **Wire the existing Postgres stores into `cmd/hzd`.** Added
+  `--postgres-dsn`. `jobstore.NewPostgresFromPool(ctx, pool)` (new
+  shared-pool constructor; `Close()` is a no-op when the pool is
+  injected so the JobStore can't yank it from the other stores) and
+  `daemon.NewPgSecretsStore` are wired when the DSN is set. Exported
+  `daemon.SecretsBackend` (alias of the unexported `secretsStore`) so
+  `setupEncryptedSecrets` can hold either backend. Boot log confirms
+  "encrypted secret store: postgres-backed (durable)".
+- [x] **Built the two missing Postgres stores.** New `auth/postgres.go`:
+  `PgKeyStore` (APIKeyStore + AdminKeyStore), `PgSessionStore`,
+  `PgUserStore`, plus `EnsurePgAuthSchema`. Roles stored as JSONB.
+  Tables: `api_keys`, `sessions`, `users`. The store vars in `main.go`
+  are now interface-typed (`auth.AdminKeyStore` / `SessionStore` /
+  `UserStore` / `core.JobStore`) so either backend slots in.
+- [x] **Users off the JSON file** when a DSN is set (`PgUserStore`);
+  `JSONUserStore` remains the no-DSN dev fallback.
+- [x] **Real-DB tests + bugs caught.** New `auth/postgres_test.go`
+  (gated on `HAZYFLOW_TEST_DB`), all pass against a real PG 16. Running
+  the long-gated jobstore path for the first time surfaced two latent
+  bugs, now fixed: (1) `schema.sql`'s workqueue partial index used
+  `now()` in its predicate — illegal (predicates must be IMMUTABLE);
+  narrowed it to `kind='node' AND status IN ('queued','running')` and
+  left the time-window filter in the Claim query. (2) the jobstore Pg
+  test enqueued a record with no `Kind` (defaults to `graph`, which
+  Claim never hands out) — fixed to `JobKindNode`.
+- [x] **Exit criteria met.** Verified end-to-end: signed up a user,
+  killed `hzd`, booted a fresh process against the same DB, signed in
+  with the pre-restart credentials → HTTP 200 with the persisted
+  tenant. Data lived only in Postgres.
+- [ ] **Follow-ups (not blocking):** wire the `HAZYFLOW_TEST_DB` tests
+  into a CI service (Phase 4); a one-time JSON-users → Postgres import
+  for existing dev deployments (greenfield deploys don't need it).
+
+### Phase 1 — Security hardening for public exposure (~1–2 wks)
+
+Mostly enumerated under **Production blockers** — this is the ordering.
+(Several quick wins shipped 2026-05-27 in the overnight batch.)
+
+- [ ] TLS on the gateway (or an enforced reverse-proxy contract) +
+  Secure/SameSite cookies + HSTS.
+- [x] **`--dev-key` defaults off** (2026-05-27). Was `true`; now opt-in
+  via `--dev-key` or `HAZYFLOW_DEV_KEY=1`.
+- [x] **Rate limiting on `/auth/{signin,signup}`** (2026-05-27).
+  Self-contained per-IP token bucket (`daemon/ratelimit.go`, no new
+  dep); flags `--auth-rate-per-min` (default 20) / `--auth-rate-burst`
+  (10); 0 disables. 429 + Retry-After on trip. 3 tests.
+- [x] **Fail-loud on port-bind failure** (2026-05-27). Webhook + HTTP
+  gateway now bind on the main goroutine (new `ServeListener` methods);
+  `hzd` fatals on a port-in-use error instead of silently dropping the
+  listener.
+- [ ] SSRF egress allowlist for `http_request`; finish secret output
+  sanitization.
+- [ ] **Quota write race** — attempted in the overnight batch, **left
+  for review**: closing it needs a reserve-and-hold-across-write change
+  threaded through the module write path (lock held across I/O),
+  correctness-critical enough to not land unattended. Snapshot model is
+  at `engine/engine.go:~397`.
+- [ ] Master-key provisioning + rotation runbook (KMS-ready).
+
+### Phase 2 — HA / horizontal scale (~2–3 wks)
+
+- [ ] Replace `MemoryBus` with Postgres LISTEN/NOTIFY (or NATS) — see
+  "Multi-node event bus".
+- [ ] Scheduler leader election via `pg_try_advisory_lock` — see
+  "Scheduler leader election".
+- [ ] Verify behaviour under concurrent multi-node load.
+
+### Phase 3 — Monetization (T3 · ~3–4 wks)
+
+Per-tenant metering → Stripe + plan gates → team features. Specced under
+**T3** below.
+
+### Phase 4 — Ops maturity (parallelizable · ~1–2 wks)
+
+- [~] **Dockerfile + CI** (2026-05-27, overnight batch). Multi-stage
+  `Dockerfile` (web bundle → static Go build → distroless nonroot,
+  serves API + bundle on :8080). `.build.yml` for builds.sr.ht runs
+  go build/test/vet + web build, with a Postgres service exporting
+  `HAZYFLOW_TEST_DB` so the gated jobstore/auth tests run in CI (closes
+  the long-standing "real-DB tests never exercised" gap). Still open:
+  k8s/compose deploy manifests; confirm the image build in CI.
+- [x] **`/readyz`** (2026-05-27) — pings Postgres when configured.
+  Still open: `/metrics` — wire the OTel scaffolding in
+  `engine/tracing.go` to an exporter.
+- [ ] Postgres backup strategy + connection-pool sizing (see "Known
+  unknowns").
+
+**Critical paths:** private beta = Phase 0 + most of Phase 1 (~3–4 wks);
+paid GA = 0 → 1 → 3, with 2 landing before the second serious customer
+(~2–3 months total).
+
 ## Path to product-market fit (Zapier-shaped sell)
 
 Active roadmap. Hazy-flow has the engine; the gap vs. Zapier is the
@@ -507,9 +619,10 @@ platform can demonstrate but not actually power a real workflow.
   signature-based-auth edge case (some signed-request schemes
   hash all headers, so an unexpected Idempotency-Key could
   break the signature; safer to gate behind a param).
-- [ ] **Port-bind failures are silent.** When the webhook listener's
-  port is taken, `hzd` logs and continues. Should fail-loud on startup
-  so orchestration (k8s, systemd) restarts the process.
+- [x] **Port-bind failures are silent.** FIXED 2026-05-27. Webhook +
+  HTTP gateway bind on the main goroutine (new `ServeListener` methods);
+  `hzd` calls `log.Fatalf` on a port-in-use bind error so k8s/systemd
+  restarts the process instead of it running listener-less.
 - [~] **Output sanitization for secrets.** V1 shipped:
   `core.LintGraph(g) []LintIssue` runs at every `PUT /graphs`
   save. The first rule, `secret_to_persistence`, detects nodes
@@ -560,10 +673,12 @@ platform can demonstrate but not actually power a real workflow.
   cron triggers and handles expired-lease cleanup. Today each hzd runs
   its own scheduler — fine for single-node, broken for multi-node
   (every cron fires N times).
-- [ ] **Postgres JobStore real-DB tests.** Implementation exists
-  (`engine/jobstore/postgres.go`) and tests are gated on
-  `HAZYFLOW_TEST_DB`. Wire a CI service or docker-compose so the
-  Postgres path is actually exercised.
+- [~] **Postgres JobStore real-DB tests.** The jobstore + auth Pg paths
+  now pass against a real PG 16 (verified 2026-05-27 against a throwaway
+  container; fixed the IMMUTABLE-index and test-kind bugs found in the
+  process). Still open: wire a CI service / docker-compose so
+  `HAZYFLOW_TEST_DB` is exercised automatically on every push rather than
+  by hand (tracked under Phase 4 ops).
 
 ## Modules
 
@@ -596,9 +711,10 @@ platform can demonstrate but not actually power a real workflow.
 - [ ] **Manifest-driven max-retries.** Currently `MaxRetries` is a
   worker-global setting. A module's author should be able to say "this
   one tolerates 10 retries" or "this is one-shot".
-- [ ] **Jitter on retry backoff.** Pure exponential synchronizes
-  failures when many sibling nodes fail together. Add small random
-  jitter (e.g. ±25%).
+- [x] **Jitter on retry backoff.** DONE 2026-05-27. The default
+  `WorkerConfig.RetryBackoff` now multiplies the exponential base by a
+  random factor in [0.75, 1.25) (±25%), so sibling nodes failing
+  together don't re-synchronize their retries.
 
 ## Auth
 
@@ -652,10 +768,10 @@ platform can demonstrate but not actually power a real workflow.
 - [ ] **Disk-usage metrics per tenant.** Expose
   `hazyflow_quota_bytes_used{tenant=...}` and `_limit` via the OTel
   metrics SDK so dashboards can show approaching-limit signals.
-- [ ] **Worker health / readiness.** No `/healthz` / `/readyz` surface
-  on hzd. Add to the gRPC server (health-check service) or a sidecar
-  HTTP handler. Particularly important given the silent bind-failure
-  in the webhook listener — health check would catch that.
+- [~] **Worker health / readiness.** `GET /healthz` (liveness) and
+  `GET /readyz` (readiness — pings Postgres when configured via
+  `gw.ReadyCheck`) both serve on the HTTP gateway as of 2026-05-27.
+  Still open: a gRPC health-check service for non-HTTP deployments.
 - [ ] **Structured graph-progress audit log.** Right now progress only
   flows over the gRPC stream. Long-running graphs that disconnect
   lose history.
@@ -799,7 +915,10 @@ blocking, but listed so we don't lose them.
   the rare browsers that don't enforce SameSite — not load-
   bearing today but worth a follow-up if customer security
   reviews ask.
-- [ ] **Rate limiting** on the gateway. None today.
+- [~] **Rate limiting** on the gateway. Per-IP token bucket now guards
+  `/api/v1/auth/{signin,signup}` (2026-05-27, `daemon/ratelimit.go`).
+  Still open: extend to other write endpoints + a per-tenant tier;
+  honor X-Forwarded-For behind a trusted-proxy allowlist.
 - [ ] **Per-tenant origin pinning** for CORS. Currently `*` (or
   configurable globally).
 
@@ -943,72 +1062,3 @@ blocking, but listed so we don't lose them.
   "route invalid records to a review queue instead of dropping
   them" — previously required `map_rows` twice with opposite
   filters, which walks the input twice. 14 tests.
-
-## Recently shipped (delete-when-reviewed)
-
-For context — these were on this TODO list and are now done. Keeping
-them visible so we don't re-litigate the design choices.
-
-- [x] **`http_request` module** — done with SSRF blocks (loopback,
-  RFC1918, link-local incl. AWS metadata), body size cap, status
-  filter, timeout, JSON/text MIME detection. 17 tests.
-- [x] **`branch` module** — done with field-path + 10 ops. Engine
-  edge-classifier extended so unused output ports correctly mark
-  downstream as skipped.
-- [x] **Cron triggers** — `daemon.Scheduler` polls workspace stores
-  for graphs with `Triggers: [{Type: "cron", Cron: "..."}]` and fires
-  via `Service.SubmitGraph`.
-- [x] **Webhook triggers** — `daemon.WebhookListener` exposes
-  `POST /trigger/<tenant>/<workspace>/<graph>` with per-graph bearer
-  secret. (Body still discarded — see top of list.)
-- [x] **Secret injection (env + builtin)** — `env://` and
-  `builtin://` resolved just before `transport.Execute`. JobStore
-  and workspace Git retain symbolic references; resolved values
-  never persist.
-- [x] **Engine fix: missing FromPort output = dormant edge** — was a
-  latent footgun where downstream of a non-emitting port ran with
-  empty input. Now correctly skipped.
-- [x] **Browser UI scaffold (`web/`).** Shipped: Vite + React + TS +
-  React Flow + lucide-react. Synthwave dark palette ported from
-  `../hazy`. App shell (TopBar with mobile hamburger, sidebar nav),
-  bearer-token sign-in, persistent session in localStorage. Pages:
-  pipeline list, pipeline editor (drag-from-catalog onto canvas,
-  edge connect, per-node Inspector with JSON params, Save, Run with
-  live status from SSE), Admin (role-gated, stubbed cards for API
-  keys / users / audit). `core.Manifest.Icon` field populated for
-  every built-in module; the UI maps logical icon names to
-  lucide-react glyphs. `core.Node.Position` round-trips via
-  PUT /graphs. `/api/v1/whoami` returns the principal + flat
-  permission set so the UI can gate features. Production build
-  passes (`npm run build`); typecheck clean. Stubs:
-  schema-driven param form, granular per-node SSE updates, admin
-  endpoints (API keys / users / audit) — none wired yet.
-- [x] **HTTP/JSON gateway for browser/UI access.** Shipped:
-  `daemon.HTTPGateway` exposes `/api/v1/{modules,graphs,jobs}` over
-  REST with bearer-token auth (reuses the API-key chain), permissive
-  CORS (tightenable via `AllowedOrigins`), and `GET /jobs/{id}/events`
-  as Server-Sent Events for live node-status streaming. The SSE frame
-  set: `snapshot` (initial JobRecord), `progress` (engine events),
-  `terminal` (closes the stream). 25-second keep-alive pings prevent
-  proxy idle timeouts. Tested via 8 handler-level tests and one full
-  e2e (PUT graph → POST /run → SSE-stream-to-terminal → final
-  GET /jobs/{id}). `core.Node` gained an optional `Position{X,Y}`
-  field for UI layout that the engine ignores. Limitations: no
-  cookie/CSRF (bearer-only), no rate-limiting, no per-tenant origin
-  pinning (CORS is global).
-- [x] **Subgraph module — call-graph-as-step.** Shipped:
-  `modules/flow/subgraph.go` is a declarative awaiting-style module
-  (manifest flag `SubmitsChildGraph`). The worker hands the result to
-  `daemon.SubGraphRunner` (Service satisfies it via `SubmitChild`),
-  which loads the child from the parent's workspace and submits it
-  with `ParentNodeRecID` linkage on the graph-record. When the child
-  terminates, `Dispatcher.maybeResumeParent` projects the child's
-  named (node, port) outputs onto the parent node's output ports via
-  `pending_output_map`, then advances the parent's graph as usual.
-  Child failures surface to the parent as `child_failed` so OnError
-  rules apply normally. V1 limits: same-workspace only, no static
-  cycle detection. Three e2e tests (happy path, child failure
-  propagates, unknown child fails cleanly).
-- [x] **Realistic shape demo (`examples/ap-invoice/`)** — single
-  graph, two webhook fires, branch routes on amount, secrets injected,
-  archived to sandbox. 10/10 assertions pass.
