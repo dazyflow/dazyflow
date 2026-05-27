@@ -67,10 +67,13 @@ services:
       HAZYFLOW_ENABLE_METRICS:       ${HAZYFLOW_ENABLE_METRICS:-}
       HAZYFLOW_TRUST_PROXY_HEADERS:  ${HAZYFLOW_TRUST_PROXY_HEADERS:-}
       HAZYFLOW_HTTP_EGRESS_ALLOW:    ${HAZYFLOW_HTTP_EGRESS_ALLOW:-}
-      # Optional marketing landing. Empty serves the app at / for
-      # everyone; set to the in-container mount path (see the commented
-      # landing volume below) to auth-gate / behind the landing page.
-      HAZYFLOW_LANDING_DIR:          ${HAZYFLOW_LANDING_DIR:-}
+      # Optional marketing landing. Set HAZYFLOW_LANDING_DIR in .env to the
+      # *host* path of your built hazy-flow-landing checkout; the volume
+      # below mounts it to the fixed in-container path /srv/landing, and
+      # hzd is pointed at that fixed path here (the `:+` means: when the
+      # host var is set, hzd reads /srv/landing; when empty, hzd gets ""
+      # and / serves the SPA for everyone).
+      HAZYFLOW_LANDING_DIR:          ${HAZYFLOW_LANDING_DIR:+/srv/landing}
       HAZYFLOW_PG_MAX_CONNS:         ${HAZYFLOW_PG_MAX_CONNS:-}
       HAZYFLOW_PG_MIN_CONNS:         ${HAZYFLOW_PG_MIN_CONNS:-}
       HAZYFLOW_MAX_GRAPH_NODES:      ${HAZYFLOW_MAX_GRAPH_NODES:-}
@@ -108,10 +111,12 @@ services:
       - "${HAZYFLOW_BIND_ADDR:-127.0.0.1}:${HAZYFLOW_PORT:-8080}:8080"
     volumes:
       - hzddata:/data
-      # Optional marketing landing: mount a checkout of the separate
-      # hazy-flow-landing repo read-only, then set
-      # HAZYFLOW_LANDING_DIR=/srv/landing in .env.
-      # - ../hazy-flow-landing:/srv/landing:ro
+      # Marketing landing: HAZYFLOW_LANDING_DIR (.env) is the *host* path of
+      # the built hazy-flow-landing checkout — it must hold landing.html at
+      # its root. Mount it read-only at the fixed container path /srv/landing
+      # that hzd reads (see the environment block above). Host path comes
+      # from the env; container path is hardcoded.
+      - ${HAZYFLOW_LANDING_DIR:-/srv/landing}:/srv/landing:ro
     # No container healthcheck: the distroless image ships no shell/curl.
     # Use the daemon's HTTP /healthz + /readyz (or the gRPC health
     # service) from your orchestrator — see deploy/k8s/hazyflow.yaml.
