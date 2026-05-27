@@ -275,3 +275,85 @@ func TestLintGraph_MessageMentionsBothNodes(t *testing.T) {
 		t.Errorf("message should mention secret: %q", got[0].Message)
 	}
 }
+
+// ---- hardcoded_secret rule ----
+
+func hasIssueCode(issues []LintIssue, code string) *LintIssue {
+	for i := range issues {
+		if issues[i].Code == code {
+			return &issues[i]
+		}
+	}
+	return nil
+}
+
+func TestLintGraph_KnownSecretPrefixFlagged(t *testing.T) {
+	g := Graph{Nodes: []Node{
+		node("a", "http_request", map[string]any{
+			"url":     "https://api.github.com",
+			"headers": map[string]any{"Authorization": "Bearer ghp_abcdefghijklmnopqrstuvwxyz0123456789"},
+		}),
+	}}
+	got := LintGraph(g)
+	iss := hasIssueCode(got, "hardcoded_secret")
+	if iss == nil {
+		t.Fatalf("expected hardcoded_secret, got %+v", got)
+	}
+	if len(iss.NodeIDs) != 1 || iss.NodeIDs[0] != "a" {
+		t.Errorf("node ids = %v, want [a]", iss.NodeIDs)
+	}
+}
+
+func TestLintGraph_LiteralUnderSecretKeyFlagged(t *testing.T) {
+	g := Graph{Nodes: []Node{
+		node("a", "postgres_query", map[string]any{
+			"dsn":      "postgres://u:hunter2longpassword@db/x",
+			"password": "hunter2longpassword!!",
+		}),
+	}}
+	if hasIssueCode(LintGraph(g), "hardcoded_secret") == nil {
+		t.Error("long literal under password key should be flagged")
+	}
+}
+
+func TestLintGraph_PlaceholderUnderSecretKeyNotFlagged(t *testing.T) {
+	g := Graph{Nodes: []Node{
+		node("a", "http_request", map[string]any{
+			"headers": map[string]any{"Authorization": "Bearer ${tenant:gh_token}"},
+		}),
+	}}
+	if hasIssueCode(LintGraph(g), "hardcoded_secret") != nil {
+		t.Error("placeholder value must not be flagged as hardcoded")
+	}
+}
+
+func TestLintGraph_ShortLiteralUnderSecretKeyNotFlagged(t *testing.T) {
+	g := Graph{Nodes: []Node{
+		node("a", "x", map[string]any{"api_key": "todo"}),
+	}}
+	if hasIssueCode(LintGraph(g), "hardcoded_secret") != nil {
+		t.Error("short placeholder-ish literal should not be flagged")
+	}
+}
+
+func TestLintGraph_HardcodedSecretInEnv(t *testing.T) {
+	n := Node{ID: "a", Module: "http_request", Env: map[string]string{
+		"AWS_ACCESS_KEY_ID": "AKIAIOSFODNN7EXAMPLE",
+	}}
+	if hasIssueCode(LintGraph(Graph{Nodes: []Node{n}}), "hardcoded_secret") == nil {
+		t.Error("AWS key literal in env should be flagged")
+	}
+}
+
+func TestLintGraph_NonSecretConfigNotFlagged(t *testing.T) {
+	g := Graph{Nodes: []Node{
+		node("a", "http_request", map[string]any{
+			"url":          "https://example.com/very/long/path/that/is/not/a/secret",
+			"content_type": "application/json",
+			"method":       "POST",
+		}),
+	}}
+	if hasIssueCode(LintGraph(g), "hardcoded_secret") != nil {
+		t.Error("ordinary config strings must not trip the hardcoded-secret rule")
+	}
+}

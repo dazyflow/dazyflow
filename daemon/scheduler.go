@@ -15,8 +15,9 @@ import (
 // Scheduler reads graphs from the configured workspaces, finds those with
 // cron triggers, and fires SubmitGraph internally when each schedule is
 // due. One Scheduler runs per hzd instance. In a multi-node deployment
-// only one instance should run this (spec calls for a leader-election
-// step via pg_try_advisory_lock — still in TODO).
+// every instance runs a Scheduler, but only the one holding the Postgres
+// advisory lock (see PgLeader, wired via SetLeader in cmd/hzd) actually
+// fires triggers; the rest stay warm via rescan and take over on failover.
 type Scheduler struct {
 	svc      *Service
 	clock    func() time.Time
@@ -27,6 +28,13 @@ type Scheduler struct {
 	mu          sync.Mutex
 	tracked     map[string]*scheduledGraph // key = tenant/workspace/graphID
 	rescanEvery time.Duration
+
+	// leader reports whether THIS instance may fire triggers. Default
+	// always-true (single node). In a multi-node cluster, cmd/hzd wires
+	// this to a Postgres advisory-lock leader so exactly one instance
+	// fires crons — otherwise every node fires every schedule N times.
+	// Rescan still runs on followers so a new leader can fire instantly.
+	leader func() bool
 
 	// principal used when the scheduler submits graphs internally; a
 	// real deployment would give the system a dedicated identity with
@@ -75,6 +83,7 @@ func NewScheduler(svc *Service) *Scheduler {
 		interval:    1 * time.Second,
 		rescanEvery: 30 * time.Second,
 		tracked:     make(map[string]*scheduledGraph),
+		leader:      func() bool { return true }, // single-node default
 		systemPrincipal: func(tenant, workspace string) core.Principal {
 			// graph:admin lets cron-fired runs bypass per-flow
 			// visibility: an admin who set up a schedule on a private
@@ -90,6 +99,15 @@ func NewScheduler(svc *Service) *Scheduler {
 				}},
 			}
 		},
+	}
+}
+
+// SetLeader installs the leadership predicate. When fn returns false
+// this instance rescans but doesn't fire — used by cmd/hzd to gate the
+// scheduler on a Postgres advisory-lock leader in multi-node clusters.
+func (s *Scheduler) SetLeader(fn func() bool) {
+	if fn != nil {
+		s.leader = fn
 	}
 }
 
@@ -110,7 +128,11 @@ func (s *Scheduler) Run(ctx context.Context) error {
 			s.logger.Printf("stopped: %v", ctx.Err())
 			return ctx.Err()
 		case <-tickT.C:
-			s.fireDue(ctx)
+			// Only the leader fires; followers stay warm via rescan and
+			// take over instantly if the leader dies.
+			if s.leader == nil || s.leader() {
+				s.fireDue(ctx)
+			}
 		case <-rescanT.C:
 			if err := s.rescan(ctx); err != nil {
 				s.logger.Printf("rescan: %v", err)

@@ -1,4 +1,5 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
+import { AlertTriangle } from "lucide-react";
 import i18n from "../i18n";
 import { iconFor, isBrandedIcon } from "../icons";
 import type { Manifest, Port } from "../types";
@@ -11,6 +12,9 @@ export type HazyNodeData = {
   moduleID: string;
   manifest?: Manifest;
   status?: string;
+  // lintMessage is set when the last save flagged this node in a lint
+  // issue (e.g. hardcoded secret). NodeCard shows a warning badge.
+  lintMessage?: string;
 };
 
 // Layout: nodes with a single input port and a single output port
@@ -38,7 +42,7 @@ export function HazyNode({ data, selected }: NodeProps) {
   const statusClass = d.status ? " status-" + d.status : "";
 
   return (
-    <div className={"hz-node" + (selected ? " selected" : "") + statusClass}>
+    <div className={"hz-node" + (selected ? " selected" : "") + statusClass + (d.lintMessage ? " lint-warn" : "")}>
       {/* Inputs (left side). Single-port nodes get a centered dot;
           multi-port nodes get one handle per port spread vertically. */}
       {inputs.map((p, i) => (
@@ -101,6 +105,11 @@ export function HazyNode({ data, selected }: NodeProps) {
           className={"status-dot " + d.status}
           title={i18n.t("nodeCard.statusTooltip", { status: d.status })}
         />
+      )}
+      {d.lintMessage && (
+        <div className="hz-node-lint" title={d.lintMessage} aria-label="lint warning">
+          <AlertTriangle size={13} />
+        </div>
       )}
 
       {/* Outputs (right side). */}

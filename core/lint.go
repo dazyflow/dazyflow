@@ -36,6 +36,36 @@ type LintIssue struct {
 // not secrets).
 var secretPlaceholderPattern = regexp.MustCompile(`\$\{(env|tenant|builtin):[^}]*\}`)
 
+// templatePattern matches ANY `${scheme:...}` placeholder (secret or
+// upstream/item). A value containing one isn't a hardcoded literal, so
+// the hardcoded-secret rule skips it.
+var templatePattern = regexp.MustCompile(`\$\{[a-z]+:[^}]*\}`)
+
+// secretKeyName matches param/env key names that conventionally hold a
+// credential. A literal (non-placeholder) value under such a key is the
+// "I pasted my token into the graph" anti-pattern.
+var secretKeyName = regexp.MustCompile(`(?i)(token|secret|password|passwd|api[_-]?key|apikey|auth|authorization|credential|private[_-]?key|access[_-]?key|client[_-]?secret)`)
+
+// knownSecretValue matches values that are almost certainly real
+// credentials regardless of the field they sit in: provider key
+// prefixes and PEM private-key blocks. Conservative on purpose — these
+// patterns don't fire on ordinary config strings.
+var knownSecretValue = regexp.MustCompile(
+	`(sk_live_[0-9A-Za-z]{8,}` + // Stripe live
+		`|sk_test_[0-9A-Za-z]{8,}` + // Stripe test
+		`|gh[pousr]_[0-9A-Za-z]{20,}` + // GitHub tokens (ghp_, gho_, ghu_, ghs_, ghr_)
+		`|github_pat_[0-9A-Za-z_]{20,}` + // GitHub fine-grained PAT
+		`|xox[baprs]-[0-9A-Za-z-]{10,}` + // Slack tokens
+		`|AKIA[0-9A-Z]{16}` + // AWS access key id
+		`|AIza[0-9A-Za-z_\-]{30,}` + // Google API key
+		`|-----BEGIN [A-Z ]*PRIVATE KEY-----` + // PEM private key
+		`)`)
+
+// minLiteralSecretLen avoids flagging short placeholder-ish values
+// ("changeme", "x") under a secret-shaped key — real pasted secrets are
+// long. Content-prefix matches (knownSecretValue) ignore this floor.
+const minLiteralSecretLen = 12
+
 // persistenceModules is the set of native drops whose output is
 // written to a place a third party (or the user later, with broader
 // access) could retrieve. Wiring a secret-bearing node's output
@@ -85,6 +115,18 @@ func LintGraph(g Graph) []LintIssue {
 		nodesByID[n.ID] = n
 	}
 
+	issues := make([]LintIssue, 0)
+	issues = append(issues, lintHardcodedSecrets(g)...)
+	issues = append(issues, lintSecretToPersistence(g, nodesByID)...)
+	if len(issues) == 0 {
+		return nil
+	}
+	return issues
+}
+
+// lintSecretToPersistence is the original rule: a secret-bearing node
+// with a forward path into a persistence sink.
+func lintSecretToPersistence(g Graph, nodesByID map[string]Node) []LintIssue {
 	// Identify nodes whose params or env reference a secret.
 	secretSources := make([]string, 0)
 	for _, n := range g.Nodes {
@@ -186,4 +228,128 @@ func hasSecretRef(v any) bool {
 		}
 	}
 	return false
+}
+
+// lintHardcodedSecrets flags literal credentials pasted into a node's
+// params/env instead of referenced via ${tenant://name}. Two triggers:
+//   - a value matching a known provider-key/PEM pattern, anywhere; or
+//   - a long literal string under a secret-shaped key name (token,
+//     password, api_key, authorization, …) that isn't a ${...} template.
+//
+// One issue per node (de-duplicated) so a node with several pasted keys
+// doesn't spam the banner.
+func lintHardcodedSecrets(g Graph) []LintIssue {
+	issues := make([]LintIssue, 0)
+	for _, n := range g.Nodes {
+		if field := findHardcodedSecret("", n.Params); field != "" {
+			issues = append(issues, hardcodedIssue(n.ID, n.Module, field))
+			continue
+		}
+		flagged := ""
+		for k, v := range n.Env {
+			if knownSecretValue.MatchString(v) ||
+				(secretKeyName.MatchString(k) && isLiteralSecret(v)) {
+				flagged = "env." + k
+				break
+			}
+		}
+		if flagged != "" {
+			issues = append(issues, hardcodedIssue(n.ID, n.Module, flagged))
+		}
+	}
+	// Stable order for reproducible output/tests.
+	sort.Slice(issues, func(i, j int) bool {
+		return issues[i].NodeIDs[0] < issues[j].NodeIDs[0]
+	})
+	return issues
+}
+
+func hardcodedIssue(nodeID, module, field string) LintIssue {
+	return LintIssue{
+		Code:     "hardcoded_secret",
+		Severity: LintWarn,
+		Message: fmt.Sprintf(
+			"Node %q (module %s) appears to contain a hardcoded secret in %s. Hardcoded credentials get committed to the workspace git history and shown to anyone who can read the graph. Store it with the secret store and reference it as ${tenant://name} instead.",
+			nodeID, module, field,
+		),
+		NodeIDs: []string{nodeID},
+	}
+}
+
+// findHardcodedSecret walks params depth-first and returns the first
+// field path (e.g. "headers.Authorization") that looks like a pasted
+// secret, or "" if none. keyPath is the dotted path to v's container.
+func findHardcodedSecret(keyPath string, v any) string {
+	switch t := v.(type) {
+	case string:
+		if knownSecretValue.MatchString(t) {
+			return orSelf(keyPath)
+		}
+		// Key-name heuristic only applies when we know the key (keyPath
+		// non-empty) — a bare top-level string param has no key context.
+		if keyPath != "" && secretKeyNameLeaf(keyPath) && isLiteralSecret(t) {
+			return keyPath
+		}
+	case map[string]any:
+		// Deterministic key order.
+		keys := make([]string, 0, len(t))
+		for k := range t {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			child := join(keyPath, k)
+			if hit := findHardcodedSecret(child, t[k]); hit != "" {
+				return hit
+			}
+		}
+	case []any:
+		for i, child := range t {
+			if hit := findHardcodedSecret(fmt.Sprintf("%s[%d]", keyPath, i), child); hit != "" {
+				return hit
+			}
+		}
+	}
+	return ""
+}
+
+// isLiteralSecret reports whether s is a non-template literal long
+// enough to plausibly be a real credential.
+func isLiteralSecret(s string) bool {
+	return len(s) >= minLiteralSecretLen && !templatePattern.MatchString(s)
+}
+
+// secretKeyNameLeaf checks the LAST path segment against the secret-key
+// pattern (so "headers.Authorization" matches on "Authorization", not
+// the whole path).
+func secretKeyNameLeaf(keyPath string) bool {
+	leaf := keyPath
+	if i := lastSep(keyPath); i >= 0 {
+		leaf = keyPath[i+1:]
+	}
+	return secretKeyName.MatchString(leaf)
+}
+
+func lastSep(s string) int {
+	idx := -1
+	for i := 0; i < len(s); i++ {
+		if s[i] == '.' || s[i] == ']' {
+			idx = i
+		}
+	}
+	return idx
+}
+
+func join(prefix, key string) string {
+	if prefix == "" {
+		return key
+	}
+	return prefix + "." + key
+}
+
+func orSelf(keyPath string) string {
+	if keyPath == "" {
+		return "a param value"
+	}
+	return keyPath
 }

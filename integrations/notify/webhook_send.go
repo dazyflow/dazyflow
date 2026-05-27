@@ -13,6 +13,7 @@ import (
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
 	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
+	hfnet "git.sr.ht/~klahr/hazy-flow/integrations/net"
 )
 
 func init() {
@@ -44,7 +45,8 @@ func init() {
 					"body":         {"description":"Default body when no input port is wired. Strings/bytes are sent as-is; anything else is JSON-marshaled and the Content-Type is forced to application/json."},
 					"content_type": {"type":"string","default":"application/json","description":"Content-Type header. Auto-overridden to application/json when the body is a non-string value."},
 					"headers":      {"type":"object","additionalProperties":{"type":"string"},"description":"Extra request headers (e.g. {\"Authorization\":\"Bearer ${env:TOKEN}\"})."},
-					"timeout_ms":   {"type":"integer","default":15000,"minimum":1,"description":"HTTP timeout in milliseconds."}
+					"timeout_ms":   {"type":"integer","default":15000,"minimum":1,"description":"HTTP timeout in milliseconds."},
+					"allow_private_networks": {"type":"boolean","default":false,"description":"Disable the SSRF guard. Only enable when posting to a local/internal service intentionally."}
 				},
 				"required":["url"]
 			}`),
@@ -87,6 +89,11 @@ func executeWebhookSend(ctx context.Context, job core.Job, progress chan<- core.
 		return params.Err(job, "bad_param",
 			fmt.Sprintf("method %q: only POST, PUT, PATCH allowed", method)), nil
 	}
+	// Same operator egress allowlist the http_request drop uses (no-op
+	// when unconfigured).
+	if err := hfnet.EgressAllowed(url); err != nil {
+		return params.Err(job, "egress_blocked", err.Error()), nil
+	}
 
 	contentType := params.StringDefault(job.Params, "content_type", "application/json")
 	var body []byte
@@ -119,11 +126,18 @@ func executeWebhookSend(ctx context.Context, job core.Job, progress chan<- core.
 	}
 
 	timeoutMs := params.IntDefault(job.Params, "timeout_ms", 15000)
-	client := &http.Client{Timeout: time.Duration(timeoutMs) * time.Millisecond}
+	allowPrivate, _ := job.Params["allow_private_networks"].(bool)
+	// SSRF-guarded client: blocks private/loopback/link-local dials
+	// (e.g. cloud metadata at 169.254.169.254) just like http_request,
+	// unless the caller opts into a local/internal target.
+	client := hfnet.SafeHTTPClient(time.Duration(timeoutMs)*time.Millisecond, allowPrivate)
 
 	emitProgress(progress, job, 0.3, method+" "+url)
 	resp, err := client.Do(req)
 	if err != nil {
+		if hfnet.IsSSRFError(err) {
+			return params.Err(job, "ssrf_blocked", err.Error()), nil
+		}
 		return params.Err(job, "send_failed", err.Error()), nil
 	}
 	defer resp.Body.Close()

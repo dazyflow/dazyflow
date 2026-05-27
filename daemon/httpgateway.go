@@ -79,6 +79,13 @@ type HTTPGateway struct {
 	// endpoints per client IP. Nil disables throttling (dev default).
 	AuthRateLimit *ipRateLimiter
 
+	// TrustProxyHeaders makes the gateway honor X-Forwarded-Proto when
+	// deciding whether a request arrived over HTTPS (for the Secure
+	// cookie flag + HSTS). Enable ONLY when hzd sits behind a trusted
+	// TLS-terminating reverse proxy — otherwise a direct client could
+	// spoof the header. Off by default.
+	TrustProxyHeaders bool
+
 	// ReadyCheck, when set, is invoked by GET /readyz to verify
 	// dependencies (e.g. a Postgres ping) before reporting ready. Nil
 	// means "ready == alive" (the dev/in-memory deployment has no
@@ -379,12 +386,35 @@ func (h *HTTPGateway) withCORSAndLogging(next http.Handler) http.Handler {
 		}
 		rw.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
 		rw.Header().Set("Access-Control-Allow-Methods", "GET, PUT, POST, DELETE, OPTIONS")
+		// HSTS only over HTTPS — sending it on a plain-HTTP response is
+		// pointless (browsers ignore it) and on a mixed setup could
+		// wedge a not-yet-TLS host. 1 year, includeSubDomains.
+		if h.requestIsHTTPS(r) {
+			rw.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
+		// Conservative content-type hardening for the API surface.
+		rw.Header().Set("X-Content-Type-Options", "nosniff")
 		if r.Method == http.MethodOptions {
 			rw.WriteHeader(http.StatusNoContent)
 			return
 		}
 		next.ServeHTTP(rw, r)
 	})
+}
+
+// requestIsHTTPS reports whether the request reached the user over TLS.
+// Directly: r.TLS is set. Behind a TLS-terminating reverse proxy the
+// connection to hzd is plain HTTP, so we consult X-Forwarded-Proto —
+// but only when TrustProxyHeaders is on, since an untrusted client
+// could otherwise forge it to flip on the Secure cookie flag.
+func (h *HTTPGateway) requestIsHTTPS(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	if h.TrustProxyHeaders && strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+		return true
+	}
+	return false
 }
 
 func originAllowed(origin string, allowed []string) bool {
@@ -435,7 +465,7 @@ func (h *HTTPGateway) signIn(rw http.ResponseWriter, r *http.Request) {
 		Expires:  sess.ExpiresAt,
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		Secure:   r.TLS != nil,
+		Secure:   h.requestIsHTTPS(r),
 	})
 	writeJSON(rw, http.StatusOK, map[string]any{
 		"token":      token,
@@ -464,7 +494,7 @@ func (h *HTTPGateway) signOut(rw http.ResponseWriter, r *http.Request) {
 		MaxAge:   -1,
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		Secure:   r.TLS != nil,
+		Secure:   h.requestIsHTTPS(r),
 	})
 	rw.WriteHeader(http.StatusNoContent)
 }

@@ -32,6 +32,7 @@ import (
 	_ "git.sr.ht/~klahr/hazy-flow/integrations"
 	"git.sr.ht/~klahr/hazy-flow/integrations/github"
 	"git.sr.ht/~klahr/hazy-flow/integrations/gmail"
+	hfnet "git.sr.ht/~klahr/hazy-flow/integrations/net"
 	"git.sr.ht/~klahr/hazy-flow/integrations/notion"
 	secretsdrop "git.sr.ht/~klahr/hazy-flow/integrations/secrets"
 	"git.sr.ht/~klahr/hazy-flow/integrations/sheets"
@@ -65,6 +66,8 @@ func main() {
 	webOrigin := flag.String("web-origin", "http://localhost:5174", "comma-separated allowed origins for the web UI (CORS + cookie credentials)")
 	authRatePerMin := flag.Int("auth-rate-per-min", 20, "per-IP requests/minute allowed on /api/v1/auth/{signin,signup} before 429. 0 disables throttling.")
 	authRateBurst := flag.Int("auth-rate-burst", 10, "per-IP burst capacity for the auth rate limiter")
+	httpEgressAllow := flag.String("http-egress-allow", os.Getenv("HAZYFLOW_HTTP_EGRESS_ALLOW"), "comma-separated egress allowlist for the http_request drop: exact hosts (api.stripe.com), wildcards (*.slack.com), or CIDR/IP (203.0.113.0/24). Empty = allow any public host (the IP-level SSRF guard still blocks private addresses).")
+	trustProxyHeaders := flag.Bool("trust-proxy-headers", os.Getenv("HAZYFLOW_TRUST_PROXY_HEADERS") == "1", "honor X-Forwarded-Proto from the reverse proxy when setting the Secure cookie flag + HSTS. Enable ONLY behind a trusted TLS-terminating proxy (nginx/Caddy/ingress); a directly-exposed daemon must leave this off so clients can't spoof the header.")
 	sessionTTL := flag.Duration("session-ttl", 24*time.Hour, "lifetime of a sign-in session before the user must re-authenticate")
 	defaultGraphTimeout := flag.Duration("default-graph-timeout", 0, "wall-time cap applied to runs whose graph has no timeout_seconds set (0 = no default; the per-graph value, when present, always wins)")
 	anthropicKey := flag.String("anthropic-key", os.Getenv("ANTHROPIC_API_KEY"), "Anthropic API key for the in-app chat agent (default $ANTHROPIC_API_KEY). Empty disables /api/v1/chat/stream unless --claude-cli is set.")
@@ -77,6 +80,14 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	// Egress allowlist for the http_request drop (operator policy).
+	if *httpEgressAllow != "" {
+		if err := hfnet.SetEgressAllowlist(strings.Split(*httpEgressAllow, ",")); err != nil {
+			log.Fatalf("--http-egress-allow: %v", err)
+		}
+		log.Printf("http_request egress allowlist active: %s", *httpEgressAllow)
+	}
 
 	// Durable stores: when --postgres-dsn is set, keys / sessions /
 	// users / jobs / secrets all persist to one shared pgxpool and
@@ -143,7 +154,19 @@ func main() {
 		log.Println("workspace store: in-memory (graphs lost on restart)")
 	}
 
-	bus := daemon.NewMemoryBus()
+	// Event bus: Postgres-backed (multi-node — any hzd can stream a run's
+	// events) when a DSN is set, else in-process MemoryBus (single node).
+	var bus daemon.Bus
+	if pgPool != nil {
+		pgBus, err := daemon.NewPgBus(ctx, pgPool)
+		if err != nil {
+			log.Fatalf("postgres event bus: %v", err)
+		}
+		bus = pgBus
+		log.Print("event bus: postgres LISTEN/NOTIFY (multi-node)")
+	} else {
+		bus = daemon.NewMemoryBus()
+	}
 	base := *sandboxBase
 	if base == "" {
 		base = ".hazyflow-sandbox"
@@ -248,6 +271,15 @@ func main() {
 	// Cron scheduler fires graphs that declare cron triggers in their JSON.
 	if *enableCron {
 		sched := daemon.NewScheduler(svc)
+		// Multi-node: gate firing on a Postgres advisory-lock leader so
+		// only one hzd fires each schedule. Single-node (no DSN) stays
+		// the default always-leader.
+		if pgPool != nil {
+			leader := daemon.NewPgLeader(pgPool, daemon.SchedulerLockKey)
+			go leader.Run(ctx)
+			sched.SetLeader(leader.IsLeader)
+			log.Print("scheduler: leader election via postgres advisory lock")
+		}
 		go func() {
 			if err := sched.Run(ctx); err != nil && err != context.Canceled {
 				log.Printf("scheduler stopped: %v", err)
@@ -284,6 +316,10 @@ func main() {
 		gw.AuthRateLimit = daemon.NewAuthRateLimiter(*authRatePerMin, *authRateBurst)
 		if gw.AuthRateLimit != nil {
 			log.Printf("auth rate limit: %d/min per IP (burst %d)", *authRatePerMin, *authRateBurst)
+		}
+		gw.TrustProxyHeaders = *trustProxyHeaders
+		if *trustProxyHeaders {
+			log.Print("trusting X-Forwarded-Proto from reverse proxy (Secure cookies + HSTS on forwarded-https)")
 		}
 		gw.WebDist = *webDist // empty disables static frontend serving
 		if pgPool != nil {

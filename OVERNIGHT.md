@@ -1,18 +1,43 @@
 # Overnight autonomous session — 2026-05-27
 
-## NEXT (resume here in the morning) — Phase 1 remaining
-1. TLS on the gateway (or an enforced reverse-proxy contract) +
-   Secure/SameSite cookies + HSTS. ← biggest, needs a decision on
-   terminate-TLS-in-hzd vs require-a-proxy.
-2. SSRF egress allowlist for `http_request` (per-tenant domain/IP
-   allowlist above the existing private-IP block).
-3. Finish secret output sanitization (more lint rules; inspector
-   per-node markers).
-4. Master-key provisioning + rotation runbook (KMS-ready).
-5. Quota write race (deferred from the batch — needs supervision; the
-   reserve-across-write change in the module write path).
-Item 1 likely wants a quick decision from you before I build it; 2–4 I
-can take unattended.
+## NEXT — Phase 1 remaining (updated 2026-05-27 PM)
+DONE this session: SSRF egress allowlist (http_request) + webhook_send
+SSRF guard (was wide open to cloud metadata) — both with tests, suite green.
+
+DONE 2026-05-27 PM (continued): TLS proxy-contract hardening
+(--trust-proxy-headers → Secure cookies + HSTS + nosniff; fixed the
+always-nil r.TLS Secure bug; DEPLOY.md documents the nginx contract).
+
+DONE 2026-05-27 (cont.): secret-sanitization rule #2 `hardcoded_secret`
+(+ per-node canvas warning badges) and the master-key runbook
+(SECURITY.md). Go + web green.
+
+Phase 1 still open:
+- Quota write race (deferred — needs supervision).
+- Per-tenant egress allowlist (today it's operator-global). ← can do
+- Master-key KEK re-wrap *command* (rotation tooling; doc shipped, code v2).
+Then Phase 1 is essentially done → Phase 2 (HA: multi-node bus, leader
+election).
+
+DONE 2026-05-27 — Phase 2 HA (both done, tests pass against real PG):
+- Multi-node event bus: daemon/eventbus_pg.go (PgBus, bus_events +
+  pg_notify) + eventbus_pg_test.go (cross-instance, terminal round-trip,
+  no-cross-talk). cmd/hzd selects PgBus when --postgres-dsn set.
+- Scheduler leader election: daemon/leader.go (PgLeader,
+  pg_try_advisory_lock) + leader_test.go (single-holder + failover).
+  Wired via Scheduler.SetLeader in cmd/hzd's cron block.
+Full suite green both with and without HAZYFLOW_TEST_DB.
+- Two-process load test: scripts/ha_loadtest.sh + scripts/ha_loadtest/seed.go.
+  Spins up throwaway Docker PG, two real hzd processes sharing it, seeds a
+  node-less 1s poll graph, asserts exactly-one-leader + no-double-fire +
+  failover (kill leader → follower takes over, keeps firing). PASSED
+  2026-05-27 (~6 fires/10s single-leader; would be ~2x if both fired).
+Phase 2 is now functionally complete. Throwaway PG containers removed;
+the load-test script tears its own container + tmp dirs down (KEEP=1 to keep).
+
+New files this session: SECURITY.md, DEPLOY.md, integrations/net/egress.go (+test),
+daemon/ratelimit.go (+test), daemon/eventbus_pg.go (+test), daemon/leader.go (+test).
+All uncommitted (gpg signing needs you).
 
 ---
 

@@ -271,6 +271,32 @@ function EditorInner() {
     return () => setActiveFlowName(null);
   }, [setActiveFlowName]);
 
+  // Mirror the latest save's lint findings onto the canvas nodes as a
+  // per-node warning badge (NodeCard reads data.lintMessage). Rebuilds
+  // the node→message map whenever lintIssues changes; clears the badge
+  // on nodes no longer flagged.
+  useEffect(() => {
+    const byNode = new Map<string, string[]>();
+    for (const iss of lintIssues) {
+      for (const nid of iss.node_ids ?? []) {
+        const arr = byNode.get(nid) ?? [];
+        arr.push(iss.message);
+        byNode.set(nid, arr);
+      }
+    }
+    setNodes((nds) => {
+      let changed = false;
+      const next = nds.map((n) => {
+        const msgs = byNode.get(n.id);
+        const lintMessage = msgs ? msgs.join("\n\n") : undefined;
+        if (n.data.lintMessage === lintMessage) return n;
+        changed = true;
+        return { ...n, data: { ...n.data, lintMessage } };
+      });
+      return changed ? next : nds;
+    });
+  }, [lintIssues]);
+
   // Register the flow-settings opener so the top-bar three-dots menu
   // can open this editor's settings modal. setSettingsOpen is stable
   // (useState setter), so registering once on mount is enough.

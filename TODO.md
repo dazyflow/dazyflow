@@ -63,8 +63,14 @@ loud "lost on restart" warning.
 Mostly enumerated under **Production blockers** — this is the ordering.
 (Several quick wins shipped 2026-05-27 in the overnight batch.)
 
-- [ ] TLS on the gateway (or an enforced reverse-proxy contract) +
-  Secure/SameSite cookies + HSTS.
+- [x] **TLS via reverse-proxy contract** (2026-05-27, decided
+  proxy-only). hzd doesn't terminate TLS; instead `--trust-proxy-headers`
+  makes it honor `X-Forwarded-Proto` to set the session cookie `Secure`
+  (was `r.TLS != nil`, which is always nil behind a TLS-terminating
+  proxy — the actual bug), emit HSTS, and `X-Content-Type-Options:
+  nosniff`. Cookies were already `HttpOnly`+`SameSite=Lax`. The required
+  proxy contract + nginx example are in `DEPLOY.md`. Native in-hzd TLS
+  intentionally deferred (optional given the proxy).
 - [x] **`--dev-key` defaults off** (2026-05-27). Was `true`; now opt-in
   via `--dev-key` or `HAZYFLOW_DEV_KEY=1`.
 - [x] **Rate limiting on `/auth/{signin,signup}`** (2026-05-27).
@@ -82,15 +88,28 @@ Mostly enumerated under **Production blockers** — this is the ordering.
   threaded through the module write path (lock held across I/O),
   correctness-critical enough to not land unattended. Snapshot model is
   at `engine/engine.go:~397`.
-- [ ] Master-key provisioning + rotation runbook (KMS-ready).
+- [~] **Master-key provisioning + rotation runbook** — DONE as docs
+  (2026-05-27, `SECURITY.md`): generation, KMS storage options,
+  loss/compromise handling, and the rotation procedure. **Still open
+  (code):** the KEK re-wrap command itself — rotation today needs the
+  documented interim (re-enter secrets); the in-place DEK re-wrap is the
+  `v2` gap noted in `daemon/encrypted_secrets.go`.
 
 ### Phase 2 — HA / horizontal scale (~2–3 wks)
 
-- [ ] Replace `MemoryBus` with Postgres LISTEN/NOTIFY (or NATS) — see
-  "Multi-node event bus".
-- [ ] Scheduler leader election via `pg_try_advisory_lock` — see
-  "Scheduler leader election".
-- [ ] Verify behaviour under concurrent multi-node load.
+- [x] Replace `MemoryBus` with Postgres LISTEN/NOTIFY — `daemon/eventbus_pg.go`
+  (`PgBus`, `bus_events` table + `pg_notify`). Wired in cmd/hzd when
+  `--postgres-dsn` is set. Tests in `daemon/eventbus_pg_test.go`.
+- [x] Scheduler leader election via `pg_try_advisory_lock` —
+  `daemon/leader.go` (`PgLeader`), gated through `Scheduler.SetLeader`.
+  Followers rescan and take over on leader failure. Tests in
+  `daemon/leader_test.go` (single-holder + failover).
+- [x] Verify behaviour under concurrent multi-node load — `scripts/ha_loadtest.sh`
+  runs two real hzd processes against one Postgres and asserts (a) exactly
+  one leader, (b) no double-fire of a 1s poll trigger, (c) failover: kill
+  the leader, a follower acquires the lock and keeps firing. Seeds a
+  node-less poll graph via `scripts/ha_loadtest/seed.go` (one job row per
+  fire). Passing as of 2026-05-27.
 
 ### Phase 3 — Monetization (T3 · ~3–4 wks)
 
@@ -599,9 +618,20 @@ platform can demonstrate but not actually power a real workflow.
   document the per-tenant env var convention (e.g.
   `HAZYFLOW_TENANT_<UPPER>_<KEY>`) in the README; today the
   provider just looks up the full prefixed name verbatim.
-- [ ] **Egress allowlist for `http_request`.** SSRF blocks private IPs
-  but a tenant can still reach any public IP. Production needs a
-  per-tenant allowlist of permitted domains/IPs above the SSRF layer.
+- [~] **Egress allowlist for `http_request`.** DONE (operator-global)
+  2026-05-27: `integrations/net/egress.go` — opt-in allowlist of exact
+  hosts, `*.wildcards`, and CIDR/IPs, checked at request time above the
+  IP SSRF guard. Wired via `--http-egress-allow` / `SetEgressAllowlist`.
+  Empty = allow-all (backward compatible). 4 tests. **Still open:** make
+  it *per-tenant* (today it's one operator-wide list) — needs tenant
+  read from ctx + per-tenant policy storage.
+- [x] **`webhook_send` SSRF guard.** FIXED 2026-05-27. Now uses the
+  shared `net.SafeHTTPClient` (private-IP dial block) + `net.EgressAllowed`
+  (same operator allowlist as http_request), with an
+  `allow_private_networks` opt-in param for intentional local targets.
+  Exported `SafeHTTPClient` / `EgressAllowed` / `IsSSRFError` from the net
+  package so the two drops share one implementation. Tests updated +
+  a new "blocked by default" case (169.254.169.254 → ssrf_blocked).
 - [~] **Idempotency keys on outbound HTTP.** Shipped:
   `core.Job.IdempotencyKey()` returns `"hazyflow:<job_id>"` — and
   Job.ID is the stable per-node-record identifier (worker
@@ -643,10 +673,17 @@ platform can demonstrate but not actually power a real workflow.
   every secret scheme, non-secret placeholder rejection,
   external-API send not triggering, BFS-stops-at-first-sink.
   2 handler tests pin the save-response shape (lint present +
-  empty case). **Open follow-ups:** more rules (e.g. lint when
-  `sheets_append_row` is downstream of a secret-bearing call,
-  surface in the inspector with per-node markers, allow
-  selective dismissal vs dismiss-all).
+  empty case). **2026-05-27 update:** added a second rule,
+  `hardcoded_secret` — flags literal credentials pasted into
+  params/env (known provider prefixes like sk_live_/ghp_/xoxb-/
+  AKIA/PEM anywhere, or a long literal under a secret-shaped key
+  name like token/password/api_key/authorization) and nudges
+  toward `${tenant://name}`. 6 new core tests. Per-node canvas
+  markers also shipped: the save response's `node_ids` drive an
+  amber warning badge + border on the flagged NodeCards (hover for
+  the message), in addition to the bottom banner. **Open
+  follow-ups:** selective dismissal (vs dismiss-all); more rules as
+  patterns emerge.
 
 ## API surface — control plane gaps
 
@@ -664,15 +701,14 @@ platform can demonstrate but not actually power a real workflow.
 
 ## Distribution & HA
 
-- [ ] **Multi-node event bus.** `MemoryBus` is in-process. Two hzd
-  instances can't share progress streams. Replace with Postgres
-  LISTEN/NOTIFY (we already have the pgxpool) or NATS. Interface is
-  designed for the swap.
-- [ ] **Scheduler leader election.** Spec mandates
-  `pg_try_advisory_lock`-based leader election so only one hzd fires
-  cron triggers and handles expired-lease cleanup. Today each hzd runs
-  its own scheduler — fine for single-node, broken for multi-node
-  (every cron fires N times).
+- [x] **Multi-node event bus.** `PgBus` (`daemon/eventbus_pg.go`) shares
+  progress streams across hzd instances via a `bus_events` table +
+  `pg_notify`. Selected automatically when `--postgres-dsn` is set;
+  `MemoryBus` remains the single-node default.
+- [x] **Scheduler leader election.** `PgLeader` (`daemon/leader.go`)
+  holds a session-scoped `pg_try_advisory_lock`; only the holder fires
+  crons (`Scheduler.SetLeader`). Lock auto-releases on connection loss,
+  so a follower takes over on leader death. Wired in cmd/hzd.
 - [~] **Postgres JobStore real-DB tests.** The jobstore + auth Pg paths
   now pass against a real PG 16 (verified 2026-05-27 against a throwaway
   container; fixed the IMMUTABLE-index and test-kind bugs found in the

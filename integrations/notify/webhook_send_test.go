@@ -60,8 +60,9 @@ func TestWebhookSend_BodyFromParamsString(t *testing.T) {
 	srv, cap := newCapturingServer(t, 200, "ok")
 	res, err := executeWebhookSend(t.Context(), core.Job{
 		Params: map[string]any{
-			"url":  srv.URL,
-			"body": "hello world",
+			"url":                    srv.URL,
+			"allow_private_networks": true,
+			"body":                   "hello world",
 		},
 	}, nil)
 	if err != nil {
@@ -93,8 +94,9 @@ func TestWebhookSend_BodyFromParamsObjectAutoJSON(t *testing.T) {
 	srv, cap := newCapturingServer(t, 200, "")
 	res, _ := executeWebhookSend(t.Context(), core.Job{
 		Params: map[string]any{
-			"url":          srv.URL,
-			"content_type": "text/plain", // intentionally wrong for an object
+			"url":                    srv.URL,
+			"allow_private_networks": true,
+			"content_type":           "text/plain", // intentionally wrong for an object
 			"body": map[string]any{
 				"text":    "Pipeline finished",
 				"channel": "#data-ops",
@@ -121,8 +123,9 @@ func TestWebhookSend_BodyFromInputPortWinsOverParams(t *testing.T) {
 	srv, cap := newCapturingServer(t, 200, "")
 	res, _ := executeWebhookSend(t.Context(), core.Job{
 		Params: map[string]any{
-			"url":  srv.URL,
-			"body": "from-params",
+			"url":                    srv.URL,
+			"allow_private_networks": true,
+			"body":                   "from-params",
 		},
 		Input: map[string]core.Ref{
 			"body": {Inline: "from-input"},
@@ -141,7 +144,7 @@ func TestWebhookSend_BodyFromInputPortObject(t *testing.T) {
 	// node rather than params.
 	srv, cap := newCapturingServer(t, 200, "")
 	res, _ := executeWebhookSend(t.Context(), core.Job{
-		Params: map[string]any{"url": srv.URL},
+		Params: map[string]any{"url": srv.URL, "allow_private_networks": true},
 		Input: map[string]core.Ref{
 			"body": {Inline: map[string]any{"alert": "high"}},
 		},
@@ -162,8 +165,9 @@ func TestWebhookSend_CustomHeaders(t *testing.T) {
 	srv, cap := newCapturingServer(t, 200, "")
 	res, _ := executeWebhookSend(t.Context(), core.Job{
 		Params: map[string]any{
-			"url":  srv.URL,
-			"body": "x",
+			"url":                    srv.URL,
+			"allow_private_networks": true,
+			"body":                   "x",
 			"headers": map[string]any{
 				"Authorization":  "Bearer abc123",
 				"X-Pipeline-Run": "run-42",
@@ -188,9 +192,10 @@ func TestWebhookSend_PUTAndPATCH(t *testing.T) {
 			srv, cap := newCapturingServer(t, 200, "")
 			res, _ := executeWebhookSend(t.Context(), core.Job{
 				Params: map[string]any{
-					"url":    srv.URL,
-					"method": method,
-					"body":   "x",
+					"url":                    srv.URL,
+					"allow_private_networks": true,
+					"method":                 method,
+					"body":                   "x",
 				},
 			}, nil)
 			if res.Status != core.StatusOK {
@@ -227,8 +232,9 @@ func TestWebhookSend_NonSuccessStatusSurfacesAsError(t *testing.T) {
 	srv, _ := newCapturingServer(t, 400, "invalid_payload: missing 'text' field")
 	res, _ := executeWebhookSend(t.Context(), core.Job{
 		Params: map[string]any{
-			"url":  srv.URL,
-			"body": "{}",
+			"url":                    srv.URL,
+			"allow_private_networks": true,
+			"body":                   "{}",
 		},
 	}, nil)
 	if res.Status != core.StatusError || res.Error.Code != "webhook_error" {
@@ -245,7 +251,7 @@ func TestWebhookSend_NonSuccessStatusSurfacesAsError(t *testing.T) {
 func TestWebhookSend_5xxSurfacesAsError(t *testing.T) {
 	srv, _ := newCapturingServer(t, 503, "")
 	res, _ := executeWebhookSend(t.Context(), core.Job{
-		Params: map[string]any{"url": srv.URL, "body": "x"},
+		Params: map[string]any{"url": srv.URL, "body": "x", "allow_private_networks": true},
 	}, nil)
 	if res.Status != core.StatusError || res.Error.Code != "webhook_error" {
 		t.Errorf("status=%q code=%q, want webhook_error", res.Status, res.Error.Code)
@@ -254,14 +260,28 @@ func TestWebhookSend_5xxSurfacesAsError(t *testing.T) {
 
 func TestWebhookSend_NetworkError(t *testing.T) {
 	// Localhost on a port nothing's listening on → connection refused.
+	// allow_private_networks bypasses the SSRF guard so the dial is
+	// actually attempted (and fails), exercising the send_failed path.
 	res, _ := executeWebhookSend(t.Context(), core.Job{
 		Params: map[string]any{
-			"url":  "http://127.0.0.1:1/webhook",
-			"body": "x",
+			"url":                    "http://127.0.0.1:1/webhook",
+			"body":                   "x",
+			"allow_private_networks": true,
 		},
 	}, nil)
 	if res.Status != core.StatusError || res.Error.Code != "send_failed" {
 		t.Errorf("status=%q code=%q, want send_failed", res.Status, res.Error.Code)
+	}
+}
+
+func TestWebhookSend_SSRFBlockedByDefault(t *testing.T) {
+	// Without allow_private_networks, a loopback/metadata target is
+	// blocked before any dial.
+	res, _ := executeWebhookSend(t.Context(), core.Job{
+		Params: map[string]any{"url": "http://169.254.169.254/latest/meta-data/", "body": "x"},
+	}, nil)
+	if res.Status != core.StatusError || res.Error.Code != "ssrf_blocked" {
+		t.Errorf("status=%q code=%q, want ssrf_blocked", res.Status, res.Error.Code)
 	}
 }
 
@@ -274,9 +294,10 @@ func TestWebhookSend_Timeout(t *testing.T) {
 	t.Cleanup(srv.Close)
 	res, _ := executeWebhookSend(t.Context(), core.Job{
 		Params: map[string]any{
-			"url":        srv.URL,
-			"body":       "x",
-			"timeout_ms": 50,
+			"url":                    srv.URL,
+			"allow_private_networks": true,
+			"body":                   "x",
+			"timeout_ms":             50,
 		},
 	}, nil)
 	if res.Status != core.StatusError || res.Error.Code != "send_failed" {
@@ -298,7 +319,7 @@ func TestWebhookSend_EmptyBodyAllowed(t *testing.T) {
 	// acknowledge links, hook-driven workflows). Empty must work.
 	srv, cap := newCapturingServer(t, 200, "")
 	res, _ := executeWebhookSend(t.Context(), core.Job{
-		Params: map[string]any{"url": srv.URL},
+		Params: map[string]any{"url": srv.URL, "allow_private_networks": true},
 	}, nil)
 	if res.Status != core.StatusOK {
 		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
@@ -319,8 +340,9 @@ func TestWebhookSend_MetaOutput(t *testing.T) {
 	srv, _ := newCapturingServer(t, 200, "ack-12345")
 	res, _ := executeWebhookSend(t.Context(), core.Job{
 		Params: map[string]any{
-			"url":  srv.URL,
-			"body": "payload",
+			"url":                    srv.URL,
+			"allow_private_networks": true,
+			"body":                   "payload",
 		},
 	}, nil)
 	if res.Status != core.StatusOK {
@@ -347,7 +369,7 @@ func TestWebhookSend_LargeResponseTruncated(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	res, _ := executeWebhookSend(t.Context(), core.Job{
-		Params: map[string]any{"url": srv.URL, "body": "x"},
+		Params: map[string]any{"url": srv.URL, "body": "x", "allow_private_networks": true},
 	}, nil)
 	if res.Status != core.StatusOK {
 		t.Fatalf("status=%q err=%+v", res.Status, res.Error)

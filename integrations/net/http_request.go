@@ -82,6 +82,11 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 	if strings.TrimSpace(url) == "" {
 		return params.Err(job, "bad_param", "url is required"), nil
 	}
+	// Operator egress allowlist (above the IP-level SSRF guard). No-op
+	// when no allowlist is configured.
+	if err := egressAllowed(url); err != nil {
+		return params.Err(job, "egress_blocked", err.Error()), nil
+	}
 
 	method := params.StringDefault(job.Params, "method", "GET")
 	method = strings.ToUpper(method)
@@ -228,6 +233,20 @@ func flattenHeaders(h http.Header) map[string]string {
 	}
 	return out
 }
+
+// SafeHTTPClient returns an http.Client whose dialer blocks
+// private/loopback/link-local destinations (the SSRF guard) unless
+// allowPrivate is true. Exported so other drops that dial
+// user-influenced URLs (notify/webhook_send) get the same protection
+// instead of a bare http.Client. SSRF rejections surface as a dial
+// error whose message contains "ssrf_blocked" (see IsSSRFError).
+func SafeHTTPClient(timeout time.Duration, allowPrivate bool) *http.Client {
+	return buildClient(timeout, allowPrivate)
+}
+
+// IsSSRFError reports whether a client.Do error came from the SSRF
+// dial guard, so callers can map it to a friendly error code.
+func IsSSRFError(err error) bool { return isSSRFError(err) }
 
 // buildClient configures the http.Client with the SSRF guard installed
 // at dial time. The Control hook fires on each TCP connection attempt

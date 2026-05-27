@@ -135,6 +135,33 @@ func TestHTTPGateway_ReadyzFailingCheck503(t *testing.T) {
 
 var errReadyTest = errors.New("dep down")
 
+func TestHTTPGateway_RequestIsHTTPS(t *testing.T) {
+	h := newGatewayHarness(t)
+	mk := func(xfp string) *http.Request {
+		r := httptest.NewRequest("GET", "/x", nil)
+		if xfp != "" {
+			r.Header.Set("X-Forwarded-Proto", xfp)
+		}
+		return r // httptest requests have r.TLS == nil
+	}
+	// TrustProxyHeaders off: forwarded-proto is ignored.
+	h.gw.TrustProxyHeaders = false
+	if h.gw.requestIsHTTPS(mk("https")) {
+		t.Error("must NOT trust X-Forwarded-Proto when TrustProxyHeaders is off")
+	}
+	// On: forwarded https counts as secure; http (or absent) doesn't.
+	h.gw.TrustProxyHeaders = true
+	if !h.gw.requestIsHTTPS(mk("https")) {
+		t.Error("should treat X-Forwarded-Proto:https as secure when trusted")
+	}
+	if h.gw.requestIsHTTPS(mk("http")) {
+		t.Error("X-Forwarded-Proto:http is not secure")
+	}
+	if h.gw.requestIsHTTPS(mk("")) {
+		t.Error("absent X-Forwarded-Proto is not secure")
+	}
+}
+
 func TestHTTPGateway_RejectsMissingBearer(t *testing.T) {
 	h := newGatewayHarness(t)
 	req := httptest.NewRequest("GET", "/api/v1/modules", nil)

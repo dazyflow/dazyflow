@@ -1736,6 +1736,27 @@
   border-color: var(--accent);
   box-shadow: var(--glow-accent-hover);
 }
+/* Lint warning: amber border + a triangle badge in the top-right.
+   Selected/status borders still win (more specific or later), so a
+   flagged node the user is editing reads as selected, not just warned. */
+.hz-node.lint-warn {
+  border-color: var(--status-warning);
+}
+.hz-node-lint {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--status-warning);
+  color: #1b1300;
+  border: 1px solid var(--surface);
+  z-index: 2;
+}
 /* Per-status border/glow on the whole node. Running pulses so it's
    unmistakable mid-canvas; terminal states stay static. Selected wins
    over status for border color so the user can still tell what's
