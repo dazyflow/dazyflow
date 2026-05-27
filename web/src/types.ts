@@ -23,6 +23,13 @@ export type GraphTrigger = {
   type: string;
   cron?: string;
   secret?: string;
+  // public_form opts a webhook trigger into a hosted intake form at
+  // /form/<tenant>/<workspace>/<id> that visitors submit without any
+  // bearer token. form_fields names the fields (defaults to
+  // name/email/message); form_title overrides the page heading.
+  public_form?: boolean;
+  form_fields?: string[];
+  form_title?: string;
 };
 
 export type Visibility = "org" | "private";
@@ -34,6 +41,16 @@ export type Visibility = "org" | "private";
 export type TemplateSummary = {
   id: string;
   title: string;
+  // use_case is the plain-language, customer-facing one-liner shown as
+  // the card's primary copy ("Get a Slack message when someone fills in
+  // your form"). description is the original technical summary, now
+  // demoted behind the "show technical details" toggle. Older index
+  // entries without use_case fall back to description.
+  use_case?: string;
+  // category groups cards under a heading on the gallery page
+  // ("Get notified", "Scheduled reports", …). Ungrouped entries land
+  // under a catch-all bucket.
+  category?: string;
   description: string;
   icon?: string;
   tags?: string[];
@@ -117,6 +134,10 @@ export type JSONSchema = {
   title?: string;
   description?: string;
   default?: unknown;
+  // examples drives a plain-language "Example: …" hint under the field.
+  // Optional; manifests that supply one give non-technical users a
+  // concrete sample to copy instead of guessing the format.
+  examples?: unknown[];
   enum?: unknown[];
   // string
   minLength?: number;
@@ -157,6 +178,10 @@ export type WhoAmI = {
   workspace: string;
   roles: { name: string; permissions: Permission[] }[];
   permissions: Permission[];
+  // public_base_url is the daemon's externally-reachable origin (from
+  // --public-base-url). Used to build correct webhook/hosted-form URLs.
+  // Empty when unset — the UI falls back to a localhost hint.
+  public_base_url?: string;
 };
 
 export type JobStatus =

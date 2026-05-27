@@ -79,6 +79,16 @@
     "inTenant": " i tenant <0>{{tenant}}</0>",
     "continueTitle": "Fortsätt där du slutade",
     "intro": "Så, vad bygger vi idag?",
+    "goalsTitle": "Vad vill du automatisera?",
+    "goalNotifyTitle": "Få en notis när något händer",
+    "goalNotifyDesc": "Ett nytt formulärsvar, mejl eller rad → ett Slack-meddelande.",
+    "goalReportTitle": "Skicka en rapport på schema",
+    "goalReportDesc": "Dagliga eller veckovisa siffror och sammanfattningar, postade eller mejlade automatiskt.",
+    "goalDataTitle": "Flytta eller organisera mina data",
+    "goalDataDesc": "Synka kalkylark, spara mejl och håll databaser uppdaterade.",
+    "goalDevTitle": "Utvecklarflöden",
+    "goalDevDesc": "GitHub, Slack-triage, deploy-notiser och annat för utvecklarteam.",
+    "orExplore": "Eller utforska på egen hand:",
     "step1Title": "Ta en mall",
     "step1Body": "Färdiga flöden du kopierar med ett klick — Excel → DB, webhook → Slack, dagliga rapporter. Enklaste sättet att klicka runt och se vad som går att göra.",
     "step1Cta": "Bläddra bland mallar",
@@ -135,7 +145,40 @@
       "copyTitle": "Kopiera",
       "cronExpression": "Cron-uttryck",
       "cronNext": "Nästa:",
-      "cronHelp": "Cron med 5 fält: minut timme dag-i-månaden månad veckodag. Exempel: <0> 0 9 * * 1-5</0> = 09:00 på vardagar."
+      "cronHelp": "Cron med 5 fält: minut timme dag-i-månaden månad veckodag. Exempel: <0> 0 9 * * 1-5</0> = 09:00 på vardagar.",
+      "recipes": {
+        "title": "Hur kopplar jag mitt webbformulär?",
+        "intro": "Ditt formulär behöver skicka varje svar till adressen nedan, med headern som visar att anropet är tillåtet. De flesta formulärverktyg kan inte lägga till den headern själva, så den enklaste universella vägen är en no-code-brygga som Zapier eller Make.",
+        "urlLabel": "Webhook-adress",
+        "headerLabel": "Header att lägga till",
+        "zapier": {
+          "title": "Zapier eller Make (fungerar med alla formulär — rekommenderas)",
+          "body": "Använd ditt formulär som trigger-steg (t.ex. \"New response in Google Forms\"). Lägg sedan till en action: i Zapier välj \"Webhooks → POST\", i Make välj \"HTTP → Make a request\". Ange URL:en ovan, metod POST, lägg till headern ovan och mappa formulärfälten till request-bodyn."
+        },
+        "typeform": {
+          "title": "Typeform (direkt)",
+          "body": "I formuläret: Connect → Webhooks → Add a webhook, och klistra in adressen ovan. Att lägga till Authorization-headern kräver ett betalt Typeform-konto; på gratisplanen, använd Zapier/Make-vägen istället."
+        },
+        "google": {
+          "title": "Google Forms",
+          "body": "Enklast via Zapier/Make med triggern \"New response\". Om du är bekväm med det: Extensions → Apps Script, och använd UrlFetchApp för att göra en POST till adressen ovan med headern."
+        },
+        "squarespace": {
+          "title": "Squarespace / Wix",
+          "body": "Dessa skickar inga webhooks själva. Koppla dem via Zapier eller Make (ovan) med deras trigger för nytt formulärsvar."
+        },
+        "note": "Obs: adressen fungerar bara så länge daemonen går att nå på den värden. När du går live, byt ut localhost mot din publika URL.",
+        "fullGuide": "Öppna hela guiden ↗"
+      },
+      "form": {
+        "enable": "Hosta ett formulär åt mig (ingen webbplats behövs)",
+        "enableDesc": "Slår på ett färdigt webbformulär som vem som helst kan fylla i via en länk — ingen Authorization-header, ingen curl, inget formulärverktyg krävs. Inskickade svar kör det här flödet.",
+        "urlLabel": "Formulärlänk",
+        "fieldsLabel": "Formulärfält",
+        "fieldsDesc": "Kommaseparerade fältnamn. Lämna tomt för standard: name, email, message. Ett fält som heter \"message\" blir en stor textruta.",
+        "titleLabel": "Formulärrubrik",
+        "preview": "Öppna formuläret ↗"
+      }
     },
     "notifications": {
       "help": "Få en notifiering när en körning av det här flödet misslyckas. Daemonen POSTar en JSON-payload till webhook-URL:en — fungerar med Slacks incoming-webhook-URL:er, Discord, Teams, PagerDuty events API eller valfri egen mottagare.",
@@ -172,7 +215,12 @@
     "forking": "Kopierar…",
     "notSignedIn": "Inte inloggad.",
     "forkFailed": "Kunde inte kopiera \"{{title}}\": {{error}}",
-    "integrationsUsed": "integrationer som används"
+    "integrationsUsed": "integrationer som används",
+    "showTechnical": "Visa tekniska detaljer",
+    "uncategorized": "Mer",
+    "filteredBy": "Visar: {{category}}",
+    "showAll": "Visa alla mallar",
+    "noneInCategory": "Inga mallar i den här kategorin ännu."
   },
   "integrations": {
     "title": "Integrationer",
@@ -219,6 +267,8 @@
     "lede": "Det här flödet använder appar eller credentials du inte konfigurerat ännu. Lägg till dem så att körningen inte misslyckas:",
     "appsHead": "Anslut dessa appar",
     "credsHead": "Lägg till dessa credentials",
+    "slackHead": "Innan du postar till Slack",
+    "slackBody": "Bjud in Hazy Flow-appen till {{channels}} i Slack (öppna kanalen, skriv /invite @Hazy Flow). Att ansluta Slack räcker inte i sig — appen måste också vara medlem i varje kanal den postar till, annars misslyckas körningen.",
     "runAnyway": "Kör ändå",
     "connect": "Gå till Anslutningar"
   },
@@ -489,7 +539,13 @@
     "accountChoose": "(välj ett anslutet konto)",
     "accountNotConnected": "{{account}} (ej ansluten)",
     "accountConnect": "Anslut ett konto",
-    "accountConnectAnother": "Anslut ett till"
+    "accountConnectAnother": "Anslut ett till",
+    "example": "Exempel: {{value}}",
+    "refTitle": "Det här fältet fylls i automatiskt när flödet körs:",
+    "refCredential": "{{name}} — en credential du sparar under Connections",
+    "refUpstream": "{{ref}} — utdata från ett tidigare steg i flödet",
+    "refTrigger": "{{ref}} — data från det som startade flödet (t.ex. formulärsvaret)",
+    "refGeneric": "{{ref}} — fylls i automatiskt när flödet körs"
   },
   "inspector": {
     "title": "Inspector",
@@ -532,6 +588,9 @@
     "lockedRun": "Låst — körning {{runID}} pågår",
     "run": "Kör",
     "running": "Kör…",
+    "testEvent": "Skicka testhändelse",
+    "sending": "Skickar…",
+    "testEventTooltip": "Kör flödet med ett exempelsvar för att kontrollera att det fungerar hela vägen",
     "saveFirst": "Spara först",
     "alreadyRunning": "Kör redan ({{runID}})",
     "missingRunPerm": "Saknar graph:run",

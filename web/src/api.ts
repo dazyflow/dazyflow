@@ -176,6 +176,23 @@ export const api = {
       "POST",
       `/graphs/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/${encodeURIComponent(id)}/run`,
     ),
+  // testTrigger fires a webhook flow with a synthetic JSON payload so a
+  // user can verify it end-to-end without wiring an external caller.
+  // The daemon seeds webhook_input nodes with `sample` exactly as a real
+  // /trigger hit would, and returns a run_id to subscribe to.
+  testTrigger: (
+    token: string,
+    tenant: string,
+    workspace: string,
+    id: string,
+    sample: unknown,
+  ) =>
+    request<{ job_id: string }>(
+      token,
+      "POST",
+      `/graphs/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/${encodeURIComponent(id)}/test-trigger`,
+      sample,
+    ),
   // validateCron asks the daemon to parse a 5-field cron expression
   // using the SAME parser the scheduler uses, and returns the next
   // few fire times when it's valid. UI uses this to surface "bad

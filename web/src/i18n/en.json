@@ -79,6 +79,16 @@
     "inTenant": " in tenant <0>{{tenant}}</0>",
     "continueTitle": "Pick up where you left off",
     "intro": "So, what are we building today?",
+    "goalsTitle": "What would you like to automate?",
+    "goalNotifyTitle": "Get notified when something happens",
+    "goalNotifyDesc": "A new form submission, email, or entry → a Slack message.",
+    "goalReportTitle": "Send a report on a schedule",
+    "goalReportDesc": "Daily or weekly numbers and summaries, posted or emailed automatically.",
+    "goalDataTitle": "Move or organize my data",
+    "goalDataDesc": "Sync spreadsheets, save emails, and keep databases up to date.",
+    "goalDevTitle": "Developer workflows",
+    "goalDevDesc": "GitHub, Slack triage, deploy alerts and other dev-team plumbing.",
+    "orExplore": "Or explore on your own:",
     "step1Title": "Grab a template",
     "step1Body": "Working flows you can copy in one click — Excel → DB, webhook → Slack, daily reports. Easiest way to poke around and see what's possible.",
     "step1Cta": "Browse templates",
@@ -135,7 +145,40 @@
       "copyTitle": "Copy",
       "cronExpression": "Cron expression",
       "cronNext": "Next:",
-      "cronHelp": "5-field cron: minute hour day-of-month month day-of-week. Example: <0> 0 9 * * 1-5</0> = 09:00 weekdays."
+      "cronHelp": "5-field cron: minute hour day-of-month month day-of-week. Example: <0> 0 9 * * 1-5</0> = 09:00 weekdays.",
+      "recipes": {
+        "title": "How do I connect my website form?",
+        "intro": "Your form needs to send each submission to the address below, with the header that proves it's allowed. Most form tools can't add that header on their own, so the easiest universal route is a no-code bridge like Zapier or Make.",
+        "urlLabel": "Webhook address",
+        "headerLabel": "Header to add",
+        "zapier": {
+          "title": "Zapier or Make (works with any form — recommended)",
+          "body": "Use your form as the trigger step (e.g. \"New response in Google Forms\"). Then add an action: in Zapier pick \"Webhooks → POST\", in Make pick \"HTTP → Make a request\". Set the URL above, method POST, add the header above, and map your form fields into the request body."
+        },
+        "typeform": {
+          "title": "Typeform (direct)",
+          "body": "In your form: Connect → Webhooks → Add a webhook, and paste the address above. Adding the Authorization header needs a paid Typeform plan; on a free plan, use the Zapier/Make route instead."
+        },
+        "google": {
+          "title": "Google Forms",
+          "body": "Easiest via Zapier/Make using the \"New response\" trigger. If you're comfortable: Extensions → Apps Script, and use UrlFetchApp to POST to the address above with the header."
+        },
+        "squarespace": {
+          "title": "Squarespace / Wix",
+          "body": "These don't send webhooks on their own. Connect them through Zapier or Make (above) using their \"new form submission\" trigger."
+        },
+        "note": "Heads up: the address only works while the daemon is reachable at that host. When you go live, replace localhost with your public URL.",
+        "fullGuide": "Open the full guide ↗"
+      },
+      "form": {
+        "enable": "Host a form for me (no website needed)",
+        "enableDesc": "Turns on a ready-made web form anyone can fill in from a link — no Authorization header, no curl, no form tool required. Submissions run this flow.",
+        "urlLabel": "Form link",
+        "fieldsLabel": "Form fields",
+        "fieldsDesc": "Comma-separated field names. Leave blank for the default: name, email, message. A field called \"message\" becomes a large text box.",
+        "titleLabel": "Form heading",
+        "preview": "Open the form ↗"
+      }
     },
     "notifications": {
       "help": "Get pinged when a run of this flow fails. The daemon POSTs a JSON payload to the webhook URL — works with Slack incoming-webhook URLs, Discord, Teams, PagerDuty events API, or any custom receiver.",
@@ -172,7 +215,12 @@
     "forking": "Forking…",
     "notSignedIn": "Not signed in.",
     "forkFailed": "Couldn't fork \"{{title}}\": {{error}}",
-    "integrationsUsed": "integrations used"
+    "integrationsUsed": "integrations used",
+    "showTechnical": "Show technical details",
+    "uncategorized": "More",
+    "filteredBy": "Showing: {{category}}",
+    "showAll": "Show all templates",
+    "noneInCategory": "No templates in this category yet."
   },
   "integrations": {
     "title": "Integrations",
@@ -219,6 +267,8 @@
     "lede": "This flow uses apps or credentials you haven't set up yet. Add them so the run doesn't fail:",
     "appsHead": "Connect these apps",
     "credsHead": "Add these credentials",
+    "slackHead": "Before posting to Slack",
+    "slackBody": "Invite the Hazy Flow app to {{channels}} in Slack (open the channel, type /invite @Hazy Flow). Connecting Slack isn't enough on its own — the app also has to be a member of each channel it posts to, or the run fails.",
     "runAnyway": "Run anyway",
     "connect": "Go to Connections"
   },
@@ -489,7 +539,13 @@
     "accountChoose": "(choose a connected account)",
     "accountNotConnected": "{{account}} (not connected)",
     "accountConnect": "Connect an account",
-    "accountConnectAnother": "Connect another"
+    "accountConnectAnother": "Connect another",
+    "example": "Example: {{value}}",
+    "refTitle": "This field fills in automatically when the flow runs:",
+    "refCredential": "{{name}} — a credential you store under Connections",
+    "refUpstream": "{{ref}} — output from an earlier step in this flow",
+    "refTrigger": "{{ref}} — data from whatever started the flow (e.g. the form submission)",
+    "refGeneric": "{{ref}} — filled in automatically when the flow runs"
   },
   "inspector": {
     "title": "Inspector",
@@ -532,6 +588,9 @@
     "lockedRun": "Locked — run {{runID}} is in progress",
     "run": "Run",
     "running": "Running…",
+    "testEvent": "Send test event",
+    "sending": "Sending…",
+    "testEventTooltip": "Fire this flow with a sample submission to check it works end-to-end",
     "saveFirst": "Save first",
     "alreadyRunning": "Already running ({{runID}})",
     "missingRunPerm": "Missing graph:run",

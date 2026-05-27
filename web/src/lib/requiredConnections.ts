@@ -50,6 +50,25 @@ export function requiredConnections(
   return [...missing.values()];
 }
 
+// slackChannels returns the distinct channel names a graph posts to via
+// any Slack send-message drop. Used to remind the user, in the pre-run
+// gate, to invite the Slack app to those channels — the single most
+// common "I connected Slack but the run still failed" cause, which the
+// connected-account check can't catch (the app being authorized is not
+// the same as the app being a member of the target channel).
+export function slackChannels(
+  nodes: GraphNodeLike[],
+  paramsByID: Record<string, Record<string, unknown>>,
+): string[] {
+  const out = new Set<string>();
+  for (const n of nodes) {
+    if (!n.data.moduleID.startsWith("slack")) continue;
+    const ch = paramsByID[n.id]?.channel;
+    if (typeof ch === "string" && ch.trim() !== "") out.add(ch.trim());
+  }
+  return [...out].sort();
+}
+
 // TENANT_REF matches a ${tenant:NAME} secret reference. NAME is anything
 // up to the closing brace — the daemon's tenant:// secret-store scheme.
 const TENANT_REF = /\$\{tenant:([^}]+)\}/g;

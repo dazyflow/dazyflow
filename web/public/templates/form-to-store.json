@@ -1,0 +1,29 @@
+{
+  "id": "form-to-store",
+  "version": "1",
+  "name": "Contact form → saved list",
+  "description": "Hosted form submissions saved to the built-in store.",
+  "icon": "database",
+  "triggers": [
+    {"type": "webhook", "secret": "", "public_form": true, "form_fields": ["name", "email", "message"], "form_title": "Get in touch"}
+  ],
+  "nodes": [
+    {
+      "id": "trigger",
+      "module": "webhook_input",
+      "params": {},
+      "position": {"x": 100, "y": 200}
+    },
+    {
+      "id": "save",
+      "module": "builtin_store_append",
+      "params": {
+        "table": "leads"
+      },
+      "position": {"x": 450, "y": 200}
+    }
+  ],
+  "edges": [
+    {"from": "trigger", "from_port": "body", "to": "save", "to_port": "rows", "on_error": ""}
+  ]
+}

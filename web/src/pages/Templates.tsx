@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { api, APIError } from "../api";
 import { useAuth } from "../auth";
@@ -23,6 +23,11 @@ export function Templates() {
   const [templates, setTemplates] = useState<TemplateSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null); // template id currently being forked
+  const [showTech, setShowTech] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Goal-first entry from the Welcome page lands here with ?category=…
+  // so the gallery opens already narrowed to the user's intent.
+  const categoryFilter = searchParams.get("category");
 
   useEffect(() => {
     api
@@ -81,47 +86,107 @@ export function Templates() {
     );
   }
 
+  // Group cards under their category heading so a non-technical visitor
+  // can scan by intent ("Get notified", "Scheduled reports"). Order is
+  // driven by first appearance in the index file, so curation controls
+  // the layout without a hard-coded category list here. Entries with no
+  // category fall into a catch-all bucket rendered last.
+  const visible = categoryFilter
+    ? templates.filter((tpl) => tpl.category === categoryFilter)
+    : templates;
+  const groups: { category: string; items: TemplateSummary[] }[] = [];
+  for (const tpl of visible) {
+    const cat = tpl.category?.trim() || t("templates.uncategorized");
+    let g = groups.find((x) => x.category === cat);
+    if (!g) {
+      g = { category: cat, items: [] };
+      groups.push(g);
+    }
+    g.items.push(tpl);
+  }
+
   return (
     <div className="page templates-page">
       <h1>{t("templates.title")}</h1>
       <p className="page-sub">{t("templates.intro")}</p>
+      {categoryFilter && (
+        <div className="template-filter-chip">
+          <span>{t("templates.filteredBy", { category: categoryFilter })}</span>
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => {
+              searchParams.delete("category");
+              setSearchParams(searchParams, { replace: true });
+            }}
+          >
+            {t("templates.showAll")}
+          </button>
+        </div>
+      )}
+      <label className="template-tech-toggle">
+        <input
+          type="checkbox"
+          checked={showTech}
+          onChange={(e) => setShowTech(e.target.checked)}
+        />
+        {t("templates.showTechnical")}
+      </label>
       {error && <div className="card error" style={{ marginBottom: 12 }}>{error}</div>}
-      <div className="template-grid">
-        {templates.map((tpl) => {
-          const Icon = iconFor(tpl.icon);
-          return (
-            <div key={tpl.id} className="template-card">
-              <div className="template-card-head">
-                <span className="template-icon">
-                  <Icon size={18} strokeWidth={2.2} />
-                </span>
-                <h2>{tpl.title}</h2>
-              </div>
-              {tpl.integrations && tpl.integrations.length > 0 && (
-                <TemplateIntegrationRow slugs={tpl.integrations} />
-              )}
-              <p className="template-desc">{tpl.description}</p>
-              {tpl.tags && tpl.tags.length > 0 && (
-                <div className="template-tags">
-                  {tpl.tags.map((t) => (
-                    <span key={t} className="template-tag">
-                      {t}
+      {groups.length === 0 && (
+        <div className="card">
+          {t("templates.noneInCategory")}{" "}
+          <Link to="/templates">{t("templates.showAll")}</Link>
+        </div>
+      )}
+      {groups.map((group) => (
+        <section key={group.category} className="template-group">
+          <h2 className="template-group-head">{group.category}</h2>
+          <div className="template-grid">
+            {group.items.map((tpl) => {
+              const Icon = iconFor(tpl.icon);
+              return (
+                <div key={tpl.id} className="template-card">
+                  <div className="template-card-head">
+                    <span className="template-icon">
+                      <Icon size={18} strokeWidth={2.2} />
                     </span>
-                  ))}
+                    <h3>{tpl.title}</h3>
+                  </div>
+                  {tpl.integrations && tpl.integrations.length > 0 && (
+                    <TemplateIntegrationRow slugs={tpl.integrations} />
+                  )}
+                  <p className="template-desc">{tpl.use_case || tpl.description}</p>
+                  {showTech && (
+                    <div className="template-tech">
+                      {tpl.use_case && (
+                        <p className="template-tech-desc">{tpl.description}</p>
+                      )}
+                      {tpl.tags && tpl.tags.length > 0 && (
+                        <div className="template-tags">
+                          {tpl.tags.map((tag) => (
+                            <span key={tag} className="template-tag">
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    className="primary template-cta"
+                    onClick={() => useTemplate(tpl)}
+                    disabled={busy !== null}
+                  >
+                    {busy === tpl.id ? t("templates.forking") : t("templates.useTemplate")}
+                  </button>
                 </div>
-              )}
-              <button
-                type="button"
-                className="primary template-cta"
-                onClick={() => useTemplate(tpl)}
-                disabled={busy !== null}
-              >
-                {busy === tpl.id ? t("templates.forking") : t("templates.useTemplate")}
-              </button>
-            </div>
-          );
-        })}
-      </div>
+              );
+            })}
+          </div>
+        </section>
+      ))}
     </div>
   );
 }

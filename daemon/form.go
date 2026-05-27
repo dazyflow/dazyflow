@@ -1,0 +1,216 @@
+package daemon
+
+import (
+	"fmt"
+	"html/template"
+	"net/http"
+	"strings"
+
+	"git.sr.ht/~klahr/hazy-flow/core"
+)
+
+// defaultFormFields is the contact-form shape a hosted form falls back
+// to when the trigger doesn't name its own fields. Covers the canonical
+// "website contact form → somewhere" use case out of the box.
+var defaultFormFields = []string{"name", "email", "message"}
+
+// handleForm serves the hosted intake form: a public page a
+// non-technical user can point people at without anyone needing a
+// bearer token or a curl command. GET renders the form; POST accepts a
+// submission and fires the flow with the field values as webhook_input
+// body. Only graphs whose webhook trigger sets public_form=true expose
+// anything here — every other path is a 404.
+//
+// This is the "first-class intake source" that closes the biggest
+// non-technical gap: the webhook /trigger endpoint needs an Authorization
+// header most form tools can't send, whereas this page needs nothing but
+// a link.
+func (w *WebhookListener) handleForm(rw http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/form/"), "/")
+	if len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
+		http.Error(rw, "expected /form/<tenant>/<workspace>/<graph-id>", http.StatusBadRequest)
+		return
+	}
+	tenant, workspace, graphID := parts[0], parts[1], parts[2]
+
+	store, err := w.svc.Workspaces.Open(tenant, workspace)
+	if err != nil {
+		http.NotFound(rw, r)
+		return
+	}
+	g, err := store.Load(graphID)
+	if err != nil {
+		http.NotFound(rw, r)
+		return
+	}
+	tr, ok := publicFormTrigger(g)
+	if !ok {
+		// Either no webhook trigger or the graph hasn't opted in. Don't
+		// reveal which — a plain 404 keeps non-public graphs invisible.
+		http.NotFound(rw, r)
+		return
+	}
+	fields := tr.FormFields
+	if len(fields) == 0 {
+		fields = defaultFormFields
+	}
+	title := tr.FormTitle
+	if title == "" {
+		title = g.Name
+	}
+	if title == "" {
+		title = g.ID
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		renderForm(rw, formView{Title: title, Fields: fields, Submitted: false})
+	case http.MethodPost:
+		if err := r.ParseForm(); err != nil {
+			http.Error(rw, "could not read form", http.StatusBadRequest)
+			return
+		}
+		// Collect declared fields only — ignore anything extra a client
+		// might tack on, so the seed shape is predictable.
+		values := make(map[string]any, len(fields))
+		for _, f := range fields {
+			values[f] = r.PostFormValue(f)
+		}
+		seed := buildFormSeed(values)
+		seeds := map[string]core.Result{}
+		for _, n := range g.Nodes {
+			if n.Module == webhookInputModuleID {
+				seeds[n.ID] = seed
+			}
+		}
+		if len(seeds) == 0 {
+			http.Error(rw, "this form's flow has no webhook step to receive it", http.StatusBadRequest)
+			return
+		}
+		principal := core.Principal{
+			Subject:   "hazyflow-form",
+			Tenant:    g.Tenant,
+			Workspace: g.Workspace,
+			Roles: []core.Role{{
+				Name:        "form",
+				Permissions: []core.Permission{core.PermGraphRun, core.PermGraphAdmin},
+			}},
+		}
+		runID, err := w.svc.SubmitGraphWithSeed(r.Context(), principal, g, seeds)
+		if err != nil {
+			w.logger.Printf("form submit %s/%s/%s: %v", tenant, workspace, graphID, err)
+			http.Error(rw, "could not submit the form", http.StatusInternalServerError)
+			return
+		}
+		w.logger.Printf("form %s/%s/%s → %s", tenant, workspace, graphID, runID)
+		renderForm(rw, formView{Title: title, Submitted: true})
+	default:
+		http.Error(rw, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// publicFormTrigger returns the graph's webhook trigger when it has
+// opted into the hosted form, else ok=false.
+func publicFormTrigger(g core.Graph) (core.GraphTrigger, bool) {
+	for _, t := range g.Triggers {
+		if t.Type == "webhook" && t.PublicForm {
+			return t, true
+		}
+	}
+	return core.GraphTrigger{}, false
+}
+
+// buildFormSeed mirrors buildWebhookSeed's output shape (body + headers
+// ports) but takes an already-parsed field map, so webhook_input
+// downstream sees the same {key: value} object it would from a JSON
+// webhook POST — i.e. ${trigger.body.email} works identically whether
+// the data arrived via the hosted form or a real webhook.
+func buildFormSeed(values map[string]any) core.Result {
+	return core.Result{
+		Status: core.StatusOK,
+		Output: map[string]core.Ref{
+			"body":    {MIME: "application/json", Inline: values},
+			"headers": {MIME: "application/json", Inline: map[string]any{}},
+		},
+	}
+}
+
+type formView struct {
+	Title     string
+	Fields    []string
+	Submitted bool
+}
+
+// humanizeField turns a field key ("first_name") into a label
+// ("First name") for the form. Mirrors the frontend's humanize so the
+// hosted form reads like the rest of the product.
+func humanizeField(s string) string {
+	s = strings.ReplaceAll(strings.ReplaceAll(s, "_", " "), "-", " ")
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+func renderForm(rw http.ResponseWriter, v formView) {
+	rw.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := formTemplate.Execute(rw, v); err != nil {
+		// Headers may already be written; nothing useful to do but log
+		// via the default logger and bail.
+		fmt.Fprintf(rw, "<!-- render error: %v -->", err)
+	}
+}
+
+// formTemplate is a self-contained, dependency-free HTML page. html/template
+// escapes every interpolation, so field names and titles can't inject
+// markup. "message" (and any field whose name contains "message") gets a
+// textarea; everything else a single-line input, with email/name getting
+// the matching input type for nicer mobile keyboards.
+var formTemplate = template.Must(template.New("form").Funcs(template.FuncMap{
+	"label":     humanizeField,
+	"inputType": formInputType,
+	"isArea":    func(f string) bool { return strings.Contains(strings.ToLower(f), "message") },
+}).Parse(`<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}}</title>
+<style>
+:root{color-scheme:light dark}
+body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;max-width:480px;margin:0 auto;padding:48px 20px;color:#1a1730;background:#fbfaff}
+@media(prefers-color-scheme:dark){body{color:#e6e2f5;background:#0f0d1c}input,textarea{background:#1c1930;color:#e6e2f5;border-color:#332d52}}
+h1{font-size:22px}
+label{display:block;margin:16px 0 4px;font-weight:600;font-size:14px}
+input,textarea{width:100%;padding:10px 12px;border:1px solid #cfc7ea;border-radius:8px;font:inherit;box-sizing:border-box}
+textarea{min-height:120px;resize:vertical}
+button{margin-top:20px;padding:11px 18px;border:0;border-radius:8px;background:#6d5dff;color:#fff;font:inherit;font-weight:600;cursor:pointer}
+button:hover{background:#5a49e6}
+.done{padding:16px 18px;border-radius:8px;background:rgba(109,93,255,.1);border:1px solid rgba(109,93,255,.35)}
+</style></head><body>
+<h1>{{.Title}}</h1>
+{{if .Submitted}}
+<div class="done"><strong>Thanks!</strong> Your submission was received.</div>
+{{else}}
+<form method="post">
+{{range .Fields}}
+<label for="{{.}}">{{label .}}</label>
+{{if isArea .}}<textarea id="{{.}}" name="{{.}}"></textarea>{{else}}<input id="{{.}}" name="{{.}}" type="{{inputType .}}">{{end}}
+{{end}}
+<button type="submit">Submit</button>
+</form>
+{{end}}
+</body></html>`))
+
+// formInputType picks an HTML input type from the field name so phones
+// surface the right keyboard. Best-effort and purely cosmetic.
+func formInputType(field string) string {
+	switch strings.ToLower(field) {
+	case "email":
+		return "email"
+	case "phone", "tel", "telephone":
+		return "tel"
+	case "url", "website":
+		return "url"
+	default:
+		return "text"
+	}
+}

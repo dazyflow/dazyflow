@@ -155,7 +155,7 @@ function SchemaField({ name, schema, required, value, onChange, workspace, accou
       // hides anything past the right edge.
       if (schema.format === "multiline") {
         return (
-          <FieldWrap name={name} schema={schema} required={required}>
+          <FieldWrap name={name} schema={schema} required={required} value={value}>
             <textarea
               rows={4}
               value={(value as string) ?? (schema.default as string | undefined) ?? ""}
@@ -170,7 +170,7 @@ function SchemaField({ name, schema, required, value, onChange, workspace, accou
         );
       }
       return (
-        <FieldWrap name={name} schema={schema} required={required}>
+        <FieldWrap name={name} schema={schema} required={required} value={value}>
           <input
             type="text"
             value={(value as string) ?? (schema.default as string | undefined) ?? ""}
@@ -415,14 +415,25 @@ function FieldWrap({
   schema,
   required,
   stack,
+  value,
   children,
 }: {
   name: string;
   schema: JSONSchema;
   required: boolean;
   stack?: boolean;
+  // value is passed for fields that can hold a ${...} reference
+  // expression (string inputs) so we can render a plain-language
+  // explainer of what each reference pulls in. Omitted elsewhere.
+  value?: unknown;
   children: React.ReactNode;
 }) {
+  const { t } = useTranslation();
+  const example =
+    schema.examples && schema.examples.length > 0
+      ? String(schema.examples[0])
+      : undefined;
+  const refs = typeof value === "string" ? referenceHints(value, t) : [];
   return (
     <div className="sf-field">
       <div className="label-row">
@@ -433,8 +444,53 @@ function FieldWrap({
       </div>
       {stack ? <div>{children}</div> : children}
       {schema.description && <div className="desc">{schema.description}</div>}
+      {example !== undefined && (
+        <div className="desc sf-example">{t("schemaForm.example", { value: example })}</div>
+      )}
+      {refs.length > 0 && (
+        <div className="sf-ref-hint">
+          <div className="sf-ref-hint-title">{t("schemaForm.refTitle")}</div>
+          <ul>
+            {refs.map((r, i) => (
+              <li key={i}>{r}</li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
+}
+
+// referenceHints turns the ${...} placeholder syntax used in template
+// params into plain-language explanations, so a non-technical user who
+// sees "${trigger.body}" or "${tenant:postgres_dsn}" in a field
+// understands it's auto-filled — not gibberish they need to overwrite.
+// The four shapes mirror the engine's resolver: tenant: (a stored
+// credential), upstream: (output of an earlier node), trigger/webhook
+// (the event that started the run), and anything else (generic).
+function referenceHints(
+  raw: string,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const re = /\$\{([^}]+)\}/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(raw)) !== null) {
+    const ref = m[1].trim();
+    if (seen.has(ref)) continue;
+    seen.add(ref);
+    if (ref.startsWith("tenant:")) {
+      out.push(t("schemaForm.refCredential", { name: ref.slice("tenant:".length) }));
+    } else if (ref.startsWith("upstream:")) {
+      out.push(t("schemaForm.refUpstream", { ref: ref.slice("upstream:".length) }));
+    } else if (ref.startsWith("trigger") || ref.startsWith("webhook")) {
+      out.push(t("schemaForm.refTrigger", { ref }));
+    } else {
+      out.push(t("schemaForm.refGeneric", { ref }));
+    }
+  }
+  return out;
 }
 
 function humanize(key: string): string {

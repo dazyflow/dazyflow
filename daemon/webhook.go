@@ -57,6 +57,7 @@ func NewWebhookListener(svc *Service) *WebhookListener {
 func (w *WebhookListener) ServeListener(ctx context.Context, ln net.Listener) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/trigger/", w.handleTrigger)
+	mux.HandleFunc("/form/", w.handleForm)
 	mux.HandleFunc("/healthz", func(rw http.ResponseWriter, _ *http.Request) {
 		rw.WriteHeader(http.StatusOK)
 		_, _ = rw.Write([]byte("ok"))
@@ -258,4 +259,11 @@ func stripBearer(h string) string {
 // behaviour via httptest. Production code should use Serve.
 func ServeWebhookForTest(w *WebhookListener, rw http.ResponseWriter, r *http.Request) {
 	w.handleTrigger(rw, r)
+}
+
+// ServeFormForTest is the hosted-form counterpart to
+// ServeWebhookForTest — dispatches a request to the /form handler
+// without binding a real port.
+func ServeFormForTest(w *WebhookListener, rw http.ResponseWriter, r *http.Request) {
+	w.handleForm(rw, r)
 }

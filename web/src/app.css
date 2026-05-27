@@ -729,6 +729,57 @@
   color: var(--muted);
   flex-shrink: 0;
 }
+.welcome-goals {
+  margin: var(--space-4) 0 var(--space-3);
+}
+.welcome-goals-head {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: var(--space-2);
+}
+.welcome-goal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-2);
+}
+.welcome-goal {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  background: var(--surface-2);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 120ms, transform 120ms;
+}
+.welcome-goal:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+.welcome-goal-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+.welcome-goal-desc {
+  font-size: 13px;
+  color: var(--muted);
+}
+.welcome-or {
+  color: var(--muted);
+  font-size: 13px;
+  margin: var(--space-3) 0 0;
+}
+.template-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: var(--space-2);
+  font-size: 13px;
+  color: var(--muted);
+}
+
 .welcome-steps {
   list-style: none;
   padding: 0;
@@ -790,6 +841,36 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: var(--space-3);
+}
+.template-group {
+  margin-top: var(--space-4);
+}
+.template-group-head {
+  margin: 0 0 var(--space-2);
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.template-tech-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+  margin-bottom: var(--space-1);
+}
+.template-tech {
+  border-top: 1px dashed var(--border);
+  padding-top: var(--space-2);
+  margin-top: var(--space-1);
+}
+.template-tech-desc {
+  font-size: 12px;
+  color: var(--faint, var(--muted));
+  margin: 0 0 var(--space-2);
 }
 
 /* ----- Integrations index + detail ----- */
@@ -2334,6 +2415,27 @@
   border-color: var(--border-strong);
 }
 
+.sf-example {
+  font-style: italic;
+}
+.sf-ref-hint {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: var(--r-2);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  font-size: 12px;
+  color: var(--muted);
+}
+.sf-ref-hint-title {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.sf-ref-hint ul {
+  margin: 0;
+  padding-left: 16px;
+}
+
 .sf-object {
   border: 1px solid var(--border);
   border-radius: var(--r-2);
@@ -3061,6 +3163,72 @@
 }
 .curl-copy:hover {
   background: var(--surface);
+}
+
+/* "Connect your form" recipes — collapsed helper under the webhook
+   curl block. */
+.webhook-recipes {
+  margin-top: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  background: var(--surface-2);
+}
+.webhook-recipes > summary {
+  cursor: pointer;
+  padding: var(--space-2) var(--space-3);
+  font-weight: 600;
+  font-size: 13px;
+  list-style: none;
+}
+.webhook-recipes > summary::-webkit-details-marker {
+  display: none;
+}
+.webhook-recipes > summary::before {
+  content: "▸ ";
+  color: var(--muted);
+}
+.webhook-recipes[open] > summary::before {
+  content: "▾ ";
+}
+.webhook-recipes-body {
+  padding: 0 var(--space-3) var(--space-3);
+}
+.webhook-recipe-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+  flex-wrap: wrap;
+}
+.webhook-recipe-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  min-width: 110px;
+}
+.copy-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.copy-inline code {
+  font-size: 12px;
+  word-break: break-all;
+}
+.copy-inline .curl-copy {
+  position: static;
+}
+.webhook-recipe-list {
+  margin: var(--space-2) 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: 13px;
+}
+.webhook-recipe-note {
+  margin-top: var(--space-2);
+  font-style: italic;
 }
 
 /* Editor top toolbar — fixed-height bar pinned above the canvas, full

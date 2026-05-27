@@ -11,6 +11,18 @@ import { loadRecentFlow } from "../recentFlow";
 // (templates gallery, guided node-drop tutorial) becomes useful once
 // templates ship; for now this is the right surface for "you're in,
 // here's what you can do."
+// GOALS is the goal-first entry into the gallery: each card names an
+// outcome in the user's words and routes to the matching template
+// category. `category` MUST match the category strings in
+// public/templates/index.json verbatim — that's the join key the
+// Templates page filters on.
+const GOALS: { category: string; titleKey: string; descKey: string }[] = [
+  { category: "Get notified", titleKey: "welcome.goalNotifyTitle", descKey: "welcome.goalNotifyDesc" },
+  { category: "Scheduled reports", titleKey: "welcome.goalReportTitle", descKey: "welcome.goalReportDesc" },
+  { category: "Spreadsheets & data", titleKey: "welcome.goalDataTitle", descKey: "welcome.goalDataDesc" },
+  { category: "For developer teams", titleKey: "welcome.goalDevTitle", descKey: "welcome.goalDevDesc" },
+];
+
 export function Welcome() {
   const { t } = useTranslation();
   const { me } = useAuth();
@@ -56,6 +68,22 @@ export function Welcome() {
           </Link>
         )}
         <p>{t("welcome.intro")}</p>
+        <div className="welcome-goals">
+          <div className="welcome-goals-head">{t("welcome.goalsTitle")}</div>
+          <div className="welcome-goal-grid">
+            {GOALS.map((g) => (
+              <Link
+                key={g.category}
+                to={`/templates?category=${encodeURIComponent(g.category)}`}
+                className="welcome-goal"
+              >
+                <span className="welcome-goal-title">{t(g.titleKey)}</span>
+                <span className="welcome-goal-desc">{t(g.descKey)}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+        <p className="welcome-or">{t("welcome.orExplore")}</p>
         <ol className="welcome-steps">
           <li>
             <h2>{t("welcome.step1Title")}</h2>

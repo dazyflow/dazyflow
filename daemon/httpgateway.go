@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -209,6 +210,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/graphs/{tenant}/{workspace}/{id}", h.requireAuth(h.loadGraph))
 	mux.HandleFunc("PUT /api/v1/graphs/{tenant}/{workspace}/{id}", h.requireAuth(h.saveGraph))
 	mux.HandleFunc("POST /api/v1/graphs/{tenant}/{workspace}/{id}/run", h.requireAuth(h.runGraph))
+	mux.HandleFunc("POST /api/v1/graphs/{tenant}/{workspace}/{id}/test-trigger", h.requireAuth(h.testTrigger))
 	mux.HandleFunc("POST /api/v1/graphs/{tenant}/{workspace}/{id}/nodes/{nodeID}/sample", h.requireAuth(h.sampleNode))
 	mux.HandleFunc("POST /api/v1/validate/cron", h.requireAuth(h.validateCron))
 	// Slack Events API endpoint. NOT under requireAuth — Slack POSTs
@@ -614,6 +616,11 @@ func (h *HTTPGateway) whoami(rw http.ResponseWriter, _ *http.Request, p core.Pri
 		"workspace":   p.Workspace,
 		"roles":       p.Roles,
 		"permissions": perms,
+		// public_base_url lets the UI build externally-correct webhook /
+		// hosted-form URLs instead of guessing the host. Empty when the
+		// operator hasn't set --public-base-url; the UI falls back to a
+		// localhost hint in that case.
+		"public_base_url": h.svc.PublicBaseURL,
 	})
 }
 
@@ -1017,6 +1024,64 @@ func (h *HTTPGateway) runGraph(rw http.ResponseWriter, r *http.Request, p core.P
 		return
 	}
 	h.audit(r.Context(), p, "graph.run", id, "run="+runID)
+	writeJSON(rw, http.StatusAccepted, map[string]string{"job_id": runID})
+}
+
+// testTrigger runs a webhook-triggered flow with a synthetic payload so
+// a user can verify the flow end-to-end without wiring up an external
+// caller (their website form, Zapier, curl, …). The request body is the
+// sample payload; we feed it through the exact same seed-building path a
+// real /trigger hit uses (buildWebhookSeed), so webhook_input nodes
+// light up identically — closing the "Run button does nothing useful on
+// a webhook flow" gap and the documented sampleNode webhook limitation.
+//
+// Unlike the public /trigger listener (bearer-secret auth, system
+// principal), this runs under the caller's own token + graph:run, so it
+// respects normal flow visibility and shows up in the run list like any
+// other run.
+func (h *HTTPGateway) testTrigger(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	tenant := r.PathValue("tenant")
+	workspace := r.PathValue("workspace")
+	id := r.PathValue("id")
+	g, err := h.svc.LoadGraph(r.Context(), p, tenant, workspace, id, "")
+	if err != nil {
+		writeJSONError(rw, http.StatusNotFound, err.Error())
+		return
+	}
+	// Read the sample body with a cap — a synthetic test payload is
+	// small, and we don't want a stray large POST to balloon memory.
+	var rawBody []byte
+	if r.Body != nil {
+		const maxSampleBytes = 1 << 20 // 1 MiB
+		data, err := io.ReadAll(io.LimitReader(r.Body, maxSampleBytes+1))
+		_ = r.Body.Close()
+		if err != nil {
+			writeJSONError(rw, http.StatusBadRequest, "read body")
+			return
+		}
+		if int64(len(data)) > maxSampleBytes {
+			writeJSONError(rw, http.StatusRequestEntityTooLarge, "sample body too large")
+			return
+		}
+		rawBody = data
+	}
+	seed := buildWebhookSeed(rawBody, r)
+	seeds := map[string]core.Result{}
+	for _, n := range g.Nodes {
+		if n.Module == webhookInputModuleID {
+			seeds[n.ID] = seed
+		}
+	}
+	if len(seeds) == 0 {
+		writeJSONError(rw, http.StatusBadRequest, "flow has no webhook_input node to send a test event to")
+		return
+	}
+	runID, err := h.svc.SubmitGraphWithSeed(r.Context(), p, g, seeds)
+	if err != nil {
+		writeJSONError(rw, http.StatusBadRequest, err.Error())
+		return
+	}
+	h.audit(r.Context(), p, "graph.run", id, "test-trigger run="+runID)
 	writeJSON(rw, http.StatusAccepted, map[string]string{"job_id": runID})
 }
 

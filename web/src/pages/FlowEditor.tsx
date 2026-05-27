@@ -28,13 +28,14 @@ import {
   type NodeChange,
   type ReactFlowInstance,
 } from "@xyflow/react";
-import { Play, Save, Square, Sparkles, Plus } from "lucide-react";
+import { Play, Save, Square, Sparkles, Plus, Send } from "lucide-react";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import { oauthProviderDisplay } from "../integrationMeta";
 import {
   requiredConnections,
   requiredSecrets,
+  slackChannels,
   type MissingConnection,
 } from "../lib/requiredConnections";
 import type {
@@ -671,6 +672,13 @@ function EditorInner() {
     () => requiredSecrets(nodes, paramsByID, secrets),
     [nodes, paramsByID, secrets],
   );
+  // slackTargets: channels this graph posts to. Drives a pre-run
+  // reminder to invite the Slack app — orthogonal to needsSetup (Slack
+  // can be connected yet the app still absent from the channel).
+  const slackTargets = useMemo(
+    () => slackChannels(nodes, paramsByID),
+    [nodes, paramsByID],
+  );
   const needsSetup =
     missingConnections.length > 0 || missingSecrets.length > 0;
 
@@ -679,6 +687,11 @@ function EditorInner() {
   // warning and run directly.
   const doRun = async () => {
     if (!token || !me || !id) return;
+    // Acknowledge the Slack-channel reminder so subsequent runs of this
+    // flow don't re-open the gate just for it.
+    if (id && slackTargets.length > 0) {
+      localStorage.setItem(`hazyflow.slackAck.${id}`, "1");
+    }
     setGateOpen(false);
     setRunning(true);
     setError(null);
@@ -694,13 +707,54 @@ function EditorInner() {
     }
   };
 
+  // A webhook flow waits for an external POST — clicking "Run" gives its
+  // webhook_input node no body, which confuses non-technical users. When
+  // the flow is webhook-triggered we offer "Send test event" instead: it
+  // fires the flow with a synthetic sample payload so the canvas lights
+  // up exactly as a real submission would.
+  const hasWebhookTrigger =
+    triggers.some((tr) => tr.type === "webhook") &&
+    nodes.some((n) => n.data.moduleID === "webhook_input");
+
+  const doTestEvent = async () => {
+    if (!token || !me || !id) return;
+    setRunning(true);
+    setError(null);
+    try {
+      const sample = {
+        message: "Test event from Hazy Flow",
+        name: "Jane Example",
+        email: "jane@example.com",
+        submitted_at: new Date().toISOString(),
+      };
+      const { job_id } = await api.testTrigger(
+        token,
+        activeTenant,
+        activeWorkspace,
+        id,
+        sample,
+      );
+      setCurrentRunID(job_id);
+      setLockedRunID(job_id);
+      localStorage.setItem(`hazyflow.lastRun.${id}`, job_id);
+      subscribeToRun(job_id);
+    } catch (e) {
+      setError((e as Error).message);
+      setRunning(false);
+    }
+  };
+
   const runWithLiveStatus = async () => {
     if (!token || !me || !id) return;
     // Warn before a run that's missing a connected account or a
     // credential the graph needs — clearer than letting the daemon fail
     // mid-run with a "no token" / "secret not found" error. The modal
     // still offers "Run anyway" since this is a heuristic, not a rule.
-    if (needsSetup) {
+    const slackReminderPending =
+      slackTargets.length > 0 &&
+      !!id &&
+      localStorage.getItem(`hazyflow.slackAck.${id}`) !== "1";
+    if (needsSetup || slackReminderPending) {
       setGateOpen(true);
       return;
     }
@@ -806,25 +860,47 @@ function EditorInner() {
               />
             </span>
           )}
-          <button
-            className="primary"
-            onClick={runWithLiveStatus}
-            disabled={running || dirty || !hasPerm("graph:run") || !!lockedRunID}
-            title={
-              dirty
-                ? t("editor.saveFirst")
-                : lockedRunID
-                ? t("editor.alreadyRunning", { runID: lockedRunID.slice(0, 8) })
-                : hasPerm("graph:run")
-                ? t("editor.run")
-                : t("editor.missingRunPerm")
-            }
-          >
-            <Play size={14} style={{ verticalAlign: -2 }} />
-            <span className="toolbar-label" style={{ marginLeft: 6 }}>
-              {running ? t("editor.running") : t("editor.run")}
-            </span>
-          </button>
+          {hasWebhookTrigger ? (
+            <button
+              className="primary"
+              onClick={doTestEvent}
+              disabled={running || dirty || !hasPerm("graph:run") || !!lockedRunID}
+              title={
+                dirty
+                  ? t("editor.saveFirst")
+                  : lockedRunID
+                  ? t("editor.alreadyRunning", { runID: lockedRunID.slice(0, 8) })
+                  : hasPerm("graph:run")
+                  ? t("editor.testEventTooltip")
+                  : t("editor.missingRunPerm")
+              }
+            >
+              <Send size={14} style={{ verticalAlign: -2 }} />
+              <span className="toolbar-label" style={{ marginLeft: 6 }}>
+                {running ? t("editor.sending") : t("editor.testEvent")}
+              </span>
+            </button>
+          ) : (
+            <button
+              className="primary"
+              onClick={runWithLiveStatus}
+              disabled={running || dirty || !hasPerm("graph:run") || !!lockedRunID}
+              title={
+                dirty
+                  ? t("editor.saveFirst")
+                  : lockedRunID
+                  ? t("editor.alreadyRunning", { runID: lockedRunID.slice(0, 8) })
+                  : hasPerm("graph:run")
+                  ? t("editor.run")
+                  : t("editor.missingRunPerm")
+              }
+            >
+              <Play size={14} style={{ verticalAlign: -2 }} />
+              <span className="toolbar-label" style={{ marginLeft: 6 }}>
+                {running ? t("editor.running") : t("editor.run")}
+              </span>
+            </button>
+          )}
           {lockedRunID && (
             <button
               className="ghost"
@@ -1240,6 +1316,7 @@ function EditorInner() {
         <ConnectionGate
           missing={missingConnections}
           missingSecrets={missingSecrets}
+          slackChannels={slackTargets}
           onConnect={() => navigate("/connections")}
           onRunAnyway={() => void doRun()}
           onCancel={() => setGateOpen(false)}
@@ -1257,17 +1334,20 @@ function EditorInner() {
 function ConnectionGate({
   missing,
   missingSecrets,
+  slackChannels,
   onConnect,
   onRunAnyway,
   onCancel,
 }: {
   missing: MissingConnection[];
   missingSecrets: string[];
+  slackChannels: string[];
   onConnect: () => void;
   onRunAnyway: () => void;
   onCancel: () => void;
 }) {
   const { t } = useTranslation();
+  const hasSetup = missing.length > 0 || missingSecrets.length > 0;
   return (
     <div className="settings-backdrop" onClick={onCancel}>
       <div
@@ -1279,7 +1359,7 @@ function ConnectionGate({
           <h2>{t("connGate.title")}</h2>
         </div>
         <div className="settings-body">
-          <p className="conn-gate-lede">{t("connGate.lede")}</p>
+          {hasSetup && <p className="conn-gate-lede">{t("connGate.lede")}</p>}
           {missing.length > 0 && (
             <>
               <div className="conn-gate-section-head">{t("connGate.appsHead")}</div>
@@ -1304,6 +1384,14 @@ function ConnectionGate({
                 ))}
               </ul>
             </>
+          )}
+          {slackChannels.length > 0 && (
+            <div className="conn-gate-slack">
+              <div className="conn-gate-section-head">{t("connGate.slackHead")}</div>
+              <p className="desc">
+                {t("connGate.slackBody", { channels: slackChannels.join(", ") })}
+              </p>
+            </div>
           )}
         </div>
         <div className="settings-foot">

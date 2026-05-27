@@ -137,6 +137,20 @@ type GraphTrigger struct {
 	Cron            string `json:"cron,omitempty"`             // for type=cron
 	Secret          string `json:"secret,omitempty"`           // for type=webhook (compared against Authorization header)
 	IntervalSeconds int    `json:"interval_seconds,omitempty"` // for type=poll; must be > 0
+	// PublicForm, on a webhook trigger, opts the graph into a hosted
+	// intake form at /form/<tenant>/<workspace>/<id>. Visitors submit
+	// without any bearer token — possession of the URL is the
+	// capability — so this is strictly opt-in. Off by default: a normal
+	// webhook trigger exposes no public page.
+	PublicForm bool `json:"public_form,omitempty"`
+	// FormFields names the fields the hosted form renders, in order.
+	// Empty falls back to a sensible contact-form default
+	// (name/email/message). Field names become the keys of the JSON
+	// object delivered to webhook_input's body port.
+	FormFields []string `json:"form_fields,omitempty"`
+	// FormTitle is the heading shown on the hosted form. Empty falls
+	// back to the graph's display name.
+	FormTitle string `json:"form_title,omitempty"`
 }
 
 // FailureNotify configures where the daemon sends a notification

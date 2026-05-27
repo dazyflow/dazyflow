@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Connect your website form — Hazy Flow</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        line-height: 1.6;
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 40px 20px 80px;
+        color: #1a1730;
+        background: #fbfaff;
+      }
+      @media (prefers-color-scheme: dark) {
+        body { color: #e6e2f5; background: #0f0d1c; }
+        code, pre { background: #1c1930 !important; }
+        a { color: #b9a9ff; }
+      }
+      h1 { font-size: 26px; }
+      h2 { font-size: 18px; margin-top: 32px; }
+      code { background: #efe9ff; padding: 2px 5px; border-radius: 4px; font-size: 90%; }
+      pre { background: #efe9ff; padding: 12px 14px; border-radius: 8px; overflow-x: auto; }
+      ol li { margin: 6px 0; }
+      .note { border-left: 3px solid #8a78ff; padding: 8px 14px; background: rgba(138,120,255,0.08); border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <h1>Connect your website form to a flow</h1>
+    <p>
+      A webhook-triggered flow waits for your form to send it each new
+      submission. Your form needs two things: the flow's <strong>webhook
+      address</strong> and an <strong>authorization header</strong> that
+      proves the request is allowed. You'll find both in your flow under
+      <em>Settings → Triggers</em>.
+    </p>
+
+    <h2>The easiest route: Zapier or Make (works with any form)</h2>
+    <p>
+      Most form tools (Google Forms, Squarespace, Wix) can't attach a
+      custom header on their own. A no-code bridge solves this in a few
+      clicks and works with virtually every form:
+    </p>
+    <ol>
+      <li>In Zapier or Make, create a new automation (a "Zap" / "Scenario").</li>
+      <li>Pick your form as the <strong>trigger</strong> step — e.g. "New response in Google Forms", "New entry in Typeform".</li>
+      <li>
+        Add an <strong>action</strong> step:
+        in Zapier choose <em>Webhooks by Zapier → POST</em>;
+        in Make choose <em>HTTP → Make a request</em>.
+      </li>
+      <li>Set the URL to your flow's <strong>webhook address</strong>, and the method to <code>POST</code>.</li>
+      <li>Add a header named <code>Authorization</code> with the value <code>Bearer &lt;your secret&gt;</code> (copy it from the Triggers panel).</li>
+      <li>Map your form fields into the request body.</li>
+      <li>Turn the automation on, then submit your form once to test it.</li>
+    </ol>
+
+    <h2>Typeform (direct)</h2>
+    <p>
+      Typeform can call a webhook itself: open your form →
+      <em>Connect → Webhooks → Add a webhook</em>, and paste the webhook
+      address. Adding the <code>Authorization</code> header requires a
+      paid Typeform plan; on a free plan, use the Zapier/Make route above.
+    </p>
+
+    <h2>Google Forms</h2>
+    <p>
+      Easiest via Zapier/Make using the "New response" trigger. If you're
+      comfortable with a little scripting: in your form's spreadsheet,
+      open <em>Extensions → Apps Script</em> and use
+      <code>UrlFetchApp.fetch</code> to POST to the webhook address with
+      the header.
+    </p>
+
+    <h2>Squarespace / Wix</h2>
+    <p>
+      These don't send webhooks on their own. Connect them through
+      Zapier or Make using their "new form submission" trigger.
+    </p>
+
+    <h2>Test it before you rely on it</h2>
+    <p>
+      In the flow editor, use <strong>Send test event</strong> to fire the
+      flow with a sample submission and watch each step light up — no need
+      to submit your real form while you're still setting things up.
+    </p>
+
+    <div class="note">
+      <strong>Going live:</strong> the webhook address points at wherever
+      the daemon is reachable. While testing locally that's
+      <code>localhost</code>; replace it with your public URL before you
+      point a real form at it.
+    </div>
+  </body>
+</html>

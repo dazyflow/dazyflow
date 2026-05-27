@@ -341,6 +341,8 @@ function TriggerRow({
   onRemove: () => void;
 }) {
   const { t } = useTranslation();
+  const { me } = useAuth();
+  const baseURL = me?.public_base_url || "";
   return (
     <div className="trigger-row">
       <div className="trigger-head">
@@ -387,7 +389,7 @@ function TriggerRow({
               <label>{t("settings.triggers.curlLabel")}</label>
             </div>
             <CurlBlock
-              command={buildCurl(graph, trigger.secret ?? "")}
+              command={buildCurl(graph, trigger.secret ?? "", baseURL)}
             />
             <div className="desc">
               <Trans
@@ -396,6 +398,8 @@ function TriggerRow({
               />
             </div>
           </div>
+          <WebhookRecipes graph={graph} secret={trigger.secret ?? ""} baseURL={baseURL} />
+          <HostedForm graph={graph} trigger={trigger} onChange={onChange} baseURL={baseURL} />
         </div>
       )}
       {trigger.type === "cron" && (
@@ -429,9 +433,13 @@ function randomHex(bytes: number): string {
 // string — drops like slack_send_message that take a string on their
 // 'body' port can be wired directly without a transform. For JSON
 // payloads, see the note under the curl block.
-function buildCurl(graph: Graph, secret: string): string {
-  const host = "http://localhost:8089";
-  const url = `${host}/trigger/${graph.tenant}/${graph.workspace}/${graph.id}`;
+// webhookHostFallback is shown only when the daemon has no
+// --public-base-url configured (dev). Once set, whoami surfaces the
+// real origin and these builders use it instead.
+const webhookHostFallback = "http://localhost:8089";
+
+function buildCurl(graph: Graph, secret: string, baseURL: string): string {
+  const url = buildWebhookURL(graph, baseURL);
   const auth = secret || "<bearer-secret>";
   return [
     `curl -X POST '${url}' \\`,
@@ -439,6 +447,172 @@ function buildCurl(graph: Graph, secret: string): string {
     `  -H 'Content-Type: text/plain' \\`,
     `  -d 'Hello from the webhook'`,
   ].join("\n");
+}
+
+// buildWebhookURL returns the public address callers POST to in order
+// to fire this graph. baseURL comes from the daemon's --public-base-url
+// (via whoami); when unset it falls back to a localhost hint.
+function buildWebhookURL(graph: Graph, baseURL: string): string {
+  const host = (baseURL || webhookHostFallback).replace(/\/+$/, "");
+  return `${host}/trigger/${graph.tenant}/${graph.workspace}/${graph.id}`;
+}
+
+// WebhookRecipes is the "I'm not a developer — how do I point my
+// website form at this?" helper. The trigger auths with a bearer
+// token, which most no-code form tools (Google Forms, Squarespace,
+// Wix) can't attach on their own — so the honest, universal answer is
+// a bridge like Zapier or Make. We lead with that and note the
+// genuinely-direct cases (Typeform on paid plans) rather than implying
+// every form tool can call the endpoint unaided. Collapsed by default
+// so it doesn't crowd the curl block developers came for.
+function WebhookRecipes({ graph, secret, baseURL }: { graph: Graph; secret: string; baseURL: string }) {
+  const { t } = useTranslation();
+  const url = buildWebhookURL(graph, baseURL);
+  const headerValue = `Bearer ${secret || "<bearer-secret>"}`;
+  const recipes: { key: string; title: string; body: string }[] = [
+    { key: "zapier", title: t("settings.triggers.recipes.zapier.title"), body: t("settings.triggers.recipes.zapier.body") },
+    { key: "typeform", title: t("settings.triggers.recipes.typeform.title"), body: t("settings.triggers.recipes.typeform.body") },
+    { key: "google", title: t("settings.triggers.recipes.google.title"), body: t("settings.triggers.recipes.google.body") },
+    { key: "squarespace", title: t("settings.triggers.recipes.squarespace.title"), body: t("settings.triggers.recipes.squarespace.body") },
+  ];
+  return (
+    <details className="webhook-recipes">
+      <summary>{t("settings.triggers.recipes.title")}</summary>
+      <div className="webhook-recipes-body">
+        <p className="desc">{t("settings.triggers.recipes.intro")}</p>
+        <div className="webhook-recipe-field">
+          <span className="webhook-recipe-label">{t("settings.triggers.recipes.urlLabel")}</span>
+          <CopyInline value={url} />
+        </div>
+        <div className="webhook-recipe-field">
+          <span className="webhook-recipe-label">{t("settings.triggers.recipes.headerLabel")}</span>
+          <CopyInline value={`Authorization: ${headerValue}`} />
+        </div>
+        <ol className="webhook-recipe-list">
+          {recipes.map((r) => (
+            <li key={r.key}>
+              <strong>{r.title}</strong>
+              <div className="desc">{r.body}</div>
+            </li>
+          ))}
+        </ol>
+        <p className="desc webhook-recipe-note">{t("settings.triggers.recipes.note")}</p>
+        <p className="desc">
+          <a href="/docs/connect-your-form.html" target="_blank" rel="noreferrer noopener">
+            {t("settings.triggers.recipes.fullGuide")}
+          </a>
+        </p>
+      </div>
+    </details>
+  );
+}
+
+// HostedForm is the opt-in hosted intake form control. When enabled,
+// the daemon serves a public form at /form/<tenant>/<workspace>/<id>
+// that visitors submit with no bearer token — the answer to "my form
+// tool can't send an Authorization header." Fields are a simple
+// comma-separated list (default name/email/message); the form delivers
+// them to webhook_input's body as a JSON object.
+function HostedForm({
+  graph,
+  trigger,
+  onChange,
+  baseURL,
+}: {
+  graph: Graph;
+  trigger: GraphTrigger;
+  onChange: (patch: Partial<GraphTrigger>) => void;
+  baseURL: string;
+}) {
+  const { t } = useTranslation();
+  const enabled = !!trigger.public_form;
+  const host = (baseURL || webhookHostFallback).replace(/\/+$/, "");
+  const formURL = `${host}/form/${graph.tenant}/${graph.workspace}/${graph.id}`;
+  const fieldsText = (trigger.form_fields ?? []).join(", ");
+  return (
+    <div className="hosted-form">
+      <label className="sf-checkbox" style={{ marginTop: 12 }}>
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(e) => onChange({ public_form: e.target.checked })}
+        />
+        <span>{t("settings.triggers.form.enable")}</span>
+      </label>
+      <div className="desc">{t("settings.triggers.form.enableDesc")}</div>
+      {enabled && (
+        <div className="hosted-form-body">
+          <div className="webhook-recipe-field">
+            <span className="webhook-recipe-label">{t("settings.triggers.form.urlLabel")}</span>
+            <CopyInline value={formURL} />
+          </div>
+          <div className="sf-field" style={{ marginTop: 10 }}>
+            <div className="label-row">
+              <label>{t("settings.triggers.form.fieldsLabel")}</label>
+            </div>
+            <input
+              type="text"
+              value={fieldsText}
+              placeholder="name, email, message"
+              onChange={(e) => {
+                const fields = e.target.value
+                  .split(",")
+                  .map((s) => s.trim())
+                  .filter(Boolean);
+                onChange({ form_fields: fields.length > 0 ? fields : undefined });
+              }}
+            />
+            <div className="desc">{t("settings.triggers.form.fieldsDesc")}</div>
+          </div>
+          <div className="sf-field">
+            <div className="label-row">
+              <label>{t("settings.triggers.form.titleLabel")}</label>
+            </div>
+            <input
+              type="text"
+              value={trigger.form_title ?? ""}
+              placeholder={graph.name || graph.id}
+              onChange={(e) => onChange({ form_title: e.target.value || undefined })}
+            />
+          </div>
+          <p className="desc">
+            <a href={formURL} target="_blank" rel="noreferrer noopener">
+              {t("settings.triggers.form.preview")}
+            </a>
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// CopyInline is a one-line value + copy button, reused for the webhook
+// URL and header in the recipes block. Same clipboard fallback posture
+// as CurlBlock — silent no-op when the API is unavailable.
+function CopyInline({ value }: { value: string }) {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+  return (
+    <span className="copy-inline">
+      <code>{value}</code>
+      <button
+        type="button"
+        className="curl-copy"
+        title={t("settings.triggers.copyTitle")}
+        onClick={async () => {
+          try {
+            await navigator.clipboard.writeText(value);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          } catch {
+            /* clipboard unavailable */
+          }
+        }}
+      >
+        {copied ? <Check size={12} /> : <Copy size={12} />}
+      </button>
+    </span>
+  );
 }
 
 // CurlBlock renders a copyable code block with a "Copy" button. Falls
