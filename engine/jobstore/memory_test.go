@@ -181,3 +181,31 @@ func TestMemory_MaxConcurrentExemptsExpiredReclaim(t *testing.T) {
 		t.Errorf("claimed %q, want the expired job 'dead' (queued must stay withheld at cap)", got.ID)
 	}
 }
+
+func TestMemory_CompleteOwned_FencesNonOwner(t *testing.T) {
+	s := NewMemory()
+	if err := s.Enqueue(t.Context(), core.JobRecord{ID: "j1", Kind: core.JobKindNode, Tenant: "t"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Claim(t.Context(), "worker-A", 30*time.Second); err != nil {
+		t.Fatalf("claim: %v", err)
+	}
+
+	// A worker that doesn't own the lease (e.g. lost it and was reclaimed)
+	// must be fenced out — ErrConflict, record untouched.
+	err := s.CompleteOwned(t.Context(), "j1", "worker-B", core.JobStatusSucceeded, &core.Result{Status: core.StatusOK})
+	if !errors.Is(err, core.ErrConflict) {
+		t.Fatalf("CompleteOwned by non-owner = %v, want ErrConflict", err)
+	}
+	if rec, _ := s.Get(t.Context(), "j1"); rec.Status != core.JobStatusRunning {
+		t.Errorf("status = %q after fenced write, want still running", rec.Status)
+	}
+
+	// The actual owner completes fine.
+	if err := s.CompleteOwned(t.Context(), "j1", "worker-A", core.JobStatusSucceeded, &core.Result{Status: core.StatusOK}); err != nil {
+		t.Fatalf("owner CompleteOwned: %v", err)
+	}
+	if rec, _ := s.Get(t.Context(), "j1"); rec.Status != core.JobStatusSucceeded {
+		t.Errorf("status = %q, want succeeded", rec.Status)
+	}
+}

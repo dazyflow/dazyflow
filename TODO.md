@@ -9,14 +9,14 @@ further down are quality, observability, and known-unknowns.
 Sequencing layer to go from "feature-complete alpha" to "deployable paid
 SaaS." Most line-items are detailed in the sections further down
 (Production blockers, Distribution & HA, T3, Observability); this orders
-them and names the one gap those sections don't already call out: **the
-daemon binary runs entirely on in-memory stores today, so a restart wipes
-runs, sessions, API keys, and secrets.**
+them.
 
-Rough state at review: features ~8/10, tests ~8/10 (all green), but
-durability ~3/10, HA ~2/10, monetization ~1/10 → about **45% to
-production**. (Update 2026-05-27: Phase 0 shipped — durability now ~7/10
-with Postgres-backed jobs/keys/sessions/users/secrets.)
+State (updated 2026-05-27): **Phases 0–2 shipped** — durability
+(Postgres-backed jobs/keys/sessions/users/secrets), security hardening
+(Phase 1), and HA (Postgres event bus + scheduler leader election). Rough
+state: features ~9/10, tests ~8/10 (green, now incl. `-race` in CI),
+durability ~8/10, HA ~7/10, monetization ~1/10 → roughly **70% to
+production**, with **Phase 3 (monetization)** the main remaining gate.
 
 ### Phase 0 — Durability: stop losing data on restart (DONE · 2026-05-27)
 
@@ -58,59 +58,17 @@ loud "lost on restart" warning.
   into a CI service (Phase 4); a one-time JSON-users → Postgres import
   for existing dev deployments (greenfield deploys don't need it).
 
-### Phase 1 — Security hardening for public exposure (~1–2 wks)
+### Phase 1 — Security hardening for public exposure (DONE · 2026-05-27)
 
-Mostly enumerated under **Production blockers** — this is the ordering.
-(Several quick wins shipped 2026-05-27 in the overnight batch.)
+All shipped. Details in **Production blockers** below; one-line summary:
 
-- [x] **TLS via reverse-proxy contract** (2026-05-27, decided
-  proxy-only). hzd doesn't terminate TLS; instead `--trust-proxy-headers`
-  makes it honor `X-Forwarded-Proto` to set the session cookie `Secure`
-  (was `r.TLS != nil`, which is always nil behind a TLS-terminating
-  proxy — the actual bug), emit HSTS, and `X-Content-Type-Options:
-  nosniff`. Cookies were already `HttpOnly`+`SameSite=Lax`. The required
-  proxy contract + nginx example are in `DEPLOY.md`. Native in-hzd TLS
-  intentionally deferred (optional given the proxy).
-- [x] **`--dev-key` defaults off** (2026-05-27). Was `true`; now opt-in
-  via `--dev-key` or `HAZYFLOW_DEV_KEY=1`.
-- [x] **Rate limiting on `/auth/{signin,signup}`** (2026-05-27).
-  Self-contained per-IP token bucket (`daemon/ratelimit.go`, no new
-  dep); flags `--auth-rate-per-min` (default 20) / `--auth-rate-burst`
-  (10); 0 disables. 429 + Retry-After on trip. 3 tests.
-- [x] **Fail-loud on port-bind failure** (2026-05-27). Webhook + HTTP
-  gateway now bind on the main goroutine (new `ServeListener` methods);
-  `hzd` fatals on a port-in-use error instead of silently dropping the
-  listener.
-- [x] **SSRF egress allowlist for `http_request`** (`--http-egress-allow`
-  + `integrations/net/egress.go`; IP-level SSRF guard always on).
-  **Secret output sanitization finished** (2026-05-27): the save-time
-  lint (`secret_to_persistence`) is now backed by *runtime* redaction —
-  `engine.resolveTemplatesCollecting` records every resolved secret
-  plaintext and `redactResult` scrubs it from the persisted node
-  `Result.Output` + error strings before it leaves the engine, so a
-  module that echoes a resolved param (e.g. an HTTP node reflecting its
-  Authorization header) can't leak the secret into the job store / run
-  UI. `engine/redact.go` (+ `_test.go`); guarded by a min-length
-  threshold to avoid over-redacting trivial values.
-- [x] **Quota write race** (2026-05-27, reservation + in-flight model).
-  `core.QuotaReserver` + `FSQuota.Reserve(tenant,n)->release` track
-  bytes reserved-but-not-committed under lock (`used + inflight + n <=
-  limit`); the `file_write` / `excel_write` drops reserve before writing
-  via the `io.SetQuotaReserver` hook (wired in `cmd/hzd`, same pattern as
-  `SetTokenLookup`) and hold the reservation across the write with
-  `defer release()`. Closes the TOCTOU two concurrent same-tenant writes
-  hit against the old per-job snapshot; the snapshot stays as the
-  no-reserver fallback. Race tests in `daemon/quota_test.go`.
-- [x] **Master-key provisioning + rotation runbook + re-wrap command**
-  (2026-05-27). Docs in `SECURITY.md`; the code gap is now closed —
-  `EncryptedSecrets.RewrapDEKs(ctx, newKey)` unwraps every tenant DEK
-  with the current KEK and re-wraps under the new one (secret
-  ciphertexts untouched, no re-entry), exposed as `hzd
-  --rotate-master-key` (re-wrap, report, exit). Re-runnable
-  (already-rotated DEKs detected via new-key trial-unwrap and skipped)
-  and fails loudly on the wrong current key, leaving the store intact.
-  New store methods `listDEKTenants` / `replaceWrappedDEK` (mem + pg);
-  rotation tests in `daemon/encrypted_secrets_test.go`.
+- [x] TLS via reverse-proxy contract — `--trust-proxy-headers` (Secure cookies + HSTS); nginx example in `DEPLOY.md`.
+- [x] `--dev-key` defaults off (opt-in).
+- [x] Auth rate limiting on `/auth/{signin,signup}` — per-IP token bucket (`daemon/ratelimit.go`).
+- [x] Fail-loud on port-bind failure (webhook + HTTP gateway bind on the main goroutine).
+- [x] SSRF egress allowlist (`--http-egress-allow`) + runtime secret-output redaction (`engine/redact.go` scrubs resolved secrets from persisted Results, backing the save-time lint).
+- [x] Quota write race closed — reservation + in-flight model (`core.QuotaReserver` / `FSQuota.Reserve`, `io.SetQuotaReserver`).
+- [x] Master-key rotation re-wrap — `hzd --rotate-master-key` (`EncryptedSecrets.RewrapDEKs`); runbook in `SECURITY.md`.
 
 ### Phase 2 — HA / horizontal scale (~2–3 wks)
 
@@ -142,15 +100,17 @@ Per-tenant metering → Stripe + plan gates → team features. Specced under
   `HAZYFLOW_TEST_DB` so the gated jobstore/auth tests run in CI (closes
   the long-standing "real-DB tests never exercised" gap). Still open:
   k8s/compose deploy manifests; confirm the image build in CI.
-- [x] **`/readyz`** (2026-05-27) — pings Postgres when configured.
-  Still open: `/metrics` — wire the OTel scaffolding in
-  `engine/tracing.go` to an exporter.
-- [ ] Postgres backup strategy + connection-pool sizing (see "Known
+- [x] **`/healthz` + `/readyz` + `/metrics`** (2026-05-27) — liveness,
+  readiness (pings Postgres when configured), and a Prometheus `/metrics`
+  endpoint behind `--metrics` with per-tenant disk gauges
+  (`daemon/metrics.go`). gRPC health service for non-HTTP deployments
+  shipped (see "Worker health / readiness"). Open: more gauges.
+- [x] **Connection-pool sizing** (2026-05-27) — `--pg-max-conns` /
+  `--pg-min-conns`. Still open: Postgres backup strategy (see "Known
   unknowns").
 
-**Critical paths:** private beta = Phase 0 + most of Phase 1 (~3–4 wks);
-paid GA = 0 → 1 → 3, with 2 landing before the second serious customer
-(~2–3 months total).
+**Critical paths:** private beta (Phases 0–1) ✅ done; paid GA gated on
+**Phase 3 (monetization)**. Phase 2 (HA) already landed.
 
 ## Path to product-market fit (Zapier-shaped sell)
 
@@ -610,12 +570,10 @@ platform can demonstrate but not actually power a real workflow.
 - [ ] **CRL / OCSP support.** All certs signed by the configured CA are
   accepted. Revocation can't be enforced. Add CRL fetch (HTTP) or
   OCSP-stapling config to the TLS layer.
-- [x] **Concurrent-write race in quotas** (2026-05-27). Closed with a
-  reserve-and-hold model: `core.QuotaReserver` + `FSQuota.Reserve`
-  tracks reserved-but-uncommitted bytes under lock; `file_write` /
-  `excel_write` reserve before writing via `io.SetQuotaReserver` and hold
-  it across the write. See the Phase 1 entry for detail. (OS-level quotas
-  remain the backstop for out-of-process writers.)
+- [x] **Concurrent-write race in quotas** (2026-05-27) — closed via a
+  reservation + in-flight model (`core.QuotaReserver` / `FSQuota.Reserve`,
+  `io.SetQuotaReserver`); see Phase 1. OS-level quotas remain the backstop
+  for out-of-process writers.
 - [ ] **Real secret providers (vault, gcp, aws, azure).** Interface +
   scheme registry + env/builtin providers exist now. The cloud KMS
   / vault implementations are real integrations we haven't done. Spec
@@ -672,41 +630,14 @@ platform can demonstrate but not actually power a real workflow.
   HTTP gateway bind on the main goroutine (new `ServeListener` methods);
   `hzd` calls `log.Fatalf` on a port-in-use bind error so k8s/systemd
   restarts the process instead of it running listener-less.
-- [x] **Output sanitization for secrets** (runtime redaction added
-  2026-05-27 — see Phase 1 entry: `engine.resolveTemplatesCollecting` +
-  `redactResult` scrub resolved secret plaintext from persisted
-  `Result.Output`/errors, backing the save-time lint below). V1 lint
-  shipped earlier:
-  `core.LintGraph(g) []LintIssue` runs at every `PUT /graphs`
-  save. The first rule, `secret_to_persistence`, detects nodes
-  whose Params or Env reference `${env|tenant|builtin:...}`
-  placeholders and have a forward edge path (any number of
-  intermediate transforms) into a persistence sink
-  (`file_write`, `excel_write`, `*_insert_rows`,
-  `*_upsert_rows`, `sheets_append_row`, `secret_set`). Each
-  reached pair emits a `LintIssue` with severity `warn` naming
-  both nodes and explaining why it matters. Lint is advisory:
-  save still succeeds, the response includes
-  `lint: []LintIssue`, and the FlowEditor's bottom banner
-  surfaces findings with a Dismiss button. External-API sends
-  (Slack/Gmail/GitHub/HTTP-post) are intentionally NOT
-  persistence sinks — they exchange the secret with the
-  service that holds it. 12 core tests pin direct/transitive
-  paths, multiple sinks, nested-in-array params, secret in env,
-  every secret scheme, non-secret placeholder rejection,
-  external-API send not triggering, BFS-stops-at-first-sink.
-  2 handler tests pin the save-response shape (lint present +
-  empty case). **2026-05-27 update:** added a second rule,
-  `hardcoded_secret` — flags literal credentials pasted into
-  params/env (known provider prefixes like sk_live_/ghp_/xoxb-/
-  AKIA/PEM anywhere, or a long literal under a secret-shaped key
-  name like token/password/api_key/authorization) and nudges
-  toward `${tenant://name}`. 6 new core tests. Per-node canvas
-  markers also shipped: the save response's `node_ids` drive an
-  amber warning badge + border on the flagged NodeCards (hover for
-  the message), in addition to the bottom banner. **Open
-  follow-ups:** selective dismissal (vs dismiss-all); more rules as
-  patterns emerge.
+- [x] **Output sanitization for secrets** — two layers. (1) Save-time
+  lint (`core.LintGraph`): `secret_to_persistence` flags a
+  secret-referencing node with an edge path into a persistence sink, and
+  `hardcoded_secret` flags literal credentials pasted into params/env;
+  advisory (warns, surfaced in the FlowEditor banner + per-node markers).
+  (2) Runtime redaction (Phase 1, `engine/redact.go`) scrubs resolved
+  secret plaintext from persisted Results. 20 core + handler tests.
+  **Open:** selective lint dismissal; more rules as patterns emerge.
 
 ## API surface — control plane gaps
 
@@ -767,14 +698,10 @@ platform can demonstrate but not actually power a real workflow.
 
 ## OnError + retry refinements
 
-- [x] **Manifest-driven max-retries** (2026-05-27). `core.Manifest` gained
-  `MaxRetries` (JSON `max_retries`, omitempty); `Worker.maybeScheduleRetry`
-  uses it as the attempt cap when set (>0), falling back to the
-  worker-global `WorkerConfig.MaxRetries` otherwise. A flaky module can
-  declare a higher cap ("tolerates 10"); a costly module can set 1 (one
-  attempt). One-shot was already expressible via `RetryPolicy != exponential_backoff`.
-  Two tests pin both directions (raises above / lowers below the worker
-  default).
+- [x] **Manifest-driven max-retries** (2026-05-27). `core.Manifest.MaxRetries`
+  overrides the worker-global attempt cap in `Worker.maybeScheduleRetry`
+  (>0 wins, else the default) — a flaky module can tolerate more, a costly
+  one can cap at 1. Two tests (raises / lowers the cap).
 - [x] **Jitter on retry backoff.** DONE 2026-05-27. The default
   `WorkerConfig.RetryBackoff` now multiplies the exponential base by a
   random factor in [0.75, 1.25) (±25%), so sibling nodes failing
@@ -800,43 +727,36 @@ platform can demonstrate but not actually power a real workflow.
 
 ## Reliability & cleanup
 
+- [x] **Fence node execution + completion on lease loss** (2026-05-27).
+  `renewLease` used to only log a failed `Renew`, so a worker whose lease
+  expired and was reclaimed kept executing *and* wrote its result,
+  clobbering the new owner (double-execution). Two-layer fence: (1) a
+  `Renew` `ErrConflict`/`ErrNotFound` (lost ownership) cancels the
+  execution context and the worker abandons — no terminal write, no
+  retry/dispatch; (2) the terminal/awaiting write goes through a new
+  optional `core.OwnedCompleter.CompleteOwned(jobID, worker, …)` (mem +
+  pg) that only lands if the worker still owns the record, closing the
+  narrow window where a worker finishes and `Complete`s before its renew
+  tick detects the loss. Transient renew errors still log + retry. Tests:
+  `daemon/lease_test.go` (fence-on-loss / no-fence-on-transient) +
+  `CompleteOwned` ownership tests (mem + gated pg).
 - [x] **Data race in `workspace.Store` under concurrent access**
-  (2026-05-27). `workspace.Store` wrapped a go-git repo
-  (`memory.NewStorage()` in-memory, or a billy FS backend) with no mutex,
-  and go-git's storers aren't concurrency-safe. The scheduler's `Run`
-  loop reads (`ListGraphs`/`Load`) on its tickers while the HTTP gateway
-  save path / a second tick writes (`Save` → `wt.Commit`) the same
-  storage map — `go test ./daemon/ -race` flagged it via
-  `scheduler_poll_test.go` (`runtime.mapassign_faststr`). Fixed by
-  guarding all repo access with a `sync.Mutex` on `Store` (every public
-  method locks; internal `loadAt`/`resolve` stay lock-free). Full mutex,
-  **not** an RWMutex: the FS backend's object LRU cache is mutated during
-  reads, so concurrent readers would race on it too. `go test -race
-  ./...` is now green and CI runs the suite with `-race` (`.build.yml`)
-  to keep it that way.
+  (2026-05-27). go-git storers aren't concurrency-safe and `Store` had no
+  mutex, so scheduler rescans (`ListGraphs`/`Load`) raced the gateway's
+  `Save` — caught by `-race` in `scheduler_poll_test.go`. Fixed with a
+  `sync.Mutex` guarding all repo access (full mutex, **not** RWMutex: the
+  FS object LRU cache mutates on reads). `go test -race ./...` green; CI
+  now runs `-race`.
 - [x] **`Job.Cleanup` enforcement — per-run scratch via `scratch://`**
-  (2026-05-27). `CleanupPolicy` was dormant and `WorkspaceRoot` is the
-  *persistent* per-(tenant, workspace) sandbox (deleting it = data loss),
-  so cleanup got a real target: a per-run **scratch** area distinct from
-  the workspace. `core.Job.ScratchRoot` + optional `core.ScratchProvider`
-  (`FSSandbox.ScratchRoot`/`RemoveScratch`, at
-  `<base>/<tenant>/<workspace>/.scratch/<runID>/` so it's quota-counted
-  yet reclaimable as a unit). Any file drop resolves a `scratch://path`
-  through the shared `io.openSandboxRoot` resolver (no per-drop flag —
-  wired into `file_write`/`file_read`; the scheme rides through output
-  Refs so downstream reads resolve the same place). The engine provisions
-  scratch per run; the dispatcher reclaims it on every terminal path
-  (success/failure/cancel), best-effort. Tests: io scheme round-trip +
-  mixed-root copy, FSSandbox lifecycle/quota/safety, and an e2e
-  "reclaimed on completion". The whole **io** package now resolves
-  through it (`file_write`/`file_read`/`excel_write`/`excel_read`/
-  `file_picker`). **Open follow-ups:** adopt the resolver in the
-  remaining cross-package path-taking drops (db/git/shell — they still
-  open `WorkspaceRoot` directly and have bespoke path handling, lower
-  value); per-node `CleanupOnNodeComplete` isolation
-  (today reclamation is per-run on graph terminal); multi-node scratch
-  reclaim is best-effort local (same single-node/shared-FS assumption as
-  the rest of the FS sandbox).
+  (2026-05-27). Cleanup needed a real target since `WorkspaceRoot` is
+  persistent (deleting it = data loss): added a per-run scratch area
+  (`core.Job.ScratchRoot` + optional `core.ScratchProvider`, at
+  `<base>/<tenant>/<workspace>/.scratch/<runID>/`, quota-counted). The io
+  drops resolve `scratch://path` through the shared `io.openSandboxRoot`
+  (no per-drop flag; scheme rides through Refs); the dispatcher reclaims
+  the dir on every terminal path. Tests across io + FSSandbox + e2e.
+  **Open:** adopt the resolver in db/git/shell drops; per-node
+  `CleanupOnNodeComplete`; multi-node reclaim is best-effort local.
 - [ ] **Streaming writes with unknown size (`ReserveAndStream`).** The
   quota *reservation* now exists (`core.QuotaReserver`, Phase 1), but it
   reserves a known size up front. A download that streams to disk with
@@ -846,9 +766,11 @@ platform can demonstrate but not actually power a real workflow.
   `http_download`/`http_upload` split is still an open feature item
   under Modules). Build `ReserveAndStream` alongside that module, not
   before it.
-- [ ] **`maybeCompleteGraph` is O(N) per completion.** Acceptable for
-  typical graphs but scales linearly. Could add a per-graph-run
-  outstanding-node counter; only walk when counter hits 0.
+- [x] **`maybeCompleteGraph` O(N²)→O(N)** (2026-05-27). The per-node
+  `store.Get` loop on every completion is now one batch `ListNodeRecords`
+  read — O(nodes) round trips per run instead of O(nodes²). Stays
+  store-backed (multi-node correct); under-fetch can only err toward
+  "not complete".
 
 ## Data flow
 
@@ -871,46 +793,35 @@ platform can demonstrate but not actually power a real workflow.
 
 - [x] **Disk-usage metrics per tenant + `/metrics`** (2026-05-27). A
   hand-rolled Prometheus text endpoint (`daemon/metrics.go`) exposes
-  `hazyflow_up`, `hazyflow_quota_bytes_used{tenant}`, and
-  `hazyflow_quota_bytes_limit{tenant}` for every tenant with a configured
-  limit, so dashboards can show approaching-limit signals. Backed by a
-  new optional `core.QuotaReporter` (`FSQuota.Usage()`). Mounted only
-  behind `--metrics` (default off — it reveals tenant names, so it's
-  opt-in and meant for a restricted scrape network) and unauthenticated
-  like `/healthz`. Hand-rolled rather than via the OTel metrics SDK to
-  avoid pulling in the Prometheus-exporter + client_golang deps for a
-  three-gauge surface; the OTel tracing scaffolding in
-  `engine/tracing.go` stays for spans. Tests cover disabled→404,
-  enabled→up+quota gauges, and enabled-without-a-quota-provider.
-  **Follow-ups:** more gauges (queue depth / runs-by-status — needs a
-  jobstore count method); a gRPC health/metrics path for non-HTTP
-  deployments.
-- [~] **Worker health / readiness.** `GET /healthz` (liveness) and
-  `GET /readyz` (readiness — pings Postgres when configured via
-  `gw.ReadyCheck`) both serve on the HTTP gateway as of 2026-05-27.
-  Still open: a gRPC health-check service for non-HTTP deployments.
+  `hazyflow_up` + `hazyflow_quota_bytes_used{tenant}` /
+  `hazyflow_quota_bytes_limit{tenant}` (via a new optional
+  `core.QuotaReporter` / `FSQuota.Usage()`). Behind `--metrics` (default
+  off — reveals tenant names) and unauthenticated like `/healthz`.
+  Hand-rolled to avoid the OTel-exporter + client_golang deps. Also emits
+  `hazyflow_jobs{status}` (node-job counts — queue depth + in-flight) via
+  an optional `core.JobCounter` (`CountsByStatus` on mem + pg). 4 tests.
+  **Follow-up:** a gRPC-exposed metrics path (the gRPC *health* service
+  now ships — see "Worker health / readiness").
+- [x] **Worker health / readiness** (2026-05-27). HTTP `GET /healthz`
+  (liveness) + `GET /readyz` (readiness — pings Postgres when configured),
+  AND the standard `grpc.health.v1` service on the gRPC server for
+  gRPC-only / k8s `grpc_health_probe` deployments. `daemon.MonitorGRPCHealth`
+  syncs the overall ("") status with a readiness probe (Postgres ping,
+  mirroring `/readyz`); SERVING-only when no probe is configured. Tests in
+  `daemon/health_test.go`.
 - [ ] **Structured graph-progress audit log.** Right now progress only
   flows over the gRPC stream. Long-running graphs that disconnect
   lose history.
-- [x] **Per-tenant rate limiting beyond disk quota.** `max_graph_nodes`
-  and `max_job_duration_s` shipped 2026-05-27 as operator-wide ceilings:
-  `--max-graph-nodes` rejects oversized graphs at `SubmitGraph`
-  (`core.ErrGraphTooLarge` → 400) before any run state is allocated, and
-  `--max-graph-timeout` clamps `effectiveGraphTimeout` so even an
-  explicit per-graph `timeout_seconds` can't pin a worker indefinitely.
-  Both are global today (matching `--default-graph-timeout`); per-tenant
-  overrides are a follow-up (needs the `--quota`-style tenant→limit map).
-  **`max_concurrent_jobs` shipped 2026-05-27** (`--max-concurrent-jobs`):
-  a per-tenant cap on running node jobs, enforced in `Claim` — new
-  (queued) work is withheld from a tenant at its cap while expired-lease
-  reclaims stay exempt (recovery, not new concurrency).
-  `JobStore.SetMaxConcurrentPerTenant`; the **memory** store is exact
-  (single lock), the **Postgres** store is a documented best-effort
-  **soft cap** (the per-tenant running count is a correlated subquery,
-  not locked against concurrent claimers, so a race can briefly allow
-  cap+1 — a hard cap would need per-tenant locking). Tests: memory
-  cap/cross-tenant/free-slot/expired-reclaim-exemption; a `HAZYFLOW_TEST_DB`-gated
-  Postgres cap test.
+- [x] **Per-tenant rate limiting beyond disk quota** (2026-05-27).
+  Operator-wide ceilings: `--max-graph-nodes` rejects oversized graphs at
+  `SubmitGraph` (`core.ErrGraphTooLarge`→400), `--max-graph-timeout`
+  clamps `effectiveGraphTimeout`, and `--max-concurrent-jobs` caps a
+  tenant's running node jobs in `Claim` (new work withheld at cap,
+  expired-lease reclaims exempt). The memory store's cap is exact; the
+  Postgres cap is a documented best-effort **soft cap** (correlated-count
+  subquery, not locked, so a race can briefly allow cap+1). Tests across
+  both stores. **Follow-up:** per-tenant overrides (today all global —
+  needs a `--quota`-style tenant→limit map).
 
 ## Coverage gaps (the honest list)
 
@@ -949,7 +860,9 @@ These are *what we don't know we don't know*:
 - Postgres connection pool tuning — `pgxpool.New` uses default
   settings; production needs sizing.
 - Lease durations vs. real-world worker crash recovery — current 30s
-  is a guess; should validate against actual restart times.
+  is a guess; should validate against actual restart times. (The
+  double-execution *hazard* on lease loss is now fenced — see Reliability;
+  what's left is tuning the duration itself.)
 - Cron scheduler under clock skew — we use `time.Now`; haven't
   reasoned about NTP jumps, daylight-saving transitions, or container
   clock drift.

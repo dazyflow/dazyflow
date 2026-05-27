@@ -22,6 +22,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/health"
+	grpc_health_v1 "google.golang.org/grpc/health/grpc_health_v1"
 
 	"git.sr.ht/~klahr/hazy-flow/auth"
 	"git.sr.ht/~klahr/hazy-flow/core"
@@ -465,6 +467,19 @@ func main() {
 	)
 	srv := grpc.NewServer(serverOpts...)
 	daemon.RegisterGRPC(srv, svc)
+
+	// Standard gRPC health service so gRPC-only / k8s deployments get
+	// liveness + readiness probes (grpc_health_probe) even without the
+	// HTTP gateway's /healthz + /readyz. Readiness tracks Postgres when
+	// configured, mirroring the HTTP /readyz.
+	healthSrv := health.NewServer()
+	grpc_health_v1.RegisterHealthServer(srv, healthSrv)
+	var grpcReady func(context.Context) error
+	if pgPool != nil {
+		pool := pgPool
+		grpcReady = func(ctx context.Context) error { return pool.Ping(ctx) }
+	}
+	go daemon.MonitorGRPCHealth(ctx, healthSrv, grpcReady, 5*time.Second)
 
 	lis, err := net.Listen("tcp", *listen)
 	if err != nil {

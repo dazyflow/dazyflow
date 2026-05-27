@@ -126,6 +126,26 @@ type JobStore interface {
 	ListNodeRecords(ctx context.Context, opts ListNodeRecordsOpts) ([]JobRecord, error)
 }
 
+// OwnedCompleter is an optional JobStore extension that fences a Complete
+// on lease ownership: the write only lands if worker still holds the
+// job's lease. The worker uses it for node terminal/awaiting writes so a
+// worker that lost its lease (reclaimed elsewhere) can't clobber the new
+// owner's run — it gets ErrConflict and abandons instead. Non-lease
+// callers (dispatcher graph-records, cancel) keep using plain Complete.
+type OwnedCompleter interface {
+	CompleteOwned(ctx context.Context, jobID, worker string, status JobStatus, result *Result) error
+}
+
+// JobCounter is an optional JobStore extension exposing aggregate
+// node-job counts for metrics — queue depth (queued) and in-flight
+// (running) are the load-bearing signals. Implemented by the Memory and
+// Postgres stores; the metrics endpoint type-asserts to it.
+type JobCounter interface {
+	// CountsByStatus returns the number of node-kind job records in each
+	// status, as a point-in-time aggregate.
+	CountsByStatus(ctx context.Context) (map[JobStatus]int, error)
+}
+
 // ListNodeRecordsOpts scopes a ListNodeRecords call. Same shape as
 // ListGraphRunsOpts but for the node-kind half of the table.
 //

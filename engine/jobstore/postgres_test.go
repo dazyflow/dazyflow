@@ -98,3 +98,36 @@ func TestPostgres_MaxConcurrentPerTenant(t *testing.T) {
 		t.Fatalf("globex claim should succeed despite acme at cap: %v", err)
 	}
 }
+
+// TestPostgres_CompleteOwned_FencesNonOwner mirrors the memory test
+// against real Postgres. Skipped unless HAZYFLOW_TEST_DB is set.
+func TestPostgres_CompleteOwned_FencesNonOwner(t *testing.T) {
+	url := os.Getenv("HAZYFLOW_TEST_DB")
+	if url == "" {
+		t.Skip("set HAZYFLOW_TEST_DB to run Postgres integration tests")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	store, err := OpenPostgres(ctx, url)
+	if err != nil {
+		t.Fatalf("OpenPostgres: %v", err)
+	}
+	defer store.Close()
+	_, _ = store.pool.Exec(ctx, "TRUNCATE jobs")
+
+	if err := store.Enqueue(ctx, core.JobRecord{ID: "j1", Kind: core.JobKindNode, Tenant: "t"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Claim(ctx, "worker-A", 30*time.Second); err != nil {
+		t.Fatalf("claim: %v", err)
+	}
+	if err := store.CompleteOwned(ctx, "j1", "worker-B", core.JobStatusSucceeded, &core.Result{Status: core.StatusOK}); !errors.Is(err, core.ErrConflict) {
+		t.Fatalf("CompleteOwned by non-owner = %v, want ErrConflict", err)
+	}
+	if rec, _ := store.Get(ctx, "j1"); rec.Status != core.JobStatusRunning {
+		t.Errorf("status = %q after fenced write, want running", rec.Status)
+	}
+	if err := store.CompleteOwned(ctx, "j1", "worker-A", core.JobStatusSucceeded, &core.Result{Status: core.StatusOK}); err != nil {
+		t.Fatalf("owner CompleteOwned: %v", err)
+	}
+}

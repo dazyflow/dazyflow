@@ -6,7 +6,34 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"git.sr.ht/~klahr/hazy-flow/core"
 )
+
+func TestMetrics_JobGauges(t *testing.T) {
+	h := newGatewayHarness(t)
+	h.gw.EnableMetrics = true
+
+	// Two queued node jobs → queue-depth gauge of 2; running stays 0.
+	for _, id := range []string{"j1", "j2"} {
+		if err := h.store.Enqueue(t.Context(), core.JobRecord{ID: id, Kind: core.JobKindNode, Tenant: "t"}); err != nil {
+			t.Fatalf("enqueue %s: %v", id, err)
+		}
+	}
+	rw := h.do(t, "GET", "/metrics", nil)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("status = %d", rw.Code)
+	}
+	body := rw.Body.String()
+	for _, want := range []string{
+		`hazyflow_jobs{status="queued"} 2`,
+		`hazyflow_jobs{status="running"} 0`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("metrics body missing %q\n--- body ---\n%s", want, body)
+		}
+	}
+}
 
 func TestMetrics_DisabledByDefault(t *testing.T) {
 	h := newGatewayHarness(t) // EnableMetrics defaults false

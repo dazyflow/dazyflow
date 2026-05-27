@@ -8,6 +8,7 @@ import (
 	"log"
 	"math/rand"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"git.sr.ht/~klahr/hazy-flow/core"
@@ -143,34 +144,60 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 	// UI's per-node dot lights up before Execute returns.
 	w.dispatcher.PublishNodeStatus(rec.GraphRunID, rec.NodeID, core.JobStatusRunning, nil)
 
-	leaseCtx, stopLease := context.WithCancel(ctx)
-	defer stopLease()
+	// execCtx ties the node's execution to the lease. If renewal detects
+	// the lease was lost (another worker reclaimed an expired job), the
+	// renew goroutine flips leaseLost and cancels execCtx to abort the
+	// in-flight run; we then abandon the job without writing a result, so
+	// the new owner's run is authoritative (no double-write, best-effort
+	// no double-execution for ctx-respecting modules).
+	execCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var leaseLost atomic.Bool
 	var leaseWg sync.WaitGroup
 	leaseWg.Add(1)
 	go func() {
 		defer leaseWg.Done()
-		w.renewLease(leaseCtx, rec.ID)
+		w.renewLease(execCtx, rec.ID, func() {
+			leaseLost.Store(true)
+			cancel()
+		})
 	}()
+	// stopLease halts the renew goroutine and reports whether the lease
+	// was lost during this attempt.
+	stopLease := func() bool {
+		cancel()
+		leaseWg.Wait()
+		return leaseLost.Load()
+	}
 
 	graph, fetchErr := w.fetchGraph(ctx, rec.GraphRunID)
 	if fetchErr != nil {
-		stopLease()
-		leaseWg.Wait()
+		if stopLease() {
+			w.cfg.Logger.Printf("[%s] %s: lease lost; abandoning (reclaimed elsewhere)", w.cfg.ID, rec.ID)
+			return
+		}
 		w.failNode(ctx, rec, "load_graph", fetchErr.Error(), nil)
 		return
 	}
 
 	prior, fetchErr := w.fetchPredecessors(ctx, graph, rec)
 	if fetchErr != nil {
-		stopLease()
-		leaseWg.Wait()
+		if stopLease() {
+			w.cfg.Logger.Printf("[%s] %s: lease lost; abandoning (reclaimed elsewhere)", w.cfg.ID, rec.ID)
+			return
+		}
 		w.failNode(ctx, rec, "load_predecessors", fetchErr.Error(), &graph)
 		return
 	}
 
-	result, runErr := w.runNode(ctx, graph, rec, prior)
-	stopLease()
-	leaseWg.Wait()
+	result, runErr := w.runNode(execCtx, graph, rec, prior)
+	if stopLease() {
+		// Lost the lease mid-execution → another worker owns this job now.
+		// Abandon: writing a terminal result here would clobber the new
+		// owner's run, and retrying/dispatching would duplicate work.
+		w.cfg.Logger.Printf("[%s] %s: lease lost during execution; abandoning (reclaimed elsewhere)", w.cfg.ID, rec.ID)
+		return
+	}
 
 	// Pause path: the module asked to be parked until an external
 	// resume call. Write status=awaiting, drop the lease, and stop —
@@ -178,7 +205,12 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 	// resume call (Service.Approve, or — for subgraph nodes — the
 	// dispatcher when the child terminates) is what advances those.
 	if runErr == nil && result.Status == core.StatusAwaiting {
-		if cerr := w.store.Complete(context.Background(), rec.ID, core.JobStatusAwaiting, &result); cerr != nil {
+		cerr := w.completeNode(context.Background(), rec.ID, core.JobStatusAwaiting, &result)
+		if errors.Is(cerr, core.ErrConflict) {
+			w.cfg.Logger.Printf("[%s] %s: park fenced (lease lost or already terminal); abandoning", w.cfg.ID, rec.ID)
+			return
+		}
+		if cerr != nil {
 			w.cfg.Logger.Printf("[%s] park %s: %v", w.cfg.ID, rec.ID, cerr)
 			return
 		}
@@ -216,13 +248,32 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 		}
 	}
 
-	if cerr := w.store.Complete(context.Background(), rec.ID, status, &result); cerr != nil {
+	cerr := w.completeNode(context.Background(), rec.ID, status, &result)
+	if errors.Is(cerr, core.ErrConflict) {
+		// Fenced: we lost the lease (reclaimed elsewhere) or the record is
+		// already terminal. Abandon — don't advance dependents off our
+		// outcome; the owner that wrote the terminal state advances.
+		w.cfg.Logger.Printf("[%s] %s: complete fenced (lease lost or already terminal); abandoning", w.cfg.ID, rec.ID)
+		return
+	}
+	if cerr != nil {
 		w.cfg.Logger.Printf("[%s] complete %s: %v", w.cfg.ID, rec.ID, cerr)
 	}
 
 	// Dispatch dependents + check graph completion via the shared
 	// dispatcher (used by both worker and approval path).
 	w.dispatcher.AdvanceAfterCompletion(ctx, graph, rec.GraphRunID, rec.NodeID, status, result.Error)
+}
+
+// completeNode writes a node's terminal/awaiting status, fenced on lease
+// ownership when the store supports it (core.OwnedCompleter) — so a
+// worker that lost its lease can't clobber the new owner's run. Falls
+// back to a plain Complete for stores without the extension.
+func (w *Worker) completeNode(ctx context.Context, jobID string, status core.JobStatus, result *core.Result) error {
+	if oc, ok := w.store.(core.OwnedCompleter); ok {
+		return oc.CompleteOwned(ctx, jobID, w.cfg.ID, status, result)
+	}
+	return w.store.Complete(ctx, jobID, status, result)
 }
 
 // maybeScheduleRetry returns the time at which to retry the failed node,
@@ -458,7 +509,12 @@ func (w *Worker) failNode(ctx context.Context, rec core.JobRecord, code, msg str
 	}
 }
 
-func (w *Worker) renewLease(ctx context.Context, jobID string) {
+// renewLease keeps the job's lease alive while it runs. A renewal that
+// fails with ErrConflict/ErrNotFound means we no longer own the job — the
+// lease expired and another worker reclaimed it — so we invoke onLost
+// (which fences the execution) and stop. Transient errors (DB blips) are
+// logged and retried on the next tick; the lease may still be valid.
+func (w *Worker) renewLease(ctx context.Context, jobID string, onLost func()) {
 	ticker := time.NewTicker(w.cfg.LeaseRenewEvery)
 	defer ticker.Stop()
 	for {
@@ -466,9 +522,18 @@ func (w *Worker) renewLease(ctx context.Context, jobID string) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if err := w.store.Renew(ctx, jobID, w.cfg.ID, w.cfg.LeaseDuration); err != nil {
-				w.cfg.Logger.Printf("[%s] renew %s: %v", w.cfg.ID, jobID, err)
+			err := w.store.Renew(ctx, jobID, w.cfg.ID, w.cfg.LeaseDuration)
+			if err == nil {
+				continue
 			}
+			if errors.Is(err, core.ErrConflict) || errors.Is(err, core.ErrNotFound) {
+				w.cfg.Logger.Printf("[%s] lost lease on %s (reclaimed elsewhere); fencing execution", w.cfg.ID, jobID)
+				onLost()
+				return
+			}
+			// Transient (e.g. DB unreachable): keep trying — a later
+			// renew can recover before the lease actually lapses.
+			w.cfg.Logger.Printf("[%s] renew %s (transient): %v", w.cfg.ID, jobID, err)
 		}
 	}
 }

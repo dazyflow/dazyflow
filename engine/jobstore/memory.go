@@ -127,6 +127,20 @@ func (m *Memory) Claim(_ context.Context, worker string, lease time.Duration) (c
 	return *picked, nil
 }
 
+// CountsByStatus implements core.JobCounter: a tally of node-kind job
+// records by status (graph-kind container records are excluded).
+func (m *Memory) CountsByStatus(_ context.Context) (map[core.JobStatus]int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make(map[core.JobStatus]int)
+	for _, r := range m.records {
+		if r.Kind == core.JobKindNode {
+			out[r.Status]++
+		}
+	}
+	return out, nil
+}
+
 func (m *Memory) Requeue(_ context.Context, jobID string, availableAt time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -162,11 +176,28 @@ func (m *Memory) Renew(_ context.Context, jobID, worker string, lease time.Durat
 }
 
 func (m *Memory) Complete(_ context.Context, jobID string, status core.JobStatus, result *core.Result) error {
+	return m.complete(jobID, "", status, result)
+}
+
+// CompleteOwned implements core.OwnedCompleter: Complete, but only if
+// worker still owns the record (ErrConflict otherwise).
+func (m *Memory) CompleteOwned(_ context.Context, jobID, worker string, status core.JobStatus, result *core.Result) error {
+	return m.complete(jobID, worker, status, result)
+}
+
+// complete is the shared body. worker == "" skips the ownership check
+// (the plain Complete used by non-lease callers).
+func (m *Memory) complete(jobID, worker string, status core.JobStatus, result *core.Result) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	r, ok := m.records[jobID]
 	if !ok {
 		return core.ErrNotFound
+	}
+	// Ownership fence: a worker that lost its lease (record reclaimed by
+	// another worker) must not be able to write a result.
+	if worker != "" && r.WorkerID != worker {
+		return core.ErrConflict
 	}
 	// Accept terminal statuses (the common case) and JobStatusAwaiting
 	// (the pause path — caller will Complete again later to terminate).

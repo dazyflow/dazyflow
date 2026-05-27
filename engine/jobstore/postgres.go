@@ -193,6 +193,26 @@ const claimCappedQuery = `
 		 )
 		 RETURNING ` + claimReturning
 
+// CountsByStatus implements core.JobCounter via a single GROUP BY over
+// the node-kind rows.
+func (s *Postgres) CountsByStatus(ctx context.Context) (map[core.JobStatus]int, error) {
+	rows, err := s.pool.Query(ctx, `SELECT status, count(*) FROM jobs WHERE kind = 'node' GROUP BY status`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make(map[core.JobStatus]int)
+	for rows.Next() {
+		var status string
+		var n int
+		if err := rows.Scan(&status, &n); err != nil {
+			return nil, err
+		}
+		out[core.JobStatus(status)] = n
+	}
+	return out, rows.Err()
+}
+
 func (s *Postgres) Requeue(ctx context.Context, jobID string, availableAt time.Time) error {
 	const q = `
 		UPDATE jobs
@@ -234,6 +254,18 @@ func (s *Postgres) Renew(ctx context.Context, jobID, worker string, lease time.D
 }
 
 func (s *Postgres) Complete(ctx context.Context, jobID string, status core.JobStatus, result *core.Result) error {
+	return s.complete(ctx, jobID, "", status, result)
+}
+
+// CompleteOwned implements core.OwnedCompleter: Complete, but only if
+// worker still owns the record (ErrConflict otherwise).
+func (s *Postgres) CompleteOwned(ctx context.Context, jobID, worker string, status core.JobStatus, result *core.Result) error {
+	return s.complete(ctx, jobID, worker, status, result)
+}
+
+// complete is the shared body. worker == "" skips the ownership fence
+// (the plain Complete used by non-lease callers).
+func (s *Postgres) complete(ctx context.Context, jobID, worker string, status core.JobStatus, result *core.Result) error {
 	if !core.IsTerminalStatus(status) && status != core.JobStatusAwaiting {
 		return core.ErrConflict
 	}
@@ -253,12 +285,17 @@ func (s *Postgres) Complete(ctx context.Context, jobID string, status core.JobSt
 	}
 	// Refuse to overwrite an already-terminal record. Awaiting and skipped
 	// are NOT included in the guard so the resume path (awaiting → succeeded)
-	// works.
+	// works. When worker is set, also fence on lease ownership.
 	q := `
 		UPDATE jobs SET status = $2, result = $3::jsonb, ` + finishedClause + `, lease_until = NULL
 		 WHERE id = $1 AND status NOT IN ('succeeded','failed','cancelled')
 	`
-	ct, err := s.pool.Exec(ctx, q, jobID, string(status), resJSON)
+	args := []any{jobID, string(status), resJSON}
+	if worker != "" {
+		q += " AND worker_id = $4"
+		args = append(args, worker)
+	}
+	ct, err := s.pool.Exec(ctx, q, args...)
 	if err != nil {
 		return wrapPgErr(err)
 	}
