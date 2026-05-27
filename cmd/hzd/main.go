@@ -59,6 +59,7 @@ func main() {
 	pgMaxConns := flag.Int("pg-max-conns", envInt("HAZYFLOW_PG_MAX_CONNS", 0), "max Postgres connections in the shared pool (default $HAZYFLOW_PG_MAX_CONNS, else pgx's default of max(4, NumCPU)). Size up for production: workers + gateway + scheduler all share this pool.")
 	pgMinConns := flag.Int("pg-min-conns", envInt("HAZYFLOW_PG_MIN_CONNS", 0), "min warm Postgres connections kept open (default $HAZYFLOW_PG_MIN_CONNS, else 0). Keeps a floor of ready connections so a burst doesn't pay connection-setup latency.")
 	webDist := flag.String("web-dist", "", "serve a built React frontend bundle from this directory (e.g. web/dist). Empty = API-only. When set, the daemon serves the SPA from the same port as the API with index.html fallback for client-side routes.")
+	landingDir := flag.String("landing-dir", os.Getenv("HAZYFLOW_LANDING_DIR"), "serve an optional static marketing site from this directory (the hazy-flow-landing repo) alongside the SPA (default $HAZYFLOW_LANDING_DIR). When set with --web-dist, GET / is auth-gated: signed-in users get the app, anonymous visitors get landing.html; marketing pages/assets (/pricing, /privacy, /terms, /style.css, …) serve publicly. Empty = / serves the SPA for everyone.")
 	enableEnvSecrets := flag.Bool("env-secrets", true, "enable env:// secret provider")
 	builtinSecretsFile := flag.String("builtin-secrets", "", "JSON file of {name: value} for builtin:// secret provider")
 	isolateSharedSecrets := flag.Bool("isolate-shared-secrets", false, "require env:// and builtin:// names to be of the form <tenant>.<key> matching the caller's tenant. Off by default for backward compatibility with single-tenant deployments; turn on for shared multi-tenant deployments so tenant A can't read tenant B's shared secrets.")
@@ -459,7 +460,8 @@ func main() {
 		if *trustProxyHeaders {
 			log.Print("trusting X-Forwarded-Proto from reverse proxy (Secure cookies + HSTS on forwarded-https)")
 		}
-		gw.WebDist = *webDist // empty disables static frontend serving
+		gw.WebDist = *webDist       // empty disables static frontend serving
+		gw.LandingDir = *landingDir // empty disables the marketing landing; / serves the SPA
 		// Audit trail: Postgres-backed (durable) when a DSN is set, else
 		// in-memory (dev). Powers GET /api/v1/admin/audit.
 		if pgPool != nil {
@@ -478,6 +480,13 @@ func main() {
 		}
 		if *webDist != "" {
 			log.Printf("serving frontend bundle from %s", *webDist)
+		}
+		if *landingDir != "" {
+			if *webDist == "" {
+				log.Printf("--landing-dir %s ignored: requires --web-dist (the landing auth-gate falls back to the SPA shell for signed-in users)", *landingDir)
+			} else {
+				log.Printf("serving marketing landing from %s (GET / auth-gated: anonymous -> landing.html, signed-in -> app)", *landingDir)
+			}
 		}
 		if *slackSigningSecret != "" {
 			gw.SlackEvents = daemon.NewSlackEventsHandler(svc, *slackSigningSecret)

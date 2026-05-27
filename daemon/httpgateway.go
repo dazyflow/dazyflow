@@ -109,6 +109,17 @@ type HTTPGateway struct {
 	// fallback so client-side routes resolve. Empty = no static
 	// serving — the gateway is API-only and unknown paths 404.
 	WebDist string
+
+	// LandingDir, when non-empty, points at a directory of static
+	// marketing-site files (the separate hazy-flow-landing repo:
+	// landing.html, style.css, /pricing, /privacy, /terms, assets).
+	// When set alongside WebDist, GET / is auth-gated: a signed-in
+	// browser (valid session cookie) gets the SPA shell, an anonymous
+	// visitor gets landing.html. Marketing pages/assets that resolve
+	// to a real file under LandingDir serve publicly; everything else
+	// falls through to the SPA. Empty = no landing; / serves the SPA
+	// for everyone (the historical behaviour).
+	LandingDir string
 }
 
 func NewHTTPGateway(svc *Service) *HTTPGateway {
@@ -226,8 +237,89 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// routes above match first; `GET /` is a catch-all for any
 	// unknown GET path. Empty WebDist = no static serving.
 	if h.WebDist != "" {
-		mux.Handle("GET /", webDistHandler(h.WebDist))
+		if h.LandingDir != "" {
+			mux.Handle("GET /", h.landingDistHandler(h.LandingDir, h.WebDist))
+		} else {
+			mux.Handle("GET /", webDistHandler(h.WebDist))
+		}
 	}
+}
+
+// landingDistHandler serves an optional static marketing site
+// (landingDir) alongside the SPA (webDir) on the same origin. The
+// root is auth-gated — a signed-in browser gets the app shell, an
+// anonymous visitor gets the landing page — so a logged-out user who
+// would previously have hit the SPA's sign-in screen at / now lands on
+// marketing copy instead, while signed-in users keep their dashboard
+// at /. Marketing pages and assets that resolve to a real file under
+// landingDir (/style.css, /pricing, /privacy, /terms, /shots/*, …)
+// serve publicly; everything else (the SPA's own assets and
+// client-side routes) falls through to the SPA handler.
+func (h *HTTPGateway) landingDistHandler(landingDir, webDir string) http.Handler {
+	spa := webDistHandler(webDir)
+	landingFS := http.FileServer(http.Dir(landingDir))
+	landingIndex := filepath.Join(landingDir, "landing.html")
+	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		// /api/* never falls through to static; defense in depth in
+		// case a route was missed in mountRoutes.
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			http.NotFound(rw, r)
+			return
+		}
+		// Root is auth-gated: the session cookie rides along on a
+		// top-level navigation (SameSite=Lax), so a valid one means a
+		// signed-in user who wants the app, not the marketing page.
+		if r.URL.Path == "/" {
+			if h.hasValidSession(r) {
+				spa.ServeHTTP(rw, r)
+				return
+			}
+			http.ServeFile(rw, r, landingIndex)
+			return
+		}
+		// Public marketing pages/assets: anything that resolves to a
+		// real file under landingDir. The SPA's routes and hashed
+		// assets don't exist there, so they fall through below.
+		if landingHas(landingDir, r.URL.Path) {
+			landingFS.ServeHTTP(rw, r)
+			return
+		}
+		spa.ServeHTTP(rw, r)
+	})
+}
+
+// landingHas reports whether urlPath resolves to a servable file under
+// dir — either a regular file, or a directory holding an index.html
+// (so /pricing maps to pricing/index.html, matching the FileServer's
+// directory-index behaviour). Used to decide landing-vs-SPA dispatch.
+func landingHas(dir, urlPath string) bool {
+	clean := filepath.Clean(urlPath)
+	if clean == "/" || strings.HasPrefix(clean, "..") {
+		return false
+	}
+	p := filepath.Join(dir, clean)
+	info, err := os.Stat(p)
+	if err != nil {
+		return false
+	}
+	if !info.IsDir() {
+		return true
+	}
+	idx, err := os.Stat(filepath.Join(p, "index.html"))
+	return err == nil && !idx.IsDir()
+}
+
+// hasValidSession reports whether the request carries a credential
+// (session cookie or Bearer token) that authenticates successfully.
+// Used to gate the marketing landing at / — it must not error the
+// request, only classify it.
+func (h *HTTPGateway) hasValidSession(r *http.Request) bool {
+	token := credentialFromRequest(r)
+	if token == "" {
+		return false
+	}
+	_, err := h.svc.Authenticate(r.Context(), token)
+	return err == nil
 }
 
 // webDistHandler serves files from root with SPA fallback to

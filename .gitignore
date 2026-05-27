@@ -5,3 +5,4 @@
 /.hazyflow-workspace
 /.hazyflow-users.json
 *.xlsx
+/.env

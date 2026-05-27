@@ -9,29 +9,43 @@ separate `hazy-flow-landing` repo.
 
 ## Deploy with Docker Compose
 
-The quickest durable setup is the daemon plus Postgres, via
-`deploy/docker-compose.yml`. You need Docker with the Compose plugin.
+The quickest durable setup is the daemon plus Postgres, via the
+root-level `docker-compose.yml`. You need Docker with the Compose plugin.
 
 ```sh
-# A stable 32-byte key that encrypts stored secrets. Keep a sealed
-# backup: losing it makes every stored secret undecryptable.
-export HAZYFLOW_MASTER_KEY=$(openssl rand -base64 32)
-
-docker compose -f deploy/docker-compose.yml up --build -d
+cp .env.example .env   # optional — defaults boot as-is
+docker compose up -d
 ```
 
+Everything is configured through `.env` (see `.env.example` for the full
+list of knobs). The defaults boot out of the box; before pointing real
+users at the box, set at least `HAZYFLOW_MASTER_KEY` (a stable 32-byte
+key that encrypts stored secrets — `openssl rand -base64 32`, keep a
+sealed backup), `POSTGRES_PASSWORD`, and your public origin.
+
 This brings up Postgres and the daemon. The API and web UI are on
-http://localhost:8080, gRPC on :50050, and Prometheus metrics on
-`/metrics`. Control-plane state (jobs, API keys, sessions, users,
-encrypted secrets) persists to Postgres; graphs and sandboxes persist to
-the `hzddata` volume.
+http://localhost:8080, gRPC on :50050. Control-plane state (jobs, API
+keys, sessions, users, encrypted secrets) persists to Postgres; graphs
+and sandboxes persist to the `hzddata` volume.
 
 Common follow-ups:
 
 ```sh
-docker compose -f deploy/docker-compose.yml logs -f hzd
-docker compose -f deploy/docker-compose.yml down      # stop
+docker compose logs -f hzd
+docker compose down      # stop
 ```
+
+### Optional marketing landing
+
+By default `/` serves the app to everyone (a logged-out visitor lands on
+the sign-in screen). To front the install with the marketing site from
+the separate `hazy-flow-landing` repo, mount it and point
+`HAZYFLOW_LANDING_DIR` at the mount: uncomment the `:/srv/landing:ro`
+volume in `docker-compose.yml` and set `HAZYFLOW_LANDING_DIR=/srv/landing`
+in `.env`. `GET /` then becomes auth-gated — anonymous visitors get the
+landing page, signed-in users keep their dashboard — and `/pricing`,
+`/privacy`, `/terms`, and the landing assets serve publicly. Leave it
+unset for a private self-host install.
 
 ## Going to production
 

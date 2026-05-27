@@ -1,0 +1,116 @@
+# Canonical self-host stack: Postgres + hzd. One command:
+#
+#   cp .env.example .env   # optional — defaults boot as-is
+#   docker compose up -d
+#
+# brings everything up, runs migrations, and serves the API + web UI on
+# http://localhost:8080 (gRPC on :50050). Control-plane state (jobs, API
+# keys, sessions, users, encrypted secrets) persists to Postgres; graphs
+# + sandboxes persist to the hzddata volume, so `docker compose down` is
+# safe.
+#
+# Override anything below via a sibling .env file (see .env.example).
+# Defaults are tuned for first-boot ergonomics, NOT production. Before
+# putting this in front of users:
+#
+#   1. Set POSTGRES_PASSWORD to something other than "hazyflow" (and
+#      update HAZYFLOW_POSTGRES_DSN to match).
+#   2. Set HAZYFLOW_MASTER_KEY to a real key (openssl rand -base64 32)
+#      and keep a sealed backup.
+#   3. Set HAZYFLOW_PUBLIC_BASE_URL + HAZYFLOW_WEB_ORIGIN to your real
+#      https origin.
+#   4. Front the app with TLS (Caddy / nginx / Traefik) and set
+#      HAZYFLOW_TRUST_PROXY_HEADERS=1.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     ${POSTGRES_USER:-hazyflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hazyflow}
+      POSTGRES_DB:       ${POSTGRES_DB:-hazyflow}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hazyflow} -d ${POSTGRES_DB:-hazyflow}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  hzd:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    # Optional: defaults below boot as-is, so the very first
+    # `docker compose up -d` works with no .env present.
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      TZ: ${TZ:-UTC}
+      # Database. Defaults to the bundled postgres service. Empty strings
+      # let hzd fall back to its own flag defaults rather than overriding
+      # with a literal "".
+      HAZYFLOW_POSTGRES_DSN: ${HAZYFLOW_POSTGRES_DSN:-postgres://${POSTGRES_USER:-hazyflow}:${POSTGRES_PASSWORD:-hazyflow}@postgres:5432/${POSTGRES_DB:-hazyflow}?sslmode=disable}
+      # Strongly recommended — when empty the encrypted secret store stays
+      # disabled (the daemon still boots).
+      HAZYFLOW_MASTER_KEY:           ${HAZYFLOW_MASTER_KEY:-}
+      HAZYFLOW_PUBLIC_BASE_URL:      ${HAZYFLOW_PUBLIC_BASE_URL:-}
+      HAZYFLOW_ENABLE_SIGNUP:        ${HAZYFLOW_ENABLE_SIGNUP:-}
+      HAZYFLOW_ENABLE_METRICS:       ${HAZYFLOW_ENABLE_METRICS:-}
+      HAZYFLOW_TRUST_PROXY_HEADERS:  ${HAZYFLOW_TRUST_PROXY_HEADERS:-}
+      HAZYFLOW_HTTP_EGRESS_ALLOW:    ${HAZYFLOW_HTTP_EGRESS_ALLOW:-}
+      # Optional marketing landing. Empty serves the app at / for
+      # everyone; set to the in-container mount path (see the commented
+      # landing volume below) to auth-gate / behind the landing page.
+      HAZYFLOW_LANDING_DIR:          ${HAZYFLOW_LANDING_DIR:-}
+      HAZYFLOW_PG_MAX_CONNS:         ${HAZYFLOW_PG_MAX_CONNS:-}
+      HAZYFLOW_PG_MIN_CONNS:         ${HAZYFLOW_PG_MIN_CONNS:-}
+      HAZYFLOW_MAX_GRAPH_NODES:      ${HAZYFLOW_MAX_GRAPH_NODES:-}
+      HAZYFLOW_MAX_CONCURRENT_JOBS:  ${HAZYFLOW_MAX_CONCURRENT_JOBS:-}
+      # Optional integrations / agent. Pass through now so operators can
+      # populate .env once and never come back here.
+      ANTHROPIC_API_KEY:                  ${ANTHROPIC_API_KEY:-}
+      HAZYFLOW_SLACK_SIGNING_SECRET:      ${HAZYFLOW_SLACK_SIGNING_SECRET:-}
+      HAZYFLOW_GITHUB_WEBHOOK_SECRET:     ${HAZYFLOW_GITHUB_WEBHOOK_SECRET:-}
+      HAZYFLOW_APPROVAL_HMAC_SECRET:      ${HAZYFLOW_APPROVAL_HMAC_SECRET:-}
+      HAZYFLOW_OAUTH_SLACK_CLIENT_ID:     ${HAZYFLOW_OAUTH_SLACK_CLIENT_ID:-}
+      HAZYFLOW_OAUTH_SLACK_CLIENT_SECRET: ${HAZYFLOW_OAUTH_SLACK_CLIENT_SECRET:-}
+      HAZYFLOW_OAUTH_GITHUB_CLIENT_ID:     ${HAZYFLOW_OAUTH_GITHUB_CLIENT_ID:-}
+      HAZYFLOW_OAUTH_GITHUB_CLIENT_SECRET: ${HAZYFLOW_OAUTH_GITHUB_CLIENT_SECRET:-}
+      HAZYFLOW_OAUTH_GOOGLE_CLIENT_ID:     ${HAZYFLOW_OAUTH_GOOGLE_CLIENT_ID:-}
+      HAZYFLOW_OAUTH_GOOGLE_CLIENT_SECRET: ${HAZYFLOW_OAUTH_GOOGLE_CLIENT_SECRET:-}
+      HAZYFLOW_OAUTH_NOTION_CLIENT_ID:     ${HAZYFLOW_OAUTH_NOTION_CLIENT_ID:-}
+      HAZYFLOW_OAUTH_NOTION_CLIENT_SECRET: ${HAZYFLOW_OAUTH_NOTION_CLIENT_SECRET:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT:        ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    command:
+      # Container layout — fixed. Tunables come from .env above.
+      - --http=:8080
+      - --listen=:50050
+      - --web-dist=/srv/web
+      - --workspace-dir=/data/workspace
+      - --sandbox-base=/data/sandbox
+      # No env fallback on these flags, so interpolate from .env with a
+      # safe default (never empty — an empty --session-ttl fails to parse).
+      - --web-origin=${HAZYFLOW_WEB_ORIGIN:-http://localhost:8080}
+      - --session-ttl=${HAZYFLOW_SESSION_TTL:-24h}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${HAZYFLOW_BIND_ADDR:-127.0.0.1}:${HAZYFLOW_PORT:-8080}:8080"
+    volumes:
+      - hzddata:/data
+      # Optional marketing landing: mount a checkout of the separate
+      # hazy-flow-landing repo read-only, then set
+      # HAZYFLOW_LANDING_DIR=/srv/landing in .env.
+      # - ../hazy-flow-landing:/srv/landing:ro
+    # No container healthcheck: the distroless image ships no shell/curl.
+    # Use the daemon's HTTP /healthz + /readyz (or the gRPC health
+    # service) from your orchestrator — see deploy/k8s/hazyflow.yaml.
+
+volumes:
+  pgdata:
+  hzddata:
