@@ -258,12 +258,13 @@ func (x *Graph) GetTriggers() []*GraphTrigger {
 }
 
 type GraphTrigger struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"` // "cron" or "webhook"
-	Cron          string                 `protobuf:"bytes,2,opt,name=cron,proto3" json:"cron,omitempty"`
-	Secret        string                 `protobuf:"bytes,3,opt,name=secret,proto3" json:"secret,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Type            string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"` // "cron", "poll", or "webhook"
+	Cron            string                 `protobuf:"bytes,2,opt,name=cron,proto3" json:"cron,omitempty"`
+	Secret          string                 `protobuf:"bytes,3,opt,name=secret,proto3" json:"secret,omitempty"`
+	IntervalSeconds int32                  `protobuf:"varint,4,opt,name=interval_seconds,json=intervalSeconds,proto3" json:"interval_seconds,omitempty"` // for type=poll; seconds between fires
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *GraphTrigger) Reset() {
@@ -315,6 +316,13 @@ func (x *GraphTrigger) GetSecret() string {
 		return x.Secret
 	}
 	return ""
+}
+
+func (x *GraphTrigger) GetIntervalSeconds() int32 {
+	if x != nil {
+		return x.IntervalSeconds
+	}
+	return 0
 }
 
 type GraphProgress struct {
@@ -1831,11 +1839,12 @@ const file_control_proto_rawDesc = "" +
 	"\tworkspace\x18\x04 \x01(\tR\tworkspace\x12/\n" +
 	"\x05nodes\x18\x05 \x03(\v2\x19.hazyflow.control.v1.NodeR\x05nodes\x12/\n" +
 	"\x05edges\x18\x06 \x03(\v2\x19.hazyflow.control.v1.EdgeR\x05edges\x12=\n" +
-	"\btriggers\x18\a \x03(\v2!.hazyflow.control.v1.GraphTriggerR\btriggers\"N\n" +
+	"\btriggers\x18\a \x03(\v2!.hazyflow.control.v1.GraphTriggerR\btriggers\"y\n" +
 	"\fGraphTrigger\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x12\n" +
 	"\x04cron\x18\x02 \x01(\tR\x04cron\x12\x16\n" +
-	"\x06secret\x18\x03 \x01(\tR\x06secret\"s\n" +
+	"\x06secret\x18\x03 \x01(\tR\x06secret\x12)\n" +
+	"\x10interval_seconds\x18\x04 \x01(\x05R\x0fintervalSeconds\"s\n" +
 	"\rGraphProgress\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12\x17\n" +
 	"\anode_id\x18\x02 \x01(\tR\x06nodeId\x12\x18\n" +

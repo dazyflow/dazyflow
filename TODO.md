@@ -11,12 +11,39 @@ SaaS." Most line-items are detailed in the sections further down
 (Production blockers, Distribution & HA, T3, Observability); this orders
 them.
 
-State (updated 2026-05-27): **Phases 0–2 shipped** — durability
-(Postgres-backed jobs/keys/sessions/users/secrets), security hardening
-(Phase 1), and HA (Postgres event bus + scheduler leader election). Rough
-state: features ~9/10, tests ~8/10 (green, now incl. `-race` in CI),
-durability ~8/10, HA ~7/10, monetization ~1/10 → roughly **70% to
-production**, with **Phase 3 (monetization)** the main remaining gate.
+### Where we are (refreshed 2026-05-27, end of stability/hardening push)
+
+Scorecard — baseline review → now:
+
+| Dimension     | Baseline | Now  | What moved it |
+|---------------|----------|------|---------------|
+| Features      | ~8/10    | ~9/10 | T0–T2 connectors / templates / run UI (prior) |
+| Tests         | ~8/10    | ~8/10 | broad suite, **now `-race` in CI**; gaps: `cmd/*` 0%, pg tests gated |
+| Durability    | ~3/10    | ~9/10 | Phase 0 — Postgres-backed everything; + backup/restore runbook + JSON→Postgres user import |
+| HA / correctness | ~2/10 | ~9/10 | Phase 2 (PgBus + leader election, load-tested) + race/lease fixes + **compose/k8s deploy manifests** |
+| Observability | ~2/10    | ~9/10 | `/healthz` + `/readyz` + `/metrics` (disk + job gauges) + gRPC health + **OTLP trace export** |
+| Monetization  | ~1/10    | ~1/10 | untouched — **Phase 3 is the gate** |
+
+**Overall: ~45% → ~75% to production.** Phases 0–2 shipped; the dominant
+remaining work is **Phase 3 (monetization)** — metering, Stripe + plan
+gates, team features. Private beta (Phases 0–1) is met; paid GA is gated
+on Phase 3.
+
+### Since the last review (this session's stability/hardening)
+
+- **Correctness/concurrency:** fixed a `workspace.Store` data race (CI now
+  runs `-race`); fenced node execution **and** completion on lease loss
+  (`OwnedCompleter`) — closes a double-execution / result-clobber hazard.
+- **Scale:** `maybeCompleteGraph` O(N²)→O(N) (batch read); `--pg-max-conns`
+  / `--pg-min-conns` pool sizing.
+- **Multi-tenant safety:** `--max-graph-nodes`, `--max-graph-timeout`,
+  `--max-concurrent-jobs` (per-tenant fairness throttle).
+- **Secrets:** runtime output redaction; `--rotate-master-key` KEK re-wrap.
+- **Lifecycle:** `Job.Cleanup` via per-run `scratch://` reclamation.
+- **Observability:** `/metrics` (per-tenant disk + job-status gauges),
+  gRPC health service.
+- **Retry:** manifest-driven max-retries.
+- TODO trimmed (1197→~1090 lines) and stale entries reconciled.
 
 ### Phase 0 — Durability: stop losing data on restart (DONE · 2026-05-27)
 
@@ -54,9 +81,10 @@ loud "lost on restart" warning.
   killed `hzd`, booted a fresh process against the same DB, signed in
   with the pre-restart credentials → HTTP 200 with the persisted
   tenant. Data lived only in Postgres.
-- [ ] **Follow-ups (not blocking):** wire the `HAZYFLOW_TEST_DB` tests
-  into a CI service (Phase 4); a one-time JSON-users → Postgres import
-  for existing dev deployments (greenfield deploys don't need it).
+- [x] **Follow-ups:** `HAZYFLOW_TEST_DB` tests now run in CI (`.build.yml`
+  Postgres service). JSON-users → Postgres import shipped 2026-05-27:
+  `auth.ImportUsers` + `hzd --import-users-from-json <path>` (idempotent,
+  skips existing); see `DEPLOY.md`.
 
 ### Phase 1 — Security hardening for public exposure (DONE · 2026-05-27)
 
@@ -98,16 +126,22 @@ Per-tenant metering → Stripe + plan gates → team features. Specced under
   serves API + bundle on :8080). `.build.yml` for builds.sr.ht runs
   go build/test/vet + web build, with a Postgres service exporting
   `HAZYFLOW_TEST_DB` so the gated jobstore/auth tests run in CI (closes
-  the long-standing "real-DB tests never exercised" gap). Still open:
-  k8s/compose deploy manifests; confirm the image build in CI.
+  the long-standing "real-DB tests never exercised" gap). **Deploy
+  manifests shipped 2026-05-27** — `deploy/docker-compose.yml` (hzd +
+  Postgres, durable, metrics on) and `deploy/k8s/hazyflow.yaml`
+  (Deployment ×2 + Service + Secret, liveness `/healthz` + readiness
+  `/readyz` probes), with `deploy/README.md`. Still open: confirm the
+  image build in CI (`.build.yml` doesn't yet build the Docker image).
 - [x] **`/healthz` + `/readyz` + `/metrics`** (2026-05-27) — liveness,
   readiness (pings Postgres when configured), and a Prometheus `/metrics`
   endpoint behind `--metrics` with per-tenant disk gauges
   (`daemon/metrics.go`). gRPC health service for non-HTTP deployments
   shipped (see "Worker health / readiness"). Open: more gauges.
 - [x] **Connection-pool sizing** (2026-05-27) — `--pg-max-conns` /
-  `--pg-min-conns`. Still open: Postgres backup strategy (see "Known
-  unknowns").
+  `--pg-min-conns`.
+- [x] **Postgres backup/restore runbook** (2026-05-27) — `DEPLOY.md`
+  covers pg_dump + PITR, the master-key break-glass caveat, and what's
+  safe to lose (bus_events spool, derived sandbox dirs).
 
 **Critical paths:** private beta (Phases 0–1) ✅ done; paid GA gated on
 **Phase 3 (monetization)**. Phase 2 (HA) already landed.
@@ -791,6 +825,14 @@ platform can demonstrate but not actually power a real workflow.
 
 ## Observability
 
+- [x] **OTLP trace export** (2026-05-27). The engine already created
+  graph/node spans (`engine/tracing.go`) but they hit the global noop
+  tracer and vanished. `daemon.SetupTracing` now installs an SDK
+  `TracerProvider` with an OTLP/gRPC exporter + W3C propagation when the
+  standard `OTEL_EXPORTER_OTLP_ENDPOINT` (or `_TRACES_ENDPOINT`) is set —
+  off by default (noop, zero overhead), wired in `cmd/hzd` with graceful
+  flush on shutdown. Tests cover env gating + provider install/no-op.
+  Documented in `DEPLOY.md`. (Adds the `otlptracegrpc` exporter dep.)
 - [x] **Disk-usage metrics per tenant + `/metrics`** (2026-05-27). A
   hand-rolled Prometheus text endpoint (`daemon/metrics.go`) exposes
   `hazyflow_up` + `hazyflow_quota_bytes_used{tenant}` /
@@ -825,15 +867,29 @@ platform can demonstrate but not actually power a real workflow.
 
 ## Coverage gaps (the honest list)
 
-- [ ] `engine/` at 57% — `LocalCatalog.LoadDir`, `cancelledResult`,
-  some error branches in `runProtocol`.
+- [~] `engine/` 57% → **72.7%** (2026-05-27) — added `LocalCatalog`
+  LoadDir/Register error-path + `localErr` tests. Remaining: `runProtocol`
+  edge branches, `cancelledResult`, remote-catalog paths.
 - [ ] `engine/jobstore/` at 36% — Postgres path gated, exercised only
   when `HAZYFLOW_TEST_DB` is set.
-- [ ] `cmd/hzctl` / `cmd/hzd` at 0% — no tests.
-- [ ] `workspace/` at 59% — most missed branches are error paths in
-  Save/Promote.
-- [ ] `modules/io/` at 66% — copyFile branch and a few sandbox edge
-  cases.
+- [~] `cmd/hzctl` / `cmd/hzd` — off 0% (2026-05-27): hzd 15.8%, hzctl
+  9.4%. Covered the pure helpers (`parseSize`/`parseQuotaSpec`/`envInt`,
+  `register*` error paths) and the `graphToPB`↔`graphFromPB` round-trip;
+  the remainder is `main()` + cobra command builders (not unit-testable
+  without an integration harness). **The push surfaced + fixed two real
+  bugs:** (1) `parseSize` couldn't parse `10MB`/`1GB` — its own
+  `--quota` flag examples — because it stripped the multiplier before the
+  `B`; (2) `controlpb.GraphTrigger` had no `interval_seconds`, so a poll
+  trigger's interval was silently dropped saving a graph via `hzctl`
+  (gRPC), leaving the trigger inert. Added the proto field (regenerated)
+  + threaded it through the conversion.
+- [~] `workspace/` 59% → **76.3%** (2026-05-27) — added disk-backed
+  reopen, Branches/Tags, LoadAt-by-hash, and Save/Load/Promote error-path
+  tests. Remaining: a few hard-to-trigger filesystem/marshal error branches.
+- [~] `integrations/io/` 66% → **79.7%** (2026-05-27) — covered the pure
+  helpers (`guessMIMEByExt`, `isTextMIME`, `inlineToBytes`,
+  `SetQuotaReserver`) + scratch:// paths. Remaining: excel type-coercion
+  edge cases.
 
 ## Architectural debt
 

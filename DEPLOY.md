@@ -76,6 +76,43 @@ those run in-memory/JSON and are lost on restart (dev only — the daemon
 logs a warning). Provide a stable `--master-key` (32-byte base64); losing
 it makes every stored secret undecryptable.
 
+### Migrating an existing JSON user file to Postgres
+
+If you ran in dev mode with a `.hazyflow-users.json` and are adopting
+Postgres, import those accounts once so nobody is stranded:
+
+```sh
+hzd --postgres-dsn "$HAZYFLOW_POSTGRES_DSN" \
+    --import-users-from-json ./.hazyflow-users.json
+# logs "user import complete: N imported, M skipped", then exits
+```
+
+It's idempotent (accounts already in Postgres are skipped, never
+overwritten), so re-running is safe.
+
+### Backup & restore
+
+Everything durable lives in the one Postgres database, so a standard
+Postgres backup is a complete backup — **plus** the `--master-key`, which
+lives outside the DB and is required to decrypt the `encrypted_secrets`
+rows.
+
+- **Logical backup (simplest):**
+  `pg_dump "$HAZYFLOW_POSTGRES_DSN" | gzip > hazyflow-$(date +%F).sql.gz`.
+  Restore into a fresh DB with `gunzip -c … | psql "$DSN"`.
+- **Point-in-time recovery:** for larger deployments use base backups +
+  WAL archiving (`pg_basebackup` / your managed provider's PITR). The app
+  needs no special handling — it re-applies its `CREATE TABLE IF NOT
+  EXISTS` schema on boot, so restoring the data is sufficient.
+- **Back up the master key separately** (the break-glass copy from the
+  "If it's lost" section of `SECURITY.md`). A DB backup without the key
+  leaves every tenant secret undecryptable.
+- **What's safe to lose:** the `bus_events` spool is ephemeral
+  (auto-swept, ~1h retention) and the per-tenant sandbox/scratch dirs are
+  derived working data — neither needs backing up. `file_write` outputs
+  in the workspace sandbox are the exception if your flows treat them as
+  durable artifacts; back up the sandbox base dir too in that case.
+
 ## Security flags worth setting
 
 - `--dev-key` defaults **off**; only enable for local dev.
@@ -84,3 +121,21 @@ it makes every stored secret undecryptable.
 - `--http-egress-allow` pins the `http_request` / `webhook_send` drops to
   an allowlist of hosts (`api.stripe.com`, `*.slack.com`, CIDRs). The
   IP-level SSRF guard (blocks private/loopback/metadata) is always on.
+
+## Observability
+
+- **Health probes:** HTTP `GET /healthz` (liveness) and `GET /readyz`
+  (readiness — pings Postgres when `--postgres-dsn` is set). For
+  gRPC-only / k8s deployments, the standard `grpc.health.v1.Health`
+  service is registered on the gRPC port (use `grpc_health_probe`); its
+  overall status tracks the same readiness check.
+- **Metrics:** `--metrics` exposes a Prometheus `GET /metrics` endpoint
+  (`hazyflow_up`, per-tenant `hazyflow_quota_bytes_used/_limit`,
+  `hazyflow_jobs{status}`). Off by default — it reveals tenant names, so
+  enable it only behind a restricted scrape network.
+- **Tracing:** set the standard `OTEL_EXPORTER_OTLP_ENDPOINT` (or
+  `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`) and `hzd` installs an OTLP trace
+  exporter so graph/node spans flow to your collector (Jaeger, Tempo,
+  the OTel Collector, Honeycomb, …). Unset = no export (zero overhead).
+  All standard `OTEL_EXPORTER_OTLP_*` env vars (headers, TLS, timeout)
+  are honored.

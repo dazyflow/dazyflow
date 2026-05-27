@@ -257,6 +257,7 @@ func graphToPB(g core.Graph) (*controlpb.Graph, error) {
 	for _, t := range g.Triggers {
 		out.Triggers = append(out.Triggers, &controlpb.GraphTrigger{
 			Type: t.Type, Cron: t.Cron, Secret: t.Secret,
+			IntervalSeconds: int32(t.IntervalSeconds),
 		})
 	}
 	return out, nil
@@ -286,6 +287,7 @@ func graphFromPB(g *controlpb.Graph) (core.Graph, error) {
 	for _, t := range g.Triggers {
 		out.Triggers = append(out.Triggers, core.GraphTrigger{
 			Type: t.Type, Cron: t.Cron, Secret: t.Secret,
+			IntervalSeconds: int(t.IntervalSeconds),
 		})
 	}
 	return out, nil

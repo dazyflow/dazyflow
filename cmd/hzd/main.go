@@ -70,6 +70,7 @@ func main() {
 	mcpServers := flag.String("mcp", "", "register MCP stdio servers, e.g. fs=server-filesystem /tmp;docs=npx -y @modelcontextprotocol/server-docs (semicolon-separated)")
 	workspaceDir := flag.String("workspace-dir", "./.hazyflow-workspace", "directory for the dev workspace's git-backed graph store; empty = in-memory (graphs lost on restart)")
 	usersFile := flag.String("users-file", "./.hazyflow-users.json", "JSON file backing the email+password user store; empty disables password sign-in")
+	importUsersFrom := flag.String("import-users-from-json", "", "one-time migration: import users from this JSON user file into the Postgres user store (requires --postgres-dsn), then exit. Idempotent — accounts already in Postgres are skipped, never overwritten.")
 	webOrigin := flag.String("web-origin", "http://localhost:5174", "comma-separated allowed origins for the web UI (CORS + cookie credentials)")
 	authRatePerMin := flag.Int("auth-rate-per-min", 20, "per-IP requests/minute allowed on /api/v1/auth/{signin,signup} before 429. 0 disables throttling.")
 	authRateBurst := flag.Int("auth-rate-burst", 10, "per-IP burst capacity for the auth rate limiter")
@@ -90,6 +91,22 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	// Distributed tracing: installs an OTLP exporter only when an
+	// OTEL_EXPORTER_OTLP_ENDPOINT (or _TRACES_ENDPOINT) is set, so the
+	// engine's spans actually leave the process. No endpoint = noop, no
+	// overhead. Shutdown flushes batched spans on exit.
+	traceShutdown, tracing, err := daemon.SetupTracing(ctx, "hzd", "dev")
+	if err != nil {
+		log.Printf("tracing: %v (continuing without trace export)", err)
+	} else if tracing {
+		log.Print("OTLP trace export enabled (configured via OTEL_EXPORTER_OTLP_* env)")
+		defer func() {
+			sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = traceShutdown(sctx)
+		}()
+	}
 
 	// Egress allowlist for the http_request drop (operator policy).
 	if *httpEgressAllow != "" {
@@ -167,6 +184,26 @@ func main() {
 		sessions = auth.NewMemSessionStore()
 		jobs = jobstore.NewMemory()
 		log.Print("WARNING: in-memory stores (jobs/api-keys/sessions) — lost on restart; set --postgres-dsn for durability")
+	}
+
+	// One-time migration: import a JSON user file into the Postgres user
+	// store, then exit. Idempotent (existing accounts skipped). Lets a dev
+	// deployment move to --postgres-dsn without stranding accounts created
+	// on the JSON file.
+	if *importUsersFrom != "" {
+		if *postgresDSN == "" {
+			log.Fatalf("--import-users-from-json requires --postgres-dsn (the destination store)")
+		}
+		src, err := auth.OpenJSONUserStore(*importUsersFrom)
+		if err != nil {
+			log.Fatalf("open source users %q: %v", *importUsersFrom, err)
+		}
+		imported, skipped, err := auth.ImportUsers(ctx, src, users)
+		if err != nil {
+			log.Fatalf("import users: %v", err)
+		}
+		log.Printf("user import complete: %d imported, %d already present (skipped). From %s → Postgres.", imported, skipped, *importUsersFrom)
+		return
 	}
 
 	// Per-tenant concurrency cap (fairness throttle). Applies to whichever
@@ -613,6 +650,16 @@ func parseSize(s string) (int64, error) {
 	if s == "" {
 		return 0, fmt.Errorf("size required")
 	}
+	// Strip an optional trailing B/b FIRST so the documented forms with a
+	// "B" — e.g. 10MB, 1GB — parse correctly (the multiplier letter is
+	// then the last char). Doing it the other way leaves the B dangling
+	// and breaks the flag's own examples.
+	if strings.HasSuffix(s, "B") || strings.HasSuffix(s, "b") {
+		s = s[:len(s)-1]
+	}
+	if s == "" {
+		return 0, fmt.Errorf("size required")
+	}
 	mult := int64(1)
 	switch s[len(s)-1] {
 	case 'K', 'k':
@@ -626,9 +673,6 @@ func parseSize(s string) (int64, error) {
 		s = s[:len(s)-1]
 	case 'T', 't':
 		mult = 1024 * 1024 * 1024 * 1024
-		s = s[:len(s)-1]
-	}
-	if strings.HasSuffix(s, "B") || strings.HasSuffix(s, "b") {
 		s = s[:len(s)-1]
 	}
 	n, err := strconv.ParseInt(s, 10, 64)

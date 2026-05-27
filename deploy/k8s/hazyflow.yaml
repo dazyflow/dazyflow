@@ -1,0 +1,86 @@
+# Kubernetes manifests for the Hazy Flow daemon.
+#
+# Assumes an EXTERNAL/managed Postgres (RDS, Cloud SQL, a pg operator) —
+# reference it via the secret below. Apply with:
+#
+#   kubectl apply -f deploy/k8s/hazyflow.yaml
+#
+# Liveness uses /healthz (process up); readiness uses /readyz (pings
+# Postgres) so a pod is pulled from the Service when the DB is
+# unreachable. The standard gRPC health service is also registered on
+# :50050 if you prefer a grpc_health_probe sidecar.
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: hazyflow-secrets
+type: Opaque
+stringData:
+  # REPLACE both. master-key: openssl rand -base64 32 (keep a sealed backup).
+  HAZYFLOW_MASTER_KEY: "REPLACE_WITH_BASE64_32_BYTE_KEY"
+  HAZYFLOW_POSTGRES_DSN: "postgres://USER:PASS@your-postgres-host:5432/hazyflow?sslmode=require"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hazyflow
+  labels: { app: hazyflow }
+spec:
+  replicas: 2 # safe: Postgres event bus + advisory-lock scheduler leader make multi-node correct
+  selector:
+    matchLabels: { app: hazyflow }
+  template:
+    metadata:
+      labels: { app: hazyflow }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+      containers:
+        - name: hzd
+          image: hazyflow/hzd:latest # build + push from the repo Dockerfile
+          args:
+            - --http=:8080
+            - --web-dist=/srv/web
+            - --workspace-dir=/data/workspace
+            - --sandbox-base=/data/sandbox
+            - --metrics
+            # Behind a TLS-terminating ingress (see DEPLOY.md):
+            - --trust-proxy-headers
+            - --web-origin=https://app.example.com
+            - --public-base-url=https://app.example.com
+          envFrom:
+            - secretRef: { name: hazyflow-secrets }
+          ports:
+            - { name: http, containerPort: 8080 }
+            - { name: grpc, containerPort: 50050 }
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: "1", memory: 512Mi }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+      volumes:
+        # emptyDir is fine when --postgres-dsn holds the durable control
+        # plane; switch to a PVC if your flows treat file_write outputs in
+        # the sandbox as durable artifacts.
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hazyflow
+  labels: { app: hazyflow }
+spec:
+  selector: { app: hazyflow }
+  ports:
+    - { name: http, port: 8080, targetPort: http }
+    - { name: grpc, port: 50050, targetPort: grpc }

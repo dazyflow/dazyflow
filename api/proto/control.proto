@@ -37,9 +37,10 @@ message Graph {
 }
 
 message GraphTrigger {
-    string type   = 1; // "cron" or "webhook"
+    string type   = 1; // "cron", "poll", or "webhook"
     string cron   = 2;
     string secret = 3;
+    int32  interval_seconds = 4; // for type=poll; seconds between fires
 }
 
 message GraphProgress {
