@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { requiredConnections } from "./requiredConnections";
+import { requiredConnections, requiredSecrets } from "./requiredConnections";
 import type { Manifest, OAuthProviderStatus } from "../types";
 
 // Minimal manifest factory — only the fields requiredConnections reads.
@@ -107,5 +107,58 @@ describe("requiredConnections", () => {
     expect(requiredConnections(nodes, mm, {}, providers)).toEqual([
       { provider: "slack", account: "default" },
     ]);
+  });
+});
+
+describe("requiredSecrets", () => {
+  it("returns [] when knownSecrets is null (store disabled / no permission)", () => {
+    const nodes = [node("q", "postgres_query")];
+    const params = { q: { dsn: "${tenant:postgres_dsn}" } };
+    expect(requiredSecrets(nodes, params, null)).toEqual([]);
+  });
+
+  it("flags a ${tenant:NAME} ref that isn't stored yet", () => {
+    const nodes = [node("q", "postgres_query")];
+    const params = { q: { dsn: "${tenant:postgres_dsn}", sql: "SELECT 1" } };
+    expect(requiredSecrets(nodes, params, [])).toEqual(["postgres_dsn"]);
+  });
+
+  it("is satisfied when the secret exists", () => {
+    const nodes = [node("q", "postgres_query")];
+    const params = { q: { dsn: "${tenant:postgres_dsn}" } };
+    expect(requiredSecrets(nodes, params, ["postgres_dsn"])).toEqual([]);
+  });
+
+  it("finds refs nested in arrays and objects", () => {
+    const nodes = [node("h", "http_request")];
+    const params = {
+      h: {
+        headers: { Authorization: "Bearer ${tenant:api_key}" },
+        tags: ["x", "${tenant:other}"],
+      },
+    };
+    expect(requiredSecrets(nodes, params, [])).toEqual(["api_key", "other"]);
+  });
+
+  it("excludes secrets the graph writes itself via secret_set", () => {
+    const nodes = [
+      node("read", "gmail_search_messages"),
+      node("save", "secret_set"),
+    ];
+    const params = {
+      read: { query: "after:${tenant:gmail_cursor}" },
+      save: { name: "gmail_cursor", value: "123" },
+    };
+    // gmail_cursor is written by the secret_set node, so it's not "missing".
+    expect(requiredSecrets(nodes, params, [])).toEqual([]);
+  });
+
+  it("dedupes a secret referenced by multiple nodes", () => {
+    const nodes = [node("a", "postgres_query"), node("b", "postgres_upsert")];
+    const params = {
+      a: { dsn: "${tenant:postgres_dsn}" },
+      b: { dsn: "${tenant:postgres_dsn}" },
+    };
+    expect(requiredSecrets(nodes, params, [])).toEqual(["postgres_dsn"]);
   });
 });

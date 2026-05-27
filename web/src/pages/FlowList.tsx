@@ -13,6 +13,7 @@ export function FlowList() {
   const [flows, setFlows] = useState<FlowSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -35,16 +36,20 @@ export function FlowList() {
     };
   }, [token, me, activeWorkspace]);
 
-  const createNew = async () => {
+  // createNew is called by the modal with a human name (+ optional
+  // description). The machine ID is derived from the name so the user
+  // never types a slug — a short random suffix keeps it unique.
+  const createNew = async (name: string, description: string) => {
     if (!token || !me || !activeWorkspace) return;
-    const id = window.prompt(t("flowList.newFlowPrompt"));
-    if (!id) return;
+    const id = `${slugify(name)}-${Math.random().toString(36).slice(2, 8)}`;
     await api.saveGraph(token, {
       id,
       tenant: activeTenant,
       workspace: activeWorkspace,
       nodes: [],
       edges: [],
+      name: name.trim(),
+      description: description.trim() || undefined,
     });
     navigate(`/flows/${encodeURIComponent(id)}`);
   };
@@ -68,7 +73,7 @@ export function FlowList() {
               {t("flowList.fromTemplate")}
             </button>
           </Link>
-          <button className="primary" onClick={createNew}>
+          <button className="primary" onClick={() => setCreating(true)}>
             <Plus size={16} style={{ marginRight: 6, verticalAlign: -3 }} />
             {t("flowList.newFlow")}
           </button>
@@ -77,9 +82,31 @@ export function FlowList() {
       {loading && <div className="card">{t("common.loading")}</div>}
       {error && <div className="card" style={{ color: "var(--danger)" }}>{error}</div>}
       {!loading && !error && flows.length === 0 && (
-        <div className="card" style={{ color: "var(--muted)" }}>
-          {t("flowList.empty")}
+        <div className="card flow-empty">
+          <Workflow size={28} className="flow-empty-icon" />
+          <h2>{t("flowList.emptyTitle")}</h2>
+          <p>{t("flowList.emptyBody")}</p>
+          <div className="flow-empty-actions">
+            <button
+              type="button"
+              className="primary"
+              onClick={() => navigate("/templates")}
+            >
+              {t("flowList.emptyTemplateCta")}
+            </button>
+            <button type="button" onClick={() => setCreating(true)}>
+              {t("flowList.emptyBlankCta")}
+            </button>
+          </div>
         </div>
+      )}
+      {creating && (
+        <NewFlowModal
+          onCancel={() => setCreating(false)}
+          onCreate={async (name, description) => {
+            await createNew(name, description);
+          }}
+        />
       )}
       <div className="graph-list">
         {flows.map((f) => {
@@ -157,6 +184,100 @@ export function FlowList() {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// slugify turns a human flow name into the [A-Za-z0-9_.-] machine ID the
+// daemon expects. Lowercases, swaps runs of anything else for a single
+// hyphen, trims edge hyphens, and falls back to "flow" when a name is
+// all punctuation/empty.
+function slugify(name: string): string {
+  const s = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return s || "flow";
+}
+
+// NewFlowModal collects a friendly name (+ optional description) for a
+// blank flow. No ID field — the parent derives the machine ID from the
+// name. Reuses the shared settings-dialog modal chrome.
+function NewFlowModal({
+  onCancel,
+  onCreate,
+}: {
+  onCancel: () => void;
+  onCreate: (name: string, description: string) => Promise<void>;
+}) {
+  const { t } = useTranslation();
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || busy) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await onCreate(name, description);
+    } catch (e) {
+      setErr((e as Error).message);
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="settings-backdrop" onClick={onCancel}>
+      <form
+        className="settings-dialog"
+        style={{ maxWidth: 460 }}
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={submit}
+      >
+        <div className="settings-head">
+          <h2>{t("flowList.newModalTitle")}</h2>
+        </div>
+        <div className="settings-body">
+          <div className="sf-field">
+            <div className="label-row">
+              <label htmlFor="new-flow-name">{t("flowList.nameLabel")}</label>
+            </div>
+            <input
+              id="new-flow-name"
+              autoFocus
+              value={name}
+              placeholder={t("flowList.namePlaceholder")}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+          <div className="sf-field">
+            <div className="label-row">
+              <label htmlFor="new-flow-desc">{t("flowList.descLabel")}</label>
+            </div>
+            <input
+              id="new-flow-desc"
+              value={description}
+              placeholder={t("flowList.descPlaceholder")}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </div>
+          {err && (
+            <div style={{ color: "var(--danger)", fontSize: 12 }}>{err}</div>
+          )}
+        </div>
+        <div className="settings-foot">
+          <button type="button" onClick={onCancel}>
+            {t("common.cancel")}
+          </button>
+          <button type="submit" className="primary" disabled={busy || !name.trim()}>
+            {busy ? t("flowList.creating") : t("flowList.createCta")}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

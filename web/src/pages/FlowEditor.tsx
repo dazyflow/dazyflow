@@ -34,6 +34,7 @@ import { api } from "../api";
 import { oauthProviderDisplay } from "../integrationMeta";
 import {
   requiredConnections,
+  requiredSecrets,
   type MissingConnection,
 } from "../lib/requiredConnections";
 import type {
@@ -102,11 +103,14 @@ function EditorInner() {
   // the pre-run connection check. null = not loaded / OAuth disabled,
   // in which case the check is skipped (never blocks a run).
   const [providers, setProviders] = useState<OAuthProviderStatus[] | null>(null);
-  // connGate holds the unmet connections that blocked a Run attempt;
-  // non-null shows the "connect first" modal. null = no gate showing.
-  const [connGate, setConnGate] = useState<MissingConnection[] | null>(null);
-  // connBannerDismissed hides the proactive "needs connection" banner
-  // for the current flow once the user dismisses it. Reset per flow.
+  // Tenant secret NAMES (never values). Drives the ${tenant:NAME}
+  // credential check. null = store disabled / no permission → no gating.
+  const [secrets, setSecrets] = useState<string[] | null>(null);
+  // gateOpen shows the "set up first" modal that a blocked Run attempt
+  // raises. The specifics come from the live missing* memos below.
+  const [gateOpen, setGateOpen] = useState(false);
+  // connBannerDismissed hides the proactive "needs setup" banner for the
+  // current flow once the user dismisses it. Reset per flow.
   const [connBannerDismissed, setConnBannerDismissed] = useState(false);
   // lintIssues holds the most recent save's advisory findings. Cleared
   // when the user makes a new edit (so resolving a finding by editing
@@ -278,6 +282,16 @@ function EditorInner() {
       })
       .catch(() => {
         if (!cancelled) setProviders(null);
+      });
+    // Secret NAMES drive the ${tenant:NAME} credential check. Same
+    // can't-tell-so-don't-block semantics on error (disabled / 403).
+    api
+      .listSecrets(token)
+      .then((r) => {
+        if (!cancelled) setSecrets(r.secrets);
+      })
+      .catch(() => {
+        if (!cancelled) setSecrets(null);
       });
     return () => {
       cancelled = true;
@@ -651,13 +665,21 @@ function EditorInner() {
     () => requiredConnections(nodes, manifestByID, paramsByID, providers),
     [nodes, manifestByID, paramsByID, providers],
   );
+  // missingSecrets: ${tenant:NAME} credentials this graph references but
+  // that aren't stored yet (excluding ones it writes itself).
+  const missingSecrets = useMemo(
+    () => requiredSecrets(nodes, paramsByID, secrets),
+    [nodes, paramsByID, secrets],
+  );
+  const needsSetup =
+    missingConnections.length > 0 || missingSecrets.length > 0;
 
   // doRun submits the graph and wires up live status. Separated from
-  // the gate check so "Run anyway" in the connection modal can bypass
-  // the warning and run directly.
+  // the gate check so "Run anyway" in the setup modal can bypass the
+  // warning and run directly.
   const doRun = async () => {
     if (!token || !me || !id) return;
-    setConnGate(null);
+    setGateOpen(false);
     setRunning(true);
     setError(null);
     try {
@@ -674,12 +696,12 @@ function EditorInner() {
 
   const runWithLiveStatus = async () => {
     if (!token || !me || !id) return;
-    // Warn before a run that's missing a connected account the graph
-    // needs — clearer than letting the daemon fail mid-run with a
-    // "no token / account not connected" error. The modal still offers
-    // "Run anyway" since this check is a heuristic, not a hard rule.
-    if (missingConnections.length > 0) {
-      setConnGate(missingConnections);
+    // Warn before a run that's missing a connected account or a
+    // credential the graph needs — clearer than letting the daemon fail
+    // mid-run with a "no token" / "secret not found" error. The modal
+    // still offers "Run anyway" since this is a heuristic, not a rule.
+    if (needsSetup) {
+      setGateOpen(true);
       return;
     }
     await doRun();
@@ -962,7 +984,7 @@ function EditorInner() {
             </ul>
           </div>
         )}
-        {!connBannerDismissed && missingConnections.length > 0 && (
+        {!connBannerDismissed && needsSetup && (
           <div
             className="editor-conn-banner"
             style={{
@@ -976,13 +998,14 @@ function EditorInner() {
           >
             <span className="editor-conn-banner-text">
               {t("editor.connNeeded", {
-                apps: Array.from(
-                  new Set(
+                items: [
+                  ...new Set(
                     missingConnections.map(
                       (m) => oauthProviderDisplay(m.provider).name,
                     ),
                   ),
-                ).join(", "),
+                  ...missingSecrets,
+                ].join(", "),
               })}
             </span>
             <span className="editor-conn-banner-actions">
@@ -1213,12 +1236,13 @@ function EditorInner() {
           }}
         />
       )}
-      {connGate && (
+      {gateOpen && (
         <ConnectionGate
-          missing={connGate}
+          missing={missingConnections}
+          missingSecrets={missingSecrets}
           onConnect={() => navigate("/connections")}
           onRunAnyway={() => void doRun()}
-          onCancel={() => setConnGate(null)}
+          onCancel={() => setGateOpen(false)}
         />
       )}
     </div>
@@ -1226,17 +1250,19 @@ function EditorInner() {
 }
 
 // ConnectionGate warns, before a run, that the flow references OAuth
-// accounts the tenant hasn't connected. Offers the high-leverage next
-// action (go connect them) plus an escape hatch ("Run anyway") because
-// the detection is a heuristic — a node could resolve its token another
-// way the editor can't see.
+// accounts and/or credentials the tenant hasn't set up. Offers the
+// high-leverage next action (go to Connections) plus an escape hatch
+// ("Run anyway") because the detection is a heuristic — a node could
+// resolve its token/secret another way the editor can't see.
 function ConnectionGate({
   missing,
+  missingSecrets,
   onConnect,
   onRunAnyway,
   onCancel,
 }: {
   missing: MissingConnection[];
+  missingSecrets: string[];
   onConnect: () => void;
   onRunAnyway: () => void;
   onCancel: () => void;
@@ -1254,14 +1280,31 @@ function ConnectionGate({
         </div>
         <div className="settings-body">
           <p className="conn-gate-lede">{t("connGate.lede")}</p>
-          <ul className="conn-gate-list">
-            {missing.map((m) => (
-              <li key={`${m.provider}::${m.account}`}>
-                <strong>{oauthProviderDisplay(m.provider).name}</strong>
-                <span className="conn-gate-account">{m.account}</span>
-              </li>
-            ))}
-          </ul>
+          {missing.length > 0 && (
+            <>
+              <div className="conn-gate-section-head">{t("connGate.appsHead")}</div>
+              <ul className="conn-gate-list">
+                {missing.map((m) => (
+                  <li key={`${m.provider}::${m.account}`}>
+                    <strong>{oauthProviderDisplay(m.provider).name}</strong>
+                    <span className="conn-gate-account">{m.account}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {missingSecrets.length > 0 && (
+            <>
+              <div className="conn-gate-section-head">{t("connGate.credsHead")}</div>
+              <ul className="conn-gate-list">
+                {missingSecrets.map((name) => (
+                  <li key={name}>
+                    <code>{name}</code>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </div>
         <div className="settings-foot">
           <button type="button" onClick={onRunAnyway}>

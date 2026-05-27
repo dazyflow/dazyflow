@@ -49,3 +49,52 @@ export function requiredConnections(
   }
   return [...missing.values()];
 }
+
+// TENANT_REF matches a ${tenant:NAME} secret reference. NAME is anything
+// up to the closing brace — the daemon's tenant:// secret-store scheme.
+const TENANT_REF = /\$\{tenant:([^}]+)\}/g;
+
+// collectTenantRefs walks a param value (string / array / object) and
+// adds every ${tenant:NAME} secret name it finds to `out`. Params nest
+// arbitrarily (sql strings, header maps, step_params), so the walk is
+// recursive over the JSON-ish shape.
+function collectTenantRefs(value: unknown, out: Set<string>): void {
+  if (typeof value === "string") {
+    for (const m of value.matchAll(TENANT_REF)) out.add(m[1].trim());
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const v of value) collectTenantRefs(v, out);
+    return;
+  }
+  if (value && typeof value === "object") {
+    for (const v of Object.values(value)) collectTenantRefs(v, out);
+  }
+}
+
+// requiredSecrets returns the tenant-secret names a graph references via
+// ${tenant:NAME} but that don't exist yet — excluding names the graph
+// writes itself with a secret_set node (the cursor-dedupe pattern), so
+// a flow that seeds its own secret on first run isn't flagged. Returns
+// [] when knownSecrets is null (secret store disabled / no permission)
+// so a run is never blocked on incomplete information.
+export function requiredSecrets(
+  nodes: GraphNodeLike[],
+  paramsByID: Record<string, Record<string, unknown>>,
+  knownSecrets: string[] | null,
+): string[] {
+  if (knownSecrets === null) return [];
+  const known = new Set(knownSecrets);
+  // Names the graph provides for itself via secret_set's `name` param.
+  const written = new Set<string>();
+  for (const n of nodes) {
+    if (n.data.moduleID !== "secret_set") continue;
+    const nm = paramsByID[n.id]?.name;
+    if (typeof nm === "string" && nm.trim() !== "") written.add(nm.trim());
+  }
+  const referenced = new Set<string>();
+  for (const n of nodes) collectTenantRefs(paramsByID[n.id] ?? {}, referenced);
+  return [...referenced]
+    .filter((nm) => !known.has(nm) && !written.has(nm))
+    .sort();
+}

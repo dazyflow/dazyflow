@@ -294,6 +294,38 @@
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: var(--space-4);
 }
+
+/* Empty-state card for a workspace with no flows — guides toward the
+   template gallery (primary) over a blank canvas. */
+.flow-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-4);
+}
+.flow-empty-icon {
+  color: var(--accent);
+  margin-bottom: var(--space-1);
+}
+.flow-empty h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.flow-empty p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  max-width: 420px;
+}
+.flow-empty-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  flex-wrap: wrap;
+  justify-content: center;
+}
 .graph-card {
   display: flex;
   flex-direction: column;
@@ -1051,6 +1083,19 @@
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--muted);
+}
+.conn-gate-section-head {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--faint);
+  margin: var(--space-3) 0 var(--space-1);
+}
+.conn-gate-section-head:first-of-type {
+  margin-top: 0;
+}
+.conn-gate-list code {
+  font-size: 12px;
 }
 
 /* "Connect another" link under the account dropdown in the inspector. */
