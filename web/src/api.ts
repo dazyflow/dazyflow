@@ -6,6 +6,7 @@ import type {
   IssuedAPIKey,
   LintIssue,
   Manifest,
+  OAuthProviderStatus,
   TemplateSummary,
   JobRecord,
   JobStatus,
@@ -430,4 +431,46 @@ export const api = {
       }
     });
   },
+  // listProviders returns every OAuth provider the daemon is
+  // configured for, plus which accounts this tenant has already
+  // connected. Drives the "Connect an app" panel. 501 when no OAuth
+  // client credentials are configured server-side — callers treat
+  // that as "no providers" rather than an error.
+  listProviders: async (token: string) => {
+    const r = await request<{ providers: OAuthProviderStatus[] }>(
+      token,
+      "GET",
+      "/oauth/providers",
+    );
+    // The daemon serializes an empty account set as JSON null, not [].
+    // Normalize so callers can trust accounts is always an array.
+    return {
+      providers: (r.providers ?? []).map((p) => ({
+        ...p,
+        accounts: p.accounts ?? [],
+      })),
+    };
+  },
+  // oauthAuthorizeUrl builds the URL the browser navigates to in order
+  // to start an OAuth consent flow. It is NOT fetched — the daemon
+  // 302s to the provider, so the caller does window.location.assign().
+  // Auth rides on the session cookie (same-origin); the daemon bounces
+  // the user back to `returnTo` with ?oauth=success|error appended.
+  oauthAuthorizeUrl: (provider: string, returnTo: string, account?: string) => {
+    const qs = new URLSearchParams({ return_to: returnTo });
+    if (account) qs.set("account", account);
+    return `${API_BASE}/oauth/${encodeURIComponent(provider)}/authorize?${qs.toString()}`;
+  },
+  // listSecrets returns the NAMES of the tenant's stored credentials —
+  // never the values (the daemon has no read-back endpoint by design).
+  listSecrets: (token: string) =>
+    request<{ secrets: string[] }>(token, "GET", "/secrets"),
+  // putSecret creates or replaces a credential. Idempotent; 204 on
+  // success. Value is write-only from here on.
+  putSecret: (token: string, name: string, value: string) =>
+    request<void>(token, "PUT", `/secrets/${encodeURIComponent(name)}`, {
+      value,
+    }),
+  deleteSecret: (token: string, name: string) =>
+    request<void>(token, "DELETE", `/secrets/${encodeURIComponent(name)}`),
 };

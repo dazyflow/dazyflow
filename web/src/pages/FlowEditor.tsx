@@ -7,7 +7,7 @@ import {
   type DragEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useActiveFlow } from "../activeFlow";
 import { saveRecentFlow } from "../recentFlow";
@@ -31,7 +31,20 @@ import {
 import { Play, Save, Square, Sparkles, Plus } from "lucide-react";
 import { useAuth } from "../auth";
 import { api } from "../api";
-import type { Graph, GraphTrigger, LintIssue, Manifest, JobStatus, Visibility } from "../types";
+import { oauthProviderDisplay } from "../integrationMeta";
+import {
+  requiredConnections,
+  type MissingConnection,
+} from "../lib/requiredConnections";
+import type {
+  Graph,
+  GraphTrigger,
+  LintIssue,
+  Manifest,
+  JobStatus,
+  OAuthProviderStatus,
+  Visibility,
+} from "../types";
 import { Inspector } from "../components/Inspector";
 import { LiveConsole } from "../components/LiveConsole";
 import { HazyNode, type HazyNodeData } from "../components/NodeCard";
@@ -50,6 +63,7 @@ function EditorInner() {
   const { setName: setActiveFlowName, setOpenSettings } = useActiveFlow();
   const { id } = useParams();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { token, me, hasPerm, activeTenant, activeWorkspace } = useAuth();
   const [manifests, setManifests] = useState<Manifest[]>([]);
   const manifestByID = useMemo(() => {
@@ -84,6 +98,16 @@ function EditorInner() {
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // OAuth providers + which accounts the tenant has connected. Drives
+  // the pre-run connection check. null = not loaded / OAuth disabled,
+  // in which case the check is skipped (never blocks a run).
+  const [providers, setProviders] = useState<OAuthProviderStatus[] | null>(null);
+  // connGate holds the unmet connections that blocked a Run attempt;
+  // non-null shows the "connect first" modal. null = no gate showing.
+  const [connGate, setConnGate] = useState<MissingConnection[] | null>(null);
+  // connBannerDismissed hides the proactive "needs connection" banner
+  // for the current flow once the user dismisses it. Reset per flow.
+  const [connBannerDismissed, setConnBannerDismissed] = useState(false);
   // lintIssues holds the most recent save's advisory findings. Cleared
   // when the user makes a new edit (so resolving a finding by editing
   // dismisses the warning visually until the next save confirms) or
@@ -234,6 +258,31 @@ function EditorInner() {
       cancelled = true;
     };
   }, [token, me, id]);
+
+  // A fresh flow gets a fresh shot at showing the connections banner.
+  useEffect(() => {
+    setConnBannerDismissed(false);
+  }, [id]);
+
+  // Load the tenant's connected OAuth accounts so Run can warn before a
+  // flow that needs Slack/Gmail/etc. fails for a missing token. Any
+  // error (OAuth disabled = 501, or no permission) leaves providers
+  // null, which the check treats as "can't tell" and never blocks.
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    api
+      .listProviders(token)
+      .then((r) => {
+        if (!cancelled) setProviders(r.providers);
+      })
+      .catch(() => {
+        if (!cancelled) setProviders(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   // Re-attach manifests to nodes whenever the drops catalog arrives or
   // changes. The graph load and drops fetch race; if the graph wins,
@@ -595,8 +644,20 @@ function EditorInner() {
     return () => abort.abort();
   };
 
-  const runWithLiveStatus = async () => {
+  // missingConnections: OAuth accounts this graph references but the
+  // tenant hasn't connected. Recomputed as nodes/params/providers
+  // change so the Run gate always reflects the current canvas.
+  const missingConnections = useMemo(
+    () => requiredConnections(nodes, manifestByID, paramsByID, providers),
+    [nodes, manifestByID, paramsByID, providers],
+  );
+
+  // doRun submits the graph and wires up live status. Separated from
+  // the gate check so "Run anyway" in the connection modal can bypass
+  // the warning and run directly.
+  const doRun = async () => {
     if (!token || !me || !id) return;
+    setConnGate(null);
     setRunning(true);
     setError(null);
     try {
@@ -609,6 +670,19 @@ function EditorInner() {
       setError((e as Error).message);
       setRunning(false);
     }
+  };
+
+  const runWithLiveStatus = async () => {
+    if (!token || !me || !id) return;
+    // Warn before a run that's missing a connected account the graph
+    // needs — clearer than letting the daemon fail mid-run with a
+    // "no token / account not connected" error. The modal still offers
+    // "Run anyway" since this check is a heuristic, not a hard rule.
+    if (missingConnections.length > 0) {
+      setConnGate(missingConnections);
+      return;
+    }
+    await doRun();
   };
 
   // selectHistoricalRun makes the chosen run "current" and re-subscribes
@@ -888,6 +962,48 @@ function EditorInner() {
             </ul>
           </div>
         )}
+        {!connBannerDismissed && missingConnections.length > 0 && (
+          <div
+            className="editor-conn-banner"
+            style={{
+              // Stack below the error/lint banners when present.
+              top:
+                12 +
+                (error ? 68 : 0) +
+                (lintIssues.length > 0 ? 68 : 0),
+            }}
+            role="alert"
+          >
+            <span className="editor-conn-banner-text">
+              {t("editor.connNeeded", {
+                apps: Array.from(
+                  new Set(
+                    missingConnections.map(
+                      (m) => oauthProviderDisplay(m.provider).name,
+                    ),
+                  ),
+                ).join(", "),
+              })}
+            </span>
+            <span className="editor-conn-banner-actions">
+              <button
+                type="button"
+                className="primary"
+                onClick={() => navigate("/connections")}
+              >
+                {t("editor.connNeededCta")}
+              </button>
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => setConnBannerDismissed(true)}
+                aria-label={t("editor.dismiss")}
+              >
+                {t("editor.dismiss")}
+              </button>
+            </span>
+          </div>
+        )}
         <div className={"pipeline-log" + (logOpen ? " open" : " collapsed")}>
           <div className="pipeline-log-bar">
             <button
@@ -998,6 +1114,8 @@ function EditorInner() {
                 }
               : undefined
           }
+          providers={providers}
+          onConnect={() => navigate("/connections")}
         />
       </div>
       <ChatPanel
@@ -1095,6 +1213,65 @@ function EditorInner() {
           }}
         />
       )}
+      {connGate && (
+        <ConnectionGate
+          missing={connGate}
+          onConnect={() => navigate("/connections")}
+          onRunAnyway={() => void doRun()}
+          onCancel={() => setConnGate(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ConnectionGate warns, before a run, that the flow references OAuth
+// accounts the tenant hasn't connected. Offers the high-leverage next
+// action (go connect them) plus an escape hatch ("Run anyway") because
+// the detection is a heuristic — a node could resolve its token another
+// way the editor can't see.
+function ConnectionGate({
+  missing,
+  onConnect,
+  onRunAnyway,
+  onCancel,
+}: {
+  missing: MissingConnection[];
+  onConnect: () => void;
+  onRunAnyway: () => void;
+  onCancel: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="settings-backdrop" onClick={onCancel}>
+      <div
+        className="settings-dialog"
+        style={{ maxWidth: 460 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="settings-head">
+          <h2>{t("connGate.title")}</h2>
+        </div>
+        <div className="settings-body">
+          <p className="conn-gate-lede">{t("connGate.lede")}</p>
+          <ul className="conn-gate-list">
+            {missing.map((m) => (
+              <li key={`${m.provider}::${m.account}`}>
+                <strong>{oauthProviderDisplay(m.provider).name}</strong>
+                <span className="conn-gate-account">{m.account}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="settings-foot">
+          <button type="button" onClick={onRunAnyway}>
+            {t("connGate.runAnyway")}
+          </button>
+          <button type="button" className="primary" onClick={onConnect}>
+            {t("connGate.connect")}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -3,11 +3,18 @@ import type { Node } from "@xyflow/react";
 import { useTranslation } from "react-i18next";
 import { X, Trash2 } from "lucide-react";
 import type { HazyNodeData } from "./NodeCard";
-import { SchemaForm, supportsSchemaForm, type WorkspaceCtx } from "./SchemaForm";
+import {
+  SchemaForm,
+  supportsSchemaForm,
+  type WorkspaceCtx,
+  type AccountPicker,
+} from "./SchemaForm";
 import { OutputPreview } from "./OutputPreview";
 import { LiveConsole } from "./LiveConsole";
 import { useAuth } from "../auth";
 import { api } from "../api";
+import { oauthProviderForIntegration } from "../integrationMeta";
+import type { OAuthProviderStatus } from "../types";
 
 type Props = {
   selected: Node<HazyNodeData> | null;
@@ -46,6 +53,11 @@ type Props = {
   // only delete affordance on touch devices, where there's no
   // Delete/Backspace key to trigger React Flow's built-in removal.
   onDelete?: (id: string) => void;
+  // providers + onConnect drive the account dropdown for OAuth drops:
+  // the `account` param becomes a picker of connected accounts instead
+  // of a free-text box. Omitted/null = plain text (OAuth disabled).
+  providers?: OAuthProviderStatus[] | null;
+  onConnect?: () => void;
 };
 
 type Mode = "form" | "json";
@@ -62,6 +74,8 @@ export function Inspector({
   onSample,
   onClose,
   onDelete,
+  providers,
+  onConnect,
 }: Props) {
   const { t } = useTranslation();
   const [sampling, setSampling] = useState(false);
@@ -123,6 +137,18 @@ export function Inspector({
   const d = selected.data;
   const schema = d.manifest?.params_schema;
   const canForm = supportsSchemaForm(schema);
+  // For OAuth-backed drops, turn the `account` param into a dropdown of
+  // connected accounts. Skipped when OAuth is off (providers null) or
+  // the drop isn't OAuth-backed (provider null).
+  const accountProvider = oauthProviderForIntegration(d.manifest?.integration);
+  const accountPicker: AccountPicker | undefined =
+    accountProvider && providers && onConnect
+      ? {
+          options:
+            providers.find((p) => p.name === accountProvider)?.accounts ?? [],
+          onConnect,
+        }
+      : undefined;
 
   return (
     <>
@@ -320,6 +346,7 @@ export function Inspector({
             schema={schema}
             value={currentParams}
             workspace={workspace}
+            accountPicker={accountPicker}
             onChange={(v) => onParamsChange(selected.id, v)}
           />
         )}

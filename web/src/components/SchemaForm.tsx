@@ -22,14 +22,25 @@ export type WorkspaceCtx = {
   workspace: string;
 };
 
+// AccountPicker, when supplied, turns the string `account` field into a
+// dropdown of the tenant's connected accounts for this drop's OAuth
+// provider, plus a "Connect…" affordance — so a forked template doesn't
+// leave the user guessing what to type. Omitted for non-OAuth drops or
+// when OAuth is disabled, in which case `account` renders as plain text.
+export type AccountPicker = {
+  options: string[];
+  onConnect: () => void;
+};
+
 type Props = {
   schema: JSONSchema;
   value: Record<string, unknown>;
   onChange: (next: Record<string, unknown>) => void;
   workspace?: WorkspaceCtx;
+  accountPicker?: AccountPicker;
 };
 
-export function SchemaForm({ schema, value, onChange, workspace }: Props) {
+export function SchemaForm({ schema, value, onChange, workspace, accountPicker }: Props) {
   const { t } = useTranslation();
   if (schema.type !== "object" || !schema.properties) {
     return (
@@ -50,6 +61,7 @@ export function SchemaForm({ schema, value, onChange, workspace }: Props) {
           required={required.has(key)}
           value={value[key]}
           workspace={workspace}
+          accountPicker={accountPicker}
           onChange={(v) => {
             const next = { ...value };
             if (v === undefined) delete next[key];
@@ -69,10 +81,33 @@ type FieldProps = {
   value: unknown;
   onChange: (v: unknown) => void;
   workspace?: WorkspaceCtx;
+  accountPicker?: AccountPicker;
 };
 
-function SchemaField({ name, schema, required, value, onChange, workspace }: FieldProps) {
+function SchemaField({ name, schema, required, value, onChange, workspace, accountPicker }: FieldProps) {
   const { t } = useTranslation();
+  // The OAuth `account` field becomes a dropdown of connected accounts
+  // (plus a Connect affordance) when the editor supplies a picker. Plain
+  // string otherwise. Guarded to a bare string field so an enum/oneOf
+  // `account` (none today, but defensively) keeps its specialized UI.
+  if (
+    accountPicker &&
+    name === "account" &&
+    schema.type === "string" &&
+    !schema.enum &&
+    !schema.oneOf
+  ) {
+    return (
+      <FieldWrap name={name} schema={schema} required={required}>
+        <AccountField
+          value={(value as string) ?? (schema.default as string | undefined) ?? ""}
+          options={accountPicker.options}
+          onConnect={accountPicker.onConnect}
+          onChange={(v) => onChange(v === "" && !required ? undefined : v)}
+        />
+      </FieldWrap>
+    );
+  }
   // oneOf takes precedence over `type` — it expresses a typed union
   // (e.g. branch.value: string | number | boolean). Render the
   // segmented picker; the selected branch is itself a SchemaField.
@@ -763,6 +798,45 @@ function WorkspacePathField({
           {error}
         </div>
       )}
+    </div>
+  );
+}
+
+// AccountField renders the OAuth `account` param as a dropdown of the
+// tenant's connected accounts plus a "Connect…" link. The current value
+// is always selectable even if it isn't in `options` (e.g. a template
+// shipped account="default" before anything was connected) so the field
+// never silently drops a value the graph already references.
+function AccountField({
+  value,
+  options,
+  onConnect,
+  onChange,
+}: {
+  value: string;
+  options: string[];
+  onConnect: () => void;
+  onChange: (v: string) => void;
+}) {
+  const { t } = useTranslation();
+  // Union of connected accounts + the current value, de-duplicated and
+  // order-stable (connected first, then the value if it's something else).
+  const choices = Array.from(new Set([...options, ...(value ? [value] : [])]));
+  return (
+    <div>
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">{t("schemaForm.accountChoose")}</option>
+        {choices.map((a) => (
+          <option key={a} value={a}>
+            {options.includes(a) ? a : t("schemaForm.accountNotConnected", { account: a })}
+          </option>
+        ))}
+      </select>
+      <button type="button" className="link-button sf-account-connect" onClick={onConnect}>
+        {options.length === 0
+          ? t("schemaForm.accountConnect")
+          : t("schemaForm.accountConnectAnother")}
+      </button>
     </div>
   );
 }

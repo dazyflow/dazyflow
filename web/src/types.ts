@@ -291,3 +291,11 @@ export type RunSummary = {
   finished_at?: string | null;
   error_code?: string;
 };
+
+// OAuthProviderStatus is one entry from GET /oauth/providers: a
+// registered provider plus the account names the tenant has already
+// connected (empty = not connected yet).
+export type OAuthProviderStatus = {
+  name: string;
+  accounts: string[];
+};

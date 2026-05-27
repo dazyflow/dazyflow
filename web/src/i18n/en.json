@@ -7,14 +7,17 @@
     "private": "Private",
     "org": "Org",
     "noneParen": "(none)",
-    "unknownParen": "(unknown)"
+    "unknownParen": "(unknown)",
+    "dismiss": "Dismiss"
   },
   "nav": {
     "workspaceGroup": "Workspace",
     "settingsGroup": "Settings",
+    "templates": "Templates",
     "flows": "Flows",
     "runs": "Runs",
     "approvals": "Approvals",
+    "connections": "Connections",
     "integrations": "Integrations",
     "admin": "Admin",
     "toggleNav": "toggle navigation",
@@ -177,6 +180,36 @@
     "outputs": "Outputs",
     "paramsSchema": "Params schema",
     "required": "required"
+  },
+  "connections": {
+    "title": "Your connections",
+    "intro": "Connect an app once here, then any flow you build can use it.",
+    "allDisabled": "Connections aren't enabled on this server yet.",
+    "connect": "Connect",
+    "connectAnother": "Connect another account",
+    "connected": "Connected",
+    "noProviders": "No apps are available to connect on this server yet.",
+    "connectedOk": "Connected {{provider}} ({{account}}).",
+    "connectFailed": "Couldn't connect {{provider}}: {{error}}",
+    "unknownError": "unknown error",
+    "credentialsTitle": "Credentials",
+    "credentialsIntro": "Store a database URL, API key, or other secret a flow needs. Values are write-only — they're never shown again after you save.",
+    "noCredentials": "No credentials stored yet.",
+    "valueSet": "set ✓",
+    "addCredential": "Add credential",
+    "saving": "Saving…",
+    "namePlaceholder": "Name (e.g. DATABASE_URL)",
+    "nameLabel": "Credential name",
+    "valuePlaceholder": "Value",
+    "valueLabel": "Credential value",
+    "deleteCredential": "Delete credential {{name}}",
+    "deleteConfirm": "Delete credential \"{{name}}\"? Flows using it will stop working."
+  },
+  "connGate": {
+    "title": "Connect an app first",
+    "lede": "This flow uses accounts you haven't connected yet. Connect them so the run doesn't fail:",
+    "runAnyway": "Run anyway",
+    "connect": "Go to Connections"
   },
   "approvals": {
     "title": "Approvals",
@@ -441,7 +474,11 @@
     "uploading": "Uploading…",
     "dropOrBrowse": "Drop a file here or click to browse",
     "workspacePathPlaceholder": "workspace-relative path",
-    "fallbackHint": "Top-level schema isn't a property bag; using JSON editor instead."
+    "fallbackHint": "Top-level schema isn't a property bag; using JSON editor instead.",
+    "accountChoose": "(choose a connected account)",
+    "accountNotConnected": "{{account}} (not connected)",
+    "accountConnect": "Connect an account",
+    "accountConnectAnother": "Connect another"
   },
   "inspector": {
     "title": "Inspector",
@@ -494,6 +531,8 @@
     "lintWarning_other": "Saved with {{count}} warnings",
     "dismiss": "Dismiss",
     "dismissLint": "dismiss lint",
+    "connNeeded": "This flow needs you to connect: {{apps}}.",
+    "connNeededCta": "Connect",
     "pipelineLog": "Pipeline log",
     "logEmpty": "empty",
     "logLines": "{{count}} lines",

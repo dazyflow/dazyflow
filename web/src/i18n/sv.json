@@ -7,14 +7,17 @@
     "private": "Privat",
     "org": "Org",
     "noneParen": "(ingen)",
-    "unknownParen": "(okänd)"
+    "unknownParen": "(okänd)",
+    "dismiss": "Stäng"
   },
   "nav": {
     "workspaceGroup": "Arbetsyta",
     "settingsGroup": "Inställningar",
+    "templates": "Mallar",
     "flows": "Flöden",
     "runs": "Körningar",
     "approvals": "Godkännanden",
+    "connections": "Anslutningar",
     "integrations": "Integrationer",
     "admin": "Admin",
     "toggleNav": "växla navigering",
@@ -177,6 +180,36 @@
     "outputs": "Utdata",
     "paramsSchema": "Parameter-schema",
     "required": "obligatorisk"
+  },
+  "connections": {
+    "title": "Dina anslutningar",
+    "intro": "Anslut en app en gång här, sedan kan alla flöden du bygger använda den.",
+    "allDisabled": "Anslutningar är inte aktiverade på den här servern ännu.",
+    "connect": "Anslut",
+    "connectAnother": "Anslut ett till konto",
+    "connected": "Ansluten",
+    "noProviders": "Inga appar går att ansluta på den här servern ännu.",
+    "connectedOk": "Anslöt {{provider}} ({{account}}).",
+    "connectFailed": "Kunde inte ansluta {{provider}}: {{error}}",
+    "unknownError": "okänt fel",
+    "credentialsTitle": "Credentials",
+    "credentialsIntro": "Spara en databas-URL, API-nyckel eller annan secret som ett flöde behöver. Värden är skrivskyddade — de visas aldrig igen efter att du sparat.",
+    "noCredentials": "Inga credentials sparade ännu.",
+    "valueSet": "satt ✓",
+    "addCredential": "Lägg till credential",
+    "saving": "Sparar…",
+    "namePlaceholder": "Namn (t.ex. DATABASE_URL)",
+    "nameLabel": "Namn på credential",
+    "valuePlaceholder": "Värde",
+    "valueLabel": "Värde för credential",
+    "deleteCredential": "Ta bort credential {{name}}",
+    "deleteConfirm": "Ta bort credential \"{{name}}\"? Flöden som använder den slutar fungera."
+  },
+  "connGate": {
+    "title": "Anslut en app först",
+    "lede": "Det här flödet använder konton du inte anslutit ännu. Anslut dem så att körningen inte misslyckas:",
+    "runAnyway": "Kör ändå",
+    "connect": "Gå till Anslutningar"
   },
   "approvals": {
     "title": "Godkännanden",
@@ -441,7 +474,11 @@
     "uploading": "Laddar upp…",
     "dropOrBrowse": "Släpp en fil här eller klicka för att bläddra",
     "workspacePathPlaceholder": "sökväg relativt arbetsytan",
-    "fallbackHint": "Top-level-schemat är inte en property-bag; använder JSON-editor istället."
+    "fallbackHint": "Top-level-schemat är inte en property-bag; använder JSON-editor istället.",
+    "accountChoose": "(välj ett anslutet konto)",
+    "accountNotConnected": "{{account}} (ej ansluten)",
+    "accountConnect": "Anslut ett konto",
+    "accountConnectAnother": "Anslut ett till"
   },
   "inspector": {
     "title": "Inspector",
@@ -494,6 +531,8 @@
     "lintWarning_other": "Sparat med {{count}} varningar",
     "dismiss": "Stäng",
     "dismissLint": "stäng lint-varning",
+    "connNeeded": "Det här flödet kräver att du ansluter: {{apps}}.",
+    "connNeededCta": "Anslut",
     "pipelineLog": "Pipeline-logg",
     "logEmpty": "tom",
     "logLines": "{{count}} rader",

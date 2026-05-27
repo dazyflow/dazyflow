@@ -14,6 +14,8 @@ import {
   FolderTree,
   Building2,
   Boxes,
+  LayoutTemplate,
+  Plug,
   Settings as SettingsIcon,
   MoreVertical,
 } from "lucide-react";
@@ -199,6 +201,13 @@ export function AppShell({ children }: { children: ReactNode }) {
         >
           <div className="group-label">{t("nav.workspaceGroup")}</div>
           <NavLink
+            to="/templates"
+            title={t("nav.templates")}
+          >
+            <LayoutTemplate size={18} />
+            <span className="nav-label">{t("nav.templates")}</span>
+          </NavLink>
+          <NavLink
             to="/flows"
             title={t("nav.flows")}
           >
@@ -223,6 +232,13 @@ export function AppShell({ children }: { children: ReactNode }) {
             {pendingCount > 0 && (
               <span className="nav-badge">{pendingCount}</span>
             )}
+          </NavLink>
+          <NavLink
+            to="/connections"
+            title={t("nav.connections")}
+          >
+            <Plug size={18} />
+            <span className="nav-label">{t("nav.connections")}</span>
           </NavLink>
           <NavLink
             to="/integrations"

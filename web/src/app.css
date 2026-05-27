@@ -834,6 +834,258 @@
   border-radius: 999px;
 }
 
+/* ----- Connections panel (top of Integrations page) ----- */
+.connections {
+  margin: var(--space-4) 0 var(--space-6);
+}
+.connections-head {
+  margin: 0 0 var(--space-1);
+  font-size: 18px;
+}
+.connections-sub {
+  margin: 0 0 var(--space-4);
+  color: var(--muted);
+  font-size: 13px;
+}
+.connections-disabled,
+.connections-empty,
+.credentials-empty {
+  color: var(--muted);
+  font-size: 13px;
+}
+.connections-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+  font-size: 13px;
+}
+.connections-banner.success {
+  border-color: var(--success);
+}
+.connections-banner.error {
+  border-color: var(--danger);
+}
+.link-button {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0;
+}
+.link-button:hover {
+  text-decoration: underline;
+}
+
+.provider-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-3);
+}
+.provider-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-3);
+  padding: var(--space-4);
+}
+.provider-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.provider-card-logo,
+.provider-card-fallback {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.06));
+  padding: 4px;
+  object-fit: contain;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}
+.provider-card-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.provider-card-title h3 {
+  margin: 0;
+  font-size: 16px;
+}
+.provider-connected {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--success);
+}
+.provider-card-blurb {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+  flex: 1;
+}
+.provider-accounts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.provider-account-chip {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--border);
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+.provider-connect {
+  margin-top: auto;
+  align-self: flex-start;
+}
+
+/* ----- Credentials manager ----- */
+.credentials {
+  margin-top: var(--space-5);
+}
+.credentials-head {
+  margin: 0 0 var(--space-1);
+  font-size: 15px;
+}
+.credentials-sub {
+  margin: 0 0 var(--space-3);
+  color: var(--muted);
+  font-size: 13px;
+}
+.credentials-list {
+  list-style: none;
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.credentials-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  padding: 6px var(--space-3);
+}
+.credentials-item code {
+  flex: 1;
+  font-size: 13px;
+}
+.credentials-set {
+  font-size: 11px;
+  color: var(--success);
+}
+.credentials-add {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.credentials-add input {
+  flex: 1;
+  min-width: 160px;
+}
+.credentials-add button.primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.icon-button {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--r-1);
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px;
+}
+.icon-button:hover {
+  color: var(--ink);
+  border-color: var(--border);
+}
+.icon-button.danger:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+/* ----- Pre-run connection gate modal ----- */
+.conn-gate-lede {
+  margin: 0 0 var(--space-3);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.conn-gate-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.conn-gate-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--surface-2, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  padding: 6px var(--space-3);
+}
+.conn-gate-account {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* "Connect another" link under the account dropdown in the inspector. */
+.sf-account-connect {
+  margin-top: 6px;
+  display: inline-block;
+}
+
+/* Proactive "this flow needs a connection" banner on the canvas. Mirrors
+   the error/lint banner geometry (absolute, top-anchored) with an accent
+   border to read as actionable rather than alarming. */
+.editor-conn-banner {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  max-width: 700px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: var(--r-2);
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--ink);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.editor-conn-banner-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
 .integration-hero {
   display: flex;
   gap: 20px;

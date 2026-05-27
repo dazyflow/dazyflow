@@ -50,6 +50,73 @@ export function integrationNameFromSlug(slug: string): string {
     .join(" ");
 }
 
+// OAuthProviderMeta is the display surface for a connectable provider
+// in the Connections panel. Keyed by the daemon's provider name (the
+// string GET /oauth/providers returns: "slack", "google", "github",
+// "notion"), which is NOT always the same as an integration slug —
+// "google" covers both Gmail and Sheets under one consent.
+export type OAuthProviderMeta = {
+  name: string;
+  brand_logo?: string;
+  // What connecting this unlocks, in the user's words. One short line.
+  blurb: string;
+};
+
+export const oauthProviderMeta: Record<string, OAuthProviderMeta> = {
+  slack: {
+    name: "Slack",
+    brand_logo: "/brands/slack.svg",
+    blurb: "Post messages and run flows from your workspace.",
+  },
+  google: {
+    name: "Google",
+    brand_logo: "/brands/gmail.svg",
+    blurb: "One sign-in covers both Gmail and Google Sheets.",
+  },
+  github: {
+    name: "GitHub",
+    brand_logo: "/brands/github.svg",
+    blurb: "Open issues, comment, and react to repo events.",
+  },
+  notion: {
+    name: "Notion",
+    brand_logo: "/brands/notion.svg",
+    blurb: "Create pages and query your databases.",
+  },
+};
+
+// integrationToProvider maps an integration slug (Manifest.integration,
+// slugified) to the OAuth provider that authorizes it. Gmail and Sheets
+// both ride the single "google" consent. Integrations absent here don't
+// use an OAuth account token (databases, http, webhooks, etc.).
+const integrationToProvider: Record<string, string> = {
+  slack: "slack",
+  gmail: "google",
+  "google-sheets": "google",
+  github: "github",
+  notion: "notion",
+};
+
+// oauthProviderForIntegration returns the OAuth provider name for a
+// Manifest.integration value, or null when that integration needs no
+// connected account.
+export function oauthProviderForIntegration(integration?: string): string | null {
+  if (!integration) return null;
+  return integrationToProvider[integrationSlug(integration)] ?? null;
+}
+
+// oauthProviderDisplay resolves a provider name to its display meta,
+// falling back to a title-cased name for any provider the daemon
+// reports that isn't curated here yet.
+export function oauthProviderDisplay(name: string): OAuthProviderMeta {
+  return (
+    oauthProviderMeta[name] ?? {
+      name: integrationNameFromSlug(name),
+      blurb: "",
+    }
+  );
+}
+
 // Curated metadata. Add new integrations here when they ship.
 export const integrationMeta: Record<string, IntegrationMeta> = {
   slack: {
