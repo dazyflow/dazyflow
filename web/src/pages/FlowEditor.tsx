@@ -241,8 +241,11 @@ function EditorInner() {
   // in/out handles — so edges wired to real ports (rows, body,
   // messages, …) find no matching handle and silently don't render.
   // This patches the manifest in once drops land, which makes the real
-  // handles appear and React Flow draws the edges. Only `manifest` is
-  // touched so a user-edited label survives.
+  // handles appear and React Flow draws the edges. We also upgrade the
+  // label from the bare module-ID fallback (set at graph-load time when
+  // manifests hadn't arrived yet) to the manifest's friendly label —
+  // but only when it's still the raw module ID, so a user-edited label
+  // survives untouched.
   useEffect(() => {
     if (manifests.length === 0) return;
     const mm = new Map(manifests.map((m) => [m.id, m]));
@@ -250,9 +253,12 @@ function EditorInner() {
       let changed = false;
       const next = nds.map((n) => {
         const m = mm.get(n.data.moduleID);
-        if (m && n.data.manifest !== m) {
+        if (!m) return n;
+        const label =
+          n.data.label === n.data.moduleID ? m.label ?? n.data.label : n.data.label;
+        if (n.data.manifest !== m || label !== n.data.label) {
           changed = true;
-          return { ...n, data: { ...n.data, manifest: m } };
+          return { ...n, data: { ...n.data, manifest: m, label } };
         }
         return n;
       });
