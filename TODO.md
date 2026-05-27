@@ -17,7 +17,7 @@ Scorecard — baseline review → now:
 
 | Dimension     | Baseline | Now  | What moved it |
 |---------------|----------|------|---------------|
-| Features      | ~8/10    | ~9/10 | T0–T2 connectors / templates / run UI (prior) |
+| Features      | ~8/10    | ~9.5/10 | T0–T2 connectors / templates / run UI + `http_download`/`http_upload`; admin-UI stubs remain |
 | Tests         | ~8/10    | ~8/10 | broad suite, **now `-race` in CI**; gaps: `cmd/*` 0%, pg tests gated |
 | Durability    | ~3/10    | ~9/10 | Phase 0 — Postgres-backed everything; + backup/restore runbook + JSON→Postgres user import |
 | HA / correctness | ~2/10 | ~9/10 | Phase 2 (PgBus + leader election, load-tested) + race/lease fixes + **compose/k8s deploy manifests** |
@@ -724,11 +724,16 @@ platform can demonstrate but not actually power a real workflow.
   must be a native module. Limitation: per-item step params are
   static — real per-item parameterization needs template substitution
   (top of list).
-- [ ] **HTTP modules: file upload / streaming download.** `http_request`
-  handles small JSON / form bodies via inline. For multipart upload or
-  large download streams it'd need a different shape — probably a
-  separate `http_upload` / `http_download` to keep `http_request`
-  simple.
+- [x] **HTTP modules: file upload / streaming download** (2026-05-27).
+  `http_download` (`integrations/io/http_download.go`): streams a URL to a
+  sandbox path (workspace or `scratch://`) in 64 KiB chunks, enforces
+  `max_bytes` + the tenant quota as it writes (reserve-and-stream), aborts
+  mid-stream with the partial file removed. `http_upload`
+  (`http_upload.go`): streams a sandbox file out — raw PUT (presigned-URL
+  style, default) or multipart/form-data POST (via an `io.Pipe`, so large
+  files don't sit in memory); takes the file from the `in` ref or
+  `params.path`. Both reuse the `net` SSRF guard + egress allowlist. 12
+  httptest-backed tests.
 
 ## OnError + retry refinements
 
@@ -761,6 +766,22 @@ platform can demonstrate but not actually power a real workflow.
 
 ## Reliability & cleanup
 
+- [x] **HMAC approval-link flow wired** (found + fixed 2026-05-27 QA).
+  The unauthenticated HMAC email/Slack-link approval path was built +
+  tested but dormant (no `engine.ApprovalSigner` set, listener never
+  served). Now wired in `cmd/hzd` behind `--approval-listen` +
+  `--approval-hmac-secret` (+ `--public-base-url`): the engine mints
+  signed `/approve/<run>/<node>` URLs and `ApprovalListener` serves the
+  HMAC-verified endpoint (given a fail-loud `ServeListener`). Off by
+  default. Happy-path test added; the authenticated inbox path
+  (`approveAuthed`) is unchanged.
+- [x] **QA pass: dead code eliminated** (2026-05-27). Removed the
+  unreachable `HTTPGateway.Serve` / `WebhookListener.Serve` wrappers
+  (superseded by the fail-loud `ServeListener` refactor) and the
+  superseded `NewRandomHMACSigner`. `go vet`, `staticcheck`, and
+  `deadcode -test ./...` are all **clean** (zero dead code repo-wide).
+  (`golangci-lint` is unusable on the go1.26 toolchain — its bundled
+  type-checker can't read the export data; not a code issue.)
 - [x] **Fence node execution + completion on lease loss** (2026-05-27).
   `renewLease` used to only log a failed `Renew`, so a worker whose lease
   expired and was reclaimed kept executing *and* wrote its result,
@@ -791,15 +812,12 @@ platform can demonstrate but not actually power a real workflow.
   the dir on every terminal path. Tests across io + FSSandbox + e2e.
   **Open:** adopt the resolver in db/git/shell drops; per-node
   `CleanupOnNodeComplete`; multi-node reclaim is best-effort local.
-- [ ] **Streaming writes with unknown size (`ReserveAndStream`).** The
-  quota *reservation* now exists (`core.QuotaReserver`, Phase 1), but it
-  reserves a known size up front. A download that streams to disk with
-  unknown length needs reserve-as-you-write that aborts mid-stream when
-  the budget is hit. **Blocked on a consumer:** there is no streaming
-  HTTP download module yet (`http_request` is inline-body only; the
-  `http_download`/`http_upload` split is still an open feature item
-  under Modules). Build `ReserveAndStream` alongside that module, not
-  before it.
+- [x] **Streaming writes with unknown size (`ReserveAndStream`)**
+  (2026-05-27). Implemented in `http_download`'s `streamToFile`: each
+  chunk is reserved against the per-tenant budget (`reserveQuota`) before
+  it lands and the snapshot is checked incrementally, so an over-budget
+  download aborts mid-stream with the partial file removed — no need to
+  know the size up front. Reservations are released on commit/abort.
 - [x] **`maybeCompleteGraph` O(N²)→O(N)** (2026-05-27). The per-node
   `store.Get` loop on every completion is now one batch `ListNodeRecords`
   read — O(nodes) round trips per run instead of O(nodes²). Stays

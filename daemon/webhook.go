@@ -51,18 +51,6 @@ func NewWebhookListener(svc *Service) *WebhookListener {
 	}
 }
 
-// Serve blocks until ctx is cancelled. It binds the HTTP server on
-// listenAddr and routes /trigger/* requests through the daemon's
-// Service.SubmitGraph. The listener is intentionally tiny — no admin
-// UI, no metrics, no rate-limiting yet (TODO).
-func (w *WebhookListener) Serve(ctx context.Context, listenAddr string) error {
-	ln, err := net.Listen("tcp", listenAddr)
-	if err != nil {
-		return fmt.Errorf("bind %s: %w", listenAddr, err)
-	}
-	return w.ServeListener(ctx, ln)
-}
-
 // ServeListener serves on an already-bound listener. Lets cmd/hzd bind
 // on the main goroutine and fail-loud on a port-in-use error instead of
 // the bind error vanishing into a background goroutine.

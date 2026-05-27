@@ -87,6 +87,8 @@ func main() {
 	claudeCLIHazydURL := flag.String("claude-cli-hzd-url", "http://localhost:8080", "URL hz-mcp uses to call back into this hzd process under --claude-cli.")
 	slackSigningSecret := flag.String("slack-signing-secret", os.Getenv("HAZYFLOW_SLACK_SIGNING_SECRET"), "Slack app Signing Secret (default $HAZYFLOW_SLACK_SIGNING_SECRET). Required for /api/v1/events/slack/* to accept Slack Events API POSTs. Empty disables the endpoint with 501.")
 	githubWebhookSecret := flag.String("github-webhook-secret", os.Getenv("HAZYFLOW_GITHUB_WEBHOOK_SECRET"), "GitHub repo webhook Secret value (default $HAZYFLOW_GITHUB_WEBHOOK_SECRET). Required for /api/v1/events/github/* to accept push and pull_request webhook POSTs. Empty disables the endpoint with 501.")
+	approvalListen := flag.String("approval-listen", "", "enable the HMAC approval-link listener on this addr (e.g. :8090) so unauthenticated email/Slack approvers can resume awaiting nodes. Empty disables. Requires --public-base-url and --approval-hmac-secret.")
+	approvalHMACSecret := flag.String("approval-hmac-secret", os.Getenv("HAZYFLOW_APPROVAL_HMAC_SECRET"), "base64-encoded shared secret (≥16 bytes) for signing/verifying approval-link tokens (default $HAZYFLOW_APPROVAL_HMAC_SECRET). Must be identical across nodes in a multi-node deployment.")
 	flag.Parse()
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -357,6 +359,34 @@ func main() {
 	// two consumers — keeps dev environments from needing a real key.
 	if *claudeCLI {
 		_ = os.Setenv("HAZYFLOW_CLAUDE_CLI", "1")
+	}
+
+	// Approval-link flow: when --approval-listen is set, mint signed
+	// per-(run,node) approval URLs (engine.ApprovalSigner) and serve the
+	// HMAC-verified /approve/{run}/{node} endpoint for unauthenticated
+	// email/Slack approvers. Off by default. Set BEFORE workers start so
+	// the signer is installed before any node executes.
+	if *approvalListen != "" {
+		if *publicBaseURL == "" {
+			log.Fatalf("--approval-listen requires --public-base-url (for the approval URLs)")
+		}
+		secret, err := base64.StdEncoding.DecodeString(*approvalHMACSecret)
+		if err != nil || len(secret) < 16 {
+			log.Fatalf("--approval-hmac-secret: need a base64-encoded secret of at least 16 bytes (shared across nodes)")
+		}
+		signer := &daemon.HMACApprovalSigner{BaseURL: *publicBaseURL, Secret: secret}
+		eng.ApprovalSigner = signer
+		al := daemon.NewApprovalListener(svc, signer)
+		alLn, err := net.Listen("tcp", *approvalListen)
+		if err != nil {
+			log.Fatalf("approval listener: cannot bind %s: %v", *approvalListen, err)
+		}
+		go func() {
+			if err := al.ServeListener(ctx, alLn); err != nil && err != http.ErrServerClosed {
+				log.Printf("approval listener stopped: %v", err)
+			}
+		}()
+		log.Printf("approval endpoint enabled at %s/approve/<run>/<node> (HMAC-verified)", *publicBaseURL)
 	}
 
 	// Spin up worker goroutines. Each is independent and competes for

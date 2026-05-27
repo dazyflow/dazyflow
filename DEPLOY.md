@@ -139,3 +139,17 @@ rows.
   the OTel Collector, Honeycomb, …). Unset = no export (zero overhead).
   All standard `OTEL_EXPORTER_OTLP_*` env vars (headers, TLS, timeout)
   are honored.
+
+## Human approvals (await_approval)
+
+Flows can pause on an `await_approval` node until a human resumes them.
+Two paths:
+
+- **Authenticated (inbox UI):** `POST /api/v1/approvals/{run}/{node}` on the
+  gateway — always available, uses the caller's API-key/session.
+- **Unauthenticated link (email/Slack):** opt in with `--approval-listen
+  :8090` + `--approval-hmac-secret <base64≥16B>` + `--public-base-url`.
+  The engine then mints signed `<base>/approve/<run>/<node>?token=…` URLs
+  and the listener verifies the HMAC before resuming. Use the **same
+  secret on every node** (a token minted by one node must verify on
+  another). Put the listener behind your TLS ingress like the gateway.

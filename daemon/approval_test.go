@@ -1,7 +1,7 @@
 package daemon
 
 import (
-	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -112,6 +112,45 @@ func TestApprovalListener_RejectsNonPost(t *testing.T) {
 	}
 }
 
-// Sanity check: the unused context is silencing-the-linter-only here;
-// we want to make sure t.Context exists in this Go version.
-var _ = context.Background
+// TestApprovalListener_ValidTokenResumes exercises the now-wired HMAC
+// path end to end: a valid signed token resumes an awaiting node.
+func TestApprovalListener_ValidTokenResumes(t *testing.T) {
+	store := jobstore.NewMemory()
+	bus := NewMemoryBus()
+	svc := &Service{Jobs: store, Bus: bus, Engine: &engine.Engine{
+		Resolver: &engine.NodeResolver{Native: engine.Default},
+	}}
+
+	// Graph-record (carries the payload Approve loads to advance) + an
+	// awaiting node-record for node-A.
+	graph := core.Graph{ID: "g", Nodes: []core.Node{{ID: "node-A", Module: "noop"}}}
+	payload, _ := json.Marshal(graph)
+	_ = store.Enqueue(t.Context(), core.JobRecord{
+		ID: "run-1", Kind: core.JobKindGraph, GraphID: "g", NodeID: "*",
+		Status: core.JobStatusRunning, GraphPayload: payload,
+	})
+	_ = store.Enqueue(t.Context(), core.JobRecord{
+		ID: NodeJobID("run-1", "node-A"), Kind: core.JobKindNode,
+		GraphRunID: "run-1", NodeID: "node-A", Status: core.JobStatusAwaiting,
+	})
+
+	signer := &HMACApprovalSigner{BaseURL: "https://x", Secret: []byte("shared-secret")}
+	a := NewApprovalListener(svc, signer)
+	token := signer.computeToken("run-1", "node-A")
+
+	req := httptest.NewRequest("POST", "/approve/run-1/node-A?token="+token+"&decision=approve&approver=alice", nil)
+	rw := httptest.NewRecorder()
+	ServeApprovalForTest(a, rw, req)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rw.Code, rw.Body.String())
+	}
+
+	// The awaiting node is now resumed (succeeded) with the decision recorded.
+	rec, _ := store.Get(t.Context(), NodeJobID("run-1", "node-A"))
+	if rec.Status != core.JobStatusSucceeded {
+		t.Errorf("node status = %q, want succeeded", rec.Status)
+	}
+	if rec.Result == nil || rec.Result.Output["decision"].Inline != "approve" {
+		t.Errorf("decision output = %+v, want approve", rec.Result)
+	}
+}

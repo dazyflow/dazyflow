@@ -3,13 +3,13 @@ package daemon
 import (
 	"context"
 	"crypto/hmac"
-	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -38,17 +38,6 @@ type ApprovalDecision struct {
 type HMACApprovalSigner struct {
 	BaseURL string
 	Secret  []byte
-}
-
-// NewRandomHMACSigner generates a random per-process secret. Single-node
-// deployments are fine; multi-node deployments must share the secret out
-// of band so workers and the listener agree.
-func NewRandomHMACSigner(baseURL string) (*HMACApprovalSigner, error) {
-	secret := make([]byte, 32)
-	if _, err := rand.Read(secret); err != nil {
-		return nil, fmt.Errorf("read random: %w", err)
-	}
-	return &HMACApprovalSigner{BaseURL: strings.TrimRight(baseURL, "/"), Secret: secret}, nil
 }
 
 // SignApprovalURL builds the absolute URL the approver hits. Format:
@@ -166,7 +155,11 @@ func NewApprovalListener(svc *Service, signer *HMACApprovalSigner) *ApprovalList
 	}
 }
 
-func (a *ApprovalListener) Serve(ctx context.Context, listenAddr string) error {
+// ServeListener serves the HMAC approval endpoint on an already-bound
+// listener and blocks until ctx is cancelled. cmd/hzd binds on the main
+// goroutine so a port-in-use error fails startup loudly (same pattern as
+// the webhook + HTTP gateway listeners).
+func (a *ApprovalListener) ServeListener(ctx context.Context, ln net.Listener) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/approve/", a.handle)
 	mux.HandleFunc("/healthz", func(rw http.ResponseWriter, _ *http.Request) {
@@ -174,7 +167,6 @@ func (a *ApprovalListener) Serve(ctx context.Context, listenAddr string) error {
 		_, _ = rw.Write([]byte("ok"))
 	})
 	srv := &http.Server{
-		Addr:              listenAddr,
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
@@ -183,8 +175,8 @@ func (a *ApprovalListener) Serve(ctx context.Context, listenAddr string) error {
 	}
 	errC := make(chan error, 1)
 	go func() {
-		a.logger.Printf("listening on %s", listenAddr)
-		errC <- srv.ListenAndServe()
+		a.logger.Printf("listening on %s", ln.Addr())
+		errC <- srv.Serve(ln)
 	}()
 	select {
 	case <-ctx.Done():

@@ -113,21 +113,6 @@ func NewHTTPGateway(svc *Service) *HTTPGateway {
 	}
 }
 
-// Serve binds the gateway on listenAddr and blocks until ctx is cancelled.
-// Production deployments terminate TLS at an ingress layer.
-//
-// The bind happens synchronously here so a port-in-use failure is
-// returned to the caller (not swallowed in a goroutine). Callers that
-// launch Serve in a goroutine should instead Listen + ServeListener so
-// the bind error fails startup loudly — see cmd/hzd.
-func (h *HTTPGateway) Serve(ctx context.Context, listenAddr string) error {
-	ln, err := net.Listen("tcp", listenAddr)
-	if err != nil {
-		return fmt.Errorf("bind %s: %w", listenAddr, err)
-	}
-	return h.ServeListener(ctx, ln)
-}
-
 // ServeListener serves on an already-bound listener and blocks until
 // ctx is cancelled. Lets the daemon bind on the main goroutine (so a
 // bind failure can fail-loud at startup) and hand the live listener
