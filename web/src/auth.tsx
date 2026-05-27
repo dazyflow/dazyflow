@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "./api";
 import { pickActive } from "./lib/pickActive";
 import type { Permission, WhoAmI } from "./types";
@@ -51,6 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [activeWorkspace, setActiveWorkspaceState] = useState<string>("");
   const [tenants, setTenants] = useState<string[]>([]);
   const [activeTenant, setActiveTenantState] = useState<string>("");
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!token) {
@@ -208,14 +210,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
-    // Best-effort: tell the daemon to invalidate the session. We don't
-    // wait on the result before clearing local state — the user-facing
-    // contract is "you're logged out now."
+    // Await the server-side session delete before clearing local state, so
+    // the session cookie is actually expired by the time we navigate. The
+    // landing gate at / is cookie-based (hasValidSession), so a still-live
+    // cookie would otherwise serve the app shell to a just-logged-out user.
+    // Failure is non-fatal — we clear local state regardless.
     const t = token;
     if (t) {
-      api.signOut(t).catch(() => {
-        /* ignored — local state still gets cleared */
-      });
+      try {
+        await api.signOut(t);
+      } catch {
+        /* ignored — local state still gets cleared below */
+      }
     }
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(WS_STORAGE_KEY);
@@ -226,6 +232,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setActiveWorkspaceState("");
     setTenants([]);
     setActiveTenantState("");
+    // Leave the protected path we were on (e.g. /admin) — otherwise the
+    // URL stays put and just re-renders as the sign-in form under a stale
+    // path. Root renders SignIn when logged out, so this is a clean reset.
+    navigate("/", { replace: true });
   };
 
   const hasPerm = (p: Permission) =>
