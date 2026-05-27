@@ -201,11 +201,11 @@
     "cardUsersTitle": "Användare & roller",
     "cardUsersDesc": "Subjekt härledda från API-nycklar, grupperade med deras effektiva behörigheter.",
     "cardWorkspaceTitle": "Arbetsyteinställningar",
-    "cardWorkspaceDesc": "Kvoter, sandbox-rötter, retention. Läser/skriver till daemonens tenant-konfig.",
+    "cardWorkspaceDesc": "Gällande kvot- och grafgränser för den här tenanten (skrivskyddat).",
     "cardModulesTitle": "Modulregister",
-    "cardModulesDesc": "Inspektera installerade moduler och (senare) godkänn remote/MCP-moduler.",
+    "cardModulesDesc": "Inspektera drop:arna som är registrerade på den här daemonen, grupperade per kategori.",
     "cardAuditTitle": "Audit-logg",
-    "cardAuditDesc": "Graf-sparningar, körningar, secret-access, godkännandebeslut — behöver persistens + instrumentering.",
+    "cardAuditDesc": "Sparade flöden, körningar, hemlighetsändringar, godkännanden — tenantens administrativa spår.",
     "statusStub": "Stub",
     "statusReady": "Klar",
     "users": {
@@ -239,6 +239,44 @@
       "colStatus": "Status",
       "anyWorkspace": "(alla)",
       "revokeTitle": "Återkalla den här nyckeln"
+    },
+    "audit": {
+      "title": "Granskningslogg",
+      "subtitle": "Administrativa åtgärder i den här tenanten — senaste först.",
+      "empty": "Inga granskningshändelser ännu.",
+      "notConfigured": "Granskningslogg är inte konfigurerad på den här hzd-instansen.",
+      "needAdmin": "Du behöver <0>tenant:admin</0> för att se granskningsloggen.",
+      "colTime": "Tid",
+      "colActor": "Aktör",
+      "colAction": "Åtgärd",
+      "colTarget": "Mål",
+      "colDetail": "Detalj"
+    },
+    "modules": {
+      "title": "Modulregister",
+      "subtitle": "Drop:ar registrerade på den här daemonen.",
+      "empty": "Inga moduler registrerade.",
+      "needAdmin": "Du behöver <0>tenant:admin</0> för att se modulregistret.",
+      "count_one": "{{count}} modul",
+      "count_other": "{{count}} moduler",
+      "idempotent": "idempotent",
+      "awaitsApproval": "väntar på godkännande",
+      "submitsChild": "delgraf"
+    },
+    "workspace": {
+      "title": "Arbetsytans gränser",
+      "subtitle": "Gällande gränser för den här tenanten — skrivskyddat (konfigureras i daemonen).",
+      "needAdmin": "Du behöver <0>tenant:admin</0> för att se arbetsytans gränser.",
+      "diskQuota": "Diskkvot",
+      "usage": "Användning",
+      "unlimited": "obegränsat",
+      "noQuota": "Ingen kvot konfigurerad.",
+      "graphLimits": "Grafgränser",
+      "daemonWideNote": "Daemon-omfattande tak, satta via flaggor.",
+      "maxGraphNodes": "Max antal grafnoder",
+      "defaultTimeout": "Standard körtidsgräns",
+      "maxTimeout": "Maximal körtidsgräns",
+      "none": "ingen"
     }
   },
   "runList": {

@@ -71,6 +71,11 @@ type HTTPGateway struct {
 	// network/proxy layer. Wired by hzd.
 	EnableMetrics bool
 
+	// Audit, when set, records administrative actions (graph save/run,
+	// secret + API-key changes, approvals, cancels) and powers
+	// GET /api/v1/admin/audit. Nil disables auditing + that endpoint.
+	Audit core.AuditLog
+
 	// SlackEvents handles Slack Events API POSTs (app_mention etc.).
 	// Nil = the route returns 501. Wired by hzd when the Slack
 	// signing-secret flag/env is set.
@@ -209,6 +214,8 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/v1/admin/api-keys/{id}", h.requireAuth(h.revokeAPIKey))
 	mux.HandleFunc("GET /api/v1/admin/users", h.requireAuth(h.listUsers))
 	mux.HandleFunc("GET /api/v1/admin/tenants", h.requireAuth(h.listTenants))
+	mux.HandleFunc("GET /api/v1/admin/audit", h.requireAuth(h.listAudit))
+	mux.HandleFunc("GET /api/v1/admin/limits", h.requireAuth(h.workspaceLimits))
 	mux.HandleFunc("GET /api/v1/jobs/{jobID}", h.requireAuth(h.jobSnapshot))
 	mux.HandleFunc("GET /api/v1/jobs/{jobID}/nodes", h.requireAuth(h.listRunNodes))
 	mux.HandleFunc("GET /api/v1/jobs/{jobID}/nodes/{nodeID}", h.requireAuth(h.nodeSnapshot))
@@ -609,6 +616,7 @@ func (h *HTTPGateway) saveGraph(rw http.ResponseWriter, r *http.Request, p core.
 	// the response. Lint is non-blocking — a failed lint doesn't stop
 	// the save; the UI surfaces the warnings post-save so the user can
 	// fix-and-resave or dismiss.
+	h.audit(r.Context(), p, "graph.save", g.ID, "commit="+commit)
 	writeJSON(rw, http.StatusOK, map[string]any{
 		"commit":   commit,
 		"graph_id": g.ID,
@@ -751,6 +759,7 @@ func (h *HTTPGateway) issueAPIKey(rw http.ResponseWriter, r *http.Request, p cor
 		adminError(rw, err)
 		return
 	}
+	h.audit(r.Context(), p, "apikey.issue", params.Subject, "")
 	writeJSON(rw, http.StatusCreated, issued)
 }
 
@@ -766,10 +775,12 @@ func (h *HTTPGateway) listUsers(rw http.ResponseWriter, r *http.Request, p core.
 }
 
 func (h *HTTPGateway) revokeAPIKey(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if err := h.svc.RevokeAPIKey(r.Context(), p, r.PathValue("id")); err != nil {
+	id := r.PathValue("id")
+	if err := h.svc.RevokeAPIKey(r.Context(), p, id); err != nil {
 		adminError(rw, err)
 		return
 	}
+	h.audit(r.Context(), p, "apikey.revoke", id, "")
 	rw.WriteHeader(http.StatusNoContent)
 }
 
@@ -861,6 +872,7 @@ func (h *HTTPGateway) approveAuthed(rw http.ResponseWriter, r *http.Request, p c
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
+	h.audit(r.Context(), p, "approval", runID+"/"+nodeID, decision)
 	writeJSON(rw, http.StatusOK, map[string]string{"status": "resumed", "decision": decision})
 }
 
@@ -894,6 +906,7 @@ func (h *HTTPGateway) cancelRun(rw http.ResponseWriter, r *http.Request, p core.
 		}
 		return
 	}
+	h.audit(r.Context(), p, "run.cancel", runID, body.Reason)
 	writeJSON(rw, http.StatusOK, map[string]string{"status": "cancelled"})
 }
 
@@ -911,6 +924,7 @@ func (h *HTTPGateway) runGraph(rw http.ResponseWriter, r *http.Request, p core.P
 		writeJSONError(rw, http.StatusBadRequest, err.Error())
 		return
 	}
+	h.audit(r.Context(), p, "graph.run", id, "run="+runID)
 	writeJSON(rw, http.StatusAccepted, map[string]string{"job_id": runID})
 }
 

@@ -255,6 +255,23 @@ export type UserSummary = {
   last_workspace?: string;
 };
 
+export type AuditEvent = {
+  time: string;
+  tenant: string;
+  actor: string;
+  action: string;
+  target: string;
+  detail?: string;
+};
+
+export type WorkspaceLimits = {
+  tenant: string;
+  quota?: { used_bytes?: number; limit_bytes: number };
+  max_graph_nodes: number;
+  default_graph_timeout_seconds: number;
+  max_graph_timeout_seconds: number;
+};
+
 export type PendingApproval = {
   run_id: string;
   graph_id: string;

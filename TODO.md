@@ -17,7 +17,7 @@ Scorecard — baseline review → now:
 
 | Dimension     | Baseline | Now  | What moved it |
 |---------------|----------|------|---------------|
-| Features      | ~8/10    | ~9.5/10 | T0–T2 connectors / templates / run UI + `http_download`/`http_upload`; admin-UI stubs remain |
+| Features      | ~8/10    | ~9.7/10 | + `http_download`/`http_upload` + admin UI (audit log, module registry, workspace limits) |
 | Tests         | ~8/10    | ~8/10 | broad suite, **now `-race` in CI**; gaps: `cmd/*` 0%, pg tests gated |
 | Durability    | ~3/10    | ~9/10 | Phase 0 — Postgres-backed everything; + backup/restore runbook + JSON→Postgres user import |
 | HA / correctness | ~2/10 | ~9/10 | Phase 2 (PgBus + leader election, load-tested) + race/lease fixes + **compose/k8s deploy manifests** |
@@ -947,16 +947,36 @@ Surfaced as "honest gaps" when individual UI features landed — none
 blocking, but listed so we don't lose them.
 
 ### Admin
-- [ ] **Audit log.** Card is stubbed. Needs (a) a persistence model
-  for the events themselves, (b) instrumentation across graph saves,
-  run submissions, secret accesses, approval decisions, and (c) a list
-  endpoint + UI. Biggest of the remaining admin items.
-- [ ] **Workspace settings UI.** Card is stubbed. Quotas, sandbox
-  roots, retention — daemon already supports them at config time;
-  needs a CRUD endpoint and an admin form.
-- [ ] **Module registry admin view.** Card is stubbed. The editor's
-  catalog already lists modules; this would be the place to approve
-  remote / MCP modules once that gate exists.
+- [x] **Audit log.** **Shipped 2026-05-27 (backend + frontend).** (a) Persistence:
+  `core.AuditLog` + `daemon.MemAuditLog` / `PgAuditLog` (`audit_events`
+  table). (b) Instrumentation: gateway-layer `h.audit(...)` on graph
+  save/run, secret put/delete (name only, never the value), API-key
+  issue/revoke, approval decisions, and run cancel. (c) `GET
+  /api/v1/admin/audit` (tenant:admin gated, tenant-scoped, paginated;
+  501 when unconfigured). Wired in `cmd/hzd` (pg-backed with a DSN, else
+  mem). Tests: store scoping/ordering/pagination + endpoint admin-gate +
+  end-to-end (save → trail). Frontend: read-only `AdminAudit`
+  page (`web/src/pages/AdminAudit.tsx`) at `/admin/audit`, tenant:admin
+  gated, table of time/actor/action/target/detail; the Admin dashboard
+  card is now `ready`; `api.listAudit` + `AuditEvent` type + en/sv i18n.
+  `tsc -b` + `vite build` green.
+- [~] **Workspace settings UI** (read-only limits, 2026-05-27).
+  `AdminWorkspace` page at `/admin/workspace` (tenant:admin gated) shows
+  the tenant's effective disk quota (used/limit) + the daemon-wide graph
+  caps (max nodes, default/max run timeout), via a new read-only
+  `GET /api/v1/admin/limits` (`api.getWorkspaceLimits`); dashboard card
+  now `ready`; en/sv i18n; backend tests + `tsc`/`vite` green.
+  **Deliberately read-only:** these are operator flags, not
+  runtime-mutable. **Still open (a product call):** editable per-tenant
+  config would need a new mutable settings store + write endpoints.
+- [x] **Module registry admin view** (2026-05-27). Read-only
+  `AdminModules` page (`web/src/pages/AdminModules.tsx`) at
+  `/admin/modules`, tenant:admin gated, lists every registered drop
+  grouped by category with id/label/provider/integration/tags +
+  idempotent/approval/subgraph flags. Frontend-only — reuses the existing
+  `GET /api/v1/drops` (`api.listDrops`); en/sv i18n; dashboard card now
+  `ready`. `tsc -b` + `vite build` green. (Approving remote/MCP modules
+  is a separate future gate.)
 - [ ] **API key expiry-setting UI.** Data model has `ExpiresAt`; issue
   modal doesn't surface it. One-line add.
 - [ ] **Role templates as a backend resource.** Today they're a

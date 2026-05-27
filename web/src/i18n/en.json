@@ -201,11 +201,11 @@
     "cardUsersTitle": "Users & roles",
     "cardUsersDesc": "Subjects derived from API keys, grouped with their effective permissions.",
     "cardWorkspaceTitle": "Workspace settings",
-    "cardWorkspaceDesc": "Quotas, sandbox roots, retention. Reads/writes to the daemon's tenant config.",
+    "cardWorkspaceDesc": "Effective quota and graph limits for this tenant (read-only).",
     "cardModulesTitle": "Module registry",
-    "cardModulesDesc": "Inspect installed modules and (later) approve remote/MCP modules.",
+    "cardModulesDesc": "Inspect the drops registered on this daemon, grouped by category.",
     "cardAuditTitle": "Audit log",
-    "cardAuditDesc": "Graph saves, runs, secret accesses, approval decisions — needs persistence + instrumentation.",
+    "cardAuditDesc": "Graph saves, runs, secret changes, approvals — the tenant's administrative trail.",
     "statusStub": "Stub",
     "statusReady": "Ready",
     "users": {
@@ -239,6 +239,44 @@
       "colStatus": "Status",
       "anyWorkspace": "(any)",
       "revokeTitle": "Revoke this key"
+    },
+    "audit": {
+      "title": "Audit log",
+      "subtitle": "Administrative actions in this tenant — newest first.",
+      "empty": "No audit events yet.",
+      "notConfigured": "Audit log not configured on this hzd instance.",
+      "needAdmin": "You need <0>tenant:admin</0> to view the audit log.",
+      "colTime": "Time",
+      "colActor": "Actor",
+      "colAction": "Action",
+      "colTarget": "Target",
+      "colDetail": "Detail"
+    },
+    "modules": {
+      "title": "Module registry",
+      "subtitle": "Drops registered on this daemon.",
+      "empty": "No modules registered.",
+      "needAdmin": "You need <0>tenant:admin</0> to view the module registry.",
+      "count_one": "{{count}} module",
+      "count_other": "{{count}} modules",
+      "idempotent": "idempotent",
+      "awaitsApproval": "awaits approval",
+      "submitsChild": "subgraph"
+    },
+    "workspace": {
+      "title": "Workspace limits",
+      "subtitle": "Effective limits for this tenant — read-only (configured at the daemon).",
+      "needAdmin": "You need <0>tenant:admin</0> to view workspace limits.",
+      "diskQuota": "Disk quota",
+      "usage": "Usage",
+      "unlimited": "unlimited",
+      "noQuota": "No quota configured.",
+      "graphLimits": "Graph limits",
+      "daemonWideNote": "Daemon-wide caps, set via flags.",
+      "maxGraphNodes": "Max graph nodes",
+      "defaultTimeout": "Default run timeout",
+      "maxTimeout": "Max run timeout",
+      "none": "none"
     }
   },
   "runList": {

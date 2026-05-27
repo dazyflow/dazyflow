@@ -90,6 +90,8 @@ func (h *HTTPGateway) putSecret(rw http.ResponseWriter, r *http.Request, p core.
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("store secret: %v", err))
 		return
 	}
+	// Audit the name only — never the value.
+	h.audit(r.Context(), p, "secret.put", name, "")
 	rw.WriteHeader(http.StatusNoContent)
 }
 
@@ -148,5 +150,6 @@ func (h *HTTPGateway) deleteSecret(rw http.ResponseWriter, r *http.Request, p co
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("delete secret: %v", err))
 		return
 	}
+	h.audit(r.Context(), p, "secret.delete", name, "")
 	rw.WriteHeader(http.StatusNoContent)
 }

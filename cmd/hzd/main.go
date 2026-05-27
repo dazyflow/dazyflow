@@ -460,6 +460,17 @@ func main() {
 			log.Print("trusting X-Forwarded-Proto from reverse proxy (Secure cookies + HSTS on forwarded-https)")
 		}
 		gw.WebDist = *webDist // empty disables static frontend serving
+		// Audit trail: Postgres-backed (durable) when a DSN is set, else
+		// in-memory (dev). Powers GET /api/v1/admin/audit.
+		if pgPool != nil {
+			auditLog, err := daemon.NewPgAuditLog(ctx, pgPool)
+			if err != nil {
+				log.Fatalf("postgres audit log: %v", err)
+			}
+			gw.Audit = auditLog
+		} else {
+			gw.Audit = daemon.NewMemAuditLog()
+		}
 		if pgPool != nil {
 			// Readiness gates on the DB being reachable.
 			pool := pgPool

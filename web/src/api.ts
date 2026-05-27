@@ -1,5 +1,6 @@
 import type {
   APIKeySummary,
+  AuditEvent,
   FlowSummary,
   Graph,
   IssuedAPIKey,
@@ -13,6 +14,7 @@ import type {
   RunSummary,
   UserSummary,
   WhoAmI,
+  WorkspaceLimits,
 } from "./types";
 
 // API_BASE: dev defaults to relative "/api/v1" (proxied by Vite to the
@@ -288,6 +290,19 @@ export const api = {
       "/admin/users" + qs,
     );
   },
+  listAudit: (token: string, opts: { limit?: number; offset?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.limit) qs.set("limit", String(opts.limit));
+    if (opts.offset) qs.set("offset", String(opts.offset));
+    const q = qs.toString();
+    return request<{ events: AuditEvent[] }>(
+      token,
+      "GET",
+      "/admin/audit" + (q ? "?" + q : ""),
+    );
+  },
+  getWorkspaceLimits: (token: string) =>
+    request<WorkspaceLimits>(token, "GET", "/admin/limits"),
   approveNode: (
     token: string,
     runID: string,

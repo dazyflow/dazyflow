@@ -15,6 +15,9 @@ import { Settings } from "./pages/Settings";
 import { Admin } from "./pages/Admin";
 import { AdminAPIKeys } from "./pages/AdminAPIKeys";
 import { AdminUsers } from "./pages/AdminUsers";
+import { AdminAudit } from "./pages/AdminAudit";
+import { AdminModules } from "./pages/AdminModules";
+import { AdminWorkspace } from "./pages/AdminWorkspace";
 
 export function App() {
   const { token, loading } = useAuth();
@@ -56,6 +59,9 @@ export function App() {
         <Route path="/admin" element={<Admin />} />
         <Route path="/admin/api-keys" element={<AdminAPIKeys />} />
         <Route path="/admin/users" element={<AdminUsers />} />
+        <Route path="/admin/audit" element={<AdminAudit />} />
+        <Route path="/admin/modules" element={<AdminModules />} />
+        <Route path="/admin/workspace" element={<AdminWorkspace />} />
         <Route path="*" element={<Navigate to="/flows" replace />} />
       </Routes>
     </AppShell>

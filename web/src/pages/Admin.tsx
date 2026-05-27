@@ -52,22 +52,25 @@ export function Admin() {
           status="ready"
         />
         <AdminCard
+          to="/admin/workspace"
           icon={<Settings2 size={16} />}
           title={t("admin.cardWorkspaceTitle")}
           desc={t("admin.cardWorkspaceDesc")}
-          status="stub"
+          status="ready"
         />
         <AdminCard
+          to="/admin/modules"
           icon={<Boxes size={16} />}
           title={t("admin.cardModulesTitle")}
           desc={t("admin.cardModulesDesc")}
-          status="stub"
+          status="ready"
         />
         <AdminCard
+          to="/admin/audit"
           icon={<ShieldAlert size={16} />}
           title={t("admin.cardAuditTitle")}
           desc={t("admin.cardAuditDesc")}
-          status="stub"
+          status="ready"
         />
       </div>
     </div>
