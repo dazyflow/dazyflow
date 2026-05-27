@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 
@@ -70,20 +69,17 @@ func executeExcelRead(_ context.Context, job core.Job, _ chan<- core.Progress) (
 	if path == "" {
 		return params.Err(job, "bad_param", "path is required — set params.path or wire the 'path' input port"), nil
 	}
-	var err error
-	if job.WorkspaceRoot == "" {
-		return params.Err(job, "no_sandbox", "excel_read requires a workspace sandbox"), nil
-	}
-	root, err := os.OpenRoot(job.WorkspaceRoot)
+	// Resolves workspace-relative and scratch:// paths alike.
+	root, rel, err := openSandboxRoot(job, path)
 	if err != nil {
-		return params.Err(job, "sandbox", fmt.Sprintf("open root: %v", err)), nil
+		return params.Err(job, "no_sandbox", err.Error()), nil
 	}
 	defer root.Close()
 
-	fh, err := root.Open(path)
+	fh, err := root.Open(rel)
 	if err != nil {
 		if isSandboxEscape(err) {
-			return params.Err(job, "sandbox_escape", fmt.Sprintf("path %q escapes workspace", path)), nil
+			return params.Err(job, "sandbox_escape", fmt.Sprintf("path %q escapes its sandbox root", path)), nil
 		}
 		return params.Err(job, "io", fmt.Sprintf("open %q: %v", path, err)), nil
 	}

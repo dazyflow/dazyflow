@@ -244,6 +244,17 @@ type Service struct {
 	// explicit per-graph value.
 	DefaultGraphTimeoutSeconds int
 
+	// MaxGraphTimeoutSeconds is a hard ceiling on a run's wall-time: an
+	// explicit per-graph TimeoutSeconds larger than this is clamped down
+	// to it, so a tenant can't pin a worker for an unbounded duration.
+	// Zero = no ceiling. Configured by `-max-graph-timeout`.
+	MaxGraphTimeoutSeconds int
+
+	// MaxGraphNodes rejects a SubmitGraph whose node count exceeds it,
+	// guarding against resource-exhaustion via pathologically large
+	// graphs. Zero = unlimited. Configured by `-max-graph-nodes`.
+	MaxGraphNodes int
+
 	// AnthropicAPIKey powers the in-app chat agent (Service.ChatStream).
 	// Empty disables the chat endpoint. Configured via the
 	// `-anthropic-key` flag on hzd or $ANTHROPIC_API_KEY.

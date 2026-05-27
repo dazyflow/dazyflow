@@ -30,8 +30,10 @@ tasks:
   - test: |
       cd hazy-flow
       # HAZYFLOW_TEST_DB is set in the environment, so the Postgres-gated
-      # jobstore + auth tests run for real here.
-      go test ./...
+      # jobstore + auth tests run for real here. -race guards against
+      # concurrency regressions (e.g. the workspace.Store / scheduler
+      # data race fixed in the mutex change) creeping back in.
+      go test -race ./...
   - vet: |
       cd hazy-flow
       go vet ./...

@@ -16,9 +16,10 @@ import (
 // Memory is an in-memory JobStore. Concurrency-safe; loses state on
 // restart. Useful for single-binary deployments and the engine's tests.
 type Memory struct {
-	mu      sync.Mutex
-	records map[string]*core.JobRecord
-	clock   func() time.Time
+	mu            sync.Mutex
+	records       map[string]*core.JobRecord
+	clock         func() time.Time
+	maxConcurrent int // per-tenant running-node cap; 0 = unlimited
 }
 
 func NewMemory() *Memory {
@@ -26,6 +27,17 @@ func NewMemory() *Memory {
 		records: make(map[string]*core.JobRecord),
 		clock:   time.Now,
 	}
+}
+
+// SetMaxConcurrentPerTenant caps how many node jobs a single tenant may
+// have running at once. Claim won't hand out new (queued) work to a
+// tenant already at the cap; reclaiming a node whose lease expired is
+// exempt (it's recovery of existing work, not new concurrency). 0 = no
+// cap. Set once at startup.
+func (m *Memory) SetMaxConcurrentPerTenant(n int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.maxConcurrent = n
 }
 
 func (m *Memory) Enqueue(_ context.Context, rec core.JobRecord) error {
@@ -58,6 +70,21 @@ func (m *Memory) Claim(_ context.Context, worker string, lease time.Duration) (c
 	defer m.mu.Unlock()
 	now := m.clock()
 
+	// Per-tenant concurrency cap: tally tenants' live-running node jobs
+	// (lease not expired) so we can withhold new queued work from any
+	// tenant already at the cap. Expired-lease "running" rows are dead
+	// work being recovered, so they don't count toward the live total.
+	var runningByTenant map[string]int
+	if m.maxConcurrent > 0 {
+		runningByTenant = make(map[string]int)
+		for _, r := range m.records {
+			if r.Kind == core.JobKindNode && r.Status == core.JobStatusRunning &&
+				r.LeaseUntil != nil && r.LeaseUntil.After(now) {
+				runningByTenant[r.Tenant]++
+			}
+		}
+	}
+
 	candidates := make([]*core.JobRecord, 0)
 	for _, r := range m.records {
 		// Workers only handle node-kind jobs. Graph-records are status
@@ -70,10 +97,16 @@ func (m *Memory) Claim(_ context.Context, worker string, lease time.Duration) (c
 			continue
 		}
 		if r.Status == core.JobStatusQueued {
+			// Withhold new work from tenants at their concurrency cap.
+			if m.maxConcurrent > 0 && runningByTenant[r.Tenant] >= m.maxConcurrent {
+				continue
+			}
 			candidates = append(candidates, r)
 			continue
 		}
 		if r.Status == core.JobStatusRunning && r.LeaseUntil != nil && r.LeaseUntil.Before(now) {
+			// Reclaiming an expired lease is recovery, not new
+			// concurrency — exempt from the cap.
 			candidates = append(candidates, r)
 		}
 	}

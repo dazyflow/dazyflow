@@ -268,13 +268,34 @@ func (d *Dispatcher) maybeCompleteGraph(
 		return
 	}
 
+	// One batch read of the run's node records, then check completion
+	// against the in-memory map — instead of a point Get per node. That
+	// keeps a graph run's completion checking to O(nodes) round trips
+	// total rather than O(nodes²) (every node's terminal transition used
+	// to re-Get every other node). Still store-backed (not an in-process
+	// counter), so it stays correct when sibling nodes complete on other
+	// hzd replicas writing the same shared store.
+	recs, err := d.store.ListNodeRecords(ctx, core.ListNodeRecordsOpts{
+		Tenant:     graph.Tenant,
+		Workspace:  graph.Workspace,
+		GraphRunID: graphRunID,
+		Limit:      len(graph.Nodes) + 1,
+	})
+	if err != nil {
+		return
+	}
+	byNode := make(map[string]core.JobRecord, len(recs))
+	for _, r := range recs {
+		byNode[r.NodeID] = r
+	}
+
 	nodeResults := make(map[string]core.Result, len(graph.Nodes))
 	for _, n := range graph.Nodes {
-		rec, err := d.store.Get(ctx, NodeJobID(graphRunID, n.ID))
-		if err != nil {
-			return
-		}
-		if !core.IsTerminalStatus(rec.Status) {
+		rec, ok := byNode[n.ID]
+		// A missing or non-terminal node means the run isn't done yet.
+		// Under-fetching here can only err toward "not complete", never
+		// toward a false completion — safe.
+		if !ok || !core.IsTerminalStatus(rec.Status) {
 			return
 		}
 		if rec.Status == core.JobStatusFailed && d.failurePropagates(graph, n.ID) {
@@ -292,6 +313,7 @@ func (d *Dispatcher) maybeCompleteGraph(
 
 	final := &core.Result{Status: core.StatusOK}
 	if cerr := d.store.Complete(ctx, graphRunID, core.JobStatusSucceeded, final); cerr == nil {
+		d.reclaimScratch(graph, graphRunID)
 		d.bus.Publish(graphRunID, BusEvent{Terminal: &TerminalEvent{
 			JobID:  graphRunID,
 			Status: core.JobStatusSucceeded,
@@ -302,6 +324,24 @@ func (d *Dispatcher) maybeCompleteGraph(
 			},
 		}})
 		d.maybeResumeParent(ctx, graphRunID, core.StatusOK, nil)
+	}
+}
+
+// reclaimScratch removes a finished run's ephemeral scratch directory
+// (everything written under a scratch:// path). Best-effort: a reclaim
+// failure is logged, never fatal, so it can't block or fail completion.
+// No-op when the sandbox provider doesn't support scratch, or when the
+// run never created any (RemoveScratch is idempotent).
+func (d *Dispatcher) reclaimScratch(graph core.Graph, graphRunID string) {
+	if d.engine == nil {
+		return
+	}
+	sp, ok := d.engine.Sandbox.(core.ScratchProvider)
+	if !ok {
+		return
+	}
+	if err := sp.RemoveScratch(graph.Tenant, graph.Workspace, graphRunID); err != nil {
+		d.logger.Printf("scratch reclaim for run %s: %v", graphRunID, err)
 	}
 }
 
@@ -320,6 +360,7 @@ func (d *Dispatcher) markGraphFailed(
 	}
 	result := &core.Result{Status: core.StatusError, Error: errPayload}
 	if cerr := d.store.Complete(ctx, graphRunID, core.JobStatusFailed, result); cerr == nil {
+		d.reclaimScratch(graph, graphRunID)
 		d.bus.Publish(graphRunID, BusEvent{Terminal: &TerminalEvent{
 			JobID:  graphRunID,
 			Status: core.JobStatusFailed,

@@ -48,8 +48,10 @@ import (
 //
 //   - HSM-backed: the KEK lives in process memory. An attacker with
 //     memory dump access wins. HSM-backed KEK is a future option.
-//   - Key-rotating: rotating the KEK means re-wrapping every DEK,
-//     which needs an explicit rotation flow. v2.
+//   - Key-rotating in place: rotating the KEK re-wraps every tenant DEK
+//     under the new key. RewrapDEKs does this (hzd's
+//     --rotate-master-key); the DEK plaintexts — and so every stored
+//     ciphertext — are untouched, so no secret is re-entered.
 //   - Audit-logged: secret reads aren't logged today. Add when
 //     compliance asks.
 type EncryptedSecrets struct {
@@ -96,6 +98,19 @@ type secretsStore interface {
 	// first secret access per tenant per process; subsequent calls
 	// hit the EncryptedSecrets in-memory cache.
 	getWrappedDEK(ctx context.Context, tenant string) (wrapped, nonce []byte, err error)
+
+	// listDEKTenants returns every tenant that has a wrapped DEK. Used
+	// only by the KEK rotation path (RewrapDEKs); ordinary reads never
+	// enumerate tenants.
+	listDEKTenants(ctx context.Context) ([]string, error)
+
+	// replaceWrappedDEK overwrites a tenant's wrapped DEK
+	// unconditionally — the rotation re-wrap. Unlike setWrappedDEK it
+	// always writes (the caller already holds the authoritative DEK
+	// plaintext and is deliberately replacing the wrapping). Returns
+	// ErrSecretNotFound if the tenant's DEK vanished between listing
+	// and the update.
+	replaceWrappedDEK(ctx context.Context, tenant string, wrapped, nonce []byte) error
 
 	// setWrappedDEK persists a freshly-generated wrapped DEK.
 	// Returns (true, nil) when THIS call persisted the DEK — the
@@ -202,6 +217,73 @@ func (e *EncryptedSecrets) Put(ctx context.Context, tenant, name, value string) 
 	}
 	ct := dek.Seal(nil, nonce, []byte(value), nil)
 	return e.store.putSecret(ctx, tenant, name, ct, nonce)
+}
+
+// RewrapDEKs rotates the KEK: it unwraps every tenant DEK with this
+// store's current KEK and re-wraps it under newMasterKey, persisting the
+// new wrapped form. The DEK plaintexts — and therefore every stored
+// secret ciphertext — are unchanged; only the key that protects the DEKs
+// rotates, so no secret has to be re-entered. Returns the count of DEKs
+// re-wrapped and the count already on the new key.
+//
+// Re-runnable: a DEK that no longer unwraps under the current KEK but
+// does under newMasterKey is counted as already-rotated and skipped, so
+// a rotation interrupted partway can simply be run again with the same
+// new key. A DEK that unwraps under neither key is a hard error (wrong
+// current key) and stops the rotation, leaving the rest untouched.
+//
+// Operational flow (see SECURITY.md): run with the daemon's --master-key
+// set to the CURRENT key and this new key, then restart the daemon with
+// --master-key set to the new key. Keep the old key until that restart
+// succeeds.
+func (e *EncryptedSecrets) RewrapDEKs(ctx context.Context, newMasterKey []byte) (rotated, skipped int, err error) {
+	if len(newMasterKey) != 32 {
+		return 0, 0, fmt.Errorf("new master key must be 32 bytes, got %d", len(newMasterKey))
+	}
+	newBlock, err := aes.NewCipher(newMasterKey)
+	if err != nil {
+		return 0, 0, fmt.Errorf("new kek cipher: %w", err)
+	}
+	newKEK, err := cipher.NewGCM(newBlock)
+	if err != nil {
+		return 0, 0, fmt.Errorf("new kek gcm: %w", err)
+	}
+
+	tenants, err := e.store.listDEKTenants(ctx)
+	if err != nil {
+		return 0, 0, fmt.Errorf("list tenant DEKs: %w", err)
+	}
+	for _, tenant := range tenants {
+		wrapped, nonce, err := e.store.getWrappedDEK(ctx, tenant)
+		if errors.Is(err, ErrSecretNotFound) {
+			continue // raced delete between listing and read
+		}
+		if err != nil {
+			return rotated, skipped, fmt.Errorf("read DEK for %q: %w", tenant, err)
+		}
+
+		dekBytes, openErr := e.kek.Open(nil, nonce, wrapped, nil)
+		if openErr != nil {
+			// Doesn't unwrap under the current key — maybe a prior run
+			// already rotated it. If the new key opens it, it's done.
+			if _, newErr := newKEK.Open(nil, nonce, wrapped, nil); newErr == nil {
+				skipped++
+				continue
+			}
+			return rotated, skipped, fmt.Errorf("unwrap DEK for %q with current key (wrong --master-key?): %w", tenant, openErr)
+		}
+
+		newNonce := make([]byte, newKEK.NonceSize())
+		if _, err := io.ReadFull(rand.Reader, newNonce); err != nil {
+			return rotated, skipped, fmt.Errorf("new wrap nonce for %q: %w", tenant, err)
+		}
+		newWrapped := newKEK.Seal(nil, newNonce, dekBytes, nil)
+		if err := e.store.replaceWrappedDEK(ctx, tenant, newWrapped, newNonce); err != nil {
+			return rotated, skipped, fmt.Errorf("persist re-wrapped DEK for %q: %w", tenant, err)
+		}
+		rotated++
+	}
+	return rotated, skipped, nil
 }
 
 // Delete removes a secret. Idempotent — "delete a secret that's

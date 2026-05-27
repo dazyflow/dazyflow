@@ -101,3 +101,83 @@ func TestMemory_ListByGraph(t *testing.T) {
 		}
 	}
 }
+
+func TestMemory_MaxConcurrentPerTenant(t *testing.T) {
+	s := NewMemory()
+	s.SetMaxConcurrentPerTenant(2)
+	for _, id := range []string{"a1", "a2", "a3"} {
+		if err := s.Enqueue(t.Context(), core.JobRecord{ID: id, Kind: core.JobKindNode, Tenant: "acme"}); err != nil {
+			t.Fatalf("enqueue %s: %v", id, err)
+		}
+	}
+
+	// Two claims succeed — acme is then at its cap of 2.
+	c1, err := s.Claim(t.Context(), "w", 30*time.Second)
+	if err != nil {
+		t.Fatalf("claim 1: %v", err)
+	}
+	if _, err := s.Claim(t.Context(), "w", 30*time.Second); err != nil {
+		t.Fatalf("claim 2: %v", err)
+	}
+	// Third acme job is withheld: the tenant has 2 running.
+	if _, err := s.Claim(t.Context(), "w", 30*time.Second); !errors.Is(err, core.ErrNoJobs) {
+		t.Fatalf("claim 3 err = %v, want ErrNoJobs (acme at cap)", err)
+	}
+
+	// A different tenant is unaffected by acme's cap.
+	if err := s.Enqueue(t.Context(), core.JobRecord{ID: "b1", Kind: core.JobKindNode, Tenant: "globex"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Claim(t.Context(), "w", 30*time.Second); err != nil {
+		t.Fatalf("globex claim should succeed despite acme at cap: %v", err)
+	}
+
+	// Completing an acme job frees a slot, so the third becomes claimable.
+	if err := s.Complete(t.Context(), c1.ID, core.JobStatusSucceeded, &core.Result{Status: core.StatusOK}); err != nil {
+		t.Fatalf("complete %s: %v", c1.ID, err)
+	}
+	freed, err := s.Claim(t.Context(), "w", 30*time.Second)
+	if err != nil {
+		t.Fatalf("claim after freeing a slot: %v", err)
+	}
+	if freed.Tenant != "acme" {
+		t.Errorf("freed claim tenant = %q, want acme", freed.Tenant)
+	}
+}
+
+func TestMemory_MaxConcurrentExemptsExpiredReclaim(t *testing.T) {
+	s := NewMemory()
+	now := time.Unix(100, 0)
+	s.clock = func() time.Time { return now }
+	s.SetMaxConcurrentPerTenant(1)
+
+	// Craft a tenant at its cap of 1 live-running job, plus a dead
+	// (expired-lease) job and a fresh queued job. Injected directly: a
+	// live AND an expired running job under a cap of 1 is unreachable
+	// through Claim alone.
+	future := time.Unix(200, 0)
+	past := time.Unix(50, 0)
+	s.records["live"] = &core.JobRecord{
+		ID: "live", Kind: core.JobKindNode, Tenant: "acme",
+		Status: core.JobStatusRunning, LeaseUntil: &future, EnqueuedAt: time.Unix(1, 0),
+	}
+	s.records["dead"] = &core.JobRecord{
+		ID: "dead", Kind: core.JobKindNode, Tenant: "acme",
+		Status: core.JobStatusRunning, LeaseUntil: &past, EnqueuedAt: time.Unix(2, 0),
+	}
+	s.records["queued"] = &core.JobRecord{
+		ID: "queued", Kind: core.JobKindNode, Tenant: "acme",
+		Status: core.JobStatusQueued, EnqueuedAt: time.Unix(3, 0),
+	}
+
+	// acme has 1 live-running job (== cap), so "queued" stays withheld —
+	// but "dead" (expired lease) is recovery, exempt from the cap, so it
+	// is what Claim hands back.
+	got, err := s.Claim(t.Context(), "w", 10*time.Second)
+	if err != nil {
+		t.Fatalf("reclaim: %v", err)
+	}
+	if got.ID != "dead" {
+		t.Errorf("claimed %q, want the expired job 'dead' (queued must stay withheld at cap)", got.ID)
+	}
+}

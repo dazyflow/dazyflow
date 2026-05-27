@@ -32,6 +32,7 @@ import (
 	_ "git.sr.ht/~klahr/hazy-flow/integrations"
 	"git.sr.ht/~klahr/hazy-flow/integrations/github"
 	"git.sr.ht/~klahr/hazy-flow/integrations/gmail"
+	"git.sr.ht/~klahr/hazy-flow/integrations/io"
 	hfnet "git.sr.ht/~klahr/hazy-flow/integrations/net"
 	"git.sr.ht/~klahr/hazy-flow/integrations/notion"
 	secretsdrop "git.sr.ht/~klahr/hazy-flow/integrations/secrets"
@@ -53,13 +54,17 @@ func main() {
 	webhookListen := flag.String("webhook", "", "enable the webhook listener on this addr (e.g. :8080); empty disables")
 	httpListen := flag.String("http", "", "enable the HTTP /api/v1 gateway on this addr (e.g. :8080); empty disables")
 	postgresDSN := flag.String("postgres-dsn", os.Getenv("HAZYFLOW_POSTGRES_DSN"), "Postgres connection string (default $HAZYFLOW_POSTGRES_DSN). When set, jobs, API keys, sessions, users, and encrypted secrets persist to Postgres (survive restart). When empty, those run in-memory/JSON — dev only, lost on restart.")
+	pgMaxConns := flag.Int("pg-max-conns", envInt("HAZYFLOW_PG_MAX_CONNS", 0), "max Postgres connections in the shared pool (default $HAZYFLOW_PG_MAX_CONNS, else pgx's default of max(4, NumCPU)). Size up for production: workers + gateway + scheduler all share this pool.")
+	pgMinConns := flag.Int("pg-min-conns", envInt("HAZYFLOW_PG_MIN_CONNS", 0), "min warm Postgres connections kept open (default $HAZYFLOW_PG_MIN_CONNS, else 0). Keeps a floor of ready connections so a burst doesn't pay connection-setup latency.")
 	webDist := flag.String("web-dist", "", "serve a built React frontend bundle from this directory (e.g. web/dist). Empty = API-only. When set, the daemon serves the SPA from the same port as the API with index.html fallback for client-side routes.")
 	enableEnvSecrets := flag.Bool("env-secrets", true, "enable env:// secret provider")
 	builtinSecretsFile := flag.String("builtin-secrets", "", "JSON file of {name: value} for builtin:// secret provider")
 	isolateSharedSecrets := flag.Bool("isolate-shared-secrets", false, "require env:// and builtin:// names to be of the form <tenant>.<key> matching the caller's tenant. Off by default for backward compatibility with single-tenant deployments; turn on for shared multi-tenant deployments so tenant A can't read tenant B's shared secrets.")
 	masterKeyB64 := flag.String("master-key", os.Getenv("HAZYFLOW_MASTER_KEY"), "base64-encoded 32-byte AES-256 master key for the tenant:// encrypted secret store (default $HAZYFLOW_MASTER_KEY). When empty the tenant:// scheme and /api/v1/secrets CRUD endpoints stay disabled.")
+	rotateKeyB64 := flag.String("rotate-master-key", "", "rotate the tenant:// encrypted-secret KEK: re-wrap every tenant DEK from --master-key (the CURRENT key) to this new base64-encoded 32-byte key, print a report, and EXIT without serving. Use the same store as the running daemon (--postgres-dsn for durable deployments). Re-runnable. Afterwards, restart with --master-key set to the new key. No secret values are re-entered.")
 	publicBaseURL := flag.String("public-base-url", os.Getenv("HAZYFLOW_PUBLIC_BASE_URL"), "externally-reachable origin of this daemon (e.g. https://app.example.com). Required for OAuth — must match the redirect_uri registered with each OAuth provider.")
 	enableSignup := flag.Bool("signup", os.Getenv("HAZYFLOW_ENABLE_SIGNUP") == "1", "enable POST /api/v1/auth/signup for self-serve account creation. Off by default; production deployments often prefer admin-invite-only.")
+	enableMetrics := flag.Bool("metrics", os.Getenv("HAZYFLOW_ENABLE_METRICS") == "1", "expose an unauthenticated GET /metrics Prometheus endpoint (per-tenant disk-usage gauges + liveness). Off by default — it reveals tenant names, so enable only behind a restricted monitoring network/proxy.")
 	mcpServers := flag.String("mcp", "", "register MCP stdio servers, e.g. fs=server-filesystem /tmp;docs=npx -y @modelcontextprotocol/server-docs (semicolon-separated)")
 	workspaceDir := flag.String("workspace-dir", "./.hazyflow-workspace", "directory for the dev workspace's git-backed graph store; empty = in-memory (graphs lost on restart)")
 	usersFile := flag.String("users-file", "./.hazyflow-users.json", "JSON file backing the email+password user store; empty disables password sign-in")
@@ -70,6 +75,9 @@ func main() {
 	trustProxyHeaders := flag.Bool("trust-proxy-headers", os.Getenv("HAZYFLOW_TRUST_PROXY_HEADERS") == "1", "honor X-Forwarded-Proto from the reverse proxy when setting the Secure cookie flag + HSTS. Enable ONLY behind a trusted TLS-terminating proxy (nginx/Caddy/ingress); a directly-exposed daemon must leave this off so clients can't spoof the header.")
 	sessionTTL := flag.Duration("session-ttl", 24*time.Hour, "lifetime of a sign-in session before the user must re-authenticate")
 	defaultGraphTimeout := flag.Duration("default-graph-timeout", 0, "wall-time cap applied to runs whose graph has no timeout_seconds set (0 = no default; the per-graph value, when present, always wins)")
+	maxGraphTimeout := flag.Duration("max-graph-timeout", 0, "hard ceiling on a run's wall-time (0 = no ceiling). Clamps even an explicit per-graph timeout_seconds so a tenant can't pin a worker indefinitely.")
+	maxGraphNodes := flag.Int("max-graph-nodes", envInt("HAZYFLOW_MAX_GRAPH_NODES", 0), "reject SubmitGraph when the graph has more than this many nodes (0 = unlimited; default $HAZYFLOW_MAX_GRAPH_NODES). Resource-exhaustion guard against pathologically large graphs.")
+	maxConcurrentJobs := flag.Int("max-concurrent-jobs", envInt("HAZYFLOW_MAX_CONCURRENT_JOBS", 0), "cap on node jobs a single tenant may have running at once (0 = unlimited; default $HAZYFLOW_MAX_CONCURRENT_JOBS). Fairness throttle so one tenant can't monopolize the worker pool. Exact on the in-memory store; a best-effort soft cap on Postgres (a race can briefly allow cap+1).")
 	anthropicKey := flag.String("anthropic-key", os.Getenv("ANTHROPIC_API_KEY"), "Anthropic API key for the in-app chat agent (default $ANTHROPIC_API_KEY). Empty disables /api/v1/chat/stream unless --claude-cli is set.")
 	claudeCLI := flag.Bool("claude-cli", false, "Route the chat endpoint through the local `claude -p` CLI + hz-mcp instead of the Anthropic API. Test mode — lets you exercise the chat without an API key as long as `claude` is logged in.")
 	claudeCLIMCPBin := flag.String("claude-cli-mcp-bin", "", "Path to the hz-mcp binary used by --claude-cli (default: $HZ_MCP_BIN, then $PATH lookup).")
@@ -102,12 +110,28 @@ func main() {
 		pgPool   *pgxpool.Pool
 	)
 	if *postgresDSN != "" {
-		pool, err := pgxpool.New(ctx, *postgresDSN)
+		poolCfg, err := pgxpool.ParseConfig(*postgresDSN)
+		if err != nil {
+			log.Fatalf("postgres dsn: %v", err)
+		}
+		// Pool sizing: pgx defaults MaxConns to max(4, NumCPU), which is
+		// often too small under real load (every worker + the gateway +
+		// the scheduler share this one pool). Let operators size it; 0
+		// leaves the pgx default. MinConns keeps warm connections so a
+		// burst doesn't pay connection-setup latency.
+		if *pgMaxConns > 0 {
+			poolCfg.MaxConns = int32(*pgMaxConns)
+		}
+		if *pgMinConns > 0 {
+			poolCfg.MinConns = int32(*pgMinConns)
+		}
+		pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 		if err != nil {
 			log.Fatalf("postgres connect: %v", err)
 		}
 		pgPool = pool
 		defer pool.Close()
+		log.Printf("postgres pool: max_conns=%d min_conns=%d", poolCfg.MaxConns, poolCfg.MinConns)
 		pgKeys, err := auth.NewPgKeyStore(ctx, pool)
 		if err != nil {
 			log.Fatalf("postgres key store: %v", err)
@@ -141,6 +165,19 @@ func main() {
 		sessions = auth.NewMemSessionStore()
 		jobs = jobstore.NewMemory()
 		log.Print("WARNING: in-memory stores (jobs/api-keys/sessions) — lost on restart; set --postgres-dsn for durability")
+	}
+
+	// Per-tenant concurrency cap (fairness throttle). Applies to whichever
+	// JobStore backend is active; the Postgres cap is a documented soft
+	// cap, the memory cap is exact.
+	if mc := *maxConcurrentJobs; mc > 0 {
+		switch js := jobs.(type) {
+		case *jobstore.Memory:
+			js.SetMaxConcurrentPerTenant(mc)
+		case *jobstore.Postgres:
+			js.SetMaxConcurrentPerTenant(mc)
+		}
+		log.Printf("per-tenant concurrency cap: %d running node jobs", mc)
 	}
 
 	// Auto-provisioning workspace lookup: every (tenant, workspace) pair
@@ -183,6 +220,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("quota: %v", err)
 	}
+	// Give the in-process filesystem drops an atomic reserve-and-hold
+	// against per-tenant quotas, closing the concurrent-write race the
+	// per-job snapshot can't (mirrors the SetTokenLookup wiring below).
+	io.SetQuotaReserver(quota.Reserve)
 	remoteCatalog := engine.NewRemoteCatalog()
 	if err := registerRemotes(remoteCatalog, *remotes); err != nil {
 		log.Fatalf("--remote: %v", err)
@@ -205,6 +246,28 @@ func main() {
 		log.Print("shared secret providers (env://, builtin://) running in tenant-isolated mode — names must be <tenant>.<key>")
 	}
 	encryptedSecrets := setupEncryptedSecrets(ctx, *masterKeyB64, secrets, pgPool)
+
+	// KEK rotation is an offline operator action: re-wrap every tenant
+	// DEK from the current --master-key to the new key, then exit. The
+	// operator restarts with the new key afterwards. Done here so it
+	// reuses the exact store wiring above (same Postgres pool / mem
+	// store) the running daemon uses.
+	if *rotateKeyB64 != "" {
+		if encryptedSecrets == nil {
+			log.Fatalf("--rotate-master-key requires --master-key (the current key) to be set")
+		}
+		newKey, err := base64.StdEncoding.DecodeString(*rotateKeyB64)
+		if err != nil {
+			log.Fatalf("--rotate-master-key: not valid base64: %v", err)
+		}
+		rotated, skipped, err := encryptedSecrets.RewrapDEKs(ctx, newKey)
+		if err != nil {
+			log.Fatalf("rotate master key: %v", err)
+		}
+		log.Printf("master-key rotation complete: %d DEK(s) re-wrapped, %d already on the new key. Restart hzd with --master-key set to the new key.", rotated, skipped)
+		return
+	}
+
 	oauthRegistry := setupOAuth(encryptedSecrets, *publicBaseURL)
 	mcpCatalog := mcp.NewCatalog()
 	if err := registerMCPServers(mcpCatalog, *mcpServers); err != nil {
@@ -235,6 +298,8 @@ func main() {
 		// from, so admin-issued keys are immediately recognized.
 		AdminKeys:                  ks,
 		DefaultGraphTimeoutSeconds: int(defaultGraphTimeout.Seconds()),
+		MaxGraphTimeoutSeconds:     int(maxGraphTimeout.Seconds()),
+		MaxGraphNodes:              *maxGraphNodes,
 		AnthropicAPIKey:            *anthropicKey,
 		UseClaudeCLI:               *claudeCLI,
 		ClaudeCLIMCPBinary:         daemon.ResolveClaudeMCPBinary(*claudeCLIMCPBin),
@@ -313,6 +378,10 @@ func main() {
 		gw.EncryptedSecrets = encryptedSecrets // nil disables /api/v1/secrets endpoints
 		gw.OAuth = oauthRegistry               // nil disables /api/v1/oauth/* endpoints
 		gw.EnableSignup = *enableSignup        // false disables POST /api/v1/auth/signup
+		gw.EnableMetrics = *enableMetrics      // false disables GET /metrics
+		if *enableMetrics {
+			log.Print("metrics endpoint enabled at GET /metrics (unauthenticated — restrict scrape access)")
+		}
 		gw.AuthRateLimit = daemon.NewAuthRateLimiter(*authRatePerMin, *authRateBurst)
 		if gw.AuthRateLimit != nil {
 			log.Printf("auth rate limit: %d/min per IP (burst %d)", *authRatePerMin, *authRateBurst)
@@ -511,6 +580,18 @@ func parseQuotaSpec(spec string) (map[string]int64, error) {
 		out[tenant] = bytes
 	}
 	return out, nil
+}
+
+// envInt reads an integer from an env var, falling back to def when the
+// var is unset or unparseable. Used for flag defaults that should also be
+// settable via the environment (parity with the string flags).
+func envInt(key string, def int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return def
 }
 
 func parseSize(s string) (int64, error) {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -92,9 +93,11 @@ func executeExcelWrite(_ context.Context, job core.Job, _ chan<- core.Progress) 
 		sheet = "Sheet1"
 	}
 
-	root, err := os.OpenRoot(job.WorkspaceRoot)
+	// Resolves dest against the workspace or the run's scratch area
+	// (scratch:// scheme); rel is the path within the returned root.
+	root, rel, err := openSandboxRoot(job, dest)
 	if err != nil {
-		return params.Err(job, "sandbox", fmt.Sprintf("open root: %v", err)), nil
+		return params.Err(job, "no_sandbox", err.Error()), nil
 	}
 	defer root.Close()
 
@@ -107,8 +110,8 @@ func executeExcelWrite(_ context.Context, job core.Job, _ chan<- core.Progress) 
 	var buf *bytes.Buffer
 	var oldSize int64
 	if doAppend {
-		if info, err := root.Stat(dest); err == nil && !info.IsDir() {
-			appended, appendBuf, err := renderAppendedXLSX(root, dest, sheet, headers, rows, job.Params)
+		if info, err := root.Stat(rel); err == nil && !info.IsDir() {
+			appended, appendBuf, err := renderAppendedXLSX(root, rel, sheet, headers, rows, job.Params)
 			if err != nil {
 				return params.Err(job, "render", err.Error()), nil
 			}
@@ -131,26 +134,39 @@ func executeExcelWrite(_ context.Context, job core.Job, _ chan<- core.Progress) 
 	// were already on disk and counted in QuotaUsed.
 	delta := int64(buf.Len()) - oldSize
 	if job.QuotaLimit > 0 && delta > 0 {
+		// Cheap snapshot check first — the only enforcement when no live
+		// reserver is wired (unit tests, embedded use).
 		if job.QuotaUsed+delta > job.QuotaLimit {
 			return params.Err(job, "quota_exceeded",
 				fmt.Sprintf("write of %d bytes (delta %d) would push tenant past %d (currently %d)",
 					buf.Len(), delta, job.QuotaLimit, job.QuotaUsed)), nil
 		}
+		// Atomic reservation of the delta closes the concurrent-write
+		// race; held across the write via defer.
+		release, qErr := reserveQuota(job.Tenant, delta)
+		if qErr != nil {
+			if errors.Is(qErr, core.ErrQuotaExceeded) {
+				return params.Err(job, "quota_exceeded",
+					fmt.Sprintf("write of %d bytes (delta %d) would exceed tenant quota", buf.Len(), delta)), nil
+			}
+			return params.Err(job, "quota", fmt.Sprintf("reserve quota: %v", qErr)), nil
+		}
+		defer release()
 	}
 
 	if mkdirs, _ := paramBool(job.Params, "mkdirs"); mkdirs {
-		if err := root.MkdirAll(path.Dir(dest), 0o755); err != nil {
+		if err := root.MkdirAll(path.Dir(rel), 0o755); err != nil {
 			if isSandboxEscape(err) {
-				return params.Err(job, "sandbox_escape", fmt.Sprintf("mkdirs %q escapes workspace", dest)), nil
+				return params.Err(job, "sandbox_escape", fmt.Sprintf("mkdirs %q escapes its sandbox root", dest)), nil
 			}
 			return params.Err(job, "io", fmt.Sprintf("mkdir: %v", err)), nil
 		}
 	}
 
-	out, err := root.Create(dest)
+	out, err := root.Create(rel)
 	if err != nil {
 		if isSandboxEscape(err) {
-			return params.Err(job, "sandbox_escape", fmt.Sprintf("dest %q escapes workspace", dest)), nil
+			return params.Err(job, "sandbox_escape", fmt.Sprintf("dest %q escapes its sandbox root", dest)), nil
 		}
 		return params.Err(job, "io", fmt.Sprintf("create %q: %v", dest, err)), nil
 	}

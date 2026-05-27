@@ -53,35 +53,43 @@ already leaked.
 
 ## Master-key rotation
 
-> ⚠️ **Automated re-wrap tooling is not built yet** (`v2` in the code —
-> see `daemon/encrypted_secrets.go`). Rotating the KEK means re-wrapping
-> every tenant's DEK under the new key; until that command ships, use the
-> interim procedure below. This is a known gap tracked in `TODO.md`.
+Rotating the KEK re-wraps every tenant's DEK under the new key. The
+secret ciphertexts (sealed under the per-tenant DEKs) are untouched —
+only the wrapped-DEK rows change — so rotation is fast, low-risk, and
+requires **no secret re-entry**. `hzd --rotate-master-key` does the
+re-wrap; the DEK plaintexts never leave the process.
 
-### Target procedure (once re-wrap tooling lands)
+### Procedure
 
 1. Generate `NEW_KEY` (`openssl rand -base64 32`).
-2. Run the re-wrap job with both keys: for each tenant, unwrap the DEK
-   with the OLD KEK and re-wrap it with the NEW KEK in a transaction.
-   Secrets (sealed under the DEK) are untouched — only the wrapped-DEK
-   rows change, so this is fast and low-risk.
-3. Swap `$HAZYFLOW_MASTER_KEY` to `NEW_KEY` and restart.
-4. Destroy the old key after verifying reads succeed.
+2. Run the re-wrap against the same store the daemon uses, with the
+   **current** key as `--master-key` and the new key as
+   `--rotate-master-key`. It re-wraps every DEK and exits without
+   serving:
 
-### Interim procedure (today, no tooling)
+   ```sh
+   hzd --postgres-dsn "$HAZYFLOW_POSTGRES_DSN" \
+       --master-key "$OLD_KEY" \
+       --rotate-master-key "$NEW_KEY"
+   # logs: "master-key rotation complete: N DEK(s) re-wrapped, …"
+   ```
 
-Because DEKs can't yet be re-wrapped in place:
+   The command is **re-runnable**: a DEK already on the new key (from a
+   prior interrupted run) is detected and skipped, not double-wrapped.
+   It fails loudly — leaving the store untouched — if `--master-key`
+   isn't the key that wrapped the existing DEKs.
+3. Swap `$HAZYFLOW_MASTER_KEY` to `NEW_KEY` and restart the daemon.
+4. Verify reads succeed, then destroy the old key.
 
-1. Stand up the new key on a fresh secret namespace (new DB, or new
-   tenant DEK rows after a wipe).
-2. Re-enter each tenant's secrets via `PUT /api/v1/secrets/{name}` (or
-   re-run the OAuth connect flows) so they're sealed under DEKs wrapped
-   by the new key.
-3. Cut over `$HAZYFLOW_MASTER_KEY` and restart.
+> ⚠️ Keep the old key until step 4 verifies. If rotation is interrupted
+> partway, re-run step 2 with the same keys before restarting — the
+> daemon's running `--master-key` must match whatever wrapped the DEKs
+> on disk.
 
-For a single-tenant / low-secret-count dev or pilot deployment this is a
-few minutes of work. For multi-tenant production, prioritise building the
-re-wrap command before you need to rotate under pressure.
+If the master key was **compromised** (not just being rotated on
+schedule), re-wrapping is not enough — also rotate the underlying
+credentials (Slack/GitHub/DB tokens) themselves, since their plaintext
+may already have leaked.
 
 ## Related hardening (see DEPLOY.md for the full list)
 

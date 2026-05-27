@@ -2,8 +2,10 @@ package daemon_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -226,4 +228,95 @@ func TestQuota_E2E_UnlimitedTenant(t *testing.T) {
 	if terminal.Status != core.JobStatusSucceeded {
 		t.Fatalf("status = %q (err=%+v)", terminal.Status, terminal.Error)
 	}
+}
+
+// --- Reservation (concurrent-write race close) ---
+
+func TestFSQuota_ReserveHoldsInflightUntilRelease(t *testing.T) {
+	q, _ := daemon.NewFSQuota(t.TempDir(), map[string]int64{"acme": 1000})
+	q.SetCacheTTL(0)
+
+	rel1, err := q.Reserve("acme", 600)
+	if err != nil {
+		t.Fatalf("first reserve: %v", err)
+	}
+	// 600 already in-flight; a second 600 would total 1200 > 1000.
+	if _, err := q.Reserve("acme", 600); !errors.Is(err, core.ErrQuotaExceeded) {
+		t.Fatalf("second reserve err = %v, want ErrQuotaExceeded", err)
+	}
+	// Releasing the first frees the budget for the next.
+	rel1()
+	rel2, err := q.Reserve("acme", 600)
+	if err != nil {
+		t.Fatalf("reserve after release: %v", err)
+	}
+	rel2()
+}
+
+func TestFSQuota_ReserveConcurrentCannotBustLimit(t *testing.T) {
+	q, _ := daemon.NewFSQuota(t.TempDir(), map[string]int64{"acme": 1000})
+	q.SetCacheTTL(0)
+
+	const n, each = 12, 200 // limit fits exactly 5 reservations
+	var (
+		wg       sync.WaitGroup
+		mu       sync.Mutex
+		ok       int
+		releases []func()
+	)
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			rel, err := q.Reserve("acme", each)
+			if err == nil {
+				mu.Lock()
+				ok++
+				releases = append(releases, rel)
+				mu.Unlock()
+			} else if !errors.Is(err, core.ErrQuotaExceeded) {
+				t.Errorf("unexpected reserve error: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+	if ok != 5 {
+		t.Fatalf("granted %d reservations, want exactly 5 (5×200=1000)", ok)
+	}
+	for _, r := range releases {
+		r()
+	}
+}
+
+func TestFSQuota_ReserveCountsCommittedFiles(t *testing.T) {
+	base := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(base, "acme"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// 600 bytes already on disk for the tenant.
+	if err := os.WriteFile(filepath.Join(base, "acme", "a.bin"), make([]byte, 600), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	q, _ := daemon.NewFSQuota(base, map[string]int64{"acme": 1000})
+	q.SetCacheTTL(0)
+
+	// 600 committed + 600 reserve = 1200 > 1000 → rejected.
+	if _, err := q.Reserve("acme", 600); !errors.Is(err, core.ErrQuotaExceeded) {
+		t.Fatalf("reserve over committed err = %v, want ErrQuotaExceeded", err)
+	}
+	// 600 committed + 300 reserve = 900 ≤ 1000 → granted.
+	rel, err := q.Reserve("acme", 300)
+	if err != nil {
+		t.Fatalf("reserve within committed budget: %v", err)
+	}
+	rel()
+}
+
+func TestFSQuota_ReserveUnlimitedTenant(t *testing.T) {
+	q, _ := daemon.NewFSQuota(t.TempDir(), nil) // no limits → unlimited
+	rel, err := q.Reserve("anyone", 1<<40)
+	if err != nil {
+		t.Fatalf("unlimited reserve should never fail, got %v", err)
+	}
+	rel() // no-op release must not panic
 }

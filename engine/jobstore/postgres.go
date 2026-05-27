@@ -30,7 +30,22 @@ type Postgres struct {
 	// Close() knows whether it may shut it down (shared pools are
 	// owned by the daemon, not the JobStore).
 	ownsPool bool
+	// maxConcurrent caps per-tenant running node jobs (0 = unlimited).
+	// Set once at startup before any worker claims, so no synchronization
+	// is needed for the read in Claim.
+	maxConcurrent int
 }
+
+// SetMaxConcurrentPerTenant caps how many node jobs a single tenant may
+// have running at once. Claim withholds new (queued) work from a tenant
+// at the cap; reclaiming an expired lease is exempt. 0 = no cap.
+//
+// NOTE: this is a best-effort SOFT cap. The per-tenant running count is
+// read in the same statement that claims, but it is not locked against
+// other concurrent claimers, so a race between workers can briefly let a
+// tenant reach cap+1. A hard cap would need per-tenant locking; the soft
+// cap is sufficient as a fairness throttle. Set once at startup.
+func (s *Postgres) SetMaxConcurrentPerTenant(n int) { s.maxConcurrent = n }
 
 // OpenPostgres connects via the supplied connection string and applies the
 // embedded schema. Production deployments should run migrations through
@@ -109,7 +124,25 @@ func (s *Postgres) Enqueue(ctx context.Context, rec core.JobRecord) error {
 }
 
 func (s *Postgres) Claim(ctx context.Context, worker string, lease time.Duration) (core.JobRecord, error) {
-	const q = `
+	var row pgx.Row
+	if s.maxConcurrent > 0 {
+		row = s.pool.QueryRow(ctx, claimCappedQuery, worker, lease.String(), s.maxConcurrent)
+	} else {
+		row = s.pool.QueryRow(ctx, claimQuery, worker, lease.String())
+	}
+	rec, err := scanRecord(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return core.JobRecord{}, core.ErrNoJobs
+	}
+	return rec, err
+}
+
+const claimReturning = `id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result,
+		           enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id, parent_node_rec_id`
+
+// claimQuery picks the oldest claimable node job (queued, or running with
+// an expired lease) and marks it running under the caller's worker.
+const claimQuery = `
 		UPDATE jobs
 		   SET status = 'running',
 		       worker_id = $1,
@@ -127,16 +160,38 @@ func (s *Postgres) Claim(ctx context.Context, worker string, lease time.Duration
 		      FOR UPDATE SKIP LOCKED
 		      LIMIT 1
 		 )
-		 RETURNING id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result,
-		           enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id, parent_node_rec_id
-	`
-	row := s.pool.QueryRow(ctx, q, worker, lease.String())
-	rec, err := scanRecord(row)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return core.JobRecord{}, core.ErrNoJobs
-	}
-	return rec, err
-}
+		 RETURNING ` + claimReturning
+
+// claimCappedQuery is claimQuery plus a per-tenant concurrency cap ($3):
+// a queued job is only claimable if its tenant currently has fewer than
+// $3 live-running node jobs. Expired-lease reclaims bypass the cap (they
+// recover existing work). The count is a correlated subquery, not locked
+// against concurrent claimers — hence the soft cap documented on
+// SetMaxConcurrentPerTenant.
+const claimCappedQuery = `
+		UPDATE jobs
+		   SET status = 'running',
+		       worker_id = $1,
+		       attempt = attempt + 1,
+		       started_at = now(),
+		       lease_until = now() + $2::interval
+		 WHERE id = (
+		     SELECT id FROM jobs
+		      WHERE kind = 'node'
+		        AND (
+		              (status = 'queued' AND (available_at IS NULL OR available_at <= now())
+		                AND (SELECT count(*) FROM jobs r
+		                      WHERE r.tenant = jobs.tenant
+		                        AND r.kind = 'node'
+		                        AND r.status = 'running'
+		                        AND r.lease_until > now()) < $3)
+		           OR (status = 'running' AND lease_until < now())
+		            )
+		      ORDER BY enqueued_at
+		      FOR UPDATE SKIP LOCKED
+		      LIMIT 1
+		 )
+		 RETURNING ` + claimReturning
 
 func (s *Postgres) Requeue(ctx context.Context, jobID string, availableAt time.Time) error {
 	const q = `

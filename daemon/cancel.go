@@ -95,6 +95,15 @@ func (s *Service) CancelGraphRun(ctx context.Context, p core.Principal, graphRun
 	if err := s.Jobs.Complete(ctx, graphRunID, core.JobStatusCancelled, graphResult); err != nil {
 		return fmt.Errorf("cancel graph record: %w", err)
 	}
+	// Reclaim the run's ephemeral scratch now that it's terminal.
+	// Best-effort, same as the dispatcher's success/failure paths.
+	if s.Engine != nil {
+		if sp, ok := s.Engine.Sandbox.(core.ScratchProvider); ok {
+			if err := sp.RemoveScratch(g.Tenant, g.Workspace, graphRunID); err != nil && s.Logger != nil {
+				s.Logger.Printf("scratch reclaim for cancelled run %s: %v", graphRunID, err)
+			}
+		}
+	}
 	s.bus().Publish(graphRunID, BusEvent{Terminal: &TerminalEvent{
 		JobID:  graphRunID,
 		Status: core.JobStatusCancelled,

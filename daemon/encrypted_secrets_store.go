@@ -101,6 +101,30 @@ func (m *MemSecretsStore) getWrappedDEK(_ context.Context, tenant string) ([]byt
 		append([]byte(nil), row.nonce...), nil
 }
 
+func (m *MemSecretsStore) listDEKTenants(_ context.Context) ([]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]string, 0, len(m.deks))
+	for t := range m.deks {
+		out = append(out, t)
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+func (m *MemSecretsStore) replaceWrappedDEK(_ context.Context, tenant string, wrapped, nonce []byte) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.deks[tenant]; !ok {
+		return ErrSecretNotFound
+	}
+	m.deks[tenant] = memDEKRow{
+		wrapped: append([]byte(nil), wrapped...),
+		nonce:   append([]byte(nil), nonce...),
+	}
+	return nil
+}
+
 func (m *MemSecretsStore) setWrappedDEK(_ context.Context, tenant string, wrapped, nonce []byte) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -223,6 +247,35 @@ func (p *PgSecretsStore) getWrappedDEK(ctx context.Context, tenant string) ([]by
 		return nil, nil, err
 	}
 	return w, n, nil
+}
+
+func (p *PgSecretsStore) listDEKTenants(ctx context.Context) ([]string, error) {
+	rows, err := p.pool.Query(ctx, `SELECT tenant FROM encrypted_secret_deks ORDER BY tenant`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var t string
+		if err := rows.Scan(&t); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+func (p *PgSecretsStore) replaceWrappedDEK(ctx context.Context, tenant string, wrapped, nonce []byte) error {
+	const q = `UPDATE encrypted_secret_deks SET wrapped_dek=$2, nonce=$3 WHERE tenant=$1`
+	tag, err := p.pool.Exec(ctx, q, tenant, wrapped, nonce)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrSecretNotFound
+	}
+	return nil
 }
 
 func (p *PgSecretsStore) setWrappedDEK(ctx context.Context, tenant string, wrapped, nonce []byte) (bool, error) {

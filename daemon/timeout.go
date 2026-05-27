@@ -15,13 +15,17 @@ import (
 // (no cap). Caller checks for zero before starting a watchdog so we
 // don't spawn idle goroutines.
 func (s *Service) effectiveGraphTimeout(g core.Graph) time.Duration {
+	d := time.Duration(s.DefaultGraphTimeoutSeconds) * time.Second
 	if g.TimeoutSeconds > 0 {
-		return time.Duration(g.TimeoutSeconds) * time.Second
+		d = time.Duration(g.TimeoutSeconds) * time.Second
 	}
-	if s.DefaultGraphTimeoutSeconds > 0 {
-		return time.Duration(s.DefaultGraphTimeoutSeconds) * time.Second
+	// Hard ceiling: clamp even an explicit per-graph value so a tenant
+	// can't pin a worker for an unbounded duration. The ceiling only
+	// shortens; it never extends a run that asked for less.
+	if max := time.Duration(s.MaxGraphTimeoutSeconds) * time.Second; max > 0 && (d == 0 || d > max) {
+		d = max
 	}
-	return 0
+	return d
 }
 
 // startGraphTimeoutWatchdog launches a goroutine that auto-cancels

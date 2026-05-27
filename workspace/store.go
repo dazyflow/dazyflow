@@ -12,6 +12,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-git/go-billy/v5"
@@ -30,7 +31,18 @@ import (
 
 // Store wraps a Git working tree. Graphs live under graphs/<id>.json;
 // environments under refs/tags/graphs/<id>/<env>.
+//
+// mu serializes every repo access. go-git's repository/storer types are
+// not safe for concurrent use, and the scheduler's rescan reads
+// (ListGraphs/Load) run on tickers concurrently with the HTTP gateway's
+// Save path — so an unguarded Store data-races on the storage map. It's a
+// full Mutex rather than an RWMutex on purpose: the filesystem backend's
+// object LRU cache is mutated *during reads*, so even two concurrent
+// readers would race on it. Graph save/load/list are infrequent next to
+// job execution, so full mutual exclusion per (tenant,workspace) store is
+// a fine trade for correctness.
 type Store struct {
+	mu   sync.Mutex
 	repo *git.Repository
 	fs   billy.Filesystem
 }
@@ -121,6 +133,8 @@ func (s *Store) Save(graph core.Graph, author string) (string, error) {
 	if graph.ID == "" {
 		return "", errors.New("graph.ID required")
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	wt, err := s.repo.Worktree()
 	if err != nil {
 		return "", err
@@ -179,6 +193,8 @@ func (s *Store) Save(graph core.Graph, author string) (string, error) {
 
 // Load reads graphs/<id>.json from HEAD.
 func (s *Store) Load(id string) (core.Graph, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	head, err := s.repo.Head()
 	if err != nil {
 		return core.Graph{}, fmt.Errorf("head: %w", err)
@@ -189,6 +205,8 @@ func (s *Store) Load(id string) (core.Graph, error) {
 // LoadAt reads graphs/<id>.json from the commit identified by ref (a
 // branch, tag, or hex hash).
 func (s *Store) LoadAt(ref, id string) (core.Graph, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	hash, err := s.resolve(ref)
 	if err != nil {
 		return core.Graph{}, err
@@ -226,6 +244,8 @@ func (s *Store) PromoteToEnvironment(graphID, env, commit string) error {
 	if env == "" {
 		return errors.New("env required")
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	hash, err := s.resolve(commit)
 	if err != nil {
 		return err
@@ -241,6 +261,8 @@ func (s *Store) PromoteToEnvironment(graphID, env, commit string) error {
 
 // ListGraphs returns the IDs of every graph currently committed at HEAD.
 func (s *Store) ListGraphs() ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	head, err := s.repo.Head()
 	if errors.Is(err, plumbing.ErrReferenceNotFound) {
 		return nil, nil
@@ -282,8 +304,16 @@ func envTag(graphID, env string) string  { return "graphs/" + graphID + "/" + en
 
 // Branches/Tags surface the underlying refs for callers that want to do
 // their own listing/diff.
-func (s *Store) Branches() ([]string, error) { return listRefs(s.repo, "refs/heads/") }
-func (s *Store) Tags() ([]string, error)     { return listRefs(s.repo, "refs/tags/") }
+func (s *Store) Branches() ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return listRefs(s.repo, "refs/heads/")
+}
+func (s *Store) Tags() ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return listRefs(s.repo, "refs/tags/")
+}
 
 func listRefs(repo *git.Repository, prefix string) ([]string, error) {
 	refs, err := repo.References()

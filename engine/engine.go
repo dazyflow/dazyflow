@@ -214,14 +214,15 @@ func (e *Engine) RunNode(
 		Env:     node.Env,
 		Cleanup: core.CleanupOnGraphComplete,
 	}
-	if err := e.populateSandbox(&job, graph); err != nil {
+	if err := e.populateSandbox(&job, graph, graphRunID); err != nil {
 		recordSpanError(span, err)
 		return core.Result{
 			Status: core.StatusError,
 			Error:  &core.JobError{Code: "sandbox", Message: err.Error()},
 		}, err
 	}
-	if err := resolveTemplates(core.WithTenant(ctx, job.Tenant), e.Secrets, prior, &job); err != nil {
+	secrets, err := resolveTemplatesCollecting(core.WithTenant(ctx, job.Tenant), e.Secrets, prior, &job)
+	if err != nil {
 		recordSpanError(span, err)
 		return core.Result{
 			Status: core.StatusError,
@@ -237,6 +238,9 @@ func (e *Engine) RunNode(
 	if result.JobID == "" {
 		result.JobID = job.ID
 	}
+	// Scrub resolved secret values from the result before it leaves the
+	// engine (and lands in the job store / run-detail UI).
+	redactResult(&result, secrets)
 	if execErr != nil {
 		recordSpanError(span, execErr)
 	} else if result.Status == core.StatusError && result.Error != nil {
@@ -283,13 +287,15 @@ func (e *Engine) runNode(
 		Env:     node.Env,
 		Cleanup: core.CleanupOnGraphComplete,
 	}
-	if err := e.populateSandbox(&job, graph); err != nil {
+	// In-process Run path has no per-run ID, so no scratch dir.
+	if err := e.populateSandbox(&job, graph, ""); err != nil {
 		return core.Result{
 			Status: core.StatusError,
 			Error:  &core.JobError{Code: "sandbox", Message: err.Error()},
 		}, err
 	}
-	if err := resolveTemplates(core.WithTenant(ctx, job.Tenant), e.Secrets, prior, &job); err != nil {
+	secrets, err := resolveTemplatesCollecting(core.WithTenant(ctx, job.Tenant), e.Secrets, prior, &job)
+	if err != nil {
 		return core.Result{
 			Status: core.StatusError,
 			Error:  &core.JobError{Code: "secret", Message: err.Error()},
@@ -308,6 +314,9 @@ func (e *Engine) runNode(
 	if result.JobID == "" {
 		result.JobID = job.ID
 	}
+	// Scrub resolved secret values from the result before it leaves the
+	// engine (and lands in the job store / run-detail UI).
+	redactResult(&result, secrets)
 	if execErr != nil {
 		recordSpanError(span, execErr)
 	} else if result.Status == core.StatusError && result.Error != nil {
@@ -385,7 +394,7 @@ func forwardProgress(
 // transport.Execute so a misconfigured sandbox never lets a module run
 // unsandboxed, and a quota-lookup error fails the job rather than
 // silently allowing unmetered writes.
-func (e *Engine) populateSandbox(job *core.Job, graph core.Graph) error {
+func (e *Engine) populateSandbox(job *core.Job, graph core.Graph, runID string) error {
 	job.Tenant = graph.Tenant
 	if e.Sandbox != nil {
 		root, err := e.Sandbox.Root(graph.Tenant, graph.Workspace)
@@ -393,6 +402,17 @@ func (e *Engine) populateSandbox(job *core.Job, graph core.Graph) error {
 			return fmt.Errorf("sandbox for %s/%s: %w", graph.Tenant, graph.Workspace, err)
 		}
 		job.WorkspaceRoot = root
+		// Per-run ephemeral scratch, when the provider supports it and we
+		// have a run ID to namespace by. Reclaimed by the dispatcher when
+		// the run finishes. The in-process Engine.Run path passes runID=""
+		// (no scratch) — only the daemon's per-node RunNode path runs.
+		if sp, ok := e.Sandbox.(core.ScratchProvider); ok && runID != "" {
+			scratch, err := sp.ScratchRoot(graph.Tenant, graph.Workspace, runID)
+			if err != nil {
+				return fmt.Errorf("scratch for %s/%s run %s: %w", graph.Tenant, graph.Workspace, runID, err)
+			}
+			job.ScratchRoot = scratch
+		}
 	}
 	if e.Quota != nil {
 		limit := e.Quota.Limit(graph.Tenant)

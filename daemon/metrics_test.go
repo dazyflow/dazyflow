@@ -1,0 +1,71 @@
+package daemon
+
+import (
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestMetrics_DisabledByDefault(t *testing.T) {
+	h := newGatewayHarness(t) // EnableMetrics defaults false
+	rw := h.do(t, "GET", "/metrics", nil)
+	if rw.Code != http.StatusNotFound {
+		t.Fatalf("GET /metrics with metrics disabled = %d, want 404 (route not mounted)", rw.Code)
+	}
+}
+
+func TestMetrics_EnabledEmitsUpAndQuotaGauges(t *testing.T) {
+	h := newGatewayHarness(t)
+	h.gw.EnableMetrics = true
+
+	// Wire a quota provider with a limited tenant and seed some usage.
+	base := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(base, "acme", "ws"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(base, "acme", "ws", "f"), make([]byte, 200), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	q, err := NewFSQuota(base, map[string]int64{"acme": 1000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	q.SetCacheTTL(0)
+	h.svc.Engine.Quota = q
+
+	rw := h.do(t, "GET", "/metrics", nil)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rw.Code)
+	}
+	if ct := rw.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/plain") {
+		t.Errorf("Content-Type = %q, want Prometheus text", ct)
+	}
+	body := rw.Body.String()
+	for _, want := range []string{
+		"hazyflow_up 1",
+		`hazyflow_quota_bytes_used{tenant="acme"} 200`,
+		`hazyflow_quota_bytes_limit{tenant="acme"} 1000`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("metrics body missing %q\n--- body ---\n%s", want, body)
+		}
+	}
+}
+
+func TestMetrics_EnabledWithoutQuotaStillServesUp(t *testing.T) {
+	h := newGatewayHarness(t)
+	h.gw.EnableMetrics = true // no quota provider wired on the harness engine
+	rw := h.do(t, "GET", "/metrics", nil)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rw.Code)
+	}
+	body := rw.Body.String()
+	if !strings.Contains(body, "hazyflow_up 1") {
+		t.Errorf("missing hazyflow_up gauge: %s", body)
+	}
+	if strings.Contains(body, "hazyflow_quota_bytes_used") {
+		t.Errorf("quota gauges present without a quota provider: %s", body)
+	}
+}

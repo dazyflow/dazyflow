@@ -82,6 +82,12 @@ func (s *Service) SubmitGraphWithSeed(
 	if err := core.Validate(g); err != nil {
 		return "", fmt.Errorf("invalid graph: %w", err)
 	}
+	// Resource-exhaustion guard: refuse a graph whose node count exceeds
+	// the operator's ceiling before allocating any run state.
+	if s.MaxGraphNodes > 0 && len(g.Nodes) > s.MaxGraphNodes {
+		return "", fmt.Errorf("%w: graph has %d nodes, limit is %d",
+			core.ErrGraphTooLarge, len(g.Nodes), s.MaxGraphNodes)
+	}
 	// Validate seed targets exist in the graph before any state writes.
 	for nodeID := range seeds {
 		if _, ok := g.Node(nodeID); !ok {

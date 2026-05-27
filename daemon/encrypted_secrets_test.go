@@ -402,3 +402,117 @@ func (c *countingStore) getWrappedDEK(ctx context.Context, tenant string) ([]byt
 func (c *countingStore) setWrappedDEK(ctx context.Context, tenant string, wrapped, nonce []byte) (bool, error) {
 	return c.inner.setWrappedDEK(ctx, tenant, wrapped, nonce)
 }
+func (c *countingStore) listDEKTenants(ctx context.Context) ([]string, error) {
+	return c.inner.listDEKTenants(ctx)
+}
+func (c *countingStore) replaceWrappedDEK(ctx context.Context, tenant string, wrapped, nonce []byte) error {
+	return c.inner.replaceWrappedDEK(ctx, tenant, wrapped, nonce)
+}
+
+func TestEncryptedSecrets_RewrapDEKs_RotatesKEK(t *testing.T) {
+	store := NewMemSecretsStore()
+	oldKey, newKey := randomKey(t), randomKey(t)
+
+	es1, err := NewEncryptedSecrets(oldKey, store)
+	if err != nil {
+		t.Fatalf("NewEncryptedSecrets(old): %v", err)
+	}
+	// Seed secrets across two tenants (two DEKs).
+	seed := map[string]map[string]string{
+		"acme":   {"slack_token": "xoxb-acme", "db_pw": "hunter2hunter2"},
+		"globex": {"api_key": "sk_live_globex_key"},
+	}
+	for tenant, kv := range seed {
+		ctx := core.WithTenant(context.Background(), tenant)
+		for name, val := range kv {
+			if err := es1.Put(ctx, tenant, name, val); err != nil {
+				t.Fatalf("put %s/%s: %v", tenant, name, err)
+			}
+		}
+	}
+
+	rotated, skipped, err := es1.RewrapDEKs(context.Background(), newKey)
+	if err != nil {
+		t.Fatalf("RewrapDEKs: %v", err)
+	}
+	if rotated != 2 || skipped != 0 {
+		t.Fatalf("rotated=%d skipped=%d, want 2/0", rotated, skipped)
+	}
+
+	// A fresh store view under the NEW key decrypts every secret — the
+	// DEK plaintexts (and ciphertexts) are unchanged, only re-wrapped.
+	es2, err := NewEncryptedSecrets(newKey, store)
+	if err != nil {
+		t.Fatalf("NewEncryptedSecrets(new): %v", err)
+	}
+	for tenant, kv := range seed {
+		ctx := core.WithTenant(context.Background(), tenant)
+		for name, want := range kv {
+			got, err := es2.Get(ctx, name)
+			if err != nil {
+				t.Fatalf("get %s/%s under new key: %v", tenant, name, err)
+			}
+			if got != want {
+				t.Errorf("%s/%s = %q, want %q", tenant, name, got, want)
+			}
+		}
+	}
+
+	// The OLD key can no longer unwrap the re-wrapped DEKs.
+	es3, _ := NewEncryptedSecrets(oldKey, store)
+	if _, err := es3.Get(core.WithTenant(context.Background(), "acme"), "slack_token"); err == nil {
+		t.Fatal("old key still decrypts after rotation; want failure")
+	}
+}
+
+func TestEncryptedSecrets_RewrapDEKs_ReRunIsIdempotent(t *testing.T) {
+	store := NewMemSecretsStore()
+	oldKey, newKey := randomKey(t), randomKey(t)
+
+	es1, _ := NewEncryptedSecrets(oldKey, store)
+	ctx := core.WithTenant(context.Background(), "acme")
+	if err := es1.Put(ctx, "acme", "k", "valuevalue"); err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	if _, _, err := es1.RewrapDEKs(context.Background(), newKey); err != nil {
+		t.Fatalf("first rotation: %v", err)
+	}
+	// Re-running the original (old-key) instance against the same store
+	// must not error or double-rotate: the DEK now unwraps only under
+	// the new key, so it's counted as skipped, not re-wrapped.
+	rotated, skipped, err := es1.RewrapDEKs(context.Background(), newKey)
+	if err != nil {
+		t.Fatalf("re-run rotation: %v", err)
+	}
+	if rotated != 0 || skipped != 1 {
+		t.Fatalf("re-run rotated=%d skipped=%d, want 0/1 (already rotated)", rotated, skipped)
+	}
+}
+
+func TestEncryptedSecrets_RewrapDEKs_WrongCurrentKeyErrors(t *testing.T) {
+	store := NewMemSecretsStore()
+	realKey, wrongKey, newKey := randomKey(t), randomKey(t), randomKey(t)
+
+	es, _ := NewEncryptedSecrets(realKey, store)
+	if err := es.Put(core.WithTenant(context.Background(), "acme"), "acme", "k", "valuevalue"); err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	// Rotating from a KEK that never wrapped these DEKs must fail loudly,
+	// not silently corrupt the store.
+	esWrong, _ := NewEncryptedSecrets(wrongKey, store)
+	if _, _, err := esWrong.RewrapDEKs(context.Background(), newKey); err == nil {
+		t.Fatal("rotation with wrong current key succeeded; want error")
+	}
+	// The original DEK is untouched — the real key still decrypts.
+	got, err := es.Get(core.WithTenant(context.Background(), "acme"), "k")
+	if err != nil || got != "valuevalue" {
+		t.Fatalf("after failed rotation: got %q err %v, want secret intact", got, err)
+	}
+}
+
+func TestEncryptedSecrets_RewrapDEKs_RejectsShortKey(t *testing.T) {
+	es, _ := NewEncryptedSecrets(randomKey(t), NewMemSecretsStore())
+	if _, _, err := es.RewrapDEKs(context.Background(), []byte("too-short")); err == nil {
+		t.Fatal("RewrapDEKs accepted a non-32-byte key; want error")
+	}
+}

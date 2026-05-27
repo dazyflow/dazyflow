@@ -81,19 +81,36 @@ Mostly enumerated under **Production blockers** — this is the ordering.
   gateway now bind on the main goroutine (new `ServeListener` methods);
   `hzd` fatals on a port-in-use error instead of silently dropping the
   listener.
-- [ ] SSRF egress allowlist for `http_request`; finish secret output
-  sanitization.
-- [ ] **Quota write race** — attempted in the overnight batch, **left
-  for review**: closing it needs a reserve-and-hold-across-write change
-  threaded through the module write path (lock held across I/O),
-  correctness-critical enough to not land unattended. Snapshot model is
-  at `engine/engine.go:~397`.
-- [~] **Master-key provisioning + rotation runbook** — DONE as docs
-  (2026-05-27, `SECURITY.md`): generation, KMS storage options,
-  loss/compromise handling, and the rotation procedure. **Still open
-  (code):** the KEK re-wrap command itself — rotation today needs the
-  documented interim (re-enter secrets); the in-place DEK re-wrap is the
-  `v2` gap noted in `daemon/encrypted_secrets.go`.
+- [x] **SSRF egress allowlist for `http_request`** (`--http-egress-allow`
+  + `integrations/net/egress.go`; IP-level SSRF guard always on).
+  **Secret output sanitization finished** (2026-05-27): the save-time
+  lint (`secret_to_persistence`) is now backed by *runtime* redaction —
+  `engine.resolveTemplatesCollecting` records every resolved secret
+  plaintext and `redactResult` scrubs it from the persisted node
+  `Result.Output` + error strings before it leaves the engine, so a
+  module that echoes a resolved param (e.g. an HTTP node reflecting its
+  Authorization header) can't leak the secret into the job store / run
+  UI. `engine/redact.go` (+ `_test.go`); guarded by a min-length
+  threshold to avoid over-redacting trivial values.
+- [x] **Quota write race** (2026-05-27, reservation + in-flight model).
+  `core.QuotaReserver` + `FSQuota.Reserve(tenant,n)->release` track
+  bytes reserved-but-not-committed under lock (`used + inflight + n <=
+  limit`); the `file_write` / `excel_write` drops reserve before writing
+  via the `io.SetQuotaReserver` hook (wired in `cmd/hzd`, same pattern as
+  `SetTokenLookup`) and hold the reservation across the write with
+  `defer release()`. Closes the TOCTOU two concurrent same-tenant writes
+  hit against the old per-job snapshot; the snapshot stays as the
+  no-reserver fallback. Race tests in `daemon/quota_test.go`.
+- [x] **Master-key provisioning + rotation runbook + re-wrap command**
+  (2026-05-27). Docs in `SECURITY.md`; the code gap is now closed —
+  `EncryptedSecrets.RewrapDEKs(ctx, newKey)` unwraps every tenant DEK
+  with the current KEK and re-wraps under the new one (secret
+  ciphertexts untouched, no re-entry), exposed as `hzd
+  --rotate-master-key` (re-wrap, report, exit). Re-runnable
+  (already-rotated DEKs detected via new-key trial-unwrap and skipped)
+  and fails loudly on the wrong current key, leaving the store intact.
+  New store methods `listDEKTenants` / `replaceWrappedDEK` (mem + pg);
+  rotation tests in `daemon/encrypted_secrets_test.go`.
 
 ### Phase 2 — HA / horizontal scale (~2–3 wks)
 
@@ -593,10 +610,12 @@ platform can demonstrate but not actually power a real workflow.
 - [ ] **CRL / OCSP support.** All certs signed by the configured CA are
   accepted. Revocation can't be enforced. Add CRL fetch (HTTP) or
   OCSP-stapling config to the TLS layer.
-- [ ] **Concurrent-write race in quotas.** Snapshot model (`QuotaUsed`
-  captured at job-start) lets two concurrent `file_write`s in the same
-  tenant briefly exceed the limit. Per-tenant write mutex or OS-level
-  quotas (XFS project quotas, ZFS) needed for hard enforcement.
+- [x] **Concurrent-write race in quotas** (2026-05-27). Closed with a
+  reserve-and-hold model: `core.QuotaReserver` + `FSQuota.Reserve`
+  tracks reserved-but-uncommitted bytes under lock; `file_write` /
+  `excel_write` reserve before writing via `io.SetQuotaReserver` and hold
+  it across the write. See the Phase 1 entry for detail. (OS-level quotas
+  remain the backstop for out-of-process writers.)
 - [ ] **Real secret providers (vault, gcp, aws, azure).** Interface +
   scheme registry + env/builtin providers exist now. The cloud KMS
   / vault implementations are real integrations we haven't done. Spec
@@ -653,7 +672,11 @@ platform can demonstrate but not actually power a real workflow.
   HTTP gateway bind on the main goroutine (new `ServeListener` methods);
   `hzd` calls `log.Fatalf` on a port-in-use bind error so k8s/systemd
   restarts the process instead of it running listener-less.
-- [~] **Output sanitization for secrets.** V1 shipped:
+- [x] **Output sanitization for secrets** (runtime redaction added
+  2026-05-27 — see Phase 1 entry: `engine.resolveTemplatesCollecting` +
+  `redactResult` scrub resolved secret plaintext from persisted
+  `Result.Output`/errors, backing the save-time lint below). V1 lint
+  shipped earlier:
   `core.LintGraph(g) []LintIssue` runs at every `PUT /graphs`
   save. The first rule, `secret_to_persistence`, detects nodes
   whose Params or Env reference `${env|tenant|builtin:...}`
@@ -744,9 +767,14 @@ platform can demonstrate but not actually power a real workflow.
 
 ## OnError + retry refinements
 
-- [ ] **Manifest-driven max-retries.** Currently `MaxRetries` is a
-  worker-global setting. A module's author should be able to say "this
-  one tolerates 10 retries" or "this is one-shot".
+- [x] **Manifest-driven max-retries** (2026-05-27). `core.Manifest` gained
+  `MaxRetries` (JSON `max_retries`, omitempty); `Worker.maybeScheduleRetry`
+  uses it as the attempt cap when set (>0), falling back to the
+  worker-global `WorkerConfig.MaxRetries` otherwise. A flaky module can
+  declare a higher cap ("tolerates 10"); a costly module can set 1 (one
+  attempt). One-shot was already expressible via `RetryPolicy != exponential_backoff`.
+  Two tests pin both directions (raises above / lowers below the worker
+  default).
 - [x] **Jitter on retry backoff.** DONE 2026-05-27. The default
   `WorkerConfig.RetryBackoff` now multiplies the exponential base by a
   random factor in [0.75, 1.25) (±25%), so sibling nodes failing
@@ -772,12 +800,52 @@ platform can demonstrate but not actually power a real workflow.
 
 ## Reliability & cleanup
 
-- [ ] **`Job.Cleanup` enforcement.** `CleanupPolicy` is on `core.Job`
-  but no code consumes it. Need cleanup on node/graph complete.
-- [ ] **Streaming writes with unknown size.** Quota check happens
-  pre-write with known size. For an HTTP download that streams to disk,
-  we'd need a `ReserveAndStream` pattern that aborts mid-write when
-  budget exceeded.
+- [x] **Data race in `workspace.Store` under concurrent access**
+  (2026-05-27). `workspace.Store` wrapped a go-git repo
+  (`memory.NewStorage()` in-memory, or a billy FS backend) with no mutex,
+  and go-git's storers aren't concurrency-safe. The scheduler's `Run`
+  loop reads (`ListGraphs`/`Load`) on its tickers while the HTTP gateway
+  save path / a second tick writes (`Save` → `wt.Commit`) the same
+  storage map — `go test ./daemon/ -race` flagged it via
+  `scheduler_poll_test.go` (`runtime.mapassign_faststr`). Fixed by
+  guarding all repo access with a `sync.Mutex` on `Store` (every public
+  method locks; internal `loadAt`/`resolve` stay lock-free). Full mutex,
+  **not** an RWMutex: the FS backend's object LRU cache is mutated during
+  reads, so concurrent readers would race on it too. `go test -race
+  ./...` is now green and CI runs the suite with `-race` (`.build.yml`)
+  to keep it that way.
+- [x] **`Job.Cleanup` enforcement — per-run scratch via `scratch://`**
+  (2026-05-27). `CleanupPolicy` was dormant and `WorkspaceRoot` is the
+  *persistent* per-(tenant, workspace) sandbox (deleting it = data loss),
+  so cleanup got a real target: a per-run **scratch** area distinct from
+  the workspace. `core.Job.ScratchRoot` + optional `core.ScratchProvider`
+  (`FSSandbox.ScratchRoot`/`RemoveScratch`, at
+  `<base>/<tenant>/<workspace>/.scratch/<runID>/` so it's quota-counted
+  yet reclaimable as a unit). Any file drop resolves a `scratch://path`
+  through the shared `io.openSandboxRoot` resolver (no per-drop flag —
+  wired into `file_write`/`file_read`; the scheme rides through output
+  Refs so downstream reads resolve the same place). The engine provisions
+  scratch per run; the dispatcher reclaims it on every terminal path
+  (success/failure/cancel), best-effort. Tests: io scheme round-trip +
+  mixed-root copy, FSSandbox lifecycle/quota/safety, and an e2e
+  "reclaimed on completion". The whole **io** package now resolves
+  through it (`file_write`/`file_read`/`excel_write`/`excel_read`/
+  `file_picker`). **Open follow-ups:** adopt the resolver in the
+  remaining cross-package path-taking drops (db/git/shell — they still
+  open `WorkspaceRoot` directly and have bespoke path handling, lower
+  value); per-node `CleanupOnNodeComplete` isolation
+  (today reclamation is per-run on graph terminal); multi-node scratch
+  reclaim is best-effort local (same single-node/shared-FS assumption as
+  the rest of the FS sandbox).
+- [ ] **Streaming writes with unknown size (`ReserveAndStream`).** The
+  quota *reservation* now exists (`core.QuotaReserver`, Phase 1), but it
+  reserves a known size up front. A download that streams to disk with
+  unknown length needs reserve-as-you-write that aborts mid-stream when
+  the budget is hit. **Blocked on a consumer:** there is no streaming
+  HTTP download module yet (`http_request` is inline-body only; the
+  `http_download`/`http_upload` split is still an open feature item
+  under Modules). Build `ReserveAndStream` alongside that module, not
+  before it.
 - [ ] **`maybeCompleteGraph` is O(N) per completion.** Acceptable for
   typical graphs but scales linearly. Could add a per-graph-run
   outstanding-node counter; only walk when counter hits 0.
@@ -801,9 +869,22 @@ platform can demonstrate but not actually power a real workflow.
 
 ## Observability
 
-- [ ] **Disk-usage metrics per tenant.** Expose
-  `hazyflow_quota_bytes_used{tenant=...}` and `_limit` via the OTel
-  metrics SDK so dashboards can show approaching-limit signals.
+- [x] **Disk-usage metrics per tenant + `/metrics`** (2026-05-27). A
+  hand-rolled Prometheus text endpoint (`daemon/metrics.go`) exposes
+  `hazyflow_up`, `hazyflow_quota_bytes_used{tenant}`, and
+  `hazyflow_quota_bytes_limit{tenant}` for every tenant with a configured
+  limit, so dashboards can show approaching-limit signals. Backed by a
+  new optional `core.QuotaReporter` (`FSQuota.Usage()`). Mounted only
+  behind `--metrics` (default off — it reveals tenant names, so it's
+  opt-in and meant for a restricted scrape network) and unauthenticated
+  like `/healthz`. Hand-rolled rather than via the OTel metrics SDK to
+  avoid pulling in the Prometheus-exporter + client_golang deps for a
+  three-gauge surface; the OTel tracing scaffolding in
+  `engine/tracing.go` stays for spans. Tests cover disabled→404,
+  enabled→up+quota gauges, and enabled-without-a-quota-provider.
+  **Follow-ups:** more gauges (queue depth / runs-by-status — needs a
+  jobstore count method); a gRPC health/metrics path for non-HTTP
+  deployments.
 - [~] **Worker health / readiness.** `GET /healthz` (liveness) and
   `GET /readyz` (readiness — pings Postgres when configured via
   `gw.ReadyCheck`) both serve on the HTTP gateway as of 2026-05-27.
@@ -811,9 +892,25 @@ platform can demonstrate but not actually power a real workflow.
 - [ ] **Structured graph-progress audit log.** Right now progress only
   flows over the gRPC stream. Long-running graphs that disconnect
   lose history.
-- [ ] **Per-tenant rate limiting beyond disk quota.** Spec mentions
-  `max_concurrent_jobs`, `max_graph_nodes`, `max_job_duration_s` —
-  none enforced yet.
+- [x] **Per-tenant rate limiting beyond disk quota.** `max_graph_nodes`
+  and `max_job_duration_s` shipped 2026-05-27 as operator-wide ceilings:
+  `--max-graph-nodes` rejects oversized graphs at `SubmitGraph`
+  (`core.ErrGraphTooLarge` → 400) before any run state is allocated, and
+  `--max-graph-timeout` clamps `effectiveGraphTimeout` so even an
+  explicit per-graph `timeout_seconds` can't pin a worker indefinitely.
+  Both are global today (matching `--default-graph-timeout`); per-tenant
+  overrides are a follow-up (needs the `--quota`-style tenant→limit map).
+  **`max_concurrent_jobs` shipped 2026-05-27** (`--max-concurrent-jobs`):
+  a per-tenant cap on running node jobs, enforced in `Claim` — new
+  (queued) work is withheld from a tenant at its cap while expired-lease
+  reclaims stay exempt (recovery, not new concurrency).
+  `JobStore.SetMaxConcurrentPerTenant`; the **memory** store is exact
+  (single lock), the **Postgres** store is a documented best-effort
+  **soft cap** (the per-tenant running count is a correlated subquery,
+  not locked against concurrent claimers, so a race can briefly allow
+  cap+1 — a hard cap would need per-tenant locking). Tests: memory
+  cap/cross-tenant/free-slot/expired-reclaim-exemption; a `HAZYFLOW_TEST_DB`-gated
+  Postgres cap test.
 
 ## Coverage gaps (the honest list)
 

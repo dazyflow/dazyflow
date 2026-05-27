@@ -65,6 +65,12 @@ type HTTPGateway struct {
 	// via --signup or $HAZYFLOW_ENABLE_SIGNUP.
 	EnableSignup bool
 
+	// EnableMetrics mounts an unauthenticated GET /metrics Prometheus
+	// endpoint. Off by default: it exposes tenant names + disk usage, so
+	// operators opt in via --metrics and restrict scrape access at the
+	// network/proxy layer. Wired by hzd.
+	EnableMetrics bool
+
 	// SlackEvents handles Slack Events API POSTs (app_mention etc.).
 	// Nil = the route returns 501. Wired by hzd when the Slack
 	// signing-secret flag/env is set.
@@ -174,6 +180,10 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 		rw.WriteHeader(http.StatusOK)
 		_, _ = rw.Write([]byte("ready"))
 	})
+	// Prometheus scrape endpoint, opt-in (exposes tenant names + usage).
+	if h.EnableMetrics {
+		mux.HandleFunc("GET /metrics", h.metrics)
+	}
 	mux.HandleFunc("POST /api/v1/auth/signin", h.rateLimitAuth(h.signIn))
 	mux.HandleFunc("POST /api/v1/auth/signup", h.rateLimitAuth(h.signUp))
 	mux.HandleFunc("POST /api/v1/auth/signout", h.signOut)

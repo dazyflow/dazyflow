@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"git.sr.ht/~klahr/hazy-flow/core"
@@ -58,19 +57,18 @@ func executeFileRead(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 	if err != nil {
 		return params.Err(job, "bad_param", err.Error()), nil
 	}
-	if job.WorkspaceRoot == "" {
-		return params.Err(job, "no_sandbox", "file_read requires a workspace sandbox"), nil
-	}
-	root, err := os.OpenRoot(job.WorkspaceRoot)
+	// Resolves both workspace-relative paths and scratch:// paths; the
+	// returned root confines all access, rel is the path within it.
+	root, rel, err := openSandboxRoot(job, path)
 	if err != nil {
-		return params.Err(job, "sandbox", fmt.Sprintf("open root: %v", err)), nil
+		return params.Err(job, "no_sandbox", err.Error()), nil
 	}
 	defer root.Close()
 
-	info, err := root.Stat(path)
+	info, err := root.Stat(rel)
 	if err != nil {
 		if isSandboxEscape(err) {
-			return params.Err(job, "sandbox_escape", fmt.Sprintf("path %q escapes workspace", path)), nil
+			return params.Err(job, "sandbox_escape", fmt.Sprintf("path %q escapes its sandbox root", path)), nil
 		}
 		return params.Err(job, "io", fmt.Sprintf("stat %q: %v", path, err)), nil
 	}
@@ -82,9 +80,11 @@ func executeFileRead(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 		mime = "application/octet-stream"
 	}
 
+	// Ref carries the original path (scheme and all) so a downstream
+	// reader resolves it the same way; internal ops use rel.
 	out := core.Ref{MIME: mime, Ref: path}
 	if inline, _ := paramBool(job.Params, "inline"); inline {
-		f, err := root.Open(path)
+		f, err := root.Open(rel)
 		if err != nil {
 			return params.Err(job, "io", fmt.Sprintf("open %q: %v", path, err)), nil
 		}

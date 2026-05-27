@@ -397,3 +397,67 @@ func TestRequeue_PreservesAttemptAndClearsResult(t *testing.T) {
 	// silence unused failure variable
 	_ = failure
 }
+
+// TestRetry_ManifestRaisesCapAboveWorkerDefault: a module that declares a
+// higher MaxRetries in its manifest gets more attempts than the
+// worker-global cap would allow.
+func TestRetry_ManifestRaisesCapAboveWorkerDefault(t *testing.T) {
+	failCount := atomic.Int32{}
+	failCount.Store(4) // fail 4 times, succeed on the 5th attempt
+	node := flakyNode(&failCount)
+	node.Manifest.MaxRetries = 5 // override the worker default of 2
+
+	h := newRetryHarness(t, node, daemon.WorkerConfig{
+		MaxRetries:   2, // global default alone would stop after 2 attempts
+		RetryBackoff: func(int) time.Duration { return 5 * time.Millisecond },
+	})
+
+	g := core.Graph{
+		ID: "retry-raise", Tenant: "t", Workspace: "ws",
+		Nodes: []core.Node{{ID: "n", Module: "flaky"}},
+	}
+	runID, err := h.svc.SubmitGraph(t.Context(), h.principal, g)
+	if err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	terminal := waitForTerminalEvent(t, h.bus, h.jobs, runID, 5*time.Second)
+	if terminal.Status != core.JobStatusSucceeded {
+		t.Fatalf("status = %q (err=%+v); manifest cap of 5 should let it reach attempt 5", terminal.Status, terminal.Error)
+	}
+	rec, _ := h.jobs.Get(t.Context(), daemon.NodeJobID(runID, "n"))
+	if rec.Attempt != 5 {
+		t.Errorf("attempt = %d, want 5 (manifest MaxRetries override)", rec.Attempt)
+	}
+}
+
+// TestRetry_ManifestLowersCapBelowWorkerDefault: a module that declares
+// MaxRetries=1 gets a single attempt even when the worker default is
+// higher — the "this is one-shot / costly" case.
+func TestRetry_ManifestLowersCapBelowWorkerDefault(t *testing.T) {
+	failCount := atomic.Int32{}
+	failCount.Store(10) // always fail
+	node := flakyNode(&failCount)
+	node.Manifest.MaxRetries = 1 // one attempt, no retry
+
+	h := newRetryHarness(t, node, daemon.WorkerConfig{
+		MaxRetries:   5, // global default would allow 5 attempts
+		RetryBackoff: func(int) time.Duration { return 5 * time.Millisecond },
+	})
+
+	g := core.Graph{
+		ID: "retry-lower", Tenant: "t", Workspace: "ws",
+		Nodes: []core.Node{{ID: "n", Module: "flaky"}},
+	}
+	runID, err := h.svc.SubmitGraph(t.Context(), h.principal, g)
+	if err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	terminal := waitForTerminalEvent(t, h.bus, h.jobs, runID, 5*time.Second)
+	if terminal.Status != core.JobStatusFailed {
+		t.Fatalf("status = %q (want failed)", terminal.Status)
+	}
+	rec, _ := h.jobs.Get(t.Context(), daemon.NodeJobID(runID, "n"))
+	if rec.Attempt != 1 {
+		t.Errorf("attempt = %d, want 1 (manifest MaxRetries=1 caps below worker default)", rec.Attempt)
+	}
+}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -69,18 +68,16 @@ func executeFilePicker(_ context.Context, job core.Job, _ chan<- core.Progress) 
 	if err != nil {
 		return params.Err(job, "bad_param", err.Error()), nil
 	}
-	if job.WorkspaceRoot == "" {
-		return params.Err(job, "no_sandbox", "file_picker requires a workspace sandbox"), nil
-	}
-	root, err := os.OpenRoot(job.WorkspaceRoot)
+	// Resolves workspace-relative and scratch:// paths alike.
+	root, rel, err := openSandboxRoot(job, path)
 	if err != nil {
-		return params.Err(job, "sandbox", fmt.Sprintf("open root: %v", err)), nil
+		return params.Err(job, "no_sandbox", err.Error()), nil
 	}
 	defer root.Close()
-	info, err := root.Stat(path)
+	info, err := root.Stat(rel)
 	if err != nil {
 		if isSandboxEscape(err) {
-			return params.Err(job, "sandbox_escape", fmt.Sprintf("path %q escapes workspace", path)), nil
+			return params.Err(job, "sandbox_escape", fmt.Sprintf("path %q escapes its sandbox root", path)), nil
 		}
 		return params.Err(job, "io", fmt.Sprintf("stat %q: %v", path, err)), nil
 	}
@@ -95,7 +92,7 @@ func executeFilePicker(_ context.Context, job core.Job, _ chan<- core.Progress) 
 
 	fileRef := core.Ref{MIME: mime, Ref: path}
 	if inline, _ := paramBool(job.Params, "inline"); inline {
-		f, err := root.Open(path)
+		f, err := root.Open(rel)
 		if err != nil {
 			return params.Err(job, "io", fmt.Sprintf("open %q: %v", path, err)), nil
 		}

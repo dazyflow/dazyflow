@@ -78,6 +78,50 @@ func (s *FSSandbox) Root(tenant, workspace string) (string, error) {
 	return resolved, nil
 }
 
+// scratchDirName is the per-workspace subdirectory under which each
+// run's scratch lives: <base>/<tenant>/<workspace>/.scratch/<runID>/.
+// Placing it under the workspace subtree means walkUsage (quota) counts
+// scratch against the tenant's budget while it's alive, and frees it on
+// reclaim.
+const scratchDirName = ".scratch"
+
+// ScratchRoot returns (creating if needed) the run's scratch directory.
+// It sits beside the persistent workspace data, namespaced by run ID, so
+// it's quota-counted yet trivially reclaimable as a unit.
+func (s *FSSandbox) ScratchRoot(tenant, workspace, runID string) (string, error) {
+	if !isSafeIdent(tenant) {
+		return "", fmt.Errorf("unsafe tenant identifier %q", tenant)
+	}
+	if !isSafeIdent(workspace) {
+		return "", fmt.Errorf("unsafe workspace identifier %q", workspace)
+	}
+	if !isSafeIdent(runID) {
+		return "", fmt.Errorf("unsafe run identifier %q", runID)
+	}
+	path := filepath.Join(s.base, tenant, workspace, scratchDirName, runID)
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		return "", fmt.Errorf("create scratch %q: %w", path, err)
+	}
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return "", fmt.Errorf("resolve scratch %q: %w", path, err)
+	}
+	if !strings.HasPrefix(resolved+string(filepath.Separator), s.base+string(filepath.Separator)) {
+		return "", fmt.Errorf("scratch %q escapes base %q", resolved, s.base)
+	}
+	return resolved, nil
+}
+
+// RemoveScratch deletes a run's scratch directory. Idempotent:
+// RemoveAll treats a missing path as success, so reclaiming a run that
+// never wrote scratch is a no-op.
+func (s *FSSandbox) RemoveScratch(tenant, workspace, runID string) error {
+	if !isSafeIdent(tenant) || !isSafeIdent(workspace) || !isSafeIdent(runID) {
+		return fmt.Errorf("unsafe identifier in scratch reclaim (%q/%q/%q)", tenant, workspace, runID)
+	}
+	return os.RemoveAll(filepath.Join(s.base, tenant, workspace, scratchDirName, runID))
+}
+
 // isSafeIdent permits the same identifier shape as DNS labels plus
 // underscores: tight enough to be safe in any path layer.
 func isSafeIdent(s string) bool {
@@ -106,5 +150,8 @@ func isSafeIdent(s string) bool {
 	return true
 }
 
-// Ensure FSSandbox satisfies the interface at compile time.
-var _ core.SandboxProvider = (*FSSandbox)(nil)
+// Ensure FSSandbox satisfies the interfaces at compile time.
+var (
+	_ core.SandboxProvider = (*FSSandbox)(nil)
+	_ core.ScratchProvider = (*FSSandbox)(nil)
+)

@@ -47,7 +47,16 @@ type Manifest struct {
 	ParamsSchema   json.RawMessage `json:"params_schema"`
 	Idempotent     bool            `json:"idempotent"`
 	RetryPolicy    RetryPolicy     `json:"retry_policy"`
-	CompatibleWith []string        `json:"compatible_with"`
+
+	// MaxRetries lets a module author override the worker-global retry
+	// cap (total attempts) for nodes running this module. Zero means
+	// "unspecified — use the worker default". A flaky network module can
+	// set it high ("tolerates 10"); a costly or one-shot module can set
+	// it to 1 (a single attempt, no retry). Only consulted when
+	// RetryPolicy already opts the module into retries.
+	MaxRetries int `json:"max_retries,omitempty"`
+
+	CompatibleWith []string `json:"compatible_with"`
 
 	// --- Discovery metadata (introduced for search + categorization) ---
 

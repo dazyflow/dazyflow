@@ -33,6 +33,14 @@ type Job struct {
 	// not have to (and cannot reliably) sandbox itself otherwise.
 	WorkspaceRoot string `json:"workspace_root,omitempty"`
 
+	// ScratchRoot is the absolute path of this run's ephemeral scratch
+	// directory — distinct from the persistent WorkspaceRoot. File drops
+	// resolve a `scratch://` path against it; whatever lands there is
+	// reclaimed when the run reaches a terminal state (per CleanupPolicy).
+	// Empty when the sandbox provider doesn't support scratch or the
+	// run has no ID. Set by the engine before Execute.
+	ScratchRoot string `json:"scratch_root,omitempty"`
+
 	// Tenant carries the principal's tenant for module-side accounting
 	// (e.g. quota checks). Set by the engine before Execute.
 	Tenant string `json:"tenant,omitempty"`

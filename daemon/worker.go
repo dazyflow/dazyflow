@@ -261,8 +261,15 @@ func (w *Worker) maybeScheduleRetry(graph core.Graph, rec core.JobRecord) (time.
 		return time.Time{}, "no outgoing edge requests retry"
 	}
 
-	if rec.Attempt >= w.cfg.MaxRetries {
-		return time.Time{}, fmt.Sprintf("max retries (%d) reached", w.cfg.MaxRetries)
+	// A module may override the worker-global attempt cap via its
+	// manifest (e.g. a flaky network module tolerating more retries, or a
+	// costly module limiting itself to one shot). Zero = use the default.
+	attemptCap := w.cfg.MaxRetries
+	if manifest.MaxRetries > 0 {
+		attemptCap = manifest.MaxRetries
+	}
+	if rec.Attempt >= attemptCap {
+		return time.Time{}, fmt.Sprintf("max retries (%d) reached", attemptCap)
 	}
 
 	return time.Now().Add(w.cfg.RetryBackoff(rec.Attempt)), ""
