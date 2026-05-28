@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"git.sr.ht/~klahr/hazy-flow/core"
@@ -70,12 +71,7 @@ func (w *WebhookListener) handleForm(rw http.ResponseWriter, r *http.Request) {
 			http.Error(rw, "could not read form", http.StatusBadRequest)
 			return
 		}
-		// Collect declared fields only — ignore anything extra a client
-		// might tack on, so the seed shape is predictable.
-		values := make(map[string]any, len(fields))
-		for _, f := range fields {
-			values[f] = r.PostFormValue(f)
-		}
+		values := collectFormValues(fields, r.PostForm)
 		seed := buildFormSeed(values)
 		seeds := map[string]core.Result{}
 		for _, n := range g.Nodes {
@@ -107,6 +103,51 @@ func (w *WebhookListener) handleForm(rw http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(rw, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+// maxFormFields caps the total field count on a single hosted-form
+// submission. The built-in store auto-evolves columns from whatever
+// gets posted (so the owner doesn't manage schema), so an unbounded
+// payload would let a spammy caller bloat the workspace's schema with
+// 1000s of TEXT columns. 50 is well above what Zapier / Make /
+// Typeform / Squarespace actually attach in practice (typically <20).
+const maxFormFields = 50
+
+// collectFormValues builds the {field: value} map seeded into the
+// flow's webhook_input.body port from a hosted-form POST. It accepts
+// every posted field (Zapier, Make, Typeform attach utm_*, source,
+// submitted_at etc. that owners commonly forget to declare), not just
+// the ones named in form_fields — the old "declared-only" filter
+// dropped extras silently while the visitor saw "Thanks!", which was
+// the worst combination: visitor reassured, owner blind, payload
+// truncated.
+//
+// declared fields are always present (blank when missing) so
+// downstream nodes that read body.email by name don't have to defend
+// against absent keys. They're inserted first so they're never crowded
+// out of maxFormFields by a payload that pads itself with junk.
+func collectFormValues(declared []string, posted url.Values) map[string]any {
+	out := make(map[string]any, len(declared)+8)
+	for _, f := range declared {
+		out[f] = posted.Get(f)
+	}
+	for k, v := range posted {
+		if len(out) >= maxFormFields {
+			break
+		}
+		if k == "" {
+			continue
+		}
+		if _, already := out[k]; already {
+			continue
+		}
+		if len(v) > 0 {
+			out[k] = v[0]
+		} else {
+			out[k] = ""
+		}
+	}
+	return out
 }
 
 // publicFormTrigger returns the graph's webhook trigger when it has

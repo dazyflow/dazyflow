@@ -513,6 +513,13 @@ function WebhookRecipes({ graph, secret, baseURL }: { graph: Graph; secret: stri
 // tool can't send an Authorization header." Fields are a simple
 // comma-separated list (default name/email/message); the form delivers
 // them to webhook_input's body as a JSON object.
+//
+// The "Thanks!" page the form renders to submitters fires before the
+// downstream flow has actually run — submission accepted ≠ graph
+// succeeded. RecentSubmissions below surfaces that to the owner: if
+// something is failing after submission (e.g. the user added a field
+// and the store hasn't caught up), the count of failed runs shows here
+// so she finds out *somewhere* without polling the runs list manually.
 function HostedForm({
   graph,
   trigger,
@@ -580,6 +587,94 @@ function HostedForm({
               {t("settings.triggers.form.preview")}
             </a>
           </p>
+          <RecentSubmissions graph={graph} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// RecentSubmissions surfaces the failure count for the per-graph runs
+// list. The hosted form renders "Thanks!" the moment the run is
+// accepted by the scheduler, *not* when downstream nodes finish — so a
+// silent post-submission failure (the classic case: owner edited her
+// form to add a field; the store hasn't been ALTERed to match) leaves
+// the visitor reassured but the owner blind. This panel is the place
+// where the owner finds out: a quiet "12 submissions, all OK" until
+// something starts failing, then "12 submissions — 2 failed" with the
+// most recent error code on display.
+//
+// One fetch on mount; she can re-open the settings modal to refresh.
+// No polling — this isn't a dashboard, it's a sanity check next to
+// the form configuration she just edited.
+function RecentSubmissions({ graph }: { graph: Graph }) {
+  const { t } = useTranslation();
+  const { token, activeTenant, activeWorkspace } = useAuth();
+  const [runs, setRuns] = useState<{
+    total: number;
+    failed: number;
+    lastFailed?: { id: string; finished_at?: string | null; error_code?: string };
+  } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    if (!token || !activeTenant || !activeWorkspace || !graph.id) return;
+    let cancelled = false;
+    api
+      .listRuns(token, activeTenant, activeWorkspace, graph.id, { limit: 50 })
+      .then((r) => {
+        if (cancelled) return;
+        const all = r.runs ?? [];
+        const failedList = all.filter((x) => x.status === "failed");
+        setRuns({
+          total: all.length,
+          failed: failedList.length,
+          lastFailed: failedList[0]
+            ? {
+                id: failedList[0].id,
+                finished_at: failedList[0].finished_at,
+                error_code: failedList[0].error_code,
+              }
+            : undefined,
+        });
+      })
+      .catch((e: Error) => {
+        if (!cancelled) setErr(e.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, activeTenant, activeWorkspace, graph.id]);
+
+  if (err) return null; // silent failure — the panel is best-effort
+  if (!runs) return null;
+  if (runs.total === 0) {
+    return (
+      <div className="hosted-form-runs desc">
+        {t("settings.triggers.form.runsEmpty")}
+      </div>
+    );
+  }
+  const ok = runs.total - runs.failed;
+  if (runs.failed === 0) {
+    return (
+      <div className="hosted-form-runs desc">
+        {t("settings.triggers.form.runsAllOK", { total: runs.total })}
+      </div>
+    );
+  }
+  return (
+    <div className="hosted-form-runs hosted-form-runs-warn">
+      <strong>
+        {t("settings.triggers.form.runsSomeFailed", {
+          ok,
+          failed: runs.failed,
+        })}
+      </strong>
+      {runs.lastFailed?.error_code && (
+        <div className="desc">
+          {t("settings.triggers.form.runsLastFailure", {
+            code: runs.lastFailed.error_code,
+          })}
         </div>
       )}
     </div>

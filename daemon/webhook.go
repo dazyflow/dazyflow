@@ -9,6 +9,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -266,4 +267,12 @@ func ServeWebhookForTest(w *WebhookListener, rw http.ResponseWriter, r *http.Req
 // without binding a real port.
 func ServeFormForTest(w *WebhookListener, rw http.ResponseWriter, r *http.Request) {
 	w.handleForm(rw, r)
+}
+
+// CollectFormValuesForTest exposes the field-collection helper to the
+// external _test package so the "extra fields aren't silently dropped"
+// guarantee is unit-testable without standing up an HTTP server +
+// graph run round trip.
+func CollectFormValuesForTest(declared []string, posted url.Values) map[string]any {
+	return collectFormValues(declared, posted)
 }

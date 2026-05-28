@@ -77,6 +77,80 @@ func TestForm_NotOptedInIs404(t *testing.T) {
 	}
 }
 
+// TestForm_CollectValuesPassesExtras documents the "Zapier/Make
+// attaches extra fields the owner forgot to declare" path: declared
+// fields are always present (blank when not posted), and any extras
+// the caller attached come through too — no silent drop.
+func TestForm_CollectValuesPassesExtras(t *testing.T) {
+	declared := []string{"name", "email", "message"}
+	posted := url.Values{
+		"name":         {"Anna"},
+		"email":        {"anna@example.com"},
+		"message":      {"hi"},
+		"utm_source":   {"facebook"},
+		"submitted_at": {"2026-05-28T10:00:00Z"},
+	}
+	got := daemon.CollectFormValuesForTest(declared, posted)
+	for k, want := range map[string]any{
+		"name":         "Anna",
+		"email":        "anna@example.com",
+		"message":      "hi",
+		"utm_source":   "facebook",
+		"submitted_at": "2026-05-28T10:00:00Z",
+	} {
+		if got[k] != want {
+			t.Errorf("values[%q] = %v, want %v", k, got[k], want)
+		}
+	}
+}
+
+// TestForm_CollectValuesIncludesDeclaredBlanks: a declared field that
+// wasn't posted still appears in the seed (as ""), so downstream nodes
+// that index by name aren't broken by a missing key.
+func TestForm_CollectValuesIncludesDeclaredBlanks(t *testing.T) {
+	got := daemon.CollectFormValuesForTest(
+		[]string{"name", "email"},
+		url.Values{"name": {"Anna"}}, // email not posted
+	)
+	if got["email"] != "" {
+		t.Errorf("declared-but-missing email = %v, want \"\"", got["email"])
+	}
+	if got["name"] != "Anna" {
+		t.Errorf("name = %v, want Anna", got["name"])
+	}
+}
+
+// TestForm_CollectValuesCaps a flood of extra fields can't bloat the
+// store's schema unboundedly. Declared fields go in first so a spammy
+// payload can't crowd the owner's own fields out of the cap.
+func TestForm_CollectValuesCaps(t *testing.T) {
+	declared := []string{"a", "b"}
+	posted := url.Values{"a": {"1"}, "b": {"2"}}
+	for i := 0; i < 200; i++ {
+		posted.Set("extra"+itoa(i), "x")
+	}
+	got := daemon.CollectFormValuesForTest(declared, posted)
+	if len(got) > 50 {
+		t.Errorf("got %d values, want <= 50 (cap)", len(got))
+	}
+	// Owner's declared fields must survive the cap.
+	if got["a"] != "1" || got["b"] != "2" {
+		t.Errorf("declared fields got crowded out: a=%v b=%v", got["a"], got["b"])
+	}
+}
+
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	var s []byte
+	for n > 0 {
+		s = append([]byte{byte('0' + n%10)}, s...)
+		n /= 10
+	}
+	return string(s)
+}
+
 func TestForm_POSTSubmitsRun(t *testing.T) {
 	_, wh, jobs, _, wsStore := startWebhookHarness(t)
 	g := core.Graph{

@@ -209,7 +209,11 @@
         "fieldsLabel": "Form fields",
         "fieldsDesc": "Comma-separated field names. Leave blank for the default: name, email, message. A field called \"message\" becomes a large text box.",
         "titleLabel": "Form heading",
-        "preview": "Open the form ↗"
+        "preview": "Open the form ↗",
+        "runsEmpty": "No submissions yet. Once people start filling in the form, a count appears here.",
+        "runsAllOK": "{{total}} submissions so far — all processed cleanly.",
+        "runsSomeFailed": "{{ok}} OK · {{failed}} failed. Open the run list to see what went wrong.",
+        "runsLastFailure": "Last failure: {{code}}"
       }
     },
     "notifications": {

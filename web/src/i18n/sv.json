@@ -209,7 +209,11 @@
         "fieldsLabel": "Formulärfält",
         "fieldsDesc": "Kommaseparerade fältnamn. Lämna tomt för standard: name, email, message. Ett fält som heter \"message\" blir en stor textruta.",
         "titleLabel": "Formulärrubrik",
-        "preview": "Öppna formuläret ↗"
+        "preview": "Öppna formuläret ↗",
+        "runsEmpty": "Inga inskick än. När folk börjar fylla i formuläret visas räkningen här.",
+        "runsAllOK": "{{total}} inskick hittills — alla bearbetade utan fel.",
+        "runsSomeFailed": "{{ok}} OK · {{failed}} misslyckade. Öppna körningslistan för att se vad som gick fel.",
+        "runsLastFailure": "Senaste fel: {{code}}"
       }
     },
     "notifications": {

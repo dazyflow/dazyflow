@@ -79,6 +79,80 @@ func TestBuiltinStore_AppendSingleObject(t *testing.T) {
 	}
 }
 
+// TestBuiltinStore_AppendEvolvesSchema covers the form-editing path:
+// a user appends submissions with one shape, then edits their form to
+// add a new field. The store's whole point is that the user doesn't
+// manage schema, so the second append should automatically ALTER the
+// table to add the new column — not fail with "table has no column
+// named X". sqlite_insert_rows still rejects this because that drop is
+// for users who manage their own schema; only the built-in path
+// evolves.
+func TestBuiltinStore_AppendEvolvesSchema(t *testing.T) {
+	root := t.TempDir()
+	base := core.Job{WorkspaceRoot: root, Params: map[string]any{"table": "leads"}}
+
+	first, err := executeBuiltinStoreAppend(t.Context(), withInput(base, map[string]core.Ref{
+		"rows": {Inline: map[string]any{"name": "Alice", "email": "alice@example.com"}},
+	}), nil)
+	if err != nil {
+		t.Fatalf("first append execute: %v", err)
+	}
+	if first.Status != core.StatusOK {
+		t.Fatalf("first append status=%q err=%+v", first.Status, first.Error)
+	}
+
+	// Maria edits her form to add a phone field. Second submission
+	// includes it — must succeed and persist the value.
+	second, err := executeBuiltinStoreAppend(t.Context(), withInput(base, map[string]core.Ref{
+		"rows": {Inline: map[string]any{"name": "Bob", "email": "bob@example.com", "phone": "+1 555 0123"}},
+	}), nil)
+	if err != nil {
+		t.Fatalf("second append execute: %v", err)
+	}
+	if second.Status != core.StatusOK {
+		t.Fatalf("schema evolution failed: status=%q err=%+v", second.Status, second.Error)
+	}
+
+	// Verify the phone value actually landed (not just that the
+	// statement was accepted).
+	q, err := executeBuiltinStoreQuery(t.Context(), core.Job{
+		WorkspaceRoot: root,
+		Params: map[string]any{
+			"sql": "SELECT name, phone FROM leads WHERE name = 'Bob'",
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("query execute: %v", err)
+	}
+	rows, _ := q.Output["rows"].Inline.([]map[string]any)
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row after evolution, got %d (%#v)", len(rows), rows)
+	}
+	if rows[0]["phone"] != "+1 555 0123" {
+		t.Errorf("phone = %v, want +1 555 0123", rows[0]["phone"])
+	}
+	// Existing rows still readable and have NULL phones.
+	all, err := executeBuiltinStoreQuery(t.Context(), core.Job{
+		WorkspaceRoot: root,
+		Params:        map[string]any{"sql": "SELECT name, phone FROM leads ORDER BY name"},
+	}, nil)
+	if err != nil {
+		t.Fatalf("all query: %v", err)
+	}
+	allRows, _ := all.Output["rows"].Inline.([]map[string]any)
+	if len(allRows) != 2 {
+		t.Fatalf("expected 2 rows total, got %d", len(allRows))
+	}
+	if allRows[0]["phone"] != nil {
+		t.Errorf("Alice (pre-evolution row) phone = %v, want NULL", allRows[0]["phone"])
+	}
+}
+
+func withInput(j core.Job, in map[string]core.Ref) core.Job {
+	j.Input = in
+	return j
+}
+
 // TestBuiltinStore_AppendEmptyBody verifies the empty-webhook-body path:
 // a webhook trigger that fires with no request body emits "" on
 // webhook_input.body; wired straight into a store's rows port that has

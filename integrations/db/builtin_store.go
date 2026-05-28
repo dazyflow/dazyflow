@@ -205,6 +205,17 @@ func executeBuiltinStoreAppend(_ context.Context, job core.Job, _ chan<- core.Pr
 		if err := ensureTable(db, table, headers, colTypes); err != nil {
 			return params.Err(job, "db", err.Error()), nil
 		}
+		// Schema evolution: when the table already exists, ensureTable
+		// is a CREATE-IF-NOT-EXISTS no-op and any headers added since
+		// would silently break the upcoming INSERT. The built-in store
+		// is explicitly the no-schema-management path — Maria edits her
+		// form, adds "phone", and expects new submissions to land. Add
+		// any missing columns now (sqlite_insert_rows keeps its
+		// stricter behaviour; that drop is for users who manage their
+		// own schema).
+		if err := evolveBuiltinStoreColumns(db, table, headers, colTypes); err != nil {
+			return params.Err(job, "db", err.Error()), nil
+		}
 	}
 	if len(rows) == 0 {
 		return core.Result{
@@ -222,6 +233,58 @@ func executeBuiltinStoreAppend(_ context.Context, job core.Job, _ chan<- core.Pr
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{"inserted": {MIME: "application/json", Inline: inserted}},
 	}, nil
+}
+
+// evolveBuiltinStoreColumns adds any header not already present on
+// table as a new column with the same type-defaulting rules
+// ensureTable uses (TEXT unless overridden by colTypes). Built-in
+// store only — the regular sqlite/postgres drops leave schema
+// management to the user. Idempotent: re-running with no new headers
+// is a single PRAGMA read and zero writes.
+//
+// SQLite caveats:
+//   - PRAGMA table_info returns column names case-sensitively as stored
+//     in the schema. ADD COLUMN with a differently-cased duplicate would
+//     create a conflicting column; we keep the comparison case-sensitive
+//     to mirror SQLite's own behaviour.
+//   - ALTER TABLE ADD COLUMN cannot add a NOT NULL column without a
+//     DEFAULT in SQLite. The store never asks for NOT NULL columns
+//     (TEXT default, no constraints), so this restriction doesn't bite.
+func evolveBuiltinStoreColumns(db *sql.DB, table string, headers []string, colTypes map[string]string) error {
+	rows, err := db.Query(fmt.Sprintf("PRAGMA table_info(%s)", quoteIdent(table)))
+	if err != nil {
+		return fmt.Errorf("read columns: %w", err)
+	}
+	defer rows.Close()
+	existing := make(map[string]struct{})
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notnull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return fmt.Errorf("scan column: %w", err)
+		}
+		existing[name] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate columns: %w", err)
+	}
+	for _, h := range headers {
+		if _, ok := existing[h]; ok {
+			continue
+		}
+		t := "TEXT"
+		if v, ok := colTypes[h]; ok && v != "" {
+			t = v
+		}
+		stmt := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s",
+			quoteIdent(table), quoteIdent(h), t)
+		if _, err := db.Exec(stmt); err != nil {
+			return fmt.Errorf("add column %q: %w", h, err)
+		}
+	}
+	return nil
 }
 
 // executeBuiltinStoreQuery is the no-DSN twin of sqlite_query. A store
