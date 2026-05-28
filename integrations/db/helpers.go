@@ -136,6 +136,16 @@ func normalizeRows(inline any) ([]map[string]any, error) {
 		}
 		return out, nil
 	case string:
+		// An empty string is "no rows" rather than malformed JSON. This
+		// shows up when a webhook trigger fires with no request body
+		// (buildWebhookSeed defaults body to "") and the graph wires
+		// webhook_input.body straight into a store's rows port — a
+		// common shape for hosted-form flows. Returning a nil slice
+		// here keeps the empty-payload path quiet; the caller's
+		// "len(rows) == 0 → insert nothing" branch handles the rest.
+		if v == "" {
+			return nil, nil
+		}
 		var parsed []map[string]any
 		if err := json.Unmarshal([]byte(v), &parsed); err != nil {
 			return nil, fmt.Errorf("rows JSON: %w", err)

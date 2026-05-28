@@ -79,6 +79,31 @@ func TestBuiltinStore_AppendSingleObject(t *testing.T) {
 	}
 }
 
+// TestBuiltinStore_AppendEmptyBody verifies the empty-webhook-body path:
+// a webhook trigger that fires with no request body emits "" on
+// webhook_input.body; wired straight into a store's rows port that has
+// historically produced a JSON parse error. The store should accept it
+// as "nothing to insert" — same shape any non-techie hits when their
+// form tool sends a heartbeat or a misconfigured caller fires empty.
+func TestBuiltinStore_AppendEmptyBody(t *testing.T) {
+	res, err := executeBuiltinStoreAppend(t.Context(), core.Job{
+		WorkspaceRoot: t.TempDir(),
+		Params:        map[string]any{"table": "leads"},
+		Input: map[string]core.Ref{
+			"rows": {Inline: ""},
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if res.Status != core.StatusOK {
+		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
+	}
+	if got, _ := res.Output["inserted"].Inline.(int); got != 0 {
+		t.Errorf("inserted = %v, want 0", res.Output["inserted"].Inline)
+	}
+}
+
 // TestBuiltinStore_QueryEmptyStore verifies that reading before anything
 // has ever been written returns an empty result, not an error — an
 // empty store is a valid state.

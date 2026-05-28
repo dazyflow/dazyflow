@@ -87,6 +87,15 @@ type HTTPGateway struct {
 	// webhook-secret flag/env is set.
 	GitHubEvents *GitHubEventsHandler
 
+	// Webhook serves /trigger/ and /form/ on the main HTTP listener so
+	// a default --http-only deploy can fire webhook-triggered flows
+	// and serve hosted intake forms without the operator also setting
+	// --webhook to a separate port. mountRoutes auto-constructs one
+	// if left nil; the standalone WebhookListener (cmd/hzd's --webhook
+	// flag) keeps working alongside this for operators who want port
+	// separation.
+	Webhook *WebhookListener
+
 	// AuthRateLimit, when set, throttles the sign-in / sign-up
 	// endpoints per client IP. Nil disables throttling (dev default).
 	AuthRateLimit *ipRateLimiter
@@ -234,6 +243,27 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/jobs/{jobID}/nodes/{nodeID}", h.requireAuth(h.nodeSnapshot))
 	mux.HandleFunc("GET /api/v1/jobs/{jobID}/events", h.requireAuth(h.jobEvents))
 	mux.HandleFunc("POST /api/v1/chat/stream", h.requireAuth(h.chatStream))
+
+	// Webhook trigger + hosted-form endpoints. Authenticated per-graph
+	// (per-trigger bearer secret for /trigger; opt-in public_form for
+	// /form) rather than via the daemon's API-key chain, so they sit
+	// outside requireAuth. Mounting on the main HTTP gateway means a
+	// default --http-only deploy serves these routes without the
+	// operator having to spin up the optional standalone --webhook
+	// listener too. cmd/hzd's --webhook flag still binds a separate
+	// listener for operators who want port separation.
+	//
+	// Methods are listed explicitly because Go 1.22's ServeMux rejects
+	// a method-any pattern that coexists with the GET / catch-all
+	// (conflict: GET / matches fewer methods but a more general path).
+	// The standalone WebhookListener registers method-any patterns
+	// because it has no GET / catch-all to collide with; this mux does.
+	if h.Webhook == nil {
+		h.Webhook = NewWebhookListener(h.svc)
+	}
+	mux.HandleFunc("POST /trigger/", h.Webhook.handleTrigger)
+	mux.HandleFunc("GET /form/", h.Webhook.handleForm)
+	mux.HandleFunc("POST /form/", h.Webhook.handleForm)
 
 	// Static frontend bundle. Registered LAST so all explicit API
 	// routes above match first; `GET /` is a catch-all for any
