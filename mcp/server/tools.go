@@ -2,11 +2,34 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 )
+
+// idempotencyKeyFor derives a deterministic Idempotency-Key from the
+// tool name + raw args. The same tool invocation with the same args
+// produces the same key — so an LLM retrying a tool after a network
+// blip will hit the gateway's cached 2xx response instead of firing
+// the action twice. Distinct tool calls (different name or args)
+// produce distinct keys and run normally.
+//
+// We hash both the name (namespacing) and the canonical args bytes.
+// The MCP framing passes args as raw JSON, so we use those bytes
+// directly — no canonicalization is needed because the LLM sends the
+// exact same JSON on retry. Hash is SHA-256 hex-truncated to 32 chars
+// (128 bits) — same collision resistance as a UUIDv4 in less space,
+// and well under the gateway's 128-char cap.
+func idempotencyKeyFor(toolName string, args json.RawMessage) string {
+	h := sha256.New()
+	h.Write([]byte(toolName))
+	h.Write([]byte{0}) // separator so {"name":"x","args":"y"} ≠ {"name":"xy","args":""}
+	h.Write(args)
+	return hex.EncodeToString(h.Sum(nil))[:32]
+}
 
 // Defaults captures the tenant/workspace the MCP server falls back to
 // when a tool call omits them. Populated once at startup from
@@ -41,6 +64,10 @@ func BuildTools(c *HazydClient, d Defaults) []Tool {
 			"Create a new flow. Use this for fresh graphs; for in-place edits to an existing flow use update_flow (same wire shape, distinct intent so the LLM doesn't accidentally overwrite something it didn't mean to touch). Note: edits are rejected with HTTP 409 while a run of the flow is active."),
 		saveFlow(c, d, "update_flow",
 			"Update an existing flow in place. Pass the FULL graph payload (nodes + edges) — the daemon overwrites the prior version. Refuses with HTTP 409 if a run of this flow is currently in flight."),
+		patchFlow(c, d),
+		validateFlow(c, d),
+		testTriggerFlow(c, d),
+		sampleNode(c, d),
 		runFlow(c, d),
 		cancelRun(c),
 		getRun(c),
@@ -115,13 +142,46 @@ func decodeArgs(raw json.RawMessage) (map[string]any, error) {
 // 4xx responses are the latter — the LLM asked for something the
 // user can fix (bad ID, locked flow). 5xx and network failures are
 // the former.
+//
+// 4xx responses from spec-aligned routes come back as structured JSON
+// so the LLM can branch on the snake_case `code` enum rather than
+// parse English. Shape:
+//
+//	{"status":409,"code":"flow_locked","message":"...","path":"POST /me/flows/.../run","details":[...],"doc":"/api/v1/openapi.json#..."}
+//
+// Legacy routes that still emit `{"error":"<string>"}` come back with
+// `code` empty and `message` filled from the string — same shape, the
+// LLM can ignore the empty code.
 func errorResultOrErr(err error) (ToolCallResult, error) {
 	if err == nil {
 		return ToolCallResult{}, nil
 	}
 	var herr *HTTPError
 	if errors.As(err, &herr) && herr.Status >= 400 && herr.Status < 500 {
-		return ErrorResult(fmt.Sprintf("daemon returned %d: %s", herr.Status, herr.Body)), nil
+		payload := map[string]any{
+			"status":  herr.Status,
+			"path":    herr.Path,
+			"message": herr.Message,
+		}
+		if herr.Code != "" {
+			payload["code"] = herr.Code
+		}
+		if len(herr.Details) > 0 {
+			payload["details"] = herr.Details
+		}
+		if herr.Doc != "" {
+			payload["doc"] = herr.Doc
+		}
+		b, mErr := json.MarshalIndent(payload, "", "  ")
+		if mErr != nil {
+			// Falling back to the flat shape keeps a botched marshal
+			// from turning into an empty tool-error.
+			return ErrorResult(fmt.Sprintf("daemon returned %d: %s", herr.Status, herr.Message)), nil
+		}
+		return ToolCallResult{
+			IsError: true,
+			Content: []ContentItem{{Type: "text", Text: string(b)}},
+		}, nil
 	}
 	return ToolCallResult{}, err
 }
@@ -393,7 +453,182 @@ func saveFlow(c *HazydClient, d Defaults, name, description string) Tool {
 				body["edges"] = []any{}
 			}
 			var out map[string]any
+			// Key includes the tool name so retried create_flow vs
+			// update_flow with the same args don't collide on cache.
+			ctx = withIdempotencyKey(ctx, idempotencyKeyFor(name, raw))
 			if err := c.Put(ctx, "/me/flows/"+composeFlowID(tenant, workspace, id), body, &out); err != nil {
+				return errorResultOrErr(err)
+			}
+			return TextResult(out), nil
+		},
+	}
+}
+
+// patchFlow exposes the gateway's PATCH /me/flows/{id} (RFC 7396 JSON
+// Merge Patch). Use this for incremental edits — adding a node,
+// rewiring an edge, changing a label — without re-uploading the whole
+// graph. Much cheaper on context than update_flow when only a small
+// part of the graph changes.
+//
+// Merge semantics: keys present in the patch replace target values;
+// nulls delete keys; nested objects merge recursively; arrays REPLACE
+// wholesale. To change a single node's params, send
+// `{"nodes":[<full new nodes list>]}` — there is no per-index array
+// merge in RFC 7396.
+func patchFlow(c *HazydClient, d Defaults) Tool {
+	return Tool{
+		Name: "patch_flow",
+		Description: "Apply a JSON Merge Patch (RFC 7396) to an existing flow. " +
+			"Use for incremental edits — the patch body is a sparse subset of the Graph; " +
+			"unspecified keys are left alone, nulls delete, arrays replace wholesale. " +
+			"Refuses with HTTP 409 if a run of this flow is currently in flight.",
+		InputSchema: json.RawMessage(`{"type":"object","required":["id","patch"],"properties":{
+			"id":        {"type":"string","description":"Flow ID."},
+			"tenant":    {"type":"string"},
+			"workspace": {"type":"string"},
+			"patch":     {"type":"object","description":"Sparse Graph document. Only keys you want to change. Use null to delete a key."}
+		}}`),
+		Handler: func(ctx context.Context, raw json.RawMessage) (ToolCallResult, error) {
+			args, err := decodeArgs(raw)
+			if err != nil {
+				return ErrorResult(err.Error()), nil
+			}
+			id := stringField(args, "id", "")
+			if id == "" {
+				return ErrorResult("id is required"), nil
+			}
+			tenant, workspace, err := scoped(args, d)
+			if err != nil {
+				return ErrorResult(err.Error()), nil
+			}
+			patch, ok := args["patch"].(map[string]any)
+			if !ok {
+				return ErrorResult("patch must be a JSON object"), nil
+			}
+			var out map[string]any
+			ctx = withIdempotencyKey(ctx, idempotencyKeyFor("patch_flow", raw))
+			if err := c.Patch(ctx, "/me/flows/"+composeFlowID(tenant, workspace, id), patch, &out); err != nil {
+				return errorResultOrErr(err)
+			}
+			return TextResult(out), nil
+		},
+	}
+}
+
+// validateFlow lints the flow at HEAD without saving. Lets the LLM
+// sanity-check a graph it just authored before running it — catches
+// schema mismatches, orphaned nodes, hardcoded secrets, etc. Returns
+// the same lint shape SaveFlow appends after a write.
+func validateFlow(c *HazydClient, d Defaults) Tool {
+	return Tool{
+		Name:        "validate_flow",
+		Description: "Lint a flow (currently saved version) without running it. Returns {ok, issues:[{severity,node,field,message}]}. Use after create_flow / update_flow / patch_flow to verify the saved shape lints clean before triggering a run.",
+		InputSchema: json.RawMessage(`{"type":"object","required":["id"],"properties":{
+			"id":        {"type":"string"},
+			"tenant":    {"type":"string"},
+			"workspace": {"type":"string"}
+		}}`),
+		Handler: func(ctx context.Context, raw json.RawMessage) (ToolCallResult, error) {
+			args, err := decodeArgs(raw)
+			if err != nil {
+				return ErrorResult(err.Error()), nil
+			}
+			id := stringField(args, "id", "")
+			if id == "" {
+				return ErrorResult("id is required"), nil
+			}
+			tenant, workspace, err := scoped(args, d)
+			if err != nil {
+				return ErrorResult(err.Error()), nil
+			}
+			var out map[string]any
+			// Read-only operation: no idempotency key needed (the server
+			// won't dedupe GET-like calls anyway).
+			if err := c.Post(ctx, "/me/flows/"+composeFlowID(tenant, workspace, id)+"/validate", nil, &out); err != nil {
+				return errorResultOrErr(err)
+			}
+			return TextResult(out), nil
+		},
+	}
+}
+
+// testTriggerFlow simulates a webhook/form trigger payload so an LLM
+// (or developer) can verify a trigger-shaped flow end-to-end without
+// wiring up an external caller. Seeds the trigger node with the
+// supplied JSON payload — exactly as a real /trigger or /form POST
+// would — and returns the run ID to observe.
+func testTriggerFlow(c *HazydClient, d Defaults) Tool {
+	return Tool{
+		Name:        "test_trigger_flow",
+		Description: "Fire a flow as if a webhook/form trigger had received the supplied JSON payload. Returns the run ID. Use this to verify a trigger-driven flow without exposing it to real traffic.",
+		InputSchema: json.RawMessage(`{"type":"object","required":["id","payload"],"properties":{
+			"id":        {"type":"string"},
+			"tenant":    {"type":"string"},
+			"workspace": {"type":"string"},
+			"payload":   {"description":"JSON payload to seed the trigger node with. Object, array, or primitive."}
+		}}`),
+		Handler: func(ctx context.Context, raw json.RawMessage) (ToolCallResult, error) {
+			args, err := decodeArgs(raw)
+			if err != nil {
+				return ErrorResult(err.Error()), nil
+			}
+			id := stringField(args, "id", "")
+			if id == "" {
+				return ErrorResult("id is required"), nil
+			}
+			tenant, workspace, err := scoped(args, d)
+			if err != nil {
+				return ErrorResult(err.Error()), nil
+			}
+			body := map[string]any{"payload": args["payload"]}
+			var out map[string]any
+			ctx = withIdempotencyKey(ctx, idempotencyKeyFor("test_trigger_flow", raw))
+			if err := c.Post(ctx, "/me/flows/"+composeFlowID(tenant, workspace, id)+"/test-trigger", body, &out); err != nil {
+				return errorResultOrErr(err)
+			}
+			return TextResult(out), nil
+		},
+	}
+}
+
+// sampleNode executes a single node with synthetic input so the LLM
+// can answer "what does this node actually emit, given X?" without
+// running the whole flow. Useful for debugging during authoring or
+// for the LLM to reason about a transformation node's behavior.
+func sampleNode(c *HazydClient, d Defaults) Tool {
+	return Tool{
+		Name:        "sample_node",
+		Description: "Run a single node in isolation with the supplied input map and return its output. Inputs are keyed by port name. Used for debugging a node mid-flow without running the upstream chain.",
+		InputSchema: json.RawMessage(`{"type":"object","required":["id","node_id"],"properties":{
+			"id":        {"type":"string","description":"Flow ID."},
+			"tenant":    {"type":"string"},
+			"workspace": {"type":"string"},
+			"node_id":   {"type":"string"},
+			"inputs":    {"type":"object","description":"Map of input-port-name → value. Optional; defaults to empty."}
+		}}`),
+		Handler: func(ctx context.Context, raw json.RawMessage) (ToolCallResult, error) {
+			args, err := decodeArgs(raw)
+			if err != nil {
+				return ErrorResult(err.Error()), nil
+			}
+			id := stringField(args, "id", "")
+			nodeID := stringField(args, "node_id", "")
+			if id == "" || nodeID == "" {
+				return ErrorResult("id and node_id are required"), nil
+			}
+			tenant, workspace, err := scoped(args, d)
+			if err != nil {
+				return ErrorResult(err.Error()), nil
+			}
+			body := map[string]any{}
+			if inputs, ok := args["inputs"].(map[string]any); ok {
+				body["inputs"] = inputs
+			}
+			var out map[string]any
+			ctx = withIdempotencyKey(ctx, idempotencyKeyFor("sample_node", raw))
+			path := "/me/flows/" + composeFlowID(tenant, workspace, id) +
+				"/nodes/" + pathSegment(nodeID) + "/sample"
+			if err := c.Post(ctx, path, body, &out); err != nil {
 				return errorResultOrErr(err)
 			}
 			return TextResult(out), nil
@@ -424,6 +659,7 @@ func runFlow(c *HazydClient, d Defaults) Tool {
 				return ErrorResult(err.Error()), nil
 			}
 			var out map[string]any
+			ctx = withIdempotencyKey(ctx, idempotencyKeyFor("run_flow", raw))
 			if err := c.Post(ctx, "/me/flows/"+composeFlowID(tenant, workspace, id)+"/run", nil, &out); err != nil {
 				return errorResultOrErr(err)
 			}
@@ -455,6 +691,7 @@ func cancelRun(c *HazydClient) Tool {
 			}
 			var out map[string]any
 			path := fmt.Sprintf("/me/runs/%s/cancel", pathSegment(runID))
+			ctx = withIdempotencyKey(ctx, idempotencyKeyFor("cancel_run", raw))
 			if err := c.Post(ctx, path, body, &out); err != nil {
 				return errorResultOrErr(err)
 			}
@@ -669,6 +906,7 @@ func approveNode(c *HazydClient) Tool {
 				path += "&comment=" + pathSegment(c)
 			}
 			var out map[string]any
+			ctx = withIdempotencyKey(ctx, idempotencyKeyFor("approve_node", raw))
 			if err := c.Post(ctx, path, nil, &out); err != nil {
 				return errorResultOrErr(err)
 			}

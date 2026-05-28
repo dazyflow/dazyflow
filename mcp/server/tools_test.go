@@ -177,6 +177,40 @@ func TestTool_CreateFlow_ServerConflictBecomesToolError(t *testing.T) {
 	}
 }
 
+// TestTool_StructuredErrorEnvelope_PropagatesCode verifies that when
+// the daemon returns the new spec-aligned ErrorEnvelope shape, the
+// MCP tool surfaces it as structured JSON — so an LLM can branch on
+// `code` (e.g. "flow_locked") instead of parsing English.
+func TestTool_StructuredErrorEnvelope_PropagatesCode(t *testing.T) {
+	s, fake, _ := fullStack(t)
+	fake.on("POST", "/api/v1/me/flows/t/ws/wedged/run", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		_, _ = io.WriteString(w, `{"error":{"code":"flow_locked","message":"another run in flight","doc":"/api/v1/openapi.json#flow"}}`)
+	})
+
+	res := runToolCall(t, s, "run_flow", map[string]any{"id": "wedged"})
+	if !res.IsError {
+		t.Fatalf("expected tool-error, got success: %s", res.Content[0].Text)
+	}
+	var got map[string]any
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &got); err != nil {
+		t.Fatalf("error result is not JSON: %v\n%s", err, res.Content[0].Text)
+	}
+	if got["code"] != "flow_locked" {
+		t.Errorf("code = %v, want flow_locked", got["code"])
+	}
+	if got["message"] != "another run in flight" {
+		t.Errorf("message = %v", got["message"])
+	}
+	if got["doc"] != "/api/v1/openapi.json#flow" {
+		t.Errorf("doc = %v", got["doc"])
+	}
+	if got["status"].(float64) != 409 {
+		t.Errorf("status = %v, want 409", got["status"])
+	}
+}
+
 // wait_for_run polls until a terminal status appears. Verifies the
 // polling shape (multiple GETs) plus the "wait_timed_out" sentinel
 // when the run is still in flight at deadline.
