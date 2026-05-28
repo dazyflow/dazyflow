@@ -116,7 +116,46 @@
     "step3Title": "Peek at a recent run",
     "step3Body": "Every time a flow runs we keep what each step took in and spat out — super handy when something looks off.",
     "step3Cta": "See runs",
-    "foot": "This page is always here at <0>/welcome</0> if you want to wander back."
+    "foot": "This page is always here at <0>/welcome</0> if you want to wander back.",
+    "connectMcpTitle": "Build flows with an MCP client",
+    "connectMcpDesc": "Hook this workspace up to Claude or another MCP-aware assistant and have it draft flows for you.",
+    "connectMcpCta": "Connect MCP client"
+  },
+  "connectMcp": {
+    "title": "Connect an MCP client",
+    "intro": "We'll mint an API key scoped to your account, then show you the config snippet for the MCP client you use. The key can run and edit flows in this workspace — nothing else.",
+    "subjectLabel": "Your account",
+    "workspaceLabel": "Workspace",
+    "workspaceAny": "any (tenant-wide)",
+    "scopeDesc": "The key inherits your workspace. Need broader scope? Issue a custom key from Admin → API keys.",
+    "cancel": "Cancel",
+    "create": "Create key",
+    "creating": "Creating…",
+    "noSubject": "Can't determine your account — try signing out and back in.",
+    "revealHelp": "Pick your MCP client below. The key is shown once — copy the snippet before closing this dialog.",
+    "configPathLabel": "Config file path",
+    "snippetLabel": "Config snippet",
+    "cliLabel": "Or use the CLI",
+    "copySnippet": "Copy snippet",
+    "copyCli": "Copy command",
+    "copyToken": "Copy token",
+    "copied": "Copied",
+    "advancedSummary": "Need just the token?",
+    "rawTokenLabel": "API key",
+    "done": "Done",
+    "clients": {
+      "anthropic": "Anthropic",
+      "claudeDesktop": {
+        "label": "Claude Desktop",
+        "configPath": "~/Library/Application Support/Claude/claude_desktop_config.json",
+        "instructions": "Open Claude Desktop → Settings → Developer → Edit Config, then paste the block below into the file (merging with any mcpServers entries you already have). Restart Claude Desktop to pick up the change."
+      },
+      "claudeCode": {
+        "label": "Claude Code",
+        "configPath": "~/.claude.json",
+        "instructions": "Edit ~/.claude.json and merge the mcpServers block below, or run the CLI command — Claude Code picks it up on the next session."
+      }
+    }
   },
   "flowList": {
     "title": "Flows",

@@ -116,7 +116,46 @@
     "step3Title": "Kika på en körning",
     "step3Body": "Varje gång ett flöde körs sparar vi vad varje steg fick in och spottade ut — riktigt skönt när något ser knasigt ut.",
     "step3Cta": "Se körningar",
-    "foot": "Den här sidan finns alltid på <0>/welcome</0> om du vill kika tillbaka."
+    "foot": "Den här sidan finns alltid på <0>/welcome</0> om du vill kika tillbaka.",
+    "connectMcpTitle": "Bygg flöden med en MCP-klient",
+    "connectMcpDesc": "Koppla den här arbetsytan till Claude eller en annan MCP-kompatibel assistent och låt den utforma flöden åt dig.",
+    "connectMcpCta": "Anslut MCP-klient"
+  },
+  "connectMcp": {
+    "title": "Anslut en MCP-klient",
+    "intro": "Vi skapar en API-nyckel kopplad till ditt konto och visar sedan konfigurationen för den MCP-klient du använder. Nyckeln kan köra och redigera flöden i den här arbetsytan — inget annat.",
+    "subjectLabel": "Ditt konto",
+    "workspaceLabel": "Arbetsyta",
+    "workspaceAny": "alla (hela organisationen)",
+    "scopeDesc": "Nyckeln ärver din arbetsyta. Behöver du bredare åtkomst? Skapa en egen nyckel under Admin → API-nycklar.",
+    "cancel": "Avbryt",
+    "create": "Skapa nyckel",
+    "creating": "Skapar…",
+    "noSubject": "Hittar inte ditt konto — försök att logga ut och in igen.",
+    "revealHelp": "Välj din MCP-klient nedan. Nyckeln visas bara en gång — kopiera konfigurationen innan du stänger dialogen.",
+    "configPathLabel": "Sökväg till konfigurationsfilen",
+    "snippetLabel": "Konfiguration",
+    "cliLabel": "Eller använd CLI:t",
+    "copySnippet": "Kopiera konfiguration",
+    "copyCli": "Kopiera kommando",
+    "copyToken": "Kopiera nyckel",
+    "copied": "Kopierat",
+    "advancedSummary": "Vill du bara ha nyckeln?",
+    "rawTokenLabel": "API-nyckel",
+    "done": "Klart",
+    "clients": {
+      "anthropic": "Anthropic",
+      "claudeDesktop": {
+        "label": "Claude Desktop",
+        "configPath": "~/Library/Application Support/Claude/claude_desktop_config.json",
+        "instructions": "Öppna Claude Desktop → Settings → Developer → Edit Config och klistra in blocket nedan i filen (slå ihop med eventuella mcpServers-poster som redan finns). Starta om Claude Desktop för att läsa in ändringen."
+      },
+      "claudeCode": {
+        "label": "Claude Code",
+        "configPath": "~/.claude.json",
+        "instructions": "Redigera ~/.claude.json och slå ihop mcpServers-blocket nedan, eller kör CLI-kommandot — Claude Code plockar upp ändringen vid nästa session."
+      }
+    }
   },
   "flowList": {
     "title": "Flöden",

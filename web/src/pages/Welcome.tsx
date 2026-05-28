@@ -1,10 +1,12 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Trans, useTranslation } from "react-i18next";
-import { ArrowRight, Workflow } from "lucide-react";
+import { ArrowRight, Plug, Workflow } from "lucide-react";
 import { useAuth } from "../auth";
 import { loadRecentFlow } from "../recentFlow";
 import { shouldShowTenantID } from "../lib/visibleTenant";
 import { orgDisplayName } from "../lib/orgDisplayName";
+import { ConnectMcpClientModal } from "../components/ConnectMcpClientModal";
 
 // Welcome is the post-signup landing wizard — the "first-run"
 // surface from the T0-3 TODO. Intentionally simple: three CTAs that
@@ -40,7 +42,8 @@ const HAS_FLOWS_KEY = "hazyflow.hasFlows";
 
 export function Welcome() {
   const { t } = useTranslation();
-  const { me, tenants } = useAuth();
+  const { me, tenants, hasPerm } = useAuth();
+  const [connectingMcp, setConnectingMcp] = useState(false);
   // Resolved once on mount — localStorage only changes when the editor
   // mounts, which can't happen while this page is showing.
   const recent = loadRecentFlow();
@@ -119,6 +122,25 @@ export function Welcome() {
             </Link>
           </div>
         </div>
+        {hasPerm("tenant:admin") && (
+          <div className="welcome-mcp">
+            <div className="welcome-mcp-body">
+              <div className="welcome-mcp-title">
+                <Plug size={16} style={{ marginRight: 8, verticalAlign: -2 }} />
+                {t("welcome.connectMcpTitle")}
+              </div>
+              <div className="welcome-mcp-desc">
+                {t("welcome.connectMcpDesc")}
+              </div>
+            </div>
+            <button
+              className="primary"
+              onClick={() => setConnectingMcp(true)}
+            >
+              {t("welcome.connectMcpCta")}
+            </button>
+          </div>
+        )}
         <p className="welcome-or">{t("welcome.orExplore")}</p>
         <ol className="welcome-steps">
           <li>
@@ -150,6 +172,9 @@ export function Welcome() {
           />
         </p>
       </div>
+      {connectingMcp && (
+        <ConnectMcpClientModal onClose={() => setConnectingMcp(false)} />
+      )}
     </div>
   );
 }
