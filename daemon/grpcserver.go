@@ -208,6 +208,18 @@ func (h *grpcHandlers) GetJob(ctx context.Context, req *controlpb.GetJobRequest)
 	return jobRecordToPB(rec), nil
 }
 
+func (h *grpcHandlers) CancelJob(ctx context.Context, req *controlpb.CancelJobRequest) (*controlpb.CancelJobResponse, error) {
+	p, _ := PrincipalFromContext(ctx)
+	reason := req.Reason
+	if reason == "" {
+		reason = "cancelled by user"
+	}
+	if err := h.svc.CancelGraphRun(ctx, p, req.JobId, reason); err != nil {
+		return nil, toStatus(err)
+	}
+	return &controlpb.CancelJobResponse{}, nil
+}
+
 func (h *grpcHandlers) ListJobsForGraph(ctx context.Context, req *controlpb.ListJobsForGraphRequest) (*controlpb.ListJobsResponse, error) {
 	p, _ := PrincipalFromContext(ctx)
 	recs, err := h.svc.ListJobsForGraph(ctx, p, req.GraphId)

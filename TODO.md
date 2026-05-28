@@ -675,9 +675,18 @@ platform can demonstrate but not actually power a real workflow.
 
 ## API surface — control plane gaps
 
-- [ ] **`job cancel` RPC.** Currently a "not implemented" stub. Needs a
-  `JobStore.Cancel` operation + worker-side cooperative cancel via
-  context.
+- [x] **`job cancel` RPC.** Shipped. `JobService.CancelJob` (new RPC,
+  `api/proto/control.proto`) routes through the existing
+  `Service.CancelGraphRun` — graceful: every non-terminal node-record +
+  the graph-record flip to `Cancelled`, mid-run nodes finish naturally
+  (the dispatcher's terminal-status guard prevents further dispatch).
+  `hzctl job cancel JOB_ID [--reason ...]` wired. New gRPC test
+  `TestGRPC_CancelJob` covers happy path, already-terminal
+  (FailedPrecondition), and missing-run (NotFound). The "worker-side
+  cooperative cancel via context" line in the original TODO is the
+  follow-up: today an HTTP `sleep(60s)` node keeps running until it
+  finishes naturally; nothing downstream advances, but the node itself
+  isn't interrupted.
 - [ ] **`job logs` streaming.** Stub today. Need a structured log surface
   on JobStore (or sidecar log store) + streaming gRPC.
 - [ ] **`workspace create/list`.** Stub today. Need a `TenantService`

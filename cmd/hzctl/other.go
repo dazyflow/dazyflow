@@ -171,9 +171,43 @@ func jobCmd() *cobra.Command {
 	j := &cobra.Command{Use: "job", Short: "Job inspection"}
 	j.AddCommand(jobStatusCmd())
 	j.AddCommand(jobListCmd())
+	j.AddCommand(jobCancelCmd())
 	j.AddCommand(notImplemented("logs", "stream job logs (needs structured-log surface in JobStore)"))
-	j.AddCommand(notImplemented("cancel", "cancel a running job (needs scheduler/worker split)"))
 	return j
+}
+
+func jobCancelCmd() *cobra.Command {
+	var reason string
+	cmd := &cobra.Command{
+		Use:   "cancel JOB_ID",
+		Short: "Cancel an in-flight graph run.",
+		Long: "Aborts a graph-run job and every non-terminal node under it. " +
+			"Already-terminal runs come back as a conflict, so the call is " +
+			"safe to retry. Requires graph:run on the run's tenant.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			conn, err := daemonConn(serverFlag)
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+			ctx, err := authCtx(cmd.Context())
+			if err != nil {
+				return err
+			}
+			_, err = controlpb.NewJobServiceClient(conn).CancelJob(ctx, &controlpb.CancelJobRequest{
+				JobId:  args[0],
+				Reason: reason,
+			})
+			if err != nil {
+				return err
+			}
+			fmt.Printf("cancelled %s\n", args[0])
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&reason, "reason", "", "free-text reason recorded on the run (default: \"cancelled by user\")")
+	return cmd
 }
 
 func jobStatusCmd() *cobra.Command {

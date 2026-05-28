@@ -1697,6 +1697,94 @@ func (x *ListJobsResponse) GetJobs() []*JobRecord {
 	return nil
 }
 
+type CancelJobRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	JobId         string                 `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"` // the graph-run ID; node-jobs are cancelled with their parent
+	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`            // free-text, recorded on the run; empty defaults to "cancelled by user"
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CancelJobRequest) Reset() {
+	*x = CancelJobRequest{}
+	mi := &file_control_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancelJobRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancelJobRequest) ProtoMessage() {}
+
+func (x *CancelJobRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_control_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancelJobRequest.ProtoReflect.Descriptor instead.
+func (*CancelJobRequest) Descriptor() ([]byte, []int) {
+	return file_control_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *CancelJobRequest) GetJobId() string {
+	if x != nil {
+		return x.JobId
+	}
+	return ""
+}
+
+func (x *CancelJobRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type CancelJobResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CancelJobResponse) Reset() {
+	*x = CancelJobResponse{}
+	mi := &file_control_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancelJobResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancelJobResponse) ProtoMessage() {}
+
+func (x *CancelJobResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_control_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancelJobResponse.ProtoReflect.Descriptor instead.
+func (*CancelJobResponse) Descriptor() ([]byte, []int) {
+	return file_control_proto_rawDescGZIP(), []int{26}
+}
+
 type ListDropsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// query substring-matches against id, label, and description.
@@ -1713,7 +1801,7 @@ type ListDropsRequest struct {
 
 func (x *ListDropsRequest) Reset() {
 	*x = ListDropsRequest{}
-	mi := &file_control_proto_msgTypes[25]
+	mi := &file_control_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1725,7 +1813,7 @@ func (x *ListDropsRequest) String() string {
 func (*ListDropsRequest) ProtoMessage() {}
 
 func (x *ListDropsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[25]
+	mi := &file_control_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1738,7 +1826,7 @@ func (x *ListDropsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDropsRequest.ProtoReflect.Descriptor instead.
 func (*ListDropsRequest) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{25}
+	return file_control_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ListDropsRequest) GetQuery() string {
@@ -1778,7 +1866,7 @@ type ListDropsResponse struct {
 
 func (x *ListDropsResponse) Reset() {
 	*x = ListDropsResponse{}
-	mi := &file_control_proto_msgTypes[26]
+	mi := &file_control_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1790,7 +1878,7 @@ func (x *ListDropsResponse) String() string {
 func (*ListDropsResponse) ProtoMessage() {}
 
 func (x *ListDropsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[26]
+	mi := &file_control_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1803,7 +1891,7 @@ func (x *ListDropsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDropsResponse.ProtoReflect.Descriptor instead.
 func (*ListDropsResponse) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{26}
+	return file_control_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *ListDropsResponse) GetDrops() []*Manifest {
@@ -1947,7 +2035,11 @@ const file_control_proto_rawDesc = "" +
 	"\x17ListJobsForGraphRequest\x12\x19\n" +
 	"\bgraph_id\x18\x01 \x01(\tR\agraphId\"F\n" +
 	"\x10ListJobsResponse\x122\n" +
-	"\x04jobs\x18\x01 \x03(\v2\x1e.hazyflow.control.v1.JobRecordR\x04jobs\"z\n" +
+	"\x04jobs\x18\x01 \x03(\v2\x1e.hazyflow.control.v1.JobRecordR\x04jobs\"A\n" +
+	"\x10CancelJobRequest\x12\x15\n" +
+	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\"\x13\n" +
+	"\x11CancelJobResponse\"z\n" +
 	"\x10ListDropsRequest\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x12\x1e\n" +
 	"\n" +
@@ -1963,11 +2055,12 @@ const file_control_proto_rawDesc = "" +
 	"\n" +
 	"ListGraphs\x12&.hazyflow.control.v1.ListGraphsRequest\x1a'.hazyflow.control.v1.ListGraphsResponse\x12c\n" +
 	"\fPromoteGraph\x12(.hazyflow.control.v1.PromoteGraphRequest\x1a).hazyflow.control.v1.PromoteGraphResponse\x12V\n" +
-	"\bRunGraph\x12$.hazyflow.control.v1.RunGraphRequest\x1a\".hazyflow.control.v1.RunGraphEvent0\x012\xc3\x01\n" +
+	"\bRunGraph\x12$.hazyflow.control.v1.RunGraphRequest\x1a\".hazyflow.control.v1.RunGraphEvent0\x012\x9f\x02\n" +
 	"\n" +
 	"JobService\x12L\n" +
 	"\x06GetJob\x12\".hazyflow.control.v1.GetJobRequest\x1a\x1e.hazyflow.control.v1.JobRecord\x12g\n" +
-	"\x10ListJobsForGraph\x12,.hazyflow.control.v1.ListJobsForGraphRequest\x1a%.hazyflow.control.v1.ListJobsResponse2i\n" +
+	"\x10ListJobsForGraph\x12,.hazyflow.control.v1.ListJobsForGraphRequest\x1a%.hazyflow.control.v1.ListJobsResponse\x12Z\n" +
+	"\tCancelJob\x12%.hazyflow.control.v1.CancelJobRequest\x1a&.hazyflow.control.v1.CancelJobResponse2i\n" +
 	"\vDropService\x12Z\n" +
 	"\tListDrops\x12%.hazyflow.control.v1.ListDropsRequest\x1a&.hazyflow.control.v1.ListDropsResponseB6Z4git.sr.ht/~klahr/hazy-flow/api/gen/control;controlpbb\x06proto3"
 
@@ -1983,7 +2076,7 @@ func file_control_proto_rawDescGZIP() []byte {
 	return file_control_proto_rawDescData
 }
 
-var file_control_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
+var file_control_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
 var file_control_proto_goTypes = []any{
 	(*Node)(nil),                    // 0: hazyflow.control.v1.Node
 	(*Edge)(nil),                    // 1: hazyflow.control.v1.Edge
@@ -2010,12 +2103,14 @@ var file_control_proto_goTypes = []any{
 	(*GetJobRequest)(nil),           // 22: hazyflow.control.v1.GetJobRequest
 	(*ListJobsForGraphRequest)(nil), // 23: hazyflow.control.v1.ListJobsForGraphRequest
 	(*ListJobsResponse)(nil),        // 24: hazyflow.control.v1.ListJobsResponse
-	(*ListDropsRequest)(nil),        // 25: hazyflow.control.v1.ListDropsRequest
-	(*ListDropsResponse)(nil),       // 26: hazyflow.control.v1.ListDropsResponse
-	nil,                             // 27: hazyflow.control.v1.Node.EnvEntry
+	(*CancelJobRequest)(nil),        // 25: hazyflow.control.v1.CancelJobRequest
+	(*CancelJobResponse)(nil),       // 26: hazyflow.control.v1.CancelJobResponse
+	(*ListDropsRequest)(nil),        // 27: hazyflow.control.v1.ListDropsRequest
+	(*ListDropsResponse)(nil),       // 28: hazyflow.control.v1.ListDropsResponse
+	nil,                             // 29: hazyflow.control.v1.Node.EnvEntry
 }
 var file_control_proto_depIdxs = []int32{
-	27, // 0: hazyflow.control.v1.Node.env:type_name -> hazyflow.control.v1.Node.EnvEntry
+	29, // 0: hazyflow.control.v1.Node.env:type_name -> hazyflow.control.v1.Node.EnvEntry
 	0,  // 1: hazyflow.control.v1.Graph.nodes:type_name -> hazyflow.control.v1.Node
 	1,  // 2: hazyflow.control.v1.Graph.edges:type_name -> hazyflow.control.v1.Edge
 	3,  // 3: hazyflow.control.v1.Graph.triggers:type_name -> hazyflow.control.v1.GraphTrigger
@@ -2040,17 +2135,19 @@ var file_control_proto_depIdxs = []int32{
 	19, // 22: hazyflow.control.v1.GraphService.RunGraph:input_type -> hazyflow.control.v1.RunGraphRequest
 	22, // 23: hazyflow.control.v1.JobService.GetJob:input_type -> hazyflow.control.v1.GetJobRequest
 	23, // 24: hazyflow.control.v1.JobService.ListJobsForGraph:input_type -> hazyflow.control.v1.ListJobsForGraphRequest
-	25, // 25: hazyflow.control.v1.DropService.ListDrops:input_type -> hazyflow.control.v1.ListDropsRequest
-	12, // 26: hazyflow.control.v1.GraphService.SaveGraph:output_type -> hazyflow.control.v1.SaveGraphResponse
-	14, // 27: hazyflow.control.v1.GraphService.LoadGraph:output_type -> hazyflow.control.v1.LoadGraphResponse
-	16, // 28: hazyflow.control.v1.GraphService.ListGraphs:output_type -> hazyflow.control.v1.ListGraphsResponse
-	18, // 29: hazyflow.control.v1.GraphService.PromoteGraph:output_type -> hazyflow.control.v1.PromoteGraphResponse
-	20, // 30: hazyflow.control.v1.GraphService.RunGraph:output_type -> hazyflow.control.v1.RunGraphEvent
-	10, // 31: hazyflow.control.v1.JobService.GetJob:output_type -> hazyflow.control.v1.JobRecord
-	24, // 32: hazyflow.control.v1.JobService.ListJobsForGraph:output_type -> hazyflow.control.v1.ListJobsResponse
-	26, // 33: hazyflow.control.v1.DropService.ListDrops:output_type -> hazyflow.control.v1.ListDropsResponse
-	26, // [26:34] is the sub-list for method output_type
-	18, // [18:26] is the sub-list for method input_type
+	25, // 25: hazyflow.control.v1.JobService.CancelJob:input_type -> hazyflow.control.v1.CancelJobRequest
+	27, // 26: hazyflow.control.v1.DropService.ListDrops:input_type -> hazyflow.control.v1.ListDropsRequest
+	12, // 27: hazyflow.control.v1.GraphService.SaveGraph:output_type -> hazyflow.control.v1.SaveGraphResponse
+	14, // 28: hazyflow.control.v1.GraphService.LoadGraph:output_type -> hazyflow.control.v1.LoadGraphResponse
+	16, // 29: hazyflow.control.v1.GraphService.ListGraphs:output_type -> hazyflow.control.v1.ListGraphsResponse
+	18, // 30: hazyflow.control.v1.GraphService.PromoteGraph:output_type -> hazyflow.control.v1.PromoteGraphResponse
+	20, // 31: hazyflow.control.v1.GraphService.RunGraph:output_type -> hazyflow.control.v1.RunGraphEvent
+	10, // 32: hazyflow.control.v1.JobService.GetJob:output_type -> hazyflow.control.v1.JobRecord
+	24, // 33: hazyflow.control.v1.JobService.ListJobsForGraph:output_type -> hazyflow.control.v1.ListJobsResponse
+	26, // 34: hazyflow.control.v1.JobService.CancelJob:output_type -> hazyflow.control.v1.CancelJobResponse
+	28, // 35: hazyflow.control.v1.DropService.ListDrops:output_type -> hazyflow.control.v1.ListDropsResponse
+	27, // [27:36] is the sub-list for method output_type
+	18, // [18:27] is the sub-list for method input_type
 	18, // [18:18] is the sub-list for extension type_name
 	18, // [18:18] is the sub-list for extension extendee
 	0,  // [0:18] is the sub-list for field type_name
@@ -2071,7 +2168,7 @@ func file_control_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_control_proto_rawDesc), len(file_control_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   28,
+			NumMessages:   30,
 			NumExtensions: 0,
 			NumServices:   3,
 		},

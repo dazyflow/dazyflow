@@ -2,6 +2,7 @@ package daemon_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net"
@@ -29,6 +30,11 @@ type harness struct {
 	conn *grpc.ClientConn
 	stop func()
 	key  string
+	// svc lets tests seed Jobs directly when exercising paths that
+	// can't be set up over the wire (e.g. cancelling a "running"
+	// graph without actually waiting for an executing node).
+	svc       *daemon.Service
+	principal core.Principal
 }
 
 func newHarness(t *testing.T) *harness {
@@ -90,6 +96,11 @@ func newHarness(t *testing.T) *harness {
 		conn: conn,
 		stop: func() { conn.Close(); srv.Stop() },
 		key:  key,
+		svc:  svc,
+		principal: core.Principal{
+			Subject: "u", Tenant: "acme", Workspace: "ws1",
+			Roles: []core.Role{editor},
+		},
 	}
 }
 
@@ -268,6 +279,92 @@ func TestGRPC_RunGraphByRef(t *testing.T) {
 				t.Errorf("status = %q", c.Completed.Result.Status)
 			}
 		}
+	}
+}
+
+// TestGRPC_CancelJob exercises the new CancelJob RPC end to end:
+// seed a fake running graph run, cancel via gRPC, verify the
+// graph-record + every node-record flip to Cancelled.
+func TestGRPC_CancelJob(t *testing.T) {
+	h := newHarness(t)
+	defer h.stop()
+
+	js := controlpb.NewJobServiceClient(h.conn)
+	ctx, cancel := h.ctxWithAuth(t)
+	defer cancel()
+
+	// Save a real graph and seed a "live" graph-record + one queued
+	// node-record. Mirrors the unit-test fixture in daemon/cancel_test.go
+	// but driven through the gRPC plane.
+	g := core.Graph{
+		ID: "f1", Tenant: "acme", Workspace: "ws1",
+		Visibility: core.VisibilityOrg,
+		Nodes:      []core.Node{{ID: "a", Module: "noop"}},
+	}
+	if _, err := h.svc.SaveGraph(context.Background(), h.principal, g); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	payload, _ := json.Marshal(g)
+	if err := h.svc.Jobs.Enqueue(context.Background(), core.JobRecord{
+		ID:           "run-1",
+		Kind:         core.JobKindGraph,
+		GraphID:      "f1",
+		NodeID:       "*",
+		Tenant:       "acme",
+		Workspace:    "ws1",
+		Status:       core.JobStatusRunning,
+		GraphPayload: payload,
+		Job:          core.Job{ID: "run-1", GraphID: "f1"},
+	}); err != nil {
+		t.Fatalf("enqueue graph rec: %v", err)
+	}
+	if err := h.svc.Jobs.Enqueue(context.Background(), core.JobRecord{
+		ID:         daemon.NodeJobID("run-1", "a"),
+		Kind:       core.JobKindNode,
+		GraphRunID: "run-1",
+		GraphID:    "f1",
+		NodeID:     "a",
+		Tenant:     "acme",
+		Workspace:  "ws1",
+		Status:     core.JobStatusQueued,
+		Job:        core.Job{GraphID: "f1", NodeID: "a"},
+	}); err != nil {
+		t.Fatalf("enqueue node a: %v", err)
+	}
+
+	if _, err := js.CancelJob(ctx, &controlpb.CancelJobRequest{
+		JobId:  "run-1",
+		Reason: "test cancel",
+	}); err != nil {
+		t.Fatalf("CancelJob: %v", err)
+	}
+
+	for _, id := range []string{"run-1", daemon.NodeJobID("run-1", "a")} {
+		rec, err := h.svc.Jobs.Get(context.Background(), id)
+		if err != nil {
+			t.Fatalf("get %s: %v", id, err)
+		}
+		if rec.Status != core.JobStatusCancelled {
+			t.Errorf("%s status = %q, want cancelled", id, rec.Status)
+		}
+	}
+
+	// Already-terminal: second CancelJob comes back as FailedPrecondition.
+	_, err := js.CancelJob(ctx, &controlpb.CancelJobRequest{JobId: "run-1"})
+	if err == nil {
+		t.Fatal("expected error on second cancel")
+	}
+	if st, _ := status.FromError(err); st.Code() != codes.FailedPrecondition {
+		t.Errorf("code = %v, want FailedPrecondition", st.Code())
+	}
+
+	// Missing run-id: NotFound.
+	_, err = js.CancelJob(ctx, &controlpb.CancelJobRequest{JobId: "nonexistent"})
+	if err == nil {
+		t.Fatal("expected error on missing run")
+	}
+	if st, _ := status.FromError(err); st.Code() != codes.NotFound {
+		t.Errorf("missing-run code = %v, want NotFound", st.Code())
 	}
 }
 

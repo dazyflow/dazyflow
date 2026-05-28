@@ -173,11 +173,21 @@ message RunGraphCompleted {
 service JobService {
     rpc GetJob           (GetJobRequest)           returns (JobRecord);
     rpc ListJobsForGraph (ListJobsForGraphRequest) returns (ListJobsResponse);
+    // CancelJob aborts an in-flight graph run. The caller must have
+    // graph:run on the run's tenant. The graph and every non-terminal
+    // node transition to JobStatus.Cancelled. Idempotent — cancelling a
+    // run that's already terminal returns NotFound or ConflictError.
+    rpc CancelJob       (CancelJobRequest)        returns (CancelJobResponse);
 }
 
 message GetJobRequest           { string job_id = 1; }
 message ListJobsForGraphRequest { string graph_id = 1; }
 message ListJobsResponse        { repeated JobRecord jobs = 1; }
+message CancelJobRequest  {
+    string job_id = 1; // the graph-run ID; node-jobs are cancelled with their parent
+    string reason = 2; // free-text, recorded on the run; empty defaults to "cancelled by user"
+}
+message CancelJobResponse {}
 
 // ========================================================= DropService
 

@@ -279,6 +279,7 @@ var GraphService_ServiceDesc = grpc.ServiceDesc{
 const (
 	JobService_GetJob_FullMethodName           = "/hazyflow.control.v1.JobService/GetJob"
 	JobService_ListJobsForGraph_FullMethodName = "/hazyflow.control.v1.JobService/ListJobsForGraph"
+	JobService_CancelJob_FullMethodName        = "/hazyflow.control.v1.JobService/CancelJob"
 )
 
 // JobServiceClient is the client API for JobService service.
@@ -287,6 +288,11 @@ const (
 type JobServiceClient interface {
 	GetJob(ctx context.Context, in *GetJobRequest, opts ...grpc.CallOption) (*JobRecord, error)
 	ListJobsForGraph(ctx context.Context, in *ListJobsForGraphRequest, opts ...grpc.CallOption) (*ListJobsResponse, error)
+	// CancelJob aborts an in-flight graph run. The caller must have
+	// graph:run on the run's tenant. The graph and every non-terminal
+	// node transition to JobStatus.Cancelled. Idempotent — cancelling a
+	// run that's already terminal returns NotFound or ConflictError.
+	CancelJob(ctx context.Context, in *CancelJobRequest, opts ...grpc.CallOption) (*CancelJobResponse, error)
 }
 
 type jobServiceClient struct {
@@ -317,12 +323,27 @@ func (c *jobServiceClient) ListJobsForGraph(ctx context.Context, in *ListJobsFor
 	return out, nil
 }
 
+func (c *jobServiceClient) CancelJob(ctx context.Context, in *CancelJobRequest, opts ...grpc.CallOption) (*CancelJobResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CancelJobResponse)
+	err := c.cc.Invoke(ctx, JobService_CancelJob_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // JobServiceServer is the server API for JobService service.
 // All implementations must embed UnimplementedJobServiceServer
 // for forward compatibility.
 type JobServiceServer interface {
 	GetJob(context.Context, *GetJobRequest) (*JobRecord, error)
 	ListJobsForGraph(context.Context, *ListJobsForGraphRequest) (*ListJobsResponse, error)
+	// CancelJob aborts an in-flight graph run. The caller must have
+	// graph:run on the run's tenant. The graph and every non-terminal
+	// node transition to JobStatus.Cancelled. Idempotent — cancelling a
+	// run that's already terminal returns NotFound or ConflictError.
+	CancelJob(context.Context, *CancelJobRequest) (*CancelJobResponse, error)
 	mustEmbedUnimplementedJobServiceServer()
 }
 
@@ -338,6 +359,9 @@ func (UnimplementedJobServiceServer) GetJob(context.Context, *GetJobRequest) (*J
 }
 func (UnimplementedJobServiceServer) ListJobsForGraph(context.Context, *ListJobsForGraphRequest) (*ListJobsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListJobsForGraph not implemented")
+}
+func (UnimplementedJobServiceServer) CancelJob(context.Context, *CancelJobRequest) (*CancelJobResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CancelJob not implemented")
 }
 func (UnimplementedJobServiceServer) mustEmbedUnimplementedJobServiceServer() {}
 func (UnimplementedJobServiceServer) testEmbeddedByValue()                    {}
@@ -396,6 +420,24 @@ func _JobService_ListJobsForGraph_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _JobService_CancelJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CancelJobRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(JobServiceServer).CancelJob(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: JobService_CancelJob_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(JobServiceServer).CancelJob(ctx, req.(*CancelJobRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // JobService_ServiceDesc is the grpc.ServiceDesc for JobService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -410,6 +452,10 @@ var JobService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListJobsForGraph",
 			Handler:    _JobService_ListJobsForGraph_Handler,
+		},
+		{
+			MethodName: "CancelJob",
+			Handler:    _JobService_CancelJob_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
