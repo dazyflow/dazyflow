@@ -83,15 +83,10 @@ func main() {
 	workspaceDir := filepath.Join(dataDir, "workspace")
 	sandboxBase := filepath.Join(dataDir, "sandbox")
 	stateDir := filepath.Join(dataDir, "state")
-	// Pre-create the state dir so the JSON dev stores can write their
-	// .json.tmp atomic-rename files even on a fresh checkout. The
-	// sandbox + workspace roots auto-provision lazily, but the flat
-	// state dir doesn't.
-	if dataDir != "" {
-		if err := os.MkdirAll(stateDir, 0o755); err != nil {
-			log.Fatalf("create state dir %s: %v", stateDir, err)
-		}
-	}
+	// The state dir is created on demand below — only when we actually
+	// fall back to the JSON stores (no Postgres DSN). With Postgres,
+	// stateDir stays unused and never gets created, so a real deploy
+	// has no orphaned <data>/state/ folder.
 	webOrigin := envStr("HAZYFLOW_WEB_ORIGIN", "http://localhost:5174")
 	// Auth rate limit is fixed at a sensible default: 20/min per IP
 	// with a burst of 10. Tightening or loosening from here is an
@@ -211,6 +206,14 @@ func main() {
 		log.Print("postgres stores enabled: jobs, api-keys, sessions, users (durable across restart)")
 	} else {
 		ks = auth.NewMemKeyStore()
+		// Pre-create the state dir so seedDefaultUser's atomic
+		// .json.tmp rename works on a fresh checkout. The Postgres
+		// branch above never reaches this — state/ stays absent.
+		if stateDir != "" {
+			if err := os.MkdirAll(stateDir, 0o755); err != nil {
+				log.Fatalf("create state dir %s: %v", stateDir, err)
+			}
+		}
 		path := stateFile(stateDir, "users")
 		jsonUsers, err := auth.OpenJSONUserStore(path)
 		if err != nil {
@@ -449,41 +452,59 @@ func main() {
 	}()
 
 	// Membership / invitation / per-org-auth / per-org-profile stores.
-	// All four live as JSON under --state-dir; the Pg equivalents will
-	// slot in later via the same --postgres-dsn switch. An empty
-	// --state-dir leaves all four nil → the gateway's invite,
-	// switch-org, and per-org settings endpoints return 501.
-	membershipsPath := stateFile(stateDir, "memberships")
-	memberships, err := auth.OpenJSONMembershipStore(membershipsPath)
-	if err != nil {
-		log.Fatalf("open memberships %q: %v", membershipsPath, err)
-	}
-	if membershipsPath != "" {
-		log.Printf("memberships store: %s", membershipsPath)
-	}
-	invitationsPath := stateFile(stateDir, "invitations")
-	invitations, err := auth.OpenJSONInvitationStore(invitationsPath)
-	if err != nil {
-		log.Fatalf("open invitations %q: %v", invitationsPath, err)
-	}
-	if invitationsPath != "" {
-		log.Printf("invitations store: %s", invitationsPath)
-	}
-	orgAuthPath := stateFile(stateDir, "orgauth")
-	orgAuthStore, err := auth.OpenJSONOrgAuthStore(orgAuthPath)
-	if err != nil {
-		log.Fatalf("open org-auth %q: %v", orgAuthPath, err)
-	}
-	if orgAuthPath != "" {
-		log.Printf("org-auth store: %s", orgAuthPath)
-	}
-	orgProfilePath := stateFile(stateDir, "orgprofile")
-	orgProfileStore, err := auth.OpenJSONOrgProfileStore(orgProfilePath)
-	if err != nil {
-		log.Fatalf("open org-profile %q: %v", orgProfilePath, err)
-	}
-	if orgProfilePath != "" {
-		log.Printf("org-profile store: %s", orgProfilePath)
+	// With Postgres configured all four live in Pg tables (managed by
+	// auth.EnsurePgOrgsSchema). Without Postgres they fall back to
+	// JSON files under <state-dir> for dev. An empty stateDir leaves
+	// the JSON stores nil → the gateway's invite, switch-org, and
+	// per-org settings endpoints return 501.
+	var (
+		memberships     auth.MembershipStore
+		invitations     auth.InvitationStore
+		orgAuthStore    auth.OrgAuthStore
+		orgProfileStore auth.OrgProfileStore
+	)
+	if pgPool != nil {
+		pgMembers, err := auth.NewPgMembershipStore(ctx, pgPool)
+		if err != nil {
+			log.Fatalf("postgres membership store: %v", err)
+		}
+		pgInvites, err := auth.NewPgInvitationStore(ctx, pgPool)
+		if err != nil {
+			log.Fatalf("postgres invitation store: %v", err)
+		}
+		pgOrgAuth, err := auth.NewPgOrgAuthStore(ctx, pgPool)
+		if err != nil {
+			log.Fatalf("postgres org-auth store: %v", err)
+		}
+		pgOrgProfile, err := auth.NewPgOrgProfileStore(ctx, pgPool)
+		if err != nil {
+			log.Fatalf("postgres org-profile store: %v", err)
+		}
+		memberships, invitations, orgAuthStore, orgProfileStore = pgMembers, pgInvites, pgOrgAuth, pgOrgProfile
+		log.Print("memberships + invitations + org-auth + org-profile stores: postgres-backed")
+	} else {
+		// stateDir already created above in the users-store branch
+		// (both run only in the no-Postgres path).
+		membersJSON, err := auth.OpenJSONMembershipStore(stateFile(stateDir, "memberships"))
+		if err != nil {
+			log.Fatalf("open memberships: %v", err)
+		}
+		invitesJSON, err := auth.OpenJSONInvitationStore(stateFile(stateDir, "invitations"))
+		if err != nil {
+			log.Fatalf("open invitations: %v", err)
+		}
+		orgAuthJSON, err := auth.OpenJSONOrgAuthStore(stateFile(stateDir, "orgauth"))
+		if err != nil {
+			log.Fatalf("open org-auth: %v", err)
+		}
+		orgProfileJSON, err := auth.OpenJSONOrgProfileStore(stateFile(stateDir, "orgprofile"))
+		if err != nil {
+			log.Fatalf("open org-profile: %v", err)
+		}
+		memberships, invitations, orgAuthStore, orgProfileStore = membersJSON, invitesJSON, orgAuthJSON, orgProfileJSON
+		if stateDir != "" {
+			log.Printf("memberships + invitations + org-auth + org-profile stores: JSON under %s/", stateDir)
+		}
 	}
 
 	if httpListen != "" {
