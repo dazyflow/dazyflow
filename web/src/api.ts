@@ -578,6 +578,11 @@ export const api = {
       `/auth/sso/${encodeURIComponent(tenant)}`,
     ),
 
+  // getPublicAuthConfig returns deployment-level auth feature flags
+  // the sign-in / sign-up pages need to render correctly. No secrets.
+  getPublicAuthConfig: () =>
+    request<{ signup_enabled: boolean }>(null, "GET", "/auth/config"),
+
   getOrgProfile: (token: string) =>
     request<OrgProfile>(token, "GET", "/admin/org/profile"),
   putOrgProfile: (token: string, display_name: string) =>

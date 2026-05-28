@@ -1,7 +1,8 @@
-import { useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
+import { api } from "../api";
 
 // SignUp is the self-serve account creation page. It mirrors the
 // SignIn layout closely on purpose — the two pages should feel like
@@ -27,6 +28,33 @@ export function SignUp() {
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
   const [localErr, setLocalErr] = useState<string | null>(null);
+  // signupAllowed starts as null = "still probing"; once the public
+  // config endpoint resolves, false means the deployment is
+  // invite-only and we bounce back to /signin.
+  const [signupAllowed, setSignupAllowed] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getPublicAuthConfig()
+      .then((r) => {
+        if (!cancelled) setSignupAllowed(!!r.signup_enabled);
+      })
+      .catch(() => {
+        if (!cancelled) setSignupAllowed(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (signupAllowed === null) return <div />;
+  if (!signupAllowed) {
+    // Invite-only deployment. Preserve any deep-link query params so a
+    // sign-in followed by /invite/<token> still works.
+    const search = searchParams.toString();
+    return <Navigate to={`/signin${search ? `?${search}` : ""}`} replace />;
+  }
 
   const passwordMismatch = password !== "" && confirm !== "" && password !== confirm;
 

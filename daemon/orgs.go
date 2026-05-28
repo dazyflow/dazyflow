@@ -586,6 +586,16 @@ func (h *HTTPGateway) deleteOrgAuthConfig(rw http.ResponseWriter, _ *http.Reques
 	rw.WriteHeader(http.StatusNoContent)
 }
 
+// getPublicAuthConfig surfaces deployment-level auth toggles the
+// sign-in page needs to render correctly (currently just whether
+// self-serve signup is enabled). Unauthenticated — the response holds
+// no secrets, just feature flags.
+func (h *HTTPGateway) getPublicAuthConfig(rw http.ResponseWriter, _ *http.Request) {
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"signup_enabled": h.EnableSignup,
+	})
+}
+
 // getPublicSSOStatus is the unauthenticated lookup the sign-in page
 // uses to decide whether to show a "Sign in with Google" button for
 // a given org. We expose only the booleans; secrets stay server-side.

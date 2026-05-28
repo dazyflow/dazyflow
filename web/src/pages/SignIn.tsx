@@ -26,6 +26,7 @@ export function SignIn() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [googleEnabled, setGoogleEnabled] = useState(false);
+  const [signupEnabled, setSignupEnabled] = useState(false);
 
   // Probe whether the org has Google SSO turned on so we know whether
   // to render the button. Public lookup, no auth required.
@@ -47,6 +48,25 @@ export function SignIn() {
       cancelled = true;
     };
   }, [orgID]);
+
+  // Whether self-serve signup is enabled on this deployment. Default
+  // false so the "Create an account" link stays hidden until the
+  // probe confirms it's allowed — matches the server's invite-only
+  // posture by default.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getPublicAuthConfig()
+      .then((r) => {
+        if (!cancelled) setSignupEnabled(!!r.signup_enabled);
+      })
+      .catch(() => {
+        if (!cancelled) setSignupEnabled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const googleHref = orgID
     ? `/api/v1/auth/google/start?tenant=${encodeURIComponent(orgID)}&return_to=${encodeURIComponent(
@@ -114,18 +134,20 @@ export function SignIn() {
           {busy ? t("signIn.submitting") : t("signIn.submit")}
         </button>
         {error && <div className="error">{error}</div>}
-        <div className="signin-alt">
-          {t("signIn.newHere")}{" "}
-          <Link
-            to={
-              inviteToken
-                ? `/signup?email=${encodeURIComponent(email)}&invite=${encodeURIComponent(inviteToken)}`
-                : "/signup"
-            }
-          >
-            {t("signIn.createAccount")}
-          </Link>
-        </div>
+        {signupEnabled && (
+          <div className="signin-alt">
+            {t("signIn.newHere")}{" "}
+            <Link
+              to={
+                inviteToken
+                  ? `/signup?email=${encodeURIComponent(email)}&invite=${encodeURIComponent(inviteToken)}`
+                  : "/signup"
+              }
+            >
+              {t("signIn.createAccount")}
+            </Link>
+          </div>
+        )}
       </form>
     </div>
   );

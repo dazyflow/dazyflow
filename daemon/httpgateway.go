@@ -296,6 +296,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/v1/admin/org/auth-config", h.requireAuth(h.putOrgAuthConfig))
 	mux.HandleFunc("DELETE /api/v1/admin/org/auth-config", h.requireAuth(h.deleteOrgAuthConfig))
 	mux.HandleFunc("GET /api/v1/auth/sso/{tenant}", h.getPublicSSOStatus)
+	mux.HandleFunc("GET /api/v1/auth/config", h.getPublicAuthConfig)
 	mux.HandleFunc("GET /api/v1/admin/org/profile", h.requireAuth(h.getOrgProfile))
 	mux.HandleFunc("PUT /api/v1/admin/org/profile", h.requireAuth(h.putOrgProfile))
 	mux.HandleFunc("GET /api/v1/auth/google/start", h.googleSignInStart)
