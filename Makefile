@@ -39,17 +39,18 @@ env: ## Sync .env with .env.example (creates one if missing; appends new keys; n
 
 ## --- Local development (no containers) ---
 
-dev: ## Run hzd locally against in-memory stores (dev key + signup)
-	# Everything goes through HAZYFLOW_* env vars now. The fixed dev
-	# master key turns on the per-tenant encrypted secret store so the
-	# BYO Anthropic chat flow works locally. Never use this key in
-	# production.
-	HAZYFLOW_HTTP=:8080 \
-	HAZYFLOW_DEV_KEY=1 \
-	HAZYFLOW_ENABLE_SIGNUP=1 \
-	HAZYFLOW_WEB_ORIGIN=http://localhost:5173 \
-	HAZYFLOW_MASTER_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
-	go run ./cmd/hzd
+dev: ## Run hzd locally. Sources .env when present (run `make env` once to seed it), else falls back to a minimal dev set.
+	@if [ -f .env ]; then \
+		set -a; . ./.env; set +a; \
+		HAZYFLOW_HTTP=:8080 go run ./cmd/hzd; \
+	else \
+		HAZYFLOW_HTTP=:8080 \
+		HAZYFLOW_DEV_KEY=1 \
+		HAZYFLOW_ENABLE_SIGNUP=1 \
+		HAZYFLOW_WEB_ORIGIN=http://localhost:5173 \
+		HAZYFLOW_MASTER_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
+		go run ./cmd/hzd; \
+	fi
 
 web: ## Run the Vite dev server (http://localhost:5173)
 	cd web && npm install && npm run dev

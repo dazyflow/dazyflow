@@ -83,6 +83,15 @@ func main() {
 	workspaceDir := filepath.Join(dataDir, "workspace")
 	sandboxBase := filepath.Join(dataDir, "sandbox")
 	stateDir := filepath.Join(dataDir, "state")
+	// Pre-create the state dir so the JSON dev stores can write their
+	// .json.tmp atomic-rename files even on a fresh checkout. The
+	// sandbox + workspace roots auto-provision lazily, but the flat
+	// state dir doesn't.
+	if dataDir != "" {
+		if err := os.MkdirAll(stateDir, 0o755); err != nil {
+			log.Fatalf("create state dir %s: %v", stateDir, err)
+		}
+	}
 	webOrigin := envStr("HAZYFLOW_WEB_ORIGIN", "http://localhost:5174")
 	// Auth rate limit is fixed at a sensible default: 20/min per IP
 	// with a burst of 10. Tightening or loosening from here is an
