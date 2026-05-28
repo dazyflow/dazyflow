@@ -517,7 +517,7 @@ var errAnthropicKeyMissing = errors.New("your org has not set an Anthropic API k
 // errEncryptedStoreOff is returned when the operator hasn't enabled
 // the per-tenant secret store at all (no --master-key). BYO chat
 // needs the store; without it the feature is operator-disabled.
-var errEncryptedStoreOff = errors.New("chat is unavailable: the operator has not enabled the per-tenant secret store (--master-key).")
+var errEncryptedStoreOff = errors.New("chat is unavailable: the operator has not enabled the per-tenant secret store (set HAZYFLOW_MASTER_KEY).")
 
 // tenantAnthropicKey reads the calling tenant's stored Anthropic key.
 // The principal's tenant scopes the lookup; the secret name is fixed.

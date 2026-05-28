@@ -76,7 +76,7 @@ func (h *GitHubEventsHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request)
 		return
 	}
 	if h.webhookSecret == "" {
-		http.Error(rw, "GitHub events endpoint not configured (set --github-webhook-secret)", http.StatusNotImplemented)
+		http.Error(rw, "GitHub events endpoint not configured (set HAZYFLOW_GITHUB_WEBHOOK_SECRET)", http.StatusNotImplemented)
 		return
 	}
 	tenant := r.PathValue("tenant")

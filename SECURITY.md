@@ -1,6 +1,6 @@
 # Security operations
 
-## The master key (`--master-key` / `$HAZYFLOW_MASTER_KEY`)
+## The master key (`$HAZYFLOW_MASTER_KEY`)
 
 hzd's built-in secret store uses **envelope encryption**:
 
@@ -62,29 +62,31 @@ re-wrap; the DEK plaintexts never leave the process.
 ### Procedure
 
 1. Generate `NEW_KEY` (`openssl rand -base64 32`).
-2. Run the re-wrap against the same store the daemon uses, with the
-   **current** key as `--master-key` and the new key as
-   `--rotate-master-key`. It re-wraps every DEK and exits without
-   serving:
+2. Run the re-wrap against the same store the daemon uses. The
+   **current** key comes from `$HAZYFLOW_MASTER_KEY`; the new one is
+   passed as the `--rotate-master-key` flag (one of only two flags
+   `hzd` still accepts, both one-shot operator commands that exit
+   after running):
 
    ```sh
-   hzd --postgres-dsn "$HAZYFLOW_POSTGRES_DSN" \
-       --master-key "$OLD_KEY" \
-       --rotate-master-key "$NEW_KEY"
+   HAZYFLOW_POSTGRES_DSN="$DSN" \
+   HAZYFLOW_MASTER_KEY="$OLD_KEY" \
+       hzd --rotate-master-key "$NEW_KEY"
    # logs: "master-key rotation complete: N DEK(s) re-wrapped, …"
    ```
 
-   The command is **re-runnable**: a DEK already on the new key (from a
-   prior interrupted run) is detected and skipped, not double-wrapped.
-   It fails loudly — leaving the store untouched — if `--master-key`
-   isn't the key that wrapped the existing DEKs.
-3. Swap `$HAZYFLOW_MASTER_KEY` to `NEW_KEY` and restart the daemon.
+   The command is **re-runnable**: a DEK already on the new key (from
+   a prior interrupted run) is detected and skipped, not double-
+   wrapped. It fails loudly — leaving the store untouched — if
+   `HAZYFLOW_MASTER_KEY` isn't the key that wrapped the existing DEKs.
+3. Swap `$HAZYFLOW_MASTER_KEY` to `NEW_KEY` in your `.env` (or whatever
+   delivers it) and restart the daemon.
 4. Verify reads succeed, then destroy the old key.
 
 > ⚠️ Keep the old key until step 4 verifies. If rotation is interrupted
 > partway, re-run step 2 with the same keys before restarting — the
-> daemon's running `--master-key` must match whatever wrapped the DEKs
-> on disk.
+> daemon's running `HAZYFLOW_MASTER_KEY` must match whatever wrapped
+> the DEKs on disk.
 
 If the master key was **compromised** (not just being rotated on
 schedule), re-wrapping is not enough — also rotate the underlying
@@ -93,12 +95,20 @@ may already have leaked.
 
 ## Related hardening (see DEPLOY.md for the full list)
 
-- Run behind a TLS-terminating reverse proxy; start hzd with
-  `--trust-proxy-headers` so session cookies are `Secure` + HSTS is sent.
-- `--dev-key` defaults off; never enable it in production.
-- `--auth-rate-per-min` throttles credential stuffing on the auth
-  endpoints.
-- `--http-egress-allow` pins the `http_request` / `webhook_send` drops to
-  an allowlist; the IP-level SSRF guard (blocks private/loopback/cloud
-  metadata) is always on.
-- `--postgres-dsn` for durable, restart-surviving stores.
+All these are env vars set via the same `.env` (see `.env.example`):
+
+- Run behind a TLS-terminating reverse proxy; set
+  `HAZYFLOW_TRUST_PROXY_HEADERS=1` so session cookies are `Secure` and
+  HSTS is sent.
+- `HAZYFLOW_DEV_KEY` defaults off; never set it in production — it
+  mints an insecure bearer token at every boot.
+- `HAZYFLOW_ISOLATE_SHARED_SECRETS=1` in multi-tenant deployments
+  forces `env://` secret lookups to be of the form `<tenant>.<key>`
+  matching the caller's tenant, so tenant A can't read tenant B's
+  operator-supplied env secrets. The auth rate limiter is fixed at
+  20/min per IP with a burst of 10 (defense against credential
+  stuffing on the auth endpoints).
+- `HAZYFLOW_HTTP_EGRESS_ALLOW` pins the `http_request` /
+  `webhook_send` drops to an allowlist; the IP-level SSRF guard
+  (blocks private/loopback/cloud metadata) is always on.
+- `HAZYFLOW_POSTGRES_DSN` for durable, restart-surviving stores.

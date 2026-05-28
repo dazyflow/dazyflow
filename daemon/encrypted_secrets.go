@@ -270,7 +270,7 @@ func (e *EncryptedSecrets) RewrapDEKs(ctx context.Context, newMasterKey []byte) 
 				skipped++
 				continue
 			}
-			return rotated, skipped, fmt.Errorf("unwrap DEK for %q with current key (wrong --master-key?): %w", tenant, openErr)
+			return rotated, skipped, fmt.Errorf("unwrap DEK for %q with current key (wrong HAZYFLOW_MASTER_KEY?): %w", tenant, openErr)
 		}
 
 		newNonce := make([]byte, newKEK.NonceSize())
@@ -359,7 +359,7 @@ func (e *EncryptedSecrets) dekFor(ctx context.Context, tenant string) (cipher.AE
 
 	dekBytes, err := e.kek.Open(nil, nonce, wrapped, nil)
 	if err != nil {
-		return nil, fmt.Errorf("unwrap DEK for %q (wrong master key?): %w", tenant, err)
+		return nil, fmt.Errorf("unwrap DEK for %q (wrong HAZYFLOW_MASTER_KEY?): %w", tenant, err)
 	}
 	block, err := aes.NewCipher(dekBytes)
 	if err != nil {

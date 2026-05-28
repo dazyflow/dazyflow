@@ -1,5 +1,10 @@
 # Deploying hzd
 
+Every knob below is a `HAZYFLOW_*` environment variable. `hzd` itself
+only has two flags, both one-shot operator commands that exit after
+running (`--rotate-master-key`, `--import-users-from-json`). For the
+canonical list see `.env.example`.
+
 ## TLS / reverse-proxy contract
 
 `hzd` does **not** terminate TLS. Run it behind a TLS-terminating reverse
@@ -7,25 +12,26 @@ proxy (nginx, Caddy, Traefik, a k8s ingress) and proxy plain HTTP to the
 gateway port.
 
 The proxy MUST:
-- terminate TLS and forward to `hzd`'s `--http` port over HTTP;
+- terminate TLS and forward to `hzd`'s HTTP port (`HAZYFLOW_HTTP`) over
+  HTTP;
 - set `X-Forwarded-Proto: https` on forwarded requests;
 - forward the `Host` and `Origin` headers unchanged (the gateway's CSRF
   origin check + CORS allowlist depend on them);
 - upgrade WebSocket/SSE connections (Vite HMR in dev, the chat + run SSE
   streams in prod).
 
-`hzd` MUST be started with:
-- `--trust-proxy-headers` — so it honors `X-Forwarded-Proto` and marks
-  session cookies `Secure` + sends HSTS on forwarded-HTTPS requests.
-  **Do not set this if hzd is exposed directly** (a client could spoof
-  the header to flip Secure on over plain HTTP).
-- `--web-origin https://your.domain` — the exact browser origin, for the
-  CORS allowlist + the cookie-origin CSRF check.
-- `--public-base-url https://your.domain` — used for OAuth redirect URIs
-  and failure-notification deep links.
+`hzd` MUST be configured with:
+- `HAZYFLOW_TRUST_PROXY_HEADERS=1` — so it honors `X-Forwarded-Proto` and
+  marks session cookies `Secure` + sends HSTS on forwarded-HTTPS
+  requests. **Do not set this if hzd is exposed directly** (a client
+  could spoof the header to flip Secure on over plain HTTP).
+- `HAZYFLOW_WEB_ORIGIN=https://your.domain` — the exact browser origin,
+  for the CORS allowlist + the cookie-origin CSRF check.
+- `HAZYFLOW_PUBLIC_BASE_URL=https://your.domain` — used for OAuth
+  redirect URIs and failure-notification deep links.
 
-What the gateway does once `--trust-proxy-headers` is on and the request
-arrives as forwarded-HTTPS:
+What the gateway does once `HAZYFLOW_TRUST_PROXY_HEADERS=1` is on and the
+request arrives as forwarded-HTTPS:
 - session cookie gets `Secure` (plus the existing `HttpOnly` +
   `SameSite=Lax`);
 - responses carry `Strict-Transport-Security: max-age=31536000;
@@ -42,7 +48,7 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/app.example.com/privkey.pem;
 
     location / {
-        proxy_pass http://127.0.0.1:8080;     # hzd --http :8080
+        proxy_pass http://127.0.0.1:8080;     # hzd listens on HAZYFLOW_HTTP=:8080
         proxy_http_version 1.1;
         proxy_set_header Host              $host;
         proxy_set_header Origin            $http_origin;
@@ -57,33 +63,44 @@ server {
 }
 ```
 
-Matching daemon flags:
+Matching `.env` for the daemon (everything operator-controllable is an
+env var — see `.env.example` for the full catalogue):
 
-```sh
-hzd --http :8080 --web-dist /srv/web \
-    --trust-proxy-headers \
-    --web-origin https://app.example.com \
-    --public-base-url https://app.example.com \
-    --postgres-dsn "$HAZYFLOW_POSTGRES_DSN" \
-    --master-key "$HAZYFLOW_MASTER_KEY"
+```env
+HAZYFLOW_HTTP=:8080
+HAZYFLOW_WEB_DIST=/srv/web
+HAZYFLOW_TRUST_PROXY_HEADERS=1
+HAZYFLOW_WEB_ORIGIN=https://app.example.com
+HAZYFLOW_PUBLIC_BASE_URL=https://app.example.com
+HAZYFLOW_POSTGRES_DSN=postgres://hazyflow:…@db/hazyflow?sslmode=require
+HAZYFLOW_MASTER_KEY=<32-byte base64; openssl rand -base64 32>
 ```
+
+Container deployments don't have to set `HAZYFLOW_HTTP` /
+`HAZYFLOW_WEB_DIST` — the supplied Dockerfile bakes those in via
+`ENV` (see `Dockerfile`).
 
 ## Durability
 
-Pass `--postgres-dsn` (or `$HAZYFLOW_POSTGRES_DSN`) so jobs, API keys,
-sessions, users, and encrypted secrets persist to Postgres. Without it
-those run in-memory/JSON and are lost on restart (dev only — the daemon
-logs a warning). Provide a stable `--master-key` (32-byte base64); losing
-it makes every stored secret undecryptable.
+Set `HAZYFLOW_POSTGRES_DSN` so jobs, API keys, sessions, users,
+encrypted secrets, memberships, invitations, per-org SSO config, and
+per-org profiles all persist to Postgres. Without it those run
+in-memory or as JSON files under `HAZYFLOW_DATA_DIR/state/` and are
+lost on restart (dev only — the daemon logs a warning). Provide a
+stable `HAZYFLOW_MASTER_KEY` (32-byte base64); losing it makes every
+stored secret undecryptable.
 
 ### Migrating an existing JSON user file to Postgres
 
-If you ran in dev mode with a `.hazyflow-users.json` and are adopting
-Postgres, import those accounts once so nobody is stranded:
+If you ran in dev mode with users in a JSON file (legacy:
+`./.hazyflow-users.json`; current layout: `<data>/state/users.json`)
+and are adopting Postgres, import those accounts once so nobody is
+stranded. This is one of the only two flags `hzd` still accepts — a
+one-shot command that exits after running:
 
 ```sh
-hzd --postgres-dsn "$HAZYFLOW_POSTGRES_DSN" \
-    --import-users-from-json ./.hazyflow-users.json
+HAZYFLOW_POSTGRES_DSN="$DSN" \
+    hzd --import-users-from-json ./.hazyflow/state/users.json
 # logs "user import complete: N imported, M skipped", then exits
 ```
 
@@ -93,9 +110,9 @@ overwritten), so re-running is safe.
 ### Backup & restore
 
 Everything durable lives in the one Postgres database, so a standard
-Postgres backup is a complete backup — **plus** the `--master-key`, which
-lives outside the DB and is required to decrypt the `encrypted_secrets`
-rows.
+Postgres backup is a complete backup — **plus** the
+`HAZYFLOW_MASTER_KEY`, which lives outside the DB and is required to
+decrypt the `encrypted_secrets` rows.
 
 - **Logical backup (simplest):**
   `pg_dump "$HAZYFLOW_POSTGRES_DSN" | gzip > hazyflow-$(date +%F).sql.gz`.
@@ -113,26 +130,33 @@ rows.
   in the workspace sandbox are the exception if your flows treat them as
   durable artifacts; back up the sandbox base dir too in that case.
 
-## Security flags worth setting
+## Security knobs worth setting
 
-- `--dev-key` defaults **off**; only enable for local dev.
-- `--auth-rate-per-min` / `--auth-rate-burst` throttle sign-in/sign-up
-  per IP (defaults 20 / 10).
-- `--http-egress-allow` pins the `http_request` / `webhook_send` drops to
-  an allowlist of hosts (`api.stripe.com`, `*.slack.com`, CIDRs). The
-  IP-level SSRF guard (blocks private/loopback/metadata) is always on.
+- `HAZYFLOW_DEV_KEY` defaults **off**; only set for local dev (mints
+  an insecure bearer token at startup).
+- The auth rate limiter is hardcoded at 20/min per IP with a burst of
+  10 on `/api/v1/auth/{signin,signup}` (defense against credential
+  stuffing) — not configurable per-deploy.
+- `HAZYFLOW_HTTP_EGRESS_ALLOW` pins the `http_request` /
+  `webhook_send` drops to an allowlist of hosts (`api.stripe.com`,
+  `*.slack.com`, CIDRs). The IP-level SSRF guard (blocks
+  private/loopback/metadata) is always on.
+- `HAZYFLOW_ISOLATE_SHARED_SECRETS=1` in shared multi-tenant
+  deployments forces `env://` lookups to be `<tenant>.<key>` so tenant
+  A can't read tenant B's operator-supplied env secrets.
 
 ## Observability
 
 - **Health probes:** HTTP `GET /healthz` (liveness) and `GET /readyz`
-  (readiness — pings Postgres when `--postgres-dsn` is set). For
+  (readiness — pings Postgres when `HAZYFLOW_POSTGRES_DSN` is set). For
   gRPC-only / k8s deployments, the standard `grpc.health.v1.Health`
   service is registered on the gRPC port (use `grpc_health_probe`); its
   overall status tracks the same readiness check.
-- **Metrics:** `--metrics` exposes a Prometheus `GET /metrics` endpoint
-  (`hazyflow_up`, per-tenant `hazyflow_quota_bytes_used/_limit`,
-  `hazyflow_jobs{status}`). Off by default — it reveals tenant names, so
-  enable it only behind a restricted scrape network.
+- **Metrics:** `HAZYFLOW_ENABLE_METRICS=1` exposes a Prometheus
+  `GET /metrics` endpoint (`hazyflow_up`, per-tenant
+  `hazyflow_quota_bytes_used/_limit`, `hazyflow_jobs{status}`). Off by
+  default — it reveals tenant names, so enable it only behind a
+  restricted scrape network.
 - **Tracing:** set the standard `OTEL_EXPORTER_OTLP_ENDPOINT` (or
   `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`) and `hzd` installs an OTLP trace
   exporter so graph/node spans flow to your collector (Jaeger, Tempo,
@@ -147,9 +171,11 @@ Two paths:
 
 - **Authenticated (inbox UI):** `POST /api/v1/approvals/{run}/{node}` on the
   gateway — always available, uses the caller's API-key/session.
-- **Unauthenticated link (email/Slack):** opt in with `--approval-listen
-  :8090` + `--approval-hmac-secret <base64≥16B>` + `--public-base-url`.
-  The engine then mints signed `<base>/approve/<run>/<node>?token=…` URLs
-  and the listener verifies the HMAC before resuming. Use the **same
-  secret on every node** (a token minted by one node must verify on
-  another). Put the listener behind your TLS ingress like the gateway.
+- **Unauthenticated link (email/Slack):** opt in by setting
+  `HAZYFLOW_APPROVAL_HMAC_SECRET=<base64≥16B>` (plus
+  `HAZYFLOW_PUBLIC_BASE_URL` so links resolve to a real origin). The
+  engine then mints signed `<base>/approve/<run>/<node>?token=…` URLs
+  and the main HTTP gateway routes them through HMAC verification
+  before resuming — no separate listener to expose. Use the **same
+  secret on every node** in a multi-node deployment so a token minted
+  by one verifies on another.

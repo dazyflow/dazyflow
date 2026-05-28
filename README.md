@@ -50,14 +50,15 @@ unset for a private self-host install.
 ## Going to production
 
 `hzd` does not terminate TLS. Run it behind a TLS terminating reverse
-proxy (nginx, Caddy, Traefik, or an ingress) and start it with
-`--trust-proxy-headers`, `--web-origin`, and `--public-base-url`.
+proxy (nginx, Caddy, Traefik, or an ingress) and set, in `.env`:
+`HAZYFLOW_TRUST_PROXY_HEADERS=1`, `HAZYFLOW_WEB_ORIGIN=https://your.domain`,
+and `HAZYFLOW_PUBLIC_BASE_URL=https://your.domain`.
 
 See **[DEPLOY.md](DEPLOY.md)** for the full reference:
 
 - the reverse-proxy contract and a worked nginx example,
 - durability, the master key, and backup and restore,
-- security flags (auth rate limiting, egress allowlist),
+- security knobs (auth rate limiting, egress allowlist),
 - observability (health probes, metrics, OpenTelemetry tracing),
 - human-approval links.
 
@@ -72,18 +73,21 @@ sure only one pod fires each schedule. Steps are in
 ## Run locally for development
 
 Postgres is optional in dev (state falls back to in-memory or a JSON
-file, and the daemon logs a warning). In one terminal:
+file, and the daemon logs a warning).
 
 ```sh
-go run ./cmd/hzd --http :8080 --dev-key --signup --web-origin http://localhost:5173
+make env         # seed .env from .env.example (one-time)
+make dev         # boots hzd; sources .env, falls back to a minimal dev
+                 # set when .env is absent. http://localhost:8080
 ```
 
-In another, start the web dev server:
+In another terminal:
 
 ```sh
-cd web
-npm install
-npm run dev      # http://localhost:5173
+make web         # vite dev server on http://localhost:5173
 ```
 
-Do not use `--dev-key` outside local development.
+`make env` writes a fresh `.env` for you. Edit it to taste — the dev
+defaults turn on signup and mint a throwaway API key on every boot
+(`HAZYFLOW_DEV_KEY=1`). Do not set `HAZYFLOW_DEV_KEY=1` outside local
+development.

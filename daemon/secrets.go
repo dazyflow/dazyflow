@@ -19,7 +19,7 @@ import (
 // — any graph in any tenant can read any env var the daemon process
 // can see. That matches the simplest single-tenant deployment. For
 // shared multi-tenant deployments, set Namespaced=true (via
-// hzd's --isolate-shared-secrets flag) — every Get then requires
+// HAZYFLOW_ISOLATE_SHARED_SECRETS=1) — every Get then requires
 // the name to be of the form `<tenant>.<key>` where tenant matches
 // the caller's tenant from core.TenantFromContext. The full
 // "tenant.key" string is then looked up in the environment (with

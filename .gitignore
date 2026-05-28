@@ -1,8 +1,6 @@
 /hzctl
 /hzd
 /transformer
-/.hazyflow-sandbox
-/.hazyflow-workspace
-/.hazyflow-users.json
+/.hazyflow/
 *.xlsx
 /.env

@@ -198,8 +198,8 @@ this no customer can try" to "needed before paid conversion."
   (keeps email out of URLs/logs), grants `editor` + `tenant_owner`
   roles (graph:run/edit/admin + secret:read/write + tenant:admin),
   and immediately issues a session so the UI lands the user
-  in-app without a round trip. Behind `--signup` /
-  `$HAZYFLOW_ENABLE_SIGNUP` so production deployments default to
+  in-app without a round trip. Gated on `HAZYFLOW_ENABLE_SIGNUP=1` so
+  production deployments default to
   admin-invite-only. 11 backend tests including
   duplicate-rejection-preserves-original-password (the critical
   security pin), email normalization, 7 bad-email variants,
@@ -260,7 +260,7 @@ this no customer can try" to "needed before paid conversion."
   node. 11 tests cover happy path, input-port-wins-over-param,
   bytes input, structured-input rejection (friendly Message +
   technical Details split), missing tenant/name/value, bad-name
-  validator, unwired-hook clear error pointing at `--master-key`,
+  validator, unwired-hook clear error pointing at `HAZYFLOW_MASTER_KEY`,
   write-failure detail surfacing, and tenant isolation.
   **Open follow-up (needs design decision):** piece (b) —
   daemon-side automatic cursor scraping after successful runs —
@@ -286,9 +286,8 @@ this no customer can try" to "needed before paid conversion."
   a background goroutine so the HTTP ack stays well under
   Slack's 3-second retry budget. Standalone execution returns
   `no_trigger_data` with a friendly Message + technical Details
-  (same pattern as `webhook_input`). hzd flag
-  `--slack-signing-secret` (default
-  `$HAZYFLOW_SLACK_SIGNING_SECRET`); empty leaves the endpoint
+  (same pattern as `webhook_input`). Gated on
+  `HAZYFLOW_SLACK_SIGNING_SECRET`; empty leaves the endpoint
   returning 501 so misconfiguration shows clearly. 10 tests:
   URL verification challenge, bad/missing/stale/future
   signatures, 501 when unconfigured, end-to-end app_mention
@@ -369,10 +368,9 @@ this no customer can try" to "needed before paid conversion."
   `pull_request` only dispatches when `action == "opened"`
   (matching the drop's "new PR" name; other actions ack
   without dispatch — future drops like
-  `github_on_pr_merged` can claim those). New hzd flag
-  `--github-webhook-secret` (default
-  `$HAZYFLOW_GITHUB_WEBHOOK_SECRET`); empty leaves the
-  endpoint returning 501. 10 tests cover the matrix
+  `github_on_pr_merged` can claim those). Gated on
+  `HAZYFLOW_GITHUB_WEBHOOK_SECRET`; empty leaves the endpoint
+  returning 501. 10 tests cover the matrix
   (ping/bad-sig/missing-sig/unconfigured/end-to-end push +
   PR/non-opened-acks/unknown-event-acks/both-standalone-runs).
 - [~] **Notion launch connector.** Shipped V1:
@@ -598,12 +596,6 @@ platform can demonstrate but not actually power a real workflow.
 
 ## Production blockers (security + correctness)
 
-- [ ] **mTLS cert rotation.** Certs reload only at hzd restart. Need
-  `tls.Config.GetCertificate` callback + filesystem watcher + atomic
-  reload. *Otherwise certs expiring mid-flight wedge the cluster.*
-- [ ] **CRL / OCSP support.** All certs signed by the configured CA are
-  accepted. Revocation can't be enforced. Add CRL fetch (HTTP) or
-  OCSP-stapling config to the TLS layer.
 - [x] **Concurrent-write race in quotas** (2026-05-27) — closed via a
   reservation + in-flight model (`core.QuotaReserver` / `FSQuota.Reserve`,
   `io.SetQuotaReserver`); see Phase 1. OS-level quotas remain the backstop
@@ -613,8 +605,8 @@ platform can demonstrate but not actually power a real workflow.
   / vault implementations are real integrations we haven't done. Spec
   lists all four.
 - [~] **Per-tenant ACL on secrets.** Shipped: `Namespaced bool` on
-  `EnvProvider` and `BuiltinProvider`. When set (via the new hzd
-  `--isolate-shared-secrets` flag, default off for backward
+  `EnvProvider` and `BuiltinProvider`. When set (via
+  `HAZYFLOW_ISOLATE_SHARED_SECRETS=1`, default off for backward
   compat), every `Get(ctx, name)` requires the name to be of the
   form `<tenant>.<key>` matching the caller's tenant from
   `core.TenantFromContext`. Names without a prefix and
@@ -632,7 +624,7 @@ platform can demonstrate but not actually power a real workflow.
 - [~] **Egress allowlist for `http_request`.** DONE (operator-global)
   2026-05-27: `integrations/net/egress.go` — opt-in allowlist of exact
   hosts, `*.wildcards`, and CIDR/IPs, checked at request time above the
-  IP SSRF guard. Wired via `--http-egress-allow` / `SetEgressAllowlist`.
+  IP SSRF guard. Wired via `HAZYFLOW_HTTP_EGRESS_ALLOW` / `SetEgressAllowlist`.
   Empty = allow-all (backward compatible). 4 tests. **Still open:** make
   it *per-tenant* (today it's one operator-wide list) — needs tenant
   read from ctx + per-tenant policy storage.
