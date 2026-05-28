@@ -60,6 +60,7 @@ func init() {
 					Notes:  "Pass a full messages array when you need conversation history; this overrides params.prompt.",
 				},
 			},
+			RequiresConnections: []string{"anthropic"},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{{

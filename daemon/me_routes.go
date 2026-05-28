@@ -139,11 +139,91 @@ func (h *HTTPGateway) saveFlowMe(rw http.ResponseWriter, r *http.Request, p core
 	// (graphs → flows) is wire-only; audit codes are stable.
 	h.audit(r.Context(), p, "graph.save", g.ID, "commit="+commit)
 	writeJSON(rw, http.StatusOK, map[string]any{
-		"commit":   commit,
-		"flow_id":  tenant + "/" + workspace + "/" + g.ID,
-		"graph_id": g.ID, // legacy alias
-		"lint":     core.LintGraph(g),
+		"commit":    commit,
+		"flow_id":   tenant + "/" + workspace + "/" + g.ID,
+		"graph_id":  g.ID, // legacy alias
+		"lint":      core.LintGraph(g),
+		"endpoints": h.triggerEndpoints(g),
 	})
+}
+
+// triggerEndpoints returns the public URLs the user must paste into
+// the upstream system (Stripe webhook UI, contact-form embed, etc.)
+// to deliver events to a webhook-triggered or hosted-form flow.
+// Returns an empty slice when the flow has no webhook/form triggers.
+//
+// Webhook trigger → `/trigger/<tenant>/<workspace>/<id>` (POST).
+// Hosted form → `/form/<tenant>/<workspace>/<id>` (GET renders, POST submits).
+// Same flow can have both on a single trigger when PublicForm is true.
+//
+// Surfaces the secret (Authorization: Bearer header) for webhook
+// triggers when one is set on the trigger — the LLM can include it
+// in the "how to wire this up" instructions to the user. PublicForm
+// pages take no auth.
+func (h *HTTPGateway) triggerEndpoints(g core.Graph) []map[string]any {
+	base := strings.TrimRight(h.svc.PublicBaseURL, "/")
+	if base == "" {
+		// No public URL is known — surface the relative paths so the
+		// LLM can still tell the user "POST to /trigger/...". Better
+		// than emitting nothing and leaving the user wondering.
+		base = ""
+	}
+	out := []map[string]any{}
+	scope := g.Tenant + "/" + g.Workspace + "/" + g.ID
+	for _, t := range g.Triggers {
+		switch t.Type {
+		case "webhook":
+			ep := map[string]any{
+				"kind":   "webhook",
+				"method": "POST",
+				"url":    base + "/trigger/" + scope,
+			}
+			if t.Secret != "" {
+				ep["auth"] = "Authorization: Bearer " + t.Secret
+			}
+			out = append(out, ep)
+			if t.PublicForm {
+				out = append(out, map[string]any{
+					"kind":   "hosted_form",
+					"method": "GET (renders) / POST (submits)",
+					"url":    base + "/form/" + scope,
+					"note":   "Public page — possession of the URL is the only credential.",
+				})
+			}
+		case "cron":
+			out = append(out, map[string]any{
+				"kind": "cron",
+				"cron": t.Cron,
+				"note": "Server-side scheduler; no public URL.",
+			})
+		case "poll":
+			out = append(out, map[string]any{
+				"kind":             "poll",
+				"interval_seconds": t.IntervalSeconds,
+				"note":             "Server-side scheduler; no public URL.",
+			})
+		}
+	}
+	return out
+}
+
+// deleteFlowMe is the DELETE /me/flows/{flow_id} handler. Idempotent:
+// missing flow → 204. Active run → 409 with code `flow_locked`.
+func (h *HTTPGateway) deleteFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	tenant, workspace, id, ok := h.readFlowID(rw, r, p)
+	if !ok {
+		return
+	}
+	if err := h.svc.DeleteGraph(r.Context(), p, tenant, workspace, id); err != nil {
+		if errors.Is(err, core.ErrConflict) {
+			writeAPIError(rw, http.StatusConflict, "flow_locked", err.Error())
+			return
+		}
+		writeAPIError(rw, http.StatusForbidden, "forbidden", err.Error())
+		return
+	}
+	h.audit(r.Context(), p, "graph.delete", id, "")
+	rw.WriteHeader(http.StatusNoContent)
 }
 
 // patchFlowMe is the RFC 7396 JSON Merge Patch entry point. The
@@ -213,9 +293,10 @@ func (h *HTTPGateway) patchFlowMe(rw http.ResponseWriter, r *http.Request, p cor
 	}
 	h.audit(r.Context(), p, "graph.patch", next.ID, "commit="+commit)
 	writeJSON(rw, http.StatusOK, map[string]any{
-		"commit":  commit,
-		"flow_id": tenant + "/" + workspace + "/" + next.ID,
-		"lint":    core.LintGraph(next),
+		"commit":    commit,
+		"flow_id":   tenant + "/" + workspace + "/" + next.ID,
+		"lint":      core.LintGraph(next),
+		"endpoints": h.triggerEndpoints(next),
 	})
 }
 
@@ -326,6 +407,60 @@ func (h *HTTPGateway) validateFlowMe(rw http.ResponseWriter, r *http.Request, p 
 		"ok":     true,
 		"issues": core.LintGraph(g),
 	})
+}
+
+// --- /me/connections --------------------------------------------------
+
+// listConnectionsMe is GET /api/v1/me/connections — the LLM-friendly
+// shape of "which OAuth providers does the daemon offer + which has
+// this caller connected." Delegates to the legacy oauthListProviders
+// handler since the underlying logic is identical.
+func (h *HTTPGateway) listConnectionsMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	h.oauthListProviders(rw, r, p)
+}
+
+// startConnectionMe is POST /api/v1/me/connections/{provider}/authorize.
+// Unlike the legacy /api/v1/oauth/{provider}/authorize (which 302s the
+// browser straight to the provider), this returns JSON
+// `{"authorize_url":"..."}` so an LLM client can hand the URL to the
+// user and have them open it manually. The provider's callback still
+// lands at /api/v1/oauth/{provider}/callback (one endpoint, one shape)
+// and finalizes the connection.
+//
+// Accepts ?account= (defaults "default") and ?return_to= (defaults
+// /integrations) — same semantics as the legacy redirect path.
+func (h *HTTPGateway) startConnectionMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	target, status, msg := h.buildAuthorizeURL(p,
+		r.PathValue("provider"),
+		r.URL.Query().Get("account"),
+		r.URL.Query().Get("return_to"),
+	)
+	if status != http.StatusOK {
+		// Code mapping: 501 = OAuth subsystem not configured;
+		// 503 = a known provider exists but its client_id/secret are
+		// not wired (operator config gap); 403 = principal can't act;
+		// 404 = no such provider; 400 = bad input.
+		writeAPIError(rw, status, oauthErrorCode(status), msg)
+		return
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{"authorize_url": target})
+}
+
+func oauthErrorCode(status int) string {
+	switch status {
+	case http.StatusNotImplemented:
+		return "oauth_not_configured"
+	case http.StatusServiceUnavailable:
+		return "provider_not_configured"
+	case http.StatusForbidden:
+		return "forbidden"
+	case http.StatusNotFound:
+		return "provider_not_found"
+	case http.StatusBadRequest:
+		return "invalid_request"
+	default:
+		return "internal_error"
+	}
 }
 
 // --- /me/runs ---------------------------------------------------------

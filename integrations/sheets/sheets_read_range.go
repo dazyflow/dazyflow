@@ -44,6 +44,7 @@ func init() {
 					Params: json.RawMessage(`{"account":"default","spreadsheet_id":"1AbcDEFghIJklmNOPqrsTUVwxyZ_0123456789abcd","range":"raw_dump!A1:Z","headers":false}`),
 				},
 			},
+			RequiresConnections: []string{"sheets"},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

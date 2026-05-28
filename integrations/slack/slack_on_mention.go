@@ -34,6 +34,7 @@ func init() {
 					Notes:  "Use the channel ID (Cxxx), not the #name. Mentions elsewhere are skipped at the gateway and don't enqueue a job.",
 				},
 			},
+			RequiresConnections: []string{"slack"},
 			ExecutionModel: core.ExecutionTrigger,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

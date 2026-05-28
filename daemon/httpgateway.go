@@ -282,6 +282,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 		h.requireAuth(h.idempotencyMiddleware("/me/flows/{flow_id}", h.saveFlowMe)))
 	mux.HandleFunc("PATCH /api/v1/me/flows/{flow_id}",
 		h.requireAuth(h.idempotencyMiddleware("/me/flows/{flow_id}", h.patchFlowMe)))
+	mux.HandleFunc("DELETE /api/v1/me/flows/{flow_id}", h.requireAuth(h.deleteFlowMe))
 	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/run",
 		h.requireAuth(h.idempotencyMiddleware("/me/flows/{flow_id}/run", h.runFlowMe)))
 	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/validate", h.requireAuth(h.validateFlowMe))
@@ -298,6 +299,14 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/me/runs/{run_id}/events", h.requireAuth(h.runEventsMe))
 	mux.HandleFunc("POST /api/v1/me/runs/{run_id}/cancel",
 		h.requireAuth(h.idempotencyMiddleware("/me/runs/{run_id}/cancel", h.cancelRunMe)))
+
+	// /me/connections — LLM-friendly OAuth surface. List returns
+	// provider catalog + which accounts the caller has linked. Authorize
+	// returns JSON {authorize_url} (no 302) so an MCP/CLI client can
+	// hand the URL to the user. Callback path stays the same.
+	mux.HandleFunc("GET /api/v1/me/connections", h.requireAuth(h.listConnectionsMe))
+	mux.HandleFunc("POST /api/v1/me/connections/{provider}/authorize",
+		h.requireAuth(h.idempotencyMiddleware("/me/connections/{provider}/authorize", h.startConnectionMe)))
 	mux.HandleFunc("POST /api/v1/validate/cron", h.requireAuth(h.validateCron))
 	// Slack Events API endpoint. NOT under requireAuth — Slack POSTs
 	// as a stranger; the HMAC signature is the auth.

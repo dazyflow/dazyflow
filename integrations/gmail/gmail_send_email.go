@@ -46,6 +46,7 @@ func init() {
 					Notes:  "thread_id keeps the reply in the same Gmail conversation as the original message.",
 				},
 			},
+			RequiresConnections: []string{"gmail"},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

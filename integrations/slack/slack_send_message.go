@@ -45,6 +45,7 @@ func init() {
 					Notes:  "When blocks are set, text is used only as the push-notification fallback.",
 				},
 			},
+			RequiresConnections: []string{"slack"},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

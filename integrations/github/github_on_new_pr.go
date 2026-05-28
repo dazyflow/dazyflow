@@ -30,6 +30,7 @@ func init() {
 					Notes:  "This trigger is webhook-driven; the daemon's GitHub events handler seeds the node when a pull_request:opened event arrives.",
 				},
 			},
+			RequiresConnections: []string{"github"},
 			ExecutionModel: core.ExecutionTrigger,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

@@ -123,6 +123,16 @@ type Manifest struct {
 	// the API serves them verbatim. Required at registration.
 	Examples []ParamsExample `json:"examples,omitempty"`
 
+	// RequiresConnections lists the OAuth provider IDs (or secret
+	// names) this drop needs configured before it will run. The
+	// catalog API surfaces these so an LLM composing a flow can
+	// pre-check "do I have a slack connection?" and direct the user
+	// to authorize first — instead of discovering the gap at run time.
+	// Empty for drops with no external auth (file IO, transforms,
+	// flow-control). Values match Provider IDs from OAuthRegistry
+	// (e.g. "slack", "gmail") or stable secret-name slugs.
+	RequiresConnections []string `json:"requires_connections,omitempty"`
+
 	// Icon is a logical icon name the UI maps to a glyph in its icon
 	// set (today: lucide-react). Values are kebab-case lowercase, e.g.
 	// "webhook", "git-branch", "sparkles". When empty the UI falls

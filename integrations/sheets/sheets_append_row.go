@@ -46,6 +46,7 @@ func init() {
 					Params: json.RawMessage(`{"token":"${secret:SHEETS_OAUTH}","spreadsheet_id":"1AbcDEFghIJklmNOPqrsTUVwxyZ_0123456789abcd","range":"Sheet1","timeout_ms":20000}`),
 				},
 			},
+			RequiresConnections: []string{"sheets"},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

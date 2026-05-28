@@ -41,6 +41,7 @@ func init() {
 					Notes:  "PRs share GitHub's issue number space, so this same drop comments on PRs too.",
 				},
 			},
+			RequiresConnections: []string{"github"},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

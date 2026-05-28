@@ -41,6 +41,7 @@ func init() {
 					Notes:  "Loop until has_more=false to drain the database.",
 				},
 			},
+			RequiresConnections: []string{"notion"},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

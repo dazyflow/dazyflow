@@ -30,6 +30,7 @@ func init() {
 					Notes:  "Filter to a specific branch downstream by checking `ref == \"refs/heads/main\"`.",
 				},
 			},
+			RequiresConnections: []string{"github"},
 			ExecutionModel: core.ExecutionTrigger,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

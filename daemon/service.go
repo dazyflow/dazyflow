@@ -315,6 +315,42 @@ func (s *Service) hasActiveRun(ctx context.Context, tenant, ws, graphID string) 
 	return false, nil
 }
 
+// DeleteGraph removes a flow from the workspace's git-backed store.
+// Permission: workspace scope + the principal must be authorized to
+// edit the existing flow (owner / org-visible / admin). Refuses with
+// core.ErrConflict if a non-terminal run exists for the flow.
+// Idempotent at the store layer: removing an already-missing flow
+// surfaces success.
+func (s *Service) DeleteGraph(ctx context.Context, p core.Principal, tenant, ws, id string) error {
+	if err := core.RequireWorkspace(p, tenant, ws); err != nil {
+		return err
+	}
+	store, err := s.Workspaces.Open(tenant, ws)
+	if err != nil {
+		return err
+	}
+	// Load to enforce edit permission on the existing flow. ErrNotFound
+	// is OK — we exit early with success (idempotent delete).
+	existing, loadErr := store.Load(id)
+	if loadErr != nil {
+		return nil
+	}
+	if err := core.AuthorizeGraphEdit(p, existing); err != nil {
+		return err
+	}
+	active, err := s.hasActiveRun(ctx, tenant, ws, id)
+	if err != nil {
+		return fmt.Errorf("check active runs: %w", err)
+	}
+	if active {
+		return fmt.Errorf("%w: flow %q has an active run; cancel it first", core.ErrConflict, id)
+	}
+	if _, err := store.Delete(id, p.Subject); err != nil {
+		return err
+	}
+	return nil
+}
+
 // SaveGraph persists a graph as principal. Tenant/workspace on the graph
 // must match the principal's scope. Returns the new commit hash.
 func (s *Service) SaveGraph(ctx context.Context, p core.Principal, g core.Graph) (string, error) {

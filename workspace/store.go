@@ -191,6 +191,56 @@ func (s *Store) Save(graph core.Graph, author string) (string, error) {
 	return hash.String(), nil
 }
 
+// Delete removes graphs/<id>.json from the worktree and commits the
+// removal. Returns the resulting commit hash on success. Idempotent
+// in the "file doesn't exist" sense: a missing path returns
+// (commit="", nil) so the caller can surface "deleted or already
+// gone" as the same outcome.
+func (s *Store) Delete(graphID, author string) (string, error) {
+	if graphID == "" {
+		return "", errors.New("graphID required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	wt, err := s.repo.Worktree()
+	if err != nil {
+		return "", err
+	}
+	relPath := graphPath(graphID)
+	if _, statErr := s.fs.Stat(relPath); statErr != nil {
+		// Not present in the worktree. Treat as already-deleted —
+		// keeps the caller's semantics simple (HTTP 204 whether the
+		// resource was there or not, matching REST conventions).
+		return "", nil
+	}
+	if err := s.fs.Remove(relPath); err != nil {
+		return "", fmt.Errorf("remove %s: %w", relPath, err)
+	}
+	if _, err := wt.Add(relPath); err != nil {
+		return "", fmt.Errorf("git add (removal): %w", err)
+	}
+	msg := fmt.Sprintf("graph: delete %s [user:%s]", graphID, author)
+	hash, err := wt.Commit(msg, &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  author,
+			Email: author,
+			When:  time.Now(),
+		},
+		AllowEmptyCommits: false,
+	})
+	if err != nil {
+		if errors.Is(err, git.ErrEmptyCommit) {
+			head, herr := s.repo.Head()
+			if herr != nil {
+				return "", fmt.Errorf("commit: %w (and head lookup: %v)", err, herr)
+			}
+			return head.Hash().String(), nil
+		}
+		return "", fmt.Errorf("commit: %w", err)
+	}
+	return hash.String(), nil
+}
+
 // Load reads graphs/<id>.json from HEAD.
 func (s *Store) Load(id string) (core.Graph, error) {
 	s.mu.Lock()

@@ -40,6 +40,7 @@ func init() {
 					Notes:  "For child pages the title goes inside properties.title (not into a named property).",
 				},
 			},
+			RequiresConnections: []string{"notion"},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

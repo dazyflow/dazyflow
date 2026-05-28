@@ -233,6 +233,13 @@ func (c *HazydClient) Patch(ctx context.Context, path string, body, out any) err
 	return c.do(ctx, http.MethodPatch, path, body, out)
 }
 
+// Delete removes a resource. The daemon's DELETE endpoints today
+// return 204 with no body; passing nil for `out` is the expected
+// shape. Honors Idempotency-Key from context like the other writers.
+func (c *HazydClient) Delete(ctx context.Context, path string) error {
+	return c.do(ctx, http.MethodDelete, path, nil, nil)
+}
+
 // idempotencyKeyCtx is the typed key for stashing an Idempotency-Key
 // value in a request context. Tools wrap the context with
 // withIdempotencyKey before calling Post/Patch/Put — the client reads

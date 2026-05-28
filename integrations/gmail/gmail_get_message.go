@@ -41,6 +41,7 @@ func init() {
 					Params: json.RawMessage(`{"id":"18f9d3a2c0e1b4a5","format":"metadata","token":"${secret:GMAIL_OAUTH}"}`),
 				},
 			},
+			RequiresConnections: []string{"gmail"},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

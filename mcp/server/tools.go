@@ -58,6 +58,10 @@ func BuildTools(c *HazydClient, d Defaults) []Tool {
 		describeIntegration(c),
 		listDrops(c),
 		describeDrop(c),
+		listConnections(c),
+		startConnection(c),
+		listSecrets(c),
+		setSecret(c),
 		listFlows(c, d),
 		getFlow(c, d),
 		saveFlow(c, d, "create_flow",
@@ -65,6 +69,7 @@ func BuildTools(c *HazydClient, d Defaults) []Tool {
 		saveFlow(c, d, "update_flow",
 			"Update an existing flow in place. Pass the FULL graph payload (nodes + edges) — the daemon overwrites the prior version. Refuses with HTTP 409 if a run of this flow is currently in flight."),
 		patchFlow(c, d),
+		deleteFlow(c, d),
 		validateFlow(c, d),
 		testTriggerFlow(c, d),
 		sampleNode(c, d),
@@ -306,6 +311,155 @@ func describeDrop(c *HazydClient) Tool {
 				return errorResultOrErr(err)
 			}
 			return TextResult(out), nil
+		},
+	}
+}
+
+// listConnections returns the OAuth providers the daemon knows about
+// plus which accounts the calling principal has already linked. Use
+// this BEFORE composing a flow whose drops have non-empty
+// requires_connections — if a provider isn't connected, hand the
+// authorize URL from start_connection to the user before continuing.
+func listConnections(c *HazydClient) Tool {
+	return Tool{
+		Name:        "list_connections",
+		Description: "List OAuth providers the daemon offers and which accounts the caller has linked. Each entry: {name, accounts:[...]}. Empty `accounts` = not connected. Pair with start_connection to begin the auth dance for a not-connected provider.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{}}`),
+		Handler: func(ctx context.Context, _ json.RawMessage) (ToolCallResult, error) {
+			var out map[string]any
+			if err := c.Get(ctx, "/me/connections", &out); err != nil {
+				return errorResultOrErr(err)
+			}
+			return TextResult(out), nil
+		},
+	}
+}
+
+// startConnection mints a provider authorize URL the LLM passes to
+// the user. The user opens it in a browser, completes the OAuth
+// dance, and the callback finalizes server-side — no further MCP
+// interaction is needed. Re-running list_connections after the user
+// reports success confirms the link.
+func startConnection(c *HazydClient) Tool {
+	return Tool{
+		Name:        "start_connection",
+		Description: "Begin the OAuth flow for a provider. Returns {authorize_url:\"https://...\"} — hand this URL to the user, ask them to open it and complete the consent screen. After they're back, call list_connections to confirm the account now appears under the provider.",
+		InputSchema: json.RawMessage(`{"type":"object","required":["provider"],"properties":{
+			"provider":  {"type":"string","description":"Provider ID from list_connections (e.g. 'slack','gmail','github')."},
+			"account":   {"type":"string","description":"Stable handle for this connection. Defaults to 'default'; use multiple values when one principal has more than one account at the same provider."},
+			"return_to": {"type":"string","description":"Same-origin path the user lands on after the OAuth dance completes. Optional; defaults to /integrations."}
+		}}`),
+		Handler: func(ctx context.Context, raw json.RawMessage) (ToolCallResult, error) {
+			args, err := decodeArgs(raw)
+			if err != nil {
+				return ErrorResult(err.Error()), nil
+			}
+			provider := stringField(args, "provider", "")
+			if provider == "" {
+				return ErrorResult("provider is required"), nil
+			}
+			qs := ""
+			if a := stringField(args, "account", ""); a != "" {
+				qs = "?account=" + pathSegment(a)
+			}
+			if rt := stringField(args, "return_to", ""); rt != "" {
+				sep := "?"
+				if qs != "" {
+					sep = "&"
+				}
+				qs += sep + "return_to=" + pathSegment(rt)
+			}
+			var out map[string]any
+			ctx = withIdempotencyKey(ctx, idempotencyKeyFor("start_connection", raw))
+			if err := c.Post(ctx, "/me/connections/"+pathSegment(provider)+"/authorize"+qs, nil, &out); err != nil {
+				return errorResultOrErr(err)
+			}
+			return TextResult(out), nil
+		},
+	}
+}
+
+// listSecrets returns the names of secrets stored for the caller's
+// tenant (values never leave the daemon — write-only). LLM use:
+// confirm a secret exists by name before building a flow that
+// references it via ${secret:NAME}.
+func listSecrets(c *HazydClient) Tool {
+	return Tool{
+		Name:        "list_secrets",
+		Description: "List secret names in the caller's tenant. Returns {secrets:[name,...]}. Values are write-only — there is no read API; the only way to inspect a secret is to use it in a node. Pair with set_secret to add one.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{}}`),
+		Handler: func(ctx context.Context, _ json.RawMessage) (ToolCallResult, error) {
+			var out map[string]any
+			if err := c.Get(ctx, "/secrets", &out); err != nil {
+				return errorResultOrErr(err)
+			}
+			return TextResult(out), nil
+		},
+	}
+}
+
+// setSecret stores a secret value for the caller's tenant. Use when
+// the user pastes an API key in chat ("here's my Stripe key") — the
+// LLM stores it under a stable name and then references it via
+// ${secret:NAME} in any flow node that needs it.
+func setSecret(c *HazydClient) Tool {
+	return Tool{
+		Name:        "set_secret",
+		Description: "Store a secret value under the given name in the caller's tenant. Overwrites if the name exists. After calling, reference the secret from a flow node's params as `${secret:NAME}` (the daemon resolves it at run time). Names must be A-Z 0-9 _ . / - .",
+		InputSchema: json.RawMessage(`{"type":"object","required":["name","value"],"properties":{
+			"name":  {"type":"string","description":"Stable name. Convention: SCREAMING_SNAKE_CASE. Becomes the key flow nodes reference via ${secret:NAME}."},
+			"value": {"type":"string","description":"The literal secret value. Will be encrypted at rest by the daemon."}
+		}}`),
+		Handler: func(ctx context.Context, raw json.RawMessage) (ToolCallResult, error) {
+			args, err := decodeArgs(raw)
+			if err != nil {
+				return ErrorResult(err.Error()), nil
+			}
+			name := stringField(args, "name", "")
+			value := stringField(args, "value", "")
+			if name == "" || value == "" {
+				return ErrorResult("name and value are required"), nil
+			}
+			body := map[string]string{"value": value}
+			ctx = withIdempotencyKey(ctx, idempotencyKeyFor("set_secret", raw))
+			if err := c.Put(ctx, "/secrets/"+pathSegment(name), body, nil); err != nil {
+				return errorResultOrErr(err)
+			}
+			return TextResult(map[string]any{"name": name, "saved": true}), nil
+		},
+	}
+}
+
+// deleteFlow removes a flow from the workspace. Refuses with 409 if
+// a run is currently in flight on this flow (same lock as save/patch).
+// Idempotent on the wire: a missing flow returns 204.
+func deleteFlow(c *HazydClient, d Defaults) Tool {
+	return Tool{
+		Name:        "delete_flow",
+		Description: "Permanently remove a flow. Use this when the user wants to undo a creation or retire a flow. Refuses (HTTP 409) if a run is currently active on the flow. Idempotent: deleting a missing flow is a no-op.",
+		InputSchema: json.RawMessage(`{"type":"object","required":["id"],"properties":{
+			"id":        {"type":"string"},
+			"tenant":    {"type":"string"},
+			"workspace": {"type":"string"}
+		}}`),
+		Handler: func(ctx context.Context, raw json.RawMessage) (ToolCallResult, error) {
+			args, err := decodeArgs(raw)
+			if err != nil {
+				return ErrorResult(err.Error()), nil
+			}
+			id := stringField(args, "id", "")
+			if id == "" {
+				return ErrorResult("id is required"), nil
+			}
+			tenant, workspace, err := scoped(args, d)
+			if err != nil {
+				return ErrorResult(err.Error()), nil
+			}
+			ctx = withIdempotencyKey(ctx, idempotencyKeyFor("delete_flow", raw))
+			if err := c.Delete(ctx, "/me/flows/"+composeFlowID(tenant, workspace, id)); err != nil {
+				return errorResultOrErr(err)
+			}
+			return TextResult(map[string]any{"id": id, "deleted": true}), nil
 		},
 	}
 }

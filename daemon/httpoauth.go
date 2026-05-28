@@ -31,54 +31,59 @@ import (
 // oauthAuthorize starts the flow. Requires bearer auth so we know
 // which tenant the resulting token belongs to.
 func (h *HTTPGateway) oauthAuthorize(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if h.OAuth == nil {
-		writeJSONError(rw, http.StatusNotImplemented, "OAuth not configured")
+	target, status, msg := h.buildAuthorizeURL(p,
+		r.PathValue("provider"),
+		r.URL.Query().Get("account"),
+		r.URL.Query().Get("return_to"),
+	)
+	if status != http.StatusOK {
+		writeJSONError(rw, status, msg)
 		return
 	}
+	http.Redirect(rw, r, target, http.StatusFound)
+}
+
+// buildAuthorizeURL is the shared path between the legacy redirect
+// endpoint and the new /me/connections/{provider}/authorize JSON
+// endpoint. Returns the provider's full authorize URL on success;
+// (HTTP status, error message) when the request is malformed or
+// OAuth is unconfigured.
+//
+// Pulled out so the JSON variant doesn't have to fake an http.Redirect
+// just to capture the target — and so the URL-building logic stays
+// single-source as more providers / extras are added.
+func (h *HTTPGateway) buildAuthorizeURL(p core.Principal, providerName, account, returnTo string) (string, int, string) {
+	if h.OAuth == nil {
+		return "", http.StatusNotImplemented, "OAuth not configured"
+	}
 	if p.Tenant == "" {
-		writeJSONError(rw, http.StatusForbidden, "principal has no tenant")
-		return
+		return "", http.StatusForbidden, "principal has no tenant"
 	}
 	if err := core.Require(p, core.PermSecretWrite); err != nil {
 		// OAuth ends up WRITING a token to the secret store; gate on
 		// the same permission that gates direct secret writes.
-		writeJSONError(rw, http.StatusForbidden, err.Error())
-		return
+		return "", http.StatusForbidden, err.Error()
 	}
-	providerName := r.PathValue("provider")
 	prov, ok := h.OAuth.providers[providerName]
 	if !ok {
-		writeJSONError(rw, http.StatusNotFound, fmt.Sprintf("unknown OAuth provider %q", providerName))
-		return
+		return "", http.StatusNotFound, fmt.Sprintf("unknown OAuth provider %q", providerName)
 	}
 	if prov.ClientID == "" || prov.ClientSecret == "" {
-		writeJSONError(rw, http.StatusServiceUnavailable,
-			fmt.Sprintf("provider %q is not configured (missing client_id/secret)", providerName))
-		return
+		return "", http.StatusServiceUnavailable,
+			fmt.Sprintf("provider %q is not configured (missing client_id/secret)", providerName)
 	}
-
-	account := r.URL.Query().Get("account")
 	if account == "" {
 		account = "default"
 	}
 	if err := validSecretName("oauth." + providerName + "." + account); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("account %q: %v", account, err))
-		return
+		return "", http.StatusBadRequest, fmt.Sprintf("account %q: %v", account, err)
 	}
-
-	// Default returnTo to a UI route that the gateway's caller
-	// usually serves; if the caller didn't pass one, "/" is a
-	// safe-enough fallback.
-	returnTo := r.URL.Query().Get("return_to")
 	if returnTo == "" {
 		returnTo = "/integrations"
 	}
-	// Same-origin only, to stop open-redirect attacks.
 	if !strings.HasPrefix(returnTo, "/") {
-		writeJSONError(rw, http.StatusBadRequest, "return_to must be a relative path starting with /")
-		return
+		return "", http.StatusBadRequest, "return_to must be a relative path starting with /"
 	}
-
 	state, err := h.OAuth.state.mint(pendingOAuth{
 		tenant:   p.Tenant,
 		provider: providerName,
@@ -86,37 +91,25 @@ func (h *HTTPGateway) oauthAuthorize(rw http.ResponseWriter, r *http.Request, p 
 		returnTo: returnTo,
 	})
 	if err != nil {
-		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("mint state: %v", err))
-		return
+		return "", http.StatusInternalServerError, fmt.Sprintf("mint state: %v", err)
 	}
-
 	q := url.Values{}
 	q.Set("client_id", prov.ClientID)
 	q.Set("redirect_uri", h.OAuth.redirectURI(providerName))
 	q.Set("response_type", "code")
 	q.Set("state", state)
 	if len(prov.Scopes) > 0 {
-		// Standard OAuth scope separator is space; some providers
-		// (Slack) want comma. Provider configs spell which they
-		// want by setting Scopes accordingly — the daemon doesn't
-		// re-split. We join with space here; a Slack-specific
-		// provider config would join its own scope string ahead
-		// of time.
 		q.Set("scope", strings.Join(prov.Scopes, " "))
 	}
-	// Provider-specific extras (Google's access_type=offline +
-	// prompt=consent, etc.). Applied last so they can override the
-	// standard params if a provider really insists.
 	for k, v := range prov.AuthorizeExtras {
 		q.Set(k, v)
 	}
-
 	target := prov.AuthorizeURL
 	sep := "?"
 	if strings.Contains(target, "?") {
 		sep = "&"
 	}
-	http.Redirect(rw, r, target+sep+q.Encode(), http.StatusFound)
+	return target + sep + q.Encode(), http.StatusOK, ""
 }
 
 // oauthCallback receives the provider's redirect, exchanges the
