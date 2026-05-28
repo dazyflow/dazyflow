@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { KeyRound, Plus, Trash2, AlertCircle } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { AlertCircle, KeyRound, Plus, Search, ShieldOff, Trash2 } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
@@ -14,6 +14,11 @@ export function AdminAPIKeys() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [filter, setFilter] = useState("");
+  // confirmRevoke holds the key id the operator is being asked about;
+  // null = no dialog. Inline (no modal portal) so the focus stays on
+  // the row they're acting on.
+  const [confirmRevoke, setConfirmRevoke] = useState<string | null>(null);
   // Holds the just-minted key so the UI can show the secret once.
   // Clearing it (close) is one-way; the secret is never recoverable.
   const [revealed, setRevealed] = useState<IssuedAPIKey | null>(null);
@@ -35,11 +40,24 @@ export function AdminAPIKeys() {
     } finally {
       setLoading(false);
     }
-  }, [token, activeTenant]);
+  }, [token, activeTenant, t]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Pre-compute the filtered view so the table + the empty-after-filter
+  // copy can both read from one source.
+  const filtered = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    if (!q) return keys;
+    return keys.filter(
+      (k) =>
+        k.id.toLowerCase().includes(q) ||
+        k.subject.toLowerCase().includes(q) ||
+        k.roles.some((r) => r.name.toLowerCase().includes(q)),
+    );
+  }, [keys, filter]);
 
   if (!hasPerm("tenant:admin")) {
     return (
@@ -51,11 +69,9 @@ export function AdminAPIKeys() {
 
   const revoke = async (id: string) => {
     if (!token) return;
-    if (!window.confirm(t("admin.apiKeys.confirmRevoke", { id }))) {
-      return;
-    }
     try {
       await api.revokeAPIKey(token, id);
+      setConfirmRevoke(null);
       await refresh();
     } catch (e) {
       setError((e as Error).message);
@@ -70,14 +86,14 @@ export function AdminAPIKeys() {
             <KeyRound size={20} style={{ marginRight: 8, verticalAlign: -3 }} />
             {t("admin.apiKeys.title")}
           </h1>
-          <div className="sub">
-            {t("admin.apiKeys.subtitle")}
-          </div>
+          <div className="sub">{t("admin.apiKeys.subtitle")}</div>
         </div>
-        <button className="primary" onClick={() => setCreating(true)}>
-          <Plus size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-          {t("admin.apiKeys.issueKey")}
-        </button>
+        {keys.length > 0 && (
+          <button className="primary" onClick={() => setCreating(true)}>
+            <Plus size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+            {t("admin.apiKeys.issueKey")}
+          </button>
+        )}
       </div>
 
       {error && (
@@ -87,61 +103,81 @@ export function AdminAPIKeys() {
         </div>
       )}
 
-      {loading && keys.length === 0 && (
-        <div className="card" style={{ color: "var(--muted)" }}>{t("common.loading")}</div>
+      {!loading && !error && keys.length === 0 && (
+        <div className="admin-empty">
+          <KeyRound size={28} />
+          <h2>{t("admin.apiKeys.emptyTitle")}</h2>
+          <p>{t("admin.apiKeys.emptyBody")}</p>
+          <button className="primary" onClick={() => setCreating(true)}>
+            <Plus size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+            {t("admin.apiKeys.issueFirst")}
+          </button>
+        </div>
       )}
 
-      {!loading && keys.length === 0 && !error && (
+      {loading && keys.length === 0 && (
         <div className="card" style={{ color: "var(--muted)" }}>
-          {t("admin.apiKeys.empty")}
+          {t("common.loading")}
         </div>
       )}
 
       {keys.length > 0 && (
-        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-          <table className="run-table">
-            <thead>
-              <tr>
-                <th>{t("admin.apiKeys.colId")}</th>
-                <th>{t("admin.apiKeys.colSubject")}</th>
-                <th>{t("admin.apiKeys.colWorkspace")}</th>
-                <th>{t("admin.apiKeys.colRoles")}</th>
-                <th>{t("admin.apiKeys.colStatus")}</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {keys.map((k) => (
-                <tr key={k.id}>
-                  <td style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>
-                    {k.id}
-                  </td>
-                  <td>{k.subject}</td>
-                  <td style={{ color: "var(--muted)", fontSize: 12 }}>
-                    {k.workspace || t("admin.apiKeys.anyWorkspace")}
-                  </td>
-                  <td style={{ fontSize: 12 }}>
-                    {k.roles.map((r) => r.name).join(", ")}
-                  </td>
-                  <td>
-                    <span className={`key-status ${k.status}`}>{k.status}</span>
-                  </td>
-                  <td style={{ textAlign: "right" }}>
-                    {k.status === "active" && (
-                      <button
-                        className="ghost"
-                        onClick={() => revoke(k.id)}
-                        title={t("admin.apiKeys.revokeTitle")}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <>
+          <div className="api-key-toolbar">
+            <div className="api-key-search">
+              <Search size={14} aria-hidden="true" />
+              <input
+                type="search"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                placeholder={t("admin.apiKeys.searchPlaceholder")}
+                aria-label={t("admin.apiKeys.searchPlaceholder")}
+              />
+            </div>
+            <div className="api-key-count">
+              {filter
+                ? t("admin.apiKeys.filteredCount", {
+                    shown: filtered.length,
+                    total: keys.length,
+                  })
+                : t("admin.apiKeys.totalCount", { total: keys.length })}
+            </div>
+          </div>
+
+          {filtered.length === 0 ? (
+            <div className="card" style={{ color: "var(--muted)" }}>
+              {t("admin.apiKeys.filterNoMatch", { query: filter })}
+            </div>
+          ) : (
+            <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+              <table className="run-table">
+                <thead>
+                  <tr>
+                    <th>{t("admin.apiKeys.colId")}</th>
+                    <th>{t("admin.apiKeys.colSubject")}</th>
+                    <th>{t("admin.apiKeys.colWorkspace")}</th>
+                    <th>{t("admin.apiKeys.colRoles")}</th>
+                    <th>{t("admin.apiKeys.colExpires")}</th>
+                    <th>{t("admin.apiKeys.colStatus")}</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((k) => (
+                    <APIKeyRow
+                      key={k.id}
+                      k={k}
+                      confirming={confirmRevoke === k.id}
+                      onConfirm={() => setConfirmRevoke(k.id)}
+                      onCancelConfirm={() => setConfirmRevoke(null)}
+                      onRevoke={() => revoke(k.id)}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
 
       {creating && (
@@ -164,4 +200,110 @@ export function AdminAPIKeys() {
       )}
     </div>
   );
+}
+
+function APIKeyRow({
+  k,
+  confirming,
+  onConfirm,
+  onCancelConfirm,
+  onRevoke,
+}: {
+  k: APIKeySummary;
+  confirming: boolean;
+  onConfirm: () => void;
+  onCancelConfirm: () => void;
+  onRevoke: () => void;
+}) {
+  const { t } = useTranslation();
+  const expiresLabel = formatExpires(t, k.expires_at);
+  return (
+    <tr className={confirming ? "row-confirming" : undefined}>
+      <td style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>{k.id}</td>
+      <td>{k.subject}</td>
+      <td style={{ color: "var(--muted)", fontSize: 12 }}>
+        {k.workspace || t("admin.apiKeys.anyWorkspace")}
+      </td>
+      <td style={{ fontSize: 12 }}>
+        {k.roles.map((r) => r.name).join(", ")}
+      </td>
+      <td style={{ fontSize: 12, color: expiresLabel.tone }}>
+        {expiresLabel.text}
+      </td>
+      <td>
+        <StatusBadge status={k.status} />
+      </td>
+      <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+        {k.status === "active" &&
+          (confirming ? (
+            <span className="inline-confirm">
+              {t("admin.apiKeys.revokeReally")}{" "}
+              <button className="danger" onClick={onRevoke}>
+                {t("admin.apiKeys.revokeConfirmBtn")}
+              </button>
+              <button className="ghost" onClick={onCancelConfirm}>
+                {t("admin.apiKeys.cancel")}
+              </button>
+            </span>
+          ) : (
+            <button
+              className="ghost"
+              onClick={onConfirm}
+              title={t("admin.apiKeys.revokeTitle")}
+            >
+              <Trash2 size={14} />
+            </button>
+          ))}
+        {k.status === "revoked" && (
+          <span style={{ color: "var(--muted)", fontSize: 12 }}>
+            <ShieldOff size={12} style={{ verticalAlign: -1, marginRight: 4 }} />
+            {t("admin.apiKeys.revokedAlready")}
+          </span>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+function StatusBadge({ status }: { status: APIKeySummary["status"] }) {
+  const { t } = useTranslation();
+  // Map status to a label + tone class; CSS picks the colour from
+  // .key-status.<status>.
+  const label =
+    status === "active"
+      ? t("admin.apiKeys.statusActive")
+      : status === "expired"
+        ? t("admin.apiKeys.statusExpired")
+        : t("admin.apiKeys.statusRevoked");
+  return <span className={`key-status ${status}`}>{label}</span>;
+}
+
+// formatExpires turns the optional ISO timestamp into either an
+// absolute date + how-soon hint, or "never" with a muted tone. The
+// tone helps the operator spot keys that have already expired or are
+// about to.
+function formatExpires(
+  t: (key: string, opts?: Record<string, unknown>) => string,
+  iso: string | null | undefined,
+): { text: string; tone: string } {
+  if (!iso) {
+    return { text: t("admin.apiKeys.expiresNever"), tone: "var(--muted)" };
+  }
+  const when = new Date(iso);
+  const now = Date.now();
+  const days = Math.round((when.getTime() - now) / (24 * 60 * 60 * 1000));
+  const dateStr = when.toLocaleDateString();
+  if (days < 0) {
+    return {
+      text: t("admin.apiKeys.expiredOn", { date: dateStr }),
+      tone: "var(--danger)",
+    };
+  }
+  if (days <= 7) {
+    return {
+      text: t("admin.apiKeys.expiresSoon", { date: dateStr, days }),
+      tone: "var(--warning)",
+    };
+  }
+  return { text: dateStr, tone: "var(--ink)" };
 }

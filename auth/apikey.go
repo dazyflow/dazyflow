@@ -108,8 +108,10 @@ func (a *APIKeyAuthenticator) now() time.Time {
 // IssueAPIKey generates a fresh key for the given identity, persists the
 // hashed record in store, and returns both the record (for further
 // metadata writes) and the cleartext credential — show that exactly once
-// to the user, then forget it.
-func IssueAPIKey(store interface{ PutKey(context.Context, APIKey) error }, ctx context.Context, id, tenant, workspace, subject string, roles []core.Role) (APIKey, string, error) {
+// to the user, then forget it. expiresAt is optional: nil = never
+// expires (operator-issued, long-lived); a non-nil value stamps the
+// record so the authenticator rejects the key after that time.
+func IssueAPIKey(store interface{ PutKey(context.Context, APIKey) error }, ctx context.Context, id, tenant, workspace, subject string, roles []core.Role, expiresAt *time.Time) (APIKey, string, error) {
 	if id == "" {
 		return APIKey{}, "", fmt.Errorf("id required")
 	}
@@ -129,6 +131,7 @@ func IssueAPIKey(store interface{ PutKey(context.Context, APIKey) error }, ctx c
 		Roles:     roles,
 		Salt:      salt,
 		Hash:      sha256Salted(salt, secret),
+		ExpiresAt: expiresAt,
 	}
 	if err := store.PutKey(ctx, key); err != nil {
 		return APIKey{}, "", err

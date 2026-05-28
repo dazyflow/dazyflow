@@ -561,7 +561,7 @@ func main() {
 		adminRole := core.Role{Name: "admin", Permissions: []core.Permission{
 			core.PermTenantAdmin, core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
 		}}
-		_, ct, err := auth.IssueAPIKey(ks, ctx, "dev", "dev", "default", "dev@local", []core.Role{adminRole})
+		_, ct, err := auth.IssueAPIKey(ks, ctx, "dev", "dev", "default", "dev@local", []core.Role{adminRole}, nil)
 		if err != nil {
 			log.Fatalf("issue dev key: %v", err)
 		}

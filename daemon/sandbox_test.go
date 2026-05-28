@@ -78,7 +78,7 @@ func TestSandbox_E2E_FileReadWrite(t *testing.T) {
 	role := core.Role{Name: "editor", Permissions: []core.Permission{
 		core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
 	}}
-	_, _, _ = auth.IssueAPIKey(ks, t.Context(), "k", "acme", "ws1", "u", []core.Role{role})
+	_, _, _ = auth.IssueAPIKey(ks, t.Context(), "k", "acme", "ws1", "u", []core.Role{role}, nil)
 	p := core.Principal{Subject: "u", Tenant: "acme", Workspace: "ws1", Roles: []core.Role{role}}
 
 	wsStore, _ := workspace.OpenFS("")
@@ -152,7 +152,7 @@ func TestSandbox_E2E_CrossTenantIsolation(t *testing.T) {
 	role := core.Role{Name: "editor", Permissions: []core.Permission{
 		core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
 	}}
-	_, _, _ = auth.IssueAPIKey(ks, t.Context(), "k", "globex", "ws1", "u", []core.Role{role})
+	_, _, _ = auth.IssueAPIKey(ks, t.Context(), "k", "globex", "ws1", "u", []core.Role{role}, nil)
 	p := core.Principal{Subject: "u", Tenant: "globex", Workspace: "ws1", Roles: []core.Role{role}}
 
 	wsStore, _ := workspace.OpenFS("")

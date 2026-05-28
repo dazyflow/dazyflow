@@ -14,7 +14,7 @@ func TestAPIKey_RoundTrip(t *testing.T) {
 	store := NewMemKeyStore()
 	roles := []core.Role{{Name: "runner", Permissions: []core.Permission{core.PermGraphRun}}}
 
-	_, cleartext, err := IssueAPIKey(store, t.Context(), "k1", "acme", "ws1", "ci-bot", roles)
+	_, cleartext, err := IssueAPIKey(store, t.Context(), "k1", "acme", "ws1", "ci-bot", roles, nil)
 	if err != nil {
 		t.Fatalf("IssueAPIKey: %v", err)
 	}
@@ -37,7 +37,7 @@ func TestAPIKey_RoundTrip(t *testing.T) {
 
 func TestAPIKey_RejectsTampered(t *testing.T) {
 	store := NewMemKeyStore()
-	_, cleartext, _ := IssueAPIKey(store, t.Context(), "k1", "t", "", "u", nil)
+	_, cleartext, _ := IssueAPIKey(store, t.Context(), "k1", "t", "", "u", nil, nil)
 
 	// Flip a hex char in the secret portion.
 	tampered := cleartext[:len(cleartext)-1] + flipHex(cleartext[len(cleartext)-1])
@@ -49,7 +49,7 @@ func TestAPIKey_RejectsTampered(t *testing.T) {
 
 func TestAPIKey_RejectsRevoked(t *testing.T) {
 	store := NewMemKeyStore()
-	_, cleartext, _ := IssueAPIKey(store, t.Context(), "k1", "t", "", "u", nil)
+	_, cleartext, _ := IssueAPIKey(store, t.Context(), "k1", "t", "", "u", nil, nil)
 	_ = store.Revoke(t.Context(), "k1", time.Now())
 
 	auth := &APIKeyAuthenticator{Store: store}
@@ -61,8 +61,7 @@ func TestAPIKey_RejectsRevoked(t *testing.T) {
 func TestAPIKey_RejectsExpired(t *testing.T) {
 	store := NewMemKeyStore()
 	past := time.Now().Add(-time.Hour)
-	k, ct, _ := IssueAPIKey(store, t.Context(), "k1", "t", "", "u", nil)
-	k.ExpiresAt = &past
+	k, ct, _ := IssueAPIKey(store, t.Context(), "k1", "t", "", "u", nil, &past)
 	_ = store.PutKey(t.Context(), k)
 
 	auth := &APIKeyAuthenticator{Store: store}
@@ -101,7 +100,7 @@ func TestBearerFromHeader(t *testing.T) {
 
 func TestChain_FallsThrough(t *testing.T) {
 	store := NewMemKeyStore()
-	_, cleartext, _ := IssueAPIKey(store, t.Context(), "k1", "t", "", "u", nil)
+	_, cleartext, _ := IssueAPIKey(store, t.Context(), "k1", "t", "", "u", nil, nil)
 
 	chain := Chain{
 		alwaysReject{},

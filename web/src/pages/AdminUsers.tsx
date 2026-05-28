@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+// useEffect already imported above; no separate hooks needed.
 import { Link } from "react-router-dom";
 import {
   AlertCircle,
@@ -108,8 +109,14 @@ export function AdminUsers() {
         </div>
       )}
       {!loading && members.length === 0 && !error && (
-        <div className="card" style={{ color: "var(--muted)" }}>
-          {t("admin.users.empty")}
+        <div className="admin-empty">
+          <Users size={28} />
+          <h2>{t("admin.users.emptyTitle")}</h2>
+          <p>{t("admin.users.emptyBody")}</p>
+          <button className="primary" onClick={() => setInviting(true)}>
+            <Plus size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+            {t("admin.users.inviteFirst")}
+          </button>
         </div>
       )}
       <div className="user-list">
@@ -196,6 +203,12 @@ function MemberCard({
         </div>
         <div className="meta">
           {roleNames || t("admin.users.noRoles")}
+          {member.created_at && (
+            <>
+              {" · "}
+              {t("admin.users.joinedAt", { date: shortDate(member.created_at) })}
+            </>
+          )}
         </div>
       </div>
       <div className="user-card-actions">
@@ -265,6 +278,18 @@ function InvitationCard({
         <div className="meta">
           {inv.roles.map((r) => r.name).join(", ") || t("admin.users.noRoles")} ·{" "}
           {t("admin.users.invitedBy", { who: inv.invited_by })}
+          {inv.pending && inv.expires_at && (
+            <>
+              {" · "}
+              {t("admin.users.expiresAt", { date: shortDate(inv.expires_at) })}
+            </>
+          )}
+          {inv.accepted_at && (
+            <>
+              {" · "}
+              {t("admin.users.acceptedAt", { date: shortDate(inv.accepted_at) })}
+            </>
+          )}
         </div>
         {inv.pending && (
           <div className="invite-link-row">
@@ -347,19 +372,29 @@ function InviteModal({
   const [roleName, setRoleName] = useState<"editor" | "admin">("editor");
   const [submitting, setSubmitting] = useState(false);
 
+  const trimmed = email.trim();
+  const looksValid = trimmed === "" || EMAIL_RE.test(trimmed);
+  const canSubmit = !submitting && trimmed !== "" && looksValid;
+  const selectedRole = rolePresetFor(roleName);
+
+  // Esc closes the modal — small thing, big quality-of-life. Attached
+  // to the document so a focus inside the input still picks it up.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCancel();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!token) return;
-    if (!email.trim()) {
-      onError(t("admin.users.inviteEmailRequired"));
-      return;
-    }
+    if (!token || !canSubmit) return;
     setSubmitting(true);
     try {
-      const roles: Role[] = [rolePresetFor(roleName)];
       const inv = await api.createInvitation(token, {
-        email: email.trim(),
-        roles,
+        email: trimmed,
+        roles: [selectedRole],
       });
       onIssued(inv);
     } catch (e) {
@@ -391,8 +426,13 @@ function InviteModal({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="teammate@example.com"
+              className={!looksValid ? "invalid" : undefined}
             />
-            <div className="desc">{t("admin.users.inviteEmailDesc")}</div>
+            <div className="desc">
+              {!looksValid
+                ? t("admin.users.inviteEmailInvalid")
+                : t("admin.users.inviteEmailDesc")}
+            </div>
           </div>
           <div className="sf-field">
             <div className="label-row">
@@ -416,13 +456,21 @@ function InviteModal({
                 <div className="role-template-desc">{t("admin.users.roleAdminDesc")}</div>
               </button>
             </div>
+            <div className="role-perms-preview">
+              <span className="role-perms-label">
+                {t("admin.users.rolePermsLabel")}
+              </span>
+              {selectedRole.permissions.map((p) => (
+                <code key={p}>{p}</code>
+              ))}
+            </div>
           </div>
         </div>
         <div className="settings-foot">
           <button type="button" onClick={onCancel}>
             {t("admin.users.cancel")}
           </button>
-          <button type="submit" className="primary" disabled={submitting}>
+          <button type="submit" className="primary" disabled={!canSubmit}>
             {submitting ? t("admin.users.sending") : t("admin.users.sendInvite")}
           </button>
         </div>
@@ -468,3 +516,20 @@ function absoluteInviteURL(acceptURL: string): string {
   }
   return acceptURL;
 }
+
+// shortDate renders an ISO timestamp as the locale's short date form.
+// Used in the meta line on member + invitation cards, so the admin can
+// tell at a glance how stale an account or invitation is.
+function shortDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleDateString();
+  } catch {
+    return iso;
+  }
+}
+
+// EMAIL_RE is intentionally permissive — full RFC validation belongs
+// on the server. We just want to catch the obvious typos
+// ("teammate@example" without a TLD, missing @, etc.) before the user
+// clicks Send and waits for a round-trip.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

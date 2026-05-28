@@ -41,7 +41,7 @@ func newApprovalHarness(t *testing.T) *approvalHarness {
 		core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
 	}}
 	ks := auth.NewMemKeyStore()
-	_, _, _ = auth.IssueAPIKey(ks, t.Context(), "k", "t", "ws", "u", []core.Role{role})
+	_, _, _ = auth.IssueAPIKey(ks, t.Context(), "k", "t", "ws", "u", []core.Role{role}, nil)
 
 	svc := &daemon.Service{
 		Auth:   auth.Chain{&auth.APIKeyAuthenticator{Store: ks}},

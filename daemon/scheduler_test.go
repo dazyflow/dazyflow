@@ -23,7 +23,7 @@ func TestScheduler_FiresGraphWithCronTrigger(t *testing.T) {
 	role := core.Role{Name: "scheduler-test", Permissions: []core.Permission{
 		core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
 	}}
-	_, _, _ = auth.IssueAPIKey(ks, t.Context(), "k", "acme", "ws1", "u", []core.Role{role})
+	_, _, _ = auth.IssueAPIKey(ks, t.Context(), "k", "acme", "ws1", "u", []core.Role{role}, nil)
 
 	wsStore, _ := workspace.OpenFS("")
 	jobs := jobstore.NewMemory()

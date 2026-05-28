@@ -37,7 +37,7 @@ func newGatewayHarness(t *testing.T) *gatewayHarness {
 	role := core.Role{Name: "editor", Permissions: []core.Permission{
 		core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
 	}}
-	_, token, err := auth.IssueAPIKey(ks, t.Context(), "k1", "t", "ws", "alice", []core.Role{role})
+	_, token, err := auth.IssueAPIKey(ks, t.Context(), "k1", "t", "ws", "alice", []core.Role{role}, nil)
 	if err != nil {
 		t.Fatalf("issue key: %v", err)
 	}
@@ -64,7 +64,7 @@ func (h *gatewayHarness) adminDo(t *testing.T, method, path string, body any) *h
 	t.Helper()
 	if h.adminToken == "" {
 		role := core.Role{Name: "admin", Permissions: []core.Permission{core.PermTenantAdmin}}
-		_, tok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-admin", "t", "ws", "root", []core.Role{role})
+		_, tok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-admin", "t", "ws", "root", []core.Role{role}, nil)
 		if err != nil {
 			t.Fatalf("issue admin key: %v", err)
 		}
@@ -610,7 +610,7 @@ func TestHTTPGateway_ListAllRunsAcceptsWorkspaceNarrow(t *testing.T) {
 
 	// Issue an unscoped admin key for this tenant.
 	role := core.Role{Name: "ta", Permissions: []core.Permission{core.PermTenantAdmin}}
-	_, adminTok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-narrow-admin", "t", "", "root3", []core.Role{role})
+	_, adminTok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-narrow-admin", "t", "", "root3", []core.Role{role}, nil)
 	if err != nil {
 		t.Fatalf("issue: %v", err)
 	}
@@ -702,7 +702,7 @@ func TestHTTPGateway_ListPendingApprovalsAcceptsWorkspaceNarrow(t *testing.T) {
 		})
 	}
 	role := core.Role{Name: "ta", Permissions: []core.Permission{core.PermTenantAdmin}}
-	_, adminTok, _ := auth.IssueAPIKey(h.ks, t.Context(), "k-narrow-app-admin", "t", "", "root4", []core.Role{role})
+	_, adminTok, _ := auth.IssueAPIKey(h.ks, t.Context(), "k-narrow-app-admin", "t", "", "root4", []core.Role{role}, nil)
 
 	doAdmin := func(path string) []string {
 		req := httptest.NewRequest("GET", path, nil)
@@ -920,7 +920,7 @@ func TestHTTPGateway_ListWorkspaces_PlatformAdminNarrowsByTenant(t *testing.T) {
 	}
 	// Platform admin (no tenant binding).
 	role := core.Role{Name: "platform", Permissions: []core.Permission{core.PermPlatformAdmin}}
-	_, tok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-platform-ws", "", "", "op", []core.Role{role})
+	_, tok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-platform-ws", "", "", "op", []core.Role{role}, nil)
 	if err != nil {
 		t.Fatalf("issue: %v", err)
 	}
@@ -985,7 +985,7 @@ func TestHTTPGateway_ListWorkspaces_AdminSeesAllInTenant(t *testing.T) {
 	}
 	// Issue a tenant-admin key with NO workspace binding.
 	role := core.Role{Name: "tenant-admin", Permissions: []core.Permission{core.PermTenantAdmin}}
-	_, tok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-floating-admin", "t", "", "root2", []core.Role{role})
+	_, tok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-floating-admin", "t", "", "root2", []core.Role{role}, nil)
 	if err != nil {
 		t.Fatalf("issue: %v", err)
 	}
@@ -1120,12 +1120,12 @@ func TestHTTPGateway_PlatformAdminListsAcrossTenants(t *testing.T) {
 	// Issue keys in two different tenants. The bootstrap key is in
 	// tenant "t" already; add one in "other-tenant".
 	role := core.Role{Name: "r", Permissions: []core.Permission{core.PermGraphRun}}
-	if _, _, err := auth.IssueAPIKey(h.ks, t.Context(), "k-other", "other-tenant", "ws", "stranger", []core.Role{role}); err != nil {
+	if _, _, err := auth.IssueAPIKey(h.ks, t.Context(), "k-other", "other-tenant", "ws", "stranger", []core.Role{role}, nil); err != nil {
 		t.Fatalf("issue other-tenant: %v", err)
 	}
 	// Mint a platform admin key (no tenant binding).
 	platform := core.Role{Name: "platform", Permissions: []core.Permission{core.PermPlatformAdmin}}
-	_, platformTok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-platform", "", "", "op", []core.Role{platform})
+	_, platformTok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-platform", "", "", "op", []core.Role{platform}, nil)
 	if err != nil {
 		t.Fatalf("issue platform: %v", err)
 	}
@@ -1170,7 +1170,7 @@ func TestHTTPGateway_PlatformAdminListsAcrossTenants(t *testing.T) {
 func TestHTTPGateway_PlatformAdminCanIssueInAnyTenant(t *testing.T) {
 	h := newGatewayHarness(t)
 	platform := core.Role{Name: "platform", Permissions: []core.Permission{core.PermPlatformAdmin}}
-	_, platformTok, _ := auth.IssueAPIKey(h.ks, t.Context(), "k-platform-issue", "", "", "op", []core.Role{platform})
+	_, platformTok, _ := auth.IssueAPIKey(h.ks, t.Context(), "k-platform-issue", "", "", "op", []core.Role{platform}, nil)
 
 	body, _ := json.Marshal(map[string]any{
 		"subject": "first-customer-admin",

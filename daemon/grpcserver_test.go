@@ -44,7 +44,7 @@ func newHarness(t *testing.T) *harness {
 	editor := core.Role{Name: "editor", Permissions: []core.Permission{
 		core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
 	}}
-	_, key, err := auth.IssueAPIKey(ks, t.Context(), "k", "acme", "ws1", "u", []core.Role{editor})
+	_, key, err := auth.IssueAPIKey(ks, t.Context(), "k", "acme", "ws1", "u", []core.Role{editor}, nil)
 	if err != nil {
 		t.Fatalf("issue key: %v", err)
 	}

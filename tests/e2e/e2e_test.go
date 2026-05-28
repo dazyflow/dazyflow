@@ -34,11 +34,11 @@ func setupStack(t *testing.T) (*daemon.Service, string, string) {
 		Permissions: []core.Permission{core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin},
 	}
 
-	_, aliceKey, err := auth.IssueAPIKey(ks, t.Context(), "alice", "acme", "ws1", "alice@acme", []core.Role{editorRole})
+	_, aliceKey, err := auth.IssueAPIKey(ks, t.Context(), "alice", "acme", "ws1", "alice@acme", []core.Role{editorRole}, nil)
 	if err != nil {
 		t.Fatalf("issue alice key: %v", err)
 	}
-	_, bobKey, err := auth.IssueAPIKey(ks, t.Context(), "bob", "globex", "ws1", "bob@globex", []core.Role{otherRole})
+	_, bobKey, err := auth.IssueAPIKey(ks, t.Context(), "bob", "globex", "ws1", "bob@globex", []core.Role{otherRole}, nil)
 	if err != nil {
 		t.Fatalf("issue bob key: %v", err)
 	}

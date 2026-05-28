@@ -301,6 +301,10 @@ export const api = {
       tenant?: string;
       workspace?: string;
       roles: Role[];
+      // ISO-8601 timestamp. Omit (or undefined) = the key never
+      // expires (operator default). When set, the daemon rejects the
+      // key after this time and the table flips it to "expired".
+      expires_at?: string;
     },
   ) => request<IssuedAPIKey>(token, "POST", "/admin/api-keys", params),
   revokeAPIKey: (token: string, id: string) =>

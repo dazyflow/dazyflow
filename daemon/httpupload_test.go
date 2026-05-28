@@ -135,7 +135,7 @@ func TestUpload_RequiresEditPermission(t *testing.T) {
 	// Issue a runner-only key (graph:run, no graph:edit).
 	h, _ := newUploadHarness(t)
 	role := core.Role{Name: "runner", Permissions: []core.Permission{core.PermGraphRun}}
-	_, runnerTok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-runner", "t", "ws", "bob", []core.Role{role})
+	_, runnerTok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-runner", "t", "ws", "bob", []core.Role{role}, nil)
 	if err != nil {
 		t.Fatalf("issue: %v", err)
 	}

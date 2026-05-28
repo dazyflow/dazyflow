@@ -3071,6 +3071,66 @@
   color: var(--muted);
   line-height: 1.4;
 }
+
+/* Role permissions preview on InviteModal — chips appearing below the
+   role-template picker so the inviter can see exactly what they're
+   about to grant before they click. */
+.role-perms-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 11px;
+}
+.role-perms-preview .role-perms-label {
+  color: var(--muted);
+  margin-right: 4px;
+}
+.role-perms-preview code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--surface-2);
+  border-radius: var(--r-1);
+  padding: 2px 6px;
+  color: var(--ink);
+}
+
+/* Invalid-state for the InviteModal email input so the user sees the
+   form pushing back before they click Create. */
+.settings-dialog input.invalid {
+  border-color: var(--warning);
+}
+.settings-dialog input.invalid:focus {
+  outline-color: var(--warning);
+}
+
+/* Expiry picker on IssueKeyModal — 4 equal pills. Reuses .role-template
+   styling concepts but tighter (one-word labels). */
+.expiry-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-2);
+}
+.expiry-choice {
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 120ms, background 120ms;
+}
+.expiry-choice:hover {
+  background: var(--surface-2);
+}
+.expiry-choice.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  font-weight: 600;
+}
 .secret-reveal {
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -3184,6 +3244,99 @@
 .key-status.revoked {
   background: color-mix(in srgb, var(--danger) 18%, transparent);
   color: var(--danger);
+}
+
+/* AdminAPIKeys polish ------------------------------------------------ */
+
+/* Toolbar above the keys table — search input + count summary. */
+.api-key-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.api-key-search {
+  position: relative;
+  flex: 1;
+  max-width: 360px;
+}
+.api-key-search svg {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
+}
+.api-key-search input[type="search"] {
+  width: 100%;
+  padding: 8px 12px 8px 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  background: var(--surface);
+  font-size: 13px;
+}
+.api-key-search input[type="search"]:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.api-key-count {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Inline confirm pattern on a table row — keeps the operator's eye on
+   the row they're about to mutate instead of bouncing to a modal. */
+.inline-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.inline-confirm button.danger {
+  background: var(--danger);
+  color: white;
+  border: none;
+  border-radius: var(--r-1);
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.inline-confirm button.danger:hover {
+  filter: brightness(1.1);
+}
+.run-table tr.row-confirming {
+  background: color-mix(in srgb, var(--danger) 6%, transparent);
+}
+
+/* Empty-state card used across admin pages when the resource list is
+   genuinely empty (first-time use). Tries to look inviting rather than
+   like an error. */
+.admin-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: var(--r-3);
+  padding: var(--space-6) var(--space-4);
+  color: var(--muted);
+}
+.admin-empty svg {
+  color: var(--accent);
+  margin-bottom: var(--space-3);
+}
+.admin-empty h2 {
+  margin: 0 0 6px 0;
+  font-size: 16px;
+  color: var(--ink);
+}
+.admin-empty p {
+  margin: 0 0 var(--space-4) 0;
+  max-width: 480px;
+  line-height: 1.5;
 }
 
 /* Approvals inbox */

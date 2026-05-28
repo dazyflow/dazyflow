@@ -55,7 +55,7 @@ func newFuzzHarness(f *testing.F) *fuzzHarness {
 		core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
 		core.PermSecretRead, core.PermSecretWrite, core.PermTenantAdmin,
 	}}
-	_, token, err := auth.IssueAPIKey(ks, context.Background(), "k1", "t", "ws", "alice", []core.Role{role})
+	_, token, err := auth.IssueAPIKey(ks, context.Background(), "k1", "t", "ws", "alice", []core.Role{role}, nil)
 	if err != nil {
 		f.Fatalf("issue key: %v", err)
 	}

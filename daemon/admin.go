@@ -37,6 +37,11 @@ type IssueAPIKeyParams struct {
 	Tenant    string      `json:"tenant"`
 	Workspace string      `json:"workspace"`
 	Roles     []core.Role `json:"roles"`
+	// ExpiresAt is optional. nil/zero = the key never expires (the
+	// current behavior for operator-issued long-lived tokens). When
+	// set, the authenticator rejects the key after this time and the
+	// admin UI surfaces the date next to the key's row.
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
 // IssuedAPIKey is what comes back from a successful issue. The Secret
@@ -107,7 +112,7 @@ func (s *Service) IssueAPIKey(ctx context.Context, p core.Principal, params Issu
 	if workspace == "" {
 		workspace = p.Workspace
 	}
-	key, secret, err := auth.IssueAPIKey(s.AdminKeys, ctx, id, tenant, workspace, params.Subject, params.Roles)
+	key, secret, err := auth.IssueAPIKey(s.AdminKeys, ctx, id, tenant, workspace, params.Subject, params.Roles, params.ExpiresAt)
 	if err != nil {
 		return IssuedAPIKey{}, err
 	}

@@ -35,7 +35,7 @@ func TestHTTPGateway_E2E_SubmitAndStreamSSE(t *testing.T) {
 	role := core.Role{Name: "editor", Permissions: []core.Permission{
 		core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
 	}}
-	_, token, err := auth.IssueAPIKey(ks, t.Context(), "k", "t", "ws", "alice", []core.Role{role})
+	_, token, err := auth.IssueAPIKey(ks, t.Context(), "k", "t", "ws", "alice", []core.Role{role}, nil)
 	if err != nil {
 		t.Fatalf("issue: %v", err)
 	}
@@ -165,7 +165,7 @@ func TestHTTPGateway_E2E_PerNodeSSE(t *testing.T) {
 	role := core.Role{Name: "editor", Permissions: []core.Permission{
 		core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
 	}}
-	_, token, err := auth.IssueAPIKey(ks, t.Context(), "k", "t", "ws", "alice", []core.Role{role})
+	_, token, err := auth.IssueAPIKey(ks, t.Context(), "k", "t", "ws", "alice", []core.Role{role}, nil)
 	if err != nil {
 		t.Fatalf("issue: %v", err)
 	}

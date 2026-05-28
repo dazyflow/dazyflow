@@ -53,6 +53,26 @@ export const ALL_PERMISSIONS: Permission[] = [
   "tenant:admin",
 ];
 
+type ExpiryChoice = "never" | "30d" | "90d" | "1y";
+
+const EXPIRY_CHOICES: { id: ExpiryChoice; labelKey: string; days?: number }[] = [
+  { id: "never", labelKey: "issueKey.expiryNever" },
+  { id: "30d", labelKey: "issueKey.expiry30d", days: 30 },
+  { id: "90d", labelKey: "issueKey.expiry90d", days: 90 },
+  { id: "1y", labelKey: "issueKey.expiry1y", days: 365 },
+];
+
+// expiryToISO converts the dropdown choice into an ISO timestamp the
+// daemon parses into time.Time. "never" yields undefined so the
+// expires_at field is omitted from the JSON body entirely.
+function expiryToISO(choice: ExpiryChoice): string | undefined {
+  const entry = EXPIRY_CHOICES.find((c) => c.id === choice);
+  if (!entry?.days) return undefined;
+  const when = new Date();
+  when.setDate(when.getDate() + entry.days);
+  return when.toISOString();
+}
+
 type Props = {
   // Pre-fill the subject when issuing from a user's detail card.
   initialSubject?: string;
@@ -75,6 +95,9 @@ export function IssueKeyModal({
   const [perms, setPerms] = useState<Set<Permission>>(
     new Set(["graph:run"] as Permission[]),
   );
+  // expiry is the dropdown value; "never" omits expires_at in the
+  // request entirely (matches the historic operator-default).
+  const [expiry, setExpiry] = useState<ExpiryChoice>("never");
   const [submitting, setSubmitting] = useState(false);
 
   const applyTemplate = (id: string) => {
@@ -122,6 +145,7 @@ export function IssueKeyModal({
         // sending activeTenant is safe for everyone.
         tenant: activeTenant || undefined,
         roles: [role],
+        expires_at: expiryToISO(expiry),
       });
       onIssued(issued);
     } catch (e) {
@@ -222,6 +246,31 @@ export function IssueKeyModal({
             </div>
             <div className="desc">
               <Trans i18nKey="issueKey.tenantAdminWarning" components={[<strong />]} />
+            </div>
+          </div>
+
+          <div className="sf-field">
+            <div className="label-row">
+              <label>{t("issueKey.expiryLabel")}</label>
+            </div>
+            <div className="expiry-grid">
+              {EXPIRY_CHOICES.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className={"expiry-choice" + (expiry === c.id ? " active" : "")}
+                  onClick={() => setExpiry(c.id)}
+                >
+                  {t(c.labelKey)}
+                </button>
+              ))}
+            </div>
+            <div className="desc">
+              {expiry === "never"
+                ? t("issueKey.expiryNeverDesc")
+                : t("issueKey.expirySetDesc", {
+                    date: new Date(expiryToISO(expiry) ?? "").toLocaleDateString(),
+                  })}
             </div>
           </div>
         </div>

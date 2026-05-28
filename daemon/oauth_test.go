@@ -100,7 +100,7 @@ func newOAuthHarness(t *testing.T) (*gatewayHarness, *fakeProvider) {
 		core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
 		core.PermSecretRead, core.PermSecretWrite,
 	}}
-	_, tok, err := auth.IssueAPIKey(h.ks, t.Context(), "oauth-key", "t", "ws", "alice", []core.Role{role})
+	_, tok, err := auth.IssueAPIKey(h.ks, t.Context(), "oauth-key", "t", "ws", "alice", []core.Role{role}, nil)
 	if err != nil {
 		t.Fatalf("issue token: %v", err)
 	}
@@ -276,7 +276,7 @@ func TestHTTPOAuth_AuthorizeRequiresSecretWrite(t *testing.T) {
 	// Runner-only role lacks secret:write → 403.
 	h, _ := newOAuthHarness(t)
 	role := core.Role{Name: "runner", Permissions: []core.Permission{core.PermGraphRun}}
-	_, tok, _ := auth.IssueAPIKey(h.ks, t.Context(), "runner", "t", "ws", "bob", []core.Role{role})
+	_, tok, _ := auth.IssueAPIKey(h.ks, t.Context(), "runner", "t", "ws", "bob", []core.Role{role}, nil)
 	req := httptest.NewRequest("GET", "/api/v1/oauth/test/authorize", nil)
 	req.Header.Set("Authorization", "Bearer "+tok)
 	rw := httptest.NewRecorder()

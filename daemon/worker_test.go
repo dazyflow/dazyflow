@@ -33,7 +33,7 @@ func newWorkerHarness(t *testing.T, workerCount int) *workerHarness {
 	role := core.Role{Name: "editor", Permissions: []core.Permission{
 		core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
 	}}
-	_, _, err := auth.IssueAPIKey(ks, t.Context(), "k", "t", "ws", "u", []core.Role{role})
+	_, _, err := auth.IssueAPIKey(ks, t.Context(), "k", "t", "ws", "u", []core.Role{role}, nil)
 	if err != nil {
 		t.Fatalf("issue key: %v", err)
 	}

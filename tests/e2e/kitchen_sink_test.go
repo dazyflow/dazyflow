@@ -120,7 +120,7 @@ func newFullStack(t *testing.T, quotaBytes int64) *fullStack {
 	role := core.Role{Name: "editor", Permissions: []core.Permission{
 		core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
 	}}
-	_, _, _ = auth.IssueAPIKey(ks, t.Context(), "k", "acme", "ws1", "u", []core.Role{role})
+	_, _, _ = auth.IssueAPIKey(ks, t.Context(), "k", "acme", "ws1", "u", []core.Role{role}, nil)
 	p := core.Principal{Subject: "u", Tenant: "acme", Workspace: "ws1", Roles: []core.Role{role}}
 
 	wsStore, _ := workspace.OpenFS("")

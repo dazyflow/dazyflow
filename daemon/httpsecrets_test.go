@@ -34,7 +34,7 @@ func newSecretsHarness(t *testing.T) *gatewayHarness {
 		core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
 		core.PermSecretRead, core.PermSecretWrite,
 	}}
-	_, tok, err := auth.IssueAPIKey(h.ks, t.Context(), "secret-key", "t", "ws", "alice", []core.Role{role})
+	_, tok, err := auth.IssueAPIKey(h.ks, t.Context(), "secret-key", "t", "ws", "alice", []core.Role{role}, nil)
 	if err != nil {
 		t.Fatalf("issue secret token: %v", err)
 	}
@@ -161,7 +161,7 @@ func TestHTTPSecrets_RequiresWritePermission(t *testing.T) {
 	// Runner-only role (graph:run, no secret:write) → PUT 403.
 	h := newSecretsHarness(t)
 	role := core.Role{Name: "runner", Permissions: []core.Permission{core.PermGraphRun}}
-	_, tok, _ := auth.IssueAPIKey(h.ks, t.Context(), "runner-key", "t", "ws", "bob", []core.Role{role})
+	_, tok, _ := auth.IssueAPIKey(h.ks, t.Context(), "runner-key", "t", "ws", "bob", []core.Role{role}, nil)
 
 	req := httptest.NewRequest("PUT", "/api/v1/secrets/k", bytes.NewBuffer(putBody("v")))
 	req.Header.Set("Authorization", "Bearer "+tok)
@@ -177,7 +177,7 @@ func TestHTTPSecrets_RequiresReadPermissionForList(t *testing.T) {
 	// Same as above but for GET.
 	h := newSecretsHarness(t)
 	role := core.Role{Name: "runner", Permissions: []core.Permission{core.PermGraphRun}}
-	_, tok, _ := auth.IssueAPIKey(h.ks, t.Context(), "runner-key", "t", "ws", "bob", []core.Role{role})
+	_, tok, _ := auth.IssueAPIKey(h.ks, t.Context(), "runner-key", "t", "ws", "bob", []core.Role{role}, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/secrets", nil)
 	req.Header.Set("Authorization", "Bearer "+tok)
