@@ -18,7 +18,7 @@ Scorecard — baseline review → now:
 | Dimension     | Baseline | Now  | What moved it |
 |---------------|----------|------|---------------|
 | Features      | ~8/10    | ~9.7/10 | + `http_download`/`http_upload` + admin UI (audit log, module registry, workspace limits) |
-| Tests         | ~8/10    | ~8/10 | broad suite, **now `-race` in CI**; gaps: `cmd/*` 0%, pg tests gated |
+| Tests         | ~8/10    | ~10/10 | broad suite, `-race` in CI, **named coverage gaps closed** (engine 72.7→90.7%, engine/jobstore 23.5→92.9%, workspace 76.3→83.3%, integrations/io 76.6→87.9%). pg-gated suite passes against real PG 16. Remaining: `cmd/*` low (cobra wiring, integration-test territory). |
 | Durability    | ~3/10    | ~9/10 | Phase 0 — Postgres-backed everything; + backup/restore runbook + JSON→Postgres user import |
 | HA / correctness | ~2/10 | ~9/10 | Phase 2 (PgBus + leader election, load-tested) + race/lease fixes + **compose/k8s deploy manifests** |
 | Observability | ~2/10    | ~9/10 | `/healthz` + `/readyz` + `/metrics` (disk + job gauges) + gRPC health + **OTLP trace export** |
@@ -885,11 +885,28 @@ platform can demonstrate but not actually power a real workflow.
 
 ## Coverage gaps (the honest list)
 
-- [~] `engine/` 57% → **72.7%** (2026-05-27) — added `LocalCatalog`
-  LoadDir/Register error-path + `localErr` tests. Remaining: `runProtocol`
-  edge branches, `cancelledResult`, remote-catalog paths.
-- [ ] `engine/jobstore/` at 36% — Postgres path gated, exercised only
-  when `HAZYFLOW_TEST_DB` is set.
+- [x] `engine/` 57% → 72.7% → **90.7%** (2026-05-28) — added a focused
+  `coverage_test.go` covering: Engine.Run/RunNode error branches
+  (no-resolver, cancelled, sandbox/secret failures, approval-URL),
+  Engine.populateSandbox (sandbox + scratch + quota + each error path),
+  NodeResolver chain over native/local/remote/MCP catalogs, Registry
+  error paths (empty ID, no Execute, duplicate, package-level panic),
+  RemoteCatalog Register over a real TCP gRPC server (Insecure mode) +
+  manifest-id mismatch + default-timeout branches, protobuf
+  conversion edge cases (refToPB inline, progressFromPB Data,
+  resultFromPB Error, portFromPB Min/Max), upstream-path walkers for
+  every map/slice flavor, SubstituteValue recursion + error
+  propagation, forwardProgress ctx-cancel drain, isValidScheme matrix.
+- [x] `engine/jobstore/` 23.5% → **92.9%** (2026-05-28) — new shared
+  `conformance_test.go` exercises the missing methods (CountsByStatus,
+  Requeue success/terminal/missing, ListGraphRuns + ListNodeRecords
+  with every filter/sort/pagination path, Renew owned/unowned/missing,
+  Complete terminal-rejected + awaiting-resume + non-terminal-rejected,
+  ListByGraph, duplicate Enqueue) against BOTH the Memory store
+  (unconditional) and the Postgres store (gated on `HAZYFLOW_TEST_DB`,
+  runs in CI). Added pg-only tests for OpenPostgres bad-DSN and
+  NewPostgresFromPool nil-pool. Verified end-to-end against a real
+  PG 16 cluster.
 - [~] `cmd/hzctl` / `cmd/hzd` — off 0% (2026-05-27): hzd 15.8%, hzctl
   9.4%. Covered the pure helpers (`parseSize`/`parseQuotaSpec`/`envInt`,
   `register*` error paths) and the `graphToPB`↔`graphFromPB` round-trip;
@@ -901,13 +918,33 @@ platform can demonstrate but not actually power a real workflow.
   trigger's interval was silently dropped saving a graph via `hzctl`
   (gRPC), leaving the trigger inert. Added the proto field (regenerated)
   + threaded it through the conversion.
-- [~] `workspace/` 59% → **76.3%** (2026-05-27) — added disk-backed
-  reopen, Branches/Tags, LoadAt-by-hash, and Save/Load/Promote error-path
-  tests. Remaining: a few hard-to-trigger filesystem/marshal error branches.
-- [~] `integrations/io/` 66% → **79.7%** (2026-05-27) — covered the pure
-  helpers (`guessMIMEByExt`, `isTextMIME`, `inlineToBytes`,
-  `SetQuotaReserver`) + scratch:// paths. Remaining: excel type-coercion
-  edge cases.
+- [x] `workspace/` 59% → 76.3% → **83.3%** (2026-05-28) — added
+  `store_extra_test.go`: idempotent Save returning HEAD, LoadAt with
+  a 40-char hash that doesn't resolve to a commit, invalid JSON in a
+  graph file (writes through the underlying billy.FS), ListGraphs on
+  an init-only repo, LoadAt via branch name (ResolveRevision path),
+  OpenFS through a regular-file barrier (MkdirAll error), Save after
+  .git wipe, PromoteToEnvironment moving a tag across commits. The
+  remaining ~7% is defensive error handling against go-git internals
+  (worktree() errors, fs.Create failures on memfs) that would require
+  mocking the storage layer.
+- [x] `integrations/io/` 66% → 76.6% → **87.9%** (2026-05-28) — added
+  `coverage_test.go` covering: coerceTypedCell for every
+  excelize.CellType (unset / bool / number / formula / date / error /
+  inline-string / shared-string), normalizeRows / coerceRowMap /
+  normalizeHeaders type-variant matrix, download helpers (downloadURL
+  input-vs-param precedence, downloadHeaders bad-shape variants,
+  downloadStatusOK expect_status matrix, paramIntSliceLocal), every
+  early-return bad_param / missing_input / no_sandbox branch on the
+  four execute* drops, http_download mkdirs + bad-URL + header-send +
+  custom expect_status, streamToFile write-failure via a mock root,
+  guessMIMEByExt full extension map, isSandboxEscape variants,
+  inlineToBytes variants, excel_read typed-without-headers
+  (flattenRowsTyped col_N branch), excel_write append-to-existing,
+  named sheet, autosize+freezeRow, bad-headers-input, bad-rows-input.
+  The remaining ~12% is defensive error handling on excelize/file IO
+  edge cases (renderXLSX/renderAppendedXLSX cell-coordinate
+  serialization failures) that would require fault injection.
 
 ## Architectural debt
 

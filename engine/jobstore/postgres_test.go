@@ -99,6 +99,49 @@ func TestPostgres_MaxConcurrentPerTenant(t *testing.T) {
 	}
 }
 
+// TestPostgres_Conformance runs the shared store-conformance suite
+// against real Postgres. Each subtest truncates jobs first so they don't
+// interfere with each other.
+func TestPostgres_Conformance(t *testing.T) {
+	url := os.Getenv("HAZYFLOW_TEST_DB")
+	if url == "" {
+		t.Skip("set HAZYFLOW_TEST_DB to run Postgres integration tests")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	store, err := OpenPostgres(ctx, url)
+	if err != nil {
+		t.Fatalf("OpenPostgres: %v", err)
+	}
+	t.Cleanup(store.Close)
+	runConformance(t, func(t *testing.T) core.JobStore {
+		_, err := store.pool.Exec(ctx, "TRUNCATE jobs")
+		if err != nil {
+			t.Fatalf("TRUNCATE: %v", err)
+		}
+		return store
+	})
+}
+
+// TestPostgres_OpenPostgres_BadDSN covers the connect / schema failure
+// paths so the OpenPostgres + NewPostgresFromPool branches that return
+// errors get exercised.
+func TestPostgres_OpenPostgres_BadDSN(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	// pgxpool.New rejects an obviously malformed DSN synchronously.
+	if _, err := OpenPostgres(ctx, "not-a-valid-dsn"); err == nil {
+		t.Errorf("OpenPostgres on bad DSN: want error, got nil")
+	}
+}
+
+// TestPostgres_NewPostgresFromPool_NilPool exercises the nil-pool guard.
+func TestPostgres_NewPostgresFromPool_NilPool(t *testing.T) {
+	if _, err := NewPostgresFromPool(t.Context(), nil); err == nil {
+		t.Errorf("NewPostgresFromPool(nil) = nil, want error")
+	}
+}
+
 // TestPostgres_CompleteOwned_FencesNonOwner mirrors the memory test
 // against real Postgres. Skipped unless HAZYFLOW_TEST_DB is set.
 func TestPostgres_CompleteOwned_FencesNonOwner(t *testing.T) {
