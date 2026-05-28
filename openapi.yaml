@@ -1,0 +1,1602 @@
+openapi: 3.1.0
+
+# Hazy Flow REST API — single source of truth for the gateway.
+#
+# This spec is intentionally LLM-friendly: every resource has a one-
+# sentence summary, every error response uses the same envelope, every
+# action endpoint uses the `:verb` suffix so non-CRUD calls stand out.
+# See API_DESIGN.md for the design rationale.
+
+info:
+  title: Hazy Flow
+  version: "1.0.0"
+  description: |
+    The Hazy Flow gateway. One surface for humans, scripts, and LLM
+    agents — the web UI, the `hz-mcp` MCP server, and any third-party
+    integrations all talk to these endpoints.
+
+    Auth is bearer-token. Session cookies are also accepted for
+    browser callers but undocumented here.
+
+    Discoverability:
+      - `GET /api/v1` — service descriptor + links to everything below.
+      - `GET /api/v1/openapi.json` — this document, served live.
+      - `GET /api/v1/catalog` — a one-page summary of installed
+        integrations and drops, sized to fit in one LLM context.
+
+  contact:
+    name: Hazy Flow
+    url: https://hazy.flow
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+
+servers:
+  - url: https://api.hazy.flow
+    description: Production
+  - url: /
+    description: Same-origin (e.g. local dev gateway, self-hosted deployments)
+
+# Bearer auth applies to every operation unless explicitly overridden.
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Discovery
+    description: Entry points an LLM or new client uses to learn the API.
+  - name: Catalog
+    description: Installed integrations and the drops they expose.
+  - name: Flows
+    description: Authoring and listing flows (called "graphs" internally).
+  - name: Runs
+    description: Execution history and live event streams.
+  - name: Secrets
+    description: Per-workspace secret storage (write-only values).
+  - name: Connections
+    description: OAuth connections to third-party services.
+  - name: Identity
+    description: Who am I, what can I do, my API keys.
+  - name: Admin
+    description: Tenant-scoped administration (api keys, members, audit, sso).
+  - name: Auth
+    description: Sign-in flows.
+
+paths:
+
+  # ---------- Discovery ------------------------------------------------
+
+  /api/v1:
+    get:
+      tags: [Discovery]
+      operationId: getServiceDescriptor
+      summary: Service descriptor
+      description: |
+        The single entry point. Returns the API version, the auth
+        scheme, and a `links` block pointing at every top-level
+        resource. An LLM or new client starts here and follows links
+        — it should never need to memorize a URL.
+      security: []
+      responses:
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ServiceDescriptor" }
+
+  /api/v1/openapi.json:
+    get:
+      tags: [Discovery]
+      operationId: getOpenAPISpec
+      summary: This spec, served live
+      security: []
+      responses:
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { type: object }
+
+  /api/v1/catalog:
+    get:
+      tags: [Catalog]
+      operationId: getCatalog
+      summary: One-page summary of installed integrations and drops
+      description: |
+        Sized to fit comfortably in one LLM context window. For the
+        full per-integration or per-drop detail, follow the `links`.
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CatalogSummary" }
+
+  /api/v1/catalog/integrations:
+    get:
+      tags: [Catalog]
+      operationId: listIntegrations
+      summary: List installed integrations
+      parameters:
+        - $ref: "#/components/parameters/PageToken"
+        - $ref: "#/components/parameters/PageSize"
+        - name: q
+          in: query
+          schema: { type: string }
+          description: "Free-text search across label, summary, tags."
+        - { name: category, in: query, schema: { $ref: "#/components/schemas/Category" } }
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Page"
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: "#/components/schemas/IntegrationSummary" }
+
+  /api/v1/catalog/integrations/{integration_id}:
+    parameters:
+      - $ref: "#/components/parameters/IntegrationID"
+    get:
+      tags: [Catalog]
+      operationId: getIntegration
+      summary: One integration's detail page
+      description: |
+        The full description of an integration — what it does, how it
+        authenticates, which drops it exposes, and worked examples.
+        This is the page an LLM reads before composing a flow that
+        uses the integration.
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Integration" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/catalog/drops:
+    get:
+      tags: [Catalog]
+      operationId: listDrops
+      summary: Search the drop catalog
+      description: |
+        A "drop" is one node type (Slack send message, HTTP request,
+        branch, etc.). The catalog is in-memory; queries are cheap.
+      parameters:
+        - { name: q,           in: query, schema: { type: string } }
+        - { name: category,    in: query, schema: { $ref: "#/components/schemas/Category" } }
+        - { name: integration, in: query, schema: { type: string } }
+        - { name: tag,         in: query, schema: { type: string } }
+        - $ref: "#/components/parameters/PageToken"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Page"
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: "#/components/schemas/DropSummary" }
+
+  /api/v1/catalog/drops/{drop_id}:
+    parameters:
+      - $ref: "#/components/parameters/DropID"
+    get:
+      tags: [Catalog]
+      operationId: getDrop
+      summary: Full description of one drop
+      description: |
+        Includes the params JSON Schema, mandatory worked examples,
+        I/O ports, and execution metadata. This is what an LLM
+        consumes to call the drop correctly the first time.
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Drop" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ---------- Identity (me) -------------------------------------------
+
+  /api/v1/me:
+    get:
+      tags: [Identity]
+      operationId: getMe
+      summary: Who am I, what can I do
+      description: |
+        Returns the calling principal plus a `links` block pointing
+        at the resources they can access. Replaces v0 `whoami`.
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+
+  /api/v1/me/api-keys:
+    get:
+      tags: [Identity]
+      operationId: listMyAPIKeys
+      summary: List API keys issued to me
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/APIKeySummary" }
+    post:
+      tags: [Identity]
+      operationId: issueMyAPIKey
+      summary: Self-issue an API key scoped to me
+      description: |
+        The key inherits the caller's tenant + workspace and is
+        capped by the caller's own permissions — no escalation.
+        Used by the Connect MCP modal, so the default role
+        (`claude-mcp`) is wired with the minimum the MCP server
+        needs. Returns the secret exactly once.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SelfIssueAPIKeyRequest" }
+      responses:
+        "201":
+          description: issued
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IssuedAPIKey" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/v1/me/api-keys/{key_id}:
+    parameters:
+      - { name: key_id, in: path, required: true, schema: { type: string } }
+    delete:
+      tags: [Identity]
+      operationId: revokeMyAPIKey
+      summary: Revoke one of my keys
+      responses:
+        "204": { description: revoked }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ---------- Flows ---------------------------------------------------
+
+  /api/v1/me/flows:
+    get:
+      tags: [Flows]
+      operationId: listFlows
+      summary: List my flows
+      parameters:
+        - { name: q,           in: query, schema: { type: string } }
+        - name: integration
+          in: query
+          schema: { type: string }
+          description: "Any flow using this integration."
+        - { name: status,      in: query, schema: { $ref: "#/components/schemas/FlowStatus" } }
+        - { name: owner,       in: query, schema: { type: string } }
+        - $ref: "#/components/parameters/PageToken"
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/Sort"
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Page"
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: "#/components/schemas/FlowSummary" }
+    post:
+      tags: [Flows]
+      operationId: createFlow
+      summary: Create a flow
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FlowCreate" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Flow" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /api/v1/me/flows/{flow_id}:
+    parameters:
+      - $ref: "#/components/parameters/FlowID"
+    get:
+      tags: [Flows]
+      operationId: getFlow
+      summary: Read a flow
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Flow" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Flows]
+      operationId: replaceFlow
+      summary: Replace a flow (full document)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Flow" }
+      responses:
+        "200":
+          description: replaced
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Flow" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    patch:
+      tags: [Flows]
+      operationId: patchFlow
+      summary: Merge-patch a flow (RFC 7396)
+      description: |
+        Targeted edits: add a node, rewire an edge, change a label.
+        Recommended path for an LLM building a flow incrementally.
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json:
+            schema: { type: object }
+      responses:
+        "200":
+          description: patched
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Flow" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    delete:
+      tags: [Flows]
+      operationId: deleteFlow
+      summary: Delete a flow
+      description: Fails 409 if a non-terminal run exists.
+      responses:
+        "204": { description: deleted }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  "/api/v1/me/flows/{flow_id}:run":
+    parameters:
+      - $ref: "#/components/parameters/FlowID"
+    post:
+      tags: [Flows]
+      operationId: runFlow
+      summary: Run a flow
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RunRequest" }
+      responses:
+        "202":
+          description: accepted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Run" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  "/api/v1/me/flows/{flow_id}:validate":
+    parameters:
+      - $ref: "#/components/parameters/FlowID"
+    post:
+      tags: [Flows]
+      operationId: validateFlow
+      summary: Lint a flow without saving
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ValidationReport" }
+
+  "/api/v1/me/flows/{flow_id}:test-trigger":
+    parameters:
+      - $ref: "#/components/parameters/FlowID"
+    post:
+      tags: [Flows]
+      operationId: testTriggerFlow
+      summary: Simulate a trigger payload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TestTriggerRequest" }
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "202":
+          description: accepted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Run" }
+
+  "/api/v1/me/flows/{flow_id}/nodes/{node_id}:sample":
+    parameters:
+      - $ref: "#/components/parameters/FlowID"
+      - { name: node_id, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [Flows]
+      operationId: sampleFlowNode
+      summary: Sample a single node with synthetic input
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NodeSampleResult" }
+
+  # ---------- Runs ----------------------------------------------------
+
+  /api/v1/me/runs:
+    get:
+      tags: [Runs]
+      operationId: listRuns
+      summary: List runs
+      parameters:
+        - { name: flow_id,   in: query, schema: { type: string } }
+        - { name: status,    in: query, schema: { $ref: "#/components/schemas/RunStatus" } }
+        - { name: from,      in: query, schema: { type: string, format: date-time } }
+        - { name: to,        in: query, schema: { type: string, format: date-time } }
+        - $ref: "#/components/parameters/PageToken"
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/Sort"
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Page"
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: "#/components/schemas/Run" }
+
+  /api/v1/me/runs/{run_id}:
+    parameters:
+      - $ref: "#/components/parameters/RunID"
+    get:
+      tags: [Runs]
+      operationId: getRun
+      summary: Read one run
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Run" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/me/runs/{run_id}/nodes:
+    parameters:
+      - $ref: "#/components/parameters/RunID"
+    get:
+      tags: [Runs]
+      operationId: listRunNodes
+      summary: Per-node summaries for a run
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/NodeRun" }
+
+  /api/v1/me/runs/{run_id}/nodes/{node_id}:
+    parameters:
+      - $ref: "#/components/parameters/RunID"
+      - { name: node_id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Runs]
+      operationId: getRunNode
+      summary: One node's snapshot from a run
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NodeRun" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/me/runs/{run_id}/events:
+    parameters:
+      - $ref: "#/components/parameters/RunID"
+    get:
+      tags: [Runs]
+      operationId: streamRunEvents
+      summary: Live event stream (SSE)
+      description: |
+        Server-Sent Events. The connection stays open until the run
+        reaches a terminal status, then the server closes. Replay
+        from the beginning by reconnecting without `Last-Event-ID`.
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "200":
+          description: streaming
+          content:
+            text/event-stream:
+              schema: { type: string }
+
+  "/api/v1/me/runs/{run_id}:cancel":
+    parameters:
+      - $ref: "#/components/parameters/RunID"
+    post:
+      tags: [Runs]
+      operationId: cancelRun
+      summary: Cancel a non-terminal run
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "202": { description: cancelling }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  # ---------- Secrets -------------------------------------------------
+
+  /api/v1/me/secrets:
+    get:
+      tags: [Secrets]
+      operationId: listSecrets
+      summary: List secret names (values never returned)
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/SecretSummary" }
+
+  /api/v1/me/secrets/{name}:
+    parameters:
+      - { name: name, in: path, required: true, schema: { type: string, pattern: "^[A-Za-z0-9_./-]+$" } }
+    put:
+      tags: [Secrets]
+      operationId: putSecret
+      summary: Upsert a secret value
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                value: { type: string }
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "204": { description: upserted }
+    delete:
+      tags: [Secrets]
+      operationId: deleteSecret
+      summary: Delete a secret
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "204": { description: deleted }
+
+  # ---------- Connections (OAuth) ------------------------------------
+
+  /api/v1/me/connections:
+    get:
+      tags: [Connections]
+      operationId: listConnections
+      summary: List OAuth connections
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Connection" }
+
+  "/api/v1/me/connections/{provider}:authorize":
+    parameters:
+      - { name: provider, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [Connections]
+      operationId: authorizeConnection
+      summary: Begin the OAuth dance for a provider
+      description: |
+        Returns a redirect URL. The browser navigates there; on
+        success the user lands back on a configured callback that
+        finalizes the connection. Non-browser callers (the MCP
+        server, scripts) should expose this URL to the user
+        verbatim — there is no headless flow.
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "200":
+          description: redirect ready
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [authorize_url]
+                properties:
+                  authorize_url: { type: string, format: uri }
+
+  /api/v1/me/connections/{provider}:
+    parameters:
+      - { name: provider, in: path, required: true, schema: { type: string } }
+    delete:
+      tags: [Connections]
+      operationId: disconnectConnection
+      summary: Disconnect a provider
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "204": { description: disconnected }
+
+  # ---------- Admin ---------------------------------------------------
+
+  /api/v1/admin/tenants/{tenant}/api-keys:
+    parameters:
+      - $ref: "#/components/parameters/Tenant"
+    get:
+      tags: [Admin]
+      operationId: adminListAPIKeys
+      summary: List keys in a tenant
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/APIKeySummary" }
+    post:
+      tags: [Admin]
+      operationId: adminIssueAPIKey
+      summary: Issue a key for any subject in this tenant
+      description: |
+        Cross-user issuance — distinct from `POST /me/api-keys` which
+        is scoped to the caller. Requires `tenant:admin`.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminIssueAPIKeyRequest" }
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "201":
+          description: issued
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IssuedAPIKey" }
+
+  /api/v1/admin/tenants/{tenant}/api-keys/{key_id}:
+    parameters:
+      - $ref: "#/components/parameters/Tenant"
+      - { name: key_id, in: path, required: true, schema: { type: string } }
+    delete:
+      tags: [Admin]
+      operationId: adminRevokeAPIKey
+      summary: Revoke any key in the tenant
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "204": { description: revoked }
+
+  /api/v1/admin/tenants/{tenant}/members:
+    parameters:
+      - $ref: "#/components/parameters/Tenant"
+    get:
+      tags: [Admin]
+      operationId: adminListMembers
+      summary: Tenant member roster
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Member" }
+
+  /api/v1/admin/tenants/{tenant}/members/{email}:
+    parameters:
+      - $ref: "#/components/parameters/Tenant"
+      - { name: email, in: path, required: true, schema: { type: string, format: email } }
+    delete:
+      tags: [Admin]
+      operationId: adminRemoveMember
+      summary: Remove a member
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "204": { description: removed }
+
+  /api/v1/admin/tenants/{tenant}/invitations:
+    parameters:
+      - $ref: "#/components/parameters/Tenant"
+    get:
+      tags: [Admin]
+      operationId: adminListInvitations
+      summary: List pending invitations
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Invitation" }
+    post:
+      tags: [Admin]
+      operationId: adminCreateInvitation
+      summary: Invite someone
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InvitationCreate" }
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Invitation" }
+
+  /api/v1/admin/tenants/{tenant}/audit:
+    parameters:
+      - $ref: "#/components/parameters/Tenant"
+    get:
+      tags: [Admin]
+      operationId: adminListAudit
+      summary: Audit log
+      parameters:
+        - { name: from,    in: query, schema: { type: string, format: date-time } }
+        - { name: to,      in: query, schema: { type: string, format: date-time } }
+        - { name: subject, in: query, schema: { type: string } }
+        - { name: action,  in: query, schema: { type: string } }
+        - $ref: "#/components/parameters/PageToken"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Page"
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: "#/components/schemas/AuditEntry" }
+
+  /api/v1/admin/tenants/{tenant}/auth-config:
+    parameters:
+      - $ref: "#/components/parameters/Tenant"
+    get:
+      tags: [Admin]
+      operationId: adminGetAuthConfig
+      summary: Read tenant SSO/auth configuration
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrgAuthConfig" }
+    put:
+      tags: [Admin]
+      operationId: adminPutAuthConfig
+      summary: Replace tenant SSO/auth configuration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OrgAuthConfig" }
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrgAuthConfig" }
+    delete:
+      tags: [Admin]
+      operationId: adminDeleteAuthConfig
+      summary: Remove tenant SSO/auth configuration
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "204": { description: removed }
+
+  # ---------- Auth (sign-in flow) ------------------------------------
+
+  /api/v1/auth/signin:
+    post:
+      tags: [Auth]
+      operationId: signIn
+      summary: Sign in with email + password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PasswordSignIn" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/auth/signup:
+    post:
+      tags: [Auth]
+      operationId: signUp
+      summary: Create an account
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PasswordSignUp" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /api/v1/auth/signout:
+    post:
+      tags: [Auth]
+      operationId: signOut
+      summary: End the current session
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "204": { description: signed out }
+
+  /api/v1/auth/google/start:
+    get:
+      tags: [Auth]
+      operationId: startGoogleSignIn
+      summary: Begin Google sign-in
+      description: |
+        Returns the Google authorize URL the caller should navigate
+        to. Browser callers can follow `Location` on a 302 instead;
+        the JSON shape is the canonical contract.
+      security: []
+      responses:
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [authorize_url]
+                properties:
+                  authorize_url: { type: string, format: uri }
+
+components:
+
+  # ---------- Security ------------------------------------------------
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: hzk_*
+
+  # ---------- Common parameters --------------------------------------
+
+  parameters:
+    PageToken:
+      name: page_token
+      in: query
+      schema: { type: string }
+      description: Opaque continuation token from the previous page's `page.next`.
+    PageSize:
+      name: page_size
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 500, default: 50 }
+    Sort:
+      name: sort
+      in: query
+      schema: { type: string }
+      description: |
+        Field name to sort by, prefixed with `-` for descending. One
+        field at a time.
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      schema: { type: string, maxLength: 128 }
+      description: |
+        Opaque client-chosen string. Re-submitting the same request
+        with the same key within 24h returns the original response.
+    Tenant:
+      name: tenant
+      in: path
+      required: true
+      schema: { type: string }
+    IntegrationID:
+      name: integration_id
+      in: path
+      required: true
+      schema: { type: string }
+    DropID:
+      name: drop_id
+      in: path
+      required: true
+      schema: { type: string }
+    FlowID:
+      name: flow_id
+      in: path
+      required: true
+      schema: { type: string }
+    RunID:
+      name: run_id
+      in: path
+      required: true
+      schema: { type: string }
+
+  # ---------- Common responses ---------------------------------------
+
+  responses:
+    BadRequest:
+      description: Bad request — input parse failure or shape mismatch.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    Unauthorized:
+      description: No or invalid credential.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    Forbidden:
+      description: Authenticated but not permitted.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    NotFound:
+      description: No such resource.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    Conflict:
+      description: Operation conflicts with current state.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    Unprocessable:
+      description: Semantically invalid input (passed parse, failed validation).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  # ---------- Schemas -------------------------------------------------
+
+  schemas:
+
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: "Machine-readable enum, snake_case."
+            message:
+              type: string
+              description: Human/LLM-readable explanation.
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  field: { type: string }
+                  issue: { type: string }
+            doc:
+              type: string
+              description: Optional deep link into this OpenAPI doc for the offending schema.
+
+    Page:
+      type: object
+      required: [page]
+      properties:
+        page:
+          type: object
+          properties:
+            next: { type: [string, "null"] }
+            size: { type: integer }
+            total:
+              type: integer
+              description: Returned when cheap to compute; absent for expensive lists.
+
+    ServiceDescriptor:
+      type: object
+      required: [service, version, links]
+      properties:
+        service: { type: string, example: hazy-flow }
+        version: { type: string, example: 1.0.0 }
+        auth:
+          type: object
+          properties:
+            scheme:   { type: string, example: Bearer }
+            issue_at: { type: string, example: /api/v1/me/api-keys }
+        links:
+          type: object
+          additionalProperties: { type: string }
+
+    Category:
+      type: string
+      enum: [trigger, flow_control, transformation, io, network, ai, external, system]
+
+    # ---------- Catalog -------------------------------------------
+
+    CatalogSummary:
+      type: object
+      properties:
+        integrations:
+          type: array
+          items:
+            type: object
+            properties:
+              id:    { type: string }
+              label: { type: string }
+              drops: { type: integer }
+        drop_count: { type: integer }
+        categories:
+          type: array
+          items: { $ref: "#/components/schemas/Category" }
+        links:
+          type: object
+          additionalProperties: { type: string }
+
+    IntegrationSummary:
+      type: object
+      required: [id, label]
+      properties:
+        id:         { type: string }
+        label:      { type: string }
+        provider:   { type: string }
+        summary:    { type: string }
+        drop_count: { type: integer }
+        brand_logo: { type: string }
+
+    Integration:
+      allOf:
+        - $ref: "#/components/schemas/IntegrationSummary"
+        - type: object
+          properties:
+            auth:
+              type: object
+              description: How this integration authenticates. `kind` is `none`, `oauth`, `secret`, or `mixed`.
+              properties:
+                kind:            { type: string, enum: [none, oauth, secret, mixed] }
+                provider_id:
+                  type: string
+                  description: "For oauth, the provider key."
+                setup:           { type: string, description: URL to begin setup. }
+                scopes_required: { type: array, items: { type: string } }
+            drops:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:    { type: string }
+                  label: { type: string }
+                  role:  { type: string, enum: [trigger, action, transformation] }
+            examples:
+              type: array
+              items:
+                type: object
+                properties:
+                  title: { type: string }
+                  flow:  { type: string, description: Link to a template flow. }
+            links:
+              type: object
+              additionalProperties: { type: string }
+
+    DropSummary:
+      type: object
+      required: [id, integration, label, category]
+      properties:
+        id:          { type: string }
+        integration: { type: string }
+        label:       { type: string }
+        summary:     { type: string, description: ~140 char LLM-friendly summary. }
+        category:    { $ref: "#/components/schemas/Category" }
+        tags:        { type: array, items: { type: string } }
+        icon:        { type: string }
+        brand_logo:  { type: string }
+
+    Drop:
+      allOf:
+        - $ref: "#/components/schemas/DropSummary"
+        - type: object
+          properties:
+            description:     { type: string, description: Long-form description (paragraph). }
+            execution_model: { type: string, enum: [batch, stream, trigger] }
+            process_model:   { type: string, enum: [spawn_per_job, long_lived, pre_registered] }
+            idempotent:      { type: boolean }
+            retry_policy:    { type: string, enum: [never, exponential_backoff] }
+            inputs:          { type: array, items: { $ref: "#/components/schemas/Port" } }
+            outputs:         { type: array, items: { $ref: "#/components/schemas/Port" } }
+            params_schema:   { description: JSON Schema 2020-12 for params., type: object }
+            params_examples:
+              type: array
+              minItems: 1
+              items: { $ref: "#/components/schemas/ParamsExample" }
+            requires_connections:
+              type: array
+              items: { type: string }
+              description: Provider IDs the user must have a connection to before this drop will run.
+            links:
+              type: object
+              additionalProperties: { type: string }
+
+    Port:
+      type: object
+      required: [port]
+      properties:
+        port:     { type: string }
+        mime:     { type: array, items: { type: string } }
+        label:    { type: string }
+        required: { type: boolean }
+        variadic: { type: boolean }
+        min:      { type: integer }
+        max:      { type: integer }
+
+    ParamsExample:
+      type: object
+      required: [title, params]
+      properties:
+        title:  { type: string }
+        params: { type: object }
+        notes:  { type: string }
+
+    # ---------- Identity ------------------------------------------
+
+    Me:
+      type: object
+      required: [subject, tenant]
+      properties:
+        subject:     { type: string }
+        tenant:      { type: string }
+        workspace:   { type: string }
+        roles:       { type: array, items: { $ref: "#/components/schemas/Role" } }
+        permissions: { type: array, items: { type: string } }
+        memberships:
+          type: array
+          items:
+            type: object
+            properties:
+              tenant:    { type: string }
+              workspace: { type: string }
+        links:
+          type: object
+          additionalProperties: { type: string }
+
+    Role:
+      type: object
+      required: [name]
+      properties:
+        name:        { type: string }
+        permissions: { type: array, items: { type: string } }
+
+    APIKeySummary:
+      type: object
+      required: [id, subject, status]
+      properties:
+        id:         { type: string }
+        subject:    { type: string }
+        workspace:  { type: string }
+        roles:      { type: array, items: { $ref: "#/components/schemas/Role" } }
+        expires_at: { type: [string, "null"], format: date-time }
+        status:     { type: string, enum: [active, expired, revoked] }
+
+    IssuedAPIKey:
+      allOf:
+        - $ref: "#/components/schemas/APIKeySummary"
+        - type: object
+          required: [secret]
+          properties:
+            secret:
+              type: string
+              description: Cleartext token, returned exactly once. Never recoverable.
+
+    SelfIssueAPIKeyRequest:
+      type: object
+      properties:
+        role:
+          type: string
+          description: |
+            One of the role templates (`claude-mcp`, `viewer`, ...).
+            Capped by the caller's own permissions.
+          default: claude-mcp
+        expires_in:
+          type: string
+          description: Duration string ("30d", "90d", "1y"). Omit for no expiry.
+
+    AdminIssueAPIKeyRequest:
+      type: object
+      required: [subject, roles]
+      properties:
+        subject:    { type: string }
+        workspace:  { type: string }
+        roles:      { type: array, items: { $ref: "#/components/schemas/Role" } }
+        expires_at: { type: string, format: date-time }
+
+    # ---------- Flows ---------------------------------------------
+
+    FlowStatus:
+      type: string
+      enum: [draft, active, archived]
+
+    FlowSummary:
+      type: object
+      required: [id, name, status]
+      properties:
+        id:          { type: string }
+        name:        { type: string }
+        description: { type: string }
+        status:      { $ref: "#/components/schemas/FlowStatus" }
+        owner:       { type: string }
+        tags:        { type: array, items: { type: string } }
+        created_at:  { type: string, format: date-time }
+        updated_at:  { type: string, format: date-time }
+        integrations:
+          type: array
+          items: { type: string }
+          description: Integration ids this flow uses (derived from its nodes).
+
+    Flow:
+      allOf:
+        - $ref: "#/components/schemas/FlowSummary"
+        - type: object
+          required: [nodes, edges]
+          properties:
+            nodes:    { type: array, items: { $ref: "#/components/schemas/Node" } }
+            edges:    { type: array, items: { $ref: "#/components/schemas/Edge" } }
+            triggers: { type: array, items: { $ref: "#/components/schemas/Trigger" } }
+            params:
+              type: object
+              description: Flow-level parameters available to all nodes.
+
+    FlowCreate:
+      type: object
+      required: [name]
+      properties:
+        name:        { type: string }
+        description: { type: string }
+        from_template:
+          type: string
+          description: Optional template ID to clone.
+        nodes:    { type: array, items: { $ref: "#/components/schemas/Node" } }
+        edges:    { type: array, items: { $ref: "#/components/schemas/Edge" } }
+        triggers: { type: array, items: { $ref: "#/components/schemas/Trigger" } }
+
+    Node:
+      type: object
+      required: [id, drop]
+      properties:
+        id:     { type: string }
+        drop:   { type: string, description: Drop ID this node instantiates. }
+        label:  { type: string }
+        params: { type: object }
+        env:    { type: object, additionalProperties: { type: string } }
+        position:
+          type: object
+          properties:
+            x: { type: number }
+            y: { type: number }
+
+    Edge:
+      type: object
+      required: [from, to]
+      properties:
+        id:   { type: string }
+        from: { $ref: "#/components/schemas/EdgeEndpoint" }
+        to:   { $ref: "#/components/schemas/EdgeEndpoint" }
+
+    EdgeEndpoint:
+      type: object
+      required: [node, port]
+      properties:
+        node: { type: string }
+        port: { type: string }
+
+    Trigger:
+      type: object
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [cron, webhook, form, manual, external]
+        cron:
+          type: string
+          description: For kind=cron, the cron expression.
+        path:
+          type: string
+          description: For kind=webhook/form, the unique path under /trigger or /form.
+        secret_ref:
+          type: string
+          description: For kind=webhook, the secret used to authenticate inbound calls.
+
+    ValidationReport:
+      type: object
+      properties:
+        ok: { type: boolean }
+        issues:
+          type: array
+          items:
+            type: object
+            properties:
+              severity: { type: string, enum: [error, warning, info] }
+              node:     { type: string }
+              field:    { type: string }
+              message:  { type: string }
+
+    TestTriggerRequest:
+      type: object
+      required: [trigger_id]
+      properties:
+        trigger_id: { type: string }
+        payload:    { type: object }
+
+    NodeSampleResult:
+      type: object
+      properties:
+        outputs:
+          type: object
+          additionalProperties: { type: object }
+        logs:
+          type: array
+          items: { type: string }
+        duration_ms: { type: integer }
+
+    # ---------- Runs ----------------------------------------------
+
+    RunStatus:
+      type: string
+      enum: [queued, running, awaiting, succeeded, failed, cancelled]
+
+    Run:
+      type: object
+      required: [id, flow_id, status]
+      properties:
+        id:           { type: string }
+        flow_id:      { type: string }
+        status:       { $ref: "#/components/schemas/RunStatus" }
+        trigger_kind: { type: string }
+        started_at:   { type: string, format: date-time }
+        finished_at:  { type: [string, "null"], format: date-time }
+        duration_ms:  { type: integer }
+        error:        { type: [string, "null"] }
+        links:
+          type: object
+          additionalProperties: { type: string }
+
+    NodeRun:
+      type: object
+      required: [node_id, status]
+      properties:
+        node_id:     { type: string }
+        drop:        { type: string }
+        status:      { $ref: "#/components/schemas/RunStatus" }
+        started_at:  { type: string, format: date-time }
+        finished_at: { type: [string, "null"], format: date-time }
+        duration_ms: { type: integer }
+        attempts:    { type: integer }
+        inputs:      { type: object, additionalProperties: true }
+        outputs:     { type: object, additionalProperties: true }
+        error:       { type: [string, "null"] }
+
+    RunRequest:
+      type: object
+      properties:
+        trigger_payload:
+          type: object
+          description: Optional payload to seed the trigger node with.
+        params_overrides:
+          type: object
+          description: Flow-level param overrides for this single run.
+
+    # ---------- Secrets / Connections -----------------------------
+
+    SecretSummary:
+      type: object
+      required: [name]
+      properties:
+        name:       { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    Connection:
+      type: object
+      required: [provider, status]
+      properties:
+        provider:    { type: string }
+        status:      { type: string, enum: [active, expired, revoked, error] }
+        account:     { type: string, description: External account label (e.g. team/user). }
+        scopes:      { type: array, items: { type: string } }
+        connected_at: { type: string, format: date-time }
+        expires_at:  { type: [string, "null"], format: date-time }
+
+    # ---------- Admin ---------------------------------------------
+
+    Member:
+      type: object
+      required: [email]
+      properties:
+        email:      { type: string, format: email }
+        subject:    { type: string }
+        roles:      { type: array, items: { $ref: "#/components/schemas/Role" } }
+        joined_at:  { type: string, format: date-time }
+        last_seen:  { type: [string, "null"], format: date-time }
+
+    Invitation:
+      type: object
+      required: [token, email]
+      properties:
+        token:      { type: string }
+        email:      { type: string, format: email }
+        roles:      { type: array, items: { $ref: "#/components/schemas/Role" } }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+
+    InvitationCreate:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+        roles: { type: array, items: { $ref: "#/components/schemas/Role" } }
+
+    AuditEntry:
+      type: object
+      required: [at, subject, action]
+      properties:
+        at:       { type: string, format: date-time }
+        subject:  { type: string }
+        action:   { type: string }
+        target:   { type: string }
+        metadata: { type: object }
+
+    OrgAuthConfig:
+      type: object
+      properties:
+        password_enabled: { type: boolean }
+        google_enabled:   { type: boolean }
+        sso:
+          type: object
+          properties:
+            kind:      { type: string, enum: [none, oidc, saml] }
+            issuer:    { type: string }
+            client_id: { type: string }
+
+    # ---------- Auth ----------------------------------------------
+
+    PasswordSignIn:
+      type: object
+      required: [email, password]
+      properties:
+        email:    { type: string, format: email }
+        password: { type: string, writeOnly: true }
+
+    PasswordSignUp:
+      type: object
+      required: [email, password]
+      properties:
+        email:        { type: string, format: email }
+        password:     { type: string, writeOnly: true }
+        invite_token: { type: string }
+
+    Session:
+      type: object
+      required: [token]
+      properties:
+        token:      { type: string }
+        expires_at: { type: string, format: date-time }
+        me:         { $ref: "#/components/schemas/Me" }
