@@ -28,7 +28,12 @@ GRAPH_ID="ha-poll"
 TENANT="loadtest"
 
 WORKDIR="$(mktemp -d /tmp/hzd-ha-XXXXXX)"
-WS_DIR="${WORKDIR}/workspace"
+# Both nodes share HAZYFLOW_DATA_DIR so the workspace (graphs the
+# scheduler reads from) is visible to whichever one wins leadership.
+# Sandboxes overlap by design — this mirrors HA production where a
+# shared filesystem (NFS / EFS) lives behind every replica.
+DATA_DIR="${WORKDIR}/data"
+WS_DIR="${DATA_DIR}/workspace"
 LOG_A="${WORKDIR}/hzd-a.log"
 LOG_B="${WORKDIR}/hzd-b.log"
 PID_A=""
@@ -87,10 +92,8 @@ say "seeding node-less poll graph (every 1s) into shared workspace"
 
 start_hzd() { # args: name logfile grpc-port
 	HAZYFLOW_POSTGRES_DSN="$DSN" \
-	HAZYFLOW_WORKSPACE_DIR="$WS_DIR" \
-	HAZYFLOW_SANDBOX_BASE="${WORKDIR}/sandbox-$1" \
+	HAZYFLOW_DATA_DIR="$DATA_DIR" \
 	HAZYFLOW_LISTEN="127.0.0.1:$3" \
-	HAZYFLOW_WORKERS=1 \
 	"${WORKDIR}/hzd" >"$2" 2>&1 &
 }
 

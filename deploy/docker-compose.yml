@@ -39,9 +39,8 @@ services:
       HAZYFLOW_ENABLE_METRICS: "1"
       # Uncomment to export traces to an OTel collector:
       # OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
-    # Container layout (HAZYFLOW_HTTP, _WEB_DIST, _WORKSPACE_DIR,
-    # _SANDBOX_BASE) is baked into the image as ENV; no command:
-    # override needed.
+    # Container layout (HAZYFLOW_HTTP, _WEB_DIST, _DATA_DIR) is baked
+    # into the image as ENV; no command: override needed.
     ports:
       - "8080:8080"
     volumes:

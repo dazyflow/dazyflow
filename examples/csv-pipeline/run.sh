@@ -4,15 +4,15 @@
 # What this proves:
 #   - A third-party gRPC module slots into Hazy Flow via --remote
 #   - Data flows: native file_read → remote csv_uppercase → native file_write
-#   - The sandbox holds: file_read reads from $SANDBOX_BASE/dev/default,
+#   - The sandbox holds: file_read reads from $DATA_DIR/dev/default,
 #     file_write produces output there
 set -euo pipefail
 
 cd "$(dirname "$0")"
 ROOT="$(cd ../.. && pwd)"
 
-SANDBOX_BASE=$(mktemp -d)
-trap 'rm -rf "$SANDBOX_BASE" /tmp/hzd-demo /tmp/hzctl-demo /tmp/csv-xform-demo' EXIT
+DATA_DIR=$(mktemp -d)
+trap 'rm -rf "$DATA_DIR" /tmp/hzd-demo /tmp/hzctl-demo /tmp/csv-xform-demo' EXIT
 
 echo "[1/6] building binaries"
 (cd "$ROOT" && go build -o /tmp/hzd-demo ./cmd/hzd)
@@ -20,26 +20,26 @@ echo "[1/6] building binaries"
 go build -o /tmp/csv-xform-demo ./transformer
 
 echo "[2/6] seeding input.csv"
-mkdir -p "$SANDBOX_BASE/dev/default"
-cat > "$SANDBOX_BASE/dev/default/input.csv" <<EOF
+# hzd's sandbox lives under $DATA_DIR/sandbox/<tenant>/<workspace>/
+mkdir -p "$DATA_DIR/sandbox/dev/default"
+cat > "$DATA_DIR/sandbox/dev/default/input.csv" <<EOF
 name,role
 alice,engineer
 bob,manager
 charlie,intern
 EOF
-echo "    input.csv ($(wc -c < "$SANDBOX_BASE/dev/default/input.csv") bytes)"
+echo "    input.csv ($(wc -c < "$DATA_DIR/sandbox/dev/default/input.csv") bytes)"
 
 echo "[3/6] starting csv_uppercase on :60001"
 /tmp/csv-xform-demo --listen=127.0.0.1:60001 > /tmp/csv-xform.log 2>&1 &
 XFORM_PID=$!
-trap 'kill $XFORM_PID 2>/dev/null || true; kill $HZD_PID 2>/dev/null || true; rm -rf "$SANDBOX_BASE" /tmp/hzd-demo /tmp/hzctl-demo /tmp/csv-xform-demo' EXIT
+trap 'kill $XFORM_PID 2>/dev/null || true; kill $HZD_PID 2>/dev/null || true; rm -rf "$DATA_DIR" /tmp/hzd-demo /tmp/hzctl-demo /tmp/csv-xform-demo' EXIT
 sleep 0.3
 
 echo "[4/6] starting hzd with the remote registered"
 HAZYFLOW_LISTEN=":50099" \
-HAZYFLOW_WORKERS=2 \
 HAZYFLOW_DEV_KEY=1 \
-HAZYFLOW_SANDBOX_BASE="$SANDBOX_BASE" \
+HAZYFLOW_DATA_DIR="$DATA_DIR" \
 HAZYFLOW_REMOTE_MODULES="csv_uppercase=127.0.0.1:60001" \
 /tmp/hzd-demo > /tmp/hzd.log 2>&1 &
 HZD_PID=$!
@@ -53,16 +53,16 @@ HZCTL_TOKEN="$TOKEN" /tmp/hzctl-demo --server=localhost:50099 graph save pipelin
 HZCTL_TOKEN="$TOKEN" /tmp/hzctl-demo --server=localhost:50099 graph run csv-uppercase 2>&1 | sed 's/^/    /'
 
 echo "[6/6] verifying output"
-if [[ -f "$SANDBOX_BASE/dev/default/output.csv" ]]; then
+if [[ -f "$DATA_DIR/sandbox/dev/default/output.csv" ]]; then
     echo "    output.csv exists"
     echo "    --- output.csv ---"
-    sed 's/^/    /' "$SANDBOX_BASE/dev/default/output.csv"
+    sed 's/^/    /' "$DATA_DIR/sandbox/dev/default/output.csv"
     echo "    ------------------"
     EXPECT="NAME,ROLE
 ALICE,ENGINEER
 BOB,MANAGER
 CHARLIE,INTERN"
-    if [[ "$(cat "$SANDBOX_BASE/dev/default/output.csv")" == "$EXPECT" ]]; then
+    if [[ "$(cat "$DATA_DIR/sandbox/dev/default/output.csv")" == "$EXPECT" ]]; then
         echo "[ok]  pipeline produced the expected uppercase CSV"
     else
         echo "[!!]  contents differ from expected"

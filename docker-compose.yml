@@ -73,9 +73,10 @@ services:
       # var is set, hzd reads /srv/landing; when empty, hzd gets "" and
       # / serves the SPA for everyone.
       HAZYFLOW_LANDING_DIR:          ${HAZYFLOW_LANDING_DIR:+/srv/landing}
-    # No command: — the image's ENTRYPOINT runs hzd and every setting is
-    # driven by HAZYFLOW_* env vars (container layout defaults are baked
-    # into the Dockerfile via ENV).
+    # No command: — the image's ENTRYPOINT runs hzd and every setting
+    # is driven by HAZYFLOW_* env vars. Container layout defaults
+    # (HAZYFLOW_HTTP, HAZYFLOW_WEB_DIST, HAZYFLOW_DATA_DIR) are baked
+    # into the Dockerfile via ENV.
     depends_on:
       postgres:
         condition: service_healthy

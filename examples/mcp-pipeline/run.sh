@@ -28,9 +28,8 @@ go build -o /tmp/mcp-server ./server
 echo "[2/5] starting hzd with MCP server registered"
 # --mcp=name=command [args]; semicolon-separated across servers
 HAZYFLOW_LISTEN=":50099" \
-HAZYFLOW_WORKERS=2 \
 HAZYFLOW_DEV_KEY=1 \
-HAZYFLOW_SANDBOX_BASE="$SANDBOX_BASE" \
+HAZYFLOW_DATA_DIR="$SANDBOX_BASE" \
 HAZYFLOW_MCP_SERVERS="ap-demo=/tmp/mcp-server" \
 /tmp/mcp-hzd > "$HZD_LOG" 2>&1 &
 HZD_PID=$!

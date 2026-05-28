@@ -50,9 +50,8 @@ SLACK_TOKEN="Bearer slack-bot-token-def" \
 APPROVAL_API_KEY="Bearer approval-system-key-ghi" \
 HAZYFLOW_LISTEN=":50099" \
 HAZYFLOW_HTTP=":18080" \
-HAZYFLOW_WORKERS=2 \
 HAZYFLOW_DEV_KEY=1 \
-HAZYFLOW_SANDBOX_BASE="$SANDBOX_BASE" \
+HAZYFLOW_DATA_DIR="$SANDBOX_BASE" \
 /tmp/ap-hzd \
     > "$HZD_LOG" 2>&1 &
 HZD_PID=$!

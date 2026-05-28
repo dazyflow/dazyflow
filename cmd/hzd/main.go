@@ -22,7 +22,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/health"
 	grpc_health_v1 "google.golang.org/grpc/health/grpc_health_v1"
 
@@ -56,11 +55,10 @@ func main() {
 
 	listen := envStr("HAZYFLOW_LISTEN", ":50050")
 	devKey := envBool("HAZYFLOW_DEV_KEY", false)
-	workerCount := envInt("HAZYFLOW_WORKERS", 2)
-	sandboxBase := envStr("HAZYFLOW_SANDBOX_BASE", "")
-	tlsCert := envStr("HAZYFLOW_TLS_CERT", "")
-	tlsKey := envStr("HAZYFLOW_TLS_KEY", "")
-	tlsCA := envStr("HAZYFLOW_TLS_CA", "")
+	// Two workers per process is enough for hand-tuned workloads.
+	// Scaling out is done by adding hzd replicas behind Postgres, not
+	// by raising this number.
+	const workerCount = 2
 	remotes := envStr("HAZYFLOW_REMOTE_MODULES", "")
 	httpListen := envStr("HAZYFLOW_HTTP", "")
 	postgresDSN := envStr("HAZYFLOW_POSTGRES_DSN", "")
@@ -75,20 +73,48 @@ func main() {
 	enableSignup := envBool("HAZYFLOW_ENABLE_SIGNUP", false)
 	enableMetrics := envBool("HAZYFLOW_ENABLE_METRICS", false)
 	mcpServers := envStr("HAZYFLOW_MCP_SERVERS", "")
-	workspaceDir := envStr("HAZYFLOW_WORKSPACE_DIR", "./.hazyflow-workspace")
-	stateDir := envStr("HAZYFLOW_STATE_DIR", ".")
+	// HAZYFLOW_DATA_DIR is the root for every piece of on-disk state
+	// (git-backed graph workspace, per-tenant sandbox roots, dev-mode
+	// JSON stores). Conventional subdirs inside: workspace/, sandbox/,
+	// state/. Container deployments pin this to /data; the dev default
+	// keeps everything tucked into a single ./.hazyflow/ folder at the
+	// repo root.
+	dataDir := envStr("HAZYFLOW_DATA_DIR", "./.hazyflow")
+	workspaceDir := filepath.Join(dataDir, "workspace")
+	sandboxBase := filepath.Join(dataDir, "sandbox")
+	stateDir := filepath.Join(dataDir, "state")
 	webOrigin := envStr("HAZYFLOW_WEB_ORIGIN", "http://localhost:5174")
-	authRatePerMin := envInt("HAZYFLOW_AUTH_RATE_PER_MIN", 20)
-	authRateBurst := envInt("HAZYFLOW_AUTH_RATE_BURST", 10)
+	// Auth rate limit is fixed at a sensible default: 20/min per IP
+	// with a burst of 10. Tightening or loosening from here is an
+	// in-code change rather than a per-deployment knob.
+	const authRatePerMin = 20
+	const authRateBurst = 10
 	httpEgressAllow := envStr("HAZYFLOW_HTTP_EGRESS_ALLOW", "")
 	trustProxyHeaders := envBool("HAZYFLOW_TRUST_PROXY_HEADERS", false)
 	sessionTTL := envDuration("HAZYFLOW_SESSION_TTL", 24*time.Hour)
 	maxGraphTimeout := envDuration("HAZYFLOW_MAX_GRAPH_TIMEOUT", 0)
-	maxGraphNodes := envInt("HAZYFLOW_MAX_GRAPH_NODES", 0)
-	maxConcurrentJobs := envInt("HAZYFLOW_MAX_CONCURRENT_JOBS", 0)
-	claudeCLI := envBool("HAZYFLOW_CLAUDE_CLI", false)
-	claudeCLIMCPBin := envStr("HAZYFLOW_CLAUDE_CLI_MCP_BIN", "")
-	claudeCLIHazydURL := envStr("HAZYFLOW_CLAUDE_CLI_HZD_URL", "http://localhost:8080")
+	// Resource guards. MAX_GRAPH_NODES is a defense-in-depth ceiling
+	// against pathologically large graphs; 1000 nodes is generous for
+	// real workflows. MAX_CONCURRENT_JOBS is 0 (unlimited) until
+	// per-tenant fairness becomes a real concern.
+	const maxGraphNodes = 1000
+	const maxConcurrentJobs = 0
+	// HAZYFLOW_CLAUDE_CLI gates the local-dev chat backend that shells
+	// out to `claude -p` + hz-mcp instead of the Anthropic API. Two
+	// shapes accepted: "1" / "true" enables with hz-mcp looked up via
+	// $PATH; any other non-empty value is treated as the hz-mcp
+	// binary path directly. Empty disables (default).
+	claudeCLIVal := envStr("HAZYFLOW_CLAUDE_CLI", "")
+	claudeCLI := claudeCLIVal != ""
+	claudeCLIMCPBin := ""
+	if claudeCLI {
+		switch strings.ToLower(claudeCLIVal) {
+		case "1", "true", "yes", "on":
+			// enabled with PATH lookup
+		default:
+			claudeCLIMCPBin = claudeCLIVal
+		}
+	}
 	slackSigningSecret := envStr("HAZYFLOW_SLACK_SIGNING_SECRET", "")
 	githubWebhookSecret := envStr("HAZYFLOW_GITHUB_WEBHOOK_SECRET", "")
 	approvalHMACSecret := envStr("HAZYFLOW_APPROVAL_HMAC_SECRET", "")
@@ -248,20 +274,16 @@ func main() {
 	} else {
 		bus = daemon.NewMemoryBus()
 	}
-	base := sandboxBase
-	if base == "" {
-		base = ".hazyflow-sandbox"
-	}
-	sandbox, err := daemon.NewFSSandbox(base)
+	sandbox, err := daemon.NewFSSandbox(sandboxBase)
 	if err != nil {
-		log.Fatalf("sandbox base %s: %v", base, err)
+		log.Fatalf("sandbox base %s: %v", sandboxBase, err)
 	}
 	// Per-tenant disk quotas: the engine machinery is wired up (Reserve
 	// closes the concurrent-write race on file_write), but quotas
 	// themselves are configured via an admin API rather than a startup
 	// string. No quotas at startup means unlimited; an admin can set
 	// them at runtime once that API exists.
-	quota, err := daemon.NewFSQuota(base, nil)
+	quota, err := daemon.NewFSQuota(sandboxBase, nil)
 	if err != nil {
 		log.Fatalf("quota: %v", err)
 	}
@@ -341,9 +363,9 @@ func main() {
 		// daemon.TenantAnthropicKeyName. Nil disables chat unless
 		// --claude-cli is also set.
 		EncryptedSecrets:           encryptedSecrets,
-		UseClaudeCLI:               claudeCLI,
-		ClaudeCLIMCPBinary:         daemon.ResolveClaudeMCPBinary(claudeCLIMCPBin),
-		ClaudeCLIHazydURL:          claudeCLIHazydURL,
+		UseClaudeCLI:       claudeCLI,
+		ClaudeCLIMCPBinary: daemon.ResolveClaudeMCPBinary(claudeCLIMCPBin),
+		ClaudeCLIHazydURL:  claudeCLIHazydURL(httpListen),
 		// PublicBaseURL feeds the failure-notify payload's run_url
 		// field (deep-link to /runs/{id}). Same value already used
 		// by the OAuth flow's redirect_uri builder.
@@ -546,32 +568,14 @@ func main() {
 		fmt.Printf("DEV API KEY (set HZCTL_TOKEN=%s):\n%s\n", ct, ct)
 	}
 
-	serverOpts := []grpc.ServerOption{
-		grpc.UnaryInterceptor(nil),
-		grpc.StreamInterceptor(nil),
-	}
-	switch {
-	case tlsCert != "" && tlsKey != "" && tlsCA != "":
-		tlsCfg, err := daemon.TLSFiles{
-			CertFile: tlsCert, KeyFile: tlsKey, CAFile: tlsCA,
-		}.LoadServerConfig()
-		if err != nil {
-			log.Fatalf("tls: %v", err)
-		}
-		serverOpts[0] = grpc.Creds(credentials.NewTLS(tlsCfg))
-		serverOpts = serverOpts[:1]
-		log.Printf("mTLS enabled (cert=%s, ca=%s)", tlsCert, tlsCA)
-	case tlsCert != "" || tlsKey != "" || tlsCA != "":
-		log.Fatalf("tls: HAZYFLOW_TLS_CERT, HAZYFLOW_TLS_KEY, HAZYFLOW_TLS_CA must be set together")
-	default:
-		log.Println("WARNING: serving without TLS — set HAZYFLOW_TLS_CERT/HAZYFLOW_TLS_KEY/HAZYFLOW_TLS_CA for production")
-		serverOpts = serverOpts[:0]
-	}
+	// gRPC serves plain — production deployments terminate TLS at an
+	// L7 proxy (Caddy/nginx/Traefik/ingress) and run hzd unencrypted
+	// inside the trust boundary.
 	unary, stream := daemon.AuthInterceptors(svc.Auth)
-	serverOpts = append(serverOpts,
+	serverOpts := []grpc.ServerOption{
 		grpc.UnaryInterceptor(unary),
 		grpc.StreamInterceptor(stream),
-	)
+	}
 	srv := grpc.NewServer(serverOpts...)
 	daemon.RegisterGRPC(srv, svc)
 
@@ -675,16 +679,30 @@ func registerRemotes(cat *engine.RemoteCatalog, spec string) error {
 	return nil
 }
 
-// stateFile builds the path to a JSON dev-state file under --state-dir.
-// kind is the bare name ("users", "memberships", …); files keep the
-// historical `.hazyflow-<kind>.json` form so existing installs with
-// `--state-dir=.` see no path change. Empty dir = empty path =
-// disable that store (matches the old per-file `--*-file=""` semantics).
+// claudeCLIHazydURL builds the URL hz-mcp uses to call back into this
+// hzd from the configured HTTP listen address. Strips the host (always
+// localhost for the local-dev claude-cli mode) and keeps the port.
+// Empty HAZYFLOW_HTTP falls back to localhost:8080 — same as the
+// container layout default.
+func claudeCLIHazydURL(httpListen string) string {
+	addr := httpListen
+	if addr == "" {
+		addr = ":8080"
+	}
+	if i := strings.LastIndex(addr, ":"); i >= 0 {
+		return "http://localhost" + addr[i:]
+	}
+	return "http://localhost:8080"
+}
+
+// stateFile builds the path to a JSON dev-state file under the state
+// subdirectory of HAZYFLOW_DATA_DIR. kind is the bare name ("users",
+// "memberships", …); files are named "<kind>.json".
 func stateFile(dir, kind string) string {
 	if dir == "" {
 		return ""
 	}
-	return filepath.Join(dir, ".hazyflow-"+kind+".json")
+	return filepath.Join(dir, kind+".json")
 }
 
 // Config knobs come from HAZYFLOW_* env vars. The helpers below give a

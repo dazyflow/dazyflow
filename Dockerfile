@@ -59,10 +59,10 @@ ENV CGO_ENABLED=0 GOOS=linux
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     go build -trimpath -ldflags="-s -w" -o /out/hzd ./cmd/hzd
-# Pre-create the data dirs here (the distroless final stage has no shell
-# to mkdir) so the default HAZYFLOW_WORKSPACE_DIR / HAZYFLOW_SANDBOX_BASE
-# paths exist and are writable by the nonroot user.
-RUN mkdir -p /data/workspace /data/sandbox
+# Pre-create the data dir here (the distroless final stage has no shell
+# to mkdir) so HAZYFLOW_DATA_DIR's subtree exists and is writable by
+# the nonroot user.
+RUN mkdir -p /data/workspace /data/sandbox /data/state
 
 # ---- 3. runtime -------------------------------------------------------
 FROM gcr.io/distroless/static-debian12:nonroot AS final
@@ -81,6 +81,5 @@ USER nonroot:nonroot
 # catalogue). Override these here only when rebaking the image.
 ENV HAZYFLOW_HTTP=:8080 \
     HAZYFLOW_WEB_DIST=/srv/web \
-    HAZYFLOW_WORKSPACE_DIR=/data/workspace \
-    HAZYFLOW_SANDBOX_BASE=/data/sandbox
+    HAZYFLOW_DATA_DIR=/data
 ENTRYPOINT ["/usr/local/bin/hzd"]
