@@ -86,12 +86,12 @@ say "seeding node-less poll graph (every 1s) into shared workspace"
 "${WORKDIR}/seed" --base "$WS_DIR" --tenant "$TENANT" --graph "$GRAPH_ID" --interval 1
 
 start_hzd() { # args: name logfile grpc-port
-	"${WORKDIR}/hzd" \
-		--postgres-dsn "$DSN" \
-		--workspace-dir "$WS_DIR" \
-		--sandbox-base "${WORKDIR}/sandbox-$1" \
-		--listen "127.0.0.1:$3" \
-		--workers 1 --cron >"$2" 2>&1 &
+	HAZYFLOW_POSTGRES_DSN="$DSN" \
+	HAZYFLOW_WORKSPACE_DIR="$WS_DIR" \
+	HAZYFLOW_SANDBOX_BASE="${WORKDIR}/sandbox-$1" \
+	HAZYFLOW_LISTEN="127.0.0.1:$3" \
+	HAZYFLOW_WORKERS=1 \
+	"${WORKDIR}/hzd" >"$2" 2>&1 &
 }
 
 # --- 4. Start both nodes ----------------------------------------------------

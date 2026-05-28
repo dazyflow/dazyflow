@@ -111,13 +111,16 @@ type HTTPGateway struct {
 	Profiles auth.OrgProfileStore
 
 	// Webhook serves /trigger/ and /form/ on the main HTTP listener so
-	// a default --http-only deploy can fire webhook-triggered flows
-	// and serve hosted intake forms without the operator also setting
-	// --webhook to a separate port. mountRoutes auto-constructs one
-	// if left nil; the standalone WebhookListener (cmd/hzd's --webhook
-	// flag) keeps working alongside this for operators who want port
-	// separation.
+	// a default HTTP-only deploy can fire webhook-triggered flows and
+	// serve hosted intake forms without a separate listener. The
+	// gateway auto-constructs one if left nil.
 	Webhook *WebhookListener
+
+	// Approval serves the HMAC-verified POST /approve/{run}/{node}
+	// endpoint for unauthenticated email/Slack approvers. Set by
+	// cmd/hzd when HAZYFLOW_APPROVAL_HMAC_SECRET is configured. Nil
+	// leaves the route unregistered so the gateway 404s on /approve/*.
+	Approval *ApprovalListener
 
 	// AuthRateLimit, when set, throttles the sign-in / sign-up
 	// endpoints per client IP. Nil disables throttling (dev default).
@@ -318,6 +321,14 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /trigger/", h.Webhook.handleTrigger)
 	mux.HandleFunc("GET /form/", h.Webhook.handleForm)
 	mux.HandleFunc("POST /form/", h.Webhook.handleForm)
+
+	// HMAC-verified approval endpoint for email/Slack approvers. The
+	// token in the URL is the auth here, so no requireAuth wrapper —
+	// the route 404s when Approval is nil (i.e. the operator hasn't
+	// configured HAZYFLOW_APPROVAL_HMAC_SECRET + PUBLIC_BASE_URL).
+	if h.Approval != nil {
+		mux.HandleFunc("POST /approve/", h.Approval.handle)
+	}
 
 	// Static frontend bundle. Registered LAST so all explicit API
 	// routes above match first; `GET /` is a catch-all for any
@@ -1592,8 +1603,13 @@ func writeJSONError(rw http.ResponseWriter, status int, msg string) {
 // On 500/timeout/aborted ctx, the handler emits one final "error"
 // frame before closing so the browser can show a banner.
 func (h *HTTPGateway) chatStream(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if h.svc.AnthropicAPIKey == "" && !h.svc.UseClaudeCLI {
-		writeJSONError(rw, http.StatusServiceUnavailable, "chat is not enabled on this daemon (set ANTHROPIC_API_KEY or -claude-cli)")
+	// Operator-level gate: chat needs either claude-cli mode (local
+	// dev) or the encrypted secret store (where each tenant stores
+	// their own Anthropic API key). The per-tenant "you haven't set
+	// your key yet" check happens inside ChatStream and is surfaced
+	// as a structured SSE frame the UI can route on.
+	if h.svc.EncryptedSecrets == nil && !h.svc.UseClaudeCLI {
+		writeJSONError(rw, http.StatusServiceUnavailable, "chat is not enabled on this daemon (operator must set --master-key or --claude-cli)")
 		return
 	}
 	// Grab the raw bearer for forwarding to hz-mcp in claude-cli mode.

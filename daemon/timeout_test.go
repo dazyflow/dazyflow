@@ -84,19 +84,18 @@ func TestGraphTimeout_NoTimeoutLeftAlone(t *testing.T) {
 	}
 }
 
-// TestGraphTimeout_DefaultApplies verifies the daemon-wide default —
-// configured by `-default-graph-timeout` on hzd — is applied when a
-// graph has no TimeoutSeconds of its own. Equivalent to #7's pending
-// flag; the wiring is on Service, not the CLI, so this exercises it.
-func TestGraphTimeout_DefaultApplies(t *testing.T) {
+// TestGraphTimeout_CeilingApplies verifies the operator ceiling
+// (HAZYFLOW_MAX_GRAPH_TIMEOUT) becomes the de-facto cap when a graph
+// declares no TimeoutSeconds of its own.
+func TestGraphTimeout_CeilingApplies(t *testing.T) {
 	h := newVisibilityHarness(t)
-	h.svc.DefaultGraphTimeoutSeconds = 1
+	h.svc.MaxGraphTimeoutSeconds = 1
 	ctx := context.Background()
 
 	g := core.Graph{
 		ID: "f1", Tenant: "t", Workspace: "ws",
 		Visibility: core.VisibilityOrg,
-		// No TimeoutSeconds — should pick up the default.
+		// No TimeoutSeconds — the ceiling fills in.
 		Nodes: []core.Node{{ID: "n1", Module: "noop"}},
 	}
 	if _, err := h.svc.SaveGraph(ctx, h.alice, g); err != nil {
@@ -120,7 +119,7 @@ func TestGraphTimeout_DefaultApplies(t *testing.T) {
 			return
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("default timeout did not fire; status=%q", rec.Status)
+			t.Fatalf("ceiling timeout did not fire; status=%q", rec.Status)
 		}
 		time.Sleep(50 * time.Millisecond)
 	}

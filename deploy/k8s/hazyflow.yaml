@@ -39,16 +39,15 @@ spec:
       containers:
         - name: hzd
           image: hazyflow/hzd:latest # build + push from the repo Dockerfile
-          args:
-            - --http=:8080
-            - --web-dist=/srv/web
-            - --workspace-dir=/data/workspace
-            - --sandbox-base=/data/sandbox
-            - --metrics
+          # Container layout defaults (HAZYFLOW_HTTP / _WEB_DIST /
+          # _WORKSPACE_DIR / _SANDBOX_BASE) come from the image's ENV.
+          # Everything else is operator policy, set here.
+          env:
+            - { name: HAZYFLOW_ENABLE_METRICS,       value: "1" }
             # Behind a TLS-terminating ingress (see DEPLOY.md):
-            - --trust-proxy-headers
-            - --web-origin=https://app.example.com
-            - --public-base-url=https://app.example.com
+            - { name: HAZYFLOW_TRUST_PROXY_HEADERS,  value: "1" }
+            - { name: HAZYFLOW_WEB_ORIGIN,           value: "https://app.example.com" }
+            - { name: HAZYFLOW_PUBLIC_BASE_URL,      value: "https://app.example.com" }
           envFrom:
             - secretRef: { name: hazyflow-secrets }
           ports:
@@ -68,9 +67,9 @@ spec:
           volumeMounts:
             - { name: data, mountPath: /data }
       volumes:
-        # emptyDir is fine when --postgres-dsn holds the durable control
-        # plane; switch to a PVC if your flows treat file_write outputs in
-        # the sandbox as durable artifacts.
+        # emptyDir is fine when HAZYFLOW_POSTGRES_DSN holds the durable
+        # control plane; switch to a PVC if your flows treat file_write
+        # outputs in the sandbox as durable artifacts.
         - name: data
           emptyDir: {}
 ---

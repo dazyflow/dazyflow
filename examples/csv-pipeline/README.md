@@ -49,7 +49,7 @@ control API, and asserts the output matches.
    Added an `inline: true` param and MIME-aware string/byte handling.
 
 2. **`hzd` had no way to register remote modules.** `engine.RemoteCatalog`
-   existed but was never instantiated. Added `--remote=id=host:port`.
+   existed but was never instantiated. Added `HAZYFLOW_REMOTE_MODULES=id=host:port`.
 
 3. **Binary inline data is wonky.** The engine wraps `Ref.Inline` with
    `json.Marshal` for gRPC transport. Text round-trips fine if you put
@@ -66,10 +66,10 @@ control API, and asserts the output matches.
   chain. Real workflows need "if amount > X route here else there".
 - **HTTP integration.** No `http_request`. The transformer is a stub
   that does string manipulation, not a real integration with anything.
-- **mTLS on the remote.** The `--remote` flag dials insecure (the
+- **mTLS on the remote.** `HAZYFLOW_REMOTE_MODULES` dials insecure (the
   RemoteDescriptor sets `Insecure: true`). Production should pass TLS
-  config; engine refuses unencrypted by default but the hzd flag opts
-  in.
+  config; the engine refuses unencrypted by default but this entry
+  point opts in.
 
 ## Anatomy: writing your own remote module
 

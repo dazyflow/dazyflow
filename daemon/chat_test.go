@@ -78,7 +78,10 @@ func TestChatStream_ProposalRoundTrip(t *testing.T) {
 		"message_stop", `{"type":"message_stop"}`,
 	)
 	api := fakeAnthropic(t, turn1, turn2)
-	h.svc.AnthropicAPIKey = "test-key"
+	h.svc.EncryptedSecrets = newTestEncryptedSecrets(t)
+	if err := h.svc.EncryptedSecrets.Put(context.Background(), h.alice.Tenant, daemon.TenantAnthropicKeyName, "test-key"); err != nil {
+		t.Fatalf("seed key: %v", err)
+	}
 	h.svc.AnthropicBaseURL = api.URL
 
 	var (
@@ -129,18 +132,67 @@ func TestChatStream_ProposalRoundTrip(t *testing.T) {
 	}
 }
 
-// Missing API key: chat should hard-fail before any wire traffic.
-// The gateway short-circuits this too, but defense in depth.
+// Missing per-tenant key: chat should emit a structured error event
+// with code "anthropic_key_missing" so the UI can route the user to
+// chat settings, and short-circuit before any wire traffic.
 func TestChatStream_RequiresAPIKey(t *testing.T) {
 	h := newVisibilityHarness(t)
-	h.svc.AnthropicAPIKey = ""
+	h.svc.EncryptedSecrets = newTestEncryptedSecrets(t) // store on, key not set
 
+	var events []daemon.ChatEvent
 	err := h.svc.ChatStream(context.Background(), h.alice, "",
 		[]daemon.ChatMessage{{Role: "user", Content: json.RawMessage(`"hi"`)}},
-		func(daemon.ChatEvent) error { return nil })
-	if err == nil || !strings.Contains(err.Error(), "API key") {
-		t.Errorf("err = %v", err)
+		func(ev daemon.ChatEvent) error {
+			events = append(events, ev)
+			return nil
+		})
+	if err != nil {
+		t.Fatalf("ChatStream returned err = %v; missing-key should surface via event, not return", err)
 	}
+	if len(events) != 1 || events[0].Type != "error" {
+		t.Fatalf("events = %+v, want a single error event", events)
+	}
+	if events[0].ErrorCode != "anthropic_key_missing" {
+		t.Errorf("error code = %q, want anthropic_key_missing", events[0].ErrorCode)
+	}
+}
+
+// Operator hasn't enabled the encrypted store at all: chat fails with
+// code "encrypted_store_off" so the UI can point at the operator.
+func TestChatStream_RequiresEncryptedStore(t *testing.T) {
+	h := newVisibilityHarness(t)
+	// EncryptedSecrets stays nil — operator never set --master-key.
+
+	var events []daemon.ChatEvent
+	err := h.svc.ChatStream(context.Background(), h.alice, "",
+		[]daemon.ChatMessage{{Role: "user", Content: json.RawMessage(`"hi"`)}},
+		func(ev daemon.ChatEvent) error {
+			events = append(events, ev)
+			return nil
+		})
+	if err != nil {
+		t.Fatalf("ChatStream returned err = %v; store-off should surface via event", err)
+	}
+	if len(events) != 1 || events[0].Type != "error" {
+		t.Fatalf("events = %+v, want a single error event", events)
+	}
+	if events[0].ErrorCode != "encrypted_store_off" {
+		t.Errorf("error code = %q, want encrypted_store_off", events[0].ErrorCode)
+	}
+}
+
+// newTestEncryptedSecrets builds an in-memory tenant secret store
+// for chat tests. Uses a zero master key — bytes are arbitrary as
+// long as the length is right; the test is exercising the lookup
+// path, not the crypto.
+func newTestEncryptedSecrets(t *testing.T) *daemon.EncryptedSecrets {
+	t.Helper()
+	masterKey := make([]byte, 32)
+	es, err := daemon.NewEncryptedSecrets(masterKey, daemon.NewMemSecretsStore())
+	if err != nil {
+		t.Fatalf("NewEncryptedSecrets: %v", err)
+	}
+	return es
 }
 
 // jsonString quotes s as a JSON string — needed in the SSE script

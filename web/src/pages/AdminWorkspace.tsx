@@ -95,10 +95,6 @@ export function AdminWorkspace() {
               value={limits.max_graph_nodes > 0 ? String(limits.max_graph_nodes) : t("admin.workspace.unlimited")}
             />
             <Row
-              label={t("admin.workspace.defaultTimeout")}
-              value={fmtSeconds(t, limits.default_graph_timeout_seconds)}
-            />
-            <Row
               label={t("admin.workspace.maxTimeout")}
               value={fmtSeconds(t, limits.max_graph_timeout_seconds)}
             />

@@ -42,19 +42,23 @@ BE_PID=$!
 sleep 0.2
 
 # --- 3. start hzd with secrets in env -------------------------------------
-echo "[3/7] starting hzd (workers=2, webhook=:18080, sandbox=$SANDBOX_BASE)"
+# /trigger/ paths land on the same HTTP listener as the API; we don't run
+# a separate webhook port anymore. All hzd config goes via HAZYFLOW_*.
+echo "[3/7] starting hzd (workers=2, http=:18080, sandbox=$SANDBOX_BASE)"
 INVOICE_API_KEY="Bearer invoice-svc-key-abc" \
 SLACK_TOKEN="Bearer slack-bot-token-def" \
 APPROVAL_API_KEY="Bearer approval-system-key-ghi" \
+HAZYFLOW_LISTEN=":50099" \
+HAZYFLOW_HTTP=":18080" \
+HAZYFLOW_WORKERS=2 \
+HAZYFLOW_DEV_KEY=1 \
+HAZYFLOW_SANDBOX_BASE="$SANDBOX_BASE" \
 /tmp/ap-hzd \
-    --listen=:50099 --workers=2 --webhook=:18080 \
-    --sandbox-base="$SANDBOX_BASE" \
-    --cron=false \
     > "$HZD_LOG" 2>&1 &
 HZD_PID=$!
 sleep 0.4
 TOKEN=$(grep -oE 'hzk_[a-z0-9_]+' "$HZD_LOG" | head -1)
-grep -E "listening|webhook" "$HZD_LOG" | sed 's/^/      /'
+grep -E "listening" "$HZD_LOG" | sed 's/^/      /'
 
 # --- 4. save the two pipeline graphs --------------------------------------
 echo "[4/7] saving graphs"

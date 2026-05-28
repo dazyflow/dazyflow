@@ -48,62 +48,34 @@ services:
       # normal host where the bridge works fine.
       network: host
     restart: unless-stopped
-    # Optional: defaults below boot as-is, so the very first
-    # `docker compose up -d` works with no .env present.
+    # env_file forwards every HAZYFLOW_* var the operator sets in .env
+    # straight to the container — see .env.example for the full
+    # catalogue. The explicit environment: block below only covers vars
+    # that need a non-trivial default for first-boot ergonomics OR a
+    # transformation (LANDING_DIR's host-path → /srv/landing mapping).
+    # Everything else flows through env_file with no per-var compose
+    # edit needed.
     env_file:
       - path: .env
         required: false
     environment:
       TZ: ${TZ:-UTC}
-      # Database. Defaults to the bundled postgres service. Empty strings
-      # let hzd fall back to its own flag defaults rather than overriding
-      # with a literal "".
+      # Default to the bundled postgres service when .env doesn't set
+      # this. Keeps first-boot working with no .env at all.
       HAZYFLOW_POSTGRES_DSN: ${HAZYFLOW_POSTGRES_DSN:-postgres://${POSTGRES_USER:-hazyflow}:${POSTGRES_PASSWORD:-hazyflow}@postgres:5432/${POSTGRES_DB:-hazyflow}?sslmode=disable}
-      # Strongly recommended — when empty the encrypted secret store stays
-      # disabled (the daemon still boots).
-      HAZYFLOW_MASTER_KEY:           ${HAZYFLOW_MASTER_KEY:-}
-      HAZYFLOW_PUBLIC_BASE_URL:      ${HAZYFLOW_PUBLIC_BASE_URL:-}
-      HAZYFLOW_ENABLE_SIGNUP:        ${HAZYFLOW_ENABLE_SIGNUP:-}
-      HAZYFLOW_ENABLE_METRICS:       ${HAZYFLOW_ENABLE_METRICS:-}
-      HAZYFLOW_TRUST_PROXY_HEADERS:  ${HAZYFLOW_TRUST_PROXY_HEADERS:-}
-      HAZYFLOW_HTTP_EGRESS_ALLOW:    ${HAZYFLOW_HTTP_EGRESS_ALLOW:-}
-      # Optional marketing landing. Set HAZYFLOW_LANDING_DIR in .env to the
-      # *host* path of your built hazy-flow-landing checkout; the volume
-      # below mounts it to the fixed in-container path /srv/landing, and
-      # hzd is pointed at that fixed path here (the `:+` means: when the
-      # host var is set, hzd reads /srv/landing; when empty, hzd gets ""
-      # and / serves the SPA for everyone).
+      # First-boot defaults. .env values override these.
+      HAZYFLOW_WEB_ORIGIN:           ${HAZYFLOW_WEB_ORIGIN:-http://localhost:8080}
+      HAZYFLOW_SESSION_TTL:          ${HAZYFLOW_SESSION_TTL:-24h}
+      # Marketing landing: HAZYFLOW_LANDING_DIR in .env is the *host*
+      # path of your built hazy-flow-landing checkout; the volume below
+      # mounts it to the fixed in-container path /srv/landing, and hzd
+      # reads from that fixed path. The `:+` form means: when the host
+      # var is set, hzd reads /srv/landing; when empty, hzd gets "" and
+      # / serves the SPA for everyone.
       HAZYFLOW_LANDING_DIR:          ${HAZYFLOW_LANDING_DIR:+/srv/landing}
-      HAZYFLOW_PG_MAX_CONNS:         ${HAZYFLOW_PG_MAX_CONNS:-}
-      HAZYFLOW_PG_MIN_CONNS:         ${HAZYFLOW_PG_MIN_CONNS:-}
-      HAZYFLOW_MAX_GRAPH_NODES:      ${HAZYFLOW_MAX_GRAPH_NODES:-}
-      HAZYFLOW_MAX_CONCURRENT_JOBS:  ${HAZYFLOW_MAX_CONCURRENT_JOBS:-}
-      # Optional integrations / agent. Pass through now so operators can
-      # populate .env once and never come back here.
-      ANTHROPIC_API_KEY:                  ${ANTHROPIC_API_KEY:-}
-      HAZYFLOW_SLACK_SIGNING_SECRET:      ${HAZYFLOW_SLACK_SIGNING_SECRET:-}
-      HAZYFLOW_GITHUB_WEBHOOK_SECRET:     ${HAZYFLOW_GITHUB_WEBHOOK_SECRET:-}
-      HAZYFLOW_APPROVAL_HMAC_SECRET:      ${HAZYFLOW_APPROVAL_HMAC_SECRET:-}
-      HAZYFLOW_OAUTH_SLACK_CLIENT_ID:     ${HAZYFLOW_OAUTH_SLACK_CLIENT_ID:-}
-      HAZYFLOW_OAUTH_SLACK_CLIENT_SECRET: ${HAZYFLOW_OAUTH_SLACK_CLIENT_SECRET:-}
-      HAZYFLOW_OAUTH_GITHUB_CLIENT_ID:     ${HAZYFLOW_OAUTH_GITHUB_CLIENT_ID:-}
-      HAZYFLOW_OAUTH_GITHUB_CLIENT_SECRET: ${HAZYFLOW_OAUTH_GITHUB_CLIENT_SECRET:-}
-      HAZYFLOW_OAUTH_GOOGLE_CLIENT_ID:     ${HAZYFLOW_OAUTH_GOOGLE_CLIENT_ID:-}
-      HAZYFLOW_OAUTH_GOOGLE_CLIENT_SECRET: ${HAZYFLOW_OAUTH_GOOGLE_CLIENT_SECRET:-}
-      HAZYFLOW_OAUTH_NOTION_CLIENT_ID:     ${HAZYFLOW_OAUTH_NOTION_CLIENT_ID:-}
-      HAZYFLOW_OAUTH_NOTION_CLIENT_SECRET: ${HAZYFLOW_OAUTH_NOTION_CLIENT_SECRET:-}
-      OTEL_EXPORTER_OTLP_ENDPOINT:        ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
-    command:
-      # Container layout — fixed. Tunables come from .env above.
-      - --http=:8080
-      - --listen=:50050
-      - --web-dist=/srv/web
-      - --workspace-dir=/data/workspace
-      - --sandbox-base=/data/sandbox
-      # No env fallback on these flags, so interpolate from .env with a
-      # safe default (never empty — an empty --session-ttl fails to parse).
-      - --web-origin=${HAZYFLOW_WEB_ORIGIN:-http://localhost:8080}
-      - --session-ttl=${HAZYFLOW_SESSION_TTL:-24h}
+    # No command: — the image's ENTRYPOINT runs hzd and every setting is
+    # driven by HAZYFLOW_* env vars (container layout defaults are baked
+    # into the Dockerfile via ENV).
     depends_on:
       postgres:
         condition: service_healthy

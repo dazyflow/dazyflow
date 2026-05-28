@@ -6,8 +6,8 @@
 #   2. build — compile the static hzd binary (CGO off)
 #   3. final — distroless nonroot runtime with the binary + bundle
 #
-# The daemon serves the bundle from the same port as the API when run
-# with --web-dist /srv/web (see cmd/hzd --web-dist).
+# The daemon serves the bundle from the same port as the API when
+# HAZYFLOW_WEB_DIST is set (we set it to /srv/web below).
 
 # ---- 1. web bundle ----------------------------------------------------
 FROM node:22-alpine AS web
@@ -60,8 +60,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     go build -trimpath -ldflags="-s -w" -o /out/hzd ./cmd/hzd
 # Pre-create the data dirs here (the distroless final stage has no shell
-# to mkdir) so the default CMD's --workspace-dir/--sandbox-base paths
-# exist and are writable by the nonroot user.
+# to mkdir) so the default HAZYFLOW_WORKSPACE_DIR / HAZYFLOW_SANDBOX_BASE
+# paths exist and are writable by the nonroot user.
 RUN mkdir -p /data/workspace /data/sandbox
 
 # ---- 3. runtime -------------------------------------------------------
@@ -71,13 +71,16 @@ COPY --from=build /out/hzd /usr/local/bin/hzd
 COPY --from=web /web/dist /srv/web
 # Workspace + sandbox dirs live under /data, owned by the nonroot uid
 # (65532). Mount a volume here in production so git-backed graphs and
-# per-tenant sandboxes persist across container restarts. (Use
-# --postgres-dsn for the durable control-plane stores.)
+# per-tenant sandboxes persist across container restarts. (Set
+# HAZYFLOW_POSTGRES_DSN for the durable control-plane stores.)
 COPY --from=build --chown=65532:65532 /data /data
 EXPOSE 50050 8080
 USER nonroot:nonroot
+# Container layout defaults — every other knob is configured via
+# HAZYFLOW_* env vars on the container (see .env.example for the full
+# catalogue). Override these here only when rebaking the image.
+ENV HAZYFLOW_HTTP=:8080 \
+    HAZYFLOW_WEB_DIST=/srv/web \
+    HAZYFLOW_WORKSPACE_DIR=/data/workspace \
+    HAZYFLOW_SANDBOX_BASE=/data/sandbox
 ENTRYPOINT ["/usr/local/bin/hzd"]
-# Sensible container defaults; override at `docker run`. Serves the API +
-# bundle on :8080, gRPC on :50050. Provide --postgres-dsn + --master-key
-# for a durable, real deployment.
-CMD ["--http=:8080", "--web-dist=/srv/web", "--workspace-dir=/data/workspace", "--sandbox-base=/data/sandbox"]

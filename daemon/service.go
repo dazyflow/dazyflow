@@ -238,12 +238,6 @@ type Service struct {
 	// list + revoke + put which would bloat that contract otherwise.
 	AdminKeys auth.AdminKeyStore
 
-	// DefaultGraphTimeoutSeconds is applied to runs whose graph has no
-	// TimeoutSeconds set. Zero = no daemon-wide default. Configured by
-	// the `-default-graph-timeout` flag on hzd; doesn't override an
-	// explicit per-graph value.
-	DefaultGraphTimeoutSeconds int
-
 	// MaxGraphTimeoutSeconds is a hard ceiling on a run's wall-time: an
 	// explicit per-graph TimeoutSeconds larger than this is clamped down
 	// to it, so a tenant can't pin a worker for an unbounded duration.
@@ -255,10 +249,12 @@ type Service struct {
 	// graphs. Zero = unlimited. Configured by `-max-graph-nodes`.
 	MaxGraphNodes int
 
-	// AnthropicAPIKey powers the in-app chat agent (Service.ChatStream).
-	// Empty disables the chat endpoint. Configured via the
-	// `-anthropic-key` flag on hzd or $ANTHROPIC_API_KEY.
-	AnthropicAPIKey string
+	// EncryptedSecrets is the per-tenant encrypted secret store, used
+	// by ChatStream to look up the tenant's Anthropic API key under
+	// the well-known name "anthropic_api_key". Nil disables the chat
+	// endpoint (the store needs --master-key to come up, and BYO-key
+	// chat is meaningless without it).
+	EncryptedSecrets *EncryptedSecrets
 
 	// AnthropicBaseURL overrides the Messages API host. Tests use it to
 	// point at httptest; production leaves it empty (defaulting to

@@ -9,10 +9,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
 	"strings"
-	"time"
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 )
@@ -152,39 +150,6 @@ func NewApprovalListener(svc *Service, signer *HMACApprovalSigner) *ApprovalList
 		svc:    svc,
 		signer: signer,
 		logger: log.New(log.Writer(), "approve: ", log.LstdFlags),
-	}
-}
-
-// ServeListener serves the HMAC approval endpoint on an already-bound
-// listener and blocks until ctx is cancelled. cmd/hzd binds on the main
-// goroutine so a port-in-use error fails startup loudly (same pattern as
-// the webhook + HTTP gateway listeners).
-func (a *ApprovalListener) ServeListener(ctx context.Context, ln net.Listener) error {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/approve/", a.handle)
-	mux.HandleFunc("/healthz", func(rw http.ResponseWriter, _ *http.Request) {
-		rw.WriteHeader(http.StatusOK)
-		_, _ = rw.Write([]byte("ok"))
-	})
-	srv := &http.Server{
-		Handler:           mux,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       60 * time.Second,
-	}
-	errC := make(chan error, 1)
-	go func() {
-		a.logger.Printf("listening on %s", ln.Addr())
-		errC <- srv.Serve(ln)
-	}()
-	select {
-	case <-ctx.Done():
-		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		return srv.Shutdown(shutdown)
-	case err := <-errC:
-		return err
 	}
 }
 

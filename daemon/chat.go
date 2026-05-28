@@ -35,6 +35,15 @@ type ChatEvent struct {
 	ResultText string `json:"result_text,omitempty"`
 	ErrorText  string `json:"error_text,omitempty"`
 
+	// ErrorCode is a stable machine-readable tag set on "error" events
+	// the UI cares to special-case. Empty for generic errors. Known
+	// values:
+	//   "anthropic_key_missing"  — tenant hasn't set anthropic_api_key
+	//                              (UI should link to chat settings)
+	//   "encrypted_store_off"    — operator hasn't enabled the
+	//                              per-tenant secret store
+	ErrorCode string `json:"error_code,omitempty"`
+
 	Proposal *core.Graph `json:"proposal,omitempty"`
 
 	// AutoApplied is true when the agent already wrote the proposed
@@ -109,11 +118,16 @@ func (s *Service) ChatStream(
 	if s.UseClaudeCLI {
 		return s.streamViaClaudeCLI(ctx, p, bearerToken, userMessages, onEvent)
 	}
-	if s.AnthropicAPIKey == "" {
-		return fmt.Errorf("anthropic API key not configured")
+	apiKey, err := s.tenantAnthropicKey(ctx, p)
+	if err != nil {
+		// Emit a structured error frame so the UI can route the user
+		// to chat settings instead of showing a raw error string.
+		// Returning nil keeps the gateway's defensive secondary error
+		// emit (different shape) from racing the structured one.
+		return onEvent(ChatEvent{Type: "error", ErrorText: err.Error(), ErrorCode: errorCodeFor(err)})
 	}
 
-	client := anthropic.NewClient(s.AnthropicAPIKey)
+	client := anthropic.NewClient(apiKey)
 	if s.AnthropicBaseURL != "" {
 		client.BaseURL = s.AnthropicBaseURL
 	}
@@ -488,4 +502,49 @@ func (s *Service) AnthropicModel() string {
 		return s.AnthropicModelOverride
 	}
 	return anthropic.DefaultModel
+}
+
+// TenantAnthropicKeyName is the well-known secret name where a tenant
+// stores its Anthropic API key. Exported so the web settings page can
+// PUT/DELETE under exactly this name via /api/v1/secrets/{name}.
+const TenantAnthropicKeyName = "anthropic_api_key"
+
+// errAnthropicKeyMissing is returned by tenantAnthropicKey when the
+// tenant hasn't stored anthropic_api_key yet. Sentinel so the chat
+// handler can tag the error frame with a stable code.
+var errAnthropicKeyMissing = errors.New("your org has not set an Anthropic API key. Open Admin → Chat agent to add one.")
+
+// errEncryptedStoreOff is returned when the operator hasn't enabled
+// the per-tenant secret store at all (no --master-key). BYO chat
+// needs the store; without it the feature is operator-disabled.
+var errEncryptedStoreOff = errors.New("chat is unavailable: the operator has not enabled the per-tenant secret store (--master-key).")
+
+// tenantAnthropicKey reads the calling tenant's stored Anthropic key.
+// The principal's tenant scopes the lookup; the secret name is fixed.
+func (s *Service) tenantAnthropicKey(ctx context.Context, p core.Principal) (string, error) {
+	if s.EncryptedSecrets == nil {
+		return "", errEncryptedStoreOff
+	}
+	ctx = core.WithTenant(ctx, p.Tenant)
+	key, err := s.EncryptedSecrets.Get(ctx, TenantAnthropicKeyName)
+	if err != nil {
+		if errors.Is(err, ErrSecretNotFound) {
+			return "", errAnthropicKeyMissing
+		}
+		return "", err
+	}
+	if key == "" {
+		return "", errAnthropicKeyMissing
+	}
+	return key, nil
+}
+
+func errorCodeFor(err error) string {
+	switch {
+	case errors.Is(err, errAnthropicKeyMissing):
+		return "anthropic_key_missing"
+	case errors.Is(err, errEncryptedStoreOff):
+		return "encrypted_store_off"
+	}
+	return ""
 }

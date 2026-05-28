@@ -36,10 +36,12 @@ trap 'kill $XFORM_PID 2>/dev/null || true; kill $HZD_PID 2>/dev/null || true; rm
 sleep 0.3
 
 echo "[4/6] starting hzd with the remote registered"
-/tmp/hzd-demo --listen=:50099 --workers=2 \
-              --sandbox-base="$SANDBOX_BASE" \
-              --remote="csv_uppercase=127.0.0.1:60001" \
-              > /tmp/hzd.log 2>&1 &
+HAZYFLOW_LISTEN=":50099" \
+HAZYFLOW_WORKERS=2 \
+HAZYFLOW_DEV_KEY=1 \
+HAZYFLOW_SANDBOX_BASE="$SANDBOX_BASE" \
+HAZYFLOW_REMOTE_MODULES="csv_uppercase=127.0.0.1:60001" \
+/tmp/hzd-demo > /tmp/hzd.log 2>&1 &
 HZD_PID=$!
 sleep 0.5
 TOKEN=$(grep -oE 'hzk_[a-z0-9_]+' /tmp/hzd.log | head -1)

@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { KeyRound, Users, Settings2, Boxes, ShieldAlert, ShieldCheck } from "lucide-react";
+import { KeyRound, Users, Settings2, Boxes, ShieldAlert, ShieldCheck, Sparkles } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { orgDisplayName } from "../lib/orgDisplayName";
@@ -71,6 +71,13 @@ export function Admin() {
           icon={<ShieldCheck size={16} />}
           title={t("admin.cardSSOTitle")}
           desc={t("admin.cardSSODesc")}
+          status="ready"
+        />
+        <AdminCard
+          to="/admin/chat"
+          icon={<Sparkles size={16} />}
+          title={t("admin.cardChatTitle")}
+          desc={t("admin.cardChatDesc")}
           status="ready"
         />
         <AdminCard

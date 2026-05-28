@@ -17,10 +17,9 @@ func (h *HTTPGateway) workspaceLimits(rw http.ResponseWriter, r *http.Request, p
 		return
 	}
 	out := map[string]any{
-		"tenant":                        p.Tenant,
-		"max_graph_nodes":               h.svc.MaxGraphNodes,              // 0 = unlimited
-		"default_graph_timeout_seconds": h.svc.DefaultGraphTimeoutSeconds, // 0 = none
-		"max_graph_timeout_seconds":     h.svc.MaxGraphTimeoutSeconds,     // 0 = no ceiling
+		"tenant":                    p.Tenant,
+		"max_graph_nodes":           h.svc.MaxGraphNodes,          // 0 = unlimited
+		"max_graph_timeout_seconds": h.svc.MaxGraphTimeoutSeconds, // 0 = no ceiling
 	}
 	// Per-tenant disk quota, when a quota provider is wired.
 	if h.svc.Engine != nil && h.svc.Engine.Quota != nil {

@@ -387,7 +387,6 @@ export type WorkspaceLimits = {
   tenant: string;
   quota?: { used_bytes?: number; limit_bytes: number };
   max_graph_nodes: number;
-  default_graph_timeout_seconds: number;
   max_graph_timeout_seconds: number;
 };
 

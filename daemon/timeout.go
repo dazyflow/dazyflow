@@ -11,17 +11,17 @@ import (
 )
 
 // effectiveGraphTimeout picks the timeout that applies to a run:
-// per-graph if set, otherwise the daemon-wide default, otherwise zero
+// per-graph if set, otherwise the operator ceiling, otherwise zero
 // (no cap). Caller checks for zero before starting a watchdog so we
 // don't spawn idle goroutines.
 func (s *Service) effectiveGraphTimeout(g core.Graph) time.Duration {
-	d := time.Duration(s.DefaultGraphTimeoutSeconds) * time.Second
+	var d time.Duration
 	if g.TimeoutSeconds > 0 {
 		d = time.Duration(g.TimeoutSeconds) * time.Second
 	}
 	// Hard ceiling: clamp even an explicit per-graph value so a tenant
-	// can't pin a worker for an unbounded duration. The ceiling only
-	// shortens; it never extends a run that asked for less.
+	// can't pin a worker for an unbounded duration. When the graph
+	// itself sets no timeout, the ceiling becomes the de-facto default.
 	if max := time.Duration(s.MaxGraphTimeoutSeconds) * time.Second; max > 0 && (d == 0 || d > max) {
 		d = max
 	}

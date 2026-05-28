@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -43,59 +44,54 @@ import (
 )
 
 func main() {
-	listen := flag.String("listen", ":50050", "gRPC listen address")
-	devKey := flag.Bool("dev-key", os.Getenv("HAZYFLOW_DEV_KEY") == "1", "issue a dev API key on startup (insecure; local use only). Default OFF — opt in with --dev-key or HAZYFLOW_DEV_KEY=1.")
-	workerCount := flag.Int("workers", 2, "number of worker goroutines")
-	sandboxBase := flag.String("sandbox-base", "", "base directory for per-workspace sandboxes (default: ./.hazyflow-sandbox)")
-	quotaSpec := flag.String("quota", "", "per-tenant quotas, e.g. acme=10MB,globex=1GB (no flag = unlimited)")
-	tlsCert := flag.String("tls-cert", "", "PEM-encoded server certificate (enables mTLS when set with --tls-key and --tls-ca)")
-	tlsKey := flag.String("tls-key", "", "PEM-encoded server private key")
-	tlsCA := flag.String("tls-ca", "", "PEM-encoded CA bundle for verifying client certificates")
-	remotes := flag.String("remote", "", "register remote modules, e.g. id1=host:port,id2=host:port (uses insecure dial; intended for dev)")
-	enableCron := flag.Bool("cron", true, "enable the cron scheduler")
-	webhookListen := flag.String("webhook", "", "enable the webhook listener on this addr (e.g. :8080); empty disables")
-	httpListen := flag.String("http", "", "enable the HTTP /api/v1 gateway on this addr (e.g. :8080); empty disables")
-	postgresDSN := flag.String("postgres-dsn", os.Getenv("HAZYFLOW_POSTGRES_DSN"), "Postgres connection string (default $HAZYFLOW_POSTGRES_DSN). When set, jobs, API keys, sessions, users, and encrypted secrets persist to Postgres (survive restart). When empty, those run in-memory/JSON — dev only, lost on restart.")
-	pgMaxConns := flag.Int("pg-max-conns", envInt("HAZYFLOW_PG_MAX_CONNS", 0), "max Postgres connections in the shared pool (default $HAZYFLOW_PG_MAX_CONNS, else pgx's default of max(4, NumCPU)). Size up for production: workers + gateway + scheduler all share this pool.")
-	pgMinConns := flag.Int("pg-min-conns", envInt("HAZYFLOW_PG_MIN_CONNS", 0), "min warm Postgres connections kept open (default $HAZYFLOW_PG_MIN_CONNS, else 0). Keeps a floor of ready connections so a burst doesn't pay connection-setup latency.")
-	webDist := flag.String("web-dist", "", "serve a built React frontend bundle from this directory (e.g. web/dist). Empty = API-only. When set, the daemon serves the SPA from the same port as the API with index.html fallback for client-side routes.")
-	landingDir := flag.String("landing-dir", os.Getenv("HAZYFLOW_LANDING_DIR"), "serve an optional static marketing site from this directory (the hazy-flow-landing repo) alongside the SPA (default $HAZYFLOW_LANDING_DIR). When set with --web-dist, GET / is auth-gated: signed-in users get the app, anonymous visitors get landing.html; marketing pages/assets (/pricing, /privacy, /terms, /style.css, …) serve publicly. Empty = / serves the SPA for everyone.")
-	enableEnvSecrets := flag.Bool("env-secrets", true, "enable env:// secret provider")
-	builtinSecretsFile := flag.String("builtin-secrets", "", "JSON file of {name: value} for builtin:// secret provider")
-	isolateSharedSecrets := flag.Bool("isolate-shared-secrets", false, "require env:// and builtin:// names to be of the form <tenant>.<key> matching the caller's tenant. Off by default for backward compatibility with single-tenant deployments; turn on for shared multi-tenant deployments so tenant A can't read tenant B's shared secrets.")
-	masterKeyB64 := flag.String("master-key", os.Getenv("HAZYFLOW_MASTER_KEY"), "base64-encoded 32-byte AES-256 master key for the tenant:// encrypted secret store (default $HAZYFLOW_MASTER_KEY). When empty the tenant:// scheme and /api/v1/secrets CRUD endpoints stay disabled.")
-	rotateKeyB64 := flag.String("rotate-master-key", "", "rotate the tenant:// encrypted-secret KEK: re-wrap every tenant DEK from --master-key (the CURRENT key) to this new base64-encoded 32-byte key, print a report, and EXIT without serving. Use the same store as the running daemon (--postgres-dsn for durable deployments). Re-runnable. Afterwards, restart with --master-key set to the new key. No secret values are re-entered.")
-	publicBaseURL := flag.String("public-base-url", os.Getenv("HAZYFLOW_PUBLIC_BASE_URL"), "externally-reachable origin of this daemon (e.g. https://app.example.com). Required for OAuth — must match the redirect_uri registered with each OAuth provider.")
-	supportContact := flag.String("support-contact", os.Getenv("HAZYFLOW_SUPPORT_CONTACT"), "operator contact (email address or URL) surfaced to end users when something is mis-configured server-side (e.g. OAuth not enabled). Empty = the UI shows a generic 'contact your administrator' message.")
-	enableSignup := flag.Bool("signup", os.Getenv("HAZYFLOW_ENABLE_SIGNUP") == "1", "enable POST /api/v1/auth/signup for self-serve account creation. Off by default; production deployments often prefer admin-invite-only.")
-	enableMetrics := flag.Bool("metrics", os.Getenv("HAZYFLOW_ENABLE_METRICS") == "1", "expose an unauthenticated GET /metrics Prometheus endpoint (per-tenant disk-usage gauges + liveness). Off by default — it reveals tenant names, so enable only behind a restricted monitoring network/proxy.")
-	mcpServers := flag.String("mcp", "", "register MCP stdio servers, e.g. fs=server-filesystem /tmp;docs=npx -y @modelcontextprotocol/server-docs (semicolon-separated)")
-	workspaceDir := flag.String("workspace-dir", "./.hazyflow-workspace", "directory for the dev workspace's git-backed graph store; empty = in-memory (graphs lost on restart)")
-	usersFile := flag.String("users-file", "./.hazyflow-users.json", "JSON file backing the email+password user store; empty disables password sign-in")
-	membershipsFile := flag.String("memberships-file", "./.hazyflow-memberships.json", "JSON file backing the multi-org membership store; empty disables the invite + org-switcher flow")
-	invitationsFile := flag.String("invitations-file", "./.hazyflow-invitations.json", "JSON file backing the pending-invitation store; empty disables /api/v1/admin/invitations")
-	orgAuthFile := flag.String("org-auth-file", "./.hazyflow-orgauth.json", "JSON file backing per-org SSO config (Google client_id/secret/workspace_domain); empty disables Google sign-in")
-	orgProfileFile := flag.String("org-profile-file", "./.hazyflow-orgprofile.json", "JSON file backing per-org profile (display name + future branding fields); empty falls back to the raw tenant ID in the UI")
-	importUsersFrom := flag.String("import-users-from-json", "", "one-time migration: import users from this JSON user file into the Postgres user store (requires --postgres-dsn), then exit. Idempotent — accounts already in Postgres are skipped, never overwritten.")
-	webOrigin := flag.String("web-origin", "http://localhost:5174", "comma-separated allowed origins for the web UI (CORS + cookie credentials)")
-	authRatePerMin := flag.Int("auth-rate-per-min", 20, "per-IP requests/minute allowed on /api/v1/auth/{signin,signup} before 429. 0 disables throttling.")
-	authRateBurst := flag.Int("auth-rate-burst", 10, "per-IP burst capacity for the auth rate limiter")
-	httpEgressAllow := flag.String("http-egress-allow", os.Getenv("HAZYFLOW_HTTP_EGRESS_ALLOW"), "comma-separated egress allowlist for the http_request drop: exact hosts (api.stripe.com), wildcards (*.slack.com), or CIDR/IP (203.0.113.0/24). Empty = allow any public host (the IP-level SSRF guard still blocks private addresses).")
-	trustProxyHeaders := flag.Bool("trust-proxy-headers", os.Getenv("HAZYFLOW_TRUST_PROXY_HEADERS") == "1", "honor X-Forwarded-Proto from the reverse proxy when setting the Secure cookie flag + HSTS. Enable ONLY behind a trusted TLS-terminating proxy (nginx/Caddy/ingress); a directly-exposed daemon must leave this off so clients can't spoof the header.")
-	sessionTTL := flag.Duration("session-ttl", 24*time.Hour, "lifetime of a sign-in session before the user must re-authenticate")
-	defaultGraphTimeout := flag.Duration("default-graph-timeout", 0, "wall-time cap applied to runs whose graph has no timeout_seconds set (0 = no default; the per-graph value, when present, always wins)")
-	maxGraphTimeout := flag.Duration("max-graph-timeout", 0, "hard ceiling on a run's wall-time (0 = no ceiling). Clamps even an explicit per-graph timeout_seconds so a tenant can't pin a worker indefinitely.")
-	maxGraphNodes := flag.Int("max-graph-nodes", envInt("HAZYFLOW_MAX_GRAPH_NODES", 0), "reject SubmitGraph when the graph has more than this many nodes (0 = unlimited; default $HAZYFLOW_MAX_GRAPH_NODES). Resource-exhaustion guard against pathologically large graphs.")
-	maxConcurrentJobs := flag.Int("max-concurrent-jobs", envInt("HAZYFLOW_MAX_CONCURRENT_JOBS", 0), "cap on node jobs a single tenant may have running at once (0 = unlimited; default $HAZYFLOW_MAX_CONCURRENT_JOBS). Fairness throttle so one tenant can't monopolize the worker pool. Exact on the in-memory store; a best-effort soft cap on Postgres (a race can briefly allow cap+1).")
-	anthropicKey := flag.String("anthropic-key", os.Getenv("ANTHROPIC_API_KEY"), "Anthropic API key for the in-app chat agent (default $ANTHROPIC_API_KEY). Empty disables /api/v1/chat/stream unless --claude-cli is set.")
-	claudeCLI := flag.Bool("claude-cli", false, "Route the chat endpoint through the local `claude -p` CLI + hz-mcp instead of the Anthropic API. Test mode — lets you exercise the chat without an API key as long as `claude` is logged in.")
-	claudeCLIMCPBin := flag.String("claude-cli-mcp-bin", "", "Path to the hz-mcp binary used by --claude-cli (default: $HZ_MCP_BIN, then $PATH lookup).")
-	claudeCLIHazydURL := flag.String("claude-cli-hzd-url", "http://localhost:8080", "URL hz-mcp uses to call back into this hzd process under --claude-cli.")
-	slackSigningSecret := flag.String("slack-signing-secret", os.Getenv("HAZYFLOW_SLACK_SIGNING_SECRET"), "Slack app Signing Secret (default $HAZYFLOW_SLACK_SIGNING_SECRET). Required for /api/v1/events/slack/* to accept Slack Events API POSTs. Empty disables the endpoint with 501.")
-	githubWebhookSecret := flag.String("github-webhook-secret", os.Getenv("HAZYFLOW_GITHUB_WEBHOOK_SECRET"), "GitHub repo webhook Secret value (default $HAZYFLOW_GITHUB_WEBHOOK_SECRET). Required for /api/v1/events/github/* to accept push and pull_request webhook POSTs. Empty disables the endpoint with 501.")
-	approvalListen := flag.String("approval-listen", "", "enable the HMAC approval-link listener on this addr (e.g. :8090) so unauthenticated email/Slack approvers can resume awaiting nodes. Empty disables. Requires --public-base-url and --approval-hmac-secret.")
-	approvalHMACSecret := flag.String("approval-hmac-secret", os.Getenv("HAZYFLOW_APPROVAL_HMAC_SECRET"), "base64-encoded shared secret (≥16 bytes) for signing/verifying approval-link tokens (default $HAZYFLOW_APPROVAL_HMAC_SECRET). Must be identical across nodes in a multi-node deployment.")
+	// All runtime configuration comes from HAZYFLOW_* env vars (see
+	// .env.example for the full list and meanings). Only two flags
+	// remain — both one-shot operator commands that exit after running,
+	// where an env var would either silently re-run on every restart
+	// (rotate-master-key) or sit useless across the daemon's lifetime
+	// (import-users-from-json).
+	rotateKeyB64 := flag.String("rotate-master-key", "", "rotate the tenant:// encrypted-secret KEK: re-wrap every tenant DEK from HAZYFLOW_MASTER_KEY (the CURRENT key) to this new base64-encoded 32-byte key, print a report, and EXIT without serving. Re-runnable. After it succeeds, restart hzd with HAZYFLOW_MASTER_KEY set to the new key. No secret values are re-entered.")
+	importUsersFrom := flag.String("import-users-from-json", "", "one-time migration: import users from this JSON user file into the Postgres user store (requires HAZYFLOW_POSTGRES_DSN), then exit. Idempotent — accounts already in Postgres are skipped, never overwritten.")
 	flag.Parse()
+
+	listen := envStr("HAZYFLOW_LISTEN", ":50050")
+	devKey := envBool("HAZYFLOW_DEV_KEY", false)
+	workerCount := envInt("HAZYFLOW_WORKERS", 2)
+	sandboxBase := envStr("HAZYFLOW_SANDBOX_BASE", "")
+	tlsCert := envStr("HAZYFLOW_TLS_CERT", "")
+	tlsKey := envStr("HAZYFLOW_TLS_KEY", "")
+	tlsCA := envStr("HAZYFLOW_TLS_CA", "")
+	remotes := envStr("HAZYFLOW_REMOTE_MODULES", "")
+	httpListen := envStr("HAZYFLOW_HTTP", "")
+	postgresDSN := envStr("HAZYFLOW_POSTGRES_DSN", "")
+	pgMaxConns := envInt("HAZYFLOW_PG_MAX_CONNS", 0)
+	pgMinConns := envInt("HAZYFLOW_PG_MIN_CONNS", 0)
+	webDist := envStr("HAZYFLOW_WEB_DIST", "")
+	landingDir := envStr("HAZYFLOW_LANDING_DIR", "")
+	isolateSharedSecrets := envBool("HAZYFLOW_ISOLATE_SHARED_SECRETS", false)
+	masterKeyB64 := envStr("HAZYFLOW_MASTER_KEY", "")
+	publicBaseURL := envStr("HAZYFLOW_PUBLIC_BASE_URL", "")
+	supportContact := envStr("HAZYFLOW_SUPPORT_CONTACT", "")
+	enableSignup := envBool("HAZYFLOW_ENABLE_SIGNUP", false)
+	enableMetrics := envBool("HAZYFLOW_ENABLE_METRICS", false)
+	mcpServers := envStr("HAZYFLOW_MCP_SERVERS", "")
+	workspaceDir := envStr("HAZYFLOW_WORKSPACE_DIR", "./.hazyflow-workspace")
+	stateDir := envStr("HAZYFLOW_STATE_DIR", ".")
+	webOrigin := envStr("HAZYFLOW_WEB_ORIGIN", "http://localhost:5174")
+	authRatePerMin := envInt("HAZYFLOW_AUTH_RATE_PER_MIN", 20)
+	authRateBurst := envInt("HAZYFLOW_AUTH_RATE_BURST", 10)
+	httpEgressAllow := envStr("HAZYFLOW_HTTP_EGRESS_ALLOW", "")
+	trustProxyHeaders := envBool("HAZYFLOW_TRUST_PROXY_HEADERS", false)
+	sessionTTL := envDuration("HAZYFLOW_SESSION_TTL", 24*time.Hour)
+	maxGraphTimeout := envDuration("HAZYFLOW_MAX_GRAPH_TIMEOUT", 0)
+	maxGraphNodes := envInt("HAZYFLOW_MAX_GRAPH_NODES", 0)
+	maxConcurrentJobs := envInt("HAZYFLOW_MAX_CONCURRENT_JOBS", 0)
+	claudeCLI := envBool("HAZYFLOW_CLAUDE_CLI", false)
+	claudeCLIMCPBin := envStr("HAZYFLOW_CLAUDE_CLI_MCP_BIN", "")
+	claudeCLIHazydURL := envStr("HAZYFLOW_CLAUDE_CLI_HZD_URL", "http://localhost:8080")
+	slackSigningSecret := envStr("HAZYFLOW_SLACK_SIGNING_SECRET", "")
+	githubWebhookSecret := envStr("HAZYFLOW_GITHUB_WEBHOOK_SECRET", "")
+	approvalHMACSecret := envStr("HAZYFLOW_APPROVAL_HMAC_SECRET", "")
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -117,11 +113,11 @@ func main() {
 	}
 
 	// Egress allowlist for the http_request drop (operator policy).
-	if *httpEgressAllow != "" {
-		if err := hfnet.SetEgressAllowlist(strings.Split(*httpEgressAllow, ",")); err != nil {
-			log.Fatalf("--http-egress-allow: %v", err)
+	if httpEgressAllow != "" {
+		if err := hfnet.SetEgressAllowlist(strings.Split(httpEgressAllow, ",")); err != nil {
+			log.Fatalf("HAZYFLOW_HTTP_EGRESS_ALLOW: %v", err)
 		}
-		log.Printf("http_request egress allowlist active: %s", *httpEgressAllow)
+		log.Printf("http_request egress allowlist active: %s", httpEgressAllow)
 	}
 
 	// Durable stores: when --postgres-dsn is set, keys / sessions /
@@ -136,8 +132,8 @@ func main() {
 		jobs     core.JobStore
 		pgPool   *pgxpool.Pool
 	)
-	if *postgresDSN != "" {
-		poolCfg, err := pgxpool.ParseConfig(*postgresDSN)
+	if postgresDSN != "" {
+		poolCfg, err := pgxpool.ParseConfig(postgresDSN)
 		if err != nil {
 			log.Fatalf("postgres dsn: %v", err)
 		}
@@ -146,11 +142,11 @@ func main() {
 		// the scheduler share this one pool). Let operators size it; 0
 		// leaves the pgx default. MinConns keeps warm connections so a
 		// burst doesn't pay connection-setup latency.
-		if *pgMaxConns > 0 {
-			poolCfg.MaxConns = int32(*pgMaxConns)
+		if pgMaxConns > 0 {
+			poolCfg.MaxConns = int32(pgMaxConns)
 		}
-		if *pgMinConns > 0 {
-			poolCfg.MinConns = int32(*pgMinConns)
+		if pgMinConns > 0 {
+			poolCfg.MinConns = int32(pgMinConns)
 		}
 		pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 		if err != nil {
@@ -180,27 +176,28 @@ func main() {
 		log.Print("postgres stores enabled: jobs, api-keys, sessions, users (durable across restart)")
 	} else {
 		ks = auth.NewMemKeyStore()
-		jsonUsers, err := auth.OpenJSONUserStore(*usersFile)
+		path := stateFile(stateDir, "users")
+		jsonUsers, err := auth.OpenJSONUserStore(path)
 		if err != nil {
 			log.Fatalf("open users: %v", err)
 		}
 		users = jsonUsers
-		if *usersFile != "" {
+		if path != "" {
 			seedDefaultUser(ctx, users)
-			log.Printf("users store: %s", *usersFile)
+			log.Printf("users store: %s", path)
 		}
 		sessions = auth.NewMemSessionStore()
 		jobs = jobstore.NewMemory()
-		log.Print("WARNING: in-memory stores (jobs/api-keys/sessions) — lost on restart; set --postgres-dsn for durability")
+		log.Print("WARNING: in-memory stores (jobs/api-keys/sessions) — lost on restart; set HAZYFLOW_POSTGRES_DSN for durability")
 	}
 
 	// One-time migration: import a JSON user file into the Postgres user
 	// store, then exit. Idempotent (existing accounts skipped). Lets a dev
-	// deployment move to --postgres-dsn without stranding accounts created
+	// deployment move to HAZYFLOW_POSTGRES_DSN without stranding accounts created
 	// on the JSON file.
 	if *importUsersFrom != "" {
-		if *postgresDSN == "" {
-			log.Fatalf("--import-users-from-json requires --postgres-dsn (the destination store)")
+		if postgresDSN == "" {
+			log.Fatalf("--import-users-from-json requires HAZYFLOW_POSTGRES_DSN (the destination store)")
 		}
 		src, err := auth.OpenJSONUserStore(*importUsersFrom)
 		if err != nil {
@@ -217,7 +214,7 @@ func main() {
 	// Per-tenant concurrency cap (fairness throttle). Applies to whichever
 	// JobStore backend is active; the Postgres cap is a documented soft
 	// cap, the memory cap is exact.
-	if mc := *maxConcurrentJobs; mc > 0 {
+	if mc := maxConcurrentJobs; mc > 0 {
 		switch js := jobs.(type) {
 		case *jobstore.Memory:
 			js.SetMaxConcurrentPerTenant(mc)
@@ -231,9 +228,9 @@ func main() {
 	// gets a git-backed store under workspaceDir/<tenant>/<workspace> on
 	// first access. This lets self-serve signups (tenant usr_<hex>) save
 	// graphs without pre-registration. Empty workspaceDir = in-memory.
-	workspaces := daemon.NewAutoFSWorkspaces(*workspaceDir)
-	if *workspaceDir != "" {
-		log.Printf("workspace store: %s/<tenant>/<workspace> (auto-provisioned)", *workspaceDir)
+	workspaces := daemon.NewAutoFSWorkspaces(workspaceDir)
+	if workspaceDir != "" {
+		log.Printf("workspace store: %s/<tenant>/<workspace> (auto-provisioned)", workspaceDir)
 	} else {
 		log.Println("workspace store: in-memory (graphs lost on restart)")
 	}
@@ -251,7 +248,7 @@ func main() {
 	} else {
 		bus = daemon.NewMemoryBus()
 	}
-	base := *sandboxBase
+	base := sandboxBase
 	if base == "" {
 		base = ".hazyflow-sandbox"
 	}
@@ -259,11 +256,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("sandbox base %s: %v", base, err)
 	}
-	limits, err := parseQuotaSpec(*quotaSpec)
-	if err != nil {
-		log.Fatalf("--quota: %v", err)
-	}
-	quota, err := daemon.NewFSQuota(base, limits)
+	// Per-tenant disk quotas: the engine machinery is wired up (Reserve
+	// closes the concurrent-write race on file_write), but quotas
+	// themselves are configured via an admin API rather than a startup
+	// string. No quotas at startup means unlimited; an admin can set
+	// them at runtime once that API exists.
+	quota, err := daemon.NewFSQuota(base, nil)
 	if err != nil {
 		log.Fatalf("quota: %v", err)
 	}
@@ -272,27 +270,19 @@ func main() {
 	// per-job snapshot can't (mirrors the SetTokenLookup wiring below).
 	io.SetQuotaReserver(quota.Reserve)
 	remoteCatalog := engine.NewRemoteCatalog()
-	if err := registerRemotes(remoteCatalog, *remotes); err != nil {
-		log.Fatalf("--remote: %v", err)
+	if err := registerRemotes(remoteCatalog, remotes); err != nil {
+		log.Fatalf("HAZYFLOW_REMOTE_MODULES: %v", err)
 	}
+	// env:// is always registered; HAZYFLOW_ISOLATE_SHARED_SECRETS gates
+	// per-tenant prefix enforcement (`<tenant>.<key>`) for multi-tenant
+	// deploys. tenant:// (encrypted, per-tenant) is set up below.
 	secrets := map[string]core.SecretProvider{}
-	if *enableEnvSecrets {
-		p := daemon.EnvProvider{Namespaced: *isolateSharedSecrets}
-		secrets[p.Scheme()] = p
+	envProvider := daemon.EnvProvider{Namespaced: isolateSharedSecrets}
+	secrets[envProvider.Scheme()] = envProvider
+	if isolateSharedSecrets {
+		log.Print("env:// secret provider running in tenant-isolated mode — names must be <tenant>.<key>")
 	}
-	if *builtinSecretsFile != "" {
-		p, err := daemon.NewBuiltinProviderFromFile(*builtinSecretsFile)
-		if err != nil {
-			log.Fatalf("builtin secrets: %v", err)
-		}
-		p.Namespaced = *isolateSharedSecrets
-		secrets[p.Scheme()] = p
-		log.Printf("loaded builtin secrets from %s", *builtinSecretsFile)
-	}
-	if *isolateSharedSecrets {
-		log.Print("shared secret providers (env://, builtin://) running in tenant-isolated mode — names must be <tenant>.<key>")
-	}
-	encryptedSecrets := setupEncryptedSecrets(ctx, *masterKeyB64, secrets, pgPool)
+	encryptedSecrets := setupEncryptedSecrets(ctx, masterKeyB64, secrets, pgPool)
 
 	// KEK rotation is an offline operator action: re-wrap every tenant
 	// DEK from the current --master-key to the new key, then exit. The
@@ -301,7 +291,7 @@ func main() {
 	// store) the running daemon uses.
 	if *rotateKeyB64 != "" {
 		if encryptedSecrets == nil {
-			log.Fatalf("--rotate-master-key requires --master-key (the current key) to be set")
+			log.Fatalf("--rotate-master-key requires HAZYFLOW_MASTER_KEY (the current key) to be set")
 		}
 		newKey, err := base64.StdEncoding.DecodeString(*rotateKeyB64)
 		if err != nil {
@@ -311,14 +301,14 @@ func main() {
 		if err != nil {
 			log.Fatalf("rotate master key: %v", err)
 		}
-		log.Printf("master-key rotation complete: %d DEK(s) re-wrapped, %d already on the new key. Restart hzd with --master-key set to the new key.", rotated, skipped)
+		log.Printf("master-key rotation complete: %d DEK(s) re-wrapped, %d already on the new key. Restart hzd with HAZYFLOW_MASTER_KEY set to the new key.", rotated, skipped)
 		return
 	}
 
-	oauthRegistry := setupOAuth(encryptedSecrets, *publicBaseURL)
+	oauthRegistry := setupOAuth(encryptedSecrets, publicBaseURL)
 	mcpCatalog := mcp.NewCatalog()
-	if err := registerMCPServers(mcpCatalog, *mcpServers); err != nil {
-		log.Fatalf("--mcp: %v", err)
+	if err := registerMCPServers(mcpCatalog, mcpServers); err != nil {
+		log.Fatalf("HAZYFLOW_MCP_SERVERS: %v", err)
 	}
 
 	eng := &engine.Engine{
@@ -343,23 +333,26 @@ func main() {
 		WorkerID:   "hzd-dev",
 		// AdminKeys uses the same MemKeyStore the Authenticator reads
 		// from, so admin-issued keys are immediately recognized.
-		AdminKeys:                  ks,
-		DefaultGraphTimeoutSeconds: int(defaultGraphTimeout.Seconds()),
-		MaxGraphTimeoutSeconds:     int(maxGraphTimeout.Seconds()),
-		MaxGraphNodes:              *maxGraphNodes,
-		AnthropicAPIKey:            *anthropicKey,
-		UseClaudeCLI:               *claudeCLI,
-		ClaudeCLIMCPBinary:         daemon.ResolveClaudeMCPBinary(*claudeCLIMCPBin),
-		ClaudeCLIHazydURL:          *claudeCLIHazydURL,
+		AdminKeys:              ks,
+		MaxGraphTimeoutSeconds: int(maxGraphTimeout.Seconds()),
+		MaxGraphNodes:          maxGraphNodes,
+		// EncryptedSecrets is where each tenant stores their own
+		// Anthropic API key under the well-known name
+		// daemon.TenantAnthropicKeyName. Nil disables chat unless
+		// --claude-cli is also set.
+		EncryptedSecrets:           encryptedSecrets,
+		UseClaudeCLI:               claudeCLI,
+		ClaudeCLIMCPBinary:         daemon.ResolveClaudeMCPBinary(claudeCLIMCPBin),
+		ClaudeCLIHazydURL:          claudeCLIHazydURL,
 		// PublicBaseURL feeds the failure-notify payload's run_url
 		// field (deep-link to /runs/{id}). Same value already used
 		// by the OAuth flow's redirect_uri builder.
-		PublicBaseURL: *publicBaseURL,
+		PublicBaseURL: publicBaseURL,
 		// SupportContact is surfaced on the Connections page when
 		// OAuth and/or the encrypted secret store are unavailable,
 		// so a non-technical end user has a path forward instead of
 		// a silently-empty page.
-		SupportContact: *supportContact,
+		SupportContact: supportContact,
 		// Default logger threads daemon-side warnings to the same
 		// log writer the gateway uses for HTTP request logs.
 		Logger: log.New(log.Writer(), "service: ", log.LstdFlags),
@@ -368,41 +361,33 @@ func main() {
 	// the Claude *drop* (integrations/ai/claude.go) reroutes through
 	// the local binary instead of the Anthropic API. Same toggle,
 	// two consumers — keeps dev environments from needing a real key.
-	if *claudeCLI {
+	if claudeCLI {
 		_ = os.Setenv("HAZYFLOW_CLAUDE_CLI", "1")
 	}
 
-	// Approval-link flow: when --approval-listen is set, mint signed
-	// per-(run,node) approval URLs (engine.ApprovalSigner) and serve the
-	// HMAC-verified /approve/{run}/{node} endpoint for unauthenticated
-	// email/Slack approvers. Off by default. Set BEFORE workers start so
-	// the signer is installed before any node executes.
-	if *approvalListen != "" {
-		if *publicBaseURL == "" {
-			log.Fatalf("--approval-listen requires --public-base-url (for the approval URLs)")
+	// Approval-link flow: when HAZYFLOW_APPROVAL_HMAC_SECRET is set,
+	// mint signed per-(run,node) approval URLs (engine.ApprovalSigner)
+	// and route the HMAC-verified /approve/{run}/{node} endpoint on
+	// the main HTTP gateway (see gw.Approval below). Set BEFORE workers
+	// start so the signer is installed before any node executes.
+	var approvalListener *daemon.ApprovalListener
+	if approvalHMACSecret != "" {
+		if publicBaseURL == "" {
+			log.Fatalf("HAZYFLOW_APPROVAL_HMAC_SECRET requires HAZYFLOW_PUBLIC_BASE_URL (for the approval URLs)")
 		}
-		secret, err := base64.StdEncoding.DecodeString(*approvalHMACSecret)
+		secret, err := base64.StdEncoding.DecodeString(approvalHMACSecret)
 		if err != nil || len(secret) < 16 {
-			log.Fatalf("--approval-hmac-secret: need a base64-encoded secret of at least 16 bytes (shared across nodes)")
+			log.Fatalf("HAZYFLOW_APPROVAL_HMAC_SECRET: need a base64-encoded secret of at least 16 bytes (shared across nodes)")
 		}
-		signer := &daemon.HMACApprovalSigner{BaseURL: *publicBaseURL, Secret: secret}
+		signer := &daemon.HMACApprovalSigner{BaseURL: publicBaseURL, Secret: secret}
 		eng.ApprovalSigner = signer
-		al := daemon.NewApprovalListener(svc, signer)
-		alLn, err := net.Listen("tcp", *approvalListen)
-		if err != nil {
-			log.Fatalf("approval listener: cannot bind %s: %v", *approvalListen, err)
-		}
-		go func() {
-			if err := al.ServeListener(ctx, alLn); err != nil && err != http.ErrServerClosed {
-				log.Printf("approval listener stopped: %v", err)
-			}
-		}()
-		log.Printf("approval endpoint enabled at %s/approve/<run>/<node> (HMAC-verified)", *publicBaseURL)
+		approvalListener = daemon.NewApprovalListener(svc, signer)
+		log.Printf("approval endpoint enabled at %s/approve/<run>/<node> (HMAC-verified)", publicBaseURL)
 	}
 
 	// Spin up worker goroutines. Each is independent and competes for
 	// claims; the JobStore makes that contention safe.
-	for i := 0; i < *workerCount; i++ {
+	for i := 0; i < workerCount; i++ {
 		w := daemon.NewWorker(daemon.WorkerConfig{
 			ID: fmt.Sprintf("hzd-dev-w%d", i),
 		}, jobs, eng, bus)
@@ -413,103 +398,90 @@ func main() {
 		}()
 	}
 
-	// Cron scheduler fires graphs that declare cron triggers in their JSON.
-	if *enableCron {
-		sched := daemon.NewScheduler(svc)
-		// Multi-node: gate firing on a Postgres advisory-lock leader so
-		// only one hzd fires each schedule. Single-node (no DSN) stays
-		// the default always-leader.
-		if pgPool != nil {
-			leader := daemon.NewPgLeader(pgPool, daemon.SchedulerLockKey)
-			go leader.Run(ctx)
-			sched.SetLeader(leader.IsLeader)
-			log.Print("scheduler: leader election via postgres advisory lock")
+	// Cron scheduler fires graphs that declare cron triggers in their
+	// JSON. Always on — the only reason to disable it would be a
+	// worker-only node in a fleet, and we don't support that yet.
+	sched := daemon.NewScheduler(svc)
+	// Multi-node: gate firing on a Postgres advisory-lock leader so
+	// only one hzd fires each schedule. Single-node (no DSN) stays
+	// the default always-leader.
+	if pgPool != nil {
+		leader := daemon.NewPgLeader(pgPool, daemon.SchedulerLockKey)
+		go leader.Run(ctx)
+		sched.SetLeader(leader.IsLeader)
+		log.Print("scheduler: leader election via postgres advisory lock")
+	}
+	go func() {
+		if err := sched.Run(ctx); err != nil && err != context.Canceled {
+			log.Printf("scheduler stopped: %v", err)
 		}
-		go func() {
-			if err := sched.Run(ctx); err != nil && err != context.Canceled {
-				log.Printf("scheduler stopped: %v", err)
-			}
-		}()
+	}()
+
+	// Membership / invitation / per-org-auth / per-org-profile stores.
+	// All four live as JSON under --state-dir; the Pg equivalents will
+	// slot in later via the same --postgres-dsn switch. An empty
+	// --state-dir leaves all four nil → the gateway's invite,
+	// switch-org, and per-org settings endpoints return 501.
+	membershipsPath := stateFile(stateDir, "memberships")
+	memberships, err := auth.OpenJSONMembershipStore(membershipsPath)
+	if err != nil {
+		log.Fatalf("open memberships %q: %v", membershipsPath, err)
+	}
+	if membershipsPath != "" {
+		log.Printf("memberships store: %s", membershipsPath)
+	}
+	invitationsPath := stateFile(stateDir, "invitations")
+	invitations, err := auth.OpenJSONInvitationStore(invitationsPath)
+	if err != nil {
+		log.Fatalf("open invitations %q: %v", invitationsPath, err)
+	}
+	if invitationsPath != "" {
+		log.Printf("invitations store: %s", invitationsPath)
+	}
+	orgAuthPath := stateFile(stateDir, "orgauth")
+	orgAuthStore, err := auth.OpenJSONOrgAuthStore(orgAuthPath)
+	if err != nil {
+		log.Fatalf("open org-auth %q: %v", orgAuthPath, err)
+	}
+	if orgAuthPath != "" {
+		log.Printf("org-auth store: %s", orgAuthPath)
+	}
+	orgProfilePath := stateFile(stateDir, "orgprofile")
+	orgProfileStore, err := auth.OpenJSONOrgProfileStore(orgProfilePath)
+	if err != nil {
+		log.Fatalf("open org-profile %q: %v", orgProfilePath, err)
+	}
+	if orgProfilePath != "" {
+		log.Printf("org-profile store: %s", orgProfilePath)
 	}
 
-	// Webhook listener (separate port from gRPC). Each graph with a
-	// webhook trigger gets POST /trigger/<tenant>/<workspace>/<graph>.
-	// Bind on the main goroutine so a port-in-use error fails startup
-	// loudly (orchestration restarts) instead of silently dropping the
-	// listener — then serve in the background on the live listener.
-	if *webhookListen != "" {
-		whLn, err := net.Listen("tcp", *webhookListen)
-		if err != nil {
-			log.Fatalf("webhook listener: cannot bind %s: %v", *webhookListen, err)
-		}
-		wh := daemon.NewWebhookListener(svc)
-		go func() {
-			if err := wh.ServeListener(ctx, whLn); err != nil && err != http.ErrServerClosed {
-				log.Printf("webhook listener stopped: %v", err)
-			}
-		}()
-	}
-
-	// Membership / invitation / per-org-auth stores. JSON-only for v1;
-	// the Pg equivalents live in auth/postgres.go alongside the user
-	// store and can be slotted in later via the same --postgres-dsn
-	// switch. Empty paths leave the store nil → the gateway's invite
-	// + switch-org endpoints return 501.
-	memberships, err := auth.OpenJSONMembershipStore(*membershipsFile)
-	if err != nil {
-		log.Fatalf("open memberships %q: %v", *membershipsFile, err)
-	}
-	if *membershipsFile != "" {
-		log.Printf("memberships store: %s", *membershipsFile)
-	}
-	invitations, err := auth.OpenJSONInvitationStore(*invitationsFile)
-	if err != nil {
-		log.Fatalf("open invitations %q: %v", *invitationsFile, err)
-	}
-	if *invitationsFile != "" {
-		log.Printf("invitations store: %s", *invitationsFile)
-	}
-	orgAuthStore, err := auth.OpenJSONOrgAuthStore(*orgAuthFile)
-	if err != nil {
-		log.Fatalf("open org-auth %q: %v", *orgAuthFile, err)
-	}
-	if *orgAuthFile != "" {
-		log.Printf("org-auth store: %s", *orgAuthFile)
-	}
-	orgProfileStore, err := auth.OpenJSONOrgProfileStore(*orgProfileFile)
-	if err != nil {
-		log.Fatalf("open org-profile %q: %v", *orgProfileFile, err)
-	}
-	if *orgProfileFile != "" {
-		log.Printf("org-profile store: %s", *orgProfileFile)
-	}
-
-	if *httpListen != "" {
+	if httpListen != "" {
 		gw := daemon.NewHTTPGateway(svc)
 		gw.Users = users
 		gw.Sessions = sessions
-		gw.SessionTTL = *sessionTTL
+		gw.SessionTTL = sessionTTL
 		gw.Memberships = memberships
 		gw.Invitations = invitations
 		gw.OrgAuth = orgAuthStore
 		gw.Profiles = orgProfileStore
 		gw.EncryptedSecrets = encryptedSecrets // nil disables /api/v1/secrets endpoints
 		gw.OAuth = oauthRegistry               // nil disables /api/v1/oauth/* endpoints
-		gw.EnableSignup = *enableSignup        // false disables POST /api/v1/auth/signup
-		gw.EnableMetrics = *enableMetrics      // false disables GET /metrics
-		if *enableMetrics {
+		gw.Approval = approvalListener         // nil leaves POST /approve/ unregistered
+		gw.EnableSignup = enableSignup        // false disables POST /api/v1/auth/signup
+		gw.EnableMetrics = enableMetrics      // false disables GET /metrics
+		if enableMetrics {
 			log.Print("metrics endpoint enabled at GET /metrics (unauthenticated — restrict scrape access)")
 		}
-		gw.AuthRateLimit = daemon.NewAuthRateLimiter(*authRatePerMin, *authRateBurst)
+		gw.AuthRateLimit = daemon.NewAuthRateLimiter(authRatePerMin, authRateBurst)
 		if gw.AuthRateLimit != nil {
-			log.Printf("auth rate limit: %d/min per IP (burst %d)", *authRatePerMin, *authRateBurst)
+			log.Printf("auth rate limit: %d/min per IP (burst %d)", authRatePerMin, authRateBurst)
 		}
-		gw.TrustProxyHeaders = *trustProxyHeaders
-		if *trustProxyHeaders {
+		gw.TrustProxyHeaders = trustProxyHeaders
+		if trustProxyHeaders {
 			log.Print("trusting X-Forwarded-Proto from reverse proxy (Secure cookies + HSTS on forwarded-https)")
 		}
-		gw.WebDist = *webDist       // empty disables static frontend serving
-		gw.LandingDir = *landingDir // empty disables the marketing landing; / serves the SPA
+		gw.WebDist = webDist       // empty disables static frontend serving
+		gw.LandingDir = landingDir // empty disables the marketing landing; / serves the SPA
 		// Audit trail: Postgres-backed (durable) when a DSN is set, else
 		// in-memory (dev). Powers GET /api/v1/admin/audit.
 		if pgPool != nil {
@@ -526,35 +498,35 @@ func main() {
 			pool := pgPool
 			gw.ReadyCheck = func(ctx context.Context) error { return pool.Ping(ctx) }
 		}
-		if *webDist != "" {
-			log.Printf("serving frontend bundle from %s", *webDist)
+		if webDist != "" {
+			log.Printf("serving frontend bundle from %s", webDist)
 		}
-		if *landingDir != "" {
-			if *webDist == "" {
-				log.Printf("--landing-dir %s ignored: requires --web-dist (the landing auth-gate falls back to the SPA shell for signed-in users)", *landingDir)
+		if landingDir != "" {
+			if webDist == "" {
+				log.Printf("HAZYFLOW_LANDING_DIR %s ignored: requires HAZYFLOW_WEB_DIST (the landing auth-gate falls back to the SPA shell for signed-in users)", landingDir)
 			} else {
-				log.Printf("serving marketing landing from %s (GET / auth-gated: anonymous -> landing.html, signed-in -> app)", *landingDir)
+				log.Printf("serving marketing landing from %s (GET / auth-gated: anonymous -> landing.html, signed-in -> app)", landingDir)
 			}
 		}
-		if *slackSigningSecret != "" {
-			gw.SlackEvents = daemon.NewSlackEventsHandler(svc, *slackSigningSecret)
+		if slackSigningSecret != "" {
+			gw.SlackEvents = daemon.NewSlackEventsHandler(svc, slackSigningSecret)
 			log.Print("Slack events endpoint enabled at /api/v1/events/slack/<tenant>")
 		}
-		if *githubWebhookSecret != "" {
-			gw.GitHubEvents = daemon.NewGitHubEventsHandler(svc, *githubWebhookSecret)
+		if githubWebhookSecret != "" {
+			gw.GitHubEvents = daemon.NewGitHubEventsHandler(svc, githubWebhookSecret)
 			log.Print("GitHub events endpoint enabled at /api/v1/events/github/<tenant>")
 		}
-		if *webOrigin != "" {
-			for _, o := range strings.Split(*webOrigin, ",") {
+		if webOrigin != "" {
+			for _, o := range strings.Split(webOrigin, ",") {
 				o = strings.TrimSpace(o)
 				if o != "" {
 					gw.AllowedOrigins = append(gw.AllowedOrigins, o)
 				}
 			}
 		}
-		gwLn, err := net.Listen("tcp", *httpListen)
+		gwLn, err := net.Listen("tcp", httpListen)
 		if err != nil {
-			log.Fatalf("http gateway: cannot bind %s: %v", *httpListen, err)
+			log.Fatalf("http gateway: cannot bind %s: %v", httpListen, err)
 		}
 		go func() {
 			if err := gw.ServeListener(ctx, gwLn); err != nil && err != http.ErrServerClosed {
@@ -563,7 +535,7 @@ func main() {
 		}()
 	}
 
-	if *devKey {
+	if devKey {
 		adminRole := core.Role{Name: "admin", Permissions: []core.Permission{
 			core.PermTenantAdmin, core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
 		}}
@@ -579,20 +551,20 @@ func main() {
 		grpc.StreamInterceptor(nil),
 	}
 	switch {
-	case *tlsCert != "" && *tlsKey != "" && *tlsCA != "":
+	case tlsCert != "" && tlsKey != "" && tlsCA != "":
 		tlsCfg, err := daemon.TLSFiles{
-			CertFile: *tlsCert, KeyFile: *tlsKey, CAFile: *tlsCA,
+			CertFile: tlsCert, KeyFile: tlsKey, CAFile: tlsCA,
 		}.LoadServerConfig()
 		if err != nil {
 			log.Fatalf("tls: %v", err)
 		}
 		serverOpts[0] = grpc.Creds(credentials.NewTLS(tlsCfg))
 		serverOpts = serverOpts[:1]
-		log.Printf("mTLS enabled (cert=%s, ca=%s)", *tlsCert, *tlsCA)
-	case *tlsCert != "" || *tlsKey != "" || *tlsCA != "":
-		log.Fatalf("tls: --tls-cert, --tls-key, --tls-ca must be set together")
+		log.Printf("mTLS enabled (cert=%s, ca=%s)", tlsCert, tlsCA)
+	case tlsCert != "" || tlsKey != "" || tlsCA != "":
+		log.Fatalf("tls: HAZYFLOW_TLS_CERT, HAZYFLOW_TLS_KEY, HAZYFLOW_TLS_CA must be set together")
 	default:
-		log.Println("WARNING: serving without TLS — set --tls-cert/--tls-key/--tls-ca for production")
+		log.Println("WARNING: serving without TLS — set HAZYFLOW_TLS_CERT/HAZYFLOW_TLS_KEY/HAZYFLOW_TLS_CA for production")
 		serverOpts = serverOpts[:0]
 	}
 	unary, stream := daemon.AuthInterceptors(svc.Auth)
@@ -616,11 +588,11 @@ func main() {
 	}
 	go daemon.MonitorGRPCHealth(ctx, healthSrv, grpcReady, 5*time.Second)
 
-	lis, err := net.Listen("tcp", *listen)
+	lis, err := net.Listen("tcp", listen)
 	if err != nil {
-		log.Fatalf("listen %s: %v", *listen, err)
+		log.Fatalf("listen %s: %v", listen, err)
 	}
-	log.Printf("hzd listening on %s", *listen)
+	log.Printf("hzd listening on %s", listen)
 
 	go func() {
 		<-ctx.Done()
@@ -670,10 +642,10 @@ func registerMCPServers(cat *mcp.Catalog, spec string) error {
 	return nil
 }
 
-// registerRemotes parses "id1=host:port,id2=host:port" and registers each
-// remote module against the catalog using an insecure dial. Production
-// would extend this to accept per-remote TLS material; the demo path
-// uses insecure for simplicity.
+// registerRemotes parses "id1=host:port,id2=host:port" and registers
+// each remote module against the catalog over an insecure dial.
+// Demo-only; production deployments would extend this to per-remote
+// TLS via a config file rather than a flag string.
 func registerRemotes(cat *engine.RemoteCatalog, spec string) error {
 	spec = strings.TrimSpace(spec)
 	if spec == "" {
@@ -684,12 +656,12 @@ func registerRemotes(cat *engine.RemoteCatalog, spec string) error {
 		if pair == "" {
 			continue
 		}
-		eq := strings.IndexByte(pair, '=')
-		if eq < 0 {
+		id, endpoint, ok := strings.Cut(pair, "=")
+		if !ok {
 			return fmt.Errorf("entry %q: expected id=host:port", pair)
 		}
-		id := strings.TrimSpace(pair[:eq])
-		endpoint := strings.TrimSpace(pair[eq+1:])
+		id = strings.TrimSpace(id)
+		endpoint = strings.TrimSpace(endpoint)
 		desc := engine.RemoteDescriptor{
 			ID:       id,
 			Endpoint: endpoint,
@@ -703,38 +675,30 @@ func registerRemotes(cat *engine.RemoteCatalog, spec string) error {
 	return nil
 }
 
-// parseQuotaSpec converts "acme=10MB,globex=1GB" into a map of bytes.
-// Suffixes K/M/G/T are powers of 1024; bare numbers are bytes. Empty
-// spec yields nil (no quotas).
-func parseQuotaSpec(spec string) (map[string]int64, error) {
-	spec = strings.TrimSpace(spec)
-	if spec == "" {
-		return nil, nil
+// stateFile builds the path to a JSON dev-state file under --state-dir.
+// kind is the bare name ("users", "memberships", …); files keep the
+// historical `.hazyflow-<kind>.json` form so existing installs with
+// `--state-dir=.` see no path change. Empty dir = empty path =
+// disable that store (matches the old per-file `--*-file=""` semantics).
+func stateFile(dir, kind string) string {
+	if dir == "" {
+		return ""
 	}
-	out := map[string]int64{}
-	for _, pair := range strings.Split(spec, ",") {
-		pair = strings.TrimSpace(pair)
-		if pair == "" {
-			continue
-		}
-		eq := strings.IndexByte(pair, '=')
-		if eq < 0 {
-			return nil, fmt.Errorf("entry %q: expected tenant=size", pair)
-		}
-		tenant := strings.TrimSpace(pair[:eq])
-		raw := strings.TrimSpace(pair[eq+1:])
-		bytes, err := parseSize(raw)
-		if err != nil {
-			return nil, fmt.Errorf("entry %q: %w", pair, err)
-		}
-		out[tenant] = bytes
-	}
-	return out, nil
+	return filepath.Join(dir, ".hazyflow-"+kind+".json")
 }
 
-// envInt reads an integer from an env var, falling back to def when the
-// var is unset or unparseable. Used for flag defaults that should also be
-// settable via the environment (parity with the string flags).
+// Config knobs come from HAZYFLOW_* env vars. The helpers below give a
+// uniform read-with-default surface; an empty/unset var means "use the
+// default", and an unparseable value silently falls back to the default
+// rather than failing startup (matches the prior flag-default behavior).
+
+func envStr(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
+
 func envInt(key string, def int) int {
 	if v := os.Getenv(key); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
@@ -744,40 +708,25 @@ func envInt(key string, def int) int {
 	return def
 }
 
-func parseSize(s string) (int64, error) {
-	if s == "" {
-		return 0, fmt.Errorf("size required")
+// envBool accepts 1/true/yes/on and 0/false/no/off (case-insensitive,
+// trimmed). Anything else, including empty, returns def.
+func envBool(key string, def bool) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
 	}
-	// Strip an optional trailing B/b FIRST so the documented forms with a
-	// "B" — e.g. 10MB, 1GB — parse correctly (the multiplier letter is
-	// then the last char). Doing it the other way leaves the B dangling
-	// and breaks the flag's own examples.
-	if strings.HasSuffix(s, "B") || strings.HasSuffix(s, "b") {
-		s = s[:len(s)-1]
+	return def
+}
+
+func envDuration(key string, def time.Duration) time.Duration {
+	if v := os.Getenv(key); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			return d
+		}
 	}
-	if s == "" {
-		return 0, fmt.Errorf("size required")
-	}
-	mult := int64(1)
-	switch s[len(s)-1] {
-	case 'K', 'k':
-		mult = 1024
-		s = s[:len(s)-1]
-	case 'M', 'm':
-		mult = 1024 * 1024
-		s = s[:len(s)-1]
-	case 'G', 'g':
-		mult = 1024 * 1024 * 1024
-		s = s[:len(s)-1]
-	case 'T', 't':
-		mult = 1024 * 1024 * 1024 * 1024
-		s = s[:len(s)-1]
-	}
-	n, err := strconv.ParseInt(s, 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("parse size: %w", err)
-	}
-	return n * mult, nil
+	return def
 }
 
 // seedDefaultUser writes test@example.com / test into the user store if
@@ -837,7 +786,7 @@ func setupEncryptedSecrets(ctx context.Context, masterKeyB64 string, secrets map
 	}
 	key, err := base64.StdEncoding.DecodeString(masterKeyB64)
 	if err != nil {
-		log.Fatalf("--master-key: not valid base64: %v", err)
+		log.Fatalf("HAZYFLOW_MASTER_KEY: not valid base64: %v", err)
 	}
 	// Persist ciphertext + wrapped DEKs to Postgres when a pool is
 	// available (survives restart); otherwise memory (dev only — losing

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { Send, Sparkles, Square, X, Wrench, CheckCircle2, AlertCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
@@ -14,7 +15,7 @@ type UserMessage = { role: "user"; text: string };
 type ToolEvent =
   | { kind: "tool"; id: string; name: string; status: "running" | "done" | "error"; resultPreview?: string }
   | { kind: "proposal"; id: string; graph: Graph; status: "pending" | "applied" | "discarded" | "applying"; autoApplied?: boolean; error?: string }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string; code?: string };
 type AssistantMessage = {
   role: "assistant";
   text: string;
@@ -136,6 +137,7 @@ export function ChatPanel({ open, onClose, applyProposal }: Props) {
               updated.events.push({
                 kind: "error",
                 message: data?.error_text ?? data?.error ?? i18n.t("chatPanel.unknownError"),
+                code: typeof data?.error_code === "string" ? data.error_code : undefined,
               });
               updated.done = true;
               break;
@@ -395,6 +397,13 @@ function ChatMessageView({
         return (
           <div key={i} className="chat-error">
             <AlertCircle size={12} /> {e.message}
+            {e.code === "anthropic_key_missing" && (
+              <div style={{ marginTop: 6 }}>
+                <Link to="/admin/chat">
+                  {t("chatPanel.openChatSettings")}
+                </Link>
+              </div>
+            )}
           </div>
         );
       })}

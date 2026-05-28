@@ -35,16 +35,13 @@ services:
       HAZYFLOW_POSTGRES_DSN: postgres://hazyflow:hazyflow@postgres:5432/hazyflow?sslmode=disable
       # Required — fail fast if unset rather than booting with secrets disabled.
       HAZYFLOW_MASTER_KEY: ${HAZYFLOW_MASTER_KEY:?set HAZYFLOW_MASTER_KEY, e.g. openssl rand -base64 32}
+      HAZYFLOW_WEB_ORIGIN: http://localhost:8080
       HAZYFLOW_ENABLE_METRICS: "1"
       # Uncomment to export traces to an OTel collector:
       # OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
-    command:
-      - --http=:8080
-      - --web-dist=/srv/web
-      - --workspace-dir=/data/workspace
-      - --sandbox-base=/data/sandbox
-      - --web-origin=http://localhost:8080
-      - --metrics
+    # Container layout (HAZYFLOW_HTTP, _WEB_DIST, _WORKSPACE_DIR,
+    # _SANDBOX_BASE) is baked into the image as ENV; no command:
+    # override needed.
     ports:
       - "8080:8080"
     volumes:
