@@ -204,6 +204,78 @@ export type WhoAmI = {
   // are off. Empty = render a generic "contact your administrator"
   // message with no link.
   support_contact?: string;
+  // memberships is every org the signed-in user can act in: their home
+  // org (home=true) plus any they've been invited to. Drives the org
+  // switcher in the app shell.
+  memberships?: OrgMembership[];
+};
+
+export type OrgMembership = {
+  tenant: string;
+  // display_name is the org's human-facing name (set on /admin/workspace,
+  // defaulted from the email domain on signup). Empty when no profile
+  // has been saved — the UI falls back to `tenant` in that case.
+  display_name?: string;
+  workspace: string;
+  roles: { name: string; permissions: Permission[] }[];
+  home: boolean;
+};
+
+export type OrgProfile = {
+  tenant: string;
+  display_name: string;
+  updated_at?: string;
+};
+
+export type InvitationDetails = {
+  email: string;
+  tenant: string;
+  // tenant_display is the org's display name when set, empty otherwise.
+  // Lets the unauthenticated invite landing say "join Acme" instead of
+  // exposing the raw usr_<hex> ID.
+  tenant_display?: string;
+  workspace: string;
+  roles: { name: string; permissions: Permission[] }[];
+  invited_by: string;
+  expires_at: string;
+  pending: boolean;
+  accepted: boolean;
+  revoked: boolean;
+  expired: boolean;
+};
+
+export type InvitationSummary = {
+  token: string;
+  email: string;
+  tenant: string;
+  workspace: string;
+  roles: { name: string; permissions: Permission[] }[];
+  invited_by: string;
+  created_at: string;
+  expires_at: string;
+  accepted_at?: string | null;
+  revoked_at?: string | null;
+  pending: boolean;
+  accept_url: string;
+};
+
+export type MemberSummary = {
+  email: string;
+  tenant: string;
+  workspace: string;
+  roles: { name: string; permissions: Permission[] }[];
+  invited_by?: string;
+  created_at: string;
+  home: boolean;
+};
+
+export type OrgAuthConfig = {
+  tenant: string;
+  google_enabled: boolean;
+  google_client_id: string;
+  google_workspace_domain: string;
+  google_secret_set?: boolean;
+  updated_at?: string;
 };
 
 export type JobStatus =

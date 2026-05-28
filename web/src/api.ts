@@ -4,14 +4,19 @@ import type {
   FlowSummary,
   Graph,
   IssuedAPIKey,
+  InvitationDetails,
+  InvitationSummary,
   LintIssue,
   Manifest,
+  MemberSummary,
   OAuthProviderStatus,
+  OrgAuthConfig,
+  OrgProfile,
+  Role,
   TemplateSummary,
   JobRecord,
   JobStatus,
   PendingApproval,
-  Role,
   RunSummary,
   UserSummary,
   WhoAmI,
@@ -490,4 +495,91 @@ export const api = {
     }),
   deleteSecret: (token: string, name: string) =>
     request<void>(token, "DELETE", `/secrets/${encodeURIComponent(name)}`),
+
+  switchOrg: (token: string, tenant: string) =>
+    request<{ tenant: string; workspace: string; roles: Role[] }>(
+      token,
+      "POST",
+      "/auth/switch-org",
+      { tenant },
+    ),
+
+  listMembers: (token: string, tenant?: string) => {
+    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
+    return request<{ members: MemberSummary[] }>(token, "GET", `/admin/members${qs}`);
+  },
+  removeMember: (token: string, email: string, tenant?: string) => {
+    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
+    return request<void>(
+      token,
+      "DELETE",
+      `/admin/members/${encodeURIComponent(email)}${qs}`,
+    );
+  },
+
+  createInvitation: (
+    token: string,
+    body: { email: string; workspace?: string; roles?: Role[] },
+  ) =>
+    request<InvitationSummary & { token: string }>(token, "POST", "/admin/invitations", body),
+
+  listInvitations: (token: string, tenant?: string) => {
+    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
+    return request<{ invitations: InvitationSummary[] }>(
+      token,
+      "GET",
+      `/admin/invitations${qs}`,
+    );
+  },
+  revokeInvitation: (token: string, inviteToken: string) =>
+    request<void>(
+      token,
+      "DELETE",
+      `/admin/invitations/${encodeURIComponent(inviteToken)}`,
+    ),
+
+  // viewInvitation is unauthenticated — the token IS the credential.
+  viewInvitation: (inviteToken: string) =>
+    request<InvitationDetails>(
+      null,
+      "GET",
+      `/invitations/${encodeURIComponent(inviteToken)}`,
+    ),
+  acceptInvitation: (token: string, inviteToken: string) =>
+    request<{ tenant: string; workspace: string; roles: Role[] }>(
+      token,
+      "POST",
+      `/invitations/${encodeURIComponent(inviteToken)}/accept`,
+    ),
+
+  getOrgAuthConfig: (token: string) =>
+    request<OrgAuthConfig>(token, "GET", "/admin/org/auth-config"),
+  putOrgAuthConfig: (
+    token: string,
+    body: {
+      google_client_id: string;
+      google_client_secret?: string;
+      google_workspace_domain?: string;
+    },
+  ) =>
+    request<{ tenant: string; google_enabled: boolean }>(
+      token,
+      "PUT",
+      "/admin/org/auth-config",
+      body,
+    ),
+  deleteOrgAuthConfig: (token: string) =>
+    request<void>(token, "DELETE", "/admin/org/auth-config"),
+
+  getPublicSSOStatus: (tenant: string) =>
+    request<{ google_enabled: boolean; google_workspace_domain?: string }>(
+      null,
+      "GET",
+      `/auth/sso/${encodeURIComponent(tenant)}`,
+    ),
+
+  getOrgProfile: (token: string) =>
+    request<OrgProfile>(token, "GET", "/admin/org/profile"),
+  putOrgProfile: (token: string, display_name: string) =>
+    request<OrgProfile>(token, "PUT", "/admin/org/profile", { display_name }),
 };

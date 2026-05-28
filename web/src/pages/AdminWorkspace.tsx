@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { AlertCircle, Settings2 } from "lucide-react";
+import { AlertCircle, Check, Settings2 } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
@@ -63,6 +63,8 @@ export function AdminWorkspace() {
         <div className="card" style={{ color: "var(--muted)" }}>{t("common.loading")}</div>
       )}
 
+      <OrgProfileEditor />
+
       {limits && (
         <>
           <div className="card" style={{ marginBottom: "var(--space-4)" }}>
@@ -118,6 +120,113 @@ function Row({ label, value }: { label: string; value: string }) {
 
 function fmtSeconds(t: (k: string) => string, s: number): string {
   return s > 0 ? `${s}s` : t("admin.workspace.none");
+}
+
+// OrgProfileEditor lets the owner rename their organization. The
+// underlying tenant ID is shown in fine print because it still appears
+// in webhook URLs and audit entries — the rename only changes the
+// display label. Defaulted from the email domain on signup so a fresh
+// account doesn't surface "usr_de3d2365" anywhere.
+function OrgProfileEditor() {
+  const { t } = useTranslation();
+  const { token, me } = useAuth();
+  const [displayName, setDisplayName] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      const p = await api.getOrgProfile(token);
+      setDisplayName(p.display_name ?? "");
+      setError(null);
+    } catch (e) {
+      if (e instanceof APIError && e.status === 501) {
+        setError(t("admin.workspace.profileNotConfigured"));
+      } else {
+        setError((e as Error).message);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [token, t]);
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  if (loading) return null;
+  if (error) {
+    return (
+      <div className="card" style={{ marginBottom: "var(--space-4)" }}>
+        <h3 style={{ marginTop: 0 }}>{t("admin.workspace.orgNameHead")}</h3>
+        <div className="desc" style={{ color: "var(--muted)" }}>{error}</div>
+      </div>
+    );
+  }
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await api.putOrgProfile(token, displayName.trim());
+      setSavedAt(new Date());
+      // Refetch whoami so the switcher + header pick up the new name.
+      // The signed-in session itself doesn't change, just the labels.
+      try {
+        await api.whoami(token);
+      } catch {
+        /* best-effort refresh */
+      }
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form className="card" style={{ marginBottom: "var(--space-4)" }} onSubmit={save}>
+      <h3 style={{ marginTop: 0 }}>{t("admin.workspace.orgNameHead")}</h3>
+      <p className="desc">{t("admin.workspace.orgNameDesc")}</p>
+      <div className="sf-field">
+        <label>{t("admin.workspace.orgNameLabel")}</label>
+        <input
+          type="text"
+          value={displayName}
+          onChange={(e) => setDisplayName(e.target.value)}
+          placeholder={t("admin.workspace.orgNamePlaceholder")}
+          maxLength={80}
+        />
+        <div className="desc">
+          <Trans
+            i18nKey="admin.workspace.orgIdHint"
+            values={{ tenant: me?.tenant ?? "" }}
+            components={[<code />]}
+          />
+        </div>
+      </div>
+      <div className="settings-foot" style={{ borderTop: "none", padding: 0 }}>
+        <button type="submit" className="primary" disabled={saving}>
+          {saving ? t("admin.workspace.saving") : t("admin.workspace.save")}
+        </button>
+        {savedAt && (
+          <span className="desc" style={{ marginLeft: 12, color: "var(--success)" }}>
+            <Check size={12} style={{ verticalAlign: -1 }} /> {t("admin.workspace.saved")}
+          </span>
+        )}
+      </div>
+      {error && (
+        <div className="error" style={{ marginTop: 12 }}>
+          <AlertCircle size={14} style={{ verticalAlign: -2 }} /> {error}
+        </div>
+      )}
+    </form>
+  );
 }
 
 function formatBytes(n: number): string {

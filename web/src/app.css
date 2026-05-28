@@ -395,6 +395,16 @@
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   color: var(--ink);
 }
+.workspace-pop-row > span:first-child {
+  font-family: var(--font-sans);
+  display: block;
+}
+.workspace-pop-id {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--muted);
+}
 .workspace-pop-sep {
   height: 1px;
   background: var(--border);
@@ -3556,6 +3566,120 @@
 }
 .hosted-form-runs-warn strong {
   color: var(--danger);
+}
+.admin-section-head {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: var(--space-4) 0 var(--space-2);
+}
+.admin-section-foot {
+  margin-top: var(--space-4);
+  color: var(--muted);
+  font-size: 13px;
+}
+.invite-link-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: var(--space-2);
+}
+.invite-link {
+  flex: 1;
+  font-size: 12px;
+  word-break: break-all;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+.invite-issued-card {
+  margin-bottom: var(--space-4);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.invite-issued-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: var(--space-2);
+}
+.invite-issued-head > div {
+  flex: 1;
+}
+.invite-card {
+  max-width: 480px;
+}
+.invite-card-icon {
+  display: flex;
+  justify-content: center;
+  margin-bottom: var(--space-2);
+  color: var(--accent);
+}
+.invite-meta-list {
+  list-style: none;
+  padding: 0;
+  margin: var(--space-2) 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.invite-meta-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+}
+.invite-cta-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: var(--space-2);
+}
+.signin-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: var(--space-3) 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.signin-divider::before,
+.signin-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.google-signin-btn {
+  display: block;
+  text-align: center;
+  text-decoration: none;
+  padding: 11px 18px;
+  border-radius: 8px;
+  background: #fff;
+  color: #1f1f1f;
+  font-weight: 600;
+  border: 1px solid #dadce0;
+  margin-bottom: var(--space-2);
+}
+.google-signin-btn:hover {
+  background: #f8f9fa;
+}
+.sso-readonly {
+  display: block;
+  padding: 8px 10px;
+  font-size: 12px;
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  border-radius: 4px;
+  word-break: break-all;
+  margin-bottom: 4px;
+}
+.sso-active-row {
+  margin-top: var(--space-3);
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
 }
 .webhook-recipe-label {
   font-size: 12px;

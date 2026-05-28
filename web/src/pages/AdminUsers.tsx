@@ -1,48 +1,63 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertCircle, KeyRound, Plus, Users, UserCircle2 } from "lucide-react";
+import {
+  AlertCircle,
+  Check,
+  Copy,
+  Mail,
+  Plus,
+  ShieldCheck,
+  Trash2,
+  UserCircle2,
+  Users,
+  X,
+} from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
-import type { IssuedAPIKey, UserSummary } from "../types";
-import { IssueKeyModal } from "../components/IssueKeyModal";
-import { RevealSecretModal } from "../components/RevealSecretModal";
+import type {
+  InvitationSummary,
+  MemberSummary,
+  Role,
+} from "../types";
 
-// AdminUsers groups API keys by Subject — Hazy Flow doesn't have a
-// separate users table, so the "user" is derived from the keys' Subject
-// field. Permissions are the union of permissions across the user's
-// active keys, which matches what they'd effectively get if they used
-// all their keys at once.
-//
-// "Issue another key" prefills the subject so common-case admin work
-// (rotation, multi-device key) is one fewer click.
+// AdminUsers is the People page for an organization: the home owner
+// plus everyone who's accepted an invite, plus the pending invites
+// section below. API keys live on /admin/api-keys — they're a
+// programmatic-access concept, not "users", and conflating the two was
+// the original confusion this page is rewritten to fix.
 export function AdminUsers() {
   const { t } = useTranslation();
-  const { token, hasPerm, activeTenant } = useAuth();
-  const [users, setUsers] = useState<UserSummary[]>([]);
+  const { token, hasPerm } = useAuth();
+  const [members, setMembers] = useState<MemberSummary[]>([]);
+  const [invites, setInvites] = useState<InvitationSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [creating, setCreating] = useState<string | null>(null); // subject prefill, null = new
-  const [revealed, setRevealed] = useState<IssuedAPIKey | null>(null);
+  const [inviting, setInviting] = useState(false);
+  const [lastIssued, setLastIssued] = useState<InvitationSummary | null>(null);
 
   const refresh = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     try {
-      const r = await api.listUsers(token, activeTenant || undefined);
-      setUsers(r.users ?? []);
+      const [m, i] = await Promise.all([
+        api.listMembers(token).catch((e: Error) => {
+          if (e instanceof APIError && e.status === 501) {
+            throw new Error(t("admin.users.notConfigured"));
+          }
+          throw e;
+        }),
+        api.listInvitations(token).catch(() => ({ invitations: [] })),
+      ]);
+      setMembers(m.members ?? []);
+      setInvites(i.invitations ?? []);
       setError(null);
     } catch (e) {
-      const err = e as APIError | Error;
-      if (err instanceof APIError && err.status === 501) {
-        setError(t("admin.users.notConfigured"));
-      } else {
-        setError(err.message);
-      }
+      setError((e as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [token, activeTenant]);
+  }, [token, t]);
 
   useEffect(() => {
     void refresh();
@@ -64,13 +79,11 @@ export function AdminUsers() {
             <Users size={20} style={{ marginRight: 8, verticalAlign: -3 }} />
             {t("admin.users.title")}
           </h1>
-          <div className="sub">
-            {t("admin.users.subtitle")}
-          </div>
+          <div className="sub">{t("admin.users.subtitle")}</div>
         </div>
-        <button className="primary" onClick={() => setCreating("")}>
+        <button className="primary" onClick={() => setInviting(true)}>
           <Plus size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-          {t("admin.users.addUser")}
+          {t("admin.users.inviteButton")}
         </button>
       </div>
 
@@ -81,104 +94,377 @@ export function AdminUsers() {
         </div>
       )}
 
-      {loading && users.length === 0 && (
-        <div className="card" style={{ color: "var(--muted)" }}>{t("common.loading")}</div>
+      {lastIssued && (
+        <InviteIssuedCard
+          inv={lastIssued}
+          onDismiss={() => setLastIssued(null)}
+        />
       )}
 
-      {!loading && users.length === 0 && !error && (
+      <h2 className="admin-section-head">{t("admin.users.peopleHead")}</h2>
+      {loading && members.length === 0 && (
+        <div className="card" style={{ color: "var(--muted)" }}>
+          {t("common.loading")}
+        </div>
+      )}
+      {!loading && members.length === 0 && !error && (
         <div className="card" style={{ color: "var(--muted)" }}>
           {t("admin.users.empty")}
         </div>
       )}
-
       <div className="user-list">
-        {users.map((u) => (
-          <div className="user-card" key={u.subject}>
-            <div style={{ minWidth: 0 }}>
-              <div className="subject">
-                <UserCircle2 size={18} />
-                {u.subject}
-              </div>
-              <div className="meta">
-                {u.role_names.length > 0
-                  ? u.role_names.join(", ")
-                  : t("admin.users.noRoles")}
-                {u.last_workspace && (
-                  <> · {t("admin.users.workspaceLabel")} <code>{u.last_workspace}</code></>
-                )}
-              </div>
-              <div className="count-pills">
-                <span className="count-pill active">
-                  {t("admin.users.activePill", { count: u.active_keys })}
-                </span>
-                {u.revoked_keys > 0 && (
-                  <span className="count-pill revoked">
-                    {t("admin.users.revokedPill", { count: u.revoked_keys })}
-                  </span>
-                )}
-              </div>
-              {u.permissions.length > 0 && (
-                <div className="perm-row">
-                  {u.permissions.map((p) => (
-                    <span
-                      key={p}
-                      className={"perm-chip" + (p === "tenant:admin" ? " admin" : "")}
-                    >
-                      {p}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="user-card-actions">
-              <Link
-                to="/admin/api-keys"
-                className="ghost"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 4,
-                  fontSize: 12,
-                  padding: "4px 10px",
-                  border: "1px solid var(--border)",
-                  borderRadius: "var(--r-2)",
-                  color: "var(--muted)",
-                  textDecoration: "none",
-                }}
-              >
-                <KeyRound size={12} />
-                {t("admin.users.keys", { count: u.key_ids.length })}
-              </Link>
-              <button
-                onClick={() => setCreating(u.subject)}
-                title={t("admin.users.issueKeyTitle")}
-              >
-                <Plus size={12} style={{ marginRight: 4, verticalAlign: -1 }} />
-                {t("admin.users.issueKey")}
-              </button>
-            </div>
-          </div>
+        {members.map((m) => (
+          <MemberCard key={m.email} member={m} onChanged={refresh} />
         ))}
       </div>
 
-      {creating !== null && (
-        <IssueKeyModal
-          initialSubject={creating || undefined}
-          onCancel={() => setCreating(null)}
-          onIssued={(issued) => {
-            setCreating(null);
-            setRevealed(issued);
+      <h2 className="admin-section-head" style={{ marginTop: "var(--space-4)" }}>
+        {t("admin.users.pendingHead")}
+      </h2>
+      {invites.length === 0 ? (
+        <div className="card" style={{ color: "var(--muted)" }}>
+          {t("admin.users.noPending")}
+        </div>
+      ) : (
+        <div className="user-list">
+          {invites.map((inv) => (
+            <InvitationCard
+              key={inv.token}
+              inv={inv}
+              onChanged={refresh}
+            />
+          ))}
+        </div>
+      )}
+
+      <p className="admin-section-foot">
+        <Trans i18nKey="admin.users.apiKeysHint" components={[<Link to="/admin/api-keys" />]} />
+      </p>
+
+      {inviting && (
+        <InviteModal
+          onCancel={() => setInviting(false)}
+          onIssued={(inv) => {
+            setInviting(false);
+            setLastIssued(inv);
             void refresh();
           }}
           onError={(msg) => setError(msg)}
         />
       )}
-      {revealed && (
-        <RevealSecretModal
-          issued={revealed}
-          onClose={() => setRevealed(null)}
-        />
-      )}
     </div>
   );
+}
+
+function MemberCard({
+  member,
+  onChanged,
+}: {
+  member: MemberSummary;
+  onChanged: () => void;
+}) {
+  const { t } = useTranslation();
+  const { token } = useAuth();
+  const [removing, setRemoving] = useState(false);
+
+  const remove = async () => {
+    if (!token) return;
+    if (!confirm(t("admin.users.removeConfirm", { email: member.email }))) return;
+    setRemoving(true);
+    try {
+      await api.removeMember(token, member.email);
+      onChanged();
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setRemoving(false);
+    }
+  };
+
+  const roleNames = member.roles.map((r) => r.name).join(", ");
+  return (
+    <div className="user-card">
+      <div style={{ minWidth: 0 }}>
+        <div className="subject">
+          <UserCircle2 size={18} />
+          {member.email}
+          {member.home && (
+            <span className="count-pill active" style={{ marginLeft: 8 }}>
+              {t("admin.users.ownerBadge")}
+            </span>
+          )}
+        </div>
+        <div className="meta">
+          {roleNames || t("admin.users.noRoles")}
+        </div>
+      </div>
+      <div className="user-card-actions">
+        {!member.home && (
+          <button onClick={remove} disabled={removing} title={t("admin.users.removeTitle")}>
+            <Trash2 size={12} style={{ marginRight: 4, verticalAlign: -1 }} />
+            {removing ? t("admin.users.removing") : t("admin.users.remove")}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function InvitationCard({
+  inv,
+  onChanged,
+}: {
+  inv: InvitationSummary;
+  onChanged: () => void;
+}) {
+  const { t } = useTranslation();
+  const { token } = useAuth();
+  const [copied, setCopied] = useState(false);
+  const [revoking, setRevoking] = useState(false);
+
+  const copy = async () => {
+    const link = absoluteInviteURL(inv.accept_url);
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard API can fail in non-secure contexts — fall back to
+      // selecting the link text would require a portal; just leave
+      // the visible URL for manual copy.
+    }
+  };
+  const revoke = async () => {
+    if (!token) return;
+    setRevoking(true);
+    try {
+      await api.revokeInvitation(token, inv.token);
+      onChanged();
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setRevoking(false);
+    }
+  };
+
+  let statusLabel: string;
+  if (inv.accepted_at) statusLabel = t("admin.users.inviteAccepted");
+  else if (inv.revoked_at) statusLabel = t("admin.users.inviteRevoked");
+  else if (!inv.pending) statusLabel = t("admin.users.inviteExpired");
+  else statusLabel = t("admin.users.invitePending");
+  return (
+    <div className="user-card">
+      <div style={{ minWidth: 0 }}>
+        <div className="subject">
+          <Mail size={18} />
+          {inv.email}
+          <span className="count-pill" style={{ marginLeft: 8 }}>
+            {statusLabel}
+          </span>
+        </div>
+        <div className="meta">
+          {inv.roles.map((r) => r.name).join(", ") || t("admin.users.noRoles")} ·{" "}
+          {t("admin.users.invitedBy", { who: inv.invited_by })}
+        </div>
+        {inv.pending && (
+          <div className="invite-link-row">
+            <code className="invite-link">{absoluteInviteURL(inv.accept_url)}</code>
+            <button onClick={copy} title={t("admin.users.copyLink")}>
+              {copied ? <Check size={12} /> : <Copy size={12} />}
+              {copied ? t("admin.users.copied") : t("admin.users.copy")}
+            </button>
+          </div>
+        )}
+      </div>
+      <div className="user-card-actions">
+        {inv.pending && (
+          <button onClick={revoke} disabled={revoking}>
+            <X size={12} style={{ marginRight: 4, verticalAlign: -1 }} />
+            {revoking ? t("admin.users.revoking") : t("admin.users.revoke")}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function InviteIssuedCard({
+  inv,
+  onDismiss,
+}: {
+  inv: InvitationSummary;
+  onDismiss: () => void;
+}) {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+  const link = absoluteInviteURL(inv.accept_url);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* manual copy fallback */
+    }
+  };
+  return (
+    <div className="card invite-issued-card">
+      <div className="invite-issued-head">
+        <ShieldCheck size={18} />
+        <div>
+          <strong>{t("admin.users.inviteCreatedTitle")}</strong>
+          <div className="desc">
+            {t("admin.users.inviteCreatedBody", { email: inv.email })}
+          </div>
+        </div>
+        <button onClick={onDismiss} className="ghost" title={t("admin.users.dismiss")}>
+          <X size={14} />
+        </button>
+      </div>
+      <div className="invite-link-row">
+        <code className="invite-link">{link}</code>
+        <button onClick={copy} className="primary">
+          {copied ? <Check size={12} /> : <Copy size={12} />}
+          {copied ? t("admin.users.copied") : t("admin.users.copyLink")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function InviteModal({
+  onCancel,
+  onIssued,
+  onError,
+}: {
+  onCancel: () => void;
+  onIssued: (inv: InvitationSummary) => void;
+  onError: (msg: string) => void;
+}) {
+  const { t } = useTranslation();
+  const { token } = useAuth();
+  const [email, setEmail] = useState("");
+  const [roleName, setRoleName] = useState<"editor" | "admin">("editor");
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token) return;
+    if (!email.trim()) {
+      onError(t("admin.users.inviteEmailRequired"));
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const roles: Role[] = [rolePresetFor(roleName)];
+      const inv = await api.createInvitation(token, {
+        email: email.trim(),
+        roles,
+      });
+      onIssued(inv);
+    } catch (e) {
+      onError((e as Error).message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="settings-backdrop" onClick={onCancel}>
+      <form
+        className="settings-dialog"
+        style={{ maxWidth: 520 }}
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={submit}
+      >
+        <div className="settings-head">
+          <h2>{t("admin.users.inviteModalTitle")}</h2>
+        </div>
+        <div className="settings-body">
+          <div className="sf-field">
+            <div className="label-row">
+              <label>{t("admin.users.inviteEmailLabel")}</label>
+            </div>
+            <input
+              autoFocus
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="teammate@example.com"
+            />
+            <div className="desc">{t("admin.users.inviteEmailDesc")}</div>
+          </div>
+          <div className="sf-field">
+            <div className="label-row">
+              <label>{t("admin.users.inviteRoleLabel")}</label>
+            </div>
+            <div className="role-template-grid">
+              <button
+                type="button"
+                className={"role-template" + (roleName === "editor" ? " active" : "")}
+                onClick={() => setRoleName("editor")}
+              >
+                <div className="role-template-name">{t("admin.users.roleEditor")}</div>
+                <div className="role-template-desc">{t("admin.users.roleEditorDesc")}</div>
+              </button>
+              <button
+                type="button"
+                className={"role-template" + (roleName === "admin" ? " active" : "")}
+                onClick={() => setRoleName("admin")}
+              >
+                <div className="role-template-name">{t("admin.users.roleAdmin")}</div>
+                <div className="role-template-desc">{t("admin.users.roleAdminDesc")}</div>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div className="settings-foot">
+          <button type="button" onClick={onCancel}>
+            {t("admin.users.cancel")}
+          </button>
+          <button type="submit" className="primary" disabled={submitting}>
+            {submitting ? t("admin.users.sending") : t("admin.users.sendInvite")}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function rolePresetFor(name: "editor" | "admin"): Role {
+  if (name === "admin") {
+    return {
+      name: "admin",
+      permissions: [
+        "graph:run",
+        "graph:edit",
+        "graph:admin",
+        "secret:read",
+        "secret:write",
+        "tenant:admin",
+      ],
+    };
+  }
+  return {
+    name: "editor",
+    permissions: [
+      "graph:run",
+      "graph:edit",
+      "graph:admin",
+      "secret:read",
+      "secret:write",
+    ],
+  };
+}
+
+// absoluteInviteURL turns a path-only accept_url (returned when the
+// daemon has no --public-base-url) into a clickable absolute URL by
+// rewriting against the current window origin. Already-absolute URLs
+// pass through unchanged.
+function absoluteInviteURL(acceptURL: string): string {
+  if (/^https?:\/\//i.test(acceptURL)) return acceptURL;
+  if (typeof window !== "undefined") {
+    return window.location.origin + acceptURL;
+  }
+  return acceptURL;
 }

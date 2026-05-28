@@ -72,6 +72,10 @@ func main() {
 	mcpServers := flag.String("mcp", "", "register MCP stdio servers, e.g. fs=server-filesystem /tmp;docs=npx -y @modelcontextprotocol/server-docs (semicolon-separated)")
 	workspaceDir := flag.String("workspace-dir", "./.hazyflow-workspace", "directory for the dev workspace's git-backed graph store; empty = in-memory (graphs lost on restart)")
 	usersFile := flag.String("users-file", "./.hazyflow-users.json", "JSON file backing the email+password user store; empty disables password sign-in")
+	membershipsFile := flag.String("memberships-file", "./.hazyflow-memberships.json", "JSON file backing the multi-org membership store; empty disables the invite + org-switcher flow")
+	invitationsFile := flag.String("invitations-file", "./.hazyflow-invitations.json", "JSON file backing the pending-invitation store; empty disables /api/v1/admin/invitations")
+	orgAuthFile := flag.String("org-auth-file", "./.hazyflow-orgauth.json", "JSON file backing per-org SSO config (Google client_id/secret/workspace_domain); empty disables Google sign-in")
+	orgProfileFile := flag.String("org-profile-file", "./.hazyflow-orgprofile.json", "JSON file backing per-org profile (display name + future branding fields); empty falls back to the raw tenant ID in the UI")
 	importUsersFrom := flag.String("import-users-from-json", "", "one-time migration: import users from this JSON user file into the Postgres user store (requires --postgres-dsn), then exit. Idempotent — accounts already in Postgres are skipped, never overwritten.")
 	webOrigin := flag.String("web-origin", "http://localhost:5174", "comma-separated allowed origins for the web UI (CORS + cookie credentials)")
 	authRatePerMin := flag.Int("auth-rate-per-min", 20, "per-IP requests/minute allowed on /api/v1/auth/{signin,signup} before 429. 0 disables throttling.")
@@ -446,11 +450,49 @@ func main() {
 		}()
 	}
 
+	// Membership / invitation / per-org-auth stores. JSON-only for v1;
+	// the Pg equivalents live in auth/postgres.go alongside the user
+	// store and can be slotted in later via the same --postgres-dsn
+	// switch. Empty paths leave the store nil → the gateway's invite
+	// + switch-org endpoints return 501.
+	memberships, err := auth.OpenJSONMembershipStore(*membershipsFile)
+	if err != nil {
+		log.Fatalf("open memberships %q: %v", *membershipsFile, err)
+	}
+	if *membershipsFile != "" {
+		log.Printf("memberships store: %s", *membershipsFile)
+	}
+	invitations, err := auth.OpenJSONInvitationStore(*invitationsFile)
+	if err != nil {
+		log.Fatalf("open invitations %q: %v", *invitationsFile, err)
+	}
+	if *invitationsFile != "" {
+		log.Printf("invitations store: %s", *invitationsFile)
+	}
+	orgAuthStore, err := auth.OpenJSONOrgAuthStore(*orgAuthFile)
+	if err != nil {
+		log.Fatalf("open org-auth %q: %v", *orgAuthFile, err)
+	}
+	if *orgAuthFile != "" {
+		log.Printf("org-auth store: %s", *orgAuthFile)
+	}
+	orgProfileStore, err := auth.OpenJSONOrgProfileStore(*orgProfileFile)
+	if err != nil {
+		log.Fatalf("open org-profile %q: %v", *orgProfileFile, err)
+	}
+	if *orgProfileFile != "" {
+		log.Printf("org-profile store: %s", *orgProfileFile)
+	}
+
 	if *httpListen != "" {
 		gw := daemon.NewHTTPGateway(svc)
 		gw.Users = users
 		gw.Sessions = sessions
 		gw.SessionTTL = *sessionTTL
+		gw.Memberships = memberships
+		gw.Invitations = invitations
+		gw.OrgAuth = orgAuthStore
+		gw.Profiles = orgProfileStore
 		gw.EncryptedSecrets = encryptedSecrets // nil disables /api/v1/secrets endpoints
 		gw.OAuth = oauthRegistry               // nil disables /api/v1/oauth/* endpoints
 		gw.EnableSignup = *enableSignup        // false disables POST /api/v1/auth/signup

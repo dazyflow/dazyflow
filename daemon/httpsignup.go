@@ -117,6 +117,21 @@ func (h *HTTPGateway) signUp(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Seed the org's display name from the email's domain so the
+	// switcher and admin pages don't surface the raw usr_<hex> ID by
+	// default. The owner can edit it on /admin/workspace at any time.
+	// Best-effort: a failure here doesn't block sign-up because the UI
+	// already falls back to the tenant ID when no profile exists.
+	if h.Profiles != nil {
+		if name := auth.DefaultOrgDisplayName(email); name != "" {
+			_ = h.Profiles.PutOrgProfile(r.Context(), auth.OrgProfile{
+				Tenant:      tenant,
+				DisplayName: name,
+				UpdatedAt:   time.Now().UTC(),
+			})
+		}
+	}
+
 	// Auto sign-in: issue a session immediately so the UI can land
 	// the user on the welcome page without an extra round trip
 	// through the sign-in form.

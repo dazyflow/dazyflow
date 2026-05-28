@@ -4,6 +4,7 @@ import { ArrowRight, Workflow } from "lucide-react";
 import { useAuth } from "../auth";
 import { loadRecentFlow } from "../recentFlow";
 import { shouldShowTenantID } from "../lib/visibleTenant";
+import { orgDisplayName } from "../lib/orgDisplayName";
 
 // Welcome is the post-signup landing wizard — the "first-run"
 // surface from the T0-3 TODO. Intentionally simple: three CTAs that
@@ -73,7 +74,7 @@ export function Welcome() {
             {me.tenant && showTenant && (
               <Trans
                 i18nKey="welcome.inTenant"
-                values={{ tenant: me.tenant }}
+                values={{ tenant: orgDisplayName(me, me.tenant) }}
                 components={[<code />]}
               />
             )}

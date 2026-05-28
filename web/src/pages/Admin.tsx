@@ -1,7 +1,8 @@
 import { Link } from "react-router-dom";
-import { KeyRound, Users, Settings2, Boxes, ShieldAlert } from "lucide-react";
+import { KeyRound, Users, Settings2, Boxes, ShieldAlert, ShieldCheck } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
+import { orgDisplayName } from "../lib/orgDisplayName";
 
 // Admin is the gating point for tenant-level configuration. Each card
 // links to a focused sub-page when the underlying API + UI exists, and
@@ -27,7 +28,7 @@ export function Admin() {
             <Trans
               i18nKey="admin.subtitle"
               values={{
-                tenant: activeTenant || me?.tenant,
+                tenant: orgDisplayName(me, activeTenant || me?.tenant || ""),
                 workspace: activeWorkspace || me?.workspace || t("admin.anyWorkspace"),
               }}
               components={[<strong />, <strong />]}
@@ -63,6 +64,13 @@ export function Admin() {
           icon={<Boxes size={16} />}
           title={t("admin.cardModulesTitle")}
           desc={t("admin.cardModulesDesc")}
+          status="ready"
+        />
+        <AdminCard
+          to="/admin/sso"
+          icon={<ShieldCheck size={16} />}
+          title={t("admin.cardSSOTitle")}
+          desc={t("admin.cardSSODesc")}
           status="ready"
         />
         <AdminCard

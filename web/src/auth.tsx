@@ -75,16 +75,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setMe(w);
         setError(null);
         const isPlatform = w.permissions.includes("platform:admin");
-        let tenantList: string[] = w.tenant ? [w.tenant] : [];
+        // Build the tenant catalogue from three sources in priority
+        // order: platform admins see every tenant on the daemon; other
+        // users see the orgs they have memberships in (home + invited);
+        // a brand-new account with no memberships still sees its home
+        // org as the single entry.
+        let tenantList: string[] = [];
+        if (w.memberships && w.memberships.length > 0) {
+          tenantList = w.memberships.map((m) => m.tenant);
+        } else if (w.tenant) {
+          tenantList = [w.tenant];
+        }
         if (isPlatform) {
           try {
             const r = await api.listTenants(token);
-            tenantList = r.tenants ?? [];
-            if (w.tenant && !tenantList.includes(w.tenant)) {
-              tenantList = [w.tenant, ...tenantList];
+            const platformList = r.tenants ?? [];
+            // Merge: keep the user's home + invited orgs first
+            // (relevant to them), then platform-wide entries after.
+            const seen = new Set(tenantList);
+            for (const t of platformList) {
+              if (!seen.has(t)) {
+                tenantList.push(t);
+                seen.add(t);
+              }
             }
           } catch {
-            /* fall back to whoami's tenant */
+            /* fall back to membership-derived list */
           }
         }
         if (cancelled) return;
@@ -167,6 +183,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // next reload will pick a sensible default for the new tenant.
     setActiveWorkspaceState("");
     localStorage.removeItem(WS_STORAGE_KEY);
+    // For password-auth users, also tell the server to re-issue the
+    // session against the new tenant so the next /graphs / /secrets /
+    // /admin call lands in the right scope. Platform admins skip this
+    // because their session isn't bound to one tenant in the first
+    // place; the path here is for invited members switching between
+    // their home org and an org they were invited into. Best-effort —
+    // a network error is non-fatal, the local state still updates.
+    if (token && t && me?.subject?.includes("@")) {
+      void api
+        .switchOrg(token, t)
+        .then(() => api.whoami(token))
+        .then((w) => setMe(w))
+        .catch(() => {
+          /* best-effort; the next whoami refresh will reconcile */
+        });
+    }
   };
 
   const signInWithPassword = async (email: string, password: string) => {

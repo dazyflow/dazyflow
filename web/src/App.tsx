@@ -19,19 +19,22 @@ import { AdminUsers } from "./pages/AdminUsers";
 import { AdminAudit } from "./pages/AdminAudit";
 import { AdminModules } from "./pages/AdminModules";
 import { AdminWorkspace } from "./pages/AdminWorkspace";
+import { AdminOrgSSO } from "./pages/AdminOrgSSO";
+import { AcceptInvite } from "./pages/AcceptInvite";
 
 export function App() {
   const { token, loading } = useAuth();
   if (loading && !token) return <div />;
   if (!token) {
     // Unauthenticated: signin/signup are reachable as deep-links;
-    // anything else 302s into signin. Two distinct routes so a
-    // marketing link pointing at /signup lands on the signup form,
-    // not the signin form.
+    // /invite/<token> renders the public invite landing (the recipient
+    // can read who invited them before signing in). Anything else
+    // 302s into signin.
     return (
       <Routes>
         <Route path="/signup" element={<SignUp />} />
         <Route path="/signin" element={<SignIn />} />
+        <Route path="/invite/:token" element={<AcceptInvite />} />
         <Route path="*" element={<SignIn />} />
       </Routes>
     );
@@ -64,6 +67,8 @@ export function App() {
         <Route path="/admin/audit" element={<AdminAudit />} />
         <Route path="/admin/modules" element={<AdminModules />} />
         <Route path="/admin/workspace" element={<AdminWorkspace />} />
+        <Route path="/admin/sso" element={<AdminOrgSSO />} />
+        <Route path="/invite/:token" element={<AcceptInvite />} />
         <Route path="*" element={<Navigate to="/flows" replace />} />
       </Routes>
     </AppShell>

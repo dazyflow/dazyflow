@@ -87,6 +87,29 @@ type HTTPGateway struct {
 	// webhook-secret flag/env is set.
 	GitHubEvents *GitHubEventsHandler
 
+	// Memberships powers the multi-org model: one user can be a member
+	// of many orgs (in addition to the "home" org their User record
+	// names). Nil means the deployment is still single-org per user —
+	// the switcher hides and the invite flow returns 501.
+	Memberships auth.MembershipStore
+
+	// Invitations is the pending-invites store backing the admin
+	// invite flow and the /invite/<token> acceptance handler. Nil
+	// disables both endpoints (501).
+	Invitations auth.InvitationStore
+
+	// OrgAuth stores per-org SSO config (today: Google Workspace
+	// client_id/secret/domain). Nil disables the "Sign in with Google"
+	// option and the admin SSO settings endpoints.
+	OrgAuth auth.OrgAuthStore
+
+	// Profiles stores per-org human-facing identity (display name; will
+	// hold logo / billing email / etc. later). Distinct from the
+	// immutable tenant ID so users can rename their org. Nil means the
+	// raw tenant ID surfaces everywhere the UI would otherwise show a
+	// display name.
+	Profiles auth.OrgProfileStore
+
 	// Webhook serves /trigger/ and /form/ on the main HTTP listener so
 	// a default --http-only deploy can fire webhook-triggered flows
 	// and serve hosted intake forms without the operator also setting
@@ -243,6 +266,37 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/jobs/{jobID}/nodes/{nodeID}", h.requireAuth(h.nodeSnapshot))
 	mux.HandleFunc("GET /api/v1/jobs/{jobID}/events", h.requireAuth(h.jobEvents))
 	mux.HandleFunc("POST /api/v1/chat/stream", h.requireAuth(h.chatStream))
+
+	// Multi-org membership: a user can belong to many tenants (the
+	// "home" tenant minted at signup + any they've been invited to).
+	// switch-org re-issues the session against a different tenant the
+	// caller has membership in. Memberships listing falls out of
+	// whoami; no separate GET is needed.
+	mux.HandleFunc("POST /api/v1/auth/switch-org", h.requireAuth(h.switchOrg))
+
+	// Invitations: admin creates / lists / revokes pending invites.
+	// The accept side is split: GET /api/v1/invitations/{token} is
+	// the public detail endpoint (no auth — the token IS the
+	// credential at that step), and POST .../accept requires the
+	// caller to be signed in so we know which user to bind the new
+	// membership to.
+	mux.HandleFunc("POST /api/v1/admin/invitations", h.requireAuth(h.createInvitation))
+	mux.HandleFunc("GET /api/v1/admin/invitations", h.requireAuth(h.listInvitations))
+	mux.HandleFunc("DELETE /api/v1/admin/invitations/{token}", h.requireAuth(h.revokeInvitation))
+	mux.HandleFunc("GET /api/v1/admin/members", h.requireAuth(h.listMembers))
+	mux.HandleFunc("DELETE /api/v1/admin/members/{email}", h.requireAuth(h.removeMember))
+	mux.HandleFunc("GET /api/v1/invitations/{token}", h.viewInvitation)
+	mux.HandleFunc("POST /api/v1/invitations/{token}/accept", h.requireAuth(h.acceptInvitation))
+
+	// Per-org SSO settings + Google sign-in round-trip.
+	mux.HandleFunc("GET /api/v1/admin/org/auth-config", h.requireAuth(h.getOrgAuthConfig))
+	mux.HandleFunc("PUT /api/v1/admin/org/auth-config", h.requireAuth(h.putOrgAuthConfig))
+	mux.HandleFunc("DELETE /api/v1/admin/org/auth-config", h.requireAuth(h.deleteOrgAuthConfig))
+	mux.HandleFunc("GET /api/v1/auth/sso/{tenant}", h.getPublicSSOStatus)
+	mux.HandleFunc("GET /api/v1/admin/org/profile", h.requireAuth(h.getOrgProfile))
+	mux.HandleFunc("PUT /api/v1/admin/org/profile", h.requireAuth(h.putOrgProfile))
+	mux.HandleFunc("GET /api/v1/auth/google/start", h.googleSignInStart)
+	mux.HandleFunc("GET /api/v1/auth/google/callback", h.googleSignInCallback)
 
 	// Webhook trigger + hosted-form endpoints. Authenticated per-graph
 	// (per-trigger bearer secret for /trigger; opt-in public_form for
@@ -629,7 +683,7 @@ func (h *HTTPGateway) signOut(rw http.ResponseWriter, r *http.Request) {
 // set of permissions any of their roles grant. The UI uses this for
 // role gating (whether to show the Admin link, the Edit button, etc.)
 // without re-implementing role unrolling client-side.
-func (h *HTTPGateway) whoami(rw http.ResponseWriter, _ *http.Request, p core.Principal) {
+func (h *HTTPGateway) whoami(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	permSet := map[core.Permission]struct{}{}
 	for _, role := range p.Roles {
 		for _, perm := range role.Permissions {
@@ -640,12 +694,19 @@ func (h *HTTPGateway) whoami(rw http.ResponseWriter, _ *http.Request, p core.Pri
 	for perm := range permSet {
 		perms = append(perms, perm)
 	}
+	// Memberships lets the UI surface an org switcher even for non-
+	// platform-admin users. The list always includes the principal's
+	// current org (Home=true) so a fresh signup with no extra
+	// memberships still sees a single entry and the switcher gracefully
+	// hides itself.
+	memberships := h.collectMemberships(r.Context(), p)
 	writeJSON(rw, http.StatusOK, map[string]any{
 		"subject":     p.Subject,
 		"tenant":      p.Tenant,
 		"workspace":   p.Workspace,
 		"roles":       p.Roles,
 		"permissions": perms,
+		"memberships": memberships,
 		// public_base_url lets the UI build externally-correct webhook /
 		// hosted-form URLs instead of guessing the host. Empty when the
 		// operator hasn't set --public-base-url; the UI falls back to a
@@ -657,6 +718,141 @@ func (h *HTTPGateway) whoami(rw http.ResponseWriter, _ *http.Request, p core.Pri
 		// Connections page). Empty = the UI shows a generic "contact
 		// your administrator" message with no link.
 		"support_contact": h.svc.SupportContact,
+	})
+}
+
+// orgMembershipDTO is the wire shape whoami emits per membership. The
+// home org always appears with home=true; the others come from the
+// MembershipStore. DisplayName is the org's human-facing name (from
+// OrgProfile) — empty when the org has no profile yet, in which case
+// the UI falls back to the raw Tenant ID.
+type orgMembershipDTO struct {
+	Tenant      string      `json:"tenant"`
+	DisplayName string      `json:"display_name,omitempty"`
+	Workspace   string      `json:"workspace"`
+	Roles       []core.Role `json:"roles"`
+	Home        bool        `json:"home"`
+}
+
+func (h *HTTPGateway) collectMemberships(ctx context.Context, p core.Principal) []orgMembershipDTO {
+	out := []orgMembershipDTO{{
+		Tenant:    p.Tenant,
+		Workspace: p.Workspace,
+		Roles:     p.Roles,
+		Home:      true,
+	}}
+	if h.Memberships != nil && p.Subject != "" && strings.Contains(p.Subject, "@") {
+		// Only password-auth subjects (email-shaped) have Memberships;
+		// API-key principals are bound to one tenant by their key. A
+		// silent skip on a non-email subject avoids accidentally exposing
+		// memberships keyed by a coincidental UUID match.
+		rows, err := h.Memberships.ListByEmail(ctx, p.Subject)
+		if err == nil {
+			for _, m := range rows {
+				if m.Tenant == p.Tenant {
+					// Already in `out` as the home entry — skip the duplicate.
+					continue
+				}
+				out = append(out, orgMembershipDTO{
+					Tenant:    m.Tenant,
+					Workspace: m.Workspace,
+					Roles:     m.Roles,
+					Home:      false,
+				})
+			}
+		}
+	}
+	// Bulk-resolve display names so the switcher can render pretty
+	// labels without an extra round-trip per membership. A missing
+	// profile leaves DisplayName empty; the UI falls back to Tenant.
+	if h.Profiles != nil && len(out) > 0 {
+		tenants := make([]string, 0, len(out))
+		for _, m := range out {
+			tenants = append(tenants, m.Tenant)
+		}
+		if profiles, err := h.Profiles.ListOrgProfiles(ctx, tenants); err == nil {
+			for i := range out {
+				if pr, ok := profiles[out[i].Tenant]; ok {
+					out[i].DisplayName = pr.DisplayName
+				}
+			}
+		}
+	}
+	return out
+}
+
+// getOrgProfile returns the per-org display name + last-edited time.
+// Always returns a row (even if the profile hasn't been written yet)
+// so the UI can show the current value (empty) and the tenant ID side
+// by side without distinguishing "no row" from "blank row".
+func (h *HTTPGateway) getOrgProfile(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	if h.Profiles == nil {
+		writeJSONError(rw, http.StatusNotImplemented, "org profiles not configured")
+		return
+	}
+	if !p.Has(core.PermTenantAdmin) {
+		writeJSONError(rw, http.StatusForbidden, "tenant:admin required")
+		return
+	}
+	tenant := r.URL.Query().Get("tenant")
+	if tenant == "" {
+		tenant = p.Tenant
+	}
+	if tenant != p.Tenant && !isPlatformAdmin(p) {
+		writeJSONError(rw, http.StatusForbidden, "cannot view another tenant's profile")
+		return
+	}
+	pr, err := h.Profiles.GetOrgProfile(r.Context(), tenant)
+	if err != nil {
+		// Empty row is the right shape — the UI fills in a default.
+		writeJSON(rw, http.StatusOK, map[string]any{
+			"tenant":       tenant,
+			"display_name": "",
+		})
+		return
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"tenant":       pr.Tenant,
+		"display_name": pr.DisplayName,
+		"updated_at":   pr.UpdatedAt,
+	})
+}
+
+func (h *HTTPGateway) putOrgProfile(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	if h.Profiles == nil {
+		writeJSONError(rw, http.StatusNotImplemented, "org profiles not configured")
+		return
+	}
+	if !p.Has(core.PermTenantAdmin) {
+		writeJSONError(rw, http.StatusForbidden, "tenant:admin required")
+		return
+	}
+	var body struct {
+		DisplayName string `json:"display_name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
+		return
+	}
+	name := strings.TrimSpace(body.DisplayName)
+	if len(name) > 80 {
+		writeJSONError(rw, http.StatusBadRequest, "display name is too long (max 80)")
+		return
+	}
+	pr := auth.OrgProfile{
+		Tenant:      p.Tenant,
+		DisplayName: name,
+		UpdatedAt:   time.Now().UTC(),
+	}
+	if err := h.Profiles.PutOrgProfile(r.Context(), pr); err != nil {
+		writeJSONError(rw, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.audit(r.Context(), p, "org_profile.update", p.Tenant, "name="+name)
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"tenant":       pr.Tenant,
+		"display_name": pr.DisplayName,
+		"updated_at":   pr.UpdatedAt,
 	})
 }
 

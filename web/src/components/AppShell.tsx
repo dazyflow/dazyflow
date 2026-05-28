@@ -24,6 +24,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { ActiveFlowContext } from "../activeFlow";
 import { shouldShowTenantID } from "../lib/visibleTenant";
+import { orgDisplayName } from "../lib/orgDisplayName";
 
 // COLLAPSE_KEY persists the sidebar collapsed/expanded choice across
 // reloads. The sidebar is always visible; small viewports just default
@@ -205,6 +206,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 tenants={tenants}
                 activeTenant={activeTenant || me.tenant}
                 onPick={setActiveTenant}
+                nameOf={(tid) => orgDisplayName(me, tid)}
               />
             )}
             <span className="topbar-workspace">
@@ -448,10 +450,16 @@ function TenantSwitcher({
   tenants,
   activeTenant,
   onPick,
+  nameOf,
 }: {
   tenants: string[];
   activeTenant: string;
   onPick: (t: string) => void;
+  // nameOf resolves a tenant ID to its display name (falls back to the
+  // ID itself when no profile is set). Keeps the switcher decoupled
+  // from the WhoAmI shape so the same control could be reused
+  // elsewhere with a different source.
+  nameOf: (tenant: string) => string;
 }) {
   const { t: tr } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -480,27 +488,36 @@ function TenantSwitcher({
         title={tr("nav.switchTenant")}
       >
         <Building2 size={13} />
-        <strong>{activeTenant || tr("nav.pickTenant")}</strong>
+        <strong>
+          {activeTenant ? nameOf(activeTenant) : tr("nav.pickTenant")}
+        </strong>
         <ChevronDown size={12} />
       </button>
       {open && (
         <div className="workspace-pop">
           <div className="workspace-pop-head">{tr("nav.tenants")}</div>
-          {tenants.map((t) => (
-            <button
-              key={t}
-              type="button"
-              className={
-                "workspace-pop-row" + (t === activeTenant ? " active" : "")
-              }
-              onClick={() => {
-                onPick(t);
-                setOpen(false);
-              }}
-            >
-              {t}
-            </button>
-          ))}
+          {tenants.map((tid) => {
+            const label = nameOf(tid);
+            return (
+              <button
+                key={tid}
+                type="button"
+                className={
+                  "workspace-pop-row" + (tid === activeTenant ? " active" : "")
+                }
+                onClick={() => {
+                  onPick(tid);
+                  setOpen(false);
+                }}
+                title={tid}
+              >
+                <span>{label}</span>
+                {label !== tid && (
+                  <span className="workspace-pop-id">{tid}</span>
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

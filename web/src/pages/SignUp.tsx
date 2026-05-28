@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 
@@ -15,7 +15,14 @@ export function SignUp() {
   const { t } = useTranslation();
   const { signUpWithPassword, error, loading } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
+  const [searchParams] = useSearchParams();
+  // Pre-fill from /invite-flow deep links so the recipient doesn't
+  // have to retype the email the invitation was sent to. The invite
+  // token rides through to the post-signup redirect so they land
+  // directly on the accept page.
+  const presetEmail = searchParams.get("email") ?? "";
+  const inviteToken = searchParams.get("invite") ?? "";
+  const [email, setEmail] = useState(presetEmail);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
@@ -42,8 +49,9 @@ export function SignUp() {
           setBusy(true);
           try {
             await signUpWithPassword(email.trim(), password);
-            // After signup, send the user to the welcome wizard.
-            navigate("/welcome");
+            // Land on the invite-accept page if the signup came from
+            // an invitation link; otherwise the usual welcome wizard.
+            navigate(inviteToken ? `/invite/${inviteToken}` : "/welcome");
           } catch {
             /* server error already set on context.error */
           } finally {
