@@ -33,7 +33,7 @@ function featureUnavailable(status: number): boolean {
 
 export function Connections() {
   const { t } = useTranslation();
-  const { token } = useAuth();
+  const { token, me } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [providers, setProviders] = useState<OAuthProviderStatus[] | null>(null);
@@ -107,9 +107,7 @@ export function Connections() {
       <p className="page-sub">{t("connections.intro")}</p>
 
       {providersOff && secretsOff && (
-        <div className="card connections-disabled">
-          {t("connections.allDisabled")}
-        </div>
+        <SetupIncompleteBanner supportContact={me?.support_contact} />
       )}
 
       {oauthResult === "success" && (
@@ -171,6 +169,61 @@ export function Connections() {
       )}
     </div>
   );
+}
+
+// SetupIncompleteBanner replaces the bare "feature off" card when BOTH
+// OAuth and the encrypted secret store come back unavailable. The
+// page would otherwise be empty save the title — leaving a paying
+// end-user with no path forward. The banner names the situation,
+// pins the responsibility on the operator (not the end user), and
+// gives them somewhere to click when a support contact is set.
+function SetupIncompleteBanner({
+  supportContact,
+}: {
+  supportContact?: string;
+}) {
+  const { t } = useTranslation();
+  const href = supportContactHref(supportContact);
+  return (
+    <div className="card connections-setup-incomplete" role="status">
+      <h2 className="connections-setup-incomplete-title">
+        {t("connections.setupIncompleteTitle")}
+      </h2>
+      <p>{t("connections.setupIncompleteBody")}</p>
+      {href ? (
+        <a className="primary" href={href}>
+          {t("connections.setupIncompleteContact")}
+        </a>
+      ) : (
+        <p className="connections-setup-incomplete-fallback">
+          {t("connections.setupIncompleteContactGeneric")}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// supportContactHref turns an operator-set contact string into the
+// right `href`. We accept three shapes so the operator doesn't have
+// to think about escaping:
+//   - "support@acme.com"          → mailto:support@acme.com
+//   - "https://acme.com/help"     → as-is
+//   - "http://acme.com/help"      → as-is
+// Anything else returns undefined, which falls back to the generic
+// "ask your admin" copy (no clickable link).
+function supportContactHref(raw?: string): string | undefined {
+  const trimmed = raw?.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    return trimmed;
+  }
+  if (trimmed.startsWith("mailto:")) return trimmed;
+  // Email heuristic: `local@domain` with no whitespace. Good enough
+  // for the operator-input use case; this isn't an RFC validator.
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+    return `mailto:${trimmed}`;
+  }
+  return undefined;
 }
 
 // ProviderCard renders one OAuth provider: brand + name + what it

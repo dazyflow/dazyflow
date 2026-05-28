@@ -966,6 +966,30 @@
   color: var(--muted);
   font-size: 13px;
 }
+.connections-setup-incomplete {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+.connections-setup-incomplete-title {
+  margin: 0;
+  font-size: 16px;
+}
+.connections-setup-incomplete p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+  max-width: 64ch;
+}
+.connections-setup-incomplete a.primary {
+  text-decoration: none;
+}
+.connections-setup-incomplete-fallback {
+  font-style: italic;
+}
 .connections-banner {
   display: flex;
   align-items: center;
@@ -1210,6 +1234,28 @@
   display: flex;
   gap: var(--space-2);
   flex-shrink: 0;
+}
+/* When the banner carries both a user-fixable line AND an admin-blocked
+   line, stack them on top of each other so the second line is visibly
+   secondary. The user-fixable line keeps the default colour; the
+   admin-side line is muted to read as informational. */
+.editor-conn-banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.editor-conn-banner-admin {
+  color: var(--muted);
+  font-size: 12px;
+}
+/* Admin-blocked rows inside the pre-run modal. Borderless list keeps it
+   visually distinct from the actionable "Connect this" rows above it. */
+.conn-gate-admin-head {
+  color: var(--muted);
+}
+.conn-gate-admin-list li {
+  color: var(--muted);
 }
 
 .integration-hero {
@@ -1497,6 +1543,27 @@
 .template-cta:disabled {
   opacity: 0.6;
   cursor: default;
+}
+/* Cards for templates that need an OAuth provider the install hasn't
+   enabled. The card is greyed out but still readable — the user gets
+   to see what they'd be missing (so they know what to ask their
+   admin for), but the Use button is disabled and a single-line note
+   names the missing integration(s). */
+.template-card-admin-blocked {
+  opacity: 0.65;
+  border-style: dashed;
+}
+.template-card-admin-blocked:hover {
+  opacity: 0.85;
+}
+.template-admin-blocked-note {
+  margin: var(--space-2) 0 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--muted) 12%, transparent);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 /* Run-detail page: failure banner, node timeline, expandable

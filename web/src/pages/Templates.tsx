@@ -1,10 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { api, APIError } from "../api";
 import { useAuth } from "../auth";
 import { iconFor } from "../icons";
-import type { Graph, TemplateSummary } from "../types";
+import {
+  displayNameForIntegrationSlug,
+  oauthProviderForIntegration,
+} from "../integrationMeta";
+import type { Graph, OAuthProviderStatus, TemplateSummary } from "../types";
 
 // Templates is the gallery page: lists pre-built workflows the user
 // can fork into their own workspace with one click. On click we
@@ -24,6 +28,14 @@ export function Templates() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null); // template id currently being forked
   const [showTech, setShowTech] = useState(false);
+  // providers is the OAuth catalog for this install. null = not loaded
+  // yet (or feature unavailable on this hosted box, which the daemon
+  // signals with 501). When the catalog is empty/null, OAuth-needing
+  // templates are flagged as admin-blocked so a non-tech buyer doesn't
+  // fork into a setup that can't run end-to-end.
+  const [providers, setProviders] = useState<OAuthProviderStatus[] | null>(
+    null,
+  );
   const [searchParams, setSearchParams] = useSearchParams();
   // Goal-first entry from the Welcome page lands here with ?category=…
   // so the gallery opens already narrowed to the user's intent.
@@ -35,6 +47,37 @@ export function Templates() {
       .then((r) => setTemplates(r.templates))
       .catch((e: Error) => setError(e.message));
   }, []);
+
+  // Fetch OAuth providers in parallel — kept independent so a 501 or
+  // 401 here doesn't blank the whole templates gallery. The map of
+  // available provider names drives per-card admin-blocked badges.
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    api
+      .listProviders(token)
+      .then((r) => {
+        if (!cancelled) setProviders(r.providers);
+      })
+      .catch(() => {
+        // 501 = OAuth not configured. Same outcome as "no providers
+        // available" for filtering: any OAuth-needing template gets
+        // flagged. Stash the empty list so the gating logic kicks in.
+        if (!cancelled) setProviders([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  // availableProviders is the set of OAuth provider names this install
+  // currently exposes. Empty when the feature is off or the daemon
+  // hasn't reported any configured providers — the same case from the
+  // template-gating POV.
+  const availableProviders = useMemo(() => {
+    if (providers === null) return null;
+    return new Set(providers.map((p) => p.name));
+  }, [providers]);
 
   const useTemplate = async (tpl: TemplateSummary) => {
     if (!token || !activeTenant || !activeWorkspace) {
@@ -145,8 +188,29 @@ export function Templates() {
           <div className="template-grid">
             {group.items.map((tpl) => {
               const Icon = iconFor(tpl.icon);
+              // missingIntegrationNames lists the OAuth-backed
+              // integrations this template references but that the
+              // current install hasn't enabled. Empty list = template
+              // is forkable. Computed against availableProviders,
+              // which itself is null until the providers fetch
+              // resolves — until then we don't block, so the gallery
+              // doesn't briefly grey every card on a slow network.
+              const missingIntegrationNames =
+                availableProviders === null
+                  ? []
+                  : oauthBlockedIntegrations(
+                      tpl.integrations ?? [],
+                      availableProviders,
+                    );
+              const adminBlocked = missingIntegrationNames.length > 0;
               return (
-                <div key={tpl.id} className="template-card">
+                <div
+                  key={tpl.id}
+                  className={
+                    "template-card" +
+                    (adminBlocked ? " template-card-admin-blocked" : "")
+                  }
+                >
                   <div className="template-card-head">
                     <span className="template-icon">
                       <Icon size={18} strokeWidth={2.2} />
@@ -173,11 +237,25 @@ export function Templates() {
                       )}
                     </div>
                   )}
+                  {adminBlocked && (
+                    <p className="template-admin-blocked-note">
+                      {t("templates.adminBlocked", {
+                        names: missingIntegrationNames.join(", "),
+                      })}
+                    </p>
+                  )}
                   <button
                     type="button"
                     className="primary template-cta"
                     onClick={() => useTemplate(tpl)}
-                    disabled={busy !== null}
+                    disabled={busy !== null || adminBlocked}
+                    title={
+                      adminBlocked
+                        ? t("templates.adminBlockedTitle", {
+                            names: missingIntegrationNames.join(", "),
+                          })
+                        : undefined
+                    }
                   >
                     {busy === tpl.id ? t("templates.forking") : t("templates.useTemplate")}
                   </button>
@@ -189,6 +267,29 @@ export function Templates() {
       ))}
     </div>
   );
+}
+
+// oauthBlockedIntegrations names the template-listed integrations
+// whose OAuth provider isn't enabled on this install. For each entry
+// in the template's `integrations` array we look up the corresponding
+// OAuth provider; if the provider exists AND isn't in the available
+// set, we surface the integration's display name ("Gmail", "Slack")
+// — not the provider key — because that's what the user already sees
+// in the card's brand-logo row, so the message lines up. Integrations
+// with no OAuth mapping (postgres, sqlite, webhook, ...) are skipped
+// here; the editor's pre-run banner covers the secret-store side.
+function oauthBlockedIntegrations(
+  integrationSlugs: string[],
+  availableProviders: Set<string>,
+): string[] {
+  const out = new Set<string>();
+  for (const slug of integrationSlugs) {
+    const provider = oauthProviderForIntegration(slug);
+    if (!provider) continue;
+    if (availableProviders.has(provider)) continue;
+    out.add(displayNameForIntegrationSlug(slug));
+  }
+  return [...out].sort();
 }
 
 // templateIntegrationCap is how many brand logos we render before

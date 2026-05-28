@@ -66,6 +66,7 @@ func main() {
 	masterKeyB64 := flag.String("master-key", os.Getenv("HAZYFLOW_MASTER_KEY"), "base64-encoded 32-byte AES-256 master key for the tenant:// encrypted secret store (default $HAZYFLOW_MASTER_KEY). When empty the tenant:// scheme and /api/v1/secrets CRUD endpoints stay disabled.")
 	rotateKeyB64 := flag.String("rotate-master-key", "", "rotate the tenant:// encrypted-secret KEK: re-wrap every tenant DEK from --master-key (the CURRENT key) to this new base64-encoded 32-byte key, print a report, and EXIT without serving. Use the same store as the running daemon (--postgres-dsn for durable deployments). Re-runnable. Afterwards, restart with --master-key set to the new key. No secret values are re-entered.")
 	publicBaseURL := flag.String("public-base-url", os.Getenv("HAZYFLOW_PUBLIC_BASE_URL"), "externally-reachable origin of this daemon (e.g. https://app.example.com). Required for OAuth — must match the redirect_uri registered with each OAuth provider.")
+	supportContact := flag.String("support-contact", os.Getenv("HAZYFLOW_SUPPORT_CONTACT"), "operator contact (email address or URL) surfaced to end users when something is mis-configured server-side (e.g. OAuth not enabled). Empty = the UI shows a generic 'contact your administrator' message.")
 	enableSignup := flag.Bool("signup", os.Getenv("HAZYFLOW_ENABLE_SIGNUP") == "1", "enable POST /api/v1/auth/signup for self-serve account creation. Off by default; production deployments often prefer admin-invite-only.")
 	enableMetrics := flag.Bool("metrics", os.Getenv("HAZYFLOW_ENABLE_METRICS") == "1", "expose an unauthenticated GET /metrics Prometheus endpoint (per-tenant disk-usage gauges + liveness). Off by default — it reveals tenant names, so enable only behind a restricted monitoring network/proxy.")
 	mcpServers := flag.String("mcp", "", "register MCP stdio servers, e.g. fs=server-filesystem /tmp;docs=npx -y @modelcontextprotocol/server-docs (semicolon-separated)")
@@ -350,6 +351,11 @@ func main() {
 		// field (deep-link to /runs/{id}). Same value already used
 		// by the OAuth flow's redirect_uri builder.
 		PublicBaseURL: *publicBaseURL,
+		// SupportContact is surfaced on the Connections page when
+		// OAuth and/or the encrypted secret store are unavailable,
+		// so a non-technical end user has a path forward instead of
+		// a silently-empty page.
+		SupportContact: *supportContact,
 		// Default logger threads daemon-side warnings to the same
 		// log writer the gateway uses for HTTP request logs.
 		Logger: log.New(log.Writer(), "service: ", log.LstdFlags),

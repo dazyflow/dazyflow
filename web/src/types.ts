@@ -182,6 +182,13 @@ export type WhoAmI = {
   // --public-base-url). Used to build correct webhook/hosted-form URLs.
   // Empty when unset — the UI falls back to a localhost hint.
   public_base_url?: string;
+  // support_contact is an operator-set email or URL (e.g.
+  // "support@acme.com" or "https://acme.com/help") surfaced on UI
+  // surfaces that depend on server-side setup the end user can't fix
+  // themselves — notably the Connections page when OAuth/secret-store
+  // are off. Empty = render a generic "contact your administrator"
+  // message with no link.
+  support_contact?: string;
 };
 
 export type JobStatus =

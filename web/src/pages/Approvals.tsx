@@ -5,6 +5,7 @@ import { Trans, useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
+import { shouldShowTenantID } from "../lib/visibleTenant";
 import type { PendingApproval } from "../types";
 
 // Approvals is the inbox for await_approval nodes parked across the
@@ -13,7 +14,7 @@ import type { PendingApproval } from "../types";
 // which Service.Approve services (same code path as the HMAC endpoint).
 export function Approvals() {
   const { t } = useTranslation();
-  const { token, me, activeTenant, activeWorkspace } = useAuth();
+  const { token, me, tenants, activeTenant, activeWorkspace } = useAuth();
   const [items, setItems] = useState<PendingApproval[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -95,10 +96,18 @@ export function Approvals() {
         <div>
           <h1>{t("approvals.title")}</h1>
           <div className="sub">
-            {t("approvals.subtitle", {
-              tenant: activeTenant || me?.tenant,
-              workspace: activeWorkspace || me?.workspace || t("approvals.anyWorkspace"),
-            })}
+            {t(
+              shouldShowTenantID(me, tenants.length)
+                ? "approvals.subtitle"
+                : "approvals.subtitleWorkspaceOnly",
+              {
+                tenant: activeTenant || me?.tenant,
+                workspace:
+                  activeWorkspace ||
+                  me?.workspace ||
+                  t("approvals.anyWorkspace"),
+              },
+            )}
             {items.length > 0 && (
               <>
                 {" · "}

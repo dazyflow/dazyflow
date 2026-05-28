@@ -621,6 +621,12 @@ func (h *HTTPGateway) whoami(rw http.ResponseWriter, _ *http.Request, p core.Pri
 		// operator hasn't set --public-base-url; the UI falls back to a
 		// localhost hint in that case.
 		"public_base_url": h.svc.PublicBaseURL,
+		// support_contact surfaces an operator-set email/URL on UI
+		// surfaces that depend on server-side setup the end user can't
+		// fix themselves (e.g. OAuth/secret-store not configured on the
+		// Connections page). Empty = the UI shows a generic "contact
+		// your administrator" message with no link.
+		"support_contact": h.svc.SupportContact,
 	})
 }
 

@@ -35,6 +35,8 @@ import { oauthProviderDisplay } from "../integrationMeta";
 import {
   requiredConnections,
   requiredSecrets,
+  unavailableProviders,
+  unavailableSecretRefs,
   slackChannels,
   type MissingConnection,
 } from "../lib/requiredConnections";
@@ -672,6 +674,22 @@ function EditorInner() {
     () => requiredSecrets(nodes, paramsByID, secrets),
     [nodes, paramsByID, secrets],
   );
+  // adminBlockedProviders / adminBlockedSecretRefs: when OAuth or the
+  // encrypted secret store are off entirely on this install, the
+  // regular checks above return [] — "we can't know what's missing."
+  // These two parallel calls surface "the graph WOULD need these but
+  // your admin hasn't enabled the feature yet" so the banner + gate
+  // can warn the user instead of dispatching a doomed run. End user
+  // can't fix these themselves — separate UI affordance (no
+  // /connections set-up CTA on these rows).
+  const adminBlockedProviders = useMemo(
+    () => unavailableProviders(nodes, manifestByID, paramsByID, providers),
+    [nodes, manifestByID, paramsByID, providers],
+  );
+  const adminBlockedSecretRefs = useMemo(
+    () => unavailableSecretRefs(nodes, paramsByID, secrets),
+    [nodes, paramsByID, secrets],
+  );
   // slackTargets: channels this graph posts to. Drives a pre-run
   // reminder to invite the Slack app — orthogonal to needsSetup (Slack
   // can be connected yet the app still absent from the channel).
@@ -679,8 +697,11 @@ function EditorInner() {
     () => slackChannels(nodes, paramsByID),
     [nodes, paramsByID],
   );
-  const needsSetup =
+  const userFixableSetup =
     missingConnections.length > 0 || missingSecrets.length > 0;
+  const adminBlockedSetup =
+    adminBlockedProviders.length > 0 || adminBlockedSecretRefs.length > 0;
+  const needsSetup = userFixableSetup || adminBlockedSetup;
 
   // doRun submits the graph and wires up live status. Separated from
   // the gate check so "Run anyway" in the setup modal can bypass the
@@ -1073,24 +1094,53 @@ function EditorInner() {
             role="alert"
           >
             <span className="editor-conn-banner-text">
-              {t("editor.connNeeded", {
-                items: [
-                  ...new Set(
-                    missingConnections.map(
-                      (m) => oauthProviderDisplay(m.provider).name,
-                    ),
-                  ),
-                  ...missingSecrets,
-                ].join(", "),
-              })}
+              {userFixableSetup && (
+                <span>
+                  {t("editor.connNeeded", {
+                    items: [
+                      ...new Set(
+                        missingConnections.map(
+                          (m) => oauthProviderDisplay(m.provider).name,
+                        ),
+                      ),
+                      ...missingSecrets,
+                    ].join(", "),
+                  })}
+                </span>
+              )}
+              {adminBlockedSetup && (
+                <span className="editor-conn-banner-admin">
+                  {t(
+                    userFixableSetup
+                      ? "editor.adminBlockedAppend"
+                      : "editor.adminBlockedOnly",
+                    {
+                      items: [
+                        ...adminBlockedProviders.map(
+                          (p) => oauthProviderDisplay(p).name,
+                        ),
+                        ...adminBlockedSecretRefs,
+                      ].join(", "),
+                    },
+                  )}
+                </span>
+              )}
             </span>
             <span className="editor-conn-banner-actions">
+              {/* "Set up" CTA only when there's something the user can
+                  actually do on /connections. When the entire blockage
+                  is admin-side, route to /connections too (the P0.1
+                  SetupIncompleteBanner there names the operator + any
+                  support contact), but label it as a status-check
+                  rather than a fixable action. */}
               <button
                 type="button"
                 className="primary"
                 onClick={() => navigate("/connections")}
               >
-                {t("editor.connNeededCta")}
+                {userFixableSetup
+                  ? t("editor.connNeededCta")
+                  : t("editor.adminBlockedCta")}
               </button>
               <button
                 type="button"
@@ -1316,6 +1366,8 @@ function EditorInner() {
         <ConnectionGate
           missing={missingConnections}
           missingSecrets={missingSecrets}
+          adminBlockedProviders={adminBlockedProviders}
+          adminBlockedSecretRefs={adminBlockedSecretRefs}
           slackChannels={slackTargets}
           onConnect={() => navigate("/connections")}
           onRunAnyway={() => void doRun()}
@@ -1334,6 +1386,8 @@ function EditorInner() {
 function ConnectionGate({
   missing,
   missingSecrets,
+  adminBlockedProviders,
+  adminBlockedSecretRefs,
   slackChannels,
   onConnect,
   onRunAnyway,
@@ -1341,13 +1395,22 @@ function ConnectionGate({
 }: {
   missing: MissingConnection[];
   missingSecrets: string[];
+  // adminBlockedProviders / adminBlockedSecretRefs name the OAuth
+  // providers and ${tenant:NAME} refs the graph would need but the
+  // operator hasn't enabled on this install. Rendered as a separate,
+  // explicitly admin-side section so the user doesn't try to "Connect"
+  // something they can't reach. Empty arrays = nothing admin-blocked.
+  adminBlockedProviders: string[];
+  adminBlockedSecretRefs: string[];
   slackChannels: string[];
   onConnect: () => void;
   onRunAnyway: () => void;
   onCancel: () => void;
 }) {
   const { t } = useTranslation();
-  const hasSetup = missing.length > 0 || missingSecrets.length > 0;
+  const hasUserFixable = missing.length > 0 || missingSecrets.length > 0;
+  const hasAdminBlocked =
+    adminBlockedProviders.length > 0 || adminBlockedSecretRefs.length > 0;
   return (
     <div className="settings-backdrop" onClick={onCancel}>
       <div
@@ -1359,7 +1422,12 @@ function ConnectionGate({
           <h2>{t("connGate.title")}</h2>
         </div>
         <div className="settings-body">
-          {hasSetup && <p className="conn-gate-lede">{t("connGate.lede")}</p>}
+          {hasUserFixable && (
+            <p className="conn-gate-lede">{t("connGate.lede")}</p>
+          )}
+          {!hasUserFixable && hasAdminBlocked && (
+            <p className="conn-gate-lede">{t("connGate.adminLede")}</p>
+          )}
           {missing.length > 0 && (
             <>
               <div className="conn-gate-section-head">{t("connGate.appsHead")}</div>
@@ -1380,6 +1448,26 @@ function ConnectionGate({
                 {missingSecrets.map((name) => (
                   <li key={name}>
                     <code>{name}</code>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {hasAdminBlocked && (
+            <>
+              <div className="conn-gate-section-head conn-gate-admin-head">
+                {t("connGate.adminBlockedHead")}
+              </div>
+              <p className="desc">{t("connGate.adminBlockedBody")}</p>
+              <ul className="conn-gate-list conn-gate-admin-list">
+                {adminBlockedProviders.map((p) => (
+                  <li key={`prov::${p}`}>
+                    <strong>{oauthProviderDisplay(p).name}</strong>
+                  </li>
+                ))}
+                {adminBlockedSecretRefs.map((n) => (
+                  <li key={`sec::${n}`}>
+                    <code>{n}</code>
                   </li>
                 ))}
               </ul>

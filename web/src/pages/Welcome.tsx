@@ -3,6 +3,7 @@ import { Trans, useTranslation } from "react-i18next";
 import { ArrowRight, Workflow } from "lucide-react";
 import { useAuth } from "../auth";
 import { loadRecentFlow } from "../recentFlow";
+import { shouldShowTenantID } from "../lib/visibleTenant";
 
 // Welcome is the post-signup landing wizard — the "first-run"
 // surface from the T0-3 TODO. Intentionally simple: three CTAs that
@@ -25,10 +26,16 @@ const GOALS: { category: string; titleKey: string; descKey: string }[] = [
 
 export function Welcome() {
   const { t } = useTranslation();
-  const { me } = useAuth();
+  const { me, tenants } = useAuth();
   // Resolved once on mount — localStorage only changes when the editor
   // mounts, which can't happen while this page is showing.
   const recent = loadRecentFlow();
+  // showTenant gates the "in tenant `usr_…`" suffix. For ordinary
+  // single-tenant principals the identifier is internal noise; only
+  // platform admins / multi-tenant principals see it as actionable
+  // context. The trailing period sits outside the gate so the
+  // sentence flows either way.
+  const showTenant = shouldShowTenantID(me, tenants.length);
   return (
     <div className="welcome">
       <div className="card welcome-card">
@@ -40,7 +47,7 @@ export function Welcome() {
               values={{ subject: me.subject }}
               components={[<strong />]}
             />
-            {me.tenant && (
+            {me.tenant && showTenant && (
               <Trans
                 i18nKey="welcome.inTenant"
                 values={{ tenant: me.tenant }}

@@ -5,11 +5,12 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import { iconFor, isBrandedIcon } from "../icons";
+import { shouldShowTenantID } from "../lib/visibleTenant";
 import type { FlowSummary } from "../types";
 
 export function FlowList() {
   const { t } = useTranslation();
-  const { token, me, activeTenant, activeWorkspace } = useAuth();
+  const { token, me, tenants, activeTenant, activeWorkspace } = useAuth();
   const [flows, setFlows] = useState<FlowSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +61,9 @@ export function FlowList() {
         <div>
           <h1>{t("flowList.title")}</h1>
           <div className="sub">
-            {activeTenant || me?.tenant}/{activeWorkspace}
+            {shouldShowTenantID(me, tenants.length)
+              ? `${activeTenant || me?.tenant}/${activeWorkspace}`
+              : activeWorkspace}
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>

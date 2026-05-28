@@ -291,6 +291,14 @@ type Service struct {
 	// hzd already collects via --public-base-url for the OAuth flow.
 	PublicBaseURL string
 
+	// SupportContact is an operator-configured email or URL the web
+	// UI surfaces to end users when a feature isn't usable on this
+	// install (e.g. OAuth disabled, encrypted secret store off). The
+	// UI shows it as the action target on "your administrator hasn't
+	// finished setup" prompts. Empty = the UI falls back to a generic
+	// "contact your administrator" message with no link.
+	SupportContact string
+
 	// Logger receives daemon-side warnings (failure-notify delivery
 	// failures, etc.). Nil disables those logs — handy in tests
 	// that don't want stderr noise.

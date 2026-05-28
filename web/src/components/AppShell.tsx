@@ -23,6 +23,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { ActiveFlowContext } from "../activeFlow";
+import { shouldShowTenantID } from "../lib/visibleTenant";
 
 // COLLAPSE_KEY persists the sidebar collapsed/expanded choice across
 // reloads. The sidebar is always visible; small viewports just default
@@ -185,7 +186,13 @@ export function AppShell({ children }: { children: ReactNode }) {
                 activeWorkspace={activeWorkspace || me.workspace}
                 workspaces={workspaces}
                 onPick={setActiveWorkspace}
-                hideTenantPrefix={tenants.length > 1}
+                // The tenant prefix is only meaningful chrome for
+                // principals who actually navigate between tenants —
+                // platform admins or anyone with >1 tenant on their
+                // token. For ordinary single-tenant users, the
+                // identifier `usr_…` is internal jargon that adds
+                // noise without surfacing an actionable choice.
+                hideTenantPrefix={!shouldShowTenantID(me, tenants.length)}
               />
             </span>
             {inEditor && openSettings && (

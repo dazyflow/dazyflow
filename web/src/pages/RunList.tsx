@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import { useAuth } from "../auth";
 import { api } from "../api";
+import { shouldShowTenantID } from "../lib/visibleTenant";
 import type { RunSummary, JobStatus } from "../types";
 
 const PAGE_SIZE = 50;
@@ -20,7 +21,7 @@ export function RunList() {
     { labelKey: "runList.filterFailed", value: "failed" },
     { labelKey: "runList.filterSucceeded", value: "succeeded" },
   ];
-  const { token, me, activeTenant, activeWorkspace } = useAuth();
+  const { token, me, tenants, activeTenant, activeWorkspace } = useAuth();
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -110,10 +111,16 @@ export function RunList() {
         <div>
           <h1>{t("runList.title")}</h1>
           <div className="sub">
-            {t("runList.subtitle", {
-              tenant: activeTenant || me?.tenant,
-              workspace: activeWorkspace || me?.workspace || t("runList.anyWorkspace"),
-            })}
+            {t(
+              shouldShowTenantID(me, tenants.length)
+                ? "runList.subtitle"
+                : "runList.subtitleWorkspaceOnly",
+              {
+                tenant: activeTenant || me?.tenant,
+                workspace:
+                  activeWorkspace || me?.workspace || t("runList.anyWorkspace"),
+              },
+            )}
           </div>
         </div>
       </div>

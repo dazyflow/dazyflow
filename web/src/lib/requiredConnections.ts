@@ -117,3 +117,65 @@ export function requiredSecrets(
     .filter((nm) => !known.has(nm) && !written.has(nm))
     .sort();
 }
+
+// unavailableProviders is the partner of requiredConnections for the
+// case where the OAuth feature is off entirely on this install
+// (providers === null). The regular check returns [] in that case —
+// "we don't know, don't block the run" — but the editor's banner and
+// pre-run gate need to distinguish "feature unavailable, your admin
+// has to enable it" from "everything is fine." This call returns the
+// OAuth provider names the graph would need, deduplicated, so the
+// editor can phrase the warning differently (no "Set up" CTA — the
+// end user can't enable OAuth themselves).
+//
+// Returns [] when providers !== null (use requiredConnections) and
+// when the graph doesn't reference any OAuth-backed drop.
+export function unavailableProviders(
+  nodes: GraphNodeLike[],
+  manifestByID: Map<string, Manifest>,
+  paramsByID: Record<string, Record<string, unknown>>,
+  providers: OAuthProviderStatus[] | null,
+): string[] {
+  if (providers !== null) return [];
+  const out = new Set<string>();
+  for (const n of nodes) {
+    const manifest = manifestByID.get(n.data.moduleID);
+    if (!manifest) continue;
+    const provider = oauthProviderForIntegration(manifest.integration);
+    if (!provider) continue;
+    const schemaProps = manifest.params_schema?.properties;
+    if (!schemaProps || !("account" in schemaProps)) continue;
+    // Same escape hatch as requiredConnections: a raw token param means
+    // the node bypasses OAuth and would work with the feature off.
+    const params = paramsByID[n.id] ?? {};
+    if (typeof params.token === "string" && params.token.trim() !== "") continue;
+    out.add(provider);
+  }
+  return [...out].sort();
+}
+
+// unavailableSecretRefs is the partner of requiredSecrets for the
+// case where the encrypted secret store is off (knownSecrets === null).
+// Same rationale as unavailableProviders: distinguish "feature off,
+// admin has to enable it" from "all good." Returns the ${tenant:NAME}
+// references the graph would need, dedup + sorted, excluding names the
+// graph writes itself with secret_set (those will populate on first run
+// even if the store is later enabled, so they're not blocking).
+//
+// Returns [] when knownSecrets !== null (use requiredSecrets).
+export function unavailableSecretRefs(
+  nodes: GraphNodeLike[],
+  paramsByID: Record<string, Record<string, unknown>>,
+  knownSecrets: string[] | null,
+): string[] {
+  if (knownSecrets !== null) return [];
+  const written = new Set<string>();
+  for (const n of nodes) {
+    if (n.data.moduleID !== "secret_set") continue;
+    const nm = paramsByID[n.id]?.name;
+    if (typeof nm === "string" && nm.trim() !== "") written.add(nm.trim());
+  }
+  const referenced = new Set<string>();
+  for (const n of nodes) collectTenantRefs(paramsByID[n.id] ?? {}, referenced);
+  return [...referenced].filter((nm) => !written.has(nm)).sort();
+}

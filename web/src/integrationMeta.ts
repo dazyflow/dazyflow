@@ -50,6 +50,17 @@ export function integrationNameFromSlug(slug: string): string {
     .join(" ");
 }
 
+// displayNameForIntegrationSlug prefers the curated name from
+// integrationMeta when one exists ("GitHub" vs the simplistic
+// title-casing of "Github"). Falls through to the slug-derived
+// title-case for any slug that hasn't been curated yet. Use this
+// anywhere user-facing copy names an integration by slug.
+export function displayNameForIntegrationSlug(slug: string): string {
+  const meta = integrationMeta[slug];
+  if (meta?.name) return meta.name;
+  return integrationNameFromSlug(slug);
+}
+
 // OAuthProviderMeta is the display surface for a connectable provider
 // in the Connections panel. Keyed by the daemon's provider name (the
 // string GET /oauth/providers returns: "slack", "google", "github",
