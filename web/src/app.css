@@ -766,6 +766,22 @@
   font-size: 13px;
   color: var(--muted);
 }
+/* "More for developers →" lives below the three main goal cards as
+   a quiet inline link. Visual weight stays low so a non-tech buyer's
+   eye still lands on the cards, but a developer can still find the
+   tech-flavoured templates without hunting through the whole gallery. */
+.welcome-goal-dev {
+  margin-top: var(--space-2);
+  font-size: 12px;
+}
+.welcome-goal-dev a {
+  color: var(--muted);
+  text-decoration: none;
+}
+.welcome-goal-dev a:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
 .welcome-or {
   color: var(--muted);
   font-size: 13px;
@@ -990,6 +1006,53 @@
 .connections-setup-incomplete-fallback {
   font-style: italic;
 }
+/* First-time-here tile that names the two integrations most useful
+   to connect first. Visual weight a notch above the other cards via
+   the accent-tinted background, so a brand-new user's eye lands on
+   it before scanning the full provider grid. */
+.connections-first-tile {
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  margin-bottom: var(--space-4);
+}
+.connections-first-tile-title {
+  margin: 0 0 var(--space-1);
+  font-size: 16px;
+}
+.connections-first-tile-body {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Sign-up form hint under the password field, surfacing the 8-char
+   minimum before the user submits and reads it from an error. */
+.signup-hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* "No setup needed" badge on the template gallery cards. Sits next
+   to the title — small enough to read as a tag, prominent enough
+   that a non-tech user can scan the gallery and spot the cards
+   they can actually use today without contacting their admin. */
+.template-no-setup-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--success, #4ade80) 18%, transparent);
+  color: var(--success, #4ade80);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
 .connections-banner {
   display: flex;
   align-items: center;
@@ -1124,6 +1187,21 @@
   flex: 1;
   font-size: 13px;
 }
+/* Highlight pulse fired when the user lands on /connections?focus=NAME
+   and the credential already exists. Two seconds is long enough to
+   notice without lingering once the user starts reading. */
+.credentials-item-highlight {
+  animation: credentials-highlight 2s ease-out;
+  border-color: var(--accent);
+}
+@keyframes credentials-highlight {
+  0% {
+    background: color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+  100% {
+    background: var(--surface);
+  }
+}
 .credentials-set {
   font-size: 11px;
   color: var(--success);
@@ -1207,6 +1285,13 @@
 .sf-account-connect {
   margin-top: 6px;
   display: inline-block;
+}
+/* Standalone Connect-Gmail / Connect-Slack button rendered when zero
+   accounts are connected — replaces the dropdown so the field has
+   one obvious action instead of an empty list. */
+.sf-account-connect-cta {
+  padding: 6px 12px;
+  font-size: 13px;
 }
 
 /* Proactive "this flow needs a connection" banner on the canvas. Mirrors
@@ -1608,6 +1693,37 @@
   font-size: 13px;
   color: var(--ink);
   opacity: 0.85;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.run-error-body {
+  flex: 1;
+  min-width: 0;
+}
+/* The plain-English headline + next-action sit above the raw
+   error code/message. Visually heavier than the technical layers
+   so a non-tech reader's eye lands on the actionable line first.
+   The headline span and the action button live on the same row at
+   wide widths and stack on narrow viewports. */
+.run-error-headline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+  margin-bottom: var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid color-mix(in srgb, var(--danger) 25%, transparent);
+}
+.run-error-action {
+  text-decoration: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  flex-shrink: 0;
 }
 .run-summary {
   padding: var(--space-3) var(--space-4);
@@ -2502,6 +2618,49 @@
   margin: 0;
   padding-left: 16px;
 }
+.sf-ref-action {
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* Credential chip rendered in place of a plain string input when the
+   field's entire value is one ${tenant:NAME} expression. Visually
+   non-input (no border, no caret affordance) so a non-tech user
+   doesn't try to click in and type. The Lock glyph + label name
+   the credential; Set-up and Replace sit as link-buttons on the
+   right. */
+.sf-credential-chip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 8px 10px;
+  border-radius: var(--r-2);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent);
+  font-size: 13px;
+  color: var(--ink);
+  min-height: 32px;
+}
+.sf-credential-chip-glyph {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.sf-credential-chip-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sf-credential-chip-label code,
+.sf-credential-chip-label {
+  font-family: inherit;
+}
+.sf-credential-chip-actions {
+  display: inline-flex;
+  gap: var(--space-3);
+  flex-shrink: 0;
+}
 
 .sf-object {
   border: 1px solid var(--border);
@@ -2570,6 +2729,23 @@
   background: var(--surface);
   color: var(--ink);
   box-shadow: var(--shadow);
+}
+/* "Show advanced" sits next to the Form/Raw mode toggle as a flat
+   checkbox + label — same visual row, lower visual weight than the
+   primary mode chips so the eye reads Form/JSON first and discovers
+   the toggle on a second pass. */
+.sf-show-advanced {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: var(--space-2);
+  font-size: 12px;
+  color: var(--muted);
+  user-select: none;
+  white-space: nowrap;
+}
+.sf-show-advanced input[type="checkbox"] {
+  margin: 0;
 }
 
 .sf-fallback-hint {
@@ -3196,6 +3372,104 @@
 .trigger-row .sf-field {
   margin-bottom: 0;
 }
+
+/* Cron preset picker — chips for the five cadences, plus per-preset
+   sub-controls (time-of-day, day-of-week, day-of-month). Visual
+   weight stays low so the trigger row doesn't dominate the modal,
+   but the active chip is clear at a glance. */
+.cron-preset-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+}
+.cron-preset-chip {
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.cron-preset-chip:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.cron-preset-chip.active {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  color: var(--ink);
+}
+.cron-preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+  font-size: 13px;
+  color: var(--ink);
+}
+.cron-preset-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+}
+.cron-preset-prefix,
+.cron-preset-suffix {
+  color: var(--muted);
+}
+.cron-preset-note {
+  color: var(--warning, var(--muted));
+}
+.cron-minute-input,
+.cron-day-input {
+  width: 60px;
+}
+.cron-time-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-family: var(--font-mono);
+}
+.cron-time-input input {
+  width: 52px;
+  text-align: center;
+  font-family: inherit;
+}
+.cron-dow-picker {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.cron-dow-chip {
+  min-width: 36px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.cron-dow-chip:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.cron-dow-chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink, #140d30);
+}
+.cron-next-head {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.cron-next-list {
+  margin: 0;
+  padding-left: 16px;
+}
 .curl-block {
   position: relative;
   background: #0a0918;
@@ -3370,6 +3644,36 @@
   color: var(--muted);
   font-size: 13px;
   padding: var(--space-5);
+}
+/* Example-prompt chips below the empty-state copy. Soft pill style
+   reads as a suggestion, not a primary CTA — the user can ignore
+   them and type their own prompt. Click pre-fills the textarea. */
+.chat-empty-examples {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  width: 100%;
+  margin-top: var(--space-2);
+}
+.chat-example-chip {
+  text-align: left;
+  padding: 6px 10px;
+  border-radius: var(--r-2);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.chat-example-chip:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+.chat-example-chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .chat-msg {
   border-radius: 10px;

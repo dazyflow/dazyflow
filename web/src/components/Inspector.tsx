@@ -62,6 +62,11 @@ type Props = {
 
 type Mode = "form" | "json";
 
+// SHOW_ADVANCED_KEY persists the "show advanced" toggle so a
+// developer who wants to see every param doesn't have to re-flip
+// the checkbox on every node selection or page reload.
+const SHOW_ADVANCED_KEY = "hazyflow.inspector.showAdvanced";
+
 export function Inspector({
   selected,
   onChange,
@@ -83,6 +88,26 @@ export function Inspector({
   const [mode, setMode] = useState<Mode>("form");
   const [jsonText, setJsonText] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
+  // showAdvanced controls whether developer-flavored params
+  // (timeouts, pagination cursors, raw-token OAuth bypass) appear
+  // in the form. Default off so a non-tech owner sees only the
+  // fields a forked template actually wants them to touch. The
+  // toggle persists per-browser — once a developer flips it, it
+  // stays flipped across reloads + node selections.
+  const [showAdvanced, setShowAdvanced] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(SHOW_ADVANCED_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(SHOW_ADVANCED_KEY, showAdvanced ? "1" : "0");
+    } catch {
+      /* localStorage might be blocked in a strict-mode iframe */
+    }
+  }, [showAdvanced]);
   // Inline approval state. Lives at the Inspector level (not per-node)
   // because the panel only ever shows one node at a time; if you click
   // away mid-typing your comment is discarded — same shape as the
@@ -147,6 +172,11 @@ export function Inspector({
           options:
             providers.find((p) => p.name === accountProvider)?.accounts ?? [],
           onConnect,
+          // providerLabel is the integration's user-facing name
+          // ("Gmail", "Slack") — drives the inline "Connect Gmail"
+          // button when no accounts are connected. Falls back to a
+          // generic label inside AccountField when absent.
+          providerLabel: d.manifest?.integration,
         }
       : undefined;
 
@@ -170,16 +200,23 @@ export function Inspector({
         </span>
       </div>
       <div className="inspector-body">
-        <div className="sf-field">
-          <div className="label-row">
-            <label>{t("inspector.nodeId")}</label>
+        {/* Node ID is internal chrome (the slug the engine references
+            the node by). Useful for developers and debugging, noise
+            for a non-tech owner editing a forked template — gated
+            behind the same Show-advanced toggle as the technical
+            params below. */}
+        {showAdvanced && (
+          <div className="sf-field">
+            <div className="label-row">
+              <label>{t("inspector.nodeId")}</label>
+            </div>
+            <input
+              value={selected.id}
+              disabled
+              style={{ fontFamily: "var(--font-mono)" }}
+            />
           </div>
-          <input
-            value={selected.id}
-            disabled
-            style={{ fontFamily: "var(--font-mono)" }}
-          />
-        </div>
+        )}
         <div className="sf-field">
           <div className="label-row">
             <label>{t("inspector.label")}</label>
@@ -332,6 +369,14 @@ export function Inspector({
             >
               {t("inspector.modeJson")}
             </button>
+            <label className="sf-show-advanced">
+              <input
+                type="checkbox"
+                checked={showAdvanced}
+                onChange={(e) => setShowAdvanced(e.target.checked)}
+              />
+              {t("inspector.showAdvanced")}
+            </label>
           </div>
         )}
 
@@ -347,6 +392,7 @@ export function Inspector({
             value={currentParams}
             workspace={workspace}
             accountPicker={accountPicker}
+            showAdvanced={showAdvanced}
             onChange={(v) => onParamsChange(selected.id, v)}
           />
         )}

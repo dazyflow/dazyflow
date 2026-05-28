@@ -8,6 +8,13 @@ import { iconFor, isBrandedIcon } from "../icons";
 import { shouldShowTenantID } from "../lib/visibleTenant";
 import type { FlowSummary } from "../types";
 
+// HAS_FLOWS_KEY mirrors the key App.tsx's RootRedirect reads when
+// deciding whether a bare-root visit lands on /welcome or /flows.
+// Kept as a string-literal here rather than imported across the
+// page boundary so both halves can run independently if the other
+// fails to mount (e.g. lazy-route splitting).
+const HAS_FLOWS_KEY = "hazyflow.hasFlows";
+
 export function FlowList() {
   const { t } = useTranslation();
   const { token, me, tenants, activeTenant, activeWorkspace } = useAuth();
@@ -24,7 +31,24 @@ export function FlowList() {
     api
       .listGraphs(token, activeTenant, activeWorkspace)
       .then((r) => {
-        if (!cancelled) setFlows(r.graphs ?? []);
+        if (cancelled) return;
+        const graphs = r.graphs ?? [];
+        setFlows(graphs);
+        // Sticky "this user has flows" hint, read by RootRedirect on
+        // the next bare-root visit so a returning user skips the
+        // /welcome wizard. We write the flag even on empty results
+        // (with "0") so a user who deleted everything goes back to
+        // the wizard rather than landing on an empty FlowList. Wrapped
+        // in try/catch — localStorage might be blocked in a strict
+        // iframe and a thrown error here would blank the page.
+        try {
+          localStorage.setItem(
+            HAS_FLOWS_KEY,
+            graphs.length > 0 ? "1" : "0",
+          );
+        } catch {
+          /* localStorage might be blocked in a strict-mode iframe */
+        }
       })
       .catch((e) => {
         if (!cancelled) setError((e as Error).message);

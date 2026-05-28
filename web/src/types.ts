@@ -60,6 +60,12 @@ export type TemplateSummary = {
   // web/public/brands/<slug>.svg — so adding a connector with a brand
   // asset automatically makes it usable here.
   integrations?: string[];
+  // no_setup flags templates that need no external accounts or
+  // credentials to run — the trial-friendliest cards. The gallery
+  // renders a small "No setup needed" badge so a brand-new buyer
+  // can spot the templates they can fork on day one without
+  // contacting their admin.
+  no_setup?: boolean;
 };
 
 export type FlowSummary = {
@@ -160,6 +166,15 @@ export type JSONSchema = {
   maxItems?: number;
   // composition
   oneOf?: JSONSchema[];
+  // x_advanced flags a field as developer-flavored — timeouts,
+  // raw-token bypasses, pagination cursors, etc. The Inspector's
+  // form hides advanced fields by default and reveals them via a
+  // "Show advanced" toggle. Named with an underscore so the
+  // TypeScript type stays valid (JSON Schema's `x-` extension
+  // convention is unrepresentable as a TS key); manifests emit
+  // either spelling and the UI accepts both.
+  x_advanced?: boolean;
+  "x-advanced"?: boolean;
 };
 
 export type Permission =

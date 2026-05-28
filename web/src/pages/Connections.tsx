@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Box, Check, Plus, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -110,6 +110,21 @@ export function Connections() {
         <SetupIncompleteBanner supportContact={me?.support_contact} />
       )}
 
+      {/* First-time tile: features are configured server-side, but
+          this tenant has nothing connected and no credentials stored
+          yet. Surface the two integrations most non-tech buyers will
+          want first so they don't stare at a wall of provider cards
+          wondering which to click. Hidden once anything is in place,
+          or when either feature is off (the SetupIncompleteBanner
+          covers that case instead). */}
+      {!providersOff && !secretsOff &&
+        providers !== null &&
+        providers.length > 0 &&
+        providers.every((p) => p.accounts.length === 0) &&
+        userSecrets.length === 0 && (
+          <FirstConnectTile />
+        )}
+
       {oauthResult === "success" && (
         <div className="card connections-banner success">
           <span>
@@ -165,8 +180,41 @@ export function Connections() {
           secrets={userSecrets}
           loading={secrets === null}
           onChanged={refresh}
+          // The editor's "Set up this credential" links route to
+          // /connections?focus=NAME so a user landing here from a
+          // template field knows which credential they need to add.
+          // Consumed once on mount: the credentials manager scrolls
+          // + highlights an existing row or pre-fills the add-form;
+          // we strip the param afterwards so a refresh doesn't
+          // re-fire the highlight.
+          focus={searchParams.get("focus") ?? undefined}
+          onFocusConsumed={() => {
+            const next = new URLSearchParams(searchParams);
+            next.delete("focus");
+            setSearchParams(next, { replace: true });
+          }}
         />
       )}
+    </div>
+  );
+}
+
+// FirstConnectTile is the "you've just landed and nothing is wired
+// up yet" prompt. Names the two integrations that satisfy the
+// largest share of templates (Slack for notifications, Google for
+// Gmail + Sheets) so a non-tech buyer knows where to start instead
+// of evaluating every provider card. The tile disappears the
+// moment something is connected.
+function FirstConnectTile() {
+  const { t } = useTranslation();
+  return (
+    <div className="card connections-first-tile">
+      <h2 className="connections-first-tile-title">
+        {t("connections.firstTileTitle")}
+      </h2>
+      <p className="connections-first-tile-body">
+        {t("connections.firstTileBody")}
+      </p>
     </div>
   );
 }
@@ -290,10 +338,21 @@ function CredentialsManager({
   secrets,
   loading,
   onChanged,
+  focus,
+  onFocusConsumed,
 }: {
   secrets: string[];
   loading: boolean;
   onChanged: () => void;
+  // focus is a credential name the user was pointed at from
+  // somewhere else (a template field's "Set up" link). When the
+  // secret already exists, the matching row scrolls into view and
+  // highlights briefly; otherwise the add-form pre-fills with the
+  // name + the value input takes focus so the user can finish
+  // setting it up in one step. onFocusConsumed strips the query
+  // param so a refresh doesn't re-fire the highlight.
+  focus?: string;
+  onFocusConsumed?: () => void;
 }) {
   const { t } = useTranslation();
   const { token } = useAuth();
@@ -301,6 +360,32 @@ function CredentialsManager({
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [highlighted, setHighlighted] = useState<string | null>(null);
+  const valueInputRef = useRef<HTMLInputElement | null>(null);
+  const rowRefs = useRef<Map<string, HTMLLIElement | null>>(new Map());
+
+  // Apply the inbound ?focus= once. We wait until the secrets list
+  // has actually loaded (so we know whether the credential exists
+  // or not) — calling onFocusConsumed only after we've acted means
+  // a slow secrets fetch doesn't drop the focus on the floor.
+  useEffect(() => {
+    if (!focus || loading) return;
+    if (secrets.includes(focus)) {
+      // Existing row — scroll to it and pulse the highlight class.
+      const row = rowRefs.current.get(focus);
+      row?.scrollIntoView({ behavior: "smooth", block: "center" });
+      setHighlighted(focus);
+      const handle = window.setTimeout(() => setHighlighted(null), 2000);
+      onFocusConsumed?.();
+      return () => window.clearTimeout(handle);
+    }
+    // New credential — pre-fill the name, focus the value input so
+    // the user can type the secret without an extra click.
+    setName(focus);
+    requestAnimationFrame(() => valueInputRef.current?.focus());
+    onFocusConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus, loading, secrets.join("\0")]);
 
   const add = async () => {
     if (!token) return;
@@ -343,7 +428,16 @@ function CredentialsManager({
       ) : (
         <ul className="credentials-list">
           {secrets.map((n) => (
-            <li key={n} className="credentials-item">
+            <li
+              key={n}
+              ref={(el) => {
+                rowRefs.current.set(n, el);
+              }}
+              className={
+                "credentials-item" +
+                (highlighted === n ? " credentials-item-highlight" : "")
+              }
+            >
               <code>{n}</code>
               <span className="credentials-set">{t("connections.valueSet")}</span>
               <button
@@ -374,6 +468,7 @@ function CredentialsManager({
           aria-label={t("connections.nameLabel")}
         />
         <input
+          ref={valueInputRef}
           type="password"
           placeholder={t("connections.valuePlaceholder")}
           value={value}

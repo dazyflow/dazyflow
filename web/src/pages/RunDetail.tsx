@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import { api, APIError } from "../api";
 import { useAuth } from "../auth";
+import { explainRunError } from "../lib/explainRunError";
 import type { JobRecord, JobStatus, Ref } from "../types";
 
 // RunDetail is the post-failure "what happened" page — and the
@@ -179,25 +180,16 @@ export function RunDetail() {
       </div>
 
       {/* Failure banner — the most-important real estate on this
-          page when something broke. Names the failing node and
-          links to its row in the timeline. */}
+          page when something broke. Names the failing node and, when
+          the error message matches a known shape (OAuth not
+          connected, missing credential, Slack channel missing),
+          shows a plain-English headline + next-action button above
+          the raw message. */}
       {run.Status === "failed" && (
-        <div className="run-error-banner">
-          <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 2 }} />
-          <div>
-            <div className="run-error-title">
-              {failedNode
-                ? t("runDetail.failedAt", { node: failedNode.NodeID })
-                : t("runDetail.failed")}
-              {run.Result?.error?.code && (
-                <span className="run-error-code"> · {run.Result.error.code}</span>
-              )}
-            </div>
-            {run.Result?.error?.message && (
-              <div className="run-error-msg">{run.Result.error.message}</div>
-            )}
-          </div>
-        </div>
+        <RunFailureBanner
+          run={run}
+          failedNodeID={failedNode?.NodeID}
+        />
       )}
 
       {/* Run-level summary card. */}
@@ -270,7 +262,7 @@ export function RunDetail() {
                 {isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                 <span className={"status-dot " + n.Status} />
                   <span className="node-id">{n.NodeID}</span>
-                <span className="node-status">{n.Status}</span>
+                <span className="node-status">{statusLabel(n.Status, t)}</span>
                 <span className="node-dur">{dur}</span>
                 {n.Result?.error?.code && (
                   <span className="node-err">{n.Result.error.code}</span>
@@ -352,13 +344,91 @@ function SummaryRow({ label, value }: { label: string; value: React.ReactNode })
   );
 }
 
+// RunFailureBanner is the "what went wrong" surface above the
+// node timeline. Three layers, top to bottom:
+//   1. The plain-English headline (when explainRunError can match
+//      the daemon message against a known shape) + a next-action
+//      button. This is the layer non-technical users read first.
+//   2. The failing-node identifier ("Failed at node `notify`").
+//   3. The raw daemon error text, kept verbatim so a developer can
+//      still see exactly what blew up. Unmatched errors render only
+//      this layer — no fake headline.
+function RunFailureBanner({
+  run,
+  failedNodeID,
+}: {
+  run: JobRecord;
+  failedNodeID: string | undefined;
+}) {
+  const { t } = useTranslation();
+  const explanation = explainRunError(
+    run.Result?.error?.code,
+    run.Result?.error?.message,
+  );
+  const action = explanation?.action;
+  const isExternal = action?.href.startsWith("http") || false;
+  return (
+    <div className="run-error-banner">
+      <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 2 }} />
+      <div className="run-error-body">
+        {explanation && (
+          <div className="run-error-headline">
+            <span>{t(explanation.headlineKey, explanation.headlineValues ?? {})}</span>
+            {action &&
+              (isExternal ? (
+                <a
+                  className="primary run-error-action"
+                  href={action.href}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                >
+                  {t(action.labelKey)}
+                </a>
+              ) : (
+                <Link className="primary run-error-action" to={action.href}>
+                  {t(action.labelKey)}
+                </Link>
+              ))}
+          </div>
+        )}
+        <div className="run-error-title">
+          {failedNodeID
+            ? t("runDetail.failedAt", { node: failedNodeID })
+            : t("runDetail.failed")}
+          {run.Result?.error?.code && (
+            <span className="run-error-code"> · {run.Result.error.code}</span>
+          )}
+        </div>
+        {run.Result?.error?.message && (
+          <div className="run-error-msg">{run.Result.error.message}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function StatusChip({ status }: { status: JobStatus }) {
+  const { t } = useTranslation();
   return (
     <span className={"status-chip " + status}>
       <span className={"status-dot " + status} />
-      {status}
+      {statusLabel(status, t)}
     </span>
   );
+}
+
+// statusLabel maps the engine's machine status values to the human
+// label rendered on chips and timeline rows. Only "awaiting" is
+// genuinely jargon — it means "the run is parked at an await_approval
+// node, waiting for a human decision". Every other status is already
+// readable, so we let them pass through verbatim and don't pay an
+// i18n round-trip for "running" / "failed" / "queued".
+export function statusLabel(
+  status: JobStatus,
+  t: (key: string) => string,
+): string {
+  if (status === "awaiting") return t("runDetail.statusAwaiting");
+  return status;
 }
 
 function formatAbs(iso: string | null): string {

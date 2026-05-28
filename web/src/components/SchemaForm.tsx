@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Upload, X } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Lock, Plus, Upload, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { JSONSchema } from "../types";
 import { api, APIError } from "../api";
@@ -27,9 +28,15 @@ export type WorkspaceCtx = {
 // provider, plus a "Connect…" affordance — so a forked template doesn't
 // leave the user guessing what to type. Omitted for non-OAuth drops or
 // when OAuth is disabled, in which case `account` renders as plain text.
+//
+// providerLabel is the integration's display name ("Gmail", "Slack").
+// It's used to humanise the inline "Connect Gmail" button rendered
+// when no accounts are connected. Optional — the field falls back to
+// "Connect an account" when absent.
 export type AccountPicker = {
   options: string[];
   onConnect: () => void;
+  providerLabel?: string;
 };
 
 type Props = {
@@ -38,9 +45,24 @@ type Props = {
   onChange: (next: Record<string, unknown>) => void;
   workspace?: WorkspaceCtx;
   accountPicker?: AccountPicker;
+  // showAdvanced controls whether developer-flavored fields appear in
+  // the form. Default false — a non-tech owner shouldn't have to
+  // explain to themselves what `timeout_ms` or `page_token` mean. The
+  // Inspector renders a "Show advanced" toggle above the form that
+  // flips this. Fields that hold a non-default value are still shown
+  // even when advanced is off, so a forked template that pre-fills an
+  // advanced param doesn't silently lose it on save.
+  showAdvanced?: boolean;
 };
 
-export function SchemaForm({ schema, value, onChange, workspace, accountPicker }: Props) {
+export function SchemaForm({
+  schema,
+  value,
+  onChange,
+  workspace,
+  accountPicker,
+  showAdvanced,
+}: Props) {
   const { t } = useTranslation();
   if (schema.type !== "object" || !schema.properties) {
     return (
@@ -53,25 +75,77 @@ export function SchemaForm({ schema, value, onChange, workspace, accountPicker }
   const entries = Object.entries(schema.properties);
   return (
     <div>
-      {entries.map(([key, propSchema]) => (
-        <SchemaField
-          key={key}
-          name={key}
-          schema={propSchema}
-          required={required.has(key)}
-          value={value[key]}
-          workspace={workspace}
-          accountPicker={accountPicker}
-          onChange={(v) => {
-            const next = { ...value };
-            if (v === undefined) delete next[key];
-            else next[key] = v;
-            onChange(next);
-          }}
-        />
-      ))}
+      {entries.map(([key, propSchema]) => {
+        if (
+          !showAdvanced &&
+          isAdvancedField(key, propSchema, schema.properties ?? {}) &&
+          !hasNonDefaultValue(value[key], propSchema)
+        ) {
+          return null;
+        }
+        return (
+          <SchemaField
+            key={key}
+            name={key}
+            schema={propSchema}
+            required={required.has(key)}
+            value={value[key]}
+            workspace={workspace}
+            accountPicker={accountPicker}
+            onChange={(v) => {
+              const next = { ...value };
+              if (v === undefined) delete next[key];
+              else next[key] = v;
+              onChange(next);
+            }}
+          />
+        );
+      })}
     </div>
   );
+}
+
+// ADVANCED_FIELD_NAMES is the built-in allowlist of param names the
+// Inspector hides until the user explicitly asks for advanced fields.
+// These are universally developer-flavored: timeouts in milliseconds,
+// pagination cursors, low-level wire-protocol knobs. Drops can opt
+// individual fields in (or out) by setting x_advanced on the
+// per-property schema.
+const ADVANCED_FIELD_NAMES = new Set([
+  "timeout_ms",
+  "page_token",
+  "next_page_token",
+  "cursor",
+]);
+
+// isAdvancedField decides whether a top-level property of a drop's
+// params_schema is "advanced" (hidden by default). Three signals
+// stack: an explicit x_advanced on the schema (manifest-level
+// opt-in), the built-in name allowlist, and a sibling-aware rule
+// for the OAuth raw-token bypass — `token` is an escape hatch when
+// the same drop also exposes an `account` param (the connection
+// picker is the non-advanced path; `token` overrides it).
+function isAdvancedField(
+  name: string,
+  schema: JSONSchema,
+  siblings: Record<string, JSONSchema>,
+): boolean {
+  if (schema.x_advanced || schema["x-advanced"]) return true;
+  if (ADVANCED_FIELD_NAMES.has(name)) return true;
+  if (name === "token" && "account" in siblings) return true;
+  return false;
+}
+
+// hasNonDefaultValue checks whether the current value on an
+// advanced field is something the user (or a forked template) has
+// actually set, so we don't silently swallow it by hiding the
+// field. Treats undefined, null, empty string, and the schema's
+// default as "no value." Anything else surfaces the field even
+// when Show-advanced is off.
+function hasNonDefaultValue(v: unknown, schema: JSONSchema): boolean {
+  if (v === undefined || v === null || v === "") return false;
+  if (schema.default !== undefined && v === schema.default) return false;
+  return true;
 }
 
 type FieldProps = {
@@ -102,6 +176,7 @@ function SchemaField({ name, schema, required, value, onChange, workspace, accou
         <AccountField
           value={(value as string) ?? (schema.default as string | undefined) ?? ""}
           options={accountPicker.options}
+          providerLabel={accountPicker.providerLabel}
           onConnect={accountPicker.onConnect}
           onChange={(v) => onChange(v === "" && !required ? undefined : v)}
         />
@@ -170,17 +245,13 @@ function SchemaField({ name, schema, required, value, onChange, workspace, accou
         );
       }
       return (
-        <FieldWrap name={name} schema={schema} required={required} value={value}>
-          <input
-            type="text"
-            value={(value as string) ?? (schema.default as string | undefined) ?? ""}
-            placeholder={schema.default ? String(schema.default) : undefined}
-            onChange={(e) => {
-              const v = e.target.value;
-              onChange(v === "" && !required ? undefined : v);
-            }}
-          />
-        </FieldWrap>
+        <PlainStringField
+          name={name}
+          schema={schema}
+          required={required}
+          value={value}
+          onChange={onChange}
+        />
       );
     case "integer":
     case "number":
@@ -433,7 +504,7 @@ function FieldWrap({
     schema.examples && schema.examples.length > 0
       ? String(schema.examples[0])
       : undefined;
-  const refs = typeof value === "string" ? referenceHints(value, t) : [];
+  const refs = typeof value === "string" ? parseFieldRefs(value) : [];
   return (
     <div className="sf-field">
       <div className="label-row">
@@ -451,9 +522,29 @@ function FieldWrap({
         <div className="sf-ref-hint">
           <div className="sf-ref-hint-title">{t("schemaForm.refTitle")}</div>
           <ul>
-            {refs.map((r, i) => (
-              <li key={i}>{r}</li>
-            ))}
+            {refs.map((r, i) => {
+              switch (r.kind) {
+                case "tenant":
+                  return (
+                    <li key={i}>
+                      {t("schemaForm.refCredential", { name: r.payload })}
+                      {" "}
+                      <Link
+                        to={`/connections?focus=${encodeURIComponent(r.payload)}`}
+                        className="link-button sf-ref-action"
+                      >
+                        {t("schemaForm.refCredentialSetUp")}
+                      </Link>
+                    </li>
+                  );
+                case "upstream":
+                  return <li key={i}>{t("schemaForm.refUpstream", { ref: r.payload })}</li>;
+                case "trigger":
+                  return <li key={i}>{t("schemaForm.refTrigger", { ref: r.payload })}</li>;
+                default:
+                  return <li key={i}>{t("schemaForm.refGeneric", { ref: r.payload })}</li>;
+              }
+            })}
           </ul>
         </div>
       )}
@@ -461,36 +552,159 @@ function FieldWrap({
   );
 }
 
-// referenceHints turns the ${...} placeholder syntax used in template
-// params into plain-language explanations, so a non-technical user who
-// sees "${trigger.body}" or "${tenant:postgres_dsn}" in a field
-// understands it's auto-filled — not gibberish they need to overwrite.
-// The four shapes mirror the engine's resolver: tenant: (a stored
+// FieldRef is a parsed ${...} reference inside a string field value.
+// Splitting kind from payload (instead of returning pre-formatted strings)
+// lets the renderer attach kind-specific affordances — e.g. tenant
+// credentials get an inline "Set up" link to /connections?focus=NAME so
+// a non-technical user has a one-click path from "this field uses a
+// credential" to "where do I store it."
+type FieldRef =
+  | { kind: "tenant"; payload: string }
+  | { kind: "upstream"; payload: string }
+  | { kind: "trigger"; payload: string }
+  | { kind: "generic"; payload: string };
+
+// parseFieldRefs extracts every ${...} placeholder from a raw string
+// field value, classifying each so the renderer can decide how to
+// present it. Mirrors the engine's resolver: tenant: (a stored
 // credential), upstream: (output of an earlier node), trigger/webhook
 // (the event that started the run), and anything else (generic).
-function referenceHints(
-  raw: string,
-  t: (key: string, opts?: Record<string, unknown>) => string,
-): string[] {
-  const out: string[] = [];
+// Dedup happens by the (kind, payload) tuple so the same ref appearing
+// twice in one string only contributes one hint.
+function parseFieldRefs(raw: string): FieldRef[] {
+  const out: FieldRef[] = [];
   const seen = new Set<string>();
   const re = /\$\{([^}]+)\}/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(raw)) !== null) {
     const ref = m[1].trim();
-    if (seen.has(ref)) continue;
-    seen.add(ref);
+    let parsed: FieldRef;
     if (ref.startsWith("tenant:")) {
-      out.push(t("schemaForm.refCredential", { name: ref.slice("tenant:".length) }));
+      parsed = { kind: "tenant", payload: ref.slice("tenant:".length) };
     } else if (ref.startsWith("upstream:")) {
-      out.push(t("schemaForm.refUpstream", { ref: ref.slice("upstream:".length) }));
+      parsed = { kind: "upstream", payload: ref.slice("upstream:".length) };
     } else if (ref.startsWith("trigger") || ref.startsWith("webhook")) {
-      out.push(t("schemaForm.refTrigger", { ref }));
+      parsed = { kind: "trigger", payload: ref };
     } else {
-      out.push(t("schemaForm.refGeneric", { ref }));
+      parsed = { kind: "generic", payload: ref };
     }
+    const key = `${parsed.kind}::${parsed.payload}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(parsed);
   }
   return out;
+}
+
+// TENANT_FULL_REF matches when a string field's ENTIRE value is one
+// ${tenant:NAME} expression — no surrounding text. That's the case
+// where rendering an editable input is actively harmful: a non-
+// technical user is likely to overwrite the placeholder thinking
+// they need to "fill it in", silently breaking the template. The
+// chip surface below replaces the input with a clear "this field
+// uses credential NAME" label + a Set-up link and an explicit
+// Replace affordance for when the user really does want to type
+// something else.
+const TENANT_FULL_REF = /^\$\{tenant:([^}]+)\}$/;
+
+// PlainStringField is the default text input for string-typed schema
+// fields. Wrapped as its own component so it can own the "show chip
+// vs show input" toggle without breaking Rules of Hooks (useState
+// can't live inside a switch case directly).
+//
+// When the field's value is exactly one ${tenant:NAME} reference, it
+// renders the credential chip; the user can click Replace to flip to
+// the input and type whatever they want instead.
+function PlainStringField({
+  name,
+  schema,
+  required,
+  value,
+  onChange,
+}: {
+  name: string;
+  schema: JSONSchema;
+  required: boolean;
+  value: unknown;
+  onChange: (v: unknown) => void;
+}) {
+  const raw = typeof value === "string" ? value : "";
+  const credMatch = TENANT_FULL_REF.exec(raw);
+  const [forceEdit, setForceEdit] = useState(false);
+  // Reset the override whenever the underlying value transitions back
+  // to (or stays) a single credential ref — e.g. a re-render after
+  // load. Keeps the chip the default state across navigation.
+  useEffect(() => {
+    if (credMatch) setForceEdit(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [raw]);
+  if (credMatch && !forceEdit) {
+    return (
+      <FieldWrap name={name} schema={schema} required={required}>
+        <TenantSecretChip
+          credName={credMatch[1]}
+          onReplace={() => {
+            // Clear the placeholder so the input opens empty rather
+            // than pre-filled with the ${tenant:...} string — the
+            // user clicked Replace, meaning "I want to type something
+            // else", and seeing the chip's syntax mirrored in the
+            // input would be confusing.
+            onChange(undefined);
+            setForceEdit(true);
+          }}
+        />
+      </FieldWrap>
+    );
+  }
+  return (
+    <FieldWrap name={name} schema={schema} required={required} value={value}>
+      <input
+        type="text"
+        value={(value as string) ?? (schema.default as string | undefined) ?? ""}
+        placeholder={schema.default ? String(schema.default) : undefined}
+        onChange={(e) => {
+          const v = e.target.value;
+          onChange(v === "" && !required ? undefined : v);
+        }}
+      />
+    </FieldWrap>
+  );
+}
+
+// TenantSecretChip is the read-only chip rendered in place of a
+// plain string input when the field's value is a single
+// ${tenant:NAME} reference. Mirrors the visual weight of the
+// account-picker dropdown rather than a free-text box so the user
+// doesn't try to click into it to type. The Replace button flips the
+// containing component back to plain-input mode for the rare case
+// where the user genuinely wants to overwrite the credential ref.
+function TenantSecretChip({
+  credName,
+  onReplace,
+}: {
+  credName: string;
+  onReplace: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="sf-credential-chip">
+      <Lock size={13} className="sf-credential-chip-glyph" />
+      <span className="sf-credential-chip-label">
+        {t("schemaForm.credChipUses", { name: credName })}
+      </span>
+      <span className="sf-credential-chip-actions">
+        <Link
+          to={`/connections?focus=${encodeURIComponent(credName)}`}
+          className="link-button"
+        >
+          {t("schemaForm.credChipSetUp")}
+        </Link>
+        <button type="button" className="link-button" onClick={onReplace}>
+          {t("schemaForm.credChipReplace")}
+        </button>
+      </span>
+    </div>
+  );
 }
 
 function humanize(key: string): string {
@@ -863,18 +1077,63 @@ function WorkspacePathField({
 // is always selectable even if it isn't in `options` (e.g. a template
 // shipped account="default" before anything was connected) so the field
 // never silently drops a value the graph already references.
+//
+// Two non-tech-friendly behaviours layered on top:
+//   - When zero accounts are connected, the dropdown disappears and
+//     the field becomes a single "Connect Gmail" button. Showing a
+//     dropdown with only "(choose an account)" + a literal "default"
+//     value left over from the template would just confuse the user.
+//   - When exactly one account is connected and the field still holds
+//     the template's literal "default" placeholder, we auto-emit the
+//     real connected name. The user gets a forkable template that
+//     "just works" without manually mapping their email to the box.
 function AccountField({
   value,
   options,
+  providerLabel,
   onConnect,
   onChange,
 }: {
   value: string;
   options: string[];
+  providerLabel?: string;
   onConnect: () => void;
   onChange: (v: string) => void;
 }) {
   const { t } = useTranslation();
+  // Auto-default: if exactly one account is connected and the field
+  // still carries the template's literal "default" placeholder, swap
+  // to the real account on mount. Runs once per (options, value)
+  // transition — the value !== options[0] guard keeps it from
+  // looping after the parent picks up the change.
+  useEffect(() => {
+    if (options.length === 1 && value === "default" && options[0] !== "default") {
+      onChange(options[0]);
+    }
+    // onChange is stable for our callers; intentionally not in deps to
+    // avoid re-firing on every parent rerender.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [options.join("\0"), value]);
+
+  // No accounts connected: replace the dropdown entirely with a
+  // single Connect button. Avoids showing a placeholder-only select
+  // that has nothing useful to choose.
+  if (options.length === 0) {
+    return (
+      <div>
+        <button
+          type="button"
+          className="primary sf-account-connect-cta"
+          onClick={onConnect}
+        >
+          {providerLabel
+            ? t("schemaForm.accountConnectProvider", { provider: providerLabel })
+            : t("schemaForm.accountConnect")}
+        </button>
+      </div>
+    );
+  }
+
   // Union of connected accounts + the current value, de-duplicated and
   // order-stable (connected first, then the value if it's something else).
   const choices = Array.from(new Set([...options, ...(value ? [value] : [])]));
@@ -889,9 +1148,7 @@ function AccountField({
         ))}
       </select>
       <button type="button" className="link-button sf-account-connect" onClick={onConnect}>
-        {options.length === 0
-          ? t("schemaForm.accountConnect")
-          : t("schemaForm.accountConnectAnother")}
+        {t("schemaForm.accountConnectAnother")}
       </button>
     </div>
   );

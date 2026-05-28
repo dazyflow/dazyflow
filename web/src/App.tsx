@@ -75,14 +75,34 @@ export function App() {
 // ?run=<jobID> from a deep-linked run).
 import { useLocation, useParams } from "react-router-dom";
 
+// HAS_FLOWS_KEY is FlowList's sticky "this user has built at least
+// one flow" hint. RootRedirect reads it (and only it — no API call)
+// to decide whether the bare-root visit should land on /welcome
+// (first-time) or /flows (returning). Written by FlowList itself
+// when the graph list resolves; cleared when it resolves empty.
+const HAS_FLOWS_KEY = "hazyflow.hasFlows";
+
 // RootRedirect decides where a logged-in user lands on the bare root.
-// With no path and no query string, that's a fresh "I just typed the
-// domain" visit → /welcome. Anything carrying a query is treated as an
-// intentional deep-link and forwarded to /flows (preserving the search).
+// Three branches:
+//   - A query string means "intentional deep-link" → /flows
+//     (preserves ?run=… etc).
+//   - A sticky localStorage flag from a previous session means the
+//     user already has flows → /flows. Skips the wizard on every
+//     return visit instead of forcing it.
+//   - Otherwise (no flag yet), default to /welcome — the first-run
+//     wizard is the right surface for someone with no flows yet.
 function RootRedirect() {
   const loc = useLocation();
-  if (!loc.search) return <Navigate to="/welcome" replace />;
-  return <Navigate to={{ pathname: "/flows", search: loc.search }} replace />;
+  if (loc.search) {
+    return <Navigate to={{ pathname: "/flows", search: loc.search }} replace />;
+  }
+  let hasFlows = false;
+  try {
+    hasFlows = localStorage.getItem(HAS_FLOWS_KEY) === "1";
+  } catch {
+    /* private mode / strict iframe — treat as first-time */
+  }
+  return <Navigate to={hasFlows ? "/flows" : "/welcome"} replace />;
 }
 
 function LegacyPipelineRedirect() {

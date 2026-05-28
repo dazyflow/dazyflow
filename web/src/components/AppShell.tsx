@@ -29,6 +29,10 @@ import { shouldShowTenantID } from "../lib/visibleTenant";
 // reloads. The sidebar is always visible; small viewports just default
 // to the icons-only rail until the user expands it.
 const COLLAPSE_KEY = "hazyflow.sidebar.collapsed";
+// APPROVAL_SEEN_KEY is the sticky local flag the Approvals nav link
+// uses to stay visible after the user has used the approval inbox
+// at least once. See the everHadApproval state below.
+const APPROVAL_SEEN_KEY = "hazyflow.approvalsEverSeen";
 // MOBILE_BREAK mirrors the @media (max-width: 768px) rule in app.css —
 // AppShell uses it to default new visitors on small viewports to the
 // rail layout on first paint.
@@ -79,6 +83,19 @@ export function AppShell({ children }: { children: ReactNode }) {
   // operators see "you have N decisions waiting" without visiting the
   // page. Polled every 30s; updates immediately on visibility change.
   const [pendingCount, setPendingCount] = useState(0);
+  // everHadApproval is a sticky local flag: once a user has seen ANY
+  // pending approval in this browser, the Approvals nav link stays
+  // visible even after the count drops back to zero — flows with
+  // await_approval nodes shouldn't lose their inbox link the moment
+  // it empties. New non-tech users (who never touch await_approval)
+  // never see the link at all.
+  const [everHadApproval, setEverHadApproval] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(APPROVAL_SEEN_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
@@ -91,7 +108,17 @@ export function AppShell({ children }: { children: ReactNode }) {
           tenant: activeTenant || undefined,
         })
         .then((r) => {
-          if (!cancelled) setPendingCount(r.approvals?.length ?? 0);
+          if (cancelled) return;
+          const n = r.approvals?.length ?? 0;
+          setPendingCount(n);
+          if (n > 0 && !everHadApproval) {
+            setEverHadApproval(true);
+            try {
+              localStorage.setItem(APPROVAL_SEEN_KEY, "1");
+            } catch {
+              /* localStorage might be blocked in a strict-mode iframe */
+            }
+          }
         })
         .catch(() => {
           /* ignore — non-essential */
@@ -102,7 +129,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       cancelled = true;
       window.clearInterval(t);
     };
-  }, [token, location.pathname, activeTenant, activeWorkspace]);
+  }, [token, location.pathname, activeTenant, activeWorkspace, everHadApproval]);
   // Editor pages need a full-bleed canvas — remove the main padding.
   // Editor pages need a full-bleed canvas. Match either the canonical
   // /flows/:id or the legacy /pipelines/:id path so an incoming legacy
@@ -228,18 +255,26 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Activity size={18} />
             <span className="nav-label">{t("nav.runs")}</span>
           </NavLink>
-          <NavLink
-            to="/approvals"
-            title={t("nav.approvals")}
-          >
-            <Inbox size={18} />
-            <span className="nav-label" style={{ flex: 1 }}>
-              {t("nav.approvals")}
-            </span>
-            {pendingCount > 0 && (
-              <span className="nav-badge">{pendingCount}</span>
-            )}
-          </NavLink>
+          {/* Approvals lives in the sidebar only when it's actually
+              useful: any pending approval right now, a sticky flag
+              from a previous visit, or an admin who needs to know
+              one might exist. Non-tech buyers whose flows don't use
+              await_approval never see the link, removing a confusing
+              "what's this?" entry from their default sidebar. */}
+          {(pendingCount > 0 || everHadApproval || hasPerm("tenant:admin")) && (
+            <NavLink
+              to="/approvals"
+              title={t("nav.approvals")}
+            >
+              <Inbox size={18} />
+              <span className="nav-label" style={{ flex: 1 }}>
+                {t("nav.approvals")}
+              </span>
+              {pendingCount > 0 && (
+                <span className="nav-badge">{pendingCount}</span>
+              )}
+            </NavLink>
+          )}
           <NavLink
             to="/connections"
             title={t("nav.connections")}

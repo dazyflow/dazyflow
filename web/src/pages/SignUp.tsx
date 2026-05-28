@@ -71,7 +71,15 @@ export function SignUp() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder={t("signUp.passwordPlaceholder")}
+          aria-describedby="signup-password-hint"
         />
+        {/* Surface the 8-character minimum BEFORE submit so the user
+            doesn't pick a short password, round-trip the server, and
+            then learn the rule from the error message. The hint sits
+            under the field as low-emphasis copy. */}
+        <div id="signup-password-hint" className="signup-hint">
+          {t("signUp.passwordHint")}
+        </div>
         <label htmlFor="confirm">{t("signUp.confirm")}</label>
         <input
           id="confirm"

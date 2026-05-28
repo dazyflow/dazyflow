@@ -169,6 +169,13 @@ function EditorInner() {
   }, []);
   // paletteOpen drives the Ctrl/Cmd+K quick-drop search popup.
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // reloadKey re-triggers the graph-load effect when an external
+  // mutation lands (today: chat's applyProposal). Bumping it is
+  // equivalent to navigating away and back, minus the full-page
+  // reload — the editor keeps its scroll, tab focus, and the chat
+  // panel open. The effect's `[token, me, id, reloadKey]` deps mean
+  // we don't re-fire on unrelated state changes.
+  const [reloadKey, setReloadKey] = useState(0);
 
   const rfRef = useRef<ReactFlowInstance<FlowNode<HazyNodeData>, FlowEdge> | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -264,7 +271,7 @@ function EditorInner() {
     return () => {
       cancelled = true;
     };
-  }, [token, me, id]);
+  }, [token, me, id, reloadKey]);
 
   // A fresh flow gets a fresh shot at showing the connections banner.
   useEffect(() => {
@@ -1284,10 +1291,12 @@ function EditorInner() {
             workspace: activeWorkspace,
           };
           await api.saveGraph(token, merged);
-          // Pull the new payload into the canvas. Cheap: just re-run
-          // the existing load effect by hard-reloading the page.
-          // A finer reload (replay loadGraph inline) is a follow-up.
-          window.location.reload();
+          // Re-seed editor state in place via the load effect (deps
+          // include reloadKey). Avoids a full-page reload — keeps the
+          // chat panel open and the user's scroll position, so the
+          // post-Apply transition reads as "the canvas just updated"
+          // rather than "the app crashed for a second."
+          setReloadKey((k) => k + 1);
         }}
       />
       {paletteOpen && (

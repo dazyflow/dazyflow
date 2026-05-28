@@ -16,13 +16,26 @@ import { shouldShowTenantID } from "../lib/visibleTenant";
 // outcome in the user's words and routes to the matching template
 // category. `category` MUST match the category strings in
 // public/templates/index.json verbatim — that's the join key the
-// Templates page filters on.
+// Templates page filters on. The developer-focused category isn't
+// in this grid — it sits as a small "More for developers →" link
+// below the goals so a non-technical owner's eye lands on the
+// three relevant cards instead of skipping past four.
 const GOALS: { category: string; titleKey: string; descKey: string }[] = [
   { category: "Get notified", titleKey: "welcome.goalNotifyTitle", descKey: "welcome.goalNotifyDesc" },
   { category: "Scheduled reports", titleKey: "welcome.goalReportTitle", descKey: "welcome.goalReportDesc" },
   { category: "Spreadsheets & data", titleKey: "welcome.goalDataTitle", descKey: "welcome.goalDataDesc" },
-  { category: "For developer teams", titleKey: "welcome.goalDevTitle", descKey: "welcome.goalDevDesc" },
 ];
+
+// DEV_CATEGORY is the developer-templates filter, surfaced as a
+// secondary link under the goal grid. Same join key as the GOALS
+// entries above so /templates?category= round-trips correctly.
+const DEV_CATEGORY = "For developer teams";
+
+// HAS_FLOWS_KEY mirrors App.tsx's RootRedirect signal. We read it
+// to decide between first-time and returning copy: a user who's
+// already built a flow gets a quieter "Welcome back" headline
+// instead of the full onboarding wizard tone.
+const HAS_FLOWS_KEY = "hazyflow.hasFlows";
 
 export function Welcome() {
   const { t } = useTranslation();
@@ -36,10 +49,20 @@ export function Welcome() {
   // context. The trailing period sits outside the gate so the
   // sentence flows either way.
   const showTenant = shouldShowTenantID(me, tenants.length);
+  // Returning users see a quieter heading ("Welcome back to Hazy
+  // Flow", "Pick up where you left off") instead of the first-run
+  // wizard tone. Hint comes from the same localStorage flag
+  // RootRedirect uses, so the two surfaces stay consistent.
+  let isReturning = false;
+  try {
+    isReturning = localStorage.getItem(HAS_FLOWS_KEY) === "1";
+  } catch {
+    /* private mode / strict iframe — treat as first-time */
+  }
   return (
     <div className="welcome">
       <div className="card welcome-card">
-        <h1>{t("welcome.title")}</h1>
+        <h1>{isReturning ? t("welcome.titleReturning") : t("welcome.title")}</h1>
         {me?.subject && (
           <p className="welcome-sub">
             <Trans
@@ -74,7 +97,7 @@ export function Welcome() {
             <ArrowRight size={16} className="welcome-resume-arrow" />
           </Link>
         )}
-        <p>{t("welcome.intro")}</p>
+        <p>{isReturning ? t("welcome.introReturning") : t("welcome.intro")}</p>
         <div className="welcome-goals">
           <div className="welcome-goals-head">{t("welcome.goalsTitle")}</div>
           <div className="welcome-goal-grid">
@@ -88,6 +111,11 @@ export function Welcome() {
                 <span className="welcome-goal-desc">{t(g.descKey)}</span>
               </Link>
             ))}
+          </div>
+          <div className="welcome-goal-dev">
+            <Link to={`/templates?category=${encodeURIComponent(DEV_CATEGORY)}`}>
+              {t("welcome.goalDevLink")}
+            </Link>
           </div>
         </div>
         <p className="welcome-or">{t("welcome.orExplore")}</p>

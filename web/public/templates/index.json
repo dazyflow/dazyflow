@@ -75,6 +75,7 @@
       "icon": "database",
       "tags": ["form", "no-setup", "store", "collect", "starter"],
       "integrations": [],
+      "no_setup": true,
       "graph_file": "/templates/form-to-store.json"
     },
     {

@@ -198,6 +198,17 @@ export function ChatPanel({ open, onClose, applyProposal }: Props) {
     setMessages((m) => updateProposal(m, msgIdx, propID, { status: "discarded" }));
   };
 
+  // EXAMPLE_PROMPTS feeds three one-click chips on the empty state. A
+  // non-tech user doesn't know what level of detail the agent expects;
+  // seeing concrete first-person prompts ("Ping me on Slack…") makes
+  // the field discoverable. The keys live under chatPanel.example*
+  // so the copy localises.
+  const EXAMPLE_PROMPTS: { labelKey: string }[] = [
+    { labelKey: "chatPanel.exampleDailyReport" },
+    { labelKey: "chatPanel.exampleNewLead" },
+    { labelKey: "chatPanel.exampleInvoiceLog" },
+  ];
+
   return (
     <aside className="chat-panel">
       <header className="chat-head">
@@ -215,6 +226,19 @@ export function ChatPanel({ open, onClose, applyProposal }: Props) {
             <p style={{ fontSize: 12, color: "var(--faint)" }}>
               {t("chatPanel.emptyP2")}
             </p>
+            <div className="chat-empty-examples">
+              {EXAMPLE_PROMPTS.map((ex) => (
+                <button
+                  key={ex.labelKey}
+                  type="button"
+                  className="chat-example-chip"
+                  onClick={() => setInput(t(ex.labelKey))}
+                  disabled={streaming}
+                >
+                  {t(ex.labelKey)}
+                </button>
+              ))}
+            </div>
           </div>
         )}
         {messages.map((m, i) => (
@@ -265,6 +289,30 @@ export function ChatPanel({ open, onClose, applyProposal }: Props) {
   );
 }
 
+// humanTool maps the agent's raw tool names to plain-English labels
+// so a non-technical user reading the chat transcript doesn't see
+// "save_graph" or "list_drops" — both internal identifiers that mean
+// nothing outside this codebase. Unknown tools fall back to a generic
+// "Working: <name>" so a future tool surfaces *something* readable
+// even if we forget to add a mapping.
+function humanTool(
+  name: string,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): string {
+  switch (name) {
+    case "list_drops":
+      return t("chatPanel.toolListDrops");
+    case "list_flows":
+      return t("chatPanel.toolListFlows");
+    case "get_flow":
+      return t("chatPanel.toolGetFlow");
+    case "propose_flow":
+      return t("chatPanel.toolProposeFlow");
+    default:
+      return t("chatPanel.toolGeneric", { name });
+  }
+}
+
 function ChatMessageView({
   msg,
   onApply,
@@ -288,7 +336,9 @@ function ChatMessageView({
               {e.status === "running" && <Wrench size={12} className="spin" />}
               {e.status === "done" && <CheckCircle2 size={12} />}
               {e.status === "error" && <AlertCircle size={12} />}
-              <span className="chat-tool-name">{e.name}</span>
+              <span className="chat-tool-name" title={e.name}>
+                {humanTool(e.name, t)}
+              </span>
               {e.status === "running" && <span style={{ color: "var(--faint)" }}>…</span>}
             </div>
           );
@@ -297,11 +347,17 @@ function ChatMessageView({
           const headLabel = e.autoApplied
             ? t("chatPanel.savedFlow")
             : t("chatPanel.proposedFlow");
+          // Prefer the human flow name; fall back to the slug. The
+          // slug stays in the title attr so anyone debugging can
+          // still see the underlying ID on hover.
+          const displayName = e.graph.name?.trim() || e.graph.id;
           return (
             <div key={i} className={`chat-proposal ${e.status}`}>
               <div className="chat-proposal-head">
                 <Sparkles size={14} />
-                <span>{headLabel}: <code>{e.graph.id}</code></span>
+                <span>
+                  {headLabel}: <strong title={e.graph.id}>{displayName}</strong>
+                </span>
               </div>
               <div className="chat-proposal-summary">
                 {t("chatPanel.nodesEdges", {
@@ -324,13 +380,12 @@ function ChatMessageView({
               )}
               {e.status === "applying" && <div className="chat-meta">{t("chatPanel.applying")}</div>}
               {e.status === "applied" && (
-                <div className="chat-proposal-actions">
-                  <div className="chat-meta success" style={{ flex: 1 }}>
-                    {e.autoApplied ? t("chatPanel.savedByAgent") : t("chatPanel.applied")}
-                  </div>
-                  <button className="ghost" onClick={() => window.location.reload()}>
-                    {t("chatPanel.reloadCanvas")}
-                  </button>
+                // No manual "Reload canvas" button: the editor reseeds
+                // its state in place once applyProposal returns, so the
+                // canvas already reflects the new graph by the time
+                // this status flip lands. The success line stands alone.
+                <div className="chat-meta success">
+                  {e.autoApplied ? t("chatPanel.savedByAgent") : t("chatPanel.applied")}
                 </div>
               )}
               {e.status === "discarded" && <div className="chat-meta">{t("chatPanel.discarded")}</div>}
