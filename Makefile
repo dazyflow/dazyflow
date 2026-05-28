@@ -34,8 +34,8 @@ build: ## Build the daemon image
 rebuild: ## Rebuild the image from scratch (no layer cache)
 	$(COMPOSE) build --no-cache hzd
 
-env: ## Create .env from the template if it doesn't exist
-	@test -f .env || (cp .env.example .env && echo "wrote .env — edit it, then 'make up'")
+env: ## Sync .env with .env.example (creates one if missing; appends new keys; never overwrites existing values)
+	@./scripts/sync-env.sh
 
 ## --- Local development (no containers) ---
 
