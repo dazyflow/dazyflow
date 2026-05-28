@@ -1131,7 +1131,8 @@ func (h *HTTPGateway) revokeAPIKey(rw http.ResponseWriter, r *http.Request, p co
 func adminError(rw http.ResponseWriter, err error) {
 	msg := err.Error()
 	switch {
-	case strings.Contains(msg, "requires permission"):
+	case strings.Contains(msg, "requires permission"),
+		strings.Contains(msg, "cannot act on tenant"):
 		writeJSONError(rw, http.StatusForbidden, msg)
 	case strings.Contains(msg, "not configured"):
 		writeJSONError(rw, http.StatusNotImplemented, msg)
