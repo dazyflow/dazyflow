@@ -400,7 +400,7 @@ paths:
         "204": { description: deleted }
         "409": { $ref: "#/components/responses/Conflict" }
 
-  "/api/v1/me/flows/{flow_id}:run":
+  /api/v1/me/flows/{flow_id}/run:
     parameters:
       - $ref: "#/components/parameters/FlowID"
     post:
@@ -422,7 +422,7 @@ paths:
               schema: { $ref: "#/components/schemas/Run" }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  "/api/v1/me/flows/{flow_id}:validate":
+  /api/v1/me/flows/{flow_id}/validate:
     parameters:
       - $ref: "#/components/parameters/FlowID"
     post:
@@ -438,7 +438,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ValidationReport" }
 
-  "/api/v1/me/flows/{flow_id}:test-trigger":
+  /api/v1/me/flows/{flow_id}/test-trigger:
     parameters:
       - $ref: "#/components/parameters/FlowID"
     post:
@@ -459,7 +459,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Run" }
 
-  "/api/v1/me/flows/{flow_id}/nodes/{node_id}:sample":
+  /api/v1/me/flows/{flow_id}/nodes/{node_id}/sample:
     parameters:
       - $ref: "#/components/parameters/FlowID"
       - { name: node_id, in: path, required: true, schema: { type: string } }
@@ -579,7 +579,7 @@ paths:
             text/event-stream:
               schema: { type: string }
 
-  "/api/v1/me/runs/{run_id}:cancel":
+  /api/v1/me/runs/{run_id}/cancel:
     parameters:
       - $ref: "#/components/parameters/RunID"
     post:
@@ -665,7 +665,7 @@ paths:
                     type: array
                     items: { $ref: "#/components/schemas/Connection" }
 
-  "/api/v1/me/connections/{provider}:authorize":
+  /api/v1/me/connections/{provider}/authorize:
     parameters:
       - { name: provider, in: path, required: true, schema: { type: string } }
     post:

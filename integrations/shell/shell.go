@@ -35,6 +35,23 @@ func init() {
 			Provider:       "internal",
 			Tags:           []string{"build", "exec", "shell", "command", "ci"},
 			Description:    "Run a shell command inside a workspace-relative directory (commonly fed by git_checkout). Captures stdout/stderr and the exit code. Always returns ok so downstream notification nodes still fire on failure — branch on meta.success / meta.exit_code.",
+			Summary:        "Run a command in a workspace directory and capture its output and exit code.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Run the test suite",
+					Params: json.RawMessage(`{"command":"go","args":["test","./..."],"timeout_ms":600000}`),
+					Notes:  "Wire git_checkout's path output into the 'path' input so the command runs against the freshly checked-out tree.",
+				},
+				{
+					Title:  "List files in a subdirectory",
+					Params: json.RawMessage(`{"path":"src","command":"ls","args":["-la"]}`),
+				},
+				{
+					Title:  "Quick build with tight cap on output",
+					Params: json.RawMessage(`{"command":"make","args":["build"],"timeout_ms":120000,"max_output_bytes":262144}`),
+					Notes:  "Cap output when you only care about the tail; the daemon truncates silently beyond max_output_bytes.",
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

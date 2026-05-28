@@ -23,6 +23,17 @@ func init() {
 			Provider:       "internal",
 			Tags:           []string{"timing", "delay", "passthrough"},
 			Description:    "Pause for a configurable duration. Forwards any input on the in port to out (or emits a control signal if input is empty).",
+			Summary:        "Hold the flow for a fixed number of milliseconds before forwarding the input downstream.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Throttle a polling loop by one second",
+					Params: json.RawMessage(`{"ms":1000}`),
+				},
+				{
+					Title:  "Wait 30 seconds before retrying a downstream call",
+					Params: json.RawMessage(`{"ms":30000}`),
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs:         []core.Port{{Port: "in", Label: "Passthrough"}},

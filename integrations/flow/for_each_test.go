@@ -36,10 +36,12 @@ func registerTestSteps(t *testing.T) {
 		// Echo step: takes whatever is on input "in" and emits it on output "out".
 		engine.Register(engine.NativeDrop{
 			Manifest: core.Manifest{
-				ID:      "test_echo_step",
-				Version: "1.0",
-				Inputs:  []core.Port{{Port: "in"}},
-				Outputs: []core.Port{{Port: "out"}},
+				ID:       "test_echo_step",
+				Version:  "1.0",
+				Summary:  "Test fixture echo step.",
+				Examples: []core.ParamsExample{{Title: "default"}},
+				Inputs:   []core.Port{{Port: "in"}},
+				Outputs:  []core.Port{{Port: "out"}},
 			},
 			Execute: func(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 				in := job.Input["in"]
@@ -54,10 +56,12 @@ func registerTestSteps(t *testing.T) {
 		// Fail-on-target step: errors when the item value matches params["fail_when"].
 		engine.Register(engine.NativeDrop{
 			Manifest: core.Manifest{
-				ID:      "test_fail_step",
-				Version: "1.0",
-				Inputs:  []core.Port{{Port: "in"}},
-				Outputs: []core.Port{{Port: "out"}},
+				ID:       "test_fail_step",
+				Version:  "1.0",
+				Summary:  "Test fixture fail-on-target step.",
+				Examples: []core.ParamsExample{{Title: "default"}},
+				Inputs:   []core.Port{{Port: "in"}},
+				Outputs:  []core.Port{{Port: "out"}},
 			},
 			Execute: func(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 				want, _ := job.Params["fail_when"].(string)
@@ -81,10 +85,12 @@ func registerTestSteps(t *testing.T) {
 		// Used to assert concurrency.
 		engine.Register(engine.NativeDrop{
 			Manifest: core.Manifest{
-				ID:      "test_slow_step",
-				Version: "1.0",
-				Inputs:  []core.Port{{Port: "in"}},
-				Outputs: []core.Port{{Port: "out"}},
+				ID:       "test_slow_step",
+				Version:  "1.0",
+				Summary:  "Test fixture slow step.",
+				Examples: []core.ParamsExample{{Title: "default"}},
+				Inputs:   []core.Port{{Port: "in"}},
+				Outputs:  []core.Port{{Port: "out"}},
 			},
 			Execute: func(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 				if cnt, ok := job.Params["__inflight"].(*atomic.Int32); ok {
@@ -301,10 +307,12 @@ func TestForEach_TemplatesItemFieldsIntoStepParams(t *testing.T) {
 	captureOnce.Do(func() {
 		engine.Register(engine.NativeDrop{
 			Manifest: core.Manifest{
-				ID:      "test_capture_step",
-				Version: "1.0",
-				Inputs:  []core.Port{{Port: "in"}},
-				Outputs: []core.Port{{Port: "out"}},
+				ID:       "test_capture_step",
+				Version:  "1.0",
+				Summary:  "Test fixture capture step.",
+				Examples: []core.ParamsExample{{Title: "default"}},
+				Inputs:   []core.Port{{Port: "in"}},
+				Outputs:  []core.Port{{Port: "out"}},
 			},
 			Execute: func(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 				captureMu.Lock()

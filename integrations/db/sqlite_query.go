@@ -28,6 +28,18 @@ func init() {
 			Integration:    "SQLite",
 			Tags:           []string{"sqlite", "sql", "database", "query", "select"},
 			Description:    "Run a SELECT against a SQLite file in your workspace and get rows back. Use ? placeholders in the SQL and pass values through the params array so user-supplied data is safely escaped.",
+			Summary:        "Run a parameterized SELECT against a workspace-sandboxed SQLite file and emit rows plus column names.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Latest signups",
+					Params: json.RawMessage(`{"path":"data/app.db","sql":"SELECT id, email, created_at FROM signups ORDER BY id DESC LIMIT 50"}`),
+				},
+				{
+					Title:  "Filter with a placeholder",
+					Params: json.RawMessage(`{"path":"data/app.db","sql":"SELECT * FROM orders WHERE status = ? AND total > ?","params":["paid",100],"limit":500}`),
+					Notes:  "Values for ? placeholders go in params, in order.",
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

@@ -298,6 +298,8 @@ func (s *stubSigner) SignApprovalURL(runID, nodeID string) string {
 func TestEngine_RunNode_ApprovalURLAttached(t *testing.T) {
 	awaitingManifest := core.Manifest{
 		ID:             "await",
+		Summary:        "Test fixture await.",
+		Examples:       []core.ParamsExample{{Title: "default"}},
 		AwaitsApproval: true,
 		Inputs:         []core.Port{{Port: "in"}},
 		Outputs:        []core.Port{{Port: "out"}},
@@ -372,7 +374,7 @@ func TestNodeResolver_ChainHitsMCP(t *testing.T) {
 
 func TestNodeResolver_Manifests_MergesAllCatalogs(t *testing.T) {
 	reg := NewRegistry()
-	_ = reg.Register(NativeDrop{Manifest: core.Manifest{ID: "native-mod"}, Execute: noopExecute})
+	_ = reg.Register(NativeDrop{Manifest: validTestManifest("native-mod"), Execute: noopExecute})
 	local := NewLocalCatalog()
 	local.nodes["local-mod"] = &LocalTransport{manifest: core.Manifest{ID: "local-mod"}}
 	remote := NewRemoteCatalog()
@@ -416,12 +418,42 @@ func TestRegistry_Register_RejectsNoExecute(t *testing.T) {
 	}
 }
 
+// validTestManifest returns a manifest that passes registration —
+// has the required Summary and Examples set. Used by the duplicate /
+// happy-path tests so they exercise the post-validation behavior
+// rather than tripping over the same fields they're not testing.
+func validTestManifest(id string) core.Manifest {
+	return core.Manifest{
+		ID:       id,
+		Summary:  "Test fixture.",
+		Examples: []core.ParamsExample{{Title: "default"}},
+	}
+}
+
+func TestRegistry_Register_RejectsMissingSummary(t *testing.T) {
+	r := NewRegistry()
+	m := validTestManifest("x")
+	m.Summary = ""
+	if err := r.Register(NativeDrop{Manifest: m, Execute: noopExecute}); err == nil {
+		t.Error("Register with empty Summary: want error")
+	}
+}
+
+func TestRegistry_Register_RejectsMissingExamples(t *testing.T) {
+	r := NewRegistry()
+	m := validTestManifest("x")
+	m.Examples = nil
+	if err := r.Register(NativeDrop{Manifest: m, Execute: noopExecute}); err == nil {
+		t.Error("Register with empty Examples: want error")
+	}
+}
+
 func TestRegistry_Register_RejectsDuplicate(t *testing.T) {
 	r := NewRegistry()
-	if err := r.Register(NativeDrop{Manifest: core.Manifest{ID: "x"}, Execute: noopExecute}); err != nil {
+	if err := r.Register(NativeDrop{Manifest: validTestManifest("x"), Execute: noopExecute}); err != nil {
 		t.Fatalf("first Register: %v", err)
 	}
-	if err := r.Register(NativeDrop{Manifest: core.Manifest{ID: "x"}, Execute: noopExecute}); err == nil {
+	if err := r.Register(NativeDrop{Manifest: validTestManifest("x"), Execute: noopExecute}); err == nil {
 		t.Error("duplicate Register: want error")
 	}
 }

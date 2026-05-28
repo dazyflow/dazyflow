@@ -146,6 +146,12 @@ type HTTPGateway struct {
 	// serving — the gateway is API-only and unknown paths 404.
 	WebDist string
 
+	// idempotency caches successful responses keyed by
+	// Idempotency-Key for /me/flows/{id}/run, /me/runs/{id}/cancel,
+	// and any other mutating spec-aligned route wired through
+	// idempotencyMiddleware. Lazily initialized in NewHTTPGateway.
+	idempotency *idempotencyStore
+
 	// LandingDir, when non-empty, points at a directory of static
 	// marketing-site files (the separate hazy-flow-landing repo:
 	// landing.html, style.css, /pricing, /privacy, /terms, assets).
@@ -160,8 +166,9 @@ type HTTPGateway struct {
 
 func NewHTTPGateway(svc *Service) *HTTPGateway {
 	return &HTTPGateway{
-		svc:    svc,
-		logger: log.New(log.Writer(), "http-api: ", log.LstdFlags),
+		svc:         svc,
+		logger:      log.New(log.Writer(), "http-api: ", log.LstdFlags),
+		idempotency: newIdempotencyStore(),
 	}
 }
 
@@ -224,7 +231,6 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/auth/signin", h.rateLimitAuth(h.signIn))
 	mux.HandleFunc("POST /api/v1/auth/signup", h.rateLimitAuth(h.signUp))
 	mux.HandleFunc("POST /api/v1/auth/signout", h.signOut)
-	mux.HandleFunc("GET /api/v1/whoami", h.requireAuth(h.whoami))
 	mux.HandleFunc("GET /api/v1/workspaces", h.requireAuth(h.listWorkspaces))
 	mux.HandleFunc("POST /api/v1/workspaces/{tenant}/{workspace}/files", h.requireAuth(h.uploadWorkspaceFile))
 	mux.HandleFunc("GET /api/v1/secrets", h.requireAuth(h.listSecrets))
@@ -241,20 +247,62 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// Legacy alias — hzctl and older proxies still hit /modules. Keep
 	// it pointing at the same handler so we can deprecate at our pace.
 	mux.HandleFunc("GET /api/v1/modules", h.requireAuth(h.listModules))
-	mux.HandleFunc("GET /api/v1/graphs", h.requireAuth(h.listGraphs))
-	mux.HandleFunc("GET /api/v1/graphs/{tenant}/{workspace}/{id}", h.requireAuth(h.loadGraph))
-	mux.HandleFunc("PUT /api/v1/graphs/{tenant}/{workspace}/{id}", h.requireAuth(h.saveGraph))
-	mux.HandleFunc("POST /api/v1/graphs/{tenant}/{workspace}/{id}/run", h.requireAuth(h.runGraph))
-	mux.HandleFunc("POST /api/v1/graphs/{tenant}/{workspace}/{id}/test-trigger", h.requireAuth(h.testTrigger))
-	mux.HandleFunc("POST /api/v1/graphs/{tenant}/{workspace}/{id}/nodes/{nodeID}/sample", h.requireAuth(h.sampleNode))
+
+	// Self-describing catalog surface (see daemon/catalog.go +
+	// daemon/openapi.yaml). These are additive — they coexist with
+	// /api/v1/drops above and will become the canonical surface once
+	// the rename PR lands. Discovery + openapi are public so an LLM
+	// client can read the spec before it has a token.
+	mux.HandleFunc("GET /api/v1", h.serviceDescriptor)
+	mux.HandleFunc("GET /api/v1/openapi.json", h.openAPISpec)
+	mux.HandleFunc("GET /api/v1/catalog", h.requireAuth(h.catalogSummary))
+	mux.HandleFunc("GET /api/v1/catalog/integrations", h.requireAuth(h.listIntegrationsHandler))
+	mux.HandleFunc("GET /api/v1/catalog/integrations/{id}", h.requireAuth(h.getIntegrationHandler))
+	mux.HandleFunc("GET /api/v1/catalog/drops", h.requireAuth(h.listDropsHandler))
+	mux.HandleFunc("GET /api/v1/catalog/drops/{id}", h.requireAuth(h.getDropHandler))
+
+	// /me surface. /me is the new alias for /whoami; /me/api-keys is
+	// new (self-issue + own-key list/revoke). Unlike /admin/api-keys
+	// these don't require tenant:admin — any authenticated principal
+	// can derive sub-scopes of their own permissions.
+	mux.HandleFunc("GET /api/v1/me", h.requireAuth(h.meHandler))
+	mux.HandleFunc("GET /api/v1/me/api-keys", h.requireAuth(h.listMyAPIKeysHandler))
+	mux.HandleFunc("POST /api/v1/me/api-keys",
+		h.requireAuth(h.idempotencyMiddleware("/me/api-keys", h.issueMyAPIKeyHandler)))
+	mux.HandleFunc("DELETE /api/v1/me/api-keys/{id}", h.requireAuth(h.revokeMyAPIKeyHandler))
+
+	// /me/flows and /me/runs — the new spec-aligned routes. flow_id is
+	// a percent-encoded composite of tenant/workspace/id; run_id is
+	// the existing jobID verbatim. Handlers in daemon/me_routes.go
+	// translate to the legacy graph + job service methods. Mutating
+	// routes honor Idempotency-Key for replay-safe retries.
+	mux.HandleFunc("GET /api/v1/me/flows", h.requireAuth(h.listFlowsMe))
+	mux.HandleFunc("GET /api/v1/me/flows/{flow_id}", h.requireAuth(h.loadFlowMe))
+	mux.HandleFunc("PUT /api/v1/me/flows/{flow_id}",
+		h.requireAuth(h.idempotencyMiddleware("/me/flows/{flow_id}", h.saveFlowMe)))
+	mux.HandleFunc("PATCH /api/v1/me/flows/{flow_id}",
+		h.requireAuth(h.idempotencyMiddleware("/me/flows/{flow_id}", h.patchFlowMe)))
+	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/run",
+		h.requireAuth(h.idempotencyMiddleware("/me/flows/{flow_id}/run", h.runFlowMe)))
+	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/validate", h.requireAuth(h.validateFlowMe))
+	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/test-trigger",
+		h.requireAuth(h.idempotencyMiddleware("/me/flows/{flow_id}/test-trigger", h.testTriggerFlowMe)))
+	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/nodes/{node_id}/sample",
+		h.requireAuth(h.idempotencyMiddleware("/me/flows/{flow_id}/nodes/{node_id}/sample", h.sampleFlowNodeMe)))
+	mux.HandleFunc("GET /api/v1/me/flows/{flow_id}/runs", h.requireAuth(h.listFlowRunsMe))
+
+	mux.HandleFunc("GET /api/v1/me/runs", h.requireAuth(h.listRunsMe))
+	mux.HandleFunc("GET /api/v1/me/runs/{run_id}", h.requireAuth(h.getRunMe))
+	mux.HandleFunc("GET /api/v1/me/runs/{run_id}/nodes", h.requireAuth(h.listRunNodesMe))
+	mux.HandleFunc("GET /api/v1/me/runs/{run_id}/nodes/{node_id}", h.requireAuth(h.getRunNodeMe))
+	mux.HandleFunc("GET /api/v1/me/runs/{run_id}/events", h.requireAuth(h.runEventsMe))
+	mux.HandleFunc("POST /api/v1/me/runs/{run_id}/cancel",
+		h.requireAuth(h.idempotencyMiddleware("/me/runs/{run_id}/cancel", h.cancelRunMe)))
 	mux.HandleFunc("POST /api/v1/validate/cron", h.requireAuth(h.validateCron))
 	// Slack Events API endpoint. NOT under requireAuth — Slack POSTs
 	// as a stranger; the HMAC signature is the auth.
 	mux.HandleFunc("POST /api/v1/events/slack/{tenant}", h.slackEvents)
 	mux.HandleFunc("POST /api/v1/events/github/{tenant}", h.githubEvents)
-	mux.HandleFunc("GET /api/v1/graphs/{tenant}/{workspace}/{id}/runs", h.requireAuth(h.listRuns))
-	mux.HandleFunc("GET /api/v1/runs", h.requireAuth(h.listAllRuns))
-	mux.HandleFunc("POST /api/v1/runs/{runID}/cancel", h.requireAuth(h.cancelRun))
 	mux.HandleFunc("GET /api/v1/approvals/pending", h.requireAuth(h.listPendingApprovals))
 	mux.HandleFunc("POST /api/v1/approvals/{runID}/{nodeID}", h.requireAuth(h.approveAuthed))
 	mux.HandleFunc("GET /api/v1/admin/api-keys", h.requireAuth(h.listAPIKeys))
@@ -264,10 +312,6 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/admin/tenants", h.requireAuth(h.listTenants))
 	mux.HandleFunc("GET /api/v1/admin/audit", h.requireAuth(h.listAudit))
 	mux.HandleFunc("GET /api/v1/admin/limits", h.requireAuth(h.workspaceLimits))
-	mux.HandleFunc("GET /api/v1/jobs/{jobID}", h.requireAuth(h.jobSnapshot))
-	mux.HandleFunc("GET /api/v1/jobs/{jobID}/nodes", h.requireAuth(h.listRunNodes))
-	mux.HandleFunc("GET /api/v1/jobs/{jobID}/nodes/{nodeID}", h.requireAuth(h.nodeSnapshot))
-	mux.HandleFunc("GET /api/v1/jobs/{jobID}/events", h.requireAuth(h.jobEvents))
 	// Multi-org membership: a user can belong to many tenants (the
 	// "home" tenant minted at signup + any they've been invited to).
 	// switch-org re-issues the session against a different tenant the

@@ -25,6 +25,14 @@ func init() {
 			Provider:       "internal",
 			Tags:           []string{"webhook", "trigger", "http", "event"},
 			Description:    "Receives the body and headers of the inbound HTTP request that fired this graph. Pre-completed by the daemon when a webhook trigger matches; running the graph manually via 'hzctl graph run' will fail this node with no_trigger_data.",
+			Summary:        "Trigger that emits the body and headers of the inbound HTTP request that fired the graph.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Webhook input (no params)",
+					Params: json.RawMessage(`{}`),
+					Notes:  "This node has no params — the trigger URL is provisioned per graph and the body/headers come from the inbound request.",
+				},
+			},
 			ExecutionModel: core.ExecutionTrigger,
 			ProcessModel:   core.ProcessLongLived,
 			// No inputs — webhook is the data source.

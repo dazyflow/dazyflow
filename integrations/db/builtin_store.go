@@ -38,6 +38,18 @@ func init() {
 			Integration:    "Built-in store",
 			Tags:           []string{"store", "database", "save", "append", "no-setup"},
 			Description:    "Save rows to a built-in table — no database to set up and no connection string to paste. Pick a table name and the rows land there; the table is created automatically the first time. Each workspace has its own private store.",
+			Summary:        "Append rows to a workspace-local table with zero setup; auto-creates the table and evolves columns on the fly.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Capture form submissions",
+					Params: json.RawMessage(`{"table":"leads"}`),
+					Notes:  "Wire a form/webhook body straight into the rows port — a single object is wrapped into a one-row list automatically.",
+				},
+				{
+					Title:  "Save with a typed column",
+					Params: json.RawMessage(`{"table":"signups","column_types":{"age":"INTEGER"}}`),
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
@@ -71,6 +83,18 @@ func init() {
 			Integration:    "Built-in store",
 			Tags:           []string{"store", "database", "read", "query", "select", "no-setup"},
 			Description:    "Read rows back out of the built-in store with a SELECT — handy for building a report from data you saved earlier. Use ? placeholders and the params list for any user-supplied values.",
+			Summary:        "Run a SELECT against the workspace's built-in store and emit rows plus column names; empty store returns an empty result.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Latest 50 leads",
+					Params: json.RawMessage(`{"sql":"SELECT * FROM leads ORDER BY submitted_at DESC LIMIT 50"}`),
+				},
+				{
+					Title:  "Filter by status with a placeholder",
+					Params: json.RawMessage(`{"sql":"SELECT email, submitted_at FROM leads WHERE status = ?","params":["new"],"limit":200}`),
+					Notes:  "Values for ? placeholders go in params, in order.",
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

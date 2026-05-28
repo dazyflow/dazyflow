@@ -22,6 +22,18 @@ func init() {
 			Integration:    "Slack",
 			Tags:           []string{"slack", "trigger", "mention", "event", "events-api"},
 			Description:    "Fires when someone @-mentions your bot in Slack. Each fire receives the message text, the channel, the user who sent it, and the raw event for advanced use. Filter by channel via the channel_filter param if you only want to react in certain rooms.",
+			Summary:        "Trigger that fires on every Slack app_mention event, optionally narrowed to one channel.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Fire on any @-mention in the workspace",
+					Params: json.RawMessage(`{}`),
+				},
+				{
+					Title:  "Only mentions in a specific channel",
+					Params: json.RawMessage(`{"channel_filter":"C0123ABC456"}`),
+					Notes:  "Use the channel ID (Cxxx), not the #name. Mentions elsewhere are skipped at the gateway and don't enqueue a job.",
+				},
+			},
 			ExecutionModel: core.ExecutionTrigger,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

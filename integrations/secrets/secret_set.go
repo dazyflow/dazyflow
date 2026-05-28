@@ -22,6 +22,19 @@ func init() {
 			Provider:       "internal",
 			Tags:           []string{"secret", "cursor", "state", "store", "write"},
 			Description:    "Save a value to your tenant's encrypted secret store under the given name. Pair it with template substitution (${tenant:name}) to read the value back from later flow runs — the classic use is cursor storage for polling flows that need to remember 'what was the last thing I processed' across restarts.",
+			Summary:        "Write a value to the tenant's encrypted secret store under the given name.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Persist a polling cursor",
+					Params: json.RawMessage(`{"name":"github_last_seen_issue"}`),
+					Notes:  "Wire the upstream node's latest-id output into the 'value' input port; later runs read it back with ${tenant:github_last_seen_issue}.",
+				},
+				{
+					Title:  "Store a literal value",
+					Params: json.RawMessage(`{"name":"deploy_target","value":"production"}`),
+					Notes:  "Inline values are fine when you don't need the input port — handy for one-time configuration writes.",
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

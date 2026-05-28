@@ -26,6 +26,18 @@ func init() {
 			Integration:    "Postgres",
 			Tags:           []string{"postgres", "postgresql", "sql", "database", "insert", "etl"},
 			Description:    "Insert rows into a Postgres table. Drops in rows from Sheets, Excel, or any transform node — the shape is interchangeable across the family, so no extra mapping needed.",
+			Summary:        "Batch-insert rows into a Postgres table inside one transaction; auto-creates the table from headers when missing.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Load Excel rows into a new table",
+					Params: json.RawMessage(`{"dsn":"${secret:PG_DSN}","table":"signups"}`),
+					Notes:  "schema defaults to public and create_table defaults to true.",
+				},
+				{
+					Title:  "Append into a typed schema",
+					Params: json.RawMessage(`{"dsn":"${secret:PG_DSN}","schema":"sales","table":"orders","create_table":false,"column_types":{"id":"bigint","created_at":"timestamptz"}}`),
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

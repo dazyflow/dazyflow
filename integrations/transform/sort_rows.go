@@ -23,6 +23,18 @@ func init() {
 			Provider:       "internal",
 			Tags:           []string{"transform", "sort", "order", "etl"},
 			Description:    "Sort rows by one or more columns. The 'by' param accepts a list of column names (ascending) or {column, desc:true} objects for descending. Multi-column sorts are stable in the order listed — earlier keys win, later keys break ties.",
+			Summary:        "Stably sort rows by one or more columns, ascending or descending per key.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Sort by created_at ascending",
+					Params: json.RawMessage(`{"by":["created_at"]}`),
+				},
+				{
+					Title:  "Highest revenue first, then alphabetical name",
+					Params: json.RawMessage(`{"by":[{"column":"revenue","desc":true},"name"]}`),
+					Notes:  "Multi-key sort is stable: rows with equal revenue keep their name-order tiebreak.",
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

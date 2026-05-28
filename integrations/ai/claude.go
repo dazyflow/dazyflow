@@ -42,6 +42,24 @@ func init() {
 			Integration:    "Claude",
 			Tags:           []string{"llm", "claude", "anthropic", "messages"},
 			Description:    "Send a prompt to Claude and get a response back. Useful for summarising upstream text, classifying inputs, generating responses, or any step where you want a language model in the loop. The graph itself is your agent loop — combine with branch nodes for multi-turn flows.",
+			Summary:        "Send a prompt to Claude and get a single-turn text response back.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "One-shot summary",
+					Params: json.RawMessage(`{"model":"claude-sonnet-4-6","prompt":"Summarize the upstream text in one sentence.","max_tokens":256,"api_key":"${secret:ANTHROPIC_API_KEY}"}`),
+					Notes:  "Wire the text to be summarised into the 'prompt' input port; params.prompt is just the instruction.",
+				},
+				{
+					Title:  "System-prompted classifier",
+					Params: json.RawMessage(`{"model":"claude-sonnet-4-6","system":"You classify emails as spam or not. Reply with exactly 'spam' or 'ham'.","prompt":"Your bank account has been compromised, click here","max_tokens":4,"temperature":0,"api_key":"${secret:ANTHROPIC_API_KEY}"}`),
+					Notes:  "Lock behaviour into the system prompt so the user prompt can be raw upstream input.",
+				},
+				{
+					Title:  "Multi-turn conversation",
+					Params: json.RawMessage(`{"model":"claude-sonnet-4-6","messages":[{"role":"user","content":"What's the capital of France?"},{"role":"assistant","content":"Paris."},{"role":"user","content":"And of Germany?"}],"max_tokens":128,"api_key":"${secret:ANTHROPIC_API_KEY}"}`),
+					Notes:  "Pass a full messages array when you need conversation history; this overrides params.prompt.",
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{{

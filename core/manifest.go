@@ -25,6 +25,17 @@ const (
 	RetryExponentialBackoff RetryPolicy = "exponential_backoff"
 )
 
+// ParamsExample is one worked params example for a drop. Title is the
+// short headline ("Post to #general"), Params is the literal JSON
+// blob a node would have for that case, and Notes is optional prose
+// for non-obvious choices. The catalog API returns these verbatim so
+// an LLM can copy the shape and adjust.
+type ParamsExample struct {
+	Title  string          `json:"title"`
+	Params json.RawMessage `json:"params"`
+	Notes  string          `json:"notes,omitempty"`
+}
+
 type Port struct {
 	Port     string   `json:"port"`
 	MIME     []string `json:"mime"`
@@ -98,6 +109,19 @@ type Manifest struct {
 	// Used for tooltips and as a search target. Label is for chips/
 	// titles (short); Description can be 1–2 sentences.
 	Description string `json:"description,omitempty"`
+
+	// Summary is a ~140-character LLM-friendly one-liner: "what does
+	// this drop do, in one sentence." Distinct from Description
+	// (paragraph) and Label (chip text). The catalog API surfaces
+	// this verbatim — keep it concrete and verb-led. Required at
+	// registration; the registry rejects manifests without one.
+	Summary string `json:"summary,omitempty"`
+
+	// Examples is at least one worked params example. An LLM
+	// composing a flow reads these to learn the shape; new
+	// integrations must ship with at least one. Authors write them;
+	// the API serves them verbatim. Required at registration.
+	Examples []ParamsExample `json:"examples,omitempty"`
 
 	// Icon is a logical icon name the UI maps to a glyph in its icon
 	// set (today: lucide-react). Values are kebab-case lowercase, e.g.

@@ -29,6 +29,18 @@ func init() {
 			Integration:    "Slack",
 			Tags:           []string{"slack", "channels", "list", "discover"},
 			Description:    "List the channels your Slack bot can see. Useful for filling a channel picker in your UI, or for flows that fan out to every matching channel — e.g. \"post the daily digest to every channel starting with #project-\".",
+			Summary:        "List the Slack channels the connected bot can see, optionally filtered by channel type.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Public + private channels (default)",
+					Params: json.RawMessage(`{"account":"default","types":"public_channel,private_channel","exclude_archived":true,"limit":200}`),
+				},
+				{
+					Title:  "DMs and group DMs only",
+					Params: json.RawMessage(`{"account":"default","types":"im,mpim","limit":500}`),
+					Notes:  "Useful for flows that fan out alerts to every direct conversation the bot is part of.",
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

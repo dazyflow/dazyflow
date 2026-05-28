@@ -58,6 +58,19 @@ func init() {
 			Provider:       "internal",
 			Tags:           []string{"transform", "route", "branch", "fork", "etl"},
 			Description:    "N-way split. Param `routes` is an ordered list of {slot, filter} entries — for each row, the FIRST filter that returns true wins and the row goes to that slot's output port. Rows matching no route land on `default`. Use this to fan one row stream into per-category pipelines (e.g. route SE/NO/UK orders to different downstream processors). Output slot names are fixed (rows_1..rows_8 + default) for V1; semantic naming via variadic ports is a future enhancement.",
+			Summary:        "Route each row to one of N output slots based on the first matching CEL filter; rest go to default.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Three-way split by country",
+					Params: json.RawMessage(`{"routes":[{"slot":"rows_1","filter":"row.country == 'SE'"},{"slot":"rows_2","filter":"row.country == 'NO'"},{"slot":"rows_3","filter":"row.country == 'DK'"}]}`),
+					Notes:  "Anything that isn't SE/NO/DK lands on the 'default' output port.",
+				},
+				{
+					Title:  "Priority routing by score",
+					Params: json.RawMessage(`{"routes":[{"slot":"rows_1","filter":"row.score >= 90"},{"slot":"rows_2","filter":"row.score >= 50"}]}`),
+					Notes:  "First-match-wins: a row with score 95 goes to rows_1 even though it also satisfies the rows_2 filter.",
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

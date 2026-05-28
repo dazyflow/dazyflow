@@ -23,6 +23,22 @@ func init() {
 			Provider:       "internal",
 			Tags:           []string{"conditional", "routing", "if-else"},
 			Description:    "Route input to either the then or else output port based on a structured condition (equals/greater_than/contains/exists/...). Field paths into JSON inputs are supported.",
+			Summary:        "Send the input down the then or else port based on a field comparison against the upstream value.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Send big orders to manual review",
+					Params: json.RawMessage(`{"condition":{"field":"total","op":"greater_than","value":500}}`),
+					Notes:  "Records with total > 500 leave on then; everything else on else.",
+				},
+				{
+					Title:  "Split by email domain",
+					Params: json.RawMessage(`{"condition":{"field":"email","op":"contains","value":"@acme.com"}}`),
+				},
+				{
+					Title:  "Check that a field is present",
+					Params: json.RawMessage(`{"condition":{"field":"customer_id","op":"exists"}}`),
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs:         []core.Port{{Port: "in", Required: true, Label: "Value to test"}},

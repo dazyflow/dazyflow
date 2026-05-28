@@ -24,6 +24,17 @@ func init() {
 			Provider:       "internal",
 			Tags:           []string{"filesystem", "read", "sandbox"},
 			Description:    "Read a file from the workspace sandbox. Path is workspace-relative. Set inline:true to embed file contents in the Ref for remote-module consumption.",
+			Summary:        "Emit a sandbox-bound Ref to a workspace file, optionally inlining its bytes for remote (gRPC) modules.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Reference a CSV by path",
+					Params: json.RawMessage(`{"path":"workspace://imports/customers.csv","mime":"text/csv"}`),
+				},
+				{
+					Title:  "Read a JSON config from scratch storage",
+					Params: json.RawMessage(`{"path":"scratch://intermediate/state.json","mime":"application/json"}`),
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{{

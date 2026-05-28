@@ -22,6 +22,22 @@ func init() {
 			Provider:       "internal",
 			Tags:           []string{"transform", "dedupe", "unique", "etl"},
 			Description:    "Drop duplicate rows. By default, two rows are duplicates when every cell matches; with 'by' set, duplicates share only the listed columns. 'keep' picks which copy of a duplicate group survives: \"first\" (default) or \"last\". Preserves input order for the surviving rows.",
+			Summary:        "Drop duplicate rows, optionally keyed on a subset of columns, keeping the first or last copy.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Dedupe on full row equality",
+					Params: json.RawMessage(`{}`),
+					Notes:  "With no 'by', two rows are duplicates only when every cell matches.",
+				},
+				{
+					Title:  "Dedupe by email, keep the most recent",
+					Params: json.RawMessage(`{"by":["email"],"keep":"last"}`),
+				},
+				{
+					Title:  "Composite key dedupe",
+					Params: json.RawMessage(`{"by":["tenant_id","sku"],"keep":"first"}`),
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

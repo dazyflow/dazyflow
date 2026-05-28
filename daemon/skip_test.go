@@ -20,6 +20,8 @@ import (
 var alwaysFailManifest = core.Manifest{
 	ID:             "boom",
 	Version:        "1.0",
+	Summary:        "Test fixture that always fails.",
+	Examples:       []core.ParamsExample{{Title: "default"}},
 	ExecutionModel: core.ExecutionBatch,
 	ProcessModel:   core.ProcessLongLived,
 	Inputs:         []core.Port{{Port: "in"}},
@@ -60,6 +62,8 @@ func newSkipHarness(t *testing.T) *skipHarness {
 		Manifest: core.Manifest{
 			ID:             "source",
 			Version:        "1.0",
+			Summary:        "Test fixture source.",
+			Examples:       []core.ParamsExample{{Title: "default"}},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs:        []core.Port{{Port: "out"}},

@@ -6,7 +6,7 @@ import { api, APIError } from "../api";
 import type { JobRecord, Ref } from "../types";
 
 // OutputPreview shows what a node emitted on its output ports during the
-// most recent run. Fetches /api/v1/jobs/{runID}/nodes/{nodeID} lazily
+// most recent run. Fetches /api/v1/me/runs/{run_id}/nodes/{node_id} lazily
 // when the inspector selection changes. Renders one card per port with
 // MIME + a JSON-formatted value (truncated if huge).
 type Props = {

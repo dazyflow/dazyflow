@@ -28,7 +28,19 @@ func init() {
 			Provider:       "internal",
 			Integration:    "GitHub",
 			Tags:           []string{"github", "issue", "pr", "comment"},
-			Description:    "Add a comment to a GitHub issue or pull request. Works for both — GitHub treats them as the same thing under the hood. Comment body supports Markdown and can come from the 'body' input or from params.",
+			Description: "Add a comment to a GitHub issue or pull request. Works for both — GitHub treats them as the same thing under the hood. Comment body supports Markdown and can come from the 'body' input or from params.",
+			Summary:     "Post a Markdown comment to a GitHub issue or pull request via the REST API.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Acknowledge a triage issue",
+					Params: json.RawMessage(`{"owner":"example","repo":"widgets","issue_number":142,"body":"Thanks for the report — reproduced on main, tracking internally.","token":"${secret:GITHUB_TOKEN}"}`),
+				},
+				{
+					Title:  "Post CI results on a PR",
+					Params: json.RawMessage(`{"owner":"example","repo":"widgets","issue_number":318,"body":"**Build:** :white_check_mark: passing\n**Coverage:** 87.4% (+0.2%)","token":"${secret:GITHUB_TOKEN}"}`),
+					Notes:  "PRs share GitHub's issue number space, so this same drop comments on PRs too.",
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

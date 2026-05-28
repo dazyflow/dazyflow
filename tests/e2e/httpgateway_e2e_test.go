@@ -76,7 +76,7 @@ func TestHTTPGateway_E2E_SubmitAndStreamSSE(t *testing.T) {
 		},
 	}
 	body, _ := json.Marshal(g)
-	putReq, _ := http.NewRequest("PUT", ts.URL+"/api/v1/graphs/t/ws/stream-demo", bytes.NewReader(body))
+	putReq, _ := http.NewRequest("PUT", ts.URL+"/api/v1/me/flows/t%2Fws%2Fstream-demo", bytes.NewReader(body))
 	putReq.Header.Set("Authorization", "Bearer "+token)
 	putReq.Header.Set("Content-Type", "application/json")
 	putResp, err := http.DefaultClient.Do(putReq)
@@ -89,7 +89,7 @@ func TestHTTPGateway_E2E_SubmitAndStreamSSE(t *testing.T) {
 	}
 
 	// 2. POST /run
-	runReq, _ := http.NewRequest("POST", ts.URL+"/api/v1/graphs/t/ws/stream-demo/run", nil)
+	runReq, _ := http.NewRequest("POST", ts.URL+"/api/v1/me/flows/t%2Fws%2Fstream-demo/run", nil)
 	runReq.Header.Set("Authorization", "Bearer "+token)
 	runResp, err := http.DefaultClient.Do(runReq)
 	if err != nil {
@@ -111,7 +111,7 @@ func TestHTTPGateway_E2E_SubmitAndStreamSSE(t *testing.T) {
 	streamCtx, streamCancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer streamCancel()
 	sseReq, _ := http.NewRequestWithContext(streamCtx, "GET",
-		ts.URL+"/api/v1/jobs/"+runOut.JobID+"/events", nil)
+		ts.URL+"/api/v1/me/runs/"+runOut.JobID+"/events", nil)
 	sseReq.Header.Set("Authorization", "Bearer "+token)
 	sseResp, err := http.DefaultClient.Do(sseReq)
 	if err != nil {
@@ -137,7 +137,7 @@ func TestHTTPGateway_E2E_SubmitAndStreamSSE(t *testing.T) {
 	}
 
 	// 4. GET /jobs/{id} — final snapshot
-	snapReq, _ := http.NewRequest("GET", ts.URL+"/api/v1/jobs/"+runOut.JobID, nil)
+	snapReq, _ := http.NewRequest("GET", ts.URL+"/api/v1/me/runs/"+runOut.JobID, nil)
 	snapReq.Header.Set("Authorization", "Bearer "+token)
 	snapResp, err := http.DefaultClient.Do(snapReq)
 	if err != nil {
@@ -204,13 +204,13 @@ func TestHTTPGateway_E2E_PerNodeSSE(t *testing.T) {
 		},
 	}
 	body, _ := json.Marshal(g)
-	putReq, _ := http.NewRequest("PUT", ts.URL+"/api/v1/graphs/t/ws/node-sse", bytes.NewReader(body))
+	putReq, _ := http.NewRequest("PUT", ts.URL+"/api/v1/me/flows/t%2Fws%2Fnode-sse", bytes.NewReader(body))
 	putReq.Header.Set("Authorization", "Bearer "+token)
 	putReq.Header.Set("Content-Type", "application/json")
 	putResp, _ := http.DefaultClient.Do(putReq)
 	putResp.Body.Close()
 
-	runReq, _ := http.NewRequest("POST", ts.URL+"/api/v1/graphs/t/ws/node-sse/run", nil)
+	runReq, _ := http.NewRequest("POST", ts.URL+"/api/v1/me/flows/t%2Fws%2Fnode-sse/run", nil)
 	runReq.Header.Set("Authorization", "Bearer "+token)
 	runResp, err := http.DefaultClient.Do(runReq)
 	if err != nil {
@@ -225,7 +225,7 @@ func TestHTTPGateway_E2E_PerNodeSSE(t *testing.T) {
 	streamCtx, streamCancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer streamCancel()
 	sseReq, _ := http.NewRequestWithContext(streamCtx, "GET",
-		ts.URL+"/api/v1/jobs/"+runOut.JobID+"/events", nil)
+		ts.URL+"/api/v1/me/runs/"+runOut.JobID+"/events", nil)
 	sseReq.Header.Set("Authorization", "Bearer "+token)
 	sseResp, err := http.DefaultClient.Do(sseReq)
 	if err != nil {

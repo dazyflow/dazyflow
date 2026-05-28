@@ -28,7 +28,23 @@ func init() {
 			Provider:       "internal",
 			Integration:    "Gmail",
 			Tags:           []string{"gmail", "email", "search", "query", "google", "poll"},
-			Description:    "Search your Gmail inbox using normal Gmail search syntax (e.g. `is:unread newer_than:5m label:invoices`). Returns message IDs — pair with the get-message drop in a for_each loop to fetch full content. Natural fit for the 'react to new email' pattern with a polling trigger.",
+			Description: "Search your Gmail inbox using normal Gmail search syntax (e.g. `is:unread newer_than:5m label:invoices`). Returns message IDs — pair with the get-message drop in a for_each loop to fetch full content. Natural fit for the 'react to new email' pattern with a polling trigger.",
+			Summary:     "Search the connected Gmail mailbox with Gmail query syntax and return matching message IDs.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Recent unread invoices",
+					Params: json.RawMessage(`{"query":"is:unread label:invoices newer_than:1d","max_results":50,"token":"${secret:GMAIL_OAUTH}"}`),
+				},
+				{
+					Title:  "Alert emails from a known sender",
+					Params: json.RawMessage(`{"query":"from:alerts@example.com newer_than:5m","max_results":25,"token":"${secret:GMAIL_OAUTH}"}`),
+					Notes:  "Pairs cleanly with a poll_trigger using newer_than as the time window.",
+				},
+				{
+					Title:  "Paginate to the next page",
+					Params: json.RawMessage(`{"query":"label:invoices","max_results":100,"page_token":"CIDEgPCM...","token":"${secret:GMAIL_OAUTH}"}`),
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

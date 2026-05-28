@@ -75,9 +75,11 @@ func TestRunNode_RedactsLeakedSecret(t *testing.T) {
 	const secret = "sk_live_supersecrettoken"
 	e := newEngineWith(t, NativeDrop{
 		Manifest: core.Manifest{
-			ID:      "echo",
-			Inputs:  []core.Port{{Port: "in"}},
-			Outputs: []core.Port{{Port: "out"}},
+			ID:       "echo",
+			Summary:  "Test fixture echo.",
+			Examples: []core.ParamsExample{{Title: "default"}},
+			Inputs:   []core.Port{{Port: "in"}},
+			Outputs:  []core.Port{{Port: "out"}},
 		},
 		// A misbehaving module that echoes its resolved param straight
 		// into its output and error — the exact leak shape redaction

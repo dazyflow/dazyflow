@@ -81,8 +81,10 @@ func TestBranch_RoutesThroughDispatch(t *testing.T) {
 			reg := engine.NewRegistry()
 			_ = reg.Register(engine.NativeDrop{
 				Manifest: core.Manifest{
-					ID:      "numeric_source",
-					Outputs: []core.Port{{Port: "out"}},
+					ID:       "numeric_source",
+					Summary:  "Test fixture that emits a constant numeric value.",
+					Examples: []core.ParamsExample{{Title: "default"}},
+					Outputs:  []core.Port{{Port: "out"}},
 				},
 				Execute: func(_ context.Context, j core.Job, _ chan<- core.Progress) (core.Result, error) {
 					return core.Result{Status: core.StatusOK, Output: map[string]core.Ref{

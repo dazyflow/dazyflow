@@ -48,7 +48,7 @@ type Whoami struct {
 
 func (c *HazydClient) Whoami(ctx context.Context) (Whoami, error) {
 	var w Whoami
-	if err := c.do(ctx, http.MethodGet, "/whoami", nil, &w); err != nil {
+	if err := c.do(ctx, http.MethodGet, "/me", nil, &w); err != nil {
 		return Whoami{}, err
 	}
 	return w, nil
@@ -117,6 +117,14 @@ func (e *HTTPError) Error() string {
 // from the LLM and could contain anything.
 func pathSegment(s string) string {
 	return url.PathEscape(s)
+}
+
+// composeFlowID encodes the (tenant, workspace, id) triple as the
+// composite path parameter the new /me/flows/{flow_id} route
+// consumes. Slashes inside the composite become %2F so the value
+// stays in a single mux segment on the server.
+func composeFlowID(tenant, workspace, id string) string {
+	return url.PathEscape(tenant + "/" + workspace + "/" + id)
 }
 
 // Get reads a JSON resource at path. The path is appended to /api/v1

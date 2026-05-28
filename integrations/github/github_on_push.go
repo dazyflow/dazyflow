@@ -21,7 +21,15 @@ func init() {
 			Provider:       "internal",
 			Integration:    "GitHub",
 			Tags:           []string{"github", "trigger", "push", "webhook", "events"},
-			Description:    "Fires when commits are pushed to your repo. Receives the branch (ref), the before/after commit SHAs, the commits list, the repo, and the pusher. Common uses: post a deploy alert when commits land on main, or kick off a CI-shaped pipeline.",
+			Description: "Fires when commits are pushed to your repo. Receives the branch (ref), the before/after commit SHAs, the commits list, the repo, and the pusher. Common uses: post a deploy alert when commits land on main, or kick off a CI-shaped pipeline.",
+			Summary:     "Trigger that fires when commits are pushed to a connected GitHub repo, with ref, SHAs, and commit list.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Default — fire on every push to the connected repo",
+					Params: json.RawMessage(`{}`),
+					Notes:  "Filter to a specific branch downstream by checking `ref == \"refs/heads/main\"`.",
+				},
+			},
 			ExecutionModel: core.ExecutionTrigger,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

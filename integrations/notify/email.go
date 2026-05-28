@@ -30,6 +30,18 @@ func init() {
 			Integration:    "Email",
 			Tags:           []string{"email", "smtp", "notify", "report"},
 			Description:    "Send an email through an SMTP server. The body can come from an upstream node or from the body param — useful for reporting a build's stdout or a daily summary directly into someone's inbox.",
+			Summary:        "Deliver a one-shot email via SMTP, taking the body from an upstream node or params and supporting STARTTLS, implicit TLS, or plaintext.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Daily report via STARTTLS on port 587",
+					Params: json.RawMessage(`{"host":"smtp.example.com","port":587,"tls":"starttls","username":"${secret:SMTP_USER}","password":"${secret:SMTP_PASS}","from":"reports@example.com","to":["team@example.com"],"subject":"Daily sales report","body":"See attached."}`),
+				},
+				{
+					Title:  "Implicit TLS (port 465) to multiple recipients",
+					Params: json.RawMessage(`{"host":"smtp.example.com","port":465,"tls":"implicit","username":"${secret:SMTP_USER}","password":"${secret:SMTP_PASS}","from":"alerts@example.com","to":["oncall@example.com","cto@example.com"],"subject":"Alert: error rate above threshold"}`),
+					Notes:  "Body left empty here so it can be wired in from an upstream node.",
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

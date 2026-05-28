@@ -28,6 +28,22 @@ func init() {
 			Integration:    "Google Sheets",
 			Tags:           []string{"sheets", "google", "read", "etl"},
 			Description:    "Read a range from a Google Sheet into rows. The first row becomes the headers by default (override with headers=false for synthetic col_0/col_1 names). The output drops straight into Excel, Postgres, and the transform drops — same shape across the family.",
+			Summary:        "Read a tab or A1 range from a Google Sheet into rows + headers for downstream drops.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Read the whole first sheet",
+					Params: json.RawMessage(`{"account":"default","spreadsheet_id":"1AbcDEFghIJklmNOPqrsTUVwxyZ_0123456789abcd","range":"Sheet1","headers":true}`),
+				},
+				{
+					Title:  "Read a specific A1 range with raw numbers",
+					Params: json.RawMessage(`{"account":"default","spreadsheet_id":"1AbcDEFghIJklmNOPqrsTUVwxyZ_0123456789abcd","range":"orders!A1:F500","value_render_option":"UNFORMATTED_VALUE"}`),
+					Notes:  "UNFORMATTED_VALUE keeps numbers as numbers; FORMATTED_VALUE returns Sheets' display strings (handy when a downstream report wants the formatted currency).",
+				},
+				{
+					Title:  "Headerless read with synthetic col_N names",
+					Params: json.RawMessage(`{"account":"default","spreadsheet_id":"1AbcDEFghIJklmNOPqrsTUVwxyZ_0123456789abcd","range":"raw_dump!A1:Z","headers":false}`),
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

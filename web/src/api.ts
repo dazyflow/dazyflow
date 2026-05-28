@@ -29,10 +29,37 @@ const API_BASE = (import.meta.env.VITE_API_BASE ?? "") + "/api/v1";
 
 export class APIError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  // code is the snake_case enum from the new ErrorEnvelope (e.g.
+  // "drop_not_found", "permission_denied"). Empty string on legacy
+  // routes that still emit the {"error":"<string>"} shape.
+  code: string;
+  constructor(status: number, message: string, code: string = "") {
     super(message);
     this.status = status;
+    this.code = code;
   }
+}
+
+// parseAPIErrorBody handles both the legacy `{"error":"<string>"}`
+// shape and the new `{"error":{"code","message","details","doc"}}`
+// envelope. New spec-aligned routes (catalog, /me) emit the envelope;
+// older routes still return the string. Returns the fallback when the
+// body is unparseable or empty.
+function parseAPIErrorBody(text: string, fallback: string): { message: string; code: string } {
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed && typeof parsed.error === "string") {
+      return { message: parsed.error, code: "" };
+    }
+    if (parsed && parsed.error && typeof parsed.error === "object") {
+      const msg = typeof parsed.error.message === "string" ? parsed.error.message : fallback;
+      const code = typeof parsed.error.code === "string" ? parsed.error.code : "";
+      return { message: msg, code };
+    }
+  } catch {
+    /* fall through with raw text */
+  }
+  return { message: text || fallback, code: "" };
 }
 
 async function request<T>(
@@ -51,15 +78,8 @@ async function request<T>(
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
-    const text = await res.text();
-    let message = text;
-    try {
-      const parsed = JSON.parse(text);
-      if (parsed.error) message = parsed.error;
-    } catch {
-      // fall through with raw text
-    }
-    throw new APIError(res.status, message || res.statusText);
+    const { message, code } = parseAPIErrorBody(await res.text(), res.statusText);
+    throw new APIError(res.status, message, code);
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
@@ -134,7 +154,7 @@ export const api = {
   },
   signOut: (token: string | null) =>
     request<void>(token, "POST", "/auth/signout"),
-  whoami: (token: string | null) => request<WhoAmI>(token, "GET", "/whoami"),
+  whoami: (token: string | null) => request<WhoAmI>(token, "GET", "/me"),
   listWorkspaces: (token: string, tenant?: string) => {
     const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
     return request<{ workspaces: string[] }>(token, "GET", "/workspaces" + qs);
@@ -152,17 +172,22 @@ export const api = {
     );
     return { drops: r.drops ?? r.modules ?? [] };
   },
-  listGraphs: (token: string, tenant: string, workspace: string) =>
-    request<{ graphs: FlowSummary[] }>(
+  listGraphs: async (token: string, tenant: string, workspace: string) => {
+    // The server still emits `graphs` alongside `flows` during the
+    // rename transition — accept whichever key is present so we keep
+    // working against both old and freshly-migrated daemons.
+    const r = await request<{ flows?: FlowSummary[]; graphs?: FlowSummary[] }>(
       token,
       "GET",
-      `/graphs?tenant=${encodeURIComponent(tenant)}&workspace=${encodeURIComponent(workspace)}`,
-    ),
+      `/me/flows?tenant=${encodeURIComponent(tenant)}&workspace=${encodeURIComponent(workspace)}`,
+    );
+    return { graphs: r.flows ?? r.graphs ?? [] };
+  },
   loadGraph: (token: string, tenant: string, workspace: string, id: string) =>
     request<Graph>(
       token,
       "GET",
-      `/graphs/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/${encodeURIComponent(id)}`,
+      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}`,
     ),
   saveGraph: (token: string, g: Graph) =>
     request<{
@@ -172,14 +197,14 @@ export const api = {
     }>(
       token,
       "PUT",
-      `/graphs/${encodeURIComponent(g.tenant)}/${encodeURIComponent(g.workspace)}/${encodeURIComponent(g.id)}`,
+      `/me/flows/${encodeURIComponent(`${g.tenant}/${g.workspace}/${g.id}`)}`,
       g,
     ),
   runGraph: (token: string, tenant: string, workspace: string, id: string) =>
     request<{ job_id: string }>(
       token,
       "POST",
-      `/graphs/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/${encodeURIComponent(id)}/run`,
+      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/run`,
     ),
   // testTrigger fires a webhook flow with a synthetic JSON payload so a
   // user can verify it end-to-end without wiring an external caller.
@@ -195,7 +220,7 @@ export const api = {
     request<{ job_id: string }>(
       token,
       "POST",
-      `/graphs/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/${encodeURIComponent(id)}/test-trigger`,
+      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/test-trigger`,
       sample,
     ),
   // validateCron asks the daemon to parse a 5-field cron expression
@@ -224,13 +249,13 @@ export const api = {
     request<{ job_id: string; sampled_node: string }>(
       token,
       "POST",
-      `/graphs/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/${encodeURIComponent(id)}/nodes/${encodeURIComponent(nodeID)}/sample`,
+      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/nodes/${encodeURIComponent(nodeID)}/sample`,
     ),
   cancelRun: (token: string, runID: string, reason?: string) =>
     request<{ status: string }>(
       token,
       "POST",
-      `/runs/${encodeURIComponent(runID)}/cancel`,
+      `/me/runs/${encodeURIComponent(runID)}/cancel`,
       reason ? { reason } : {},
     ),
   listRuns: (
@@ -247,7 +272,7 @@ export const api = {
     return request<{ runs: RunSummary[] }>(
       token,
       "GET",
-      `/graphs/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/${encodeURIComponent(id)}/runs?${qs.toString()}`,
+      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/runs?${qs.toString()}`,
     );
   },
   listAllRuns: (
@@ -269,11 +294,11 @@ export const api = {
     return request<{ runs: RunSummary[] }>(
       token,
       "GET",
-      `/runs?${qs.toString()}`,
+      `/me/runs?${qs.toString()}`,
     );
   },
   getJob: (token: string, jobID: string) =>
-    request<JobRecord>(token, "GET", `/jobs/${encodeURIComponent(jobID)}`),
+    request<JobRecord>(token, "GET", `/me/runs/${encodeURIComponent(jobID)}`),
   listPendingApprovals: (token: string, opts: { workspace?: string; tenant?: string } = {}) => {
     const qs = new URLSearchParams();
     if (opts.workspace) qs.set("workspace", opts.workspace);
@@ -307,6 +332,20 @@ export const api = {
       expires_at?: string;
     },
   ) => request<IssuedAPIKey>(token, "POST", "/admin/api-keys", params),
+
+  // issueMyAPIKey is the self-issue path used by the Connect MCP modal.
+  // Tenant + workspace + subject come from the caller's session — only
+  // optional fields ride in the body. Server caps requested permissions
+  // to a subset of the caller's own.
+  issueMyAPIKey: (
+    token: string,
+    params: {
+      id?: string;
+      roles?: Role[];
+      expires_at?: string;
+    },
+  ) => request<IssuedAPIKey>(token, "POST", "/me/api-keys", params),
+
   revokeAPIKey: (token: string, id: string) =>
     request<void>(token, "DELETE", `/admin/api-keys/${encodeURIComponent(id)}`),
   listUsers: (token: string, tenant?: string) => {
@@ -349,7 +388,7 @@ export const api = {
     request<JobRecord>(
       token,
       "GET",
-      `/jobs/${encodeURIComponent(runID)}/nodes/${encodeURIComponent(nodeID)}`,
+      `/me/runs/${encodeURIComponent(runID)}/nodes/${encodeURIComponent(nodeID)}`,
     ),
   // listRunNodes returns every per-node record for a run in one
   // round trip — the run-detail page draws its timeline from this.
@@ -357,7 +396,7 @@ export const api = {
     request<{ nodes: JobRecord[] }>(
       token,
       "GET",
-      `/jobs/${encodeURIComponent(runID)}/nodes`,
+      `/me/runs/${encodeURIComponent(runID)}/nodes`,
     ),
   // SSE: EventSource doesn't support headers, so we proxy through fetch
   // with ReadableStream parsing instead. Caller cancels via AbortController.
@@ -367,7 +406,7 @@ export const api = {
     onEvent: (kind: string, data: unknown) => void,
     signal: AbortSignal,
   ): Promise<void> {
-    return fetch(API_BASE + `/jobs/${encodeURIComponent(jobID)}/events`, {
+    return fetch(API_BASE + `/me/runs/${encodeURIComponent(jobID)}/events`, {
       method: "GET",
       headers: { Authorization: `Bearer ${token}` },
       signal,

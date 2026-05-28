@@ -59,6 +59,8 @@ func newFullStack(t *testing.T, quotaBytes int64) *fullStack {
 		Manifest: core.Manifest{
 			ID:             "flaky",
 			Version:        "1.0",
+			Summary:        "Test fixture flaky.",
+			Examples:       []core.ParamsExample{{Title: "default"}},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs:        []core.Port{{Port: "out"}},
@@ -86,6 +88,8 @@ func newFullStack(t *testing.T, quotaBytes int64) *fullStack {
 		Manifest: core.Manifest{
 			ID:             "explode",
 			Version:        "1.0",
+			Summary:        "Test fixture explode.",
+			Examples:       []core.ParamsExample{{Title: "default"}},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs:        []core.Port{{Port: "out"}},

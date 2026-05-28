@@ -26,6 +26,23 @@ func init() {
 			Integration:    "Postgres",
 			Tags:           []string{"postgres", "postgresql", "sql", "database", "upsert", "merge", "etl"},
 			Description:    "Upsert (insert-or-update) rows into a Postgres table. Set the conflict columns — Postgres matches existing rows on those, updating them in place, while new rows get inserted. Pick which columns get updated on a match if you want to preserve some existing values.",
+			Summary:        "Insert-or-update rows in Postgres via INSERT ... ON CONFLICT, matching existing rows on the conflict columns.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Sync customers by email",
+					Params: json.RawMessage(`{"dsn":"${secret:PG_DSN}","table":"customers","conflict_columns":["email"]}`),
+					Notes:  "When update_columns is omitted, every non-conflict column is overwritten from the incoming row.",
+				},
+				{
+					Title:  "Refresh just a few fields on match",
+					Params: json.RawMessage(`{"dsn":"${secret:PG_DSN}","schema":"crm","table":"customers","conflict_columns":["email"],"update_columns":["last_seen","plan"]}`),
+				},
+				{
+					Title:  "Insert-if-absent (DO NOTHING)",
+					Params: json.RawMessage(`{"dsn":"${secret:PG_DSN}","table":"events","conflict_columns":["event_id"],"update_columns":[]}`),
+					Notes:  "An empty update_columns becomes ON CONFLICT DO NOTHING — handy for idempotent event ingestion.",
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

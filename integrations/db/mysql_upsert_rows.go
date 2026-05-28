@@ -26,6 +26,23 @@ func init() {
 			Integration:    "MySQL",
 			Tags:           []string{"mysql", "mariadb", "sql", "database", "upsert", "merge", "etl"},
 			Description:    "Upsert (insert-or-update) rows into a MySQL or MariaDB table. Set the conflict columns — MySQL matches existing rows on those, updating them in place, while new rows get inserted. Reports separate insert vs update counts so downstream notifications can say 'X new + Y updated'.",
+			Summary:        "Insert-or-update rows in MySQL/MariaDB via INSERT ... ON DUPLICATE KEY UPDATE, matching existing rows on the conflict columns.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Sync customers by email",
+					Params: json.RawMessage(`{"dsn":"${secret:MYSQL_DSN}","table":"customers","conflict_columns":["email"],"column_types":{"email":"VARCHAR(255)"}}`),
+					Notes:  "MySQL UNIQUE on TEXT needs a key length, so give the conflict column a sized type like VARCHAR(255).",
+				},
+				{
+					Title:  "Refresh just a few fields on match",
+					Params: json.RawMessage(`{"dsn":"${secret:MYSQL_DSN}","table":"customers","conflict_columns":["email"],"update_columns":["last_seen","plan"],"column_types":{"email":"VARCHAR(255)"}}`),
+				},
+				{
+					Title:  "Insert-if-absent",
+					Params: json.RawMessage(`{"dsn":"${secret:MYSQL_DSN}","table":"signups","conflict_columns":["email"],"update_columns":[],"column_types":{"email":"VARCHAR(255)"}}`),
+					Notes:  "Empty update_columns leaves existing rows untouched (MySQL approximation of DO NOTHING).",
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

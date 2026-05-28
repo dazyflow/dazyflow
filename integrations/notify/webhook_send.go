@@ -29,6 +29,22 @@ func init() {
 			Integration:    "Webhook",
 			Tags:           []string{"webhook", "http", "post", "notify", "slack", "discord", "teams"},
 			Description:    "Send a payload to any webhook URL — Slack, Discord, Teams, PagerDuty, ntfy, or your own custom receiver. Body can come from an upstream node (objects are auto-converted to JSON) or from params.",
+			Summary:        "POST/PUT/PATCH a payload to a webhook URL, auto-JSON-marshaling non-string bodies and surfacing non-2xx responses as errors.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Slack incoming webhook",
+					Params: json.RawMessage(`{"url":"https://hooks.slack.com/services/${secret:SLACK_WEBHOOK_PATH}","body":{"text":"Deployment finished."}}`),
+				},
+				{
+					Title:  "Custom receiver with auth header",
+					Params: json.RawMessage(`{"url":"https://api.example.com/hooks/build","method":"POST","headers":{"Authorization":"Bearer ${secret:EXAMPLE_HOOK_TOKEN}"},"body":{"event":"build.succeeded","sha":"abc123"}}`),
+				},
+				{
+					Title:  "Trigger-style POST with no body",
+					Params: json.RawMessage(`{"url":"https://events.pagerduty.com/integration/${secret:PAGERDUTY_KEY}/acknowledge"}`),
+					Notes:  "Some receivers treat the POST itself as the signal; an empty body is fine.",
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

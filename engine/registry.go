@@ -20,12 +20,25 @@ func NewRegistry() *Registry {
 
 // Register adds a native module. Returns an error if a module with the same
 // ID is already registered — caller chooses whether to panic or recover.
+//
+// The Summary and Examples fields are required: a new integration must
+// state in one sentence what it does and supply at least one worked
+// params example. The catalog API surfaces both verbatim, so an LLM
+// composing a flow has the metadata it needs to call the drop
+// correctly. Fail-closed here keeps the contract honest — drops can't
+// silently ship without the discovery shape the LLM relies on.
 func (r *Registry) Register(n NativeDrop) error {
 	if n.Manifest.ID == "" {
 		return fmt.Errorf("manifest ID is empty")
 	}
 	if n.Execute == nil {
 		return fmt.Errorf("module %q has no Execute function", n.Manifest.ID)
+	}
+	if n.Manifest.Summary == "" {
+		return fmt.Errorf("module %q: Manifest.Summary is required (one-sentence LLM-friendly description)", n.Manifest.ID)
+	}
+	if len(n.Manifest.Examples) == 0 {
+		return fmt.Errorf("module %q: Manifest.Examples must contain at least one ParamsExample", n.Manifest.ID)
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()

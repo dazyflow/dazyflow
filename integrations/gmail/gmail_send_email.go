@@ -29,7 +29,23 @@ func init() {
 			Provider:       "internal",
 			Integration:    "Gmail",
 			Tags:           []string{"gmail", "email", "send", "google"},
-			Description:    "Send an email through your connected Gmail account. The body comes from the 'body' input or from the 'body' param; set format to html for rich content. The 'from' address is fixed to your authorized Google account — Gmail's API doesn't allow spoofing.",
+			Description: "Send an email through your connected Gmail account. The body comes from the 'body' input or from the 'body' param; set format to html for rich content. The 'from' address is fixed to your authorized Google account — Gmail's API doesn't allow spoofing.",
+			Summary:     "Send an email through the user's connected Gmail account, in plain text or HTML, with optional threading.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Plain-text alert",
+					Params: json.RawMessage(`{"to":"oncall@example.com","subject":"Build failed","body":"main is red, see https://ci.example.com/run/123","token":"${secret:GMAIL_OAUTH}"}`),
+				},
+				{
+					Title:  "HTML newsletter to a list",
+					Params: json.RawMessage(`{"to":"team@example.com","cc":"leads@example.com","subject":"Weekly digest","body":"<h1>Highlights</h1><p>Shipped the new onboarding flow.</p>","format":"html","token":"${secret:GMAIL_OAUTH}"}`),
+				},
+				{
+					Title:  "Threaded reply",
+					Params: json.RawMessage(`{"to":"alice@example.com","subject":"Re: deploy plan","body":"Sounds good — running it at 16:00 UTC.","thread_id":"18f9d3a2c0e1b4a5","reply_to":"ops@example.com","token":"${secret:GMAIL_OAUTH}"}`),
+					Notes:  "thread_id keeps the reply in the same Gmail conversation as the original message.",
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

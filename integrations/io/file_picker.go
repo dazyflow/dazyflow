@@ -30,6 +30,18 @@ func init() {
 			// where the user picks an input file via the schema-form's
 			// workspace-path picker.
 			Description:    "Pick a file from the workspace sandbox. Outputs both the workspace-relative path (string) and a file reference (MIME-tagged Ref) so downstream readers can open it through the sandbox without re-resolving anywhere else. By default the file's bytes are NOT inlined — set inline=true for handoff to remote modules that don't share the workspace filesystem.",
+			Summary:        "Surface a chosen workspace file as a stable path + MIME-tagged Ref for downstream readers, with opt-in byte inlining for remote modules.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Pick a spreadsheet to feed into excel_read",
+					Params: json.RawMessage(`{"path":"workspace://reports/sales.xlsx"}`),
+				},
+				{
+					Title:  "Pin a MIME and inline bytes for a remote module",
+					Params: json.RawMessage(`{"path":"workspace://uploads/report.pdf","mime":"application/pdf","inline":true}`),
+					Notes:  "inline=true reads the file into memory now — only use for files small enough to ship across the wire.",
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

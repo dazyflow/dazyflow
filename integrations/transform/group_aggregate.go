@@ -38,6 +38,21 @@ func init() {
 			Provider:       "internal",
 			Tags:           []string{"transform", "group", "aggregate", "pivot", "sum", "etl", "sql"},
 			Description:    "Group rows by N columns and emit one row per group with aggregated values. Param `by` is the list of grouping columns. Param `aggregate` maps each output column to {op, column} — supported ops: count (no column needed), sum, avg, min, max, first, last, collect (gathers values into a list). Numeric ops coerce strings (\"30\") and ints/floats so Excel/JSON mixed inputs work without pre-casting. min/max falls back to lexical comparison when values aren't all numeric. Groups are emitted in first-seen order. by:[] = single group covering all rows — useful for whole-input totals.",
+			Summary:        "Group rows by N columns and emit one aggregated row per group (count/sum/avg/min/max/first/last/collect).",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Orders per country, with revenue totals",
+					Params: json.RawMessage(`{"by":["country"],"aggregate":{"order_count":{"op":"count"},"revenue":{"op":"sum","column":"amount"},"avg_ticket":{"op":"avg","column":"amount"}}}`),
+				},
+				{
+					Title:  "Whole-input totals (by:[] = one group)",
+					Params: json.RawMessage(`{"by":[],"aggregate":{"total_rows":{"op":"count"},"total":{"op":"sum","column":"amount"}}}`),
+				},
+				{
+					Title:  "Collect SKUs per customer",
+					Params: json.RawMessage(`{"by":["customer_id"],"aggregate":{"skus":{"op":"collect","column":"sku"},"first_seen":{"op":"min","column":"created_at"}}}`),
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

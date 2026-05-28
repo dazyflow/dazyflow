@@ -27,6 +27,22 @@ func init() {
 			Integration:    "Excel",
 			Tags:           []string{"excel", "xlsx", "spreadsheet", "read"},
 			Description:    "Read rows from an .xlsx workbook in your workspace. The first row becomes the headers by default. Restrict to a cell range (e.g. \"A1:D100\") if the sheet has a banner you want to skip. Flip on typed mode to get native numbers/dates/booleans instead of strings.",
+			Summary:        "Read an .xlsx sheet into a row-oriented dataset, with optional header row, cell range, and typed numeric/date coercion.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "First sheet, headers from row 1",
+					Params: json.RawMessage(`{"path":"workspace://reports/sales.xlsx","sheet":"Sheet1","headers":true}`),
+				},
+				{
+					Title:  "Specific range with banner skipped, typed values",
+					Params: json.RawMessage(`{"path":"workspace://exports/q3.xlsx","sheet":"Raw","range":"A3:F500","headers":true,"typed":true}`),
+					Notes:  "Use typed=true when downstream nodes need real numbers and time.Time dates instead of formatted strings.",
+				},
+				{
+					Title:  "Headerless sheet — columns become col_0, col_1, …",
+					Params: json.RawMessage(`{"path":"workspace://imports/raw.xlsx","sheet":"data","headers":false}`),
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

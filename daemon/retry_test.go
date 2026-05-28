@@ -19,6 +19,8 @@ import (
 var flakyManifest = core.Manifest{
 	ID:             "flaky",
 	Version:        "1.0",
+	Summary:        "Test fixture for retry policy.",
+	Examples:       []core.ParamsExample{{Title: "default"}},
 	ExecutionModel: core.ExecutionBatch,
 	ProcessModel:   core.ProcessLongLived,
 	Inputs:         []core.Port{{Port: "in"}},
@@ -211,6 +213,8 @@ func TestRetry_NoRetryEdgeMeansNoRetry(t *testing.T) {
 	// Register a sink so we have an outgoing edge to attach OnError to.
 	sinkManifest := core.Manifest{
 		ID: "sink", Version: "1.0",
+		Summary:        "Test fixture sink.",
+		Examples:       []core.ParamsExample{{Title: "default"}},
 		ExecutionModel: core.ExecutionBatch,
 		ProcessModel:   core.ProcessLongLived,
 		Inputs:         []core.Port{{Port: "in"}},

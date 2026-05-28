@@ -32,6 +32,18 @@ func init() {
 			Integration:    "Excel",
 			Tags:           []string{"excel", "xlsx", "spreadsheet", "write"},
 			Description:    "Write rows to an .xlsx file in your workspace. Use this to deliver a downloadable report, or to round-trip data through Excel for someone to review. Append mode lets you add rows to an existing file without overwriting it — the existing header row decides the column order.",
+			Summary:        "Serialize a row stream into an .xlsx workbook in the workspace, optionally appending to an existing sheet and freezing/auto-sizing columns.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Fresh report with autosized columns and a frozen header",
+					Params: json.RawMessage(`{"path":"workspace://reports/sales-2026.xlsx","sheet":"Sales","mkdirs":true,"autosize":true,"freezeRow":1}`),
+				},
+				{
+					Title:  "Append to an existing workbook",
+					Params: json.RawMessage(`{"path":"workspace://logs/audit.xlsx","sheet":"Events","append":true}`),
+					Notes:  "Column order is fixed by the existing header row; new rows missing a column write \"\" in that cell.",
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

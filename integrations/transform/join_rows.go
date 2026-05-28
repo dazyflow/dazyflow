@@ -40,6 +40,22 @@ func init() {
 			Provider:       "internal",
 			Tags:           []string{"transform", "join", "merge", "lookup", "etl", "sql"},
 			Description:    "SQL JOIN between two row streams. Param `on` maps left columns to right columns ({\"id\": \"user_id\"}). `kind` picks inner / left / right / outer. When the same key matches multiple right rows the output cartesians within that group (standard SQL behavior). Non-key right columns that collide with left column names get suffixed (default \"_right\", overridable via `right_suffix`). The right side's key columns are dropped from the output since they equal the left's by construction.",
+			Summary:        "SQL-style inner/left/right/outer join between two row streams keyed on one or more columns.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Inner join orders to customers",
+					Params: json.RawMessage(`{"on":{"customer_id":"id"},"kind":"inner"}`),
+				},
+				{
+					Title:  "Left join with name collisions suffixed",
+					Params: json.RawMessage(`{"on":{"user_id":"id"},"kind":"left","right_suffix":"_user"}`),
+					Notes:  "Right-side columns that share a name with the left (e.g. 'name') become 'name_user' in the output. The right's 'id' key column is dropped since it equals user_id.",
+				},
+				{
+					Title:  "Multi-column outer join",
+					Params: json.RawMessage(`{"on":{"tenant_id":"tenant_id","sku":"product_sku"},"kind":"outer"}`),
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

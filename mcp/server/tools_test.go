@@ -101,8 +101,11 @@ func fullStack(t *testing.T) (*server.Server, *fakeHzd, *httptest.Server) {
 
 func TestTool_ListDrops_HitsRightEndpoint(t *testing.T) {
 	s, fake, _ := fullStack(t)
-	fake.on("GET", "/api/v1/drops", func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = io.WriteString(w, `{"http_request":{"id":"http_request"}}`)
+	// list_drops now hits the new catalog endpoint (the LLM-friendly
+	// surface with Summary + Examples) rather than the legacy
+	// /api/v1/drops shape.
+	fake.on("GET", "/api/v1/catalog/drops", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, `{"items":[{"id":"http_request","label":"HTTP request"}]}`)
 	})
 
 	res := runToolCall(t, s, "list_drops", map[string]any{})
@@ -122,8 +125,11 @@ func TestTool_ListDrops_HitsRightEndpoint(t *testing.T) {
 // path values as the source of truth.
 func TestTool_CreateFlow_UsesDefaultsInPath(t *testing.T) {
 	s, fake, _ := fullStack(t)
-	fake.on("PUT", "/api/v1/graphs/t/ws/my-flow", func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = io.WriteString(w, `{"commit":"abc","graph_id":"my-flow"}`)
+	// flow_id is the percent-encoded composite tenant/workspace/id;
+	// the fake's net/http server normalizes %2F back to / in r.URL.Path,
+	// so we register the decoded shape.
+	fake.on("PUT", "/api/v1/me/flows/t/ws/my-flow", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, `{"commit":"abc","flow_id":"t/ws/my-flow","graph_id":"my-flow"}`)
 	})
 
 	res := runToolCall(t, s, "create_flow", map[string]any{
@@ -137,7 +143,10 @@ func TestTool_CreateFlow_UsesDefaultsInPath(t *testing.T) {
 		t.Fatalf("requests = %+v", fake.requests)
 	}
 	r := fake.requests[0]
-	if r.method != "PUT" || r.path != "/api/v1/graphs/t/ws/my-flow" {
+	// r.path is the raw RequestURI (encoded), so slashes inside the
+	// flow_id composite show up as %2F here. The fake's handler-lookup
+	// table keys on decoded r.URL.Path, which is why "on" above matched.
+	if r.method != "PUT" || r.path != "/api/v1/me/flows/t%2Fws%2Fmy-flow" {
 		t.Errorf("request = %s %s", r.method, r.path)
 	}
 	var body map[string]any
@@ -152,7 +161,7 @@ func TestTool_CreateFlow_UsesDefaultsInPath(t *testing.T) {
 // reads it and can tell the user to wait for the run to finish.
 func TestTool_CreateFlow_ServerConflictBecomesToolError(t *testing.T) {
 	s, fake, _ := fullStack(t)
-	fake.on("PUT", "/api/v1/graphs/t/ws/locked", func(w http.ResponseWriter, _ *http.Request) {
+	fake.on("PUT", "/api/v1/me/flows/t/ws/locked", func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, `flow "locked" has an active run`, http.StatusConflict)
 	})
 
@@ -174,7 +183,7 @@ func TestTool_CreateFlow_ServerConflictBecomesToolError(t *testing.T) {
 func TestTool_WaitForRun_ReturnsTerminal(t *testing.T) {
 	s, fake, _ := fullStack(t)
 	calls := 0
-	fake.on("GET", "/api/v1/jobs/r1", func(w http.ResponseWriter, _ *http.Request) {
+	fake.on("GET", "/api/v1/me/runs/r1", func(w http.ResponseWriter, _ *http.Request) {
 		calls++
 		if calls < 2 {
 			_, _ = io.WriteString(w, `{"id":"r1","status":"running"}`)

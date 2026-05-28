@@ -28,6 +28,23 @@ func init() {
 			Integration:    "Slack",
 			Tags:           []string{"slack", "chat", "notify", "send"},
 			Description:    "Post a message to a Slack channel. The simplest path: set the channel and either type your message in 'text' or wire upstream text into the 'body' input. For richer formatting — buttons, dividers, images — use Block Kit blocks instead of plain text.",
+			Summary:        "Post a message to a Slack channel as the connected bot, with optional thread_ts and Block Kit.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Plain message to a channel",
+					Params: json.RawMessage(`{"account":"default","channel":"#general","text":"Deploy finished — see https://ci.example.com/run/123"}`),
+				},
+				{
+					Title:  "Threaded reply by channel ID",
+					Params: json.RawMessage(`{"account":"default","channel":"C0123ABC","text":"All clear — closing the incident.","thread_ts":"1714060800.000100"}`),
+					Notes:  "Use the channel ID (Cxxx) for DMs and private channels; the #name form works for public ones.",
+				},
+				{
+					Title:  "Block Kit message with a fallback text",
+					Params: json.RawMessage(`{"account":"default","channel":"#alerts","text":"Build failed","blocks":[{"type":"section","text":{"type":"mrkdwn","text":"*Build failed* on main"}},{"type":"actions","elements":[{"type":"button","text":{"type":"plain_text","text":"Open run"},"url":"https://ci.example.com/run/123"}]}]}`),
+					Notes:  "When blocks are set, text is used only as the push-notification fallback.",
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

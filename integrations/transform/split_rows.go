@@ -23,6 +23,18 @@ func init() {
 			Provider:       "internal",
 			Tags:           []string{"transform", "split", "fork", "branch", "filter", "etl"},
 			Description:    "Fork a row stream into two by a CEL predicate. Rows where the filter evaluates to true go out 'matched'; the rest go out 'unmatched'. Same expression surface as compute_rows.filter — `row.active && row.score >= 50` and similar. Use when you'd otherwise need map_rows twice (once with the filter, once with its negation): split_rows walks the input once and gives you both halves at the cost of nothing extra.",
+			Summary:        "Fork a row stream into matched/unmatched halves using a single CEL boolean expression.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Split valid vs invalid records",
+					Params: json.RawMessage(`{"filter":"row.email != '' && row.age >= 18"}`),
+					Notes:  "Use the unmatched port to wire rows into a dead-letter table or review queue.",
+				},
+				{
+					Title:  "Active premium customers vs everyone else",
+					Params: json.RawMessage(`{"filter":"row.status == 'active' && row.plan == 'premium'"}`),
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

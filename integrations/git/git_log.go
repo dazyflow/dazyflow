@@ -28,7 +28,19 @@ func init() {
 			Provider:       "internal",
 			Integration:    "Git",
 			Tags:           []string{"git", "log", "history", "vcs"},
-			Description:    "List recent commits in a checked-out repo. Returns each commit's SHA, author, time, and summary. Useful for showing release notes, attributing changes, or building 'what landed today' reports.",
+			Description: "List recent commits in a checked-out repo. Returns each commit's SHA, author, time, and summary. Useful for showing release notes, attributing changes, or building 'what landed today' reports.",
+			Summary:     "Walk a checked-out repo's history and return recent commits with SHA, author, timestamp, and summary.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Last 20 commits on the default branch",
+					Params: json.RawMessage(`{"path":"src/widgets"}`),
+				},
+				{
+					Title:  "Recent commits on a release branch",
+					Params: json.RawMessage(`{"path":"src/widgets","ref":"release/2026.05","limit":50}`),
+					Notes:  "Pair with a markdown_format step to turn the commit list into release notes.",
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

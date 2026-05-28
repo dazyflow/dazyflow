@@ -27,6 +27,18 @@ func init() {
 			Integration:    "MySQL",
 			Tags:           []string{"mysql", "mariadb", "sql", "database", "insert", "etl"},
 			Description:    "Insert rows into a MySQL or MariaDB table. Drops in rows from Sheets, Excel, or any transform node — the shape is interchangeable across the family.",
+			Summary:        "Batch-insert rows into a MySQL/MariaDB table inside one transaction; auto-creates the table from headers when missing.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Load Excel rows into a new table",
+					Params: json.RawMessage(`{"dsn":"${secret:MYSQL_DSN}","table":"signups"}`),
+					Notes:  "create_table defaults to true, so the table is built from the upstream headers on first run.",
+				},
+				{
+					Title:  "Append into a pre-existing schema",
+					Params: json.RawMessage(`{"dsn":"${secret:MYSQL_DSN}","table":"orders","create_table":false,"column_types":{"id":"BIGINT","total":"DECIMAL(10,2)"}}`),
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

@@ -20,9 +20,21 @@ type Defaults struct {
 // BuildTools wires the full set of MCP tools against an HazydClient.
 // Returned in a stable order; the framing layer registers them via
 // Server.Register in the order they appear here.
+//
+// The catalog tools (list_integrations / describe_integration /
+// list_drops / describe_drop) front the daemon's /api/v1/catalog
+// surface. They're the LLM's discovery path: list_integrations first
+// to see what services are available, describe_integration to learn
+// what one of them can do, then describe_drop to get the params
+// schema + worked examples for the specific node before composing a
+// flow. We expose them as separate tools (rather than one giant
+// "search") so the LLM picks the right level of detail per turn.
 func BuildTools(c *HazydClient, d Defaults) []Tool {
 	return []Tool{
+		listIntegrations(c),
+		describeIntegration(c),
 		listDrops(c),
+		describeDrop(c),
 		listFlows(c, d),
 		getFlow(c, d),
 		saveFlow(c, d, "create_flow",
@@ -116,14 +128,121 @@ func errorResultOrErr(err error) (ToolCallResult, error) {
 
 // ─────────────────────────── tool definitions ───────────────────────────
 
+func listIntegrations(c *HazydClient) Tool {
+	return Tool{
+		Name:        "list_integrations",
+		Description: "List every integration the daemon offers, grouped by vendor (Slack, Gmail, GitHub, ...). Each entry includes a one-sentence summary and how many drops it exposes. Use this FIRST when composing a new flow — narrow by integration before drilling into individual drops.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{
+			"q":        {"type":"string","description":"Free-text filter against integration label and summary."},
+			"category": {"type":"string","description":"Optional category filter: trigger, transformation, io, ai, network, external, system, flow_control."}
+		}}`),
+		Handler: func(ctx context.Context, raw json.RawMessage) (ToolCallResult, error) {
+			args, err := decodeArgs(raw)
+			if err != nil {
+				return ErrorResult(err.Error()), nil
+			}
+			qs := ""
+			if q := stringField(args, "q", ""); q != "" {
+				qs = "?q=" + pathSegment(q)
+			}
+			if cat := stringField(args, "category", ""); cat != "" {
+				sep := "?"
+				if qs != "" {
+					sep = "&"
+				}
+				qs += sep + "category=" + pathSegment(cat)
+			}
+			var out map[string]any
+			if err := c.Get(ctx, "/catalog/integrations"+qs, &out); err != nil {
+				return errorResultOrErr(err)
+			}
+			return TextResult(out), nil
+		},
+	}
+}
+
+func describeIntegration(c *HazydClient) Tool {
+	return Tool{
+		Name:        "describe_integration",
+		Description: "Return one integration's detail page: its auth shape, every drop it exposes with their role (trigger / action / transformation), and example flows. Read this BEFORE describing individual drops — it tells you which drop within the integration to look at.",
+		InputSchema: json.RawMessage(`{"type":"object","required":["id"],"properties":{
+			"id": {"type":"string","description":"Integration ID, e.g. 'Slack' or 'standard-library'. Get the canonical IDs from list_integrations."}
+		}}`),
+		Handler: func(ctx context.Context, raw json.RawMessage) (ToolCallResult, error) {
+			args, err := decodeArgs(raw)
+			if err != nil {
+				return ErrorResult(err.Error()), nil
+			}
+			id := stringField(args, "id", "")
+			if id == "" {
+				return ErrorResult("id is required"), nil
+			}
+			var out map[string]any
+			if err := c.Get(ctx, "/catalog/integrations/"+pathSegment(id), &out); err != nil {
+				return errorResultOrErr(err)
+			}
+			return TextResult(out), nil
+		},
+	}
+}
+
 func listDrops(c *HazydClient) Tool {
 	return Tool{
-		Name: "list_drops",
-		Description: "List every flow node ('drop') the daemon knows about. The returned map keys are module IDs (e.g. 'http_request', 'await_approval', 'slack_send_message'); the values are the full manifest including label, description, inputs/outputs, and params_schema. Call this BEFORE create_flow so you know what modules exist and what params each one accepts.",
-		InputSchema: json.RawMessage(`{"type":"object","properties":{}}`),
-		Handler: func(ctx context.Context, _ json.RawMessage) (ToolCallResult, error) {
+		Name:        "list_drops",
+		Description: "Search the flat drop catalog. Returns lean per-drop entries (id, label, summary, category, integration). Use the optional filters to narrow — full per-drop detail (params schema, examples) comes from describe_drop.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{
+			"q":           {"type":"string","description":"Free-text filter against label, description, tags."},
+			"category":    {"type":"string"},
+			"integration": {"type":"string","description":"Limit to drops in this integration (e.g. 'Slack')."},
+			"tag":         {"type":"string"}
+		}}`),
+		Handler: func(ctx context.Context, raw json.RawMessage) (ToolCallResult, error) {
+			args, err := decodeArgs(raw)
+			if err != nil {
+				return ErrorResult(err.Error()), nil
+			}
+			qs := ""
+			add := func(k, v string) {
+				if v == "" {
+					return
+				}
+				sep := "?"
+				if qs != "" {
+					sep = "&"
+				}
+				qs += sep + k + "=" + pathSegment(v)
+			}
+			add("q", stringField(args, "q", ""))
+			add("category", stringField(args, "category", ""))
+			add("integration", stringField(args, "integration", ""))
+			add("tag", stringField(args, "tag", ""))
 			var out map[string]any
-			if err := c.Get(ctx, "/drops", &out); err != nil {
+			if err := c.Get(ctx, "/catalog/drops"+qs, &out); err != nil {
+				return errorResultOrErr(err)
+			}
+			return TextResult(out), nil
+		},
+	}
+}
+
+func describeDrop(c *HazydClient) Tool {
+	return Tool{
+		Name:        "describe_drop",
+		Description: "Get the full manifest of one drop — params JSON Schema, worked params examples, I/O ports, execution model, retry policy. THIS is the source of truth when composing the node's params; the examples field gives you concrete shapes to crib from.",
+		InputSchema: json.RawMessage(`{"type":"object","required":["id"],"properties":{
+			"id": {"type":"string","description":"Drop ID (e.g. 'http_request', 'slack_send_message'). Find IDs via list_drops or describe_integration."}
+		}}`),
+		Handler: func(ctx context.Context, raw json.RawMessage) (ToolCallResult, error) {
+			args, err := decodeArgs(raw)
+			if err != nil {
+				return ErrorResult(err.Error()), nil
+			}
+			id := stringField(args, "id", "")
+			if id == "" {
+				return ErrorResult("id is required"), nil
+			}
+			var out map[string]any
+			if err := c.Get(ctx, "/catalog/drops/"+pathSegment(id), &out); err != nil {
 				return errorResultOrErr(err)
 			}
 			return TextResult(out), nil
@@ -149,7 +268,7 @@ func listFlows(c *HazydClient, d Defaults) Tool {
 				return ErrorResult(err.Error()), nil
 			}
 			var out map[string]any
-			path := fmt.Sprintf("/graphs?tenant=%s&workspace=%s", pathSegment(tenant), pathSegment(workspace))
+			path := fmt.Sprintf("/me/flows?tenant=%s&workspace=%s", pathSegment(tenant), pathSegment(workspace))
 			if err := c.Get(ctx, path, &out); err != nil {
 				return errorResultOrErr(err)
 			}
@@ -181,8 +300,7 @@ func getFlow(c *HazydClient, d Defaults) Tool {
 				return ErrorResult(err.Error()), nil
 			}
 			var out map[string]any
-			path := fmt.Sprintf("/graphs/%s/%s/%s", pathSegment(tenant), pathSegment(workspace), pathSegment(id))
-			if err := c.Get(ctx, path, &out); err != nil {
+			if err := c.Get(ctx, "/me/flows/"+composeFlowID(tenant, workspace, id), &out); err != nil {
 				return errorResultOrErr(err)
 			}
 			return TextResult(out), nil
@@ -275,8 +393,7 @@ func saveFlow(c *HazydClient, d Defaults, name, description string) Tool {
 				body["edges"] = []any{}
 			}
 			var out map[string]any
-			path := fmt.Sprintf("/graphs/%s/%s/%s", pathSegment(tenant), pathSegment(workspace), pathSegment(id))
-			if err := c.Put(ctx, path, body, &out); err != nil {
+			if err := c.Put(ctx, "/me/flows/"+composeFlowID(tenant, workspace, id), body, &out); err != nil {
 				return errorResultOrErr(err)
 			}
 			return TextResult(out), nil
@@ -307,8 +424,7 @@ func runFlow(c *HazydClient, d Defaults) Tool {
 				return ErrorResult(err.Error()), nil
 			}
 			var out map[string]any
-			path := fmt.Sprintf("/graphs/%s/%s/%s/run", pathSegment(tenant), pathSegment(workspace), pathSegment(id))
-			if err := c.Post(ctx, path, nil, &out); err != nil {
+			if err := c.Post(ctx, "/me/flows/"+composeFlowID(tenant, workspace, id)+"/run", nil, &out); err != nil {
 				return errorResultOrErr(err)
 			}
 			return TextResult(out), nil
@@ -338,7 +454,7 @@ func cancelRun(c *HazydClient) Tool {
 				body["reason"] = reason
 			}
 			var out map[string]any
-			path := fmt.Sprintf("/runs/%s/cancel", pathSegment(runID))
+			path := fmt.Sprintf("/me/runs/%s/cancel", pathSegment(runID))
 			if err := c.Post(ctx, path, body, &out); err != nil {
 				return errorResultOrErr(err)
 			}
@@ -364,7 +480,7 @@ func getRun(c *HazydClient) Tool {
 				return ErrorResult("run_id is required"), nil
 			}
 			var out map[string]any
-			if err := c.Get(ctx, "/jobs/"+pathSegment(runID), &out); err != nil {
+			if err := c.Get(ctx, "/me/runs/"+pathSegment(runID), &out); err != nil {
 				return errorResultOrErr(err)
 			}
 			return TextResult(out), nil
@@ -398,10 +514,10 @@ func listRuns(c *HazydClient, d Defaults) Tool {
 				if err != nil {
 					return ErrorResult(err.Error()), nil
 				}
-				path = fmt.Sprintf("/graphs/%s/%s/%s/runs?limit=%d",
-					pathSegment(tenant), pathSegment(workspace), pathSegment(flowID), limit)
+				path = fmt.Sprintf("/me/flows/%s/runs?limit=%d",
+					composeFlowID(tenant, workspace, flowID), limit)
 			} else {
-				path = fmt.Sprintf("/runs?limit=%d", limit)
+				path = fmt.Sprintf("/me/runs?limit=%d", limit)
 			}
 			if status != "" {
 				path += "&status=" + pathSegment(status)
@@ -449,7 +565,7 @@ func waitForRun(c *HazydClient) Tool {
 			var last map[string]any
 			for {
 				var rec map[string]any
-				if err := c.Get(ctx, "/jobs/"+pathSegment(runID), &rec); err != nil {
+				if err := c.Get(ctx, "/me/runs/"+pathSegment(runID), &rec); err != nil {
 					return errorResultOrErr(err)
 				}
 				last = rec

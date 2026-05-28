@@ -21,6 +21,14 @@ func init() {
 			Provider:       "internal",
 			Tags:           []string{"poll", "trigger", "interval", "schedule"},
 			Description:    "Marks a graph as poll-driven — fires every N seconds (configured on the GRAPH'S 'poll' trigger, not on this node). Outputs `fired_at` (RFC3339 timestamp). For dedupe-against-seen behavior, store a cursor in the tenant secret store with a downstream node and read it back on the next fire.",
+			Summary:        "Trigger that fires the graph on the workspace's poll schedule, emitting the fire timestamp.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Poll trigger (interval lives on the graph trigger, not this node)",
+					Params: json.RawMessage(`{}`),
+					Notes:  "Configure the polling interval on the graph's 'poll' trigger; this node just emits 'fired_at' downstream.",
+				},
+			},
 			ExecutionModel: core.ExecutionTrigger,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

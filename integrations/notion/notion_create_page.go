@@ -28,6 +28,18 @@ func init() {
 			Integration:    "Notion",
 			Tags:           []string{"notion", "page", "create", "database", "write"},
 			Description:    "Create a Notion page. Set the parent — a database, in which case the page becomes a row, or another page, in which case it becomes a child. Properties define the field values; optional child blocks fill the page body. Outputs the new page's id and URL.",
+			Summary:        "Create a Notion page as either a database row or a child of another page, with optional initial block content.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Add a row to a tasks database",
+					Params: json.RawMessage(`{"account":"default","parent_database_id":"11111111-2222-3333-4444-555555555555","properties":{"Name":{"title":[{"text":{"content":"Review Q3 numbers"}}]},"Status":{"select":{"name":"Todo"}}}}`),
+				},
+				{
+					Title:  "Create a child page with body blocks under another page",
+					Params: json.RawMessage(`{"token":"${secret:NOTION_TOKEN}","parent_page_id":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","properties":{"title":[{"text":{"content":"Meeting notes 2026-05-28"}}]},"children":[{"object":"block","type":"paragraph","paragraph":{"rich_text":[{"type":"text","text":{"content":"Attendees: …"}}]}}]}`),
+					Notes:  "For child pages the title goes inside properties.title (not into a named property).",
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

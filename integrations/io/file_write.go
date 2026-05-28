@@ -26,6 +26,17 @@ func init() {
 			Provider:       "internal",
 			Tags:           []string{"filesystem", "write", "sandbox"},
 			Description:    "Write a file to the workspace sandbox. Accepts inline data or a workspace-relative source Ref. Respects per-tenant disk quotas.",
+			Summary:        "Copy an input Ref's bytes to a workspace-relative destination, refusing escapes and pre-checking against the tenant disk quota.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Drop a generated artifact into the reports folder",
+					Params: json.RawMessage(`{"path":"workspace://reports/summary.json","mkdirs":true}`),
+				},
+				{
+					Title:  "Persist to a scratch path that lives only as long as the run",
+					Params: json.RawMessage(`{"path":"scratch://staging/payload.bin"}`),
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{{

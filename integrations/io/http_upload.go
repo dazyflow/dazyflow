@@ -30,6 +30,17 @@ func init() {
 			Integration:    "HTTP",
 			Tags:           []string{"http", "upload", "file", "sandbox"},
 			Description:    "Upload a file from the workspace sandbox to a URL, streaming it from disk. Raw mode (default) PUTs the file bytes directly — what S3/GCS/Azure presigned URLs expect; multipart mode POSTs it as a form field for APIs that want multipart/form-data. Reads scratch:// paths too. Private-network addresses are blocked by default.",
+			Summary:        "Stream a sandbox file to a remote URL as a raw PUT body (presigned-URL style) or a multipart/form-data POST.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "PUT to an S3 presigned URL",
+					Params: json.RawMessage(`{"url":"https://bucket.s3.amazonaws.com/uploads/report.xlsx?X-Amz-Signature=...","path":"workspace://reports/report.xlsx","content_type":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}`),
+				},
+				{
+					Title:  "Multipart POST to a form-data API",
+					Params: json.RawMessage(`{"url":"https://api.example.com/v1/attachments","path":"workspace://uploads/photo.jpg","multipart":true,"field_name":"file","filename":"photo.jpg","headers":{"Authorization":"Bearer ${secret:EXAMPLE_API_TOKEN}"}}`),
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{{

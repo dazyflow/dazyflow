@@ -33,6 +33,21 @@ func init() {
 			Integration:    "HTTP",
 			Tags:           []string{"http", "rest", "api", "webhook"},
 			Description:    "Make an HTTP request to any URL — GET, POST, PUT, PATCH, or DELETE. Useful when the service you want to call doesn't have a dedicated connector here yet. Returns the response body on one port and status/headers on another. Private-network addresses are blocked by default to prevent accidental internal calls.",
+			Summary:        "Issue an arbitrary HTTP request and split the response into body/meta ports, with SSRF-guard and response-size cap.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Simple authenticated GET",
+					Params: json.RawMessage(`{"url":"https://api.example.com/v1/users","method":"GET","headers":{"Authorization":"Bearer ${env:EXAMPLE_API_TOKEN}","Accept":"application/json"}}`),
+				},
+				{
+					Title:  "POST JSON payload, accept 201",
+					Params: json.RawMessage(`{"url":"https://api.example.com/v1/orders","method":"POST","headers":{"Content-Type":"application/json","Authorization":"Bearer ${env:EXAMPLE_API_TOKEN}"},"body":"{\"sku\":\"ABC-123\",\"qty\":2}","expect_status":[200,201]}`),
+				},
+				{
+					Title:  "DELETE with explicit status expectation and short timeout",
+					Params: json.RawMessage(`{"url":"https://api.example.com/v1/sessions/42","method":"DELETE","timeout_ms":5000,"expect_status":[204]}`),
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{{

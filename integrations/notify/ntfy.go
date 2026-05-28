@@ -28,6 +28,17 @@ func init() {
 			Integration:    "ntfy",
 			Tags:           []string{"ntfy", "push", "notify", "report"},
 			Description:    "Push a notification through ntfy.sh (or a self-hosted ntfy server). Set the server, the topic, and the message. Optional title, priority, tags, and a click-URL attach extras for richer notifications on the receiving device.",
+			Summary:        "Publish a push notification to an ntfy topic with optional title, priority, tags, click-URL, and bearer token.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Simple message to a public topic",
+					Params: json.RawMessage(`{"topic":"my-alerts","message":"Build #1234 succeeded."}`),
+				},
+				{
+					Title:  "High-priority alert on a self-hosted server",
+					Params: json.RawMessage(`{"server":"https://ntfy.example.com","topic":"oncall","title":"Pager","message":"Error rate above 5%","priority":"high","tags":["warning","rotating_light"],"click":"https://dashboard.example.com/alerts","token":"${secret:NTFY_TOKEN}"}`),
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

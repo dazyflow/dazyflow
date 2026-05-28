@@ -29,7 +29,19 @@ func init() {
 			Provider:       "internal",
 			Integration:    "GitHub",
 			Tags:           []string{"github", "issue", "create"},
-			Description:    "Open a new issue on a GitHub repo. The body supports Markdown and can come from the 'body' input or from params. Common pattern: a trigger detects something noteworthy and this drop opens a tracked issue for the team to handle.",
+			Description: "Open a new issue on a GitHub repo. The body supports Markdown and can come from the 'body' input or from params. Common pattern: a trigger detects something noteworthy and this drop opens a tracked issue for the team to handle.",
+			Summary:     "Open a new GitHub issue on a repo with optional labels, assignees, and milestone.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Minimal bug report",
+					Params: json.RawMessage(`{"owner":"example","repo":"widgets","title":"Deploy failed: prod-eu-west","token":"${secret:GITHUB_TOKEN}"}`),
+					Notes:  "Title-only issues are allowed; useful for short automated alerts.",
+				},
+				{
+					Title:  "Triage issue with labels and assignee",
+					Params: json.RawMessage(`{"owner":"example","repo":"widgets","title":"5xx spike on /checkout","body":"Error rate jumped to 4.1% at 14:02 UTC. Dashboard: https://grafana.example.com/d/checkout","labels":["bug","priority/high"],"assignees":["alice"],"token":"${secret:GITHUB_TOKEN}"}`),
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

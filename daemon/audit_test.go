@@ -73,7 +73,7 @@ func TestAudit_GraphSaveEmitsEvent(t *testing.T) {
 	h.gw.Audit = NewMemAuditLog()
 
 	// Editor saves a graph (audited as actor=alice, tenant=t).
-	save := h.do(t, "PUT", "/api/v1/graphs/t/ws/myflow", map[string]any{
+	save := h.do(t, "PUT", "/api/v1/me/flows/t%2Fws%2Fmyflow", map[string]any{
 		"visibility": "org",
 		"nodes":      []map[string]any{{"id": "a", "module": "noop"}},
 	})

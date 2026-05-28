@@ -24,6 +24,18 @@ func init() {
 			Provider:       "internal",
 			Tags:           []string{"text", "string", "constant", "literal"},
 			Description:    "Emit a literal string value. The 'text' param can be multi-line; downstream consumers see it as text/plain on the 'out' port.",
+			Summary:        "Emit a graph-author-supplied literal string on the 'out' port.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Short constant",
+					Params: json.RawMessage(`{"text":"hello world"}`),
+				},
+				{
+					Title:  "Inline prompt template",
+					Params: json.RawMessage(`{"text":"You are a helpful assistant.\nAnswer the user's question in one sentence."}`),
+					Notes:  "Multi-line strings work fine — useful as a system prompt feeding into a Claude node.",
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs:        []core.Port{{Port: "out", Label: "Text", MIME: []string{"text/plain"}}},

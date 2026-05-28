@@ -30,6 +30,18 @@ func init() {
 			Integration:    "HTTP",
 			Tags:           []string{"http", "download", "file", "sandbox"},
 			Description:    "Download a URL to a file in the workspace sandbox, streaming the response to disk (handles bodies too large to hold in memory). Honors per-tenant quotas as it writes and aborts cleanly if the budget or max_bytes is exceeded. Use a scratch:// path for intermediate downloads that should be reclaimed when the run ends. Private-network addresses are blocked by default.",
+			Summary:        "Stream a URL to a workspace (or scratch://) file, enforcing quota and a max_bytes ceiling and blocking private-network targets by default.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Save a public report to the workspace",
+					Params: json.RawMessage(`{"url":"https://example.com/data/export.csv","path":"workspace://imports/export.csv","mkdirs":true}`),
+				},
+				{
+					Title:  "Authenticated download to a scratch path",
+					Params: json.RawMessage(`{"url":"https://api.example.com/v1/dump","path":"scratch://dumps/today.bin","headers":{"Authorization":"Bearer ${secret:EXAMPLE_API_TOKEN}"},"timeout_ms":600000,"max_bytes":524288000}`),
+					Notes:  "scratch:// files are cleaned up at the end of the run; bump max_bytes for large dumps.",
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{{

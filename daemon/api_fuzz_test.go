@@ -169,7 +169,7 @@ func FuzzWhoamiBearer(f *testing.F) {
 	f.Add("Basic dXNlcjpwYXNz")
 	f.Add("Bearer \x00\x01\x02")
 	f.Fuzz(func(t *testing.T, authz string) {
-		req := httptest.NewRequest("GET", "/api/v1/whoami", nil)
+		req := httptest.NewRequest("GET", "/api/v1/me", nil)
 		if authz != "" {
 			req.Header.Set("Authorization", authz)
 		}
@@ -195,7 +195,7 @@ func FuzzSaveGraph(f *testing.F) {
 	f.Add([]byte(`{"nodes":[],"edges":[{"from":"ghost","to":"phantom"}]}`))
 	f.Add([]byte(`{"nodes":[{"id":"n","params":{"x":[[[[[[[1]]]]]]]}}]}`))
 	f.Fuzz(func(t *testing.T, body []byte) {
-		req := httptest.NewRequest("PUT", "/api/v1/graphs/t/ws/fuzz-graph", bytes.NewReader(body))
+		req := httptest.NewRequest("PUT", "/api/v1/me/flows/t%2Fws%2Ffuzz-graph", bytes.NewReader(body))
 		req.Header.Set("Authorization", "Bearer "+h.token)
 		req.Header.Set("Content-Type", "application/json")
 		rw := httptest.NewRecorder()
@@ -211,8 +211,9 @@ func FuzzRunGraphPath(f *testing.F) {
 	f.Add("t", "ws", "..%2F..")
 	f.Add(makeASCIIRepeat(1024), "ws", "g")
 	f.Fuzz(func(t *testing.T, tenant, workspace, id string) {
-		path := fmt.Sprintf("/api/v1/graphs/%s/%s/%s/run",
-			escapePathSeg(tenant), escapePathSeg(workspace), escapePathSeg(id))
+		// flow_id is the percent-encoded composite — encode the slashes
+		// inside as %2F so the value stays in a single mux segment.
+		path := "/api/v1/me/flows/" + escapePathSeg(tenant+"/"+workspace+"/"+id) + "/run"
 		req, err := http.NewRequest("POST", path, nil)
 		if err != nil {
 			t.Skip()
@@ -231,8 +232,8 @@ func FuzzSampleNodePath(f *testing.F) {
 	f.Add("t", "ws", "g", "\x00\x01")
 	f.Add("t", "ws", "g", "..")
 	f.Fuzz(func(t *testing.T, tenant, workspace, id, nodeID string) {
-		path := fmt.Sprintf("/api/v1/graphs/%s/%s/%s/nodes/%s/sample",
-			escapePathSeg(tenant), escapePathSeg(workspace), escapePathSeg(id), escapePathSeg(nodeID))
+		path := "/api/v1/me/flows/" + escapePathSeg(tenant+"/"+workspace+"/"+id) +
+			"/nodes/" + escapePathSeg(nodeID) + "/sample"
 		req, err := http.NewRequest("POST", path, nil)
 		if err != nil {
 			t.Skip()

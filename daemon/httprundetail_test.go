@@ -59,7 +59,7 @@ func TestHTTPGateway_ListRunNodes_ReturnsAllNodesForRun(t *testing.T) {
 		Status:     core.JobStatusSucceeded,
 	})
 
-	rw := h.do(t, "GET", "/api/v1/jobs/run-aaa/nodes", nil)
+	rw := h.do(t, "GET", "/api/v1/me/runs/run-aaa/nodes", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("code = %d body = %s", rw.Code, rw.Body.String())
 	}
@@ -88,7 +88,7 @@ func TestHTTPGateway_ListRunNodes_ReturnsAllNodesForRun(t *testing.T) {
 
 func TestHTTPGateway_ListRunNodes_UnknownRunIs404(t *testing.T) {
 	h := newGatewayHarness(t)
-	rw := h.do(t, "GET", "/api/v1/jobs/never-existed/nodes", nil)
+	rw := h.do(t, "GET", "/api/v1/me/runs/never-existed/nodes", nil)
 	if rw.Code != http.StatusNotFound {
 		t.Errorf("code = %d, want 404", rw.Code)
 	}
@@ -108,7 +108,7 @@ func TestHTTPGateway_ListRunNodes_EmptyListForRunWithNoNodes(t *testing.T) {
 		Status:       core.JobStatusSucceeded,
 		GraphPayload: []byte(`{"id":"g","tenant":"t","workspace":"ws"}`),
 	})
-	rw := h.do(t, "GET", "/api/v1/jobs/run-empty/nodes", nil)
+	rw := h.do(t, "GET", "/api/v1/me/runs/run-empty/nodes", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("code = %d body = %s", rw.Code, rw.Body.String())
 	}

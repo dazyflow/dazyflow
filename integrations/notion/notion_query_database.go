@@ -29,6 +29,18 @@ func init() {
 			Integration:    "Notion",
 			Tags:           []string{"notion", "database", "query", "filter", "list"},
 			Description:    "Query a Notion database with optional filters and sorting. Pair with a polling trigger to react to new rows — the cursor outputs let you keep track of what's been seen. Page objects come back raw; a downstream compute_rows extracts the properties you care about.",
+			Summary:        "Fetch a page of Notion database rows by filter and sort, returning the page objects plus pagination cursor.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Latest 25 Todo items",
+					Params: json.RawMessage(`{"account":"default","database_id":"11111111-2222-3333-4444-555555555555","filter":{"property":"Status","select":{"equals":"Todo"}},"sorts":[{"property":"Created","direction":"descending"}],"page_size":25}`),
+				},
+				{
+					Title:  "Continue paging from a prior cursor",
+					Params: json.RawMessage(`{"token":"${secret:NOTION_TOKEN}","database_id":"11111111-2222-3333-4444-555555555555","start_cursor":"abc123-cursor-from-previous-call","page_size":100}`),
+					Notes:  "Loop until has_more=false to drain the database.",
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

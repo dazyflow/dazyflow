@@ -26,7 +26,19 @@ func init() {
 			Provider:       "internal",
 			Integration:    "Git",
 			Tags:           []string{"git", "diff", "patch", "vcs"},
-			Description:    "Get a unified diff between two refs in a checked-out repo. Default compares the most recent commit (HEAD~1..HEAD), but you can specify any two refs. Returns the patch text plus a short summary of what changed.",
+			Description: "Get a unified diff between two refs in a checked-out repo. Default compares the most recent commit (HEAD~1..HEAD), but you can specify any two refs. Returns the patch text plus a short summary of what changed.",
+			Summary:     "Produce a unified diff (patch text) between two git refs in a checked-out workspace repo.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Last commit on HEAD",
+					Params: json.RawMessage(`{"path":"src/widgets"}`),
+					Notes:  "Defaults to HEAD~1..HEAD — the diff introduced by the most recent commit.",
+				},
+				{
+					Title:  "Compare a feature branch against main",
+					Params: json.RawMessage(`{"path":"src/widgets","from":"origin/main","to":"feature/new-api"}`),
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

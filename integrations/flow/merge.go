@@ -21,6 +21,14 @@ func init() {
 			Provider:       "internal",
 			Tags:           []string{"fan_in", "aggregate", "join"},
 			Description:    "Wait for N upstream inputs to arrive and emit them as a single list on the out port. Useful as a synchronization point in parallel branches.",
+			Summary:        "Synchronize parallel branches by collecting every upstream input into a single list emitted on out.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "No configuration — merge takes no params",
+					Params: json.RawMessage(`{}`),
+					Notes:  "Wire two or more upstream output ports into the variadic items input.",
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{{

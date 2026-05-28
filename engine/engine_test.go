@@ -15,9 +15,11 @@ import (
 // noopManifest describes a module with one optional input and one output,
 // used by most tests to assemble arbitrary graph shapes.
 var noopManifest = core.Manifest{
-	ID:      "noop",
-	Inputs:  []core.Port{{Port: "in"}},
-	Outputs: []core.Port{{Port: "out"}},
+	ID:       "noop",
+	Summary:  "Test fixture no-op.",
+	Examples: []core.ParamsExample{{Title: "default"}},
+	Inputs:   []core.Port{{Port: "in"}},
+	Outputs:  []core.Port{{Port: "out"}},
 }
 
 func newEngineWith(t *testing.T, nodes ...NativeDrop) *Engine {
@@ -100,9 +102,11 @@ func TestEngine_DiamondParallelism(t *testing.T) {
 	}
 
 	merge := core.Manifest{
-		ID:      "merge",
-		Inputs:  []core.Port{{Port: "in", Variadic: true}},
-		Outputs: []core.Port{{Port: "out"}},
+		ID:       "merge",
+		Summary:  "Test fixture merge.",
+		Examples: []core.ParamsExample{{Title: "default"}},
+		Inputs:   []core.Port{{Port: "in", Variadic: true}},
+		Outputs:  []core.Port{{Port: "out"}},
 	}
 
 	e := newEngineWith(t,

@@ -20,6 +20,18 @@ func init() {
 			Provider:       "internal",
 			Tags:           []string{"human_in_the_loop", "approval", "pause", "wait"},
 			Description:    "Pause the graph until an external HTTP approval arrives. Emits the approval URL on `pending_url` so downstream nodes (email, Slack) can notify a human. On resume, emits the decision on `decision`, plus a control signal on either `approved` or `rejected` — wire downstream `then`/`else` branches accordingly.",
+			Summary:        "Park the flow until a human hits the approve or reject link, then route downstream by decision.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Ask a manager to approve a refund",
+					Params: json.RawMessage(`{"prompt":"Refund $230 to customer #4821 — order shipped damaged. Approve?"}`),
+					Notes:  "Wire pending_url into an email or Slack drop so the approver gets the link.",
+				},
+				{
+					Title:  "Gate a production deploy",
+					Params: json.RawMessage(`{"prompt":"Promote build 1.42.0 to production?"}`),
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{{

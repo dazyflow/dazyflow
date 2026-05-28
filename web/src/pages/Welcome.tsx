@@ -42,7 +42,7 @@ const HAS_FLOWS_KEY = "hazyflow.hasFlows";
 
 export function Welcome() {
   const { t } = useTranslation();
-  const { me, tenants, hasPerm } = useAuth();
+  const { me, tenants } = useAuth();
   const [connectingMcp, setConnectingMcp] = useState(false);
   // Resolved once on mount — localStorage only changes when the editor
   // mounts, which can't happen while this page is showing.
@@ -122,7 +122,7 @@ export function Welcome() {
             </Link>
           </div>
         </div>
-        {hasPerm("tenant:admin") && (
+        {me && (
           <div className="welcome-mcp">
             <div className="welcome-mcp-body">
               <div className="welcome-mcp-title">

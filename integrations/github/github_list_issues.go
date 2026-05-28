@@ -29,7 +29,19 @@ func init() {
 			Provider:       "internal",
 			Integration:    "GitHub",
 			Tags:           []string{"github", "issue", "list", "poll", "query"},
-			Description:    "List issues on a GitHub repo with optional filters (state, labels, assignee, since-date). Pair with a polling trigger to react to new issues as they appear. Heads-up: pull requests also come back from this endpoint — filter them out downstream if you only want issues.",
+			Description: "List issues on a GitHub repo with optional filters (state, labels, assignee, since-date). Pair with a polling trigger to react to new issues as they appear. Heads-up: pull requests also come back from this endpoint — filter them out downstream if you only want issues.",
+			Summary:     "Query a repo's issues with filters for state, labels, assignee, and an updated-since cutoff.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Open bugs assigned to a teammate",
+					Params: json.RawMessage(`{"owner":"example","repo":"widgets","state":"open","labels":["bug"],"assignee":"alice","token":"${secret:GITHUB_TOKEN}"}`),
+				},
+				{
+					Title:  "Poll for issues updated since last run",
+					Params: json.RawMessage(`{"owner":"example","repo":"widgets","since":"2026-05-28T00:00:00Z","per_page":100,"token":"${secret:GITHUB_TOKEN}"}`),
+					Notes:  "Feed 'since' from a poll_trigger's last-seen cursor to react only to fresh updates.",
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

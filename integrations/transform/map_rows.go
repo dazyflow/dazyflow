@@ -21,6 +21,22 @@ func init() {
 			Provider:       "internal",
 			Tags:           []string{"transform", "map", "rename", "filter", "select", "etl"},
 			Description:    "Reshape a row stream between two drops: select/drop columns, rename, fill missing values, filter rows on equality / inequality / membership. All operations refer to INPUT column names; renames apply last so the output uses the renamed names. Pure config, no expression language — covers the bulk of 'my Excel columns don't match my DB schema' cases.",
+			Summary:        "Reshape rows: select or drop columns, rename, default missing cells, and filter by equality or membership.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Select and rename columns",
+					Params: json.RawMessage(`{"select":["id","first_name","last_name","email"],"rename":{"first_name":"given_name","last_name":"family_name"}}`),
+				},
+				{
+					Title:  "Keep only active SE users, default missing country",
+					Params: json.RawMessage(`{"filter_eq":{"status":"active"},"filter_in":{"country":["SE","NO","DK"]},"default":{"country":"SE"}}`),
+					Notes:  "Comparisons are string-based, so an int 30 and the string \"30\" match.",
+				},
+				{
+					Title:  "Drop sensitive columns before fanout",
+					Params: json.RawMessage(`{"drop":["ssn","internal_notes"]}`),
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

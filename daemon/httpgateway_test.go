@@ -210,11 +210,11 @@ func TestHTTPGateway_SaveAndLoadGraph(t *testing.T) {
 			Position: &core.Position{X: 100, Y: 50},
 		}},
 	}
-	rw := h.do(t, "PUT", "/api/v1/graphs/t/ws/my-graph", g)
+	rw := h.do(t, "PUT", "/api/v1/me/flows/t%2Fws%2Fmy-graph", g)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("save: code = %d body = %s", rw.Code, rw.Body.String())
 	}
-	rw = h.do(t, "GET", "/api/v1/graphs/t/ws/my-graph", nil)
+	rw = h.do(t, "GET", "/api/v1/me/flows/t%2Fws%2Fmy-graph", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("load: code = %d body = %s", rw.Code, rw.Body.String())
 	}
@@ -233,17 +233,21 @@ func TestHTTPGateway_SaveAndLoadGraph(t *testing.T) {
 	}
 }
 
-func TestHTTPGateway_ListGraphsRequiresParams(t *testing.T) {
+func TestHTTPGateway_ListFlows_UsesPrincipalScope(t *testing.T) {
+	// The /me/flows route falls back to the caller's tenant +
+	// workspace from the session when ?tenant=&workspace= aren't
+	// supplied. Distinct from the legacy /api/v1/graphs which
+	// 400'd on missing params — the /me/ prefix means "use my scope".
 	h := newGatewayHarness(t)
-	rw := h.do(t, "GET", "/api/v1/graphs", nil)
-	if rw.Code != http.StatusBadRequest {
-		t.Errorf("code = %d, want 400", rw.Code)
+	rw := h.do(t, "GET", "/api/v1/me/flows", nil)
+	if rw.Code != http.StatusOK {
+		t.Errorf("code = %d, want 200 (principal scope should apply)", rw.Code)
 	}
 }
 
 func TestHTTPGateway_JobSnapshotNotFound(t *testing.T) {
 	h := newGatewayHarness(t)
-	rw := h.do(t, "GET", "/api/v1/jobs/does-not-exist", nil)
+	rw := h.do(t, "GET", "/api/v1/me/runs/does-not-exist", nil)
 	if rw.Code != http.StatusNotFound {
 		t.Errorf("code = %d, want 404", rw.Code)
 	}
@@ -251,7 +255,7 @@ func TestHTTPGateway_JobSnapshotNotFound(t *testing.T) {
 
 func TestHTTPGateway_NodeSnapshotMissingParentGraphIs404(t *testing.T) {
 	h := newGatewayHarness(t)
-	rw := h.do(t, "GET", "/api/v1/jobs/no-such-run/nodes/some-node", nil)
+	rw := h.do(t, "GET", "/api/v1/me/runs/no-such-run/nodes/some-node", nil)
 	if rw.Code != http.StatusNotFound {
 		t.Errorf("code = %d, want 404", rw.Code)
 	}
@@ -290,7 +294,7 @@ func TestHTTPGateway_NodeSnapshotReturnsRecord(t *testing.T) {
 	}
 	_ = h.store.Enqueue(t.Context(), nodeRec)
 
-	rw := h.do(t, "GET", "/api/v1/jobs/run-xyz/nodes/step1", nil)
+	rw := h.do(t, "GET", "/api/v1/me/runs/run-xyz/nodes/step1", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("code = %d body = %s", rw.Code, rw.Body.String())
 	}
@@ -331,7 +335,7 @@ func TestHTTPGateway_ListRunsReturnsNewestFirst(t *testing.T) {
 		GraphID: "g1", Tenant: "t", Workspace: "ws",
 	})
 
-	rw := h.do(t, "GET", "/api/v1/graphs/t/ws/g1/runs", nil)
+	rw := h.do(t, "GET", "/api/v1/me/flows/t%2Fws%2Fg1/runs", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("code = %d body = %s", rw.Code, rw.Body.String())
 	}
@@ -353,7 +357,7 @@ func TestHTTPGateway_ListRunsReturnsNewestFirst(t *testing.T) {
 
 func TestHTTPGateway_ListRunsUnknownGraphIs404(t *testing.T) {
 	h := newGatewayHarness(t)
-	rw := h.do(t, "GET", "/api/v1/graphs/t/ws/no-such/runs", nil)
+	rw := h.do(t, "GET", "/api/v1/me/flows/t%2Fws%2Fno-such/runs", nil)
 	if rw.Code != http.StatusNotFound {
 		t.Errorf("code = %d, want 404", rw.Code)
 	}
@@ -379,7 +383,7 @@ func TestHTTPGateway_ListRunsStatusFilter(t *testing.T) {
 			Tenant: "t", Workspace: "ws", Status: e.status,
 		})
 	}
-	rw := h.do(t, "GET", "/api/v1/graphs/t/ws/g1/runs?status=failed", nil)
+	rw := h.do(t, "GET", "/api/v1/me/flows/t%2Fws%2Fg1/runs?status=failed", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("code = %d", rw.Code)
 	}
@@ -406,7 +410,7 @@ func TestHTTPGateway_ListRunsOffsetLimit(t *testing.T) {
 			Tenant: "t", Workspace: "ws", Status: core.JobStatusSucceeded,
 		})
 	}
-	rw := h.do(t, "GET", "/api/v1/graphs/t/ws/g1/runs?limit=2&offset=2", nil)
+	rw := h.do(t, "GET", "/api/v1/me/flows/t%2Fws%2Fg1/runs?limit=2&offset=2", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("code = %d", rw.Code)
 	}
@@ -444,7 +448,7 @@ func TestHTTPGateway_ListAllRunsAcrossGraphs(t *testing.T) {
 		ID: NodeJobID("r1", "n"), Kind: core.JobKindNode,
 		GraphID: "gA", Tenant: "t", Workspace: "ws",
 	})
-	rw := h.do(t, "GET", "/api/v1/runs", nil)
+	rw := h.do(t, "GET", "/api/v1/me/runs", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("code = %d body = %s", rw.Code, rw.Body.String())
 	}
@@ -633,17 +637,17 @@ func TestHTTPGateway_ListAllRunsAcceptsWorkspaceNarrow(t *testing.T) {
 		return ids
 	}
 	// Unfiltered: both visible.
-	all := doAdmin("/api/v1/runs")
+	all := doAdmin("/api/v1/me/runs")
 	if len(all) != 2 {
 		t.Errorf("unfiltered len = %d, want 2 (saw %v)", len(all), all)
 	}
 	// Narrow to ws.
-	onlyWS := doAdmin("/api/v1/runs?workspace=ws")
+	onlyWS := doAdmin("/api/v1/me/runs?workspace=ws")
 	if len(onlyWS) != 1 || onlyWS[0] != "r-ws" {
 		t.Errorf("workspace=ws filtered: %v, want [r-ws]", onlyWS)
 	}
 	// Narrow to ws2.
-	onlyWS2 := doAdmin("/api/v1/runs?workspace=ws2")
+	onlyWS2 := doAdmin("/api/v1/me/runs?workspace=ws2")
 	if len(onlyWS2) != 1 || onlyWS2[0] != "r-ws2" {
 		t.Errorf("workspace=ws2 filtered: %v, want [r-ws2]", onlyWS2)
 	}
@@ -663,7 +667,7 @@ func TestHTTPGateway_ListAllRuns_ScopedPrincipalIgnoresWorkspaceQuery(t *testing
 	// h.do uses the bootstrap editor key bound to workspace "ws". Even
 	// if we pass ?workspace=ws2, the principal's binding wins and
 	// they only see their own workspace's runs.
-	rw := h.do(t, "GET", "/api/v1/runs?workspace=ws2", nil)
+	rw := h.do(t, "GET", "/api/v1/me/runs?workspace=ws2", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("code = %d", rw.Code)
 	}
@@ -748,7 +752,7 @@ func TestHTTPGateway_ListAllRunsScopedToTenant(t *testing.T) {
 		ID: "theirs", Kind: core.JobKindGraph, GraphID: "gA",
 		Tenant: "other", Workspace: "ws", Status: core.JobStatusSucceeded,
 	})
-	rw := h.do(t, "GET", "/api/v1/runs", nil)
+	rw := h.do(t, "GET", "/api/v1/me/runs", nil)
 	var out struct {
 		Runs []struct{ ID string } `json:"runs"`
 	}
@@ -769,7 +773,7 @@ func TestHTTPGateway_NodeSnapshotUnknownNodeIs404(t *testing.T) {
 		Status:       core.JobStatusRunning,
 		GraphPayload: []byte(`{"id":"g"}`),
 	})
-	rw := h.do(t, "GET", "/api/v1/jobs/run-xyz/nodes/ghost", nil)
+	rw := h.do(t, "GET", "/api/v1/me/runs/run-xyz/nodes/ghost", nil)
 	if rw.Code != http.StatusNotFound {
 		t.Errorf("code = %d, want 404", rw.Code)
 	}
@@ -1252,7 +1256,7 @@ func TestHTTPGateway_SampleNode_Accepts(t *testing.T) {
 	if _, err := h.ws.Save(g, "test"); err != nil {
 		t.Fatalf("save graph: %v", err)
 	}
-	rw := h.do(t, "POST", "/api/v1/graphs/t/ws/chain/nodes/b/sample", nil)
+	rw := h.do(t, "POST", "/api/v1/me/flows/t%2Fws%2Fchain/nodes/b/sample", nil)
 	if rw.Code != http.StatusAccepted {
 		t.Fatalf("code = %d body = %s", rw.Code, rw.Body.String())
 	}
@@ -1300,7 +1304,7 @@ func TestHTTPGateway_SampleNode_UnknownNodeIs404(t *testing.T) {
 	}, "test"); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	rw := h.do(t, "POST", "/api/v1/graphs/t/ws/g/nodes/ghost/sample", nil)
+	rw := h.do(t, "POST", "/api/v1/me/flows/t%2Fws%2Fg/nodes/ghost/sample", nil)
 	if rw.Code != http.StatusNotFound {
 		t.Errorf("code = %d, want 404; body=%s", rw.Code, rw.Body.String())
 	}
@@ -1309,7 +1313,7 @@ func TestHTTPGateway_SampleNode_UnknownNodeIs404(t *testing.T) {
 func TestHTTPGateway_SampleNode_UnknownGraphIs404(t *testing.T) {
 	h := newGatewayHarness(t)
 	// No save — graph doesn't exist.
-	rw := h.do(t, "POST", "/api/v1/graphs/t/ws/missing/nodes/x/sample", nil)
+	rw := h.do(t, "POST", "/api/v1/me/flows/t%2Fws%2Fmissing/nodes/x/sample", nil)
 	if rw.Code != http.StatusNotFound {
 		t.Errorf("code = %d, want 404", rw.Code)
 	}
@@ -1317,7 +1321,7 @@ func TestHTTPGateway_SampleNode_UnknownGraphIs404(t *testing.T) {
 
 func TestHTTPGateway_SampleNode_RequiresAuth(t *testing.T) {
 	h := newGatewayHarness(t)
-	req := httptest.NewRequest("POST", "/api/v1/graphs/t/ws/g/nodes/x/sample", nil)
+	req := httptest.NewRequest("POST", "/api/v1/me/flows/t%2Fws%2Fg/nodes/x/sample", nil)
 	// no Authorization header
 	rw := httptest.NewRecorder()
 	ServeForTest(h.gw, rw, req)
@@ -1425,7 +1429,7 @@ func TestHTTPGateway_SaveGraph_IncludesLintInResponse(t *testing.T) {
 			{From: "call", To: "save", FromPort: "body", ToPort: "data"},
 		},
 	}
-	rw := h.do(t, "PUT", "/api/v1/graphs/t/ws/leaky", g)
+	rw := h.do(t, "PUT", "/api/v1/me/flows/t%2Fws%2Fleaky", g)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("code = %d body = %s", rw.Code, rw.Body.String())
 	}
@@ -1460,7 +1464,7 @@ func TestHTTPGateway_CSRF_BearerAuthUnaffectedByOrigin(t *testing.T) {
 	h := newGatewayHarness(t)
 	// Bearer-auth POST with arbitrary or no Origin — should pass
 	// (the new middleware only kicks in for cookie-auth).
-	rw := h.do(t, "PUT", "/api/v1/graphs/t/ws/g-bearer", core.Graph{
+	rw := h.do(t, "PUT", "/api/v1/me/flows/t%2Fws%2Fg-bearer", core.Graph{
 		ID: "g-bearer", Tenant: "t", Workspace: "ws",
 	})
 	if rw.Code != http.StatusOK {
@@ -1473,7 +1477,7 @@ func TestHTTPGateway_CSRF_CookieAuthRequiresOrigin(t *testing.T) {
 	h.gw.AllowedOrigins = []string{"https://app.example.com"}
 	// Build a request that LOOKS like a CSRF attack: a session cookie
 	// is attached but no Origin header is set.
-	req := httptest.NewRequest("PUT", "/api/v1/graphs/t/ws/g-csrf", bytes.NewBufferString(`{}`))
+	req := httptest.NewRequest("PUT", "/api/v1/me/flows/t%2Fws%2Fg-csrf", bytes.NewBufferString(`{}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "hazyflow_session", Value: "any-session"})
 	rw := httptest.NewRecorder()
@@ -1488,7 +1492,7 @@ func TestHTTPGateway_CSRF_AllowedOriginPasses(t *testing.T) {
 	h.gw.AllowedOrigins = []string{"https://app.example.com"}
 	g := core.Graph{ID: "g-allowed", Tenant: "t", Workspace: "ws"}
 	body, _ := json.Marshal(g)
-	req := httptest.NewRequest("PUT", "/api/v1/graphs/t/ws/g-allowed", bytes.NewReader(body))
+	req := httptest.NewRequest("PUT", "/api/v1/me/flows/t%2Fws%2Fg-allowed", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+h.token) // still need real auth
 	req.Header.Set("Origin", "https://app.example.com")
@@ -1503,7 +1507,7 @@ func TestHTTPGateway_CSRF_AllowedOriginPasses(t *testing.T) {
 func TestHTTPGateway_CSRF_DisallowedOriginRejected(t *testing.T) {
 	h := newGatewayHarness(t)
 	h.gw.AllowedOrigins = []string{"https://app.example.com"}
-	req := httptest.NewRequest("PUT", "/api/v1/graphs/t/ws/g-evil", bytes.NewBufferString(`{}`))
+	req := httptest.NewRequest("PUT", "/api/v1/me/flows/t%2Fws%2Fg-evil", bytes.NewBufferString(`{}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Origin", "https://evil.example.com")
 	req.AddCookie(&http.Cookie{Name: "hazyflow_session", Value: "any-session"})
@@ -1521,7 +1525,7 @@ func TestHTTPGateway_CSRF_GetMethodNotAffected(t *testing.T) {
 	// browser enforces), so this is safe.
 	h := newGatewayHarness(t)
 	h.gw.AllowedOrigins = []string{"https://app.example.com"}
-	req := httptest.NewRequest("GET", "/api/v1/whoami", nil)
+	req := httptest.NewRequest("GET", "/api/v1/me", nil)
 	req.Header.Set("Authorization", "Bearer "+h.token)
 	req.AddCookie(&http.Cookie{Name: "hazyflow_session", Value: "any"})
 	// No Origin header — should still pass since it's a GET.
@@ -1538,7 +1542,7 @@ func TestHTTPGateway_SaveGraph_NoLintReturnsEmpty(t *testing.T) {
 		ID: "clean", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{{ID: "n", Module: "noop"}},
 	}
-	rw := h.do(t, "PUT", "/api/v1/graphs/t/ws/clean", g)
+	rw := h.do(t, "PUT", "/api/v1/me/flows/t%2Fws%2Fclean", g)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("code = %d", rw.Code)
 	}

@@ -32,7 +32,19 @@ func init() {
 			Provider:       "internal",
 			Integration:    "Git",
 			Tags:           []string{"git", "clone", "checkout", "vcs"},
-			Description:    "Clone a git repository into your workspace, optionally checking out a specific branch, tag, or commit. The cloned files become available to downstream nodes — useful for inspecting source code, pulling templates, or staging files for processing.",
+			Description: "Clone a git repository into your workspace, optionally checking out a specific branch, tag, or commit. The cloned files become available to downstream nodes — useful for inspecting source code, pulling templates, or staging files for processing.",
+			Summary:     "Clone a remote git repository into the workspace and optionally check out a specific branch, tag, or commit SHA.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Full clone of a public repo",
+					Params: json.RawMessage(`{"url":"https://github.com/example/widgets.git","path":"src/widgets"}`),
+				},
+				{
+					Title:  "Shallow checkout of a release tag",
+					Params: json.RawMessage(`{"url":"https://github.com/example/widgets.git","path":"src/widgets","ref":"v1.4.2","depth":1}`),
+					Notes:  "depth:1 keeps the clone small when you only need the tip of a tag or branch.",
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

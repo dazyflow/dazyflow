@@ -26,6 +26,22 @@ func init() {
 			Provider:       "internal",
 			Tags:           []string{"transform", "compute", "expression", "cel", "derived", "filter", "etl"},
 			Description:    "Add derived columns and filter rows using CEL (Google's Common Expression Language) expressions. Each expression sees the row as the variable `row` (a map of string→dyn): `row.first_name + ' ' + row.last_name`, `row.age >= 18`, `row.score > 90 ? 'gold' : 'bronze'`. Compute adds or overwrites columns; filter drops rows whose expression evaluates to false. The expressive sibling of map_rows — reach for it only when static config can't say what you mean.",
+			Summary:        "Add derived columns and drop rows using CEL expressions evaluated against each row.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Add a full_name column",
+					Params: json.RawMessage(`{"compute":{"full_name":"row.first_name + ' ' + row.last_name"}}`),
+				},
+				{
+					Title:  "Tier rows and filter adults only",
+					Params: json.RawMessage(`{"filter":"row.age >= 18","compute":{"tier":"row.score > 90 ? 'gold' : (row.score > 50 ? 'silver' : 'bronze')"}}`),
+					Notes:  "filter runs before compute, so the filter expression sees only input columns.",
+				},
+				{
+					Title:  "Filter-only (no derived columns)",
+					Params: json.RawMessage(`{"filter":"row.status == 'active' && row.country == 'SE'"}`),
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

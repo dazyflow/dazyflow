@@ -28,7 +28,19 @@ func init() {
 			Provider:       "internal",
 			Integration:    "Gmail",
 			Tags:           []string{"gmail", "email", "fetch", "google"},
-			Description:    "Fetch one Gmail message by ID. Outputs the common headers (from, to, subject, date), a short snippet, and the plain-text body when one's present. Typically used after the search drop with a for_each to expand the IDs into full messages.",
+			Description: "Fetch one Gmail message by ID. Outputs the common headers (from, to, subject, date), a short snippet, and the plain-text body when one's present. Typically used after the search drop with a for_each to expand the IDs into full messages.",
+			Summary:     "Fetch a single Gmail message by ID and return its headers, snippet, and decoded body text.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Full message body for an ID from search",
+					Params: json.RawMessage(`{"id":"18f9d3a2c0e1b4a5","token":"${secret:GMAIL_OAUTH}"}`),
+					Notes:  "Pair with gmail_search_messages + for_each: the search returns IDs, this expands each to a full message.",
+				},
+				{
+					Title:  "Headers-only fetch (faster)",
+					Params: json.RawMessage(`{"id":"18f9d3a2c0e1b4a5","format":"metadata","token":"${secret:GMAIL_OAUTH}"}`),
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

@@ -21,7 +21,15 @@ func init() {
 			Provider:       "internal",
 			Integration:    "GitHub",
 			Tags:           []string{"github", "trigger", "pull-request", "pr", "webhook", "events"},
-			Description:    "Fires when a pull request is opened. Reopens and pushed-updates don't fire this trigger — it's specifically the 'new PR' moment. Outputs the PR number, title, body, author, source/target branches, and the web URL.",
+			Description: "Fires when a pull request is opened. Reopens and pushed-updates don't fire this trigger — it's specifically the 'new PR' moment. Outputs the PR number, title, body, author, source/target branches, and the web URL.",
+			Summary:     "Trigger that fires once when a pull request is opened on a connected GitHub repo.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Default — fire on any new PR in the connected repo",
+					Params: json.RawMessage(`{}`),
+					Notes:  "This trigger is webhook-driven; the daemon's GitHub events handler seeds the node when a pull_request:opened event arrives.",
+				},
+			},
 			ExecutionModel: core.ExecutionTrigger,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

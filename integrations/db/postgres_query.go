@@ -24,6 +24,18 @@ func init() {
 			Integration:    "Postgres",
 			Tags:           []string{"postgres", "postgresql", "sql", "database", "query", "select"},
 			Description:    "Run a SELECT against your Postgres database and get rows back. Use $1, $2 placeholders in the SQL and pass values through the params array so user-supplied data is safely escaped. Set a row limit to keep large result sets bounded.",
+			Summary:        "Run a parameterized SELECT against Postgres and stream rows back as a result set with typed values.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Recent orders for one customer",
+					Params: json.RawMessage(`{"dsn":"${secret:PG_DSN}","sql":"SELECT id, total FROM orders WHERE customer_id = $1 ORDER BY id DESC LIMIT 50","params":[42]}`),
+				},
+				{
+					Title:  "Count by status",
+					Params: json.RawMessage(`{"dsn":"${secret:PG_DSN}","sql":"SELECT status, count(*) FROM orders GROUP BY status"}`),
+					Notes:  "Empty params is fine when the SQL has no $N placeholders.",
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

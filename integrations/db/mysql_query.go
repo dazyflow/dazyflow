@@ -24,6 +24,18 @@ func init() {
 			Integration:    "MySQL",
 			Tags:           []string{"mysql", "mariadb", "sql", "database", "query", "select"},
 			Description:    "Run a SELECT against your MySQL or MariaDB database and get rows back. Use ? placeholders in the SQL and pass values through the params array so user-supplied data is safely escaped. Set a row limit to keep large result sets bounded.",
+			Summary:        "Run a parameterized SELECT against MySQL/MariaDB and emit rows plus column names as a result set.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Recent orders for one customer",
+					Params: json.RawMessage(`{"dsn":"${secret:MYSQL_DSN}","sql":"SELECT id, total FROM orders WHERE customer_id = ? ORDER BY id DESC LIMIT 50","params":[42]}`),
+				},
+				{
+					Title:  "Aggregate with a row cap",
+					Params: json.RawMessage(`{"dsn":"${secret:MYSQL_DSN}","sql":"SELECT status, count(*) AS n FROM orders GROUP BY status","limit":100}`),
+					Notes:  "Empty params is fine when the SQL has no ? placeholders.",
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

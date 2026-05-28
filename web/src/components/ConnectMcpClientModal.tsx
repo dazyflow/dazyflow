@@ -69,7 +69,7 @@ const CLIENTS: ClientDef[] = [
 
 export function ConnectMcpClientModal({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation();
-  const { token, me, activeTenant, activeWorkspace } = useAuth();
+  const { token, me, activeWorkspace } = useAuth();
   const [stage, setStage] = useState<Stage>("confirm");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,10 +87,11 @@ export function ConnectMcpClientModal({ onClose }: { onClose: () => void }) {
     setSubmitting(true);
     setError(null);
     try {
-      const k = await api.issueAPIKey(token, {
-        subject,
-        tenant: activeTenant || undefined,
-        workspace: workspace || undefined,
+      // Self-issue path. Server takes subject/tenant/workspace from
+      // the session and caps permissions to a subset of the caller's
+      // own — so the Connect button works for any signed-in member,
+      // not just tenant admins.
+      const k = await api.issueMyAPIKey(token, {
         roles: [
           {
             name: CLAUDE_ROLE.name,

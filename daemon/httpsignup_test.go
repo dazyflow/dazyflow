@@ -86,7 +86,7 @@ func TestSignup_HappyPath(t *testing.T) {
 		t.Errorf("workspace = %q, want main", user.Workspace)
 	}
 	// Should be able to immediately use the returned token.
-	whoamiReq := httptest.NewRequest("GET", "/api/v1/whoami", nil)
+	whoamiReq := httptest.NewRequest("GET", "/api/v1/me", nil)
 	whoamiReq.Header.Set("Authorization", "Bearer "+resp.Token)
 	whoamiRW := httptest.NewRecorder()
 	ServeForTest(h.gw, whoamiRW, whoamiReq)

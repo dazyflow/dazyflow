@@ -25,6 +25,18 @@ func init() {
 			Provider:       "internal",
 			Tags:           []string{"iterate", "loop", "fan_out", "map"},
 			Description:    "Run a configured step module once per item in an input list. Items execute in parallel up to params.concurrency. Outputs `results` (one Result per item, in order) and `errors` (a map of failing indices). Set fail_fast=true to abort on the first failure; otherwise the iteration continues and per-item errors surface on the errors port.",
+			Summary:        "Fan out a list and run the same step module on every item, optionally in parallel, collecting results in order.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "POST each row to a webhook, 5 at a time",
+					Params: json.RawMessage(`{"step_module":"http","step_params":{"method":"POST","url":"https://api.example.com/orders","body":"${item:}"},"concurrency":5}`),
+					Notes:  "${item:} splices the whole item as JSON into the body. Use ${item:field.subfield} for a nested value.",
+				},
+				{
+					Title:  "Send a templated email per recipient, stop on first failure",
+					Params: json.RawMessage(`{"step_module":"email_send","step_params":{"to":"${item:email}","subject":"Hi ${item:name}","body":"Welcome aboard."},"fail_fast":true}`),
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{{

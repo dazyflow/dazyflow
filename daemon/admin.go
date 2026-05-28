@@ -122,6 +122,102 @@ func (s *Service) IssueAPIKey(ctx context.Context, p core.Principal, params Issu
 	}, nil
 }
 
+// SelfIssueAPIKeyParams is the body for POST /api/v1/me/api-keys.
+// Unlike IssueAPIKeyParams, it doesn't carry subject / tenant /
+// workspace — those are taken verbatim from the caller's principal.
+// Roles defaults to a claude-mcp role suitable for the Connect MCP
+// flow if omitted; specifying explicit roles is allowed but every
+// permission must be a subset of the caller's own permissions.
+type SelfIssueAPIKeyParams struct {
+	ID        string      `json:"id"`
+	Roles     []core.Role `json:"roles,omitempty"`
+	ExpiresAt *time.Time  `json:"expires_at,omitempty"`
+}
+
+// defaultSelfIssueRole is what gets attached when the caller doesn't
+// specify roles — the narrow role the Connect MCP modal wants: enough
+// to author and run flows in the caller's workspace, nothing else.
+var defaultSelfIssueRole = core.Role{
+	Name: "claude-mcp",
+	Permissions: []core.Permission{
+		core.PermGraphRun,
+		core.PermGraphEdit,
+	},
+}
+
+// IssueOwnAPIKey mints a key scoped to the caller. No admin permission
+// is required — a key holder can always derive a sub-scope of their
+// own permissions. The key's subject/tenant/workspace match the
+// principal's verbatim; requested role permissions are capped by the
+// caller's permissions (the engine will refuse a key it doesn't have
+// the right to mint regardless, but failing here gives a clearer error).
+//
+// Used by the Connect MCP modal — lets any signed-in user issue a key
+// for Claude without needing tenant:admin on the AdminAPIKeys page.
+func (s *Service) IssueOwnAPIKey(ctx context.Context, p core.Principal, params SelfIssueAPIKeyParams) (IssuedAPIKey, error) {
+	if s.AdminKeys == nil {
+		return IssuedAPIKey{}, errors.New("api key admin not configured")
+	}
+	if p.Subject == "" {
+		return IssuedAPIKey{}, errors.New("principal has no subject")
+	}
+	if p.Tenant == "" {
+		return IssuedAPIKey{}, errors.New("principal has no tenant")
+	}
+
+	roles := params.Roles
+	if len(roles) == 0 {
+		// Copy the default so callers can't mutate the package var.
+		copyPerms := make([]core.Permission, len(defaultSelfIssueRole.Permissions))
+		copy(copyPerms, defaultSelfIssueRole.Permissions)
+		roles = []core.Role{{Name: defaultSelfIssueRole.Name, Permissions: copyPerms}}
+	}
+
+	// Cap requested permissions to what the caller actually holds. The
+	// authenticator would refuse the key at use time, but failing here
+	// gives a clearer error message ("you can't grant secret:write to
+	// yourself") and avoids minting a permanently-broken key.
+	callerPerms := principalPermissions(p)
+	for _, r := range roles {
+		for _, perm := range r.Permissions {
+			if _, ok := callerPerms[perm]; !ok {
+				return IssuedAPIKey{}, fmt.Errorf("requested permission %q exceeds caller's own permissions", perm)
+			}
+		}
+	}
+
+	id := params.ID
+	if id == "" {
+		generated, err := newID()
+		if err != nil {
+			return IssuedAPIKey{}, fmt.Errorf("generate key id: %w", err)
+		}
+		id = "k" + generated[:12]
+	}
+
+	key, secret, err := auth.IssueAPIKey(s.AdminKeys, ctx, id, p.Tenant, p.Workspace, p.Subject, roles, params.ExpiresAt)
+	if err != nil {
+		return IssuedAPIKey{}, err
+	}
+	return IssuedAPIKey{
+		APIKeySummary: redactKey(key, time.Now()),
+		Secret:        secret,
+	}, nil
+}
+
+// principalPermissions flattens the principal's roles into a perm set
+// for membership checks. Returned as a map so callers can do O(1)
+// lookups without re-walking the role slice per permission.
+func principalPermissions(p core.Principal) map[core.Permission]struct{} {
+	out := map[core.Permission]struct{}{}
+	for _, role := range p.Roles {
+		for _, perm := range role.Permissions {
+			out[perm] = struct{}{}
+		}
+	}
+	return out
+}
+
 // resolveAdminTenant centralizes the "did the caller specify a tenant
 // they're allowed to act on?" check used by ListAPIKeys, ListUsers,
 // and IssueAPIKey. Platform admins can specify any tenant; everyone

@@ -33,6 +33,18 @@ func init() {
 			Integration:    "SQLite",
 			Tags:           []string{"sqlite", "sql", "database", "insert", "etl"},
 			Description:    "Insert rows into a SQLite table in your workspace. The table is auto-created from the row shape by default — flip create_table off if you've already set up the schema with indexes or constraints you don't want overwritten.",
+			Summary:        "Batch-insert rows into a workspace-sandboxed SQLite file inside one transaction; auto-creates the table from headers.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Save Excel rows to a local database",
+					Params: json.RawMessage(`{"path":"data/signups.db","table":"signups"}`),
+					Notes:  "The path is workspace-relative; the file (and any parent dirs) are created on first insert.",
+				},
+				{
+					Title:  "Append into a pre-existing schema",
+					Params: json.RawMessage(`{"path":"data/app.db","table":"orders","create_table":false,"column_types":{"id":"INTEGER","created_at":"DATETIME"}}`),
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

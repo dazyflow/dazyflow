@@ -29,6 +29,23 @@ func init() {
 			Integration:    "Google Sheets",
 			Tags:           []string{"sheets", "google", "append", "log", "etl"},
 			Description:    "Append rows to a Google Sheet. Useful for logging events into a spreadsheet teammates can inspect, or for keeping a Sheet in sync with another source. By default Sheets parses '30' as a number and '=SUM(A:A)' as a formula — switch to RAW mode if you want everything stored as literal strings.",
+			Summary:        "Append rows to a Google Sheet tab, with the first row picking column order from headers.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Append to the default sheet",
+					Params: json.RawMessage(`{"account":"default","spreadsheet_id":"1AbcDEFghIJklmNOPqrsTUVwxyZ_0123456789abcd","range":"Sheet1"}`),
+					Notes:  "Rows come in on the 'rows' input port; the column order is derived from row keys (alphabetical) when no headers input is wired.",
+				},
+				{
+					Title:  "Append to a named tab with RAW value mode",
+					Params: json.RawMessage(`{"account":"default","spreadsheet_id":"1AbcDEFghIJklmNOPqrsTUVwxyZ_0123456789abcd","range":"event_log!A:E","value_input_option":"RAW","insert_data_option":"INSERT_ROWS"}`),
+					Notes:  "RAW preserves leading zeros and stops Sheets from interpreting '=SUM(...)' as a formula.",
+				},
+				{
+					Title:  "Append using a raw access token",
+					Params: json.RawMessage(`{"token":"${secret:SHEETS_OAUTH}","spreadsheet_id":"1AbcDEFghIJklmNOPqrsTUVwxyZ_0123456789abcd","range":"Sheet1","timeout_ms":20000}`),
+				},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
