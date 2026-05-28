@@ -359,58 +359,6 @@ export const api = {
       "GET",
       `/jobs/${encodeURIComponent(runID)}/nodes`,
     ),
-  // streamChat opens the agentic chat against POST /chat/stream and
-  // forwards each SSE event to the caller. messages is the full
-  // conversation so far (the server is stateless across requests);
-  // signal cancels mid-stream when the user clicks Stop or types a
-  // new message.
-  streamChat(
-    token: string,
-    messages: { role: "user" | "assistant"; content: unknown }[],
-    onEvent: (kind: string, data: any) => void,
-    signal: AbortSignal,
-  ): Promise<void> {
-    return fetch(API_BASE + "/chat/stream", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ messages }),
-      signal,
-    }).then(async (res) => {
-      if (!res.ok || !res.body) {
-        throw new APIError(res.status, await res.text());
-      }
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) return;
-        buffer += decoder.decode(value, { stream: true });
-        let idx;
-        while ((idx = buffer.indexOf("\n\n")) >= 0) {
-          const frame = buffer.slice(0, idx);
-          buffer = buffer.slice(idx + 2);
-          if (frame.startsWith(":")) continue;
-          let name = "message";
-          let dataLine = "";
-          for (const line of frame.split("\n")) {
-            if (line.startsWith("event: ")) name = line.slice(7);
-            else if (line.startsWith("data: ")) dataLine = line.slice(6);
-          }
-          if (dataLine) {
-            try {
-              onEvent(name, JSON.parse(dataLine));
-            } catch {
-              onEvent(name, dataLine);
-            }
-          }
-        }
-      }
-    });
-  },
   // SSE: EventSource doesn't support headers, so we proxy through fetch
   // with ReadableStream parsing instead. Caller cancels via AbortController.
   streamJob(

@@ -249,37 +249,11 @@ type Service struct {
 	// graphs. Zero = unlimited. Configured by `-max-graph-nodes`.
 	MaxGraphNodes int
 
-	// EncryptedSecrets is the per-tenant encrypted secret store, used
-	// by ChatStream to look up the tenant's Anthropic API key under
-	// the well-known name "anthropic_api_key". Nil disables the chat
-	// endpoint (the store needs --master-key to come up, and BYO-key
-	// chat is meaningless without it).
+	// EncryptedSecrets is the per-tenant encrypted secret store that
+	// integration drops (Gmail OAuth, Claude API key, etc.) read from.
+	// Nil leaves the store CRUD endpoints + any drop that depends on
+	// encrypted secrets disabled. Comes up only when --master-key is set.
 	EncryptedSecrets *EncryptedSecrets
-
-	// AnthropicBaseURL overrides the Messages API host. Tests use it to
-	// point at httptest; production leaves it empty (defaulting to
-	// https://api.anthropic.com).
-	AnthropicBaseURL string
-
-	// AnthropicModelOverride pins a non-default model for the chat
-	// agent. Empty = use anthropic.DefaultModel.
-	AnthropicModelOverride string
-
-	// UseClaudeCLI flips the chat backend from the Anthropic API to a
-	// subprocess that spawns `claude -p` per turn, pointed at our
-	// hz-mcp server. Intended for local development — lets you test
-	// the chat surface end-to-end without an Anthropic API key.
-	UseClaudeCLI bool
-
-	// ClaudeCLIMCPBinary is the absolute path to the hz-mcp binary
-	// claude spawns. When empty, claude-cli mode falls back to
-	// $HZ_MCP_BIN, then a PATH lookup.
-	ClaudeCLIMCPBinary string
-
-	// ClaudeCLIHazydURL is the URL hz-mcp uses to call back into this
-	// hzd process. Defaults to http://localhost:8080 — set explicitly
-	// for non-loopback deployments.
-	ClaudeCLIHazydURL string
 
 	// PublicBaseURL is the externally-reachable origin of the daemon,
 	// used by failure_notify to construct UI links to the failing

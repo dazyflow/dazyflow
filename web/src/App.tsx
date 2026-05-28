@@ -20,7 +20,6 @@ import { AdminAudit } from "./pages/AdminAudit";
 import { AdminModules } from "./pages/AdminModules";
 import { AdminWorkspace } from "./pages/AdminWorkspace";
 import { AdminOrgSSO } from "./pages/AdminOrgSSO";
-import { AdminChat } from "./pages/AdminChat";
 import { AcceptInvite } from "./pages/AcceptInvite";
 
 export function App() {
@@ -69,7 +68,6 @@ export function App() {
         <Route path="/admin/modules" element={<AdminModules />} />
         <Route path="/admin/workspace" element={<AdminWorkspace />} />
         <Route path="/admin/sso" element={<AdminOrgSSO />} />
-        <Route path="/admin/chat" element={<AdminChat />} />
         <Route path="/invite/:token" element={<AcceptInvite />} />
         <Route path="*" element={<Navigate to="/flows" replace />} />
       </Routes>

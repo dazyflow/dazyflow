@@ -268,8 +268,6 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/jobs/{jobID}/nodes", h.requireAuth(h.listRunNodes))
 	mux.HandleFunc("GET /api/v1/jobs/{jobID}/nodes/{nodeID}", h.requireAuth(h.nodeSnapshot))
 	mux.HandleFunc("GET /api/v1/jobs/{jobID}/events", h.requireAuth(h.jobEvents))
-	mux.HandleFunc("POST /api/v1/chat/stream", h.requireAuth(h.chatStream))
-
 	// Multi-org membership: a user can belong to many tenants (the
 	// "home" tenant minted at signup + any they've been invited to).
 	// switch-org re-issues the session against a different tenant the
@@ -1591,67 +1589,10 @@ func writeJSONError(rw http.ResponseWriter, status int, msg string) {
 	writeJSON(rw, status, map[string]string{"error": msg})
 }
 
-// chatStream runs Service.ChatStream and forwards each ChatEvent
-// to the client as an SSE frame named after the event's Type
-// ("text", "tool_use_start", "tool_use_result", "proposal", "done",
-// "error"). The browser parses these and updates the chat panel.
-//
-// Body shape:
-//
-//	{
-//	  "messages": [{"role":"user","content":"plain text"}, ...]
-//	}
-//
-// On 500/timeout/aborted ctx, the handler emits one final "error"
-// frame before closing so the browser can show a banner.
-func (h *HTTPGateway) chatStream(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	// Operator-level gate: chat needs either claude-cli mode (local
-	// dev) or the encrypted secret store (where each tenant stores
-	// their own Anthropic API key). The per-tenant "you haven't set
-	// your key yet" check happens inside ChatStream and is surfaced
-	// as a structured SSE frame the UI can route on.
-	if h.svc.EncryptedSecrets == nil && !h.svc.UseClaudeCLI {
-		writeJSONError(rw, http.StatusServiceUnavailable, "chat is not enabled on this daemon (operator must set --master-key or --claude-cli)")
-		return
-	}
-	// Grab the raw bearer for forwarding to hz-mcp in claude-cli mode.
-	// requireAuth already validated it; this is the same string.
-	bearerToken := credentialFromRequest(r)
-	var body struct {
-		Messages []ChatMessage `json:"messages"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, "decode body: "+err.Error())
-		return
-	}
-	if len(body.Messages) == 0 {
-		writeJSONError(rw, http.StatusBadRequest, "messages must be non-empty")
-		return
-	}
-	flusher, ok := rw.(http.Flusher)
-	if !ok {
-		writeJSONError(rw, http.StatusInternalServerError, "streaming unsupported")
-		return
-	}
-	rw.Header().Set("Content-Type", "text/event-stream")
-	rw.Header().Set("Cache-Control", "no-cache")
-	rw.Header().Set("X-Accel-Buffering", "no")
-	rw.WriteHeader(http.StatusOK)
-	flusher.Flush()
-
-	err := h.svc.ChatStream(r.Context(), p, bearerToken, body.Messages, func(ev ChatEvent) error {
-		// The event name doubles as the SSE `event:` field so the
-		// browser can dispatch on it without parsing the payload.
-		writeSSE(rw, ev.Type, ev)
-		flusher.Flush()
-		return r.Context().Err()
-	})
-	if err != nil && !errors.Is(err, context.Canceled) {
-		writeSSE(rw, "error", map[string]string{"error": err.Error()})
-		flusher.Flush()
-	}
-}
-
+// writeSSE writes a single Server-Sent Events frame: `event: <name>\n
+// data: <json>\n\n`. The browser's EventSource parser dispatches on
+// the event name without parsing the payload twice. Used by the job
+// events stream.
 func writeSSE(rw http.ResponseWriter, event string, payload any) {
 	b, err := json.Marshal(payload)
 	if err != nil {
@@ -1659,3 +1600,4 @@ func writeSSE(rw http.ResponseWriter, event string, payload any) {
 	}
 	_, _ = fmt.Fprintf(rw, "event: %s\ndata: %s\n\n", event, b)
 }
+

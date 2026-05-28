@@ -103,22 +103,6 @@ func main() {
 	// per-tenant fairness becomes a real concern.
 	const maxGraphNodes = 1000
 	const maxConcurrentJobs = 0
-	// HAZYFLOW_CLAUDE_CLI gates the local-dev chat backend that shells
-	// out to `claude -p` + hz-mcp instead of the Anthropic API. Two
-	// shapes accepted: "1" / "true" enables with hz-mcp looked up via
-	// $PATH; any other non-empty value is treated as the hz-mcp
-	// binary path directly. Empty disables (default).
-	claudeCLIVal := envStr("HAZYFLOW_CLAUDE_CLI", "")
-	claudeCLI := claudeCLIVal != ""
-	claudeCLIMCPBin := ""
-	if claudeCLI {
-		switch strings.ToLower(claudeCLIVal) {
-		case "1", "true", "yes", "on":
-			// enabled with PATH lookup
-		default:
-			claudeCLIMCPBin = claudeCLIVal
-		}
-	}
 	slackSigningSecret := envStr("HAZYFLOW_SLACK_SIGNING_SECRET", "")
 	githubWebhookSecret := envStr("HAZYFLOW_GITHUB_WEBHOOK_SECRET", "")
 	approvalHMACSecret := envStr("HAZYFLOW_APPROVAL_HMAC_SECRET", "")
@@ -370,14 +354,11 @@ func main() {
 		AdminKeys:              ks,
 		MaxGraphTimeoutSeconds: int(maxGraphTimeout.Seconds()),
 		MaxGraphNodes:          maxGraphNodes,
-		// EncryptedSecrets is where each tenant stores their own
-		// Anthropic API key under the well-known name
-		// daemon.TenantAnthropicKeyName. Nil disables chat unless
-		// --claude-cli is also set.
-		EncryptedSecrets:           encryptedSecrets,
-		UseClaudeCLI:       claudeCLI,
-		ClaudeCLIMCPBinary: daemon.ResolveClaudeMCPBinary(claudeCLIMCPBin),
-		ClaudeCLIHazydURL:  claudeCLIHazydURL(httpListen),
+		// EncryptedSecrets is the per-tenant store integration drops
+		// (Gmail OAuth, Claude drop's API key, etc.) read from. Nil
+		// leaves the store CRUD endpoints + secret-dependent drops
+		// disabled.
+		EncryptedSecrets: encryptedSecrets,
 		// PublicBaseURL feeds the failure-notify payload's run_url
 		// field (deep-link to /runs/{id}). Same value already used
 		// by the OAuth flow's redirect_uri builder.
@@ -390,13 +371,6 @@ func main() {
 		// Default logger threads daemon-side warnings to the same
 		// log writer the gateway uses for HTTP request logs.
 		Logger: log.New(log.Writer(), "service: ", log.LstdFlags),
-	}
-	// When claude-cli mode is on, also publish it as an env var so
-	// the Claude *drop* (integrations/ai/claude.go) reroutes through
-	// the local binary instead of the Anthropic API. Same toggle,
-	// two consumers — keeps dev environments from needing a real key.
-	if claudeCLI {
-		_ = os.Setenv("HAZYFLOW_CLAUDE_CLI", "1")
 	}
 
 	// Approval-link flow: when HAZYFLOW_APPROVAL_HMAC_SECRET is set,
@@ -707,22 +681,6 @@ func registerRemotes(cat *engine.RemoteCatalog, spec string) error {
 		log.Printf("registered remote module %q at %s", id, endpoint)
 	}
 	return nil
-}
-
-// claudeCLIHazydURL builds the URL hz-mcp uses to call back into this
-// hzd from the configured HTTP listen address. Strips the host (always
-// localhost for the local-dev claude-cli mode) and keeps the port.
-// Empty HAZYFLOW_HTTP falls back to localhost:8080 — same as the
-// container layout default.
-func claudeCLIHazydURL(httpListen string) string {
-	addr := httpListen
-	if addr == "" {
-		addr = ":8080"
-	}
-	if i := strings.LastIndex(addr, ":"); i >= 0 {
-		return "http://localhost" + addr[i:]
-	}
-	return "http://localhost:8080"
 }
 
 // stateFile builds the path to a JSON dev-state file under the state

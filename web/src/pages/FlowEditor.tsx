@@ -28,7 +28,7 @@ import {
   type NodeChange,
   type ReactFlowInstance,
 } from "@xyflow/react";
-import { Play, Save, Square, Sparkles, Plus, Send } from "lucide-react";
+import { Play, Save, Square, Plus, Send } from "lucide-react";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import { oauthProviderDisplay } from "../integrationMeta";
@@ -54,7 +54,6 @@ import { LiveConsole } from "../components/LiveConsole";
 import { HazyNode, type HazyNodeData } from "../components/NodeCard";
 import { RunHistory } from "../components/RunHistory";
 import { SettingsModal } from "../components/SettingsModal";
-import { ChatPanel } from "../components/ChatPanel";
 import { QuickDropPalette } from "../components/QuickDropPalette";
 
 // Custom node-types registry. React Flow caches by reference, so this
@@ -143,7 +142,6 @@ function EditorInner() {
   const [description, setDescription] = useState<string | undefined>(undefined);
   const [timeoutSeconds, setTimeoutSeconds] = useState<number | undefined>(undefined);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);
   // Per-node params kept outside React Flow's node-data so the inspector
   // can mutate them without forcing canvas re-layout. They're merged
   // back into the graph payload on save.
@@ -220,13 +218,6 @@ function EditorInner() {
   }, []);
   // paletteOpen drives the Ctrl/Cmd+K quick-drop search popup.
   const [paletteOpen, setPaletteOpen] = useState(false);
-  // reloadKey re-triggers the graph-load effect when an external
-  // mutation lands (today: chat's applyProposal). Bumping it is
-  // equivalent to navigating away and back, minus the full-page
-  // reload — the editor keeps its scroll, tab focus, and the chat
-  // panel open. The effect's `[token, me, id, reloadKey]` deps mean
-  // we don't re-fire on unrelated state changes.
-  const [reloadKey, setReloadKey] = useState(0);
 
   const rfRef = useRef<ReactFlowInstance<FlowNode<HazyNodeData>, FlowEdge> | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -322,7 +313,7 @@ function EditorInner() {
     return () => {
       cancelled = true;
     };
-  }, [token, me, id, reloadKey]);
+  }, [token, me, id]);
 
   // A fresh flow gets a fresh shot at showing the connections banner.
   useEffect(() => {
@@ -900,14 +891,6 @@ function EditorInner() {
               {navigator.userAgent.includes("Mac") ? "⌘K" : "Ctrl+K"}
             </kbd>
           </button>
-          <button
-            className="ghost"
-            onClick={() => setChatOpen((v) => !v)}
-            title={t("editor.aiAssistant")}
-            aria-pressed={chatOpen}
-          >
-            <Sparkles size={14} />
-          </button>
           {/* Flow settings moved to the top-bar three-dots menu (single
               entry point). The toolbar gear used to live here. */}
           <button
@@ -1329,31 +1312,6 @@ function EditorInner() {
           onConnect={() => navigate("/connections")}
         />
       </div>
-      <ChatPanel
-        open={chatOpen}
-        onClose={() => setChatOpen(false)}
-        applyProposal={async (g) => {
-          // Force the proposal to land at THIS editor's flow ID so
-          // an LLM that misnames the flow can't overwrite a
-          // different one. The settings/triggers/visibility come
-          // straight from the proposal — the LLM owns those fields
-          // by construction.
-          if (!token || !id) throw new Error("not signed in");
-          const merged: Graph = {
-            ...g,
-            id,
-            tenant: activeTenant,
-            workspace: activeWorkspace,
-          };
-          await api.saveGraph(token, merged);
-          // Re-seed editor state in place via the load effect (deps
-          // include reloadKey). Avoids a full-page reload — keeps the
-          // chat panel open and the user's scroll position, so the
-          // post-Apply transition reads as "the canvas just updated"
-          // rather than "the app crashed for a second."
-          setReloadKey((k) => k + 1);
-        }}
-      />
       {paletteOpen && (
         <QuickDropPalette
           drops={manifests}
