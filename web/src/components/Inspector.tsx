@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Node } from "@xyflow/react";
 import { useTranslation } from "react-i18next";
-import { X, Trash2 } from "lucide-react";
+import { X, Trash2, ChevronUp, ChevronDown } from "lucide-react";
 import type { HazyNodeData } from "./NodeCard";
 import {
   SchemaForm,
@@ -49,6 +49,14 @@ type Props = {
   // The close affordance is only rendered when this prop is set so
   // desktop layouts (where the inspector is always visible) stay clean.
   onClose?: () => void;
+  // expanded + onToggleExpand drive the narrow-screen bottom sheet's
+  // peek/expand behavior. When onToggleExpand is set (narrow layout), the
+  // head renders a chevron and the head itself becomes tappable to expand
+  // from the collapsed peek state. `expanded` flips the chevron and the
+  // head's tap-to-expand affordance. Both omitted on desktop, where the
+  // panel is always fully visible in the grid.
+  expanded?: boolean;
+  onToggleExpand?: () => void;
   // onDelete removes the selected node (and its edges). This is the
   // only delete affordance on touch devices, where there's no
   // Delete/Backspace key to trigger React Flow's built-in removal.
@@ -78,6 +86,8 @@ export function Inspector({
   workspace,
   onSample,
   onClose,
+  expanded,
+  onToggleExpand,
   onDelete,
   providers,
   onConnect,
@@ -182,15 +192,46 @@ export function Inspector({
 
   return (
     <>
-      <div className="panel-head">
+      <div
+        className="panel-head"
+        // On narrow screens the head is the peek strip of the collapsed
+        // bottom sheet — tapping it (anywhere but the buttons) expands.
+        // No-op once expanded; the chevron handles collapsing.
+        onClick={onToggleExpand && !expanded ? onToggleExpand : undefined}
+        style={
+          onToggleExpand && !expanded ? { cursor: "pointer" } : undefined
+        }
+      >
         <span>{t("inspector.title")}</span>
         <span className="inspector-head-right">
           <span style={{ color: "var(--faint)", fontSize: 11 }}>{d.moduleID}</span>
+          {onToggleExpand && (
+            <button
+              type="button"
+              className="ghost icon"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleExpand();
+              }}
+              aria-expanded={!!expanded}
+              aria-label={
+                expanded ? t("inspector.collapse") : t("inspector.expand")
+              }
+              title={
+                expanded ? t("inspector.collapse") : t("inspector.expand")
+              }
+            >
+              {expanded ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+            </button>
+          )}
           {onClose && (
             <button
               type="button"
               className="ghost icon inspector-close"
-              onClick={onClose}
+              onClick={(e) => {
+                e.stopPropagation();
+                onClose();
+              }}
               aria-label={t("inspector.close")}
               title={t("inspector.close")}
             >

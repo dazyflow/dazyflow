@@ -801,6 +801,8 @@
     "title": "Inspector",
     "empty": "Välj en nod för att redigera.",
     "close": "Stäng inspektorn",
+    "expand": "Fäll ut",
+    "collapse": "Fäll ihop",
     "nodeId": "Nod-ID",
     "label": "Etikett",
     "sampleTitle": "Kör den här noden och dess upstream-kedja — hoppa över allt nedströms. Användbart när du kopplar fält mot verklig upstream-data.",

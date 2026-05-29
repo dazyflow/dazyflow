@@ -801,6 +801,8 @@
     "title": "Inspector",
     "empty": "Select a node to edit.",
     "close": "Close inspector",
+    "expand": "Expand",
+    "collapse": "Collapse",
     "nodeId": "Node ID",
     "label": "Label",
     "sampleTitle": "Run this node and its upstream chain — skip everything downstream. Useful when wiring fields against real upstream data.",

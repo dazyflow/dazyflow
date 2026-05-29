@@ -2081,19 +2081,25 @@
      in the grid. */
   position: relative;
 }
-/* Mobile / narrow tablet: the inspector becomes a bottom sheet that
-   auto-opens whenever the user selects a node, and hides as soon as
-   they X-out or click empty canvas (which clears selection). The
-   canvas stays single-column behind the sheet so context isn't lost. */
+/* Mobile / narrow tablet: the inspector becomes a bottom sheet. Selecting
+   a node no longer slams the full sheet over the canvas — instead the
+   sheet rests in a collapsed "peek" state showing only its head, the same
+   expand-on-demand idea as the left sidebar. Tapping the head (or the
+   chevron) expands it to full height; the chevron or X collapses/dismisses.
+   The canvas stays single-column behind the sheet so context isn't lost. */
 @media (max-width: 1100px) {
   .editor {
     grid-template-columns: 1fr;
+    /* Height of the peek strip — exactly the panel head, so nothing of
+       the body shows until the user expands. */
+    --inspector-peek: 44px;
   }
   .editor .inspector {
     /* Pinned to the bottom of the editor; the editor itself is the
        containing block via position:relative further down. The sheet
-       slides in/out with a translate transform, leaving the layout
-       width unchanged so React Flow's measurements stay stable. */
+       slides between hidden / peek / expanded with a translate transform,
+       leaving the layout width unchanged so React Flow's measurements
+       stay stable. */
     position: absolute;
     left: 0;
     right: 0;
@@ -2111,9 +2117,21 @@
     z-index: 30;
     pointer-events: none;
   }
+  /* Selected but collapsed: only the head peeks above the bottom edge so
+     the canvas stays usable. The head is tappable to expand. */
   .editor[data-has-selection="true"] .inspector {
-    transform: translateY(0);
+    transform: translateY(calc(100% - var(--inspector-peek)));
     pointer-events: auto;
+  }
+  /* Pin the head to exactly the peek height so the collapsed sheet shows
+     the head and nothing of the body below it. */
+  .editor .inspector .panel-head {
+    min-height: var(--inspector-peek);
+    box-sizing: border-box;
+  }
+  /* Expanded: the full sheet slides up. */
+  .editor[data-has-selection="true"][data-inspector-expanded="true"] .inspector {
+    transform: translateY(0);
   }
   /* Drag-handle hint at the top of the sheet — purely decorative; the
      real dismiss affordance is the X in the panel head. */
@@ -2444,11 +2462,11 @@
   white-space: nowrap;
 }
 .hz-port-label.hz-port-in::before {
-  content: "← ";
+  content: "⬅ ";
   color: var(--faint);
 }
 .hz-port-label.hz-port-out::after {
-  content: " →";
+  content: " ➡";
   color: var(--faint);
 }
 .hz-node:hover {

@@ -200,14 +200,15 @@ function EditorInner() {
   // collapsed to give the canvas back its vertical space until
   // there's something to read.
   const [logOpen, setLogOpen] = useState(false);
-  // On narrow viewports the inspector is a bottom sheet that auto-opens
-  // whenever a node is selected and closes when the user X's it out or
-  // taps the canvas. No manual toggle needed — selection drives it,
-  // which keeps the affordance discoverable.
+  // On narrow viewports the inspector is a bottom sheet. Selecting a node
+  // rests it in a collapsed peek (just the head); the user taps the head
+  // or chevron to expand, and X's it out (or taps the canvas) to dismiss.
+  // This keeps a single tap on a drop from slamming the full sheet over
+  // the canvas — see inspectorExpanded below.
   //
-  // isNarrow tracks the same 1100px breakpoint the CSS uses. It gates
-  // the close-X on the inspector head so the desktop layout (where the
-  // panel is always visible and X would be confusing) stays clean.
+  // isNarrow tracks the same 1100px breakpoint the CSS uses. It gates both
+  // the expand chevron and the close-X on the inspector head so the desktop
+  // layout (where the panel is always visible) stays clean.
   const [isNarrow, setIsNarrow] = useState<boolean>(() =>
     typeof window !== "undefined" ? window.innerWidth <= 1100 : false,
   );
@@ -218,6 +219,10 @@ function EditorInner() {
   }, []);
   // paletteOpen drives the Ctrl/Cmd+K quick-drop search popup.
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // inspectorExpanded controls the narrow-screen bottom sheet. Selecting a
+  // node rests it in the collapsed peek state (just the head); the user
+  // taps to expand. Desktop ignores this (the panel is always in the grid).
+  const [inspectorExpanded, setInspectorExpanded] = useState(false);
 
   const rfRef = useRef<ReactFlowInstance<FlowNode<HazyNodeData>, FlowEdge> | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -868,6 +873,7 @@ function EditorInner() {
     <div
       className="editor"
       data-has-selection={selectedID ? "true" : "false"}
+      data-inspector-expanded={inspectorExpanded ? "true" : "false"}
       ref={wrapperRef}
     >
       <div
@@ -1007,9 +1013,12 @@ function EditorInner() {
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onInit={(inst) => (rfRef.current = inst)}
-          onSelectionChange={(s) =>
-            setSelectedID(s.nodes[0]?.id ?? null)
-          }
+          onSelectionChange={(s) => {
+            setSelectedID(s.nodes[0]?.id ?? null);
+            // Every new (or cleared) selection starts collapsed so a tap
+            // on a drop doesn't slam the full sheet over the canvas.
+            setInspectorExpanded(false);
+          }}
           fitView
           fitViewOptions={{ padding: 0.3 }}
           proOptions={{ hideAttribution: true }}
@@ -1277,6 +1286,10 @@ function EditorInner() {
           workspace={
             token ? { token, tenant: activeTenant, workspace: activeWorkspace } : undefined
           }
+          expanded={inspectorExpanded}
+          onToggleExpand={
+            isNarrow ? () => setInspectorExpanded((v) => !v) : undefined
+          }
           onClose={
             isNarrow
               ? () => {
@@ -1287,6 +1300,7 @@ function EditorInner() {
                   // click on the node won't keep highlighting it
                   // underneath.
                   setSelectedID(null);
+                  setInspectorExpanded(false);
                   setNodes((nds) =>
                     nds.map((n) =>
                       n.selected ? { ...n, selected: false } : n,
