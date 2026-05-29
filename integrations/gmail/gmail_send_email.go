@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"path"
 	"strings"
@@ -247,7 +248,12 @@ func buildRFC822(h rfc822Headers, body string, attachments []emailAttachment) ([
 	headerInto(&buf, "Cc", h.Cc)
 	headerInto(&buf, "Bcc", h.Bcc)
 	headerInto(&buf, "Reply-To", h.ReplyTo)
-	headerInto(&buf, "Subject", h.Subject)
+	// RFC 2047 encoded-word: email headers are 7-bit ASCII, so a subject
+	// with non-ASCII (e.g. Swedish "Hej från Hazy Flow!") must be encoded
+	// as =?utf-8?q?...?= rather than shipped as raw UTF-8 bytes — raw bytes
+	// get mojibake'd by receiving clients. QEncoding leaves pure-ASCII
+	// subjects untouched, so this is a no-op for the common case.
+	headerInto(&buf, "Subject", mime.QEncoding.Encode("utf-8", h.Subject))
 	headerInto(&buf, "MIME-Version", "1.0")
 
 	if len(attachments) == 0 {
@@ -280,7 +286,7 @@ func buildRFC822(h rfc822Headers, body string, attachments []emailAttachment) ([
 	for _, a := range attachments {
 		fmt.Fprintf(&buf, "--%s\r\n", boundary)
 		headerInto(&buf, "Content-Type", a.MIME)
-		headerInto(&buf, "Content-Disposition", fmt.Sprintf("attachment; filename=%q", a.Filename))
+		headerInto(&buf, "Content-Disposition", dispositionHeader(a.Filename))
 		headerInto(&buf, "Content-Transfer-Encoding", "base64")
 		buf.WriteString("\r\n")
 		encoded := base64.StdEncoding.EncodeToString(a.Bytes)
@@ -295,6 +301,20 @@ func buildRFC822(h rfc822Headers, body string, attachments []emailAttachment) ([
 	}
 	fmt.Fprintf(&buf, "--%s--\r\n", boundary)
 	return buf.Bytes(), nil
+}
+
+// dispositionHeader builds the Content-Disposition value for an
+// attachment. A non-ASCII filename (e.g. "årsrapport.pdf") can't ride as
+// a raw header value, so mime.FormatMediaType emits the RFC 2231 form
+// (filename*=utf-8''%C3%A5rsrapport.pdf); ASCII names stay as the plain
+// filename= form. FormatMediaType returns "" if it can't encode the
+// params — fall back to a quoted plain filename so we still send something
+// sane rather than an empty header.
+func dispositionHeader(filename string) string {
+	if v := mime.FormatMediaType("attachment", map[string]string{"filename": filename}); v != "" {
+		return v
+	}
+	return fmt.Sprintf("attachment; filename=%q", filename)
 }
 
 // newBoundary returns a MIME boundary token unlikely to appear inside

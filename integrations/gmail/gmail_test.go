@@ -558,7 +558,7 @@ func TestGmailSendEmail_OneInlineAttachment(t *testing.T) {
 	if !strings.Contains(rfc822, "Content-Type: application/pdf") {
 		t.Errorf("attachment MIME missing: %q", rfc822)
 	}
-	if !strings.Contains(rfc822, `Content-Disposition: attachment; filename="attachment-1.pdf"`) {
+	if !strings.Contains(rfc822, `Content-Disposition: attachment; filename=attachment-1.pdf`) {
 		t.Errorf("inline-ref filename should synthesize from MIME: %q", rfc822)
 	}
 	if !strings.Contains(rfc822, "Content-Transfer-Encoding: base64") {
@@ -591,7 +591,7 @@ func TestGmailSendEmail_AttachmentFilenameFromSandboxPath(t *testing.T) {
 		},
 	}, nil)
 	rfc822 := decodeSentRFC822(t, fg)
-	if !strings.Contains(rfc822, `filename="report.pdf"`) {
+	if !strings.Contains(rfc822, `filename=report.pdf`) {
 		t.Errorf("path basename should win as filename: %q", rfc822)
 	}
 	if !strings.Contains(rfc822, base64.StdEncoding.EncodeToString([]byte("PDFDATA"))) {
@@ -621,7 +621,7 @@ func TestGmailSendEmail_MultipleAttachmentsOrderedByIndex(t *testing.T) {
 		t.Errorf("attachments[0] (pdf) should come before attachments[1] (csv); pdf@%d csv@%d", pdfIdx, csvIdx)
 	}
 	// Synthesised filenames should reflect the MIME-derived extension.
-	if !strings.Contains(rfc822, `filename="attachment-2.csv"`) {
+	if !strings.Contains(rfc822, `filename=attachment-2.csv`) {
 		t.Errorf("expected csv synthesised filename: %q", rfc822)
 	}
 }
@@ -638,8 +638,34 @@ func TestGmailSendEmail_AttachmentNoMIMEFallsBackToOctetStream(t *testing.T) {
 	if !strings.Contains(rfc822, "Content-Type: application/octet-stream") {
 		t.Errorf("expected octet-stream fallback: %q", rfc822)
 	}
-	if !strings.Contains(rfc822, `filename="attachment-1.bin"`) {
+	if !strings.Contains(rfc822, `filename=attachment-1.bin`) {
 		t.Errorf("expected .bin synthesised extension: %q", rfc822)
+	}
+}
+
+func TestGmailSendEmail_AttachmentNonASCIIFilename(t *testing.T) {
+	// A non-ASCII filename can't ride as a raw header value; it must be
+	// emitted in the RFC 2231 extended form so the recipient sees the
+	// original name rather than mojibake.
+	tmp := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmp, "årsrapport.pdf"), []byte("PDFDATA"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fg := newFakeGmail(t)
+	_, _ = executeGmailSendEmail(t.Context(), core.Job{
+		Params:        map[string]any{"token": "x", "to": "a@b", "body": "x"},
+		WorkspaceRoot: tmp,
+		Input: map[string]core.Ref{
+			"attachments[0]": {MIME: "application/pdf", Ref: "årsrapport.pdf"},
+		},
+	}, nil)
+	rfc822 := decodeSentRFC822(t, fg)
+	if !strings.Contains(rfc822, `filename*=utf-8''%C3%A5rsrapport.pdf`) {
+		t.Errorf("non-ASCII filename should be RFC 2231 encoded: %q", rfc822)
+	}
+	// The raw UTF-8 bytes must NOT appear unencoded in the header.
+	if strings.Contains(rfc822, "filename=årsrapport.pdf") {
+		t.Errorf("raw non-ASCII filename leaked into header: %q", rfc822)
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"mime"
 	"net"
 	"net/smtp"
 	"strings"
@@ -153,7 +154,9 @@ func buildMessage(from string, to []string, subject, body string) []byte {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "From: %s\r\n", from)
 	fmt.Fprintf(&sb, "To: %s\r\n", strings.Join(to, ", "))
-	fmt.Fprintf(&sb, "Subject: %s\r\n", subject)
+	// RFC 2047 encoded-word — non-ASCII subjects must not ride as raw
+	// UTF-8 bytes in a header, or receiving clients mojibake them.
+	fmt.Fprintf(&sb, "Subject: %s\r\n", mime.QEncoding.Encode("utf-8", subject))
 	sb.WriteString("MIME-Version: 1.0\r\n")
 	sb.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
 	sb.WriteString("\r\n")
