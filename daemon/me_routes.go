@@ -138,13 +138,32 @@ func (h *HTTPGateway) saveFlowMe(rw http.ResponseWriter, r *http.Request, p core
 	// contract that downstream alerting may key on. The public rename
 	// (graphs → flows) is wire-only; audit codes are stable.
 	h.audit(r.Context(), p, "graph.save", g.ID, "commit="+commit)
-	writeJSON(rw, http.StatusOK, map[string]any{
-		"commit":    commit,
-		"flow_id":   tenant + "/" + workspace + "/" + g.ID,
-		"graph_id":  g.ID, // legacy alias
-		"lint":      core.LintGraph(g),
-		"endpoints": h.triggerEndpoints(g),
-	})
+	writeJSON(rw, http.StatusOK, h.flowMutationResponse(commit, g))
+}
+
+// flowMutationResponse is the shared response shape for save + patch.
+// Includes a canvas URL the LLM can hand to the user ("open this to
+// see what I built"), the trigger endpoints, and a flag indicating
+// whether the operator has set --public-base-url. When the flag is
+// false, the trigger URLs in `endpoints` are relative — the LLM
+// should warn the user instead of telling them to paste the URL.
+func (h *HTTPGateway) flowMutationResponse(commit string, g core.Graph) map[string]any {
+	scope := g.Tenant + "/" + g.Workspace + "/" + g.ID
+	resp := map[string]any{
+		"commit":                  commit,
+		"flow_id":                 scope,
+		"graph_id":                g.ID, // legacy alias
+		"lint":                    core.LintGraph(g),
+		"endpoints":               h.triggerEndpoints(g),
+		"public_base_configured":  h.svc.PublicBaseURL != "",
+	}
+	// canvas_url is the deep link to the in-app editor for this flow.
+	// Relative when no public base — the LLM can still pass it through
+	// to a browser-mediated user, and a web UI client treats it as
+	// same-origin.
+	base := strings.TrimRight(h.svc.PublicBaseURL, "/")
+	resp["canvas_url"] = base + "/flows/" + g.ID
+	return resp
 }
 
 // triggerEndpoints returns the public URLs the user must paste into
@@ -205,6 +224,38 @@ func (h *HTTPGateway) triggerEndpoints(g core.Graph) []map[string]any {
 		}
 	}
 	return out
+}
+
+// enableFlowMe / disableFlowMe are POST /me/flows/{flow_id}/enable
+// and /disable. Idempotent — pressing "enable" twice succeeds. The
+// Disabled bool lives on the saved graph; toggling it produces a new
+// git commit, so the action shows up in the workspace history.
+func (h *HTTPGateway) enableFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	h.setFlowEnabled(rw, r, p, true)
+}
+func (h *HTTPGateway) disableFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	h.setFlowEnabled(rw, r, p, false)
+}
+func (h *HTTPGateway) setFlowEnabled(rw http.ResponseWriter, r *http.Request, p core.Principal, enabled bool) {
+	tenant, workspace, id, ok := h.readFlowID(rw, r, p)
+	if !ok {
+		return
+	}
+	commit, err := h.svc.SetFlowEnabled(r.Context(), p, tenant, workspace, id, enabled)
+	if err != nil {
+		writeAPIError(rw, http.StatusForbidden, "forbidden", err.Error())
+		return
+	}
+	action := "graph.disable"
+	if enabled {
+		action = "graph.enable"
+	}
+	h.audit(r.Context(), p, action, id, "commit="+commit)
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"flow_id": tenant + "/" + workspace + "/" + id,
+		"enabled": enabled,
+		"commit":  commit,
+	})
 }
 
 // deleteFlowMe is the DELETE /me/flows/{flow_id} handler. Idempotent:
@@ -292,12 +343,7 @@ func (h *HTTPGateway) patchFlowMe(rw http.ResponseWriter, r *http.Request, p cor
 		return
 	}
 	h.audit(r.Context(), p, "graph.patch", next.ID, "commit="+commit)
-	writeJSON(rw, http.StatusOK, map[string]any{
-		"commit":    commit,
-		"flow_id":   tenant + "/" + workspace + "/" + next.ID,
-		"lint":      core.LintGraph(next),
-		"endpoints": h.triggerEndpoints(next),
-	})
+	writeJSON(rw, http.StatusOK, h.flowMutationResponse(commit, next))
 }
 
 // jsonMergePatch applies RFC 7396 merge semantics: for each key in
@@ -387,6 +433,35 @@ func (h *HTTPGateway) listFlowRunsMe(rw http.ResponseWriter, r *http.Request, p 
 	r2.SetPathValue("workspace", workspace)
 	r2.SetPathValue("id", id)
 	h.listRuns(rw, r2, p)
+}
+
+// validateGraphLiteral is POST /api/v1/validate/graph. Body is a
+// Graph document; we lint it without touching the store. Lets an LLM
+// compose a graph in chat, dry-run it, and only call create_flow
+// when the lint is clean. Distinct from validateFlowMe which lints
+// the HEAD of an already-saved flow.
+func (h *HTTPGateway) validateGraphLiteral(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	var g core.Graph
+	if err := json.NewDecoder(r.Body).Decode(&g); err != nil {
+		writeAPIError(rw, http.StatusBadRequest, "decode_failed",
+			"body must be a Graph JSON object: "+err.Error())
+		return
+	}
+	// Workspace scoping isn't required since we're not touching the
+	// store, but stamp the principal's scope onto the graph so lint
+	// rules that reference (tenant, workspace) behave as the saved
+	// flow would. Caller can override these in the body if they need
+	// to lint as a different scope.
+	if g.Tenant == "" {
+		g.Tenant = p.Tenant
+	}
+	if g.Workspace == "" {
+		g.Workspace = p.Workspace
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"ok":     len(core.LintGraph(g)) == 0,
+		"issues": core.LintGraph(g),
+	})
 }
 
 // validateFlowMe is the spec's /me/flows/{flow_id}/validate — lint

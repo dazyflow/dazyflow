@@ -41,7 +41,9 @@ func init() {
 					Notes:  "Loop until has_more=false to drain the database.",
 				},
 			},
-			RequiresConnections: []string{"notion"},
+			RequiresConnections: []core.ConnectionRequirement{
+				{Kind: "secret", Name: "NOTION_TOKEN", Note: "Notion internal integration token (Notion uses tokens, not OAuth for most server-to-server use)."},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

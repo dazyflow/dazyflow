@@ -45,7 +45,9 @@ func init() {
 					Params: json.RawMessage(`{"query":"label:invoices","max_results":100,"page_token":"CIDEgPCM...","token":"${secret:GMAIL_OAUTH}"}`),
 				},
 			},
-			RequiresConnections: []string{"gmail"},
+			RequiresConnections: []core.ConnectionRequirement{
+				{Kind: "oauth", Name: "gmail", Note: "Gmail OAuth — gmail.send / gmail.readonly scopes."},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

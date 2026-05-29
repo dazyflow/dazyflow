@@ -42,7 +42,9 @@ func init() {
 					Notes:  "Feed 'since' from a poll_trigger's last-seen cursor to react only to fresh updates.",
 				},
 			},
-			RequiresConnections: []string{"github"},
+			RequiresConnections: []core.ConnectionRequirement{
+				{Kind: "oauth", Name: "github", Note: "GitHub OAuth — list_connections to confirm before composing."},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

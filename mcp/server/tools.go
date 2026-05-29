@@ -58,10 +58,13 @@ func BuildTools(c *HazydClient, d Defaults) []Tool {
 		describeIntegration(c),
 		listDrops(c),
 		describeDrop(c),
+		describeTriggerKinds(c),
 		listConnections(c),
 		startConnection(c),
 		listSecrets(c),
 		setSecret(c),
+		deleteSecret(c),
+		validateCron(c),
 		listFlows(c, d),
 		getFlow(c, d),
 		saveFlow(c, d, "create_flow",
@@ -70,7 +73,10 @@ func BuildTools(c *HazydClient, d Defaults) []Tool {
 			"Update an existing flow in place. Pass the FULL graph payload (nodes + edges) — the daemon overwrites the prior version. Refuses with HTTP 409 if a run of this flow is currently in flight."),
 		patchFlow(c, d),
 		deleteFlow(c, d),
+		enableFlow(c, d),
+		disableFlow(c, d),
 		validateFlow(c, d),
+		validateGraph(c),
 		testTriggerFlow(c, d),
 		sampleNode(c, d),
 		runFlow(c, d),
@@ -315,6 +321,25 @@ func describeDrop(c *HazydClient) Tool {
 	}
 }
 
+// describeTriggerKinds returns the typed schema for every supported
+// trigger kind (cron, webhook, poll) plus worked examples. Use this
+// BEFORE composing a flow with a trigger — esp. webhook+public_form,
+// which isn't obvious from any single drop's description.
+func describeTriggerKinds(c *HazydClient) Tool {
+	return Tool{
+		Name:        "describe_trigger_kinds",
+		Description: "Return the schema for every supported GraphTrigger kind (cron, webhook, poll), with per-field descriptions and worked examples. Consult this when composing a flow that needs to fire on a schedule, accept a webhook, or show a hosted intake form (webhook + public_form:true).",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{}}`),
+		Handler: func(ctx context.Context, _ json.RawMessage) (ToolCallResult, error) {
+			var out map[string]any
+			if err := c.Get(ctx, "/catalog/trigger-kinds", &out); err != nil {
+				return errorResultOrErr(err)
+			}
+			return TextResult(out), nil
+		},
+	}
+}
+
 // listConnections returns the OAuth providers the daemon knows about
 // plus which accounts the calling principal has already linked. Use
 // this BEFORE composing a flow whose drops have non-empty
@@ -426,6 +451,113 @@ func setSecret(c *HazydClient) Tool {
 				return errorResultOrErr(err)
 			}
 			return TextResult(map[string]any{"name": name, "saved": true}), nil
+		},
+	}
+}
+
+// deleteSecret removes a secret. Use when the user explicitly asks
+// to remove a key, or when rotating to a new one ("delete the old
+// then set the new"). Idempotent: deleting a missing name is a 204.
+func deleteSecret(c *HazydClient) Tool {
+	return Tool{
+		Name:        "delete_secret",
+		Description: "Permanently remove a secret. Idempotent: missing names succeed silently. Flows that still reference the deleted secret via ${secret:NAME} will fail at run time — pair with list_flows / get_flow before deleting if you're unsure.",
+		InputSchema: json.RawMessage(`{"type":"object","required":["name"],"properties":{
+			"name": {"type":"string"}
+		}}`),
+		Handler: func(ctx context.Context, raw json.RawMessage) (ToolCallResult, error) {
+			args, err := decodeArgs(raw)
+			if err != nil {
+				return ErrorResult(err.Error()), nil
+			}
+			name := stringField(args, "name", "")
+			if name == "" {
+				return ErrorResult("name is required"), nil
+			}
+			ctx = withIdempotencyKey(ctx, idempotencyKeyFor("delete_secret", raw))
+			if err := c.Delete(ctx, "/secrets/"+pathSegment(name)); err != nil {
+				return errorResultOrErr(err)
+			}
+			return TextResult(map[string]any{"name": name, "deleted": true}), nil
+		},
+	}
+}
+
+// validateCron pre-flights a cron expression against the same parser
+// the scheduler uses. Useful so the LLM can confirm "0 9 * * 1" is
+// valid (and means what it thinks) BEFORE saving a flow with a cron
+// trigger — catches mistakes in chat instead of via a 422 from save.
+func validateCron(c *HazydClient) Tool {
+	return Tool{
+		Name:        "validate_cron",
+		Description: "Validate a cron expression. Returns {ok:true} on parse success, or {ok:false, error:\"...\"} when the scheduler would reject it. Call this BEFORE create_flow when wiring a cron trigger so a bad expression surfaces in chat instead of at save time.",
+		InputSchema: json.RawMessage(`{"type":"object","required":["expr"],"properties":{
+			"expr": {"type":"string","description":"Standard 5-field cron (minute hour day month weekday). Example: \"0 9 * * 1\" = every Monday at 09:00."}
+		}}`),
+		Handler: func(ctx context.Context, raw json.RawMessage) (ToolCallResult, error) {
+			args, err := decodeArgs(raw)
+			if err != nil {
+				return ErrorResult(err.Error()), nil
+			}
+			expr := stringField(args, "expr", "")
+			if expr == "" {
+				return ErrorResult("expr is required"), nil
+			}
+			var out map[string]any
+			if err := c.Post(ctx, "/validate/cron", map[string]string{"expr": expr}, &out); err != nil {
+				return errorResultOrErr(err)
+			}
+			return TextResult(out), nil
+		},
+	}
+}
+
+// enableFlow / disableFlow toggle the Disabled flag on a saved flow.
+// Disabled flows skip scheduled firings (cron + poll) and reject
+// inbound webhooks/forms, but explicit run_flow / test_trigger_flow
+// calls still work — those represent intentional triggering.
+//
+// Use to "pause" a flow without losing the definition: e.g. user
+// says "stop the Monday digest for a few weeks" — call disable_flow
+// now, then enable_flow when they're ready.
+func enableFlow(c *HazydClient, d Defaults) Tool {
+	return enableOrDisable(c, d, "enable_flow",
+		"Re-enable a previously-disabled flow. Idempotent: enabling an enabled flow is a no-op.",
+		"/enable")
+}
+func disableFlow(c *HazydClient, d Defaults) Tool {
+	return enableOrDisable(c, d, "disable_flow",
+		"Pause a flow without deleting it. Scheduled firings (cron/poll) and inbound webhooks are suppressed; explicit run_flow / test_trigger_flow calls still work. Idempotent.",
+		"/disable")
+}
+func enableOrDisable(c *HazydClient, d Defaults, name, desc, suffix string) Tool {
+	return Tool{
+		Name:        name,
+		Description: desc,
+		InputSchema: json.RawMessage(`{"type":"object","required":["id"],"properties":{
+			"id":        {"type":"string"},
+			"tenant":    {"type":"string"},
+			"workspace": {"type":"string"}
+		}}`),
+		Handler: func(ctx context.Context, raw json.RawMessage) (ToolCallResult, error) {
+			args, err := decodeArgs(raw)
+			if err != nil {
+				return ErrorResult(err.Error()), nil
+			}
+			id := stringField(args, "id", "")
+			if id == "" {
+				return ErrorResult("id is required"), nil
+			}
+			tenant, workspace, err := scoped(args, d)
+			if err != nil {
+				return ErrorResult(err.Error()), nil
+			}
+			var out map[string]any
+			ctx = withIdempotencyKey(ctx, idempotencyKeyFor(name, raw))
+			if err := c.Post(ctx, "/me/flows/"+composeFlowID(tenant, workspace, id)+suffix, nil, &out); err != nil {
+				return errorResultOrErr(err)
+			}
+			return TextResult(out), nil
 		},
 	}
 }
@@ -699,6 +831,36 @@ func validateFlow(c *HazydClient, d Defaults) Tool {
 			// Read-only operation: no idempotency key needed (the server
 			// won't dedupe GET-like calls anyway).
 			if err := c.Post(ctx, "/me/flows/"+composeFlowID(tenant, workspace, id)+"/validate", nil, &out); err != nil {
+				return errorResultOrErr(err)
+			}
+			return TextResult(out), nil
+		},
+	}
+}
+
+// validateGraph dry-runs the lint over a Graph JSON document without
+// saving. Use this when composing a flow in chat — pass the candidate
+// graph, see if it lints clean, then call create_flow only when
+// satisfied. Avoids the create-fix-update churn of authoring against
+// HEAD-only validate_flow.
+func validateGraph(c *HazydClient) Tool {
+	return Tool{
+		Name:        "validate_graph",
+		Description: "Lint a Graph JSON document without saving. Returns {ok, issues}. Use this DURING authoring to catch problems (unknown modules, orphan nodes, hardcoded secrets, port mismatches) before calling create_flow. The body is the same shape create_flow accepts.",
+		InputSchema: json.RawMessage(`{"type":"object","required":["graph"],"properties":{
+			"graph": {"type":"object","description":"A Graph document — nodes, edges, optional triggers/visibility/etc. See create_flow for shape."}
+		}}`),
+		Handler: func(ctx context.Context, raw json.RawMessage) (ToolCallResult, error) {
+			args, err := decodeArgs(raw)
+			if err != nil {
+				return ErrorResult(err.Error()), nil
+			}
+			graph, ok := args["graph"].(map[string]any)
+			if !ok {
+				return ErrorResult("graph must be a JSON object"), nil
+			}
+			var out map[string]any
+			if err := c.Post(ctx, "/validate/graph", graph, &out); err != nil {
 				return errorResultOrErr(err)
 			}
 			return TextResult(out), nil

@@ -42,7 +42,9 @@ func init() {
 					Params: json.RawMessage(`{"owner":"example","repo":"widgets","title":"5xx spike on /checkout","body":"Error rate jumped to 4.1% at 14:02 UTC. Dashboard: https://grafana.example.com/d/checkout","labels":["bug","priority/high"],"assignees":["alice"],"token":"${secret:GITHUB_TOKEN}"}`),
 				},
 			},
-			RequiresConnections: []string{"github"},
+			RequiresConnections: []core.ConnectionRequirement{
+				{Kind: "oauth", Name: "github", Note: "GitHub OAuth — list_connections to confirm before composing."},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

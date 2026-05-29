@@ -25,6 +25,21 @@ const (
 	RetryExponentialBackoff RetryPolicy = "exponential_backoff"
 )
 
+// ConnectionRequirement is one credential a drop needs. Kind is
+// either "oauth" (the user authorizes via a provider; check via
+// list_connections; mint a URL via start_connection) or "secret" (the
+// user pastes an API key the LLM stores via set_secret; flows
+// reference it as ${secret:NAME}). Name carries the provider ID for
+// oauth or the recommended secret-name slug for secret — note that
+// any secret-name a node param references is acceptable; the Name
+// field is just the canonical / suggested one. Note is a short human
+// label the LLM can quote when asking the user.
+type ConnectionRequirement struct {
+	Kind string `json:"kind"`           // "oauth" | "secret"
+	Name string `json:"name"`           // provider ID OR recommended secret name
+	Note string `json:"note,omitempty"` // human-readable, e.g. "Anthropic API key"
+}
+
 // ParamsExample is one worked params example for a drop. Title is the
 // short headline ("Post to #general"), Params is the literal JSON
 // blob a node would have for that case, and Notes is optional prose
@@ -123,15 +138,13 @@ type Manifest struct {
 	// the API serves them verbatim. Required at registration.
 	Examples []ParamsExample `json:"examples,omitempty"`
 
-	// RequiresConnections lists the OAuth provider IDs (or secret
-	// names) this drop needs configured before it will run. The
-	// catalog API surfaces these so an LLM composing a flow can
-	// pre-check "do I have a slack connection?" and direct the user
-	// to authorize first — instead of discovering the gap at run time.
-	// Empty for drops with no external auth (file IO, transforms,
-	// flow-control). Values match Provider IDs from OAuthRegistry
-	// (e.g. "slack", "gmail") or stable secret-name slugs.
-	RequiresConnections []string `json:"requires_connections,omitempty"`
+	// RequiresConnections lists the credentials this drop needs
+	// configured before it will run. Each entry is typed (`oauth` vs
+	// `secret`) so an LLM composing a flow knows whether to send the
+	// user through an OAuth dance (start_connection) or ask them to
+	// paste an API key (set_secret) — without trying both. Empty for
+	// drops with no external auth (file IO, transforms, flow-control).
+	RequiresConnections []ConnectionRequirement `json:"requires_connections,omitempty"`
 
 	// Icon is a logical icon name the UI maps to a glyph in its icon
 	// set (today: lucide-react). Values are kebab-case lowercase, e.g.

@@ -44,6 +44,13 @@ func (w *WebhookListener) handleForm(rw http.ResponseWriter, r *http.Request) {
 		http.NotFound(rw, r)
 		return
 	}
+	if g.Disabled {
+		// Symmetric with the webhook: a paused flow's form is off.
+		// Use 404 (not 403) to match the rest of this handler's
+		// "don't reveal whether the graph exists" stance.
+		http.NotFound(rw, r)
+		return
+	}
 	tr, ok := publicFormTrigger(g)
 	if !ok {
 		// Either no webhook trigger or the graph hasn't opted in. Don't

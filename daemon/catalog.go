@@ -517,6 +517,80 @@ func (h *HTTPGateway) revokeMyAPIKeyHandler(rw http.ResponseWriter, r *http.Requ
 	rw.WriteHeader(http.StatusNoContent)
 }
 
+// triggerKindsHandler is GET /api/v1/catalog/trigger-kinds. Returns
+// the typed schema for every supported trigger kind — what fields a
+// GraphTrigger of that kind accepts, with worked examples. This is
+// the LLM's discovery path for "how do I make this run on a schedule
+// / accept a webhook / show a hosted form?" without scraping
+// hardcoded knowledge from training.
+func (h *HTTPGateway) triggerKindsHandler(rw http.ResponseWriter, _ *http.Request, _ core.Principal) {
+	writeJSON(rw, http.StatusOK, map[string]any{"kinds": triggerKinds()})
+}
+
+// triggerKinds is the source of truth for the trigger catalog. Kept
+// inline (rather than reflection over GraphTrigger) so the human-
+// readable explanation lives next to the schema and stays in sync.
+// When a new GraphTrigger field lands, update both this function and
+// core.GraphTrigger in the same change.
+func triggerKinds() []map[string]any {
+	return []map[string]any{
+		{
+			"kind":    "cron",
+			"summary": "Fire on a schedule using standard 5-field cron syntax.",
+			"fields": map[string]any{
+				"type": map[string]any{"const": "cron"},
+				"cron": map[string]any{
+					"type":        "string",
+					"description": "Minute hour day month weekday. Validate with the validate_cron tool before saving.",
+				},
+			},
+			"examples": []map[string]any{
+				{"title": "Weekdays at 09:00", "trigger": map[string]any{"type": "cron", "cron": "0 9 * * 1-5"}},
+				{"title": "Every 15 minutes", "trigger": map[string]any{"type": "cron", "cron": "*/15 * * * *"}},
+			},
+		},
+		{
+			"kind":    "webhook",
+			"summary": "Accept POSTs from an external system. Optional secret authenticates the caller; optional public_form opts the flow into a hosted intake form.",
+			"fields": map[string]any{
+				"type": map[string]any{"const": "webhook"},
+				"secret": map[string]any{
+					"type":        "string",
+					"description": "Optional. When set, callers must send `Authorization: Bearer <secret>`. Surfaced to the user in the save response's `endpoints[].auth` field.",
+				},
+				"public_form": map[string]any{
+					"type":        "boolean",
+					"description": "When true, the flow ALSO gets a hosted intake form at /form/<tenant>/<workspace>/<id>. The form is public — possession of the URL is the only credential.",
+				},
+				"form_fields": map[string]any{
+					"type":        "array",
+					"items":       map[string]any{"type": "string"},
+					"description": "Names of the fields the hosted form renders. Empty defaults to name/email/message. Field names become keys in the JSON delivered to the webhook_input node.",
+				},
+				"form_title": map[string]any{
+					"type":        "string",
+					"description": "Heading shown on the hosted form. Empty falls back to the flow's name.",
+				},
+			},
+			"examples": []map[string]any{
+				{"title": "Secret-protected webhook", "trigger": map[string]any{"type": "webhook", "secret": "${secret:STRIPE_WEBHOOK_SECRET}"}},
+				{"title": "Public contact form", "trigger": map[string]any{"type": "webhook", "public_form": true, "form_fields": []string{"name", "email", "message"}, "form_title": "Get in touch"}},
+			},
+		},
+		{
+			"kind":    "poll",
+			"summary": "Server-side polling — the scheduler fires the flow every N seconds, like a cron with relative spacing rather than wall-clock alignment.",
+			"fields": map[string]any{
+				"type":             map[string]any{"const": "poll"},
+				"interval_seconds": map[string]any{"type": "integer", "minimum": 1},
+			},
+			"examples": []map[string]any{
+				{"title": "Every 60 seconds", "trigger": map[string]any{"type": "poll", "interval_seconds": 60}},
+			},
+		},
+	}
+}
+
 // dropRole maps a drop's category to the "role" the integration page
 // surfaces. Triggers are special because they're what an LLM looks
 // for first when composing a new flow ("how does this start?");

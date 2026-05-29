@@ -41,7 +41,9 @@ func init() {
 					Notes:  "Useful for flows that fan out alerts to every direct conversation the bot is part of.",
 				},
 			},
-			RequiresConnections: []string{"slack"},
+			RequiresConnections: []core.ConnectionRequirement{
+				{Kind: "oauth", Name: "slack", Note: "Slack OAuth — chat:write etc. scopes."},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

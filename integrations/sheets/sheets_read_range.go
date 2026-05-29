@@ -44,7 +44,9 @@ func init() {
 					Params: json.RawMessage(`{"account":"default","spreadsheet_id":"1AbcDEFghIJklmNOPqrsTUVwxyZ_0123456789abcd","range":"raw_dump!A1:Z","headers":false}`),
 				},
 			},
-			RequiresConnections: []string{"sheets"},
+			RequiresConnections: []core.ConnectionRequirement{
+				{Kind: "oauth", Name: "sheets", Note: "Google Sheets OAuth — drive.file scope."},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

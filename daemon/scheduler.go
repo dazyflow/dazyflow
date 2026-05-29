@@ -166,6 +166,12 @@ func (s *Scheduler) rescan(ctx context.Context) error {
 			if err != nil {
 				continue
 			}
+			// A disabled flow is paused — skip every trigger here.
+			// Cron + poll triggers will resume automatically once the
+			// flow is re-enabled and the scheduler re-scans.
+			if g.Disabled {
+				continue
+			}
 			for triggerIdx, t := range g.Triggers {
 				var entry *scheduledGraph
 				switch t.Type {

@@ -46,7 +46,9 @@ func init() {
 					Params: json.RawMessage(`{"token":"${secret:SHEETS_OAUTH}","spreadsheet_id":"1AbcDEFghIJklmNOPqrsTUVwxyZ_0123456789abcd","range":"Sheet1","timeout_ms":20000}`),
 				},
 			},
-			RequiresConnections: []string{"sheets"},
+			RequiresConnections: []core.ConnectionRequirement{
+				{Kind: "oauth", Name: "sheets", Note: "Google Sheets OAuth — drive.file scope."},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

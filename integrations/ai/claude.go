@@ -60,7 +60,9 @@ func init() {
 					Notes:  "Pass a full messages array when you need conversation history; this overrides params.prompt.",
 				},
 			},
-			RequiresConnections: []string{"anthropic"},
+			RequiresConnections: []core.ConnectionRequirement{
+				{Kind: "secret", Name: "ANTHROPIC_API_KEY", Note: "Anthropic API key (sk-ant-...); any secret name works at param level, this is the conventional one."},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{{

@@ -40,7 +40,9 @@ func init() {
 					Notes:  "For child pages the title goes inside properties.title (not into a named property).",
 				},
 			},
-			RequiresConnections: []string{"notion"},
+			RequiresConnections: []core.ConnectionRequirement{
+				{Kind: "secret", Name: "NOTION_TOKEN", Note: "Notion internal integration token (Notion uses tokens, not OAuth for most server-to-server use)."},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

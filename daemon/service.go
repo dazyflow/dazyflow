@@ -315,6 +315,35 @@ func (s *Service) hasActiveRun(ctx context.Context, tenant, ws, graphID string) 
 	return false, nil
 }
 
+// SetFlowEnabled toggles the Disabled flag on a flow. When disabled,
+// the scheduler skips cron + poll triggers and webhook/form endpoints
+// reject inbound calls — but manual runs and explicit test triggers
+// still work. Surfaced via enable_flow / disable_flow MCP tools.
+//
+// Idempotent: enabling an already-enabled flow (or disabling a
+// disabled one) returns nil without touching the store.
+func (s *Service) SetFlowEnabled(ctx context.Context, p core.Principal, tenant, ws, id string, enabled bool) (string, error) {
+	if err := core.RequireWorkspace(p, tenant, ws); err != nil {
+		return "", err
+	}
+	store, err := s.Workspaces.Open(tenant, ws)
+	if err != nil {
+		return "", err
+	}
+	g, err := store.Load(id)
+	if err != nil {
+		return "", err
+	}
+	if err := core.AuthorizeGraphEdit(p, g); err != nil {
+		return "", err
+	}
+	if g.Disabled == !enabled {
+		return "", nil // idempotent no-op
+	}
+	g.Disabled = !enabled
+	return store.Save(g, p.Subject)
+}
+
 // DeleteGraph removes a flow from the workspace's git-backed store.
 // Permission: workspace scope + the principal must be authorized to
 // edit the existing flow (owner / org-visible / admin). Refuses with

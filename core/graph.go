@@ -92,6 +92,15 @@ type Graph struct {
 	// The hzd `-default-graph-timeout` flag is applied at SubmitGraph
 	// time when this field is unset.
 	TimeoutSeconds int `json:"timeout_seconds,omitempty"`
+
+	// Disabled, when true, suspends all automatic firing of this flow:
+	// the scheduler skips cron + poll triggers, and webhook + form
+	// endpoints reject inbound calls with 403 + code "flow_disabled".
+	// Manual runs via /me/flows/{id}/run and test_trigger_flow still
+	// work — those paths are explicit intent ("yes, run this now")
+	// rather than passive firing. Pair with the enable_flow /
+	// disable_flow MCP tools to pause a flow without deleting it.
+	Disabled bool `json:"disabled,omitempty"`
 }
 
 // Visibility enumerates the access modes a flow can have. Values are

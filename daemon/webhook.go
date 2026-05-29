@@ -111,6 +111,13 @@ func (w *WebhookListener) handleTrigger(rw http.ResponseWriter, r *http.Request)
 		http.Error(rw, "unknown graph", http.StatusNotFound)
 		return
 	}
+	if g.Disabled {
+		// Paused flows reject inbound webhooks. 403 rather than 404 so
+		// the caller (e.g. Stripe's webhook UI) sees this as "we know
+		// the endpoint but it's off" instead of an unknown-URL retry.
+		http.Error(rw, `{"error":{"code":"flow_disabled","message":"flow is currently disabled — re-enable via enable_flow"}}`, http.StatusForbidden)
+		return
+	}
 
 	secret := webhookSecret(g)
 	if secret == "" {

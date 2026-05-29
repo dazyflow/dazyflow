@@ -34,7 +34,9 @@ func init() {
 					Notes:  "Use the channel ID (Cxxx), not the #name. Mentions elsewhere are skipped at the gateway and don't enqueue a job.",
 				},
 			},
-			RequiresConnections: []string{"slack"},
+			RequiresConnections: []core.ConnectionRequirement{
+				{Kind: "oauth", Name: "slack", Note: "Slack OAuth — chat:write etc. scopes."},
+			},
 			ExecutionModel: core.ExecutionTrigger,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

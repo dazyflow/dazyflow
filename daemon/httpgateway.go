@@ -260,6 +260,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/catalog/integrations/{id}", h.requireAuth(h.getIntegrationHandler))
 	mux.HandleFunc("GET /api/v1/catalog/drops", h.requireAuth(h.listDropsHandler))
 	mux.HandleFunc("GET /api/v1/catalog/drops/{id}", h.requireAuth(h.getDropHandler))
+	mux.HandleFunc("GET /api/v1/catalog/trigger-kinds", h.requireAuth(h.triggerKindsHandler))
 
 	// /me surface. /me is the new alias for /whoami; /me/api-keys is
 	// new (self-issue + own-key list/revoke). Unlike /admin/api-keys
@@ -283,6 +284,10 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PATCH /api/v1/me/flows/{flow_id}",
 		h.requireAuth(h.idempotencyMiddleware("/me/flows/{flow_id}", h.patchFlowMe)))
 	mux.HandleFunc("DELETE /api/v1/me/flows/{flow_id}", h.requireAuth(h.deleteFlowMe))
+	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/enable",
+		h.requireAuth(h.idempotencyMiddleware("/me/flows/{flow_id}/enable", h.enableFlowMe)))
+	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/disable",
+		h.requireAuth(h.idempotencyMiddleware("/me/flows/{flow_id}/disable", h.disableFlowMe)))
 	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/run",
 		h.requireAuth(h.idempotencyMiddleware("/me/flows/{flow_id}/run", h.runFlowMe)))
 	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/validate", h.requireAuth(h.validateFlowMe))
@@ -308,6 +313,11 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/me/connections/{provider}/authorize",
 		h.requireAuth(h.idempotencyMiddleware("/me/connections/{provider}/authorize", h.startConnectionMe)))
 	mux.HandleFunc("POST /api/v1/validate/cron", h.requireAuth(h.validateCron))
+	// validate/graph lints a Graph JSON literal without saving — for
+	// LLMs that compose a graph in chat and want a dry-run before
+	// committing. Distinct from /me/flows/{id}/validate which lints
+	// the saved HEAD.
+	mux.HandleFunc("POST /api/v1/validate/graph", h.requireAuth(h.validateGraphLiteral))
 	// Slack Events API endpoint. NOT under requireAuth — Slack POSTs
 	// as a stranger; the HMAC signature is the auth.
 	mux.HandleFunc("POST /api/v1/events/slack/{tenant}", h.slackEvents)
