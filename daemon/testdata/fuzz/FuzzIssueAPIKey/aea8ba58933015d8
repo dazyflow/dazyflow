@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("{\"suBjeCt\":\"00000\",\"tenAnt\":\"00\",\"roles\":[{}]}")
