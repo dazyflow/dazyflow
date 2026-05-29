@@ -47,11 +47,17 @@ type googleSignInState struct {
 	Tenant   string
 	Created  time.Time
 	ReturnTo string
+	// Test marks an admin-initiated "Test sign-in" round-trip. When
+	// true, errors after state-consume redirect to ReturnTo with a
+	// ?test_error=<code> query param instead of dumping JSON, so the
+	// admin SSO page can render a friendly diagnosis. Real (member-
+	// initiated) sign-in failures keep the existing JSON behavior.
+	Test bool
 }
 
 const googleSignInStateTTL = 10 * time.Minute
 
-func mintGoogleState(tenant, returnTo string) (string, error) {
+func mintGoogleState(tenant, returnTo string, test bool) (string, error) {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
@@ -65,7 +71,12 @@ func mintGoogleState(tenant, returnTo string) (string, error) {
 			delete(googleSignInStates.items, k)
 		}
 	}
-	googleSignInStates.items[s] = googleSignInState{Tenant: tenant, Created: now, ReturnTo: returnTo}
+	googleSignInStates.items[s] = googleSignInState{
+		Tenant:   tenant,
+		Created:  now,
+		ReturnTo: returnTo,
+		Test:     test,
+	}
 	return s, nil
 }
 
@@ -106,7 +117,8 @@ func (h *HTTPGateway) googleSignInStart(rw http.ResponseWriter, r *http.Request)
 	if returnTo == "" || !strings.HasPrefix(returnTo, "/") {
 		returnTo = "/"
 	}
-	state, err := mintGoogleState(tenant, returnTo)
+	test := r.URL.Query().Get("test") == "1"
+	state, err := mintGoogleState(tenant, returnTo, test)
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
@@ -133,6 +145,53 @@ func (h *HTTPGateway) googleRedirectURI() string {
 	return base + "/api/v1/auth/google/callback"
 }
 
+// classifyGoogleError maps a token-exchange error string into a short
+// code the SSO admin page knows how to render. We substring-match on
+// Google's OAuth error codes (which are stable across their API) since
+// the wrapping error chain hides the structured fields.
+func classifyGoogleError(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "invalid_client"):
+		return "invalid_client"
+	case strings.Contains(msg, "redirect_uri_mismatch"):
+		return "redirect_uri_mismatch"
+	case strings.Contains(msg, "invalid_grant"):
+		return "invalid_grant"
+	case strings.Contains(msg, "unauthorized_client"):
+		return "unauthorized_client"
+	default:
+		return "exchange_failed"
+	}
+}
+
+// appendQuery adds key=value to a URL string, picking ? or & as needed.
+// We don't round-trip through net/url because ReturnTo is a path+query
+// (not a full URL) — net/url.Parse handles it but the formatting churn
+// isn't worth it for one append.
+func appendQuery(base, key, val string) string {
+	sep := "?"
+	if strings.Contains(base, "?") {
+		sep = "&"
+	}
+	return base + sep + url.QueryEscape(key) + "=" + url.QueryEscape(val)
+}
+
+// redirectTestError sends the admin back to the SSO settings page with
+// a ?test_error=<code> query param so the page can render a friendly
+// banner. Used only when st.Test is true; production sign-in failures
+// fall through to writeJSONError as before.
+func redirectTestError(rw http.ResponseWriter, r *http.Request, st googleSignInState, code string) {
+	target := st.ReturnTo
+	if target == "" || !strings.HasPrefix(target, "/") {
+		target = "/admin/sso"
+	}
+	http.Redirect(rw, r, appendQuery(target, "test_error", code), http.StatusFound)
+}
+
 // googleSignInCallback handles the redirect back from Google. We
 // exchange the code for an id_token + access_token, fetch userinfo,
 // verify hd= when the org requires it, look up the user (creating
@@ -143,43 +202,74 @@ func (h *HTTPGateway) googleSignInCallback(rw http.ResponseWriter, r *http.Reque
 		writeJSONError(rw, http.StatusNotImplemented, "google sign-in not configured")
 		return
 	}
+	// Consume state up-front so that even early errors (e.g. user
+	// declined consent on Google, which arrives as ?error=access_denied
+	// alongside the state) can route to the friendly test-error page.
+	state := r.URL.Query().Get("state")
+	var st googleSignInState
+	hasState := false
+	if state != "" {
+		st, hasState = consumeGoogleState(state)
+	}
 	if errStr := r.URL.Query().Get("error"); errStr != "" {
+		if hasState && st.Test {
+			redirectTestError(rw, r, st, "denied")
+			return
+		}
 		writeJSONError(rw, http.StatusBadRequest, "google: "+errStr)
 		return
 	}
-	state := r.URL.Query().Get("state")
 	code := r.URL.Query().Get("code")
-	if state == "" || code == "" {
-		writeJSONError(rw, http.StatusBadRequest, "missing state or code")
+	if !hasState {
+		writeJSONError(rw, http.StatusBadRequest, "invalid or expired state")
 		return
 	}
-	st, ok := consumeGoogleState(state)
-	if !ok {
-		writeJSONError(rw, http.StatusBadRequest, "invalid or expired state")
+	if code == "" {
+		writeJSONError(rw, http.StatusBadRequest, "missing code")
 		return
 	}
 	cfg, err := h.OrgAuth.GetOrgAuth(r.Context(), st.Tenant)
 	if err != nil || !cfg.GoogleEnabled() {
+		if st.Test {
+			redirectTestError(rw, r, st, "not_configured")
+			return
+		}
 		writeJSONError(rw, http.StatusBadRequest, "Google sign-in is no longer configured for that organization")
 		return
 	}
 	tok, info, err := exchangeGoogleCode(r.Context(), cfg, code, h.googleRedirectURI())
 	if err != nil {
+		if st.Test {
+			redirectTestError(rw, r, st, classifyGoogleError(err))
+			return
+		}
 		writeJSONError(rw, http.StatusBadGateway, err.Error())
 		return
 	}
 	_ = tok // access token isn't stored — sign-in is one-shot
 	email := strings.ToLower(strings.TrimSpace(info.Email))
 	if email == "" {
+		if st.Test {
+			redirectTestError(rw, r, st, "no_email")
+			return
+		}
 		writeJSONError(rw, http.StatusBadGateway, "google didn't return an email")
 		return
 	}
 	if !info.EmailVerified {
+		if st.Test {
+			redirectTestError(rw, r, st, "not_verified")
+			return
+		}
 		writeJSONError(rw, http.StatusForbidden, "google didn't verify this email")
 		return
 	}
 	if cfg.GoogleWorkspaceDomain != "" {
 		if !strings.EqualFold(info.HD, cfg.GoogleWorkspaceDomain) {
+			if st.Test {
+				redirectTestError(rw, r, st, "domain_mismatch")
+				return
+			}
 			writeJSONError(rw, http.StatusForbidden,
 				fmt.Sprintf("only %s users can sign into this organization via Google", cfg.GoogleWorkspaceDomain))
 			return
@@ -203,6 +293,10 @@ func (h *HTTPGateway) googleSignInCallback(rw http.ResponseWriter, r *http.Reque
 			CreatedAt: time.Now().UTC(),
 		}
 		if err := h.Users.PutUser(r.Context(), user); err != nil {
+			if st.Test {
+				redirectTestError(rw, r, st, "internal")
+				return
+			}
 			writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("create user: %v", err))
 			return
 		}
@@ -257,6 +351,10 @@ func (h *HTTPGateway) googleSignInCallback(rw http.ResponseWriter, r *http.Reque
 	sessUser.Roles = activeRoles
 	sess, token, err := auth.IssueSession(r.Context(), h.Sessions, sessUser, ttl)
 	if err != nil {
+		if st.Test {
+			redirectTestError(rw, r, st, "internal")
+			return
+		}
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("issue session: %v", err))
 		return
 	}
@@ -270,9 +368,15 @@ func (h *HTTPGateway) googleSignInCallback(rw http.ResponseWriter, r *http.Reque
 		Secure:   h.requestIsHTTPS(r),
 	})
 	// Land the user wherever the sign-in started — defaults to /.
+	// For an admin Test sign-in, decorate with ?test=ok so the SSO
+	// page can render a success banner (the page strips the param
+	// after surfacing it, so a refresh doesn't keep claiming success).
 	target := st.ReturnTo
 	if target == "" {
 		target = "/"
+	}
+	if st.Test {
+		target = appendQuery(target, "test", "ok")
 	}
 	http.Redirect(rw, r, target, http.StatusFound)
 }

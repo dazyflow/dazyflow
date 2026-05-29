@@ -1,9 +1,42 @@
 import { useCallback, useEffect, useState } from "react";
-import { AlertCircle, Check, ShieldCheck } from "lucide-react";
+import { AlertCircle, Check, Copy, ShieldCheck } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
 import type { OrgAuthConfig } from "../types";
+
+// RedirectURIDisplay shows the read-only redirect URI alongside a copy
+// button. The URI must be pasted verbatim into Google's "Authorized
+// redirect URIs" box — a trailing space or wrong scheme makes Google
+// reject the sign-in, which is hard to debug. Manual copy is the
+// single most error-prone step in the SSO setup, so we make it
+// one-click.
+function RedirectURIDisplay({ uri }: { uri: string }) {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(uri);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard may be blocked; user can select + copy manually */
+    }
+  };
+  return (
+    <div className="sso-readonly-row">
+      <code className="sso-readonly">{uri}</code>
+      <button type="button" onClick={copy} className="sso-copy-btn">
+        {copied ? (
+          <Check size={12} style={{ marginRight: 6, verticalAlign: -1 }} />
+        ) : (
+          <Copy size={12} style={{ marginRight: 6, verticalAlign: -1 }} />
+        )}
+        {copied ? t("admin.sso.copyRedirectDone") : t("admin.sso.copyRedirect")}
+      </button>
+    </div>
+  );
+}
 
 // AdminOrgSSO is the per-organization Google Workspace SSO settings
 // page. The org's admin pastes their Google OAuth client_id +
@@ -26,6 +59,58 @@ export function AdminOrgSSO() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [testOK, setTestOK] = useState(false);
+  const [testErrorCode, setTestErrorCode] = useState<string | null>(null);
+  const [popupBlocked, setPopupBlocked] = useState(false);
+
+  // The Test sign-in button opens /api/v1/auth/google/start in a new
+  // tab. The callback either redirects back here with ?test=ok (full
+  // round-trip succeeded — Google accepted client_id/secret and the
+  // redirect URI matches) or ?test_error=<code> (the daemon classified
+  // the failure). Read whichever is set, surface a banner, then strip
+  // the param so a refresh doesn't keep claiming a stale result.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    const ok = sp.get("test");
+    const err = sp.get("test_error");
+    let touched = false;
+    if (ok === "ok") {
+      setTestOK(true);
+      sp.delete("test");
+      touched = true;
+    }
+    if (err) {
+      setTestErrorCode(err);
+      sp.delete("test_error");
+      touched = true;
+    }
+    if (touched) {
+      const qs = sp.toString();
+      const url = window.location.pathname + (qs ? `?${qs}` : "");
+      window.history.replaceState(null, "", url);
+    }
+  }, []);
+
+  // Codes the daemon emits — keep in sync with classifyGoogleError +
+  // the redirectTestError sites in daemon/google_signin.go.
+  const knownTestErrorCodes = new Set([
+    "invalid_client",
+    "redirect_uri_mismatch",
+    "invalid_grant",
+    "unauthorized_client",
+    "exchange_failed",
+    "no_email",
+    "not_verified",
+    "domain_mismatch",
+    "not_configured",
+    "denied",
+    "internal",
+  ]);
+  const testErrorBodyKey =
+    testErrorCode && knownTestErrorCodes.has(testErrorCode)
+      ? `admin.sso.testError.${testErrorCode}`
+      : "admin.sso.testError.exchange_failed";
 
   const refresh = useCallback(async () => {
     if (!token) return;
@@ -98,6 +183,10 @@ export function AdminOrgSSO() {
 
   const enabled = !!cfg?.google_enabled;
   const orgID = me?.tenant ?? "";
+  const testSignInURL =
+    `/api/v1/auth/google/start?tenant=${encodeURIComponent(orgID)}` +
+    `&test=1` +
+    `&return_to=${encodeURIComponent("/admin/sso")}`;
   const redirectURI =
     me?.public_base_url
       ? `${me.public_base_url.replace(/\/+$/, "")}/api/v1/auth/google/callback`
@@ -123,18 +212,84 @@ export function AdminOrgSSO() {
           {error}
         </div>
       )}
+      {testOK && (
+        <div className="card sso-test-ok">
+          <Check size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+          <strong>{t("admin.sso.testSuccessHead")}</strong>
+          <div className="desc">{t("admin.sso.testSuccessBody")}</div>
+        </div>
+      )}
+      {testErrorCode && (
+        <div className="card sso-test-error">
+          <AlertCircle size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+          <strong>{t("admin.sso.testErrorHead")}</strong>
+          <div className="desc">{t(testErrorBodyKey)}</div>
+          <div className="desc sso-test-error-retry">{t("admin.sso.testErrorRetry")}</div>
+        </div>
+      )}
       {loading ? (
         <div className="card" style={{ color: "var(--muted)" }}>
           {t("common.loading")}
         </div>
       ) : (
+        <>
+        <details className="sso-walkthrough card" open={!enabled}>
+          <summary>{t("admin.sso.walkthroughSummary")}</summary>
+          <p className="desc">{t("admin.sso.walkthroughIntro")}</p>
+          <ol className="sso-walkthrough-steps">
+            <li>
+              <h3>{t("admin.sso.walkthroughStep1Head")}</h3>
+              <p>
+                <Trans
+                  i18nKey="admin.sso.walkthroughStep1Body"
+                  components={[
+                    <a
+                      href="https://console.cloud.google.com/apis/credentials"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    />,
+                  ]}
+                />
+              </p>
+            </li>
+            <li>
+              <h3>{t("admin.sso.walkthroughStep2Head")}</h3>
+              <p>
+                <Trans
+                  i18nKey="admin.sso.walkthroughStep2Body"
+                  components={[<strong />]}
+                />
+              </p>
+            </li>
+            <li>
+              <h3>{t("admin.sso.walkthroughStep3Head")}</h3>
+              <p>
+                <Trans
+                  i18nKey="admin.sso.walkthroughStep3Body"
+                  components={[<strong />, <strong />]}
+                />
+              </p>
+              <RedirectURIDisplay uri={redirectURI} />
+            </li>
+            <li>
+              <h3>{t("admin.sso.walkthroughStep4Head")}</h3>
+              <p>
+                <Trans
+                  i18nKey="admin.sso.walkthroughStep4Body"
+                  components={[<strong />, <strong />]}
+                />
+              </p>
+            </li>
+          </ol>
+          <p className="desc sso-walkthrough-tip">{t("admin.sso.walkthroughTip")}</p>
+        </details>
         <form className="card" onSubmit={save}>
           <h2 style={{ marginTop: 0 }}>{t("admin.sso.googleHead")}</h2>
           <p className="desc">{t("admin.sso.googleIntro")}</p>
 
           <div className="sf-field">
             <label>{t("admin.sso.redirectUriLabel")}</label>
-            <code className="sso-readonly">{redirectURI}</code>
+            <RedirectURIDisplay uri={redirectURI} />
             <div className="desc">{t("admin.sso.redirectUriDesc")}</div>
           </div>
 
@@ -201,9 +356,39 @@ export function AdminOrgSSO() {
                   signinUrl: `/signin?org=${encodeURIComponent(orgID)}`,
                 })}
               </div>
+              <div className="sso-test-row">
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => {
+                    // window.open returns null when the browser blocks
+                    // the popup (common with strict popup-blocker
+                    // settings). Fall back to an inline link the user
+                    // can click in-tab — losing the dual-tab UX but
+                    // not losing the test flow entirely.
+                    const w = window.open(testSignInURL, "_blank", "noopener,noreferrer");
+                    setPopupBlocked(!w);
+                  }}
+                >
+                  {t("admin.sso.testButton")}
+                </button>
+                <div className="desc">{t("admin.sso.testButtonDesc")}</div>
+                {popupBlocked && (
+                  <div className="sso-popup-blocked">
+                    <AlertCircle size={12} style={{ marginRight: 6, verticalAlign: -1 }} />
+                    <strong>{t("admin.sso.popupBlockedHead")}</strong>
+                    <div className="desc">
+                      {t("admin.sso.popupBlockedBody")}{" "}
+                      <a href={testSignInURL}>{t("admin.sso.popupBlockedLink")}</a>{" "}
+                      {t("admin.sso.popupBlockedTail")}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </form>
+        </>
       )}
     </div>
   );
