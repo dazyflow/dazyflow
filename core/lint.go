@@ -66,6 +66,16 @@ var knownSecretValue = regexp.MustCompile(
 // long. Content-prefix matches (knownSecretValue) ignore this floor.
 const minLiteralSecretLen = 12
 
+// templatePlaceholderPattern matches the `REPLACE_WITH_<TOKEN>` markers
+// that ship inside template graph fixtures (sheet IDs, Notion DB UUIDs,
+// …) for fields a user must fill in before the flow can do real work.
+// A forked template that still carries one will silently fail at run
+// time — the placeholder is a literal string the API rejects only when
+// the run actually fires. Flagging it at save/validate time is the
+// nudge that prevents "I forked the template, hit run, got an unhelpful
+// error" sequence.
+var templatePlaceholderPattern = regexp.MustCompile(`REPLACE_WITH_[A-Z0-9_]+`)
+
 // persistenceModules is the set of native drops whose output is
 // written to a place a third party (or the user later, with broader
 // access) could retrieve. Wiring a secret-bearing node's output
@@ -118,10 +128,81 @@ func LintGraph(g Graph) []LintIssue {
 	issues := make([]LintIssue, 0)
 	issues = append(issues, lintHardcodedSecrets(g)...)
 	issues = append(issues, lintSecretToPersistence(g, nodesByID)...)
+	issues = append(issues, lintTemplatePlaceholders(g)...)
 	if len(issues) == 0 {
 		return nil
 	}
 	return issues
+}
+
+// lintTemplatePlaceholders flags REPLACE_WITH_… markers still present
+// in a node's params or env — the canonical "user forked a template
+// but didn't fill in the sheet ID / DB UUID" trap. Emits one issue per
+// node (first hit), severity error because the run is guaranteed to
+// fail at the placeholder field.
+func lintTemplatePlaceholders(g Graph) []LintIssue {
+	issues := make([]LintIssue, 0)
+	for _, n := range g.Nodes {
+		if field, marker := findTemplatePlaceholder("", n.Params); field != "" {
+			issues = append(issues, placeholderIssue(n.ID, n.Module, field, marker))
+			continue
+		}
+		flagged, marker := "", ""
+		for k, v := range n.Env {
+			if m := templatePlaceholderPattern.FindString(v); m != "" {
+				flagged, marker = "env."+k, m
+				break
+			}
+		}
+		if flagged != "" {
+			issues = append(issues, placeholderIssue(n.ID, n.Module, flagged, marker))
+		}
+	}
+	sort.Slice(issues, func(i, j int) bool {
+		return issues[i].NodeIDs[0] < issues[j].NodeIDs[0]
+	})
+	return issues
+}
+
+func placeholderIssue(nodeID, module, field, marker string) LintIssue {
+	return LintIssue{
+		Code:     "template_placeholder",
+		Severity: LintError,
+		Message: fmt.Sprintf(
+			"Node %q (module %s) still has the template placeholder %q in %s. Replace it with the real value before running — the upstream service will reject it as-is.",
+			nodeID, module, marker, field,
+		),
+		NodeIDs: []string{nodeID},
+	}
+}
+
+// findTemplatePlaceholder walks params depth-first and returns the
+// first (field path, matched marker) it finds, or ("","") if none.
+func findTemplatePlaceholder(keyPath string, v any) (string, string) {
+	switch t := v.(type) {
+	case string:
+		if m := templatePlaceholderPattern.FindString(t); m != "" {
+			return orSelf(keyPath), m
+		}
+	case map[string]any:
+		keys := make([]string, 0, len(t))
+		for k := range t {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			if hit, marker := findTemplatePlaceholder(join(keyPath, k), t[k]); hit != "" {
+				return hit, marker
+			}
+		}
+	case []any:
+		for i, child := range t {
+			if hit, marker := findTemplatePlaceholder(fmt.Sprintf("%s[%d]", keyPath, i), child); hit != "" {
+				return hit, marker
+			}
+		}
+	}
+	return "", ""
 }
 
 // lintSecretToPersistence is the original rule: a secret-bearing node

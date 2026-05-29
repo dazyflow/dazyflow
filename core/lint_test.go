@@ -345,6 +345,99 @@ func TestLintGraph_HardcodedSecretInEnv(t *testing.T) {
 	}
 }
 
+// ---- template_placeholder rule ----
+
+func TestLintGraph_TemplatePlaceholderInParamsFlagged(t *testing.T) {
+	g := Graph{Nodes: []Node{
+		node("log", "sheets_append_row", map[string]any{
+			"spreadsheet_id": "REPLACE_WITH_YOUR_SHEET_ID",
+			"range":          "Inbox Log",
+		}),
+	}}
+	got := LintGraph(g)
+	iss := hasIssueCode(got, "template_placeholder")
+	if iss == nil {
+		t.Fatalf("expected template_placeholder, got %+v", got)
+	}
+	if iss.Severity != LintError {
+		t.Errorf("severity=%q want error", iss.Severity)
+	}
+	if len(iss.NodeIDs) != 1 || iss.NodeIDs[0] != "log" {
+		t.Errorf("node_ids=%v want [log]", iss.NodeIDs)
+	}
+	if !strings.Contains(iss.Message, "spreadsheet_id") {
+		t.Errorf("message should name the field: %q", iss.Message)
+	}
+	if !strings.Contains(iss.Message, "REPLACE_WITH_YOUR_SHEET_ID") {
+		t.Errorf("message should quote the marker: %q", iss.Message)
+	}
+}
+
+func TestLintGraph_TemplatePlaceholderInEnvFlagged(t *testing.T) {
+	n := Node{ID: "a", Module: "http_request", Env: map[string]string{
+		"DB_URL": "REPLACE_WITH_DATABASE_UUID",
+	}}
+	iss := hasIssueCode(LintGraph(Graph{Nodes: []Node{n}}), "template_placeholder")
+	if iss == nil {
+		t.Fatal("placeholder in env should be flagged")
+	}
+	if !strings.Contains(iss.Message, "env.DB_URL") {
+		t.Errorf("message should name env field: %q", iss.Message)
+	}
+}
+
+func TestLintGraph_TemplatePlaceholderNestedFlagged(t *testing.T) {
+	g := Graph{Nodes: []Node{
+		node("fetch", "for_each", map[string]any{
+			"step": "gmail_get_message",
+			"step_params": map[string]any{
+				"id":      "REPLACE_WITH_MESSAGE_ID",
+				"account": "default",
+			},
+		}),
+	}}
+	iss := hasIssueCode(LintGraph(g), "template_placeholder")
+	if iss == nil {
+		t.Fatal("nested placeholder should be flagged")
+	}
+	if !strings.Contains(iss.Message, "step_params.id") {
+		t.Errorf("message should walk the path: %q", iss.Message)
+	}
+}
+
+func TestLintGraph_NoPlaceholderNotFlagged(t *testing.T) {
+	g := Graph{Nodes: []Node{
+		node("log", "sheets_append_row", map[string]any{
+			"spreadsheet_id": "1abc-real-sheet-id",
+			"range":          "Inbox Log",
+		}),
+	}}
+	if hasIssueCode(LintGraph(g), "template_placeholder") != nil {
+		t.Error("real values must not trip the placeholder rule")
+	}
+}
+
+func TestLintGraph_TemplatePlaceholderOneIssuePerNode(t *testing.T) {
+	// Two placeholder fields on the same node → still one issue,
+	// so the banner doesn't spam.
+	g := Graph{Nodes: []Node{
+		node("log", "sheets_append_row", map[string]any{
+			"spreadsheet_id": "REPLACE_WITH_YOUR_SHEET_ID",
+			"range":          "REPLACE_WITH_RANGE",
+		}),
+	}}
+	got := LintGraph(g)
+	count := 0
+	for _, iss := range got {
+		if iss.Code == "template_placeholder" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("want 1 placeholder issue per node, got %d (%+v)", count, got)
+	}
+}
+
 func TestLintGraph_NonSecretConfigNotFlagged(t *testing.T) {
 	g := Graph{Nodes: []Node{
 		node("a", "http_request", map[string]any{

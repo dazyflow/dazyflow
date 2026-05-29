@@ -458,9 +458,10 @@ func (h *HTTPGateway) validateGraphLiteral(rw http.ResponseWriter, r *http.Reque
 	if g.Workspace == "" {
 		g.Workspace = p.Workspace
 	}
+	issues := core.LintGraph(g)
 	writeJSON(rw, http.StatusOK, map[string]any{
-		"ok":     len(core.LintGraph(g)) == 0,
-		"issues": core.LintGraph(g),
+		"ok":     !hasLintError(issues),
+		"issues": issues,
 	})
 }
 
@@ -478,10 +479,24 @@ func (h *HTTPGateway) validateFlowMe(rw http.ResponseWriter, r *http.Request, p 
 		writeAPIError(rw, http.StatusNotFound, "flow_not_found", err.Error())
 		return
 	}
+	issues := core.LintGraph(g)
 	writeJSON(rw, http.StatusOK, map[string]any{
-		"ok":     true,
-		"issues": core.LintGraph(g),
+		"ok":     !hasLintError(issues),
+		"issues": issues,
 	})
+}
+
+// hasLintError reports whether any issue in xs is a hard error (vs an
+// advisory warning). The validate endpoints flip `ok` to false on the
+// first error so callers can gate "run" / "publish" on a clean slate
+// while still tolerating warn-level findings.
+func hasLintError(xs []core.LintIssue) bool {
+	for _, x := range xs {
+		if x.Severity == core.LintError {
+			return true
+		}
+	}
+	return false
 }
 
 // --- /me/connections --------------------------------------------------
