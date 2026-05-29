@@ -674,6 +674,52 @@ func TestSheetsExportPDF_NoToken_AuthError(t *testing.T) {
 	}
 }
 
+// ---- spreadsheet_id URL extraction ----
+
+func TestNormalizeSpreadsheetID(t *testing.T) {
+	// A bare ID round-trips; every URL shape Google emits resolves
+	// to the same ID. The unmatched cases (truncated URLs, gibberish)
+	// fall through verbatim so the API call surfaces the real error
+	// from Drive/Sheets instead of us swallowing it.
+	cases := []struct {
+		in, want string
+	}{
+		{"1AbcDEFghIJklmNOPqrsTUVwxyZ_0123456789abcd", "1AbcDEFghIJklmNOPqrsTUVwxyZ_0123456789abcd"},
+		{"https://docs.google.com/spreadsheets/d/1AbcDEF/edit", "1AbcDEF"},
+		{"https://docs.google.com/spreadsheets/d/1AbcDEF/edit#gid=0", "1AbcDEF"},
+		{"https://docs.google.com/spreadsheets/d/1AbcDEF/edit?usp=sharing", "1AbcDEF"},
+		{"https://docs.google.com/spreadsheets/d/1AbcDEF", "1AbcDEF"},
+		{"https://docs.google.com/spreadsheets/d/1A_b-c2-3", "1A_b-c2-3"},
+		// Trailing whitespace or fragment-only inputs: leave alone,
+		// let the API decide.
+		{"not-a-url-or-id", "not-a-url-or-id"},
+		{"", ""},
+	}
+	for _, c := range cases {
+		if got := normalizeSpreadsheetID(c.in); got != c.want {
+			t.Errorf("normalizeSpreadsheetID(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestSheetsExportPDF_AcceptsURL(t *testing.T) {
+	// End-to-end: paste a sheet URL into the params; the drop must
+	// hit the Drive endpoint with the extracted ID, not the URL.
+	fd := newFakeDrive(t)
+	_, _ = executeSheetsExportPDF(t.Context(), core.Job{
+		Params: map[string]any{
+			"token":          "x",
+			"spreadsheet_id": "https://docs.google.com/spreadsheets/d/1FROM_URL/edit#gid=0",
+		},
+		ScratchRoot: t.TempDir(),
+	}, nil)
+	fd.mu.Lock()
+	defer fd.mu.Unlock()
+	if !strings.Contains(fd.lastPath, "/files/1FROM_URL/export") {
+		t.Errorf("expected /files/1FROM_URL/export in path; got %q", fd.lastPath)
+	}
+}
+
 // Sanity check that the manifest reached the engine's default
 // registry through init() — catches the easy-to-forget engine.Register
 // call going missing.

@@ -68,7 +68,7 @@ func init() {
 				"properties":{
 					"account":        {"type":"string","default":"default"},
 					"token":          {"type":"string","description":"Raw access token; overrides 'account'."},
-					"spreadsheet_id": {"type":"string","description":"The Google Sheet's file ID (the long string in its URL)."},
+					"spreadsheet_id": {"type":"string","description":"Either the Sheet ID (the long string between /d/ and /edit in the URL) or paste the whole URL — the drop extracts the ID for you."},
 					"path":           {"type":"string","format":"workspace-path","description":"Sandbox destination. Defaults to scratch://sheet-<id>.pdf; use a plain path for a persistent workspace file."},
 					"timeout_ms":     {"type":"integer","default":60000,"minimum":1,"description":"Hard deadline for the export, in milliseconds."}
 				},
@@ -82,10 +82,11 @@ func init() {
 }
 
 func executeSheetsExportPDF(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	spreadsheetID, err := params.String(job.Params, "spreadsheet_id")
+	spreadsheetIDRaw, err := params.String(job.Params, "spreadsheet_id")
 	if err != nil {
 		return params.Err(job, "bad_param", err.Error()), nil
 	}
+	spreadsheetID := normalizeSpreadsheetID(spreadsheetIDRaw)
 	token, err := resolveToken(ctx, job)
 	if err != nil {
 		return params.Err(job, "auth", err.Error()), nil

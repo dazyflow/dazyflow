@@ -63,7 +63,7 @@ func init() {
 				"properties":{
 					"account":            {"type":"string","default":"default"},
 					"token":              {"type":"string","description":"Raw access token; overrides 'account'."},
-					"spreadsheet_id":     {"type":"string","description":"The Sheet ID — the long string in the URL between /d/ and /edit."},
+					"spreadsheet_id":     {"type":"string","description":"Either the Sheet ID (the long string between /d/ and /edit in the URL) or paste the whole URL — the drop extracts the ID for you."},
 					"range":              {"type":"string","default":"Sheet1","description":"Sheet name (e.g. \"Sheet1\") or a full range (\"Sheet1!A1:Z\"). Sheets appends after the last populated row in this range."},
 					"value_input_option": {"type":"string","enum":["USER_ENTERED","RAW"],"default":"USER_ENTERED","description":"USER_ENTERED parses strings as numbers/dates/formulas; RAW keeps them literal."},
 					"insert_data_option": {"type":"string","enum":["INSERT_ROWS","OVERWRITE"],"default":"INSERT_ROWS","description":"INSERT_ROWS pushes existing rows down; OVERWRITE fills empty cells in place."},
@@ -93,10 +93,11 @@ func init() {
 // ETL into a human-edited sheet. Pass value_input_option=RAW to
 // preserve literal strings.
 func executeSheetsAppendRow(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	spreadsheetID, err := params.String(job.Params, "spreadsheet_id")
+	spreadsheetIDRaw, err := params.String(job.Params, "spreadsheet_id")
 	if err != nil {
 		return params.Err(job, "bad_param", err.Error()), nil
 	}
+	spreadsheetID := normalizeSpreadsheetID(spreadsheetIDRaw)
 	token, err := resolveToken(ctx, job)
 	if err != nil {
 		return params.Err(job, "auth", err.Error()), nil

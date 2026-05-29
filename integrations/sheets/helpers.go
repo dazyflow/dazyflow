@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"sync"
 
@@ -102,6 +103,35 @@ func currentDriveHTTPBase() string {
 	httpBaseMu.RLock()
 	defer httpBaseMu.RUnlock()
 	return driveBase
+}
+
+// ---- spreadsheet_id normalisation -----------------------------------
+//
+// Non-technical users paste the URL from their browser tab; technical
+// users paste the bare file ID. Both shapes are accepted everywhere
+// `spreadsheet_id` is read so the drops don't make the user learn
+// what "the ID part" of the URL is. The Drive file ID is the opaque
+// `[A-Za-z0-9_-]+` segment between `/d/` and the next `/` in:
+//
+//   https://docs.google.com/spreadsheets/d/<ID>/edit#gid=0
+//
+// If the input contains that pattern we return the ID; otherwise we
+// return the input unchanged (a bare ID round-trips through this).
+// Done as a lenient extractor — not a strict URL parser — because the
+// surrounding URL may have querystring/fragment variations the user
+// pasted in.
+
+var spreadsheetIDRe = regexp.MustCompile(`/spreadsheets/d/([A-Za-z0-9_-]+)`)
+
+// normalizeSpreadsheetID accepts either a bare Drive file ID or a full
+// Google Sheets URL and returns the ID. A non-matching string is
+// returned verbatim — the API call will surface the real "not found"
+// error from Drive/Sheets instead of us second-guessing here.
+func normalizeSpreadsheetID(raw string) string {
+	if m := spreadsheetIDRe.FindStringSubmatch(raw); len(m) == 2 {
+		return m[1]
+	}
+	return raw
 }
 
 // ---- shared row/header normalization --------------------------------

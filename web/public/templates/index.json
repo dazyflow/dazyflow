@@ -56,6 +56,17 @@
       "graph_file": "/templates/daily-group-aggregate-report.json"
     },
     {
+      "id": "daily-sheet-to-pdf-email",
+      "title": "Daily Google Sheet → PDF in your inbox",
+      "use_case": "Wake up to a PDF of yesterday's spreadsheet in your inbox — perfect for a daily comments digest, sales recap, or any dashboard you maintain in a Sheet.",
+      "category": "Scheduled reports",
+      "description": "Cron-fires every morning, exports a Google Sheet as a PDF, and emails it to you as an attachment. Two nodes: sheets_export_pdf renders the PDF into the run's scratch sandbox; gmail_send_email picks it up via its variadic attachments port. Paste a sheet URL straight into the export node — the drop extracts the file ID for you.",
+      "icon": "mail",
+      "tags": ["daily", "pdf", "google sheets", "email", "report"],
+      "integrations": ["sheets", "gmail"],
+      "graph_file": "/templates/daily-sheet-to-pdf-email.json"
+    },
+    {
       "id": "excel-clean-and-email",
       "title": "Tidy a spreadsheet → email the summary",
       "use_case": "Clean up a messy Excel file (rename columns, drop blanks, total things up) and email yourself the summary.",

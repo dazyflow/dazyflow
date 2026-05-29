@@ -58,7 +58,7 @@ func init() {
 				"properties":{
 					"account":              {"type":"string","default":"default"},
 					"token":                {"type":"string","description":"Raw access token; overrides 'account'."},
-					"spreadsheet_id":       {"type":"string","description":"The Sheet ID from its URL."},
+					"spreadsheet_id":       {"type":"string","description":"Either the Sheet ID (the long string between /d/ and /edit in the URL) or paste the whole URL — the drop extracts the ID for you."},
 					"range":                {"type":"string","default":"Sheet1","description":"Sheet name (\"Sheet1\") or full range (\"Sheet1!A1:D100\"). Without a sheet name, uses the first sheet."},
 					"headers":              {"type":"boolean","default":true,"description":"When true, the first row of the range is treated as column headers."},
 					"value_render_option":  {"type":"string","enum":["FORMATTED_VALUE","UNFORMATTED_VALUE","FORMULA"],"default":"FORMATTED_VALUE","description":"FORMATTED_VALUE returns what the user sees in Sheets (currency formatting, date strings); UNFORMATTED_VALUE returns raw numbers; FORMULA returns the formula source for computed cells."},
@@ -84,10 +84,11 @@ func init() {
 // type-juggle between sources. UNFORMATTED_VALUE returns proper
 // number/bool types if the downstream code prefers them.
 func executeSheetsReadRange(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	spreadsheetID, err := params.String(job.Params, "spreadsheet_id")
+	spreadsheetIDRaw, err := params.String(job.Params, "spreadsheet_id")
 	if err != nil {
 		return params.Err(job, "bad_param", err.Error()), nil
 	}
+	spreadsheetID := normalizeSpreadsheetID(spreadsheetIDRaw)
 	token, err := resolveToken(ctx, job)
 	if err != nil {
 		return params.Err(job, "auth", err.Error()), nil
