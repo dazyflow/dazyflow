@@ -907,6 +907,12 @@ func registerOAuthProviders(r *daemon.OAuthRegistry) {
 			"https://www.googleapis.com/auth/gmail.send",
 			"https://www.googleapis.com/auth/gmail.readonly",
 			"https://www.googleapis.com/auth/spreadsheets",
+			// drive.readonly is required for sheets_export_pdf (Drive's
+			// files.export endpoint is the only way to render a sheet
+			// as PDF; the narrower drive.file scope only sees files
+			// the app created, which doesn't fit "user pastes a sheet
+			// ID" flows).
+			"https://www.googleapis.com/auth/drive.readonly",
 		},
 		AuthorizeExtras: map[string]string{
 			"access_type": "offline",

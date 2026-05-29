@@ -68,6 +68,12 @@ func resolveToken(ctx context.Context, job core.Job) (string, error) {
 var (
 	httpBaseMu sync.RWMutex
 	httpBase   = "https://sheets.googleapis.com/v4"
+	// driveBase hosts Drive API v3, used by sheets_export_pdf via
+	// files.export (Sheets has no native export-to-PDF — Drive does
+	// the render and Sheets shares the Google OAuth grant, so the
+	// same access token works once drive.readonly is in the scope
+	// list).
+	driveBase = "https://www.googleapis.com/drive/v3"
 )
 
 func SetHTTPBase(base string) {
@@ -76,10 +82,26 @@ func SetHTTPBase(base string) {
 	httpBase = base
 }
 
+// SetDriveHTTPBase swaps the Drive API root; tests point this at an
+// httptest server so they never hit Google. Independent setter so a
+// test can keep sheets.googleapis.com on its real base while only
+// stubbing Drive (or vice versa).
+func SetDriveHTTPBase(base string) {
+	httpBaseMu.Lock()
+	defer httpBaseMu.Unlock()
+	driveBase = base
+}
+
 func currentHTTPBase() string {
 	httpBaseMu.RLock()
 	defer httpBaseMu.RUnlock()
 	return httpBase
+}
+
+func currentDriveHTTPBase() string {
+	httpBaseMu.RLock()
+	defer httpBaseMu.RUnlock()
+	return driveBase
 }
 
 // ---- shared row/header normalization --------------------------------

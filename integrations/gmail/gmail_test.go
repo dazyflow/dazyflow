@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -497,5 +499,166 @@ func TestGmailGetMessage_OAuthLookupUsed(t *testing.T) {
 	defer fg.mu.Unlock()
 	if fg.lastGetAuth != "Bearer ya29.from-oauth" {
 		t.Errorf("auth = %q", fg.lastGetAuth)
+	}
+}
+
+// ---- attachments ----
+
+// decodeSentRFC822 round-trips through the fake Gmail server's
+// captured POST body and returns the rendered RFC822 message — the
+// shape the attachment tests need to grep for boundaries, MIME parts,
+// and Content-Disposition lines.
+func decodeSentRFC822(t *testing.T, fg *fakeGmail) string {
+	t.Helper()
+	fg.mu.Lock()
+	defer fg.mu.Unlock()
+	var sent map[string]any
+	if err := json.Unmarshal(fg.lastSendBody, &sent); err != nil {
+		t.Fatalf("body not JSON: %v (%q)", err, fg.lastSendBody)
+	}
+	raw, _ := sent["raw"].(string)
+	decoded, err := base64.URLEncoding.WithPadding(base64.NoPadding).DecodeString(raw)
+	if err != nil {
+		t.Fatalf("raw not base64-URL-no-pad: %v", err)
+	}
+	return string(decoded)
+}
+
+func TestGmailSendEmail_NoAttachments_StaysSinglePart(t *testing.T) {
+	// Regression: with the attachment port wired to nothing the wire
+	// format MUST stay identical to the pre-attachment behaviour — no
+	// boundary, no extra parts.
+	fg := newFakeGmail(t)
+	_, _ = executeGmailSendEmail(t.Context(), core.Job{
+		Params: map[string]any{"token": "x", "to": "a@b", "body": "plain"},
+	}, nil)
+	rfc822 := decodeSentRFC822(t, fg)
+	if strings.Contains(rfc822, "multipart/mixed") {
+		t.Errorf("zero attachments should NOT produce multipart/mixed: %q", rfc822)
+	}
+	if !strings.Contains(rfc822, "Content-Transfer-Encoding: 8bit") {
+		t.Errorf("single-part body should keep 8bit encoding: %q", rfc822)
+	}
+}
+
+func TestGmailSendEmail_OneInlineAttachment(t *testing.T) {
+	fg := newFakeGmail(t)
+	_, _ = executeGmailSendEmail(t.Context(), core.Job{
+		Params: map[string]any{"token": "x", "to": "a@b", "subject": "rpt", "body": "see attached"},
+		Input: map[string]core.Ref{
+			"body":            {Inline: "see attached"},
+			"attachments[0]":  {MIME: "application/pdf", Inline: []byte("%PDF-1.4 fake pdf bytes")},
+		},
+	}, nil)
+	rfc822 := decodeSentRFC822(t, fg)
+
+	if !strings.Contains(rfc822, "Content-Type: multipart/mixed; boundary=") {
+		t.Fatalf("expected multipart/mixed outer: %q", rfc822)
+	}
+	if !strings.Contains(rfc822, "Content-Type: application/pdf") {
+		t.Errorf("attachment MIME missing: %q", rfc822)
+	}
+	if !strings.Contains(rfc822, `Content-Disposition: attachment; filename="attachment-1.pdf"`) {
+		t.Errorf("inline-ref filename should synthesize from MIME: %q", rfc822)
+	}
+	if !strings.Contains(rfc822, "Content-Transfer-Encoding: base64") {
+		t.Errorf("attachment must be base64-encoded: %q", rfc822)
+	}
+	// Body part must survive intact.
+	if !strings.Contains(rfc822, "see attached") {
+		t.Errorf("body lost in multipart wrap: %q", rfc822)
+	}
+	// Encoded bytes must decode back to the input.
+	encoded := base64.StdEncoding.EncodeToString([]byte("%PDF-1.4 fake pdf bytes"))
+	if !strings.Contains(rfc822, encoded) {
+		t.Errorf("attachment bytes not present in encoded form. want %q in %q", encoded, rfc822)
+	}
+}
+
+func TestGmailSendEmail_AttachmentFilenameFromSandboxPath(t *testing.T) {
+	// A ref with a sandbox path keeps its basename as the filename —
+	// "report.pdf" stays "report.pdf" in the recipient's inbox.
+	tmp := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmp, "report.pdf"), []byte("PDFDATA"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fg := newFakeGmail(t)
+	_, _ = executeGmailSendEmail(t.Context(), core.Job{
+		Params:        map[string]any{"token": "x", "to": "a@b", "body": "x"},
+		WorkspaceRoot: tmp,
+		Input: map[string]core.Ref{
+			"attachments[0]": {MIME: "application/pdf", Ref: "report.pdf"},
+		},
+	}, nil)
+	rfc822 := decodeSentRFC822(t, fg)
+	if !strings.Contains(rfc822, `filename="report.pdf"`) {
+		t.Errorf("path basename should win as filename: %q", rfc822)
+	}
+	if !strings.Contains(rfc822, base64.StdEncoding.EncodeToString([]byte("PDFDATA"))) {
+		t.Errorf("attachment bytes not read from sandbox: %q", rfc822)
+	}
+}
+
+func TestGmailSendEmail_MultipleAttachmentsOrderedByIndex(t *testing.T) {
+	// Two variadic indices arrive out-of-order in the Input map; the
+	// MIME parts must come out in the order the engine recorded them,
+	// not in map-iteration order.
+	fg := newFakeGmail(t)
+	_, _ = executeGmailSendEmail(t.Context(), core.Job{
+		Params: map[string]any{"token": "x", "to": "a@b", "body": "two attached"},
+		Input: map[string]core.Ref{
+			"attachments[1]": {MIME: "text/csv", Inline: "b,c\n2,3"},
+			"attachments[0]": {MIME: "application/pdf", Inline: "first"},
+		},
+	}, nil)
+	rfc822 := decodeSentRFC822(t, fg)
+	pdfIdx := strings.Index(rfc822, "application/pdf")
+	csvIdx := strings.Index(rfc822, "text/csv")
+	if pdfIdx < 0 || csvIdx < 0 {
+		t.Fatalf("both attachments missing: %q", rfc822)
+	}
+	if pdfIdx > csvIdx {
+		t.Errorf("attachments[0] (pdf) should come before attachments[1] (csv); pdf@%d csv@%d", pdfIdx, csvIdx)
+	}
+	// Synthesised filenames should reflect the MIME-derived extension.
+	if !strings.Contains(rfc822, `filename="attachment-2.csv"`) {
+		t.Errorf("expected csv synthesised filename: %q", rfc822)
+	}
+}
+
+func TestGmailSendEmail_AttachmentNoMIMEFallsBackToOctetStream(t *testing.T) {
+	fg := newFakeGmail(t)
+	_, _ = executeGmailSendEmail(t.Context(), core.Job{
+		Params: map[string]any{"token": "x", "to": "a@b", "body": "x"},
+		Input: map[string]core.Ref{
+			"attachments[0]": {Inline: []byte("opaque")},
+		},
+	}, nil)
+	rfc822 := decodeSentRFC822(t, fg)
+	if !strings.Contains(rfc822, "Content-Type: application/octet-stream") {
+		t.Errorf("expected octet-stream fallback: %q", rfc822)
+	}
+	if !strings.Contains(rfc822, `filename="attachment-1.bin"`) {
+		t.Errorf("expected .bin synthesised extension: %q", rfc822)
+	}
+}
+
+func TestGmailSendEmail_AttachmentSandboxEscapeRejected(t *testing.T) {
+	// A ref pointing outside the workspace root must fail to open
+	// through the sandbox helper rather than reading host files.
+	tmp := t.TempDir()
+	fg := newFakeGmail(t)
+	res, _ := executeGmailSendEmail(t.Context(), core.Job{
+		Params:        map[string]any{"token": "x", "to": "a@b", "body": "x"},
+		WorkspaceRoot: tmp,
+		Input: map[string]core.Ref{
+			"attachments[0]": {MIME: "text/plain", Ref: "../../../etc/passwd"},
+		},
+	}, nil)
+	if res.Status == core.StatusOK {
+		t.Fatalf("sandbox escape was permitted; res=%+v", res)
+	}
+	if fg.lastSendBody != nil {
+		t.Errorf("sandbox escape should not have reached the send call")
 	}
 }

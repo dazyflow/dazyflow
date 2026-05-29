@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"path"
 
 	"git.sr.ht/~klahr/hazy-flow/core"
@@ -169,30 +168,6 @@ func executeFileWrite(_ context.Context, job core.Job, _ chan<- core.Progress) (
 			"out": {MIME: mime, Ref: dest},
 		},
 	}, nil
-}
-
-// isSandboxEscape returns true when err looks like a path-traversal
-// rejection from os.Root. The stdlib doesn't currently expose a sentinel
-// error type for this so we string-match the messages it emits.
-func isSandboxEscape(err error) bool {
-	if err == nil {
-		return false
-	}
-	if errors.Is(err, os.ErrInvalid) {
-		return true
-	}
-	return containsAny(err.Error(), "path escapes", "outside root", "invalid argument")
-}
-
-func containsAny(s string, parts ...string) bool {
-	for _, p := range parts {
-		for i := 0; i+len(p) <= len(s); i++ {
-			if s[i:i+len(p)] == p {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func inlineToBytes(inline any) ([]byte, error) {

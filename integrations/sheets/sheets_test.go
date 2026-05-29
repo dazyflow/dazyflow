@@ -1,17 +1,21 @@
 package sheets
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
 	"testing"
 
 	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazy-flow/engine"
 )
 
 // fakeSheets stubs the Sheets v4 endpoints we hit. Same pattern as
@@ -474,5 +478,220 @@ func TestSheetsReadRange_OutputShapeMatchesExcelRead(t *testing.T) {
 	}
 	if _, ok := res.Output["headers"].Inline.([]string); !ok {
 		t.Errorf("headers Inline = %T, want []string", res.Output["headers"].Inline)
+	}
+}
+
+// ===== sheets_export_pdf ============================================
+
+// fakeDrive stubs the single Drive endpoint export hits.
+// Pattern matches fakeSheets — record the last request, return what
+// the test configures.
+type fakeDrive struct {
+	server *httptest.Server
+
+	mu sync.Mutex
+
+	lastPath  string
+	lastQuery string
+	lastAuth  string
+	resp      []byte
+	respCT    string
+	status    int
+}
+
+func newFakeDrive(t *testing.T) *fakeDrive {
+	t.Helper()
+	f := &fakeDrive{
+		status: 200,
+		resp:   []byte("%PDF-1.4\n…fake pdf bytes…"),
+		respCT: "application/pdf",
+	}
+	f.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		f.lastPath = r.URL.Path
+		f.lastQuery = r.URL.RawQuery
+		f.lastAuth = r.Header.Get("Authorization")
+		status := f.status
+		body := f.resp
+		ct := f.respCT
+		f.mu.Unlock()
+		w.Header().Set("Content-Type", ct)
+		w.WriteHeader(status)
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(f.server.Close)
+	prev := currentDriveHTTPBase()
+	SetDriveHTTPBase(f.server.URL + "/drive/v3")
+	t.Cleanup(func() { SetDriveHTTPBase(prev) })
+	return f
+}
+
+func TestSheetsExportPDF_HappyPath(t *testing.T) {
+	fd := newFakeDrive(t)
+	tmp := t.TempDir()
+	res, err := executeSheetsExportPDF(t.Context(), core.Job{
+		Params: map[string]any{
+			"token":          "ya29.test",
+			"spreadsheet_id": "1AbcDEF",
+		},
+		ScratchRoot: tmp,
+	}, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if res.Status != core.StatusOK {
+		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
+	}
+
+	// URL hits the right Drive endpoint with mimeType=application/pdf.
+	fd.mu.Lock()
+	defer fd.mu.Unlock()
+	if want := "/drive/v3/files/1AbcDEF/export"; fd.lastPath != want {
+		t.Errorf("path = %q, want %q", fd.lastPath, want)
+	}
+	if !strings.Contains(fd.lastQuery, "mimeType=application%2Fpdf") {
+		t.Errorf("query missing PDF mime: %q", fd.lastQuery)
+	}
+	if fd.lastAuth != "Bearer ya29.test" {
+		t.Errorf("auth = %q", fd.lastAuth)
+	}
+
+	// Output ref preserves the scratch:// scheme so gmail can resolve
+	// it through the same sandbox helper.
+	if got := res.Output["pdf"].Ref; got != "scratch://sheet-1AbcDEF.pdf" {
+		t.Errorf("pdf ref = %q, want scratch://sheet-1AbcDEF.pdf", got)
+	}
+	if got := res.Output["pdf"].MIME; got != "application/pdf" {
+		t.Errorf("pdf mime = %q", got)
+	}
+
+	// Meta carries the byte count the test can assert on.
+	meta := res.Output["meta"].Inline.(map[string]any)
+	if got := meta["bytes"]; got == nil || got == int64(0) {
+		t.Errorf("meta.bytes = %v, want non-zero", got)
+	}
+
+	// File actually landed in the scratch root with the expected bytes.
+	written, err := os.ReadFile(filepath.Join(tmp, "sheet-1AbcDEF.pdf"))
+	if err != nil {
+		t.Fatalf("read scratch file: %v", err)
+	}
+	if !bytes.HasPrefix(written, []byte("%PDF-1.4")) {
+		t.Errorf("scratch file doesn't look like the response bytes: %q", written)
+	}
+}
+
+func TestSheetsExportPDF_CustomWorkspacePath(t *testing.T) {
+	// A plain (non-scratch) path lands in the persistent workspace
+	// root, not the scratch root.
+	_ = newFakeDrive(t)
+	ws := t.TempDir()
+	res, _ := executeSheetsExportPDF(t.Context(), core.Job{
+		Params: map[string]any{
+			"token":          "x",
+			"spreadsheet_id": "s",
+			"path":           "yesterday.pdf",
+		},
+		WorkspaceRoot: ws,
+	}, nil)
+	if res.Status != core.StatusOK {
+		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
+	}
+	if got := res.Output["pdf"].Ref; got != "yesterday.pdf" {
+		t.Errorf("pdf ref = %q, want literal path through", got)
+	}
+	if _, err := os.Stat(filepath.Join(ws, "yesterday.pdf")); err != nil {
+		t.Errorf("file not written to workspace root: %v", err)
+	}
+}
+
+func TestSheetsExportPDF_DriveForbiddenSurfacedActionably(t *testing.T) {
+	// 403 with the scope-missing message is the most likely failure
+	// for an existing user who connected before we added drive.readonly
+	// — the error must name the reconnect-with-new-scope remedy.
+	fd := newFakeDrive(t)
+	fd.mu.Lock()
+	fd.status = 403
+	fd.resp = []byte(`{"error":{"code":403,"message":"Insufficient Permission: Request had insufficient authentication scopes."}}`)
+	fd.respCT = "application/json"
+	fd.mu.Unlock()
+	res, _ := executeSheetsExportPDF(t.Context(), core.Job{
+		Params:      map[string]any{"token": "x", "spreadsheet_id": "s"},
+		ScratchRoot: t.TempDir(),
+	}, nil)
+	if res.Status == core.StatusOK {
+		t.Fatalf("expected error on 403; got OK")
+	}
+	if res.Error.Code != "drive_forbidden" {
+		t.Errorf("error code = %q, want drive_forbidden", res.Error.Code)
+	}
+	if !strings.Contains(res.Error.Message, "drive.readonly") {
+		t.Errorf("error should name the missing scope; got %q", res.Error.Message)
+	}
+}
+
+func TestSheetsExportPDF_NoSandboxRejectsCleanly(t *testing.T) {
+	_ = newFakeDrive(t)
+	res, _ := executeSheetsExportPDF(t.Context(), core.Job{
+		Params: map[string]any{"token": "x", "spreadsheet_id": "s"},
+		// Neither ScratchRoot nor WorkspaceRoot set.
+	}, nil)
+	if res.Status == core.StatusOK {
+		t.Fatalf("expected error when no sandbox roots configured")
+	}
+	if res.Error.Code != "no_sandbox" {
+		t.Errorf("error code = %q, want no_sandbox", res.Error.Code)
+	}
+}
+
+func TestSheetsExportPDF_MissingSpreadsheetID(t *testing.T) {
+	_ = newFakeDrive(t)
+	res, _ := executeSheetsExportPDF(t.Context(), core.Job{
+		Params:      map[string]any{"token": "x"},
+		ScratchRoot: t.TempDir(),
+	}, nil)
+	if res.Status == core.StatusOK {
+		t.Fatalf("expected error on missing spreadsheet_id")
+	}
+	if res.Error.Code != "bad_param" {
+		t.Errorf("error code = %q, want bad_param", res.Error.Code)
+	}
+}
+
+func TestSheetsExportPDF_NoToken_AuthError(t *testing.T) {
+	_ = newFakeDrive(t)
+	// Don't install a TokenLookup — the resolver should surface the
+	// same actionable error gmail_send_email uses.
+	res, _ := executeSheetsExportPDF(t.Context(), core.Job{
+		Params:      map[string]any{"spreadsheet_id": "s"},
+		ScratchRoot: t.TempDir(),
+	}, nil)
+	if res.Status == core.StatusOK {
+		t.Fatalf("expected auth error with no token")
+	}
+	if res.Error.Code != "auth" {
+		t.Errorf("error code = %q, want auth", res.Error.Code)
+	}
+}
+
+// Sanity check that the manifest reached the engine's default
+// registry through init() — catches the easy-to-forget engine.Register
+// call going missing.
+func TestSheetsExportPDF_Registered(t *testing.T) {
+	manifests := engine.Default.Manifests()
+	got, ok := manifests["sheets_export_pdf"]
+	if !ok {
+		t.Fatalf("sheets_export_pdf not registered in engine.Default")
+	}
+	if got.Integration != "Google Sheets" {
+		t.Errorf("integration = %q, want Google Sheets", got.Integration)
+	}
+	want := []string{"pdf", "meta"}
+	have := make([]string, 0, len(got.Outputs))
+	for _, p := range got.Outputs {
+		have = append(have, p.Port)
+	}
+	if !reflect.DeepEqual(have, want) {
+		t.Errorf("outputs = %v, want %v", have, want)
 	}
 }
