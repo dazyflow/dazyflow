@@ -1,0 +1,46 @@
+{
+  "id": "feedback-digest",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "triggers": [{"type": "cron", "cron": "0 10 * * 1"}],
+  "nodes": [
+    {
+      "id": "read_responses",
+      "module": "sheets_read_range",
+      "params": {"account": "default", "spreadsheet_id": "REPLACE_WITH_SHEET_ID", "range": "Responses"}
+    },
+    {
+      "id": "last_week",
+      "module": "route_rows",
+      "params": {
+        "routes": [{"slot": "rows_1", "filter": "timestamp(string(row.submitted_at) + \"T00:00:00Z\") > timestamp(string(now)) - duration(\"168h\")"}]
+      }
+    },
+    {
+      "id": "summarize",
+      "module": "claude",
+      "params": {"prompt": "Summarize the main themes and overall sentiment in these survey responses, and include up to three representative quotes."}
+    },
+    {
+      "id": "save_page",
+      "module": "notion_create_page",
+      "params": {
+        "account": "default",
+        "parent_database_id": "REPLACE_WITH_NOTION_DB_ID",
+        "properties": {"Name": {"title": [{"text": {"content": "Weekly feedback digest"}}]}}
+      }
+    },
+    {
+      "id": "post_headline",
+      "module": "slack_send_message",
+      "params": {"channel": "#customer-success"}
+    }
+  ],
+  "edges": [
+    {"from": "read_responses", "from_port": "rows", "to": "last_week", "to_port": "rows"},
+    {"from": "last_week", "from_port": "rows_1", "to": "summarize", "to_port": "prompt"},
+    {"from": "summarize", "from_port": "text", "to": "save_page", "to_port": "content"},
+    {"from": "summarize", "from_port": "text", "to": "post_headline", "to_port": "body"}
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "id": "overdue-invoice-chaser",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "triggers": [{"type": "cron", "cron": "0 9 * * 1-5"}],
+  "nodes": [
+    {
+      "id": "read_invoices",
+      "module": "sheets_read_range",
+      "params": {"account": "default", "spreadsheet_id": "REPLACE_WITH_SHEET_ID", "range": "Invoices"}
+    },
+    {
+      "id": "mark_overdue",
+      "module": "compute_rows",
+      "params": {
+        "compute": {"days_overdue": "int((timestamp(string(now)) - timestamp(string(row.due_date) + \"T00:00:00Z\")) / duration(\"24h\"))"}
+      }
+    },
+    {
+      "id": "only_overdue",
+      "module": "route_rows",
+      "params": {
+        "routes": [{"slot": "rows_1", "filter": "row.status == \"unpaid\" && double(row.days_overdue) > 0.0"}]
+      }
+    },
+    {
+      "id": "send_reminders",
+      "module": "for_each",
+      "params": {
+        "step_module": "gmail_send_email",
+        "item_port": "body",
+        "step_params": {
+          "to": "${item:client_email}",
+          "subject": "Reminder: invoice ${item:invoice_no} is overdue",
+          "body": "Hi ${item:client_name}, invoice ${item:invoice_no} for ${item:amount} is now ${item:days_overdue} days past due. Please arrange payment."
+        }
+      }
+    },
+    {
+      "id": "log_reminded",
+      "module": "sheets_append_row",
+      "params": {"account": "default", "spreadsheet_id": "REPLACE_WITH_SHEET_ID", "range": "Reminders"}
+    }
+  ],
+  "edges": [
+    {"from": "read_invoices", "from_port": "rows", "to": "mark_overdue", "to_port": "rows"},
+    {"from": "read_invoices", "from_port": "headers", "to": "mark_overdue", "to_port": "headers"},
+    {"from": "mark_overdue", "from_port": "rows", "to": "only_overdue", "to_port": "rows"},
+    {"from": "only_overdue", "from_port": "rows_1", "to": "send_reminders", "to_port": "items"},
+    {"from": "only_overdue", "from_port": "rows_1", "to": "log_reminded", "to_port": "rows"}
+  ]
+}

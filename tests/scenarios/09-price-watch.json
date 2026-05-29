@@ -1,0 +1,67 @@
+{
+  "id": "price-watch",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "triggers": [{"type": "poll", "interval_seconds": 86400}],
+  "nodes": [
+    {
+      "id": "fetch_page",
+      "module": "http_request",
+      "params": {"url": "https://supplier.example.com/product/123", "method": "GET"}
+    },
+    {
+      "id": "extract_price",
+      "module": "claude",
+      "params": {"prompt": "Return ONLY a JSON array with one object {\"sku\":\"123\",\"price\":number} giving the current price shown on this product page."}
+    },
+    {
+      "id": "today_rows",
+      "module": "parse_json",
+      "params": {}
+    },
+    {
+      "id": "prior_price",
+      "module": "builtin_store_query",
+      "params": {"sql": "SELECT sku, price FROM prices ORDER BY observed_at DESC LIMIT 1"}
+    },
+    {
+      "id": "compare",
+      "module": "join_rows",
+      "params": {"on": ["sku"]}
+    },
+    {
+      "id": "flag_change",
+      "module": "compute_rows",
+      "params": {"compute": {"changed": "double(row.price) != double(row.price_right)"}}
+    },
+    {
+      "id": "changed_only",
+      "module": "route_rows",
+      "params": {"routes": [{"slot": "rows_1", "filter": "row.changed == true"}]}
+    },
+    {
+      "id": "alert",
+      "module": "for_each",
+      "params": {
+        "step_module": "slack_send_message",
+        "step_params": {"channel": "#price-alerts", "text": "Price change on ${item:sku}: now ${item:price} (was ${item:price_right})"}
+      }
+    },
+    {
+      "id": "record_today",
+      "module": "builtin_store_append",
+      "params": {"table": "prices"}
+    }
+  ],
+  "edges": [
+    {"from": "fetch_page", "from_port": "response_body", "to": "extract_price", "to_port": "prompt"},
+    {"from": "extract_price", "from_port": "text", "to": "today_rows", "to_port": "in"},
+    {"from": "today_rows", "from_port": "rows", "to": "compare", "to_port": "left_rows"},
+    {"from": "prior_price", "from_port": "rows", "to": "compare", "to_port": "right_rows"},
+    {"from": "compare", "from_port": "rows", "to": "flag_change", "to_port": "rows"},
+    {"from": "flag_change", "from_port": "rows", "to": "changed_only", "to_port": "rows"},
+    {"from": "changed_only", "from_port": "rows_1", "to": "alert", "to_port": "items"},
+    {"from": "today_rows", "from_port": "rows", "to": "record_today", "to_port": "rows"}
+  ]
+}

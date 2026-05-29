@@ -1,0 +1,43 @@
+{
+  "id": "low-stock-reorder",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "triggers": [{"type": "cron", "cron": "0 16 * * 5"}],
+  "nodes": [
+    {
+      "id": "read_stock",
+      "module": "sheets_read_range",
+      "params": {"account": "default", "spreadsheet_id": "REPLACE_WITH_SHEET_ID", "range": "Inventory"}
+    },
+    {
+      "id": "below_threshold",
+      "module": "route_rows",
+      "params": {
+        "routes": [{"slot": "rows_1", "filter": "double(row.qty_on_hand) < double(row.reorder_at)"}]
+      }
+    },
+    {
+      "id": "approval",
+      "module": "await_approval",
+      "params": {"title": "Approve reorder", "prompt": "Approve the purchase order for the items below?"}
+    },
+    {
+      "id": "send_po",
+      "module": "for_each",
+      "params": {
+        "step_module": "gmail_send_email",
+        "step_params": {
+          "to": "${item:supplier_email}",
+          "subject": "Purchase order: ${item:sku}",
+          "body": "Please supply ${item:reorder_qty} units of ${item:sku} (${item:name})."
+        }
+      }
+    }
+  ],
+  "edges": [
+    {"from": "read_stock", "from_port": "rows", "to": "below_threshold", "to_port": "rows"},
+    {"from": "below_threshold", "from_port": "rows_1", "to": "approval", "to_port": "context"},
+    {"from": "approval", "from_port": "approved", "to": "send_po", "to_port": "items"}
+  ]
+}

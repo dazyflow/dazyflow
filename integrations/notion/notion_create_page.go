@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"git.sr.ht/~klahr/hazy-flow/core"
@@ -27,8 +28,8 @@ func init() {
 			Provider:       "internal",
 			Integration:    "Notion",
 			Tags:           []string{"notion", "page", "create", "database", "write"},
-			Description:    "Create a Notion page. Set the parent — a database, in which case the page becomes a row, or another page, in which case it becomes a child. Properties define the field values; optional child blocks fill the page body. Outputs the new page's id and URL.",
-			Summary:        "Create a Notion page as either a database row or a child of another page, with optional initial block content.",
+			Description:    "Create a Notion page. Set the parent — a database, in which case the page becomes a row, or another page, in which case it becomes a child. Properties define the field values; optional child blocks fill the page body. Wire upstream text (for example an AI summary or an HTTP response) into the 'content' input and it is appended to the page body as paragraph blocks. That is the way to drop a value computed earlier in the flow into the page. Outputs the new page's id and URL.",
+			Summary:        "Create a Notion page as either a database row or a child of another page, with optional block content and a 'content' input for upstream text.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Add a row to a tasks database",
@@ -45,6 +46,9 @@ func init() {
 			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
+			Inputs: []core.Port{
+				{Port: "content", Label: "Body text appended as paragraph block(s) (optional)", Required: false},
+			},
 			Outputs: []core.Port{
 				{Port: "id", Label: "Created page ID", MIME: []string{"text/plain"}},
 				{Port: "url", Label: "Web URL of the new page", MIME: []string{"text/plain"}},
@@ -92,7 +96,11 @@ func executeNotionCreatePage(ctx context.Context, job core.Job, _ chan<- core.Pr
 	} else {
 		payload["parent"] = map[string]any{"page_id": pgID}
 	}
-	if children, ok := job.Params["children"]; ok && children != nil {
+	children := childBlocks(job)
+	if c, ok := job.Input["content"]; ok {
+		children = append(children, contentBlocks(c.Inline)...)
+	}
+	if len(children) > 0 {
 		payload["children"] = children
 	}
 
@@ -138,4 +146,78 @@ func executeNotionCreatePage(ctx context.Context, job core.Job, _ chan<- core.Pr
 			"meta": {MIME: "application/json", Inline: page},
 		},
 	}, nil
+}
+
+// childBlocks returns the block array from params.children, or nil. The
+// 'content' input is appended after these so a flow can mix authored
+// blocks with upstream text.
+func childBlocks(job core.Job) []any {
+	raw, ok := job.Params["children"]
+	if !ok || raw == nil {
+		return nil
+	}
+	if arr, ok := raw.([]any); ok {
+		return append([]any(nil), arr...)
+	}
+	return nil
+}
+
+// notionContentLimit is Notion's cap on the character count of a single
+// rich-text object. Longer paragraphs are split across several text
+// objects within the same block so nothing is silently truncated.
+const notionContentLimit = 2000
+
+// contentBlocks turns the 'content' input into Notion paragraph blocks.
+// An already-structured block array (or single block object) passes
+// through untouched; any other value is stringified, split into
+// paragraphs on blank lines, and emitted as paragraph blocks. Empty or
+// nil content yields no blocks.
+func contentBlocks(inline any) []any {
+	switch v := inline.(type) {
+	case nil:
+		return nil
+	case []any:
+		// Caller already produced Notion block objects.
+		return v
+	case map[string]any:
+		return []any{v}
+	case string:
+		return paragraphsToBlocks(v)
+	default:
+		return paragraphsToBlocks(fmt.Sprint(v))
+	}
+}
+
+// paragraphsToBlocks splits text on blank lines into paragraph blocks,
+// chunking each paragraph's rich-text to Notion's per-object limit.
+func paragraphsToBlocks(text string) []any {
+	var blocks []any
+	for para := range strings.SplitSeq(strings.TrimSpace(text), "\n\n") {
+		para = strings.TrimSpace(para)
+		if para == "" {
+			continue
+		}
+		blocks = append(blocks, map[string]any{
+			"object":    "block",
+			"type":      "paragraph",
+			"paragraph": map[string]any{"rich_text": richTextChunks(para)},
+		})
+	}
+	return blocks
+}
+
+// richTextChunks splits s into Notion rich-text objects no longer than
+// notionContentLimit runes each.
+func richTextChunks(s string) []any {
+	runes := []rune(s)
+	var chunks []any
+	for len(runes) > 0 {
+		n := min(len(runes), notionContentLimit)
+		chunks = append(chunks, map[string]any{
+			"type": "text",
+			"text": map[string]any{"content": string(runes[:n])},
+		})
+		runes = runes[n:]
+	}
+	return chunks
 }

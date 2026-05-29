@@ -1,0 +1,65 @@
+{
+  "id": "timesheet-rollup",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "triggers": [{"type": "cron", "cron": "0 17 * * 5"}],
+  "nodes": [
+    {
+      "id": "read_hours",
+      "module": "sheets_read_range",
+      "params": {"account": "default", "spreadsheet_id": "REPLACE_WITH_SHEET_ID", "range": "Timesheets"}
+    },
+    {
+      "id": "last_week",
+      "module": "route_rows",
+      "params": {
+        "routes": [{"slot": "rows_1", "filter": "timestamp(string(row.work_date) + \"T00:00:00Z\") > timestamp(string(now)) - duration(\"168h\")"}]
+      }
+    },
+    {
+      "id": "by_employee",
+      "module": "group_aggregate",
+      "params": {"by": ["employee"], "aggregate": {"hours": {"op": "sum", "column": "hours"}}}
+    },
+    {
+      "id": "read_rates",
+      "module": "sheets_read_range",
+      "params": {"account": "default", "spreadsheet_id": "REPLACE_WITH_SHEET_ID", "range": "Rates"}
+    },
+    {
+      "id": "with_rate",
+      "module": "join_rows",
+      "params": {"on": ["employee"]}
+    },
+    {
+      "id": "compute_pay",
+      "module": "compute_rows",
+      "params": {"compute": {"gross": "double(row.hours) * double(row.rate)"}}
+    },
+    {
+      "id": "write_summary",
+      "module": "excel_write",
+      "params": {"path": "payroll/week.xlsx", "sheet": "Payroll", "mkdirs": true, "autosize": true}
+    },
+    {
+      "id": "email_bookkeeper",
+      "module": "gmail_send_email",
+      "params": {
+        "account": "default",
+        "to": "bookkeeper@example.com",
+        "subject": "Weekly payroll summary",
+        "body": "Attached is this week's payroll summary."
+      }
+    }
+  ],
+  "edges": [
+    {"from": "read_hours", "from_port": "rows", "to": "last_week", "to_port": "rows"},
+    {"from": "last_week", "from_port": "rows_1", "to": "by_employee", "to_port": "rows"},
+    {"from": "by_employee", "from_port": "rows", "to": "with_rate", "to_port": "left_rows"},
+    {"from": "read_rates", "from_port": "rows", "to": "with_rate", "to_port": "right_rows"},
+    {"from": "with_rate", "from_port": "rows", "to": "compute_pay", "to_port": "rows"},
+    {"from": "compute_pay", "from_port": "rows", "to": "write_summary", "to_port": "rows"},
+    {"from": "write_summary", "from_port": "out", "to": "email_bookkeeper", "to_port": "attachments"}
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "id": "recurring-invoices",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "triggers": [{"type": "cron", "cron": "0 9 1 * *"}],
+  "nodes": [
+    {
+      "id": "read_clients",
+      "module": "sheets_read_range",
+      "params": {"account": "default", "spreadsheet_id": "REPLACE_WITH_SHEET_ID", "range": "RecurringClients"}
+    },
+    {
+      "id": "invoice_each_client",
+      "module": "for_each",
+      "params": {
+        "step_module": "subgraph",
+        "step_params": {
+          "graph_id": "invoice-one-client",
+          "input_map": {"in": "client_in"},
+          "output_map": {"out": {"node": "email", "port": "meta"}}
+        }
+      }
+    }
+  ],
+  "edges": [
+    {"from": "read_clients", "from_port": "rows", "to": "invoice_each_client", "to_port": "items"}
+  ]
+}

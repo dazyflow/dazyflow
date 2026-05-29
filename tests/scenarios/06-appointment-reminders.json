@@ -1,0 +1,54 @@
+{
+  "id": "appointment-reminders",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "triggers": [{"type": "cron", "cron": "0 17 * * *"}],
+  "nodes": [
+    {
+      "id": "read_bookings",
+      "module": "sheets_read_range",
+      "params": {"account": "default", "spreadsheet_id": "REPLACE_WITH_SHEET_ID", "range": "Bookings"}
+    },
+    {
+      "id": "tomorrow",
+      "module": "route_rows",
+      "params": {
+        "routes": [{"slot": "rows_1", "filter": "row.date == string(timestamp(string(now)) + duration(\"24h\"))"}]
+      }
+    },
+    {
+      "id": "email_reminder",
+      "module": "for_each",
+      "params": {
+        "step_module": "email_send",
+        "step_params": {
+          "host": "smtp.example.com:587",
+          "from": "front-desk@example.com",
+          "to": "${item:email}",
+          "subject": "Reminder: your appointment tomorrow",
+          "body": "Hi ${item:name}, this is a reminder of your appointment on ${item:date} at ${item:time}."
+        }
+      }
+    },
+    {
+      "id": "push_reminder",
+      "module": "for_each",
+      "params": {
+        "step_module": "ntfy",
+        "step_params": {"topic": "clinic-reminders", "message": "Reminder sent to ${item:name} for ${item:date} ${item:time}"}
+      }
+    },
+    {
+      "id": "log_reminded",
+      "module": "sheets_append_row",
+      "params": {"account": "default", "spreadsheet_id": "REPLACE_WITH_SHEET_ID", "range": "Reminded"}
+    }
+  ],
+  "edges": [
+    {"from": "read_bookings", "from_port": "rows", "to": "tomorrow", "to_port": "rows"},
+    {"from": "tomorrow", "from_port": "rows_1", "to": "email_reminder", "to_port": "items"},
+    {"from": "tomorrow", "from_port": "rows_1", "to": "push_reminder", "to_port": "items"},
+    {"from": "tomorrow", "from_port": "rows_1", "to": "log_reminded", "to_port": "rows"}
+  ]
+}

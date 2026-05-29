@@ -1,0 +1,45 @@
+{
+  "id": "receipt-expense-capture",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "triggers": [{"type": "cron", "cron": "0 18 * * *"}],
+  "nodes": [
+    {
+      "id": "find_receipts",
+      "module": "gmail_search_messages",
+      "params": {"account": "default", "query": "label:receipts has:attachment newer_than:1d"}
+    },
+    {
+      "id": "fetch_each",
+      "module": "for_each",
+      "params": {
+        "step_module": "gmail_get_message",
+        "step_params": {"account": "default", "id": "${item:id}"}
+      }
+    },
+    {
+      "id": "extract",
+      "module": "claude",
+      "params": {
+        "prompt": "From these receipt emails, return ONLY a JSON array where each element is {\"vendor\":string,\"date\":string,\"total\":number,\"category\":string}."
+      }
+    },
+    {
+      "id": "to_rows",
+      "module": "parse_json",
+      "params": {}
+    },
+    {
+      "id": "append_expenses",
+      "module": "sheets_append_row",
+      "params": {"account": "default", "spreadsheet_id": "REPLACE_WITH_SHEET_ID", "range": "Expenses"}
+    }
+  ],
+  "edges": [
+    {"from": "find_receipts", "from_port": "messages", "to": "fetch_each", "to_port": "items"},
+    {"from": "fetch_each", "from_port": "results", "to": "extract", "to_port": "prompt"},
+    {"from": "extract", "from_port": "text", "to": "to_rows", "to_port": "in"},
+    {"from": "to_rows", "from_port": "rows", "to": "append_expenses", "to_port": "rows"}
+  ]
+}
