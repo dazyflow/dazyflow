@@ -5,6 +5,7 @@ import type {
   Graph,
   IssuedAPIKey,
   InvitationDetails,
+  AdminOAuthProvider,
   InvitationSummary,
   LintIssue,
   Manifest,
@@ -461,6 +462,11 @@ export const api = {
       providers: (r.providers ?? []).map((p) => ({
         ...p,
         accounts: p.accounts ?? [],
+        // stale_accounts is optional on the wire — absent or null when
+        // every account's scopes still match. Normalise to an empty
+        // array so callers can `.length` and `.includes()` without
+        // optional-chain-and-default-everywhere boilerplate.
+        stale_accounts: p.stale_accounts ?? [],
       })),
     };
   },
@@ -474,6 +480,39 @@ export const api = {
     if (account) qs.set("account", account);
     return `${API_BASE}/oauth/${encodeURIComponent(provider)}/authorize?${qs.toString()}`;
   },
+  // listAdminOAuthProviders returns every provider Hazy Flow knows
+  // about (Slack, Google, GitHub, Notion) along with whether each is
+  // currently configured and where the credentials came from (env vs.
+  // persisted via this UI). Admin-only — 403 to a regular member.
+  listAdminOAuthProviders: (token: string) =>
+    request<{ providers: AdminOAuthProvider[] }>(
+      token,
+      "GET",
+      "/admin/oauth-providers",
+    ),
+  // upsertAdminOAuthProvider stores client_id + client_secret for one
+  // provider, encrypted at rest, and live-registers it in the registry
+  // so no daemon restart is needed. Idempotent.
+  upsertAdminOAuthProvider: (
+    token: string,
+    name: string,
+    clientID: string,
+    clientSecret: string,
+  ) =>
+    request<{ name: string; configured: boolean; updated_at: string }>(
+      token,
+      "PUT",
+      `/admin/oauth-providers/${encodeURIComponent(name)}`,
+      { client_id: clientID, client_secret: clientSecret },
+    ),
+  // deleteAdminOAuthProvider clears the persisted credentials and
+  // unregisters the provider from the in-memory registry. Returns 204.
+  deleteAdminOAuthProvider: (token: string, name: string) =>
+    request<void>(
+      token,
+      "DELETE",
+      `/admin/oauth-providers/${encodeURIComponent(name)}`,
+    ),
   // listSecrets returns the NAMES of the tenant's stored credentials —
   // never the values (the daemon has no read-back endpoint by design).
   listSecrets: (token: string) =>

@@ -314,16 +314,34 @@ function ProviderCard({
       {meta.blurb && <p className="provider-card-blurb">{meta.blurb}</p>}
       {connected && (
         <div className="provider-accounts">
-          {provider.accounts.map((a) => (
-            <span key={a} className="provider-account-chip">
-              {a}
-            </span>
-          ))}
+          {provider.accounts.map((a) => {
+            const stale = provider.stale_accounts?.includes(a) ?? false;
+            return (
+              <span
+                key={a}
+                className={
+                  "provider-account-chip" + (stale ? " provider-account-chip-stale" : "")
+                }
+                title={
+                  stale ? t("connections.reconnectRequiredHint") : undefined
+                }
+              >
+                {a}
+                {stale && (
+                  <span className="provider-account-stale-pill">
+                    {t("connections.reconnectRequired")}
+                  </span>
+                )}
+              </span>
+            );
+          })}
         </div>
       )}
       <button type="button" className="primary provider-connect" onClick={onConnect}>
         {connected
-          ? t("connections.connectAnother")
+          ? (provider.stale_accounts?.length
+              ? t("connections.reconnect")
+              : t("connections.connectAnother"))
           : t("connections.connect")}
       </button>
     </div>

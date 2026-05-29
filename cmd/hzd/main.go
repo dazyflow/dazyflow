@@ -836,6 +836,18 @@ func setupOAuth(secrets *daemon.EncryptedSecrets, publicBaseURL string) *daemon.
 	}
 	reg := daemon.NewOAuthRegistry(publicBaseURL, secrets)
 	registerOAuthProviders(reg)
+	// Persisted creds (set via the admin UI) override env on boot —
+	// otherwise an operator who pasted in fresh creds via the UI but
+	// left a stale env var around would see the env values keep
+	// resurrecting after every restart.
+	if hydrated, errs := daemon.HydrateOAuthProvidersFromStore(context.Background(), reg, secrets); len(hydrated) > 0 || len(errs) > 0 {
+		if len(hydrated) > 0 {
+			log.Printf("OAuth providers hydrated from store: %v", hydrated)
+		}
+		for _, err := range errs {
+			log.Printf("OAuth hydrate: %v", err)
+		}
+	}
 	if len(reg.Providers()) > 0 {
 		log.Printf("OAuth enabled: %v", reg.Providers())
 	}
@@ -868,66 +880,32 @@ func wireConnectorTokenHooks(reg *daemon.OAuthRegistry) {
 	github.SetTokenLookup(bind("github"))
 	notion.SetTokenLookup(bind("notion"))
 }
+// registerOAuthProviders walks daemon.KnownOAuthProviderDefaults — the
+// single source of truth for the URL/scope/extras side of each known
+// provider — and registers any whose credentials are supplied via
+// HAZYFLOW_OAUTH_<NAME>_CLIENT_ID/_CLIENT_SECRET env vars. Adding a
+// new connector means appending one entry to KnownOAuthProviderDefaults
+// and a corresponding env-var pair in deployment config; no code
+// change here.
+//
+// Persisted credentials saved through the admin UI override env at
+// boot (see daemon.HydrateOAuthProvidersFromStore, called after this).
 func registerOAuthProviders(r *daemon.OAuthRegistry) {
-	maybe := func(p daemon.OAuthProvider) {
-		if p.ClientID == "" || p.ClientSecret == "" {
-			return
+	for _, def := range daemon.KnownOAuthProviderDefaults {
+		upper := strings.ToUpper(def.Name)
+		clientID := os.Getenv("HAZYFLOW_OAUTH_" + upper + "_CLIENT_ID")
+		clientSecret := os.Getenv("HAZYFLOW_OAUTH_" + upper + "_CLIENT_SECRET")
+		if clientID == "" || clientSecret == "" {
+			continue
 		}
-		r.Register(p)
+		r.Register(daemon.OAuthProvider{
+			Name:            def.Name,
+			AuthorizeURL:    def.AuthorizeURL,
+			TokenURL:        def.TokenURL,
+			Scopes:          def.Scopes,
+			AuthorizeExtras: def.AuthorizeExtras,
+			ClientID:        clientID,
+			ClientSecret:    clientSecret,
+		})
 	}
-	// Slack — first launch connector (T1).
-	maybe(daemon.OAuthProvider{
-		Name:         "slack",
-		AuthorizeURL: "https://slack.com/oauth/v2/authorize",
-		TokenURL:     "https://slack.com/api/oauth.v2.access",
-		Scopes:       []string{"chat:write", "channels:read", "channels:history"},
-		ClientID:     os.Getenv("HAZYFLOW_OAUTH_SLACK_CLIENT_ID"),
-		ClientSecret: os.Getenv("HAZYFLOW_OAUTH_SLACK_CLIENT_SECRET"),
-	})
-	// GitHub — adds when T1 continues.
-	maybe(daemon.OAuthProvider{
-		Name:         "github",
-		AuthorizeURL: "https://github.com/login/oauth/authorize",
-		TokenURL:     "https://github.com/login/oauth/access_token",
-		Scopes:       []string{"repo", "read:user"},
-		ClientID:     os.Getenv("HAZYFLOW_OAUTH_GITHUB_CLIENT_ID"),
-		ClientSecret: os.Getenv("HAZYFLOW_OAUTH_GITHUB_CLIENT_SECRET"),
-	})
-	// Google (Gmail + Sheets share the same OAuth app).
-	// access_type=offline + prompt=consent are required to receive a
-	// refresh_token. Without them the access token lasts ~1 hour and
-	// the user has to re-authorize — the prompt=consent re-trigger
-	// is the canonical workaround for Google's "only return refresh
-	// on first consent" quirk.
-	maybe(daemon.OAuthProvider{
-		Name:         "google",
-		AuthorizeURL: "https://accounts.google.com/o/oauth2/v2/auth",
-		TokenURL:     "https://oauth2.googleapis.com/token",
-		Scopes: []string{
-			"https://www.googleapis.com/auth/gmail.send",
-			"https://www.googleapis.com/auth/gmail.readonly",
-			"https://www.googleapis.com/auth/spreadsheets",
-			// drive.readonly is required for sheets_export_pdf (Drive's
-			// files.export endpoint is the only way to render a sheet
-			// as PDF; the narrower drive.file scope only sees files
-			// the app created, which doesn't fit "user pastes a sheet
-			// ID" flows).
-			"https://www.googleapis.com/auth/drive.readonly",
-		},
-		AuthorizeExtras: map[string]string{
-			"access_type": "offline",
-			"prompt":      "consent",
-		},
-		ClientID:     os.Getenv("HAZYFLOW_OAUTH_GOOGLE_CLIENT_ID"),
-		ClientSecret: os.Getenv("HAZYFLOW_OAUTH_GOOGLE_CLIENT_SECRET"),
-	})
-	// Notion.
-	maybe(daemon.OAuthProvider{
-		Name:         "notion",
-		AuthorizeURL: "https://api.notion.com/v1/oauth/authorize",
-		TokenURL:     "https://api.notion.com/v1/oauth/token",
-		Scopes:       nil, // Notion uses workspace-scope, no per-scope list
-		ClientID:     os.Getenv("HAZYFLOW_OAUTH_NOTION_CLIENT_ID"),
-		ClientSecret: os.Getenv("HAZYFLOW_OAUTH_NOTION_CLIENT_SECRET"),
-	})
 }

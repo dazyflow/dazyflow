@@ -1242,6 +1242,21 @@
   padding: 1px 8px;
   border-radius: 999px;
 }
+.provider-account-chip-stale {
+  border-color: var(--warn, #d4a017);
+  background: color-mix(in srgb, var(--warn, #d4a017) 12%, transparent);
+}
+.provider-account-stale-pill {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--warn, #d4a017);
+  color: white;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
 .provider-connect {
   margin-top: auto;
   align-self: flex-start;

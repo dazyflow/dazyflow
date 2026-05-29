@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -240,10 +241,77 @@ func (h *HTTPGateway) oauthListProviders(rw http.ResponseWriter, r *http.Request
 	}
 	out := make([]map[string]any, 0, len(names))
 	for _, n := range names {
-		out = append(out, map[string]any{
+		row := map[string]any{
 			"name":     n,
 			"accounts": connected[n], // empty slice = not connected
-		})
+		}
+		// stale_accounts: accounts whose stored token's granted scope
+		// no longer covers what the current provider config requires
+		// (typical cause: we added a new scope after the user
+		// connected, so the access token can't call the new endpoint).
+		// The frontend renders a "Reconnect required" pill on these.
+		if provider, ok := h.OAuth.Provider(n); ok && len(provider.Scopes) > 0 {
+			stale := h.staleAccounts(r.Context(), p.Tenant, n, connected[n], provider.Scopes)
+			if len(stale) > 0 {
+				row["stale_accounts"] = stale
+			}
+		}
+		out = append(out, row)
 	}
 	writeJSON(rw, http.StatusOK, map[string]any{"providers": out})
+}
+
+// staleAccounts compares each connected account's stored token scope
+// against the current required scope set and returns the names whose
+// grant is missing at least one required scope. A token whose scope
+// field is empty (some providers don't echo it on success) is treated
+// as fresh — we have no signal to declare it stale and false positives
+// would push users into a needless reauthorize loop.
+func (h *HTTPGateway) staleAccounts(ctx context.Context, tenant, provider string, accounts, required []string) []string {
+	if h.OAuth == nil || tenant == "" {
+		return nil
+	}
+	stale := make([]string, 0)
+	for _, account := range accounts {
+		tok, err := h.OAuth.GetOAuthToken(core.WithTenant(ctx, tenant), provider, account)
+		if err != nil || tok == nil || tok.Scope == "" {
+			continue
+		}
+		granted := splitScopes(tok.Scope)
+		if !grantedCovers(granted, required) {
+			stale = append(stale, account)
+		}
+	}
+	return stale
+}
+
+// splitScopes accepts the wire formats different providers use —
+// Google uses spaces, GitHub and Slack use commas, and a few clients
+// mix both. Splitting on either gives a tolerant set; lowercase
+// because scope strings are case-insensitive in practice (Google
+// returns the canonical URL form, which is mixed-case but identity-
+// compared in real callers).
+func splitScopes(s string) map[string]struct{} {
+	set := map[string]struct{}{}
+	for _, raw := range strings.FieldsFunc(s, func(r rune) bool {
+		return r == ' ' || r == ',' || r == '\t' || r == '\n'
+	}) {
+		if raw == "" {
+			continue
+		}
+		set[strings.ToLower(raw)] = struct{}{}
+	}
+	return set
+}
+
+// grantedCovers reports whether every required scope is present in
+// granted. A missing scope (in granted) is the signal — extras in
+// granted are fine.
+func grantedCovers(granted map[string]struct{}, required []string) bool {
+	for _, req := range required {
+		if _, ok := granted[strings.ToLower(req)]; !ok {
+			return false
+		}
+	}
+	return true
 }

@@ -105,9 +105,27 @@ func NewOAuthRegistry(baseURL string, secrets *EncryptedSecrets) *OAuthRegistry 
 
 // Register adds a provider to the registry. Calling Register twice
 // with the same name overwrites — the last-write-wins lets a
-// deployment override built-in scope defaults by re-registering.
+// deployment override built-in scope defaults by re-registering, and
+// also lets the admin OAuth setup endpoint swap credentials in at
+// runtime without a daemon restart.
 func (r *OAuthRegistry) Register(p OAuthProvider) {
 	r.providers[p.Name] = p
+}
+
+// Unregister removes a provider from the registry. Used by the admin
+// "clear credentials" path so a deployment can take a provider out of
+// service without restarting. Idempotent — unregistering a missing
+// provider is a no-op.
+func (r *OAuthRegistry) Unregister(name string) {
+	delete(r.providers, name)
+}
+
+// Provider returns the OAuthProvider registered under name, plus a
+// presence flag. Lets the admin endpoint introspect what's currently
+// configured without exposing the whole map.
+func (r *OAuthRegistry) Provider(name string) (OAuthProvider, bool) {
+	p, ok := r.providers[name]
+	return p, ok
 }
 
 // Providers returns the registered provider names, sorted, for the

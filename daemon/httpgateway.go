@@ -331,6 +331,12 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/admin/tenants", h.requireAuth(h.listTenants))
 	mux.HandleFunc("GET /api/v1/admin/audit", h.requireAuth(h.listAudit))
 	mux.HandleFunc("GET /api/v1/admin/limits", h.requireAuth(h.workspaceLimits))
+	// OAuth provider configuration: paste client_id + client_secret in
+	// the admin UI instead of HAZYFLOW_OAUTH_*_CLIENT_ID env vars + a
+	// restart. Persisted creds win over env on the next boot.
+	mux.HandleFunc("GET /api/v1/admin/oauth-providers", h.requireAuth(h.listAdminOAuthProviders))
+	mux.HandleFunc("PUT /api/v1/admin/oauth-providers/{name}", h.requireAuth(h.upsertAdminOAuthProvider))
+	mux.HandleFunc("DELETE /api/v1/admin/oauth-providers/{name}", h.requireAuth(h.deleteAdminOAuthProvider))
 	// Multi-org membership: a user can belong to many tenants (the
 	// "home" tenant minted at signup + any they've been invited to).
 	// switch-org re-issues the session against a different tenant the

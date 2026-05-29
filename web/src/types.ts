@@ -412,8 +412,30 @@ export type RunSummary = {
 
 // OAuthProviderStatus is one entry from GET /oauth/providers: a
 // registered provider plus the account names the tenant has already
-// connected (empty = not connected yet).
+// connected (empty = not connected yet). stale_accounts lists the
+// subset of accounts whose stored token scope no longer covers the
+// provider's current required scopes — drives the "Reconnect
+// required" pill on the Connections page.
 export type OAuthProviderStatus = {
   name: string;
   accounts: string[];
+  stale_accounts?: string[];
+};
+
+// AdminOAuthProvider is one row from GET /api/v1/admin/oauth-providers:
+// the per-provider control panel state. configured = the registry
+// currently has client_id + client_secret for it (either from env
+// or persisted via this UI). has_env = configured but no persisted
+// row, so saving here will override.
+export type AdminOAuthProvider = {
+  name: string;
+  display_name: string;
+  authorize_url: string;
+  scopes: string[];
+  setup_help: string;
+  redirect_uri: string;
+  configured: boolean;
+  has_persisted: boolean;
+  has_env: boolean;
+  updated_at?: string;
 };
