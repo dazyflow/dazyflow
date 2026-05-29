@@ -57,19 +57,19 @@ var KnownOAuthProviderDefaults = []OAuthProviderDefault{
 		AuthorizeURL: "https://accounts.google.com/o/oauth2/v2/auth",
 		TokenURL:     "https://oauth2.googleapis.com/token",
 		Scopes: []string{
-			// Non-restricted (sensitive) scopes: send mail + read/write
-			// Sheets. These can be granted by an app in Testing without
-			// Google's restricted-scope security assessment.
+			// Sensitive scopes: send mail + read/write Sheets.
 			"https://www.googleapis.com/auth/gmail.send",
 			"https://www.googleapis.com/auth/spreadsheets",
-			// Restricted scopes are parked until the app passes Google
-			// verification — Google refuses to grant them on an unverified
-			// app, which blocks the whole consent. Re-enable these (and add
-			// them back on the consent screen) once verified:
-			//   gmail.readonly  → powers gmail_search / gmail_get
-			//   drive.readonly  → powers sheets_export_pdf (Drive files.export)
-			//   "https://www.googleapis.com/auth/gmail.readonly",
-			//   "https://www.googleapis.com/auth/drive.readonly",
+			// Restricted scopes: gmail.readonly powers gmail_search /
+			// gmail_get; drive.readonly powers sheets_export_pdf.
+			//
+			// These grant freely on an INTERNAL Workspace app (no
+			// verification). On an EXTERNAL app, Google blocks restricted-
+			// scope consent until the app passes its security assessment —
+			// so a multi-org / External deployment must get the app verified
+			// (or drop these two) before outside companies can connect.
+			"https://www.googleapis.com/auth/gmail.readonly",
+			"https://www.googleapis.com/auth/drive.readonly",
 		},
 		AuthorizeExtras: map[string]string{
 			// Required for refresh_token (Google's "first consent only"
