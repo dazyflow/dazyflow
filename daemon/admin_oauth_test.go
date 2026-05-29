@@ -252,14 +252,16 @@ func TestAdminOAuth_DeleteUnregistersAndClearsStore(t *testing.T) {
 // ---- scope_mismatch on user-facing listing -------------------------
 
 func TestStaleAccounts_MissingScopeFlagged(t *testing.T) {
-	// Token was granted gmail.send + spreadsheets — drive.readonly
-	// was added later. The account should be flagged stale.
+	// Token was granted only gmail.send, but the (explicit) required set
+	// also needs drive.readonly. The account should be flagged stale.
+	// Required scopes are passed in rather than read from the default so
+	// this test stays valid regardless of the default scope set.
 	es := newMemSecrets(t)
 	r := NewOAuthRegistry("https://example.test", es)
 	r.Register(providerDefault("google").toProvider("c", "s"))
 	tok := &StoredOAuthToken{
 		AccessToken: "ya29.test",
-		Scope:       "https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/spreadsheets",
+		Scope:       "https://www.googleapis.com/auth/gmail.send",
 		ObtainedAt:  time.Now().UTC(),
 	}
 	if _, err := r.store(t.Context(), "tenantA", "google", "default", tok); err != nil {
@@ -268,7 +270,11 @@ func TestStaleAccounts_MissingScopeFlagged(t *testing.T) {
 	h := newGatewayHarness(t)
 	h.gw.EncryptedSecrets = es
 	h.gw.OAuth = r
-	stale := h.gw.staleAccounts(context.Background(), "tenantA", "google", []string{"default"}, providerDefault("google").Scopes)
+	required := []string{
+		"https://www.googleapis.com/auth/gmail.send",
+		"https://www.googleapis.com/auth/drive.readonly", // granted token lacks this
+	}
+	stale := h.gw.staleAccounts(context.Background(), "tenantA", "google", []string{"default"}, required)
 	if !contains(stale, "default") {
 		t.Errorf("expected default to be stale; got %v", stale)
 	}

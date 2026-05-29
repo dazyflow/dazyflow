@@ -30,11 +30,10 @@ type OAuthProviderDefault struct {
 // OAuth providers Hazy Flow's drops can use. Order matters: it's the
 // order admin UI rows render in.
 //
-// drive.readonly on the Google entry is required for sheets_export_pdf
-// (Drive's files.export endpoint). Existing connected accounts that
-// predate this scope show a "Reconnect required" pill on the user-
-// facing Connections page (scope_mismatch check) until they
-// reauthorize.
+// The Google entry requests only non-restricted scopes by default
+// (gmail.send + spreadsheets). The restricted readonly scopes are parked
+// (see the Google entry) because Google blocks restricted-scope consent
+// on an unverified app, which otherwise fails the entire connect.
 var KnownOAuthProviderDefaults = []OAuthProviderDefault{
 	{
 		Name:         "slack",
@@ -58,10 +57,19 @@ var KnownOAuthProviderDefaults = []OAuthProviderDefault{
 		AuthorizeURL: "https://accounts.google.com/o/oauth2/v2/auth",
 		TokenURL:     "https://oauth2.googleapis.com/token",
 		Scopes: []string{
+			// Non-restricted (sensitive) scopes: send mail + read/write
+			// Sheets. These can be granted by an app in Testing without
+			// Google's restricted-scope security assessment.
 			"https://www.googleapis.com/auth/gmail.send",
-			"https://www.googleapis.com/auth/gmail.readonly",
 			"https://www.googleapis.com/auth/spreadsheets",
-			"https://www.googleapis.com/auth/drive.readonly",
+			// Restricted scopes are parked until the app passes Google
+			// verification — Google refuses to grant them on an unverified
+			// app, which blocks the whole consent. Re-enable these (and add
+			// them back on the consent screen) once verified:
+			//   gmail.readonly  → powers gmail_search / gmail_get
+			//   drive.readonly  → powers sheets_export_pdf (Drive files.export)
+			//   "https://www.googleapis.com/auth/gmail.readonly",
+			//   "https://www.googleapis.com/auth/drive.readonly",
 		},
 		AuthorizeExtras: map[string]string{
 			// Required for refresh_token (Google's "first consent only"
