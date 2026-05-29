@@ -62,6 +62,7 @@ func init() {
 					},
 					"filter": {
 						"type":"string",
+						"format":"row-condition",
 						"description":"CEL expression that must evaluate to a bool. Rows where it returns false are dropped."
 					}
 				}
@@ -109,9 +110,7 @@ func executeComputeRows(ctx context.Context, job core.Job, _ chan<- core.Progres
 		inputHeaders = deriveHeaders(rows)
 	}
 
-	env, err := cel.NewEnv(
-		cel.Variable("row", cel.MapType(cel.StringType, cel.DynType)),
-	)
+	env, err := newRowCELEnv()
 	if err != nil {
 		return errResult(job, "internal", fmt.Sprintf("cel env: %v", err)), nil
 	}
@@ -247,7 +246,7 @@ func compileOptionalFilter(env *cel.Env, params map[string]any) (cel.Program, er
 }
 
 func evalFilter(_ context.Context, prog cel.Program, row map[string]any) (bool, error) {
-	v, _, err := prog.Eval(map[string]any{"row": row})
+	v, _, err := prog.Eval(celVars(row))
 	if err != nil {
 		return false, err
 	}
@@ -259,7 +258,7 @@ func evalFilter(_ context.Context, prog cel.Program, row map[string]any) (bool, 
 }
 
 func evalExpression(_ context.Context, prog cel.Program, row map[string]any) (any, error) {
-	v, _, err := prog.Eval(map[string]any{"row": row})
+	v, _, err := prog.Eval(celVars(row))
 	if err != nil {
 		return nil, err
 	}

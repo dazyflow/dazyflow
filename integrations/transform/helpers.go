@@ -8,9 +8,35 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"time"
+
+	"github.com/google/cel-go/cel"
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 )
+
+// newRowCELEnv builds the CEL environment shared by the filtering and
+// computing drops (compute_rows, route_rows, split_rows). Two variables
+// are in scope:
+//
+//   - row: the current row as map<string, dyn>.
+//   - now: the current time as a timestamp, so filters and computed
+//     columns can express "overdue", "last week", "due tomorrow" without
+//     the caller precomputing a date column. Bound at eval by celVars.
+func newRowCELEnv(extra ...cel.EnvOption) (*cel.Env, error) {
+	opts := []cel.EnvOption{
+		cel.Variable("row", cel.MapType(cel.StringType, cel.DynType)),
+		cel.Variable("now", cel.TimestampType),
+	}
+	return cel.NewEnv(append(opts, extra...)...)
+}
+
+// celVars is the activation for one row evaluation. `now` is sampled
+// per call; within a batch that's day-granularity stable, which is all
+// the time-window filters need.
+func celVars(row map[string]any) map[string]any {
+	return map[string]any{"row": row, "now": time.Now().UTC()}
+}
 
 func errResult(job core.Job, code, msg string) core.Result {
 	return core.Result{

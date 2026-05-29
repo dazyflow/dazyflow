@@ -11,16 +11,52 @@ line as the acceptance check.
 
 ## How these are tested
 
-Each scenario has a graph under `tests/scenarios/NN-*.json` built from real
-modules. `tests/scenarios/scenarios_test.go` loads every graph and runs it
-through `core.ValidateWithManifests` against the live native catalog, plus a
-check that each `for_each` step module exists. That proves the scenario
-*composes* from supported building blocks: every module and port exists, the
-wiring is type-compatible, and required inputs are connected. It does not make
-live Gmail/Sheets/Slack/Notion calls, so the "Proves it works" lines describe
-the end-to-end behaviour to assert once real accounts are wired in.
+There are three layers, from cheapest to most lifelike.
 
-First run found three gaps, since closed:
+1. **Composition** (`tests/scenarios/scenarios_test.go`,
+   `tests/scenarios/templates_test.go`). Each scenario has a graph under
+   `tests/scenarios/NN-*.json`. This loads every graph and runs it through
+   `core.ValidateWithManifests` against the live native catalog, plus a check
+   that each `for_each` step module exists. It proves the scenario *composes*:
+   every module and port exists, the wiring is type-compatible, and required
+   inputs are connected. `templates_test.go` applies the same guard to the
+   shipped templates in `web/public/templates` (what a newcomer actually forks),
+   which caught two real defects: both Gmail templates used a stale `step` param
+   instead of `step_module` (so the `for_each` failed at run time, now fixed) and
+   feed `for_each.results` (a list of Result wrappers) into a `compute_rows` that
+   reads them as raw message rows (a shape mismatch that needs a results->rows
+   flattening step; those two are skipped with that note until redesigned). It
+   also surfaced that `ValidateWithManifests` doesn't model the editor's variadic
+   `port[N]` convention, so the test normalizes those before validating.
+
+2. **Newcomer journey** (`tests/journey/`). Boots the real stack (the same HTTP
+   API the web UI calls, plus a worker that executes flows) and walks the steps
+   a non-technical newcomer takes: sign up, find the building blocks in the
+   catalog, see which accounts to connect, save the flow, let the app validate
+   it, fill in the blanks, and run it. A failure reads as "a newcomer would be
+   stuck here." Three scenarios run the whole loop for real, with the SaaS
+   endpoints mocked at their HTTP base and a raw `token` param standing in for a
+   connected account:
+   - lead-intake (no account needed): webhook in, lead stored.
+   - overdue-invoice (Sheets + Gmail): reads the sheet, computes days overdue,
+     emails exactly the one unpaid+overdue client, logs back to the sheet.
+   - weekly-sales-summary (Sheets + AI + Slack): filters to last week, totals by
+     salesperson, has the AI write the recap, posts it to Slack.
+   The remaining scenarios are exercised through save + validate.
+
+3. **Lived walkthrough** (`tests/journey/WALKTHROUGH.md` + `screenshots/`). A
+   narrated, screenshot-backed pass driving the actual web UI as a clueless
+   user, recording real friction. Headline: the app is genuinely
+   non-technical-friendly; the friction is self-host *setup* (register OAuth apps
+   for Gmail/Slack/Notion, set `HAZYFLOW_WEB_ORIGIN`), not the product. The
+   fastest path to first success is a no-setup template (contact form -> stored
+   list), which works with zero configuration.
+
+The composition layer does not make live Gmail/Sheets/Slack/Notion calls, so the
+"Proves it works" lines describe the end-to-end behaviour to assert once real
+accounts are wired in.
+
+First run of the composition layer found two gaps, since closed:
 
 - **`parse_json`** (new transform) turns JSON text, an AI step's output or an
   HTTP response, into rows + headers, tolerating Markdown code fences and
@@ -29,6 +65,21 @@ First run found three gaps, since closed:
 - **`notion_create_page` gained a `content` input** so upstream text (an AI
   summary) can become the page body. Before, the node took only static params
   and could not receive a value computed earlier in the flow (scenario 10).
+
+Running the connected scenarios for real (layer 2) surfaced one more, since
+closed, plus a scenario-authoring lesson:
+
+- **The CEL env had no `now`.** Time-window filters ("overdue", "last week",
+  "due tomorrow") are the backbone of these scenarios, but `compute_rows`,
+  `route_rows`, and `split_rows` only exposed `row`, so any filter referencing
+  the current time failed to compile at run time. `now` (a timestamp, bound at
+  eval) is now in scope for all three. This is core to the non-technical
+  promise: most recurring jobs are "do X to the rows from the last day/week".
+- **`for_each` `item_port` footgun.** Pointing `item_port` at a typed input
+  (e.g. a Gmail step's string `body`) injects the whole row object there and the
+  step rejects it. Feed per-item values through `${item:...}` in `step_params`
+  instead, and leave `item_port` at its default. (Caught when overdue-invoice
+  sent zero emails despite routing correctly.)
 
 Two runtime caveats the composition check does not cover, noted where relevant:
 PDF export exists only for Google Sheets (`sheets_export_pdf`), so a "PDF"

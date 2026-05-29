@@ -14,7 +14,7 @@
       "id": "mark_overdue",
       "module": "compute_rows",
       "params": {
-        "compute": {"days_overdue": "int((timestamp(string(now)) - timestamp(string(row.due_date) + \"T00:00:00Z\")) / duration(\"24h\"))"}
+        "compute": {"days_overdue": "(now - timestamp(string(row.due_date) + \"T00:00:00Z\")).getHours() / 24"}
       }
     },
     {
@@ -29,7 +29,6 @@
       "module": "for_each",
       "params": {
         "step_module": "gmail_send_email",
-        "item_port": "body",
         "step_params": {
           "to": "${item:client_email}",
           "subject": "Reminder: invoice ${item:invoice_no} is overdue",

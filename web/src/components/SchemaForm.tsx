@@ -225,6 +225,20 @@ function SchemaField({ name, schema, required, value, onChange, workspace, accou
           </FieldWrap>
         );
       }
+      // format:"row-condition" gets the no-code condition builder — a
+      // column/operator/value form that emits the CEL filter string a
+      // non-technical user would otherwise have to hand-write. Power
+      // users can flip to the raw CEL textarea at any time.
+      if (schema.format === "row-condition") {
+        return (
+          <FieldWrap name={name} schema={schema} required={required} value={value}>
+            <RowConditionField
+              value={(value as string) ?? ""}
+              onChange={(v) => onChange(v === "" && !required ? undefined : v)}
+            />
+          </FieldWrap>
+        );
+      }
       // format:"multiline" gets a textarea — for things like LLM
       // user prompts and system prompts where a single-line input
       // hides anything past the right edge.
@@ -978,6 +992,223 @@ function defaultFor(schema: JSONSchema): unknown {
 // WorkspacePathField renders the workspace-path widget: a text input
 // holding the current sandbox-relative path, plus a drop-zone +
 // file-picker that uploads the dropped/selected file via the daemon
+// --- RowConditionField: no-code filter builder -----------------------
+//
+// Renders the `filter` param of the row drops (route_rows, compute_rows,
+// split_rows) as column / operator / value rows joined by AND, and emits
+// the CEL string the engine expects. A non-technical user never sees CEL;
+// a power user can flip to the raw textarea (and anything the builder
+// can't round-trip opens there automatically).
+
+export type RowCond = { column: string; op: string; value: string };
+
+const ROW_COND_OPS: { id: string; label: string; value: "text" | "number" | "none" }[] = [
+  { id: "equals", label: "is", value: "text" },
+  { id: "not_equals", label: "is not", value: "text" },
+  { id: "contains", label: "contains", value: "text" },
+  { id: "gt", label: "greater than", value: "number" },
+  { id: "lt", label: "less than", value: "number" },
+  { id: "is_empty", label: "is empty", value: "none" },
+  { id: "is_not_empty", label: "is not empty", value: "none" },
+  { id: "before_today", label: "is before today", value: "none" },
+  { id: "after_today", label: "is after today", value: "none" },
+];
+
+function rowCondValueKind(op: string): "text" | "number" | "none" {
+  return ROW_COND_OPS.find((o) => o.id === op)?.value ?? "text";
+}
+
+function celQuote(s: string): string {
+  return '"' + s.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
+}
+function celUnquote(s: string): string {
+  return s.replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+}
+
+export function rowCondToCEL(c: RowCond): string {
+  const col = `row.${c.column}`;
+  switch (c.op) {
+    case "equals":
+      return c.value === "" ? `${col} == ""` : `${col} == ${celQuote(c.value)}`;
+    case "not_equals":
+      return c.value === "" ? `${col} != ""` : `${col} != ${celQuote(c.value)}`;
+    case "contains":
+      return `string(${col}).contains(${celQuote(c.value)})`;
+    case "gt":
+      return `double(${col}) > ${Number(c.value) || 0}`;
+    case "lt":
+      return `double(${col}) < ${Number(c.value) || 0}`;
+    case "is_empty":
+      return `${col} == ""`;
+    case "is_not_empty":
+      return `${col} != ""`;
+    case "before_today":
+      return `timestamp(string(${col}) + "T00:00:00Z") < now`;
+    case "after_today":
+      return `timestamp(string(${col}) + "T00:00:00Z") > now`;
+    default:
+      return "";
+  }
+}
+
+export function buildRowCEL(conds: RowCond[]): string {
+  return conds
+    .filter((c) => c.column.trim() !== "")
+    .map(rowCondToCEL)
+    .join(" && ");
+}
+
+// parseRowCEL is the inverse of buildRowCEL for the shapes the builder
+// emits. Returns null when any clause is something the builder didn't
+// produce, so the caller falls back to the raw CEL editor rather than
+// silently dropping the user's expression.
+export function parseRowCEL(cel: string): RowCond[] | null {
+  const trimmed = cel.trim();
+  if (trimmed === "") return [];
+  const COL = "row\\.([A-Za-z0-9_.]+)";
+  const matchers: { op: string; re: RegExp; val?: (m: RegExpMatchArray) => string }[] = [
+    { op: "before_today", re: new RegExp(`^timestamp\\(string\\(${COL}\\) \\+ "T00:00:00Z"\\) < now$`) },
+    { op: "after_today", re: new RegExp(`^timestamp\\(string\\(${COL}\\) \\+ "T00:00:00Z"\\) > now$`) },
+    { op: "contains", re: new RegExp(`^string\\(${COL}\\)\\.contains\\("(.*)"\\)$`), val: (m) => celUnquote(m[2]) },
+    { op: "gt", re: new RegExp(`^double\\(${COL}\\) > (-?\\d+(?:\\.\\d+)?)$`), val: (m) => m[2] },
+    { op: "lt", re: new RegExp(`^double\\(${COL}\\) < (-?\\d+(?:\\.\\d+)?)$`), val: (m) => m[2] },
+    { op: "is_empty", re: new RegExp(`^${COL} == ""$`) },
+    { op: "is_not_empty", re: new RegExp(`^${COL} != ""$`) },
+    { op: "equals", re: new RegExp(`^${COL} == "(.*)"$`), val: (m) => celUnquote(m[2]) },
+    { op: "not_equals", re: new RegExp(`^${COL} != "(.*)"$`), val: (m) => celUnquote(m[2]) },
+  ];
+  const out: RowCond[] = [];
+  for (const clause of trimmed.split(" && ")) {
+    let matched = false;
+    for (const { op, re, val } of matchers) {
+      const m = clause.trim().match(re);
+      if (m) {
+        out.push({ column: m[1], op, value: val ? val(m) : "" });
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) return null;
+  }
+  return out;
+}
+
+function RowConditionField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const parsedInit = parseRowCEL(value);
+  const [advanced, setAdvanced] = useState(parsedInit === null);
+  const [conds, setConds] = useState<RowCond[]>(parsedInit ?? []);
+
+  const emit = (next: RowCond[]) => {
+    setConds(next);
+    onChange(buildRowCEL(next));
+  };
+  const setCond = (i: number, patch: Partial<RowCond>) =>
+    emit(conds.map((c, idx) => (idx === i ? { ...c, ...patch } : c)));
+  const addCond = () => emit([...conds, { column: "", op: "equals", value: "" }]);
+  const removeCond = (i: number) => emit(conds.filter((_, idx) => idx !== i));
+
+  if (advanced) {
+    return (
+      <div className="sf-rowcond">
+        <textarea
+          rows={2}
+          value={value}
+          placeholder='e.g. row.status == "unpaid"'
+          onChange={(e) => onChange(e.target.value)}
+          style={{ resize: "vertical", width: "100%", fontFamily: "monospace" }}
+        />
+        <button
+          type="button"
+          className="sf-rowcond-toggle"
+          onClick={() => {
+            const p = parseRowCEL(value);
+            if (p === null) {
+              // Keep the user's expression; just tell them it's not
+              // simple enough to edit visually.
+              window.alert(
+                "This condition is too advanced for the simple builder. Edit it as CEL here.",
+              );
+              return;
+            }
+            setConds(p);
+            setAdvanced(false);
+          }}
+        >
+          Use simple builder
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="sf-rowcond">
+      {conds.length === 0 && (
+        <div className="desc">No conditions yet — every row passes.</div>
+      )}
+      {conds.map((c, i) => {
+        const kind = rowCondValueKind(c.op);
+        return (
+          <div
+            key={i}
+            className="sf-rowcond-row"
+            style={{ display: "flex", gap: 6, marginBottom: 6, alignItems: "center" }}
+          >
+            {i > 0 && <span className="desc" style={{ minWidth: 28 }}>and</span>}
+            <input
+              placeholder="column"
+              value={c.column}
+              onChange={(e) => setCond(i, { column: e.target.value })}
+              style={{ flex: "1 1 0" }}
+            />
+            <select value={c.op} onChange={(e) => setCond(i, { op: e.target.value })}>
+              {ROW_COND_OPS.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            {kind !== "none" && (
+              <input
+                type={kind === "number" ? "number" : "text"}
+                placeholder="value"
+                value={c.value}
+                onChange={(e) => setCond(i, { value: e.target.value })}
+                style={{ flex: "1 1 0" }}
+              />
+            )}
+            <button
+              type="button"
+              aria-label="Remove condition"
+              onClick={() => removeCond(i)}
+              className="sf-rowcond-remove"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        );
+      })}
+      <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+        <button type="button" className="sf-rowcond-add" onClick={addCond}>
+          <Plus size={14} /> Add condition
+        </button>
+        <button
+          type="button"
+          className="sf-rowcond-toggle"
+          onClick={() => setAdvanced(true)}
+        >
+          Advanced (CEL)
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // and stores the returned path. Drag-and-drop uses native HTML5
 // events (no library) so it works alongside React Flow's own
 // drag handling — we stopPropagation so a drop on the input doesn't

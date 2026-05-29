@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/google/cel-go/cel"
-
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
 )
@@ -49,7 +47,7 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"filter":{"type":"string","description":"CEL expression that must return a bool. Rows where it's true land on 'matched', false on 'unmatched'."}
+					"filter":{"type":"string","format":"row-condition","description":"CEL expression that must return a bool. Rows where it's true land on 'matched', false on 'unmatched'."}
 				},
 				"required":["filter"]
 			}`),
@@ -92,9 +90,7 @@ func executeSplitRows(ctx context.Context, job core.Job, _ chan<- core.Progress)
 		headers = deriveHeaders(rows)
 	}
 
-	env, err := cel.NewEnv(
-		cel.Variable("row", cel.MapType(cel.StringType, cel.DynType)),
-	)
+	env, err := newRowCELEnv()
 	if err != nil {
 		return errResult(job, "internal", fmt.Sprintf("cel env: %v", err)), nil
 	}

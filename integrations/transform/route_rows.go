@@ -88,7 +88,7 @@ func init() {
 							"type":"object",
 							"properties":{
 								"slot":   {"type":"string","description":"Output port name. One of rows_1..rows_8."},
-								"filter": {"type":"string","description":"CEL expression returning bool. Sees 'row' as map<string,dyn>."}
+								"filter": {"type":"string","format":"row-condition","description":"CEL expression returning bool. Sees 'row' as map<string,dyn>."}
 							},
 							"required":["slot","filter"]
 						}
@@ -141,7 +141,7 @@ func executeRouteRows(ctx context.Context, job core.Job, _ chan<- core.Progress)
 	// fail the whole batch up front (same contract as compute_rows /
 	// split_rows) — partial routing is worse than none for
 	// downstream consumers expecting deterministic slot sizes.
-	env, err := cel.NewEnv(cel.Variable("row", cel.MapType(cel.StringType, cel.DynType)))
+	env, err := newRowCELEnv()
 	if err != nil {
 		return errResult(job, "internal", fmt.Sprintf("cel env: %v", err)), nil
 	}
