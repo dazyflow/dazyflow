@@ -231,6 +231,15 @@ a:hover {
   text-decoration: underline;
 }
 
+/* Links styled as buttons (.primary / .ghost on an <a>/<Link>) read as
+   buttons, so they must not pick up the text-link hover underline. */
+a.primary,
+a.ghost,
+a.primary:hover,
+a.ghost:hover {
+  text-decoration: none;
+}
+
 button {
   font-family: inherit;
   font-size: inherit;
