@@ -234,6 +234,10 @@ func (e *Engine) RunNode(
 	}
 	jobIDsFromSpan(ctx, &job)
 
+	// Tenant rides on the context into Execute so connector token lookups
+	// (OAuth GetOAuthToken) can resolve the per-tenant account.
+	ctx = core.WithTenant(ctx, job.Tenant)
+
 	result, execErr := transport.Execute(ctx, job, progress)
 	if result.JobID == "" {
 		result.JobID = job.ID
@@ -302,6 +306,10 @@ func (e *Engine) runNode(
 		}, err
 	}
 	jobIDsFromSpan(ctx, &job)
+
+	// Tenant rides on the context into Execute so connector token lookups
+	// (OAuth GetOAuthToken) can resolve the per-tenant account.
+	ctx = core.WithTenant(ctx, job.Tenant)
 
 	nodeProgress := make(chan core.Progress)
 	forwarderDone := make(chan struct{})

@@ -312,6 +312,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/me/connections", h.requireAuth(h.listConnectionsMe))
 	mux.HandleFunc("POST /api/v1/me/connections/{provider}/authorize",
 		h.requireAuth(h.idempotencyMiddleware("/me/connections/{provider}/authorize", h.startConnectionMe)))
+	mux.HandleFunc("DELETE /api/v1/me/connections/{provider}", h.requireAuth(h.disconnectConnectionMe))
 	mux.HandleFunc("POST /api/v1/validate/cron", h.requireAuth(h.validateCron))
 	// validate/graph lints a Graph JSON literal without saving — for
 	// LLMs that compose a graph in chat and want a dry-run before

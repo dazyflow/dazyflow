@@ -1043,12 +1043,11 @@ function EditorInner() {
           <div
             role="alert"
             style={{
-              // Pinned just below the toolbar so the banner can't get
-              // buried under the pipeline-log strip at the bottom of
-              // the canvas. z-index keeps it above ReactFlow controls
-              // and the mini-map.
+              // Pinned below the 48px toolbar so it never covers the
+              // Save/Run actions, and above the pipeline-log strip at the
+              // bottom. z-index keeps it over ReactFlow controls + mini-map.
               position: "absolute",
-              top: 12,
+              top: 60,
               left: 12,
               right: 12,
               background: "var(--surface)",
@@ -1081,11 +1080,10 @@ function EditorInner() {
         {lintIssues.length > 0 && (
           <div
             style={{
-              // Stack below the error banner when both are present, but
-              // still at the top of the canvas — never behind the
-              // pipeline-log strip.
+              // Below the toolbar; stacks under the error banner when both
+              // are present. Never behind the pipeline-log strip.
               position: "absolute",
-              top: error ? 80 : 12,
+              top: error ? 128 : 60,
               left: 12,
               right: 12,
               background: "var(--surface)",
@@ -1130,9 +1128,9 @@ function EditorInner() {
           <div
             className="editor-conn-banner"
             style={{
-              // Stack below the error/lint banners when present.
+              // Below the 48px toolbar; stacks under the error/lint banners.
               top:
-                12 +
+                60 +
                 (error ? 68 : 0) +
                 (lintIssues.length > 0 ? 68 : 0),
             }}
@@ -1140,17 +1138,33 @@ function EditorInner() {
           >
             <span className="editor-conn-banner-text">
               {userFixableSetup && (
-                <span>
-                  {t("editor.connNeeded", {
-                    items: [
-                      ...new Set(
-                        missingConnections.map(
-                          (m) => oauthProviderDisplay(m.provider).name,
-                        ),
-                      ),
-                      ...missingSecrets,
-                    ].join(", "),
+                <span className="editor-conn-banner-needs">
+                  <span>{t("editor.connNeededLead")}</span>
+                  {[
+                    ...new Map(
+                      missingConnections.map((m) => [m.provider, m]),
+                    ).values(),
+                  ].map((m) => {
+                    const meta = oauthProviderDisplay(m.provider);
+                    return (
+                      <span key={m.provider} className="editor-conn-chip">
+                        {meta.brand_logo && (
+                          <img
+                            src={meta.brand_logo}
+                            alt=""
+                            className="editor-conn-chip-logo"
+                            draggable={false}
+                          />
+                        )}
+                        {meta.name}
+                      </span>
+                    );
                   })}
+                  {missingSecrets.map((s) => (
+                    <span key={s} className="editor-conn-chip">
+                      {s}
+                    </span>
+                  ))}
                 </span>
               )}
               {adminBlockedSetup && (

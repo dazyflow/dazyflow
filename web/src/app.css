@@ -1239,8 +1239,26 @@
   font-size: 11px;
   background: var(--surface-2, rgba(255, 255, 255, 0.05));
   border: 1px solid var(--border);
-  padding: 1px 8px;
+  padding: 1px 4px 1px 8px;
   border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.provider-account-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  background: none;
+  border: none;
+  color: var(--faint, #8a8a8a);
+  cursor: pointer;
+  border-radius: 999px;
+}
+.provider-account-remove:hover:not(:disabled) {
+  color: var(--danger, #e5484d);
+  background: color-mix(in srgb, var(--danger, #e5484d) 14%, transparent);
 }
 .provider-account-chip-stale {
   border-color: var(--warn, #d4a017);
@@ -1438,6 +1456,31 @@
   flex-direction: column;
   gap: 4px;
   min-width: 0;
+}
+/* The "Connect to run this flow:" line with one chip per required
+   connection — each chip carries the provider's brand icon + name. */
+.editor-conn-banner-needs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.editor-conn-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px 2px 6px;
+  border-radius: 999px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--border);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.editor-conn-chip-logo {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
 }
 .editor-conn-banner-admin {
   color: var(--muted);

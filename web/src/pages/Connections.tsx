@@ -94,6 +94,16 @@ export function Connections() {
     window.location.assign(api.oauthAuthorizeUrl(provider, RETURN_TO));
   };
 
+  const disconnect = (provider: string, account: string) => {
+    if (!token) return;
+    api
+      .disconnectConnection(token, provider, account)
+      .then(refresh)
+      .catch((e) =>
+        setError(e instanceof APIError ? e.message : (e as Error).message),
+      );
+  };
+
   // Hide the oauth.* secrets from the credentials list — those are
   // surfaced as connected-account chips under their provider.
   const userSecrets = useMemo(
@@ -168,6 +178,7 @@ export function Connections() {
                   key={p.name}
                   provider={p}
                   onConnect={() => connect(p.name)}
+                  onDisconnect={(account) => disconnect(p.name, account)}
                 />
               ))}
             </div>
@@ -280,9 +291,11 @@ function supportContactHref(raw?: string): string | undefined {
 function ProviderCard({
   provider,
   onConnect,
+  onDisconnect,
 }: {
   provider: OAuthProviderStatus;
   onConnect: () => void;
+  onDisconnect: (account: string) => void;
 }) {
   const { t } = useTranslation();
   const meta = oauthProviderDisplay(provider.name);
@@ -332,6 +345,15 @@ function ProviderCard({
                     {t("connections.reconnectRequired")}
                   </span>
                 )}
+                <button
+                  type="button"
+                  className="provider-account-remove"
+                  aria-label={t("connections.disconnect")}
+                  title={t("connections.disconnect")}
+                  onClick={() => onDisconnect(a)}
+                >
+                  <Trash2 size={12} strokeWidth={2.2} />
+                </button>
               </span>
             );
           })}

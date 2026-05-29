@@ -480,6 +480,17 @@ export const api = {
     if (account) qs.set("account", account);
     return `${API_BASE}/oauth/${encodeURIComponent(provider)}/authorize?${qs.toString()}`;
   },
+  // disconnectConnection deletes a stored OAuth connection (forgets the
+  // token for that provider+account) so flows stop using it. Inverse of
+  // the connect flow; needs secret:write.
+  disconnectConnection: (token: string, provider: string, account: string) => {
+    const qs = account ? `?account=${encodeURIComponent(account)}` : "";
+    return request<void>(
+      token,
+      "DELETE",
+      `/me/connections/${encodeURIComponent(provider)}${qs}`,
+    );
+  },
   // listAdminOAuthProviders returns every provider Hazy Flow knows
   // about (Slack, Google, GitHub, Notion) along with whether each is
   // currently configured and where the credentials came from (env vs.

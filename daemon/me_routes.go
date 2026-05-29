@@ -536,6 +536,47 @@ func (h *HTTPGateway) startConnectionMe(rw http.ResponseWriter, r *http.Request,
 	writeJSON(rw, http.StatusOK, map[string]any{"authorize_url": target})
 }
 
+// disconnectConnectionMe is the inverse of the connect/authorize flow:
+// it deletes the stored oauth.<provider>.<account> token for the
+// caller's tenant, so flows stop using it and the Connections page shows
+// the account disconnected. Account defaults to "default"; idempotent.
+//
+// This forgets the token locally; it does not revoke the grant at the
+// provider (the user can also remove access in the provider's own
+// account settings). Gated on secret:write, the same permission the
+// connect flow requires.
+func (h *HTTPGateway) disconnectConnectionMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	if err := core.Require(p, core.PermSecretWrite); err != nil {
+		writeAPIError(rw, http.StatusForbidden, "forbidden", err.Error())
+		return
+	}
+	if h.EncryptedSecrets == nil {
+		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "encrypted secret store not configured")
+		return
+	}
+	if p.Tenant == "" {
+		writeAPIError(rw, http.StatusForbidden, "forbidden", "principal has no tenant")
+		return
+	}
+	provider := r.PathValue("provider")
+	if providerDefault(provider) == nil {
+		writeAPIError(rw, http.StatusNotFound, "unknown_provider",
+			fmt.Sprintf("unknown OAuth provider %q", provider))
+		return
+	}
+	account := r.URL.Query().Get("account")
+	if account == "" {
+		account = "default"
+	}
+	name := secretNameFor(provider, account)
+	if err := h.EncryptedSecrets.Delete(r.Context(), p.Tenant, name); err != nil {
+		writeAPIError(rw, http.StatusInternalServerError, "delete_failed", err.Error())
+		return
+	}
+	h.audit(r.Context(), p, "oauth.connection.disconnect", name, "")
+	rw.WriteHeader(http.StatusNoContent)
+}
+
 func oauthErrorCode(status int) string {
 	switch status {
 	case http.StatusNotImplemented:
