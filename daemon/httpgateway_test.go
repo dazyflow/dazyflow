@@ -27,8 +27,9 @@ type gatewayHarness struct {
 	ws         *workspace.Store
 	bus        *MemoryBus
 	ks         *auth.MemKeyStore
-	token      string // editor token
-	adminToken string // tenant:admin token (issued lazily by ensureAdmin)
+	token         string // editor token
+	adminToken    string // tenant:admin token (issued lazily by adminDo)
+	platformToken string // platform:admin token (issued lazily by platformDo)
 }
 
 func newGatewayHarness(t *testing.T) *gatewayHarness {
@@ -79,6 +80,34 @@ func (h *gatewayHarness) adminDo(t *testing.T, method, path string, body any) *h
 	}
 	req := httptest.NewRequest(method, path, bodyReader)
 	req.Header.Set("Authorization", "Bearer "+h.adminToken)
+	req.Header.Set("Content-Type", "application/json")
+	rw := httptest.NewRecorder()
+	ServeForTest(h.gw, rw, req)
+	return rw
+}
+
+// platformDo runs the request with a platform:admin bearer token (no
+// tenant binding), minting one on first use. Used for instance-wide
+// settings that tenant admins must not reach (e.g. OAuth provider creds).
+func (h *gatewayHarness) platformDo(t *testing.T, method, path string, body any) *httptest.ResponseRecorder {
+	t.Helper()
+	if h.platformToken == "" {
+		role := core.Role{Name: "platform", Permissions: []core.Permission{core.PermPlatformAdmin}}
+		_, tok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-platform", "", "", "op", []core.Role{role}, nil)
+		if err != nil {
+			t.Fatalf("issue platform key: %v", err)
+		}
+		h.platformToken = tok
+	}
+	var bodyReader *bytes.Buffer
+	if body != nil {
+		b, _ := json.Marshal(body)
+		bodyReader = bytes.NewBuffer(b)
+	} else {
+		bodyReader = bytes.NewBuffer(nil)
+	}
+	req := httptest.NewRequest(method, path, bodyReader)
+	req.Header.Set("Authorization", "Bearer "+h.platformToken)
 	req.Header.Set("Content-Type", "application/json")
 	rw := httptest.NewRecorder()
 	ServeForTest(h.gw, rw, req)

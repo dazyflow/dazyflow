@@ -379,6 +379,18 @@ func requireAdmin(p core.Principal) error {
 	return fmt.Errorf("requires permission %q", core.PermTenantAdmin)
 }
 
+// requirePlatformAdmin gates instance-wide settings that every tenant
+// shares — e.g. the OAuth client_id/secret for the provider apps the
+// whole install connects through. A tenant admin owns one org and must
+// NOT read or change config that affects all orgs, so these surfaces
+// require platform admin rather than the broader requireAdmin.
+func requirePlatformAdmin(p core.Principal) error {
+	if p.Has(core.PermPlatformAdmin) {
+		return nil
+	}
+	return fmt.Errorf("requires permission %q", core.PermPlatformAdmin)
+}
+
 // isPlatformAdmin is the override used by admin Service methods to
 // decide whether the caller is allowed to specify a tenant other than
 // their own.

@@ -73,13 +73,18 @@ export function Admin() {
           desc={t("admin.cardSSODesc")}
           status="ready"
         />
-        <AdminCard
-          to="/admin/oauth"
-          icon={<Plug size={16} />}
-          title={t("admin.cardOAuthTitle")}
-          desc={t("admin.cardOAuthDesc")}
-          status="ready"
-        />
+        {/* OAuth provider apps (client_id/secret) are an instance-wide
+            setting shared by every org, so only the platform operator
+            configures them — a tenant admin would get a 403. */}
+        {hasPerm("platform:admin") && (
+          <AdminCard
+            to="/admin/oauth"
+            icon={<Plug size={16} />}
+            title={t("admin.cardOAuthTitle")}
+            desc={t("admin.cardOAuthDesc")}
+            status="ready"
+          />
+        )}
         <AdminCard
           to="/admin/audit"
           icon={<ShieldAlert size={16} />}

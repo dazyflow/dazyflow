@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -48,10 +49,13 @@ import (
 //   - Per-tenant client_id/secret: enterprises sometimes want their
 //     own OAuth app to control which scopes show in the consent
 //     screen. T3 feature.
-//   - Refresh-on-expiry: we store refresh_token but don't yet
-//     transparently refresh in Get. Drops calling getOAuthToken get
-//     whatever's stored. Refresh becomes important once we have
-//     long-lived integrations; deferred.
+//
+// What it DOES handle:
+//
+//   - Refresh-on-expiry: GetOAuthToken transparently exchanges a stored
+//     refresh_token for a fresh access token when the current one is at
+//     or past expiry, so long-running scheduled flows keep working
+//     without the user reconnecting. See GetOAuthToken / refreshAccessToken.
 
 // OAuthProvider describes how to talk to one OAuth 2.0 provider.
 // Hardcoded per provider (Slack, Gmail, GitHub, etc.) because the
@@ -89,6 +93,12 @@ type OAuthRegistry struct {
 
 	// HTTPClient lets tests stub provider calls. nil = http.DefaultClient.
 	HTTPClient *http.Client
+
+	// refreshMu guards refreshLocks; each per-account lock serializes
+	// concurrent refreshes of the same token so a fleet of scheduled
+	// flows firing at once makes one refresh call, not N.
+	refreshMu    sync.Mutex
+	refreshLocks map[string]*sync.Mutex
 }
 
 // NewOAuthRegistry constructs a registry. baseURL is the
@@ -283,7 +293,14 @@ func (r *OAuthRegistry) exchangeCode(ctx context.Context, p OAuthProvider, code 
 	form.Set("code", code)
 	form.Set("redirect_uri", r.redirectURI(p.Name))
 	form.Set("grant_type", "authorization_code")
+	return r.postTokenForm(ctx, p, form)
+}
 
+// postTokenForm POSTs a form-urlencoded request to the provider's token
+// endpoint and parses the standard OAuth 2.0 response into a stored
+// token. Shared by the authorization_code exchange and the
+// refresh_token grant — they differ only in the form they send.
+func (r *OAuthRegistry) postTokenForm(ctx context.Context, p OAuthProvider, form url.Values) (*StoredOAuthToken, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.TokenURL,
 		strings.NewReader(form.Encode()))
 	if err != nil {
@@ -370,19 +387,49 @@ func (r *OAuthRegistry) store(ctx context.Context, tenant, provider, account str
 	return name, nil
 }
 
+// refreshSkew is how far before the stored expiry we proactively
+// refresh. Provider clocks and network latency mean a token "valid for
+// another 10 seconds" is a coin-flip by the time the API call lands, so
+// we treat anything inside this window as already expired.
+const refreshSkew = 60 * time.Second
+
 // GetOAuthToken fetches a previously-stored token by (provider,
 // account). Tenant comes from the context (set by Engine.RunNode
 // via core.WithTenant). The returned struct is the StoredOAuthToken
 // shape — caller pulls .AccessToken to make API calls.
 //
-// Refresh-on-expiry: NOT implemented in v1. The token is whatever
-// was last stored. If it's expired the API call fails and the user
-// re-connects. v2 will check ExpiresAt and refresh transparently.
+// Refresh-on-expiry: when the stored access token is at or past its
+// expiry (within refreshSkew) and we hold a refresh_token plus a
+// configured provider, we exchange the refresh_token for a fresh access
+// token, persist it, and return the new one — so long-running scheduled
+// flows keep working without the user reconnecting every hour. If the
+// refresh fails we fall back to the stored token (the API call will
+// surface the real error) rather than hard-failing the lookup.
 func (r *OAuthRegistry) GetOAuthToken(ctx context.Context, provider, account string) (*StoredOAuthToken, error) {
 	tenant, ok := core.TenantFromContext(ctx)
 	if !ok {
 		return nil, errors.New("get oauth token: no tenant in context")
 	}
+	tok, err := r.loadToken(ctx, tenant, provider, account)
+	if err != nil {
+		return nil, err
+	}
+	if !tokenNeedsRefresh(tok) {
+		return tok, nil
+	}
+	refreshed, err := r.refreshAccessToken(ctx, tenant, provider, account, tok)
+	if err != nil {
+		// Best-effort: hand back what we have. The downstream API call
+		// returns the authoritative 401, and the user can reconnect.
+		log.Printf("oauth refresh failed for %s/%s (tenant %s): %v; using stored token", provider, account, tenant, err)
+		return tok, nil
+	}
+	return refreshed, nil
+}
+
+// loadToken reads and decodes the stored token for (tenant, provider,
+// account) without any refresh.
+func (r *OAuthRegistry) loadToken(ctx context.Context, tenant, provider, account string) (*StoredOAuthToken, error) {
 	name := secretNameFor(provider, account)
 	raw, err := r.secrets.Get(core.WithTenant(ctx, tenant), name)
 	if err != nil {
@@ -393,5 +440,78 @@ func (r *OAuthRegistry) GetOAuthToken(ctx context.Context, provider, account str
 		return nil, fmt.Errorf("unmarshal stored token: %w", err)
 	}
 	return &tok, nil
+}
+
+// tokenNeedsRefresh reports whether a stored token is expired (within
+// the skew window) AND refreshable. A token with no expiry recorded is
+// treated as non-expiring (some providers issue long-lived tokens and
+// omit expires_in); without a refresh_token there's nothing to do.
+func tokenNeedsRefresh(tok *StoredOAuthToken) bool {
+	if tok.RefreshToken == "" || tok.ExpiresAt == nil {
+		return false
+	}
+	return time.Now().UTC().Add(refreshSkew).After(*tok.ExpiresAt)
+}
+
+// refreshAccessToken exchanges the stored refresh_token for a fresh
+// access token, persists it, and returns it. A per-account lock plus a
+// re-check after acquiring it means a burst of concurrent flows for the
+// same account makes a single refresh call — the rest see the freshly
+// stored token and skip the network round-trip.
+func (r *OAuthRegistry) refreshAccessToken(ctx context.Context, tenant, provider, account string, current *StoredOAuthToken) (*StoredOAuthToken, error) {
+	p, ok := r.Provider(provider)
+	if !ok || p.ClientID == "" || p.TokenURL == "" {
+		return nil, fmt.Errorf("provider %q not configured for refresh", provider)
+	}
+
+	lock := r.refreshLock(secretNameFor(provider, account))
+	lock.Lock()
+	defer lock.Unlock()
+
+	// Re-check under the lock: another goroutine may have refreshed
+	// while we waited.
+	if latest, err := r.loadToken(ctx, tenant, provider, account); err == nil && !tokenNeedsRefresh(latest) {
+		return latest, nil
+	}
+
+	form := url.Values{}
+	form.Set("client_id", p.ClientID)
+	form.Set("client_secret", p.ClientSecret)
+	form.Set("refresh_token", current.RefreshToken)
+	form.Set("grant_type", "refresh_token")
+
+	fresh, err := r.postTokenForm(ctx, p, form)
+	if err != nil {
+		return nil, err
+	}
+	// Providers (Google among them) usually omit the refresh_token on a
+	// refresh response — the original one stays valid, so carry it over.
+	if fresh.RefreshToken == "" {
+		fresh.RefreshToken = current.RefreshToken
+	}
+	// Likewise preserve provider-specific Extras (team_id, etc.) the
+	// refresh response doesn't echo back.
+	if len(fresh.Extras) == 0 && len(current.Extras) > 0 {
+		fresh.Extras = current.Extras
+	}
+	if _, err := r.store(ctx, tenant, provider, account, fresh); err != nil {
+		return nil, fmt.Errorf("persist refreshed token: %w", err)
+	}
+	return fresh, nil
+}
+
+// refreshLock returns the per-account mutex, creating it on first use.
+func (r *OAuthRegistry) refreshLock(name string) *sync.Mutex {
+	r.refreshMu.Lock()
+	defer r.refreshMu.Unlock()
+	if r.refreshLocks == nil {
+		r.refreshLocks = make(map[string]*sync.Mutex)
+	}
+	m, ok := r.refreshLocks[name]
+	if !ok {
+		m = &sync.Mutex{}
+		r.refreshLocks[name] = m
+	}
+	return m
 }
 

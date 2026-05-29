@@ -49,7 +49,7 @@ type adminUpsertProviderRequest struct {
 }
 
 func (h *HTTPGateway) listAdminOAuthProviders(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if err := requireAdmin(p); err != nil {
+	if err := requirePlatformAdmin(p); err != nil {
 		adminError(rw, err)
 		return
 	}
@@ -85,7 +85,7 @@ func (h *HTTPGateway) listAdminOAuthProviders(rw http.ResponseWriter, r *http.Re
 }
 
 func (h *HTTPGateway) upsertAdminOAuthProvider(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if err := requireAdmin(p); err != nil {
+	if err := requirePlatformAdmin(p); err != nil {
 		adminError(rw, err)
 		return
 	}
@@ -138,7 +138,7 @@ func (h *HTTPGateway) upsertAdminOAuthProvider(rw http.ResponseWriter, r *http.R
 }
 
 func (h *HTTPGateway) deleteAdminOAuthProvider(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if err := requireAdmin(p); err != nil {
+	if err := requirePlatformAdmin(p); err != nil {
 		adminError(rw, err)
 		return
 	}

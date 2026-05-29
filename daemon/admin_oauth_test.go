@@ -128,18 +128,39 @@ func TestHydrate_UnknownProviderSkipped(t *testing.T) {
 
 // ---- Endpoints -------------------------------------------------------
 
-func TestAdminOAuth_ListRequiresAdmin(t *testing.T) {
+// OAuth provider credentials are an instance-wide setting shared by
+// every tenant, so only a platform admin may read or change them. An
+// editor and even a tenant admin (which every signup gets for its own
+// org) must be rejected — otherwise any customer could break or hijack
+// the shared OAuth apps for all the other orgs on the instance.
+func TestAdminOAuth_ProviderConfigRequiresPlatformAdmin(t *testing.T) {
 	h := newAdminOAuthHarness(t)
-	// Editor token (no tenant:admin) — must be rejected.
-	rw := h.do(t, "GET", "/api/v1/admin/oauth-providers", nil)
-	if rw.Code != 403 {
-		t.Fatalf("editor should be 403; got %d body=%s", rw.Code, rw.Body.String())
+
+	// Editor (no admin at all) — rejected.
+	if rw := h.do(t, "GET", "/api/v1/admin/oauth-providers", nil); rw.Code != 403 {
+		t.Errorf("editor GET should be 403; got %d body=%s", rw.Code, rw.Body.String())
+	}
+	// Tenant admin (org owner) — also rejected now: this is instance-wide config.
+	if rw := h.adminDo(t, "GET", "/api/v1/admin/oauth-providers", nil); rw.Code != 403 {
+		t.Errorf("tenant admin GET should be 403 (instance-wide config); got %d body=%s", rw.Code, rw.Body.String())
+	}
+	if rw := h.adminDo(t, "PUT", "/api/v1/admin/oauth-providers/google", map[string]any{
+		"client_id": "x", "client_secret": "y",
+	}); rw.Code != 403 {
+		t.Errorf("tenant admin PUT should be 403; got %d body=%s", rw.Code, rw.Body.String())
+	}
+	if rw := h.adminDo(t, "DELETE", "/api/v1/admin/oauth-providers/google", nil); rw.Code != 403 {
+		t.Errorf("tenant admin DELETE should be 403; got %d body=%s", rw.Code, rw.Body.String())
+	}
+	// Platform admin (the operator) — allowed.
+	if rw := h.platformDo(t, "GET", "/api/v1/admin/oauth-providers", nil); rw.Code != 200 {
+		t.Errorf("platform admin GET should be 200; got %d body=%s", rw.Code, rw.Body.String())
 	}
 }
 
 func TestAdminOAuth_ListReturnsAllDefaults(t *testing.T) {
 	h := newAdminOAuthHarness(t)
-	rw := h.adminDo(t, "GET", "/api/v1/admin/oauth-providers", nil)
+	rw := h.platformDo(t, "GET", "/api/v1/admin/oauth-providers", nil)
 	if rw.Code != 200 {
 		t.Fatalf("code = %d, body = %s", rw.Code, rw.Body.String())
 	}
@@ -167,7 +188,7 @@ func TestAdminOAuth_ListReturnsAllDefaults(t *testing.T) {
 
 func TestAdminOAuth_UpsertRegistersLiveAndPersists(t *testing.T) {
 	h := newAdminOAuthHarness(t)
-	rw := h.adminDo(t, "PUT", "/api/v1/admin/oauth-providers/google", map[string]any{
+	rw := h.platformDo(t, "PUT", "/api/v1/admin/oauth-providers/google", map[string]any{
 		"client_id":     "555.apps.googleusercontent.com",
 		"client_secret": "GOCSPX-pasted-in-ui",
 	})
@@ -190,7 +211,7 @@ func TestAdminOAuth_UpsertRegistersLiveAndPersists(t *testing.T) {
 
 func TestAdminOAuth_UpsertRejectsEmptyCreds(t *testing.T) {
 	h := newAdminOAuthHarness(t)
-	rw := h.adminDo(t, "PUT", "/api/v1/admin/oauth-providers/google", map[string]any{
+	rw := h.platformDo(t, "PUT", "/api/v1/admin/oauth-providers/google", map[string]any{
 		"client_id":     "abc",
 		"client_secret": "",
 	})
@@ -201,7 +222,7 @@ func TestAdminOAuth_UpsertRejectsEmptyCreds(t *testing.T) {
 
 func TestAdminOAuth_UpsertUnknownProvider(t *testing.T) {
 	h := newAdminOAuthHarness(t)
-	rw := h.adminDo(t, "PUT", "/api/v1/admin/oauth-providers/discord", map[string]any{
+	rw := h.platformDo(t, "PUT", "/api/v1/admin/oauth-providers/discord", map[string]any{
 		"client_id":     "abc",
 		"client_secret": "xyz",
 	})
@@ -213,10 +234,10 @@ func TestAdminOAuth_UpsertUnknownProvider(t *testing.T) {
 func TestAdminOAuth_DeleteUnregistersAndClearsStore(t *testing.T) {
 	h := newAdminOAuthHarness(t)
 	// Set first.
-	_ = h.adminDo(t, "PUT", "/api/v1/admin/oauth-providers/google", map[string]any{
+	_ = h.platformDo(t, "PUT", "/api/v1/admin/oauth-providers/google", map[string]any{
 		"client_id": "abc", "client_secret": "xyz",
 	})
-	rw := h.adminDo(t, "DELETE", "/api/v1/admin/oauth-providers/google", nil)
+	rw := h.platformDo(t, "DELETE", "/api/v1/admin/oauth-providers/google", nil)
 	if rw.Code != 204 {
 		t.Fatalf("delete code = %d body=%s", rw.Code, rw.Body.String())
 	}
