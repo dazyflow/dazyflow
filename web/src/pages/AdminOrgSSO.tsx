@@ -3,7 +3,14 @@ import { AlertCircle, Check, Copy, ShieldCheck } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
+import { ServiceIcon, serviceLabel } from "../components/ServiceIcon";
 import type { OrgAuthConfig } from "../types";
+
+// ssoUpcoming lists identity providers we show as placeholders so the
+// surface reads as "SSO providers" rather than "Google" — the monogram
+// tiles swap for real logos (and real config forms) as each lands.
+// Empty for now: Microsoft Entra, Okta and SAML are hidden until wired.
+const ssoUpcoming: string[] = [];
 
 // RedirectURIDisplay shows the read-only redirect URI alongside a copy
 // button. The URI must be pasted verbatim into Google's "Authorized
@@ -23,6 +30,11 @@ function RedirectURIDisplay({ uri }: { uri: string }) {
       /* clipboard may be blocked; user can select + copy manually */
     }
   };
+  // No absolute origin to build a pasteable URI from — show a hint
+  // instead of a misleading relative path in the copy box.
+  if (!uri) {
+    return <div className="desc">{t("admin.sso.redirectUriUnavailable")}</div>;
+  }
   return (
     <div className="sso-readonly-row">
       <code className="sso-readonly">{uri}</code>
@@ -112,30 +124,45 @@ export function AdminOrgSSO() {
       ? `admin.sso.testError.${testErrorCode}`
       : "admin.sso.testError.exchange_failed";
 
-  const refresh = useCallback(async () => {
-    if (!token) return;
-    setLoading(true);
-    try {
-      const c = await api.getOrgAuthConfig(token);
-      setCfg(c);
-      setClientID(c.google_client_id ?? "");
-      setWorkspaceDomain(c.google_workspace_domain ?? "");
-      setClientSecret(""); // never round-tripped from the server
-      setError(null);
-    } catch (e) {
-      if (e instanceof APIError && e.status === 501) {
-        setError(t("admin.sso.notConfigured"));
-      } else {
-        setError((e as Error).message);
+  // silent skips the full-page loading swap — used by the post-save
+  // refetch so the "Saved" chip stays visible instead of flashing away
+  // under the loading card.
+  const refresh = useCallback(
+    async (silent = false) => {
+      if (!token) return;
+      if (!silent) setLoading(true);
+      try {
+        const c = await api.getOrgAuthConfig(token);
+        setCfg(c);
+        setClientID(c.google_client_id ?? "");
+        setWorkspaceDomain(c.google_workspace_domain ?? "");
+        setClientSecret(""); // never round-tripped from the server
+        setError(null);
+      } catch (e) {
+        if (e instanceof APIError && e.status === 501) {
+          setError(t("admin.sso.notConfigured"));
+        } else {
+          setError((e as Error).message);
+        }
+      } finally {
+        if (!silent) setLoading(false);
       }
-    } finally {
-      setLoading(false);
-    }
-  }, [token, t]);
+    },
+    [token, t],
+  );
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // The "Saved" confirmation is a transient acknowledgement, not durable
+  // state — the header status pill carries whether SSO is actually on.
+  // Fade it out after a few seconds so it doesn't linger as decoration.
+  useEffect(() => {
+    if (!savedAt) return;
+    const id = window.setTimeout(() => setSavedAt(null), 4000);
+    return () => window.clearTimeout(id);
+  }, [savedAt]);
 
   if (!hasPerm("tenant:admin")) {
     return (
@@ -159,7 +186,7 @@ export function AdminOrgSSO() {
       });
       setSavedAt(new Date());
       setClientSecret("");
-      void refresh();
+      void refresh(true);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -187,12 +214,20 @@ export function AdminOrgSSO() {
     `/api/v1/auth/google/start?tenant=${encodeURIComponent(orgID)}` +
     `&test=1` +
     `&return_to=${encodeURIComponent("/admin/sso")}`;
-  const redirectURI =
-    me?.public_base_url
-      ? `${me.public_base_url.replace(/\/+$/, "")}/api/v1/auth/google/callback`
-      : (typeof window !== "undefined"
-          ? `${window.location.origin}/api/v1/auth/google/callback`
-          : "/api/v1/auth/google/callback");
+  // Public origin the daemon is reached at — prefer the operator-set
+  // public_base_url, fall back to the current window origin.
+  const publicOrigin = me?.public_base_url
+    ? me.public_base_url.replace(/\/+$/, "")
+    : typeof window !== "undefined"
+      ? window.location.origin
+      : "";
+  // Without a known absolute origin the redirect URI would be a relative
+  // path, which is invalid in Google's "Authorized redirect URIs" box and
+  // would silently cause redirect_uri_mismatch. Leave it empty so the
+  // display shows a "set the public base URL" hint rather than a
+  // paste-ready-looking relative path.
+  const redirectURI = publicOrigin ? `${publicOrigin}/api/v1/auth/google/callback` : "";
+  const signinURL = `${publicOrigin}/signin?org=${encodeURIComponent(orgID)}`;
 
   return (
     <div>
@@ -206,8 +241,28 @@ export function AdminOrgSSO() {
         </div>
       </div>
 
+      <div className="svc-providers">
+        <div className="svc-provider active">
+          <ServiceIcon name="google" size={28} />
+          <span className="svc-provider-name">{serviceLabel("google")}</span>
+          {enabled && <span className="badge ok">{t("admin.sso.enabledBadge")}</span>}
+        </div>
+        {ssoUpcoming.map((s) => (
+          <div className="svc-provider soon" key={s} aria-disabled="true">
+            <ServiceIcon name={s} size={28} />
+            <span className="svc-provider-name">{serviceLabel(s)}</span>
+            <span className="badge muted">{t("admin.sso.soon")}</span>
+          </div>
+        ))}
+      </div>
+
       {error && (
-        <div className="card" style={{ color: "var(--danger)", marginBottom: "var(--space-4)" }}>
+        <div
+          className="card"
+          role="alert"
+          aria-live="assertive"
+          style={{ color: "var(--danger)", marginBottom: "var(--space-4)" }}
+        >
           <AlertCircle size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
           {error}
         </div>
@@ -283,9 +338,18 @@ export function AdminOrgSSO() {
           </ol>
           <p className="desc sso-walkthrough-tip">{t("admin.sso.walkthroughTip")}</p>
         </details>
-        <form className="card" onSubmit={save}>
-          <h2 style={{ marginTop: 0 }}>{t("admin.sso.googleHead")}</h2>
-          <p className="desc">{t("admin.sso.googleIntro")}</p>
+        <form className="card sso-card" onSubmit={save}>
+          <div className="sso-card-head">
+            <ServiceIcon name="google" size={36} className="sso-card-logo" />
+            <div className="sso-card-headings">
+              <h2>{t("admin.sso.googleHead")}</h2>
+              <p className="desc">{t("admin.sso.googleIntro")}</p>
+            </div>
+            <span className={`sso-status-pill${enabled ? " is-active" : ""}`}>
+              {enabled && <Check size={12} style={{ verticalAlign: -1 }} />}
+              {enabled ? t("admin.sso.enabledBadge") : t("admin.sso.statusInactive")}
+            </span>
+          </div>
 
           <div className="sf-field">
             <label>{t("admin.sso.redirectUriLabel")}</label>
@@ -310,7 +374,7 @@ export function AdminOrgSSO() {
               type="password"
               value={clientSecret}
               onChange={(e) => setClientSecret(e.target.value)}
-              placeholder={cfg?.google_secret_set ? t("admin.sso.secretStoredPlaceholder") : ""}
+              placeholder={cfg?.google_secret_set ? t("common.secretStored") : ""}
               autoComplete="off"
             />
             <div className="desc">
@@ -331,30 +395,36 @@ export function AdminOrgSSO() {
             <div className="desc">{t("admin.sso.workspaceDomainDesc")}</div>
           </div>
 
-          <div className="settings-foot" style={{ borderTop: "none", padding: 0 }}>
-            {enabled && (
-              <button type="button" onClick={disable}>
-                {t("admin.sso.disable")}
+          <div className="sso-card-foot">
+            <div className="sso-foot-msg" role="status" aria-live="polite">
+              {savedAt && (
+                <span className="sso-saved-chip">
+                  <Check size={12} style={{ verticalAlign: -1 }} />
+                  {t("admin.sso.savedAt")}
+                </span>
+              )}
+            </div>
+            <div className="sso-foot-actions">
+              {enabled && (
+                <button type="button" onClick={disable}>
+                  {t("admin.sso.disable")}
+                </button>
+              )}
+              <button type="submit" className="primary" disabled={saving}>
+                {saving ? t("admin.sso.saving") : t("admin.sso.save")}
               </button>
-            )}
-            <button type="submit" className="primary" disabled={saving}>
-              {saving ? t("admin.sso.saving") : t("admin.sso.save")}
-            </button>
-            {savedAt && (
-              <span className="desc" style={{ marginLeft: 12, color: "var(--success)" }}>
-                <Check size={12} style={{ verticalAlign: -1 }} />
-                {t("admin.sso.savedAt")}
-              </span>
-            )}
+            </div>
           </div>
 
           {enabled && (
             <div className="sso-active-row">
               <strong>{t("admin.sso.activeHead")}</strong>
               <div className="desc">
-                {t("admin.sso.activeBody", {
-                  signinUrl: `/signin?org=${encodeURIComponent(orgID)}`,
-                })}
+                <Trans
+                  i18nKey="admin.sso.activeBody"
+                  values={{ signinUrl: signinURL }}
+                  components={[<code />]}
+                />
               </div>
               <div className="sso-test-row">
                 <button

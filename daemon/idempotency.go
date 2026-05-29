@@ -38,15 +38,22 @@ const (
 )
 
 type idempotentResponse struct {
-	status  int
-	headers http.Header
-	body    []byte
+	status   int
+	headers  http.Header
+	body     []byte
 	storedAt time.Time
+	// done is false while the request that reserved this key is still
+	// in flight (the handler hasn't returned yet), and true once a
+	// completed response has been cached. An in-flight entry exists so
+	// a concurrent retry of the SAME key cannot also run the handler —
+	// closing the get-then-put TOCTOU that let an action fire twice.
+	done bool
 }
 
 // idempotencyStore is a thread-safe map of cached responses. Cap on
 // entries is enforced via simple FIFO eviction so a pathological key
-// churn can't OOM the daemon.
+// churn can't OOM the daemon. Invariant: a key is in `entries` iff it
+// is in `order`, exactly once — begin/commit/abort/evict all preserve it.
 type idempotencyStore struct {
 	mu      sync.Mutex
 	entries map[string]*idempotentResponse
@@ -57,34 +64,79 @@ func newIdempotencyStore() *idempotencyStore {
 	return &idempotencyStore{entries: map[string]*idempotentResponse{}}
 }
 
-func (s *idempotencyStore) get(key string) (*idempotentResponse, bool) {
+// begin atomically claims a key for the calling request. It returns
+// either the existing entry (fresh=false) — which the caller inspects:
+// a `done` entry is replayed, a not-`done` entry means another request
+// holds the key right now (respond 409) — or, when the key is free,
+// reserves an in-flight marker and returns fresh=true, making the caller
+// the sole owner responsible for resolving it via commit or abort.
+//
+// A stale entry (older than the TTL) is reclaimed as if absent: a stuck
+// in-flight reservation (e.g. a handler that hung and never resolved)
+// can't lock a key out forever. The common crash/panic case is handled
+// up front by the caller's deferred abort; this is the backstop.
+func (s *idempotencyStore) begin(key string) (existing *idempotentResponse, fresh bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	e, ok := s.entries[key]
-	if !ok {
-		return nil, false
-	}
-	if time.Since(e.storedAt) > idempotencyTTL {
+	if e, ok := s.entries[key]; ok {
+		if time.Since(e.storedAt) <= idempotencyTTL {
+			return e, false
+		}
+		// Stale — drop it and fall through to a fresh reservation.
 		delete(s.entries, key)
-		return nil, false
+		s.removeFromOrderLocked(key)
 	}
-	return e, true
+	s.entries[key] = &idempotentResponse{storedAt: time.Now()} // done=false: reserved
+	s.order = append(s.order, key)
+	s.evictLocked()
+	return nil, true
 }
 
-func (s *idempotencyStore) put(key string, e *idempotentResponse) {
+// commit replaces this key's in-flight reservation with the completed
+// response. Called once, by the owner, on a cacheable (2xx) result.
+func (s *idempotencyStore) commit(key string, e *idempotentResponse) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, exists := s.entries[key]; !exists {
+	e.done = true
+	// Keep the key's existing slot in `order` (set by begin); just swap
+	// the value in place so a re-put doesn't double-append.
+	if _, ok := s.entries[key]; !ok {
+		// Reservation was evicted under cache pressure; re-add it.
 		s.order = append(s.order, key)
 	}
 	s.entries[key] = e
-	// Cap the cache. Drop oldest first — the FIFO order isn't perfect
-	// (it doesn't account for re-puts), but for an LLM workload where
-	// keys are one-shot UUIDs this approximates LRU.
+	s.evictLocked()
+}
+
+// abort releases a reservation without caching a response, so the client
+// is free to retry. Called by the owner when the handler returned a
+// non-2xx (a transient failure the client may fix and retry) or panicked.
+func (s *idempotencyStore) abort(key string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if e, ok := s.entries[key]; ok && !e.done {
+		delete(s.entries, key)
+		s.removeFromOrderLocked(key)
+	}
+}
+
+// evictLocked caps the cache, dropping oldest-first. Caller holds s.mu.
+func (s *idempotencyStore) evictLocked() {
 	for len(s.entries) > idempotencyMaxCache {
 		drop := s.order[0]
 		s.order = s.order[1:]
 		delete(s.entries, drop)
+	}
+}
+
+// removeFromOrderLocked deletes the first occurrence of key from order.
+// Caller holds s.mu. O(n), but only on the rare abort/stale-reclaim path.
+func (s *idempotencyStore) removeFromOrderLocked(key string) {
+	for i, k := range s.order {
+		if k == key {
+			s.order = append(s.order[:i], s.order[i+1:]...)
+			return
+		}
 	}
 }
 
@@ -117,30 +169,51 @@ func (h *HTTPGateway) idempotencyMiddleware(routePattern string, next func(rw ht
 			return
 		}
 		cacheKey := p.Subject + "|" + r.Method + "|" + routePattern + "|" + key
-		if cached, ok := h.idempotency.get(cacheKey); ok {
-			// Replay. Note we DO NOT call the handler — that's the point.
-			for k, vs := range cached.headers {
+		existing, fresh := h.idempotency.begin(cacheKey)
+		if !fresh {
+			if !existing.done {
+				// A request with this key is in flight right now. Running
+				// the handler again would fire the action twice, so refuse
+				// — the client retries and gets the cached result once the
+				// first request finishes. (Stripe's documented semantics.)
+				rw.Header().Set("Idempotency-Replay", "false")
+				writeAPIError(rw, http.StatusConflict, "idempotency_key_in_flight",
+					"a request with this Idempotency-Key is already being processed; retry shortly")
+				return
+			}
+			// Replay the cached response. We DO NOT call the handler.
+			for k, vs := range existing.headers {
 				for _, v := range vs {
 					rw.Header().Add(k, v)
 				}
 			}
 			rw.Header().Set("Idempotency-Replay", "true")
-			rw.WriteHeader(cached.status)
-			_, _ = rw.Write(cached.body)
+			rw.WriteHeader(existing.status)
+			_, _ = rw.Write(existing.body)
 			return
 		}
-		// Capture the response so we can replay on the next match.
+		// We own the reservation. Resolve it no matter what: abort on a
+		// panic or a non-2xx so the key isn't left locked or caching a
+		// failure; commit only a cacheable result. The defer is the
+		// backstop for a panicking handler (the http stack recovers it).
+		committed := false
+		defer func() {
+			if !committed {
+				h.idempotency.abort(cacheKey)
+			}
+		}()
 		cap := &captureWriter{ResponseWriter: rw, headers: http.Header{}}
 		next(cap, r, p)
 		// Only cache 2xx — caching errors would lock the client out of
 		// retrying after fixing a transient problem.
 		if cap.status >= 200 && cap.status < 300 {
-			h.idempotency.put(cacheKey, &idempotentResponse{
-				status:  cap.status,
-				headers: cap.headers,
-				body:    cap.body.Bytes(),
+			h.idempotency.commit(cacheKey, &idempotentResponse{
+				status:   cap.status,
+				headers:  cap.headers,
+				body:     cap.body.Bytes(),
 				storedAt: time.Now(),
 			})
+			committed = true
 		}
 	}
 }

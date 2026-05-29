@@ -24,7 +24,7 @@ import (
 // a webhook delivers a JSON array, the body is seeded straight into a
 // for_each node, and a step runs once per item.
 func TestForEach_E2E_WebhookToIteration(t *testing.T) {
-	_, wh, jobs, bus, wsStore := startWebhookHarnessLocal(t)
+	_, wh, jobs, _, wsStore := startWebhookHarnessLocal(t)
 
 	g := core.Graph{
 		ID: "fe-iter", Tenant: "acme", Workspace: "ws1",
@@ -70,7 +70,7 @@ func TestForEach_E2E_WebhookToIteration(t *testing.T) {
 	}
 	_ = json.NewDecoder(resp.Body).Decode(&out)
 
-	terminal := waitForFire(t, bus, out.JobID, 5*time.Second)
+	terminal := waitForFire(t, jobs, out.JobID)
 	if terminal != core.JobStatusSucceeded {
 		t.Fatalf("status=%q, want succeeded", terminal)
 	}
@@ -208,7 +208,7 @@ func TestForEach_E2E_PerItemHTTPWithTemplatedURL(t *testing.T) {
 	}
 	_ = json.NewDecoder(resp.Body).Decode(&out)
 
-	terminal := waitForFire(t, bus, out.JobID, 5*time.Second)
+	terminal := waitForFire(t, jobs, out.JobID)
 	if terminal != core.JobStatusSucceeded {
 		t.Fatalf("status = %q, want succeeded", terminal)
 	}

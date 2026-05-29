@@ -6,18 +6,14 @@
 package integrations
 
 import (
-	_ "git.sr.ht/~klahr/hazy-flow/integrations/ai"
 	_ "git.sr.ht/~klahr/hazy-flow/integrations/db"
 	_ "git.sr.ht/~klahr/hazy-flow/integrations/flow"
 	_ "git.sr.ht/~klahr/hazy-flow/integrations/git"
 	_ "git.sr.ht/~klahr/hazy-flow/integrations/github"
-	_ "git.sr.ht/~klahr/hazy-flow/integrations/gmail"
 	_ "git.sr.ht/~klahr/hazy-flow/integrations/io"
 	_ "git.sr.ht/~klahr/hazy-flow/integrations/net"
 	_ "git.sr.ht/~klahr/hazy-flow/integrations/notify"
-	_ "git.sr.ht/~klahr/hazy-flow/integrations/notion"
 	_ "git.sr.ht/~klahr/hazy-flow/integrations/secrets"
-	_ "git.sr.ht/~klahr/hazy-flow/integrations/sheets"
 	_ "git.sr.ht/~klahr/hazy-flow/integrations/shell"
 	_ "git.sr.ht/~klahr/hazy-flow/integrations/slack"
 	_ "git.sr.ht/~klahr/hazy-flow/integrations/transform"

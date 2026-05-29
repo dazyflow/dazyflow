@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 // Egress allowlist for http_request. The SSRF guard (ssrfGuard) blocks
@@ -90,6 +91,23 @@ func SetEgressAllowlist(entries []string) error {
 	egressMu.Unlock()
 	return nil
 }
+
+// allowPrivateEgress gates the per-request `allow_private_networks` flow
+// param on the http_request / http_download / http_upload drops. That param
+// disables the SSRF guard, so honoring it from an untrusted flow lets any
+// tenant reach cloud metadata (169.254.169.254), localhost, and internal
+// services. It is therefore ignored unless the operator opts in via
+// SetAllowPrivateEgress (wired from HAZYFLOW_ALLOW_PRIVATE_EGRESS). Default
+// off: the param has no effect and the SSRF guard always applies.
+var allowPrivateEgress atomic.Bool
+
+// SetAllowPrivateEgress sets the operator opt-in for the
+// allow_private_networks param. Called once at startup.
+func SetAllowPrivateEgress(v bool) { allowPrivateEgress.Store(v) }
+
+// PrivateEgressAllowed reports whether drops may honor a request's
+// allow_private_networks param. A drop must AND its own param with this.
+func PrivateEgressAllowed() bool { return allowPrivateEgress.Load() }
 
 // EgressAllowed is the exported form of egressAllowed, so other
 // integration drops that make user-influenced outbound requests

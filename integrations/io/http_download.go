@@ -20,17 +20,17 @@ import (
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "http_download",
-			Version:        "1.0",
-			Label:          "HTTP download",
-			Color:          "#5599ee",
-			Icon:           "download",
-			Category:       "io",
-			Provider:       "internal",
-			Integration:    "HTTP",
-			Tags:           []string{"http", "download", "file", "sandbox"},
-			Description:    "Download a URL to a file in the workspace sandbox, streaming the response to disk (handles bodies too large to hold in memory). Honors per-tenant quotas as it writes and aborts cleanly if the budget or max_bytes is exceeded. Use a scratch:// path for intermediate downloads that should be reclaimed when the run ends. Private-network addresses are blocked by default.",
-			Summary:        "Stream a URL to a workspace (or scratch://) file, enforcing quota and a max_bytes ceiling and blocking private-network targets by default.",
+			ID:          "http_download",
+			Version:     "1.0",
+			Label:       "HTTP download",
+			Color:       "#5599ee",
+			Icon:        "download",
+			Category:    "io",
+			Provider:    "internal",
+			Integration: "HTTP",
+			Tags:        []string{"http", "download", "file", "sandbox"},
+			Description: "Download a URL to a file in the workspace sandbox, streaming the response to disk (handles bodies too large to hold in memory). Honors per-tenant quotas as it writes and aborts cleanly if the budget or max_bytes is exceeded. Use a scratch:// path for intermediate downloads that should be reclaimed when the run ends. Private-network addresses are blocked by default.",
+			Summary:     "Stream a URL to a workspace (or scratch://) file, enforcing quota and a max_bytes ceiling and blocking private-network targets by default.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Save a public report to the workspace",
@@ -98,7 +98,9 @@ func executeHTTPDownload(ctx context.Context, job core.Job, _ chan<- core.Progre
 	method := strings.ToUpper(params.StringDefault(job.Params, "method", "GET"))
 	timeoutMs := params.IntDefault(job.Params, "timeout_ms", 300000)
 	maxBytes := int64(params.IntDefault(job.Params, "max_bytes", defaultDownloadMaxBytes))
-	allowPrivate := params.BoolDefault(job.Params, "allow_private_networks", false)
+	// allow_private_networks disables the SSRF guard — honored only when the
+	// operator opted in (HAZYFLOW_ALLOW_PRIVATE_EGRESS), else ignored.
+	allowPrivate := params.BoolDefault(job.Params, "allow_private_networks", false) && hfnet.PrivateEgressAllowed()
 
 	// Resolve the destination (workspace or scratch://) and open its root.
 	root, rel, err := openSandboxRoot(job, dest)

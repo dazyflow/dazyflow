@@ -15,16 +15,16 @@ import (
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "file_read",
-			Version:        "1.0",
-			Label:          "File read",
-			Color:          "#4a8",
-			Icon:           "file-input",
-			Category:       "io",
-			Provider:       "internal",
-			Tags:           []string{"filesystem", "read", "sandbox"},
-			Description:    "Read a file from the workspace sandbox. Path is workspace-relative. Set inline:true to embed file contents in the Ref for remote-module consumption.",
-			Summary:        "Emit a sandbox-bound Ref to a workspace file, optionally inlining its bytes for remote (gRPC) modules.",
+			ID:          "file_read",
+			Version:     "1.0",
+			Label:       "File read",
+			Color:       "#4a8",
+			Icon:        "file-input",
+			Category:    "io",
+			Provider:    "internal",
+			Tags:        []string{"filesystem", "read", "sandbox"},
+			Description: "Read a file from the workspace sandbox. Path is workspace-relative. Set inline:true to embed file contents in the Ref for remote-module consumption.",
+			Summary:     "Emit a sandbox-bound Ref to a workspace file, optionally inlining its bytes for remote (gRPC) modules.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Reference a CSV by path",

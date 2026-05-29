@@ -16,22 +16,23 @@ import (
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
 	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
+	hfnet "git.sr.ht/~klahr/hazy-flow/integrations/net"
 )
 
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "email_send",
-			Version:        "1.0",
-			Label:          "Send email",
-			Color:          "#2dd4bf",
-			Icon:           "mail",
-			Category:       "network",
-			Provider:       "internal",
-			Integration:    "Email",
-			Tags:           []string{"email", "smtp", "notify", "report"},
-			Description:    "Send an email through an SMTP server. The body can come from an upstream node or from the body param — useful for reporting a build's stdout or a daily summary directly into someone's inbox.",
-			Summary:        "Deliver a one-shot email via SMTP, taking the body from an upstream node or params and supporting STARTTLS, implicit TLS, or plaintext.",
+			ID:          "email_send",
+			Version:     "1.0",
+			Label:       "Send email",
+			Color:       "#2dd4bf",
+			Icon:        "mail",
+			Category:    "network",
+			Provider:    "internal",
+			Integration: "Email",
+			Tags:        []string{"email", "smtp", "notify", "report"},
+			Description: "Send an email through an SMTP server. The body can come from an upstream node or from the body param — useful for reporting a build's stdout or a daily summary directly into someone's inbox.",
+			Summary:     "Deliver a one-shot email via SMTP, taking the body from an upstream node or params and supporting STARTTLS, implicit TLS, or plaintext.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Daily report via STARTTLS on port 587",
@@ -120,6 +121,12 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 	}
 
 	addr := net.JoinHostPort(host, fmt.Sprint(port))
+	// SSRF guard: the SMTP host is a tenant-supplied param, so refuse
+	// private/loopback/link-local targets (internal services, metadata)
+	// unless the operator opted into private egress.
+	if err := hfnet.CheckDialHost(addr); err != nil {
+		return params.Err(job, "ssrf_blocked", err.Error()), nil
+	}
 	msg := buildMessage(from, to, subject, body)
 
 	var auth smtp.Auth

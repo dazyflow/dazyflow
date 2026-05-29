@@ -275,6 +275,21 @@ func (h *HTTPGateway) googleSignInCallback(rw http.ResponseWriter, r *http.Reque
 			return
 		}
 	}
+	// An admin Test sign-in only verifies the Google side: the code
+	// exchange succeeded (so client_id/secret are right), the redirect URI
+	// matched, and the returned email is verified (and in-domain if
+	// restricted). That's the whole contract the success banner claims.
+	// Stop here — a test must not mint a real user, auto-create a
+	// membership, or issue a session/cookie as a side effect (the last
+	// would also clobber the admin's current session).
+	if st.Test {
+		target := st.ReturnTo
+		if target == "" {
+			target = "/"
+		}
+		http.Redirect(rw, r, appendQuery(target, "test", "ok"), http.StatusFound)
+		return
+	}
 	// Resolve which org the user lands in:
 	//   - If they already have a User record, use their home tenant.
 	//   - If they have a Membership in this org, switch their session to it.
@@ -293,10 +308,6 @@ func (h *HTTPGateway) googleSignInCallback(rw http.ResponseWriter, r *http.Reque
 			CreatedAt: time.Now().UTC(),
 		}
 		if err := h.Users.PutUser(r.Context(), user); err != nil {
-			if st.Test {
-				redirectTestError(rw, r, st, "internal")
-				return
-			}
 			writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("create user: %v", err))
 			return
 		}
@@ -349,12 +360,8 @@ func (h *HTTPGateway) googleSignInCallback(rw http.ResponseWriter, r *http.Reque
 	sessUser.Tenant = activeTenant
 	sessUser.Workspace = activeWorkspace
 	sessUser.Roles = activeRoles
-	sess, token, err := auth.IssueSession(r.Context(), h.Sessions, sessUser, ttl)
+	sess, token, err := auth.IssueSession(r.Context(), h.Sessions, h.elevatePlatformAdmin(sessUser), ttl)
 	if err != nil {
-		if st.Test {
-			redirectTestError(rw, r, st, "internal")
-			return
-		}
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("issue session: %v", err))
 		return
 	}

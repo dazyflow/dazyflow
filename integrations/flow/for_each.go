@@ -16,16 +16,16 @@ import (
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "for_each",
-			Version:        "1.0",
-			Label:          "For each",
-			Color:          "#5a9bd4",
-			Icon:           "repeat",
-			Category:       "flow_control",
-			Provider:       "internal",
-			Tags:           []string{"iterate", "loop", "fan_out", "map"},
-			Description:    "Run a configured step module once per item in an input list. Items execute in parallel up to params.concurrency. Outputs `results` (one Result per item, in order) and `errors` (a map of failing indices). Set fail_fast=true to abort on the first failure; otherwise the iteration continues and per-item errors surface on the errors port.",
-			Summary:        "Fan out a list and run the same step module on every item, optionally in parallel, collecting results in order.",
+			ID:          "for_each",
+			Version:     "1.0",
+			Label:       "For each",
+			Color:       "#5a9bd4",
+			Icon:        "repeat",
+			Category:    "flow_control",
+			Provider:    "internal",
+			Tags:        []string{"iterate", "loop", "fan_out", "map"},
+			Description: "Run a configured step module once per item in an input list. Items execute in parallel up to params.concurrency. Outputs `results` (one Result per item, in order) and `errors` (a map of failing indices). Set fail_fast=true to abort on the first failure; otherwise the iteration continues and per-item errors surface on the errors port.",
+			Summary:     "Fan out a list and run the same step module on every item, optionally in parallel, collecting results in order.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "POST each row to a webhook, 5 at a time",
@@ -66,6 +66,20 @@ func init() {
 	})
 }
 
+// resolveStep resolves the step module through the engine's full resolver
+// (native + scripted + remote + MCP) when the engine put it on the context —
+// so a scripted/marketplace drop can be a for_each step, not just a native one.
+// Falls back to the native registry for callers that don't set a resolver.
+func resolveStep(ctx context.Context, moduleID string) (core.Transport, bool) {
+	if r, ok := engine.ResolverFromContext(ctx); ok {
+		// ctx already carries the tenant (the engine set it before Execute),
+		// so a per-tenant / version-pinned step module resolves correctly.
+		t, err := r.Resolve(ctx, moduleID)
+		return t, err == nil
+	}
+	return engine.Default.Get(moduleID)
+}
+
 func executeForEach(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
 	stepModule, err := params.String(job.Params, "step_module")
 	if err != nil {
@@ -91,7 +105,7 @@ func executeForEach(ctx context.Context, job core.Job, progress chan<- core.Prog
 		return params.Err(job, "bad_input", err.Error()), nil
 	}
 
-	transport, ok := engine.Default.Get(stepModule)
+	transport, ok := resolveStep(ctx, stepModule)
 	if !ok {
 		return params.Err(job, "unknown_step", fmt.Sprintf("step module %q is not registered", stepModule)), nil
 	}

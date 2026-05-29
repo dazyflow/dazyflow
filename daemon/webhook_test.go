@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"context"
 	"git.sr.ht/~klahr/hazy-flow/auth"
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/daemon"
@@ -17,7 +18,6 @@ import (
 	"git.sr.ht/~klahr/hazy-flow/engine/jobstore"
 	_ "git.sr.ht/~klahr/hazy-flow/integrations"
 	"git.sr.ht/~klahr/hazy-flow/workspace"
-	"context"
 )
 
 func startWebhookHarness(t *testing.T) (*daemon.Service, *daemon.WebhookListener, core.JobStore, *daemon.MemoryBus, *workspace.Store) {

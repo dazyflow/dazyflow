@@ -22,6 +22,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/cache"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/storer"
 	"github.com/go-git/go-git/v5/storage"
 	"github.com/go-git/go-git/v5/storage/filesystem"
 	"github.com/go-git/go-git/v5/storage/memory"
@@ -127,9 +128,58 @@ func openOrInit(storer storage.Storer, wt billy.Filesystem) (*git.Repository, er
 	return repo, nil
 }
 
-// Save writes graph to graphs/<id>.json and commits the change as the
-// given author. Returns the new commit hash.
+// autosaveCoalesceWindow bounds how long a run of editor autosaves of the
+// same graph by the same author collapses into a single commit. Each
+// coalescing autosave amends the previous one as long as it landed within
+// this window, so a continuous editing session is one commit and every
+// pause longer than the window starts a fresh one. Explicit saves never
+// coalesce, so the user can still drop intentional checkpoints.
+const autosaveCoalesceWindow = 90 * time.Second
+
+// autosaveMessage / explicitMessage are the commit subjects. They differ so
+// a later autosave can recognise (and amend) a previous autosave commit
+// without ever amending an explicit checkpoint.
+func autosaveMessage(graphID, author string) string {
+	return fmt.Sprintf("autosave: update %s [user:%s]", graphID, author)
+}
+func explicitMessage(graphID, author string) string {
+	return fmt.Sprintf("graph: update %s [user:%s]", graphID, author)
+}
+
+// headIsRecentAutosave reports whether HEAD is an autosave commit for this
+// exact (graph, author) that landed within the coalesce window — i.e. the
+// next autosave should amend it rather than stack a new commit. Caller holds
+// s.mu.
+func (s *Store) headIsRecentAutosave(graphID, author string) bool {
+	ref, err := s.repo.Head()
+	if err != nil {
+		return false
+	}
+	c, err := s.repo.CommitObject(ref.Hash())
+	if err != nil {
+		return false
+	}
+	if c.Message != autosaveMessage(graphID, author) {
+		return false
+	}
+	return time.Since(c.Author.When) <= autosaveCoalesceWindow
+}
+
+// Save writes the graph and commits a new revision. Use this for explicit
+// saves — it always produces its own commit (an intentional checkpoint).
 func (s *Store) Save(graph core.Graph, author string) (string, error) {
+	return s.save(graph, author, false)
+}
+
+// SaveCoalescing is the editor-autosave variant: a save that immediately
+// follows a recent autosave of the same graph by the same author amends it
+// instead of stacking a new commit, so a continuous editing session stays
+// one commit in the history. See autosaveCoalesceWindow.
+func (s *Store) SaveCoalescing(graph core.Graph, author string) (string, error) {
+	return s.save(graph, author, true)
+}
+
+func (s *Store) save(graph core.Graph, author string, coalesce bool) (string, error) {
 	if graph.ID == "" {
 		return "", errors.New("graph.ID required")
 	}
@@ -165,7 +215,13 @@ func (s *Store) Save(graph core.Graph, author string) (string, error) {
 		return "", fmt.Errorf("git add: %w", err)
 	}
 
-	msg := fmt.Sprintf("graph: update %s [user:%s]", graph.ID, author)
+	// Coalesce a run of autosaves into one commit by amending the previous
+	// autosave when it's recent and for the same graph+author.
+	amend := coalesce && s.headIsRecentAutosave(graph.ID, author)
+	msg := explicitMessage(graph.ID, author)
+	if coalesce {
+		msg = autosaveMessage(graph.ID, author)
+	}
 	hash, err := wt.Commit(msg, &git.CommitOptions{
 		Author: &object.Signature{
 			Name:  author,
@@ -173,6 +229,7 @@ func (s *Store) Save(graph core.Graph, author string) (string, error) {
 			When:  time.Now(),
 		},
 		AllowEmptyCommits: false,
+		Amend:             amend,
 	})
 	if err != nil {
 		// Re-saving identical content is a no-op, not a failure —
@@ -189,6 +246,55 @@ func (s *Store) Save(graph core.Graph, author string) (string, error) {
 		return "", fmt.Errorf("commit: %w", err)
 	}
 	return hash.String(), nil
+}
+
+// Revision is one entry in a graph's commit history.
+type Revision struct {
+	Commit   string    `json:"commit"`
+	Author   string    `json:"author"`
+	Message  string    `json:"message"`
+	When     time.Time `json:"when"`
+	Autosave bool      `json:"autosave"`
+}
+
+// History returns the commits that touched graphs/<id>.json, newest first,
+// capped at limit (limit <= 0 applies a default). It's the backing data for
+// the editor's version-history panel; restoring a revision is a normal Save
+// of that revision's content (a new commit at the top), so history is never
+// rewritten.
+func (s *Store) History(id string, limit int) ([]Revision, error) {
+	if id == "" {
+		return nil, errors.New("graphID required")
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rel := graphPath(id)
+	iter, err := s.repo.Log(&git.LogOptions{FileName: &rel, Order: git.LogOrderCommitterTime})
+	if err != nil {
+		return nil, fmt.Errorf("log %s: %w", rel, err)
+	}
+	defer iter.Close()
+	revs := make([]Revision, 0, limit)
+	err = iter.ForEach(func(c *object.Commit) error {
+		if len(revs) >= limit {
+			return storer.ErrStop
+		}
+		revs = append(revs, Revision{
+			Commit:   c.Hash.String(),
+			Author:   c.Author.Name,
+			Message:  c.Message,
+			When:     c.Author.When,
+			Autosave: strings.HasPrefix(c.Message, "autosave:"),
+		})
+		return nil
+	})
+	if err != nil && !errors.Is(err, storer.ErrStop) {
+		return nil, fmt.Errorf("walk history: %w", err)
+	}
+	return revs, nil
 }
 
 // Delete removes graphs/<id>.json from the worktree and commits the
@@ -349,8 +455,8 @@ func (s *Store) resolve(ref string) (plumbing.Hash, error) {
 	return plumbing.ZeroHash, fmt.Errorf("could not resolve %q", ref)
 }
 
-func graphPath(id string) string         { return "graphs/" + id + ".json" }
-func envTag(graphID, env string) string  { return "graphs/" + graphID + "/" + env }
+func graphPath(id string) string        { return "graphs/" + id + ".json" }
+func envTag(graphID, env string) string { return "graphs/" + graphID + "/" + env }
 
 // Branches/Tags surface the underlying refs for callers that want to do
 // their own listing/diff.
@@ -380,4 +486,3 @@ func listRefs(repo *git.Repository, prefix string) ([]string, error) {
 	})
 	return out, err
 }
-

@@ -29,8 +29,8 @@ func init() {
 			// through the sandbox. Useful as the front of a pipeline
 			// where the user picks an input file via the schema-form's
 			// workspace-path picker.
-			Description:    "Pick a file from the workspace sandbox. Outputs both the workspace-relative path (string) and a file reference (MIME-tagged Ref) so downstream readers can open it through the sandbox without re-resolving anywhere else. By default the file's bytes are NOT inlined — set inline=true for handoff to remote modules that don't share the workspace filesystem.",
-			Summary:        "Surface a chosen workspace file as a stable path + MIME-tagged Ref for downstream readers, with opt-in byte inlining for remote modules.",
+			Description: "Pick a file from the workspace sandbox. Outputs both the workspace-relative path (string) and a file reference (MIME-tagged Ref) so downstream readers can open it through the sandbox without re-resolving anywhere else. By default the file's bytes are NOT inlined — set inline=true for handoff to remote modules that don't share the workspace filesystem.",
+			Summary:     "Surface a chosen workspace file as a stable path + MIME-tagged Ref for downstream readers, with opt-in byte inlining for remote modules.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Pick a spreadsheet to feed into excel_read",

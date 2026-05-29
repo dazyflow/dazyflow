@@ -43,9 +43,9 @@ export type TemplateSummary = {
   title: string;
   // use_case is the plain-language, customer-facing one-liner shown as
   // the card's primary copy ("Get a Slack message when someone fills in
-  // your form"). description is the original technical summary, now
-  // demoted behind the "show technical details" toggle. Older index
-  // entries without use_case fall back to description.
+  // your form"). description is the original technical summary, no longer
+  // surfaced on the card. Older index entries without use_case fall back
+  // to description.
   use_case?: string;
   // category groups cards under a heading on the gallery page
   // ("Get notified", "Scheduled reports", …). Ungrouped entries land
@@ -305,6 +305,17 @@ export type LintIssue = {
   node_ids?: string[];
 };
 
+// Revision is one entry in a flow's commit history (GET /me/flows/{id}/history).
+// autosave distinguishes coalesced editor autosaves from explicit/restore
+// checkpoints so the history panel can label them.
+export type Revision = {
+  commit: string;
+  author: string;
+  message: string;
+  when: string;
+  autosave: boolean;
+};
+
 export type JobError = {
   code: string;
   message: string;
@@ -341,6 +352,35 @@ export type JobRecord = {
     Input?: Record<string, Ref>;
     Params?: Record<string, unknown>;
   };
+};
+
+// RunView / NodeRunView are the clean wire shapes the public API actually
+// returns from GET /me/runs/{id} and /me/runs/{id}/nodes (and the SSE
+// snapshot/terminal frames) — snake_case, storage-detail-free. The api
+// layer maps these to the JobRecord shape the run-detail components
+// consume; see api.ts (runViewToRecord / nodeViewToRecord).
+export type RunView = {
+  id: string;
+  flow_id: string;
+  graph_id?: string;
+  status: JobStatus;
+  enqueued_at: string;
+  started_at?: string | null;
+  finished_at?: string | null;
+  duration_ms?: number;
+  error?: JobError;
+};
+
+export type NodeRunView = {
+  node_id: string;
+  status: JobStatus;
+  attempts?: number;
+  started_at?: string | null;
+  finished_at?: string | null;
+  duration_ms?: number;
+  inputs?: Record<string, Ref>;
+  outputs?: Record<string, Ref>;
+  error?: JobError;
 };
 
 export type Role = {
@@ -435,7 +475,93 @@ export type AdminOAuthProvider = {
   setup_help: string;
   redirect_uri: string;
   configured: boolean;
+  // The configured OAuth client ID (public identifier, not a secret).
+  // Present when configured; the secret is never returned.
+  client_id?: string;
   has_persisted: boolean;
   has_env: boolean;
   updated_at?: string;
+};
+
+// --- Marketplace (platform-admin install) -------------------------------
+
+// Signature-derived trust tier of an installed artifact (never self-declared).
+export type TrustTier = "official" | "verified" | "community";
+
+// One row from GET /api/v1/admin/marketplace/integrations.
+export type InstalledIntegration = {
+  id: string;
+  version: string;
+  tier: TrustTier;
+};
+
+// One row from GET /api/v1/admin/marketplace/drops.
+export type InstalledDrop = {
+  id: string;
+  tier: TrustTier;
+  manifest: Manifest;
+};
+
+// One field of an integration's install form, from the preview endpoint.
+// "text"/"secret" collect operator input; "display" is read-only (e.g. the
+// redirect URI, already templated for this deployment).
+export type SetupField = {
+  key: string;
+  label: string;
+  type: "text" | "secret" | "display";
+  required?: boolean;
+  help?: string;
+  value?: string;
+};
+
+// POST /api/v1/admin/marketplace/integrations/from-git/preview response: the
+// validated manifest header, the setup form to render, the trust tier the
+// signature resolves to, and the resolved git commit (immutable digest).
+export type IntegrationPreview = {
+  id: string;
+  version: string;
+  label: string;
+  summary: string;
+  auth_kind: string;
+  scopes?: string[];
+  setup: SetupField[];
+  tier: TrustTier;
+  commit?: string;
+};
+
+// POST /api/v1/admin/marketplace/drops[/from-git]/preview — the access a drop
+// declares, shown for install consent. An installed drop always runs sandboxed
+// (out-of-process, resource-limited); the residual trust is the secrets/OAuth it
+// reads and the hosts it may reach, so those are what the admin acknowledges.
+export type DropCapabilitySummary = {
+  id: string;
+  version: string;
+  label: string;
+  summary: string;
+  tier: TrustTier;
+  sandboxed: boolean;
+  oauth: string[];
+  secrets: string[];
+  egress: string[]; // [] = the drop declared no outbound network
+  commit?: string;
+};
+
+// GET /api/v1/secret-manager — the tenant's BYO secret-manager (OpenBao/Vault)
+// connection, redacted: never includes the token / secret_id.
+export type SecretManagerStatus = {
+  configured: boolean;
+  address?: string;
+  namespace?: string;
+  mount?: string;
+  auth_method?: "token" | "approle";
+};
+
+// PUT /api/v1/secret-manager body — the full connection incl. credentials.
+export type SecretManagerConfig = {
+  address: string;
+  mount: string;
+  namespace?: string;
+  auth:
+    | { method: "token"; token: string }
+    | { method: "approle"; role_id: string; secret_id: string };
 };

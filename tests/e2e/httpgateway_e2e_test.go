@@ -108,7 +108,7 @@ func TestHTTPGateway_E2E_SubmitAndStreamSSE(t *testing.T) {
 	}
 
 	// 3. GET /jobs/{id}/events — SSE
-	streamCtx, streamCancel := context.WithTimeout(t.Context(), 10*time.Second)
+	streamCtx, streamCancel := context.WithTimeout(t.Context(), e2eWaitCeiling)
 	defer streamCancel()
 	sseReq, _ := http.NewRequestWithContext(streamCtx, "GET",
 		ts.URL+"/api/v1/me/runs/"+runOut.JobID+"/events", nil)
@@ -122,7 +122,7 @@ func TestHTTPGateway_E2E_SubmitAndStreamSSE(t *testing.T) {
 		t.Fatalf("content-type = %q, want text/event-stream", ct)
 	}
 
-	events := readSSEUntilTerminal(t, sseResp.Body, 5*time.Second)
+	events := readSSEUntilTerminal(t, sseResp.Body, e2eWaitCeiling)
 	if len(events) == 0 {
 		t.Fatal("no SSE events received")
 	}
@@ -222,7 +222,7 @@ func TestHTTPGateway_E2E_PerNodeSSE(t *testing.T) {
 	}
 	_ = json.NewDecoder(runResp.Body).Decode(&runOut)
 
-	streamCtx, streamCancel := context.WithTimeout(t.Context(), 10*time.Second)
+	streamCtx, streamCancel := context.WithTimeout(t.Context(), e2eWaitCeiling)
 	defer streamCancel()
 	sseReq, _ := http.NewRequestWithContext(streamCtx, "GET",
 		ts.URL+"/api/v1/me/runs/"+runOut.JobID+"/events", nil)
@@ -233,7 +233,7 @@ func TestHTTPGateway_E2E_PerNodeSSE(t *testing.T) {
 	}
 	defer sseResp.Body.Close()
 
-	events := readSSEUntilTerminal(t, sseResp.Body, 5*time.Second)
+	events := readSSEUntilTerminal(t, sseResp.Body, e2eWaitCeiling)
 
 	// Collect per-node status events; we expect each node to appear with
 	// at least one terminal-ish status. (Snapshot may also have emitted

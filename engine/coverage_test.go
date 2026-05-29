@@ -339,7 +339,7 @@ func TestNodeResolver_ChainHitsLocal(t *testing.T) {
 	// spawn a subprocess.
 	local.nodes["m"] = &LocalTransport{manifest: core.Manifest{ID: "m"}}
 	r := &NodeResolver{Native: reg, Local: local}
-	tr, err := r.Resolve("m")
+	tr, err := r.Resolve(context.Background(), "m")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
@@ -354,7 +354,7 @@ func TestNodeResolver_ChainHitsRemote(t *testing.T) {
 	remote := NewRemoteCatalog()
 	remote.nodes["m"] = &RemoteTransport{manifest: core.Manifest{ID: "m"}}
 	r := &NodeResolver{Native: reg, Local: local, Remote: remote}
-	tr, err := r.Resolve("m")
+	tr, err := r.Resolve(context.Background(), "m")
 	if err != nil || tr.Manifest().ID != "m" {
 		t.Errorf("Resolve = (%v,%v)", tr, err)
 	}
@@ -366,7 +366,7 @@ func TestNodeResolver_ChainHitsMCP(t *testing.T) {
 	// MCP catalog is empty so the MCP branch returns ok=false. Resolve
 	// must then fall through to the "no transport" error — exercising
 	// the Get/false return for the MCP branch.
-	_, err := r.Resolve("ghost")
+	_, err := r.Resolve(context.Background(), "ghost")
 	if err == nil || !strings.Contains(err.Error(), "no transport") {
 		t.Errorf("err = %v, want one mentioning 'no transport'", err)
 	}
@@ -913,7 +913,9 @@ type bareResolver struct {
 	fn func(string) (core.Transport, error)
 }
 
-func (b bareResolver) Resolve(id string) (core.Transport, error) { return b.fn(id) }
+func (b bareResolver) Resolve(_ context.Context, id string) (core.Transport, error) {
+	return b.fn(id)
+}
 
 func TestEngine_validate_FallsBackToCoreValidateWithoutManifests(t *testing.T) {
 	// A resolver that doesn't expose Manifests forces validate() onto

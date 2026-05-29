@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -29,9 +30,61 @@ import (
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/daemon"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/engine/containerdrop"
 	"git.sr.ht/~klahr/hazy-flow/engine/jobstore"
+	"git.sr.ht/~klahr/hazy-flow/engine/jsdrop"
 	_ "git.sr.ht/~klahr/hazy-flow/integrations" // register every native drop
+	"git.sr.ht/~klahr/hazy-flow/officialdrops"
 )
+
+// officialCatalog is the scripted catalog of embedded official drops (gmail,
+// slack, …), so the harness resolves them like the real daemon does. When `node`
+// is available it also wires the Run hook to the Node runtime (process tier), so
+// connected scenarios actually EXECUTE a scripted connector against a mock (see
+// connected_test.go); the broker defaults to http.DefaultClient (no SSRF guard
+// on this bare test catalog) so a drop's base_url can point at a loopback mock.
+// Without node, Run stays nil — graph validation still works; execution tests
+// skip via requireNode.
+func officialCatalog(t *testing.T) *jsdrop.Catalog {
+	t.Helper()
+	cat := jsdrop.NewCatalog()
+	if node, drophost, ok := nodeDropHost(); ok {
+		cat.Run = func(m core.Manifest, jsESM string, _ bool) core.Transport {
+			return containerdrop.NewTransport(
+				m,
+				containerdrop.DropRef{ID: m.ID, Argv: []string{node, drophost}, Source: []byte(jsESM)},
+				containerdrop.ProcessRunner{},
+				containerdrop.Host{Files: func(job core.Job) jsdrop.FileStore { return jsdrop.NewJobFileStore(job, nil) }},
+			)
+		}
+	}
+	if err := officialdrops.Register(cat); err != nil {
+		t.Fatalf("register official drops: %v", err)
+	}
+	return cat
+}
+
+// nodeDropHost resolves `node` + the absolute drophost.mjs path, ok=false if
+// node isn't installed.
+func nodeDropHost() (node, drophost string, ok bool) {
+	n, err := exec.LookPath("node")
+	if err != nil {
+		return "", "", false
+	}
+	abs, err := filepath.Abs("../../engine/containerdrop/nodehost/drophost.mjs")
+	if err != nil {
+		return "", "", false
+	}
+	return n, abs, true
+}
+
+// requireNode skips a test that must EXECUTE a scripted drop when node is absent.
+func requireNode(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+}
 
 // stack is a self-contained Hazy Flow install: the HTTP API the web UI
 // talks to, backed by an in-memory control plane and a real worker so
@@ -63,7 +116,7 @@ func newStack(t *testing.T) *stack {
 	jobs := jobstore.NewMemory()
 	bus := daemon.NewMemoryBus()
 	eng := &engine.Engine{
-		Resolver: &engine.NodeResolver{Native: engine.Default},
+		Resolver: &engine.NodeResolver{Native: engine.Default, Script: officialCatalog(t)},
 		Sandbox:  sandbox,
 	}
 	svc := &daemon.Service{
@@ -320,8 +373,15 @@ func (n *newcomer) runFlow(id string) string {
 
 // waitForRun polls the run like the Run detail page does, until it
 // reaches a terminal status or times out.
+// journeyWaitCeiling is the generous ceiling for waiting on a run to reach
+// a terminal status. waitForRun returns the instant the run finishes, so a
+// large ceiling never slows a passing test — it only prevents a spurious
+// failure when CPU contention under `go test -race ./...` (every package in
+// parallel) starves the worker. The 8s it replaces lost that race under load.
+const journeyWaitCeiling = 30 * time.Second
+
 func (n *newcomer) waitForRun(runID string) string {
-	deadline := time.Now().Add(8 * time.Second)
+	deadline := time.Now().Add(journeyWaitCeiling)
 	var last string
 	for time.Now().Before(deadline) {
 		r := n.s.call(n.t, "GET", "/api/v1/me/runs/"+runID, n.token, nil)
@@ -347,7 +407,7 @@ func (n *newcomer) waitForRun(runID string) string {
 func (n *newcomer) failedNodeReport(runID string) string {
 	r := n.s.call(n.t, "GET", "/api/v1/me/runs/"+runID+"/nodes", n.token, nil)
 	var out struct {
-		Nodes []core.JobRecord `json:"nodes"`
+		Nodes []nodeView `json:"nodes"`
 	}
 	r.decode(&out)
 	var b strings.Builder
@@ -356,8 +416,8 @@ func (n *newcomer) failedNodeReport(runID string) string {
 			continue
 		}
 		fmt.Fprintf(&b, "  - %s [%s]", rec.NodeID, rec.Status)
-		if rec.Result != nil && rec.Result.Error != nil {
-			fmt.Fprintf(&b, ": %s / %s", rec.Result.Error.Code, rec.Result.Error.Message)
+		if rec.Error != nil {
+			fmt.Fprintf(&b, ": %s / %s", rec.Error.Code, rec.Error.Message)
 		}
 		b.WriteString("\n")
 	}
@@ -372,36 +432,48 @@ func (n *newcomer) failedNodeReport(runID string) string {
 func (n *newcomer) dumpRun(runID string) string {
 	r := n.s.call(n.t, "GET", "/api/v1/me/runs/"+runID+"/nodes", n.token, nil)
 	var out struct {
-		Nodes []core.JobRecord `json:"nodes"`
+		Nodes []nodeView `json:"nodes"`
 	}
 	r.decode(&out)
 	var b strings.Builder
 	for _, rec := range out.Nodes {
 		fmt.Fprintf(&b, "  %s [%s]", rec.NodeID, rec.Status)
-		if rec.Result != nil {
-			for port, ref := range rec.Result.Output {
-				bs, _ := json.Marshal(ref.Inline)
-				fmt.Fprintf(&b, " %s=%s", port, truncate(string(bs), 200))
-			}
-			if rec.Result.Error != nil {
-				fmt.Fprintf(&b, " ERR=%s", rec.Result.Error.Message)
-			}
+		for port, ref := range rec.Outputs {
+			bs, _ := json.Marshal(ref.Inline)
+			fmt.Fprintf(&b, " %s=%s", port, truncate(string(bs), 200))
+		}
+		if rec.Error != nil {
+			fmt.Fprintf(&b, " ERR=%s", rec.Error.Message)
 		}
 		b.WriteString("\n")
 	}
 	return b.String()
 }
 
+// nodeView mirrors the daemon's node-run DTO (daemon.nodeRunView) — the
+// shape the run-detail endpoints actually serialize. Node records are NOT
+// returned as a raw core.JobRecord: the result is flattened into top-level
+// `outputs`/`error` with no `result` envelope, so decoding into a
+// core.JobRecord silently drops them. This is the harness's view of one
+// executed node.
+type nodeView struct {
+	NodeID  string              `json:"node_id"`
+	Status  core.JobStatus      `json:"status"`
+	Inputs  map[string]core.Ref `json:"inputs"`
+	Outputs map[string]core.Ref `json:"outputs"`
+	Error   *core.JobError      `json:"error"`
+}
+
 // nodeRecord fetches one node's record within a run, as the Run detail
 // page does when you click a node.
-func (n *newcomer) nodeRecord(runID, nodeID string) core.JobRecord {
+func (n *newcomer) nodeRecord(runID, nodeID string) nodeView {
 	r := n.s.call(n.t, "GET", "/api/v1/me/runs/"+runID+"/nodes/"+nodeID, n.token, nil)
 	if r.status != http.StatusOK {
 		n.t.Fatalf("node %q not found in run %s: status=%d", nodeID, runID, r.status)
 	}
-	var rec core.JobRecord
-	r.decode(&rec)
-	return rec
+	var v nodeView
+	r.decode(&v)
+	return v
 }
 
 // --- scenario files --------------------------------------------------

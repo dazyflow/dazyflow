@@ -5,7 +5,7 @@ COMPOSE ?= docker compose
 
 .DEFAULT_GOAL := help
 
-.PHONY: help up down restart logs ps build rebuild env dev web test vet fmt
+.PHONY: help up down restart logs ps build rebuild env dev web test vet fmt check ci hooks
 
 help: ## List targets
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sort | \
@@ -63,3 +63,23 @@ vet: ## Run go vet
 
 fmt: ## Format Go sources
 	gofmt -w .
+
+## --- Gates (run locally; CI on builds.sr.ht is advisory, not blocking) ---
+# These mirror .build.yml so a push never lands red. gofmt is intentionally
+# NOT a gate: CI doesn't enforce it and the tree carries pre-existing
+# gofmt-version drift, so a gofmt gate would fail on files unrelated to the
+# change. Run `make fmt` before committing instead.
+
+check: ## Fast pre-push gate (what the pre-push hook runs): build, vet, tests
+	@echo "==> go build"; go build ./...
+	@echo "==> go vet"; go vet ./...
+	@echo "==> go test"; go test ./...
+
+ci: ## Full local mirror of CI (.build.yml): build, vet, race tests, web build
+	@echo "==> go build"; go build ./...
+	@echo "==> go vet"; go vet ./...
+	@echo "==> go test -race"; go test -race ./...
+	@echo "==> web build"; cd web && npm ci && npm run build
+
+hooks: ## Install git hooks (the pre-push gate) into .git/hooks
+	@./scripts/install-hooks.sh

@@ -36,6 +36,20 @@ type WorkerConfig struct {
 	// failed, picking delay before the second"). Default is
 	// exponential: base*2^(attempt-1) with base=1s.
 	RetryBackoff func(attempt int) time.Duration
+
+	// DefaultNodeTimeout is the wall-time backstop applied to a node that
+	// sets no explicit TimeoutSeconds. Without it, a node that honors
+	// cancellation but never finishes on its own — a remote gRPC call to a
+	// black-hole host, a native HTTP/DB call to a stalled backend — would
+	// hold its worker slot until the lease churns. The deadline cancels its
+	// context so it returns. (Code that actively ignores ctx can't be
+	// interrupted in-process — Go can't kill a goroutine — which is exactly
+	// why untrusted drops run sandboxed under containerdrop, whose runner
+	// kills the process on its own budget.) A node's own TimeoutSeconds,
+	// when set, overrides this. It's a generous backstop, not an SLA:
+	// parked nodes (await_approval, subgraph) return from Execute promptly
+	// and so never approach it. Default 30m; set negative to disable.
+	DefaultNodeTimeout time.Duration
 }
 
 func (c *WorkerConfig) withDefaults() WorkerConfig {
@@ -57,6 +71,9 @@ func (c *WorkerConfig) withDefaults() WorkerConfig {
 	}
 	if out.MaxRetries == 0 {
 		out.MaxRetries = 3
+	}
+	if out.DefaultNodeTimeout == 0 {
+		out.DefaultNodeTimeout = 30 * time.Minute
 	}
 	if out.RetryBackoff == nil {
 		out.RetryBackoff = func(attempt int) time.Duration {
@@ -150,7 +167,14 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 	// in-flight run; we then abandon the job without writing a result, so
 	// the new owner's run is authoritative (no double-write, best-effort
 	// no double-execution for ctx-respecting modules).
-	execCtx, cancel := context.WithCancel(ctx)
+	//
+	// It's derived via WithoutCancel so a graceful shutdown (the claim-loop
+	// ctx being cancelled on SIGTERM) does NOT abort a node mid-run: the
+	// claim loop stops taking new work, but the node already in flight runs
+	// to its natural completion (bounded by its own timeout/lease and the
+	// caller's bounded drain). Lease loss still cancels it via the explicit
+	// cancel() below.
+	execCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	defer cancel()
 	var leaseLost atomic.Bool
 	var leaseWg sync.WaitGroup
@@ -261,8 +285,13 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 	}
 
 	// Dispatch dependents + check graph completion via the shared
-	// dispatcher (used by both worker and approval path).
-	w.dispatcher.AdvanceAfterCompletion(ctx, graph, rec.GraphRunID, rec.NodeID, status, result.Error)
+	// dispatcher (used by both worker and approval path). Detached from the
+	// claim ctx (WithoutCancel) so that when a node finishes during a
+	// graceful shutdown its dependents still get enqueued and the graph
+	// completion check still runs — otherwise the run would strand with
+	// dependents never created (and the reaper, which only finalizes runs
+	// whose nodes are all terminal, couldn't recover it).
+	w.dispatcher.AdvanceAfterCompletion(context.WithoutCancel(ctx), graph, rec.GraphRunID, rec.NodeID, status, result.Error)
 }
 
 // completeNode writes a node's terminal/awaiting status, fenced on lease
@@ -288,7 +317,10 @@ func (w *Worker) maybeScheduleRetry(graph core.Graph, rec core.JobRecord) (time.
 	if !ok {
 		return time.Time{}, "node missing from graph"
 	}
-	transport, err := w.engine.Resolver.Resolve(node.Module)
+	// Manifest-only lookup for the retry policy; scope to the graph's tenant so
+	// a per-tenant / pinned module resolves to the right version.
+	ctx := core.WithTenant(context.Background(), graph.Tenant)
+	transport, err := w.engine.Resolver.Resolve(ctx, node.Module)
 	if err != nil {
 		return time.Time{}, "module not resolvable"
 	}
@@ -346,10 +378,21 @@ func (w *Worker) runNode(ctx context.Context, graph core.Graph, rec core.JobReco
 	// sandbox exec, etc.). Modules that ignore ctx will exceed the
 	// timeout — we still surface "timeout" as the failure code below
 	// so the dispatcher's failure-propagation rules can react cleanly.
+	// Every node gets a wall-time cap: its explicit TimeoutSeconds when
+	// set, otherwise the worker's DefaultNodeTimeout backstop. The deadline
+	// reaches every cancellation-honoring Execute (engine.RunNode →
+	// transport → http.NewRequestWithContext / sandbox exec / gRPC stream),
+	// so a node blocked on a stalled backend returns instead of holding its
+	// slot indefinitely. We surface "timeout" below so the dispatcher's
+	// failure-propagation rules react cleanly.
+	timeout := w.cfg.DefaultNodeTimeout
+	if node, ok := graph.Node(rec.NodeID); ok && node.TimeoutSeconds > 0 {
+		timeout = time.Duration(node.TimeoutSeconds) * time.Second
+	}
 	execCtx := ctx
 	var cancelDeadline context.CancelFunc
-	if node, ok := graph.Node(rec.NodeID); ok && node.TimeoutSeconds > 0 {
-		execCtx, cancelDeadline = context.WithTimeout(ctx, time.Duration(node.TimeoutSeconds)*time.Second)
+	if timeout > 0 {
+		execCtx, cancelDeadline = context.WithTimeout(ctx, timeout)
 		defer cancelDeadline()
 	}
 	result, err := w.engine.RunNode(execCtx, graph, rec.GraphRunID, rec.NodeID, prior, nodeProgress)
@@ -360,13 +403,12 @@ func (w *Worker) runNode(ctx context.Context, graph core.Graph, rec core.JobReco
 	// this, ctx.Err() bubbling up as a generic error makes per-node
 	// timeouts indistinguishable from a network blip in dashboards.
 	if execCtx != ctx && errors.Is(execCtx.Err(), context.DeadlineExceeded) {
-		node, _ := graph.Node(rec.NodeID)
 		return core.Result{
 			JobID:  rec.ID,
 			Status: core.StatusError,
 			Error: &core.JobError{
 				Code:    "timeout",
-				Message: fmt.Sprintf("node exceeded %ds timeout", node.TimeoutSeconds),
+				Message: fmt.Sprintf("node exceeded %s timeout", timeout),
 			},
 		}, nil
 	}
@@ -433,7 +475,7 @@ func (w *Worker) maybeSubmitChild(ctx context.Context, rec core.JobRecord, resul
 	if !ok {
 		return
 	}
-	transport, err := w.engine.Resolver.Resolve(node.Module)
+	transport, err := w.engine.Resolver.Resolve(core.WithTenant(ctx, rec.Tenant), node.Module)
 	if err != nil {
 		return
 	}

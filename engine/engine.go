@@ -103,6 +103,14 @@ func (e *Engine) Run(ctx context.Context, graph core.Graph, progress chan<- Grap
 }
 
 func (e *Engine) validate(graph core.Graph) error {
+	// Prefer a tenant-scoped manifest set so a graph validates against the
+	// drops its tenant has installed (and any exact versions it pins), not the
+	// global-default palette.
+	if mp, ok := e.Resolver.(interface {
+		ManifestsForTenant(string) map[string]core.Manifest
+	}); ok {
+		return core.ValidateWithManifests(graph, mp.ManifestsForTenant(graph.Tenant))
+	}
 	if mp, ok := e.Resolver.(interface {
 		Manifests() map[string]core.Manifest
 	}); ok {
@@ -189,7 +197,11 @@ func (e *Engine) RunNode(
 	ctx, span := startNodeSpan(ctx, graph, node)
 	defer span.End()
 
-	transport, err := e.Resolver.Resolve(node.Module)
+	// Tenant rides on ctx through resolution so the scripted catalog returns
+	// this tenant's installed (and version-pinned) drops, not the global set.
+	ctx = core.WithTenant(ctx, graph.Tenant)
+
+	transport, err := e.Resolver.Resolve(ctx, node.Module)
 	if err != nil {
 		recordSpanError(span, err)
 		return core.Result{
@@ -237,6 +249,7 @@ func (e *Engine) RunNode(
 	// Tenant rides on the context into Execute so connector token lookups
 	// (OAuth GetOAuthToken) can resolve the per-tenant account.
 	ctx = core.WithTenant(ctx, job.Tenant)
+	ctx = WithResolver(ctx, e.Resolver)
 
 	result, execErr := transport.Execute(ctx, job, progress)
 	if result.JobID == "" {
@@ -265,7 +278,11 @@ func (e *Engine) runNode(
 	ctx, span := startNodeSpan(ctx, graph, node)
 	defer span.End()
 
-	transport, err := e.Resolver.Resolve(node.Module)
+	// Tenant rides on ctx through resolution so the scripted catalog returns
+	// this tenant's installed (and version-pinned) drops, not the global set.
+	ctx = core.WithTenant(ctx, graph.Tenant)
+
+	transport, err := e.Resolver.Resolve(ctx, node.Module)
 	if err != nil {
 		recordSpanError(span, err)
 		return core.Result{
@@ -310,6 +327,7 @@ func (e *Engine) runNode(
 	// Tenant rides on the context into Execute so connector token lookups
 	// (OAuth GetOAuthToken) can resolve the per-tenant account.
 	ctx = core.WithTenant(ctx, job.Tenant)
+	ctx = WithResolver(ctx, e.Resolver)
 
 	nodeProgress := make(chan core.Progress)
 	forwarderDone := make(chan struct{})

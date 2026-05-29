@@ -19,6 +19,7 @@ import (
 	"git.sr.ht/~klahr/hazy-flow/engine"
 	"git.sr.ht/~klahr/hazy-flow/engine/jobstore"
 	_ "git.sr.ht/~klahr/hazy-flow/integrations"
+	hzio "git.sr.ht/~klahr/hazy-flow/integrations/io"
 	"git.sr.ht/~klahr/hazy-flow/workspace"
 )
 
@@ -48,6 +49,14 @@ func newFullStack(t *testing.T, quotaBytes int64) *fullStack {
 		t.Fatalf("quota: %v", err)
 	}
 	quota.SetCacheTTL(0)
+	// Wire the atomic quota reserver the SAME way production does
+	// (cmd/hzd/main.go: io.SetQuotaReserver). Without it, file_write falls back
+	// to the per-job QuotaUsed snapshot, which two concurrent same-tenant writes
+	// can both pass before either commits — the exact TOCTOU the reservation
+	// closes. It's a process global, so clear it on cleanup (e2e tests run
+	// serially within the package).
+	hzio.SetQuotaReserver(quota.Reserve)
+	t.Cleanup(func() { hzio.SetQuotaReserver(nil) })
 
 	flakyCalls := &atomic.Int32{}
 	failuresLeft := &atomic.Int32{}
@@ -159,25 +168,25 @@ func newFullStack(t *testing.T, quotaBytes int64) *fullStack {
 	}
 }
 
-func waitTerminal(t *testing.T, bus *daemon.MemoryBus, id string, timeout time.Duration) daemon.TerminalEvent {
+// waitTerminal polls the job store until id reaches a terminal status and
+// returns a TerminalEvent built from the record. Store-polling avoids the
+// subscribe-after-finish race a bus subscription has (see waitForFire) — a
+// run that finishes before the subscribe lands would otherwise hang the wait.
+func waitTerminal(t *testing.T, store core.JobStore, id string) daemon.TerminalEvent {
 	t.Helper()
-	events, cancel := bus.Subscribe(id)
-	defer cancel()
-	deadline := time.NewTimer(timeout)
-	defer deadline.Stop()
-	for {
-		select {
-		case <-deadline.C:
-			t.Fatalf("timed out waiting for terminal on %s", id)
-		case ev, ok := <-events:
-			if !ok {
-				t.Fatalf("event channel closed without terminal")
-			}
-			if ev.Terminal != nil {
-				return *ev.Terminal
-			}
+	var ev daemon.TerminalEvent
+	waitFor(t, "run "+id+" to reach a terminal status", func() bool {
+		rec, err := store.Get(context.Background(), id)
+		if err != nil {
+			return false
 		}
-	}
+		ev = daemon.TerminalEvent{JobID: id, Status: rec.Status}
+		if rec.Result != nil {
+			ev.Error = rec.Result.Error
+		}
+		return core.IsTerminalStatus(rec.Status)
+	})
+	return ev
 }
 
 // TestKitchenSink_AllPoliciesTogether builds a single graph that uses:
@@ -235,7 +244,7 @@ func TestKitchenSink_AllPoliciesTogether(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	terminal := waitTerminal(t, h.bus, graphRunID, 10*time.Second)
+	terminal := waitTerminal(t, h.jobs, graphRunID)
 	if terminal.Status != core.JobStatusSucceeded {
 		t.Fatalf("graph status = %q (err=%+v)", terminal.Status, terminal.Error)
 	}
@@ -325,7 +334,7 @@ func TestKitchenSink_QuotaCutsOffMidGraph(t *testing.T) {
 		},
 	}
 	graphRunID, _ := h.svc.SubmitGraph(t.Context(), h.principal, g)
-	terminal := waitTerminal(t, h.bus, graphRunID, 5*time.Second)
+	terminal := waitTerminal(t, h.jobs, graphRunID)
 	if terminal.Status != core.JobStatusFailed {
 		t.Fatalf("status = %q, want failed (second write should hit quota)", terminal.Status)
 	}
@@ -380,7 +389,7 @@ func TestKitchenSink_ConcurrentGraphsIsolated(t *testing.T) {
 				t.Errorf("Submit %d: %v", i, err)
 				return
 			}
-			terminal := waitTerminal(t, h.bus, runID, 10*time.Second)
+			terminal := waitTerminal(t, h.jobs, runID)
 			results[i] = string(terminal.Status)
 		}(i)
 	}
@@ -450,7 +459,7 @@ func TestKitchenSink_GraphRecordReflectsOutcome(t *testing.T) {
 				}
 				return
 			}
-			_ = waitTerminal(t, h.bus, runID, 5*time.Second)
+			_ = waitTerminal(t, h.jobs, runID)
 			rec, _ := h.jobs.Get(t.Context(), runID)
 			if rec.Status != c.want {
 				t.Errorf("graph status = %q, want %q", rec.Status, c.want)

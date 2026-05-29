@@ -100,6 +100,19 @@ func (s *Service) IssueAPIKey(ctx context.Context, p core.Principal, params Issu
 	if err != nil {
 		return IssuedAPIKey{}, err
 	}
+	// Block the cross-tenant escalation: only a platform admin may mint a key
+	// carrying platform:admin. A tenant admin is the administrator of their own
+	// org and legitimately delegates lesser permissions (graph:*, secret:*,
+	// even tenant:admin) within it — resolveAdminTenant already pins those keys
+	// to the caller's own tenant — but must never be able to grant the
+	// cross-tenant super-admin role and break out of that tenant.
+	if !isPlatformAdmin(p) {
+		for _, r := range params.Roles {
+			if r.Has(core.PermPlatformAdmin) {
+				return IssuedAPIKey{}, fmt.Errorf("%w: only a platform admin may grant %q", core.ErrUnauthorized, core.PermPlatformAdmin)
+			}
+		}
+	}
 	id := params.ID
 	if id == "" {
 		generated, err := newID()
@@ -241,14 +254,14 @@ func resolveAdminTenant(p core.Principal, requested string) (string, error) {
 // The aggregate Permissions union is what the principal would
 // effectively get if all their active keys were combined.
 type UserSummary struct {
-	Subject       string           `json:"subject"`
-	Tenant        string           `json:"tenant"`
-	ActiveKeys    int              `json:"active_keys"`
-	RevokedKeys   int              `json:"revoked_keys"`
+	Subject       string            `json:"subject"`
+	Tenant        string            `json:"tenant"`
+	ActiveKeys    int               `json:"active_keys"`
+	RevokedKeys   int               `json:"revoked_keys"`
 	Permissions   []core.Permission `json:"permissions"`
-	RoleNames     []string         `json:"role_names"`
-	KeyIDs        []string         `json:"key_ids"`
-	LastWorkspace string           `json:"last_workspace,omitempty"`
+	RoleNames     []string          `json:"role_names"`
+	KeyIDs        []string          `json:"key_ids"`
+	LastWorkspace string            `json:"last_workspace,omitempty"`
 }
 
 // ListUsers groups the tenant's API keys by subject, returning one
@@ -257,6 +270,7 @@ type UserSummary struct {
 //   - ActiveKeys / RevokedKeys count each key's status
 //   - RoleNames is the dedup'd set of role names the active keys carry
 //   - KeyIDs lets the UI link to a focused list
+//
 // Sorted by Subject for stable ordering.
 func (s *Service) ListUsers(ctx context.Context, p core.Principal, tenant string) ([]UserSummary, error) {
 	if err := requireAdmin(p); err != nil {

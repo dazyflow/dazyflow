@@ -65,7 +65,7 @@ func (h *HTTPGateway) buildAuthorizeURL(p core.Principal, providerName, account,
 		// the same permission that gates direct secret writes.
 		return "", http.StatusForbidden, err.Error()
 	}
-	prov, ok := h.OAuth.providers[providerName]
+	prov, ok := h.OAuth.Provider(providerName)
 	if !ok {
 		return "", http.StatusNotFound, fmt.Sprintf("unknown OAuth provider %q", providerName)
 	}
@@ -122,7 +122,7 @@ func (h *HTTPGateway) oauthCallback(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	providerName := r.PathValue("provider")
-	prov, ok := h.OAuth.providers[providerName]
+	prov, ok := h.OAuth.Provider(providerName)
 	if !ok {
 		writeJSONError(rw, http.StatusNotFound, fmt.Sprintf("unknown OAuth provider %q", providerName))
 		return

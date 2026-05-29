@@ -310,17 +310,22 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "200":
-          description: ok
+          description: |
+            ok. `flows` is the list; `graphs` is a deprecated alias that
+            mirrors `flows` verbatim for older clients — read `flows`.
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: "#/components/schemas/Page"
-                  - type: object
-                    properties:
-                      items:
-                        type: array
-                        items: { $ref: "#/components/schemas/FlowSummary" }
+                type: object
+                required: [flows]
+                properties:
+                  flows:
+                    type: array
+                    items: { $ref: "#/components/schemas/FlowSummary" }
+                  graphs:
+                    type: array
+                    deprecated: true
+                    items: { $ref: "#/components/schemas/FlowSummary" }
     post:
       tags: [Flows]
       operationId: createFlow
@@ -416,10 +421,12 @@ paths:
             schema: { $ref: "#/components/schemas/RunRequest" }
       responses:
         "202":
-          description: accepted
+          description: |
+            Accepted. The run is enqueued; poll GET /api/v1/me/runs/{run_id}
+            (using the returned job_id as run_id) for status.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Run" }
+              schema: { $ref: "#/components/schemas/RunAccepted" }
         "404": { $ref: "#/components/responses/NotFound" }
 
   /api/v1/me/flows/{flow_id}/validate:
@@ -476,6 +483,33 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/NodeSampleResult" }
 
+  /api/v1/me/flows/{flow_id}/runs:
+    parameters:
+      - $ref: "#/components/parameters/FlowID"
+    get:
+      tags: [Runs]
+      operationId: listFlowRuns
+      summary: List runs of one flow
+      parameters:
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/RunStatus" } }
+        - { name: limit,  in: query, schema: { type: integer } }
+        - { name: offset, in: query, schema: { type: integer } }
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [runs]
+                properties:
+                  runs:
+                    type: array
+                    items: { $ref: "#/components/schemas/RunSummary" }
+
   # ---------- Runs ----------------------------------------------------
 
   /api/v1/me/runs:
@@ -499,13 +533,12 @@ paths:
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: "#/components/schemas/Page"
-                  - type: object
-                    properties:
-                      items:
-                        type: array
-                        items: { $ref: "#/components/schemas/Run" }
+                type: object
+                required: [runs]
+                properties:
+                  runs:
+                    type: array
+                    items: { $ref: "#/components/schemas/RunSummary" }
 
   /api/v1/me/runs/{run_id}:
     parameters:
@@ -538,8 +571,9 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [nodes]
                 properties:
-                  items:
+                  nodes:
                     type: array
                     items: { $ref: "#/components/schemas/NodeRun" }
 
@@ -570,6 +604,14 @@ paths:
         Server-Sent Events. The connection stays open until the run
         reaches a terminal status, then the server closes. Replay
         from the beginning by reconnecting without `Last-Event-ID`.
+
+        Frames (`event:` / JSON `data:`):
+          - `snapshot` — the current run, as the `Run` schema.
+          - `node`     — a node transition: `{node_id, status, error?}`.
+          - `progress` — optional progress: `{job_id, node_id, progress}`.
+          - `terminal` — final outcome: `{run_id, status, error?}` where
+            `error` is a `JobError`. Sent once, then the stream closes.
+        `: ping` comment lines are heartbeats; ignore them.
       responses:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
@@ -1463,36 +1505,74 @@ components:
       type: string
       enum: [queued, running, awaiting, succeeded, failed, cancelled]
 
+    # RunAccepted is the body of POST /me/flows/{flow_id}/run (202). The
+    # run executes asynchronously; job_id is the run_id to poll under
+    # /me/runs/{run_id}.
+    RunAccepted:
+      type: object
+      required: [job_id]
+      properties:
+        job_id: { type: string }
+
+    # JobError is the structured failure attached to a run/node when it
+    # fails: a stable machine code, a human message, and optional technical
+    # details. null/absent when the run or node succeeded.
+    JobError:
+      type: object
+      required: [code, message]
+      properties:
+        code:    { type: string }
+        message: { type: string }
+        details: { type: string }
+
+    # Run is the single-run read shape (GET /me/runs/{run_id}). Graph-records
+    # carry no distinct started_at, so duration_ms is measured enqueue→finish
+    # for a run. error is the structured failure, or absent on success.
     Run:
       type: object
       required: [id, flow_id, status]
       properties:
         id:           { type: string }
         flow_id:      { type: string }
+        graph_id:     { type: string }
         status:       { $ref: "#/components/schemas/RunStatus" }
-        trigger_kind: { type: string }
-        started_at:   { type: string, format: date-time }
+        enqueued_at:  { type: string, format: date-time }
+        started_at:   { type: [string, "null"], format: date-time }
         finished_at:  { type: [string, "null"], format: date-time }
         duration_ms:  { type: integer }
-        error:        { type: [string, "null"] }
-        links:
-          type: object
-          additionalProperties: { type: string }
+        error:        { $ref: "#/components/schemas/JobError" }
 
+    # RunSummary is the slim list shape (GET /me/runs, GET
+    # /me/flows/{flow_id}/runs). It omits flow_id/duration and reports the
+    # failure as a machine code rather than a message.
+    RunSummary:
+      type: object
+      required: [id, status]
+      properties:
+        id:          { type: string }
+        graph_id:    { type: string }
+        status:      { $ref: "#/components/schemas/RunStatus" }
+        enqueued_at: { type: string, format: date-time }
+        started_at:  { type: [string, "null"], format: date-time }
+        finished_at: { type: [string, "null"], format: date-time }
+        error_code:  { type: string }
+
+    # NodeRun is one node-record within a run (GET /me/runs/{run_id}/nodes
+    # and .../nodes/{node_id}). inputs/outputs are the port→value maps the
+    # node received and emitted; error is the structured failure or absent.
     NodeRun:
       type: object
       required: [node_id, status]
       properties:
         node_id:     { type: string }
-        drop:        { type: string }
         status:      { $ref: "#/components/schemas/RunStatus" }
-        started_at:  { type: string, format: date-time }
+        attempts:    { type: integer }
+        started_at:  { type: [string, "null"], format: date-time }
         finished_at: { type: [string, "null"], format: date-time }
         duration_ms: { type: integer }
-        attempts:    { type: integer }
         inputs:      { type: object, additionalProperties: true }
         outputs:     { type: object, additionalProperties: true }
-        error:       { type: [string, "null"] }
+        error:       { $ref: "#/components/schemas/JobError" }
 
     RunRequest:
       type: object

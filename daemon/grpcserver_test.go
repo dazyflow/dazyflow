@@ -38,6 +38,14 @@ type harness struct {
 }
 
 func newHarness(t *testing.T) *harness {
+	return newHarnessOpts(t, true)
+}
+
+// newHarnessOpts builds the gRPC test harness. startWorker controls whether a
+// background worker runs. Tests that exercise control-plane record transitions
+// (e.g. CancelJob) pass false so the worker doesn't race them by executing or
+// terminal-failing the seeded job before the call under test.
+func newHarnessOpts(t *testing.T, startWorker bool) *harness {
 	t.Helper()
 
 	ks := auth.NewMemKeyStore()
@@ -61,15 +69,17 @@ func newHarness(t *testing.T) *harness {
 		Bus:        bus,
 	}
 
-	workerCtx, cancelWorker := context.WithCancel(context.Background())
-	t.Cleanup(cancelWorker)
-	w := daemon.NewWorker(daemon.WorkerConfig{
-		ID:              "grpc-test-worker",
-		PollInterval:    5 * time.Millisecond,
-		LeaseDuration:   5 * time.Second,
-		LeaseRenewEvery: 1 * time.Second,
-	}, jobs, eng, bus)
-	go func() { _ = w.Run(workerCtx) }()
+	if startWorker {
+		workerCtx, cancelWorker := context.WithCancel(context.Background())
+		t.Cleanup(cancelWorker)
+		w := daemon.NewWorker(daemon.WorkerConfig{
+			ID:              "grpc-test-worker",
+			PollInterval:    5 * time.Millisecond,
+			LeaseDuration:   5 * time.Second,
+			LeaseRenewEvery: 1 * time.Second,
+		}, jobs, eng, bus)
+		go func() { _ = w.Run(workerCtx) }()
+	}
 
 	unary, stream := daemon.AuthInterceptors(svc.Auth)
 	srv := grpc.NewServer(
@@ -286,7 +296,11 @@ func TestGRPC_RunGraphByRef(t *testing.T) {
 // seed a fake running graph run, cancel via gRPC, verify the
 // graph-record + every node-record flip to Cancelled.
 func TestGRPC_CancelJob(t *testing.T) {
-	h := newHarness(t)
+	// No worker: CancelJob is a control-plane record transition. A running
+	// worker would race this test by claiming the seeded queued node and
+	// terminal-failing it (the unresolvable "noop" module) before the cancel,
+	// turning CancelJob into a FailedPrecondition. (Was an intermittent flake.)
+	h := newHarnessOpts(t, false)
 	defer h.stop()
 
 	js := controlpb.NewJobServiceClient(h.conn)

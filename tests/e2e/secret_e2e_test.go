@@ -87,7 +87,7 @@ func TestSecrets_E2E_AuthorizationHeader(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	terminal := waitForFire(t, bus, runID, 5*time.Second)
+	terminal := waitForFire(t, jobs, runID)
 	if terminal != core.JobStatusSucceeded {
 		t.Fatalf("status = %q, want succeeded", terminal)
 	}
@@ -158,7 +158,7 @@ func TestSecrets_E2E_MissingSecretFailsNodeCleanly(t *testing.T) {
 		}},
 	}
 	runID, _ := svc.SubmitGraph(t.Context(), p, g)
-	terminal := waitForFire(t, bus, runID, 5*time.Second)
+	terminal := waitForFire(t, jobs, runID)
 	if terminal != core.JobStatusFailed {
 		t.Fatalf("status=%q, want failed", terminal)
 	}
@@ -171,23 +171,23 @@ func TestSecrets_E2E_MissingSecretFailsNodeCleanly(t *testing.T) {
 	}
 }
 
-func waitForFire(t *testing.T, bus *daemon.MemoryBus, runID string, timeout time.Duration) core.JobStatus {
+// waitForFire polls the job store until runID reaches a terminal status and
+// returns it. It deliberately polls the store rather than subscribing to the
+// bus: a subscriber that registers AFTER the run already finished misses the
+// terminal event and would then hang for the whole ceiling — the
+// subscribe-after-finish race that WaitGraph reconciles in production
+// (daemon/service.go re-reads the record post-subscribe). Polling has no such
+// window, so it's race-free even when CPU contention reorders scheduling.
+func waitForFire(t *testing.T, store core.JobStore, runID string) core.JobStatus {
 	t.Helper()
-	events, cancel := bus.Subscribe(runID)
-	defer cancel()
-	deadline := time.NewTimer(timeout)
-	defer deadline.Stop()
-	for {
-		select {
-		case <-deadline.C:
-			t.Fatalf("timed out waiting for terminal on %s", runID)
-		case ev, ok := <-events:
-			if !ok {
-				t.Fatalf("event channel closed")
-			}
-			if ev.Terminal != nil {
-				return ev.Terminal.Status
-			}
+	var status core.JobStatus
+	waitFor(t, "run "+runID+" to reach a terminal status", func() bool {
+		rec, err := store.Get(context.Background(), runID)
+		if err != nil {
+			return false
 		}
-	}
+		status = rec.Status
+		return core.IsTerminalStatus(status)
+	})
+	return status
 }

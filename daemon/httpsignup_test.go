@@ -166,13 +166,13 @@ func TestSignup_TenantIDsAreUnique(t *testing.T) {
 func TestSignup_RejectsBadEmail(t *testing.T) {
 	h := newSignupHarness(t)
 	for _, bad := range []string{
-		"",                     // empty
-		"not-an-email",         // no @
-		"a@b",                  // no dot in domain
-		"@example.com",         // empty local
-		"name@",                // empty domain
+		"",                      // empty
+		"not-an-email",          // no @
+		"a@b",                   // no dot in domain
+		"@example.com",          // empty local
+		"name@",                 // empty domain
 		"name with space@x.com", // whitespace
-		"name\r\n@x.com",       // control chars
+		"name\r\n@x.com",        // control chars
 	} {
 		t.Run(bad, func(t *testing.T) {
 			rw := rawDo(t, h, "POST", "/api/v1/auth/signup", signupBody(bad, "supersecret"))

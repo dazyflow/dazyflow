@@ -10,6 +10,45 @@ import (
 	"git.sr.ht/~klahr/hazy-flow/core"
 )
 
+// TestSession_StoredKeyIsHashedNotToken locks in that a session is stored
+// under the SHA-256 of its token, never the token itself — so a leak of the
+// session store can't be replayed as a live bearer credential. The cleartext
+// token still authenticates end-to-end.
+func TestSession_StoredKeyIsHashedNotToken(t *testing.T) {
+	store := NewMemSessionStore()
+	user := User{Subject: "u", Tenant: "t", Workspace: "ws"}
+	sess, token, err := IssueSession(context.Background(), store, user, time.Hour)
+	if err != nil {
+		t.Fatalf("issue: %v", err)
+	}
+	if !strings.HasPrefix(token, SessionTokenPrefix) {
+		t.Fatalf("token missing prefix: %q", token)
+	}
+	// The store key must be the hash, not the token.
+	if sess.ID == token {
+		t.Fatal("session stored under the raw token; a store leak would hand out live credentials")
+	}
+	if sess.ID != SessionLookupKey(token) {
+		t.Errorf("sess.ID = %q, want SessionLookupKey(token)", sess.ID)
+	}
+	// Looking the store up by the raw token must miss; only the hash hits.
+	if _, err := store.GetSession(context.Background(), token); err == nil {
+		t.Error("GetSession(rawToken) succeeded; the raw token must never be a store key")
+	}
+	if _, err := store.GetSession(context.Background(), SessionLookupKey(token)); err != nil {
+		t.Errorf("GetSession(hash) = %v, want a hit", err)
+	}
+	// End-to-end: the authenticator still accepts the cleartext token.
+	a := &SessionAuthenticator{Store: store}
+	p, err := a.Authenticate(context.Background(), token)
+	if err != nil {
+		t.Fatalf("authenticate: %v", err)
+	}
+	if p.Subject != "u" || p.Tenant != "t" {
+		t.Errorf("principal = %+v, want subject=u tenant=t", p)
+	}
+}
+
 func TestAPIKey_RoundTrip(t *testing.T) {
 	store := NewMemKeyStore()
 	roles := []core.Role{{Name: "runner", Permissions: []core.Permission{core.PermGraphRun}}}

@@ -17,12 +17,20 @@ export type HazyNodeData = {
   lintMessage?: string;
 };
 
-// Layout: nodes with a single input port and a single output port
-// stay compact — handles dot the left and right edges with no labels.
-// Once a side has more than one port we render its labels inside the
-// card so the wiring is unambiguous (no "which handle was that?"
-// guesswork). The canonical multi-port shapes are branch (then/else)
-// and await_approval (approved/rejected).
+// Layout: outputs always render as labeled rows on the right so every
+// node names what it emits — a one-output drop (e.g. Text) reads as
+// clearly as a multi-output one (branch's then/else, await_approval's
+// approved/rejected). A single input stays a compact, label-less dot on
+// the left edge; only once there's more than one input do we label them,
+// since that's where "which handle was that?" ambiguity actually arises.
+//
+// Each labeled handle lives INSIDE its label row (not as a free sibling)
+// so the dot is always vertically centered on its description — they
+// can't drift apart when the title wraps or the card grows. The dot is
+// then pinned back onto the card's outer edge via CSS transform, so it
+// still reads as a perimeter connection point. Label text is tinted to
+// match its dot's color so eye can pair "green dot ↔ green label" at a
+// glance.
 export function HazyNode({ data, selected }: NodeProps) {
   const d = data as HazyNodeData;
   const Icon = iconFor(d.manifest?.icon, d.manifest?.category);
@@ -37,69 +45,96 @@ export function HazyNode({ data, selected }: NodeProps) {
     ? d.manifest.outputs
     : [{ port: "out" }];
   const inputsMulti = inputs.length > 1;
-  const outputsMulti = outputs.length > 1;
 
   const statusClass = d.status ? " status-" + d.status : "";
 
   return (
     <div className={"hz-node" + (selected ? " selected" : "") + statusClass + (d.lintMessage ? " lint-warn" : "")}>
-      {/* Inputs (left side). Single-port nodes get a centered dot;
-          multi-port nodes get one handle per port spread vertically. */}
-      {inputs.map((p, i) => (
+      {/* Single input: a centered dot on the left edge, no label. */}
+      {!inputsMulti && (
         <Handle
-          key={"in-" + p.port}
           type="target"
           position={Position.Left}
-          id={p.port}
-          style={portStyle(p, i, inputs.length, "left")}
-          title={portTooltip(p)}
+          id={inputs[0].port}
+          style={dotStyle(portColor(inputs[0].mime), inputs[0].required ?? false)}
+          title={portTooltip(inputs[0])}
         />
-      ))}
-
-      {d.manifest?.brand_logo ? (
-        <div className="icon brand-logo">
-          <img src={d.manifest.brand_logo} alt="" draggable={false} />
-        </div>
-      ) : isBrandedIcon(d.manifest?.icon) ? (
-        <div className="icon branded">
-          <Icon size={22} strokeWidth={2.2} />
-        </div>
-      ) : (
-        <div
-          className="icon"
-          style={{
-            background: `linear-gradient(135deg, ${color}, color-mix(in srgb, ${color} 70%, #fff))`,
-          }}
-        >
-          <Icon size={16} color="#140d30" strokeWidth={2.2} />
-        </div>
       )}
-      <div className="hz-node-body">
-        <div className="label">{d.label}</div>
-        <div className="module-id">{d.moduleID}</div>
-        {(inputsMulti || outputsMulti) && (
-          <div className="hz-ports">
-            {inputsMulti && (
-              <div className="hz-port-col">
-                {inputs.map((p) => (
-                  <div key={"il-" + p.port} className="hz-port-label hz-port-in">
-                    {p.port}
-                  </div>
-                ))}
-              </div>
-            )}
-            {outputsMulti && (
-              <div className="hz-port-col right">
-                {outputs.map((p) => (
-                  <div key={"ol-" + p.port} className="hz-port-label hz-port-out">
-                    {p.port}
-                  </div>
-                ))}
-              </div>
-            )}
+
+      <div className="hz-node-main">
+        {d.manifest?.brand_logo ? (
+          <div className="icon brand-logo">
+            <img src={d.manifest.brand_logo} alt="" draggable={false} />
+          </div>
+        ) : isBrandedIcon(d.manifest?.icon) ? (
+          <div className="icon branded">
+            <Icon size={22} strokeWidth={2.2} />
+          </div>
+        ) : (
+          <div
+            className="icon"
+            style={{
+              background: `linear-gradient(135deg, ${color}, color-mix(in srgb, ${color} 70%, #fff))`,
+            }}
+          >
+            <Icon size={16} color="#140d30" strokeWidth={2.2} />
           </div>
         )}
+        <div className="hz-node-body">
+          <div className="label">{d.label}</div>
+        </div>
       </div>
+
+      <div className="hz-ports">
+        {inputsMulti && (
+          <div className="hz-port-col">
+            {inputs.map((p) => {
+              const c = portColor(p.mime);
+              return (
+                <div
+                  key={"il-" + p.port}
+                  className="hz-port-label hz-port-in"
+                  style={{ color: c }}
+                >
+                  <Handle
+                    type="target"
+                    position={Position.Left}
+                    id={p.port}
+                    style={dotStyle(c, p.required ?? false, "in")}
+                    title={portTooltip(p)}
+                  />
+                  {p.label ?? p.port}
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {/* Outputs always carry a visible label, single or multi — so a
+            one-output drop (e.g. Text) names what it emits instead of
+            showing a bare, unlabeled dot. */}
+        <div className="hz-port-col right">
+          {outputs.map((p) => {
+            const c = portColor(p.mime);
+            return (
+              <div
+                key={"ol-" + p.port}
+                className="hz-port-label hz-port-out"
+                style={{ color: c }}
+              >
+                <Handle
+                  type="source"
+                  position={Position.Right}
+                  id={p.port}
+                  style={dotStyle(c, p.required ?? false, "out")}
+                  title={portTooltip(p)}
+                />
+                {p.label ?? p.port}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {d.status && (
         <div
           className={"status-dot " + d.status}
@@ -111,58 +146,56 @@ export function HazyNode({ data, selected }: NodeProps) {
           <AlertTriangle size={13} />
         </div>
       )}
-
-      {/* Outputs (right side). */}
-      {outputs.map((p, i) => (
-        <Handle
-          key={"out-" + p.port}
-          type="source"
-          position={Position.Right}
-          id={p.port}
-          style={portStyle(p, i, outputs.length, "right")}
-          title={portTooltip(p)}
-        />
-      ))}
     </div>
   );
 }
 
-// portStyle places each handle's vertical center and paints it
-// according to the port's MIME (color) and required-ness (filled vs
-// hollow). Single ports sit at the card's vertical midpoint; multiple
-// ports spread evenly inside the labels region (which we pad to match
-// in CSS, see .hz-ports).
+// dotStyle paints a handle by its port's MIME (color) and required-ness
+// (filled vs hollow), and positions it.
 //
-// Geometry: the handle vertical position is computed in pixels off the
-// card top because React Flow's default Position.{Left,Right} centers
-// at top:50% — we override with style.top.
+//   place omitted → single port: keep React Flow's default centering on
+//     the card's vertical midpoint.
+//   place "in"/"out" → multi port: the handle is rendered inside its
+//     label row (the positioning context), so top:50% centers the dot on
+//     that row's text. We then translate it out onto the card's outer
+//     edge: -50%/+50% recenters the 10px dot, and the extra
+//     (--space-3 + 1.5px) walks it across the body padding and the card
+//     border so it lands on the perimeter — independent of label width or
+//     header height, which is what kept the old absolute-px math drifting.
 //
 // Visual encoding:
-//   - color    → first listed MIME on the port (see portColor)
-//   - fill     → required ports are solid; optional ports are hollow
-//                rings of the same color, signalling "you don't have to
-//                wire this to make the graph valid"
+//   - color → first listed MIME on the port (see portColor)
+//   - fill  → required ports are solid; optional ports are hollow rings of
+//             the same color, signalling "you don't have to wire this to
+//             make the graph valid"
 //   - missing MIME falls back to the neutral surface color so ports on
 //     legacy manifests without MIME annotations look unchanged
-function portStyle(port: Port, index: number, count: number, side: "left" | "right") {
-  const color = portColor(port.mime);
-  const required = port.required ?? false;
+function dotStyle(color: string, required: boolean, place?: "in" | "out") {
   const base = {
     background: required ? color : "var(--surface)",
     border: `1.5px solid ${color}`,
     width: 10,
     height: 10,
   } as const;
-  if (count === 1) return base;
-  // 38px is the header band height; below that we have the
-  // labels block whose rows are 18px tall. Center each handle on the
-  // matching label row.
-  const top = 50 + index * 20;
-  return {
-    ...base,
-    top: `${top}px`,
-    ...(side === "left" ? { left: -5 } : { right: -5 }),
-  } as const;
+  if (place === "in") {
+    return {
+      ...base,
+      top: "50%",
+      left: 0,
+      right: "auto",
+      transform: "translate(calc(-50% - var(--space-3) - 1.5px), -50%)",
+    } as const;
+  }
+  if (place === "out") {
+    return {
+      ...base,
+      top: "50%",
+      left: "auto",
+      right: 0,
+      transform: "translate(calc(50% + var(--space-3) + 1.5px), -50%)",
+    } as const;
+  }
+  return base;
 }
 
 // portColor picks a hue from the port's first listed MIME. Three rules

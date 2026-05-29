@@ -1,14 +1,24 @@
 import { Link } from "react-router-dom";
-import { KeyRound, Users, Settings2, Boxes, ShieldAlert, ShieldCheck, Plug } from "lucide-react";
+import {
+  KeyRound,
+  Users,
+  SlidersHorizontal,
+  Boxes,
+  ScrollText,
+  ShieldCheck,
+  Plug,
+  Store,
+} from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { orgDisplayName } from "../lib/orgDisplayName";
 
-// Admin is the gating point for tenant-level configuration. Each card
-// links to a focused sub-page when the underlying API + UI exists, and
-// stays as a stub otherwise. The role gate accepts either tenant:admin
-// (the right one) or graph:admin (a coarser fallback so power users
-// who set the system up can land here even before refining roles).
+// Admin is the gating point for tenant-level configuration. Cards are
+// split into what an org admin manages and what only the platform
+// operator can touch (instance-wide settings), so scope is clear from
+// the grouping rather than per-card text. Role gate accepts tenant:admin
+// (the right one) or graph:admin (a coarser fallback so power users who
+// set the system up land here before refining roles).
 export function Admin() {
   const { t } = useTranslation();
   const { me, hasPerm, activeTenant, activeWorkspace } = useAuth();
@@ -19,6 +29,7 @@ export function Admin() {
       </div>
     );
   }
+  const isPlatform = hasPerm("platform:admin");
   return (
     <div>
       <div className="page-title">
@@ -37,62 +48,28 @@ export function Admin() {
         </div>
       </div>
 
+      <h2 className="admin-group-label">{t("admin.groupOrg")}</h2>
       <div className="admin-grid">
-        <AdminCard
-          to="/admin/api-keys"
-          icon={<KeyRound size={16} />}
-          title={t("admin.cardApiKeysTitle")}
-          desc={t("admin.cardApiKeysDesc")}
-          status="ready"
-        />
-        <AdminCard
-          to="/admin/users"
-          icon={<Users size={16} />}
-          title={t("admin.cardUsersTitle")}
-          desc={t("admin.cardUsersDesc")}
-          status="ready"
-        />
-        <AdminCard
-          to="/admin/workspace"
-          icon={<Settings2 size={16} />}
-          title={t("admin.cardWorkspaceTitle")}
-          desc={t("admin.cardWorkspaceDesc")}
-          status="ready"
-        />
-        <AdminCard
-          to="/admin/modules"
-          icon={<Boxes size={16} />}
-          title={t("admin.cardModulesTitle")}
-          desc={t("admin.cardModulesDesc")}
-          status="ready"
-        />
-        <AdminCard
-          to="/admin/sso"
-          icon={<ShieldCheck size={16} />}
-          title={t("admin.cardSSOTitle")}
-          desc={t("admin.cardSSODesc")}
-          status="ready"
-        />
-        {/* OAuth provider apps (client_id/secret) are an instance-wide
-            setting shared by every org, so only the platform operator
-            configures them — a tenant admin would get a 403. */}
-        {hasPerm("platform:admin") && (
-          <AdminCard
-            to="/admin/oauth"
-            icon={<Plug size={16} />}
-            title={t("admin.cardOAuthTitle")}
-            desc={t("admin.cardOAuthDesc")}
-            status="ready"
-          />
-        )}
-        <AdminCard
-          to="/admin/audit"
-          icon={<ShieldAlert size={16} />}
-          title={t("admin.cardAuditTitle")}
-          desc={t("admin.cardAuditDesc")}
-          status="ready"
-        />
+        <AdminCard to="/admin/api-keys" icon={<KeyRound size={18} />} title={t("admin.cardApiKeysTitle")} desc={t("admin.cardApiKeysDesc")} />
+        <AdminCard to="/admin/users" icon={<Users size={18} />} title={t("admin.cardUsersTitle")} desc={t("admin.cardUsersDesc")} />
+        <AdminCard to="/admin/sso" icon={<ShieldCheck size={18} />} title={t("admin.cardSSOTitle")} desc={t("admin.cardSSODesc")} />
+        <AdminCard to="/admin/workspace" icon={<SlidersHorizontal size={18} />} title={t("admin.cardWorkspaceTitle")} desc={t("admin.cardWorkspaceDesc")} />
+        <AdminCard to="/admin/modules" icon={<Boxes size={18} />} title={t("admin.cardModulesTitle")} desc={t("admin.cardModulesDesc")} />
+        <AdminCard to="/admin/audit" icon={<ScrollText size={18} />} title={t("admin.cardAuditTitle")} desc={t("admin.cardAuditDesc")} />
       </div>
+
+      {/* OAuth provider apps and marketplace installs are instance-wide
+          (shared across every org), so only the platform operator sees
+          them — a tenant admin would get a 403. */}
+      {isPlatform && (
+        <>
+          <h2 className="admin-group-label">{t("admin.groupPlatform")}</h2>
+          <div className="admin-grid">
+            <AdminCard to="/admin/oauth" icon={<Plug size={18} />} title={t("admin.cardOAuthTitle")} desc={t("admin.cardOAuthDesc")} />
+            <AdminCard to="/admin/marketplace" icon={<Store size={18} />} title={t("admin.cardMarketplaceTitle")} desc={t("admin.cardMarketplaceDesc")} />
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -101,31 +78,20 @@ function AdminCard({
   icon,
   title,
   desc,
-  status,
   to,
 }: {
   icon: React.ReactNode;
   title: string;
   desc: string;
-  status: "stub" | "ready";
-  to?: string;
+  to: string;
 }) {
-  const { t } = useTranslation();
-  const body = (
-    <div className="admin-card">
-      <h3>
-        {icon}
-        {title}
-      </h3>
-      <div className="desc">{desc}</div>
-      <span className="badge">{status === "stub" ? t("admin.statusStub") : t("admin.statusReady")}</span>
-    </div>
-  );
-  return to ? (
-    <Link to={to} style={{ textDecoration: "none", color: "inherit" }}>
-      {body}
+  return (
+    <Link to={to} className="admin-card">
+      <span className="admin-card-icon">{icon}</span>
+      <span className="admin-card-body">
+        <span className="admin-card-title">{title}</span>
+        <span className="desc">{desc}</span>
+      </span>
     </Link>
-  ) : (
-    body
   );
 }

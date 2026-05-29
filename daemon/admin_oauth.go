@@ -35,6 +35,11 @@ type adminProviderRow struct {
 	SetupHelp    string    `json:"setup_help"`
 	RedirectURI  string    `json:"redirect_uri"`
 	Configured   bool      `json:"configured"`
+	// ClientID is the configured OAuth client ID, if any. It's a public
+	// identifier (not a secret — it rides along in authorize URLs), so we
+	// return it for the admin UI to show. The client *secret* is never
+	// returned.
+	ClientID     string    `json:"client_id,omitempty"`
 	HasPersisted bool      `json:"has_persisted"`
 	HasEnv       bool      `json:"has_env"`
 	UpdatedAt    time.Time `json:"updated_at,omitempty"`
@@ -69,10 +74,14 @@ func (h *HTTPGateway) listAdminOAuthProviders(rw http.ResponseWriter, r *http.Re
 		}
 		if registered, ok := h.OAuth.Provider(def.Name); ok && registered.ClientID != "" {
 			row.Configured = true
+			row.ClientID = registered.ClientID
 		}
 		if c, err := loadProviderCreds(r.Context(), h.EncryptedSecrets, def.Name); err == nil && c != nil {
 			row.HasPersisted = true
 			row.UpdatedAt = c.UpdatedAt
+			if row.ClientID == "" {
+				row.ClientID = c.ClientID
+			}
 		}
 		// HasEnv is "configured but no persisted creds" — i.e. the live
 		// values came from HAZYFLOW_OAUTH_<NAME>_CLIENT_ID env vars at

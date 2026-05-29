@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"strings"
@@ -17,9 +18,26 @@ import (
 // + opaque secret format so a single Authenticate path covers both.
 const SessionTokenPrefix = "hzs_"
 
-// Session is the server-side record. Cookies/bearer tokens carry only
-// the opaque ID; the principal lives here so revocation is immediate
-// and the cookie cannot be spoofed offline.
+// SessionLookupKey maps a session token to the key its record is stored
+// under. Sessions are stored keyed by the SHA-256 of the token, never the
+// token itself — so a leak of the session store (a DB backup, a read
+// replica, a SQLi elsewhere) hands out hashes, not live bearer
+// credentials, mirroring how API-key secrets are stored hashed. The token
+// is 256 bits of CSPRNG output, so an unsalted hash suffices: salt defends
+// low-entropy secrets like passwords against precomputation, and adds
+// nothing for a high-entropy random token.
+//
+// Callers that look a session up by its raw token (sign-out, org switch)
+// must pass the token through this first.
+func SessionLookupKey(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
+}
+
+// Session is the server-side record. The principal lives here so
+// revocation is immediate and the cookie cannot be spoofed offline. ID is
+// the SHA-256 of the token (the store key), not the token itself — see
+// SessionLookupKey.
 type Session struct {
 	ID        string
 	Subject   string
@@ -86,12 +104,14 @@ func (a *SessionAuthenticator) Authenticate(ctx context.Context, credential stri
 	if !strings.HasPrefix(credential, SessionTokenPrefix) {
 		return core.Principal{}, ErrInvalidCredential
 	}
-	sess, err := a.Store.GetSession(ctx, credential)
+	// The record is keyed by the token's hash, never the token itself.
+	key := SessionLookupKey(credential)
+	sess, err := a.Store.GetSession(ctx, key)
 	if err != nil {
 		return core.Principal{}, ErrInvalidCredential
 	}
 	if a.now().After(sess.ExpiresAt) {
-		_ = a.Store.DeleteSession(ctx, credential)
+		_ = a.Store.DeleteSession(ctx, key)
 		return core.Principal{}, fmt.Errorf("%w: session expired", ErrInvalidCredential)
 	}
 	return core.Principal{
@@ -110,9 +130,9 @@ func (a *SessionAuthenticator) now() time.Time {
 }
 
 // IssueSession persists a fresh session for the given user and returns
-// the record plus the opaque token. The token doubles as cookie value
-// and bearer credential — there's no separate ID/secret because there's
-// no on-disk hash to compare against.
+// the record plus the opaque token. The token doubles as cookie value and
+// bearer credential; only its hash is persisted (sess.ID), so the stored
+// record can't be replayed as a credential if the store leaks.
 func IssueSession(ctx context.Context, store SessionStore, user User, ttl time.Duration) (Session, string, error) {
 	secret := make([]byte, 32)
 	if _, err := rand.Read(secret); err != nil {
@@ -121,7 +141,8 @@ func IssueSession(ctx context.Context, store SessionStore, user User, ttl time.D
 	token := SessionTokenPrefix + hex.EncodeToString(secret)
 	now := time.Now()
 	sess := Session{
-		ID:        token,
+		// Store the token's hash, not the token — see SessionLookupKey.
+		ID:        SessionLookupKey(token),
 		Subject:   user.Subject,
 		Tenant:    user.Tenant,
 		Workspace: user.Workspace,

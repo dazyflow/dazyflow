@@ -12,9 +12,6 @@ import (
 	"time"
 
 	"git.sr.ht/~klahr/hazy-flow/core"
-	gmailmod "git.sr.ht/~klahr/hazy-flow/integrations/gmail"
-	sheetsmod "git.sr.ht/~klahr/hazy-flow/integrations/sheets"
-	slackmod "git.sr.ht/~klahr/hazy-flow/integrations/slack"
 )
 
 // timeShortDaysAgo returns an ISO date (YYYY-MM-DD) n days before now,
@@ -34,6 +31,7 @@ func timeShortDaysAgo(n int) string {
 // is the execution counterpart to the catalog/journey tests: it watches
 // a SaaS scenario actually run, not just validate.
 func TestJourney_OverdueInvoice_RunsWithConnectedAccounts(t *testing.T) {
+	requireNode(t)
 	google := newGoogleMock(t)
 	defer google.Close()
 
@@ -42,11 +40,13 @@ func TestJourney_OverdueInvoice_RunsWithConnectedAccounts(t *testing.T) {
 
 	raw, g := readGraph(t, "../scenarios/01-overdue-invoice-chaser.json")
 
-	// Stand in for a connected Google account: a raw token on every
-	// Google node, and the for_each's gmail step.
-	patchParams(&g, "read_invoices", map[string]any{"token": "mock-token"})
-	patchParams(&g, "log_reminded", map[string]any{"token": "mock-token"})
-	patchStepParams(&g, "send_reminders", map[string]any{"token": "mock-token"})
+	// The Sheets + Gmail nodes are scripted connectors; point each at the mock
+	// via the base_url override (the scripted analog of the old SetHTTPBase),
+	// with a raw token standing in for a connected account.
+	mock := map[string]any{"token": "mock-token", "base_url": google.srv.URL}
+	patchParams(&g, "read_invoices", mock)
+	patchParams(&g, "log_reminded", mock)
+	patchStepParams(&g, "send_reminders", mock)
 	raw = fillBlanks(mustJSON(t, g))
 
 	const flowID = "overdue-invoice-chaser"
@@ -87,6 +87,7 @@ func TestJourney_OverdueInvoice_RunsWithConnectedAccounts(t *testing.T) {
 // the aggregated rows it was handed so the test can confirm the data
 // actually flowed through filter -> aggregate -> sort -> AI -> Slack.
 func TestJourney_WeeklySalesSummary_RunsWithConnectedAccounts(t *testing.T) {
+	requireNode(t)
 	m := newSalesMock(t)
 	defer m.Close()
 
@@ -94,9 +95,11 @@ func TestJourney_WeeklySalesSummary_RunsWithConnectedAccounts(t *testing.T) {
 	me := s.signUp(t, "founder@shop.example")
 
 	_, g := readGraph(t, "../scenarios/02-weekly-sales-summary.json")
-	patchParams(&g, "read_orders", map[string]any{"token": "mock-token"})
+	// All three connectors (Sheets, Claude, Slack) are scripted; point each at
+	// the shared mock via base_url (Claude already used it).
+	patchParams(&g, "read_orders", map[string]any{"token": "mock-token", "base_url": m.srv.URL})
 	patchParams(&g, "compose", map[string]any{"api_key": "mock-key", "base_url": m.srv.URL})
-	patchParams(&g, "post", map[string]any{"token": "mock-token"})
+	patchParams(&g, "post", map[string]any{"token": "mock-token", "base_url": m.srv.URL})
 	raw := fillBlanks(mustJSON(t, g))
 
 	const flowID = "weekly-sales-summary"
@@ -194,12 +197,6 @@ func newSalesMock(t *testing.T) *salesMock {
 	})
 
 	m.srv = httptest.NewServer(mux)
-	sheetsmod.SetHTTPBase(m.srv.URL)
-	slackmod.SetHTTPBase(m.srv.URL)
-	t.Cleanup(func() {
-		sheetsmod.SetHTTPBase("https://sheets.googleapis.com/v4")
-		slackmod.SetHTTPBase("https://slack.com/api")
-	})
 	return m
 }
 
@@ -261,13 +258,6 @@ func newGoogleMock(t *testing.T) *googleMock {
 	})
 
 	m.srv = httptest.NewServer(mux)
-	sheetsmod.SetHTTPBase(m.srv.URL)
-	gmailmod.SetHTTPBase(m.srv.URL)
-	t.Cleanup(func() {
-		// Restore the real API roots so other tests aren't affected.
-		sheetsmod.SetHTTPBase("https://sheets.googleapis.com/v4")
-		gmailmod.SetHTTPBase("https://gmail.googleapis.com/gmail/v1")
-	})
 	return m
 }
 

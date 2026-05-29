@@ -963,26 +963,6 @@
   letter-spacing: 0.04em;
   color: var(--muted);
 }
-.template-tech-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--muted);
-  cursor: pointer;
-  margin-bottom: var(--space-1);
-}
-.template-tech {
-  border-top: 1px dashed var(--border);
-  padding-top: var(--space-2);
-  margin-top: var(--space-1);
-}
-.template-tech-desc {
-  font-size: 12px;
-  color: var(--faint, var(--muted));
-  margin: 0 0 var(--space-2);
-}
-
 /* ----- Integrations index + detail ----- */
 .integration-grid {
   display: grid;
@@ -1338,6 +1318,60 @@
   gap: var(--space-2);
   flex-wrap: wrap;
 }
+
+/* Bring-your-own secret-manager config panel (Connections page). */
+.secret-manager {
+  margin-top: var(--space-5);
+}
+.secret-manager-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.secret-manager-status-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.secret-manager-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+.secret-manager-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-width: 560px;
+}
+.secret-manager-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.secret-manager-form input,
+.secret-manager-form select {
+  width: 100%;
+}
+.secret-manager-row {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.secret-manager-row label {
+  flex: 1;
+  min-width: 160px;
+}
+.secret-manager-form-actions {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
 .credentials-add input {
   flex: 1;
   min-width: 160px;
@@ -1530,29 +1564,6 @@
 }
 .integration-hero-docs a:hover {
   text-decoration: underline;
-}
-/* Hero's "Technical details" disclosure — tucks protocol names and
-   env-var references behind a single click so the friendly hero
-   description stays the focused-by-default surface. */
-.integration-hero-technical {
-  margin: 10px 0 0;
-}
-.integration-hero-technical > summary {
-  cursor: pointer;
-  user-select: none;
-  font-size: 12px;
-  color: var(--faint);
-  font-weight: 500;
-}
-.integration-hero-technical > summary:hover {
-  color: var(--ink);
-}
-.integration-hero-technical > p {
-  margin: 8px 0 0;
-  font-size: 13px;
-  color: var(--muted);
-  line-height: 1.55;
-  max-width: 70ch;
 }
 .integration-drops-head {
   margin: 24px 0 12px;
@@ -2426,20 +2437,30 @@
   box-shadow: var(--shadow);
   font-size: 13px;
   display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
+  flex-direction: column;
   transition: border-color 120ms, box-shadow 120ms;
+}
+/* Header row: icon next to the title block. The ports section sits
+   below it spanning the full card width so its left/right columns line
+   up with the card edges (not indented under the icon). */
+.hz-node-main {
+  display: flex;
+  /* Title is a single line now (no sub-text), so center it against the
+     icon rather than top-aligning. */
+  align-items: center;
+  gap: var(--space-3);
 }
 .hz-node-body {
   flex: 1;
   min-width: 0;
 }
-/* Multi-port row layout: input names left-aligned, output names
-   right-aligned. Row height (20px) matches the handle spacing math in
-   NodeCard.tsx → keep these in sync if you tweak. */
+/* Multi-port rows: input names left-aligned, output names right-aligned.
+   Each row is a positioning context (position: relative) so its handle
+   dot — rendered inside the row — centers on the label vertically and is
+   then pushed onto the card edge via transform (see dotStyle in
+   NodeCard.tsx). The dot therefore always tracks its description. */
 .hz-ports {
   display: flex;
-  justify-content: space-between;
   gap: var(--space-3);
   margin-top: var(--space-2);
   padding-top: var(--space-2);
@@ -2451,23 +2472,31 @@
   gap: 4px;
   min-width: 0;
 }
+/* margin-left:auto keeps the output column flush right even when a node
+   has outputs but a single (label-less) input, so no left column exists
+   to push it over. */
 .hz-port-col.right {
   align-items: flex-end;
+  margin-left: auto;
 }
 .hz-port-label {
+  position: relative;
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--muted);
   line-height: 16px;
   white-space: nowrap;
 }
+/* Chevrons inherit the label's (dot-matched) color but stay subtle.
+   Inputs: ">" to the left of the left-aligned name; outputs: ">" to the
+   right of the right-aligned name — both point inward toward the card. */
 .hz-port-label.hz-port-in::before {
-  content: "⬅ ";
-  color: var(--faint);
+  content: "> ";
+  opacity: 0.55;
 }
 .hz-port-label.hz-port-out::after {
-  content: " ➡";
-  color: var(--faint);
+  content: " >";
+  opacity: 0.55;
 }
 .hz-node:hover {
   border-color: var(--accent);
@@ -2582,12 +2611,6 @@
   color: var(--ink);
   line-height: 1.2;
 }
-.hz-node .module-id {
-  font-family: var(--font-mono);
-  color: var(--faint);
-  font-size: 11px;
-  margin-top: 2px;
-}
 
 /* Live xterm.js console inside the inspector. Fixed height so the
    terminal has a stable viewport to render into; xterm handles
@@ -2689,28 +2712,167 @@
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: var(--space-4);
 }
+/* Marketplace admin page */
+.mk-grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+.mk-grid3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: var(--space-2);
+}
+.mk-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mk-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.mk-id {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.mk-row .sub {
+  flex: 1;
+}
+/* Small uppercase section heading that groups the admin cards
+   (Organization vs Platform). Carries the scope so the cards don't need
+   to spell it out. */
+.admin-group-label {
+  margin: var(--space-5) 0 var(--space-3);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.admin-group-label:first-of-type {
+  margin-top: var(--space-4);
+}
 .admin-card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-3);
   padding: var(--space-4);
   display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
+  align-items: flex-start;
+  gap: var(--space-3);
+  text-decoration: none;
+  color: inherit;
+  transition:
+    border-color 0.12s ease,
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
 }
-.admin-card h3 {
-  margin: 0;
-  font-size: 14px;
+.admin-card:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-lg);
+  /* These cards are links but read as buttons — keep the text-link
+     hover underline (from the global a:hover) off them. */
+  text-decoration: none;
+}
+.admin-card-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-2);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+.admin-card-body {
   display: flex;
-  align-items: center;
-  gap: var(--space-2);
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.admin-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
 }
 .admin-card .desc {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12.5px;
+  line-height: 1.4;
 }
-.admin-card .badge {
+
+/* Service rows — third-party providers (OAuth connector apps, SSO).
+   Shared by the OAuth-providers and SSO admin pages so they read the
+   same. The ServiceIcon monogram carries the identity. */
+.svc-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.svc-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.svc-head-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+.svc-head-text h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.svc-redirect {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.svc-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+.svc-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.svc-fields input {
+  width: 100%;
+}
+.svc-error {
+  color: var(--danger);
+  font-size: 12px;
+  margin-top: var(--space-2);
+}
+.svc-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.svc-confirm {
+  font-size: 12px;
+  color: var(--muted);
+}
+.badge {
   display: inline-block;
+  flex: none;
   padding: 2px 8px;
   border-radius: var(--r-pill);
   background: color-mix(in srgb, var(--accent) 18%, transparent);
@@ -2718,6 +2880,50 @@
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+.badge.ok {
+  background: color-mix(in srgb, var(--success) 18%, transparent);
+  color: var(--success);
+}
+.badge.muted {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.ghost.danger {
+  color: var(--danger);
+}
+
+/* Provider strip — the row of SSO/identity-provider tiles. The active
+   provider is highlighted; the rest are placeholders awaiting their
+   integration (monogram tiles swap for real logos as they land). */
+.svc-providers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+.svc-provider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  background: var(--surface);
+}
+.svc-provider.active {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent) inset;
+}
+.svc-provider.soon {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.svc-provider-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
 }
 
 /* Schema-driven form (Inspector params) */
@@ -3963,6 +4169,126 @@
   height: 1px;
   background: var(--border);
 }
+/* Flow version-history: a banner across the canvas top while previewing a
+   past revision, and a right-side panel listing the commit log. */
+.history-preview-banner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  font-size: 13px;
+}
+.history-preview-banner.with-panel {
+  /* Stop short of the open history panel so the Restore action stays visible. */
+  right: 300px;
+}
+.history-preview-msg {
+  display: inline-flex;
+  align-items: center;
+  color: var(--ink);
+}
+.history-preview-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+}
+.history-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 6;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+}
+.history-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+.history-empty {
+  padding: var(--space-4);
+  color: var(--muted);
+  font-size: 13px;
+}
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-2);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.history-row {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: flex-start;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-2);
+  padding: var(--space-2) var(--space-3);
+}
+.history-row:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+.history-row.active {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+.history-row-when {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.history-row-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 12px;
+  color: var(--muted);
+}
+.history-row-author {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.history-badge {
+  flex: 0 0 auto;
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  font-weight: 600;
+}
+.history-badge.autosave {
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.history-badge.checkpoint {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}
 .google-signin-btn {
   display: block;
   text-align: center;
@@ -4003,10 +4329,102 @@
   font-size: 12px;
   padding: 6px 10px;
 }
+/* Google Workspace SSO card. A header (logo + title + status pill), a
+   stack of fields, then a footer with the actions right-aligned. Section
+   dividers are inset by the card padding, which reads as deliberate. */
+.sso-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  margin-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+.sso-card-logo {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+.sso-card-headings {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.sso-card-headings h2 {
+  margin: 0 0 2px;
+}
+.sso-card-headings .desc {
+  margin: 0;
+}
+/* Status pill: muted when SSO isn't configured, success-tinted once the
+   org's client is saved and live. Mirrors the at-a-glance state the
+   provider list uses, so the card and the list agree. */
+.sso-status-pill {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.sso-status-pill.is-active {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+  border-color: color-mix(in srgb, var(--success) 35%, transparent);
+}
+.sso-card-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+.sso-foot-msg {
+  flex: 1 1 auto;
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+}
+.sso-foot-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+/* "Saved" acknowledgement. A quiet success chip, not loud green prose —
+   it fades on its own after a few seconds (see AdminOrgSSO). */
+.sso-saved-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--success) 30%, transparent);
+  animation: sso-saved-in 160ms ease-out;
+}
+@keyframes sso-saved-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
 .sso-active-row {
-  margin-top: var(--space-3);
-  padding: 10px 12px;
-  border-radius: 6px;
+  margin-top: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--r-2);
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
 }

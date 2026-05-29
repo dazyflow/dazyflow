@@ -21,7 +21,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 )
@@ -106,10 +108,18 @@ func (h *HTTPGateway) loadFlowMe(rw http.ResponseWriter, r *http.Request, p core
 	}
 	g, err := h.svc.LoadGraph(r.Context(), p, tenant, workspace, id, r.URL.Query().Get("ref"))
 	if err != nil {
-		writeAPIError(rw, http.StatusNotFound, "flow_not_found", err.Error())
+		writeAPIError(rw, http.StatusNotFound, "flow_not_found", flowNotFoundMessage(tenant, workspace, id))
 		return
 	}
 	writeJSON(rw, http.StatusOK, g)
+}
+
+// flowNotFoundMessage is the user-facing 404 message for a missing flow.
+// It deliberately omits the git-backed store's internals (the commit hash,
+// the word "graph", "file not found") that the raw LoadGraph error
+// exposes — those are storage details a public API caller shouldn't see.
+func flowNotFoundMessage(tenant, workspace, id string) string {
+	return fmt.Sprintf("no flow %q in workspace %s/%s", id, tenant, workspace)
 }
 
 func (h *HTTPGateway) saveFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
@@ -125,7 +135,16 @@ func (h *HTTPGateway) saveFlowMe(rw http.ResponseWriter, r *http.Request, p core
 	// Path is source-of-truth; ignore tenant/workspace/id in the body
 	// even when the client supplied them.
 	g.Tenant, g.Workspace, g.ID = tenant, workspace, id
-	commit, err := h.svc.SaveGraph(r.Context(), p, g)
+	// ?autosave=1 marks an editor autosave: consecutive autosaves of this
+	// flow coalesce into a single commit so the history stays readable.
+	// Explicit saves (no param) always commit their own checkpoint.
+	var commit string
+	var err error
+	if r.URL.Query().Get("autosave") == "1" {
+		commit, err = h.svc.SaveGraphCoalescing(r.Context(), p, g)
+	} else {
+		commit, err = h.svc.SaveGraph(r.Context(), p, g)
+	}
 	if err != nil {
 		if errors.Is(err, core.ErrConflict) {
 			writeAPIError(rw, http.StatusConflict, "flow_locked", err.Error())
@@ -150,12 +169,12 @@ func (h *HTTPGateway) saveFlowMe(rw http.ResponseWriter, r *http.Request, p core
 func (h *HTTPGateway) flowMutationResponse(commit string, g core.Graph) map[string]any {
 	scope := g.Tenant + "/" + g.Workspace + "/" + g.ID
 	resp := map[string]any{
-		"commit":                  commit,
-		"flow_id":                 scope,
-		"graph_id":                g.ID, // legacy alias
-		"lint":                    core.LintGraph(g),
-		"endpoints":               h.triggerEndpoints(g),
-		"public_base_configured":  h.svc.PublicBaseURL != "",
+		"commit":                 commit,
+		"flow_id":                scope,
+		"graph_id":               g.ID, // legacy alias
+		"lint":                   core.LintGraph(g),
+		"endpoints":              h.triggerEndpoints(g),
+		"public_base_configured": h.svc.PublicBaseURL != "",
 	}
 	// canvas_url is the deep link to the in-app editor for this flow.
 	// Relative when no public base — the LLM can still pass it through
@@ -164,6 +183,60 @@ func (h *HTTPGateway) flowMutationResponse(commit string, g core.Graph) map[stri
 	base := strings.TrimRight(h.svc.PublicBaseURL, "/")
 	resp["canvas_url"] = base + "/flows/" + g.ID
 	return resp
+}
+
+// historyFlowMe is GET /me/flows/{flow_id}/history — the commit log of a
+// flow, newest first, for the editor's version-history panel.
+func (h *HTTPGateway) historyFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	tenant, workspace, id, ok := h.readFlowID(rw, r, p)
+	if !ok {
+		return
+	}
+	limit := 100
+	if v := strings.TrimSpace(r.URL.Query().Get("limit")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	revs, err := h.svc.FlowHistory(r.Context(), p, tenant, workspace, id, limit)
+	if err != nil {
+		writeAPIError(rw, http.StatusNotFound, "flow_not_found", flowNotFoundMessage(tenant, workspace, id))
+		return
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{"revisions": revs})
+}
+
+// restoreFlowMe is POST /me/flows/{flow_id}/restore {ref} — make a past
+// revision the new HEAD by saving its content as a fresh commit. History is
+// preserved (no rewrite); a 409 means the flow is locked by an active run.
+func (h *HTTPGateway) restoreFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	tenant, workspace, id, ok := h.readFlowID(rw, r, p)
+	if !ok {
+		return
+	}
+	var body struct {
+		Ref string `json:"ref"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeAPIError(rw, http.StatusBadRequest, "decode_failed", "decode body: "+err.Error())
+		return
+	}
+	body.Ref = strings.TrimSpace(body.Ref)
+	if body.Ref == "" {
+		writeAPIError(rw, http.StatusBadRequest, "validation_failed", "ref is required")
+		return
+	}
+	commit, g, err := h.svc.RestoreFlow(r.Context(), p, tenant, workspace, id, body.Ref)
+	if err != nil {
+		if errors.Is(err, core.ErrConflict) {
+			writeAPIError(rw, http.StatusConflict, "flow_locked", err.Error())
+			return
+		}
+		writeAPIError(rw, http.StatusBadRequest, "restore_failed", err.Error())
+		return
+	}
+	h.audit(r.Context(), p, "graph.restore", id, "from="+body.Ref+" commit="+commit)
+	writeJSON(rw, http.StatusOK, h.flowMutationResponse(commit, g))
 }
 
 // triggerEndpoints returns the public URLs the user must paste into
@@ -394,6 +467,14 @@ func (h *HTTPGateway) runFlowMe(rw http.ResponseWriter, r *http.Request, p core.
 	r2.SetPathValue("tenant", tenant)
 	r2.SetPathValue("workspace", workspace)
 	r2.SetPathValue("id", id)
+	// Pre-check existence with a clean 404 before delegating: the legacy
+	// runGraph surfaces the raw store error ("graph \"x\" at <commit>: file
+	// not found"), which leaks the git-backed storage internals. A clean
+	// flow_not_found here short-circuits that.
+	if _, err := h.svc.LoadGraph(r.Context(), p, tenant, workspace, id, ""); err != nil {
+		writeAPIError(rw, http.StatusNotFound, "flow_not_found", flowNotFoundMessage(tenant, workspace, id))
+		return
+	}
 	h.runGraph(rw, r2, p)
 }
 
@@ -596,27 +677,179 @@ func oauthErrorCode(status int) string {
 
 // --- /me/runs ---------------------------------------------------------
 
+// runView is the public, stable shape of a graph run for the /me/runs
+// endpoints — the implementation of the OpenAPI `Run` schema. The legacy
+// /api/v1/graphs + /api/v1/jobs inspector routes still serialize the raw
+// core.JobRecord (the web UI inspector depends on that shape, GraphPayload
+// and all); runView is the clean, snake_case, storage-detail-free view the
+// public API documents and promises. `enqueued_at` + `graph_id` are kept
+// for parity with the list shape (runSummary).
+type runView struct {
+	ID         string         `json:"id"`
+	FlowID     string         `json:"flow_id"` // tenant/workspace/graph_id composite
+	GraphID    string         `json:"graph_id"`
+	Status     core.JobStatus `json:"status"`
+	EnqueuedAt time.Time      `json:"enqueued_at"`
+	StartedAt  *time.Time     `json:"started_at,omitempty"`
+	FinishedAt *time.Time     `json:"finished_at,omitempty"`
+	DurationMS int64          `json:"duration_ms,omitempty"`
+	Error      *core.JobError `json:"error,omitempty"`
+}
+
+// nodeRunView is the public shape of a single node-record within a run —
+// the OpenAPI `NodeRun` schema: status, timing, attempts, the inputs it
+// received, the outputs it emitted, and its structured error if any. No
+// internal/storage fields.
+type nodeRunView struct {
+	NodeID     string              `json:"node_id"`
+	Status     core.JobStatus      `json:"status"`
+	Attempts   int                 `json:"attempts,omitempty"`
+	StartedAt  *time.Time          `json:"started_at,omitempty"`
+	FinishedAt *time.Time          `json:"finished_at,omitempty"`
+	DurationMS int64               `json:"duration_ms,omitempty"`
+	Inputs     map[string]core.Ref `json:"inputs,omitempty"`
+	Outputs    map[string]core.Ref `json:"outputs,omitempty"`
+	Error      *core.JobError      `json:"error,omitempty"`
+}
+
+// sseTerminalView is the clean payload of the `terminal` SSE frame on the
+// /me/runs/{id}/events stream — run_id + final status + structured error.
+// Replaces the raw TerminalEvent (PascalCase JobID/GraphRes) that used to
+// be serialized straight onto the wire.
+type sseTerminalView struct {
+	RunID  string         `json:"run_id"`
+	Status core.JobStatus `json:"status"`
+	Error  *core.JobError `json:"error,omitempty"`
+}
+
+func newSSETerminalView(ev *TerminalEvent) sseTerminalView {
+	return sseTerminalView{RunID: ev.JobID, Status: ev.Status, Error: ev.Error}
+}
+
+// durationMS returns the run/node wall-clock in milliseconds when both
+// ends are known, else 0 (omitted by the DTO's omitempty).
+func durationMS(start, end *time.Time) int64 {
+	if start == nil || end == nil {
+		return 0
+	}
+	return end.Sub(*start).Milliseconds()
+}
+
+// resultError returns the structured error from a result, or nil. The
+// {code, message, details} shape is what machine clients branch on and
+// what the run-detail UI renders.
+func resultError(res *core.Result) *core.JobError {
+	if res == nil {
+		return nil
+	}
+	return res.Error
+}
+
+func newRunView(rec core.JobRecord) runView {
+	// Graph-records don't carry a distinct started_at (only node-records
+	// do), so the run's end-to-end duration is enqueue → finish.
+	runStart := rec.StartedAt
+	if runStart == nil {
+		runStart = &rec.EnqueuedAt
+	}
+	return runView{
+		ID:         rec.ID,
+		FlowID:     rec.Tenant + "/" + rec.Workspace + "/" + rec.GraphID,
+		GraphID:    rec.GraphID,
+		Status:     rec.Status,
+		EnqueuedAt: rec.EnqueuedAt,
+		StartedAt:  rec.StartedAt,
+		FinishedAt: rec.FinishedAt,
+		DurationMS: durationMS(runStart, rec.FinishedAt),
+		Error:      resultError(rec.Result),
+	}
+}
+
+func newNodeRunView(rec core.JobRecord) nodeRunView {
+	v := nodeRunView{
+		NodeID:     rec.NodeID,
+		Status:     rec.Status,
+		Attempts:   rec.Attempt,
+		StartedAt:  rec.StartedAt,
+		FinishedAt: rec.FinishedAt,
+		DurationMS: durationMS(rec.StartedAt, rec.FinishedAt),
+		Inputs:     rec.Job.Input,
+		Error:      resultError(rec.Result),
+	}
+	if rec.Result != nil {
+		v.Outputs = rec.Result.Output
+	}
+	return v
+}
+
+// loadRunScoped fetches a run-record by id and enforces the caller's
+// tenant scope. A missing run and a cross-tenant run both report 404, so
+// run existence never leaks across tenants. On failure it writes the
+// structured error and returns ok=false.
+func (h *HTTPGateway) loadRunScoped(rw http.ResponseWriter, r *http.Request, p core.Principal, runID string) (core.JobRecord, bool) {
+	rec, err := h.svc.GetJob(r.Context(), p, runID)
+	if err != nil {
+		if errors.Is(err, core.ErrNotFound) || errors.Is(err, core.ErrUnauthorized) {
+			writeAPIError(rw, http.StatusNotFound, "run_not_found", "no run with that id")
+			return core.JobRecord{}, false
+		}
+		writeAPIError(rw, http.StatusInternalServerError, "internal_error", err.Error())
+		return core.JobRecord{}, false
+	}
+	return rec, true
+}
+
 func (h *HTTPGateway) listRunsMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	h.listAllRuns(rw, r, p)
 }
 
 func (h *HTTPGateway) getRunMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	r2 := r.Clone(r.Context())
-	r2.SetPathValue("jobID", r.PathValue("run_id"))
-	h.jobSnapshot(rw, r2, p)
+	rec, ok := h.loadRunScoped(rw, r, p, r.PathValue("run_id"))
+	if !ok {
+		return
+	}
+	writeJSON(rw, http.StatusOK, newRunView(rec))
 }
 
 func (h *HTTPGateway) listRunNodesMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	r2 := r.Clone(r.Context())
-	r2.SetPathValue("jobID", r.PathValue("run_id"))
-	h.listRunNodes(rw, r2, p)
+	runID := r.PathValue("run_id")
+	runRec, ok := h.loadRunScoped(rw, r, p, runID)
+	if !ok {
+		return
+	}
+	nodes, err := h.svc.Jobs.ListNodeRecords(r.Context(), core.ListNodeRecordsOpts{
+		Tenant:     runRec.Tenant,
+		Workspace:  runRec.Workspace,
+		GraphRunID: runID,
+		Limit:      1000, // typical graphs have <100 nodes; cap defensively
+	})
+	if err != nil {
+		writeAPIError(rw, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	out := make([]nodeRunView, 0, len(nodes))
+	for _, n := range nodes {
+		out = append(out, newNodeRunView(n))
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{"nodes": out})
 }
 
 func (h *HTTPGateway) getRunNodeMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	r2 := r.Clone(r.Context())
-	r2.SetPathValue("jobID", r.PathValue("run_id"))
-	r2.SetPathValue("nodeID", r.PathValue("node_id"))
-	h.nodeSnapshot(rw, r2, p)
+	runID := r.PathValue("run_id")
+	// The run-record scope check gates access to its node records.
+	if _, ok := h.loadRunScoped(rw, r, p, runID); !ok {
+		return
+	}
+	nodeRec, err := h.svc.Jobs.Get(r.Context(), NodeJobID(runID, r.PathValue("node_id")))
+	if err != nil {
+		if errors.Is(err, core.ErrNotFound) {
+			writeAPIError(rw, http.StatusNotFound, "node_not_found", "no such node in this run")
+			return
+		}
+		writeAPIError(rw, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	writeJSON(rw, http.StatusOK, newNodeRunView(nodeRec))
 }
 
 func (h *HTTPGateway) runEventsMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {

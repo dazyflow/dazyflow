@@ -3,10 +3,14 @@ package db
 import (
 	"context"
 	"database/sql"
+	stdnet "net"
 	"sync"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	hfnet "git.sr.ht/~klahr/hazy-flow/integrations/net"
 )
 
 // Pool reuse for the Postgres drops. Connection setup (TCP + TLS + auth)
@@ -90,7 +94,22 @@ func (r *pgPoolRegistry) pgPool(ctx context.Context, tenant, dsn string) (*pgxpo
 		return e.pool, nil
 	}
 
-	pool, err := pgxpool.New(ctx, dsn)
+	cfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		return nil, err
+	}
+	// SSRF guard: a tenant supplies the DSN, so without this they could point
+	// a Postgres drop at an internal host — including hzd's own control-plane
+	// database — and probe/connect. Install the shared dial guard (post-DNS,
+	// rebinding-resistant); it's a no-op when the operator opted into private
+	// egress.
+	if ctrl := hfnet.SSRFDialControl(); ctrl != nil {
+		d := &stdnet.Dialer{Control: ctrl}
+		cfg.ConnConfig.DialFunc = func(ctx context.Context, network, addr string) (stdnet.Conn, error) {
+			return d.DialContext(ctx, network, addr)
+		}
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -189,6 +208,18 @@ func (r *sqlDBRegistry) sqlDB(ctx context.Context, tenant, dsn string) (*sql.DB,
 	if e, ok := r.dbs[key]; ok {
 		e.lastUse = time.Now()
 		return e.db, nil
+	}
+
+	// SSRF pre-flight: the tenant supplies the DSN. database/sql has no dial
+	// hook, so parse the host out of the DSN and refuse private/loopback
+	// targets before connecting (no-op when the operator opted into private
+	// egress). Only TCP MySQL DSNs are checked; unix sockets aren't network.
+	if r.driverName == "mysql" {
+		if cfg, perr := mysql.ParseDSN(dsn); perr == nil && cfg.Net == "tcp" {
+			if err := hfnet.CheckDialHost(cfg.Addr); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	db, err := sql.Open(r.driverName, dsn)

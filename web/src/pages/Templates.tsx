@@ -27,7 +27,6 @@ export function Templates() {
   const [templates, setTemplates] = useState<TemplateSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null); // template id currently being forked
-  const [showTech, setShowTech] = useState(false);
   // providers is the OAuth catalog for this install. null = not loaded
   // yet (or feature unavailable on this hosted box, which the daemon
   // signals with 501). When the catalog is empty/null, OAuth-needing
@@ -167,14 +166,6 @@ export function Templates() {
           </button>
         </div>
       )}
-      <label className="template-tech-toggle">
-        <input
-          type="checkbox"
-          checked={showTech}
-          onChange={(e) => setShowTech(e.target.checked)}
-        />
-        {t("templates.showTechnical")}
-      </label>
       {error && <div className="card error" style={{ marginBottom: 12 }}>{error}</div>}
       {groups.length === 0 && (
         <div className="card">
@@ -226,22 +217,6 @@ export function Templates() {
                     <TemplateIntegrationRow slugs={tpl.integrations} />
                   )}
                   <p className="template-desc">{tpl.use_case || tpl.description}</p>
-                  {showTech && (
-                    <div className="template-tech">
-                      {tpl.use_case && (
-                        <p className="template-tech-desc">{tpl.description}</p>
-                      )}
-                      {tpl.tags && tpl.tags.length > 0 && (
-                        <div className="template-tags">
-                          {tpl.tags.map((tag) => (
-                            <span key={tag} className="template-tag">
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
                   {adminBlocked && (
                     <p className="template-admin-blocked-note">
                       {t("templates.adminBlocked", {

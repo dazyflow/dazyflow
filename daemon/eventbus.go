@@ -57,10 +57,15 @@ func NewMemoryBus() *MemoryBus {
 }
 
 func (b *MemoryBus) Publish(jobID string, ev BusEvent) {
+	// Send under the lock. cancel() closes a subscriber channel while
+	// holding b.mu, so sending outside the lock races that close — and the
+	// `default` below avoids *blocking* on a full channel, not the panic
+	// from a send on a *closed* one. Holding the lock across the loop makes
+	// send and close mutually exclusive. Sends are non-blocking, so the
+	// critical section stays short.
 	b.mu.Lock()
-	chans := append([]chan BusEvent(nil), b.subs[jobID]...)
-	b.mu.Unlock()
-	for _, c := range chans {
+	defer b.mu.Unlock()
+	for _, c := range b.subs[jobID] {
 		select {
 		case c <- ev:
 		default:

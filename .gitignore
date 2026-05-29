@@ -1,6 +1,13 @@
+# Compiled binaries (build outputs — never commit; rebuild with `make`/`go build`)
 /hzctl
 /hzd
 /transformer
+/hz-drops
+/hz-drophost
+/ha_loadtest
 /.hazyflow/
 *.xlsx
 /.env
+
+# Signing keys for hz-drops — NEVER commit the private key
+.keys/

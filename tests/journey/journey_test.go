@@ -125,12 +125,12 @@ func TestJourney_LeadIntake_RunsEndToEnd(t *testing.T) {
 	if string(store.Status) != "succeeded" {
 		t.Fatalf("the store step did not succeed: %q", store.Status)
 	}
-	if store.Result == nil {
-		t.Fatal("the store step recorded no result")
+	inserted, ok := store.Outputs["inserted"]
+	if !ok {
+		t.Fatalf("the store step recorded no inserted-count output; outputs=%v", store.Outputs)
 	}
-	inserted := store.Result.Output["inserted"].Inline
-	if fmt.Sprint(inserted) != "1" {
-		t.Errorf("expected exactly 1 lead stored, got inserted=%v", inserted)
+	if fmt.Sprint(inserted.Inline) != "1" {
+		t.Errorf("expected exactly 1 lead stored, got inserted=%v", inserted.Inline)
 	}
 }
 

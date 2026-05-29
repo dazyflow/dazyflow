@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -30,17 +31,30 @@ import (
 	"git.sr.ht/~klahr/hazy-flow/daemon"
 	"git.sr.ht/~klahr/hazy-flow/engine"
 	"git.sr.ht/~klahr/hazy-flow/engine/jobstore"
+	"git.sr.ht/~klahr/hazy-flow/engine/jsdrop"
 	"git.sr.ht/~klahr/hazy-flow/engine/mcp"
 	_ "git.sr.ht/~klahr/hazy-flow/integrations"
 	"git.sr.ht/~klahr/hazy-flow/integrations/github"
-	"git.sr.ht/~klahr/hazy-flow/integrations/gmail"
 	"git.sr.ht/~klahr/hazy-flow/integrations/io"
 	hfnet "git.sr.ht/~klahr/hazy-flow/integrations/net"
-	"git.sr.ht/~klahr/hazy-flow/integrations/notion"
 	secretsdrop "git.sr.ht/~klahr/hazy-flow/integrations/secrets"
-	"git.sr.ht/~klahr/hazy-flow/integrations/sheets"
 	"git.sr.ht/~klahr/hazy-flow/integrations/slack"
+	"git.sr.ht/~klahr/hazy-flow/officialdrops"
 )
+
+// scriptedDropDoer is the HTTP client a scripted drop's fetch() routes
+// through. It composes both protections the http_request drop applies: the
+// operator egress allowlist (EgressAllowed, checked per URL) and the SSRF
+// guard (installed in SafeHTTPClient's dialer Control hook). Implemented at
+// the daemon edge so the integrations/net package stays free of jsdrop.
+type scriptedDropDoer struct{ client *http.Client }
+
+func (d scriptedDropDoer) Do(req *http.Request) (*http.Response, error) {
+	if err := hfnet.EgressAllowed(req.URL.String()); err != nil {
+		return nil, err
+	}
+	return d.client.Do(req)
+}
 
 func main() {
 	// All runtime configuration comes from HAZYFLOW_* env vars (see
@@ -55,6 +69,10 @@ func main() {
 
 	listen := envStr("HAZYFLOW_LISTEN", ":50050")
 	devKey := envBool("HAZYFLOW_DEV_KEY", false)
+	// HAZYFLOW_DEV relaxes the production-config guardrails (default DB
+	// password, missing master key) so the bundled defaults boot for local
+	// development. It must NOT be set in production.
+	devMode := envBool("HAZYFLOW_DEV", false)
 	// Two workers per process is enough for hand-tuned workloads.
 	// Scaling out is done by adding hzd replicas behind Postgres, not
 	// by raising this number.
@@ -73,6 +91,15 @@ func main() {
 	enableSignup := envBool("HAZYFLOW_ENABLE_SIGNUP", false)
 	enableMetrics := envBool("HAZYFLOW_ENABLE_METRICS", false)
 	mcpServers := envStr("HAZYFLOW_MCP_SERVERS", "")
+	// Directory of scripted (JS/TS) drops loaded at startup. Each *.ts/*.js
+	// file is a drop whose default export is { manifest, run }; the Catalog
+	// transpiles + compiles it once. Empty = no scripted drops.
+	scriptedDropsDir := envStr("HAZYFLOW_SCRIPTED_DROPS_DIR", "")
+	// Trusted marketplace signing keys (root of trust for the official/verified
+	// tiers): semicolon-separated "id:tier:publisher:base64key" specs. Boot
+	// config on purpose — the root of trust must not be runtime-mutable. Empty
+	// = no trusted keys, so every install resolves to "community".
+	trustedKeys := envStr("HAZYFLOW_TRUSTED_KEYS", "")
 	// HAZYFLOW_DATA_DIR is the root for every piece of on-disk state
 	// (git-backed graph workspace, per-tenant sandbox roots, dev-mode
 	// JSON stores). Conventional subdirs inside: workspace/, sandbox/,
@@ -133,6 +160,27 @@ func main() {
 		}
 		log.Printf("http_request egress allowlist active: %s", httpEgressAllow)
 	}
+
+	// The http_* drops expose an `allow_private_networks` param that disables
+	// the SSRF guard (reaching loopback/private/link-local incl. cloud
+	// metadata). On an untrusted multi-tenant deployment that's a
+	// tenant-controllable SSRF bypass, so the param is ignored unless the
+	// operator opts in here. Default off.
+	if envBool("HAZYFLOW_ALLOW_PRIVATE_EGRESS", false) {
+		hfnet.SetAllowPrivateEgress(true)
+		log.Print("WARNING: HAZYFLOW_ALLOW_PRIVATE_EGRESS=1 — flows may set allow_private_networks to reach private/loopback hosts (SSRF guard becomes opt-out)")
+	}
+
+	// Route marketplace git-over-https fetches through the same SSRF-guarded
+	// client (blocks private/loopback/link-local at dial, e.g. cloud metadata),
+	// so an https repo URL can't be used to reach internal services. Non-https
+	// schemes are rejected before go-git is invoked.
+	daemon.InstallGuardedHTTPTransport(hfnet.SafeHTTPClient(60*time.Second, false))
+
+	// Refuse to boot with the bundled insecure defaults in a real deployment.
+	// A configured Postgres DSN is the signal that this isn't the in-memory dev
+	// fallback. HAZYFLOW_DEV=1 opts out (and is logged) for local development.
+	validateProductionConfig(devMode, postgresDSN, masterKeyB64)
 
 	// Durable stores: when --postgres-dsn is set, keys / sessions /
 	// users / jobs / secrets all persist to one shared pgxpool and
@@ -302,6 +350,15 @@ func main() {
 	}
 	encryptedSecrets := setupEncryptedSecrets(ctx, masterKeyB64, secrets, pgPool)
 
+	// Bring-your-own secret manager: vault:// resolves against each tenant's own
+	// OpenBao/Vault, with the per-tenant connection config stored (encrypted) in
+	// the built-in store — so it's only available when that store is configured.
+	if encryptedSecrets != nil {
+		vaultProvider := daemon.NewVaultProviderForStore(encryptedSecrets, 15*time.Second)
+		secrets[vaultProvider.Scheme()] = vaultProvider
+		log.Print("BYO secret manager enabled (scheme: vault://) — tenants configure their own OpenBao/Vault via /api/v1/secret-manager")
+	}
+
 	// KEK rotation is an offline operator action: re-wrap every tenant
 	// DEK from the current --master-key to the new key, then exit. The
 	// operator restarts with the new key afterwards. Done here so it
@@ -329,11 +386,82 @@ func main() {
 		log.Fatalf("HAZYFLOW_MCP_SERVERS: %v", err)
 	}
 
+	// Scripted (JS/TS) drops. fetch() routes through the SAME guards the
+	// http_request drop applies — the egress allowlist (per-URL) plus the
+	// SSRF guard baked into SafeHTTPClient's dialer — so a scripted drop has
+	// no privileged network path. 30s is the per-request ceiling; allowprivate
+	// is false (loopback/private/link-local refused).
+	scriptedCatalog := jsdrop.NewCatalog()
+	scriptedHTTP := scriptedDropDoer{client: hfnet.SafeHTTPClient(30*time.Second, false)}
+	// ctx.auth.token(provider) → the OAuth registry (auto-refresh inside).
+	// Tenant rides in the execution context; nil registry (OAuth disabled)
+	// leaves ctx.auth unexposed to scripted drops. These capabilities reach a
+	// drop through the broker (engine/containerdrop Host), wired below — the
+	// catalog itself holds no capability state.
+	var scriptedTokens jsdrop.TokenResolver
+	if oauthRegistry != nil {
+		scriptedTokens = func(ctx context.Context, provider, account string) (string, error) {
+			tok, err := oauthRegistry.GetOAuthToken(ctx, provider, account)
+			if err != nil {
+				return "", err
+			}
+			return tok.AccessToken, nil
+		}
+	}
+	// One scripted runtime: every drop (official + installed) is read and
+	// executed out-of-process in the Node drop host under resource limits,
+	// reaching the daemon only through the broker (the same SSRF-guarded HTTP,
+	// OAuth, and per-tenant sandbox). ctx.files.write reserves bytes against the
+	// same per-tenant FSQuota the file_write drop uses, so scripted and native
+	// writes share one budget. Wires both the Run (execute) and Extract (read
+	// manifest) hooks; must precede LoadDir/official-drop registration.
+	configureScriptedRuntime(scriptedCatalog, scriptedHTTP, scriptedTokens, quota.Reserve)
+	if scriptedDropsDir != "" {
+		if err := scriptedCatalog.LoadDir(scriptedDropsDir); err != nil {
+			log.Fatalf("HAZYFLOW_SCRIPTED_DROPS_DIR: %v", err)
+		}
+		log.Printf("scripted drops loaded from %s (%d registered)", scriptedDropsDir, len(scriptedCatalog.Manifests()))
+	}
+	// Official first-party connectors ship as scripted drops embedded in the
+	// binary (they replaced the former native Go connectors). Their manifests
+	// are embedded at generate time, so registration needs no Node spawn.
+	if err := officialdrops.Register(scriptedCatalog); err != nil {
+		log.Fatalf("register official drops: %v", err)
+	}
+
+	// Re-register marketplace installs persisted from a previous boot:
+	// integration providers (recipe + stored creds) and their dependent drops.
+	// The keyring derives each install's trust tier from its signature; it's
+	// empty for now (everything resolves to "community" until Hazy's official
+	// key + reviewed-publisher keys are loaded here from config).
+	keyring, keyErrs := daemon.LoadKeyring(strings.Split(trustedKeys, ";"))
+	for _, e := range keyErrs {
+		log.Printf("HAZYFLOW_TRUSTED_KEYS: %v", e)
+	}
+	if ids := keyring.IDs(); len(ids) > 0 {
+		log.Printf("marketplace trusted keys: %v", ids)
+	}
+	installer := daemon.NewInstaller(oauthRegistry, scriptedCatalog, encryptedSecrets, keyring)
+	// Operator kill switch: ids here are refused on install and skipped on
+	// Restore, regardless of signature/tier (boot config, like the trusted keys).
+	if revoked := strings.Split(envStr("HAZYFLOW_REVOKED_INSTALLS", ""), ","); len(revoked) > 0 {
+		installer.SetRevoked(revoked)
+	}
+	if restored, errs := installer.Restore(ctx); len(restored) > 0 || len(errs) > 0 {
+		if len(restored) > 0 {
+			log.Printf("marketplace installs restored: %v", restored)
+		}
+		for _, e := range errs {
+			log.Printf("install restore: %v", e)
+		}
+	}
+
 	eng := &engine.Engine{
 		Resolver: &engine.NodeResolver{
 			Native: engine.Default,
 			Remote: remoteCatalog,
 			MCP:    mcpCatalog,
+			Script: scriptedCatalog,
 		},
 		Sandbox: sandbox,
 		Quota:   quota,
@@ -393,13 +521,22 @@ func main() {
 		log.Printf("approval endpoint enabled at %s/approve/<run>/<node> (HMAC-verified)", publicBaseURL)
 	}
 
+	// bgWg tracks the long-lived background goroutines (workers, scheduler,
+	// reaper) so shutdown can drain them: on SIGTERM the claim loops stop
+	// taking new work, in-flight nodes run to completion (their exec context
+	// is detached from the signal), and main waits — bounded by
+	// HAZYFLOW_SHUTDOWN_GRACE — for them to finish before the process exits.
+	var bgWg sync.WaitGroup
+
 	// Spin up worker goroutines. Each is independent and competes for
 	// claims; the JobStore makes that contention safe.
 	for i := 0; i < workerCount; i++ {
 		w := daemon.NewWorker(daemon.WorkerConfig{
 			ID: fmt.Sprintf("hzd-dev-w%d", i),
 		}, jobs, eng, bus)
+		bgWg.Add(1)
 		go func() {
+			defer bgWg.Done()
 			if err := w.Run(ctx); err != nil && err != context.Canceled {
 				log.Printf("worker stopped: %v", err)
 			}
@@ -419,9 +556,44 @@ func main() {
 		sched.SetLeader(leader.IsLeader)
 		log.Print("scheduler: leader election via postgres advisory lock")
 	}
+	bgWg.Add(1)
 	go func() {
+		defer bgWg.Done()
 		if err := sched.Run(ctx); err != nil && err != context.Canceled {
 			log.Printf("scheduler stopped: %v", err)
+		}
+	}()
+
+	// Orphaned-graph-run reaper. A worker that dies between a run's last node
+	// going terminal and the dispatcher's completion check leaves the graph
+	// record stuck "running" with nothing left to re-fire it. This sweep
+	// re-runs the completion check for running graph runs and finalizes the
+	// ones that are actually done — once at startup (recovering runs orphaned
+	// by a prior crash) and then on an interval. Idempotent across replicas.
+	reaperDispatcher := daemon.NewDispatcher(jobs, bus, eng, log.New(os.Stderr, "reaper: ", log.LstdFlags))
+	reapInterval := envDuration("HAZYFLOW_REAP_INTERVAL", time.Minute)
+	bgWg.Add(1)
+	go func() {
+		defer bgWg.Done()
+		runReap := func() {
+			if n, err := reaperDispatcher.ReapStuckGraphRuns(ctx); err != nil {
+				if ctx.Err() == nil {
+					log.Printf("reaper sweep: %v", err)
+				}
+			} else if n > 0 {
+				log.Printf("reaper: recovered %d orphaned graph run(s)", n)
+			}
+		}
+		runReap() // startup pass: recover runs the previous process orphaned
+		t := time.NewTicker(reapInterval)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				runReap()
+			}
 		}
 	}()
 
@@ -492,9 +664,10 @@ func main() {
 		gw.Profiles = orgProfileStore
 		gw.EncryptedSecrets = encryptedSecrets // nil disables /api/v1/secrets endpoints
 		gw.OAuth = oauthRegistry               // nil disables /api/v1/oauth/* endpoints
+		gw.Installer = installer               // platform-admin marketplace install endpoints
 		gw.Approval = approvalListener         // nil leaves POST /approve/ unregistered
-		gw.EnableSignup = enableSignup        // false disables POST /api/v1/auth/signup
-		gw.EnableMetrics = enableMetrics      // false disables GET /metrics
+		gw.EnableSignup = enableSignup         // false disables POST /api/v1/auth/signup
+		gw.EnableMetrics = enableMetrics       // false disables GET /metrics
 		if enableMetrics {
 			log.Print("metrics endpoint enabled at GET /metrics (unauthenticated — restrict scrape access)")
 		}
@@ -549,6 +722,18 @@ func main() {
 					gw.AllowedOrigins = append(gw.AllowedOrigins, o)
 				}
 			}
+		}
+		// Bootstrap the platform:admin super-admin role from an email
+		// allowlist (normalize to lowercase + trimmed so the gateway can
+		// compare exactly). This is the only grant path — see the field
+		// doc on HTTPGateway.PlatformAdmins.
+		for _, e := range strings.Split(envStr("HAZYFLOW_PLATFORM_ADMINS", ""), ",") {
+			if e = strings.ToLower(strings.TrimSpace(e)); e != "" {
+				gw.PlatformAdmins = append(gw.PlatformAdmins, e)
+			}
+		}
+		if len(gw.PlatformAdmins) > 0 {
+			log.Printf("platform admins (from HAZYFLOW_PLATFORM_ADMINS): %v", gw.PlatformAdmins)
 		}
 		gwLn, err := net.Listen("tcp", httpListen)
 		if err != nil {
@@ -610,6 +795,37 @@ func main() {
 
 	if err := srv.Serve(lis); err != nil {
 		log.Fatalf("serve: %v", err)
+	}
+
+	// gRPC has drained (GracefulStop returned). Now drain the background
+	// goroutines: their claim loops have already seen ctx cancel and stopped
+	// taking new work; wait for any in-flight node to finish writing its
+	// result before the process exits. Bounded so a stuck node can't block
+	// shutdown forever — an unfinished node's lease expires and another
+	// instance reclaims it.
+	grace := envDuration("HAZYFLOW_SHUTDOWN_GRACE", 25*time.Second)
+	if waitForGroup(&bgWg, grace) {
+		log.Println("workers drained cleanly")
+	} else {
+		log.Printf("shutdown grace (%s) elapsed with work still in flight; exiting (in-flight jobs will be reclaimed)", grace)
+	}
+}
+
+// waitForGroup waits for wg up to timeout. Returns true if the group finished,
+// false if the timeout elapsed first.
+func waitForGroup(wg *sync.WaitGroup, timeout time.Duration) bool {
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	t := time.NewTimer(timeout)
+	defer t.Stop()
+	select {
+	case <-done:
+		return true
+	case <-t.C:
+		return false
 	}
 }
 
@@ -693,6 +909,55 @@ func stateFile(dir, kind string) string {
 	return filepath.Join(dir, kind+".json")
 }
 
+// defaultInsecurePassword is the DB password shipped in the bundled .env /
+// docker-compose defaults so the stack boots out of the box. It must never
+// survive into a real deployment — validateProductionConfig refuses to start
+// with it unless HAZYFLOW_DEV is set.
+const defaultInsecurePassword = "hazyflow"
+
+// validateProductionConfig fails closed on the bundled insecure defaults once
+// the daemon is configured for a durable (non-dev) deployment. A configured
+// Postgres DSN is the "this is real" signal; the in-memory fallback already
+// warns loudly on its own. HAZYFLOW_DEV=1 turns these into warnings so local
+// development with the shipped defaults still boots.
+func validateProductionConfig(devMode bool, postgresDSN, masterKeyB64 string) {
+	problems := productionConfigProblems(postgresDSN, masterKeyB64)
+	if len(problems) == 0 {
+		return
+	}
+	if devMode {
+		for _, p := range problems {
+			log.Printf("WARNING (HAZYFLOW_DEV): %s", p)
+		}
+		return
+	}
+	for _, p := range problems {
+		log.Printf("FATAL: %s", p)
+	}
+	log.Fatal("refusing to start with insecure production config; fix the above or set HAZYFLOW_DEV=1 for local development")
+}
+
+// productionConfigProblems returns human-readable descriptions of every
+// bundled-insecure-default still in effect for a durable deployment. Empty
+// when the config is safe (or when there's no DSN — the in-memory dev path).
+// Pure so it can be unit-tested without exiting the process.
+func productionConfigProblems(postgresDSN, masterKeyB64 string) []string {
+	// In-memory dev fallback (no DSN): nothing to guard here.
+	if postgresDSN == "" {
+		return nil
+	}
+	var problems []string
+	if cfg, err := pgxpool.ParseConfig(postgresDSN); err == nil {
+		if cfg.ConnConfig.Password == defaultInsecurePassword {
+			problems = append(problems, "HAZYFLOW_POSTGRES_DSN uses the default database password "+strconv.Quote(defaultInsecurePassword)+" — change POSTGRES_PASSWORD and the DSN to a strong secret")
+		}
+	}
+	if masterKeyB64 == "" {
+		problems = append(problems, "HAZYFLOW_MASTER_KEY is empty — stored-secret encryption is DISABLED; set a stable 32-byte base64 key (`openssl rand -base64 32`)")
+	}
+	return problems
+}
+
 // Config knobs come from HAZYFLOW_* env vars. The helpers below give a
 // uniform read-with-default surface; an empty/unset var means "use the
 // default", and an unparseable value silently falls back to the default
@@ -772,13 +1037,6 @@ func seedDefaultUser(ctx context.Context, users auth.UserStore) {
 	log.Printf("seeded sign-in: %s / test", u.Email)
 }
 
-// registerOAuthProviders wires the per-service OAuth configs into the
-// registry. URLs and scopes are hardcoded per provider (they don't
-// vary per deployment); client_id and client_secret come from env
-// vars (HAZYFLOW_OAUTH_<NAME>_CLIENT_ID / _CLIENT_SECRET). A provider
-// is skipped silently when its credentials aren't set — that way a
-// dev daemon stays useful even when only one OAuth app is configured.
-
 // setupEncryptedSecrets wires the tenant:// encrypted store when a
 // master key is configured. The store provides per-tenant secret
 // isolation (separate DEK per tenant, AES-GCM wrapped by the KEK
@@ -835,11 +1093,10 @@ func setupOAuth(secrets *daemon.EncryptedSecrets, publicBaseURL string) *daemon.
 		return nil
 	}
 	reg := daemon.NewOAuthRegistry(publicBaseURL, secrets)
-	registerOAuthProviders(reg)
-	// Persisted creds (set via the admin UI) override env on boot —
-	// otherwise an operator who pasted in fresh creds via the UI but
-	// left a stale env var around would see the env values keep
-	// resurrecting after every restart.
+	// OAuth provider credentials come solely from the admin UI, which
+	// persists client_id/secret to the encrypted store; we hydrate them on
+	// boot. There is no env-var path. (daemon.RegisterFromManifest is the
+	// data-driven registration this grows into for installed integrations.)
 	if hydrated, errs := daemon.HydrateOAuthProvidersFromStore(context.Background(), reg, secrets); len(hydrated) > 0 || len(errs) > 0 {
 		if len(hydrated) > 0 {
 			log.Printf("OAuth providers hydrated from store: %v", hydrated)
@@ -871,41 +1128,9 @@ func wireConnectorTokenHooks(reg *daemon.OAuthRegistry) {
 			return tok.AccessToken, nil
 		}
 	}
+	// slack/github still have native webhook-trigger drops that resolve tokens
+	// this way. The Gmail/Sheets/Notion connectors are now scripted and resolve
+	// their token through the scripted catalog's generic Tokens hook instead.
 	slack.SetTokenLookup(bind("slack"))
-	// Gmail and Sheets share the "google" OAuth app — one client,
-	// two scope sets requested at authorize time.
-	google := bind("google")
-	gmail.SetTokenLookup(google)
-	sheets.SetTokenLookup(google)
 	github.SetTokenLookup(bind("github"))
-	notion.SetTokenLookup(bind("notion"))
-}
-// registerOAuthProviders walks daemon.KnownOAuthProviderDefaults — the
-// single source of truth for the URL/scope/extras side of each known
-// provider — and registers any whose credentials are supplied via
-// HAZYFLOW_OAUTH_<NAME>_CLIENT_ID/_CLIENT_SECRET env vars. Adding a
-// new connector means appending one entry to KnownOAuthProviderDefaults
-// and a corresponding env-var pair in deployment config; no code
-// change here.
-//
-// Persisted credentials saved through the admin UI override env at
-// boot (see daemon.HydrateOAuthProvidersFromStore, called after this).
-func registerOAuthProviders(r *daemon.OAuthRegistry) {
-	for _, def := range daemon.KnownOAuthProviderDefaults {
-		upper := strings.ToUpper(def.Name)
-		clientID := os.Getenv("HAZYFLOW_OAUTH_" + upper + "_CLIENT_ID")
-		clientSecret := os.Getenv("HAZYFLOW_OAUTH_" + upper + "_CLIENT_SECRET")
-		if clientID == "" || clientSecret == "" {
-			continue
-		}
-		r.Register(daemon.OAuthProvider{
-			Name:            def.Name,
-			AuthorizeURL:    def.AuthorizeURL,
-			TokenURL:        def.TokenURL,
-			Scopes:          def.Scopes,
-			AuthorizeExtras: def.AuthorizeExtras,
-			ClientID:        clientID,
-			ClientSecret:    clientSecret,
-		})
-	}
 }

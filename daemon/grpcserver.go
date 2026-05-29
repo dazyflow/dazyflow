@@ -369,7 +369,7 @@ func jobRecordToPB(r core.JobRecord) *controlpb.JobRecord {
 		Id: r.ID, GraphId: r.GraphID, NodeId: r.NodeID,
 		Tenant: r.Tenant, Workspace: r.Workspace,
 		Status: string(r.Status), Attempt: int32(r.Attempt),
-		WorkerId: r.WorkerID,
+		WorkerId:   r.WorkerID,
 		EnqueuedAt: r.EnqueuedAt.UnixNano(),
 	}
 	if r.StartedAt != nil {

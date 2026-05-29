@@ -12,8 +12,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/creack/pty"
@@ -24,18 +26,29 @@ import (
 )
 
 func init() {
+	// The shell drop runs arbitrary host commands as the daemon's user with
+	// host filesystem + network access — it bypasses the scripted-drop
+	// sandbox entirely. That's fine for a single-tenant CI box but is a full
+	// RCE primitive on a multi-tenant deployment, where any user with
+	// graph:run could read the host, the daemon env (master key!), and reach
+	// internal services. So it is OFF unless the operator explicitly opts in
+	// with HAZYFLOW_ENABLE_SHELL — and even then its env is scrubbed of
+	// HAZYFLOW_* secrets (see executeShell).
+	if !shellEnabled() {
+		return
+	}
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "shell",
-			Version:        "1.0",
-			Label:          "Run command",
-			Color:          "#7f5af0",
-			Icon:           "terminal",
-			Category:       "io",
-			Provider:       "internal",
-			Tags:           []string{"build", "exec", "shell", "command", "ci"},
-			Description:    "Run a shell command inside a workspace-relative directory (commonly fed by git_checkout). Captures stdout/stderr and the exit code. Always returns ok so downstream notification nodes still fire on failure — branch on meta.success / meta.exit_code.",
-			Summary:        "Run a command in a workspace directory and capture its output and exit code.",
+			ID:          "shell",
+			Version:     "1.0",
+			Label:       "Run command",
+			Color:       "#7f5af0",
+			Icon:        "terminal",
+			Category:    "io",
+			Provider:    "internal",
+			Tags:        []string{"build", "exec", "shell", "command", "ci"},
+			Description: "Run a shell command inside a workspace-relative directory (commonly fed by git_checkout). Captures stdout/stderr and the exit code. Always returns ok so downstream notification nodes still fire on failure — branch on meta.success / meta.exit_code.",
+			Summary:     "Run a command in a workspace directory and capture its output and exit code.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Run the test suite",
@@ -86,6 +99,35 @@ const (
 	defaultMaxOutputBytes = 1024 * 1024
 )
 
+// shellEnabled reports whether the operator opted into the shell drop. Any
+// non-empty value other than "0"/"false" enables it.
+func shellEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("HAZYFLOW_ENABLE_SHELL"))) {
+	case "", "0", "false", "no", "off":
+		return false
+	default:
+		return true
+	}
+}
+
+// scrubbedEnv is the host environment minus every HAZYFLOW_* variable, so a
+// command can't read the daemon's secrets (master key, Postgres DSN, webhook
+// signing secrets, trusted signing keys, …) out of its own environment. CI
+// ergonomics are preserved: PATH, HOME, GOPATH, language toolchain vars, etc.
+// all pass through — only the app's own secret namespace is removed.
+func scrubbedEnv() []string {
+	src := os.Environ()
+	out := make([]string, 0, len(src))
+	for _, kv := range src {
+		k, _, ok := strings.Cut(kv, "=")
+		if ok && strings.HasPrefix(k, "HAZYFLOW_") {
+			continue
+		}
+		out = append(out, kv)
+	}
+	return out
+}
+
 func executeShell(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
 	cmdName, err := params.String(job.Params, "command")
 	if err != nil {
@@ -121,6 +163,9 @@ func executeShell(ctx context.Context, job core.Job, progress chan<- core.Progre
 
 	cmd := exec.CommandContext(runCtx, cmdName, args...)
 	cmd.Dir = workdir
+	// Never expose the daemon's HAZYFLOW_* secrets (master key, DSN, webhook
+	// secrets) to the command — see scrubbedEnv.
+	cmd.Env = scrubbedEnv()
 	combined := &boundedBuffer{limit: maxBytes}
 
 	emitProgress(progress, job, 0.1, "exec "+cmdName)

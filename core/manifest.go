@@ -146,6 +146,16 @@ type Manifest struct {
 	// drops with no external auth (file IO, transforms, flow-control).
 	RequiresConnections []ConnectionRequirement `json:"requires_connections,omitempty"`
 
+	// Egress is the allowlist of external hosts a sandboxed (out-of-process)
+	// drop may reach via the broker's guarded fetch — the drop's *declared*
+	// network surface, enforced on top of the global SSRF guard + egress policy.
+	// Each entry is a hostname; "*.example.com" matches any subdomain. Empty
+	// means the drop declares no egress, so a sandboxed drop gets none (fetch is
+	// refused). Ignored for in-process (trusted) drops, which fall under the
+	// process-wide egress policy instead. This is what bounds exfiltration to a
+	// community drop's stated destinations.
+	Egress []string `json:"egress,omitempty"`
+
 	// Icon is a logical icon name the UI maps to a glyph in its icon
 	// set (today: lucide-react). Values are kebab-case lowercase, e.g.
 	// "webhook", "git-branch", "sparkles". When empty the UI falls

@@ -19,6 +19,30 @@ import (
 	"git.sr.ht/~klahr/hazy-flow/workspace"
 )
 
+// e2eWaitCeiling is the single, generous ceiling for every "wait until a
+// run/node reaches a state" in this package. These waits return the instant
+// their condition or terminal event occurs, so a large ceiling never slows a
+// passing test — it only bites on a genuine hang. It's set high enough that
+// CPU contention under `go test -race ./...` (every package in parallel)
+// can't trip it spuriously. The flakes it replaces used 3–5s wall-clock
+// deadlines that lost the race under load. One knob; tune here, not per call.
+const e2eWaitCeiling = 30 * time.Second
+
+// waitFor polls cond every 20ms until it returns true, failing with msg if
+// the ceiling elapses first. The condition holding ends the wait at once, so
+// the ceiling only matters when something is actually stuck.
+func waitFor(t *testing.T, msg string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(e2eWaitCeiling)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("timed out after %s waiting for: %s", e2eWaitCeiling, msg)
+}
+
 func setupStack(t *testing.T) (*daemon.Service, string, string) {
 	t.Helper()
 
@@ -338,7 +362,7 @@ func TestE2E_FailingGraphRecordedAsFailed(t *testing.T) {
 
 func TestE2E_ProgressStreaming(t *testing.T) {
 	svc, aliceKey, _ := setupStack(t)
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), e2eWaitCeiling)
 	defer cancel()
 	alice, _ := svc.Authenticate(ctx, aliceKey)
 

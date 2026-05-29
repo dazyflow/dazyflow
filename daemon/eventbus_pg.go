@@ -139,10 +139,13 @@ func (b *PgBus) Subscribe(jobID string) (<-chan BusEvent, func()) {
 
 // fanout delivers ev to local subscribers for jobID (non-blocking).
 func (b *PgBus) fanout(jobID string, ev BusEvent) {
+	// Send under the lock — same reasoning as MemoryBus.Publish: cancel()
+	// closes channels under b.mu, so sending outside the lock would race
+	// that close and panic (the `default` only guards against blocking, not
+	// a send on a closed channel). Sends are non-blocking, so this is cheap.
 	b.mu.Lock()
-	chans := append([]chan BusEvent(nil), b.subs[jobID]...)
-	b.mu.Unlock()
-	for _, c := range chans {
+	defer b.mu.Unlock()
+	for _, c := range b.subs[jobID] {
 		select {
 		case c <- ev:
 		default:

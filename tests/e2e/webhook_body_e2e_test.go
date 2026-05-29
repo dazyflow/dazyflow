@@ -23,7 +23,7 @@ import (
 // is pre-completed by the trigger handler, and a downstream branch
 // routes on a field inside the body.
 func TestWebhookBody_E2E_JSONPropagation(t *testing.T) {
-	_, wh, jobs, bus, wsStore := startWebhookHarnessLocal(t)
+	_, wh, jobs, _, wsStore := startWebhookHarnessLocal(t)
 
 	g := core.Graph{
 		ID: "wh-body-flow", Tenant: "acme", Workspace: "ws1",
@@ -79,7 +79,7 @@ func TestWebhookBody_E2E_JSONPropagation(t *testing.T) {
 		t.Fatal("no job_id")
 	}
 
-	terminal := waitForFire(t, bus, out.JobID, 5*time.Second)
+	terminal := waitForFire(t, jobs, out.JobID)
 	if terminal != core.JobStatusSucceeded {
 		t.Fatalf("status=%q", terminal)
 	}
@@ -177,7 +177,7 @@ func TestWebhookBody_E2E_TextBody(t *testing.T) {
 func TestWebhookBody_E2E_ManualRunFails(t *testing.T) {
 	// A graph with webhook_input that's submitted manually (not via
 	// webhook) must fail the webhook_input node with no_trigger_data.
-	svc, _, jobs, bus, wsStore := startWebhookHarnessLocal(t)
+	svc, _, jobs, _, wsStore := startWebhookHarnessLocal(t)
 
 	g := core.Graph{
 		ID: "wh-manual", Tenant: "acme", Workspace: "ws1",
@@ -197,7 +197,7 @@ func TestWebhookBody_E2E_ManualRunFails(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SubmitGraph: %v", err)
 	}
-	terminal := waitForFire(t, bus, runID, 5*time.Second)
+	terminal := waitForFire(t, jobs, runID)
 	if terminal != core.JobStatusFailed {
 		t.Fatalf("status=%q, want failed", terminal)
 	}

@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"git.sr.ht/~klahr/hazy-flow/core"
-	"git.sr.ht/~klahr/hazy-flow/engine"
 )
 
 // knownBrokenTemplates are shipped templates with a real defect that
@@ -57,7 +56,7 @@ func normalizeVariadicPorts(g *core.Graph, manifests map[string]core.Manifest) {
 // each for_each names a real step module. A failure here means a user
 // who forks that template hits a runtime error they can't diagnose.
 func TestShippedTemplatesCompose(t *testing.T) {
-	manifests := engine.Default.Manifests()
+	manifests := combinedManifests(t)
 
 	dir := filepath.Join("..", "..", "web", "public", "templates")
 	files, err := filepath.Glob(filepath.Join(dir, "*.json"))

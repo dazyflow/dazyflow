@@ -7,6 +7,33 @@ import (
 	"git.sr.ht/~klahr/hazy-flow/engine/mcp"
 )
 
+func TestProductionConfigProblems(t *testing.T) {
+	const strongKey = "c3Ryb25nLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9rIQ=="
+	const safeDSN = "postgres://hazyflow:s3cret@db:5432/hazyflow"
+	const defaultDSN = "postgres://hazyflow:hazyflow@db:5432/hazyflow?sslmode=disable"
+
+	cases := []struct {
+		name      string
+		dsn       string
+		masterKey string
+		wantCount int
+	}{
+		{"no dsn is dev fallback, no problems", "", "", 0},
+		{"safe dsn + key is clean", safeDSN, strongKey, 0},
+		{"default password flagged", defaultDSN, strongKey, 1},
+		{"missing master key flagged", safeDSN, "", 1},
+		{"both insecure flagged", defaultDSN, "", 2},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := productionConfigProblems(tc.dsn, tc.masterKey)
+			if len(got) != tc.wantCount {
+				t.Errorf("problems = %v (n=%d), want %d", got, len(got), tc.wantCount)
+			}
+		})
+	}
+}
+
 func TestEnvInt(t *testing.T) {
 	t.Setenv("HZ_TEST_INT", "42")
 	if got := envInt("HZ_TEST_INT", 7); got != 42 {

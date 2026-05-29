@@ -120,6 +120,9 @@ func (h *HTTPGateway) listSecrets(rw http.ResponseWriter, r *http.Request, p cor
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("list secrets: %v", err))
 		return
 	}
+	// Hide internal "cfg:" entries (e.g. the BYO secret-manager config) — they
+	// aren't user secrets and shouldn't appear in the UI.
+	names = filterReservedSecretNames(names)
 	if names == nil {
 		names = []string{}
 	}

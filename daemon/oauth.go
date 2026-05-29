@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -81,6 +82,11 @@ type OAuthProvider struct {
 // plus the in-process state store and the encrypted secrets backend
 // it writes tokens into.
 type OAuthRegistry struct {
+	// mu guards the providers map: Register/Unregister mutate it at runtime
+	// (admin OAuth setup + marketplace install/uninstall) while the OAuth
+	// authorize/callback handlers read it concurrently — an unguarded map is a
+	// concurrent read/write crash.
+	mu        sync.RWMutex
 	providers map[string]OAuthProvider
 	state     *oauthStateStore
 	secrets   *EncryptedSecrets
@@ -119,6 +125,8 @@ func NewOAuthRegistry(baseURL string, secrets *EncryptedSecrets) *OAuthRegistry 
 // also lets the admin OAuth setup endpoint swap credentials in at
 // runtime without a daemon restart.
 func (r *OAuthRegistry) Register(p OAuthProvider) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.providers[p.Name] = p
 }
 
@@ -127,6 +135,8 @@ func (r *OAuthRegistry) Register(p OAuthProvider) {
 // service without restarting. Idempotent — unregistering a missing
 // provider is a no-op.
 func (r *OAuthRegistry) Unregister(name string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	delete(r.providers, name)
 }
 
@@ -134,6 +144,8 @@ func (r *OAuthRegistry) Unregister(name string) {
 // presence flag. Lets the admin endpoint introspect what's currently
 // configured without exposing the whole map.
 func (r *OAuthRegistry) Provider(name string) (OAuthProvider, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	p, ok := r.providers[name]
 	return p, ok
 }
@@ -141,17 +153,13 @@ func (r *OAuthRegistry) Provider(name string) (OAuthProvider, bool) {
 // Providers returns the registered provider names, sorted, for the
 // UI's "connect a service" picker.
 func (r *OAuthRegistry) Providers() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	out := make([]string, 0, len(r.providers))
 	for k := range r.providers {
 		out = append(out, k)
 	}
-	// Stable order matters for the UI; sort.Strings is overkill for
-	// the typical 5-10 entries, just do it inline.
-	for i := 1; i < len(out); i++ {
-		for j := i; j > 0 && out[j] < out[j-1]; j-- {
-			out[j], out[j-1] = out[j-1], out[j]
-		}
-	}
+	sort.Strings(out)
 	return out
 }
 
@@ -159,8 +167,15 @@ func (r *OAuthRegistry) httpClient() *http.Client {
 	if r.HTTPClient != nil {
 		return r.HTTPClient
 	}
-	return http.DefaultClient
+	return defaultOAuthClient
 }
+
+// defaultOAuthClient bounds provider token-endpoint calls. http.DefaultClient
+// has no timeout, so a slow or hostile token endpoint would hang the calling
+// goroutine for as long as it stalls — and token *refresh* runs on the job
+// execution path, sometimes under a context with no deadline of its own. A
+// fixed ceiling guarantees the call returns.
+var defaultOAuthClient = &http.Client{Timeout: 30 * time.Second}
 
 // redirectURI builds the URL the provider should send the user
 // back to. The provider's OAuth app config must list this exact
@@ -514,4 +529,3 @@ func (r *OAuthRegistry) refreshLock(name string) *sync.Mutex {
 	}
 	return m
 }
-

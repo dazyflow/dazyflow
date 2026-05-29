@@ -5,7 +5,11 @@ import { useTranslation } from "react-i18next";
 import { api, APIError } from "../api";
 import { useAuth } from "../auth";
 import { oauthProviderDisplay } from "../integrationMeta";
-import type { OAuthProviderStatus } from "../types";
+import type {
+  OAuthProviderStatus,
+  SecretManagerConfig,
+  SecretManagerStatus,
+} from "../types";
 
 // Connections is the actionable "connect an app once, then your flows
 // can use it" page. Two halves:
@@ -33,8 +37,15 @@ function featureUnavailable(status: number): boolean {
 
 export function Connections() {
   const { t } = useTranslation();
-  const { token, me } = useAuth();
+  const { token, me, hasPerm } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
+
+  // canWrite gates every mutating control on the page. The read
+  // endpoints only need secret:read, so a read-only role can land here
+  // (or follow a stale link) and see connections + credentials — but it
+  // must not be shown Connect / Add / Delete affordances that would just
+  // 403 on click. Without it we render the page as a read-only view.
+  const canWrite = hasPerm("secret:write");
 
   const [providers, setProviders] = useState<OAuthProviderStatus[] | null>(null);
   const [providersOff, setProvidersOff] = useState(false);
@@ -127,7 +138,7 @@ export function Connections() {
           wondering which to click. Hidden once anything is in place,
           or when either feature is off (the SetupIncompleteBanner
           covers that case instead). */}
-      {!providersOff && !secretsOff &&
+      {canWrite && !providersOff && !secretsOff &&
         providers !== null &&
         providers.length > 0 &&
         providers.every((p) => p.accounts.length === 0) &&
@@ -177,6 +188,7 @@ export function Connections() {
                 <ProviderCard
                   key={p.name}
                   provider={p}
+                  canWrite={canWrite}
                   onConnect={() => connect(p.name)}
                   onDisconnect={(account) => disconnect(p.name, account)}
                 />
@@ -190,6 +202,7 @@ export function Connections() {
         <CredentialsManager
           secrets={userSecrets}
           loading={secrets === null}
+          canWrite={canWrite}
           onChanged={refresh}
           // The editor's "Set up this credential" links route to
           // /connections?focus=NAME so a user landing here from a
@@ -205,6 +218,242 @@ export function Connections() {
             setSearchParams(next, { replace: true });
           }}
         />
+      )}
+
+      {/* Bring-your-own secret manager. Self-hides when the feature isn't
+          available for this caller (501/401/403), same as the sections above. */}
+      <SecretManagerPanel />
+    </div>
+  );
+}
+
+// SecretManagerPanel lets a tenant point the platform at its own OpenBao/Vault
+// so flows can resolve ${vault:PATH#FIELD} against it (instead of, or alongside,
+// the credentials above). It fetches its own redacted status and hides itself
+// when the encrypted store — where the connection config lives — isn't
+// configured for this caller.
+function SecretManagerPanel() {
+  const { t } = useTranslation();
+  const { token, hasPerm } = useAuth();
+  const canWrite = hasPerm("secret:write");
+  const [status, setStatus] = useState<SecretManagerStatus | null>(null);
+  const [off, setOff] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const [address, setAddress] = useState("");
+  const [mount, setMount] = useState("secret");
+  const [namespace, setNamespace] = useState("");
+  const [method, setMethod] = useState<"token" | "approle">("token");
+  const [tokenVal, setTokenVal] = useState("");
+  const [roleID, setRoleID] = useState("");
+  const [secretID, setSecretID] = useState("");
+
+  const load = () => {
+    if (!token) return;
+    api
+      .getSecretManager(token)
+      .then((s) => {
+        setStatus(s);
+        setOff(false);
+      })
+      .catch((e) => {
+        if (e instanceof APIError && featureUnavailable(e.status)) setOff(true);
+        else setErr(e instanceof APIError ? e.message : (e as Error).message);
+      });
+  };
+  useEffect(load, [token]);
+
+  if (off) return null;
+
+  const startEdit = () => {
+    // Credentials are never returned, so the secret fields start blank — the
+    // operator re-enters them to update (the save re-tests the connection).
+    setAddress(status?.address ?? "");
+    setMount(status?.mount ?? "secret");
+    setNamespace(status?.namespace ?? "");
+    setMethod(status?.auth_method ?? "token");
+    setTokenVal("");
+    setRoleID("");
+    setSecretID("");
+    setErr(null);
+    setEditing(true);
+  };
+
+  const save = async () => {
+    if (!token) return;
+    const base = { address: address.trim(), mount: mount.trim(), namespace: namespace.trim() || undefined };
+    const cfg: SecretManagerConfig =
+      method === "token"
+        ? { ...base, auth: { method: "token", token: tokenVal } }
+        : { ...base, auth: { method: "approle", role_id: roleID.trim(), secret_id: secretID } };
+    setBusy(true);
+    setErr(null);
+    try {
+      await api.setSecretManager(token, cfg);
+      setTokenVal("");
+      setSecretID("");
+      setEditing(false);
+      load();
+    } catch (e) {
+      setErr(e instanceof APIError ? e.message : (e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!token) return;
+    if (!window.confirm(t("connections.secretManager.removeConfirm"))) return;
+    try {
+      await api.deleteSecretManager(token);
+      setStatus({ configured: false });
+      load();
+    } catch (e) {
+      setErr(e instanceof APIError ? e.message : (e as Error).message);
+    }
+  };
+
+  const configured = status?.configured ?? false;
+  // A read-only viewer with nothing configured has nothing to look at —
+  // don't render an empty panel header with no actionable form.
+  if (!configured && !canWrite) return null;
+  const showForm = canWrite && (editing || !configured);
+  const canSave =
+    address.trim() !== "" &&
+    mount.trim() !== "" &&
+    (method === "token" ? tokenVal !== "" : roleID.trim() !== "" && secretID !== "");
+
+  return (
+    <div className="credentials secret-manager">
+      <h2 className="credentials-head">{t("connections.secretManager.title")}</h2>
+      <p className="credentials-sub">{t("connections.secretManager.intro")}</p>
+      {err && <div className="card error">{err}</div>}
+
+      {configured && !editing && (
+        <div className="card secret-manager-status">
+          <div className="secret-manager-status-info">
+            <code>{status?.address}</code>
+            <span className="credentials-set">
+              {t("connections.secretManager.summary", {
+                method: status?.auth_method,
+                mount: status?.mount,
+              })}
+              {status?.namespace ? ` · ${status.namespace}` : ""}
+            </span>
+          </div>
+          {canWrite && (
+            <div className="secret-manager-actions">
+              <button type="button" className="ghost" onClick={startEdit}>
+                {t("connections.secretManager.edit")}
+              </button>
+              <button
+                type="button"
+                className="icon-button danger"
+                onClick={() => void remove()}
+                aria-label={t("connections.secretManager.remove")}
+                title={t("connections.secretManager.remove")}
+              >
+                <Trash2 size={15} />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {showForm && (
+        <form
+          className="secret-manager-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save();
+          }}
+        >
+          <label>
+            {t("connections.secretManager.addressLabel")}
+            <input
+              type="url"
+              placeholder="https://openbao.internal:8200"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              autoComplete="off"
+            />
+          </label>
+          <div className="secret-manager-row">
+            <label>
+              {t("connections.secretManager.mountLabel")}
+              <input
+                type="text"
+                placeholder="secret"
+                value={mount}
+                onChange={(e) => setMount(e.target.value)}
+                autoComplete="off"
+              />
+            </label>
+            <label>
+              {t("connections.secretManager.namespaceLabel")}
+              <input
+                type="text"
+                placeholder={t("connections.secretManager.namespacePlaceholder")}
+                value={namespace}
+                onChange={(e) => setNamespace(e.target.value)}
+                autoComplete="off"
+              />
+            </label>
+          </div>
+          <label>
+            {t("connections.secretManager.authMethodLabel")}
+            <select value={method} onChange={(e) => setMethod(e.target.value as "token" | "approle")}>
+              <option value="token">{t("connections.secretManager.methodToken")}</option>
+              <option value="approle">{t("connections.secretManager.methodApprole")}</option>
+            </select>
+          </label>
+          {method === "token" ? (
+            <label>
+              {t("connections.secretManager.tokenLabel")}
+              <input
+                type="password"
+                value={tokenVal}
+                onChange={(e) => setTokenVal(e.target.value)}
+                autoComplete="off"
+              />
+            </label>
+          ) : (
+            <div className="secret-manager-row">
+              <label>
+                {t("connections.secretManager.roleIdLabel")}
+                <input
+                  type="text"
+                  value={roleID}
+                  onChange={(e) => setRoleID(e.target.value)}
+                  autoComplete="off"
+                />
+              </label>
+              <label>
+                {t("connections.secretManager.secretIdLabel")}
+                <input
+                  type="password"
+                  value={secretID}
+                  onChange={(e) => setSecretID(e.target.value)}
+                  autoComplete="off"
+                />
+              </label>
+            </div>
+          )}
+          <div className="secret-manager-form-actions">
+            <button type="submit" className="primary" disabled={busy || !canSave}>
+              {busy
+                ? t("connections.secretManager.saving")
+                : t("connections.secretManager.save")}
+            </button>
+            {configured && (
+              <button type="button" className="ghost" onClick={() => setEditing(false)}>
+                {t("common.cancel")}
+              </button>
+            )}
+          </div>
+        </form>
       )}
     </div>
   );
@@ -290,10 +539,12 @@ function supportContactHref(raw?: string): string | undefined {
 // button that adds another account (or the first one).
 function ProviderCard({
   provider,
+  canWrite,
   onConnect,
   onDisconnect,
 }: {
   provider: OAuthProviderStatus;
+  canWrite: boolean;
   onConnect: () => void;
   onDisconnect: (account: string) => void;
 }) {
@@ -345,27 +596,31 @@ function ProviderCard({
                     {t("connections.reconnectRequired")}
                   </span>
                 )}
-                <button
-                  type="button"
-                  className="provider-account-remove"
-                  aria-label={t("connections.disconnect")}
-                  title={t("connections.disconnect")}
-                  onClick={() => onDisconnect(a)}
-                >
-                  <Trash2 size={12} strokeWidth={2.2} />
-                </button>
+                {canWrite && (
+                  <button
+                    type="button"
+                    className="provider-account-remove"
+                    aria-label={t("connections.disconnect")}
+                    title={t("connections.disconnect")}
+                    onClick={() => onDisconnect(a)}
+                  >
+                    <Trash2 size={12} strokeWidth={2.2} />
+                  </button>
+                )}
               </span>
             );
           })}
         </div>
       )}
-      <button type="button" className="primary provider-connect" onClick={onConnect}>
-        {connected
-          ? (provider.stale_accounts?.length
-              ? t("connections.reconnect")
-              : t("connections.connectAnother"))
-          : t("connections.connect")}
-      </button>
+      {canWrite && (
+        <button type="button" className="primary provider-connect" onClick={onConnect}>
+          {connected
+            ? (provider.stale_accounts?.length
+                ? t("connections.reconnect")
+                : t("connections.connectAnother"))
+            : t("connections.connect")}
+        </button>
+      )}
     </div>
   );
 }
@@ -377,12 +632,14 @@ function ProviderCard({
 function CredentialsManager({
   secrets,
   loading,
+  canWrite,
   onChanged,
   focus,
   onFocusConsumed,
 }: {
   secrets: string[];
   loading: boolean;
+  canWrite: boolean;
   onChanged: () => void;
   // focus is a credential name the user was pointed at from
   // somewhere else (a template field's "Set up" link). When the
@@ -480,50 +737,54 @@ function CredentialsManager({
             >
               <code>{n}</code>
               <span className="credentials-set">{t("connections.valueSet")}</span>
-              <button
-                type="button"
-                className="icon-button danger"
-                aria-label={t("connections.deleteCredential", { name: n })}
-                title={t("connections.deleteCredential", { name: n })}
-                onClick={() => remove(n)}
-              >
-                <Trash2 size={15} />
-              </button>
+              {canWrite && (
+                <button
+                  type="button"
+                  className="icon-button danger"
+                  aria-label={t("connections.deleteCredential", { name: n })}
+                  title={t("connections.deleteCredential", { name: n })}
+                  onClick={() => remove(n)}
+                >
+                  <Trash2 size={15} />
+                </button>
+              )}
             </li>
           ))}
         </ul>
       )}
-      <form
-        className="credentials-add"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void add();
-        }}
-      >
-        <input
-          type="text"
-          placeholder={t("connections.namePlaceholder")}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          aria-label={t("connections.nameLabel")}
-        />
-        <input
-          ref={valueInputRef}
-          type="password"
-          placeholder={t("connections.valuePlaceholder")}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          aria-label={t("connections.valueLabel")}
-          autoComplete="off"
-        />
-        <button
-          type="submit"
-          className="primary"
-          disabled={busy || !name.trim() || !value}
+      {canWrite && (
+        <form
+          className="credentials-add"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void add();
+          }}
         >
-          <Plus size={15} /> {busy ? t("connections.saving") : t("connections.addCredential")}
-        </button>
-      </form>
+          <input
+            type="text"
+            placeholder={t("connections.namePlaceholder")}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            aria-label={t("connections.nameLabel")}
+          />
+          <input
+            ref={valueInputRef}
+            type="password"
+            placeholder={t("connections.valuePlaceholder")}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            aria-label={t("connections.valueLabel")}
+            autoComplete="off"
+          />
+          <button
+            type="submit"
+            className="primary"
+            disabled={busy || !name.trim() || !value}
+          >
+            <Plus size={15} /> {busy ? t("connections.saving") : t("connections.addCredential")}
+          </button>
+        </form>
+      )}
     </div>
   );
 }

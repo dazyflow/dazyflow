@@ -110,7 +110,7 @@ func TestSubgraph_E2E_HappyPath(t *testing.T) {
 		t.Fatalf("Submit: %v", err)
 	}
 
-	terminal := waitForFire(t, h.bus, runID, 5*time.Second)
+	terminal := waitForFire(t, h.store, runID)
 	if terminal != core.JobStatusSucceeded {
 		t.Fatalf("status = %q, want succeeded", terminal)
 	}
@@ -170,7 +170,7 @@ func TestSubgraph_E2E_ChildFailurePropagatesToParent(t *testing.T) {
 		t.Fatalf("Submit: %v", err)
 	}
 
-	terminal := waitForFire(t, h.bus, runID, 5*time.Second)
+	terminal := waitForFire(t, h.store, runID)
 	if terminal != core.JobStatusFailed {
 		t.Fatalf("status = %q, want failed", terminal)
 	}
@@ -212,7 +212,7 @@ func TestSubgraph_E2E_UnknownChildFailsParent(t *testing.T) {
 		t.Fatalf("Submit: %v", err)
 	}
 
-	terminal := waitForFire(t, h.bus, runID, 5*time.Second)
+	terminal := waitForFire(t, h.store, runID)
 	if terminal != core.JobStatusFailed {
 		t.Fatalf("status = %q, want failed", terminal)
 	}

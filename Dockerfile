@@ -59,23 +59,27 @@ ENV CGO_ENABLED=0 GOOS=linux
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     go build -trimpath -ldflags="-s -w" -o /out/hzd ./cmd/hzd
-# Pre-create the data dir here (the distroless final stage has no shell
-# to mkdir) so HAZYFLOW_DATA_DIR's subtree exists and is writable by
-# the nonroot user.
 RUN mkdir -p /data/workspace /data/sandbox /data/state
 
 # ---- 3. runtime -------------------------------------------------------
-FROM gcr.io/distroless/static-debian12:nonroot AS final
+# Scripted drops run in the Node drop host (engine/containerdrop/nodehost),
+# so the runtime image needs `node`. The default ("process") tier spawns node
+# directly; the "gvisor" tier instead runs node inside a runsc container and
+# needs a Docker socket + the runsc runtime on the host (out of image scope).
+FROM node:22-alpine AS final
 WORKDIR /srv
 COPY --from=build /out/hzd /usr/local/bin/hzd
+# drophost.mjs sits next to hzd so resolveNodeDropHost() finds it (it looks
+# beside the running executable). It's our trusted runtime, not a drop.
+COPY engine/containerdrop/nodehost/drophost.mjs /usr/local/bin/drophost.mjs
 COPY --from=web /web/dist /srv/web
-# Workspace + sandbox dirs live under /data, owned by the nonroot uid
-# (65532). Mount a volume here in production so git-backed graphs and
-# per-tenant sandboxes persist across container restarts. (Set
-# HAZYFLOW_POSTGRES_DSN for the durable control-plane stores.)
-COPY --from=build --chown=65532:65532 /data /data
+# Workspace + sandbox dirs live under /data, owned by the unprivileged `node`
+# user (uid 1000, shipped in the node image). Mount a volume here in production
+# so git-backed graphs and per-tenant sandboxes persist across container
+# restarts. (Set HAZYFLOW_POSTGRES_DSN for the durable control-plane stores.)
+COPY --from=build --chown=1000:1000 /data /data
 EXPOSE 50050 8080
-USER nonroot:nonroot
+USER node
 # Container layout defaults — every other knob is configured via
 # HAZYFLOW_* env vars on the container (see .env.example for the full
 # catalogue). Override these here only when rebaking the image.

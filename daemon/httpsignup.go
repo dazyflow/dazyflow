@@ -139,7 +139,7 @@ func (h *HTTPGateway) signUp(rw http.ResponseWriter, r *http.Request) {
 	if ttl <= 0 {
 		ttl = 24 * time.Hour
 	}
-	sess, token, err := auth.IssueSession(r.Context(), h.Sessions, user, ttl)
+	sess, token, err := auth.IssueSession(r.Context(), h.Sessions, h.elevatePlatformAdmin(user), ttl)
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("issue session: %v", err))
 		return
@@ -231,7 +231,7 @@ func defaultSignupRoles() []core.Role {
 			},
 		},
 		{
-			Name: "tenant_owner",
+			Name:        "tenant_owner",
 			Permissions: []core.Permission{core.PermTenantAdmin},
 		},
 	}

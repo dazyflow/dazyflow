@@ -23,17 +23,17 @@ import (
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "http_request",
-			Version:        "1.0",
-			Label:          "HTTP request",
-			Color:          "#5599ee",
-			Icon:           "globe",
-			Category:       "network",
-			Provider:       "internal",
-			Integration:    "HTTP",
-			Tags:           []string{"http", "rest", "api", "webhook"},
-			Description:    "Make an HTTP request to any URL — GET, POST, PUT, PATCH, or DELETE. Useful when the service you want to call doesn't have a dedicated connector here yet. Returns the response body on one port and status/headers on another. Private-network addresses are blocked by default to prevent accidental internal calls.",
-			Summary:        "Issue an arbitrary HTTP request and split the response into body/meta ports, with SSRF-guard and response-size cap.",
+			ID:          "http_request",
+			Version:     "1.0",
+			Label:       "HTTP request",
+			Color:       "#5599ee",
+			Icon:        "globe",
+			Category:    "network",
+			Provider:    "internal",
+			Integration: "HTTP",
+			Tags:        []string{"http", "rest", "api", "webhook"},
+			Description: "Make an HTTP request to any URL — GET, POST, PUT, PATCH, or DELETE. Useful when the service you want to call doesn't have a dedicated connector here yet. Returns the response body on one port and status/headers on another. Private-network addresses are blocked by default to prevent accidental internal calls.",
+			Summary:     "Issue an arbitrary HTTP request and split the response into body/meta ports, with SSRF-guard and response-size cap.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Simple authenticated GET",
@@ -107,7 +107,11 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 	method = strings.ToUpper(method)
 	timeoutMs := params.IntDefault(job.Params, "timeout_ms", defaultTimeoutMs)
 	maxBodyBytes := int64(params.IntDefault(job.Params, "max_body_bytes", defaultMaxBodyBytes))
-	allowPrivate, _ := paramBool(job.Params, "allow_private_networks")
+	// allow_private_networks disables the SSRF guard; only honor it when the
+	// operator has opted in (HAZYFLOW_ALLOW_PRIVATE_EGRESS). Otherwise it's a
+	// tenant-controllable SSRF bypass to metadata/localhost/internal hosts.
+	reqAllowPrivate, _ := paramBool(job.Params, "allow_private_networks")
+	allowPrivate := reqAllowPrivate && PrivateEgressAllowed()
 
 	headers, err := paramHeaders(job.Params, "headers")
 	if err != nil {
@@ -285,6 +289,53 @@ func buildClient(timeout time.Duration, allowPrivate bool) *http.Client {
 		},
 		// Default redirect policy follows up to 10; that's fine.
 	}
+}
+
+// SSRFDialControl returns a net.Dialer Control hook that blocks dialing
+// loopback/private/link-local addresses. Because Control runs after DNS
+// resolution on the resolved IP, it resists DNS rebinding. Returns nil when
+// the operator has opted into private egress (no restriction). Reusable by
+// non-HTTP drops that dial user-supplied hosts (Postgres, SMTP, …) so they
+// share the one SSRF policy instead of dialing arbitrary internal hosts.
+func SSRFDialControl() func(network, address string, c syscall.RawConn) error {
+	if PrivateEgressAllowed() {
+		return nil
+	}
+	return func(_, address string, _ syscall.RawConn) error {
+		return ssrfGuard(address)
+	}
+}
+
+// CheckDialHost is a pre-flight (pre-dial) SSRF check for a "host:port" or
+// bare host, for drivers that don't expose a dial hook (e.g. database/sql
+// MySQL). It resolves the host and refuses if any resolved IP is
+// loopback/private/link-local — unless the operator opted into private
+// egress. Weaker than SSRFDialControl against rebinding, but blocks the
+// common "point me at an internal host" case. nil = allowed.
+func CheckDialHost(hostPort string) error {
+	if PrivateEgressAllowed() {
+		return nil
+	}
+	host := hostPort
+	if h, _, err := stdnet.SplitHostPort(hostPort); err == nil {
+		host = h
+	}
+	if ip := stdnet.ParseIP(host); ip != nil {
+		if isUnsafeIP(ip) {
+			return fmt.Errorf("ssrf_blocked: %s is loopback/private/link-local", ip)
+		}
+		return nil
+	}
+	ips, err := stdnet.LookupIP(host)
+	if err != nil {
+		return fmt.Errorf("ssrf_blocked: cannot resolve %q", host)
+	}
+	for _, ip := range ips {
+		if isUnsafeIP(ip) {
+			return fmt.Errorf("ssrf_blocked: %s resolves to loopback/private/link-local", host)
+		}
+	}
+	return nil
 }
 
 func ssrfGuard(address string) error {

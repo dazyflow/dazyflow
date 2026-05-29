@@ -9,8 +9,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -18,6 +20,7 @@ import (
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
 	"git.sr.ht/~klahr/hazy-flow/integrations/internal/params"
+	hfnet "git.sr.ht/~klahr/hazy-flow/integrations/net"
 )
 
 func init() {
@@ -74,6 +77,9 @@ func executeGitCheckout(ctx context.Context, job core.Job, progress chan<- core.
 	url, err := params.String(job.Params, "url")
 	if err != nil {
 		return params.Err(job, "bad_param", err.Error()), nil
+	}
+	if err := guardRepoURL(url); err != nil {
+		return params.Err(job, "blocked", err.Error()), nil
 	}
 	relPath, err := params.String(job.Params, "path")
 	if err != nil {
@@ -136,6 +142,78 @@ func executeGitCheckout(ctx context.Context, job core.Job, progress chan<- core.
 			"meta": {MIME: "application/json", Inline: meta},
 		},
 	}, nil
+}
+
+// guardRepoURL enforces the SSRF/egress policy on a tenant-supplied repo
+// URL before go-git is allowed to dial it. go-git's default transport
+// registry still serves http://, git://, and file:// (only the
+// marketplace's https transport is overridden daemon-side), so without
+// this a tenant could clone file:///etc/passwd (host-file read),
+// git://internal-host/... (internal git daemon), or
+// http://169.254.169.254/... (cloud metadata) — the same SSRF class the
+// net drops already guard. Only https and ssh are permitted, and the
+// resolved host is run through the shared SSRF pre-flight
+// (hfnet.CheckDialHost: refuses loopback/private/link-local) plus the
+// operator egress allowlist (hfnet.EgressAllowed). The pre-flight is a
+// resolve-then-check (a rebinding window remains, like the SMTP/MySQL
+// drops, since go-git exposes no dial hook), but it closes the common
+// "point me at an internal host or a local file" case. When the operator
+// has opted into private egress, the net helpers no-op, matching the
+// http drops.
+func guardRepoURL(rawURL string) error {
+	raw := strings.TrimSpace(rawURL)
+	if raw == "" {
+		return fmt.Errorf("url is required")
+	}
+	// scp-like ssh syntax (git@host:path) carries no scheme and trips
+	// url.Parse ("first path segment cannot contain colon"), so detect
+	// and SSRF-check it before parsing.
+	if !strings.Contains(raw, "://") {
+		if host, ok := scpLikeHost(raw); ok {
+			return hfnet.CheckDialHost(host)
+		}
+		// No scheme and not scp-like ⇒ a local-filesystem path; refuse
+		// it the same as file://.
+		return fmt.Errorf("repo URL scheme not allowed (use https:// or ssh://)")
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("invalid repo URL: %w", err)
+	}
+	switch u.Scheme {
+	case "https":
+		if err := hfnet.EgressAllowed(raw); err != nil {
+			return err
+		}
+		return hfnet.CheckDialHost(u.Host)
+	case "ssh":
+		return hfnet.CheckDialHost(u.Host)
+	default:
+		return fmt.Errorf("repo URL scheme %q not allowed (use https:// or ssh://)", u.Scheme)
+	}
+}
+
+// scpLikeHost extracts the host from scp-like ssh syntax
+// ("[user@]host:path", no "://"). It reports false when the string isn't
+// scp-like — a colon that follows a slash is a path, not a host:path
+// separator, so a bare path like "/srv/repos/x.git" is correctly not
+// treated as a remote.
+func scpLikeHost(s string) (string, bool) {
+	colon := strings.Index(s, ":")
+	if colon < 0 {
+		return "", false
+	}
+	if slash := strings.Index(s, "/"); slash >= 0 && slash < colon {
+		return "", false
+	}
+	hostPart := s[:colon]
+	if at := strings.LastIndex(hostPart, "@"); at >= 0 {
+		hostPart = hostPart[at+1:]
+	}
+	if hostPart == "" {
+		return "", false
+	}
+	return hostPart, true
 }
 
 // openOrClone returns the repository at dst — opening it when the

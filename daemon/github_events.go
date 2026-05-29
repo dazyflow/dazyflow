@@ -45,7 +45,7 @@ const maxGitHubBodyBytes = 1 * 1024 * 1024
 //   - ping            → 200 OK ack so GitHub's "test delivery" works
 //   - push            → fans out to graphs with github_on_push nodes
 //   - pull_request    → fans out to github_on_new_pr nodes when
-//                       action == "opened" (other actions ack silently)
+//     action == "opened" (other actions ack silently)
 //
 // Unknown events ack with 200 so GitHub stops retrying — graphs that
 // subscribed get nothing, which is the correct outcome.

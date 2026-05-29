@@ -16,16 +16,16 @@ import (
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "file_write",
-			Version:        "1.0",
-			Label:          "File write",
-			Color:          "#4a8",
-			Icon:           "file-output",
-			Category:       "io",
-			Provider:       "internal",
-			Tags:           []string{"filesystem", "write", "sandbox"},
-			Description:    "Write a file to the workspace sandbox. Accepts inline data or a workspace-relative source Ref. Respects per-tenant disk quotas.",
-			Summary:        "Copy an input Ref's bytes to a workspace-relative destination, refusing escapes and pre-checking against the tenant disk quota.",
+			ID:          "file_write",
+			Version:     "1.0",
+			Label:       "File write",
+			Color:       "#4a8",
+			Icon:        "file-output",
+			Category:    "io",
+			Provider:    "internal",
+			Tags:        []string{"filesystem", "write", "sandbox"},
+			Description: "Write a file to the workspace sandbox. Accepts inline data or a workspace-relative source Ref. Respects per-tenant disk quotas.",
+			Summary:     "Copy an input Ref's bytes to a workspace-relative destination, refusing escapes and pre-checking against the tenant disk quota.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Drop a generated artifact into the reports folder",

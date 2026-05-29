@@ -28,7 +28,7 @@ import {
   type NodeChange,
   type ReactFlowInstance,
 } from "@xyflow/react";
-import { Play, Save, Square, Plus, Send } from "lucide-react";
+import { Play, Save, Square, Plus, Send, History, RotateCcw, X } from "lucide-react";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import { oauthProviderDisplay } from "../integrationMeta";
@@ -47,6 +47,7 @@ import type {
   Manifest,
   JobStatus,
   OAuthProviderStatus,
+  Revision,
   Visibility,
 } from "../types";
 import { Inspector } from "../components/Inspector";
@@ -60,6 +61,27 @@ import { QuickDropPalette } from "../components/QuickDropPalette";
 // is declared at module scope rather than inline in the component to
 // avoid unnecessary remounts on each render.
 const nodeTypes = { hazy: HazyNode };
+
+// How long the editor waits after the last edit before autosaving. Short
+// enough to feel "always saved", long enough that a burst of edits (typing,
+// dragging) debounces into a single save the daemon then coalesces.
+const AUTOSAVE_DEBOUNCE_MS = 1500;
+
+// timeAgo renders a locale-aware relative time ("3 minutes ago") for the
+// history panel. Falls back to the raw string if the timestamp is unparseable.
+function timeAgo(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return iso;
+  const diffSec = Math.round((then - Date.now()) / 1000);
+  const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+  const abs = Math.abs(diffSec);
+  if (abs < 60) return rtf.format(diffSec, "second");
+  const diffMin = Math.round(diffSec / 60);
+  if (Math.abs(diffMin) < 60) return rtf.format(diffMin, "minute");
+  const diffHr = Math.round(diffMin / 60);
+  if (Math.abs(diffHr) < 24) return rtf.format(diffHr, "hour");
+  return rtf.format(Math.round(diffHr / 24), "day");
+}
 
 // buildTestEventSample produces the JSON object the "Send test event"
 // button POSTs to /test-trigger. When the webhook trigger has
@@ -169,6 +191,15 @@ function EditorInner() {
   // dismisses the warning visually until the next save confirms) or
   // when the user explicitly dismisses.
   const [lintIssues, setLintIssues] = useState<LintIssue[]>([]);
+  // Version-history panel state. previewRef holds the commit currently
+  // being previewed on the canvas (null = live HEAD). While previewing,
+  // autosave/save/run are suppressed so a peek at an old version can't be
+  // written back as the new HEAD by accident.
+  const [showHistory, setShowHistory] = useState(false);
+  const [revisions, setRevisions] = useState<Revision[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [previewRef, setPreviewRef] = useState<string | null>(null);
+  const [restoring, setRestoring] = useState(false);
   // lockedRunID is set when ANY run of this flow (this tab or another)
   // is still in-flight. Save is gated on it so two editors can't race
   // a save against a live run.
@@ -232,6 +263,51 @@ function EditorInner() {
   const lastPointer = useRef<{ x: number; y: number } | null>(null);
   const { screenToFlowPosition } = useReactFlow();
 
+  // hydrateGraph loads a Graph payload into editor state. Shared by the
+  // mount load, the history preview (a past ref), and the post-restore
+  // reload, so all three stay in sync. Manifests are resolved against the
+  // current state because the drops fetch is independent and may arrive
+  // after a graph load. Always clears dirty — a freshly-loaded graph is, by
+  // definition, in sync with the server.
+  const hydrateGraph = useCallback((g: Graph) => {
+    setManifests((current) => {
+      const mm = new Map<string, Manifest>();
+      for (const m of current) mm.set(m.id, m);
+      setNodes(
+        (g.nodes ?? []).map((n, i) => ({
+          id: n.id,
+          type: "hazy",
+          position: n.position ?? { x: 80 + i * 240, y: 80 },
+          data: {
+            label: mm.get(n.module)?.label ?? n.module,
+            moduleID: n.module,
+            manifest: mm.get(n.module),
+          },
+        })),
+      );
+      return current;
+    });
+    setEdges(
+      (g.edges ?? []).map((e) => ({
+        id: `${e.from}.${e.from_port}->${e.to}.${e.to_port}`,
+        source: e.from,
+        target: e.to,
+        sourceHandle: e.from_port,
+        targetHandle: e.to_port,
+        style: { stroke: "var(--accent)", strokeWidth: 1.5 },
+      })),
+    );
+    setParamsByID(Object.fromEntries((g.nodes ?? []).map((n) => [n.id, n.params ?? {}])));
+    setTriggers(g.triggers ?? []);
+    setVisibility(g.visibility);
+    setOwner(g.owner);
+    setName(g.name);
+    setIcon(g.icon);
+    setDescription(g.description);
+    setTimeoutSeconds(g.timeout_seconds);
+    setDirty(false);
+  }, []);
+
   // Load modules + graph on mount. The two fetches are kept independent
   // — Promise.all would reject the whole batch if loadGraph 404s for a
   // never-saved flow, leaving the catalog empty (so Ctrl+K had no
@@ -255,48 +331,7 @@ function EditorInner() {
       .loadGraph(token, activeTenant, activeWorkspace, id)
       .then((g) => {
         if (cancelled) return;
-        // Resolve module manifests against the current state since the
-        // drops fetch is now independent — it might arrive after this
-        // graph load. NodeCard pulls `manifest` straight from
-        // node.data, so a missed lookup here just renders the bare
-        // module ID until manifests land and the next setNodes runs.
-        setManifests((current) => {
-          const mm = new Map<string, Manifest>();
-          for (const m of current) mm.set(m.id, m);
-          setNodes(
-            (g.nodes ?? []).map((n, i) => ({
-              id: n.id,
-              type: "hazy",
-              position: n.position ?? { x: 80 + i * 240, y: 80 },
-              data: {
-                label: mm.get(n.module)?.label ?? n.module,
-                moduleID: n.module,
-                manifest: mm.get(n.module),
-              },
-            })),
-          );
-          return current;
-        });
-        setEdges(
-          (g.edges ?? []).map((e) => ({
-            id: `${e.from}.${e.from_port}->${e.to}.${e.to_port}`,
-            source: e.from,
-            target: e.to,
-            sourceHandle: e.from_port,
-            targetHandle: e.to_port,
-            label: e.from_port === "out" && e.to_port === "in" ? undefined : `${e.from_port} → ${e.to_port}`,
-            style: { stroke: "var(--accent)", strokeWidth: 1.5 },
-          })),
-        );
-        setParamsByID(Object.fromEntries((g.nodes ?? []).map((n) => [n.id, n.params ?? {}])));
-        setTriggers(g.triggers ?? []);
-        setVisibility(g.visibility);
-        setOwner(g.owner);
-        setName(g.name);
-        setIcon(g.icon);
-        setDescription(g.description);
-        setTimeoutSeconds(g.timeout_seconds);
-        setDirty(false);
+        hydrateGraph(g);
       })
       .catch((e) => {
         if (cancelled) return;
@@ -318,7 +353,7 @@ function EditorInner() {
     return () => {
       cancelled = true;
     };
-  }, [token, me, id]);
+  }, [token, me, id, hydrateGraph]);
 
   // A fresh flow gets a fresh shot at showing the connections banner.
   useEffect(() => {
@@ -459,18 +494,10 @@ function EditorInner() {
   );
   const onConnect = useCallback(
     (params: Connection) => {
-      const fromPort = params.sourceHandle ?? "out";
-      const toPort = params.targetHandle ?? "in";
-      // Label non-default port wirings (e.g. branch.then → sleep.in) so
-      // edges remain readable when the canvas is zoomed out and the
-      // port labels on the node cards aren't legible. Default
-      // `out`→`in` stays unlabeled.
-      const labeled = !(fromPort === "out" && toPort === "in");
       setEdges((eds) =>
         addEdge(
           {
             ...params,
-            label: labeled ? `${fromPort} → ${toPort}` : undefined,
             style: { stroke: "var(--accent)", strokeWidth: 1.5 },
           },
           eds,
@@ -595,12 +622,12 @@ function EditorInner() {
     ...overrides,
   });
 
-  const save = async () => {
+  const save = async (autosave = false) => {
     if (!token || !me || !id) return;
     setSaving(true);
     setError(null);
     try {
-      const res = await api.saveGraph(token, buildGraph());
+      const res = await api.saveGraph(token, buildGraph(), autosave);
       setDirty(false);
       // Lint findings are advisory — the save already succeeded.
       // Show them; the user can fix-and-resave or dismiss.
@@ -617,6 +644,123 @@ function EditorInner() {
       setSaving(false);
     }
   };
+
+  // Autosave: the editor saves on its own a short beat after the last
+  // edit, so there's nothing to remember to press. saveRef always points
+  // at the latest save closure (which reads current state), so the
+  // debounced timer never fires a stale snapshot. The daemon coalesces
+  // these autosaves into one commit per editing burst (autosave=true), so
+  // the workspace git history stays readable; the manual Save button still
+  // writes its own explicit checkpoint commit.
+  const saveRef = useRef(save);
+  saveRef.current = save;
+  useEffect(() => {
+    if (!dirty || saving || !token || !me || !id) return;
+    if (!hasPerm("graph:edit") || lockedRunID) return;
+    if (previewRef) return; // never autosave a history preview as the HEAD
+    const handle = window.setTimeout(() => {
+      void saveRef.current(true);
+    }, AUTOSAVE_DEBOUNCE_MS);
+    return () => window.clearTimeout(handle);
+    // Re-arm on any content change so the debounce measures idle time, not
+    // time-since-first-edit. Each change cancels the prior timer. `saving`
+    // is a dep so a save in flight defers the next autosave instead of
+    // racing a second PUT.
+  }, [
+    dirty,
+    saving,
+    nodes,
+    edges,
+    paramsByID,
+    triggers,
+    visibility,
+    owner,
+    name,
+    icon,
+    description,
+    timeoutSeconds,
+    lockedRunID,
+    previewRef,
+    token,
+    me,
+    id,
+    hasPerm,
+  ]);
+
+  // --- Version history ------------------------------------------------
+  // openHistory loads the flow's commit log into the side panel.
+  const openHistory = useCallback(async () => {
+    if (!token || !id) return;
+    setShowHistory(true);
+    setHistoryLoading(true);
+    try {
+      const res = await api.flowHistory(token, activeTenant, activeWorkspace, id);
+      setRevisions(res.revisions ?? []);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [token, id, activeTenant, activeWorkspace]);
+
+  // previewRevision loads a past revision onto the canvas read-only. It
+  // does NOT touch HEAD — autosave/save/run are gated on previewRef.
+  const previewRevision = useCallback(
+    async (commit: string) => {
+      if (!token || !id) return;
+      try {
+        const g = await api.loadGraph(token, activeTenant, activeWorkspace, id, commit);
+        hydrateGraph(g);
+        setPreviewRef(commit);
+      } catch (e) {
+        setError((e as Error).message);
+      }
+    },
+    [token, id, activeTenant, activeWorkspace, hydrateGraph],
+  );
+
+  // exitPreview drops the preview and reloads the live HEAD.
+  const exitPreview = useCallback(async () => {
+    if (!token || !id) {
+      setPreviewRef(null);
+      return;
+    }
+    try {
+      const g = await api.loadGraph(token, activeTenant, activeWorkspace, id);
+      hydrateGraph(g);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setPreviewRef(null);
+    }
+  }, [token, id, activeTenant, activeWorkspace, hydrateGraph]);
+
+  // restoreRevision makes a revision the new HEAD (a fresh commit on top),
+  // then reloads HEAD and refreshes the history list. History is preserved.
+  const restoreRevision = useCallback(
+    async (commit: string) => {
+      if (!token || !id) return;
+      setRestoring(true);
+      setError(null);
+      try {
+        await api.restoreFlow(token, activeTenant, activeWorkspace, id, commit);
+        const g = await api.loadGraph(token, activeTenant, activeWorkspace, id);
+        hydrateGraph(g);
+        setPreviewRef(null);
+        const res = await api.flowHistory(token, activeTenant, activeWorkspace, id);
+        setRevisions(res.revisions ?? []);
+      } catch (e) {
+        const msg = (e as Error).message;
+        setError(msg);
+        if (msg.toLowerCase().includes("locked") || msg.includes("409")) {
+          void refreshLock();
+        }
+      } finally {
+        setRestoring(false);
+      }
+    },
+    [token, id, activeTenant, activeWorkspace, hydrateGraph],
+  );
 
   // refreshLock asks the daemon whether any run of this flow is still
   // active. The server is the source of truth — another tab or a
@@ -900,8 +1044,8 @@ function EditorInner() {
           {/* Flow settings moved to the top-bar three-dots menu (single
               entry point). The toolbar gear used to live here. */}
           <button
-            onClick={save}
-            disabled={!dirty || saving || !hasPerm("graph:edit") || !!lockedRunID}
+            onClick={() => save()}
+            disabled={!dirty || saving || !hasPerm("graph:edit") || !!lockedRunID || !!previewRef}
             title={
               !hasPerm("graph:edit")
                 ? t("editor.readOnly")
@@ -921,6 +1065,18 @@ function EditorInner() {
                 : t("editor.saved")}
             </span>
           </button>
+          {me && id && (
+            <button
+              className="ghost"
+              onClick={openHistory}
+              title={t("editor.historyTitle")}
+            >
+              <History size={14} style={{ verticalAlign: -2 }} />
+              <span className="toolbar-label" style={{ marginLeft: 6 }}>
+                {t("editor.history")}
+              </span>
+            </button>
+          )}
           {me && id && (
             <span className="toolbar-run-history">
               <RunHistory
@@ -1005,6 +1161,77 @@ function EditorInner() {
             </button>
           )}
         </div>
+        {previewRef && (
+          <div className={`history-preview-banner${showHistory ? " with-panel" : ""}`}>
+            <span className="history-preview-msg">
+              <History size={14} style={{ verticalAlign: -2, marginRight: 6 }} />
+              {t("editor.viewingOld", {
+                when: timeAgo(
+                  revisions.find((r) => r.commit === previewRef)?.when ?? "",
+                ),
+              })}
+            </span>
+            <div className="history-preview-actions">
+              <button
+                className="primary"
+                onClick={() => void restoreRevision(previewRef)}
+                disabled={
+                  restoring ||
+                  !hasPerm("graph:edit") ||
+                  !!lockedRunID ||
+                  previewRef === revisions[0]?.commit
+                }
+              >
+                <RotateCcw size={13} style={{ verticalAlign: -2, marginRight: 5 }} />
+                {restoring ? t("editor.restoring") : t("editor.restore")}
+              </button>
+              <button className="ghost" onClick={() => void exitPreview()} disabled={restoring}>
+                {t("editor.backToLatest")}
+              </button>
+            </div>
+          </div>
+        )}
+        {showHistory && (
+          <div className="history-panel">
+            <div className="history-panel-head">
+              <strong>{t("editor.historyTitle")}</strong>
+              <button
+                className="icon"
+                onClick={() => setShowHistory(false)}
+                aria-label={t("common.dismiss")}
+              >
+                <X size={16} />
+              </button>
+            </div>
+            {historyLoading ? (
+              <div className="history-empty">{t("common.loading")}</div>
+            ) : revisions.length === 0 ? (
+              <div className="history-empty">{t("editor.noHistory")}</div>
+            ) : (
+              <ul className="history-list">
+                {revisions.map((rev, i) => (
+                  <li key={rev.commit}>
+                    <button
+                      className={`history-row${previewRef === rev.commit ? " active" : ""}`}
+                      onClick={() => void previewRevision(rev.commit)}
+                      title={new Date(rev.when).toLocaleString()}
+                    >
+                      <span className="history-row-when">
+                        {i === 0 ? t("editor.historyLatest") : timeAgo(rev.when)}
+                      </span>
+                      <span className="history-row-meta">
+                        <span className="history-row-author">{rev.author}</span>
+                        <span className={`history-badge ${rev.autosave ? "autosave" : "checkpoint"}`}>
+                          {rev.autosave ? t("editor.autosaveBadge") : t("editor.checkpointBadge")}
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
         <ReactFlow
           nodes={nodes}
           edges={edges}

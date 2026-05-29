@@ -277,13 +277,21 @@ export function AppShell({ children }: { children: ReactNode }) {
               )}
             </NavLink>
           )}
-          <NavLink
-            to="/connections"
-            title={t("nav.connections")}
-          >
-            <Plug size={18} />
-            <span className="nav-label">{t("nav.connections")}</span>
-          </NavLink>
+          <div className="group-label">{t("nav.appsGroup")}</div>
+          {/* "My accounts" only appears for users who can actually manage
+              connections (secret:write — the editor role has it, viewers
+              don't). Without it the page is just hidden sections and dead
+              "Connect" buttons, so we keep it out of the menu rather than
+              show a non-techie a surface they can't use. */}
+          {hasPerm("secret:write") && (
+            <NavLink
+              to="/connections"
+              title={t("nav.connections")}
+            >
+              <Plug size={18} />
+              <span className="nav-label">{t("nav.connections")}</span>
+            </NavLink>
+          )}
           <NavLink
             to="/integrations"
             title={t("nav.integrations")}

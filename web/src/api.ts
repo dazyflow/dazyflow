@@ -6,9 +6,15 @@ import type {
   IssuedAPIKey,
   InvitationDetails,
   AdminOAuthProvider,
+  InstalledIntegration,
+  InstalledDrop,
+  IntegrationPreview,
+  DropCapabilitySummary,
+  TrustTier,
   InvitationSummary,
   LintIssue,
   Manifest,
+  Revision,
   MemberSummary,
   OAuthProviderStatus,
   OrgAuthConfig,
@@ -19,6 +25,10 @@ import type {
   JobStatus,
   PendingApproval,
   RunSummary,
+  RunView,
+  NodeRunView,
+  SecretManagerStatus,
+  SecretManagerConfig,
   UserSummary,
   WhoAmI,
   WorkspaceLimits,
@@ -93,6 +103,43 @@ export type SignInResponse = {
   workspace: string;
   expires_at: string;
 };
+
+// runViewToRecord / nodeViewToRecord adapt the public API's clean run/node
+// wire shapes (RunView / NodeRunView, snake_case) into the JobRecord shape
+// the run-detail components already consume. Keeping the translation here
+// means the API stays clean while the component layer is untouched.
+function runViewToRecord(r: RunView): JobRecord {
+  return {
+    ID: r.id,
+    Kind: "graph",
+    GraphRunID: "",
+    GraphID: r.graph_id ?? "",
+    NodeID: "*",
+    Status: r.status,
+    StartedAt: r.started_at ?? null,
+    FinishedAt: r.finished_at ?? null,
+    Result: r.error ? { status: r.status, error: r.error } : undefined,
+  };
+}
+
+function nodeViewToRecord(runID: string, n: NodeRunView): JobRecord {
+  return {
+    ID: `${runID}:${n.node_id}`,
+    Kind: "node",
+    GraphRunID: runID,
+    GraphID: "",
+    NodeID: n.node_id,
+    Status: n.status,
+    StartedAt: n.started_at ?? null,
+    FinishedAt: n.finished_at ?? null,
+    Attempt: n.attempts,
+    Result:
+      n.outputs || n.error
+        ? { status: n.status, output: n.outputs, error: n.error }
+        : undefined,
+    Job: n.inputs ? { Input: n.inputs } : undefined,
+  };
+}
 
 export const api = {
   // uploadWorkspaceFile sends a single file to a workspace sandbox via
@@ -184,13 +231,35 @@ export const api = {
     );
     return { graphs: r.flows ?? r.graphs ?? [] };
   },
-  loadGraph: (token: string, tenant: string, workspace: string, id: string) =>
+  // ref loads a past revision (a commit hash from flowHistory); omit it
+  // for the current HEAD. Used by the editor's history-preview.
+  loadGraph: (token: string, tenant: string, workspace: string, id: string, ref?: string) =>
     request<Graph>(
       token,
       "GET",
-      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}`,
+      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}${
+        ref ? `?ref=${encodeURIComponent(ref)}` : ""
+      }`,
     ),
-  saveGraph: (token: string, g: Graph) =>
+  // flowHistory returns the flow's commit log, newest first.
+  flowHistory: (token: string, tenant: string, workspace: string, id: string) =>
+    request<{ revisions: Revision[] }>(
+      token,
+      "GET",
+      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/history`,
+    ),
+  // restoreFlow makes a past revision the new HEAD (a fresh commit on top).
+  restoreFlow: (token: string, tenant: string, workspace: string, id: string, ref: string) =>
+    request<{ commit: string }>(
+      token,
+      "POST",
+      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/restore`,
+      { ref },
+    ),
+  // autosave=true marks an editor autosave: the daemon coalesces
+  // consecutive autosaves of the same flow into one commit so the
+  // workspace history stays readable. Explicit saves omit it.
+  saveGraph: (token: string, g: Graph, autosave = false) =>
     request<{
       commit: string;
       graph_id: string;
@@ -198,7 +267,9 @@ export const api = {
     }>(
       token,
       "PUT",
-      `/me/flows/${encodeURIComponent(`${g.tenant}/${g.workspace}/${g.id}`)}`,
+      `/me/flows/${encodeURIComponent(`${g.tenant}/${g.workspace}/${g.id}`)}${
+        autosave ? "?autosave=1" : ""
+      }`,
       g,
     ),
   runGraph: (token: string, tenant: string, workspace: string, id: string) =>
@@ -298,8 +369,10 @@ export const api = {
       `/me/runs?${qs.toString()}`,
     );
   },
-  getJob: (token: string, jobID: string) =>
-    request<JobRecord>(token, "GET", `/me/runs/${encodeURIComponent(jobID)}`),
+  getJob: (token: string, jobID: string): Promise<JobRecord> =>
+    request<RunView>(token, "GET", `/me/runs/${encodeURIComponent(jobID)}`).then(
+      runViewToRecord,
+    ),
   listPendingApprovals: (token: string, opts: { workspace?: string; tenant?: string } = {}) => {
     const qs = new URLSearchParams();
     if (opts.workspace) qs.set("workspace", opts.workspace);
@@ -385,20 +458,20 @@ export const api = {
       `/approvals/${encodeURIComponent(runID)}/${encodeURIComponent(nodeID)}?${qs.toString()}`,
     );
   },
-  getNodeRecord: (token: string, runID: string, nodeID: string) =>
-    request<JobRecord>(
+  getNodeRecord: (token: string, runID: string, nodeID: string): Promise<JobRecord> =>
+    request<NodeRunView>(
       token,
       "GET",
       `/me/runs/${encodeURIComponent(runID)}/nodes/${encodeURIComponent(nodeID)}`,
-    ),
+    ).then((n) => nodeViewToRecord(runID, n)),
   // listRunNodes returns every per-node record for a run in one
   // round trip — the run-detail page draws its timeline from this.
-  listRunNodes: (token: string, runID: string) =>
-    request<{ nodes: JobRecord[] }>(
+  listRunNodes: (token: string, runID: string): Promise<{ nodes: JobRecord[] }> =>
+    request<{ nodes: NodeRunView[] }>(
       token,
       "GET",
       `/me/runs/${encodeURIComponent(runID)}/nodes`,
-    ),
+    ).then((r) => ({ nodes: (r.nodes ?? []).map((n) => nodeViewToRecord(runID, n)) })),
   // SSE: EventSource doesn't support headers, so we proxy through fetch
   // with ReadableStream parsing instead. Caller cancels via AbortController.
   streamJob(
@@ -524,6 +597,81 @@ export const api = {
       "DELETE",
       `/admin/oauth-providers/${encodeURIComponent(name)}`,
     ),
+
+  // --- Marketplace install (platform-admin) -------------------------------
+  // What's installed today.
+  listMarketplaceIntegrations: (token: string) =>
+    request<{ integrations: InstalledIntegration[] }>(
+      token,
+      "GET",
+      "/admin/marketplace/integrations",
+    ),
+  listMarketplaceDrops: (token: string) =>
+    request<{ drops: InstalledDrop[] }>(token, "GET", "/admin/marketplace/drops"),
+  // previewIntegrationFromGit fetches a repo@ref and returns the setup form +
+  // trust tier + resolved commit, WITHOUT installing — the "see what you're
+  // about to install" step before entering credentials.
+  previewIntegrationFromGit: (token: string, repo: string, ref: string) =>
+    request<IntegrationPreview>(
+      token,
+      "POST",
+      "/admin/marketplace/integrations/from-git/preview",
+      { repo, ref },
+    ),
+  // installIntegrationFromGit fetches repo@ref and installs it with the
+  // operator-supplied credentials (registers the OAuth provider, persists).
+  installIntegrationFromGit: (
+    token: string,
+    repo: string,
+    ref: string,
+    credentials: Record<string, string>,
+  ) =>
+    request<{ id: string; version: string; tier: TrustTier; installed: boolean }>(
+      token,
+      "POST",
+      "/admin/marketplace/integrations/from-git",
+      { repo, ref, credentials },
+    ),
+  // previewDropFromGit fetches repo@ref:path and returns the drop's requested
+  // capabilities (secrets/OAuth/egress) + trust tier + commit, WITHOUT
+  // installing — the consent step before an untrusted drop is installed.
+  previewDropFromGit: (token: string, repo: string, ref: string, path: string) =>
+    request<DropCapabilitySummary>(
+      token,
+      "POST",
+      "/admin/marketplace/drops/from-git/preview",
+      { repo, ref, path },
+    ),
+  // installDropFromGit fetches repo@ref:path and installs it (gated on its
+  // required integrations — a 409 means install the integration first — and on
+  // explicit capability consent: acknowledged must be true).
+  installDropFromGit: (
+    token: string,
+    repo: string,
+    ref: string,
+    path: string,
+    acknowledged: boolean,
+  ) =>
+    request<{ id: string; tier: TrustTier; installed: boolean }>(
+      token,
+      "POST",
+      "/admin/marketplace/drops/from-git",
+      { repo, ref, path, acknowledged },
+    ),
+  // uninstallIntegration removes an integration. 409 if an installed drop still
+  // depends on it.
+  uninstallIntegration: (token: string, id: string) =>
+    request<void>(
+      token,
+      "DELETE",
+      `/admin/marketplace/integrations/${encodeURIComponent(id)}`,
+    ),
+  uninstallDrop: (token: string, id: string) =>
+    request<void>(
+      token,
+      "DELETE",
+      `/admin/marketplace/drops/${encodeURIComponent(id)}`,
+    ),
   // listSecrets returns the NAMES of the tenant's stored credentials —
   // never the values (the daemon has no read-back endpoint by design).
   listSecrets: (token: string) =>
@@ -536,6 +684,16 @@ export const api = {
     }),
   deleteSecret: (token: string, name: string) =>
     request<void>(token, "DELETE", `/secrets/${encodeURIComponent(name)}`),
+
+  // Bring-your-own secret manager (OpenBao/Vault) connection for this tenant.
+  // getSecretManager returns a redacted view (no credentials); setSecretManager
+  // connection-tests before saving (a 502 means "could not reach the manager").
+  getSecretManager: (token: string) =>
+    request<SecretManagerStatus>(token, "GET", "/secret-manager"),
+  setSecretManager: (token: string, cfg: SecretManagerConfig) =>
+    request<void>(token, "PUT", "/secret-manager", cfg),
+  deleteSecretManager: (token: string) =>
+    request<void>(token, "DELETE", "/secret-manager"),
 
   switchOrg: (token: string, tenant: string) =>
     request<{ tenant: string; workspace: string; roles: Role[] }>(

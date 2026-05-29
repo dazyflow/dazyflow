@@ -60,11 +60,26 @@ type HTTPGateway struct {
 	// writes tokens into the encrypted store.
 	OAuth *OAuthRegistry
 
+	// Installer powers the /api/v1/admin/marketplace/* endpoints for
+	// installing integrations and drops (platform-admin only). Nil disables
+	// those endpoints (501).
+	Installer *Installer
+
 	// EnableSignup opens POST /api/v1/auth/signup for self-serve
 	// account creation. Defaults to false — production deployments
 	// often want admin-invite-only signup. The hzd binary opts in
 	// via --signup or $HAZYFLOW_ENABLE_SIGNUP.
 	EnableSignup bool
+
+	// PlatformAdmins is the lowercased email allowlist that bootstraps the
+	// platform:admin super-admin role (e.g. to reach /admin/oauth). There's
+	// no other grant path — only a platform admin can mint a platform-admin
+	// key — so this env-driven list breaks the chicken-and-egg. Matching
+	// users get the role stamped onto their session at sign-in/signup/SSO
+	// (see elevatePlatformAdmin); the list is the single source of truth,
+	// so removing an email + re-login revokes it. Wired from
+	// $HAZYFLOW_PLATFORM_ADMINS.
+	PlatformAdmins []string
 
 	// EnableMetrics mounts an unauthenticated GET /metrics Prometheus
 	// endpoint. Off by default: it exposes tenant names + disk usage, so
@@ -180,7 +195,7 @@ func (h *HTTPGateway) ServeListener(ctx context.Context, ln net.Listener) error 
 	mux := http.NewServeMux()
 	h.mountRoutes(mux)
 	srv := &http.Server{
-		Handler:           h.withCORSAndLogging(h.verifyCookieOrigin(mux)),
+		Handler:           h.withCORSAndLogging(h.verifyCookieOrigin(jsonErrors(mux))),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		// No WriteTimeout — SSE responses are long-lived. Per-request
@@ -236,6 +251,13 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/secrets", h.requireAuth(h.listSecrets))
 	mux.HandleFunc("PUT /api/v1/secrets/{name}", h.requireAuth(h.putSecret))
 	mux.HandleFunc("DELETE /api/v1/secrets/{name}", h.requireAuth(h.deleteSecret))
+
+	// Bring-your-own secret manager (OpenBao/Vault): per-tenant connection
+	// config behind the same secret-permission gate. Flows then resolve
+	// ${vault:PATH#FIELD} against the tenant's own manager.
+	mux.HandleFunc("GET /api/v1/secret-manager", h.requireAuth(h.getSecretManager))
+	mux.HandleFunc("PUT /api/v1/secret-manager", h.requireAuth(h.putSecretManager))
+	mux.HandleFunc("DELETE /api/v1/secret-manager", h.requireAuth(h.deleteSecretManager))
 	mux.HandleFunc("GET /api/v1/oauth/providers", h.requireAuth(h.oauthListProviders))
 	mux.HandleFunc("GET /api/v1/oauth/{provider}/authorize", h.requireAuth(h.oauthAuthorize))
 	// Callback is UNAUTHENTICATED — the OAuth provider redirects the
@@ -279,6 +301,9 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// routes honor Idempotency-Key for replay-safe retries.
 	mux.HandleFunc("GET /api/v1/me/flows", h.requireAuth(h.listFlowsMe))
 	mux.HandleFunc("GET /api/v1/me/flows/{flow_id}", h.requireAuth(h.loadFlowMe))
+	mux.HandleFunc("GET /api/v1/me/flows/{flow_id}/history", h.requireAuth(h.historyFlowMe))
+	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/restore",
+		h.requireAuth(h.idempotencyMiddleware("/me/flows/{flow_id}/restore", h.restoreFlowMe)))
 	mux.HandleFunc("PUT /api/v1/me/flows/{flow_id}",
 		h.requireAuth(h.idempotencyMiddleware("/me/flows/{flow_id}", h.saveFlowMe)))
 	mux.HandleFunc("PATCH /api/v1/me/flows/{flow_id}",
@@ -338,6 +363,23 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/admin/oauth-providers", h.requireAuth(h.listAdminOAuthProviders))
 	mux.HandleFunc("PUT /api/v1/admin/oauth-providers/{name}", h.requireAuth(h.upsertAdminOAuthProvider))
 	mux.HandleFunc("DELETE /api/v1/admin/oauth-providers/{name}", h.requireAuth(h.deleteAdminOAuthProvider))
+	// Marketplace install (platform-admin): preview an integration's setup
+	// form, install integrations + drops, list what's installed. The drop
+	// install is gated on its required integrations being installed first.
+	mux.HandleFunc("POST /api/v1/admin/marketplace/integrations/preview", h.requireAuth(h.previewIntegration))
+	mux.HandleFunc("GET /api/v1/admin/marketplace/integrations", h.requireAuth(h.listInstalledIntegrations))
+	mux.HandleFunc("POST /api/v1/admin/marketplace/integrations", h.requireAuth(h.installIntegration))
+	mux.HandleFunc("GET /api/v1/admin/marketplace/drops", h.requireAuth(h.listInstalledDrops))
+	mux.HandleFunc("POST /api/v1/admin/marketplace/drops/preview", h.requireAuth(h.previewDrop))
+	mux.HandleFunc("POST /api/v1/admin/marketplace/drops", h.requireAuth(h.installDrop))
+	// Install from a git repo at a tag (the git-as-source transport): preview
+	// fetches + shows the form/capabilities, the others fetch + install.
+	mux.HandleFunc("POST /api/v1/admin/marketplace/integrations/from-git/preview", h.requireAuth(h.previewIntegrationFromGit))
+	mux.HandleFunc("POST /api/v1/admin/marketplace/integrations/from-git", h.requireAuth(h.installIntegrationFromGit))
+	mux.HandleFunc("POST /api/v1/admin/marketplace/drops/from-git/preview", h.requireAuth(h.previewDropFromGit))
+	mux.HandleFunc("POST /api/v1/admin/marketplace/drops/from-git", h.requireAuth(h.installDropFromGit))
+	mux.HandleFunc("DELETE /api/v1/admin/marketplace/integrations/{id}", h.requireAuth(h.uninstallIntegration))
+	mux.HandleFunc("DELETE /api/v1/admin/marketplace/drops/{id}", h.requireAuth(h.uninstallDrop))
 	// Multi-org membership: a user can belong to many tenants (the
 	// "home" tenant minted at signup + any they've been invited to).
 	// switch-org re-issues the session against a different tenant the
@@ -537,7 +579,7 @@ func webDistHandler(root string) http.Handler {
 func ServeForTest(h *HTTPGateway, rw http.ResponseWriter, r *http.Request) {
 	mux := http.NewServeMux()
 	h.mountRoutes(mux)
-	h.withCORSAndLogging(h.verifyCookieOrigin(mux)).ServeHTTP(rw, r)
+	h.withCORSAndLogging(h.verifyCookieOrigin(jsonErrors(mux))).ServeHTTP(rw, r)
 }
 
 // verifyCookieOrigin is the CSRF defense layer for cookie-authenticated
@@ -713,7 +755,7 @@ func (h *HTTPGateway) signIn(rw http.ResponseWriter, r *http.Request) {
 	if ttl <= 0 {
 		ttl = 24 * time.Hour
 	}
-	sess, token, err := auth.IssueSession(r.Context(), h.Sessions, user, ttl)
+	sess, token, err := auth.IssueSession(r.Context(), h.Sessions, h.elevatePlatformAdmin(user), ttl)
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("issue session: %v", err))
 		return
@@ -736,6 +778,46 @@ func (h *HTTPGateway) signIn(rw http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// elevatePlatformAdmin grants the platform:admin role to a user whose
+// email is in the PlatformAdmins allowlist. Called at every session-issue
+// site (sign-in, signup, SSO) so the allowlist is the single source of
+// truth — roles are baked into the session at issue time, so an existing
+// session must re-authenticate to pick up an allowlist change. No-op when
+// the email isn't listed or the role is already present.
+func (h *HTTPGateway) elevatePlatformAdmin(u auth.User) auth.User {
+	if !h.isPlatformAdminEmail(u.Email) {
+		return u
+	}
+	for _, r := range u.Roles {
+		if r.Has(core.PermPlatformAdmin) {
+			return u
+		}
+	}
+	// Copy before appending: u.Roles may alias a slice held by the user
+	// store, and we must not mutate that shared backing array.
+	u.Roles = append(append([]core.Role(nil), u.Roles...), core.Role{
+		Name:        "platform_admin",
+		Permissions: []core.Permission{core.PermPlatformAdmin},
+	})
+	return u
+}
+
+// isPlatformAdminEmail reports whether email is in the allowlist. The
+// stored entries are already lowercased + trimmed at wiring time; we
+// normalize the candidate the same way so the comparison is exact.
+func (h *HTTPGateway) isPlatformAdminEmail(email string) bool {
+	email = strings.ToLower(strings.TrimSpace(email))
+	if email == "" {
+		return false
+	}
+	for _, a := range h.PlatformAdmins {
+		if a == email {
+			return true
+		}
+	}
+	return false
+}
+
 // signOut deletes the server-side session and clears the cookie. It
 // silently no-ops when no session is attached so the browser can hit
 // this on logout without inspecting state first.
@@ -745,7 +827,7 @@ func (h *HTTPGateway) signOut(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if token := credentialFromRequest(r); strings.HasPrefix(token, auth.SessionTokenPrefix) {
-		_ = h.Sessions.DeleteSession(r.Context(), token)
+		_ = h.Sessions.DeleteSession(r.Context(), auth.SessionLookupKey(token))
 	}
 	http.SetCookie(rw, &http.Cookie{
 		Name:     sessionCookieName,
@@ -1260,13 +1342,15 @@ func (h *HTTPGateway) approveAuthed(rw http.ResponseWriter, r *http.Request, p c
 		writeJSONError(rw, http.StatusForbidden, err.Error())
 		return
 	}
-	approver := r.URL.Query().Get("approver")
-	if approver == "" {
-		approver = p.Subject
-	}
+	// Always attribute the approval to the authenticated principal — never a
+	// client-supplied ?approver=. This path has a proven identity (the API-key
+	// chain), so honoring a query param would let a valid caller forge who
+	// approved in both the audit log and the resumed node's record. (The
+	// unauthenticated HMAC /approve path is different: there the approver is
+	// supplied because there's no session identity to trust.)
 	if err := h.svc.Approve(r.Context(), runID, nodeID, ApprovalDecision{
 		Decision: decision,
-		Approver: approver,
+		Approver: p.Subject,
 		Comment:  r.URL.Query().Get("comment"),
 	}); err != nil {
 		if strings.Contains(err.Error(), "not awaiting") {
@@ -1566,15 +1650,20 @@ func (h *HTTPGateway) jobEvents(rw http.ResponseWriter, r *http.Request, p core.
 	rw.WriteHeader(http.StatusOK)
 
 	// Snapshot first so the UI has the current state without racing
-	// against subscriber delivery.
-	writeSSE(rw, "snapshot", rec)
+	// against subscriber delivery. Emit the same clean runView the REST
+	// /me/runs/{id} endpoint returns — not the raw JobRecord.
+	writeSSE(rw, "snapshot", newRunView(rec))
 	// Followed by per-node status snapshots — late subscribers (the UI
 	// that connects after Submit returns) catch up on transitions that
 	// already happened.
 	h.emitNodeSnapshots(rw, r.Context(), rec)
 	flusher.Flush()
 	if core.IsTerminalStatus(rec.Status) {
-		writeSSE(rw, "terminal", map[string]any{"status": rec.Status})
+		writeSSE(rw, "terminal", sseTerminalView{
+			RunID:  rec.ID,
+			Status: rec.Status,
+			Error:  resultError(rec.Result),
+		})
 		flusher.Flush()
 		return
 	}
@@ -1609,7 +1698,7 @@ func (h *HTTPGateway) jobEvents(rw http.ResponseWriter, r *http.Request, p core.
 				flusher.Flush()
 			}
 			if ev.Terminal != nil {
-				writeSSE(rw, "terminal", ev.Terminal)
+				writeSSE(rw, "terminal", newSSETerminalView(ev.Terminal))
 				flusher.Flush()
 				return
 			}
@@ -1655,8 +1744,13 @@ func writeJSON(rw http.ResponseWriter, status int, body any) {
 	_ = json.NewEncoder(rw).Encode(body)
 }
 
+// writeJSONError emits the structured ErrorEnvelope with a code derived
+// from the HTTP status. It exists so the ~260 legacy call sites that only
+// have (status, message) still produce the SAME wire shape as
+// writeAPIError — one error envelope across the whole API. Handlers that
+// have a more specific machine code should call writeAPIError directly.
 func writeJSONError(rw http.ResponseWriter, status int, msg string) {
-	writeJSON(rw, status, map[string]string{"error": msg})
+	writeAPIError(rw, status, codeForStatus(status), msg)
 }
 
 // writeSSE writes a single Server-Sent Events frame: `event: <name>\n
@@ -1670,4 +1764,3 @@ func writeSSE(rw http.ResponseWriter, event string, payload any) {
 	}
 	_, _ = fmt.Fprintf(rw, "event: %s\ndata: %s\n\n", event, b)
 }
-

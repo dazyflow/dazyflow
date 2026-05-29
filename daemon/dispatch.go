@@ -44,6 +44,56 @@ func NewDispatcher(store core.JobStore, bus Bus, eng *engine.Engine, logger *log
 	return &Dispatcher{store: store, bus: bus, engine: eng, logger: logger}
 }
 
+// reapBatchLimit bounds one reaper sweep. Runs that complete drop out of the
+// running filter, so anything beyond the batch is picked up on the next sweep.
+const reapBatchLimit = 500
+
+// ReapStuckGraphRuns recovers graph-run records still marked running whose
+// every node-record has already reached a terminal state, and finalizes them.
+//
+// Normally the dispatcher finalizes a graph run as a side effect of the last
+// node's terminal transition (maybeCompleteGraph). If a worker dies in the
+// window between that node's terminal write and the completion check — or the
+// process is killed mid-finalize — the graph record is left running forever,
+// with no lease and no node transition left to re-fire it. This sweep closes
+// that gap: it re-runs the completion check for each running graph run, which
+// is a no-op for runs that genuinely still have work outstanding and a clean
+// finalize (success, propagated failure, parent-subgraph resume, scratch
+// reclaim — exactly the live path) for runs that are actually done.
+//
+// Safe to run on every replica concurrently: Complete is terminal-guarded, so
+// only one finalize wins and a healthy in-flight run is never disturbed.
+// Returns the number of runs finalized this sweep.
+func (d *Dispatcher) ReapStuckGraphRuns(ctx context.Context) (int, error) {
+	runs, err := d.store.ListGraphRuns(ctx, core.ListGraphRunsOpts{
+		Status: core.JobStatusRunning,
+		Limit:  reapBatchLimit,
+	})
+	if err != nil {
+		return 0, err
+	}
+	reaped := 0
+	for _, run := range runs {
+		if len(run.GraphPayload) == 0 {
+			continue
+		}
+		var g core.Graph
+		if err := json.Unmarshal(run.GraphPayload, &g); err != nil {
+			d.logger.Printf("reaper: graph run %s has unparseable payload, skipping: %v", run.ID, err)
+			continue
+		}
+		// A non-failing lastStatus + empty lastNodeID skips the fast-path and
+		// runs the full all-terminal evaluation; if the run isn't actually
+		// done this returns without touching it.
+		d.maybeCompleteGraph(ctx, g, run.ID, "", core.JobStatusSucceeded, nil)
+		if rec, err := d.store.Get(ctx, run.ID); err == nil && core.IsTerminalStatus(rec.Status) {
+			reaped++
+			d.logger.Printf("reaper: recovered orphaned graph run %s → %s", run.ID, rec.Status)
+		}
+	}
+	return reaped, nil
+}
+
 // AdvanceAfterCompletion is the single entry-point used by the worker
 // and the approval handler once a node has reached its final outcome.
 // It centralizes the "publish node-status + dispatch dependents +

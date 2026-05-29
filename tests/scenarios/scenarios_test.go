@@ -15,11 +15,32 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazy-flow/engine/jsdrop"
 	_ "git.sr.ht/~klahr/hazy-flow/integrations" // register every native drop
+	"git.sr.ht/~klahr/hazy-flow/officialdrops"
 )
 
+// combinedManifests is the full shipped catalog the app exposes: native drops
+// plus the official scripted drops (gmail, slack, …) embedded in the binary.
+// Scenario/template graphs reference both, so validation must know both.
+func combinedManifests(t *testing.T) map[string]core.Manifest {
+	t.Helper()
+	out := map[string]core.Manifest{}
+	for id, m := range engine.Default.Manifests() {
+		out[id] = m
+	}
+	cat := jsdrop.NewCatalog()
+	if err := officialdrops.Register(cat); err != nil {
+		t.Fatalf("register official drops: %v", err)
+	}
+	for id, m := range cat.Manifests() {
+		out[id] = m
+	}
+	return out
+}
+
 func TestScenarioGraphsValidate(t *testing.T) {
-	manifests := engine.Default.Manifests()
+	manifests := combinedManifests(t)
 
 	files, err := filepath.Glob("*.json")
 	if err != nil {

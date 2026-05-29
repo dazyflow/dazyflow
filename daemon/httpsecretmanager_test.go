@@ -1,0 +1,110 @@
+package daemon
+
+import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+)
+
+// fakeVaultServer stands in for OpenBao/Vault: it accepts a token-self lookup
+// from one known token and 403s anything else, so the verify-on-save path is
+// exercised without a real server.
+func fakeVaultServer(t *testing.T, goodToken string) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/v1/auth/token/lookup-self") {
+			if r.Header.Get("X-Vault-Token") == goodToken {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`{"data":{}}`))
+				return
+			}
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"errors":["permission denied"]}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func smBody(addr, token string) json.RawMessage {
+	b, _ := json.Marshal(map[string]any{
+		"address": addr,
+		"mount":   "secret",
+		"auth":    map[string]any{"method": "token", "token": token},
+	})
+	return b
+}
+
+func TestSecretManager_SetGetDelete(t *testing.T) {
+	h := newSecretsHarness(t)
+	srv := fakeVaultServer(t, "good-token")
+
+	// Save a valid config → verified, then stored.
+	if rw := h.do(t, "PUT", "/api/v1/secret-manager", smBody(srv.URL, "good-token")); rw.Code != http.StatusNoContent {
+		t.Fatalf("PUT status=%d body=%s", rw.Code, rw.Body.String())
+	}
+
+	// GET returns the redacted view — configured, address shown, credential NOT.
+	rw := h.do(t, "GET", "/api/v1/secret-manager", nil)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("GET status=%d body=%s", rw.Code, rw.Body.String())
+	}
+	if strings.Contains(rw.Body.String(), "good-token") {
+		t.Fatalf("GET leaked the token: %s", rw.Body.String())
+	}
+	var view secretManagerView
+	if err := json.Unmarshal(rw.Body.Bytes(), &view); err != nil {
+		t.Fatal(err)
+	}
+	if !view.Configured || view.Address != srv.URL || view.AuthMethod != "token" {
+		t.Errorf("view = %+v", view)
+	}
+
+	// The config must not appear in the user-facing secret listing.
+	rw = h.do(t, "GET", "/api/v1/secrets", nil)
+	if strings.Contains(rw.Body.String(), "cfg:secret-manager") {
+		t.Errorf("secret-manager config leaked into the secret listing: %s", rw.Body.String())
+	}
+
+	// Delete → gone.
+	if rw := h.do(t, "DELETE", "/api/v1/secret-manager", nil); rw.Code != http.StatusNoContent {
+		t.Fatalf("DELETE status=%d", rw.Code)
+	}
+	rw = h.do(t, "GET", "/api/v1/secret-manager", nil)
+	if err := json.Unmarshal(rw.Body.Bytes(), &view); err != nil {
+		t.Fatal(err)
+	}
+	if view.Configured {
+		t.Error("config should be gone after delete")
+	}
+}
+
+// A config that fails the connection test is rejected (502) and not persisted.
+func TestSecretManager_RejectsUnreachable(t *testing.T) {
+	h := newSecretsHarness(t)
+	srv := fakeVaultServer(t, "good-token")
+
+	if rw := h.do(t, "PUT", "/api/v1/secret-manager", smBody(srv.URL, "WRONG-token")); rw.Code != http.StatusBadGateway {
+		t.Fatalf("PUT with bad token status=%d body=%s, want 502", rw.Code, rw.Body.String())
+	}
+	// Nothing stored.
+	rw := h.do(t, "GET", "/api/v1/secret-manager", nil)
+	var view secretManagerView
+	_ = json.Unmarshal(rw.Body.Bytes(), &view)
+	if view.Configured {
+		t.Error("a rejected config must not be persisted")
+	}
+}
+
+// An invalid config (bad auth method) is a 400 before any network call.
+func TestSecretManager_ValidatesBody(t *testing.T) {
+	h := newSecretsHarness(t)
+	bad, _ := json.Marshal(map[string]any{"address": "https://v", "mount": "secret", "auth": map[string]any{"method": "psychic"}})
+	if rw := h.do(t, "PUT", "/api/v1/secret-manager", json.RawMessage(bad)); rw.Code != http.StatusBadRequest {
+		t.Fatalf("PUT invalid status=%d, want 400", rw.Code)
+	}
+}

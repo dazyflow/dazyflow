@@ -1,16 +1,19 @@
-# Canonical self-host stack: Postgres + hzd. One command:
+# Canonical self-host stack: Postgres + hzd.
 #
-#   cp .env.example .env   # optional — defaults boot as-is
+#   cp .env.example .env   # then set the values in steps 1–4 below
 #   docker compose up -d
 #
-# brings everything up, runs migrations, and serves the API + web UI on
+# brings everything up and serves the API + web UI on
 # http://localhost:8080 (gRPC on :50050). Control-plane state (jobs, API
 # keys, sessions, users, encrypted secrets) persists to Postgres; graphs
 # + sandboxes persist to the hzddata volume, so `docker compose down` is
 # safe.
 #
 # Override anything below via a sibling .env file (see .env.example).
-# Defaults are tuned for first-boot ergonomics, NOT production. Before
+# NOTE: hzd refuses to boot with the bundled default DB password or an
+# empty master key once a database is configured (it always is here), so
+# steps 1 and 2 are mandatory — not just recommended. For a throwaway
+# local trial, HAZYFLOW_DEV=1 downgrades that guard to warnings. Before
 # putting this in front of users:
 #
 #   1. Set POSTGRES_PASSWORD to something other than "hazyflow" (and

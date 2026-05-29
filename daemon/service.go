@@ -382,7 +382,18 @@ func (s *Service) DeleteGraph(ctx context.Context, p core.Principal, tenant, ws,
 
 // SaveGraph persists a graph as principal. Tenant/workspace on the graph
 // must match the principal's scope. Returns the new commit hash.
+// SaveGraph persists an explicit save — its own commit (checkpoint).
 func (s *Service) SaveGraph(ctx context.Context, p core.Principal, g core.Graph) (string, error) {
+	return s.saveGraph(ctx, p, g, false)
+}
+
+// SaveGraphCoalescing persists an editor autosave: consecutive autosaves of
+// the same flow coalesce into one commit (see workspace.Store.SaveCoalescing).
+func (s *Service) SaveGraphCoalescing(ctx context.Context, p core.Principal, g core.Graph) (string, error) {
+	return s.saveGraph(ctx, p, g, true)
+}
+
+func (s *Service) saveGraph(ctx context.Context, p core.Principal, g core.Graph, coalesce bool) (string, error) {
 	if err := core.RequireWorkspace(p, g.Tenant, g.Workspace); err != nil {
 		return "", err
 	}
@@ -435,6 +446,9 @@ func (s *Service) SaveGraph(ctx context.Context, p core.Principal, g core.Graph)
 			g.Owner = p.Subject
 		}
 	}
+	if coalesce {
+		return store.SaveCoalescing(g, p.Subject)
+	}
 	return store.Save(g, p.Subject)
 }
 
@@ -465,6 +479,60 @@ func (s *Service) LoadGraph(ctx context.Context, p core.Principal, tenant, ws, i
 		return core.Graph{}, fmt.Errorf("graph %q: %w", id, core.ErrNotFound)
 	}
 	return g, nil
+}
+
+// FlowHistory returns the commit history of a flow, newest first. Gated on
+// the same view permission as LoadGraph so private flows don't leak their
+// existence (or edit cadence) to non-viewers.
+func (s *Service) FlowHistory(ctx context.Context, p core.Principal, tenant, ws, id string, limit int) ([]workspace.Revision, error) {
+	if err := core.RequireWorkspace(p, tenant, ws); err != nil {
+		return nil, err
+	}
+	store, err := s.Workspaces.Open(tenant, ws)
+	if err != nil {
+		return nil, err
+	}
+	// Authorize against the current HEAD revision, mirroring LoadGraph: if
+	// the principal can't view the flow, report it as absent.
+	g, err := store.Load(id)
+	if err != nil {
+		return nil, err
+	}
+	if vErr := core.AuthorizeGraphView(p, g); vErr != nil {
+		return nil, fmt.Errorf("graph %q: %w", id, core.ErrNotFound)
+	}
+	return store.History(id, limit)
+}
+
+// RestoreFlow makes a past revision the new HEAD: it loads the flow's
+// content at ref and saves it as a fresh commit on top. History is never
+// rewritten — restoring is just an edit whose content happens to match an
+// older revision (the Google-Docs model). The save reuses SaveGraph's edit
+// authorization and active-run lock, so restoring a locked flow 409s like
+// any other edit. Returns the new commit and the resulting HEAD graph.
+func (s *Service) RestoreFlow(ctx context.Context, p core.Principal, tenant, ws, id, ref string) (string, core.Graph, error) {
+	if err := core.RequireWorkspace(p, tenant, ws); err != nil {
+		return "", core.Graph{}, err
+	}
+	store, err := s.Workspaces.Open(tenant, ws)
+	if err != nil {
+		return "", core.Graph{}, err
+	}
+	old, err := store.LoadAt(ref, id)
+	if err != nil {
+		return "", core.Graph{}, err
+	}
+	old.Tenant, old.Workspace, old.ID = tenant, ws, id
+	// Explicit (non-coalescing) save: a restore is an intentional checkpoint.
+	commit, err := s.saveGraph(ctx, p, old, false)
+	if err != nil {
+		return "", core.Graph{}, err
+	}
+	head, err := store.Load(id)
+	if err != nil {
+		return "", core.Graph{}, err
+	}
+	return commit, head, nil
 }
 
 // ListGraphs returns every graph ID in a workspace at HEAD that the
@@ -513,6 +581,7 @@ func (s *Service) ListGraphs(ctx context.Context, p core.Principal, tenant, ws s
 //     see every workspace under their own Tenant.
 //   - Platform admins may pass `narrowTenant` to list workspaces in
 //     any tenant — used by the cross-tenant switcher.
+//
 // The UI uses this to populate the workspace switcher in the top bar;
 // non-admins simply see a single entry and the switcher hides.
 func (s *Service) ListWorkspaces(ctx context.Context, p core.Principal, narrowTenant string) ([]string, error) {
@@ -785,13 +854,13 @@ func (s *Service) ListGraphRuns(ctx context.Context, p core.Principal, opts core
 // module emitted). Built by ListPendingApprovals; the UI never sees the
 // raw node-record.
 type PendingApproval struct {
-	RunID    string    `json:"run_id"`
-	GraphID  string    `json:"graph_id"`
-	NodeID   string    `json:"node_id"`
-	Prompt   string    `json:"prompt,omitempty"`
-	URL      string    `json:"url,omitempty"`
-	Since    time.Time `json:"since"`
-	Workspace string   `json:"workspace"`
+	RunID     string    `json:"run_id"`
+	GraphID   string    `json:"graph_id"`
+	NodeID    string    `json:"node_id"`
+	Prompt    string    `json:"prompt,omitempty"`
+	URL       string    `json:"url,omitempty"`
+	Since     time.Time `json:"since"`
+	Workspace string    `json:"workspace"`
 }
 
 // ListPendingApprovals returns awaiting node-records that were

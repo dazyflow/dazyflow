@@ -255,9 +255,9 @@ func TestPerNode_LeaseExpiryAllowsReclaim(t *testing.T) {
 	graphRunID := "gr"
 	// Seed the graph-record manually so the worker can fetch it.
 	graphRec := core.JobRecord{
-		ID:     graphRunID,
-		Kind:   core.JobKindGraph,
-		Status: core.JobStatusRunning,
+		ID:           graphRunID,
+		Kind:         core.JobKindGraph,
+		Status:       core.JobStatusRunning,
 		GraphPayload: []byte(`{"id":"g","nodes":[{"id":"a","module":"sleep","params":{"ms":5}}],"edges":[]}`),
 	}
 	if err := jobs.Enqueue(t.Context(), graphRec); err != nil {

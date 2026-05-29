@@ -20,17 +20,17 @@ import (
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "http_upload",
-			Version:        "1.0",
-			Label:          "HTTP upload",
-			Color:          "#5599ee",
-			Icon:           "upload",
-			Category:       "io",
-			Provider:       "internal",
-			Integration:    "HTTP",
-			Tags:           []string{"http", "upload", "file", "sandbox"},
-			Description:    "Upload a file from the workspace sandbox to a URL, streaming it from disk. Raw mode (default) PUTs the file bytes directly — what S3/GCS/Azure presigned URLs expect; multipart mode POSTs it as a form field for APIs that want multipart/form-data. Reads scratch:// paths too. Private-network addresses are blocked by default.",
-			Summary:        "Stream a sandbox file to a remote URL as a raw PUT body (presigned-URL style) or a multipart/form-data POST.",
+			ID:          "http_upload",
+			Version:     "1.0",
+			Label:       "HTTP upload",
+			Color:       "#5599ee",
+			Icon:        "upload",
+			Category:    "io",
+			Provider:    "internal",
+			Integration: "HTTP",
+			Tags:        []string{"http", "upload", "file", "sandbox"},
+			Description: "Upload a file from the workspace sandbox to a URL, streaming it from disk. Raw mode (default) PUTs the file bytes directly — what S3/GCS/Azure presigned URLs expect; multipart mode POSTs it as a form field for APIs that want multipart/form-data. Reads scratch:// paths too. Private-network addresses are blocked by default.",
+			Summary:     "Stream a sandbox file to a remote URL as a raw PUT body (presigned-URL style) or a multipart/form-data POST.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "PUT to an S3 presigned URL",
@@ -95,7 +95,9 @@ func executeHTTPUpload(ctx context.Context, job core.Job, _ chan<- core.Progress
 	}
 	multi := params.BoolDefault(job.Params, "multipart", false)
 	timeoutMs := params.IntDefault(job.Params, "timeout_ms", 300000)
-	allowPrivate := params.BoolDefault(job.Params, "allow_private_networks", false)
+	// allow_private_networks disables the SSRF guard — honored only when the
+	// operator opted in (HAZYFLOW_ALLOW_PRIVATE_EGRESS), else ignored.
+	allowPrivate := params.BoolDefault(job.Params, "allow_private_networks", false) && hfnet.PrivateEgressAllowed()
 
 	// Open the source file from the sandbox (workspace or scratch://).
 	root, rel, err := openSandboxRoot(job, srcPath)

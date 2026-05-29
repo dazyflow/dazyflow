@@ -209,12 +209,6 @@ export function IntegrationDetail() {
           {meta.description && (
             <p className="integration-hero-desc">{meta.description}</p>
           )}
-          {meta.technical_notes && (
-            <details className="integration-hero-technical">
-              <summary>{t("integrations.technicalDetails")}</summary>
-              <p>{meta.technical_notes}</p>
-            </details>
-          )}
           {meta.docs_url && (
             <p className="integration-hero-docs">
               <a href={meta.docs_url} target="_blank" rel="noreferrer noopener">

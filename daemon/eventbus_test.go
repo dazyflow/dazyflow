@@ -60,6 +60,86 @@ func TestMemoryBus_UnsubscribeCloses(t *testing.T) {
 	}
 }
 
+// TestMemoryBus_PublishCancelRace is the regression test for the
+// send-on-closed-channel race: publishers fan out concurrently while
+// subscribers churn subscribe→cancel (which closes their channel). On the
+// pre-fix code — snapshot under lock, send after unlock — a publish sends
+// to a channel cancel() just closed and the runtime panics. With the send
+// held under the lock, close and send are mutually exclusive. Passing
+// means no panic (and `-race` finds any residual data race).
+func TestMemoryBus_PublishCancelRace(t *testing.T) {
+	b := NewMemoryBus()
+	const job = "job-1"
+	stop := make(chan struct{})
+	var pubWg, subWg sync.WaitGroup
+
+	for i := 0; i < 4; i++ {
+		pubWg.Add(1)
+		go func() {
+			defer pubWg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+					b.Publish(job, BusEvent{Progress: &engine.GraphProgress{JobID: job}})
+				}
+			}
+		}()
+	}
+	for i := 0; i < 8; i++ {
+		subWg.Add(1)
+		go func() {
+			defer subWg.Done()
+			for j := 0; j < 3000; j++ {
+				_, cancel := b.Subscribe(job)
+				cancel()
+			}
+		}()
+	}
+	subWg.Wait()
+	close(stop)
+	pubWg.Wait()
+}
+
+// TestPgBus_FanoutCancelRace exercises the same race on the PgBus fan-out
+// path. fanout/Subscribe touch only the mutex + subs map (no pool), so the
+// concurrency contract is testable without a database.
+func TestPgBus_FanoutCancelRace(t *testing.T) {
+	b := &PgBus{subs: make(map[string][]chan BusEvent)}
+	const job = "job-1"
+	stop := make(chan struct{})
+	var pubWg, subWg sync.WaitGroup
+
+	for i := 0; i < 4; i++ {
+		pubWg.Add(1)
+		go func() {
+			defer pubWg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+					b.fanout(job, BusEvent{Progress: &engine.GraphProgress{JobID: job}})
+				}
+			}
+		}()
+	}
+	for i := 0; i < 8; i++ {
+		subWg.Add(1)
+		go func() {
+			defer subWg.Done()
+			for j := 0; j < 3000; j++ {
+				_, cancel := b.Subscribe(job)
+				cancel()
+			}
+		}()
+	}
+	subWg.Wait()
+	close(stop)
+	pubWg.Wait()
+}
+
 func TestMemoryBus_SlowSubscriberDoesNotBlockPublisher(t *testing.T) {
 	b := NewMemoryBus()
 	ch, cancel := b.Subscribe("job-1")

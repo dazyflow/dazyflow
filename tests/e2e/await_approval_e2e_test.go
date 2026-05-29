@@ -111,18 +111,11 @@ func TestAwaitApproval_E2E_ApproveResumesDownstream(t *testing.T) {
 	}
 
 	// Wait until the approval node has parked.
-	deadline := time.Now().Add(3 * time.Second)
 	var askRec core.JobRecord
-	for time.Now().Before(deadline) {
+	waitFor(t, "ask node to reach awaiting", func() bool {
 		askRec, _ = h.store.Get(t.Context(), daemon.NodeJobID(runID, "ask"))
-		if askRec.Status == core.JobStatusAwaiting {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	if askRec.Status != core.JobStatusAwaiting {
-		t.Fatalf("ask never reached awaiting; status = %q", askRec.Status)
-	}
+		return askRec.Status == core.JobStatusAwaiting
+	})
 
 	// The graph-record must still be running (not terminal) while the
 	// approval is pending.
@@ -156,7 +149,7 @@ func TestAwaitApproval_E2E_ApproveResumesDownstream(t *testing.T) {
 	}
 
 	// Wait for the graph to finalize.
-	terminal := waitForFire(t, h.bus, runID, 5*time.Second)
+	terminal := waitForFire(t, h.store, runID)
 	if terminal != core.JobStatusSucceeded {
 		t.Fatalf("terminal status = %q", terminal)
 	}
@@ -210,15 +203,11 @@ func TestAwaitApproval_E2E_RejectRoutesToRejectedBranch(t *testing.T) {
 		t.Fatalf("SubmitGraph: %v", err)
 	}
 
-	deadline := time.Now().Add(3 * time.Second)
 	var askRec core.JobRecord
-	for time.Now().Before(deadline) {
+	waitFor(t, "ask node to reach awaiting", func() bool {
 		askRec, _ = h.store.Get(t.Context(), daemon.NodeJobID(runID, "ask"))
-		if askRec.Status == core.JobStatusAwaiting {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+		return askRec.Status == core.JobStatusAwaiting
+	})
 	approvalURL, _ := askRec.Result.Output["pending_url"].Inline.(string)
 
 	req, _ := http.NewRequest("POST", approvalURL+"&decision=reject&approver=bob&comment=too+risky", nil)
@@ -228,7 +217,7 @@ func TestAwaitApproval_E2E_RejectRoutesToRejectedBranch(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	terminal := waitForFire(t, h.bus, runID, 5*time.Second)
+	terminal := waitForFire(t, h.store, runID)
 	if terminal != core.JobStatusSucceeded {
 		t.Fatalf("terminal = %q", terminal)
 	}
@@ -263,15 +252,11 @@ func TestAwaitApproval_E2E_DoubleApproveIs409(t *testing.T) {
 	}
 	runID, _ := h.svc.SubmitGraph(t.Context(), p, g)
 
-	deadline := time.Now().Add(3 * time.Second)
 	var askRec core.JobRecord
-	for time.Now().Before(deadline) {
+	waitFor(t, "ask node to reach awaiting", func() bool {
 		askRec, _ = h.store.Get(t.Context(), daemon.NodeJobID(runID, "ask"))
-		if askRec.Status == core.JobStatusAwaiting {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+		return askRec.Status == core.JobStatusAwaiting
+	})
 	approvalURL, _ := askRec.Result.Output["pending_url"].Inline.(string)
 
 	for i, want := range []int{http.StatusOK, http.StatusConflict} {

@@ -21,12 +21,12 @@ import (
 // returning the Bearer token tests should send for an authenticated
 // principal scoped to t/ws.
 type gatewayHarness struct {
-	gw         *HTTPGateway
-	svc        *Service
-	store      core.JobStore
-	ws         *workspace.Store
-	bus        *MemoryBus
-	ks         *auth.MemKeyStore
+	gw            *HTTPGateway
+	svc           *Service
+	store         core.JobStore
+	ws            *workspace.Store
+	bus           *MemoryBus
+	ks            *auth.MemKeyStore
 	token         string // editor token
 	adminToken    string // tenant:admin token (issued lazily by adminDo)
 	platformToken string // platform:admin token (issued lazily by platformDo)
@@ -327,15 +327,18 @@ func TestHTTPGateway_NodeSnapshotReturnsRecord(t *testing.T) {
 	if rw.Code != http.StatusOK {
 		t.Fatalf("code = %d body = %s", rw.Code, rw.Body.String())
 	}
-	var got core.JobRecord
+	var got nodeRunView
 	if err := json.Unmarshal(rw.Body.Bytes(), &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if got.Status != core.JobStatusSucceeded {
 		t.Errorf("status = %q", got.Status)
 	}
-	if got.Result == nil || got.Result.Output["out"].Inline != "hello" {
-		t.Errorf("output = %+v", got.Result)
+	if got.NodeID != "step1" {
+		t.Errorf("node_id = %q", got.NodeID)
+	}
+	if got.Outputs["out"].Inline != "hello" {
+		t.Errorf("outputs = %+v", got.Outputs)
 	}
 }
 
@@ -609,6 +612,43 @@ func TestHTTPGateway_ApproveAuthedResumesAwaitingNode(t *testing.T) {
 	// Approver defaults to the principal's subject when not set.
 	if got, _ := rec.Result.Output["approver"].Inline.(string); got != "alice" {
 		t.Errorf("approver = %q, want alice (principal subject)", got)
+	}
+}
+
+// TestHTTPGateway_ApproveAuthedIgnoresSpoofedApprover locks in that the
+// authenticated approval path attributes the approval to the proven
+// principal, never a client-supplied ?approver=. Otherwise a valid caller
+// could forge who approved in the audit trail and the node record.
+func TestHTTPGateway_ApproveAuthedIgnoresSpoofedApprover(t *testing.T) {
+	h := newGatewayHarness(t)
+	_ = h.store.Enqueue(t.Context(), core.JobRecord{
+		ID: "run-spoof", Kind: core.JobKindGraph,
+		GraphID: "g1", Tenant: "t", Workspace: "ws",
+		Status:       core.JobStatusRunning,
+		GraphPayload: []byte(`{"id":"g1","tenant":"t","workspace":"ws","nodes":[{"id":"a","module":"await_approval"}]}`),
+	})
+	_ = h.store.Enqueue(t.Context(), core.JobRecord{
+		ID: NodeJobID("run-spoof", "a"), Kind: core.JobKindNode,
+		GraphRunID: "run-spoof", GraphID: "g1",
+		NodeID: "a", Tenant: "t", Workspace: "ws",
+		Status: core.JobStatusAwaiting,
+		Result: &core.Result{
+			Status: core.StatusAwaiting,
+			Output: map[string]core.Ref{"pending_url": {Inline: "https://hzd/approve/run-spoof/a?token=x"}},
+		},
+	})
+	// Caller tries to attribute the approval to "mallory".
+	rw := h.do(t, "POST", "/api/v1/approvals/run-spoof/a?decision=approve&approver=mallory", nil)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("code = %d body = %s", rw.Code, rw.Body.String())
+	}
+	rec, _ := h.store.Get(t.Context(), NodeJobID("run-spoof", "a"))
+	got, _ := rec.Result.Output["approver"].Inline.(string)
+	if got == "mallory" {
+		t.Fatal("spoofed ?approver= was honored; approval must be attributed to the principal")
+	}
+	if got != "alice" {
+		t.Errorf("approver = %q, want alice (the authenticated principal)", got)
 	}
 }
 
@@ -1226,6 +1266,47 @@ func TestHTTPGateway_PlatformAdminCanIssueInAnyTenant(t *testing.T) {
 	// The new key works for its tenant.
 	if _, err := h.svc.Authenticate(t.Context(), issued.Secret); err != nil {
 		t.Errorf("new tenant's bootstrap key didn't authenticate: %v", err)
+	}
+}
+
+// A tenant admin must not be able to mint a key carrying platform:admin —
+// that would escalate from per-tenant admin to cross-tenant super-admin. A
+// platform admin issuing the same role is fine.
+func TestHTTPGateway_TenantAdminCantGrantPlatformAdmin(t *testing.T) {
+	h := newGatewayHarness(t)
+
+	issue := func(tok string) *httptest.ResponseRecorder {
+		body, _ := json.Marshal(map[string]any{
+			"subject": "escalated",
+			"tenant":  "t",
+			"roles":   []map[string]any{{"name": "super", "permissions": []string{"platform:admin"}}},
+		})
+		req := httptest.NewRequest("POST", "/api/v1/admin/api-keys", bytes.NewBuffer(body))
+		req.Header.Set("Authorization", "Bearer "+tok)
+		req.Header.Set("Content-Type", "application/json")
+		rw := httptest.NewRecorder()
+		ServeForTest(h.gw, rw, req)
+		return rw
+	}
+
+	// Tenant admin → refused.
+	taRole := core.Role{Name: "ta", Permissions: []core.Permission{core.PermTenantAdmin}}
+	_, taTok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-ta-esc", "t", "ws", "root", []core.Role{taRole}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rw := issue(taTok); rw.Code == http.StatusCreated {
+		t.Fatalf("tenant admin was allowed to mint a platform:admin key: %s", rw.Body.String())
+	}
+
+	// Platform admin → allowed.
+	paRole := core.Role{Name: "pa", Permissions: []core.Permission{core.PermPlatformAdmin}}
+	_, paTok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-pa-esc", "", "", "op", []core.Role{paRole}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rw := issue(paTok); rw.Code != http.StatusCreated {
+		t.Fatalf("platform admin couldn't mint a platform:admin key: %d %s", rw.Code, rw.Body.String())
 	}
 }
 

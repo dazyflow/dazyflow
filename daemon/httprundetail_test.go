@@ -64,7 +64,7 @@ func TestHTTPGateway_ListRunNodes_ReturnsAllNodesForRun(t *testing.T) {
 		t.Fatalf("code = %d body = %s", rw.Code, rw.Body.String())
 	}
 	var resp struct {
-		Nodes []core.JobRecord `json:"nodes"`
+		Nodes []nodeRunView `json:"nodes"`
 	}
 	if err := json.Unmarshal(rw.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
@@ -72,12 +72,12 @@ func TestHTTPGateway_ListRunNodes_ReturnsAllNodesForRun(t *testing.T) {
 	if len(resp.Nodes) != 3 {
 		t.Fatalf("got %d nodes, want 3 (must not include run-bbb's): %+v", len(resp.Nodes), resp.Nodes)
 	}
+	// run-bbb also has a "step1"; a cross-run leak would push the count to
+	// 4 (caught above) — so membership of exactly the three expected ids is
+	// the leak check here.
 	got := map[string]bool{}
 	for _, n := range resp.Nodes {
 		got[n.NodeID] = true
-		if n.GraphRunID != "run-aaa" {
-			t.Errorf("leaked node from another run: %+v", n)
-		}
 	}
 	for _, want := range []string{"step1", "step2", "step3"} {
 		if !got[want] {

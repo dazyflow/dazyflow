@@ -172,6 +172,49 @@ func TestRetry_ExhaustedFailsGraph(t *testing.T) {
 	}
 }
 
+// TestWorker_DefaultNodeTimeoutBoundsUnboundedNode proves the worker's
+// wall-time backstop: a node with NO explicit TimeoutSeconds that would
+// otherwise block forever (here, until its context is cancelled) is bounded
+// by DefaultNodeTimeout, fails with a structured "timeout", and frees the
+// worker — rather than pinning the slot indefinitely.
+func TestWorker_DefaultNodeTimeoutBoundsUnboundedNode(t *testing.T) {
+	blocker := engine.NativeDrop{
+		Manifest: core.Manifest{
+			ID: "blocker", Version: "1.0", Summary: "blocks until ctx cancelled.",
+			Examples:       []core.ParamsExample{{Title: "default"}},
+			ExecutionModel: core.ExecutionBatch,
+			ProcessModel:   core.ProcessLongLived,
+			Outputs:        []core.Port{{Port: "out"}},
+		},
+		Execute: func(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
+			<-ctx.Done() // honors cancellation; the backstop is what fires it
+			return core.Result{JobID: job.ID, Status: core.StatusOK}, nil
+		},
+	}
+	// No explicit node timeout; a short DefaultNodeTimeout is the only bound.
+	h := newRetryHarness(t, blocker, daemon.WorkerConfig{
+		MaxRetries:         1, // one shot, no retries
+		DefaultNodeTimeout: 150 * time.Millisecond,
+	})
+
+	g := core.Graph{
+		ID: "to-backstop", Tenant: "t", Workspace: "ws",
+		Nodes: []core.Node{{ID: "n", Module: "blocker"}},
+	}
+	graphRunID, err := h.svc.SubmitGraph(t.Context(), h.principal, g)
+	if err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	terminal := waitForTerminalEvent(t, h.bus, h.jobs, graphRunID, 5*time.Second)
+	if terminal.Status != core.JobStatusFailed {
+		t.Fatalf("graph status = %q, want failed (the node should time out)", terminal.Status)
+	}
+	rec, _ := h.jobs.Get(t.Context(), daemon.NodeJobID(graphRunID, "n"))
+	if rec.Result == nil || rec.Result.Error == nil || rec.Result.Error.Code != "timeout" {
+		t.Fatalf("want a structured timeout failure, got %+v", rec.Result)
+	}
+}
+
 func TestRetry_HonorsBackoffDelay(t *testing.T) {
 	failCount := atomic.Int32{}
 	failCount.Store(1) // fail once, succeed second time

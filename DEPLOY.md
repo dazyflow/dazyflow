@@ -90,6 +90,20 @@ lost on restart (dev only — the daemon logs a warning). Provide a
 stable `HAZYFLOW_MASTER_KEY` (32-byte base64); losing it makes every
 stored secret undecryptable.
 
+### Fail-closed config guard
+
+When `HAZYFLOW_POSTGRES_DSN` is set (the durable-deployment signal),
+`hzd` **refuses to start** if it would otherwise run with a bundled
+insecure default — specifically a `HAZYFLOW_POSTGRES_DSN` still using the
+shipped default DB password, or an empty `HAZYFLOW_MASTER_KEY`. The boot
+log prints a `FATAL` line naming each offending value. Fix them (set a
+strong `POSTGRES_PASSWORD` and a real master key) and restart.
+
+`HAZYFLOW_DEV=1` downgrades the guard from fatal to warnings so the
+bundled defaults boot for a local trial. **Never set it in production** —
+it exists only so `docker compose up -d` works for a throwaway smoke
+test.
+
 ### Migrating an existing JSON user file to Postgres
 
 If you ran in dev mode with users in a JSON file (legacy:
@@ -141,6 +155,24 @@ decrypt the `encrypted_secrets` rows.
   `webhook_send` drops to an allowlist of hosts (`api.stripe.com`,
   `*.slack.com`, CIDRs). The IP-level SSRF guard (blocks
   private/loopback/metadata) is always on.
+- `HAZYFLOW_ALLOW_PRIVATE_EGRESS` defaults **off**. The
+  `http_request` / `http_download` / `http_upload` drops expose an
+  `allow_private_networks` param that disables the SSRF guard; that
+  param is ignored unless this is set to `1`. Leave it off on
+  multi-tenant deployments, or any tenant could reach cloud metadata
+  (`169.254.169.254`), `localhost`, or internal services. The same
+  opt-in also governs the SSRF guard on the Postgres/MySQL `dsn` host
+  and the SMTP `host` (so a flow can't point a DB or email drop at an
+  internal address either).
+- `HAZYFLOW_ENABLE_SHELL` defaults **off** — and should stay off on any
+  multi-tenant or internet-facing deployment. It registers the `shell`
+  drop, which runs arbitrary host commands as the daemon's user with
+  full host filesystem and network access, bypassing the scripted-drop
+  sandbox. Enabling it gives **anyone who can run a flow remote code
+  execution on the host**; only turn it on for a single-tenant/CI box
+  you fully control. When enabled, the command env is scrubbed of all
+  `HAZYFLOW_*` variables so the master key and daemon secrets are never
+  exposed to the command.
 - `HAZYFLOW_ISOLATE_SHARED_SECRETS=1` in shared multi-tenant
   deployments forces `env://` lookups to be `<tenant>.<key>` so tenant
   A can't read tenant B's operator-supplied env secrets.
@@ -163,6 +195,23 @@ decrypt the `encrypted_secrets` rows.
   the OTel Collector, Honeycomb, …). Unset = no export (zero overhead).
   All standard `OTEL_EXPORTER_OTLP_*` env vars (headers, TLS, timeout)
   are honored.
+
+## Graceful shutdown
+
+On `SIGTERM`/`SIGINT`, `hzd` drains: it stops the gRPC server gracefully,
+stops claiming new jobs, and lets any in-flight node finish and finalize
+its run before exiting. The wait is bounded by `HAZYFLOW_SHUTDOWN_GRACE`
+(default `25s`); if it elapses with work still running, `hzd` exits
+anyway and the unfinished node's lease expires so another instance
+reclaims it. Set `HAZYFLOW_SHUTDOWN_GRACE` below your orchestrator's
+termination grace (e.g. keep it under k8s
+`terminationGracePeriodSeconds`, default 30s) so the process drains
+rather than being `SIGKILL`ed mid-write.
+
+A separate reaper sweep (every `HAZYFLOW_REAP_INTERVAL`, default `1m`,
+plus once at startup) recovers any graph run left marked `running` by a
+hard crash whose nodes have all reached a terminal state — so a `SIGKILL`
+or power loss can't strand a run forever.
 
 ## Human approvals (await_approval)
 

@@ -88,7 +88,7 @@ func (h *HTTPGateway) switchOrg(rw http.ResponseWriter, r *http.Request, p core.
 		writeJSONError(rw, http.StatusUnauthorized, "no session token")
 		return
 	}
-	sess, err := h.Sessions.GetSession(r.Context(), token)
+	sess, err := h.Sessions.GetSession(r.Context(), auth.SessionLookupKey(token))
 	if err != nil {
 		writeJSONError(rw, http.StatusUnauthorized, "session not found")
 		return
@@ -416,17 +416,17 @@ func (h *HTTPGateway) viewInvitation(rw http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(rw, http.StatusOK, map[string]any{
-		"email":             inv.Email,
-		"tenant":            inv.Tenant,
-		"tenant_display":    orgName,
-		"workspace":         inv.Workspace,
-		"roles":             inv.Roles,
-		"invited_by":        inv.InvitedBy,
-		"expires_at":        inv.ExpiresAt,
-		"pending":           inv.IsPending(now),
-		"accepted":          inv.AcceptedAt != nil,
-		"revoked":           inv.RevokedAt != nil,
-		"expired":           !now.Before(inv.ExpiresAt),
+		"email":          inv.Email,
+		"tenant":         inv.Tenant,
+		"tenant_display": orgName,
+		"workspace":      inv.Workspace,
+		"roles":          inv.Roles,
+		"invited_by":     inv.InvitedBy,
+		"expires_at":     inv.ExpiresAt,
+		"pending":        inv.IsPending(now),
+		"accepted":       inv.AcceptedAt != nil,
+		"revoked":        inv.RevokedAt != nil,
+		"expired":        !now.Before(inv.ExpiresAt),
 	})
 }
 
@@ -506,9 +506,9 @@ func (h *HTTPGateway) getOrgAuthConfig(rw http.ResponseWriter, r *http.Request, 
 	if err != nil {
 		if errors.Is(err, auth.ErrUnknownOrgAuth) {
 			writeJSON(rw, http.StatusOK, map[string]any{
-				"tenant":          tenant,
-				"google_enabled":  false,
-				"google_client_id": "",
+				"tenant":                  tenant,
+				"google_enabled":          false,
+				"google_client_id":        "",
 				"google_workspace_domain": "",
 			})
 			return

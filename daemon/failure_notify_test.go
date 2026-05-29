@@ -17,8 +17,8 @@ import (
 // fakeWebhook captures everything a failure-notify POST sends so
 // the tests can assert on the payload shape and headers.
 type fakeWebhook struct {
-	server  *httptest.Server
-	mu      sync.Mutex
+	server   *httptest.Server
+	mu       sync.Mutex
 	received []capturedPost
 	respCode int
 }
