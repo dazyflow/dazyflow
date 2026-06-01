@@ -6,7 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"git.sr.ht/~klahr/hazy-flow/auth"
 	"git.sr.ht/~klahr/hazy-flow/core"
 )
 
@@ -28,6 +30,53 @@ func TestMetrics_JobGauges(t *testing.T) {
 	for _, want := range []string{
 		`hazyflow_jobs{status="queued"} 2`,
 		`hazyflow_jobs{status="running"} 0`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("metrics body missing %q\n--- body ---\n%s", want, body)
+		}
+	}
+}
+
+func TestMetrics_SessionCacheGauges(t *testing.T) {
+	h := newGatewayHarness(t)
+	h.gw.EnableMetrics = true
+
+	// Wrap a session store with the cache and prime one hit + one miss.
+	cache := auth.NewCachingSessionStore(auth.NewMemSessionStore(), time.Minute, 0)
+	sess := auth.Session{ID: "s1", Subject: "u", Tenant: "t", ExpiresAt: time.Now().Add(time.Hour)}
+	if err := cache.PutSession(t.Context(), sess); err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	_, _ = cache.GetSession(t.Context(), "s1")      // hit
+	_, _ = cache.GetSession(t.Context(), "missing") // miss
+	h.gw.Sessions = cache
+
+	body := h.do(t, "GET", "/metrics", nil).Body.String()
+	for _, want := range []string{
+		"hazyflow_session_cache_hits_total 1",
+		"hazyflow_session_cache_misses_total 1",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("metrics body missing %q\n--- body ---\n%s", want, body)
+		}
+	}
+}
+
+func TestMetrics_HTTPRedSeries(t *testing.T) {
+	h := newGatewayHarness(t)
+	h.gw.EnableMetrics = true
+	h.gw.Metrics = NewMetrics()
+
+	// Drive a couple of requests through the full middleware chain so the
+	// RED counters + duration histogram accumulate.
+	h.do(t, "GET", "/healthz", nil)
+	h.do(t, "GET", "/healthz", nil)
+
+	body := h.do(t, "GET", "/metrics", nil).Body.String()
+	for _, want := range []string{
+		`hazyflow_http_requests_total{method="GET",code="200"}`,
+		"hazyflow_http_request_duration_seconds_bucket",
+		`hazyflow_http_request_duration_seconds_count{method="GET"}`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("metrics body missing %q\n--- body ---\n%s", want, body)

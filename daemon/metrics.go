@@ -1,12 +1,28 @@
 package daemon
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 )
+
+// queueAger is the optional JobStore capability for reporting queue
+// latency. The Postgres store implements it; the in-memory dev store
+// doesn't, so the gauge is simply omitted there.
+type queueAger interface {
+	OldestQueuedEnqueuedAt(ctx context.Context) (time.Time, bool, error)
+}
+
+// sessionCacheStatter is implemented by auth.CachingSessionStore. When
+// the session store is wrapped with the cache, the metrics endpoint
+// surfaces its hit/miss counters; otherwise the gauges are omitted.
+type sessionCacheStatter interface {
+	Stats() (hits, misses int64)
+}
 
 // jobStatusOrder fixes the gauge emission order so every status (incl.
 // zero counts) appears every scrape — stable, gap-free time series.
@@ -43,6 +59,54 @@ func (h *HTTPGateway) metrics(rw http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+
+	// Queue latency: how long the oldest claimable node job has waited.
+	// A rising value is the early signal that workers can't keep up —
+	// raise HAZYFLOW_WORKER_COUNT or add replicas before users feel it.
+	if ager, ok := h.svc.Jobs.(queueAger); ok {
+		if t, present, err := ager.OldestQueuedEnqueuedAt(r.Context()); err == nil {
+			age := 0.0
+			if present {
+				age = time.Since(t).Seconds()
+			}
+			fmt.Fprint(rw, "# HELP hazyflow_jobs_oldest_queued_seconds Age of the oldest claimable node job (0 when the queue is empty).\n")
+			fmt.Fprint(rw, "# TYPE hazyflow_jobs_oldest_queued_seconds gauge\n")
+			fmt.Fprintf(rw, "hazyflow_jobs_oldest_queued_seconds %.3f\n", age)
+		}
+	}
+
+	// Postgres pool saturation — the earliest warning that the pool is
+	// undersized. empty_acquires climbing means callers are waiting for a
+	// free connection (raise HAZYFLOW_PG_MAX_CONNS or scale out).
+	if h.DBPool != nil {
+		st := h.DBPool.Stat()
+		fmt.Fprint(rw, "# HELP hazyflow_pg_pool_connections Postgres pool connections by state.\n")
+		fmt.Fprint(rw, "# TYPE hazyflow_pg_pool_connections gauge\n")
+		fmt.Fprintf(rw, "hazyflow_pg_pool_connections{state=%s} %d\n", promLabel("acquired"), st.AcquiredConns())
+		fmt.Fprintf(rw, "hazyflow_pg_pool_connections{state=%s} %d\n", promLabel("idle"), st.IdleConns())
+		fmt.Fprintf(rw, "hazyflow_pg_pool_connections{state=%s} %d\n", promLabel("total"), st.TotalConns())
+		fmt.Fprint(rw, "# HELP hazyflow_pg_pool_max_connections Configured pool ceiling.\n")
+		fmt.Fprint(rw, "# TYPE hazyflow_pg_pool_max_connections gauge\n")
+		fmt.Fprintf(rw, "hazyflow_pg_pool_max_connections %d\n", st.MaxConns())
+		fmt.Fprint(rw, "# HELP hazyflow_pg_pool_empty_acquires_total Acquires that had to wait for a connection (cumulative).\n")
+		fmt.Fprint(rw, "# TYPE hazyflow_pg_pool_empty_acquires_total counter\n")
+		fmt.Fprintf(rw, "hazyflow_pg_pool_empty_acquires_total %d\n", st.EmptyAcquireCount())
+	}
+
+	// Session-lookup cache hit/miss — confirms the cache is absorbing the
+	// per-request auth lookups, and the miss rate tracks raw auth load.
+	if statter, ok := h.Sessions.(sessionCacheStatter); ok {
+		hits, misses := statter.Stats()
+		fmt.Fprint(rw, "# HELP hazyflow_session_cache_hits_total Session lookups served from the in-process cache (cumulative).\n")
+		fmt.Fprint(rw, "# TYPE hazyflow_session_cache_hits_total counter\n")
+		fmt.Fprintf(rw, "hazyflow_session_cache_hits_total %d\n", hits)
+		fmt.Fprint(rw, "# HELP hazyflow_session_cache_misses_total Session lookups that fell through to the store (cumulative).\n")
+		fmt.Fprint(rw, "# TYPE hazyflow_session_cache_misses_total counter\n")
+		fmt.Fprintf(rw, "hazyflow_session_cache_misses_total %d\n", misses)
+	}
+
+	// HTTP RED + per-node latency histograms (cumulative, in-process).
+	h.Metrics.render(rw)
 
 	reporter, ok := h.quotaReporter()
 	if !ok {

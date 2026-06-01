@@ -92,6 +92,38 @@ func NewPgAuditLog(ctx context.Context, pool *pgxpool.Pool) (*PgAuditLog, error)
 	return &PgAuditLog{pool: pool}, nil
 }
 
+// Prune deletes audit rows older than the cutoff in bounded batches so a
+// large backlog doesn't lock the table in one statement. Returns the
+// total deleted. olderThan <= 0 is a no-op (retention disabled).
+func (p *PgAuditLog) Prune(ctx context.Context, olderThan time.Duration, batch int) (int, error) {
+	if olderThan <= 0 {
+		return 0, nil
+	}
+	if batch <= 0 {
+		batch = 5000
+	}
+	cutoff := time.Now().Add(-olderThan)
+	total := 0
+	for {
+		tag, err := p.pool.Exec(ctx,
+			`DELETE FROM audit_events WHERE id IN (
+			     SELECT id FROM audit_events WHERE ts < $1 LIMIT $2)`, cutoff, batch)
+		if err != nil {
+			return total, err
+		}
+		n := int(tag.RowsAffected())
+		total += n
+		if n < batch {
+			return total, nil
+		}
+		select {
+		case <-ctx.Done():
+			return total, ctx.Err()
+		default:
+		}
+	}
+}
+
 func (p *PgAuditLog) Append(ctx context.Context, e core.AuditEvent) error {
 	_, err := p.pool.Exec(ctx,
 		`INSERT INTO audit_events (ts, tenant, actor, action, target, detail) VALUES ($1,$2,$3,$4,$5,$6)`,

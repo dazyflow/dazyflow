@@ -195,6 +195,69 @@ const claimCappedQuery = `
 
 // CountsByStatus implements core.JobCounter via a single GROUP BY over
 // the node-kind rows.
+// PruneTerminal deletes finished job rows whose finished_at is older
+// than the cutoff, in bounded batches so a large backlog doesn't lock
+// the table in one statement. Only terminal-status rows are removed;
+// queued/running rows (and any row without a finished_at) are never
+// touched, so an in-flight or reaper-recoverable run is safe. Returns
+// the total number of rows deleted. olderThan <= 0 is a no-op so callers
+// can pass a disabled-retention value straight through.
+func (s *Postgres) PruneTerminal(ctx context.Context, olderThan time.Duration, batch int) (int, error) {
+	if olderThan <= 0 {
+		return 0, nil
+	}
+	if batch <= 0 {
+		batch = 5000
+	}
+	cutoff := time.Now().Add(-olderThan)
+	total := 0
+	for {
+		tag, err := s.pool.Exec(ctx,
+			`DELETE FROM jobs WHERE id IN (
+			     SELECT id FROM jobs
+			      WHERE finished_at IS NOT NULL AND finished_at < $1
+			        AND status IN ('succeeded','failed','cancelled','skipped')
+			      LIMIT $2)`, cutoff, batch)
+		if err != nil {
+			return total, err
+		}
+		n := int(tag.RowsAffected())
+		total += n
+		if n < batch {
+			return total, nil
+		}
+		// Yield between batches: bail promptly on shutdown rather than
+		// holding a connection through a long backlog drain.
+		select {
+		case <-ctx.Done():
+			return total, ctx.Err()
+		default:
+		}
+	}
+}
+
+// OldestQueuedEnqueuedAt returns the enqueue time of the oldest
+// claimable (queued, available) node job, so metrics can expose queue
+// latency — the age of this row is how long the most-delayed work has
+// waited for a worker. The bool is false when nothing is queued. Uses
+// the same workqueue index as Claim, so it's a cheap index probe.
+func (s *Postgres) OldestQueuedEnqueuedAt(ctx context.Context) (time.Time, bool, error) {
+	var t time.Time
+	err := s.pool.QueryRow(ctx,
+		`SELECT enqueued_at FROM jobs
+		  WHERE kind = 'node' AND status = 'queued'
+		    AND (available_at IS NULL OR available_at <= now())
+		  ORDER BY enqueued_at
+		  LIMIT 1`).Scan(&t)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return time.Time{}, false, nil
+	}
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	return t, true, nil
+}
+
 func (s *Postgres) CountsByStatus(ctx context.Context) (map[core.JobStatus]int, error) {
 	rows, err := s.pool.Query(ctx, `SELECT status, count(*) FROM jobs WHERE kind = 'node' GROUP BY status`)
 	if err != nil {

@@ -16,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"git.sr.ht/~klahr/hazy-flow/auth"
 	"git.sr.ht/~klahr/hazy-flow/core"
 )
@@ -160,6 +162,18 @@ type HTTPGateway struct {
 	// TLS-terminating reverse proxy — otherwise a direct client could
 	// spoof the header. Off by default.
 	TrustProxyHeaders bool
+
+	// Metrics, when set, accumulates HTTP RED (rate/errors/duration) and
+	// per-node execution-latency series for the /metrics endpoint. Nil
+	// leaves those series unreported (the gauges in metrics.go still
+	// work). Shared with the workers so node latencies land here too.
+	Metrics *Metrics
+
+	// DBPool, when set, is the shared Postgres pool. The metrics
+	// endpoint reads its Stat() for connection-pool saturation gauges
+	// (the earliest warning that the pool is undersized). Nil = no pool
+	// metrics (in-memory dev deployments).
+	DBPool *pgxpool.Pool
 
 	// ReadyCheck, when set, is invoked by GET /readyz to verify
 	// dependencies (e.g. a Postgres ping) before reporting ready. Nil
@@ -700,6 +714,17 @@ func (h *HTTPGateway) withCORSAndLogging(next http.Handler) http.Handler {
 		allowCreds = true
 	}
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		// Wrap the writer to capture the status code, and time the
+		// request for the RED metrics. The recorder delegates Flush so
+		// SSE streams are unaffected.
+		if h.Metrics != nil {
+			rec := &statusRecorder{ResponseWriter: rw}
+			rw = rec
+			start := time.Now()
+			defer func() {
+				h.Metrics.ObserveHTTP(r.Method, rec.statusCode(), time.Since(start).Seconds())
+			}()
+		}
 		origin := r.Header.Get("Origin")
 		if allowCreds && origin != "" && h.originAllowed(origin) {
 			rw.Header().Set("Access-Control-Allow-Origin", origin)

@@ -37,6 +37,10 @@ type WorkerConfig struct {
 	// exponential: base*2^(attempt-1) with base=1s.
 	RetryBackoff func(attempt int) time.Duration
 
+	// Metrics, when set, receives per-node execution latency (keyed by
+	// terminal status) for the /metrics endpoint. Nil disables it.
+	Metrics *Metrics
+
 	// DefaultNodeTimeout is the wall-time backstop applied to a node that
 	// sets no explicit TimeoutSeconds. Without it, a node that honors
 	// cancellation but never finishes on its own — a remote gRPC call to a
@@ -214,7 +218,9 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 		return
 	}
 
+	nodeStart := time.Now()
 	result, runErr := w.runNode(execCtx, graph, rec, prior)
+	nodeElapsed := time.Since(nodeStart)
 	if stopLease() {
 		// Lost the lease mid-execution → another worker owns this job now.
 		// Abandon: writing a terminal result here would clobber the new
@@ -252,6 +258,13 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 	status := core.JobStatusSucceeded
 	if runErr != nil || result.Status == core.StatusError {
 		status = core.JobStatusFailed
+	}
+
+	// Record execution latency for any node that reached a terminal
+	// status (the awaiting/park path returned above). Failed attempts
+	// that will retry are counted too — they're real executions.
+	if w.cfg.Metrics != nil {
+		w.cfg.Metrics.ObserveNode(string(status), nodeElapsed.Seconds())
 	}
 
 	// Timeouts are intentional caps, not transient blips — retrying

@@ -73,10 +73,16 @@ func main() {
 	// password, missing master key) so the bundled defaults boot for local
 	// development. It must NOT be set in production.
 	devMode := envBool("HAZYFLOW_DEV", false)
-	// Two workers per process is enough for hand-tuned workloads.
-	// Scaling out is done by adding hzd replicas behind Postgres, not
-	// by raising this number.
-	const workerCount = 2
+	// Workers per process. Two is plenty for hand-tuned in-house
+	// workloads; raise it (HAZYFLOW_WORKER_COUNT) on an execution-heavy
+	// node, or scale out by adding hzd replicas behind Postgres. Both
+	// axes are safe: the job queue claims with FOR UPDATE SKIP LOCKED so
+	// workers never double-claim. Each worker can run one node at a time,
+	// so this is the per-process concurrency ceiling for flow execution.
+	workerCount := envInt("HAZYFLOW_WORKER_COUNT", 2)
+	if workerCount < 1 {
+		workerCount = 1
+	}
 	remotes := envStr("HAZYFLOW_REMOTE_MODULES", "")
 	httpListen := envStr("HAZYFLOW_HTTP", "")
 	postgresDSN := envStr("HAZYFLOW_POSTGRES_DSN", "")
@@ -131,6 +137,13 @@ func main() {
 	httpEgressAllow := envStr("HAZYFLOW_HTTP_EGRESS_ALLOW", "")
 	trustProxyHeaders := envBool("HAZYFLOW_TRUST_PROXY_HEADERS", false)
 	sessionTTL := envDuration("HAZYFLOW_SESSION_TTL", 24*time.Hour)
+	// Session-lookup cache TTL. Every cookie/bearer-authenticated request
+	// validates its session token; with Postgres that's a DB round-trip
+	// each time. A short in-process cache collapses that to ~1 query per
+	// token per window. Same-instance sign-out/rotation invalidates the
+	// cache immediately; the TTL only bounds cross-instance revocation
+	// lag, so keep it short. 0 disables the cache.
+	sessionCacheTTL := envDuration("HAZYFLOW_SESSION_CACHE_TTL", 15*time.Second)
 	maxGraphTimeout := envDuration("HAZYFLOW_MAX_GRAPH_TIMEOUT", 0)
 	// Resource guards. MAX_GRAPH_NODES is a defense-in-depth ceiling
 	// against pathologically large graphs; 1000 nodes is generous for
@@ -208,15 +221,23 @@ func main() {
 			log.Fatalf("postgres dsn: %v", err)
 		}
 		// Pool sizing: pgx defaults MaxConns to max(4, NumCPU), which is
-		// often too small under real load (every worker + the gateway +
-		// the scheduler share this one pool). Let operators size it; 0
-		// leaves the pgx default. MinConns keeps warm connections so a
-		// burst doesn't pay connection-setup latency.
+		// too small for real multi-tenant load — every worker, the
+		// gateway, the scheduler, and the reaper share this one pool, so
+		// 4 connections starve under even modest concurrency. We default
+		// to 20 (override with HAZYFLOW_PG_MAX_CONNS) and keep a couple of
+		// warm connections so a burst doesn't pay connect latency.
 		if pgMaxConns > 0 {
 			poolCfg.MaxConns = int32(pgMaxConns)
+		} else {
+			poolCfg.MaxConns = 20
 		}
 		if pgMinConns > 0 {
 			poolCfg.MinConns = int32(pgMinConns)
+		} else if poolCfg.MinConns < 2 {
+			poolCfg.MinConns = 2
+		}
+		if poolCfg.MinConns > poolCfg.MaxConns {
+			poolCfg.MinConns = poolCfg.MaxConns
 		}
 		pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 		if err != nil {
@@ -225,6 +246,9 @@ func main() {
 		pgPool = pool
 		defer pool.Close()
 		log.Printf("postgres pool: max_conns=%d min_conns=%d", poolCfg.MaxConns, poolCfg.MinConns)
+		if poolCfg.MaxConns < 10 {
+			log.Printf("WARNING: postgres pool max_conns=%d is low for production; set HAZYFLOW_PG_MAX_CONNS to 20+ once you have real concurrent load", poolCfg.MaxConns)
+		}
 		pgKeys, err := auth.NewPgKeyStore(ctx, pool)
 		if err != nil {
 			log.Fatalf("postgres key store: %v", err)
@@ -241,7 +265,13 @@ func main() {
 		if err != nil {
 			log.Fatalf("postgres job store: %v", err)
 		}
-		ks, users, sessions, jobs = pgKeys, pgUsers, pgSessions, pgJobs
+		// Front the session store with a short-TTL read cache so the
+		// per-request auth lookup doesn't hammer the pool. Returns the
+		// raw store when the TTL is 0.
+		ks, users, sessions, jobs = pgKeys, pgUsers, auth.NewCachingSessionStore(pgSessions, sessionCacheTTL, 0), pgJobs
+		if sessionCacheTTL > 0 {
+			log.Printf("session lookup cache: ttl=%s", sessionCacheTTL)
+		}
 		seedDefaultUser(ctx, users)
 		log.Print("postgres stores enabled: jobs, api-keys, sessions, users (durable across restart)")
 	} else {
@@ -536,11 +566,17 @@ func main() {
 	// HAZYFLOW_SHUTDOWN_GRACE — for them to finish before the process exits.
 	var bgWg sync.WaitGroup
 
+	// Shared metrics registry: HTTP RED on the gateway, per-node latency
+	// from the workers. Always created (cheap); /metrics only serves it
+	// when HAZYFLOW_ENABLE_METRICS is on.
+	appMetrics := daemon.NewMetrics()
+
 	// Spin up worker goroutines. Each is independent and competes for
 	// claims; the JobStore makes that contention safe.
 	for i := 0; i < workerCount; i++ {
 		w := daemon.NewWorker(daemon.WorkerConfig{
-			ID: fmt.Sprintf("hzd-dev-w%d", i),
+			ID:      fmt.Sprintf("hzd-dev-w%d", i),
+			Metrics: appMetrics,
 		}, jobs, eng, bus)
 		bgWg.Add(1)
 		go func() {
@@ -604,6 +640,60 @@ func main() {
 			}
 		}
 	}()
+
+	// Retention sweeps. The jobs table (full run history, JSON payloads)
+	// and audit_events grow without bound otherwise. Postgres-only — the
+	// in-memory dev stores are ephemeral. Each retention <= 0 disables
+	// that sweep; runs once at startup, then hourly.
+	if pgPool != nil {
+		jobRetention := envDuration("HAZYFLOW_JOB_RETENTION", 30*24*time.Hour)
+		auditRetention := envDuration("HAZYFLOW_AUDIT_RETENTION", 90*24*time.Hour)
+		if jobRetention > 0 || auditRetention > 0 {
+			retentionAudit, err := daemon.NewPgAuditLog(ctx, pgPool)
+			if err != nil {
+				log.Fatalf("retention: audit log: %v", err)
+			}
+			jobPruner, _ := jobs.(interface {
+				PruneTerminal(context.Context, time.Duration, int) (int, error)
+			})
+			bgWg.Add(1)
+			go func() {
+				defer bgWg.Done()
+				sweep := func() {
+					if jobRetention > 0 && jobPruner != nil {
+						if n, err := jobPruner.PruneTerminal(ctx, jobRetention, 5000); err != nil {
+							if ctx.Err() == nil {
+								log.Printf("retention: prune jobs: %v", err)
+							}
+						} else if n > 0 {
+							log.Printf("retention: pruned %d terminal job row(s)", n)
+						}
+					}
+					if auditRetention > 0 {
+						if n, err := retentionAudit.Prune(ctx, auditRetention, 5000); err != nil {
+							if ctx.Err() == nil {
+								log.Printf("retention: prune audit: %v", err)
+							}
+						} else if n > 0 {
+							log.Printf("retention: pruned %d audit row(s)", n)
+						}
+					}
+				}
+				sweep() // startup pass
+				t := time.NewTicker(time.Hour)
+				defer t.Stop()
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case <-t.C:
+						sweep()
+					}
+				}
+			}()
+			log.Printf("retention sweeps: jobs=%s audit=%s (0 = disabled)", jobRetention, auditRetention)
+		}
+	}
 
 	// Membership / invitation / per-org-auth / per-org-profile stores.
 	// With Postgres configured all four live in Pg tables (managed by
@@ -676,6 +766,8 @@ func main() {
 		gw.Approval = approvalListener         // nil leaves POST /approve/ unregistered
 		gw.EnableSignup = enableSignup         // false disables POST /api/v1/auth/signup
 		gw.EnableMetrics = enableMetrics       // false disables GET /metrics
+		gw.Metrics = appMetrics                // HTTP RED + per-node latency series
+		gw.DBPool = pgPool                     // nil = no pool-saturation metrics (dev)
 		if enableMetrics {
 			log.Print("metrics endpoint enabled at GET /metrics (unauthenticated — restrict scrape access)")
 		}

@@ -229,10 +229,49 @@ decrypt the `encrypted_secrets` rows.
   service is registered on the gRPC port (use `grpc_health_probe`); its
   overall status tracks the same readiness check.
 - **Metrics:** `HAZYFLOW_ENABLE_METRICS=1` exposes a Prometheus
-  `GET /metrics` endpoint (`hazyflow_up`, per-tenant
-  `hazyflow_quota_bytes_used/_limit`, `hazyflow_jobs{status}`). Off by
-  default — it reveals tenant names, so enable it only behind a
-  restricted scrape network.
+  `GET /metrics` endpoint. Off by default — it reveals tenant names, so
+  enable it only behind a restricted scrape network. Series exposed:
+  - `hazyflow_up` — liveness.
+  - `hazyflow_jobs{status}` — node-job counts by status. `queued` is
+    queue depth, `running` is in-flight work.
+  - `hazyflow_jobs_oldest_queued_seconds` — age of the oldest claimable
+    node job. **The leading indicator for execution backlog**: when this
+    climbs, workers can't keep up. Raise `HAZYFLOW_WORKER_COUNT` or add
+    replicas before users feel the lag.
+  - `hazyflow_pg_pool_connections{state}` (`acquired`/`idle`/`total`),
+    `hazyflow_pg_pool_max_connections`, and
+    `hazyflow_pg_pool_empty_acquires_total`. **The earliest warning of
+    pool exhaustion**: a rising `empty_acquires_total` (or `acquired`
+    pinned at `max`) means requests are waiting for a connection. Raise
+    `HAZYFLOW_PG_MAX_CONNS` or scale out.
+  - `hazyflow_session_cache_hits_total` / `_misses_total` — auth-lookup
+    cache effectiveness. A healthy hit ratio means the per-request
+    session lookup isn't hammering Postgres; the miss rate tracks raw
+    authenticated-request load.
+  - `hazyflow_quota_bytes_used/_limit{tenant}` — per-tenant disk usage.
+  - `hazyflow_http_requests_total{method,code}` and
+    `hazyflow_http_request_duration_seconds{method}` (histogram) — HTTP
+    RED. Rate is the counter's increase; error ratio is the share of
+    `code` >= 500 (or >= 400); latency percentiles come from the
+    histogram (`histogram_quantile(0.99, ...)`). The front-door health
+    signal.
+  - `hazyflow_node_duration_seconds{status}` (histogram) — per-node
+    execution latency, split by terminal status. Rising p99 here is the
+    flow-engine analogue of slow requests; the `failed` series' rate is
+    your node error rate. Counts retried attempts (each is a real
+    execution).
+
+  Suggested alerts as you approach scale: p99 of
+  `http_request_duration_seconds` and `node_duration_seconds` above your
+  SLO; HTTP 5xx ratio over a small threshold; `oldest_queued_seconds`
+  above your acceptable trigger-to-start latency for a few minutes; pool
+  `acquired / max` sustained above ~0.8 or any sustained rise in
+  `empty_acquires_total`; and watch the `jobs` table and `audit_events`
+  row counts against the `HAZYFLOW_JOB_RETENTION` /
+  `HAZYFLOW_AUDIT_RETENTION` windows to confirm the retention sweeps keep
+  up. The histograms use fixed buckets (5ms to 60s); per-route HTTP
+  labels and per-module node labels are intentionally omitted to keep
+  cardinality bounded — say so if you want either dimension added.
 - **Tracing:** set the standard `OTEL_EXPORTER_OTLP_ENDPOINT` (or
   `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`) and `hzd` installs an OTLP trace
   exporter so graph/node spans flow to your collector (Jaeger, Tempo,
