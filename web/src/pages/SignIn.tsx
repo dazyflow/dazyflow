@@ -99,7 +99,8 @@ export function SignIn() {
         {googleEnabled && (
           <>
             <a href={googleHref} className="primary google-signin-btn">
-              {t("signIn.continueWithGoogle")}
+              <img src="/brands/google.svg" alt="" aria-hidden="true" />
+              <span>{t("signIn.continueWithGoogle")}</span>
             </a>
             <div className="signin-divider">
               <span>{t("signIn.or")}</span>
