@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -47,6 +48,14 @@ type googleSignInState struct {
 	Tenant   string
 	Created  time.Time
 	ReturnTo string
+	// Host is the host the browser used to start the flow (e.g.
+	// "acme.hazyflow.app"). Captured only when WildcardDomain is set and
+	// the host is the apex or one of its subdomains; empty otherwise.
+	// Google always redirects back to the apex callback (the single
+	// registered redirect_uri), so when Host names a different host the
+	// callback hands the session off to it via a one-time token rather
+	// than setting a cookie on the apex (Option B: host-only cookies).
+	Host string
 	// Test marks an admin-initiated "Test sign-in" round-trip. When
 	// true, errors after state-consume redirect to ReturnTo with a
 	// ?test_error=<code> query param instead of dumping JSON, so the
@@ -57,7 +66,7 @@ type googleSignInState struct {
 
 const googleSignInStateTTL = 10 * time.Minute
 
-func mintGoogleState(tenant, returnTo string, test bool) (string, error) {
+func mintGoogleState(tenant, returnTo, host string, test bool) (string, error) {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
@@ -75,6 +84,7 @@ func mintGoogleState(tenant, returnTo string, test bool) (string, error) {
 		Tenant:   tenant,
 		Created:  now,
 		ReturnTo: returnTo,
+		Host:     host,
 		Test:     test,
 	}
 	return s, nil
@@ -114,11 +124,17 @@ func (h *HTTPGateway) googleSignInStart(rw http.ResponseWriter, r *http.Request)
 		return
 	}
 	returnTo := r.URL.Query().Get("return_to")
-	if returnTo == "" || !strings.HasPrefix(returnTo, "/") {
+	if !safeReturnPath(returnTo) {
 		returnTo = "/"
 	}
 	test := r.URL.Query().Get("test") == "1"
-	state, err := mintGoogleState(tenant, returnTo, test)
+	// Remember which host started the flow so the apex callback can hand
+	// the session back to the right org subdomain. Only trust the host
+	// when it's the apex or a subdomain of the configured WildcardDomain;
+	// otherwise leave it empty and the callback sets the cookie inline as
+	// before (the non-wildcard path).
+	startHost := h.signInStartHost(r)
+	state, err := mintGoogleState(tenant, returnTo, startHost, test)
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
@@ -184,12 +200,68 @@ func appendQuery(base, key, val string) string {
 // a ?test_error=<code> query param so the page can render a friendly
 // banner. Used only when st.Test is true; production sign-in failures
 // fall through to writeJSONError as before.
-func redirectTestError(rw http.ResponseWriter, r *http.Request, st googleSignInState, code string) {
+func (h *HTTPGateway) redirectTestError(rw http.ResponseWriter, r *http.Request, st googleSignInState, code string) {
 	target := st.ReturnTo
-	if target == "" || !strings.HasPrefix(target, "/") {
+	if !safeReturnPath(target) {
 		target = "/admin/sso"
 	}
-	http.Redirect(rw, r, appendQuery(target, "test_error", code), http.StatusFound)
+	http.Redirect(rw, r, h.signInRedirectURL(r, st, appendQuery(target, "test_error", code)), http.StatusFound)
+}
+
+// safeReturnPath reports whether p is a safe same-origin redirect
+// target: a rooted path ("/foo") that can't be coerced into an
+// off-origin URL. We reject "//host" (protocol-relative) and "/\host"
+// (which some browsers normalize to a host) so a crafted return_to can't
+// turn the sign-in flow into an open redirect.
+func safeReturnPath(p string) bool {
+	return strings.HasPrefix(p, "/") &&
+		!strings.HasPrefix(p, "//") &&
+		!strings.HasPrefix(p, "/\\")
+}
+
+// signInStartHost returns the host the browser used to begin a sign-in
+// flow, but only when per-org subdomains are enabled and the host is the
+// wildcard apex or one of its subdomains. Empty means "don't track a
+// host" — the callback then behaves exactly as the pre-subdomain code
+// (set the cookie inline on whatever host the callback ran on).
+func (h *HTTPGateway) signInStartHost(r *http.Request) string {
+	if h.WildcardDomain == "" {
+		return ""
+	}
+	bare := strings.ToLower(bareHost(r.Host))
+	if bare == h.WildcardDomain || hostIsSubdomainOf(bare, h.WildcardDomain) {
+		return r.Host
+	}
+	return ""
+}
+
+// signInRedirectURL turns a same-origin path into an absolute URL on
+// st.Host when the flow started on a different host than the one now
+// handling the request (the apex callback bouncing back to an org
+// subdomain). When the hosts match, or no host was tracked, it returns
+// the path unchanged so the redirect stays relative.
+func (h *HTTPGateway) signInRedirectURL(r *http.Request, st googleSignInState, pathQuery string) string {
+	if st.Host == "" || sameHost(st.Host, r.Host) {
+		return pathQuery
+	}
+	scheme := "https"
+	if !h.requestIsHTTPS(r) {
+		scheme = "http"
+	}
+	return scheme + "://" + st.Host + pathQuery
+}
+
+// bareHost strips an optional :port from a Host header value.
+func bareHost(h string) string {
+	if host, _, err := net.SplitHostPort(h); err == nil {
+		return host
+	}
+	return h
+}
+
+// sameHost compares two Host values ignoring port and case.
+func sameHost(a, b string) bool {
+	return strings.EqualFold(bareHost(a), bareHost(b))
 }
 
 // googleSignInCallback handles the redirect back from Google. We
@@ -213,7 +285,7 @@ func (h *HTTPGateway) googleSignInCallback(rw http.ResponseWriter, r *http.Reque
 	}
 	if errStr := r.URL.Query().Get("error"); errStr != "" {
 		if hasState && st.Test {
-			redirectTestError(rw, r, st, "denied")
+			h.redirectTestError(rw, r, st, "denied")
 			return
 		}
 		writeJSONError(rw, http.StatusBadRequest, "google: "+errStr)
@@ -231,7 +303,7 @@ func (h *HTTPGateway) googleSignInCallback(rw http.ResponseWriter, r *http.Reque
 	cfg, err := h.OrgAuth.GetOrgAuth(r.Context(), st.Tenant)
 	if err != nil || !cfg.GoogleEnabled() {
 		if st.Test {
-			redirectTestError(rw, r, st, "not_configured")
+			h.redirectTestError(rw, r, st, "not_configured")
 			return
 		}
 		writeJSONError(rw, http.StatusBadRequest, "Google sign-in is no longer configured for that organization")
@@ -240,7 +312,7 @@ func (h *HTTPGateway) googleSignInCallback(rw http.ResponseWriter, r *http.Reque
 	tok, info, err := exchangeGoogleCode(r.Context(), cfg, code, h.googleRedirectURI())
 	if err != nil {
 		if st.Test {
-			redirectTestError(rw, r, st, classifyGoogleError(err))
+			h.redirectTestError(rw, r, st, classifyGoogleError(err))
 			return
 		}
 		writeJSONError(rw, http.StatusBadGateway, err.Error())
@@ -250,7 +322,7 @@ func (h *HTTPGateway) googleSignInCallback(rw http.ResponseWriter, r *http.Reque
 	email := strings.ToLower(strings.TrimSpace(info.Email))
 	if email == "" {
 		if st.Test {
-			redirectTestError(rw, r, st, "no_email")
+			h.redirectTestError(rw, r, st, "no_email")
 			return
 		}
 		writeJSONError(rw, http.StatusBadGateway, "google didn't return an email")
@@ -258,7 +330,7 @@ func (h *HTTPGateway) googleSignInCallback(rw http.ResponseWriter, r *http.Reque
 	}
 	if !info.EmailVerified {
 		if st.Test {
-			redirectTestError(rw, r, st, "not_verified")
+			h.redirectTestError(rw, r, st, "not_verified")
 			return
 		}
 		writeJSONError(rw, http.StatusForbidden, "google didn't verify this email")
@@ -267,7 +339,7 @@ func (h *HTTPGateway) googleSignInCallback(rw http.ResponseWriter, r *http.Reque
 	if cfg.GoogleWorkspaceDomain != "" {
 		if !strings.EqualFold(info.HD, cfg.GoogleWorkspaceDomain) {
 			if st.Test {
-				redirectTestError(rw, r, st, "domain_mismatch")
+				h.redirectTestError(rw, r, st, "domain_mismatch")
 				return
 			}
 			writeJSONError(rw, http.StatusForbidden,
@@ -365,6 +437,34 @@ func (h *HTTPGateway) googleSignInCallback(rw http.ResponseWriter, r *http.Reque
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("issue session: %v", err))
 		return
 	}
+	target := st.ReturnTo
+	if !safeReturnPath(target) {
+		target = "/"
+	}
+	// Option B handoff: this callback always runs on the apex (the single
+	// registered redirect_uri), but the session cookie must live on the
+	// org subdomain the user started from. When the start host differs
+	// from the callback host, stash the freshly-issued session under a
+	// single-use token and bounce to that host's /auth/handoff, which
+	// sets the host-only cookie there. This keeps cookies scoped to one
+	// subdomain instead of sharing a parent-domain cookie across orgs.
+	if st.Host != "" && !sameHost(st.Host, r.Host) {
+		code, err := mintHandoff(token, sess.ExpiresAt)
+		if err != nil {
+			writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("sign-in handoff: %v", err))
+			return
+		}
+		scheme := "https"
+		if !h.requestIsHTTPS(r) {
+			scheme = "http"
+		}
+		dest := scheme + "://" + st.Host + "/api/v1/auth/handoff?ot=" + url.QueryEscape(code) +
+			"&return_to=" + url.QueryEscape(target)
+		http.Redirect(rw, r, dest, http.StatusFound)
+		return
+	}
+	// Same host (apex sign-in, or the subdomains feature is off): set the
+	// session cookie inline and land the user where the flow started.
 	http.SetCookie(rw, &http.Cookie{
 		Name:     sessionCookieName,
 		Value:    token,
@@ -374,17 +474,6 @@ func (h *HTTPGateway) googleSignInCallback(rw http.ResponseWriter, r *http.Reque
 		SameSite: http.SameSiteLaxMode,
 		Secure:   h.requestIsHTTPS(r),
 	})
-	// Land the user wherever the sign-in started — defaults to /.
-	// For an admin Test sign-in, decorate with ?test=ok so the SSO
-	// page can render a success banner (the page strips the param
-	// after surfacing it, so a refresh doesn't keep claiming success).
-	target := st.ReturnTo
-	if target == "" {
-		target = "/"
-	}
-	if st.Test {
-		target = appendQuery(target, "test", "ok")
-	}
 	http.Redirect(rw, r, target, http.StatusFound)
 }
 

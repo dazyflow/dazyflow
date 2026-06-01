@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
+import { orgFromHost } from "../lib/orgFromHost";
 
 // SignIn is the email+password sign-in form. It also handles two
 // deep-link query params:
@@ -21,23 +22,55 @@ export function SignIn() {
   const navigate = useNavigate();
   const presetEmail = searchParams.get("email") ?? "";
   const inviteToken = searchParams.get("invite") ?? "";
-  const orgID = searchParams.get("org") ?? "";
+  const queryOrg = searchParams.get("org") ?? "";
   const [email, setEmail] = useState(presetEmail);
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [googleEnabled, setGoogleEnabled] = useState(false);
   const [signupEnabled, setSignupEnabled] = useState(false);
+  // The org whose SSO we offer. Prefer an explicit ?org=, otherwise fall
+  // back to the org encoded in the host on a wildcard-subdomain deploy
+  // (e.g. acme.hazyflow.app → "acme"), resolved once the public auth
+  // config tells us the wildcard domain.
+  const [org, setOrg] = useState(queryOrg);
 
-  // Probe whether the org has Google SSO turned on so we know whether
-  // to render the button. Public lookup, no auth required.
+  // Whether self-serve signup is enabled, plus the wildcard domain used
+  // to derive the org from the host. Default signupEnabled false so the
+  // "Create an account" link stays hidden until the probe confirms it's
+  // allowed — matches the server's invite-only posture by default.
   useEffect(() => {
-    if (!orgID) {
+    let cancelled = false;
+    api
+      .getPublicAuthConfig()
+      .then((r) => {
+        if (cancelled) return;
+        setSignupEnabled(!!r.signup_enabled);
+        if (!queryOrg && r.wildcard_domain) {
+          const fromHost = orgFromHost(
+            window.location.hostname,
+            r.wildcard_domain,
+          );
+          if (fromHost) setOrg(fromHost);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setSignupEnabled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [queryOrg]);
+
+  // Probe whether the resolved org has Google SSO turned on so we know
+  // whether to render the button. Public lookup, no auth required.
+  useEffect(() => {
+    if (!org) {
       setGoogleEnabled(false);
       return;
     }
     let cancelled = false;
     api
-      .getPublicSSOStatus(orgID)
+      .getPublicSSOStatus(org)
       .then((r) => {
         if (!cancelled) setGoogleEnabled(!!r.google_enabled);
       })
@@ -47,29 +80,10 @@ export function SignIn() {
     return () => {
       cancelled = true;
     };
-  }, [orgID]);
+  }, [org]);
 
-  // Whether self-serve signup is enabled on this deployment. Default
-  // false so the "Create an account" link stays hidden until the
-  // probe confirms it's allowed — matches the server's invite-only
-  // posture by default.
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .getPublicAuthConfig()
-      .then((r) => {
-        if (!cancelled) setSignupEnabled(!!r.signup_enabled);
-      })
-      .catch(() => {
-        if (!cancelled) setSignupEnabled(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const googleHref = orgID
-    ? `/api/v1/auth/google/start?tenant=${encodeURIComponent(orgID)}&return_to=${encodeURIComponent(
+  const googleHref = org
+    ? `/api/v1/auth/google/start?tenant=${encodeURIComponent(org)}&return_to=${encodeURIComponent(
         inviteToken ? `/invite/${inviteToken}` : "/",
       )}`
     : "";

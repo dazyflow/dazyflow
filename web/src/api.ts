@@ -780,7 +780,11 @@ export const api = {
   // getPublicAuthConfig returns deployment-level auth feature flags
   // the sign-in / sign-up pages need to render correctly. No secrets.
   getPublicAuthConfig: () =>
-    request<{ signup_enabled: boolean }>(null, "GET", "/auth/config"),
+    request<{ signup_enabled: boolean; wildcard_domain?: string }>(
+      null,
+      "GET",
+      "/auth/config",
+    ),
 
   getOrgProfile: (token: string) =>
     request<OrgProfile>(token, "GET", "/admin/org/profile"),

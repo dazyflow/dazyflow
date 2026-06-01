@@ -9,6 +9,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -40,6 +41,18 @@ type HTTPGateway struct {
 	svc            *Service
 	logger         *log.Logger
 	AllowedOrigins []string // empty = "*"
+
+	// WildcardDomain, when set (e.g. "hazyflow.app"), treats every
+	// subdomain "<org>.hazyflow.app" as an allowed browser origin for
+	// the CORS allowlist + the CSRF origin check, on top of the exact
+	// entries in AllowedOrigins. It also lets the sign-in page derive
+	// the target org from the host and powers the OAuth sign-in handoff
+	// (Option B: the apex callback bounces the session to the org
+	// subdomain via a one-time token so cookies stay host-only — see
+	// authHandoff). Empty disables all per-org-subdomain behaviour, so
+	// single-host deployments are unaffected. Wired from
+	// $HAZYFLOW_WILDCARD_DOMAIN.
+	WildcardDomain string
 
 	// Sessions and Users power the email+password sign-in flow. Both
 	// are optional — leaving them nil disables the /auth endpoints
@@ -411,6 +424,11 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/v1/admin/org/profile", h.requireAuth(h.putOrgProfile))
 	mux.HandleFunc("GET /api/v1/auth/google/start", h.googleSignInStart)
 	mux.HandleFunc("GET /api/v1/auth/google/callback", h.googleSignInCallback)
+	// One-time handoff: the apex SSO callback bounces the session to the
+	// org subdomain here so the cookie is set host-only on that origin
+	// (per-org subdomains, Option B). Unauthenticated — the one-time code
+	// in the query is the credential.
+	mux.HandleFunc("GET /api/v1/auth/handoff", h.authHandoff)
 
 	// Webhook trigger + hosted-form endpoints. Authenticated per-graph
 	// (per-trigger bearer secret for /trigger; opt-in public_form for
@@ -623,8 +641,8 @@ func (h *HTTPGateway) verifyCookieOrigin(next http.Handler) http.Handler {
 				"cookie-authenticated state-changing requests require an Origin header (CSRF defense)")
 			return
 		}
-		if !originAllowed(origin, h.AllowedOrigins) {
-			h.logger.Printf("CSRF reject: Origin=%q not in allowed=%v (host=%q)", origin, h.AllowedOrigins, r.Host)
+		if !h.originAllowed(origin) {
+			h.logger.Printf("CSRF reject: Origin=%q not in allowed=%v wildcard=%q (host=%q)", origin, h.AllowedOrigins, h.WildcardDomain, r.Host)
 			writeJSONError(rw, http.StatusForbidden,
 				fmt.Sprintf("cookie-authenticated request from disallowed origin %q (CSRF defense)", origin))
 			return
@@ -670,16 +688,20 @@ func credentialFromRequest(r *http.Request) string {
 func (h *HTTPGateway) withCORSAndLogging(next http.Handler) http.Handler {
 	allowed := "*"
 	allowCreds := false
-	if len(h.AllowedOrigins) > 0 {
+	if len(h.AllowedOrigins) > 0 || h.WildcardDomain != "" {
 		allowed = strings.Join(h.AllowedOrigins, ", ")
 		// Cookie-based sessions require an explicit origin and
 		// Access-Control-Allow-Credentials: true. Wildcard "*" is
-		// incompatible with credentials per the CORS spec.
+		// incompatible with credentials per the CORS spec. With only a
+		// WildcardDomain configured, AllowedOrigins may be empty — the
+		// per-request originAllowed check below still reflects the exact
+		// origin back, so credentials work; the static `allowed` fallback
+		// just stays empty for non-matching origins.
 		allowCreds = true
 	}
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if allowCreds && origin != "" && originAllowed(origin, h.AllowedOrigins) {
+		if allowCreds && origin != "" && h.originAllowed(origin) {
 			rw.Header().Set("Access-Control-Allow-Origin", origin)
 			rw.Header().Set("Access-Control-Allow-Credentials", "true")
 			rw.Header().Set("Vary", "Origin")
@@ -719,13 +741,39 @@ func (h *HTTPGateway) requestIsHTTPS(r *http.Request) bool {
 	return false
 }
 
-func originAllowed(origin string, allowed []string) bool {
-	for _, a := range allowed {
+// originAllowed reports whether a browser Origin header is trusted for
+// CORS + CSRF. An origin is allowed if it exactly matches one of the
+// configured AllowedOrigins, or — when WildcardDomain is set — if it is
+// a subdomain of that domain (e.g. "https://acme.hazyflow.app" against
+// WildcardDomain "hazyflow.app"). The Origin header is set by the
+// browser and not forgeable by page script, so suffix-matching the host
+// is safe; "evil-hazyflow.app" doesn't end in ".hazyflow.app" so it
+// won't match. The apex itself ("https://hazyflow.app") is intentionally
+// NOT matched here — it carries a scheme/port we want pinned, so it must
+// be listed explicitly in AllowedOrigins like any other exact origin.
+func (h *HTTPGateway) originAllowed(origin string) bool {
+	for _, a := range h.AllowedOrigins {
 		if a == origin {
 			return true
 		}
 	}
+	if h.WildcardDomain != "" {
+		if u, err := url.Parse(origin); err == nil {
+			if hostIsSubdomainOf(u.Hostname(), h.WildcardDomain) {
+				return true
+			}
+		}
+	}
 	return false
+}
+
+// hostIsSubdomainOf reports whether host is a (single- or multi-level)
+// subdomain of domain. Both are compared case-insensitively. The apex
+// (host == domain) returns false — only strict subdomains match.
+func hostIsSubdomainOf(host, domain string) bool {
+	host = strings.ToLower(strings.TrimSuffix(host, "."))
+	domain = strings.ToLower(domain)
+	return domain != "" && strings.HasSuffix(host, "."+domain)
 }
 
 // --- Handlers ---------------------------------------------------------

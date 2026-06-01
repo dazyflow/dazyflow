@@ -80,6 +80,50 @@ Container deployments don't have to set `HAZYFLOW_HTTP` /
 `HAZYFLOW_WEB_DIST` — the supplied Dockerfile bakes those in via
 `ENV` (see `Dockerfile`).
 
+## Per-org subdomains (optional)
+
+Set `HAZYFLOW_WILDCARD_DOMAIN=<apex>` (e.g. `hazyflow.app`) to give each
+org its own subdomain. A visit to `acme.hazyflow.app` lands on the
+sign-in page with `org=acme` preselected, so that org's "Sign in with
+Google" button shows without a `?org=` query param. Leave it empty and
+the daemon behaves exactly as a single-host deploy.
+
+What it changes when set:
+
+- **CORS + CSRF** accept any `*.<apex>` subdomain as a browser origin, in
+  addition to the exact `HAZYFLOW_WEB_ORIGIN` entries. The apex itself is
+  not implied — list it in `HAZYFLOW_WEB_ORIGIN` as usual. The match is a
+  strict subdomain suffix, so `evil-hazyflow.app` does not match
+  `hazyflow.app`.
+- **Session cookies stay host-only** (no parent-domain cookie). Each
+  org's session is scoped to its own subdomain, so one org's subdomain
+  can never read another's cookie.
+- **Google/OAuth sign-in** still uses a single redirect URI on the apex
+  (`HAZYFLOW_PUBLIC_BASE_URL`), so you register **one** redirect URI with
+  the provider regardless of how many org subdomains exist. The apex
+  callback issues the session, then 302s the browser to
+  `<subdomain>/api/v1/auth/handoff?ot=…` with a single-use, short-lived
+  (2 min) token; the subdomain exchanges it for a host-only session
+  cookie. Password sign-in needs no handoff — it already happens on the
+  subdomain origin.
+
+Infrastructure prerequisites:
+
+- A wildcard DNS record `*.<apex>` pointing at the proxy.
+- A wildcard TLS certificate (`*.<apex>`) at the proxy. Let's Encrypt
+  issues these via the DNS-01 challenge.
+- `HAZYFLOW_PUBLIC_BASE_URL` set to the apex (`https://<apex>`).
+- The proxy must route every `*.<apex>` host to the same hzd upstream
+  (the sign-in handoff state is held in-process). An nginx `server_name`
+  of `<apex> *.<apex>` with the same `proxy_pass` covers both.
+
+Org slugs become DNS labels: only single-label, DNS-valid slugs resolve
+to an org, and reserved labels (`www`, `api`, `app`, `admin`, `auth`,
+`docs`, `status`, …) never map to one, so those hosts can serve
+infrastructure or marketing without colliding with a tenant. There is no
+automatic DNS provisioning — adding an org's subdomain is an ops step
+(the wildcard record + cert already cover it; nothing per-org to create).
+
 ## Durability
 
 Set `HAZYFLOW_POSTGRES_DSN` so jobs, API keys, sessions, users,

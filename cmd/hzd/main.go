@@ -115,6 +115,14 @@ func main() {
 	// stateDir stays unused and never gets created, so a real deploy
 	// has no orphaned <data>/state/ folder.
 	webOrigin := envStr("HAZYFLOW_WEB_ORIGIN", "http://localhost:5174")
+	// Optional wildcard domain for per-org subdomains (e.g. "hazyflow.app",
+	// so "acme.hazyflow.app" routes to the sign-in page with org=acme).
+	// Empty disables the feature. Normalize away a leading dot / scheme so
+	// "https://.hazyflow.app" and "hazyflow.app" both work.
+	wildcardDomain := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(envStr("HAZYFLOW_WILDCARD_DOMAIN", ""))), ".")
+	if i := strings.Index(wildcardDomain, "://"); i >= 0 {
+		wildcardDomain = wildcardDomain[i+3:]
+	}
 	// Auth rate limit is fixed at a sensible default: 20/min per IP
 	// with a burst of 10. Tightening or loosening from here is an
 	// in-code change rather than a per-deployment knob.
@@ -722,6 +730,10 @@ func main() {
 					gw.AllowedOrigins = append(gw.AllowedOrigins, o)
 				}
 			}
+		}
+		gw.WildcardDomain = wildcardDomain
+		if wildcardDomain != "" {
+			log.Printf("per-org subdomains enabled for *.%s (CORS/CSRF allow subdomains; sign-in derives org from host)", wildcardDomain)
 		}
 		// Bootstrap the platform:admin super-admin role from an email
 		// allowlist (normalize to lowercase + trimmed so the gateway can

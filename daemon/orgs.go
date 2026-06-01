@@ -593,6 +593,10 @@ func (h *HTTPGateway) deleteOrgAuthConfig(rw http.ResponseWriter, _ *http.Reques
 func (h *HTTPGateway) getPublicAuthConfig(rw http.ResponseWriter, _ *http.Request) {
 	writeJSON(rw, http.StatusOK, map[string]any{
 		"signup_enabled": h.EnableSignup,
+		// wildcard_domain, when set, lets the sign-in page derive the
+		// target org from a "<org>.<domain>" host so a visit to
+		// acme.hazyflow.app preselects org=acme. Empty = feature off.
+		"wildcard_domain": h.WildcardDomain,
 	})
 }
 
