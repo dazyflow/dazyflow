@@ -45,9 +45,16 @@ services:
       - "8080:8080"
     volumes:
       - hzddata:/data
-    # No container healthcheck: the distroless image ships no shell/curl.
-    # Use the daemon's HTTP /healthz + /readyz (or the gRPC health service)
-    # from your orchestrator instead — see deploy/k8s/hazyflow.yaml.
+    # The node:22-alpine runtime ships busybox wget, so we probe the
+    # daemon's HTTP readiness endpoint directly (/readyz pings Postgres).
+    # start_period covers first-boot schema setup. k8s/other orchestrators
+    # can use the gRPC health service instead — see deploy/k8s/hazyflow.yaml.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/readyz || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
 
 volumes:
   pgdata:
