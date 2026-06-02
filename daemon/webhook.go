@@ -192,9 +192,15 @@ func (w *WebhookListener) handleTrigger(rw http.ResponseWriter, r *http.Request)
 // ports — body and headers — matching the webhook_input manifest.
 //
 // Body parsing follows Content-Type:
-//   - application/json    → map[string]any (parsed object) or whatever JSON.Unmarshal produces
-//   - text/* or no body   → string
-//   - everything else     → []byte
+//   - application/json                  → map[string]any (parsed object) or whatever JSON.Unmarshal produces
+//   - application/x-www-form-urlencoded → map[string]any (one entry per field, first value)
+//   - text/* or no body                 → string
+//   - everything else                   → []byte
+//
+// The form-urlencoded case reuses collectFormValues so a real HTML
+// form (or a sender like Twilio/Slack that posts urlencoded) lands the
+// same {key: value} object as the hosted form and a JSON webhook —
+// ${trigger.body.email} works identically across all three paths.
 //
 // Headers are flattened to a string map (first value per name) so
 // downstream nodes can read them with branch's field-path access.
@@ -217,6 +223,14 @@ func buildWebhookSeed(rawBody []byte, r *http.Request) core.Result {
 		} else {
 			// Fall back to string when JSON is malformed — better to
 			// let the graph see the raw text than fail the trigger.
+			bodyValue = string(rawBody)
+		}
+	case mediaType == "application/x-www-form-urlencoded":
+		if parsed, err := url.ParseQuery(string(rawBody)); err == nil {
+			bodyValue = collectFormValues(nil, parsed)
+		} else {
+			// Malformed query string — hand the raw text to the graph
+			// rather than fail the trigger, mirroring the JSON path.
 			bodyValue = string(rawBody)
 		}
 	case strings.HasPrefix(mediaType, "text/"):
@@ -282,4 +296,11 @@ func ServeFormForTest(w *WebhookListener, rw http.ResponseWriter, r *http.Reques
 // graph run round trip.
 func CollectFormValuesForTest(declared []string, posted url.Values) map[string]any {
 	return collectFormValues(declared, posted)
+}
+
+// BuildWebhookSeedForTest exposes the Content-Type-driven body parser
+// to the external _test package so the per-encoding decoding (JSON,
+// form-urlencoded, text, raw) is unit-testable without a graph run.
+func BuildWebhookSeedForTest(rawBody []byte, r *http.Request) core.Result {
+	return buildWebhookSeed(rawBody, r)
 }

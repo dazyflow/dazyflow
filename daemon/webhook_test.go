@@ -226,6 +226,67 @@ func TestWebhook_MalformedPath(t *testing.T) {
 	}
 }
 
+// TestWebhook_BodyParsingByContentType pins the Content-Type-driven
+// decoding: JSON and form-urlencoded both become a field-addressable
+// map (so ${trigger.body.email} works), text stays a string, and an
+// unknown MIME passes through as raw bytes.
+func TestWebhook_BodyParsingByContentType(t *testing.T) {
+	newReq := func(ct string) *http.Request {
+		r, _ := http.NewRequest("POST", "/trigger/acme/ws1/g", nil)
+		if ct != "" {
+			r.Header.Set("Content-Type", ct)
+		}
+		return r
+	}
+
+	t.Run("urlencoded becomes a map", func(t *testing.T) {
+		seed := daemon.BuildWebhookSeedForTest(
+			[]byte("name=Anna&email=anna%40example.com"),
+			newReq("application/x-www-form-urlencoded"),
+		)
+		body, ok := seed.Output["body"].Inline.(map[string]any)
+		if !ok {
+			t.Fatalf("body = %T, want map[string]any", seed.Output["body"].Inline)
+		}
+		if body["name"] != "Anna" || body["email"] != "anna@example.com" {
+			t.Errorf("parsed body = %v", body)
+		}
+	})
+
+	t.Run("urlencoded with charset param still parses", func(t *testing.T) {
+		seed := daemon.BuildWebhookSeedForTest(
+			[]byte("x=1"),
+			newReq("application/x-www-form-urlencoded; charset=utf-8"),
+		)
+		if body, ok := seed.Output["body"].Inline.(map[string]any); !ok || body["x"] != "1" {
+			t.Errorf("body = %v (%T)", seed.Output["body"].Inline, seed.Output["body"].Inline)
+		}
+	})
+
+	t.Run("json becomes a map", func(t *testing.T) {
+		seed := daemon.BuildWebhookSeedForTest(
+			[]byte(`{"event":"hello"}`), newReq("application/json"))
+		if body, ok := seed.Output["body"].Inline.(map[string]any); !ok || body["event"] != "hello" {
+			t.Errorf("body = %v (%T)", seed.Output["body"].Inline, seed.Output["body"].Inline)
+		}
+	})
+
+	t.Run("text stays a string", func(t *testing.T) {
+		seed := daemon.BuildWebhookSeedForTest([]byte("hi there"), newReq("text/plain"))
+		if seed.Output["body"].Inline != "hi there" {
+			t.Errorf("body = %v, want string", seed.Output["body"].Inline)
+		}
+	})
+
+	t.Run("unknown MIME stays raw bytes", func(t *testing.T) {
+		raw := []byte{0x00, 0x01, 0x02}
+		seed := daemon.BuildWebhookSeedForTest(raw, newReq("application/octet-stream"))
+		if _, ok := seed.Output["body"].Inline.([]byte); !ok {
+			t.Errorf("body = %T, want []byte", seed.Output["body"].Inline)
+		}
+	})
+}
+
 // callPrivateHandler reaches into the listener and calls the same
 // handler Serve installs onto its mux. We expose this indirection via
 // a small accessor below; doing it through Serve would require binding
