@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os/exec"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -14,11 +12,8 @@ import (
 	"git.sr.ht/~klahr/hazyflow/core"
 	"git.sr.ht/~klahr/hazyflow/daemon"
 	"git.sr.ht/~klahr/hazyflow/engine"
-	"git.sr.ht/~klahr/hazyflow/engine/containerdrop"
 	"git.sr.ht/~klahr/hazyflow/engine/jobstore"
-	"git.sr.ht/~klahr/hazyflow/engine/jsdrop"
 	_ "git.sr.ht/~klahr/hazyflow/drops"
-	"git.sr.ht/~klahr/hazyflow/officialdrops"
 	"git.sr.ht/~klahr/hazyflow/workspace"
 )
 
@@ -31,14 +26,6 @@ import (
 // network access. Secret injection ensures the api_key parameter is a
 // reference (env://) in the saved graph, not the cleartext.
 func TestClaude_E2E_ClassifyAndRoute(t *testing.T) {
-	node, err := exec.LookPath("node")
-	if err != nil {
-		t.Skip("node not installed")
-	}
-	drophost, err := filepath.Abs("../../engine/containerdrop/nodehost/drophost.mjs")
-	if err != nil {
-		t.Fatal(err)
-	}
 	t.Setenv("ANTHROPIC_API_KEY", "sk-test-XYZ")
 
 	// Mock backend that returns a controlled "classification".
@@ -75,23 +62,10 @@ func TestClaude_E2E_ClassifyAndRoute(t *testing.T) {
 	wsStore, _ := workspace.OpenFS("")
 	jobs := jobstore.NewMemory()
 	bus := daemon.NewMemoryBus()
-	// claude is now an embedded scripted connector. Register the official drops
-	// into the resolver's Script catalog; its fetch reaches the loopback mock via
-	// the drop's base_url param (no SSRF guard on this bare test catalog).
-	scripted := jsdrop.NewCatalog()
-	scripted.Run = func(m core.Manifest, jsESM string, _ bool) core.Transport {
-		return containerdrop.NewTransport(
-			m,
-			containerdrop.DropRef{ID: m.ID, Argv: []string{node, drophost}, Source: []byte(jsESM)},
-			containerdrop.ProcessRunner{},
-			containerdrop.Host{},
-		)
-	}
-	if err := officialdrops.Register(scripted); err != nil {
-		t.Fatalf("register official drops: %v", err)
-	}
+	// claude is a native Go drop; it reaches the loopback mock via its base_url
+	// param (a fixed-vendor connector, so no SSRF guard).
 	eng := &engine.Engine{
-		Resolver: &engine.NodeResolver{Native: engine.Default, Script: scripted},
+		Resolver: &engine.NodeResolver{Native: engine.Default},
 		Secrets: map[string]core.SecretProvider{
 			"env": daemon.EnvProvider{},
 		},

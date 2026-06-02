@@ -5,7 +5,7 @@ flows (connectors, transforms, AI steps, branching, schedules and
 webhooks) and serves a web UI for building and watching them.
 
 This README gets you running. **[DEPLOY.md](DEPLOY.md)** is the full
-reference (TLS, backups, the marketplace, secrets, observability);
+reference (TLS, backups, secrets, observability);
 **[SECURITY.md](SECURITY.md)** covers the master key.
 
 ## Quick start (Docker Compose)
@@ -84,8 +84,8 @@ proxy (nginx, Caddy, Traefik, an ingress) and set, in `.env`:
 and `HAZYFLOW_PUBLIC_BASE_URL=https://your.domain`.
 
 See **[DEPLOY.md](DEPLOY.md)** for the reverse-proxy contract and nginx
-example, backup/restore, the master key, per-org subdomains, the
-marketplace (drops & integrations), secrets (built-in store + OpenBao/Vault),
+example, backup/restore, the master key, per-org subdomains,
+secrets (built-in store + OpenBao/Vault),
 security knobs, observability, and multi-node Kubernetes
 (`deploy/k8s/hazyflow.yaml`).
 

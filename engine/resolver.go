@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine/jsdrop"
 	"git.sr.ht/~klahr/hazyflow/engine/mcp"
 )
 
@@ -56,22 +55,20 @@ func ResolverFromContext(ctx context.Context) (Resolver, bool) {
 
 // NodeResolver is the default Resolver. It consults catalogs in the order
 // listed in the spec: native registry → local descriptors → remote
-// descriptors → MCP tools → scripted (JS/TS) drops.
+// descriptors → MCP tools.
 type NodeResolver struct {
 	Native *Registry
 	Local  *LocalCatalog
 	Remote *RemoteCatalog
 	MCP    *mcp.Catalog
-	Script *jsdrop.Catalog
 }
 
-func (r *NodeResolver) Resolve(ctx context.Context, moduleID string) (core.Transport, error) {
-	id, version := splitModuleVersion(moduleID)
-	tenant, _ := core.TenantFromContext(ctx)
+func (r *NodeResolver) Resolve(_ context.Context, moduleID string) (core.Transport, error) {
+	id, _ := splitModuleVersion(moduleID)
 
-	// Native / local / remote / MCP drops are version- and tenant-blind:
-	// they live in the bare-id world, so resolve them by id and ignore any
-	// pin (a built-in's behavior doesn't fork per version).
+	// Native / local / remote / MCP drops are version-blind: they live in the
+	// bare-id world, so resolve them by id and ignore any pin (a built-in's
+	// behavior doesn't fork per version).
 	if r.Native != nil {
 		if t, ok := r.Native.Get(id); ok {
 			return t, nil
@@ -92,22 +89,12 @@ func (r *NodeResolver) Resolve(ctx context.Context, moduleID string) (core.Trans
 			return t, nil
 		}
 	}
-	// Scripted/marketplace drops are the per-tenant, version-pinned world:
-	// resolve the tenant's installed version (their installs ∪ the global
-	// default), pinned exactly when a version is given, else latest.
-	if r.Script != nil {
-		if t, ok := r.Script.GetForTenant(tenant, id, version); ok {
-			return t, nil
-		}
-	}
 	return nil, fmt.Errorf("no transport registered for module %q", moduleID)
 }
 
 // ManifestsForTenant gathers every manifest visible to the tenant, for
-// ValidateWithManifests before execution. It folds in the scripted catalog's
-// per-tenant palette (bare id → latest) plus a "id@version" entry for every
-// installed version, so a node that pins an exact version validates too.
-func (r *NodeResolver) ManifestsForTenant(tenant string) map[string]core.Manifest {
+// ValidateWithManifests before execution.
+func (r *NodeResolver) ManifestsForTenant(_ string) map[string]core.Manifest {
 	out := map[string]core.Manifest{}
 	if r.Native != nil {
 		for id, m := range r.Native.Manifests() {
@@ -129,19 +116,11 @@ func (r *NodeResolver) ManifestsForTenant(tenant string) map[string]core.Manifes
 			out[id] = m
 		}
 	}
-	if r.Script != nil {
-		for id, m := range r.Script.ManifestsForTenant(tenant) {
-			out[id] = m
-		}
-		for ref, m := range r.Script.PinnedManifestsForTenant(tenant) {
-			out[ref] = m
-		}
-	}
 	return out
 }
 
-// Manifests gathers the global-default manifests (tenant ""). Back-compat shim
-// for callers that aren't tenant-scoped; the engine prefers ManifestsForTenant.
+// Manifests gathers the global-default manifests. Back-compat shim for callers
+// that aren't tenant-scoped; the engine prefers ManifestsForTenant.
 func (r *NodeResolver) Manifests() map[string]core.Manifest {
 	return r.ManifestsForTenant("")
 }

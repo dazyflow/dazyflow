@@ -47,9 +47,8 @@ type WorkerConfig struct {
 	// black-hole host, a native HTTP/DB call to a stalled backend — would
 	// hold its worker slot until the lease churns. The deadline cancels its
 	// context so it returns. (Code that actively ignores ctx can't be
-	// interrupted in-process — Go can't kill a goroutine — which is exactly
-	// why untrusted drops run sandboxed under containerdrop, whose runner
-	// kills the process on its own budget.) A node's own TimeoutSeconds,
+	// interrupted — Go can't kill a goroutine — so every drop is trusted,
+	// first-party Go that honours its context.) A node's own TimeoutSeconds,
 	// when set, overrides this. It's a generous backstop, not an SLA:
 	// parked nodes (await_approval, subgraph) return from Execute promptly
 	// and so never approach it. Default 30m; set negative to disable.

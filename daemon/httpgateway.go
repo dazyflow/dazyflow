@@ -89,11 +89,6 @@ type HTTPGateway struct {
 	// writes tokens into the encrypted store.
 	OAuth *OAuthRegistry
 
-	// Installer powers the /api/v1/admin/marketplace/* endpoints for
-	// installing integrations and drops (platform-admin only). Nil disables
-	// those endpoints (501).
-	Installer *Installer
-
 	// EnableSignup opens POST /api/v1/auth/signup for self-serve
 	// account creation. Defaults to false — production deployments
 	// often want admin-invite-only signup. The hzd binary opts in
@@ -416,23 +411,6 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/admin/oauth-providers", h.requireAuth(h.listAdminOAuthProviders))
 	mux.HandleFunc("PUT /api/v1/admin/oauth-providers/{name}", h.requireAuth(h.upsertAdminOAuthProvider))
 	mux.HandleFunc("DELETE /api/v1/admin/oauth-providers/{name}", h.requireAuth(h.deleteAdminOAuthProvider))
-	// Marketplace install (platform-admin): preview an integration's setup
-	// form, install integrations + drops, list what's installed. The drop
-	// install is gated on its required integrations being installed first.
-	mux.HandleFunc("POST /api/v1/admin/marketplace/integrations/preview", h.requireAuth(h.previewIntegration))
-	mux.HandleFunc("GET /api/v1/admin/marketplace/integrations", h.requireAuth(h.listInstalledIntegrations))
-	mux.HandleFunc("POST /api/v1/admin/marketplace/integrations", h.requireAuth(h.installIntegration))
-	mux.HandleFunc("GET /api/v1/admin/marketplace/drops", h.requireAuth(h.listInstalledDrops))
-	mux.HandleFunc("POST /api/v1/admin/marketplace/drops/preview", h.requireAuth(h.previewDrop))
-	mux.HandleFunc("POST /api/v1/admin/marketplace/drops", h.requireAuth(h.installDrop))
-	// Install from a git repo at a tag (the git-as-source transport): preview
-	// fetches + shows the form/capabilities, the others fetch + install.
-	mux.HandleFunc("POST /api/v1/admin/marketplace/integrations/from-git/preview", h.requireAuth(h.previewIntegrationFromGit))
-	mux.HandleFunc("POST /api/v1/admin/marketplace/integrations/from-git", h.requireAuth(h.installIntegrationFromGit))
-	mux.HandleFunc("POST /api/v1/admin/marketplace/drops/from-git/preview", h.requireAuth(h.previewDropFromGit))
-	mux.HandleFunc("POST /api/v1/admin/marketplace/drops/from-git", h.requireAuth(h.installDropFromGit))
-	mux.HandleFunc("DELETE /api/v1/admin/marketplace/integrations/{id}", h.requireAuth(h.uninstallIntegration))
-	mux.HandleFunc("DELETE /api/v1/admin/marketplace/drops/{id}", h.requireAuth(h.uninstallDrop))
 	// Multi-org membership: a user can belong to many tenants (the
 	// "home" tenant minted at signup + any they've been invited to).
 	// switch-org re-issues the session against a different tenant the

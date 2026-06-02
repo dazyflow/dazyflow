@@ -17,10 +17,14 @@
 package github
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"sync"
+	"time"
 
 	"git.sr.ht/~klahr/hazyflow/core"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
@@ -120,6 +124,66 @@ type gitHubErrorEnvelope struct {
 		Code     string `json:"code"`
 		Message  string `json:"message"`
 	} `json:"errors"`
+}
+
+// githubDo runs one authenticated GitHub REST call and returns the
+// status code and raw body. Headers match the v3 API contract
+// (Bearer token, vnd.github+json, pinned API version). The caller
+// decides 2xx vs error so it can run extractGitHubError on the body.
+func githubDo(ctx context.Context, method, url, token string, body []byte, timeoutMS int) (int, []byte, error) {
+	if timeoutMS <= 0 {
+		timeoutMS = 15000
+	}
+	reqCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMS)*time.Millisecond)
+	defer cancel()
+
+	var rdr io.Reader
+	if body != nil {
+		rdr = bytes.NewReader(body)
+	}
+	req, err := http.NewRequestWithContext(reqCtx, method, url, rdr)
+	if err != nil {
+		return 0, nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return resp.StatusCode, nil, err
+	}
+	return resp.StatusCode, raw, nil
+}
+
+// resolveBody figures out the issue/comment body: params.body, overridden
+// by the 'body' input port. A string passes through; a structured value
+// is rendered as a fenced JSON block (so a rows-list wired in still lands
+// as readable Markdown rather than failing). Matches the former scripted
+// behaviour.
+func resolveBody(job core.Job) string {
+	body := params.StringDefault(job.Params, "body", "")
+	if in, ok := job.Input["body"]; ok && in.Inline != nil {
+		switch v := in.Inline.(type) {
+		case string:
+			body = v
+		case []byte:
+			body = string(v)
+		default:
+			if b, err := json.MarshalIndent(v, "", "  "); err == nil {
+				body = "```json\n" + string(b) + "\n```"
+			}
+		}
+	}
+	return body
 }
 
 func extractGitHubError(body []byte) string {

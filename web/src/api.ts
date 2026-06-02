@@ -6,11 +6,6 @@ import type {
   IssuedAPIKey,
   InvitationDetails,
   AdminOAuthProvider,
-  InstalledIntegration,
-  InstalledDrop,
-  IntegrationPreview,
-  DropCapabilitySummary,
-  TrustTier,
   InvitationSummary,
   LintIssue,
   Manifest,
@@ -686,80 +681,6 @@ export const api = {
       `/admin/oauth-providers/${encodeURIComponent(name)}`,
     ),
 
-  // --- Marketplace install (platform-admin) -------------------------------
-  // What's installed today.
-  listMarketplaceIntegrations: (token: string) =>
-    request<{ integrations: InstalledIntegration[] }>(
-      token,
-      "GET",
-      "/admin/marketplace/integrations",
-    ),
-  listMarketplaceDrops: (token: string) =>
-    request<{ drops: InstalledDrop[] }>(token, "GET", "/admin/marketplace/drops"),
-  // previewIntegrationFromGit fetches a repo@ref and returns the setup form +
-  // trust tier + resolved commit, WITHOUT installing — the "see what you're
-  // about to install" step before entering credentials.
-  previewIntegrationFromGit: (token: string, repo: string, ref: string) =>
-    request<IntegrationPreview>(
-      token,
-      "POST",
-      "/admin/marketplace/integrations/from-git/preview",
-      { repo, ref },
-    ),
-  // installIntegrationFromGit fetches repo@ref and installs it with the
-  // operator-supplied credentials (registers the OAuth provider, persists).
-  installIntegrationFromGit: (
-    token: string,
-    repo: string,
-    ref: string,
-    credentials: Record<string, string>,
-  ) =>
-    request<{ id: string; version: string; tier: TrustTier; installed: boolean }>(
-      token,
-      "POST",
-      "/admin/marketplace/integrations/from-git",
-      { repo, ref, credentials },
-    ),
-  // previewDropFromGit fetches repo@ref:path and returns the drop's requested
-  // capabilities (secrets/OAuth/egress) + trust tier + commit, WITHOUT
-  // installing — the consent step before an untrusted drop is installed.
-  previewDropFromGit: (token: string, repo: string, ref: string, path: string) =>
-    request<DropCapabilitySummary>(
-      token,
-      "POST",
-      "/admin/marketplace/drops/from-git/preview",
-      { repo, ref, path },
-    ),
-  // installDropFromGit fetches repo@ref:path and installs it (gated on its
-  // required integrations — a 409 means install the integration first — and on
-  // explicit capability consent: acknowledged must be true).
-  installDropFromGit: (
-    token: string,
-    repo: string,
-    ref: string,
-    path: string,
-    acknowledged: boolean,
-  ) =>
-    request<{ id: string; tier: TrustTier; installed: boolean }>(
-      token,
-      "POST",
-      "/admin/marketplace/drops/from-git",
-      { repo, ref, path, acknowledged },
-    ),
-  // uninstallIntegration removes an integration. 409 if an installed drop still
-  // depends on it.
-  uninstallIntegration: (token: string, id: string) =>
-    request<void>(
-      token,
-      "DELETE",
-      `/admin/marketplace/integrations/${encodeURIComponent(id)}`,
-    ),
-  uninstallDrop: (token: string, id: string) =>
-    request<void>(
-      token,
-      "DELETE",
-      `/admin/marketplace/drops/${encodeURIComponent(id)}`,
-    ),
   // listSecrets returns the NAMES of the tenant's stored credentials —
   // never the values (the daemon has no read-back endpoint by design).
   listSecrets: (token: string) =>

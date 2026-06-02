@@ -16,8 +16,8 @@ import type { ReactNode, SVGProps } from "react";
 //   • Inline `glyph` here — for the admin OAuth/SSO surfaces, where the
 //     component renders inline (monogram fallback, `size`/props spreading,
 //     no extra request for a tiny icon). New service icons go here.
-//   • /public/brands/*.svg — URL-referenced logos for the marketplace /
-//     integrations surfaces (see integrationMeta `brand_logo`).
+//   • /public/brands/*.svg — URL-referenced logos for the connector drops
+//     (a drop manifest's brandLogo points at one).
 // Don't mirror a logo into both; pick the home that matches the surface.
 
 type ServiceMeta = {

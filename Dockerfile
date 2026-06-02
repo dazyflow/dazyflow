@@ -62,24 +62,21 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 RUN mkdir -p /data/workspace /data/sandbox /data/state
 
 # ---- 3. runtime -------------------------------------------------------
-# Scripted drops run in the Node drop host (engine/containerdrop/nodehost),
-# so the runtime image needs `node`. The default ("process") tier spawns node
-# directly; the "gvisor" tier instead runs node inside a runsc container and
-# needs a Docker socket + the runsc runtime on the host (out of image scope).
-FROM node:22-alpine AS final
+# hzd is a self-contained Go binary — every drop (connectors included) is
+# native Go now, so the runtime image needs no Node. Just the binary, CA roots
+# for outbound HTTPS to vendor APIs, and the web assets.
+FROM alpine:latest AS final
+RUN apk add --no-cache ca-certificates && adduser -D -u 1000 hazyflow
 WORKDIR /srv
 COPY --from=build /out/hzd /usr/local/bin/hzd
-# drophost.mjs sits next to hzd so resolveNodeDropHost() finds it (it looks
-# beside the running executable). It's our trusted runtime, not a drop.
-COPY engine/containerdrop/nodehost/drophost.mjs /usr/local/bin/drophost.mjs
 COPY --from=web /web/dist /srv/web
-# Workspace + sandbox dirs live under /data, owned by the unprivileged `node`
-# user (uid 1000, shipped in the node image). Mount a volume here in production
-# so git-backed graphs and per-tenant sandboxes persist across container
-# restarts. (Set HAZYFLOW_POSTGRES_DSN for the durable control-plane stores.)
+# Workspace + sandbox dirs live under /data, owned by the unprivileged
+# `hazyflow` user (uid 1000). Mount a volume here in production so git-backed
+# graphs and per-tenant sandboxes persist across container restarts. (Set
+# HAZYFLOW_POSTGRES_DSN for the durable control-plane stores.)
 COPY --from=build --chown=1000:1000 /data /data
 EXPOSE 50050 8080
-USER node
+USER hazyflow
 # Container layout defaults — every other knob is configured via
 # HAZYFLOW_* env vars on the container (see .env.example for the full
 # catalogue). Override these here only when rebaking the image.

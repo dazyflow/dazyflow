@@ -46,13 +46,9 @@ trap 'kill $XFORM_PID 2>/dev/null || true; kill $HZD_PID 2>/dev/null || true; rm
 wait_for 127.0.0.1 60001 csv_uppercase
 
 echo "[4/6] starting hzd with the remote registered"
-# Running hzd from a bare `go build` (not the Docker image) means drophost.mjs
-# isn't beside the binary; point hzd at the in-repo copy so the scripted-drop
-# runtime (used by the official drops) initializes instead of fatally exiting.
 HAZYFLOW_LISTEN=":50099" \
 HAZYFLOW_DEV_KEY=1 \
 HAZYFLOW_DATA_DIR="$DATA_DIR" \
-HAZYFLOW_NODE_DROPHOST="$ROOT/engine/containerdrop/nodehost/drophost.mjs" \
 HAZYFLOW_REMOTE_MODULES="csv_uppercase=127.0.0.1:60001" \
 /tmp/hzd-demo > /tmp/hzd.log 2>&1 &
 HZD_PID=$!

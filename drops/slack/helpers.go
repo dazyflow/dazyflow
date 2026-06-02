@@ -15,10 +15,15 @@
 package slack
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"strings"
 	"sync"
+	"time"
 
 	"git.sr.ht/~klahr/hazyflow/core"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
@@ -156,4 +161,78 @@ func decodeSlackJSON(body []byte) (slackEnvelope, map[string]any, error) {
 	var raw map[string]any
 	_ = json.Unmarshal(body, &raw) // best-effort; envelope is the source of truth for ok/error
 	return env, raw, nil
+}
+
+// slackBaseURL resolves the API root for a job: an explicit base_url param
+// (proxy / self-hosted / tests) wins, else the package default (which
+// tests can swap via SetHTTPBase).
+func slackBaseURL(job core.Job) string {
+	if b, _ := params.StringOpt(job.Params, "base_url"); b != "" {
+		return strings.TrimRight(b, "/")
+	}
+	return currentHTTPBase()
+}
+
+// slackDo runs one authenticated Slack Web API call and returns the
+// shared {ok,error,...} envelope plus the raw decoded body. A non-2xx
+// status is a transport error; an {ok:false} body is returned for the
+// caller to translate into a friendly slack_error. timeoutMS bounds the
+// request (defaults to 15s). body is nil for GETs.
+func slackDo(ctx context.Context, method, url, token string, body []byte, timeoutMS int) (slackEnvelope, map[string]any, error) {
+	if timeoutMS <= 0 {
+		timeoutMS = 15000
+	}
+	reqCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMS)*time.Millisecond)
+	defer cancel()
+
+	var rdr io.Reader
+	if body != nil {
+		rdr = bytes.NewReader(body)
+	}
+	req, err := http.NewRequestWithContext(reqCtx, method, url, rdr)
+	if err != nil {
+		return slackEnvelope{}, nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return slackEnvelope{}, nil, err
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return slackEnvelope{}, nil, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return slackEnvelope{}, nil, fmt.Errorf("slack returned %d: %s", resp.StatusCode, string(raw))
+	}
+	return decodeSlackJSON(raw)
+}
+
+// bodyInputText pulls a string off the optional 'body' input port,
+// returning (text, true, nil) when present. A structured value is a
+// wiring mistake — the caller gets a friendly JobError telling them to
+// render it as a string (e.g. via render_text). Shared by the connectors
+// whose body/text comes from upstream.
+func bodyInputText(job core.Job) (string, bool, *core.JobError) {
+	in, ok := job.Input["body"]
+	if !ok || in.Inline == nil {
+		return "", false, nil
+	}
+	switch v := in.Inline.(type) {
+	case string:
+		return v, true, nil
+	case []byte:
+		return string(v), true, nil
+	default:
+		return "", false, &core.JobError{
+			Code:    "bad_input",
+			Message: "The Slack message needs text on its 'body' input, but the upstream node is sending a structured value. Route it through render_text and wire that text output instead.",
+			Details: fmt.Sprintf("Received type %T on input port 'body'; expected a string.", v),
+		}
+	}
 }

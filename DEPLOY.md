@@ -322,85 +322,14 @@ Two paths:
   secret on every node** in a multi-node deployment so a token minted
   by one verifies on another.
 
-## Marketplace: drops & integrations
+## Drops
 
-A **drop** is a node you can drop on the canvas (a connector, transform, or
-action); an **integration** is a connection prerequisite a drop depends on
-(e.g. `gmail`, `slack`). Besides the built-ins, a platform admin can install
-more at runtime from the web UI — **Admin → Marketplace** (`/admin/marketplace`),
-platform-admin only — by pointing at a git repo:
-
-- **Install an integration** from a repo's `integration.json`, then connect
-  accounts via the OAuth flow.
-- **Install a drop** from a repo path (`repo`, `ref`, `path`). Installs are
-  persisted and restored on boot. A drop is gated on its required integrations:
-  install the integration first or the drop install is refused.
-
-Git fetches are pinned to the resolved commit and routed through the SSRF guard
-(only `https`/`ssh`/local schemes; private/loopback addresses are blocked).
-
-**Versioning & uninstall.** Drops are versioned; a graph node refers to a drop
-by bare id (`gmail_send_email`, tracks the latest installed version) or pins an
-exact version (`gmail_send_email@2.0.0`), so re-installing a newer version can't
-silently change a flow that pinned the old one. Uninstalling an integration is
-refused while any installed drop version still requires it — uninstall the
-dependent drop first.
-
-### Trust tiers
-
-Every install is shown as **official**, **verified**, or **community**. The tier
-is *derived from a signature*, never self-declared — a drop cannot mark itself
-official. A repo ships a detached `<file>.sig` (Ed25519) next to each signed
-artifact; the daemon verifies it over the exact bytes against the keys in
-`HAZYFLOW_TRUSTED_KEYS` (boot config, not runtime-editable — it's the root of
-trust):
-
-```
-HAZYFLOW_TRUSTED_KEYS="id:tier:publisher:base64key;…"   # tier = official | verified
-```
-
-Unsigned or unknown-key artifacts install as **community**. Reserved built-in
-provider ids (`google`, `slack`, `github`, `notion`) can only be claimed by a
-signed official/verified manifest, so a community drop can't shadow a built-in
-provider.
-
-### Authoring & publishing
-
-Drops are authored in TypeScript against
-`engine/jsdrop/sdk/hazyflow-drop.d.ts` (integrations against
-`hazyflow-integration.d.ts`); see `engine/jsdrop/sdk/examples/` for the Gmail
-and Slack connectors and **[engine/jsdrop/DESIGN.md](engine/jsdrop/DESIGN.md)**
-for the capability surface and runtime. To run local drops in dev, point
-`HAZYFLOW_SCRIPTED_DROPS_DIR` at a directory of `.ts` files.
-
-To publish a signed, official-tier repo, drive the `hz-drops` tool. The whole
-flow is just keygen → sign → publish a git repo the daemon can fetch:
-
-```sh
-# 1. One-time: generate a signing keypair. Keep the .key secret (never commit
-#    it); .keys/<id>.trustedkey holds the public HAZYFLOW_TRUSTED_KEYS entry.
-go run ./cmd/hz-drops keygen --id hazy-official --publisher "Hazyflow" \
-    --tier official --out .keys
-
-# 2. Lay out the drops and sign each → writes a detached drops/<file>.ts.sig.
-mkdir -p repo/drops && cp officialdrops/{gmail_send_email,slack_send_message}.ts repo/drops/
-go run ./cmd/hz-drops sign --key .keys/hazy-official.key --id hazy-official repo/drops/*.ts
-
-# 3. Commit + tag. The daemon resolves the install ref via a go-git fetch, so
-#    use a LIGHTWEIGHT tag and force gpg-signing off (a signed/annotated tag,
-#    e.g. from a global commit.gpgSign, won't resolve the same way).
-cd repo && git init -q && git add -A
-git -c commit.gpgSign=false commit -q -m "Official drops v1.0.0"
-git -c tag.gpgSign=false -c tag.forceSignAnnotated=false tag -f v1.0.0
-
-# 4. Configure the printed key on the daemon, ';'-separated, in HAZYFLOW_TRUSTED_KEYS.
-cat ../.keys/hazy-official.trustedkey
-```
-
-Point the admin marketplace (`/admin/marketplace` → Install drop) at that repo +
-ref; installs then show as **official**. The private key is the authority to
-mint official drops: generate it on a trusted machine and keep it in a secret
-manager/HSM.
+Every node you drop on the canvas — triggers, transforms, and the connectors
+(Gmail, Slack, Sheets, Notion, GitHub, Claude, Excel, ntfy, webhooks) — is a
+native Go drop compiled into `hzd`. There is no plugin/marketplace install
+step and no separate runtime: the catalog is fixed at build time. Connectors
+that need credentials use the OAuth providers configured under **Admin →
+Connector apps** (`/admin/oauth`) or a `${secret:…}` token.
 
 ## Secrets
 

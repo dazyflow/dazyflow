@@ -483,69 +483,6 @@ export type AdminOAuthProvider = {
   updated_at?: string;
 };
 
-// --- Marketplace (platform-admin install) -------------------------------
-
-// Signature-derived trust tier of an installed artifact (never self-declared).
-export type TrustTier = "official" | "verified" | "community";
-
-// One row from GET /api/v1/admin/marketplace/integrations.
-export type InstalledIntegration = {
-  id: string;
-  version: string;
-  tier: TrustTier;
-};
-
-// One row from GET /api/v1/admin/marketplace/drops.
-export type InstalledDrop = {
-  id: string;
-  tier: TrustTier;
-  manifest: Manifest;
-};
-
-// One field of an integration's install form, from the preview endpoint.
-// "text"/"secret" collect operator input; "display" is read-only (e.g. the
-// redirect URI, already templated for this deployment).
-export type SetupField = {
-  key: string;
-  label: string;
-  type: "text" | "secret" | "display";
-  required?: boolean;
-  help?: string;
-  value?: string;
-};
-
-// POST /api/v1/admin/marketplace/integrations/from-git/preview response: the
-// validated manifest header, the setup form to render, the trust tier the
-// signature resolves to, and the resolved git commit (immutable digest).
-export type IntegrationPreview = {
-  id: string;
-  version: string;
-  label: string;
-  summary: string;
-  auth_kind: string;
-  scopes?: string[];
-  setup: SetupField[];
-  tier: TrustTier;
-  commit?: string;
-};
-
-// POST /api/v1/admin/marketplace/drops[/from-git]/preview — the access a drop
-// declares, shown for install consent. An installed drop always runs sandboxed
-// (out-of-process, resource-limited); the residual trust is the secrets/OAuth it
-// reads and the hosts it may reach, so those are what the admin acknowledges.
-export type DropCapabilitySummary = {
-  id: string;
-  version: string;
-  label: string;
-  summary: string;
-  tier: TrustTier;
-  sandboxed: boolean;
-  oauth: string[];
-  secrets: string[];
-  egress: string[]; // [] = the drop declared no outbound network
-  commit?: string;
-};
-
 // GET /api/v1/secret-manager — the tenant's BYO secret-manager (OpenBao/Vault)
 // connection, redacted: never includes the token / secret_id.
 export type SecretManagerStatus = {

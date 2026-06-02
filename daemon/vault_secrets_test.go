@@ -9,6 +9,16 @@ import (
 	"git.sr.ht/~klahr/hazyflow/core"
 )
 
+// newTestSecrets builds an in-memory EncryptedSecrets for tests.
+func newTestSecrets(t *testing.T) *EncryptedSecrets {
+	t.Helper()
+	es, err := NewEncryptedSecrets(make([]byte, 32), NewMemSecretsStore())
+	if err != nil {
+		t.Fatalf("encrypted secrets: %v", err)
+	}
+	return es
+}
+
 // fakeVaultClient records readKV calls and returns canned fields per (tenant is
 // implicit in cfg.Address here) path.
 type fakeVaultClient struct {

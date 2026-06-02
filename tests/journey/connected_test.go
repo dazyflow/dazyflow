@@ -31,7 +31,6 @@ func timeShortDaysAgo(n int) string {
 // is the execution counterpart to the catalog/journey tests: it watches
 // a SaaS scenario actually run, not just validate.
 func TestJourney_OverdueInvoice_RunsWithConnectedAccounts(t *testing.T) {
-	requireNode(t)
 	google := newGoogleMock(t)
 	defer google.Close()
 
@@ -87,7 +86,6 @@ func TestJourney_OverdueInvoice_RunsWithConnectedAccounts(t *testing.T) {
 // the aggregated rows it was handed so the test can confirm the data
 // actually flowed through filter -> aggregate -> sort -> AI -> Slack.
 func TestJourney_WeeklySalesSummary_RunsWithConnectedAccounts(t *testing.T) {
-	requireNode(t)
 	m := newSalesMock(t)
 	defer m.Close()
 

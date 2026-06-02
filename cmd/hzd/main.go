@@ -32,30 +32,18 @@ import (
 	"git.sr.ht/~klahr/hazyflow/daemon"
 	"git.sr.ht/~klahr/hazyflow/engine"
 	"git.sr.ht/~klahr/hazyflow/engine/jobstore"
-	"git.sr.ht/~klahr/hazyflow/engine/jsdrop"
 	"git.sr.ht/~klahr/hazyflow/engine/mcp"
 	_ "git.sr.ht/~klahr/hazyflow/drops"
+	gitdrop "git.sr.ht/~klahr/hazyflow/drops/git"
 	"git.sr.ht/~klahr/hazyflow/drops/github"
+	"git.sr.ht/~klahr/hazyflow/drops/gmail"
 	"git.sr.ht/~klahr/hazyflow/drops/io"
 	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
+	"git.sr.ht/~klahr/hazyflow/drops/notion"
 	secretsdrop "git.sr.ht/~klahr/hazyflow/drops/secrets"
+	"git.sr.ht/~klahr/hazyflow/drops/sheets"
 	"git.sr.ht/~klahr/hazyflow/drops/slack"
-	"git.sr.ht/~klahr/hazyflow/officialdrops"
 )
-
-// scriptedDropDoer is the HTTP client a scripted drop's fetch() routes
-// through. It composes both protections the http_request drop applies: the
-// operator egress allowlist (EgressAllowed, checked per URL) and the SSRF
-// guard (installed in SafeHTTPClient's dialer Control hook). Implemented at
-// the daemon edge so the drops/net package stays free of jsdrop.
-type scriptedDropDoer struct{ client *http.Client }
-
-func (d scriptedDropDoer) Do(req *http.Request) (*http.Response, error) {
-	if err := hfnet.EgressAllowed(req.URL.String()); err != nil {
-		return nil, err
-	}
-	return d.client.Do(req)
-}
 
 func main() {
 	// All runtime configuration comes from HAZYFLOW_* env vars (see
@@ -98,15 +86,6 @@ func main() {
 	enableSignup := envBool("HAZYFLOW_ENABLE_SIGNUP", false)
 	enableMetrics := envBool("HAZYFLOW_ENABLE_METRICS", false)
 	mcpServers := envStr("HAZYFLOW_MCP_SERVERS", "")
-	// Directory of scripted (JS/TS) drops loaded at startup. Each *.ts/*.js
-	// file is a drop whose default export is { manifest, run }; the Catalog
-	// transpiles + compiles it once. Empty = no scripted drops.
-	scriptedDropsDir := envStr("HAZYFLOW_SCRIPTED_DROPS_DIR", "")
-	// Trusted marketplace signing keys (root of trust for the official/verified
-	// tiers): semicolon-separated "id:tier:publisher:base64key" specs. Boot
-	// config on purpose — the root of trust must not be runtime-mutable. Empty
-	// = no trusted keys, so every install resolves to "community".
-	trustedKeys := envStr("HAZYFLOW_TRUSTED_KEYS", "")
 	// HAZYFLOW_DATA_DIR is the root for every piece of on-disk state
 	// (git-backed graph workspace, per-tenant sandbox roots, dev-mode
 	// JSON stores). Conventional subdirs inside: workspace/, sandbox/,
@@ -193,11 +172,10 @@ func main() {
 		log.Print("WARNING: HAZYFLOW_ALLOW_PRIVATE_EGRESS=1 — flows may set allow_private_networks to reach private/loopback hosts (SSRF guard becomes opt-out)")
 	}
 
-	// Route marketplace git-over-https fetches through the same SSRF-guarded
-	// client (blocks private/loopback/link-local at dial, e.g. cloud metadata),
-	// so an https repo URL can't be used to reach internal services. Non-https
-	// schemes are rejected before go-git is invoked.
-	daemon.InstallGuardedHTTPTransport(hfnet.SafeHTTPClient(60*time.Second, false))
+	// Route git-over-https clones (git_checkout / git_log) through an
+	// SSRF-guarded client (blocks private/loopback/link-local at dial, e.g.
+	// cloud metadata), so a clone URL can't be used to reach internal services.
+	gitdrop.InstallGuardedHTTPTransport(hfnet.SafeHTTPClient(60*time.Second, false))
 
 	// Refuse to boot with the bundled insecure defaults in a real deployment.
 	// A configured Postgres DSN is the signal that this isn't the in-memory dev
@@ -425,82 +403,11 @@ func main() {
 		log.Fatalf("HAZYFLOW_MCP_SERVERS: %v", err)
 	}
 
-	// Scripted (JS/TS) drops. fetch() routes through the SAME guards the
-	// http_request drop applies — the egress allowlist (per-URL) plus the
-	// SSRF guard baked into SafeHTTPClient's dialer — so a scripted drop has
-	// no privileged network path. 30s is the per-request ceiling; allowprivate
-	// is false (loopback/private/link-local refused).
-	scriptedCatalog := jsdrop.NewCatalog()
-	scriptedHTTP := scriptedDropDoer{client: hfnet.SafeHTTPClient(30*time.Second, false)}
-	// ctx.auth.token(provider) → the OAuth registry (auto-refresh inside).
-	// Tenant rides in the execution context; nil registry (OAuth disabled)
-	// leaves ctx.auth unexposed to scripted drops. These capabilities reach a
-	// drop through the broker (engine/containerdrop Host), wired below — the
-	// catalog itself holds no capability state.
-	var scriptedTokens jsdrop.TokenResolver
-	if oauthRegistry != nil {
-		scriptedTokens = func(ctx context.Context, provider, account string) (string, error) {
-			tok, err := oauthRegistry.GetOAuthToken(ctx, provider, account)
-			if err != nil {
-				return "", err
-			}
-			return tok.AccessToken, nil
-		}
-	}
-	// One scripted runtime: every drop (official + installed) is read and
-	// executed out-of-process in the Node drop host under resource limits,
-	// reaching the daemon only through the broker (the same SSRF-guarded HTTP,
-	// OAuth, and per-tenant sandbox). ctx.files.write reserves bytes against the
-	// same per-tenant FSQuota the file_write drop uses, so scripted and native
-	// writes share one budget. Wires both the Run (execute) and Extract (read
-	// manifest) hooks; must precede LoadDir/official-drop registration.
-	configureScriptedRuntime(scriptedCatalog, scriptedHTTP, scriptedTokens, quota.Reserve)
-	if scriptedDropsDir != "" {
-		if err := scriptedCatalog.LoadDir(scriptedDropsDir); err != nil {
-			log.Fatalf("HAZYFLOW_SCRIPTED_DROPS_DIR: %v", err)
-		}
-		log.Printf("scripted drops loaded from %s (%d registered)", scriptedDropsDir, len(scriptedCatalog.Manifests()))
-	}
-	// Official first-party connectors ship as scripted drops embedded in the
-	// binary (they replaced the former native Go connectors). Their manifests
-	// are embedded at generate time, so registration needs no Node spawn.
-	if err := officialdrops.Register(scriptedCatalog); err != nil {
-		log.Fatalf("register official drops: %v", err)
-	}
-
-	// Re-register marketplace installs persisted from a previous boot:
-	// integration providers (recipe + stored creds) and their dependent drops.
-	// The keyring derives each install's trust tier from its signature; it's
-	// empty for now (everything resolves to "community" until Hazy's official
-	// key + reviewed-publisher keys are loaded here from config).
-	keyring, keyErrs := daemon.LoadKeyring(strings.Split(trustedKeys, ";"))
-	for _, e := range keyErrs {
-		log.Printf("HAZYFLOW_TRUSTED_KEYS: %v", e)
-	}
-	if ids := keyring.IDs(); len(ids) > 0 {
-		log.Printf("marketplace trusted keys: %v", ids)
-	}
-	installer := daemon.NewInstaller(oauthRegistry, scriptedCatalog, encryptedSecrets, keyring)
-	// Operator kill switch: ids here are refused on install and skipped on
-	// Restore, regardless of signature/tier (boot config, like the trusted keys).
-	if revoked := strings.Split(envStr("HAZYFLOW_REVOKED_INSTALLS", ""), ","); len(revoked) > 0 {
-		installer.SetRevoked(revoked)
-	}
-	if restored, errs := installer.Restore(ctx); len(restored) > 0 || len(errs) > 0 {
-		if len(restored) > 0 {
-			log.Printf("marketplace installs restored: %v", restored)
-		}
-		for _, e := range errs {
-			log.Printf("install restore: %v", e)
-		}
-	}
-
 	eng := &engine.Engine{
 		Resolver: &engine.NodeResolver{
 			Native: engine.Default,
 			Remote: remoteCatalog,
 			MCP:    mcpCatalog,
-			Script: scriptedCatalog,
 		},
 		Sandbox: sandbox,
 		Quota:   quota,
@@ -777,7 +684,6 @@ func main() {
 		gw.Profiles = orgProfileStore
 		gw.EncryptedSecrets = encryptedSecrets // nil disables /api/v1/secrets endpoints
 		gw.OAuth = oauthRegistry               // nil disables /api/v1/oauth/* endpoints
-		gw.Installer = installer               // platform-admin marketplace install endpoints
 		gw.Approval = approvalListener         // nil leaves POST /approve/ unregistered
 		gw.EnableSignup = enableSignup         // false disables POST /api/v1/auth/signup
 		gw.EnableMetrics = enableMetrics       // false disables GET /metrics
@@ -1255,9 +1161,11 @@ func wireConnectorTokenHooks(reg *daemon.OAuthRegistry) {
 			return tok.AccessToken, nil
 		}
 	}
-	// slack/github still have native webhook-trigger drops that resolve tokens
-	// this way. The Gmail/Sheets/Notion connectors are now scripted and resolve
-	// their token through the scripted catalog's generic Tokens hook instead.
+	// Every shipped connector is native Go now; each binds to its OAuth
+	// provider. Gmail and Sheets both ride Google OAuth; Notion has its own.
 	slack.SetTokenLookup(bind("slack"))
 	github.SetTokenLookup(bind("github"))
+	gmail.SetTokenLookup(bind("google"))
+	sheets.SetTokenLookup(bind("google"))
+	notion.SetTokenLookup(bind("notion"))
 }

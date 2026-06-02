@@ -7,7 +7,6 @@ import {
   ScrollText,
   ShieldCheck,
   Plug,
-  Store,
 } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
@@ -58,15 +57,14 @@ export function Admin() {
         <AdminCard to="/admin/audit" icon={<ScrollText size={18} />} title={t("admin.cardAuditTitle")} desc={t("admin.cardAuditDesc")} />
       </div>
 
-      {/* OAuth provider apps and marketplace installs are instance-wide
-          (shared across every org), so only the platform operator sees
-          them — a tenant admin would get a 403. */}
+      {/* OAuth provider apps are instance-wide (shared across every org), so
+          only the platform operator sees them — a tenant admin would get a
+          403. */}
       {isPlatform && (
         <>
           <h2 className="admin-group-label">{t("admin.groupPlatform")}</h2>
           <div className="admin-grid">
             <AdminCard to="/admin/oauth" icon={<Plug size={18} />} title={t("admin.cardOAuthTitle")} desc={t("admin.cardOAuthDesc")} />
-            <AdminCard to="/admin/marketplace" icon={<Store size={18} />} title={t("admin.cardMarketplaceTitle")} desc={t("admin.cardMarketplaceDesc")} />
           </div>
         </>
       )}

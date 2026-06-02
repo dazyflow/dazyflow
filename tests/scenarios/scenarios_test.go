@@ -15,25 +15,16 @@ import (
 
 	"git.sr.ht/~klahr/hazyflow/core"
 	"git.sr.ht/~klahr/hazyflow/engine"
-	"git.sr.ht/~klahr/hazyflow/engine/jsdrop"
 	_ "git.sr.ht/~klahr/hazyflow/drops" // register every native drop
-	"git.sr.ht/~klahr/hazyflow/officialdrops"
 )
 
-// combinedManifests is the full shipped catalog the app exposes: native drops
-// plus the official scripted drops (gmail, slack, …) embedded in the binary.
-// Scenario/template graphs reference both, so validation must know both.
+// combinedManifests is the full shipped catalog the app exposes. Every drop —
+// including the gmail/slack/sheets/… connectors — is now a native Go drop, so
+// the catalog is just the native registry.
 func combinedManifests(t *testing.T) map[string]core.Manifest {
 	t.Helper()
 	out := map[string]core.Manifest{}
 	for id, m := range engine.Default.Manifests() {
-		out[id] = m
-	}
-	cat := jsdrop.NewCatalog()
-	if err := officialdrops.Register(cat); err != nil {
-		t.Fatalf("register official drops: %v", err)
-	}
-	for id, m := range cat.Manifests() {
 		out[id] = m
 	}
 	return out

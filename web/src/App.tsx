@@ -21,7 +21,6 @@ import { AdminModules } from "./pages/AdminModules";
 import { AdminWorkspace } from "./pages/AdminWorkspace";
 import { AdminOrgSSO } from "./pages/AdminOrgSSO";
 import { AdminOAuthProviders } from "./pages/AdminOAuthProviders";
-import { AdminMarketplace } from "./pages/AdminMarketplace";
 import { AcceptInvite } from "./pages/AcceptInvite";
 
 export function App() {
@@ -71,7 +70,6 @@ export function App() {
         <Route path="/admin/workspace" element={<AdminWorkspace />} />
         <Route path="/admin/sso" element={<AdminOrgSSO />} />
         <Route path="/admin/oauth" element={<AdminOAuthProviders />} />
-        <Route path="/admin/marketplace" element={<AdminMarketplace />} />
         <Route path="/invite/:token" element={<AcceptInvite />} />
         <Route path="*" element={<Navigate to="/flows" replace />} />
       </Routes>

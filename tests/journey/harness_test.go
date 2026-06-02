@@ -20,7 +20,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -30,61 +29,9 @@ import (
 	"git.sr.ht/~klahr/hazyflow/core"
 	"git.sr.ht/~klahr/hazyflow/daemon"
 	"git.sr.ht/~klahr/hazyflow/engine"
-	"git.sr.ht/~klahr/hazyflow/engine/containerdrop"
 	"git.sr.ht/~klahr/hazyflow/engine/jobstore"
-	"git.sr.ht/~klahr/hazyflow/engine/jsdrop"
 	_ "git.sr.ht/~klahr/hazyflow/drops" // register every native drop
-	"git.sr.ht/~klahr/hazyflow/officialdrops"
 )
-
-// officialCatalog is the scripted catalog of embedded official drops (gmail,
-// slack, …), so the harness resolves them like the real daemon does. When `node`
-// is available it also wires the Run hook to the Node runtime (process tier), so
-// connected scenarios actually EXECUTE a scripted connector against a mock (see
-// connected_test.go); the broker defaults to http.DefaultClient (no SSRF guard
-// on this bare test catalog) so a drop's base_url can point at a loopback mock.
-// Without node, Run stays nil — graph validation still works; execution tests
-// skip via requireNode.
-func officialCatalog(t *testing.T) *jsdrop.Catalog {
-	t.Helper()
-	cat := jsdrop.NewCatalog()
-	if node, drophost, ok := nodeDropHost(); ok {
-		cat.Run = func(m core.Manifest, jsESM string, _ bool) core.Transport {
-			return containerdrop.NewTransport(
-				m,
-				containerdrop.DropRef{ID: m.ID, Argv: []string{node, drophost}, Source: []byte(jsESM)},
-				containerdrop.ProcessRunner{},
-				containerdrop.Host{Files: func(job core.Job) jsdrop.FileStore { return jsdrop.NewJobFileStore(job, nil) }},
-			)
-		}
-	}
-	if err := officialdrops.Register(cat); err != nil {
-		t.Fatalf("register official drops: %v", err)
-	}
-	return cat
-}
-
-// nodeDropHost resolves `node` + the absolute drophost.mjs path, ok=false if
-// node isn't installed.
-func nodeDropHost() (node, drophost string, ok bool) {
-	n, err := exec.LookPath("node")
-	if err != nil {
-		return "", "", false
-	}
-	abs, err := filepath.Abs("../../engine/containerdrop/nodehost/drophost.mjs")
-	if err != nil {
-		return "", "", false
-	}
-	return n, abs, true
-}
-
-// requireNode skips a test that must EXECUTE a scripted drop when node is absent.
-func requireNode(t *testing.T) {
-	t.Helper()
-	if _, err := exec.LookPath("node"); err != nil {
-		t.Skip("node not installed")
-	}
-}
 
 // stack is a self-contained Hazyflow install: the HTTP API the web UI
 // talks to, backed by an in-memory control plane and a real worker so
@@ -116,7 +63,7 @@ func newStack(t *testing.T) *stack {
 	jobs := jobstore.NewMemory()
 	bus := daemon.NewMemoryBus()
 	eng := &engine.Engine{
-		Resolver: &engine.NodeResolver{Native: engine.Default, Script: officialCatalog(t)},
+		Resolver: &engine.NodeResolver{Native: engine.Default},
 		Sandbox:  sandbox,
 	}
 	svc := &daemon.Service{
