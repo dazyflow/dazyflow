@@ -2,7 +2,7 @@
   "id": "github-issue-to-slack",
   "version": "1",
   "name": "GitHub issue webhook → Slack",
-  "description": "Receives a GitHub issue webhook (configure the repo's webhook URL to the daemon's /trigger endpoint with the per-flow secret), formats the payload into a Slack-friendly line, and posts to your channel. Use case: route new issues from a busy repo into a triage channel.",
+  "description": "Receives a GitHub issue webhook (point the repo's webhook at the daemon's /trigger endpoint with the per-flow secret), renders the payload into one Slack line, and posts it to your triage channel. render_text turns the issue row into the message string that Slack's body expects.",
   "icon": "git-branch",
   "triggers": [
     {"type": "webhook", "secret": ""}
@@ -12,31 +12,28 @@
       "id": "trigger",
       "module": "webhook_input",
       "params": {},
-      "position": {"x": 100, "y": 200}
+      "position": {"x": 200, "y": 200}
     },
     {
-      "id": "format",
-      "module": "compute_rows",
+      "id": "render",
+      "module": "render_text",
       "params": {
-        "compute": {
-          "line": "'[' + row.repository.full_name + '] #' + string(row.issue.number) + ' ' + row.action + ' by ' + row.sender.login + ': ' + row.issue.title"
-        }
+        "template": "'[' + row.repository.full_name + '] #' + string(row.issue.number) + ' ' + row.action + ' by ' + row.sender.login + ': ' + row.issue.title"
       },
-      "position": {"x": 400, "y": 200}
+      "position": {"x": 540, "y": 200}
     },
     {
       "id": "notify",
       "module": "slack_send_message",
       "params": {
         "channel": "#triage",
-        "account": "default",
-        "text": "${upstream:format.rows[0].line}"
+        "account": "default"
       },
-      "position": {"x": 700, "y": 200}
+      "position": {"x": 880, "y": 200}
     }
   ],
   "edges": [
-    {"from": "trigger", "from_port": "body", "to": "format", "to_port": "rows", "on_error": ""},
-    {"from": "format", "from_port": "rows", "to": "notify", "to_port": "body", "on_error": ""}
+    {"from": "trigger", "from_port": "body", "to": "render", "to_port": "rows", "on_error": ""},
+    {"from": "render", "from_port": "text", "to": "notify", "to_port": "body", "on_error": ""}
   ]
 }

@@ -1,14 +1,11 @@
 {
   "id": "daily-group-aggregate-report",
   "version": "1",
-  "name": "Daily group-by report \u2192 Slack",
-  "description": "Every morning at 09:00, queries yesterday's orders from Postgres, groups them by country with sum/avg/count aggregations, formats a one-line summary per country, and posts to Slack. Demonstrates group_aggregate composing with compute_rows for the final string render.",
+  "name": "Daily group-by report → Slack",
+  "description": "Every morning at 09:00, queries yesterday's orders from Postgres, groups them by country with sum/avg/count aggregations, renders one summary line per country, and posts the whole block to Slack. Shows group_aggregate feeding render_text — the reducer that collapses many rows into a single message body.",
   "icon": "clock",
   "triggers": [
-    {
-      "type": "cron",
-      "cron": "0 9 * * *"
-    }
+    {"type": "cron", "cron": "0 9 * * *"}
   ],
   "nodes": [
     {
@@ -18,99 +15,46 @@
         "dsn": "${tenant:postgres_dsn}",
         "sql": "SELECT country, amount FROM orders WHERE created_at::date = current_date - 1"
       },
-      "position": {
-        "x": 400,
-        "y": 200
-      }
+      "position": {"x": 200, "y": 200}
     },
     {
       "id": "summarize",
       "module": "group_aggregate",
       "params": {
-        "by": [
-          "country"
-        ],
+        "by": ["country"],
         "aggregate": {
-          "orders": {
-            "op": "count"
-          },
-          "revenue": {
-            "op": "sum",
-            "column": "amount"
-          },
-          "avg_ticket": {
-            "op": "avg",
-            "column": "amount"
-          }
+          "orders": {"op": "count"},
+          "revenue": {"op": "sum", "column": "amount"},
+          "avg_ticket": {"op": "avg", "column": "amount"}
         }
       },
-      "position": {
-        "x": 700,
-        "y": 200
-      }
+      "position": {"x": 520, "y": 200}
     },
     {
       "id": "render",
-      "module": "compute_rows",
+      "module": "render_text",
       "params": {
-        "compute": {
-          "line": "row.country + ': ' + string(row.orders) + ' orders, $' + string(row.revenue) + ' total, avg $' + string(row.avg_ticket)"
-        }
+        "template": "'• ' + row.country + ': ' + string(row.orders) + ' orders, $' + string(row.revenue) + ' total (avg $' + string(row.avg_ticket) + ')'",
+        "prefix": "*Yesterday by country*\n",
+        "empty": "No orders yesterday."
       },
-      "position": {
-        "x": 1000,
-        "y": 200
-      }
+      "position": {"x": 840, "y": 200}
     },
     {
       "id": "notify",
       "module": "slack_send_message",
       "params": {
         "channel": "#ops-daily",
-        "account": "default",
-        "text": "${upstream:render.rows[0].line}"
+        "account": "default"
       },
-      "position": {
-        "x": 1300,
-        "y": 200
-      }
+      "position": {"x": 1160, "y": 200}
     }
   ],
   "edges": [
-    {
-      "from": "query",
-      "from_port": "rows",
-      "to": "summarize",
-      "to_port": "rows",
-      "on_error": ""
-    },
-    {
-      "from": "query",
-      "from_port": "columns",
-      "to": "summarize",
-      "to_port": "headers",
-      "on_error": ""
-    },
-    {
-      "from": "summarize",
-      "from_port": "rows",
-      "to": "render",
-      "to_port": "rows",
-      "on_error": ""
-    },
-    {
-      "from": "summarize",
-      "from_port": "headers",
-      "to": "render",
-      "to_port": "headers",
-      "on_error": ""
-    },
-    {
-      "from": "render",
-      "from_port": "rows",
-      "to": "notify",
-      "to_port": "body",
-      "on_error": ""
-    }
+    {"from": "query", "from_port": "rows", "to": "summarize", "to_port": "rows", "on_error": ""},
+    {"from": "query", "from_port": "columns", "to": "summarize", "to_port": "headers", "on_error": ""},
+    {"from": "summarize", "from_port": "rows", "to": "render", "to_port": "rows", "on_error": ""},
+    {"from": "summarize", "from_port": "headers", "to": "render", "to_port": "headers", "on_error": ""},
+    {"from": "render", "from_port": "text", "to": "notify", "to_port": "body", "on_error": ""}
   ]
 }

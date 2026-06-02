@@ -77,12 +77,32 @@ func normalizeRows(inline any) ([]map[string]any, error) {
 			out = append(out, m)
 		}
 		return out, nil
+	case map[string]any:
+		// A single object is one row. This is the shape a webhook or
+		// hosted-form trigger emits for a JSON object body
+		// (buildWebhookSeed / collectFormValues), so wiring
+		// webhook_input.body straight into a transform's rows port — the
+		// most common starter shape — just works instead of failing with
+		// "unsupported input type".
+		return []map[string]any{v}, nil
+	case map[string]string:
+		m := make(map[string]any, len(v))
+		for k, val := range v {
+			m[k] = val
+		}
+		return []map[string]any{m}, nil
 	case string:
-		var parsed []map[string]any
+		// An empty string is "no rows" (a webhook fired with no body),
+		// matching the db drops' contract. Otherwise parse JSON, accepting
+		// either an array of objects or a single object.
+		if v == "" {
+			return nil, nil
+		}
+		var parsed any
 		if err := json.Unmarshal([]byte(v), &parsed); err != nil {
 			return nil, fmt.Errorf("rows JSON: %w", err)
 		}
-		return parsed, nil
+		return normalizeRows(parsed)
 	}
 	return nil, fmt.Errorf("rows: unsupported input type %T", inline)
 }

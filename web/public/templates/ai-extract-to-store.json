@@ -1,0 +1,48 @@
+{
+  "id": "ai-extract-to-store",
+  "version": "1",
+  "name": "Extract structured data from text (AI)",
+  "description": "Posts incoming free text (an email, a note, a pasted receipt) to a webhook; Claude turns it into structured rows; parse_json reads the model's JSON — stripping any Markdown code fence automatically — and the rows land in the built-in store. The classic 'messy text in, clean table out' pattern. Set ANTHROPIC_API_KEY as a secret.",
+  "icon": "sparkles",
+  "triggers": [
+    {"type": "webhook", "secret": ""}
+  ],
+  "nodes": [
+    {
+      "id": "trigger",
+      "module": "webhook_input",
+      "params": {},
+      "position": {"x": 200, "y": 200}
+    },
+    {
+      "id": "extract",
+      "module": "claude",
+      "params": {
+        "model": "claude-sonnet-4-6",
+        "system": "Extract every line item from the user's text as a JSON array of objects with the fields \"description\" (string) and \"amount\" (number). Reply with only the JSON array, no prose.",
+        "max_tokens": 1024,
+        "temperature": 0,
+        "api_key": "${secret:ANTHROPIC_API_KEY}"
+      },
+      "position": {"x": 540, "y": 200}
+    },
+    {
+      "id": "parse",
+      "module": "parse_json",
+      "params": {"fence": true},
+      "position": {"x": 880, "y": 200}
+    },
+    {
+      "id": "save",
+      "module": "builtin_store_append",
+      "params": {"table": "extracted_items"},
+      "position": {"x": 1220, "y": 200}
+    }
+  ],
+  "edges": [
+    {"from": "trigger", "from_port": "body", "to": "extract", "to_port": "prompt", "on_error": ""},
+    {"from": "extract", "from_port": "text", "to": "parse", "to_port": "in", "on_error": ""},
+    {"from": "parse", "from_port": "rows", "to": "save", "to_port": "rows", "on_error": ""},
+    {"from": "parse", "from_port": "headers", "to": "save", "to_port": "headers", "on_error": ""}
+  ]
+}

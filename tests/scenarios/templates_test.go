@@ -2,9 +2,11 @@ package scenarios
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -14,10 +16,7 @@ import (
 // knownBrokenTemplates are shipped templates with a real defect that
 // predates this guard, with the finding noted. They're skipped (loudly)
 // rather than silently passing, so the gap stays visible until fixed.
-var knownBrokenTemplates = map[string]string{
-	"gmail-new-email-to-slack.json": "for_each.results is a list of Result wrappers ({status, output:{message}}), but the downstream compute_rows reads row.headers.* as if each item were the message itself. Needs a results->rows flattening step before it can run correctly.",
-	"gmail-to-sheet.json":           "same shape mismatch as gmail-new-email-to-slack: for_each.results (wrapped Results) feeds compute_rows expecting raw message rows.",
-}
+var knownBrokenTemplates = map[string]string{}
 
 // variadicIndex matches the editor's `port[N]` convention for variadic
 // input ports (e.g. attachments[0]). The engine resolves these to the
@@ -117,6 +116,125 @@ func TestShippedTemplatesCompose(t *testing.T) {
 					t.Errorf("template node %q appears to hardcode a secret", n.ID)
 				}
 			}
+
+			// Params must satisfy each drop's declared schema. The
+			// composition check above validates wiring but NOT params, so
+			// before this a missing/typo'd required param (e.g. `conflict`
+			// where the drop requires `conflict_columns`) sailed straight
+			// through and only blew up at run time.
+			for _, n := range g.Nodes {
+				m, ok := manifests[n.Module]
+				if !ok {
+					continue // the composition check already flagged the unknown module
+				}
+				for _, issue := range paramSchemaIssues(n.Params, m.ParamsSchema) {
+					t.Errorf("node %q (%s): %s", n.ID, n.Module, issue)
+				}
+			}
+
+			// A scalar-string sink port (a chat/email/issue body, a stored
+			// value) must be fed a rendered string — text/plain — not a
+			// rows list. Wiring compute_rows.rows straight into
+			// slack_send_message.body is the antipattern that fails at run
+			// time with "structured value… render it as a string";
+			// render_text.text is the fix. The composition check is blind
+			// to this because the sink ports declare no MIME of their own.
+			mod := make(map[string]string, len(g.Nodes))
+			for _, n := range g.Nodes {
+				mod[n.ID] = n.Module
+			}
+			for _, e := range g.Edges {
+				if !stringSinkPorts[mod[e.To]][e.ToPort] {
+					continue
+				}
+				src, ok := manifests[mod[e.From]]
+				if !ok {
+					continue
+				}
+				p, ok := src.Output(e.FromPort)
+				if !ok || len(p.MIME) == 0 {
+					continue // an untyped source could legitimately carry a string
+				}
+				if !slices.Contains(p.MIME, "text/plain") {
+					t.Errorf("node %q feeds %s.%s from %s.%s (%v) — that port wants a rendered string; route it through render_text and wire its text output",
+						e.From, mod[e.To], e.ToPort, mod[e.From], e.FromPort, p.MIME)
+				}
+			}
 		})
 	}
+}
+
+// stringSinkPorts are (module, input-port) pairs that consume a single
+// rendered string rather than a rows list. The drops behind them read
+// the value as text and either JSON-dump or hard-fail on a structured
+// value, so a template must feed them text/plain (render_text.text),
+// never an application/json rows stream.
+var stringSinkPorts = map[string]map[string]bool{
+	"slack_send_message":  {"body": true},
+	"gmail_send_email":    {"body": true},
+	"github_create_issue": {"body": true},
+	"secret_set":          {"value": true},
+}
+
+// paramSchemaIssues does a focused check of a node's params against the
+// drop's JSON-Schema: required properties are present, and declared
+// properties carry a value of the declared JSON type. It is deliberately
+// not a full validator — just enough to catch the param mistakes the
+// composition check can't see. It only inspects declared properties, so
+// a drop whose schema omits a param it accepts won't produce a false
+// positive.
+func paramSchemaIssues(params map[string]any, schema json.RawMessage) []string {
+	if len(schema) == 0 {
+		return nil
+	}
+	var s struct {
+		Properties map[string]struct {
+			Type string `json:"type"`
+		} `json:"properties"`
+		Required []string `json:"required"`
+	}
+	if err := json.Unmarshal(schema, &s); err != nil {
+		return nil // a schema we can't parse isn't the template's fault
+	}
+	var issues []string
+	for _, req := range s.Required {
+		if _, ok := params[req]; !ok {
+			issues = append(issues, fmt.Sprintf("missing required param %q", req))
+		}
+	}
+	for name, prop := range s.Properties {
+		v, ok := params[name]
+		if !ok || prop.Type == "" {
+			continue
+		}
+		if !jsonTypeMatches(prop.Type, v) {
+			issues = append(issues, fmt.Sprintf("param %q should be %s, got %T", name, prop.Type, v))
+		}
+	}
+	return issues
+}
+
+// jsonTypeMatches reports whether v (decoded by encoding/json, so numbers
+// are float64) matches a JSON-Schema primitive type. A ${...} placeholder
+// is always a string, which is what schema-typed string params expect, so
+// no special-casing is needed for the values templates actually carry.
+func jsonTypeMatches(t string, v any) bool {
+	switch t {
+	case "string":
+		_, ok := v.(string)
+		return ok
+	case "array":
+		_, ok := v.([]any)
+		return ok
+	case "object":
+		_, ok := v.(map[string]any)
+		return ok
+	case "boolean":
+		_, ok := v.(bool)
+		return ok
+	case "number", "integer":
+		_, ok := v.(float64)
+		return ok
+	}
+	return true // unknown or unconstrained type: don't second-guess
 }

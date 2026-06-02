@@ -18,6 +18,8 @@ import {
   Cpu,
   Workflow,
   Hammer,
+  Type,
+  PackageOpen,
   type LucideIcon,
 } from "lucide-react";
 import { GitIcon } from "./components/GitIcon";
@@ -50,6 +52,8 @@ const iconRegistry: Record<string, LucideIcon> = {
   cpu: Cpu,
   workflow: Workflow,
   hammer: Hammer,
+  text: Type,
+  "package-open": PackageOpen,
 };
 
 // categoryFallback picks a sensible default icon when a manifest didn't

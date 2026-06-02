@@ -46,7 +46,7 @@
       "params": {
         "dsn": "${tenant:postgres_dsn}",
         "table": "notion_pages",
-        "conflict": [
+        "conflict_columns": [
           "id"
         ]
       },

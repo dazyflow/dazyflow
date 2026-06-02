@@ -56,7 +56,7 @@
       "params": {
         "dsn": "${tenant:postgres_dsn}",
         "table": "sales_enriched",
-        "conflict": [
+        "conflict_columns": [
           "customer_id",
           "sale_id"
         ]

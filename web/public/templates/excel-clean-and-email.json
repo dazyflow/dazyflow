@@ -2,7 +2,7 @@
   "id": "excel-clean-and-email",
   "version": "1",
   "name": "Clean Excel → email summary",
-  "description": "Reads an .xlsx file from the workspace, normalizes the rows (rename columns, drop incomplete rows), aggregates totals, formats a plain-text summary, and emails it via Gmail. Demonstrates the row-cleaning pipeline plus a non-Slack outbound channel.",
+  "description": "Reads an .xlsx from the workspace, renames and selects columns (map_rows), drops incomplete rows (compute_rows filter), totals what's left (group_aggregate), renders a plain-text summary (render_text), and emails it via Gmail. The render_text → email body edge is also what sequences the send after the pipeline finishes.",
   "icon": "mail",
   "nodes": [
     {
@@ -46,11 +46,9 @@
     },
     {
       "id": "render",
-      "module": "compute_rows",
+      "module": "render_text",
       "params": {
-        "compute": {
-          "subject": "'Daily import summary: ' + string(row.n) + ' rows, $' + string(row.revenue) + ' total'"
-        }
+        "template": "'Daily import summary: ' + string(row.n) + ' rows, $' + string(row.revenue) + ' total'"
       },
       "position": {"x": 1300, "y": 200}
     },
@@ -59,10 +57,9 @@
       "module": "gmail_send_email",
       "params": {
         "to": "ops@example.com",
-        "subject": "${upstream:render.rows[0].subject}",
+        "subject": "Daily import summary",
         "format": "text",
-        "account": "default",
-        "body": "See attached file or run the flow detail for the breakdown."
+        "account": "default"
       },
       "position": {"x": 1600, "y": 200}
     }
@@ -75,6 +72,7 @@
     {"from": "filter", "from_port": "rows", "to": "totals", "to_port": "rows", "on_error": ""},
     {"from": "filter", "from_port": "headers", "to": "totals", "to_port": "headers", "on_error": ""},
     {"from": "totals", "from_port": "rows", "to": "render", "to_port": "rows", "on_error": ""},
-    {"from": "totals", "from_port": "headers", "to": "render", "to_port": "headers", "on_error": ""}
+    {"from": "totals", "from_port": "headers", "to": "render", "to_port": "headers", "on_error": ""},
+    {"from": "render", "from_port": "text", "to": "email", "to_port": "body", "on_error": ""}
   ]
 }

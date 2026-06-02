@@ -1,0 +1,41 @@
+{
+  "id": "excel-dedupe-sort-to-store",
+  "version": "1",
+  "name": "Tidy a contact list: dedupe + sort",
+  "description": "Reads a contact list from an .xlsx, drops duplicate rows (keeping the most recent per email), sorts the survivors by name, and saves the clean list to the built-in store — no database to set up. Shows dedupe_rows and sort_rows back to back, the two workhorses of list hygiene.",
+  "icon": "database",
+  "nodes": [
+    {
+      "id": "read",
+      "module": "excel_read",
+      "params": {"path": "input/contacts.xlsx", "header_row": 1},
+      "position": {"x": 200, "y": 200}
+    },
+    {
+      "id": "dedupe",
+      "module": "dedupe_rows",
+      "params": {"by": ["email"], "keep": "last"},
+      "position": {"x": 520, "y": 200}
+    },
+    {
+      "id": "sort",
+      "module": "sort_rows",
+      "params": {"by": ["name"]},
+      "position": {"x": 840, "y": 200}
+    },
+    {
+      "id": "save",
+      "module": "builtin_store_append",
+      "params": {"table": "contacts"},
+      "position": {"x": 1160, "y": 200}
+    }
+  ],
+  "edges": [
+    {"from": "read", "from_port": "rows", "to": "dedupe", "to_port": "rows", "on_error": ""},
+    {"from": "read", "from_port": "headers", "to": "dedupe", "to_port": "headers", "on_error": ""},
+    {"from": "dedupe", "from_port": "rows", "to": "sort", "to_port": "rows", "on_error": ""},
+    {"from": "dedupe", "from_port": "headers", "to": "sort", "to_port": "headers", "on_error": ""},
+    {"from": "sort", "from_port": "rows", "to": "save", "to_port": "rows", "on_error": ""},
+    {"from": "sort", "from_port": "headers", "to": "save", "to_port": "headers", "on_error": ""}
+  ]
+}
