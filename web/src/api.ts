@@ -125,11 +125,34 @@ async function request<T>(
 }
 
 export type SignInResponse = {
-  token: string;
-  subject: string;
-  tenant: string;
-  workspace: string;
-  expires_at: string;
+  // On a normal sign-in the server returns a session token + identity.
+  // When the account has 2FA enabled it instead returns
+  // { totp_required: true, challenge } and the other fields are absent —
+  // the caller must finish via api.totpVerify before it has a session.
+  token?: string;
+  subject?: string;
+  tenant?: string;
+  workspace?: string;
+  expires_at?: string;
+  totp_required?: boolean;
+  challenge?: string;
+};
+
+// TOTPStatus mirrors GET /me/totp. enrolled_at + recovery_codes_left are
+// only meaningful when enabled.
+export type TOTPStatus = {
+  enabled: boolean;
+  enrolled_at?: string;
+  recovery_codes_left?: number;
+};
+
+// TOTPSetup mirrors POST /me/totp/setup — the provisioning data shown
+// while enrolling. qr_png_data_url is a ready-to-render <img> source;
+// secret_base32 is the manual fallback for apps that can't scan.
+export type TOTPSetup = {
+  otp_auth_url: string;
+  secret_base32: string;
+  qr_png_data_url?: string;
 };
 
 // runViewToRecord / nodeViewToRecord adapt the public API's clean run/node
@@ -234,6 +257,39 @@ export const api = {
       signalUnauthorized: false,
     }),
   whoami: (token: string | null) => request<WhoAmI>(token, "GET", "/me"),
+
+  // --- TOTP 2FA ---------------------------------------------------------
+  // totpVerify is leg 2 of sign-in: it redeems the challenge from leg 1
+  // plus a code (or recovery code) and, on success, returns the same
+  // payload as a normal sign-in (token + identity). Unauthenticated.
+  totpVerify: (challenge: string, code: string, recoveryCode: string) =>
+    request<SignInResponse>(null, "POST", "/auth/totp", {
+      challenge,
+      code,
+      recovery_code: recoveryCode,
+    }),
+  // getTOTPStatus reads the caller's current 2FA state for the Settings
+  // card. Returns { enabled: false } for principals with no 2FA.
+  getTOTPStatus: (token: string) =>
+    request<TOTPStatus>(token, "GET", "/me/totp"),
+  // totpSetup starts enrolment — mints a pending secret and returns the
+  // QR + manual secret. totpConfirm finalises it and returns the
+  // one-time recovery codes.
+  totpSetup: (token: string) =>
+    request<TOTPSetup>(token, "POST", "/me/totp/setup"),
+  totpConfirm: (token: string, code: string) =>
+    request<{ recovery_codes: string[] }>(token, "POST", "/me/totp/confirm", {
+      code,
+    }),
+  // totpDisable requires the current password as a re-auth gate.
+  totpDisable: (token: string, password: string) =>
+    request<void>(token, "POST", "/me/totp/disable", { password }),
+  totpRegenerateRecoveryCodes: (token: string) =>
+    request<{ recovery_codes: string[] }>(
+      token,
+      "POST",
+      "/me/totp/recovery-codes",
+    ),
   listWorkspaces: (token: string, tenant?: string) => {
     const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
     return request<{ workspaces: string[] }>(token, "GET", "/workspaces" + qs);

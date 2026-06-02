@@ -17,7 +17,7 @@ import { orgFromHost } from "../lib/orgFromHost";
 //                lands the user in.
 export function SignIn() {
   const { t } = useTranslation();
-  const { signInWithPassword, error, loading } = useAuth();
+  const { signInWithPassword, verifyTOTP, error, loading } = useAuth();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const presetEmail = searchParams.get("email") ?? "";
@@ -26,6 +26,13 @@ export function SignIn() {
   const [email, setEmail] = useState(presetEmail);
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  // Second-factor step. When the password step returns a challenge we
+  // swap the form to a code prompt rather than navigating — the
+  // challenge is short-lived and single-use, so it lives only in state.
+  const [challenge, setChallenge] = useState<string | null>(null);
+  const [totpCode, setTotpCode] = useState("");
+  const [recoveryCode, setRecoveryCode] = useState("");
+  const [useRecovery, setUseRecovery] = useState(false);
   const [googleEnabled, setGoogleEnabled] = useState(false);
   const [signupEnabled, setSignupEnabled] = useState(false);
   // The org whose SSO we offer. Prefer an explicit ?org=, otherwise fall
@@ -88,6 +95,98 @@ export function SignIn() {
       )}`
     : "";
 
+  // Second-factor step: shown once the password step hands back a
+  // challenge. Submitting exchanges the code (or recovery code) for a
+  // session via verifyTOTP, then follows the same post-sign-in nav as
+  // the password path.
+  if (challenge) {
+    return (
+      <div className="signin-wrap">
+        <form
+          className="signin"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            const code = useRecovery ? "" : totpCode.trim();
+            const recovery = useRecovery ? recoveryCode.trim() : "";
+            if (!code && !recovery) return;
+            setBusy(true);
+            try {
+              await verifyTOTP(challenge, code, recovery);
+              if (inviteToken) {
+                navigate(`/invite/${inviteToken}`);
+              }
+            } catch {
+              /* error already set on context */
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <h1>{t("signIn.totpTitle")}</h1>
+          {!useRecovery ? (
+            <>
+              <label htmlFor="totp-code">{t("signIn.totpCodeLabel")}</label>
+              <input
+                id="totp-code"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                autoFocus
+                value={totpCode}
+                onChange={(e) => setTotpCode(e.target.value)}
+                placeholder="123456"
+              />
+              <div className="desc">{t("signIn.totpCodeHint")}</div>
+            </>
+          ) : (
+            <>
+              <label htmlFor="recovery-code">
+                {t("signIn.recoveryCodeLabel")}
+              </label>
+              <input
+                id="recovery-code"
+                type="text"
+                autoComplete="one-time-code"
+                autoFocus
+                value={recoveryCode}
+                onChange={(e) => setRecoveryCode(e.target.value)}
+                placeholder="xxxx-xxxx"
+              />
+              <div className="desc">{t("signIn.recoveryCodeHint")}</div>
+            </>
+          )}
+          <button
+            type="submit"
+            className="primary"
+            disabled={
+              busy ||
+              loading ||
+              (useRecovery ? !recoveryCode.trim() : !totpCode.trim())
+            }
+          >
+            {busy ? t("signIn.submitting") : t("signIn.verify")}
+          </button>
+          {error && <div className="error">{error}</div>}
+          <div className="signin-alt">
+            <button
+              type="button"
+              className="linklike"
+              onClick={() => {
+                setUseRecovery((v) => !v);
+                setTotpCode("");
+                setRecoveryCode("");
+              }}
+            >
+              {useRecovery
+                ? t("signIn.useAuthenticator")
+                : t("signIn.useRecoveryCode")}
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
   return (
     <div className="signin-wrap">
       <form
@@ -97,7 +196,12 @@ export function SignIn() {
           if (!email.trim() || !password) return;
           setBusy(true);
           try {
-            await signInWithPassword(email.trim(), password);
+            const r = await signInWithPassword(email.trim(), password);
+            // 2FA: don't navigate — switch the form to the code step.
+            if (r.totpRequired && r.challenge) {
+              setChallenge(r.challenge);
+              return;
+            }
             if (inviteToken) {
               navigate(`/invite/${inviteToken}`);
             }

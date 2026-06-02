@@ -670,6 +670,71 @@
 .signin-alt a:hover {
   text-decoration: underline;
 }
+/* Button styled as an inline link — used for the "use a recovery code"
+   toggle on the second-factor step, where a full button would read as
+   too heavy next to the primary Verify action. */
+.linklike {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent, #9f83fe);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: none;
+}
+.linklike:hover {
+  text-decoration: underline;
+}
+
+/* Two-factor card (Settings). Enrolment shows a QR + the manual secret;
+   the recovery panel lists the one-time codes in a monospace grid. */
+.totp-enrol,
+.totp-recovery,
+.totp-disable {
+  margin-top: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.totp-qr {
+  align-self: flex-start;
+  border-radius: 8px;
+  background: #fff;
+  padding: 8px;
+}
+.totp-secret {
+  align-self: flex-start;
+  font-family: var(--mono, monospace);
+  letter-spacing: 1px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.06));
+  word-break: break-all;
+}
+.totp-recovery-codes {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-2);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 16px;
+  border-radius: 8px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.06));
+}
+.totp-recovery-codes code {
+  font-family: var(--mono, monospace);
+  letter-spacing: 1px;
+}
+.totp-state {
+  font-size: 14px;
+  margin: var(--space-2) 0;
+}
+.totp-state.totp-on {
+  color: var(--success, #4caf50);
+}
+.totp-state.totp-off {
+  color: var(--muted);
+}
 
 /* Welcome / first-run wizard. Centered card with a three-step list
    of CTAs — the lightest version of an onboarding flow that still

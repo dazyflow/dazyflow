@@ -65,6 +65,29 @@
     "langEnglish": "English",
     "langSwedish": "Svenska"
   },
+  "twoFactor": {
+    "title": "Tvåfaktorsautentisering",
+    "intro": "Lägg till ett extra steg vid inloggning med en autentiseringsapp (till exempel Google Authenticator, 1Password eller Authy).",
+    "unavailable": "Tvåfaktorsautentisering är inte tillgänglig på den här servern.",
+    "stateEnabled_one": "Aktiverad. {{count}} återställningskod kvar.",
+    "stateEnabled_other": "Aktiverad. {{count}} återställningskoder kvar.",
+    "stateDisabled": "Inte aktiverad.",
+    "enable": "Aktivera tvåfaktorsautentisering",
+    "qrAlt": "QR-kod för din autentiseringsapp",
+    "manualSecret": "Kan du inte skanna? Ange den här nyckeln manuellt i din autentiseringsapp:",
+    "confirmLabel": "Ange koden från din app för att slutföra",
+    "confirmEnable": "Bekräfta och aktivera",
+    "cancel": "Avbryt",
+    "recoveryTitle": "Spara dina återställningskoder",
+    "recoveryWarn": "Förvara dem på ett säkert ställe. Varje kod fungerar en gång och låter dig logga in om du förlorar din autentiseringsapp. De visas inte igen.",
+    "copyCodes": "Kopiera koder",
+    "savedCodes": "Jag har sparat dem",
+    "regenerate": "Skapa nya återställningskoder",
+    "disable": "Inaktivera",
+    "disablePasswordLabel": "Bekräfta ditt lösenord för att inaktivera",
+    "confirmDisable": "Inaktivera tvåfaktor",
+    "qr": "QR"
+  },
   "signIn": {
     "title": "Logga in",
     "email": "E-post",
@@ -75,7 +98,15 @@
     "createAccount": "Skapa ett konto",
     "continueWithGoogle": "Fortsätt med Google",
     "or": "eller",
-    "sessionExpired": "Din session har gått ut. Logga in igen."
+    "sessionExpired": "Din session har gått ut. Logga in igen.",
+    "totpTitle": "Tvåfaktorsautentisering",
+    "totpCodeLabel": "Autentiseringskod",
+    "totpCodeHint": "Ange den 6-siffriga koden från din autentiseringsapp.",
+    "recoveryCodeLabel": "Återställningskod",
+    "recoveryCodeHint": "Ange en av återställningskoderna du sparade när du aktiverade tvåfaktorsautentisering.",
+    "verify": "Verifiera",
+    "useRecoveryCode": "Använd en återställningskod i stället",
+    "useAuthenticator": "Använd din autentiseringsapp i stället"
   },
   "signUp": {
     "title": "Skapa ditt konto",

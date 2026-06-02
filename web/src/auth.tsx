@@ -14,7 +14,23 @@ type AuthCtx = {
   me: WhoAmI | null;
   loading: boolean;
   error: string | null;
-  signInWithPassword: (email: string, password: string) => Promise<void>;
+  // signInWithPassword resolves to a discriminator: when the account has
+  // 2FA enabled the server withholds the session and returns a challenge
+  // instead, so the caller must collect a code and finish via verifyTOTP.
+  // Errors surface on `error` and are re-thrown.
+  signInWithPassword: (
+    email: string,
+    password: string,
+  ) => Promise<{ totpRequired: boolean; challenge?: string }>;
+  // verifyTOTP completes leg 2 of sign-in: it exchanges the challenge +
+  // a code (or recovery code) for a session, landing the user in the
+  // same signed-in state as a code-free sign-in. Pass recoveryCode="" to
+  // use a TOTP code and code="" to use a recovery code.
+  verifyTOTP: (
+    challenge: string,
+    code: string,
+    recoveryCode: string,
+  ) => Promise<void>;
   // signUpWithPassword creates a new account, auto-signs the user in,
   // and lands them in the same authenticated state as a sign-in call.
   // Errors surface on the context (`error`) and are re-thrown so the
@@ -228,18 +244,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // applySession mirrors a freshly-issued session token into localStorage
+  // (so the app keeps using its bearer-header path) and resolves identity.
+  // Shared by the password, TOTP-second-leg, and signup flows.
+  const applySession = async (token: string) => {
+    localStorage.setItem(STORAGE_KEY, token);
+    setToken(token);
+    const who = await api.whoami(token);
+    setMe(who);
+  };
+
   const signInWithPassword = async (email: string, password: string) => {
     setLoading(true);
     setError(null);
     try {
       const r = await api.signIn(email, password);
-      // The signin endpoint also sets an HttpOnly session cookie, but
-      // we mirror the token in localStorage so the rest of the app
-      // keeps using its bearer-header code path unchanged.
-      localStorage.setItem(STORAGE_KEY, r.token);
-      setToken(r.token);
-      const who = await api.whoami(r.token);
-      setMe(who);
+      // 2FA gate: the server returns a challenge instead of a session.
+      // Don't apply anything yet — hand the challenge back so the form
+      // can switch to the code step. Keep loading off so the second-step
+      // inputs are interactive.
+      if (r.totp_required && r.challenge) {
+        setLoading(false);
+        return { totpRequired: true, challenge: r.challenge };
+      }
+      // The signin endpoint also sets an HttpOnly session cookie, but we
+      // mirror the token in localStorage so the rest of the app keeps
+      // using its bearer-header code path unchanged.
+      await applySession(r.token as string);
+      return { totpRequired: false };
+    } catch (e) {
+      setError((e as Error).message);
+      throw e;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verifyTOTP = async (
+    challenge: string,
+    code: string,
+    recoveryCode: string,
+  ) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await api.totpVerify(challenge, code, recoveryCode);
+      await applySession(r.token as string);
     } catch (e) {
       setError((e as Error).message);
       throw e;
@@ -256,10 +306,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
     try {
       const r = await api.signUp(email, password);
-      localStorage.setItem(STORAGE_KEY, r.token);
-      setToken(r.token);
-      const who = await api.whoami(r.token);
-      setMe(who);
+      await applySession(r.token as string);
     } catch (e) {
       setError((e as Error).message);
       throw e;
@@ -308,6 +355,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         error,
         signInWithPassword,
+        verifyTOTP,
         signUpWithPassword,
         signOut,
         hasPerm,

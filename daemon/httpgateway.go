@@ -63,6 +63,20 @@ type HTTPGateway struct {
 	Users      auth.UserStore
 	SessionTTL time.Duration // default 24h when zero
 
+	// TOTPKey is the 32-byte AES key that encrypts users' TOTP secrets
+	// at rest (decoded from HAZYFLOW_TOTP_KEY by cmd/hzd). When it's not
+	// the required 32 bytes, 2FA is considered un-configured at the
+	// install level: the /me/totp + /auth/totp endpoints return 503 and
+	// sign-in never asks for a second factor.
+	TOTPKey []byte
+	// TOTPChallenges bridges the password step and the second-factor
+	// step during sign-in. An in-memory store is fine — challenges live
+	// five minutes and losing them on restart just re-prompts for the
+	// password. Nil with a configured TOTPKey disables the challenge leg
+	// (sign-in would fail closed for enrolled users), so cmd/hzd wires
+	// both together.
+	TOTPChallenges auth.TOTPChallengeStore
+
 	// EncryptedSecrets powers the /api/v1/secrets CRUD endpoints. Nil
 	// means the encrypted store isn't configured for this deployment;
 	// the routes return 501 in that case so callers can detect the
@@ -273,6 +287,10 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/auth/signin", h.rateLimitAuth(h.signIn))
 	mux.HandleFunc("POST /api/v1/auth/signup", h.rateLimitAuth(h.signUp))
 	mux.HandleFunc("POST /api/v1/auth/signout", h.signOut)
+	// Leg 2 of sign-in for TOTP-enrolled users. Unauthenticated (the
+	// challenge token is the principal) and rate-limited like the rest
+	// of the auth surface.
+	mux.HandleFunc("POST /api/v1/auth/totp", h.rateLimitAuth(h.totpVerify))
 	mux.HandleFunc("GET /api/v1/workspaces", h.requireAuth(h.listWorkspaces))
 	mux.HandleFunc("POST /api/v1/workspaces/{tenant}/{workspace}/files", h.requireAuth(h.uploadWorkspaceFile))
 	mux.HandleFunc("GET /api/v1/secrets", h.requireAuth(h.listSecrets))
@@ -316,6 +334,14 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// these don't require tenant:admin — any authenticated principal
 	// can derive sub-scopes of their own permissions.
 	mux.HandleFunc("GET /api/v1/me", h.requireAuth(h.meHandler))
+	// /me/totp — the caller manages their own 2FA. Status is readable
+	// by anyone signed in; the mutating routes 503 when the install
+	// hasn't configured a TOTP key.
+	mux.HandleFunc("GET /api/v1/me/totp", h.requireAuth(h.totpStatus))
+	mux.HandleFunc("POST /api/v1/me/totp/setup", h.requireAuth(h.totpSetup))
+	mux.HandleFunc("POST /api/v1/me/totp/confirm", h.requireAuth(h.totpConfirm))
+	mux.HandleFunc("POST /api/v1/me/totp/disable", h.requireAuth(h.totpDisable))
+	mux.HandleFunc("POST /api/v1/me/totp/recovery-codes", h.requireAuth(h.totpRegenerate))
 	mux.HandleFunc("GET /api/v1/me/api-keys", h.requireAuth(h.listMyAPIKeysHandler))
 	mux.HandleFunc("POST /api/v1/me/api-keys",
 		h.requireAuth(h.idempotencyMiddleware("/me/api-keys", h.issueMyAPIKeyHandler)))
@@ -822,6 +848,24 @@ func (h *HTTPGateway) signIn(rw http.ResponseWriter, r *http.Request) {
 	user, err := auth.VerifyPassword(r.Context(), h.Users, body.Email, body.Password)
 	if err != nil {
 		writeJSONError(rw, http.StatusUnauthorized, "invalid email or password")
+		return
+	}
+	// Second factor: if this user has TOTP enabled (and the install has
+	// 2FA configured), the password alone is not enough. Mint a
+	// short-lived challenge and return it instead of a session; the
+	// client posts it back to /auth/totp with a code to finish. We fail
+	// closed — an enrolled user can't downgrade to password-only just
+	// because the challenge store is missing.
+	if user.TOTPEnabled && h.totpConfigured() {
+		challenge, cerr := auth.IssueTOTPChallenge(r.Context(), h.TOTPChallenges, user.Email)
+		if cerr != nil {
+			writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("issue challenge: %v", cerr))
+			return
+		}
+		writeJSON(rw, http.StatusOK, map[string]any{
+			"totp_required": true,
+			"challenge":     challenge,
+		})
 		return
 	}
 	ttl := h.SessionTTL

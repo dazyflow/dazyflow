@@ -57,8 +57,21 @@ CREATE TABLE IF NOT EXISTS users (
     tenant        TEXT NOT NULL,
     workspace     TEXT NOT NULL,
     roles         JSONB NOT NULL DEFAULT '[]',
-    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- TOTP 2FA. Added after the initial users table shipped, so the
+    -- ALTERs below carry installs that predate 2FA. totp_secret_enc is
+    -- the AES-256-GCM ciphertext (see auth/totp.go); recovery_codes is a
+    -- JSONB array of bcrypt hashes of the unused single-use codes.
+    totp_secret_enc  BYTEA,
+    totp_enabled     BOOLEAN NOT NULL DEFAULT FALSE,
+    totp_enrolled_at TIMESTAMPTZ,
+    recovery_codes   JSONB NOT NULL DEFAULT '[]'
 );
+-- Idempotent migrations for users tables created before 2FA landed.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret_enc  BYTEA;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled     BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enrolled_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_codes   JSONB NOT NULL DEFAULT '[]';
 `
 
 // EnsurePgAuthSchema creates the api_keys / sessions / users tables if
@@ -274,15 +287,40 @@ func NewPgUserStore(ctx context.Context, pool *pgxpool.Pool) (*PgUserStore, erro
 	return &PgUserStore{pool: pool}, nil
 }
 
+// marshalRecoveryCodes / unmarshalRecoveryCodes move the bcrypt-hash
+// array in and out of the recovery_codes JSONB column. nil → "[]" so the
+// NOT NULL column always gets a value.
+func marshalRecoveryCodes(codes []string) ([]byte, error) {
+	if codes == nil {
+		return []byte("[]"), nil
+	}
+	return json.Marshal(codes)
+}
+
+func unmarshalRecoveryCodes(b []byte) ([]string, error) {
+	if len(b) == 0 {
+		return nil, nil
+	}
+	var codes []string
+	if err := json.Unmarshal(b, &codes); err != nil {
+		return nil, err
+	}
+	return codes, nil
+}
+
 func (s *PgUserStore) GetByEmail(ctx context.Context, email string) (User, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
-	const q = `SELECT email, password_hash, subject, tenant, workspace, roles, created_at FROM users WHERE email=$1`
+	const q = `SELECT email, password_hash, subject, tenant, workspace, roles, created_at,
+	                  totp_secret_enc, totp_enabled, totp_enrolled_at, recovery_codes
+	             FROM users WHERE email=$1`
 	var (
-		u        User
-		rolesRaw []byte
+		u           User
+		rolesRaw    []byte
+		recoveryRaw []byte
 	)
 	err := s.pool.QueryRow(ctx, q, email).Scan(
 		&u.Email, &u.PasswordHash, &u.Subject, &u.Tenant, &u.Workspace, &rolesRaw, &u.CreatedAt,
+		&u.TOTPSecretEnc, &u.TOTPEnabled, &u.TOTPEnrolledAt, &recoveryRaw,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -295,6 +333,11 @@ func (s *PgUserStore) GetByEmail(ctx context.Context, email string) (User, error
 		return User{}, err
 	}
 	u.Roles = roles
+	codes, err := unmarshalRecoveryCodes(recoveryRaw)
+	if err != nil {
+		return User{}, err
+	}
+	u.RecoveryCodeHashes = codes
 	return u, nil
 }
 
@@ -307,23 +350,33 @@ func (s *PgUserStore) PutUser(ctx context.Context, u User) error {
 	if err != nil {
 		return err
 	}
+	recovery, err := marshalRecoveryCodes(u.RecoveryCodeHashes)
+	if err != nil {
+		return err
+	}
 	created := u.CreatedAt
 	if created.IsZero() {
 		created = time.Now()
 	}
 	const q = `
-		INSERT INTO users (email, password_hash, subject, tenant, workspace, roles, created_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7)
+		INSERT INTO users (email, password_hash, subject, tenant, workspace, roles, created_at,
+		                   totp_secret_enc, totp_enabled, totp_enrolled_at, recovery_codes)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
 		ON CONFLICT (email) DO UPDATE SET
 		  password_hash=EXCLUDED.password_hash, subject=EXCLUDED.subject,
-		  tenant=EXCLUDED.tenant, workspace=EXCLUDED.workspace, roles=EXCLUDED.roles
+		  tenant=EXCLUDED.tenant, workspace=EXCLUDED.workspace, roles=EXCLUDED.roles,
+		  totp_secret_enc=EXCLUDED.totp_secret_enc, totp_enabled=EXCLUDED.totp_enabled,
+		  totp_enrolled_at=EXCLUDED.totp_enrolled_at, recovery_codes=EXCLUDED.recovery_codes
 	`
-	_, err = s.pool.Exec(ctx, q, u.Email, u.PasswordHash, u.Subject, u.Tenant, u.Workspace, roles, created)
+	_, err = s.pool.Exec(ctx, q, u.Email, u.PasswordHash, u.Subject, u.Tenant, u.Workspace, roles, created,
+		u.TOTPSecretEnc, u.TOTPEnabled, u.TOTPEnrolledAt, recovery)
 	return err
 }
 
 func (s *PgUserStore) ListUsers(ctx context.Context) ([]User, error) {
-	rows, err := s.pool.Query(ctx, `SELECT email, password_hash, subject, tenant, workspace, roles, created_at FROM users ORDER BY email`)
+	rows, err := s.pool.Query(ctx, `SELECT email, password_hash, subject, tenant, workspace, roles, created_at,
+	                                       totp_secret_enc, totp_enabled, totp_enrolled_at, recovery_codes
+	                                  FROM users ORDER BY email`)
 	if err != nil {
 		return nil, err
 	}
@@ -331,10 +384,12 @@ func (s *PgUserStore) ListUsers(ctx context.Context) ([]User, error) {
 	out := make([]User, 0)
 	for rows.Next() {
 		var (
-			u        User
-			rolesRaw []byte
+			u           User
+			rolesRaw    []byte
+			recoveryRaw []byte
 		)
-		if err := rows.Scan(&u.Email, &u.PasswordHash, &u.Subject, &u.Tenant, &u.Workspace, &rolesRaw, &u.CreatedAt); err != nil {
+		if err := rows.Scan(&u.Email, &u.PasswordHash, &u.Subject, &u.Tenant, &u.Workspace, &rolesRaw, &u.CreatedAt,
+			&u.TOTPSecretEnc, &u.TOTPEnabled, &u.TOTPEnrolledAt, &recoveryRaw); err != nil {
 			return nil, err
 		}
 		roles, err := unmarshalRoles(rolesRaw)
@@ -342,6 +397,11 @@ func (s *PgUserStore) ListUsers(ctx context.Context) ([]User, error) {
 			return nil, err
 		}
 		u.Roles = roles
+		codes, err := unmarshalRecoveryCodes(recoveryRaw)
+		if err != nil {
+			return nil, err
+		}
+		u.RecoveryCodeHashes = codes
 		out = append(out, u)
 	}
 	return out, rows.Err()

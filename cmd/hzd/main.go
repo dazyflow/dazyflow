@@ -7,6 +7,7 @@ package main
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -756,6 +757,20 @@ func main() {
 		gw.Users = users
 		gw.Sessions = sessions
 		gw.SessionTTL = sessionTTL
+		// TOTP 2FA: enabled only when HAZYFLOW_TOTP_KEY decodes to a
+		// 32-byte AES key. Absent/malformed → 2FA stays off (the /totp
+		// endpoints 503 and sign-in never asks for a second factor), so
+		// installs that don't want 2FA simply leave the var unset. The
+		// in-memory challenge store bridges the two sign-in legs.
+		if totpKey, terr := auth.LoadTOTPKey(); terr == nil {
+			gw.TOTPKey = totpKey
+			gw.TOTPChallenges = auth.NewMemTOTPChallengeStore()
+			log.Print("two-factor authentication (TOTP) enabled (HAZYFLOW_TOTP_KEY set)")
+		} else if !errors.Is(terr, auth.ErrTOTPKeyMissing) {
+			// Set-but-broken is an operator mistake worth shouting about;
+			// merely unset is the silent, supported "2FA off" path.
+			log.Fatalf("HAZYFLOW_TOTP_KEY: %v", terr)
+		}
 		gw.Memberships = memberships
 		gw.Invitations = invitations
 		gw.OrgAuth = orgAuthStore

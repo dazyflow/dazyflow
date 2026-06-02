@@ -65,6 +65,29 @@
     "langEnglish": "English",
     "langSwedish": "Svenska"
   },
+  "twoFactor": {
+    "title": "Two-factor authentication",
+    "intro": "Add a second step to sign-in using an authenticator app (such as Google Authenticator, 1Password, or Authy).",
+    "unavailable": "Two-factor authentication is not available on this server.",
+    "stateEnabled_one": "Enabled. {{count}} recovery code remaining.",
+    "stateEnabled_other": "Enabled. {{count}} recovery codes remaining.",
+    "stateDisabled": "Not enabled.",
+    "enable": "Enable two-factor authentication",
+    "qrAlt": "QR code for your authenticator app",
+    "manualSecret": "Can't scan? Enter this secret in your authenticator app manually:",
+    "confirmLabel": "Enter the code from your app to finish",
+    "confirmEnable": "Confirm & enable",
+    "cancel": "Cancel",
+    "recoveryTitle": "Save your recovery codes",
+    "recoveryWarn": "Store these somewhere safe. Each code works once and lets you sign in if you lose your authenticator. They won't be shown again.",
+    "copyCodes": "Copy codes",
+    "savedCodes": "I've saved them",
+    "regenerate": "Regenerate recovery codes",
+    "disable": "Disable",
+    "disablePasswordLabel": "Confirm your password to disable",
+    "confirmDisable": "Disable two-factor",
+    "qr": "QR"
+  },
   "signIn": {
     "title": "Sign in",
     "email": "Email",
@@ -75,7 +98,15 @@
     "createAccount": "Create an account",
     "continueWithGoogle": "Continue with Google",
     "or": "or",
-    "sessionExpired": "Your session has expired. Please sign in again."
+    "sessionExpired": "Your session has expired. Please sign in again.",
+    "totpTitle": "Two-factor authentication",
+    "totpCodeLabel": "Authentication code",
+    "totpCodeHint": "Enter the 6-digit code from your authenticator app.",
+    "recoveryCodeLabel": "Recovery code",
+    "recoveryCodeHint": "Enter one of the recovery codes you saved when you set up two-factor authentication.",
+    "verify": "Verify",
+    "useRecoveryCode": "Use a recovery code instead",
+    "useAuthenticator": "Use your authenticator app instead"
   },
   "signUp": {
     "title": "Create your account",

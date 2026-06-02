@@ -27,6 +27,21 @@ type User struct {
 	Workspace    string      `json:"workspace"`
 	Roles        []core.Role `json:"roles"`
 	CreatedAt    time.Time   `json:"created_at"`
+
+	// TOTP 2FA state. All four fields are zero on a user who has never
+	// enrolled; the JSON tags carry omitempty so existing user-store
+	// files stay byte-compatible when 2FA is off. The secret is stored
+	// AES-256-GCM-encrypted (see auth/totp.go) so a leak of the store —
+	// a DB backup, a stray JSON file — yields ciphertext, not live
+	// seeds. Recovery codes are kept as bcrypt hashes only; the
+	// plaintext is shown to the user exactly once at mint time.
+	//
+	// TOTPSecretEnc holds a *pending* secret (TOTPEnabled=false) between
+	// EnrolStart and EnrolConfirm, and the *active* secret once enabled.
+	TOTPSecretEnc      []byte     `json:"totp_secret_enc,omitempty"`
+	TOTPEnabled        bool       `json:"totp_enabled,omitempty"`
+	TOTPEnrolledAt     *time.Time `json:"totp_enrolled_at,omitempty"`
+	RecoveryCodeHashes []string   `json:"recovery_code_hashes,omitempty"`
 }
 
 // UserStore is the password-auth lookup boundary. Implementations may
