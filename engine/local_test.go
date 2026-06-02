@@ -4,8 +4,6 @@ import (
 	"bufio"
 	"encoding/json"
 	"io"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -151,56 +149,4 @@ func TestRunProtocol_ModuleReturnsError(t *testing.T) {
 	if result.Error == nil || result.Error.Code != "boom" {
 		t.Errorf("error = %+v", result.Error)
 	}
-}
-
-// TestLocalTransport_SubprocessIntegration uses the compiled C SDK echo
-// example. Skipped if it hasn't been built — bring it up with
-// `make -C sdk/c examples` first.
-func TestLocalTransport_SubprocessIntegration(t *testing.T) {
-	bin := findEchoBinary(t)
-	if bin == "" {
-		t.Skip("sdk/c/examples/echo not built; run `make -C sdk/c examples` to enable")
-	}
-	cat := NewLocalCatalog()
-	if err := cat.Register(LocalDescriptor{
-		ID:      "echo",
-		Runtime: "executable",
-		Path:    bin,
-	}); err != nil {
-		t.Fatalf("Register: %v", err)
-	}
-	transport, ok := cat.Get("echo")
-	if !ok {
-		t.Fatal("echo not in catalog")
-	}
-
-	progress := make(chan core.Progress, 4)
-	result, err := transport.Execute(t.Context(), core.Job{
-		ID:    "j1",
-		Input: map[string]core.Ref{"in": {Ref: "/tmp/x", MIME: "text/plain"}},
-	}, progress)
-	close(progress)
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	if result.Status != core.StatusOK {
-		t.Fatalf("status = %q (%+v)", result.Status, result.Error)
-	}
-	if result.Output["out"].Ref != "/tmp/x" {
-		t.Errorf("output ref = %q, want /tmp/x", result.Output["out"].Ref)
-	}
-}
-
-func findEchoBinary(t *testing.T) string {
-	t.Helper()
-	wd, err := os.Getwd()
-	if err != nil {
-		return ""
-	}
-	cand := filepath.Join(wd, "..", "sdk", "c", "examples", "echo")
-	if _, err := os.Stat(cand); err == nil {
-		abs, _ := filepath.Abs(cand)
-		return abs
-	}
-	return ""
 }

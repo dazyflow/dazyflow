@@ -5,7 +5,7 @@ COMPOSE ?= docker compose
 
 .DEFAULT_GOAL := help
 
-.PHONY: help up down restart logs ps build rebuild env dev web test vet fmt check ci hooks
+.PHONY: help up down restart logs ps build rebuild env dev web test vet fmt check ci
 
 help: ## List targets
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sort | \
@@ -70,7 +70,7 @@ fmt: ## Format Go sources
 # gofmt-version drift, so a gofmt gate would fail on files unrelated to the
 # change. Run `make fmt` before committing instead.
 
-check: ## Fast pre-push gate (what the pre-push hook runs): build, vet, tests
+check: ## Fast local gate before pushing: build, vet, tests
 	@echo "==> go build"; go build ./...
 	@echo "==> go vet"; go vet ./...
 	@echo "==> go test"; go test ./...
@@ -80,6 +80,3 @@ ci: ## Full local mirror of CI (.build.yml): build, vet, race tests, web build
 	@echo "==> go vet"; go vet ./...
 	@echo "==> go test -race"; go test -race ./...
 	@echo "==> web build"; cd web && npm ci && npm run build
-
-hooks: ## Install git hooks (the pre-push gate) into .git/hooks
-	@./scripts/install-hooks.sh

@@ -214,36 +214,22 @@ decrypt the `encrypted_secrets` rows.
 
 ## Security knobs worth setting
 
-- `HAZYFLOW_DEV_KEY` defaults **off**; only set for local dev (mints
-  an insecure bearer token at startup).
-- The auth rate limiter is hardcoded at 20/min per IP with a burst of
-  10 on `/api/v1/auth/{signin,signup}` (defense against credential
-  stuffing) — not configurable per-deploy.
-- `HAZYFLOW_HTTP_EGRESS_ALLOW` pins the `http_request` /
-  `webhook_send` drops to an allowlist of hosts (`api.stripe.com`,
-  `*.slack.com`, CIDRs). The IP-level SSRF guard (blocks
-  private/loopback/metadata) is always on.
-- `HAZYFLOW_ALLOW_PRIVATE_EGRESS` defaults **off**. The
-  `http_request` / `http_download` / `http_upload` drops expose an
-  `allow_private_networks` param that disables the SSRF guard; that
-  param is ignored unless this is set to `1`. Leave it off on
-  multi-tenant deployments, or any tenant could reach cloud metadata
-  (`169.254.169.254`), `localhost`, or internal services. The same
-  opt-in also governs the SSRF guard on the Postgres/MySQL `dsn` host
-  and the SMTP `host` (so a flow can't point a DB or email drop at an
-  internal address either).
-- `HAZYFLOW_ENABLE_SHELL` defaults **off** — and should stay off on any
-  multi-tenant or internet-facing deployment. It registers the `shell`
-  drop, which runs arbitrary host commands as the daemon's user with
-  full host filesystem and network access, bypassing the scripted-drop
-  sandbox. Enabling it gives **anyone who can run a flow remote code
-  execution on the host**; only turn it on for a single-tenant/CI box
-  you fully control. When enabled, the command env is scrubbed of all
-  `HAZYFLOW_*` variables so the master key and daemon secrets are never
-  exposed to the command.
-- `HAZYFLOW_ISOLATE_SHARED_SECRETS=1` in shared multi-tenant
-  deployments forces `env://` lookups to be `<tenant>.<key>` so tenant
-  A can't read tenant B's operator-supplied env secrets.
+Every variable is documented in full — semantics, default, and warnings —
+in `.env.example`. This is the security-critical subset to review before
+you expose the daemon; see `.env.example` for the detail.
+
+- The auth rate limiter is fixed at **20/min per IP (burst 10)** on
+  `/api/v1/auth/{signin,signup}` — not a knob, but worth knowing it's there.
+- `HAZYFLOW_DEV_KEY` / `HAZYFLOW_DEV` — dev-only; never set in production.
+- `HAZYFLOW_HTTP_EGRESS_ALLOW` — allowlist the hosts outbound HTTP drops may
+  reach (the IP-level SSRF guard blocks private/loopback/metadata regardless).
+- `HAZYFLOW_ALLOW_PRIVATE_EGRESS` — keep **off** on multi-tenant deploys; on,
+  it lets flows reach private/loopback/cloud-metadata addresses (and the
+  DB/SMTP drop hosts).
+- `HAZYFLOW_ENABLE_SHELL` — **off** by default; on, it's host RCE for anyone
+  who can run a flow. Single-tenant / CI box only.
+- `HAZYFLOW_ISOLATE_SHARED_SECRETS` — scope `env://` lookups per tenant on
+  shared multi-tenant deployments.
 
 ## Observability
 
@@ -387,20 +373,34 @@ and Slack connectors and **[engine/jsdrop/DESIGN.md](engine/jsdrop/DESIGN.md)**
 for the capability surface and runtime. To run local drops in dev, point
 `HAZYFLOW_SCRIPTED_DROPS_DIR` at a directory of `.ts` files.
 
-To publish a signed, official-tier repo, use the `hz-drops` tool:
+To publish a signed, official-tier repo, drive the `hz-drops` tool. The whole
+flow is just keygen → sign → publish a git repo the daemon can fetch:
 
 ```sh
-# one-time: generate a signing keypair (keep the .key secret; never commit it)
-go run ./cmd/hz-drops keygen --id hazy-official --publisher "Hazy Flow" --out .keys
+# 1. One-time: generate a signing keypair. Keep the .key secret (never commit
+#    it); .keys/<id>.trustedkey holds the public HAZYFLOW_TRUSTED_KEYS entry.
+go run ./cmd/hz-drops keygen --id hazy-official --publisher "Hazy Flow" \
+    --tier official --out .keys
 
-# sign each artifact → writes <file>.sig
-go run ./cmd/hz-drops sign --key .keys/hazy-official.key --id hazy-official drops/*.ts
+# 2. Lay out the drops and sign each → writes a detached drops/<file>.ts.sig.
+mkdir -p repo/drops && cp officialdrops/{gmail_send_email,slack_send_message}.ts repo/drops/
+go run ./cmd/hz-drops sign --key .keys/hazy-official.key --id hazy-official repo/drops/*.ts
+
+# 3. Commit + tag. The daemon resolves the install ref via a go-git fetch, so
+#    use a LIGHTWEIGHT tag and force gpg-signing off (a signed/annotated tag,
+#    e.g. from a global commit.gpgSign, won't resolve the same way).
+cd repo && git init -q && git add -A
+git -c commit.gpgSign=false commit -q -m "Official drops v1.0.0"
+git -c tag.gpgSign=false -c tag.forceSignAnnotated=false tag -f v1.0.0
+
+# 4. Configure the printed key on the daemon, ';'-separated, in HAZYFLOW_TRUSTED_KEYS.
+cat ../.keys/hazy-official.trustedkey
 ```
 
-`scripts/publish-official-drops.sh` wraps this end to end — it signs the example
-drops into a standalone git repo and prints the `HAZYFLOW_TRUSTED_KEYS` entry to
-configure on the daemon. The private key is the authority to mint official
-drops: generate it on a trusted machine and keep it in a secret manager/HSM.
+Point the admin marketplace (`/admin/marketplace` → Install drop) at that repo +
+ref; installs then show as **official**. The private key is the authority to
+mint official drops: generate it on a trusted machine and keep it in a secret
+manager/HSM.
 
 ## Secrets
 

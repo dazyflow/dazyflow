@@ -34,9 +34,28 @@ tasks:
       # concurrency regressions (e.g. the workspace.Store / scheduler
       # data race fixed in the mutex change) creeping back in.
       go test -race ./...
+  - generated: |
+      # No-drift guard: the embedded Excel drops + manifests.json are
+      # generated (officialdrops/excelsrc/gen.go bundles the vendored SheetJS;
+      # manifestgen emits manifests via the Node drop host). Regenerate and
+      # fail if the committed artifacts are stale. (nodejs is installed above —
+      # manifestgen needs `node` on PATH.)
+      cd hazy-flow
+      go generate ./officialdrops
+      git diff --exit-code -- officialdrops/ || {
+        echo "officialdrops/ is stale — run 'go generate ./officialdrops' and commit the result"; exit 1;
+      }
   - vet: |
       cd hazy-flow
       go vet ./...
+  - hzctl-e2e: |
+      # Guard the gRPC control plane + hzctl end to end: this demo builds
+      # hzd + hzctl + a remote module, then drives SaveGraph/RunGraph over
+      # gRPC and asserts the output. Fails the build if the control API or
+      # the CLI that depends on it regresses. (nodejs is installed above —
+      # the scripted-drop runtime needs `node` on PATH.)
+      cd hazy-flow
+      bash examples/csv-pipeline/run.sh
   - web: |
       cd hazy-flow/web
       npm ci

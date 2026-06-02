@@ -339,9 +339,8 @@ the sandbox + signature-informed consent, so both become prerequisites.
 3. ~~**Signing + signature-derived badge.**~~ *Done* — `cmd/hz-drops`
    (`keygen` + `sign`) produces detached Ed25519 `<file>.sig`; the daemon verifies
    at install over the exact bytes and derives `official`/`verified`/`community`
-   (badge shown in the marketplace UI, surfaced at the consent moment).
-   `scripts/publish-official-drops.sh` publishes the example drops as a signed
-   official-tier git repo. See README "Marketplace".
+   (badge shown in the marketplace UI, surfaced at the consent moment). See
+   DEPLOY.md "Marketplace" for the end-to-end publish flow.
 4. **Engine hardening — goja → QuickJS-on-wazero** *(partially done).* The
    wall-clock half landed: the executor enforces its own per-run budget
    (`RunInput.MaxRunDuration`, default 60s, `HAZYFLOW_SCRIPTED_DROP_TIMEOUT`),

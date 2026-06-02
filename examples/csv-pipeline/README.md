@@ -97,5 +97,4 @@ func main() {
 ```
 
 For non-Go modules use the same gRPC service — proto file is in
-`api/proto/node.proto`. The C SDK in `sdk/c/` does the equivalent over
-stdio for spawn-per-job modules.
+`api/proto/node.proto`.
