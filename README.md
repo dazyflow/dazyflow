@@ -86,8 +86,8 @@ and `HAZYFLOW_PUBLIC_BASE_URL=https://your.domain`.
 See **[DEPLOY.md](DEPLOY.md)** for the reverse-proxy contract and nginx
 example, backup/restore, the master key, per-org subdomains, the
 marketplace (drops & integrations), secrets (built-in store + OpenBao/Vault),
-security knobs, and observability. For multi-node Kubernetes, see
-**[deploy/README.md](deploy/README.md)**.
+security knobs, observability, and multi-node Kubernetes
+(`deploy/k8s/hazyflow.yaml`).
 
 ## Run locally for development
 

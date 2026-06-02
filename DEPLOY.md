@@ -80,6 +80,30 @@ Container deployments don't have to set `HAZYFLOW_HTTP` /
 `HAZYFLOW_WEB_DIST` — the supplied Dockerfile bakes those in via
 `ENV` (see `Dockerfile`).
 
+## Kubernetes (multi-node)
+
+`deploy/k8s/hazyflow.yaml` is a 2-replica Deployment, a Service, and a
+Secret template. Multi-replica works out of the box: the Postgres event
+bus lets any pod stream a run's events (`PgBus`), and a Postgres
+advisory-lock leader ensures only one pod fires each schedule
+(`PgLeader`). Everything is configured by `HAZYFLOW_*` env vars on the
+container — there are no daemon flags to set.
+
+1. Edit the `hazyflow-secrets` Secret: a fresh `HAZYFLOW_MASTER_KEY`
+   (`openssl rand -base64 32`) and your managed-Postgres
+   `HAZYFLOW_POSTGRES_DSN`.
+2. Build and push the image from the repo Dockerfile
+   (`docker build -t hazyflow/hzd:latest .`) and set it in the Deployment.
+3. Update `HAZYFLOW_WEB_ORIGIN` / `HAZYFLOW_PUBLIC_BASE_URL` in the
+   Deployment env to your real hostnames (`HAZYFLOW_TRUST_PROXY_HEADERS=1`
+   is already set), then `kubectl apply -f deploy/k8s/hazyflow.yaml`.
+4. Front it with an ingress that terminates TLS and forwards `Host` /
+   `Origin` unchanged (the same reverse-proxy contract as above).
+
+Probes: liveness `/healthz`, readiness `/readyz` (pulls a pod from the
+Service when Postgres is unreachable). The `grpc.health.v1.Health` service
+on :50050 is available for a `grpc_health_probe` sidecar if preferred.
+
 ## Per-org subdomains (optional)
 
 Set `HAZYFLOW_WILDCARD_DOMAIN=<apex>` (e.g. `hazyflow.app`) to give each
