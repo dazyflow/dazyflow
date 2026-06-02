@@ -74,7 +74,8 @@
     "newHere": "New here?",
     "createAccount": "Create an account",
     "continueWithGoogle": "Continue with Google",
-    "or": "or"
+    "or": "or",
+    "sessionExpired": "Your session has expired. Please sign in again."
   },
   "signUp": {
     "title": "Create your account",

@@ -74,7 +74,8 @@
     "newHere": "Ny här?",
     "createAccount": "Skapa ett konto",
     "continueWithGoogle": "Fortsätt med Google",
-    "or": "eller"
+    "or": "eller",
+    "sessionExpired": "Din session har gått ut. Logga in igen."
   },
   "signUp": {
     "title": "Skapa ditt konto",

@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "./api";
+import { api, APIError, setUnauthorizedHandler } from "./api";
 import { pickActive } from "./lib/pickActive";
+import i18n from "./i18n";
 import type { Permission, WhoAmI } from "./types";
 
 const STORAGE_KEY = "hazyflow.token";
@@ -53,6 +54,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [tenants, setTenants] = useState<string[]>([]);
   const [activeTenant, setActiveTenantState] = useState<string>("");
   const navigate = useNavigate();
+
+  // Register the process-wide 401 handler so a session that expires or is
+  // revoked *while the app is open* — not just on the bootstrap whoami —
+  // tears down local state, shows the "session expired" message, and
+  // bounces to sign-in, instead of leaking the raw backend error into
+  // whichever component happened to make the failing request. Registered
+  // ahead of the bootstrap effect below so it's live before the first
+  // authenticated call resolves. setToken/setMe/setError are stable and
+  // navigate is stable across renders, so this runs once.
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      localStorage.removeItem(STORAGE_KEY);
+      setToken(null);
+      setMe(null);
+      setError(i18n.t("signIn.sessionExpired"));
+      navigate("/signin");
+    });
+    return () => setUnauthorizedHandler(null);
+  }, [navigate]);
 
   useEffect(() => {
     if (!token) {
@@ -113,9 +133,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setActiveTenantState(chosenTenant);
         if (chosenTenant) localStorage.setItem(TENANT_STORAGE_KEY, chosenTenant);
       })
-      .catch((e: Error) => {
+      .catch((e: unknown) => {
         if (!cancelled) {
-          setError(e.message);
+          // A token restored from localStorage that the server rejects
+          // (401) means the saved session has expired or been revoked.
+          // Show a plain-language message rather than the raw backend
+          // "auth: invalid credential" string — most users hitting this
+          // are non-technical and just need to know to sign in again.
+          // Other failures (network, 5xx) keep their original message.
+          const expired = e instanceof APIError && e.status === 401;
+          setError(expired ? i18n.t("signIn.sessionExpired") : (e as Error).message);
           setMe(null);
           localStorage.removeItem(STORAGE_KEY);
           setToken(null);

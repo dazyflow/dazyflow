@@ -51,6 +51,26 @@ export class APIError extends Error {
   }
 }
 
+// onUnauthorized is a process-wide hook fired whenever an *authenticated*
+// request (one that carried a credential) comes back 401 — i.e. the
+// daemon no longer accepts the token, so the session has expired or been
+// revoked mid-use. The AuthProvider registers a handler that tears down
+// local session state, surfaces the "session expired" message, and
+// bounces to /signin; without it, a stale request anywhere in the app
+// would leak the raw "auth: invalid credential" string into that
+// component's own error UI. Null until the provider mounts.
+let onUnauthorized: (() => void) | null = null;
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  onUnauthorized = handler;
+}
+
+// notifyUnauthorized fires the handler for an authenticated 401. Anonymous
+// endpoints (signin/signup, static template assets) must NOT call this: a
+// 401 there is a wrong-password / not-found case, not an expired session.
+function notifyUnauthorized(): void {
+  if (onUnauthorized) onUnauthorized();
+}
+
 // parseAPIErrorBody handles both the legacy `{"error":"<string>"}`
 // shape and the new `{"error":{"code","message","details","doc"}}`
 // envelope. New spec-aligned routes (catalog, /me) emit the envelope;
@@ -78,6 +98,11 @@ async function request<T>(
   method: string,
   path: string,
   body?: unknown,
+  // signalUnauthorized defaults true: a 401 on a token-bearing request
+  // triggers the global session-expired handler. signOut passes false —
+  // a 401 there just means the session was already gone, which is the
+  // intended end state, not an event to surface as "session expired".
+  opts?: { signalUnauthorized?: boolean },
 ): Promise<T> {
   const headers: Record<string, string> = {};
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -90,6 +115,9 @@ async function request<T>(
   });
   if (!res.ok) {
     const { message, code } = parseAPIErrorBody(await res.text(), res.statusText);
+    if (res.status === 401 && token && opts?.signalUnauthorized !== false) {
+      notifyUnauthorized();
+    }
     throw new APIError(res.status, message, code);
   }
   if (res.status === 204) return undefined as T;
@@ -174,6 +202,7 @@ export const api = {
       } catch {
         // raw text
       }
+      if (res.status === 401) notifyUnauthorized();
       throw new APIError(res.status, message || res.statusText);
     }
     return res.json();
@@ -201,7 +230,9 @@ export const api = {
     return res.json();
   },
   signOut: (token: string | null) =>
-    request<void>(token, "POST", "/auth/signout"),
+    request<void>(token, "POST", "/auth/signout", undefined, {
+      signalUnauthorized: false,
+    }),
   whoami: (token: string | null) => request<WhoAmI>(token, "GET", "/me"),
   listWorkspaces: (token: string, tenant?: string) => {
     const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
@@ -486,6 +517,7 @@ export const api = {
       signal,
     }).then(async (res) => {
       if (!res.ok || !res.body) {
+        if (res.status === 401) notifyUnauthorized();
         throw new APIError(res.status, await res.text());
       }
       const reader = res.body.getReader();
