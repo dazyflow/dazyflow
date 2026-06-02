@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strings"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // defaultFormFields is the contact-form shape a hosted form falls back

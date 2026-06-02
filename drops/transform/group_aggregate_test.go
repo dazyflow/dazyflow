@@ -5,7 +5,7 @@ import (
 	"sort"
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // runGroup wraps executeGroupAggregate the way runJoin wraps

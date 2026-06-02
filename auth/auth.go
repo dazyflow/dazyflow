@@ -9,7 +9,7 @@ import (
 	"errors"
 	"strings"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // Authenticator turns a bearer credential into a Principal. Implementations

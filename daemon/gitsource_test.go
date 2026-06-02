@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	hfnet "git.sr.ht/~klahr/hazy-flow/drops/net"
+	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // queueAger is the optional JobStore capability for reporting queue

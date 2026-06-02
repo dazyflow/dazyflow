@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-# Multi-stage build for the Hazy Flow daemon + web bundle.
+# Multi-stage build for the Hazyflow daemon + web bundle.
 #
 #   1. web   — build the React/Vite bundle to /web/dist
 #   2. build — compile the static hzd binary (CGO off)

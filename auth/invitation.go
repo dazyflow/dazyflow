@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // Invitation is a pending offer for someone to join an org. It carries

@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 func TestHTTPGateway_ListRunNodes_ReturnsAllNodesForRun(t *testing.T) {

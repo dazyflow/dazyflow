@@ -23,13 +23,13 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	controlpb "git.sr.ht/~klahr/hazy-flow/api/gen/control"
-	"git.sr.ht/~klahr/hazy-flow/auth"
-	"git.sr.ht/~klahr/hazy-flow/core"
-	"git.sr.ht/~klahr/hazy-flow/daemon"
-	"git.sr.ht/~klahr/hazy-flow/engine"
-	"git.sr.ht/~klahr/hazy-flow/engine/jobstore"
-	"git.sr.ht/~klahr/hazy-flow/workspace"
+	controlpb "git.sr.ht/~klahr/hazyflow/api/gen/control"
+	"git.sr.ht/~klahr/hazyflow/auth"
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/daemon"
+	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/hazyflow/engine/jobstore"
+	"git.sr.ht/~klahr/hazyflow/workspace"
 )
 
 // testCerts holds an in-memory PKI tree: one CA signs both a server cert

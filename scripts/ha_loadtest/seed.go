@@ -13,8 +13,8 @@ import (
 	"flag"
 	"log"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
-	"git.sr.ht/~klahr/hazy-flow/daemon"
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/daemon"
 )
 
 func main() {

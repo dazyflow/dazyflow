@@ -1,4 +1,4 @@
-# Hazy Flow — common tasks. `make up` boots the Docker Compose stack
+# Hazyflow — common tasks. `make up` boots the Docker Compose stack
 # (Postgres + hzd); the rest cover its lifecycle and local dev.
 
 COMPOSE ?= docker compose

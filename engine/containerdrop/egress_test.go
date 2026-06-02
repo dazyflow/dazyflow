@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // fetchProbe is a runner that, in-process, dials the broker and attempts one

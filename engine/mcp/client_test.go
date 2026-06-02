@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/engine/mcp"
-	"git.sr.ht/~klahr/hazy-flow/engine/mcp/mcptest"
+	"git.sr.ht/~klahr/hazyflow/engine/mcp"
+	"git.sr.ht/~klahr/hazyflow/engine/mcp/mcptest"
 )
 
 // inProcessPair wires a FakeServer to a Client via two io.Pipes,

@@ -1,4 +1,4 @@
-# Hazy Flow web UI
+# Hazyflow web UI
 
 React + React Flow + Vite, talking to the daemon's HTTP gateway
 (`/api/v1/...`) over bearer-token auth.

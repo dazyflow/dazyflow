@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // dropSrc builds a minimal valid drop source with a given id + version. The

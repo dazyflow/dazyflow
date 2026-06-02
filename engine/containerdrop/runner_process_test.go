@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // Proves the real cross-process path: a SEPARATE process (the testdrop binary)

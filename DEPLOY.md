@@ -379,7 +379,7 @@ flow is just keygen → sign → publish a git repo the daemon can fetch:
 ```sh
 # 1. One-time: generate a signing keypair. Keep the .key secret (never commit
 #    it); .keys/<id>.trustedkey holds the public HAZYFLOW_TRUSTED_KEYS entry.
-go run ./cmd/hz-drops keygen --id hazy-official --publisher "Hazy Flow" \
+go run ./cmd/hz-drops keygen --id hazy-official --publisher "Hazyflow" \
     --tier official --out .keys
 
 # 2. Lay out the drops and sign each → writes a detached drops/<file>.ts.sig.

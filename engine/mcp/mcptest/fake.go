@@ -9,7 +9,7 @@ import (
 	"encoding/json"
 	"io"
 
-	"git.sr.ht/~klahr/hazy-flow/engine/mcp"
+	"git.sr.ht/~klahr/hazyflow/engine/mcp"
 )
 
 // ToolHandler runs server-side when the client calls a tool. Return a

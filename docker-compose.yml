@@ -70,7 +70,7 @@ services:
       HAZYFLOW_WEB_ORIGIN:           ${HAZYFLOW_WEB_ORIGIN:-http://localhost:8080}
       HAZYFLOW_SESSION_TTL:          ${HAZYFLOW_SESSION_TTL:-24h}
       # Marketing landing: HAZYFLOW_LANDING_DIR in .env is the *host*
-      # path of your built hazy-flow-landing checkout; the volume below
+      # path of your built hazyflow-landing checkout; the volume below
       # mounts it to the fixed in-container path /srv/landing, and hzd
       # reads from that fixed path. The `:+` form means: when the host
       # var is set, hzd reads /srv/landing; when empty, hzd gets "" and
@@ -88,7 +88,7 @@ services:
     volumes:
       - hzddata:/data
       # Marketing landing: HAZYFLOW_LANDING_DIR (.env) is the *host* path of
-      # the built hazy-flow-landing checkout — it must hold landing.html at
+      # the built hazyflow-landing checkout — it must hold landing.html at
       # its root. Mount it read-only at the fixed container path /srv/landing
       # that hzd reads (see the environment block above). Host path comes
       # from the env; container path is hardcoded.

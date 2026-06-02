@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // LocalDescriptor is the on-disk JSON file under hzd.toml's

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // dropKey identifies an exact drop version. Scripted/marketplace drops are

@@ -3,7 +3,7 @@ package transform
 import (
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // The filtering/computing drops expose `now` so flows can express

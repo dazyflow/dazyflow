@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // OIDCConfig is what hzd.toml's [auth] section maps to when provider="oidc".
@@ -13,7 +13,7 @@ type OIDCConfig struct {
 	Issuer   string
 	Audience string
 	ClientID string
-	// TenantClaim names the claim that maps to a Hazy Flow tenant ID
+	// TenantClaim names the claim that maps to a Hazyflow tenant ID
 	// (default "tenant"). Different IdPs use different conventions; for
 	// Microsoft Entra it's typically "tid", for Google Workspace "hd".
 	TenantClaim string

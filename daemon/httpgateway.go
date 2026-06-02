@@ -18,12 +18,12 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"git.sr.ht/~klahr/hazy-flow/auth"
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/auth"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // HTTPGateway exposes Service over JSON/HTTP so browsers and other
-// non-gRPC clients can drive Hazy Flow. The endpoint surface is small
+// non-gRPC clients can drive Hazyflow. The endpoint surface is small
 // on purpose — just enough to power a visual editor:
 //
 //	GET    /api/v1/drops                                      — list drop manifests
@@ -195,7 +195,7 @@ type HTTPGateway struct {
 	idempotency *idempotencyStore
 
 	// LandingDir, when non-empty, points at a directory of static
-	// marketing-site files (the separate hazy-flow-landing repo:
+	// marketing-site files (the separate hazyflow-landing repo:
 	// landing.html, style.css, /pricing, /privacy, /terms, assets).
 	// When set alongside WebDist, GET / is auth-gated: a signed-in
 	// browser (valid session cookie) gets the SPA shell, an anonymous

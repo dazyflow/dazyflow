@@ -3,7 +3,7 @@ package workspace
 import (
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 func TestStore_SaveAndLoad(t *testing.T) {

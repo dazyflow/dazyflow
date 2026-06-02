@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // maxUploadBytes caps a single upload request body. Quota provides the

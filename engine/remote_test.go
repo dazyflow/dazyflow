@@ -9,8 +9,8 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
 
-	nodepb "git.sr.ht/~klahr/hazy-flow/api/gen/node"
-	"git.sr.ht/~klahr/hazy-flow/core"
+	nodepb "git.sr.ht/~klahr/hazyflow/api/gen/node"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // fakeServer implements NodeService against an in-memory bufconn so the

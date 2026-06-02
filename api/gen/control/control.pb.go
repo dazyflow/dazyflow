@@ -2062,7 +2062,7 @@ const file_control_proto_rawDesc = "" +
 	"\x10ListJobsForGraph\x12,.hazyflow.control.v1.ListJobsForGraphRequest\x1a%.hazyflow.control.v1.ListJobsResponse\x12Z\n" +
 	"\tCancelJob\x12%.hazyflow.control.v1.CancelJobRequest\x1a&.hazyflow.control.v1.CancelJobResponse2i\n" +
 	"\vDropService\x12Z\n" +
-	"\tListDrops\x12%.hazyflow.control.v1.ListDropsRequest\x1a&.hazyflow.control.v1.ListDropsResponseB6Z4git.sr.ht/~klahr/hazy-flow/api/gen/control;controlpbb\x06proto3"
+	"\tListDrops\x12%.hazyflow.control.v1.ListDropsRequest\x1a&.hazyflow.control.v1.ListDropsResponseB5Z3git.sr.ht/~klahr/hazyflow/api/gen/control;controlpbb\x06proto3"
 
 var (
 	file_control_proto_rawDescOnce sync.Once

@@ -1,9 +1,9 @@
 {
-  "name": "hazy-flow-web",
+  "name": "hazyflow-web",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Hazy Flow visual editor — React + React Flow over the daemon HTTP gateway.",
+  "description": "Hazyflow visual editor — React + React Flow over the daemon HTTP gateway.",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

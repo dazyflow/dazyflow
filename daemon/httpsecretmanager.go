@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // Per-tenant "bring your own secret manager" config endpoints. A tenant points

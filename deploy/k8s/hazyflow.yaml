@@ -1,4 +1,4 @@
-# Kubernetes manifests for the Hazy Flow daemon.
+# Kubernetes manifests for the Hazyflow daemon.
 #
 # Assumes an EXTERNAL/managed Postgres (RDS, Cloud SQL, a pg operator) —
 # reference it via the secret below. Apply with:

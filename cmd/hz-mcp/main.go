@@ -1,4 +1,4 @@
-// hz-mcp is the Hazy Flow MCP (Model Context Protocol) server. It
+// hz-mcp is the Hazyflow MCP (Model Context Protocol) server. It
 // runs as a stdio subprocess of an MCP client (Claude Desktop /
 // Claude Code) and exposes pipeline-management operations as tools.
 // Internally it just forwards to the running hzd daemon's /api/v1
@@ -9,7 +9,7 @@
 //
 //	{
 //	  "mcpServers": {
-//	    "hazy-flow": {
+//	    "hazyflow": {
 //	      "command": "/path/to/hz-mcp",
 //	      "env": {
 //	        "HAZYFLOW_URL":     "http://localhost:8080",
@@ -35,7 +35,7 @@ import (
 	"syscall"
 	"time"
 
-	"git.sr.ht/~klahr/hazy-flow/mcp/server"
+	"git.sr.ht/~klahr/hazyflow/mcp/server"
 )
 
 func main() {
@@ -80,7 +80,7 @@ func main() {
 	}
 
 	srv := &server.Server{
-		Name:    "hazy-flow",
+		Name:    "hazyflow",
 		Version: "0.1.0",
 		Logger:  logger,
 	}

@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
-	"git.sr.ht/~klahr/hazy-flow/engine/containerdrop"
-	"git.sr.ht/~klahr/hazy-flow/engine/jsdrop"
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/engine/containerdrop"
+	"git.sr.ht/~klahr/hazyflow/engine/jsdrop"
 )
 
 // TestExcel_RoundTrip exercises the scripted (SheetJS) Excel drops end-to-end on

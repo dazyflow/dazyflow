@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // Failure-notification dispatcher. Listens on the bus for a single

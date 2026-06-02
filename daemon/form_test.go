@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
-	"git.sr.ht/~klahr/hazy-flow/daemon"
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/daemon"
 )
 
 // formServer stands the /form handler up on an httptest server using

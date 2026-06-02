@@ -8,8 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	controlpb "git.sr.ht/~klahr/hazy-flow/api/gen/control"
-	"git.sr.ht/~klahr/hazy-flow/core"
+	controlpb "git.sr.ht/~klahr/hazyflow/api/gen/control"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 func graphCmd() *cobra.Command {

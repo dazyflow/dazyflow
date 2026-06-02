@@ -97,7 +97,7 @@ function timeAgo(iso: string): string {
 function buildTestEventSample(formFields?: string[]): Record<string, string> {
   if (!formFields || formFields.length === 0) {
     return {
-      message: "Test event from Hazy Flow",
+      message: "Test event from Hazyflow",
       name: "Jane Example",
       email: "jane@example.com",
       submitted_at: new Date().toISOString(),
@@ -123,7 +123,7 @@ function sampleValueFor(field: string): string {
   if (f === "email" || f.endsWith("_email")) return "jane@example.com";
   if (f === "name" || f.endsWith("_name")) return "Jane Example";
   if (f === "message" || f === "body" || f === "notes" || f === "comment" || f === "comments") {
-    return "Test event from Hazy Flow";
+    return "Test event from Hazyflow";
   }
   if (f === "phone" || f === "telephone" || f === "mobile") return "+1 555 0123";
   if (f === "company" || f === "organisation" || f === "organization") return "Acme AB";

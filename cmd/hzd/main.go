@@ -1,4 +1,4 @@
-// Command hzd is the Hazy Flow daemon. It serves the control gRPC API
+// Command hzd is the Hazyflow daemon. It serves the control gRPC API
 // backed by a daemon.Service. For step-12 the storage layer is in-memory
 // and a single dev workspace is auto-provisioned; production deployments
 // will swap in Postgres + a real workspace lookup.
@@ -26,20 +26,20 @@ import (
 	"google.golang.org/grpc/health"
 	grpc_health_v1 "google.golang.org/grpc/health/grpc_health_v1"
 
-	"git.sr.ht/~klahr/hazy-flow/auth"
-	"git.sr.ht/~klahr/hazy-flow/core"
-	"git.sr.ht/~klahr/hazy-flow/daemon"
-	"git.sr.ht/~klahr/hazy-flow/engine"
-	"git.sr.ht/~klahr/hazy-flow/engine/jobstore"
-	"git.sr.ht/~klahr/hazy-flow/engine/jsdrop"
-	"git.sr.ht/~klahr/hazy-flow/engine/mcp"
-	_ "git.sr.ht/~klahr/hazy-flow/drops"
-	"git.sr.ht/~klahr/hazy-flow/drops/github"
-	"git.sr.ht/~klahr/hazy-flow/drops/io"
-	hfnet "git.sr.ht/~klahr/hazy-flow/drops/net"
-	secretsdrop "git.sr.ht/~klahr/hazy-flow/drops/secrets"
-	"git.sr.ht/~klahr/hazy-flow/drops/slack"
-	"git.sr.ht/~klahr/hazy-flow/officialdrops"
+	"git.sr.ht/~klahr/hazyflow/auth"
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/daemon"
+	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/hazyflow/engine/jobstore"
+	"git.sr.ht/~klahr/hazyflow/engine/jsdrop"
+	"git.sr.ht/~klahr/hazyflow/engine/mcp"
+	_ "git.sr.ht/~klahr/hazyflow/drops"
+	"git.sr.ht/~klahr/hazyflow/drops/github"
+	"git.sr.ht/~klahr/hazyflow/drops/io"
+	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
+	secretsdrop "git.sr.ht/~klahr/hazyflow/drops/secrets"
+	"git.sr.ht/~klahr/hazyflow/drops/slack"
+	"git.sr.ht/~klahr/hazyflow/officialdrops"
 )
 
 // scriptedDropDoer is the HTTP client a scripted drop's fetch() routes

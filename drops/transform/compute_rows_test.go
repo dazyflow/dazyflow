@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // runCompute is the compute_rows analog of map_rows' run helper —

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
-	"git.sr.ht/~klahr/hazy-flow/engine/jsdrop"
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/engine/jsdrop"
 )
 
 // stubDoer is the host HTTP client the broker mediates fetch through.

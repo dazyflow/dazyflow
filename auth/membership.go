@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // Membership is one (user, tenant) pair: a person's access to an

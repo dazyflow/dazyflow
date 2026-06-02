@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 
-	"git.sr.ht/~klahr/hazy-flow/daemon"
+	"git.sr.ht/~klahr/hazyflow/daemon"
 )
 
 // daemonConn dials hzd. Address comes from --server (default localhost:50050)

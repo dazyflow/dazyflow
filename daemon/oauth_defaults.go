@@ -27,7 +27,7 @@ type OAuthProviderDefault struct {
 }
 
 // KnownOAuthProviderDefaults is the deployment-invariant catalogue of
-// OAuth providers Hazy Flow's drops can use. Order matters: it's the
+// OAuth providers Hazyflow's drops can use. Order matters: it's the
 // order admin UI rows render in.
 //
 // The Google entry requests only non-restricted scopes by default
@@ -91,7 +91,7 @@ var KnownOAuthProviderDefaults = []OAuthProviderDefault{
 }
 
 // providerDefault returns the defaults entry for name, or nil if the
-// provider isn't in Hazy Flow's known catalogue.
+// provider isn't in Hazyflow's known catalogue.
 func providerDefault(name string) *OAuthProviderDefault {
 	for i := range KnownOAuthProviderDefaults {
 		if KnownOAuthProviderDefaults[i].Name == name {

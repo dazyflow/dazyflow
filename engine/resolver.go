@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
-	"git.sr.ht/~klahr/hazy-flow/engine/jsdrop"
-	"git.sr.ht/~klahr/hazy-flow/engine/mcp"
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/engine/jsdrop"
+	"git.sr.ht/~klahr/hazyflow/engine/mcp"
 )
 
 // Resolver looks up the Transport responsible for executing a given module

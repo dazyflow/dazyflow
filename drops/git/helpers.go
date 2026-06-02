@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // sandboxRel cleans rel and rejects absolute paths or "../" escapes so

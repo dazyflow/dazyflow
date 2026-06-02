@@ -82,7 +82,7 @@ func (c *HazydClient) do(ctx context.Context, method, path string, body, out any
 	}
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
-		return fmt.Errorf("hazy-flow %s %s: %w", method, path, err)
+		return fmt.Errorf("hazyflow %s %s: %w", method, path, err)
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4*1024*1024))

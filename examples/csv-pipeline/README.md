@@ -1,6 +1,6 @@
 # csv-pipeline — end-to-end demo
 
-A 3-node Hazy Flow graph that runs across **two processes**:
+A 3-node Hazyflow graph that runs across **two processes**:
 
 ```
    ┌──────────────────────────────── hzd (native modules) ───────────┐

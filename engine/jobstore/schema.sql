@@ -1,4 +1,4 @@
--- Hazy Flow JobStore schema.
+-- Hazyflow JobStore schema.
 --
 -- The store backs both the workqueue (via SELECT ... FOR UPDATE SKIP LOCKED)
 -- and the scheduler's leader election (via pg_try_advisory_lock).

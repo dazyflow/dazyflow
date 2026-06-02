@@ -3,7 +3,7 @@
  *
  * Behaviour-for-behaviour with the native Go drop it replaces: builds an RFC822
  * message (header-injection-safe, RFC 2047 encoded-word subject so non-ASCII
- * like "Hej från Hazy Flow!" doesn't mojibake, multipart/mixed with base64
+ * like "Hej från Hazyflow!" doesn't mojibake, multipart/mixed with base64
  * attachments + RFC 2231 filenames), base64url-encodes it the way Gmail's API
  * requires, and POSTs to users/me/messages/send. The OAuth-connected account is
  * the implicit sender ("me"); Gmail's API doesn't allow spoofing the From.

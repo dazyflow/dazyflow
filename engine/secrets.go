@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // resolveSecrets is the secret-only convenience wrapper around

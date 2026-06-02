@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strings"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // HTTP surface for the OAuth flow. Two endpoints:

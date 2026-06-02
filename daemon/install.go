@@ -8,8 +8,8 @@ import (
 	"strings"
 	"sync"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
-	"git.sr.ht/~klahr/hazy-flow/engine/jsdrop"
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/engine/jsdrop"
 )
 
 // Provenance records where a git-installed artifact came from: the repo, the

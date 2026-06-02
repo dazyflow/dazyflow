@@ -1,4 +1,4 @@
-module git.sr.ht/~klahr/hazy-flow
+module git.sr.ht/~klahr/hazyflow
 
 go 1.26.3
 

@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 func runSplit(t *testing.T, params map[string]any, rows []map[string]any, headers []string) (matched, unmatched []map[string]any, outHeaders []string) {

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/daemon"
+	"git.sr.ht/~klahr/hazyflow/daemon"
 )
 
 // The end-to-end trust loop: keygen → sign → the daemon's keyring verifies the
@@ -24,7 +24,7 @@ func TestKeygenAndSign_VerifiesAsOfficial(t *testing.T) {
 
 	// keygen
 	keysDir := filepath.Join(dir, "keys")
-	kg := exec.Command(bin, "keygen", "--id", "hazy-official", "--publisher", "Hazy Flow", "--out", keysDir)
+	kg := exec.Command(bin, "keygen", "--id", "hazy-official", "--publisher", "Hazyflow", "--out", keysDir)
 	if out, err := kg.CombinedOutput(); err != nil {
 		t.Fatalf("keygen: %v\n%s", err, out)
 	}
@@ -35,8 +35,8 @@ func TestKeygenAndSign_VerifiesAsOfficial(t *testing.T) {
 	if err != nil {
 		t.Fatalf("trusted key spec %q does not parse: %v", trustedSpec, err)
 	}
-	if tk.Tier != daemon.TierOfficial || tk.Publisher != "Hazy Flow" {
-		t.Fatalf("trusted key = %+v, want tier=official publisher='Hazy Flow'", tk)
+	if tk.Tier != daemon.TierOfficial || tk.Publisher != "Hazyflow" {
+		t.Fatalf("trusted key = %+v, want tier=official publisher='Hazyflow'", tk)
 	}
 
 	// sign a sample artifact
@@ -61,8 +61,8 @@ func TestKeygenAndSign_VerifiesAsOfficial(t *testing.T) {
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
-	if tier != daemon.TierOfficial || publisher != "Hazy Flow" {
-		t.Fatalf("verify tier=%q publisher=%q, want official/Hazy Flow", tier, publisher)
+	if tier != daemon.TierOfficial || publisher != "Hazyflow" {
+		t.Fatalf("verify tier=%q publisher=%q, want official/Hazyflow", tier, publisher)
 	}
 
 	// Tamper detection: a changed byte must fail verification, not downgrade.

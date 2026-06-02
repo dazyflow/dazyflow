@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 func TestSubgraph_RejectsMissingGraphID(t *testing.T) {

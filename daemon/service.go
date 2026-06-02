@@ -18,10 +18,10 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/hazy-flow/auth"
-	"git.sr.ht/~klahr/hazy-flow/core"
-	"git.sr.ht/~klahr/hazy-flow/engine"
-	"git.sr.ht/~klahr/hazy-flow/workspace"
+	"git.sr.ht/~klahr/hazyflow/auth"
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/hazyflow/workspace"
 )
 
 // WorkspaceLookup resolves a (tenant, workspace) pair to its backing Git

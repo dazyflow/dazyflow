@@ -1,7 +1,7 @@
 package notify
 
 import (
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 func paramStringSlice(params map[string]any, key string) []string {

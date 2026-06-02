@@ -11,10 +11,10 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	controlpb "git.sr.ht/~klahr/hazy-flow/api/gen/control"
-	"git.sr.ht/~klahr/hazy-flow/auth"
-	"git.sr.ht/~klahr/hazy-flow/core"
-	"git.sr.ht/~klahr/hazy-flow/engine"
+	controlpb "git.sr.ht/~klahr/hazyflow/api/gen/control"
+	"git.sr.ht/~klahr/hazyflow/auth"
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/engine"
 )
 
 // RegisterGRPC wires the Service's RPC handlers onto srv. The caller is

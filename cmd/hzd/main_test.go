@@ -3,8 +3,8 @@ package main
 import (
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/engine"
-	"git.sr.ht/~klahr/hazy-flow/engine/mcp"
+	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/hazyflow/engine/mcp"
 )
 
 func TestProductionConfigProblems(t *testing.T) {

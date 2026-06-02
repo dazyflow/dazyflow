@@ -2,7 +2,7 @@
 
 This is the browser half of the experience test. I drove the real web app
 as a brand-new, non-technical user (call her Nina, who runs a bakery and
-has never seen Hazy Flow) and recorded where the journey was smooth and
+has never seen Hazyflow) and recorded where the journey was smooth and
 where she would get stuck. Screenshots are in `screenshots/`.
 
 Setup for the run: a freshly built `hzd` serving the freshly built
@@ -48,7 +48,7 @@ was a stale local build. Worth knowing so we don't mis-file them.
   enables …" and a disabled button. On a fresh self-host with no OAuth
   apps configured, that is 8 of our 10 scenarios. The Connections page
   says so honestly: "Setup isn't finished on this server yet … Contact
-  whoever set up this Hazy Flow workspace." So the product communicates
+  whoever set up this Hazyflow workspace." So the product communicates
   the wall well, but the wall is real: a non-technical user cannot connect
   Google/Slack/Notion until an admin registers OAuth client credentials
   and a secret store. The scenarios that need no accounts (contact form ->

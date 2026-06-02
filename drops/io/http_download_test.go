@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 func downloadServer(t *testing.T, body []byte, status int) *httptest.Server {

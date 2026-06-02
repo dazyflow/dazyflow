@@ -10,7 +10,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	hfnet "git.sr.ht/~klahr/hazy-flow/drops/net"
+	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
 )
 
 // Pool reuse for the Postgres drops. Connection setup (TCP + TLS + auth)

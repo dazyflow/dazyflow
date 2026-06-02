@@ -10,7 +10,7 @@ import (
 	"io"
 	"sync"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // EncryptedSecrets is the built-in per-tenant secret store. It's the

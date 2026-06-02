@@ -1,5 +1,5 @@
 /**
- * Hazy Flow — JS/TS drop authoring contract.
+ * Hazyflow — JS/TS drop authoring contract.
  *
  * This is the surface a scripted drop binds to. It is intentionally
  * self-contained: it does NOT reference the DOM lib (no `fetch`/`Response`

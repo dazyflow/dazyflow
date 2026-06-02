@@ -3,7 +3,7 @@ package net
 import (
 	"fmt"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 func paramBool(params map[string]any, key string) (bool, bool) {

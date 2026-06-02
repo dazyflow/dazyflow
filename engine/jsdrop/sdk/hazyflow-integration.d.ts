@@ -1,5 +1,5 @@
 /**
- * Hazy Flow — integration authoring contract.
+ * Hazyflow — integration authoring contract.
  *
  * An *integration* is an installable prerequisite the platform supports —
  * concretely a provider / connection-type (e.g. "google") that drops depend on

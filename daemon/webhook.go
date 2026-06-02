@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 const webhookInputModuleID = "webhook_input"
@@ -35,7 +35,7 @@ const webhookInputModuleID = "webhook_input"
 // The listener authenticates via the per-graph trigger secret rather
 // than the daemon's normal API-key chain. That's intentional: webhook
 // callers (Stripe, GitHub, your CI provider) typically don't have a
-// Hazy Flow API key but do hold a per-integration secret.
+// Hazyflow API key but do hold a per-integration secret.
 type WebhookListener struct {
 	svc    *Service
 	logger *log.Logger

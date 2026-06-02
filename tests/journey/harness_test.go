@@ -26,15 +26,15 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/hazy-flow/auth"
-	"git.sr.ht/~klahr/hazy-flow/core"
-	"git.sr.ht/~klahr/hazy-flow/daemon"
-	"git.sr.ht/~klahr/hazy-flow/engine"
-	"git.sr.ht/~klahr/hazy-flow/engine/containerdrop"
-	"git.sr.ht/~klahr/hazy-flow/engine/jobstore"
-	"git.sr.ht/~klahr/hazy-flow/engine/jsdrop"
-	_ "git.sr.ht/~klahr/hazy-flow/drops" // register every native drop
-	"git.sr.ht/~klahr/hazy-flow/officialdrops"
+	"git.sr.ht/~klahr/hazyflow/auth"
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/daemon"
+	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/hazyflow/engine/containerdrop"
+	"git.sr.ht/~klahr/hazyflow/engine/jobstore"
+	"git.sr.ht/~klahr/hazyflow/engine/jsdrop"
+	_ "git.sr.ht/~klahr/hazyflow/drops" // register every native drop
+	"git.sr.ht/~klahr/hazyflow/officialdrops"
 )
 
 // officialCatalog is the scripted catalog of embedded official drops (gmail,
@@ -86,7 +86,7 @@ func requireNode(t *testing.T) {
 	}
 }
 
-// stack is a self-contained Hazy Flow install: the HTTP API the web UI
+// stack is a self-contained Hazyflow install: the HTTP API the web UI
 // talks to, backed by an in-memory control plane and a real worker so
 // saved flows actually run.
 type stack struct {
@@ -212,7 +212,7 @@ func (s *stack) call(t *testing.T, method, path, token string, body any) resp {
 
 // --- the newcomer ----------------------------------------------------
 
-// newcomer is a person who just found Hazy Flow. They hold a session
+// newcomer is a person who just found Hazyflow. They hold a session
 // token and are bound to the tenant/workspace signup minted for them.
 type newcomer struct {
 	t         *testing.T

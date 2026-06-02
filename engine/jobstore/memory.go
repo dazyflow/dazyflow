@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // Memory is an in-memory JobStore. Concurrency-safe; loses state on

@@ -63,7 +63,7 @@ const CLIENTS: ClientDef[] = [
       // Trailing `--` separates `claude mcp add` flags from the
       // command + args that Claude Code will spawn. Multi-line with
       // backslashes for readability when the URL is long.
-      `claude mcp add hazy-flow \\\n  --env HAZYFLOW_URL=${shellQuote(url)} \\\n  --env HAZYFLOW_API_KEY=${shellQuote(secret)} \\\n  -- hz-mcp`,
+      `claude mcp add hazyflow \\\n  --env HAZYFLOW_URL=${shellQuote(url)} \\\n  --env HAZYFLOW_API_KEY=${shellQuote(secret)} \\\n  -- hz-mcp`,
   },
 ];
 
@@ -317,7 +317,7 @@ function CopyButton({ text, labelKey }: { text: string; labelKey: string }) {
 function mcpServersJSON({ url, secret }: SnippetEnv): string {
   const config = {
     mcpServers: {
-      "hazy-flow": {
+      "hazyflow": {
         command: "hz-mcp",
         env: {
           HAZYFLOW_URL: url,

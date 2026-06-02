@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
-	"git.sr.ht/~klahr/hazy-flow/engine/mcp"
-	"git.sr.ht/~klahr/hazy-flow/engine/mcp/mcptest"
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/engine/mcp"
+	"git.sr.ht/~klahr/hazyflow/engine/mcp/mcptest"
 )
 
 // registerInProcess wires a FakeServer into a fresh Catalog using

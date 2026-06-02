@@ -7,8 +7,8 @@ import (
 	"reflect"
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/engine/containerdrop"
-	"git.sr.ht/~klahr/hazy-flow/engine/jsdrop"
+	"git.sr.ht/~klahr/hazyflow/engine/containerdrop"
+	"git.sr.ht/~klahr/hazyflow/engine/jsdrop"
 )
 
 // Registering transpiles every embedded .ts and validates its embedded manifest

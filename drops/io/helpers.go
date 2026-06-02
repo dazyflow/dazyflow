@@ -1,8 +1,8 @@
 package io
 
 import (
-	"git.sr.ht/~klahr/hazy-flow/core"
-	"git.sr.ht/~klahr/hazy-flow/drops/internal/params"
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
 )
 
 func paramBool(params map[string]any, key string) (bool, bool) {

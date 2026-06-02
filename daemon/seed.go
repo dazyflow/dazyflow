@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // enqueueReadyDependents looks at every node downstream of completedNodeID

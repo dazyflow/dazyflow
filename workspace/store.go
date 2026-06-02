@@ -27,7 +27,7 @@ import (
 	"github.com/go-git/go-git/v5/storage/filesystem"
 	"github.com/go-git/go-git/v5/storage/memory"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // Store wraps a Git working tree. Graphs live under graphs/<id>.json;
@@ -118,8 +118,8 @@ func openOrInit(storer storage.Storer, wt billy.Filesystem) (*git.Repository, er
 	}
 	if _, err := tree.Commit("init", &git.CommitOptions{
 		Author: &object.Signature{
-			Name:  "hazy-flow",
-			Email: "hazy-flow@local",
+			Name:  "hazyflow",
+			Email: "hazyflow@local",
 			When:  time.Now(),
 		},
 	}); err != nil {

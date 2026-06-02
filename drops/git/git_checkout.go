@@ -17,10 +17,10 @@ import (
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
-	"git.sr.ht/~klahr/hazy-flow/engine"
-	"git.sr.ht/~klahr/hazy-flow/drops/internal/params"
-	hfnet "git.sr.ht/~klahr/hazy-flow/drops/net"
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
+	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
 )
 
 func init() {

@@ -10,11 +10,11 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/auth"
-	"git.sr.ht/~klahr/hazy-flow/core"
-	"git.sr.ht/~klahr/hazy-flow/engine"
-	"git.sr.ht/~klahr/hazy-flow/engine/jobstore"
-	"git.sr.ht/~klahr/hazy-flow/workspace"
+	"git.sr.ht/~klahr/hazyflow/auth"
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/hazyflow/engine/jobstore"
+	"git.sr.ht/~klahr/hazyflow/workspace"
 )
 
 // gatewayHarness assembles a minimal daemon stack + an HTTP gateway,

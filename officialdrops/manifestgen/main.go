@@ -19,7 +19,7 @@ import (
 	"sort"
 	"strings"
 
-	"git.sr.ht/~klahr/hazy-flow/engine/jsdrop"
+	"git.sr.ht/~klahr/hazyflow/engine/jsdrop"
 )
 
 // drophost is relative to the officialdrops package dir (go generate's cwd).

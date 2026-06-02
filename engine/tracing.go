@@ -8,14 +8,14 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // tracer is resolved lazily from the global TracerProvider; tests can swap
 // it via otel.SetTracerProvider before invoking the engine. With the noop
 // default this is effectively zero-cost.
 func tracer() trace.Tracer {
-	return otel.GetTracerProvider().Tracer("git.sr.ht/~klahr/hazy-flow/engine")
+	return otel.GetTracerProvider().Tracer("git.sr.ht/~klahr/hazyflow/engine")
 }
 
 func startGraphSpan(ctx context.Context, graph core.Graph) (context.Context, trace.Span) {

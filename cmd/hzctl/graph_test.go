@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // TestGraphPBRoundTrip pins the core.Graph ↔ controlpb.Graph conversion

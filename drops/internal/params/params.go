@@ -13,7 +13,7 @@ package params
 import (
 	"fmt"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // String returns a required string param. Error messages follow the

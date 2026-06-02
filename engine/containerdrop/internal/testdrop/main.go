@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"os"
 
-	"git.sr.ht/~klahr/hazy-flow/engine/containerdrop"
+	"git.sr.ht/~klahr/hazyflow/engine/containerdrop"
 )
 
 func main() {

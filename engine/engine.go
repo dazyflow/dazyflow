@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"sync"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // GraphProgress wraps a node-level Progress event with the graph context so

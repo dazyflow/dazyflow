@@ -182,7 +182,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {/* The logo is the home affordance — clicking it lands on the
             start/welcome screen (where no flow is selected), matching
             the sibling `hazy` app's brand-click-goes-home behaviour. */}
-        <NavLink to="/welcome" className="brand" title="Hazy Flow">
+        <NavLink to="/welcome" className="brand" title="Hazyflow">
           <img
             src="/favicon.png"
             alt=""
@@ -195,7 +195,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               slot so the operator always knows which flow they're in.
               Elsewhere it's the product wordmark. */}
           <span className="brand-title">
-            {inEditor && activeFlowName ? activeFlowName : "Hazy Flow"}
+            {inEditor && activeFlowName ? activeFlowName : "Hazyflow"}
           </span>
         </NavLink>
         <div className="spacer" />

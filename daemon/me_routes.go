@@ -25,7 +25,7 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // splitFlowID parses the {flow_id} path parameter back into

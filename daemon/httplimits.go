@@ -3,7 +3,7 @@ package daemon
 import (
 	"net/http"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // workspaceLimits serves GET /api/v1/admin/limits — a read-only view of

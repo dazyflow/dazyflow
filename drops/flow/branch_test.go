@@ -3,7 +3,7 @@ package flow
 import (
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 func TestBranch_StringEquals(t *testing.T) {

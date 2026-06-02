@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // The Node drop host's capability surface, exercised end-to-end through the

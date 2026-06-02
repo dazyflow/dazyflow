@@ -10,16 +10,16 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/hazy-flow/auth"
-	"git.sr.ht/~klahr/hazy-flow/core"
-	"git.sr.ht/~klahr/hazy-flow/daemon"
-	"git.sr.ht/~klahr/hazy-flow/engine"
-	"git.sr.ht/~klahr/hazy-flow/engine/containerdrop"
-	"git.sr.ht/~klahr/hazy-flow/engine/jobstore"
-	"git.sr.ht/~klahr/hazy-flow/engine/jsdrop"
-	_ "git.sr.ht/~klahr/hazy-flow/drops"
-	"git.sr.ht/~klahr/hazy-flow/officialdrops"
-	"git.sr.ht/~klahr/hazy-flow/workspace"
+	"git.sr.ht/~klahr/hazyflow/auth"
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/daemon"
+	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/hazyflow/engine/containerdrop"
+	"git.sr.ht/~klahr/hazyflow/engine/jobstore"
+	"git.sr.ht/~klahr/hazyflow/engine/jsdrop"
+	_ "git.sr.ht/~klahr/hazyflow/drops"
+	"git.sr.ht/~klahr/hazyflow/officialdrops"
+	"git.sr.ht/~klahr/hazyflow/workspace"
 )
 
 // TestClaude_E2E_ClassifyAndRoute composes the LLM module with branch:

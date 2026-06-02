@@ -10,7 +10,7 @@ import (
 	"os"
 	"strings"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // TokenResolver returns a current OAuth access token for (tenant-from-ctx,

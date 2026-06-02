@@ -1,6 +1,6 @@
 openapi: 3.1.0
 
-# Hazy Flow REST API — single source of truth for the gateway.
+# Hazyflow REST API — single source of truth for the gateway.
 #
 # This spec is intentionally LLM-friendly: every resource has a one-
 # sentence summary, every error response uses the same envelope, every
@@ -8,10 +8,10 @@ openapi: 3.1.0
 # See API_DESIGN.md for the design rationale.
 
 info:
-  title: Hazy Flow
+  title: Hazyflow
   version: "1.0.0"
   description: |
-    The Hazy Flow gateway. One surface for humans, scripts, and LLM
+    The Hazyflow gateway. One surface for humans, scripts, and LLM
     agents — the web UI, the `hz-mcp` MCP server, and any third-party
     integrations all talk to these endpoints.
 
@@ -25,7 +25,7 @@ info:
         integrations and drops, sized to fit in one LLM context.
 
   contact:
-    name: Hazy Flow
+    name: Hazyflow
     url: https://hazy.flow
   license:
     name: Proprietary
@@ -1160,7 +1160,7 @@ components:
       type: object
       required: [service, version, links]
       properties:
-        service: { type: string, example: hazy-flow }
+        service: { type: string, example: hazyflow }
         version: { type: string, example: 1.0.0 }
         auth:
           type: object

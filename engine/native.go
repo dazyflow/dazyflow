@@ -3,7 +3,7 @@ package engine
 import (
 	"context"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // NativeDrop is a module implemented as Go code, executed by direct function

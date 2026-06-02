@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
-	"git.sr.ht/~klahr/hazy-flow/engine/jsdrop"
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/engine/jsdrop"
 )
 
 // dropSrc builds a minimal valid scripted drop with a given id + version. The

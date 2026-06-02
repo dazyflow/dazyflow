@@ -1,7 +1,7 @@
 # Scheduled automation scenarios
 
 A reference set of recurring jobs that a small to mid sized company, staffed by
-non-technical people, runs every day or week by hand today. Hazy Flow should be
+non-technical people, runs every day or week by hand today. Hazyflow should be
 able to automate each one end to end without the operator writing code.
 
 We keep this list so we can test against it: every scenario names the building

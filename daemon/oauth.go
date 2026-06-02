@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // OAuth 2.0 authorization-code flow. This is what makes the

@@ -20,8 +20,8 @@ import (
 	"fmt"
 	"sync"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
-	"git.sr.ht/~klahr/hazy-flow/drops/internal/params"
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
 )
 
 // TokenLookup resolves an account name to a Slack access token by

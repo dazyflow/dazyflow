@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	controlpb "git.sr.ht/~klahr/hazy-flow/api/gen/control"
+	controlpb "git.sr.ht/~klahr/hazyflow/api/gen/control"
 )
 
 func moduleCmd() *cobra.Command {

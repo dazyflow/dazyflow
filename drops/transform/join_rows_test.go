@@ -4,7 +4,7 @@ import (
 	"sort"
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // runJoin is a thin shim — every test builds a job, calls executeJoinRows,

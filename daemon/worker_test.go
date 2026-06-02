@@ -8,13 +8,13 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/hazy-flow/auth"
-	"git.sr.ht/~klahr/hazy-flow/core"
-	"git.sr.ht/~klahr/hazy-flow/daemon"
-	"git.sr.ht/~klahr/hazy-flow/engine"
-	"git.sr.ht/~klahr/hazy-flow/engine/jobstore"
-	_ "git.sr.ht/~klahr/hazy-flow/drops"
-	"git.sr.ht/~klahr/hazy-flow/workspace"
+	"git.sr.ht/~klahr/hazyflow/auth"
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/daemon"
+	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/hazyflow/engine/jobstore"
+	_ "git.sr.ht/~klahr/hazyflow/drops"
+	"git.sr.ht/~klahr/hazyflow/workspace"
 )
 
 // workerHarness wires Service + Workers around in-memory storage. Workers

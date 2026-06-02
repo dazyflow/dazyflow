@@ -12,7 +12,7 @@ packages:
   - npm
   - postgresql
 sources:
-  - https://git.sr.ht/~klahr/hazy-flow
+  - https://git.sr.ht/~klahr/hazyflow
 environment:
   HAZYFLOW_TEST_DB: postgres://hazyflow:hazyflow@localhost:5432/hazyflow_test
 tasks:
@@ -25,10 +25,10 @@ tasks:
       sudo -iu postgres psql -c "CREATE USER hazyflow WITH PASSWORD 'hazyflow';"
       sudo -iu postgres psql -c "CREATE DATABASE hazyflow_test OWNER hazyflow;"
   - build: |
-      cd hazy-flow
+      cd hazyflow
       go build ./...
   - test: |
-      cd hazy-flow
+      cd hazyflow
       # HAZYFLOW_TEST_DB is set in the environment, so the Postgres-gated
       # jobstore + auth tests run for real here. -race guards against
       # concurrency regressions (e.g. the workspace.Store / scheduler
@@ -40,13 +40,13 @@ tasks:
       # manifestgen emits manifests via the Node drop host). Regenerate and
       # fail if the committed artifacts are stale. (nodejs is installed above —
       # manifestgen needs `node` on PATH.)
-      cd hazy-flow
+      cd hazyflow
       go generate ./officialdrops
       git diff --exit-code -- officialdrops/ || {
         echo "officialdrops/ is stale — run 'go generate ./officialdrops' and commit the result"; exit 1;
       }
   - vet: |
-      cd hazy-flow
+      cd hazyflow
       go vet ./...
   - hzctl-e2e: |
       # Guard the gRPC control plane + hzctl end to end: this demo builds
@@ -54,9 +54,9 @@ tasks:
       # gRPC and asserts the output. Fails the build if the control API or
       # the CLI that depends on it regresses. (nodejs is installed above —
       # the scripted-drop runtime needs `node` on PATH.)
-      cd hazy-flow
+      cd hazyflow
       bash examples/csv-pipeline/run.sh
   - web: |
-      cd hazy-flow/web
+      cd hazyflow/web
       npm ci
       npm run build

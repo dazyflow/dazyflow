@@ -16,14 +16,14 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
-	controlpb "git.sr.ht/~klahr/hazy-flow/api/gen/control"
-	"git.sr.ht/~klahr/hazy-flow/auth"
-	"git.sr.ht/~klahr/hazy-flow/core"
-	"git.sr.ht/~klahr/hazy-flow/daemon"
-	"git.sr.ht/~klahr/hazy-flow/engine"
-	"git.sr.ht/~klahr/hazy-flow/engine/jobstore"
-	_ "git.sr.ht/~klahr/hazy-flow/drops"
-	"git.sr.ht/~klahr/hazy-flow/workspace"
+	controlpb "git.sr.ht/~klahr/hazyflow/api/gen/control"
+	"git.sr.ht/~klahr/hazyflow/auth"
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/daemon"
+	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/hazyflow/engine/jobstore"
+	_ "git.sr.ht/~klahr/hazyflow/drops"
+	"git.sr.ht/~klahr/hazyflow/workspace"
 )
 
 type harness struct {

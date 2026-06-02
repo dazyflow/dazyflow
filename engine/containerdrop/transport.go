@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
-	"git.sr.ht/~klahr/hazy-flow/engine/jsdrop"
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/engine/jsdrop"
 )
 
 // DefaultMaxRunDuration is the hard wall-clock ceiling a drop execution gets

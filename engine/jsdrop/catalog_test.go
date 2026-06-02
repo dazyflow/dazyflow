@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // LoadDir is the path the daemon uses at startup

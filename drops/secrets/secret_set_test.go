@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // fakeStore captures writes for inspection. Concurrency-safe so a

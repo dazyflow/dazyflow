@@ -26,7 +26,7 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/hazy-flow/engine/jsdrop"
+	"git.sr.ht/~klahr/hazyflow/engine/jsdrop"
 )
 
 // BrokerDeps are the host-side capability implementations the broker mediates —

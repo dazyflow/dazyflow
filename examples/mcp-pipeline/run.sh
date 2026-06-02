@@ -77,7 +77,7 @@ assert "regular path was skipped (branch correctly forked)" \
 
 if [[ $errors -eq 0 ]]; then
     echo
-    echo "[ok] all assertions passed — Hazy Flow ↔ MCP integration live"
+    echo "[ok] all assertions passed — Hazyflow ↔ MCP integration live"
 else
     echo
     echo "[!!] $errors assertion(s) failed"

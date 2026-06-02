@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // Additional fuzz harnesses extending api_fuzz_test.go to surfaces that

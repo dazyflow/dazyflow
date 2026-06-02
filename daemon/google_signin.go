@@ -14,8 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/hazy-flow/auth"
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/auth"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // Google sign-in — per-org SSO using the org's own OAuth client id +
@@ -27,7 +27,7 @@ import (
 // The state token binds the in-flight flow to a target org and expires
 // after a short window. We don't reuse the integrations OAuth registry
 // here because that one stores per-tenant tokens for connecting Gmail /
-// Slack / etc. — this flow is for *signing in to Hazy Flow itself*.
+// Slack / etc. — this flow is for *signing in to Hazyflow itself*.
 
 const (
 	googleAuthURL     = "https://accounts.google.com/o/oauth2/v2/auth"

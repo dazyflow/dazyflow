@@ -1,5 +1,5 @@
 // Package server implements an MCP (Model Context Protocol) server
-// that exposes Hazy Flow's pipeline-management operations as tools. It
+// that exposes Hazyflow's pipeline-management operations as tools. It
 // is the server-side counterpart to engine/mcp (which is the client we
 // use to consume external MCP servers as flow nodes).
 //

@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // run is a small wrapper that exercises executeMapRows with the

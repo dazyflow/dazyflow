@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
-	"git.sr.ht/~klahr/hazy-flow/engine"
-	"git.sr.ht/~klahr/hazy-flow/drops/internal/params"
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
 	_ "modernc.org/sqlite"
 )
 

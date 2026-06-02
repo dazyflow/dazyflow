@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/auth"
+	"git.sr.ht/~klahr/hazyflow/auth"
 )
 
 // newSignupHarness extends the default gateway harness with the

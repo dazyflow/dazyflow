@@ -2,7 +2,7 @@
 // the text content of its input ref and emits the result on its "out"
 // port. It exists to demonstrate the end-to-end flow of building a
 // remote module — what code a third party would write to plug into
-// Hazy Flow.
+// Hazyflow.
 package main
 
 import (
@@ -16,7 +16,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	nodepb "git.sr.ht/~klahr/hazy-flow/api/gen/node"
+	nodepb "git.sr.ht/~klahr/hazyflow/api/gen/node"
 )
 
 type server struct {

@@ -2,7 +2,7 @@
 # End-to-end demo: hzd + remote transformer + hzctl driving a 3-node graph.
 #
 # What this proves:
-#   - A third-party gRPC module slots into Hazy Flow via --remote
+#   - A third-party gRPC module slots into Hazyflow via --remote
 #   - Data flows: native file_read → remote csv_uppercase → native file_write
 #   - The sandbox holds: file_read reads from $DATA_DIR/dev/default,
 #     file_write produces output there

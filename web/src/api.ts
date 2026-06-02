@@ -596,7 +596,7 @@ export const api = {
       `/me/connections/${encodeURIComponent(provider)}${qs}`,
     );
   },
-  // listAdminOAuthProviders returns every provider Hazy Flow knows
+  // listAdminOAuthProviders returns every provider Hazyflow knows
   // about (Slack, Google, GitHub, Notion) along with whether each is
   // currently configured and where the credentials came from (env vs.
   // persisted via this UI). Admin-only — 403 to a regular member.

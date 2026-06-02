@@ -1,4 +1,4 @@
-// Command hz-drops signs Hazy Flow marketplace artifacts (drops + integration
+// Command hz-drops signs Hazyflow marketplace artifacts (drops + integration
 // manifests) so they install at the official/verified trust tier, and generates
 // the signing keypair.
 //
@@ -9,7 +9,7 @@
 // leaves the publisher and is never committed. The tier is derived from which
 // trusted key verified the exact bytes — an artifact can't declare its own tier.
 //
-//	hz-drops keygen --id hazy-official --publisher "Hazy Flow" --out ./keys
+//	hz-drops keygen --id hazy-official --publisher "Hazyflow" --out ./keys
 //	hz-drops sign   --key ./keys/hazy-official.key --id hazy-official drop.ts ...
 package main
 
@@ -46,7 +46,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprint(os.Stderr, `hz-drops — sign Hazy Flow marketplace artifacts
+	fmt.Fprint(os.Stderr, `hz-drops — sign Hazyflow marketplace artifacts
 
   hz-drops keygen --id <id> --publisher <name> [--tier official|verified] [--out <dir>]
       Generate an Ed25519 signing keypair. Writes <out>/<id>.key (private,

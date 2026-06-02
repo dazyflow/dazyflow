@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // idempotency middleware test harness: a gateway with just the store, and

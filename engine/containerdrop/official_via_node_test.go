@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
-	"git.sr.ht/~klahr/hazy-flow/engine/jsdrop"
-	"git.sr.ht/~klahr/hazy-flow/officialdrops"
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/engine/jsdrop"
+	"git.sr.ht/~klahr/hazyflow/officialdrops"
 )
 
 // TestOfficialDrops_RunViaNode is the Phase D gate: official drops, registered

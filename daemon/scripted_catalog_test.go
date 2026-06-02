@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
-	"git.sr.ht/~klahr/hazy-flow/engine/containerdrop"
-	"git.sr.ht/~klahr/hazy-flow/engine/jsdrop"
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/engine/containerdrop"
+	"git.sr.ht/~klahr/hazyflow/engine/jsdrop"
 )
 
 // testScriptedCatalog builds a catalog wired to the real Node runtime — the

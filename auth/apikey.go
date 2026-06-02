@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // API key wire format: "hzk_<key-id>_<secret-hex>".

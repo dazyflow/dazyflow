@@ -1,4 +1,4 @@
-// Package officialdrops ships Hazy Flow's first-party connectors as scripted
+// Package officialdrops ships Hazyflow's first-party connectors as scripted
 // (TypeScript) drops embedded in the binary and registered into the scripted
 // catalog at boot. These REPLACE the former native Go connectors: an official
 // drop is an ordinary scripted drop that runs on the exact same Node runtime as
@@ -12,7 +12,7 @@ import (
 	"sort"
 	"strings"
 
-	"git.sr.ht/~klahr/hazy-flow/engine/jsdrop"
+	"git.sr.ht/~klahr/hazyflow/engine/jsdrop"
 )
 
 // excel_read.ts / excel_write.ts are generated (SheetJS bundled with the drop

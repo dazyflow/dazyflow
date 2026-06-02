@@ -1,10 +1,10 @@
 {
   "explain": {
-    "oauthAccountMissing": "We can't reach {{provider}}: the account \"{{account}}\" isn't connected on your Hazy Flow workspace.",
-    "providerNotConnected": "{{provider}} isn't connected yet on your Hazy Flow workspace.",
+    "oauthAccountMissing": "We can't reach {{provider}}: the account \"{{account}}\" isn't connected on your Hazyflow workspace.",
+    "providerNotConnected": "{{provider}} isn't connected yet on your Hazyflow workspace.",
     "credentialMissing": "This flow uses a credential called \"{{name}}\", but it hasn't been added yet.",
     "slackChannelNotFound": "Slack couldn't find the channel this flow tries to post in. The bot might also need to be invited to it.",
-    "slackNotInChannel": "The Hazy Flow Slack app isn't a member of that channel yet. Open the channel in Slack and type /invite @Hazy Flow.",
+    "slackNotInChannel": "The Hazyflow Slack app isn't a member of that channel yet. Open the channel in Slack and type /invite @Hazyflow.",
     "slackInvalidAuth": "Slack rejected the request — the saved token has expired or been revoked. Reconnect Slack to fix it.",
     "actionReconnect": "Reconnect →",
     "actionConnect": "Connect →",
@@ -92,7 +92,7 @@
     "signInLink": "Sign in"
   },
   "welcome": {
-    "title": "Welcome to Hazy Flow",
+    "title": "Welcome to Hazyflow",
     "signedInAs": "Signed in as <0>{{subject}}</0>",
     "inTenant": " in tenant <0>{{tenant}}</0>",
     "continueTitle": "Pick up where you left off",
@@ -107,7 +107,7 @@
     "goalDevTitle": "Developer workflows",
     "goalDevDesc": "GitHub, Slack triage, deploy alerts and other dev-team plumbing.",
     "goalDevLink": "More for developers →",
-    "titleReturning": "Welcome back to Hazy Flow",
+    "titleReturning": "Welcome back to Hazyflow",
     "introReturning": "Pick up where you left off, or start a new flow from a template.",
     "orExplore": "Or explore on your own:",
     "step1Title": "Grab a template",
@@ -327,14 +327,14 @@
     "setupIncompleteTitle": "Setup isn't finished on this server yet",
     "setupIncompleteBody": "Your administrator hasn't enabled the apps you can connect (Slack, Gmail, Notion, …) or the place where credentials get stored. Until that's done, there's nothing for you to do here — your flows that need those won't be able to run.",
     "setupIncompleteContact": "Contact your administrator",
-    "setupIncompleteContactGeneric": "Contact whoever set up this Hazy Flow workspace for you and ask them to finish the apps + credentials setup.",
+    "setupIncompleteContactGeneric": "Contact whoever set up this Hazyflow workspace for you and ask them to finish the apps + credentials setup.",
     "connect": "Connect",
     "connectAnother": "Connect another account",
     "connected": "Connected",
     "disconnect": "Disconnect",
     "reconnect": "Reconnect",
     "reconnectRequired": "Reconnect required",
-    "reconnectRequiredHint": "Hazy Flow now needs permissions this account didn't grant. Reconnect to add them.",
+    "reconnectRequiredHint": "Hazyflow now needs permissions this account didn't grant. Reconnect to add them.",
     "noProviders": "No apps are available to connect on this server yet.",
     "connectedOk": "Connected {{provider}} ({{account}}).",
     "connectFailed": "Couldn't connect {{provider}}: {{error}}",
@@ -378,10 +378,10 @@
     "appsHead": "Connect these apps",
     "credsHead": "Add these credentials",
     "slackHead": "Before posting to Slack",
-    "slackBody": "Invite the Hazy Flow app to {{channels}} in Slack (open the channel, type /invite @Hazy Flow). Connecting Slack isn't enough on its own — the app also has to be a member of each channel it posts to, or the run fails.",
+    "slackBody": "Invite the Hazyflow app to {{channels}} in Slack (open the channel, type /invite @Hazyflow). Connecting Slack isn't enough on its own — the app also has to be a member of each channel it posts to, or the run fails.",
     "adminLede": "This flow can't run yet — setup on this server isn't finished. Your administrator has to enable a few things before it'll work.",
     "adminBlockedHead": "Your administrator needs to enable",
-    "adminBlockedBody": "These aren't switched on in your Hazy Flow workspace yet. You can't enable them yourself — ask whoever set this up for you.",
+    "adminBlockedBody": "These aren't switched on in your Hazyflow workspace yet. You can't enable them yourself — ask whoever set this up for you.",
     "runAnyway": "Run anyway",
     "connect": "Go to Connections"
   },
@@ -537,9 +537,9 @@
       "walkthroughStep1Head": "Open Google Cloud Console",
       "walkthroughStep1Body": "Go to <0>console.cloud.google.com/apis/credentials</0> and sign in with a Google Workspace admin account. Pick the project for your company, or create a new one (top bar → project picker → \"New project\").",
       "walkthroughStep2Head": "Configure the OAuth consent screen (one-time)",
-      "walkthroughStep2Body": "In the left sidebar, click \"OAuth consent screen\". Choose <0>Internal</0> if your team uses Google Workspace (recommended — only people in your domain can sign in). Fill in an app name (e.g. \"Hazy Flow\") and a support email, then Save and continue through the remaining screens. You can skip the Scopes step.",
+      "walkthroughStep2Body": "In the left sidebar, click \"OAuth consent screen\". Choose <0>Internal</0> if your team uses Google Workspace (recommended — only people in your domain can sign in). Fill in an app name (e.g. \"Hazyflow\") and a support email, then Save and continue through the remaining screens. You can skip the Scopes step.",
       "walkthroughStep3Head": "Create the OAuth client ID",
-      "walkthroughStep3Body": "Back under \"Credentials\", click <0>+ Create credentials → OAuth client ID</0>. For \"Application type\" pick <1>Web application</1>. Name it \"Hazy Flow\". Under \"Authorized redirect URIs\", click \"+ Add URI\" and paste this exact URL — use the Copy button below; even one wrong character (a trailing slash, a missed letter) means Google will reject sign-in:",
+      "walkthroughStep3Body": "Back under \"Credentials\", click <0>+ Create credentials → OAuth client ID</0>. For \"Application type\" pick <1>Web application</1>. Name it \"Hazyflow\". Under \"Authorized redirect URIs\", click \"+ Add URI\" and paste this exact URL — use the Copy button below; even one wrong character (a trailing slash, a missed letter) means Google will reject sign-in:",
       "walkthroughStep4Head": "Copy the Client ID and secret",
       "walkthroughStep4Body": "Click <0>Create</0>. Google shows a popup with your <1>Client ID</1> and <1>Client secret</1>. Copy both — the secret is only shown once. Paste them into the form below and click Save.",
       "walkthroughTip": "Tip: if you don't see \"Internal\" as an option, your account isn't a Workspace admin. Ask whoever administers your company's Google accounts to either do this step or grant you admin on the Cloud project.",
@@ -583,7 +583,7 @@
         "domain_mismatch": "You signed in with a Google account that isn't in your Workspace domain — that's what the domain restriction is supposed to do, so this is actually a sign it's working. To verify the full flow, click Test sign-in again and pick an account in your Workspace.",
         "not_configured": "The Google sign-in settings were changed while the test was running. Refresh the page and try again.",
         "denied": "The sign-in was cancelled or blocked before completing. If you clicked \"Cancel\" in Google's chooser, click Test sign-in again and pick an account. If Google blocked it, your Workspace admin may have a policy that needs adjusting.",
-        "internal": "Hazy Flow couldn't finish the sign-in on its end. This isn't a problem with your Google config — it's most likely a temporary backend issue. Try again in a minute, or check the daemon logs if it keeps failing."
+        "internal": "Hazyflow couldn't finish the sign-in on its end. This isn't a problem with your Google config — it's most likely a temporary backend issue. Try again in a minute, or check the daemon logs if it keeps failing."
       }
     },
     "apiKeys": {
@@ -797,7 +797,7 @@
   },
   "revealSecret": {
     "title": "Save this secret — it's shown once",
-    "warning": "The bearer token below is the only chance to see it. Hazy Flow stores a salted hash; if you lose this string, revoke the key and issue a new one.",
+    "warning": "The bearer token below is the only chance to see it. Hazyflow stores a salted hash; if you lose this string, revoke the key and issue a new one.",
     "copy": "Copy to clipboard",
     "copied": "Copied",
     "keyIdLabel": "Key ID",

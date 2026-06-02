@@ -1,4 +1,4 @@
-# Hazy Flow
+# Hazyflow
 
 A workflow automation engine. `hzd` is a Go daemon that runs graph based
 flows (connectors, transforms, AI steps, branching, schedules and

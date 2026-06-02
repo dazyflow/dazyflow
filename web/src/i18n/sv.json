@@ -1,10 +1,10 @@
 {
   "explain": {
-    "oauthAccountMissing": "Vi når inte {{provider}}: kontot \"{{account}}\" är inte anslutet i din Hazy Flow-arbetsyta.",
-    "providerNotConnected": "{{provider}} är inte anslutet ännu i din Hazy Flow-arbetsyta.",
+    "oauthAccountMissing": "Vi når inte {{provider}}: kontot \"{{account}}\" är inte anslutet i din Hazyflow-arbetsyta.",
+    "providerNotConnected": "{{provider}} är inte anslutet ännu i din Hazyflow-arbetsyta.",
     "credentialMissing": "Det här flödet använder en credential som heter \"{{name}}\", men den är inte tillagd ännu.",
     "slackChannelNotFound": "Slack hittade inte kanalen flödet försöker posta i. Boten kan också behöva bjudas in dit.",
-    "slackNotInChannel": "Hazy Flow-appen i Slack är inte med i kanalen ännu. Öppna kanalen i Slack och skriv /invite @Hazy Flow.",
+    "slackNotInChannel": "Hazyflow-appen i Slack är inte med i kanalen ännu. Öppna kanalen i Slack och skriv /invite @Hazyflow.",
     "slackInvalidAuth": "Slack avvisade anropet — den sparade token har gått ut eller dragits tillbaka. Återanslut Slack för att lösa det.",
     "actionReconnect": "Återanslut →",
     "actionConnect": "Anslut →",
@@ -92,7 +92,7 @@
     "signInLink": "Logga in"
   },
   "welcome": {
-    "title": "Välkommen till Hazy Flow",
+    "title": "Välkommen till Hazyflow",
     "signedInAs": "Inloggad som <0>{{subject}}</0>",
     "inTenant": " i tenant <0>{{tenant}}</0>",
     "continueTitle": "Fortsätt där du slutade",
@@ -107,7 +107,7 @@
     "goalDevTitle": "Utvecklarflöden",
     "goalDevDesc": "GitHub, Slack-triage, deploy-notiser och annat för utvecklarteam.",
     "goalDevLink": "Mer för utvecklare →",
-    "titleReturning": "Välkommen tillbaka till Hazy Flow",
+    "titleReturning": "Välkommen tillbaka till Hazyflow",
     "introReturning": "Fortsätt där du slutade, eller starta ett nytt flöde från en mall.",
     "orExplore": "Eller utforska på egen hand:",
     "step1Title": "Ta en mall",
@@ -327,14 +327,14 @@
     "setupIncompleteTitle": "Servern är inte färdigkonfigurerad ännu",
     "setupIncompleteBody": "Administratören har inte aktiverat apparna du kan ansluta (Slack, Gmail, Notion, …) eller platsen där credentials sparas. Tills det är klart finns det inget du kan göra här — flöden som behöver det går inte att köra.",
     "setupIncompleteContact": "Kontakta administratören",
-    "setupIncompleteContactGeneric": "Kontakta personen som satte upp det här Hazy Flow-kontot åt dig och be dem slutföra konfigurationen av appar och credentials.",
+    "setupIncompleteContactGeneric": "Kontakta personen som satte upp det här Hazyflow-kontot åt dig och be dem slutföra konfigurationen av appar och credentials.",
     "connect": "Anslut",
     "connectAnother": "Anslut ett till konto",
     "connected": "Ansluten",
     "disconnect": "Koppla från",
     "reconnect": "Anslut igen",
     "reconnectRequired": "Anslut igen krävs",
-    "reconnectRequiredHint": "Hazy Flow behöver nu rättigheter som det här kontot inte gett. Anslut igen för att lägga till dem.",
+    "reconnectRequiredHint": "Hazyflow behöver nu rättigheter som det här kontot inte gett. Anslut igen för att lägga till dem.",
     "noProviders": "Inga appar går att ansluta på den här servern ännu.",
     "connectedOk": "Anslöt {{provider}} ({{account}}).",
     "connectFailed": "Kunde inte ansluta {{provider}}: {{error}}",
@@ -378,10 +378,10 @@
     "appsHead": "Anslut dessa appar",
     "credsHead": "Lägg till dessa credentials",
     "slackHead": "Innan du postar till Slack",
-    "slackBody": "Bjud in Hazy Flow-appen till {{channels}} i Slack (öppna kanalen, skriv /invite @Hazy Flow). Att ansluta Slack räcker inte i sig — appen måste också vara medlem i varje kanal den postar till, annars misslyckas körningen.",
+    "slackBody": "Bjud in Hazyflow-appen till {{channels}} i Slack (öppna kanalen, skriv /invite @Hazyflow). Att ansluta Slack räcker inte i sig — appen måste också vara medlem i varje kanal den postar till, annars misslyckas körningen.",
     "adminLede": "Flödet går inte att köra ännu — konfigurationen på servern är inte färdig. Administratören behöver aktivera några saker först.",
     "adminBlockedHead": "Administratören behöver aktivera",
-    "adminBlockedBody": "Dessa är inte påslagna i ditt Hazy Flow-konto ännu. Du kan inte aktivera dem själv — fråga personen som satte upp det åt dig.",
+    "adminBlockedBody": "Dessa är inte påslagna i ditt Hazyflow-konto ännu. Du kan inte aktivera dem själv — fråga personen som satte upp det åt dig.",
     "runAnyway": "Kör ändå",
     "connect": "Gå till Anslutningar"
   },
@@ -537,9 +537,9 @@
       "walkthroughStep1Head": "Öppna Google Cloud Console",
       "walkthroughStep1Body": "Gå till <0>console.cloud.google.com/apis/credentials</0> och logga in med ett Google Workspace-adminkonto. Välj ditt företags projekt, eller skapa ett nytt (övre listen → projektväljaren → \"New project\").",
       "walkthroughStep2Head": "Konfigurera OAuth consent screen (engångssteg)",
-      "walkthroughStep2Body": "I vänsterspalten, klicka på \"OAuth consent screen\". Välj <0>Internal</0> om ditt team använder Google Workspace (rekommenderas — bara personer i din domän kan logga in). Fyll i ett appnamn (t.ex. \"Hazy Flow\") och en support-e-post, sedan Save and continue genom de följande stegen. Du kan hoppa över Scopes-steget.",
+      "walkthroughStep2Body": "I vänsterspalten, klicka på \"OAuth consent screen\". Välj <0>Internal</0> om ditt team använder Google Workspace (rekommenderas — bara personer i din domän kan logga in). Fyll i ett appnamn (t.ex. \"Hazyflow\") och en support-e-post, sedan Save and continue genom de följande stegen. Du kan hoppa över Scopes-steget.",
       "walkthroughStep3Head": "Skapa OAuth client ID",
-      "walkthroughStep3Body": "Tillbaka under \"Credentials\", klicka <0>+ Create credentials → OAuth client ID</0>. För \"Application type\", välj <1>Web application</1>. Namnge den \"Hazy Flow\". Under \"Authorized redirect URIs\", klicka \"+ Add URI\" och klistra in exakt den här URL:en — använd Kopiera-knappen nedan; ett enda fel tecken (ett snedstreck för mycket, en missad bokstav) gör att Google avvisar inloggningen:",
+      "walkthroughStep3Body": "Tillbaka under \"Credentials\", klicka <0>+ Create credentials → OAuth client ID</0>. För \"Application type\", välj <1>Web application</1>. Namnge den \"Hazyflow\". Under \"Authorized redirect URIs\", klicka \"+ Add URI\" och klistra in exakt den här URL:en — använd Kopiera-knappen nedan; ett enda fel tecken (ett snedstreck för mycket, en missad bokstav) gör att Google avvisar inloggningen:",
       "walkthroughStep4Head": "Kopiera Client ID och secret",
       "walkthroughStep4Body": "Klicka <0>Create</0>. Google visar en popup med ditt <1>Client ID</1> och din <1>Client secret</1>. Kopiera båda — hemligheten visas bara en gång. Klistra in dem i formuläret nedan och klicka Spara.",
       "walkthroughTip": "Tips: om du inte ser \"Internal\" som alternativ är ditt konto inte Workspace-admin. Be den som administrerar företagets Google-konton att antingen göra det här steget eller ge dig admin på Cloud-projektet.",
@@ -583,7 +583,7 @@
         "domain_mismatch": "Du loggade in med ett Google-konto som inte ligger i din Workspace-domän — det är precis det domänbegränsningen ska göra, så det här är faktiskt ett tecken på att den fungerar. För att verifiera hela flödet, klicka Testa inloggning igen och välj ett konto i din Workspace.",
         "not_configured": "Google-inloggningsinställningarna ändrades under testet. Ladda om sidan och försök igen.",
         "denied": "Inloggningen avbröts eller blockerades innan den slutfördes. Om du klickade \"Avbryt\" i Googles väljare, klicka Testa inloggning igen och välj ett konto. Om Google blockerade det kan din Workspace-administratör ha en policy som behöver justeras.",
-        "internal": "Hazy Flow kunde inte slutföra inloggningen på sin sida. Det är inte ett problem med din Google-konfiguration — troligen ett tillfälligt backend-problem. Försök igen om en stund, eller kolla daemon-loggarna om det fortsätter misslyckas."
+        "internal": "Hazyflow kunde inte slutföra inloggningen på sin sida. Det är inte ett problem med din Google-konfiguration — troligen ett tillfälligt backend-problem. Försök igen om en stund, eller kolla daemon-loggarna om det fortsätter misslyckas."
       }
     },
     "apiKeys": {
@@ -797,7 +797,7 @@
   },
   "revealSecret": {
     "title": "Spara den här hemligheten — den visas bara en gång",
-    "warning": "Bearer-token nedan är enda chansen att se den. Hazy Flow lagrar en saltad hash; om du tappar bort strängen, återkalla nyckeln och skapa en ny.",
+    "warning": "Bearer-token nedan är enda chansen att se den. Hazyflow lagrar en saltad hash; om du tappar bort strängen, återkalla nyckeln och skapa en ny.",
     "copy": "Kopiera till urklipp",
     "copied": "Kopierat",
     "keyIdLabel": "Nyckel-ID",

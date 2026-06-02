@@ -1,10 +1,10 @@
-# mcp-pipeline — Hazy Flow ↔ MCP integration demo
+# mcp-pipeline — Hazyflow ↔ MCP integration demo
 
-Hazy Flow speaks the [Model Context Protocol](https://spec.modelcontextprotocol.io/)
+Hazyflow speaks the [Model Context Protocol](https://spec.modelcontextprotocol.io/)
 as a client. Any MCP stdio server — the npm-published
 `@modelcontextprotocol/server-*` packages, custom Python servers built
 with `mcp.server.fastmcp`, your in-house Go binaries — can be registered
-at hzd startup. Its tools then appear as Hazy Flow modules named
+at hzd startup. Its tools then appear as Hazyflow modules named
 `mcp:<server>:<tool>` and slot into graphs alongside the native modules.
 
 ## What this demo proves
@@ -83,7 +83,7 @@ hzd --mcp="fs=npx -y @modelcontextprotocol/server-filesystem /tmp;\
 
 The reason MCP belongs in a workflow engine is the same reason a Zapier
 clone needs lots of integrations: workflows derive their value from
-*what they can touch*. With MCP support, Hazy Flow doesn't need a
+*what they can touch*. With MCP support, Hazyflow doesn't need a
 hand-written module per SaaS. Every MCP server published — there are
 hundreds now and the number grows weekly — becomes a usable module.
 
@@ -106,7 +106,7 @@ logic:
   Connectors, Cloudflare Workers MCP) become common.
 - **Notifications + progress.** MCP supports server-initiated progress
   notifications; we drop them on the floor today. Worth wiring into
-  Hazy Flow's progress channel.
+  Hazyflow's progress channel.
 - **Resource and prompt access.** Only `tools/*` is implemented. MCP
   also exposes `resources/list`, `resources/read`, `prompts/get` — all
   useful but lower-priority than tools.

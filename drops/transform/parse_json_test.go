@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 func runParseJSON(t *testing.T, in any, params map[string]any) core.Result {

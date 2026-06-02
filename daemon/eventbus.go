@@ -3,8 +3,8 @@ package daemon
 import (
 	"sync"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
-	"git.sr.ht/~klahr/hazy-flow/engine"
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/engine"
 )
 
 // BusEvent is what flows from a worker to subscribers waiting on a job.

@@ -12,7 +12,7 @@ import (
 	"net/http"
 	"strings"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // ApprovalDecision is the input from the human approver, accepted by

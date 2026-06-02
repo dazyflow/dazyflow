@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
-	"git.sr.ht/~klahr/hazy-flow/engine/jsdrop"
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/engine/jsdrop"
 )
 
 // pingManifestJSON is the manifest the Node drop host would emit for a ping

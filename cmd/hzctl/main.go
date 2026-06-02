@@ -1,4 +1,4 @@
-// Command hzctl is the Hazy Flow CLI. Commands fall into two groups:
+// Command hzctl is the Hazyflow CLI. Commands fall into two groups:
 //
 //   - "offline" — work against a local workspace Git repo (lint).
 //   - "remote"  — talk to hzd over gRPC via the control API. Configure
@@ -18,7 +18,7 @@ var serverFlag string
 func main() {
 	root := &cobra.Command{
 		Use:           "hzctl",
-		Short:         "Hazy Flow CLI",
+		Short:         "Hazyflow CLI",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}

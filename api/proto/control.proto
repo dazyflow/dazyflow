@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package hazyflow.control.v1;
 
-option go_package = "git.sr.ht/~klahr/hazy-flow/api/gen/control;controlpb";
+option go_package = "git.sr.ht/~klahr/hazyflow/api/gen/control;controlpb";
 
 // The control plane is what hzctl (and any future web UI) speaks to hzd
 // for graph/job/module/workspace management. Authentication is per-RPC

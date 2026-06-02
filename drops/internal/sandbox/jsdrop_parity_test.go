@@ -3,9 +3,9 @@ package sandbox_test
 import (
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
-	"git.sr.ht/~klahr/hazy-flow/engine/jsdrop"
-	"git.sr.ht/~klahr/hazy-flow/drops/internal/sandbox"
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/engine/jsdrop"
+	"git.sr.ht/~klahr/hazyflow/drops/internal/sandbox"
 )
 
 // jsdrop.ResolveRoot is a hand-kept copy of sandbox.Resolve — engine/jsdrop

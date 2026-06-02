@@ -7,7 +7,7 @@ import (
 	"log"
 	"time"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // effectiveGraphTimeout picks the timeout that applies to a run:

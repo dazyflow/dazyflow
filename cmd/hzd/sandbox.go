@@ -9,9 +9,9 @@ import (
 	"strconv"
 	"strings"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
-	"git.sr.ht/~klahr/hazy-flow/engine/containerdrop"
-	"git.sr.ht/~klahr/hazy-flow/engine/jsdrop"
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/engine/containerdrop"
+	"git.sr.ht/~klahr/hazyflow/engine/jsdrop"
 )
 
 // configureScriptedRuntime wires the catalog's Run and Extract hooks so EVERY

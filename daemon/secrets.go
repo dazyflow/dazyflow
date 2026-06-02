@@ -7,7 +7,7 @@ import (
 	"os"
 	"sync"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // EnvProvider resolves env://NAME by reading os.Getenv("NAME"). Missing

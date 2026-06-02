@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // DropSearch describes the filter set ListModules supports. Empty

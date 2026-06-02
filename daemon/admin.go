@@ -7,8 +7,8 @@ import (
 	"sort"
 	"time"
 
-	"git.sr.ht/~klahr/hazy-flow/auth"
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/auth"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // APIKeySummary is the redacted view of an API key that's safe to
@@ -249,7 +249,7 @@ func resolveAdminTenant(p core.Principal, requested string) (string, error) {
 }
 
 // UserSummary is the per-subject roll-up the Admin users view uses.
-// "User" isn't a first-class entity in Hazy Flow today — we derive
+// "User" isn't a first-class entity in Hazyflow today — we derive
 // one synthetic record per distinct Subject across the tenant's keys.
 // The aggregate Permissions union is what the principal would
 // effectively get if all their active keys were combined.

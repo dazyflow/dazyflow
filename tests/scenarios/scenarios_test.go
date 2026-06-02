@@ -13,11 +13,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
-	"git.sr.ht/~klahr/hazy-flow/engine"
-	"git.sr.ht/~klahr/hazy-flow/engine/jsdrop"
-	_ "git.sr.ht/~klahr/hazy-flow/drops" // register every native drop
-	"git.sr.ht/~klahr/hazy-flow/officialdrops"
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/hazyflow/engine/jsdrop"
+	_ "git.sr.ht/~klahr/hazyflow/drops" // register every native drop
+	"git.sr.ht/~klahr/hazyflow/officialdrops"
 )
 
 // combinedManifests is the full shipped catalog the app exposes: native drops

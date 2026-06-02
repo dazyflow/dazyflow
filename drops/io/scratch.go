@@ -1,7 +1,7 @@
 package io
 
 import (
-	"git.sr.ht/~klahr/hazy-flow/drops/internal/sandbox"
+	"git.sr.ht/~klahr/hazyflow/drops/internal/sandbox"
 )
 
 // Re-export the shared sandbox helpers under the same names the io

@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"git.sr.ht/~klahr/hazy-flow/core"
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // redactionMarker replaces a secret plaintext wherever it surfaces in a
