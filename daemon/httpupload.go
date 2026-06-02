@@ -144,7 +144,7 @@ func (h *HTTPGateway) uploadWorkspaceFile(rw http.ResponseWriter, r *http.Reques
 	})
 }
 
-// isUploadSandboxEscape mirrors integrations/io/file_write.go's check;
+// isUploadSandboxEscape mirrors drops/io/file_write.go's check;
 // kept local to avoid pulling that package into daemon.
 func isUploadSandboxEscape(err error) bool {
 	if err == nil {

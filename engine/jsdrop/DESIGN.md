@@ -206,7 +206,7 @@ func (h *Host) injectCapabilities(
         opts := parseFetchOptions(vm, call.Argument(1))
 
         // Reuse the existing guard + allowlist + quota accounting. Same code
-        // path as integrations/net.http_request — no second implementation.
+        // path as drops/net.http_request — no second implementation.
         resp, ferr := h.http.Do(ctx, job, url, opts) // SSRF + egress + quota inside
         if ferr != nil {
             return vm.NewGoError(ferr) // surfaces as DropError on the JS side
@@ -231,8 +231,8 @@ func (h *Host) injectCapabilities(
         progress <- core.Progress{JobID: job.ID, NodeID: job.NodeID, Message: msg}
     })
 
-    // files.* → confined via os.Root. engine/jsdrop is outside integrations/,
-    // so it can't import integrations/internal/sandbox — resolveRoot mirrors
+    // files.* → confined via os.Root. engine/jsdrop is outside drops/,
+    // so it can't import drops/internal/sandbox — resolveRoot mirrors
     // sandbox.Resolve (scratch:// vs bare-workspace). files.write reserves
     // bytes through the same FSQuota.Reserve the file_write drop uses.
     vm.Set("__fileRead", h.fileRead(ctx, job))
@@ -334,7 +334,7 @@ the sandbox + signature-informed consent, so both become prerequisites.
    `ctx`, the real `scriptedDropDoer`, and a real `FSQuota`, including an
    SSRF-refusal assertion. Locks the `cmd/hzd` wiring against regressions.
 2. ~~**`ResolveRoot` drift guard.**~~ *Done* — parity test at
-   `integrations/internal/sandbox/jsdrop_parity_test.go` asserts jsdrop's
+   `drops/internal/sandbox/jsdrop_parity_test.go` asserts jsdrop's
    `ResolveRoot` stays identical to `sandbox.Resolve` across all path schemes.
 3. ~~**Signing + signature-derived badge.**~~ *Done* — `cmd/hz-drops`
    (`keygen` + `sign`) produces detached Ed25519 `<file>.sig`; the daemon verifies

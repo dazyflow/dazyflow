@@ -33,7 +33,7 @@ import (
 	"git.sr.ht/~klahr/hazy-flow/engine/containerdrop"
 	"git.sr.ht/~klahr/hazy-flow/engine/jobstore"
 	"git.sr.ht/~klahr/hazy-flow/engine/jsdrop"
-	_ "git.sr.ht/~klahr/hazy-flow/integrations" // register every native drop
+	_ "git.sr.ht/~klahr/hazy-flow/drops" // register every native drop
 	"git.sr.ht/~klahr/hazy-flow/officialdrops"
 )
 

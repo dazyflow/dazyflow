@@ -33,12 +33,12 @@ import (
 	"git.sr.ht/~klahr/hazy-flow/engine/jobstore"
 	"git.sr.ht/~klahr/hazy-flow/engine/jsdrop"
 	"git.sr.ht/~klahr/hazy-flow/engine/mcp"
-	_ "git.sr.ht/~klahr/hazy-flow/integrations"
-	"git.sr.ht/~klahr/hazy-flow/integrations/github"
-	"git.sr.ht/~klahr/hazy-flow/integrations/io"
-	hfnet "git.sr.ht/~klahr/hazy-flow/integrations/net"
-	secretsdrop "git.sr.ht/~klahr/hazy-flow/integrations/secrets"
-	"git.sr.ht/~klahr/hazy-flow/integrations/slack"
+	_ "git.sr.ht/~klahr/hazy-flow/drops"
+	"git.sr.ht/~klahr/hazy-flow/drops/github"
+	"git.sr.ht/~klahr/hazy-flow/drops/io"
+	hfnet "git.sr.ht/~klahr/hazy-flow/drops/net"
+	secretsdrop "git.sr.ht/~klahr/hazy-flow/drops/secrets"
+	"git.sr.ht/~klahr/hazy-flow/drops/slack"
 	"git.sr.ht/~klahr/hazy-flow/officialdrops"
 )
 
@@ -46,7 +46,7 @@ import (
 // through. It composes both protections the http_request drop applies: the
 // operator egress allowlist (EgressAllowed, checked per URL) and the SSRF
 // guard (installed in SafeHTTPClient's dialer Control hook). Implemented at
-// the daemon edge so the integrations/net package stays free of jsdrop.
+// the daemon edge so the drops/net package stays free of jsdrop.
 type scriptedDropDoer struct{ client *http.Client }
 
 func (d scriptedDropDoer) Do(req *http.Request) (*http.Response, error) {

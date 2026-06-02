@@ -31,8 +31,8 @@ type QuotaReserve func(tenant string, n int64) (release func(), err error)
 // shared sandbox helper uses, so a scripted drop's files interoperate with
 // native file_read/file_write. os.Root refuses traversal at the OS level.
 //
-// NOTE: engine/jsdrop sits outside the integrations/ tree, so it can't import
-// integrations/internal/sandbox. ResolveRoot below mirrors sandbox.Resolve
+// NOTE: engine/jsdrop sits outside the drops/ tree, so it can't import
+// drops/internal/sandbox. ResolveRoot below mirrors sandbox.Resolve
 // exactly; keep the two in sync.
 //
 // NewJobFileStore returns the sandboxed FileStore the broker Host wires for a
@@ -122,11 +122,11 @@ func (f *jobFiles) Write(p string, data []byte) error {
 	return err
 }
 
-// ResolveRoot mirrors integrations/internal/sandbox.Resolve: a "scratch://"
+// ResolveRoot mirrors drops/internal/sandbox.Resolve: a "scratch://"
 // prefix routes to the ephemeral per-run root; anything else is relative to
-// the persistent workspace root. engine/jsdrop sits outside the integrations/
+// the persistent workspace root. engine/jsdrop sits outside the drops/
 // tree and can't import that internal package, so this is a hand-kept copy —
-// exported so a parity test under integrations/internal/sandbox can assert the
+// exported so a parity test under drops/internal/sandbox can assert the
 // two stay byte-for-byte identical (see that package's jsdrop_parity_test.go).
 func ResolveRoot(job core.Job, p string) (dir, rel string, err error) {
 	if rest, ok := strings.CutPrefix(p, "scratch://"); ok {

@@ -16,7 +16,7 @@ import (
 	"git.sr.ht/~klahr/hazy-flow/engine"
 	"git.sr.ht/~klahr/hazy-flow/engine/containerdrop"
 	"git.sr.ht/~klahr/hazy-flow/engine/jsdrop"
-	hfnet "git.sr.ht/~klahr/hazy-flow/integrations/net"
+	hfnet "git.sr.ht/~klahr/hazy-flow/drops/net"
 )
 
 // These tests reconstruct the exact runtime wiring main()/configureScriptedRuntime

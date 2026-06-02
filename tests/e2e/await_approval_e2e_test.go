@@ -13,7 +13,7 @@ import (
 	"git.sr.ht/~klahr/hazy-flow/daemon"
 	"git.sr.ht/~klahr/hazy-flow/engine"
 	"git.sr.ht/~klahr/hazy-flow/engine/jobstore"
-	_ "git.sr.ht/~klahr/hazy-flow/integrations"
+	_ "git.sr.ht/~klahr/hazy-flow/drops"
 )
 
 // approvalHarness builds a full stack (service + worker + approval

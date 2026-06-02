@@ -17,7 +17,7 @@ import (
 	"git.sr.ht/~klahr/hazy-flow/engine/containerdrop"
 	"git.sr.ht/~klahr/hazy-flow/engine/jobstore"
 	"git.sr.ht/~klahr/hazy-flow/engine/jsdrop"
-	_ "git.sr.ht/~klahr/hazy-flow/integrations"
+	_ "git.sr.ht/~klahr/hazy-flow/drops"
 	"git.sr.ht/~klahr/hazy-flow/officialdrops"
 	"git.sr.ht/~klahr/hazy-flow/workspace"
 )

@@ -18,8 +18,8 @@ import (
 	"git.sr.ht/~klahr/hazy-flow/daemon"
 	"git.sr.ht/~klahr/hazy-flow/engine"
 	"git.sr.ht/~klahr/hazy-flow/engine/jobstore"
-	_ "git.sr.ht/~klahr/hazy-flow/integrations"
-	hzio "git.sr.ht/~klahr/hazy-flow/integrations/io"
+	_ "git.sr.ht/~klahr/hazy-flow/drops"
+	hzio "git.sr.ht/~klahr/hazy-flow/drops/io"
 	"git.sr.ht/~klahr/hazy-flow/workspace"
 )
 

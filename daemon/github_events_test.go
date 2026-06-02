@@ -13,7 +13,7 @@ import (
 
 	"git.sr.ht/~klahr/hazy-flow/core"
 	"git.sr.ht/~klahr/hazy-flow/engine"
-	_ "git.sr.ht/~klahr/hazy-flow/integrations/github"
+	_ "git.sr.ht/~klahr/hazy-flow/drops/github"
 )
 
 // signGitHub produces the X-Hub-Signature-256 header value GitHub
