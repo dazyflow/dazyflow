@@ -285,6 +285,8 @@
         "fieldsDesc": "Comma-separated field names. Leave blank for the default: name, email, message. A field called \"message\" becomes a large text box.",
         "titleLabel": "Form heading",
         "preview": "Open the form ↗",
+        "embedSummary": "Put this form on my own website",
+        "embedDesc": "Paste this code into your site's HTML where you want the form to appear. It stays hosted here — no secret is exposed.",
         "runsEmpty": "No submissions yet. Once people start filling in the form, a count appears here.",
         "runsAllOK": "{{total}} submissions so far — all processed cleanly.",
         "runsSomeFailed": "{{ok}} OK · {{failed}} failed. Open the run list to see what went wrong.",
@@ -317,6 +319,33 @@
       "owner": "Owner",
       "ownerPlaceholder": "(set on first save)",
       "ownerDesc": "Stamped by the daemon when the flow is first saved. Only tenant admins can transfer ownership."
+    }
+  },
+  "triggers": {
+    "title": "Triggers",
+    "tab": {
+      "form": "Form",
+      "webhook": "Webhook",
+      "schedule": "Schedule"
+    },
+    "extrasPreserved_one": "This flow has {{count}} extra trigger created via the API. It's preserved on save, but only the first of each type is editable here.",
+    "extrasPreserved_other": "This flow has {{count}} extra triggers created via the API. They're preserved on save, but only the first of each type is editable here.",
+    "form": {
+      "help": "Collect submissions through a ready-made web page — no website, secret, or code required. Turn it on and share the link, or embed it on your own site."
+    },
+    "webhook": {
+      "help": "Let other systems start this flow by POSTing to its address with the bearer secret below.",
+      "emptyTitle": "No webhook set up",
+      "emptyDesc": "Add a webhook so tools like Zapier, Typeform, or your own code can fire this flow.",
+      "add": "Set up a webhook",
+      "removeTitle": "Remove the webhook trigger (also turns off the hosted form)"
+    },
+    "schedule": {
+      "help": "Run this flow automatically on a recurring schedule.",
+      "emptyTitle": "No schedule set up",
+      "emptyDesc": "Add a schedule to run this flow automatically — daily, weekly, or on a custom cadence.",
+      "add": "Add a schedule",
+      "removeTitle": "Remove the schedule"
     }
   },
   "templates": {
@@ -886,6 +915,8 @@
     "back": "Back",
     "addDrop": "Add drop",
     "addDropTitle": "Search and insert a drop (Ctrl/Cmd+K)",
+    "triggers": "Triggers",
+    "triggersTitle": "Configure how this flow starts — form, webhook, or schedule",
     "flowSettings": "Flow settings (triggers, etc.)",
     "inspector": "Inspector",
     "save": "Save",

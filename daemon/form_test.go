@@ -46,6 +46,12 @@ func TestForm_GETRendersOptedInForm(t *testing.T) {
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", res.StatusCode)
 	}
+	// The form must be iframe-able so the "Put this form on my own
+	// website" embed snippet works — assert framing is explicitly
+	// permitted rather than silently blocked.
+	if got := res.Header.Get("Content-Security-Policy"); got != "frame-ancestors *" {
+		t.Errorf("CSP = %q, want \"frame-ancestors *\" (form must be embeddable)", got)
+	}
 	body, _ := io.ReadAll(res.Body)
 	html := string(body)
 	for _, want := range []string{"Contact us", `name="name"`, `name="email"`, `name="message"`, "<textarea"} {

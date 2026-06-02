@@ -4128,6 +4128,68 @@
 .webhook-recipes-body {
   padding: 0 var(--space-3) var(--space-3);
 }
+/* Triggers modal: per-tab empty state with a single create CTA. */
+.trigger-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  padding: var(--space-5) var(--space-3);
+  color: var(--muted);
+}
+.trigger-empty-icon {
+  color: var(--muted);
+  opacity: 0.6;
+}
+.trigger-empty-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--ink);
+}
+.trigger-empty .desc {
+  max-width: 36ch;
+}
+/* Head row of a populated trigger tab: help text on the left, remove
+   button pushed to the right. */
+.trigger-tab-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+.trigger-extras-note {
+  margin-top: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+
+/* "Put this form on my own website" — collapsed embed snippet under the
+   hosted-form link. Shares the disclosure styling of .webhook-recipes. */
+.form-embed {
+  margin-top: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  background: var(--surface-2);
+}
+.form-embed > summary {
+  cursor: pointer;
+  padding: var(--space-2) var(--space-3);
+  font-weight: 600;
+  font-size: 13px;
+  list-style: none;
+}
+.form-embed > summary::-webkit-details-marker {
+  display: none;
+}
+.form-embed > summary::before {
+  content: "▸ ";
+  color: var(--muted);
+}
+.form-embed[open] > summary::before {
+  content: "▾ ";
+}
 .webhook-recipe-field {
   display: flex;
   align-items: center;

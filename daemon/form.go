@@ -202,6 +202,12 @@ func humanizeField(s string) string {
 
 func renderForm(rw http.ResponseWriter, v formView) {
 	rw.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// Allow the form to be iframed onto any site — the "Put this form on
+	// my own website" embed snippet relies on it. Set frame-ancestors
+	// explicitly (rather than leaning on the absence of X-Frame-Options)
+	// so the intent is deliberate. Clickjacking risk is low: the form is
+	// secret-less and submits only public, owner-declared fields.
+	rw.Header().Set("Content-Security-Policy", "frame-ancestors *")
 	if err := formTemplate.Execute(rw, v); err != nil {
 		// Headers may already be written; nothing useful to do but log
 		// via the default logger and bail.

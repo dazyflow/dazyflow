@@ -28,7 +28,7 @@ import {
   type NodeChange,
   type ReactFlowInstance,
 } from "@xyflow/react";
-import { Play, Save, Square, Plus, Send, History, RotateCcw, X } from "lucide-react";
+import { Play, Save, Square, Plus, Send, History, RotateCcw, X, Zap } from "lucide-react";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import { oauthProviderDisplay } from "../integrationMeta";
@@ -55,6 +55,7 @@ import { LiveConsole } from "../components/LiveConsole";
 import { HazyNode, type HazyNodeData } from "../components/NodeCard";
 import { RunHistory } from "../components/RunHistory";
 import { SettingsModal } from "../components/SettingsModal";
+import { TriggersModal } from "../components/TriggersModal";
 import { QuickDropPalette } from "../components/QuickDropPalette";
 
 // Custom node-types registry. React Flow caches by reference, so this
@@ -164,6 +165,7 @@ function EditorInner() {
   const [description, setDescription] = useState<string | undefined>(undefined);
   const [timeoutSeconds, setTimeoutSeconds] = useState<number | undefined>(undefined);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [triggersOpen, setTriggersOpen] = useState(false);
   // Per-node params kept outside React Flow's node-data so the inspector
   // can mutate them without forcing canvas re-layout. They're merged
   // back into the graph payload on save.
@@ -1013,6 +1015,55 @@ function EditorInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  // settingsGraph + persistSettings are shared by the Settings and
+  // Triggers modals — both edit graph-level fields and persist
+  // immediately on their own Save button (no extra toolbar Save trip).
+  const settingsGraph: Graph = {
+    id: id ?? "",
+    tenant: activeTenant,
+    workspace: activeWorkspace,
+    nodes: [],
+    edges: [],
+    triggers,
+    visibility,
+    owner,
+    name,
+    icon,
+    description,
+    timeout_seconds: timeoutSeconds,
+  };
+  const persistSettings = async (next: Graph) => {
+    setTriggers(next.triggers ?? []);
+    setVisibility(next.visibility);
+    setName(next.name);
+    setIcon(next.icon);
+    setDescription(next.description);
+    setTimeoutSeconds(next.timeout_seconds);
+    // Owner stays as-is — UI doesn't expose transfer; only the daemon
+    // (on admin save) can change it.
+    if (!token) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await api.saveGraph(
+        token,
+        buildGraph({
+          triggers: (next.triggers ?? []).length > 0 ? next.triggers : undefined,
+          visibility: next.visibility,
+          name: next.name,
+          icon: next.icon,
+          description: next.description,
+          timeout_seconds: next.timeout_seconds,
+        }),
+      );
+      setDirty(false);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div
       className="editor"
@@ -1042,7 +1093,21 @@ function EditorInner() {
             </kbd>
           </button>
           {/* Flow settings moved to the top-bar three-dots menu (single
-              entry point). The toolbar gear used to live here. */}
+              entry point). The toolbar gear used to live here. Triggers
+              ("how this flow starts") get their own labeled button so
+              the hosted-form link isn't buried in a menu. */}
+          {me && id && (
+            <button
+              className="ghost"
+              onClick={() => setTriggersOpen(true)}
+              title={t("editor.triggersTitle")}
+            >
+              <Zap size={14} style={{ verticalAlign: -2 }} />
+              <span className="toolbar-label" style={{ marginLeft: 6 }}>
+                {t("editor.triggers")}
+              </span>
+            </button>
+          )}
           <button
             onClick={() => save()}
             disabled={!dirty || saving || !hasPerm("graph:edit") || !!lockedRunID || !!previewRef}
@@ -1589,54 +1654,16 @@ function EditorInner() {
       )}
       {settingsOpen && me && id && (
         <SettingsModal
-          graph={{
-            id,
-            tenant: activeTenant,
-            workspace: activeWorkspace,
-            nodes: [],
-            edges: [],
-            triggers,
-            visibility,
-            owner,
-            name,
-            icon,
-            description,
-            timeout_seconds: timeoutSeconds,
-          }}
+          graph={settingsGraph}
           onClose={() => setSettingsOpen(false)}
-          onSave={async (next) => {
-            setTriggers(next.triggers ?? []);
-            setVisibility(next.visibility);
-            setName(next.name);
-            setIcon(next.icon);
-            setDescription(next.description);
-            setTimeoutSeconds(next.timeout_seconds);
-            // Owner stays as-is — UI doesn't expose transfer; only the
-            // daemon (on admin save) can change it.
-            // Persist immediately so the modal's Save button means what
-            // it says — no extra trip through the toolbar Save.
-            if (!token) return;
-            setSaving(true);
-            setError(null);
-            try {
-              await api.saveGraph(
-                token,
-                buildGraph({
-                  triggers: (next.triggers ?? []).length > 0 ? next.triggers : undefined,
-                  visibility: next.visibility,
-                  name: next.name,
-                  icon: next.icon,
-                  description: next.description,
-                  timeout_seconds: next.timeout_seconds,
-                }),
-              );
-              setDirty(false);
-            } catch (e) {
-              setError((e as Error).message);
-            } finally {
-              setSaving(false);
-            }
-          }}
+          onSave={persistSettings}
+        />
+      )}
+      {triggersOpen && me && id && (
+        <TriggersModal
+          graph={settingsGraph}
+          onClose={() => setTriggersOpen(false)}
+          onSave={persistSettings}
         />
       )}
       {gateOpen && (

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { scheduleFromCron } from "./SettingsModal";
+import { scheduleFromCron } from "./TriggersModal";
 
 // scheduleFromCron is the parse half of the cron-preset round-trip.
 // The picker emits cron via scheduleToCron and re-parses on every

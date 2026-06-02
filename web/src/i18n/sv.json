@@ -285,6 +285,8 @@
         "fieldsDesc": "Kommaseparerade fältnamn. Lämna tomt för standard: name, email, message. Ett fält som heter \"message\" blir en stor textruta.",
         "titleLabel": "Formulärrubrik",
         "preview": "Öppna formuläret ↗",
+        "embedSummary": "Bädda in formuläret på min egen webbplats",
+        "embedDesc": "Klistra in den här koden i din webbplats HTML där formuläret ska visas. Det ligger fortfarande kvar här — ingen hemlighet exponeras.",
         "runsEmpty": "Inga inskick än. När folk börjar fylla i formuläret visas räkningen här.",
         "runsAllOK": "{{total}} inskick hittills — alla bearbetade utan fel.",
         "runsSomeFailed": "{{ok}} OK · {{failed}} misslyckade. Öppna körningslistan för att se vad som gick fel.",
@@ -317,6 +319,33 @@
       "owner": "Ägare",
       "ownerPlaceholder": "(sätts vid första sparningen)",
       "ownerDesc": "Stämplas av daemonen när flödet sparas första gången. Endast tenant-admins kan överföra ägarskap."
+    }
+  },
+  "triggers": {
+    "title": "Triggers",
+    "tab": {
+      "form": "Formulär",
+      "webhook": "Webhook",
+      "schedule": "Schema"
+    },
+    "extrasPreserved_one": "Det här flödet har {{count}} extra trigger skapad via API:t. Den bevaras vid sparande, men endast den första av varje typ kan redigeras här.",
+    "extrasPreserved_other": "Det här flödet har {{count}} extra triggers skapade via API:t. De bevaras vid sparande, men endast den första av varje typ kan redigeras här.",
+    "form": {
+      "help": "Samla in svar via en färdig webbsida — ingen webbplats, hemlighet eller kod behövs. Slå på den och dela länken, eller bädda in den på din egen webbplats."
+    },
+    "webhook": {
+      "help": "Låt andra system starta det här flödet genom att göra en POST till dess adress med bearer-hemligheten nedan.",
+      "emptyTitle": "Ingen webhook konfigurerad",
+      "emptyDesc": "Lägg till en webhook så att verktyg som Zapier, Typeform eller din egen kod kan trigga flödet.",
+      "add": "Konfigurera en webhook",
+      "removeTitle": "Ta bort webhook-triggern (stänger även av det hostade formuläret)"
+    },
+    "schedule": {
+      "help": "Kör det här flödet automatiskt enligt ett återkommande schema.",
+      "emptyTitle": "Inget schema konfigurerat",
+      "emptyDesc": "Lägg till ett schema för att köra flödet automatiskt — dagligen, veckovis eller med en egen takt.",
+      "add": "Lägg till ett schema",
+      "removeTitle": "Ta bort schemat"
     }
   },
   "templates": {
@@ -886,6 +915,8 @@
     "back": "Tillbaka",
     "addDrop": "Lägg till drop",
     "addDropTitle": "Sök och infoga en drop (Ctrl/Cmd+K)",
+    "triggers": "Triggers",
+    "triggersTitle": "Ställ in hur flödet startar — formulär, webhook eller schema",
     "flowSettings": "Flödesinställningar (triggers m.m.)",
     "inspector": "Inspector",
     "save": "Spara",
