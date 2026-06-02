@@ -272,7 +272,7 @@ func main() {
 		if sessionCacheTTL > 0 {
 			log.Printf("session lookup cache: ttl=%s", sessionCacheTTL)
 		}
-		seedDefaultUser(ctx, users)
+		seedDefaultUser(ctx, users, devKey || devMode)
 		log.Print("postgres stores enabled: jobs, api-keys, sessions, users (durable across restart)")
 	} else {
 		ks = auth.NewMemKeyStore()
@@ -291,7 +291,7 @@ func main() {
 		}
 		users = jsonUsers
 		if path != "" {
-			seedDefaultUser(ctx, users)
+			seedDefaultUser(ctx, users, devKey || devMode)
 			log.Printf("users store: %s", path)
 		}
 		sessions = auth.NewMemSessionStore()
@@ -1108,7 +1108,15 @@ func envDuration(key string, def time.Duration) time.Duration {
 // no users exist yet. It's a dev convenience — there's nothing to sign
 // in with on a fresh deployment otherwise, and the user this seeds is
 // scoped to the same dev/default tenant the dev API key uses.
-func seedDefaultUser(ctx context.Context, users auth.UserStore) {
+//
+// It is gated on dev mode (HAZYFLOW_DEV / HAZYFLOW_DEV_KEY): a durable
+// production deploy must NOT get a publicly-known admin credential. There,
+// bootstrap the first account with HAZYFLOW_ENABLE_SIGNUP=1 (then grant it
+// platform:admin via HAZYFLOW_PLATFORM_ADMINS) — see DEPLOY.md.
+func seedDefaultUser(ctx context.Context, users auth.UserStore, dev bool) {
+	if !dev {
+		return
+	}
 	existing, err := users.ListUsers(ctx)
 	if err != nil {
 		log.Printf("seed user: list failed: %v", err)

@@ -5,13 +5,15 @@ in Postgres) — see `../DEPLOY.md` for the full flag/TLS/backup reference.
 
 ## docker-compose (single node)
 
-```sh
-export HAZYFLOW_MASTER_KEY=$(openssl rand -base64 32)   # keep a sealed backup
-docker compose -f docker-compose.yml up --build
-```
+See the **[Quick start in the root README](../README.md#quick-start-docker-compose)**:
+`cp .env.example .env`, set the mandatory values (`POSTGRES_PASSWORD` +
+matching `HAZYFLOW_POSTGRES_DSN`, `HAZYFLOW_MASTER_KEY`, public origin),
+then `docker compose up -d`. The daemon refuses to boot with the bundled
+default password or an empty master key, so those values are mandatory —
+not optional.
 
 Brings up Postgres + the daemon; API + web UI on http://localhost:8080,
-gRPC on :50050, Prometheus metrics on `/metrics`.
+gRPC on :50050.
 
 ## Kubernetes (multi-node)
 
