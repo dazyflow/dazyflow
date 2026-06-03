@@ -1067,6 +1067,13 @@
 .integration-card-head h2 {
   margin: 0;
   font-size: 17px;
+  /* Single line + ellipsis so a long name never wraps and shifts height.
+     min-width:0 lets the flex item shrink so the ellipsis kicks in. */
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .integration-card-dot {
   margin-left: auto;
@@ -1095,7 +1102,15 @@
   font-size: 13px;
   color: var(--muted);
   line-height: 1.5;
-  flex: 1;
+  /* Clamp to 3 lines with a trailing ellipsis, and reserve those 3 lines
+     (min-height) so cards with a short or empty description stay the same
+     height as the rest. Title is one line + this is three → every card in
+     the grid is identical height. */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 4.5em;
 }
 /* ----- Connections panel (top of Integrations page) ----- */
 .connections {

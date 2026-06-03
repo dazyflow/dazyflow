@@ -63,19 +63,32 @@ export function Integrations() {
   // Group drops by integration slug. The standard-library bucket
   // catches anything without an Integration field — matches the
   // NodeCatalog grouping rules.
-  const groups = useMemo(() => buildGroups(drops ?? []), [drops]);
+  // Alphabetical by display name (the standard-library bucket shows as
+  // "Built-in"). Both sections preserve this order, so one sort covers
+  // Ready to use + Needs setup.
+  const groups = useMemo(() => {
+    const nameOf = (g: { slug: string; meta: { name: string } }) =>
+      g.slug === "standard-library" ? t("integrations.builtinGroup") : g.meta.name;
+    return buildGroups(drops ?? []).sort((a, b) =>
+      nameOf(a).localeCompare(nameOf(b), undefined, { sensitivity: "base" }),
+    );
+  }, [drops, t]);
 
-  // Split into Connected (requires setup AND every requirement is
-  // satisfied) vs Available (everything else — no-setup integrations
-  // are available from the start, and not-yet-connected ones can be set
-  // up). Re-buckets automatically once secrets/providers load.
-  const { connected, available } = useMemo(() => {
-    const conn: typeof groups = [];
-    const avail: typeof groups = [];
+  // Split into "Ready to use" (usable right now — no-setup integrations
+  // plus connected ones) vs "Needs setup" (declares a connection that
+  // isn't configured yet). connectedSlugs drives the green dot, so a
+  // connected app still reads distinctly from an always-available one
+  // within the Ready section. Re-buckets once secrets/providers load.
+  const { ready, needsSetup, connectedSlugs } = useMemo(() => {
+    const ready: typeof groups = [];
+    const needsSetup: typeof groups = [];
+    const connectedSlugs = new Set<string>();
     for (const g of groups) {
-      (groupIsConnected(g.drops, secrets, providers) ? conn : avail).push(g);
+      const st = appConnectionState(g.slug, g.drops, secrets, providers);
+      (st.needsSetup ? needsSetup : ready).push(g);
+      if (st.connected) connectedSlugs.add(g.slug);
     }
-    return { connected: conn, available: avail };
+    return { ready, needsSetup, connectedSlugs };
   }, [groups, secrets, providers]);
 
   if (error) {
@@ -99,21 +112,21 @@ export function Integrations() {
     <div className="page integrations-page">
       <h1>{t("integrations.title")}</h1>
       <p className="page-sub">{t("integrations.intro")}</p>
-      {connected.length > 0 && (
+      {ready.length > 0 && (
         <>
-          <h2 className="integrations-section-head">{t("integrations.connectedHead")}</h2>
+          <h2 className="integrations-section-head">{t("integrations.readyHead")}</h2>
           <div className="integration-grid">
-            {connected.map((g) => (
-              <IntegrationCard key={g.slug} {...g} connected />
+            {ready.map((g) => (
+              <IntegrationCard key={g.slug} {...g} connected={connectedSlugs.has(g.slug)} />
             ))}
           </div>
         </>
       )}
-      {available.length > 0 && (
+      {needsSetup.length > 0 && (
         <>
-          <h2 className="integrations-section-head">{t("integrations.availableHead")}</h2>
+          <h2 className="integrations-section-head">{t("integrations.needsSetupHead")}</h2>
           <div className="integration-grid">
-            {available.map((g) => (
+            {needsSetup.map((g) => (
               <IntegrationCard key={g.slug} {...g} connected={false} />
             ))}
           </div>
@@ -172,32 +185,46 @@ function IntegrationCard({
           {connected && (
             <span
               className="connection-dot on integration-card-dot"
-              title={t("integrations.connectedHead")}
+              title={t("integrations.connectedTip")}
             />
           )}
         </div>
-        <p className="integration-card-desc">{truncate(meta.description, 160)}</p>
+        <p className="integration-card-desc">{meta.description}</p>
       </div>
     </Link>
   );
 }
 
-// groupIsConnected reports whether an integration is fully set up: it
-// declares at least one connection requirement and every one is
-// satisfied (secret stored / oauth account connected). No-requirement
-// integrations return false — they're "available", not "connected".
-function groupIsConnected(
+// appConnectionState classifies an integration for the index grouping.
+// needsSetup = it declares a connection (single secret, OAuth, or a
+// multi-field service connection) that isn't fully satisfied yet.
+// connected = it declares one and it IS satisfied. A no-connection
+// integration is neither (needsSetup:false, connected:false) — always
+// "Ready to use", no dot.
+function appConnectionState(
+  slug: string,
   drops: Manifest[],
   secrets: string[] | null,
   providers: OAuthProviderStatus[] | null,
-): boolean {
+): { needsSetup: boolean; connected: boolean } {
   const reqs = dedupeRequirements(drops);
-  if (reqs.length === 0) return false;
-  return reqs.every((req) =>
+  const fields = drops.find((d) => d.connection_fields?.length)?.connection_fields ?? [];
+  if (reqs.length === 0 && fields.length === 0) {
+    return { needsSetup: false, connected: false };
+  }
+  const reqsOk = reqs.every((req) =>
     req.kind === "secret"
       ? (secrets ?? []).includes(req.name)
       : ((providers ?? []).find((p) => p.name === req.name)?.accounts.length ?? 0) > 0,
   );
+  let fieldsOk = true;
+  if (fields.length > 0) {
+    const required = fields.filter((f) => f.required);
+    const isSet = (f: ConnectionField) => (secrets ?? []).includes(`conn.${slug}.${f.key}`);
+    fieldsOk = required.length > 0 ? required.every(isSet) : fields.some(isSet);
+  }
+  const connected = reqsOk && fieldsOk;
+  return { needsSetup: !connected, connected };
 }
 
 // IntegrationDetail is /integrations/:slug — the per-integration
@@ -1012,11 +1039,4 @@ function buildGroups(all: Manifest[]) {
     });
   }
   return out;
-}
-
-function truncate(s: string, n: number): string {
-  if (s.length <= n) return s;
-  // .replace stays inside the ES2015 lib target the rest of the
-  // app builds against (avoids forcing es2019.string just for trimEnd).
-  return s.slice(0, n - 1).replace(/\s+$/, "") + "…";
 }
