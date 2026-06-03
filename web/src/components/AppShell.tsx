@@ -299,18 +299,6 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Boxes size={18} />
             <span className="nav-label">{t("nav.integrations")}</span>
           </NavLink>
-          {showAdmin && (
-            <>
-              <div className="group-label">{t("nav.settingsGroup")}</div>
-              <NavLink
-                to="/admin"
-                title={t("nav.admin")}
-              >
-                <ShieldCheck size={18} />
-                <span className="nav-label">{t("nav.admin")}</span>
-              </NavLink>
-            </>
-          )}
           <div className="sidebar-spacer" />
           {/* Classical collapse arrow. Duplicates the hamburger's
               collapse action so the affordance sits next to the panel it
@@ -351,6 +339,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               email={me.subject || t("nav.noSubject")}
               onSignOut={signOut}
               collapsed={navCollapsed}
+              showAdmin={showAdmin}
             />
           )}
         </aside>
@@ -542,10 +531,12 @@ function AccountMenu({
   email,
   onSignOut,
   collapsed,
+  showAdmin,
 }: {
   email: string;
   onSignOut: () => void;
   collapsed: boolean;
+  showAdmin: boolean;
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -627,6 +618,20 @@ function AccountMenu({
               <SettingsIcon size={14} />
               {t("account.settings")}
             </button>
+            {showAdmin && (
+              <button
+                type="button"
+                role="menuitem"
+                className="workspace-pop-row account-pop-row"
+                onClick={() => {
+                  setOpen(false);
+                  navigate("/admin");
+                }}
+              >
+                <ShieldCheck size={14} />
+                {t("nav.admin")}
+              </button>
+            )}
             <div className="workspace-pop-sep" role="separator" />
             <button
               type="button"
