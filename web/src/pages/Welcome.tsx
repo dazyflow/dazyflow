@@ -1,7 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Trans, useTranslation } from "react-i18next";
-import { ArrowRight, Plug, Workflow } from "lucide-react";
+import { ArrowRight, Plug, Bell, Clock, Database } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { FlowIcon } from "../icons";
+import { api } from "../api";
 import { useAuth } from "../auth";
 import { loadRecentFlow } from "../recentFlow";
 import { shouldShowTenantID } from "../lib/visibleTenant";
@@ -23,10 +26,15 @@ import { ConnectMcpClientModal } from "../components/ConnectMcpClientModal";
 // in this grid — it sits as a small "More for developers →" link
 // below the goals so a non-technical owner's eye lands on the
 // three relevant cards instead of skipping past four.
-const GOALS: { category: string; titleKey: string; descKey: string }[] = [
-  { category: "Get notified", titleKey: "welcome.goalNotifyTitle", descKey: "welcome.goalNotifyDesc" },
-  { category: "Scheduled reports", titleKey: "welcome.goalReportTitle", descKey: "welcome.goalReportDesc" },
-  { category: "Spreadsheets & data", titleKey: "welcome.goalDataTitle", descKey: "welcome.goalDataDesc" },
+const GOALS: {
+  category: string;
+  titleKey: string;
+  descKey: string;
+  Icon: LucideIcon;
+}[] = [
+  { category: "Get notified", titleKey: "welcome.goalNotifyTitle", descKey: "welcome.goalNotifyDesc", Icon: Bell },
+  { category: "Scheduled reports", titleKey: "welcome.goalReportTitle", descKey: "welcome.goalReportDesc", Icon: Clock },
+  { category: "Spreadsheets & data", titleKey: "welcome.goalDataTitle", descKey: "welcome.goalDataDesc", Icon: Database },
 ];
 
 // DEV_CATEGORY is the developer-templates filter, surfaced as a
@@ -42,11 +50,34 @@ const HAS_FLOWS_KEY = "hazyflow.hasFlows";
 
 export function Welcome() {
   const { t } = useTranslation();
-  const { me, tenants } = useAuth();
+  const { me, tenants, token, activeTenant, activeWorkspace } = useAuth();
   const [connectingMcp, setConnectingMcp] = useState(false);
   // Resolved once on mount — localStorage only changes when the editor
   // mounts, which can't happen while this page is showing.
   const recent = loadRecentFlow();
+  // The cached recent flow only carries whatever icon/name was stored
+  // when it was last opened. Resolve the current icon + name from the
+  // live flow list so a renamed flow / freshly-set icon shows correctly
+  // here without depending on the cache being fresh.
+  const recentId = recent?.id;
+  const [live, setLive] = useState<{ icon?: string; name?: string } | null>(null);
+  useEffect(() => {
+    if (!recentId || !token || !activeWorkspace) return;
+    let cancelled = false;
+    api
+      .listGraphs(token, activeTenant, activeWorkspace)
+      .then((r) => {
+        if (cancelled) return;
+        const f = r.graphs.find((g) => g.id === recentId);
+        if (f) setLive({ icon: f.icon, name: f.name });
+      })
+      .catch(() => {
+        /* non-essential — fall back to the cached values */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [recentId, token, activeTenant, activeWorkspace]);
   // showTenant gates the "in tenant `usr_…`" suffix. For ordinary
   // single-tenant principals the identifier is internal noise; only
   // platform admins / multi-tenant principals see it as actionable
@@ -90,37 +121,41 @@ export function Welcome() {
             className="welcome-resume"
           >
             <span className="welcome-resume-icon">
-              <Workflow size={18} />
+              <FlowIcon icon={live?.icon ?? recent.icon} size={18} />
             </span>
             <span className="welcome-resume-body">
               <span className="welcome-resume-lede">
                 {t("welcome.continueTitle")}
               </span>
-              <span className="welcome-resume-name">{recent.name}</span>
+              <span className="welcome-resume-name">{live?.name ?? recent.name}</span>
             </span>
             <ArrowRight size={16} className="welcome-resume-arrow" />
           </Link>
         )}
-        <p>{isReturning ? t("welcome.introReturning") : t("welcome.intro")}</p>
-        <div className="welcome-goals">
-          <div className="welcome-goals-head">{t("welcome.goalsTitle")}</div>
-          <div className="welcome-goal-grid">
-            {GOALS.map((g) => (
-              <Link
-                key={g.category}
-                to={`/templates?category=${encodeURIComponent(g.category)}`}
-                className="welcome-goal"
-              >
+        <p className="welcome-intro">
+          {isReturning ? t("welcome.introReturning") : t("welcome.intro")}
+        </p>
+        <div className="welcome-goal-grid">
+          {GOALS.map((g) => (
+            <Link
+              key={g.category}
+              to={`/templates?category=${encodeURIComponent(g.category)}`}
+              className="welcome-goal"
+            >
+              <div className="welcome-goal-head">
+                <span className="welcome-goal-icon">
+                  <g.Icon size={18} strokeWidth={2} />
+                </span>
                 <span className="welcome-goal-title">{t(g.titleKey)}</span>
-                <span className="welcome-goal-desc">{t(g.descKey)}</span>
-              </Link>
-            ))}
-          </div>
-          <div className="welcome-goal-dev">
-            <Link to={`/templates?category=${encodeURIComponent(DEV_CATEGORY)}`}>
-              {t("welcome.goalDevLink")}
+              </div>
+              <span className="welcome-goal-desc">{t(g.descKey)}</span>
             </Link>
-          </div>
+          ))}
+        </div>
+        <div className="welcome-goal-dev">
+          <Link to={`/templates?category=${encodeURIComponent(DEV_CATEGORY)}`}>
+            {t("welcome.goalDevLink")}
+          </Link>
         </div>
         {me && (
           <div className="welcome-mcp">
@@ -133,44 +168,11 @@ export function Welcome() {
                 {t("welcome.connectMcpDesc")}
               </div>
             </div>
-            <button
-              className="primary"
-              onClick={() => setConnectingMcp(true)}
-            >
-              {t("welcome.connectMcpCta")}
+            <button className="primary welcome-cta" onClick={() => setConnectingMcp(true)}>
+              <Plug size={14} /> {t("welcome.connectMcpCta")}
             </button>
           </div>
         )}
-        <p className="welcome-or">{t("welcome.orExplore")}</p>
-        <ol className="welcome-steps">
-          <li>
-            <h2>{t("welcome.step1Title")}</h2>
-            <p>{t("welcome.step1Body")}</p>
-            <Link to="/templates" className="primary welcome-cta">
-              {t("welcome.step1Cta")}
-            </Link>
-          </li>
-          <li>
-            <h2>{t("welcome.step2Title")}</h2>
-            <p>{t("welcome.step2Body")}</p>
-            <Link to="/flows" className="welcome-cta">
-              {t("welcome.step2Cta")}
-            </Link>
-          </li>
-          <li>
-            <h2>{t("welcome.step3Title")}</h2>
-            <p>{t("welcome.step3Body")}</p>
-            <Link to="/runs" className="welcome-cta">
-              {t("welcome.step3Cta")}
-            </Link>
-          </li>
-        </ol>
-        <p className="welcome-foot">
-          <Trans
-            i18nKey="welcome.foot"
-            components={[<Link to="/welcome" />]}
-          />
-        </p>
       </div>
       {connectingMcp && (
         <ConnectMcpClientModal onClose={() => setConnectingMcp(false)} />

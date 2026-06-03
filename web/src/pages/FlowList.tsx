@@ -4,7 +4,8 @@ import { Plus, Workflow, Lock, Globe } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
-import { iconFor, isBrandedIcon } from "../icons";
+import { FlowIcon, isBrandedIcon } from "../icons";
+import { isImageIcon } from "../lib/iconImage";
 import { shouldShowTenantID } from "../lib/visibleTenant";
 import type { FlowSummary } from "../types";
 
@@ -17,7 +18,12 @@ const HAS_FLOWS_KEY = "hazyflow.hasFlows";
 
 export function FlowList() {
   const { t } = useTranslation();
-  const { token, me, tenants, activeTenant, activeWorkspace } = useAuth();
+  const { token, me, tenants, activeTenant, activeWorkspace, hasPerm } = useAuth();
+  // Creating a flow needs graph:edit; viewers can browse + open flows but
+  // not create. Disable the create CTAs (with a tooltip) so they don't
+  // click into a server "missing graph:edit" error. Browsing templates
+  // stays enabled — only the fork/create action is gated (on Templates).
+  const canEdit = hasPerm("graph:edit");
   const [flows, setFlows] = useState<FlowSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -100,7 +106,12 @@ export function FlowList() {
               {t("flowList.fromTemplate")}
             </button>
           </Link>
-          <button className="primary" onClick={() => setCreating(true)}>
+          <button
+            className="primary"
+            onClick={() => setCreating(true)}
+            disabled={!canEdit}
+            title={!canEdit ? t("flowList.needEdit") : undefined}
+          >
             <Plus size={16} style={{ marginRight: 6, verticalAlign: -3 }} />
             {t("flowList.newFlow")}
           </button>
@@ -121,7 +132,12 @@ export function FlowList() {
             >
               {t("flowList.emptyTemplateCta")}
             </button>
-            <button type="button" onClick={() => setCreating(true)}>
+            <button
+              type="button"
+              onClick={() => setCreating(true)}
+              disabled={!canEdit}
+              title={!canEdit ? t("flowList.needEdit") : undefined}
+            >
               {t("flowList.emptyBlankCta")}
             </button>
           </div>
@@ -139,7 +155,6 @@ export function FlowList() {
         {flows.map((f) => {
           const isPrivate = f.visibility === "private";
           const ownedByMe = !!me && f.owner === me.subject;
-          const Icon = f.icon ? iconFor(f.icon) : Workflow;
           const displayName = f.name || f.id;
           return (
             <Link
@@ -149,9 +164,9 @@ export function FlowList() {
             >
               <div className="graph-card">
                 <div className="name">
-                  <Icon
-                    size={isBrandedIcon(f.icon) ? 20 : 16}
-                    color={isBrandedIcon(f.icon) ? undefined : "currentColor"}
+                  <FlowIcon
+                    icon={f.icon}
+                    size={isBrandedIcon(f.icon) || isImageIcon(f.icon) ? 20 : 16}
                   />
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ display: "block" }}>{displayName}</span>

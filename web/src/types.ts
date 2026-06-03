@@ -249,6 +249,9 @@ export type OrgMembership = {
   // defaulted from the email domain on signup). Empty when no profile
   // has been saved — the UI falls back to `tenant` in that case.
   display_name?: string;
+  // icon is the org's logo (data: URL or icon name); drives the org
+  // glyph in the tenant switcher.
+  icon?: string;
   workspace: string;
   roles: { name: string; permissions: Permission[] }[];
   home: boolean;
@@ -257,6 +260,9 @@ export type OrgMembership = {
 export type OrgProfile = {
   tenant: string;
   display_name: string;
+  // icon is an optional org logo — a data: URL (uploaded SVG/PNG) or a
+  // logical icon name. Rendered as an image when it looks like one.
+  icon?: string;
   updated_at?: string;
 };
 

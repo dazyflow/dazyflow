@@ -9,7 +9,7 @@ import {
 } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { useActiveFlow } from "../activeFlow";
+import { useActiveFlow, FLOWS_CHANGED_EVENT } from "../activeFlow";
 import { saveRecentFlow } from "../recentFlow";
 import {
   ReactFlow,
@@ -137,7 +137,11 @@ function sampleValueFor(field: string): string {
 
 function EditorInner() {
   const { t } = useTranslation();
-  const { setName: setActiveFlowName, setOpenSettings } = useActiveFlow();
+  const {
+    setName: setActiveFlowName,
+    setIcon: setActiveFlowIcon,
+    setOpenSettings,
+  } = useActiveFlow();
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -431,6 +435,9 @@ function EditorInner() {
     setActiveFlowName(name || id || null);
   }, [name, id, setActiveFlowName]);
   useEffect(() => {
+    setActiveFlowIcon(icon ?? null);
+  }, [icon, setActiveFlowIcon]);
+  useEffect(() => {
     return () => setActiveFlowName(null);
   }, [setActiveFlowName]);
 
@@ -472,8 +479,8 @@ function EditorInner() {
   // can offer a "continue working" link. Falls back to the id until
   // the display name loads.
   useEffect(() => {
-    if (id) saveRecentFlow({ id, name: name || id });
-  }, [id, name]);
+    if (id) saveRecentFlow({ id, name: name || id, icon });
+  }, [id, name, icon]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
@@ -1062,6 +1069,9 @@ function EditorInner() {
       // secret-less webhook) is entered, so its save is exactly where the
       // trigger lint needs to reach the banner.
       setLintIssues(res.lint ?? []);
+      // Name/icon/visibility may have changed — tell the sidebar list to
+      // refetch so it reflects the new icon/name without a navigation.
+      window.dispatchEvent(new Event(FLOWS_CHANGED_EVENT));
     } catch (e) {
       setError((e as Error).message);
     } finally {

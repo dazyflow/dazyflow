@@ -209,7 +209,8 @@
     "privateOwnedByYou": "Privat — endast du kan se det här flödet",
     "privateOwnedBy": "Privat — ägs av {{owner}}",
     "orgTooltip": "Synlig för alla i den här arbetsytan",
-    "ownerLabel": "Ägare:"
+    "ownerLabel": "Ägare:",
+    "needEdit": "Du behöver redigeringsbehörighet för att skapa flöden."
   },
   "settings": {
     "title": "Flödesinställningar",
@@ -303,7 +304,7 @@
       "displayNameDesc": "Vänligt namn som visas i flödeslistan. Standardvärde är ID:t.",
       "icon": "Ikon",
       "iconPlaceholder": "t.ex. git, ntfy, claude, mail, globe, webhook",
-      "iconDesc": "Logiskt ikon-namn. Välj ett av: git, ntfy, claude, mail, globe, webhook, sparkles, hammer, file-input, file-output, terminal, clock, database, cpu, workflow, git-branch, git-merge, repeat, timer, square-stack, user-check.",
+      "iconDesc": "Ladda upp en SVG eller PNG. Lämna tomt för standardikonen.",
       "description": "Beskrivning",
       "descriptionPlaceholder": "Vad gör det här flödet?",
       "timeout": "Tidsgräns för körning (sekunder)",
@@ -513,8 +514,8 @@
     },
     "cardOAuthTitle": "Connector-appar",
     "cardOAuthDesc": "Uppgifter för Google, Slack, GitHub, Notion.",
-    "cardWorkspaceTitle": "Gränser",
-    "cardWorkspaceDesc": "Kvot- och grafgränser (skrivskyddat).",
+    "cardWorkspaceTitle": "Organisation",
+    "cardWorkspaceDesc": "Namn, logotyp och gränser.",
     "cardModulesTitle": "Drops",
     "cardModulesDesc": "Bläddra bland drop:arna på den här daemonen.",
     "cardAuditTitle": "Granskningslogg",
@@ -715,8 +716,8 @@
       "submitsChild": "delgraf"
     },
     "workspace": {
-      "title": "Gränser",
-      "subtitle": "Kvot- och grafgränser för organisationen — skrivskyddat.",
+      "title": "Organisation",
+      "subtitle": "Organisationens namn, logotyp och resursgränser.",
       "needAdmin": "Du behöver <0>tenant:admin</0> för att se arbetsytans gränser.",
       "diskQuota": "Diskkvot",
       "usage": "Användning",
@@ -735,7 +736,8 @@
       "save": "Spara",
       "saving": "Sparar…",
       "saved": "Sparat",
-      "profileNotConfigured": "Organisationsprofiler är inte aktiverade på den här hzd-instansen."
+      "profileNotConfigured": "Organisationsprofiler är inte aktiverade på den här hzd-instansen.",
+      "orgIconLabel": "Logotyp"
     }
   },
   "runList": {
@@ -985,5 +987,9 @@
     "logClear": "Rensa",
     "logClearTitle": "Rensa",
     "logEmptyHint": "Ingen output än — kör ett flöde för att se streamad stdout/stderr från varje nod här."
+  },
+  "iconUpload": {
+    "upload": "Ladda upp bild",
+    "remove": "Ta bort"
   }
 }

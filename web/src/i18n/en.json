@@ -209,7 +209,8 @@
     "privateOwnedByYou": "Private — only you can see this flow",
     "privateOwnedBy": "Private — owned by {{owner}}",
     "orgTooltip": "Visible to everyone in this workspace",
-    "ownerLabel": "Owner:"
+    "ownerLabel": "Owner:",
+    "needEdit": "You need edit access to create flows."
   },
   "settings": {
     "title": "Flow settings",
@@ -303,7 +304,7 @@
       "displayNameDesc": "Friendly name shown in the flow list. Defaults to the ID.",
       "icon": "Icon",
       "iconPlaceholder": "e.g. git, ntfy, claude, mail, globe, webhook",
-      "iconDesc": "Logical icon name. Pick one of: git, ntfy, claude, mail, globe, webhook, sparkles, hammer, file-input, file-output, terminal, clock, database, cpu, workflow, git-branch, git-merge, repeat, timer, square-stack, user-check.",
+      "iconDesc": "Upload an SVG or PNG. Leave empty for the default icon.",
       "description": "Description",
       "descriptionPlaceholder": "What does this flow do?",
       "timeout": "Wall-time timeout (seconds)",
@@ -513,8 +514,8 @@
     },
     "cardOAuthTitle": "Connector apps",
     "cardOAuthDesc": "Credentials for Google, Slack, GitHub, Notion.",
-    "cardWorkspaceTitle": "Limits",
-    "cardWorkspaceDesc": "Quota and graph caps (read-only).",
+    "cardWorkspaceTitle": "Organization",
+    "cardWorkspaceDesc": "Name, logo, and limits.",
     "cardModulesTitle": "Drops",
     "cardModulesDesc": "Browse the drops on this daemon.",
     "cardAuditTitle": "Audit log",
@@ -715,8 +716,8 @@
       "submitsChild": "subgraph"
     },
     "workspace": {
-      "title": "Limits",
-      "subtitle": "Quota and graph caps for this organization — read-only.",
+      "title": "Organization",
+      "subtitle": "Your organization's name, logo, and resource limits.",
       "needAdmin": "You need <0>tenant:admin</0> to view workspace limits.",
       "diskQuota": "Disk quota",
       "usage": "Usage",
@@ -735,7 +736,8 @@
       "save": "Save",
       "saving": "Saving…",
       "saved": "Saved",
-      "profileNotConfigured": "Organization profiles aren't enabled on this hzd instance."
+      "profileNotConfigured": "Organization profiles aren't enabled on this hzd instance.",
+      "orgIconLabel": "Logo"
     }
   },
   "runList": {
@@ -985,5 +987,9 @@
     "logClear": "Clear",
     "logClearTitle": "Clear",
     "logEmptyHint": "No output yet — run a flow to see streamed stdout/stderr from every node here."
+  },
+  "iconUpload": {
+    "upload": "Upload image",
+    "remove": "Remove"
   }
 }

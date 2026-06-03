@@ -22,9 +22,13 @@ import (
 // Currently we only carry the display name; future expansion (logo,
 // billing email, support contact, custom domain) lives here.
 type OrgProfile struct {
-	Tenant      string    `json:"tenant"`
-	DisplayName string    `json:"display_name"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	Tenant      string `json:"tenant"`
+	DisplayName string `json:"display_name"`
+	// Icon is an optional org logo: a data: URL (uploaded SVG/PNG) or a
+	// logical icon name. The UI renders an image when it's a data:/URL/
+	// path and a glyph otherwise. Stored inline — kept small client-side.
+	Icon      string    `json:"icon,omitempty"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // OrgProfileStore is the lookup boundary. Tenants with no profile

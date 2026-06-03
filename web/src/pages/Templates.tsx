@@ -22,7 +22,10 @@ import type { Graph, OAuthProviderStatus, TemplateSummary } from "../types";
 // daemon code change.
 export function Templates() {
   const { t } = useTranslation();
-  const { token, activeTenant, activeWorkspace } = useAuth();
+  const { token, activeTenant, activeWorkspace, hasPerm } = useAuth();
+  // Forking a template creates a flow → needs graph:edit. Viewers can
+  // browse templates but the "Use this template" action is disabled.
+  const canEdit = hasPerm("graph:edit");
   const navigate = useNavigate();
   const [templates, setTemplates] = useState<TemplateSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -228,13 +231,15 @@ export function Templates() {
                     type="button"
                     className="primary template-cta"
                     onClick={() => useTemplate(tpl)}
-                    disabled={busy !== null || adminBlocked}
+                    disabled={busy !== null || adminBlocked || !canEdit}
                     title={
                       adminBlocked
                         ? t("templates.adminBlockedTitle", {
                             names: missingIntegrationNames.join(", "),
                           })
-                        : undefined
+                        : !canEdit
+                          ? t("flowList.needEdit")
+                          : undefined
                     }
                   >
                     {busy === tpl.id ? t("templates.forking") : t("templates.useTemplate")}

@@ -25,6 +25,7 @@ import {
 import { GitIcon } from "./components/GitIcon";
 import { NtfyIcon } from "./components/NtfyIcon";
 import { ClaudeIcon } from "./components/ClaudeIcon";
+import { isImageIcon } from "./lib/iconImage";
 
 // iconRegistry maps the kebab-case logical names manifests carry
 // (Manifest.Icon in Go) to concrete icon components. They share the
@@ -82,4 +83,40 @@ const brandedIcons = new Set(["git", "ntfy", "claude"]);
 
 export function isBrandedIcon(name?: string): boolean {
   return !!name && brandedIcons.has(name);
+}
+
+// FlowIcon renders a flow's icon consistently wherever it appears (the
+// sidebar list, the flow cards): an uploaded image (data: URL / path)
+// as an <img>, otherwise the logical lucide glyph via iconFor, falling
+// back to the Workflow glyph when the flow has no icon set.
+export function FlowIcon({
+  icon,
+  size = 16,
+  className,
+}: {
+  icon?: string;
+  size?: number;
+  className?: string;
+}) {
+  if (isImageIcon(icon)) {
+    return (
+      <img
+        src={icon}
+        alt=""
+        className={"flow-icon-img" + (className ? " " + className : "")}
+        width={size}
+        height={size}
+        draggable={false}
+      />
+    );
+  }
+  const Glyph = icon ? iconFor(icon) : Workflow;
+  return (
+    <Glyph
+      size={size}
+      className={className}
+      strokeWidth={2}
+      color={isBrandedIcon(icon) ? undefined : "currentColor"}
+    />
+  );
 }

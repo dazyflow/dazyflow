@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
-import { AlertCircle, Check, Settings2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AlertCircle, Building2, Check, Settings2 } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
+import { IconUpload } from "../components/IconUpload";
 import type { WorkspaceLimits } from "../types";
 
 // AdminWorkspace is a read-only view of the effective limits for the
@@ -127,10 +128,16 @@ function OrgProfileEditor() {
   const { t } = useTranslation();
   const { token, me } = useAuth();
   const [displayName, setDisplayName] = useState("");
+  const [icon, setIcon] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // loadedRef gates autosave until the initial GET completes; savedRef
+  // holds the last-persisted values so the autosave effect only fires on
+  // a genuine user edit (not the load itself).
+  const loadedRef = useRef(false);
+  const savedRef = useRef<{ name: string; icon?: string }>({ name: "", icon: undefined });
 
   const refresh = useCallback(async () => {
     if (!token) return;
@@ -138,6 +145,9 @@ function OrgProfileEditor() {
     try {
       const p = await api.getOrgProfile(token);
       setDisplayName(p.display_name ?? "");
+      setIcon(p.icon || undefined);
+      savedRef.current = { name: (p.display_name ?? "").trim(), icon: p.icon || undefined };
+      loadedRef.current = true;
       setError(null);
     } catch (e) {
       if (e instanceof APIError && e.status === 501) {
@@ -153,26 +163,16 @@ function OrgProfileEditor() {
     void refresh();
   }, [refresh]);
 
-  if (loading) return null;
-  if (error) {
-    return (
-      <div className="card" style={{ marginBottom: "var(--space-4)" }}>
-        <h3 style={{ marginTop: 0 }}>{t("admin.workspace.orgNameHead")}</h3>
-        <div className="desc" style={{ color: "var(--muted)" }}>{error}</div>
-      </div>
-    );
-  }
-
-  const save = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const save = useCallback(async () => {
     if (!token) return;
     setSaving(true);
     setError(null);
     try {
-      await api.putOrgProfile(token, displayName.trim());
+      await api.putOrgProfile(token, displayName.trim(), icon);
+      savedRef.current = { name: displayName.trim(), icon };
       setSavedAt(new Date());
-      // Refetch whoami so the switcher + header pick up the new name.
-      // The signed-in session itself doesn't change, just the labels.
+      // Refetch whoami so the switcher + top bar pick up the new
+      // name/icon. The session itself doesn't change, just the labels.
       try {
         await api.whoami(token);
       } catch {
@@ -183,12 +183,46 @@ function OrgProfileEditor() {
     } finally {
       setSaving(false);
     }
-  };
+  }, [token, displayName, icon]);
+
+  // Autosave: debounce-persist a genuine change (skipped until the
+  // initial load, and when the values already match what's stored).
+  useEffect(() => {
+    if (!loadedRef.current) return;
+    if (
+      displayName.trim() === savedRef.current.name &&
+      (icon ?? "") === (savedRef.current.icon ?? "")
+    ) {
+      return;
+    }
+    const h = window.setTimeout(() => void save(), 600);
+    return () => window.clearTimeout(h);
+  }, [displayName, icon, save]);
+
+  if (loading) return null;
+  // Load failure (e.g. 501 not-configured) replaces the editor; a
+  // transient save error renders inline below instead.
+  if (error && !loadedRef.current) {
+    return (
+      <div className="card" style={{ marginBottom: "var(--space-4)" }}>
+        <h3 style={{ marginTop: 0 }}>{t("admin.workspace.orgNameHead")}</h3>
+        <div className="desc" style={{ color: "var(--muted)" }}>{error}</div>
+      </div>
+    );
+  }
 
   return (
-    <form className="card" style={{ marginBottom: "var(--space-4)" }} onSubmit={save}>
+    <div className="card" style={{ marginBottom: "var(--space-4)" }}>
       <h3 style={{ marginTop: 0 }}>{t("admin.workspace.orgNameHead")}</h3>
       <p className="desc">{t("admin.workspace.orgNameDesc")}</p>
+      <div className="sf-field">
+        <label>{t("admin.workspace.orgIconLabel")}</label>
+        <IconUpload
+          value={icon}
+          onChange={setIcon}
+          fallback={<Building2 size={22} />}
+        />
+      </div>
       <div className="sf-field">
         <label>{t("admin.workspace.orgNameLabel")}</label>
         <input
@@ -206,22 +240,21 @@ function OrgProfileEditor() {
           />
         </div>
       </div>
-      <div className="settings-foot" style={{ borderTop: "none", padding: 0 }}>
-        <button type="submit" className="primary" disabled={saving}>
-          {saving ? t("admin.workspace.saving") : t("admin.workspace.save")}
-        </button>
-        {savedAt && (
-          <span className="desc" style={{ marginLeft: 12, color: "var(--success)" }}>
+      <div className="settings-foot" style={{ borderTop: "none", padding: 0, minHeight: 18 }}>
+        {saving ? (
+          <span className="desc">{t("admin.workspace.saving")}</span>
+        ) : savedAt ? (
+          <span className="desc" style={{ color: "var(--success)" }}>
             <Check size={12} style={{ verticalAlign: -1 }} /> {t("admin.workspace.saved")}
           </span>
-        )}
+        ) : null}
       </div>
       {error && (
         <div className="error" style={{ marginTop: 12 }}>
           <AlertCircle size={14} style={{ verticalAlign: -2 }} /> {error}
         </div>
       )}
-    </form>
+    </div>
   );
 }
 

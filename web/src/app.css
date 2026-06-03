@@ -211,6 +211,77 @@
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   color: var(--ink);
 }
+/* Flow list nested under the Flows nav entry. Inherits .sidebar a base
+   styling; these overrides make the rows compact and indented so they
+   read as children of "Flows". */
+.nav-flows {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-bottom: var(--space-1);
+}
+.sidebar a.nav-flow-item {
+  padding: 5px var(--space-3) 5px 38px;
+  font-size: 13px;
+  font-weight: 400;
+  gap: var(--space-2);
+}
+.nav-flow-icon {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+/* Uploaded image icons (flows/orgs) render as <img>; keep them square,
+   contained, and crisp at small sizes. */
+.flow-icon-img {
+  object-fit: contain;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.tenant-pop-glyph {
+  display: inline-flex;
+  align-items: center;
+}
+/* Shared icon-upload control (flow + org settings). */
+.icon-upload {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.icon-upload-preview {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-2);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+  color: var(--muted);
+}
+.icon-upload-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.icon-upload-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.icon-upload-error {
+  flex-basis: 100%;
+  color: var(--danger);
+  font-size: 12px;
+}
+.nav-flow-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .nav-badge {
   display: inline-block;
   min-width: 18px;
@@ -779,6 +850,7 @@
 .welcome-resume:hover {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   border-color: var(--accent);
+  text-decoration: none;
 }
 .welcome-resume-icon {
   display: inline-flex;
@@ -812,34 +884,53 @@
   font-weight: 600;
   margin-bottom: var(--space-2);
 }
+.welcome-intro {
+  margin: var(--space-4) 0 var(--space-3);
+  font-size: 15px;
+}
+/* Goal cards mirror the Apps index cards (.integration-card): a surface
+   card with an icon + title head row and a description below. */
 .welcome-goal-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: var(--space-2);
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-3);
 }
 .welcome-goal {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: var(--space-3);
+  gap: var(--space-2);
+  padding: var(--space-4);
   border: 1px solid var(--border);
-  border-radius: var(--r-2);
-  background: var(--surface-2);
+  border-radius: var(--r-3);
+  background: var(--surface);
   text-decoration: none;
   color: inherit;
+  cursor: pointer;
   transition: border-color 120ms, transform 120ms;
 }
 .welcome-goal:hover {
   border-color: var(--accent);
   transform: translateY(-1px);
+  text-decoration: none;
+}
+.welcome-goal-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.welcome-goal-icon {
+  display: inline-flex;
+  color: var(--accent);
+  flex-shrink: 0;
 }
 .welcome-goal-title {
   font-weight: 600;
-  font-size: 14px;
+  font-size: 16px;
 }
 .welcome-goal-desc {
   font-size: 13px;
   color: var(--muted);
+  line-height: 1.5;
 }
 /* "More for developers →" lives below the three main goal cards as
    a quiet inline link. Visual weight stays low so a non-tech buyer's
@@ -980,7 +1071,9 @@
    button {} rules — mirror those tokens here so they read as the app's
    standard buttons rather than a one-off welcome-only style. */
 .welcome-cta {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: inherit;
   color: var(--ink);
   text-decoration: none;

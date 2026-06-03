@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import type { Graph } from "../types";
+import { IconUpload } from "./IconUpload";
+import { FlowIcon } from "../icons";
 
 // SettingsModal hosts graph-level configuration that doesn't fit in
 // the per-node Inspector. Triggers ("how this flow starts") have their
@@ -116,12 +118,10 @@ export function SettingsModal({ graph, onClose, onSave }: Props) {
                 <div className="label-row">
                   <label>{t("settings.general.icon")}</label>
                 </div>
-                <input
-                  value={draft.icon ?? ""}
-                  placeholder={t("settings.general.iconPlaceholder")}
-                  onChange={(e) =>
-                    setDraft({ ...draft, icon: e.target.value || undefined })
-                  }
+                <IconUpload
+                  value={draft.icon}
+                  onChange={(v) => setDraft({ ...draft, icon: v })}
+                  fallback={<FlowIcon icon={draft.icon} size={22} />}
                 />
                 <div className="desc">
                   {t("settings.general.iconDesc")}

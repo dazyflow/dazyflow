@@ -797,6 +797,9 @@ export const api = {
 
   getOrgProfile: (token: string) =>
     request<OrgProfile>(token, "GET", "/admin/org/profile"),
-  putOrgProfile: (token: string, display_name: string) =>
-    request<OrgProfile>(token, "PUT", "/admin/org/profile", { display_name }),
+  putOrgProfile: (token: string, display_name: string, icon?: string) =>
+    request<OrgProfile>(token, "PUT", "/admin/org/profile", {
+      display_name,
+      icon: icon ?? "",
+    }),
 };

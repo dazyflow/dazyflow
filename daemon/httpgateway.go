@@ -986,6 +986,7 @@ func (h *HTTPGateway) whoami(rw http.ResponseWriter, r *http.Request, p core.Pri
 type orgMembershipDTO struct {
 	Tenant      string      `json:"tenant"`
 	DisplayName string      `json:"display_name,omitempty"`
+	Icon        string      `json:"icon,omitempty"`
 	Workspace   string      `json:"workspace"`
 	Roles       []core.Role `json:"roles"`
 	Home        bool        `json:"home"`
@@ -1031,6 +1032,7 @@ func (h *HTTPGateway) collectMemberships(ctx context.Context, p core.Principal) 
 			for i := range out {
 				if pr, ok := profiles[out[i].Tenant]; ok {
 					out[i].DisplayName = pr.DisplayName
+					out[i].Icon = pr.Icon
 				}
 			}
 		}
@@ -1071,9 +1073,15 @@ func (h *HTTPGateway) getOrgProfile(rw http.ResponseWriter, r *http.Request, p c
 	writeJSON(rw, http.StatusOK, map[string]any{
 		"tenant":       pr.Tenant,
 		"display_name": pr.DisplayName,
+		"icon":         pr.Icon,
 		"updated_at":   pr.UpdatedAt,
 	})
 }
+
+// maxOrgIconBytes caps the inline org icon (data: URL). Icons are
+// downscaled client-side; this is a backstop against an oversized blob
+// bloating the profile store.
+const maxOrgIconBytes = 256 * 1024
 
 func (h *HTTPGateway) putOrgProfile(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Profiles == nil {
@@ -1086,6 +1094,7 @@ func (h *HTTPGateway) putOrgProfile(rw http.ResponseWriter, r *http.Request, p c
 	}
 	var body struct {
 		DisplayName string `json:"display_name"`
+		Icon        string `json:"icon"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
@@ -1096,9 +1105,14 @@ func (h *HTTPGateway) putOrgProfile(rw http.ResponseWriter, r *http.Request, p c
 		writeJSONError(rw, http.StatusBadRequest, "display name is too long (max 80)")
 		return
 	}
+	if len(body.Icon) > maxOrgIconBytes {
+		writeJSONError(rw, http.StatusBadRequest, "icon is too large")
+		return
+	}
 	pr := auth.OrgProfile{
 		Tenant:      p.Tenant,
 		DisplayName: name,
+		Icon:        body.Icon,
 		UpdatedAt:   time.Now().UTC(),
 	}
 	if err := h.Profiles.PutOrgProfile(r.Context(), pr); err != nil {
@@ -1109,6 +1123,7 @@ func (h *HTTPGateway) putOrgProfile(rw http.ResponseWriter, r *http.Request, p c
 	writeJSON(rw, http.StatusOK, map[string]any{
 		"tenant":       pr.Tenant,
 		"display_name": pr.DisplayName,
+		"icon":         pr.Icon,
 		"updated_at":   pr.UpdatedAt,
 	})
 }

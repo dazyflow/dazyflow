@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useRef, useState } from "react";
+import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
@@ -22,9 +22,30 @@ import {
 import { useTranslation } from "react-i18next";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { ActiveFlowContext } from "../activeFlow";
+import { ActiveFlowContext, FLOWS_CHANGED_EVENT } from "../activeFlow";
 import { shouldShowTenantID } from "../lib/visibleTenant";
 import { orgDisplayName } from "../lib/orgDisplayName";
+import { FlowIcon } from "../icons";
+import { isImageIcon } from "../lib/iconImage";
+import type { FlowSummary } from "../types";
+
+// orgGlyph renders an org's icon: an uploaded image (data: URL) as an
+// <img>, otherwise the generic Building2 mark. Shared by the tenant
+// switcher trigger + rows.
+function orgGlyph(icon: string | undefined, size: number) {
+  return isImageIcon(icon) ? (
+    <img
+      src={icon}
+      alt=""
+      width={size}
+      height={size}
+      style={{ borderRadius: 3, objectFit: "contain" }}
+      draggable={false}
+    />
+  ) : (
+    <Building2 size={size} />
+  );
+}
 
 // COLLAPSE_KEY persists the sidebar collapsed/expanded choice across
 // reloads. The sidebar is always visible; small viewports just default
@@ -84,6 +105,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   // operators see "you have N decisions waiting" without visiting the
   // page. Polled every 30s; updates immediately on visibility change.
   const [pendingCount, setPendingCount] = useState(0);
+  // All flows in the active workspace, listed under the "Flows" nav entry.
+  const [flows, setFlows] = useState<FlowSummary[]>([]);
   // everHadApproval is a sticky local flag: once a user has seen ANY
   // pending approval in this browser, the Approvals nav link stays
   // visible even after the count drops back to zero — flows with
@@ -131,6 +154,29 @@ export function AppShell({ children }: { children: ReactNode }) {
       window.clearInterval(t);
     };
   }, [token, location.pathname, activeTenant, activeWorkspace, everHadApproval]);
+  // Load the workspace's flows for the sidebar list.
+  const refreshFlows = useCallback(() => {
+    if (!token || !activeWorkspace) {
+      setFlows([]);
+      return;
+    }
+    api
+      .listGraphs(token, activeTenant, activeWorkspace)
+      .then((r) => setFlows(r.graphs))
+      .catch(() => {
+        /* ignore — sidebar list is non-essential */
+      });
+  }, [token, activeTenant, activeWorkspace]);
+  // Refetch on navigation (covers create/delete via the flow list).
+  useEffect(refreshFlows, [refreshFlows, location.pathname]);
+  // Refetch immediately when a flow's name/icon is saved in the editor —
+  // the editor fires FLOWS_CHANGED_EVENT after the save persists, so the
+  // sidebar reflects a renamed flow / new icon without a navigation.
+  useEffect(() => {
+    const onChanged = () => refreshFlows();
+    window.addEventListener(FLOWS_CHANGED_EVENT, onChanged);
+    return () => window.removeEventListener(FLOWS_CHANGED_EVENT, onChanged);
+  }, [refreshFlows]);
   // Editor pages need a full-bleed canvas — remove the main padding.
   // Editor pages need a full-bleed canvas. Match either the canonical
   // /flows/:id or the legacy /pipelines/:id path so an incoming legacy
@@ -144,6 +190,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   // Cleared whenever we navigate away from an editor route so a stale
   // name never lingers on the flow list / runs / admin pages.
   const [activeFlowName, setActiveFlowName] = useState<string | null>(null);
+  // activeFlowIcon mirrors the open flow's icon so the top bar can show
+  // it next to the name (only when the flow has a non-default icon set).
+  const [activeFlowIcon, setActiveFlowIcon] = useState<string | null>(null);
   // openSettings is registered by the editor so the top-right "current
   // flow" three-dots can open the flow-settings modal it owns. Stored
   // as a 0-arg callback; null when no editor is mounted.
@@ -151,6 +200,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!inEditor) {
       setActiveFlowName(null);
+      setActiveFlowIcon(null);
       setOpenSettings(null);
     }
   }, [inEditor]);
@@ -160,11 +210,22 @@ export function AppShell({ children }: { children: ReactNode }) {
   // small screens just defaulting to the rail variant.
   const toggleNav = () => setNavCollapsed((x) => !x);
 
+  // Top-bar branding. In the editor the open flow takes the slot; the
+  // org's name/logo replaces the product wordmark once the org has a
+  // profile set; otherwise it's the Hazyflow mark.
+  const curTenant = activeTenant || me?.tenant || "";
+  const orgMembership = me?.memberships?.find((m) => m.tenant === curTenant);
+  const orgName = orgMembership?.display_name;
+  const orgIcon = orgMembership?.icon;
+  const showFlow = inEditor && !!activeFlowName;
+
   return (
     <ActiveFlowContext.Provider
       value={{
         name: activeFlowName,
         setName: setActiveFlowName,
+        icon: activeFlowIcon,
+        setIcon: setActiveFlowIcon,
         openSettings,
         setOpenSettings,
       }}
@@ -182,20 +243,34 @@ export function AppShell({ children }: { children: ReactNode }) {
         {/* The logo is the home affordance — clicking it lands on the
             start/welcome screen (where no flow is selected), matching
             the sibling `hazy` app's brand-click-goes-home behaviour. */}
-        <NavLink to="/welcome" className="brand" title="Hazyflow">
-          <img
-            src="/favicon.png"
-            alt=""
-            className="brand-mark-img"
-            width={24}
-            height={24}
-            draggable={false}
-          />
-          {/* In the editor, the open flow's name takes the wordmark's
-              slot so the operator always knows which flow they're in.
-              Elsewhere it's the product wordmark. */}
+        <NavLink to="/welcome" className="brand" title={orgName || "Hazyflow"}>
+          {/* Mark: the open flow's icon in the editor, else the org logo
+              when set, else the Hazyflow favicon. */}
+          {showFlow && activeFlowIcon ? (
+            <FlowIcon icon={activeFlowIcon} size={22} className="brand-flow-icon" />
+          ) : !showFlow && isImageIcon(orgIcon) ? (
+            <img
+              src={orgIcon}
+              alt=""
+              className="flow-icon-img brand-flow-icon"
+              width={24}
+              height={24}
+              draggable={false}
+            />
+          ) : (
+            <img
+              src="/favicon.png"
+              alt=""
+              className="brand-mark-img"
+              width={24}
+              height={24}
+              draggable={false}
+            />
+          )}
+          {/* Title: the open flow's name in the editor; otherwise the
+              org's name once set, falling back to the product wordmark. */}
           <span className="brand-title">
-            {inEditor && activeFlowName ? activeFlowName : "Hazyflow"}
+            {showFlow ? activeFlowName : orgName || "Hazyflow"}
           </span>
         </NavLink>
         <div className="spacer" />
@@ -207,6 +282,9 @@ export function AppShell({ children }: { children: ReactNode }) {
                 activeTenant={activeTenant || me.tenant}
                 onPick={setActiveTenant}
                 nameOf={(tid) => orgDisplayName(me, tid)}
+                iconOf={(tid) =>
+                  me.memberships?.find((m) => m.tenant === tid)?.icon
+                }
               />
             )}
             <span className="topbar-workspace">
@@ -250,6 +328,23 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Workflow size={18} />
             <span className="nav-label">{t("nav.flows")}</span>
           </NavLink>
+          {/* All flows in the workspace, nested under the Flows entry.
+              Hidden in the collapsed icon-rail (no room for labels). */}
+          {!navCollapsed && flows.length > 0 && (
+            <div className="nav-flows">
+              {flows.map((f) => (
+                <NavLink
+                  key={f.id}
+                  to={`/flows/${encodeURIComponent(f.id)}`}
+                  className="nav-flow-item"
+                  title={f.name || f.id}
+                >
+                  <FlowIcon icon={f.icon} size={15} className="nav-flow-icon" />
+                  <span className="nav-label nav-flow-name">{f.name || f.id}</span>
+                </NavLink>
+              ))}
+            </div>
+          )}
           <NavLink
             to="/runs"
             title={t("nav.runs")}
@@ -448,6 +543,7 @@ function TenantSwitcher({
   activeTenant,
   onPick,
   nameOf,
+  iconOf,
 }: {
   tenants: string[];
   activeTenant: string;
@@ -457,6 +553,8 @@ function TenantSwitcher({
   // from the WhoAmI shape so the same control could be reused
   // elsewhere with a different source.
   nameOf: (tenant: string) => string;
+  // iconOf resolves a tenant ID to its org icon (data: URL / name), if any.
+  iconOf: (tenant: string) => string | undefined;
 }) {
   const { t: tr } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -484,7 +582,7 @@ function TenantSwitcher({
         }}
         title={tr("nav.switchTenant")}
       >
-        <Building2 size={13} />
+        {orgGlyph(iconOf(activeTenant), 14)}
         <strong>
           {activeTenant ? nameOf(activeTenant) : tr("nav.pickTenant")}
         </strong>
@@ -508,6 +606,7 @@ function TenantSwitcher({
                 }}
                 title={tid}
               >
+                <span className="tenant-pop-glyph">{orgGlyph(iconOf(tid), 14)}</span>
                 <span>{label}</span>
                 {label !== tid && (
                   <span className="workspace-pop-id">{tid}</span>
