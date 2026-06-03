@@ -129,6 +129,7 @@ func LintGraph(g Graph) []LintIssue {
 	issues = append(issues, lintHardcodedSecrets(g)...)
 	issues = append(issues, lintSecretToPersistence(g, nodesByID)...)
 	issues = append(issues, lintTemplatePlaceholders(g)...)
+	issues = append(issues, lintTriggers(g)...)
 	if len(issues) == 0 {
 		return nil
 	}

@@ -249,3 +249,51 @@ func TestGitHubOnNewPR_StandaloneRunErrors(t *testing.T) {
 		t.Errorf("standalone github_on_new_pr should error with no_trigger_data, got %+v", res)
 	}
 }
+
+// TestGitHubEvents_WrongSigPrefixRejected — a valid HMAC hex under the
+// wrong algorithm prefix (sha1=) must be rejected; the handler requires
+// the sha256= scheme GitHub actually uses.
+func TestGitHubEvents_WrongSigPrefixRejected(t *testing.T) {
+	h := newGitHubHarness(t)
+	body := []byte(`{"ref":"refs/heads/main"}`)
+	mac := hmac.New(sha256.New, []byte(h.secret))
+	mac.Write(body)
+	req := httptest.NewRequest("POST", "/api/v1/events/github/t", bytes.NewReader(body))
+	req.Header.Set("X-Hub-Signature-256", "sha1="+hex.EncodeToString(mac.Sum(nil)))
+	req.Header.Set("X-GitHub-Event", "push")
+	rw := httptest.NewRecorder()
+	ServeForTest(h.gw, rw, req)
+	if rw.Code != http.StatusUnauthorized {
+		t.Errorf("wrong sig prefix code=%d, want 401", rw.Code)
+	}
+}
+
+// TestGitHubEvents_UppercaseHexSigRejected — GitHub signs with lowercase
+// hex; an uppercased hex of an otherwise-correct HMAC must not validate
+// (the compare is byte-for-byte, not case-folded).
+func TestGitHubEvents_UppercaseHexSigRejected(t *testing.T) {
+	h := newGitHubHarness(t)
+	body := []byte(`{"ref":"refs/heads/main"}`)
+	mac := hmac.New(sha256.New, []byte(h.secret))
+	mac.Write(body)
+	upper := string(bytes.ToUpper([]byte(hex.EncodeToString(mac.Sum(nil)))))
+	req := httptest.NewRequest("POST", "/api/v1/events/github/t", bytes.NewReader(body))
+	req.Header.Set("X-Hub-Signature-256", "sha256="+upper)
+	req.Header.Set("X-GitHub-Event", "push")
+	rw := httptest.NewRecorder()
+	ServeForTest(h.gw, rw, req)
+	if rw.Code != http.StatusUnauthorized {
+		t.Errorf("uppercase hex sig code=%d, want 401", rw.Code)
+	}
+}
+
+// TestGitHubEvents_SparsePushAcked — a push with most fields absent
+// (only ref) is structurally valid; the handler must parse it without
+// erroring (200), not 4xx/5xx on missing commits/repository/pusher.
+func TestGitHubEvents_SparsePushAcked(t *testing.T) {
+	h := newGitHubHarness(t)
+	rw := h.post(t, "/api/v1/events/github/t", "push", []byte(`{"ref":"refs/heads/main"}`))
+	if rw.Code != http.StatusOK {
+		t.Errorf("sparse push code=%d, want 200", rw.Code)
+	}
+}

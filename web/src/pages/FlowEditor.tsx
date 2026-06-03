@@ -1045,7 +1045,7 @@ function EditorInner() {
     setSaving(true);
     setError(null);
     try {
-      await api.saveGraph(
+      const res = await api.saveGraph(
         token,
         buildGraph({
           triggers: (next.triggers ?? []).length > 0 ? next.triggers : undefined,
@@ -1057,6 +1057,11 @@ function EditorInner() {
         }),
       );
       setDirty(false);
+      // Surface lint warnings from this save too — the Triggers modal is
+      // where bad trigger config (never-firing cron, bad poll interval,
+      // secret-less webhook) is entered, so its save is exactly where the
+      // trigger lint needs to reach the banner.
+      setLintIssues(res.lint ?? []);
     } catch (e) {
       setError((e as Error).message);
     } finally {

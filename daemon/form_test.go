@@ -191,3 +191,118 @@ func TestForm_POSTSubmitsRun(t *testing.T) {
 		t.Errorf("expected a run to be submitted by the form POST")
 	}
 }
+
+// TestForm_DisabledGraphIs404 — a paused flow's hosted form is off, and
+// returns 404 (not 403) so a disabled flow is indistinguishable from a
+// non-existent one (don't leak which graphs exist).
+func TestForm_DisabledGraphIs404(t *testing.T) {
+	_, wh, _, _, wsStore := startWebhookHarness(t)
+	g := core.Graph{
+		ID: "paused", Tenant: "acme", Workspace: "ws1", Disabled: true,
+		Nodes:    []core.Node{{ID: "in", Module: "webhook_input"}},
+		Triggers: []core.GraphTrigger{{Type: "webhook", Secret: "s", PublicForm: true}},
+	}
+	if _, err := wsStore.Save(g, "test"); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	ts := formServer(t, wh)
+	for _, m := range []string{"GET", "POST"} {
+		req, _ := http.NewRequest(m, ts.URL+"/form/acme/ws1/paused", strings.NewReader("name=x"))
+		if m == "POST" {
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("%s: %v", m, err)
+		}
+		res.Body.Close()
+		if res.StatusCode != http.StatusNotFound {
+			t.Errorf("%s disabled form = %d, want 404", m, res.StatusCode)
+		}
+	}
+}
+
+// TestForm_NoWebhookInputNodeIs400 — a public_form flow with no
+// webhook_input node has nowhere to deliver the submission, so POST
+// fails with 400 rather than silently accepting and dropping the data.
+func TestForm_NoWebhookInputNodeIs400(t *testing.T) {
+	_, wh, _, _, wsStore := startWebhookHarness(t)
+	g := core.Graph{
+		ID: "no-sink", Tenant: "acme", Workspace: "ws1",
+		Nodes:    []core.Node{{ID: "x", Module: "sleep", Params: map[string]any{"ms": 1}}},
+		Triggers: []core.GraphTrigger{{Type: "webhook", Secret: "s", PublicForm: true}},
+	}
+	if _, err := wsStore.Save(g, "test"); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	ts := formServer(t, wh)
+	res, err := http.PostForm(ts.URL+"/form/acme/ws1/no-sink", url.Values{"name": {"x"}})
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400 (no webhook_input node)", res.StatusCode)
+	}
+}
+
+// TestForm_CustomFieldsRendered — declared FormFields override the
+// default name/email/message set on the rendered GET page.
+func TestForm_CustomFieldsRendered(t *testing.T) {
+	_, wh, _, _, wsStore := startWebhookHarness(t)
+	g := core.Graph{
+		ID: "custom", Tenant: "acme", Workspace: "ws1",
+		Nodes:    []core.Node{{ID: "in", Module: "webhook_input"}},
+		Triggers: []core.GraphTrigger{{Type: "webhook", Secret: "s", PublicForm: true, FormFields: []string{"phone", "company"}}},
+	}
+	if _, err := wsStore.Save(g, "test"); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	ts := formServer(t, wh)
+	res, err := http.Get(ts.URL + "/form/acme/ws1/custom")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	defer res.Body.Close()
+	html, _ := io.ReadAll(res.Body)
+	for _, want := range []string{`name="phone"`, `name="company"`} {
+		if !strings.Contains(string(html), want) {
+			t.Errorf("custom form missing %q", want)
+		}
+	}
+	if strings.Contains(string(html), `name="message"`) {
+		t.Errorf("custom form should not render the default 'message' field")
+	}
+}
+
+// TestForm_FieldNameAndTitleEscaped — field names and the title flow
+// into the HTML template; html/template must escape them so a field
+// name like <script> can't inject markup into the hosted page.
+func TestForm_FieldNameAndTitleEscaped(t *testing.T) {
+	_, wh, _, _, wsStore := startWebhookHarness(t)
+	g := core.Graph{
+		ID: "xss", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{{ID: "in", Module: "webhook_input"}},
+		Triggers: []core.GraphTrigger{{
+			Type: "webhook", Secret: "s", PublicForm: true,
+			FormTitle:  "<script>alert(1)</script>",
+			FormFields: []string{"<img src=x onerror=alert(2)>"},
+		}},
+	}
+	if _, err := wsStore.Save(g, "test"); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	ts := formServer(t, wh)
+	res, err := http.Get(ts.URL + "/form/acme/ws1/xss")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	defer res.Body.Close()
+	html, _ := io.ReadAll(res.Body)
+	if strings.Contains(string(html), "<script>alert(1)</script>") {
+		t.Errorf("title not escaped — raw <script> present in form HTML")
+	}
+	if strings.Contains(string(html), "<img src=x onerror=alert(2)>") {
+		t.Errorf("field name not escaped — raw <img onerror> present in form HTML")
+	}
+}

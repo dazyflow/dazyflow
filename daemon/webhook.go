@@ -210,7 +210,12 @@ func buildWebhookSeed(rawBody []byte, r *http.Request) core.Result {
 	if i := strings.IndexByte(mediaType, ';'); i >= 0 {
 		mediaType = mediaType[:i]
 	}
-	mediaType = strings.TrimSpace(mediaType)
+	// HTTP media types are case-insensitive (RFC 9110 §8.3.1), so a
+	// sender using "Application/JSON" or "TEXT/PLAIN" must parse the same
+	// as the lowercase form — otherwise it falls through to raw []byte
+	// and ${trigger.body.field} silently breaks. Lowercase only this
+	// comparison key; bodyMIME below keeps the original header verbatim.
+	mediaType = strings.ToLower(strings.TrimSpace(mediaType))
 
 	var bodyValue any
 	switch {
@@ -241,6 +246,15 @@ func buildWebhookSeed(rawBody []byte, r *http.Request) core.Result {
 
 	headers := make(map[string]any, len(r.Header))
 	for k, vs := range r.Header {
+		// Never expose credential headers on the body's sibling port: the
+		// Authorization header carries this graph's own webhook bearer
+		// secret, and Cookie can carry session creds. A downstream node
+		// that forwards ${trigger.headers} to an external service would
+		// otherwise leak them. Drop both (canonicalized, case-insensitive).
+		switch http.CanonicalHeaderKey(k) {
+		case "Authorization", "Cookie":
+			continue
+		}
 		if len(vs) > 0 {
 			headers[k] = vs[0]
 		}

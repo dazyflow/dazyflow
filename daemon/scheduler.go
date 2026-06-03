@@ -18,6 +18,7 @@ import (
 // every instance runs a Scheduler, but only the one holding the Postgres
 // advisory lock (see PgLeader, wired via SetLeader in cmd/hzd) actually
 // fires triggers; the rest stay warm via rescan and take over on failover.
+
 type Scheduler struct {
 	svc      *Service
 	clock    func() time.Time
@@ -192,7 +193,14 @@ func (s *Scheduler) rescan(ctx context.Context) error {
 						scheduleFn: sched,
 					}
 				case "poll":
-					if t.IntervalSeconds <= 0 {
+					// Reject <= 0 (tight-loops) and absurdly large values:
+					// time.Duration is int64 ns, so IntervalSeconds *
+					// time.Second OVERFLOWS negative past ~292 years, which
+					// would make nextFireFrom return a past time and fire
+					// every tick — a runaway loop from one bad config value.
+					// A 1-year ceiling is generous for a poll and far under
+					// the overflow point.
+					if t.IntervalSeconds <= 0 || t.IntervalSeconds > core.MaxPollIntervalSeconds {
 						s.logger.Printf("bad poll interval %d on %s/%s/%s",
 							t.IntervalSeconds, tenant, workspace, gid)
 						continue
@@ -238,6 +246,13 @@ func (s *Scheduler) fireDue(ctx context.Context) {
 	s.mu.Unlock()
 
 	for _, e := range entries {
+		// A zero scheduleAt means "never fires" — cron.Schedule.Next gives
+		// up on an impossible date (e.g. Feb 30) and returns the zero time.
+		// Without this guard the zero time reads as "due now" and the graph
+		// fires every tick forever. Treat it as dormant.
+		if e.scheduleAt.IsZero() {
+			continue
+		}
 		if !e.scheduleAt.After(now) {
 			s.fireGraph(ctx, e)
 			s.mu.Lock()

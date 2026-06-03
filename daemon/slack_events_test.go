@@ -351,3 +351,39 @@ func TestSlackOnMention_StandaloneRunErrors(t *testing.T) {
 		t.Fatalf("error=%+v want code=no_trigger_data", res.Error)
 	}
 }
+
+// TestSlackEvents_NonIntegerTimestampRejected — a non-numeric
+// X-Slack-Request-Timestamp must be rejected (401), not parsed into a
+// zero/garbage time that could slip past the replay window.
+func TestSlackEvents_NonIntegerTimestampRejected(t *testing.T) {
+	h := newSlackHarness(t)
+	body := []byte(`{"type":"url_verification","challenge":"x"}`)
+	req := httptest.NewRequest("POST", "/api/v1/events/slack/t", bytes.NewReader(body))
+	req.Header.Set("X-Slack-Request-Timestamp", "not-a-number")
+	req.Header.Set("X-Slack-Signature", "v0=deadbeef")
+	req.Header.Set("Content-Type", "application/json")
+	rw := httptest.NewRecorder()
+	ServeForTest(h.gw, rw, req)
+	if rw.Code != http.StatusUnauthorized {
+		t.Errorf("non-integer timestamp code=%d, want 401", rw.Code)
+	}
+}
+
+// TestSlackEvents_RetryHeaderTolerated — Slack re-delivers events with
+// X-Slack-Retry-Num; the handler must still ack a valid retry (200),
+// not choke on the extra header.
+func TestSlackEvents_RetryHeaderTolerated(t *testing.T) {
+	h := newSlackHarness(t)
+	body := []byte(`{"type":"url_verification","challenge":"abc"}`)
+	ts := h.frozen.Unix()
+	req := httptest.NewRequest("POST", "/api/v1/events/slack/t", bytes.NewReader(body))
+	req.Header.Set("X-Slack-Request-Timestamp", strconv.FormatInt(ts, 10))
+	req.Header.Set("X-Slack-Signature", signSlackRequest(t, h.secret, ts, body))
+	req.Header.Set("X-Slack-Retry-Num", "2")
+	req.Header.Set("Content-Type", "application/json")
+	rw := httptest.NewRecorder()
+	ServeForTest(h.gw, rw, req)
+	if rw.Code != http.StatusOK {
+		t.Errorf("retry code=%d, want 200", rw.Code)
+	}
+}

@@ -159,3 +159,55 @@ func TestScheduler_RejectsBadCron(t *testing.T) {
 		t.Errorf("tracked=%d, want 0 (bad cron expr should be rejected)", got)
 	}
 }
+
+// TestScheduler_ImpossibleCronDateDoesNotFire guards a runaway-loop:
+// "0 0 30 2 *" (Feb 30 — never exists) PARSES fine, but cron.Schedule.
+// Next() gives up after 5 years and returns the ZERO time. The fire
+// check (!scheduleAt.After(now)) treats a zero time as "due now", so the
+// graph would fire on every tick forever. A never-fires schedule must be
+// dormant, not perpetually due.
+func TestScheduler_ImpossibleCronDateDoesNotFire(t *testing.T) {
+	ks := auth.NewMemKeyStore()
+	role := core.Role{Name: "s", Permissions: []core.Permission{core.PermGraphRun, core.PermGraphAdmin}}
+	_, _, _ = auth.IssueAPIKey(ks, t.Context(), "k", "acme", "ws1", "u", []core.Role{role}, nil)
+	wsStore, _ := workspace.OpenFS("")
+	jobs := jobstore.NewMemory()
+	bus := daemon.NewMemoryBus()
+	svc := &daemon.Service{
+		Auth:       auth.Chain{&auth.APIKeyAuthenticator{Store: ks}},
+		Workspaces: daemon.MapWorkspaces{"acme/ws1": wsStore},
+		Jobs:       jobs,
+		Engine:     &engine.Engine{Resolver: &engine.NodeResolver{Native: engine.Default}},
+		Bus:        bus,
+	}
+	wctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	w := daemon.NewWorker(daemon.WorkerConfig{ID: "w", PollInterval: 5 * time.Millisecond, MaxRetries: 1}, jobs, svc.Engine, bus)
+	go func() { _ = w.Run(wctx) }()
+
+	_, _ = wsStore.Save(core.Graph{
+		ID: "feb30", Tenant: "acme", Workspace: "ws1",
+		Nodes:    []core.Node{{ID: "a", Module: "sleep", Params: map[string]any{"ms": 1}}},
+		Triggers: []core.GraphTrigger{{Type: "cron", Cron: "0 0 30 2 *"}}, // Feb 30: never
+	}, "test")
+
+	sched := daemon.NewScheduler(svc)
+	sched.SetInterval(5*time.Millisecond, 30*time.Millisecond)
+	schedCtx, schedCancel := context.WithCancel(context.Background())
+	defer schedCancel()
+	go func() { _ = sched.Run(schedCtx) }()
+
+	// Many ticks elapse. A never-firing schedule must produce zero runs;
+	// the zero-time bug would tight-loop and rack up runs.
+	time.Sleep(200 * time.Millisecond)
+	records, _ := jobs.ListByGraph(t.Context(), "feb30")
+	runs := 0
+	for _, r := range records {
+		if r.Kind == core.JobKindGraph {
+			runs++
+		}
+	}
+	if runs != 0 {
+		t.Errorf("runs=%d, want 0 — an impossible cron date fired a runaway loop", runs)
+	}
+}

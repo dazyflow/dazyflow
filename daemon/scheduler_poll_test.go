@@ -198,3 +198,31 @@ func TestScheduler_BadPollIntervalIsIgnored(t *testing.T) {
 		t.Errorf("tracked=%d, want 0 (bad interval should be skipped)", h.sched.TrackedCount())
 	}
 }
+
+// TestScheduler_HugePollIntervalIsIgnored guards an integer-overflow
+// foot-gun: time.Duration is int64 nanoseconds (~292 years max), so
+// `time.Duration(IntervalSeconds) * time.Second` wraps NEGATIVE for a
+// large enough IntervalSeconds. A negative interval makes nextFireFrom
+// return a time in the PAST, so the poll fires every scheduler tick —
+// a runaway-run loop from one fat-fingered config value. The scheduler
+// must reject an out-of-range interval the way it rejects <= 0.
+func TestScheduler_HugePollIntervalIsIgnored(t *testing.T) {
+	h := newPollHarness(t)
+	graph := core.Graph{
+		ID: "huge-poll", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{{ID: "tick", Module: "poll_trigger"}},
+		Triggers: []core.GraphTrigger{
+			// >> maxInt64/1e9 seconds: the *time.Second multiply overflows.
+			{Type: "poll", IntervalSeconds: 1 << 60},
+		},
+	}
+	_, _ = h.wsStore.Save(graph, "test")
+	time.Sleep(120 * time.Millisecond) // let rescan + several ticks elapse
+	if h.sched.TrackedCount() != 0 {
+		t.Errorf("tracked=%d, want 0 (overflowing interval must be skipped)", h.sched.TrackedCount())
+	}
+	// With the overflow bug present this tight-loops; assert no runs fired.
+	if n := h.waitForGraphRuns(t, "huge-poll", 1, 300*time.Millisecond); n != 0 {
+		t.Errorf("runs=%d, want 0 — overflowing interval fired a runaway loop", n)
+	}
+}
