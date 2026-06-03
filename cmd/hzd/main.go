@@ -708,6 +708,7 @@ func main() {
 	if devKey {
 		adminRole := core.Role{Name: "admin", Permissions: []core.Permission{
 			core.PermTenantAdmin, core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
+			core.PermSecretRead, core.PermSecretWrite,
 		}}
 		_, ct, err := auth.IssueAPIKey(ks, ctx, "dev", "dev", "default", "dev@local", []core.Role{adminRole}, nil)
 		if err != nil {
@@ -970,6 +971,7 @@ func seedDefaultUser(ctx context.Context, users auth.UserStore, dev bool) {
 	}
 	adminRole := core.Role{Name: "admin", Permissions: []core.Permission{
 		core.PermTenantAdmin, core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
+		core.PermSecretRead, core.PermSecretWrite,
 	}}
 	u := auth.User{
 		Email:        "test@example.com",

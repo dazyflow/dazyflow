@@ -60,6 +60,30 @@ const APPROVAL_SEEN_KEY = "hazyflow.approvalsEverSeen";
 // rail layout on first paint.
 const MOBILE_BREAK = 768;
 
+// savedCollapsePref reads the user's explicit desktop collapse choice.
+// Only the desktop toggle writes this (see toggleNav) — on small screens
+// the rail is a per-session default, not a persisted preference, so a
+// phone toggle never overwrites the desktop layout.
+function savedCollapsePref(): boolean {
+  try {
+    return localStorage.getItem(COLLAPSE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+// initialNavCollapsed picks the first-paint rail state: small viewports
+// always start collapsed (the full sidebar would eat too much of a
+// phone/tablet screen, regardless of any saved desktop preference);
+// desktops honour the saved choice. Runs synchronously so the first
+// paint matches the viewport — no flicker between the two widths.
+function initialNavCollapsed(): boolean {
+  if (typeof window !== "undefined" && window.innerWidth <= MOBILE_BREAK) {
+    return true;
+  }
+  return savedCollapsePref();
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
   const {
@@ -80,26 +104,20 @@ export function AppShell({ children }: { children: ReactNode }) {
   // would eat too much of a phone/tablet screen) and expanded on
   // desktops. The initial read runs synchronously so the first paint
   // matches — no flicker between the two widths.
-  const [navCollapsed, setNavCollapsed] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem(COLLAPSE_KEY);
-      if (saved === "1") return true;
-      if (saved === "0") return false;
-    } catch {
-      /* fall through to viewport default */
-    }
-    if (typeof window !== "undefined" && window.innerWidth <= MOBILE_BREAK) {
-      return true;
-    }
-    return false;
-  });
+  const [navCollapsed, setNavCollapsed] = useState<boolean>(initialNavCollapsed);
+  // Keep the rail in sync with the viewport: collapse when we cross into
+  // a small screen, and restore the saved desktop preference when we
+  // cross back out. matchMedia's change event fires only on crossing the
+  // breakpoint (not on every resize), so a user who expands the rail on a
+  // phone keeps it expanded for the session. Viewport-driven changes are
+  // deliberately NOT persisted — the stored value is the desktop choice.
   useEffect(() => {
-    try {
-      localStorage.setItem(COLLAPSE_KEY, navCollapsed ? "1" : "0");
-    } catch {
-      /* localStorage might be blocked in a strict-mode iframe */
-    }
-  }, [navCollapsed]);
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia(`(max-width: ${MOBILE_BREAK}px)`);
+    const apply = () => setNavCollapsed(mq.matches ? true : savedCollapsePref());
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
   const location = useLocation();
   // Pending approvals count — surfaces a badge on the sidebar nav so
   // operators see "you have N decisions waiting" without visiting the
@@ -207,8 +225,22 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   // The hamburger toggles between the full sidebar and the icons-only
   // rail at every viewport — the sidebar is now always visible, with
-  // small screens just defaulting to the rail variant.
-  const toggleNav = () => setNavCollapsed((x) => !x);
+  // small screens just defaulting to the rail variant. We persist the
+  // choice only on desktop: on a small screen the rail is a transient,
+  // per-session default, so a phone toggle must not overwrite the saved
+  // desktop layout (the matchMedia listener re-collapses on next load).
+  const toggleNav = () =>
+    setNavCollapsed((x) => {
+      const next = !x;
+      if (typeof window === "undefined" || window.innerWidth > MOBILE_BREAK) {
+        try {
+          localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0");
+        } catch {
+          /* localStorage might be blocked in a strict-mode iframe */
+        }
+      }
+      return next;
+    });
 
   // Top-bar branding. In the editor the open flow takes the slot; the
   // org's name/logo replaces the product wordmark once the org has a
@@ -402,7 +434,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <button
             type="button"
             className="sidebar-collapse-toggle"
-            onClick={() => setNavCollapsed((x) => !x)}
+            onClick={toggleNav}
             aria-label={
               navCollapsed
                 ? t("nav.expandSidebar")

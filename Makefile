@@ -55,6 +55,7 @@ dev: pg ## Run hzd locally against the bundled Postgres (make pg). Sources .env 
 		HAZYFLOW_DEV_KEY=1 \
 		HAZYFLOW_ENABLE_SIGNUP=1 \
 		HAZYFLOW_WEB_ORIGIN=http://localhost:5173 \
+		HAZYFLOW_PUBLIC_BASE_URL=http://localhost:5173 \
 		HAZYFLOW_MASTER_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
 		HAZYFLOW_POSTGRES_DSN=postgres://hazyflow:hazyflow@localhost:5432/hazyflow?sslmode=disable \
 		go run ./cmd/hzd; \

@@ -71,11 +71,18 @@
 .topbar .spacer {
   flex: 1;
 }
-/* Hamburger is always shown. On desktop it toggles the icons-only rail;
-   on mobile it slides the full sidebar in. The same affordance covers
-   both modes — the behaviour branch lives in AppShell.toggleNav. */
+/* Hamburger is the small-screen affordance for toggling the rail. On
+   large screens the sidebar's own collapse arrow handles that, so the
+   hamburger is hidden to avoid a redundant control. The 769px cutoff is
+   the exact complement of the mobile @media (max-width: 768px) rule and
+   mirrors AppShell's MOBILE_BREAK. */
 .topbar .hamburger {
   display: inline-flex;
+}
+@media (min-width: 769px) {
+  .topbar .hamburger {
+    display: none;
+  }
 }
 
 .topbar .user {

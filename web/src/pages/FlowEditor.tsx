@@ -319,7 +319,12 @@ function EditorInner() {
   // never-saved flow, leaving the catalog empty (so Ctrl+K had no
   // drops). Drops should be available even when the graph fetch fails.
   useEffect(() => {
-    if (!token || !me || !id) return;
+    // Wait for activeWorkspace too: it resolves on a separate async path
+    // (whoami → workspaces) after `me`, so on a hard refresh it's briefly
+    // "". Loading the graph then builds a flow_id of "tenant//id" (empty
+    // workspace), which the API rejects. activeTenant/activeWorkspace are
+    // in the dep array below, so this re-runs and loads once they land.
+    if (!token || !me || !id || !activeTenant || !activeWorkspace) return;
     let cancelled = false;
     setError(null);
 
@@ -359,7 +364,7 @@ function EditorInner() {
     return () => {
       cancelled = true;
     };
-  }, [token, me, id, hydrateGraph]);
+  }, [token, me, id, activeTenant, activeWorkspace, hydrateGraph]);
 
   // A fresh flow gets a fresh shot at showing the connections banner.
   useEffect(() => {
