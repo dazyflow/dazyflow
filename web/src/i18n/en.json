@@ -31,8 +31,8 @@
     "flows": "Flows",
     "runs": "Runs",
     "approvals": "Approvals",
-    "connections": "My accounts",
-    "integrations": "Catalog",
+    "connections": "Accounts",
+    "integrations": "Apps",
     "admin": "Admin",
     "toggleNav": "toggle navigation",
     "collapseSidebar": "Collapse sidebar",
@@ -365,13 +365,12 @@
     "noneInCategory": "No templates in this category yet."
   },
   "integrations": {
-    "title": "Integrations",
-    "intro": "Every connector and built-in family the daemon knows about. Click an integration to see its drops, descriptions, and usage notes.",
-    "drop_one": "{{count}} drop",
-    "drop_other": "{{count}} drops",
+    "title": "Apps",
+    "intro": "Connect the apps your flows use. Click one to set it up or see what it can do.",
+    "builtinGroup": "Built-in",
     "connectedHead": "Connected",
     "availableHead": "Available",
-    "backAll": "← All integrations",
+    "backAll": "← All apps",
     "noDrops": "No drops registered for this integration.",
     "officialDocs": "Official documentation ↗",
     "dropsHead": "Drops",
@@ -393,7 +392,7 @@
     }
   },
   "connections": {
-    "title": "Your connections",
+    "title": "Accounts",
     "intro": "Connect an app once here, then any flow you build can use it.",
     "firstTileTitle": "Start with Slack and Google",
     "firstTileBody": "Most templates fire a notification or read a mailbox. Connecting Slack (for messages) and Google (for Gmail + Sheets) covers the majority of what you'll build first — pick the cards below and we'll guide you through the rest.",

@@ -1097,20 +1097,6 @@
   line-height: 1.5;
   flex: 1;
 }
-.integration-card-meta {
-  display: flex;
-  gap: 8px;
-  font-size: 11px;
-  color: var(--faint);
-}
-.integration-card-count {
-  font-family: var(--font-mono);
-  background: var(--surface-2, rgba(255, 255, 255, 0.05));
-  border: 1px solid var(--border);
-  padding: 1px 8px;
-  border-radius: 999px;
-}
-
 /* ----- Connections panel (top of Integrations page) ----- */
 .connections {
   margin: var(--space-4) 0 var(--space-6);

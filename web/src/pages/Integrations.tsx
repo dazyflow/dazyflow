@@ -165,7 +165,9 @@ function IntegrationCard({
               <HeaderIcon size={headerBranded ? 22 : 18} strokeWidth={2.2} />
             </span>
           )}
-          <h2>{meta.name}</h2>
+          <h2>
+            {slug === "standard-library" ? t("integrations.builtinGroup") : meta.name}
+          </h2>
           {connected && (
             <span
               className="connection-dot on integration-card-dot"
@@ -174,11 +176,6 @@ function IntegrationCard({
           )}
         </div>
         <p className="integration-card-desc">{truncate(meta.description, 160)}</p>
-        <div className="integration-card-meta">
-          <span className="integration-card-count">
-            {t("integrations.drop", { count: drops.length })}
-          </span>
-        </div>
       </div>
     </Link>
   );
@@ -228,12 +225,18 @@ export function IntegrationDetail() {
   const { meta, integrationDrops } = useMemo(() => {
     const all = drops ?? [];
     const filtered = all.filter((m) => integrationSlugFor(m) === slug);
-    const m = integrationMeta[slug] ?? {
+    const base = integrationMeta[slug] ?? {
       name: integrationNameFromSlug(slug),
       description: "",
     };
+    // The catch-all bucket reads as "Built-in" to non-technical users,
+    // not "Standard Library".
+    const m =
+      slug === "standard-library"
+        ? { ...base, name: t("integrations.builtinGroup") }
+        : base;
     return { meta: m, integrationDrops: filtered };
-  }, [drops, slug]);
+  }, [drops, slug, t]);
 
   if (error) {
     return (

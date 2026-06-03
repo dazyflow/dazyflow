@@ -31,8 +31,8 @@
     "flows": "Flöden",
     "runs": "Körningar",
     "approvals": "Godkännanden",
-    "connections": "Mina konton",
-    "integrations": "Katalog",
+    "connections": "Konton",
+    "integrations": "Appar",
     "admin": "Admin",
     "toggleNav": "växla navigering",
     "collapseSidebar": "Fäll ihop sidofältet",
@@ -365,13 +365,12 @@
     "noneInCategory": "Inga mallar i den här kategorin ännu."
   },
   "integrations": {
-    "title": "Integrationer",
-    "intro": "Varje connector och inbyggd familj daemonen känner till. Klicka på en integration för att se dess drops, beskrivningar och användningsanteckningar.",
-    "drop_one": "{{count}} drop",
-    "drop_other": "{{count}} drops",
+    "title": "Appar",
+    "intro": "Anslut apparna dina flöden använder. Klicka på en för att ställa in den eller se vad den kan göra.",
+    "builtinGroup": "Inbyggt",
     "connectedHead": "Anslutna",
     "availableHead": "Tillgängliga",
-    "backAll": "← Alla integrationer",
+    "backAll": "← Alla appar",
     "noDrops": "Inga drops registrerade för den här integrationen.",
     "officialDocs": "Officiell dokumentation ↗",
     "dropsHead": "Drops",
@@ -393,7 +392,7 @@
     }
   },
   "connections": {
-    "title": "Dina anslutningar",
+    "title": "Konton",
     "intro": "Anslut en app en gång här, sedan kan alla flöden du bygger använda den.",
     "firstTileTitle": "Börja med Slack och Google",
     "firstTileBody": "De flesta mallar skickar en notis eller läser en inkorg. Att ansluta Slack (för meddelanden) och Google (för Gmail + Sheets) täcker det mesta du bygger först — välj korten nedan så guidar vi dig genom resten.",
