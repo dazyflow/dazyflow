@@ -239,8 +239,6 @@ function CredentialsManager({
 
   return (
     <div className="credentials">
-      <h2 className="credentials-head">{t("connections.credentialsTitle")}</h2>
-      <p className="credentials-sub">{t("connections.credentialsIntro")}</p>
       {err && <div className="card error">{err}</div>}
       {loading ? (
         <div className="card">{t("common.loading")}</div>

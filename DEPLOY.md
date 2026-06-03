@@ -150,22 +150,21 @@ automatic DNS provisioning — adding an org's subdomain is an ops step
 
 ## Durability
 
-Set `HAZYFLOW_POSTGRES_DSN` so jobs, API keys, sessions, users,
-encrypted secrets, memberships, invitations, per-org SSO config, and
-per-org profiles all persist to Postgres. Without it those run
-in-memory or as JSON files under `HAZYFLOW_DATA_DIR/state/` and are
-lost on restart (dev only — the daemon logs a warning). Provide a
+`HAZYFLOW_POSTGRES_DSN` is **required** — `hzd` runs on Postgres and
+refuses to start without it. Jobs, API keys, sessions, users, encrypted
+secrets, memberships, invitations, per-org SSO config, and per-org
+profiles all persist to Postgres. (Graph workspaces and execution
+sandboxes are git/filesystem-backed under `HAZYFLOW_DATA_DIR`.) Provide a
 stable `HAZYFLOW_MASTER_KEY` (32-byte base64); losing it makes every
 stored secret undecryptable.
 
 ### Fail-closed config guard
 
-When `HAZYFLOW_POSTGRES_DSN` is set (the durable-deployment signal),
-`hzd` **refuses to start** if it would otherwise run with a bundled
-insecure default — specifically a `HAZYFLOW_POSTGRES_DSN` still using the
-shipped default DB password, or an empty `HAZYFLOW_MASTER_KEY`. The boot
-log prints a `FATAL` line naming each offending value. Fix them (set a
-strong `POSTGRES_PASSWORD` and a real master key) and restart.
+`hzd` **refuses to start** if it would run with a bundled insecure
+default — a missing `HAZYFLOW_POSTGRES_DSN`, a DSN still using the shipped
+default DB password, or an empty `HAZYFLOW_MASTER_KEY`. The boot log
+prints a `FATAL` line naming each offending value. Fix them (set a strong
+`POSTGRES_PASSWORD` and a real master key) and restart.
 
 `HAZYFLOW_DEV=1` downgrades the guard from fatal to warnings so the
 bundled defaults boot for a local trial. **Never set it in production** —

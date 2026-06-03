@@ -1,6 +1,8 @@
 // Package claude hosts the native Claude (Anthropic Messages API)
 // connector, migrated from the scripted TS drop. It authenticates with an
-// api_key param (typically ${tenant:ANTHROPIC_API_KEY}); there's no OAuth.
+// api_key param supplied by the per-tenant Claude app connection — the
+// engine injects conn.claude.api_key into the param when the node leaves
+// it unset (see ConnectionFields below); there's no OAuth.
 package claude
 
 import (
@@ -38,20 +40,23 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"claude", "anthropic", "ai", "llm", "prompt"},
 			Examples: []core.ParamsExample{
-				{Title: "One-shot summary", Params: json.RawMessage(`{"model":"claude-sonnet-4-6","prompt":"Summarize the upstream text in one sentence.","max_tokens":256,"api_key":"${tenant:ANTHROPIC_API_KEY}"}`), Notes: "Wire the text to summarise into the 'prompt' input; params.prompt or params.system is the instruction."},
-				{Title: "System-prompted classifier", Params: json.RawMessage(`{"model":"claude-sonnet-4-6","system":"Reply with exactly 'spam' or 'ham'.","prompt":"Your bank account has been compromised","max_tokens":4,"temperature":0,"api_key":"${tenant:ANTHROPIC_API_KEY}"}`)},
+				{Title: "One-shot summary", Params: json.RawMessage(`{"model":"claude-sonnet-4-6","prompt":"Summarize the upstream text in one sentence.","max_tokens":256}`), Notes: "Wire the text to summarise into the 'prompt' input; params.prompt or params.system is the instruction. The API key comes from the Claude app connection — leave api_key unset."},
+				{Title: "System-prompted classifier", Params: json.RawMessage(`{"model":"claude-sonnet-4-6","system":"Reply with exactly 'spam' or 'ham'.","prompt":"Your bank account has been compromised","max_tokens":4,"temperature":0}`)},
 			},
-			RequiresConnections: []core.ConnectionRequirement{
-				{Kind: "secret", Name: "ANTHROPIC_API_KEY", Note: "Anthropic API key (sk-ant-…)."},
+			// The Anthropic API key is a per-tenant connection set once on
+			// the Claude app page; the engine injects it into the api_key
+			// param so a flow author never pastes the key on a node.
+			ConnectionFields: []core.ConnectionField{
+				{Key: "api_key", Label: "API key", Secret: true, Required: true, Placeholder: "sk-ant-…"},
 			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				{Port: "prompt", Label: "Optional user message text (overrides params.messages if set)"},
+				{Port: "prompt", Label: "Prompt"},
 			},
 			Outputs: []core.Port{
-				{Port: "text", Label: "Assistant response text"},
-				{Port: "response", Label: "Full response object (usage, stop_reason, …)"},
+				{Port: "text", Label: "Text"},
+				{Port: "response", Label: "Full response"},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
@@ -59,12 +64,12 @@ func init() {
 					"model":{"type":"string","description":"Model id, e.g. claude-sonnet-4-6."},
 					"prompt":{"type":"string","format":"multiline","description":"Single user message (used when no 'prompt' input and no params.messages)."},
 					"system":{"type":"string","format":"multiline","description":"Optional system prompt."},
-					"messages":{"type":"array","items":{},"description":"Full conversation history ({role, content}); overrides params.prompt."},
+					"messages":{"type":"array","items":{},"x_advanced":true,"description":"Full conversation history ({role, content}); overrides params.prompt."},
 					"max_tokens":{"type":"integer","default":1024,"minimum":1},
 					"temperature":{"type":"number"},
-					"stop_sequences":{"type":"array","items":{"type":"string"}},
-					"api_key":{"type":"string","description":"Anthropic API key. Use ${tenant:ANTHROPIC_API_KEY}."},
-					"base_url":{"type":"string","description":"Override the API host."},
+					"stop_sequences":{"type":"array","items":{"type":"string"},"x_advanced":true},
+					"api_key":{"type":"string","x_advanced":true,"description":"Anthropic API key. Configured once on the Claude app connection and injected automatically — leave unset on the node."},
+					"base_url":{"type":"string","x_advanced":true,"description":"Override the API host."},
 					"timeout_ms":{"type":"integer","default":60000,"minimum":1}
 				}
 			}`),
@@ -78,7 +83,7 @@ func init() {
 func executeClaude(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	apiKey, _ := params.StringOpt(job.Params, "api_key")
 	if apiKey == "" {
-		return params.Err(job, "bad_param", "api_key is required (use ${tenant:ANTHROPIC_API_KEY})"), nil
+		return params.Err(job, "bad_param", "no API key — connect Claude on the Apps page to set it"), nil
 	}
 
 	// Message precedence: prompt input → params.messages → params.prompt.

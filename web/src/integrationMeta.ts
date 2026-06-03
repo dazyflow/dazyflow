@@ -238,7 +238,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Run prompts through Claude, Anthropic's AI assistant. Useful for summarising upstream text, classifying inputs, generating responses, or any spot in your flow where you want a language model in the loop.",
     technical_notes:
-      "Authenticated via $ANTHROPIC_API_KEY. For local development without a key, the hzd --claude-cli flag routes through a local `claude -p` CLI plus an MCP server so flows can exercise the chat path against your already-logged-in CLI.",
+      "Authenticated with the API key set on this connection — flows pick it up automatically, no key on the node. For local development without a key, the hzd --claude-cli flag routes through a local `claude -p` CLI plus an MCP server so flows can exercise the chat path against your already-logged-in CLI.",
     docs_url: "https://docs.anthropic.com/",
   },
   git: {

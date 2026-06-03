@@ -33,6 +33,11 @@ services:
       POSTGRES_USER:     ${POSTGRES_USER:-hazyflow}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hazyflow}
       POSTGRES_DB:       ${POSTGRES_DB:-hazyflow}
+    # Published on the host loopback only — lets `make dev` (hzd running on
+    # the host via `go run`) reach the bundled database at localhost:5432,
+    # and lets an operator run psql for backups. Not exposed off-host.
+    ports:
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

@@ -19,9 +19,8 @@ You need Docker with the Compose plugin. Everything is configured through
 cp .env.example .env
 ```
 
-**2. Set the four mandatory values** in `.env` (the daemon refuses to
-boot with insecure defaults once a database is configured — see the guard
-below):
+**2. Set the four mandatory values** in `.env` (`hzd` requires Postgres and
+refuses to boot with insecure defaults — see the guard below):
 
 - `POSTGRES_PASSWORD` — a strong password. **You must put the same value
   into `HAZYFLOW_POSTGRES_DSN`** (it appears inline there). The two must
@@ -62,7 +61,7 @@ Stop with `docker compose down` (named volumes persist).
 
 ### Boot guard
 
-`hzd` **refuses to start** when it's pointed at a database while still
+`hzd` requires `HAZYFLOW_POSTGRES_DSN` and **refuses to start** while still
 using the bundled default DB password or an empty master key — the boot
 log names exactly which value is insecure. Fix it and restart. To boot the
 shipped defaults for a throwaway local trial only, set `HAZYFLOW_DEV=1`,
@@ -91,18 +90,21 @@ security knobs, observability, and multi-node Kubernetes
 
 ## Run locally for development
 
-Postgres is optional in dev (state falls back to in-memory or a JSON file,
-and the daemon logs a warning).
+`hzd` requires Postgres — there is no in-memory mode. For local dev,
+`make dev` starts the bundled Postgres container (loopback-only) and runs
+the daemon on the host against it; no other setup needed.
 
 ```sh
-make env         # seed .env from .env.example (one-time)
-make dev         # boots hzd; sources .env, or a minimal dev set if absent.
+make dev         # starts bundled Postgres (make pg), then boots hzd on
                  # http://localhost:8080
 make web         # (other terminal) Vite dev server on http://localhost:5173
 ```
 
-`make env` seeds the bundled Postgres DSN, which trips the boot guard. For
-local dev either blank `HAZYFLOW_POSTGRES_DSN` (in-memory fallback, no
-guard) or set `HAZYFLOW_DEV=1`. The dev defaults turn on signup and mint a
-throwaway API key on every boot (`HAZYFLOW_DEV_KEY=1`) — never set that
-outside local development.
+With no `.env`, `make dev` points hzd at the bundled database
+(`postgres://hazyflow:hazyflow@localhost:5432/hazyflow`) and sets
+`HAZYFLOW_DEV=1` so the bundled-default password is allowed. It also turns
+on signup and mints a throwaway API key on every boot
+(`HAZYFLOW_DEV_KEY=1`) — never set those outside local development. To run
+against your own database instead, `make env`, set `HAZYFLOW_POSTGRES_DSN`
+in `.env`, and `make dev` will source it. (`make pg` / `make pg-down` start
+and stop the bundled dev Postgres on their own.)

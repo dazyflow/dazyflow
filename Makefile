@@ -5,7 +5,7 @@ COMPOSE ?= docker compose
 
 .DEFAULT_GOAL := help
 
-.PHONY: help up down restart logs ps build rebuild env dev web test vet fmt check ci
+.PHONY: help up down restart logs ps build rebuild env pg pg-down dev web test vet fmt check ci
 
 help: ## List targets
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sort | \
@@ -37,18 +37,26 @@ rebuild: ## Rebuild the image from scratch (no layer cache)
 env: ## Sync .env with .env.example (creates one if missing; appends new keys; never overwrites existing values)
 	@./scripts/sync-env.sh
 
-## --- Local development (no containers) ---
+## --- Local development (containers for Postgres only) ---
 
-dev: ## Run hzd locally. Sources .env when present (run `make env` once to seed it), else falls back to a minimal dev set.
+pg: ## Start (and wait for) just the bundled Postgres on 127.0.0.1:5432 — `make dev` needs it
+	$(COMPOSE) up -d --wait postgres
+
+pg-down: ## Stop the bundled dev Postgres (data persists in the pgdata volume)
+	$(COMPOSE) stop postgres
+
+dev: pg ## Run hzd locally against the bundled Postgres (make pg). Sources .env when present, else a minimal dev set pointed at localhost:5432.
 	@if [ -f .env ]; then \
 		set -a; . ./.env; set +a; \
 		HAZYFLOW_HTTP=:8080 go run ./cmd/hzd; \
 	else \
 		HAZYFLOW_HTTP=:8080 \
+		HAZYFLOW_DEV=1 \
 		HAZYFLOW_DEV_KEY=1 \
 		HAZYFLOW_ENABLE_SIGNUP=1 \
 		HAZYFLOW_WEB_ORIGIN=http://localhost:5173 \
 		HAZYFLOW_MASTER_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
+		HAZYFLOW_POSTGRES_DSN=postgres://hazyflow:hazyflow@localhost:5432/hazyflow?sslmode=disable \
 		go run ./cmd/hzd; \
 	fi
 

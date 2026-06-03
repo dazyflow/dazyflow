@@ -412,7 +412,7 @@
   },
   "connections": {
     "title": "Hemligheter",
-    "intro": "Lagra de hemliga värden dina flöden behöver — API-nycklar, databas-URL:er. För att ansluta en app som Slack eller Gmail, använd Appar-sidan.",
+    "intro": "Hemligheter låter dig hantera återanvändbar konfigurationsdata. De är krypterade och används för känsliga värden som API-nycklar, tokens och databas-URL:er — skrivskyddade, så ett värde visas aldrig igen efter att du sparat det. För att ansluta en app som Slack eller Gmail, använd Appar-sidan.",
     "firstTileTitle": "Börja med Slack och Google",
     "firstTileBody": "De flesta mallar skickar en notis eller läser en inkorg. Att ansluta Slack (för meddelanden) och Google (för Gmail + Sheets) täcker det mesta du bygger först — välj korten nedan så guidar vi dig genom resten.",
     "setupIncompleteTitle": "Servern är inte färdigkonfigurerad ännu",
@@ -430,8 +430,6 @@
     "connectedOk": "Anslöt {{provider}} ({{account}}).",
     "connectFailed": "Kunde inte ansluta {{provider}}: {{error}}",
     "unknownError": "okänt fel",
-    "credentialsTitle": "Credentials",
-    "credentialsIntro": "Spara en databas-URL, API-nyckel eller annan secret som ett flöde behöver. Värden är skrivskyddade — de visas aldrig igen efter att du sparat.",
     "noCredentials": "Inga credentials sparade ännu.",
     "valueSet": "satt ✓",
     "addCredential": "Lägg till credential",
@@ -895,6 +893,7 @@
     "enter": "Retur"
   },
   "schemaForm": {
+    "advancedSection": "Avancerat ({{count}})",
     "enabled": "Aktiverad",
     "disabled": "Avaktiverad",
     "remove": "ta bort",

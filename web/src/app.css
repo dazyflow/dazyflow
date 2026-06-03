@@ -1466,15 +1466,6 @@
 .credentials {
   margin-top: var(--space-5);
 }
-.credentials-head {
-  margin: 0 0 var(--space-1);
-  font-size: 15px;
-}
-.credentials-sub {
-  margin: 0 0 var(--space-3);
-  color: var(--muted);
-  font-size: 13px;
-}
 .credentials-list {
   list-style: none;
   margin: 0 0 var(--space-3);
@@ -3433,6 +3424,42 @@ button.danger-outline:hover:not(:disabled) {
 }
 .sf-show-advanced input[type="checkbox"] {
   margin: 0;
+}
+
+/* Collapsible Advanced section inside a node's param form: a hairline
+   separator, a clickable summary with a rotating disclosure triangle,
+   and the advanced fields below. Keeps the everyday form short while
+   leaving developer-flavored params one click away. */
+.sf-advanced {
+  margin-top: var(--space-3);
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-3);
+}
+.sf-advanced-summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.sf-advanced-summary::-webkit-details-marker {
+  display: none;
+}
+.sf-advanced-summary::before {
+  content: "▸";
+  font-size: 10px;
+  color: var(--faint);
+  transition: transform 0.12s ease;
+}
+.sf-advanced[open] > .sf-advanced-summary::before {
+  transform: rotate(90deg);
+}
+.sf-advanced-body {
+  margin-top: var(--space-3);
 }
 
 .sf-fallback-hint {

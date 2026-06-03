@@ -18,7 +18,7 @@ func TestProductionConfigProblems(t *testing.T) {
 		masterKey string
 		wantCount int
 	}{
-		{"no dsn is dev fallback, no problems", "", "", 0},
+		{"unparseable dsn skips password check", "", strongKey, 0},
 		{"safe dsn + key is clean", safeDSN, strongKey, 0},
 		{"default password flagged", defaultDSN, strongKey, 1},
 		{"missing master key flagged", safeDSN, "", 1},

@@ -72,36 +72,90 @@ export function SchemaForm({
     );
   }
   const required = new Set(schema.required ?? []);
-  const entries = Object.entries(schema.properties);
+  const props = schema.properties;
+  const renderField = (key: string, propSchema: JSONSchema) => (
+    <SchemaField
+      key={key}
+      name={key}
+      schema={propSchema}
+      required={required.has(key)}
+      value={value[key]}
+      workspace={workspace}
+      accountPicker={accountPicker}
+      onChange={(v) => {
+        const next = { ...value };
+        if (v === undefined) delete next[key];
+        else next[key] = v;
+        onChange(next);
+      }}
+    />
+  );
+
+  // Split into a basic group (always visible) and an advanced group
+  // tucked into a collapsible section, so a non-tech owner sees only
+  // the everyday params by default. Classification is unchanged
+  // (isAdvancedField) — this is purely how the two groups are laid out.
+  const basic: [string, JSONSchema][] = [];
+  const advanced: [string, JSONSchema][] = [];
+  for (const [key, propSchema] of Object.entries(props)) {
+    if (isAdvancedField(key, propSchema, props)) advanced.push([key, propSchema]);
+    else basic.push([key, propSchema]);
+  }
+
+  // The section starts open when the user prefers advanced fields
+  // visible (the Inspector's Show-advanced preference) OR when any
+  // advanced field already holds a non-default value — so a forked
+  // template that pre-filled an advanced param never hides a set value
+  // behind a collapsed disclosure.
+  const advancedHasValue = advanced.some(([k, s]) => hasNonDefaultValue(value[k], s));
+
   return (
     <div>
-      {entries.map(([key, propSchema]) => {
-        if (
-          !showAdvanced &&
-          isAdvancedField(key, propSchema, schema.properties ?? {}) &&
-          !hasNonDefaultValue(value[key], propSchema)
-        ) {
-          return null;
-        }
-        return (
-          <SchemaField
-            key={key}
-            name={key}
-            schema={propSchema}
-            required={required.has(key)}
-            value={value[key]}
-            workspace={workspace}
-            accountPicker={accountPicker}
-            onChange={(v) => {
-              const next = { ...value };
-              if (v === undefined) delete next[key];
-              else next[key] = v;
-              onChange(next);
-            }}
-          />
-        );
-      })}
+      {basic.map(([key, propSchema]) => renderField(key, propSchema))}
+      {advanced.length > 0 && (
+        <AdvancedSection
+          count={advanced.length}
+          defaultOpen={!!showAdvanced || advancedHasValue}
+        >
+          {advanced.map(([key, propSchema]) => renderField(key, propSchema))}
+        </AdvancedSection>
+      )}
     </div>
+  );
+}
+
+// AdvancedSection is the collapsible disclosure holding a drop's
+// developer-flavored params (timeouts, raw overrides, connection
+// plumbing). Basic params render above it, always visible; this keeps
+// the everyday form short while leaving the extras one click away.
+// defaultOpen seeds the initial state — the Inspector's Show-advanced
+// preference, or the presence of a non-default value the user mustn't
+// lose sight of. onToggle mirrors manual open/close into local state so
+// a parent re-render (a keystroke elsewhere in the form) doesn't fight
+// the user's choice. The parent keys SchemaForm by node id, so this
+// state resets correctly when a different node is selected.
+function AdvancedSection({
+  count,
+  defaultOpen,
+  children,
+}: {
+  count: number;
+  defaultOpen: boolean;
+  children: React.ReactNode;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <details
+      className="sf-advanced"
+      open={open}
+      onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}
+    >
+      <summary className="sf-advanced-summary">
+        {t("schemaForm.advancedSection", { count })}
+      </summary>
+      <div className="sf-advanced-body">{children}</div>
+    </details>
   );
 }
 

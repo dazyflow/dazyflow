@@ -1,7 +1,8 @@
 // Command hzd is the Hazyflow daemon. It serves the control gRPC API
-// backed by a daemon.Service. For step-12 the storage layer is in-memory
-// and a single dev workspace is auto-provisioned; production deployments
-// will swap in Postgres + a real workspace lookup.
+// backed by a daemon.Service. Control-plane state (jobs, api-keys,
+// sessions, users, encrypted secrets, org metadata) is Postgres-backed
+// and HAZYFLOW_POSTGRES_DSN is required; graph workspaces and sandboxes
+// are git/filesystem-backed under HAZYFLOW_DATA_DIR.
 package main
 
 import (
@@ -30,9 +31,6 @@ import (
 	"git.sr.ht/~klahr/hazyflow/auth"
 	"git.sr.ht/~klahr/hazyflow/core"
 	"git.sr.ht/~klahr/hazyflow/daemon"
-	"git.sr.ht/~klahr/hazyflow/engine"
-	"git.sr.ht/~klahr/hazyflow/engine/jobstore"
-	"git.sr.ht/~klahr/hazyflow/engine/mcp"
 	_ "git.sr.ht/~klahr/hazyflow/drops"
 	gitdrop "git.sr.ht/~klahr/hazyflow/drops/git"
 	"git.sr.ht/~klahr/hazyflow/drops/github"
@@ -43,6 +41,9 @@ import (
 	secretsdrop "git.sr.ht/~klahr/hazyflow/drops/secrets"
 	"git.sr.ht/~klahr/hazyflow/drops/sheets"
 	"git.sr.ht/~klahr/hazyflow/drops/slack"
+	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/hazyflow/engine/jobstore"
+	"git.sr.ht/~klahr/hazyflow/engine/mcp"
 )
 
 func main() {
@@ -87,19 +88,13 @@ func main() {
 	enableMetrics := envBool("HAZYFLOW_ENABLE_METRICS", false)
 	mcpServers := envStr("HAZYFLOW_MCP_SERVERS", "")
 	// HAZYFLOW_DATA_DIR is the root for every piece of on-disk state
-	// (git-backed graph workspace, per-tenant sandbox roots, dev-mode
-	// JSON stores). Conventional subdirs inside: workspace/, sandbox/,
-	// state/. Container deployments pin this to /data; the dev default
-	// keeps everything tucked into a single ./.hazyflow/ folder at the
-	// repo root.
+	// (git-backed graph workspace, per-tenant sandbox roots).
+	// Conventional subdirs inside: workspace/, sandbox/. Container
+	// deployments pin this to /data; the dev default keeps everything
+	// tucked into a single ./.hazyflow/ folder at the repo root.
 	dataDir := envStr("HAZYFLOW_DATA_DIR", "./.hazyflow")
 	workspaceDir := filepath.Join(dataDir, "workspace")
 	sandboxBase := filepath.Join(dataDir, "sandbox")
-	stateDir := filepath.Join(dataDir, "state")
-	// The state dir is created on demand below — only when we actually
-	// fall back to the JSON stores (no Postgres DSN). With Postgres,
-	// stateDir stays unused and never gets created, so a real deploy
-	// has no orphaned <data>/state/ folder.
 	webOrigin := envStr("HAZYFLOW_WEB_ORIGIN", "http://localhost:5174")
 	// Optional wildcard domain for per-org subdomains (e.g. "hazyflow.app",
 	// so "acme.hazyflow.app" routes to the sign-in page with org=acme).
@@ -177,16 +172,22 @@ func main() {
 	// cloud metadata), so a clone URL can't be used to reach internal services.
 	gitdrop.InstallGuardedHTTPTransport(hfnet.SafeHTTPClient(60*time.Second, false))
 
-	// Refuse to boot with the bundled insecure defaults in a real deployment.
-	// A configured Postgres DSN is the signal that this isn't the in-memory dev
-	// fallback. HAZYFLOW_DEV=1 opts out (and is logged) for local development.
+	// hzd runs on Postgres — there is no in-memory mode. Fail fast and
+	// clearly when the DSN is missing, before the insecure-defaults guard
+	// (which would otherwise complain about the master key first).
+	if postgresDSN == "" {
+		log.Fatal("HAZYFLOW_POSTGRES_DSN is required — hzd runs on Postgres. For local development, `make pg` starts the bundled database and `make dev` points at it (see the README).")
+	}
+
+	// Refuse to boot with the bundled insecure defaults (default DB
+	// password, empty master key). HAZYFLOW_DEV=1 opts out (and is logged)
+	// for local development.
 	validateProductionConfig(devMode, postgresDSN, masterKeyB64)
 
-	// Durable stores: when --postgres-dsn is set, keys / sessions /
-	// users / jobs / secrets all persist to one shared pgxpool and
-	// survive a restart. When empty, they fall back to the in-memory /
-	// JSON-file stores — fine for dev, but everything is lost on
-	// restart. Declared as interfaces so either backend slots in.
+	// Durable stores: keys / sessions / users / jobs / secrets / org
+	// metadata all persist to one shared pgxpool and survive a restart.
+	// (The NewMem* implementations live on only as test fixtures.)
+	// Declared as interfaces so a fake can slot in under test.
 	var (
 		ks       auth.AdminKeyStore
 		users    auth.UserStore
@@ -194,7 +195,7 @@ func main() {
 		jobs     core.JobStore
 		pgPool   *pgxpool.Pool
 	)
-	if postgresDSN != "" {
+	{
 		poolCfg, err := pgxpool.ParseConfig(postgresDSN)
 		if err != nil {
 			log.Fatalf("postgres dsn: %v", err)
@@ -253,29 +254,6 @@ func main() {
 		}
 		seedDefaultUser(ctx, users, devKey || devMode)
 		log.Print("postgres stores enabled: jobs, api-keys, sessions, users (durable across restart)")
-	} else {
-		ks = auth.NewMemKeyStore()
-		// Pre-create the state dir so seedDefaultUser's atomic
-		// .json.tmp rename works on a fresh checkout. The Postgres
-		// branch above never reaches this — state/ stays absent.
-		if stateDir != "" {
-			if err := os.MkdirAll(stateDir, 0o755); err != nil {
-				log.Fatalf("create state dir %s: %v", stateDir, err)
-			}
-		}
-		path := stateFile(stateDir, "users")
-		jsonUsers, err := auth.OpenJSONUserStore(path)
-		if err != nil {
-			log.Fatalf("open users: %v", err)
-		}
-		users = jsonUsers
-		if path != "" {
-			seedDefaultUser(ctx, users, devKey || devMode)
-			log.Printf("users store: %s", path)
-		}
-		sessions = auth.NewMemSessionStore()
-		jobs = jobstore.NewMemory()
-		log.Print("WARNING: in-memory stores (jobs/api-keys/sessions) — lost on restart; set HAZYFLOW_POSTGRES_DSN for durability")
 	}
 
 	// One-time migration: import a JSON user file into the Postgres user
@@ -298,14 +276,10 @@ func main() {
 		return
 	}
 
-	// Per-tenant concurrency cap (fairness throttle). Applies to whichever
-	// JobStore backend is active; the Postgres cap is a documented soft
-	// cap, the memory cap is exact.
+	// Per-tenant concurrency cap (fairness throttle) on the Postgres job
+	// store — a documented soft cap.
 	if mc := maxConcurrentJobs; mc > 0 {
-		switch js := jobs.(type) {
-		case *jobstore.Memory:
-			js.SetMaxConcurrentPerTenant(mc)
-		case *jobstore.Postgres:
+		if js, ok := jobs.(*jobstore.Postgres); ok {
 			js.SetMaxConcurrentPerTenant(mc)
 		}
 		log.Printf("per-tenant concurrency cap: %d running node jobs", mc)
@@ -322,19 +296,14 @@ func main() {
 		log.Println("workspace store: in-memory (graphs lost on restart)")
 	}
 
-	// Event bus: Postgres-backed (multi-node — any hzd can stream a run's
-	// events) when a DSN is set, else in-process MemoryBus (single node).
-	var bus daemon.Bus
-	if pgPool != nil {
-		pgBus, err := daemon.NewPgBus(ctx, pgPool)
-		if err != nil {
-			log.Fatalf("postgres event bus: %v", err)
-		}
-		bus = pgBus
-		log.Print("event bus: postgres LISTEN/NOTIFY (multi-node)")
-	} else {
-		bus = daemon.NewMemoryBus()
+	// Event bus: Postgres LISTEN/NOTIFY so any hzd replica can stream a
+	// run's events (multi-node).
+	pgBus, err := daemon.NewPgBus(ctx, pgPool)
+	if err != nil {
+		log.Fatalf("postgres event bus: %v", err)
 	}
+	var bus daemon.Bus = pgBus
+	log.Print("event bus: postgres LISTEN/NOTIFY (multi-node)")
 	sandbox, err := daemon.NewFSSandbox(sandboxBase)
 	if err != nil {
 		log.Fatalf("sandbox base %s: %v", sandboxBase, err)
@@ -550,10 +519,9 @@ func main() {
 	}()
 
 	// Retention sweeps. The jobs table (full run history, JSON payloads)
-	// and audit_events grow without bound otherwise. Postgres-only — the
-	// in-memory dev stores are ephemeral. Each retention <= 0 disables
-	// that sweep; runs once at startup, then hourly.
-	if pgPool != nil {
+	// and audit_events grow without bound otherwise. Each retention <= 0
+	// disables that sweep; runs once at startup, then hourly.
+	{
 		jobRetention := envDuration("HAZYFLOW_JOB_RETENTION", 30*24*time.Hour)
 		auditRetention := envDuration("HAZYFLOW_AUDIT_RETENTION", 90*24*time.Hour)
 		if jobRetention > 0 || auditRetention > 0 {
@@ -603,19 +571,15 @@ func main() {
 		}
 	}
 
-	// Membership / invitation / per-org-auth / per-org-profile stores.
-	// With Postgres configured all four live in Pg tables (managed by
-	// auth.EnsurePgOrgsSchema). Without Postgres they fall back to
-	// JSON files under <state-dir> for dev. An empty stateDir leaves
-	// the JSON stores nil → the gateway's invite, switch-org, and
-	// per-org settings endpoints return 501.
+	// Membership / invitation / per-org-auth / per-org-profile stores all
+	// live in Postgres tables (managed by auth.EnsurePgOrgsSchema).
 	var (
 		memberships     auth.MembershipStore
 		invitations     auth.InvitationStore
 		orgAuthStore    auth.OrgAuthStore
 		orgProfileStore auth.OrgProfileStore
 	)
-	if pgPool != nil {
+	{
 		pgMembers, err := auth.NewPgMembershipStore(ctx, pgPool)
 		if err != nil {
 			log.Fatalf("postgres membership store: %v", err)
@@ -634,29 +598,6 @@ func main() {
 		}
 		memberships, invitations, orgAuthStore, orgProfileStore = pgMembers, pgInvites, pgOrgAuth, pgOrgProfile
 		log.Print("memberships + invitations + org-auth + org-profile stores: postgres-backed")
-	} else {
-		// stateDir already created above in the users-store branch
-		// (both run only in the no-Postgres path).
-		membersJSON, err := auth.OpenJSONMembershipStore(stateFile(stateDir, "memberships"))
-		if err != nil {
-			log.Fatalf("open memberships: %v", err)
-		}
-		invitesJSON, err := auth.OpenJSONInvitationStore(stateFile(stateDir, "invitations"))
-		if err != nil {
-			log.Fatalf("open invitations: %v", err)
-		}
-		orgAuthJSON, err := auth.OpenJSONOrgAuthStore(stateFile(stateDir, "orgauth"))
-		if err != nil {
-			log.Fatalf("open org-auth: %v", err)
-		}
-		orgProfileJSON, err := auth.OpenJSONOrgProfileStore(stateFile(stateDir, "orgprofile"))
-		if err != nil {
-			log.Fatalf("open org-profile: %v", err)
-		}
-		memberships, invitations, orgAuthStore, orgProfileStore = membersJSON, invitesJSON, orgAuthJSON, orgProfileJSON
-		if stateDir != "" {
-			log.Printf("memberships + invitations + org-auth + org-profile stores: JSON under %s/", stateDir)
-		}
 	}
 
 	if httpListen != "" {
@@ -702,22 +643,15 @@ func main() {
 		}
 		gw.WebDist = webDist       // empty disables static frontend serving
 		gw.LandingDir = landingDir // empty disables the marketing landing; / serves the SPA
-		// Audit trail: Postgres-backed (durable) when a DSN is set, else
-		// in-memory (dev). Powers GET /api/v1/admin/audit.
-		if pgPool != nil {
-			auditLog, err := daemon.NewPgAuditLog(ctx, pgPool)
-			if err != nil {
-				log.Fatalf("postgres audit log: %v", err)
-			}
-			gw.Audit = auditLog
-		} else {
-			gw.Audit = daemon.NewMemAuditLog()
+		// Audit trail: Postgres-backed (durable). Powers GET /api/v1/admin/audit.
+		auditLog, err := daemon.NewPgAuditLog(ctx, pgPool)
+		if err != nil {
+			log.Fatalf("postgres audit log: %v", err)
 		}
-		if pgPool != nil {
-			// Readiness gates on the DB being reachable.
-			pool := pgPool
-			gw.ReadyCheck = func(ctx context.Context) error { return pool.Ping(ctx) }
-		}
+		gw.Audit = auditLog
+		// Readiness gates on the DB being reachable.
+		pool := pgPool
+		gw.ReadyCheck = func(ctx context.Context) error { return pool.Ping(ctx) }
 		if webDist != "" {
 			log.Printf("serving frontend bundle from %s", webDist)
 		}
@@ -924,27 +858,15 @@ func registerRemotes(cat *engine.RemoteCatalog, spec string) error {
 	return nil
 }
 
-// stateFile builds the path to a JSON dev-state file under the state
-// subdirectory of HAZYFLOW_DATA_DIR. kind is the bare name ("users",
-// "memberships", …); files are named "<kind>.json".
-func stateFile(dir, kind string) string {
-	if dir == "" {
-		return ""
-	}
-	return filepath.Join(dir, kind+".json")
-}
-
 // defaultInsecurePassword is the DB password shipped in the bundled .env /
 // docker-compose defaults so the stack boots out of the box. It must never
 // survive into a real deployment — validateProductionConfig refuses to start
 // with it unless HAZYFLOW_DEV is set.
 const defaultInsecurePassword = "hazyflow"
 
-// validateProductionConfig fails closed on the bundled insecure defaults once
-// the daemon is configured for a durable (non-dev) deployment. A configured
-// Postgres DSN is the "this is real" signal; the in-memory fallback already
-// warns loudly on its own. HAZYFLOW_DEV=1 turns these into warnings so local
-// development with the shipped defaults still boots.
+// validateProductionConfig fails closed on the bundled insecure defaults
+// (default DB password, empty master key). HAZYFLOW_DEV=1 turns these into
+// warnings so local development with the shipped defaults still boots.
 func validateProductionConfig(devMode bool, postgresDSN, masterKeyB64 string) {
 	problems := productionConfigProblems(postgresDSN, masterKeyB64)
 	if len(problems) == 0 {
@@ -963,14 +885,9 @@ func validateProductionConfig(devMode bool, postgresDSN, masterKeyB64 string) {
 }
 
 // productionConfigProblems returns human-readable descriptions of every
-// bundled-insecure-default still in effect for a durable deployment. Empty
-// when the config is safe (or when there's no DSN — the in-memory dev path).
+// bundled-insecure-default still in effect. Empty when the config is safe.
 // Pure so it can be unit-tested without exiting the process.
 func productionConfigProblems(postgresDSN, masterKeyB64 string) []string {
-	// In-memory dev fallback (no DSN): nothing to guard here.
-	if postgresDSN == "" {
-		return nil
-	}
 	var problems []string
 	if cfg, err := pgxpool.ParseConfig(postgresDSN); err == nil {
 		if cfg.ConnConfig.Password == defaultInsecurePassword {
@@ -1085,20 +1002,13 @@ func setupEncryptedSecrets(ctx context.Context, masterKeyB64 string, secrets map
 	if err != nil {
 		log.Fatalf("HAZYFLOW_MASTER_KEY: not valid base64: %v", err)
 	}
-	// Persist ciphertext + wrapped DEKs to Postgres when a pool is
-	// available (survives restart); otherwise memory (dev only — losing
-	// the store means losing every tenant's secrets on restart).
-	var store daemon.SecretsBackend
-	if pool != nil {
-		pg, err := daemon.NewPgSecretsStore(ctx, pool)
-		if err != nil {
-			log.Fatalf("encrypted secrets (postgres): %v", err)
-		}
-		store = pg
-		log.Print("encrypted secret store: postgres-backed (durable)")
-	} else {
-		store = daemon.NewMemSecretsStore()
+	// Persist ciphertext + wrapped DEKs to Postgres (survives restart).
+	pg, err := daemon.NewPgSecretsStore(ctx, pool)
+	if err != nil {
+		log.Fatalf("encrypted secrets (postgres): %v", err)
 	}
+	var store daemon.SecretsBackend = pg
+	log.Print("encrypted secret store: postgres-backed (durable)")
 	es, err := daemon.NewEncryptedSecrets(key, store)
 	if err != nil {
 		log.Fatalf("encrypted secrets: %v", err)

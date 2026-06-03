@@ -412,7 +412,7 @@
   },
   "connections": {
     "title": "Secrets",
-    "intro": "Store the secret values your flows need — API keys, database URLs. To connect an app like Slack or Gmail, use the Apps page.",
+    "intro": "Secrets let you manage reusable configuration data. They're encrypted and used for sensitive values like API keys, tokens, and database URLs — write-only, so a value is never shown again after you save it. To connect an app like Slack or Gmail, use the Apps page.",
     "firstTileTitle": "Start with Slack and Google",
     "firstTileBody": "Most templates fire a notification or read a mailbox. Connecting Slack (for messages) and Google (for Gmail + Sheets) covers the majority of what you'll build first — pick the cards below and we'll guide you through the rest.",
     "setupIncompleteTitle": "Setup isn't finished on this server yet",
@@ -430,8 +430,6 @@
     "connectedOk": "Connected {{provider}} ({{account}}).",
     "connectFailed": "Couldn't connect {{provider}}: {{error}}",
     "unknownError": "unknown error",
-    "credentialsTitle": "Credentials",
-    "credentialsIntro": "Store a database URL, API key, or other secret a flow needs. Values are write-only — they're never shown again after you save.",
     "noCredentials": "No credentials stored yet.",
     "valueSet": "set ✓",
     "addCredential": "Add credential",
@@ -895,6 +893,7 @@
     "enter": "Enter"
   },
   "schemaForm": {
+    "advancedSection": "Advanced ({{count}})",
     "enabled": "Enabled",
     "disabled": "Disabled",
     "remove": "remove",
