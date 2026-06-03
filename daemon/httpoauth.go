@@ -80,7 +80,7 @@ func (h *HTTPGateway) buildAuthorizeURL(p core.Principal, providerName, account,
 		return "", http.StatusBadRequest, fmt.Sprintf("account %q: %v", account, err)
 	}
 	if returnTo == "" {
-		returnTo = "/integrations"
+		returnTo = "/apps"
 	}
 	if !strings.HasPrefix(returnTo, "/") {
 		return "", http.StatusBadRequest, "return_to must be a relative path starting with /"

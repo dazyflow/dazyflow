@@ -5,7 +5,7 @@ import { SignIn } from "./pages/SignIn";
 import { SignUp } from "./pages/SignUp";
 import { Welcome } from "./pages/Welcome";
 import { Templates } from "./pages/Templates";
-import { Integrations, IntegrationDetail } from "./pages/Integrations";
+import { Apps, AppDetail } from "./pages/Apps";
 import { Secrets } from "./pages/Secrets";
 import { FlowList } from "./pages/FlowList";
 import { FlowEditor } from "./pages/FlowEditor";
@@ -57,8 +57,8 @@ export function App() {
         />
         <Route path="/templates" element={<Templates />} />
         <Route path="/secrets" element={<Secrets />} />
-        <Route path="/integrations" element={<Integrations />} />
-        <Route path="/integrations/:slug" element={<IntegrationDetail />} />
+        <Route path="/apps" element={<Apps />} />
+        <Route path="/apps/:slug" element={<AppDetail />} />
         <Route path="/runs" element={<RunList />} />
         <Route path="/runs/:runID" element={<RunDetail />} />
         <Route path="/approvals" element={<Approvals />} />

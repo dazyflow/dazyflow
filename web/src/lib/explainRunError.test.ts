@@ -22,7 +22,7 @@ describe("explainRunError", () => {
       provider: "Slack",
       account: "marketing",
     });
-    expect(r!.action?.href).toBe("/integrations");
+    expect(r!.action?.href).toBe("/apps");
   });
 
   it("matches the OAuth-account-not-connected pattern (Google)", () => {
@@ -43,7 +43,7 @@ describe("explainRunError", () => {
     );
     expect(r!.headlineKey).toBe("explain.providerNotConnected");
     expect(r!.headlineValues).toEqual({ provider: "Slack" });
-    expect(r!.action?.href).toBe("/integrations");
+    expect(r!.action?.href).toBe("/apps");
   });
 
   it("matches Slack channel_not_found", () => {
@@ -69,7 +69,7 @@ describe("explainRunError", () => {
       "Slack rejected message: invalid_auth",
     );
     expect(r!.headlineKey).toBe("explain.slackInvalidAuth");
-    expect(r!.action?.href).toBe("/integrations");
+    expect(r!.action?.href).toBe("/apps");
   });
 
   it("matches a missing tenant secret with double quotes", () => {

@@ -244,7 +244,7 @@ func TestOAuth_GetTokenRequiresTenantInCtx(t *testing.T) {
 
 func TestHTTPOAuth_AuthorizeRedirectsToProvider(t *testing.T) {
 	h, fp := newOAuthHarness(t)
-	rw := h.do(t, "GET", "/api/v1/oauth/test/authorize?account=main&return_to=/integrations", nil)
+	rw := h.do(t, "GET", "/api/v1/oauth/test/authorize?account=main&return_to=/apps", nil)
 	if rw.Code != http.StatusFound {
 		t.Fatalf("status=%d body=%s", rw.Code, rw.Body.String())
 	}
@@ -301,7 +301,7 @@ func TestHTTPOAuth_CallbackHappyPath(t *testing.T) {
 	// 3. Verify the token landed in encrypted secrets and the user
 	//    got redirected to return_to with oauth=success.
 	h, _ := newOAuthHarness(t)
-	rw := h.do(t, "GET", "/api/v1/oauth/test/authorize?account=main&return_to=/integrations", nil)
+	rw := h.do(t, "GET", "/api/v1/oauth/test/authorize?account=main&return_to=/apps", nil)
 	if rw.Code != http.StatusFound {
 		t.Fatalf("authorize status=%d", rw.Code)
 	}
@@ -320,8 +320,8 @@ func TestHTTPOAuth_CallbackHappyPath(t *testing.T) {
 		t.Fatalf("callback status=%d body=%s", cb.Code, cb.Body.String())
 	}
 	loc2, _ := url.Parse(cb.Header().Get("Location"))
-	if loc2.Path != "/integrations" {
-		t.Errorf("redirect path = %q, want /integrations", loc2.Path)
+	if loc2.Path != "/apps" {
+		t.Errorf("redirect path = %q, want /apps", loc2.Path)
 	}
 	if loc2.Query().Get("oauth") != "success" {
 		t.Errorf("oauth=%q, want success (full URL %s)", loc2.Query().Get("oauth"), cb.Header().Get("Location"))
@@ -384,7 +384,7 @@ func TestHTTPOAuth_CallbackProviderDeniedConsent(t *testing.T) {
 	// User clicks "Deny" → provider redirects with ?error=access_denied.
 	// We should bounce back to return_to with oauth=error.
 	h, _ := newOAuthHarness(t)
-	rw := h.do(t, "GET", "/api/v1/oauth/test/authorize?return_to=/integrations", nil)
+	rw := h.do(t, "GET", "/api/v1/oauth/test/authorize?return_to=/apps", nil)
 	loc, _ := url.Parse(rw.Header().Get("Location"))
 	state := loc.Query().Get("state")
 

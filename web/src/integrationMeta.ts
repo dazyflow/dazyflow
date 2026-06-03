@@ -1,4 +1,4 @@
-// Per-integration prose for the /integrations/:slug pages. Slugs
+// Per-integration prose for the /apps/:slug pages. Slugs
 // are the lowercased Manifest.integration string with spaces
 // replaced by hyphens (e.g. "Google Sheets" → "google-sheets").
 // Drops without an Integration field land under "standard-library".

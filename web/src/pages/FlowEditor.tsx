@@ -1500,7 +1500,7 @@ function EditorInner() {
               <button
                 type="button"
                 className="primary"
-                onClick={() => navigate("/integrations")}
+                onClick={() => navigate("/apps")}
               >
                 {userFixableSetup
                   ? t("editor.connNeededCta")
@@ -1633,7 +1633,7 @@ function EditorInner() {
               : undefined
           }
           providers={providers}
-          onConnect={() => navigate("/integrations")}
+          onConnect={() => navigate("/apps")}
         />
       </div>
       {paletteOpen && (
@@ -1677,7 +1677,7 @@ function EditorInner() {
           adminBlockedProviders={adminBlockedProviders}
           adminBlockedSecretRefs={adminBlockedSecretRefs}
           slackChannels={slackTargets}
-          onConnect={() => navigate("/integrations")}
+          onConnect={() => navigate("/apps")}
           onRunAnyway={() => void doRun()}
           onCancel={() => setGateOpen(false)}
         />

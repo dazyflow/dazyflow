@@ -225,7 +225,7 @@ export function NodeCatalog({ drops }: Props) {
                     integration profile page; the collapse toggle on
                     the button stays distinct. */}
                 <Link
-                  to={`/integrations/${encodeURIComponent(
+                  to={`/apps/${encodeURIComponent(
                     s.isStdlib ? "standard-library" : integrationSlug(s.label),
                   )}`}
                   className="catalog-learn-more"

@@ -18,18 +18,12 @@ import type {
   OAuthProviderStatus,
 } from "../types";
 
-// Integrations is the index page — one card per integration the
-// daemon knows about, derived from the live manifest registry plus
-// curated prose from integrationMeta. Drops without an Integration
-// field land in a "Standard library" bucket so the page covers
-// everything the catalog shows in the editor.
-//
-// Card-level data:
-//   - brand logo (from any drop's brand_logo, or curated override)
-//   - integration name (curated, falls back to slug)
-//   - short description (curated; truncated; full prose on detail)
-//   - drop count
-export function Integrations() {
+// Apps is the index page — one card per integration ("app") the daemon
+// knows about, derived from the live manifest registry plus curated
+// prose from integrationMeta. Drops without an Integration field land in
+// a "Built-in" bucket so the page covers everything the catalog shows in
+// the editor. Cards are grouped into "Ready to use" vs "Needs setup".
+export function Apps() {
   const { t } = useTranslation();
   const { token } = useAuth();
   const [drops, setDrops] = useState<Manifest[] | null>(null);
@@ -162,7 +156,7 @@ function IntegrationCard({
   const headerBranded = isBrandedIcon(headerDrop?.icon);
   return (
     <Link
-      to={`/integrations/${encodeURIComponent(slug)}`}
+      to={`/apps/${encodeURIComponent(slug)}`}
       style={{ textDecoration: "none", color: "inherit" }}
     >
       <div className="integration-card">
@@ -227,11 +221,10 @@ function appConnectionState(
   return { needsSetup: !connected, connected };
 }
 
-// IntegrationDetail is /integrations/:slug — the per-integration
-// "profile" page. Shows the hero (logo + name + full prose) plus
-// every drop the integration ships, each with its description,
-// input/output ports, and a collapsed params hint.
-export function IntegrationDetail() {
+// AppDetail is /apps/:slug — the per-app "profile" page. Shows
+// the hero (logo + name + full prose), the Connection card(s), and every
+// drop the app ships with its ports and a collapsed params hint.
+export function AppDetail() {
   const { t } = useTranslation();
   const slugRaw = window.location.pathname.split("/").pop() ?? "";
   const slug = decodeURIComponent(slugRaw);
@@ -285,7 +278,7 @@ export function IntegrationDetail() {
     return (
       <div className="page">
         <h1>{meta.name}</h1>
-        <Link to="/integrations" className="back-link">
+        <Link to="/apps" className="back-link">
           {t("integrations.backAll")}
         </Link>
         <div className="card" style={{ marginTop: 12 }}>
@@ -302,7 +295,7 @@ export function IntegrationDetail() {
 
   return (
     <div className="page integration-detail">
-      <Link to="/integrations" className="back-link">
+      <Link to="/apps" className="back-link">
         {t("integrations.backAll")}
       </Link>
       <header className="integration-hero">
@@ -420,7 +413,7 @@ function IntegrationConnections({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(refresh, [token, slug]);
 
-  // OAuth bounces back to /integrations/:slug?oauth=success|error. Show
+  // OAuth bounces back to /apps/:slug?oauth=success|error. Show
   // the result once, then strip the params so a refresh doesn't re-show.
   const oauthResult = searchParams.get("oauth");
   const oauthError = searchParams.get("error") ?? "";
@@ -672,7 +665,7 @@ function OAuthCard({
   const connected = (status?.accounts.length ?? 0) > 0;
   const connect = () => {
     window.location.assign(
-      api.oauthAuthorizeUrl(req.name, `/integrations/${encodeURIComponent(slug)}`),
+      api.oauthAuthorizeUrl(req.name, `/apps/${encodeURIComponent(slug)}`),
     );
   };
 

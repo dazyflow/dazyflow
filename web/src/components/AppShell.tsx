@@ -293,7 +293,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </NavLink>
           )}
           <NavLink
-            to="/integrations"
+            to="/apps"
             title={t("nav.integrations")}
           >
             <Boxes size={18} />

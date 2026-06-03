@@ -54,7 +54,7 @@ export function explainRunError(
       headlineValues: { provider, account: acctMatch[2] },
       action: {
         labelKey: "explain.actionReconnect",
-        href: "/integrations",
+        href: "/apps",
       },
     };
   }
@@ -70,7 +70,7 @@ export function explainRunError(
       headlineValues: { provider: capitalise(noTokenMatch[1]) },
       action: {
         labelKey: "explain.actionConnect",
-        href: "/integrations",
+        href: "/apps",
       },
     };
   }
@@ -102,7 +102,7 @@ export function explainRunError(
       headlineKey: "explain.slackInvalidAuth",
       action: {
         labelKey: "explain.actionReconnect",
-        href: "/integrations",
+        href: "/apps",
       },
     };
   }
