@@ -28,7 +28,7 @@ import {
   type NodeChange,
   type ReactFlowInstance,
 } from "@xyflow/react";
-import { Play, Save, Square, Plus, Send, History, RotateCcw, X, Zap } from "lucide-react";
+import { Play, Save, Check, Square, Plus, Send, History, RotateCcw, X, Zap } from "lucide-react";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import { oauthProviderDisplay } from "../integrationMeta";
@@ -1128,28 +1128,37 @@ function EditorInner() {
               </span>
             </button>
           )}
-          <button
-            onClick={() => save()}
-            disabled={!dirty || saving || !hasPerm("graph:edit") || !!lockedRunID || !!previewRef}
-            title={
-              !hasPerm("graph:edit")
-                ? t("editor.readOnly")
-                : lockedRunID
-                ? t("editor.lockedRun", { runID: lockedRunID.slice(0, 8) })
-                : t("editor.save")
-            }
-          >
-            <Save size={14} style={{ verticalAlign: -2 }} />
-            <span className="toolbar-label" style={{ marginLeft: 6 }}>
-              {lockedRunID
-                ? t("editor.locked")
-                : saving
-                ? t("editor.saving")
-                : dirty
-                ? t("editor.save")
-                : t("editor.saved")}
+          {!dirty && !saving && !lockedRunID && !previewRef ? (
+            // Everything's saved and we're on the live graph — show a calm
+            // confirmation, not a greyed-out Save button.
+            <span className="editor-saved" title={t("editor.saved")}>
+              <Check size={14} style={{ verticalAlign: -2 }} />
+              <span className="toolbar-label" style={{ marginLeft: 6 }}>
+                {t("editor.saved")}
+              </span>
             </span>
-          </button>
+          ) : (
+            <button
+              onClick={() => save()}
+              disabled={!dirty || saving || !hasPerm("graph:edit") || !!lockedRunID || !!previewRef}
+              title={
+                !hasPerm("graph:edit")
+                  ? t("editor.readOnly")
+                  : lockedRunID
+                  ? t("editor.lockedRun", { runID: lockedRunID.slice(0, 8) })
+                  : t("editor.save")
+              }
+            >
+              <Save size={14} style={{ verticalAlign: -2 }} />
+              <span className="toolbar-label" style={{ marginLeft: 6 }}>
+                {lockedRunID
+                  ? t("editor.locked")
+                  : saving
+                  ? t("editor.saving")
+                  : t("editor.save")}
+              </span>
+            </button>
+          )}
           {me && id && (
             <button
               className="ghost"

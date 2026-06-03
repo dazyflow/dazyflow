@@ -35,6 +35,7 @@
     "integrations": "Appar",
     "admin": "Admin",
     "toggleNav": "växla navigering",
+    "closeMenu": "Stäng meny",
     "collapseSidebar": "Fäll ihop sidofältet",
     "expandSidebar": "Fäll ut sidofältet",
     "signOut": "logga ut",

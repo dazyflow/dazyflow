@@ -35,6 +35,7 @@
     "integrations": "Apps",
     "admin": "Admin",
     "toggleNav": "toggle navigation",
+    "closeMenu": "Close menu",
     "collapseSidebar": "Collapse sidebar",
     "expandSidebar": "Expand sidebar",
     "signOut": "sign out",

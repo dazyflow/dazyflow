@@ -113,9 +113,15 @@
 .app-shell[data-nav-collapsed="true"] {
   --sidebar-current: var(--sidebar-rail-w);
 }
-/* The sidebar is always inline in the grid now — even on mobile —
-   because small viewports default to the rail variant. No more
-   slide-over behaviour. */
+/* On desktop the sidebar is inline in the grid (full width, or the
+   icon-only rail when collapsed). On small screens it becomes an
+   off-canvas drawer that slides in over the content — see the mobile
+   media query further down. */
+/* Scrim behind the mobile drawer: inert on desktop, shown only on small
+   screens when the drawer is open (see the media query below). */
+.sidebar-scrim {
+  display: none;
+}
 
 /* Sidebar */
 .sidebar {
@@ -208,6 +214,69 @@
   .sidebar-collapse-toggle,
   .sidebar-spacer {
     display: none;
+  }
+  /* Off-canvas drawer: the sidebar leaves the grid and slides in over
+     the content from the left when opened (hamburger → data-nav-
+     collapsed="false"). A tap on the scrim — or picking a nav item —
+     closes it. */
+  .body {
+    grid-template-columns: 1fr;
+    position: relative;
+  }
+  .sidebar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(82vw, 300px);
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform 200ms ease;
+    box-shadow: var(--shadow-pop);
+    /* Opaque as an overlay (the inline desktop sidebar is translucent
+       over the page, but a drawer floating over content must not show
+       it through). */
+    background: var(--surface);
+    /* Always the full menu in the drawer — never the icon rail. */
+    padding: var(--space-4) var(--space-2);
+    align-items: stretch;
+  }
+  .app-shell[data-nav-collapsed="false"] .sidebar {
+    transform: translateX(0);
+  }
+  /* Undo the icon-rail (data-collapsed) treatment inside the drawer so
+     labels and group headings always show while it slides. */
+  .sidebar[data-collapsed="true"] a {
+    justify-content: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+  }
+  .sidebar[data-collapsed="true"] .nav-label,
+  .sidebar[data-collapsed="true"] .group-label {
+    display: revert;
+  }
+  .sidebar-scrim,
+  /* The global button:hover (0,2,1) outweighs a bare .sidebar-scrim,
+     so without this the scrim tints gray on hover. Match its specificity
+     to keep the dim backdrop steady. */
+  .sidebar-scrim:hover:not(:disabled) {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 40;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    background: rgba(8, 2, 30, 0.45);
+    transition: opacity 200ms ease;
+  }
+  .sidebar-scrim {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .app-shell[data-nav-collapsed="false"] .sidebar-scrim {
+    opacity: 1;
+    pointer-events: auto;
   }
 }
 .sidebar a:hover {
@@ -5036,6 +5105,22 @@ button.danger-outline:hover:not(:disabled) {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   z-index: 5;
+}
+/* Idle "all saved" status — a calm confirmation in place of the Save
+   button when there's nothing to save. No button chrome; a soft success
+   check + muted label, sized to sit flush with the toolbar buttons. */
+.editor-saved {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--muted);
+  user-select: none;
+  white-space: nowrap;
+}
+.editor-saved svg {
+  color: var(--success);
 }
 /* Small-screen toolbar: drop the text labels next to the action icons,
    the Ctrl+K hint, and the entire run-history switcher — keep just

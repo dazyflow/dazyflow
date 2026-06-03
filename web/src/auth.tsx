@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, APIError, setUnauthorizedHandler } from "./api";
 import { pickActive } from "./lib/pickActive";
@@ -54,6 +54,11 @@ type AuthCtx = {
   tenants: string[];
   activeTenant: string;
   setActiveTenant: (t: string) => void;
+
+  // refreshMe re-fetches the current identity (whoami) and updates `me`,
+  // so chrome bound to it — the top bar's org name/logo, the tenant
+  // switcher — reflects a just-saved org profile without a full reload.
+  refreshMe: () => Promise<void>;
 };
 
 const Ctx = createContext<AuthCtx | null>(null);
@@ -244,6 +249,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // refreshMe re-resolves identity from the server and updates `me` so
+  // anything bound to it (top bar org name/logo, tenant switcher) reflects
+  // a just-saved change. Stable across renders (keyed on token) so callers
+  // can safely list it in effect/useCallback deps.
+  const refreshMe = useCallback(async () => {
+    if (!token) return;
+    try {
+      setMe(await api.whoami(token));
+    } catch {
+      /* best-effort; a later whoami reconciles */
+    }
+  }, [token]);
+
   // applySession mirrors a freshly-issued session token into localStorage
   // (so the app keeps using its bearer-header path) and resolves identity.
   // Shared by the password, TOTP-second-leg, and signup flows.
@@ -365,6 +383,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         tenants,
         activeTenant,
         setActiveTenant,
+        refreshMe,
       }}
     >
       {children}

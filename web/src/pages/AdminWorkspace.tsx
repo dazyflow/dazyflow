@@ -126,7 +126,7 @@ function fmtSeconds(t: (k: string) => string, s: number): string {
 // account doesn't surface "usr_de3d2365" anywhere.
 function OrgProfileEditor() {
   const { t } = useTranslation();
-  const { token, me } = useAuth();
+  const { token, me, refreshMe } = useAuth();
   const [displayName, setDisplayName] = useState("");
   const [icon, setIcon] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
@@ -171,19 +171,16 @@ function OrgProfileEditor() {
       await api.putOrgProfile(token, displayName.trim(), icon);
       savedRef.current = { name: displayName.trim(), icon };
       setSavedAt(new Date());
-      // Refetch whoami so the switcher + top bar pick up the new
-      // name/icon. The session itself doesn't change, just the labels.
-      try {
-        await api.whoami(token);
-      } catch {
-        /* best-effort refresh */
-      }
+      // Refresh identity so the switcher + top bar pick up the new
+      // name/icon immediately (updates the context's `me`, not just a
+      // throwaway fetch). The session itself doesn't change, just labels.
+      await refreshMe();
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setSaving(false);
     }
-  }, [token, displayName, icon]);
+  }, [token, displayName, icon, refreshMe]);
 
   // Autosave: debounce-persist a genuine change (skipped until the
   // initial load, and when the values already match what's stored).

@@ -55,8 +55,11 @@ CREATE TABLE IF NOT EXISTS org_auth (
 CREATE TABLE IF NOT EXISTS org_profiles (
     tenant       TEXT PRIMARY KEY,
     display_name TEXT NOT NULL,
+    icon         TEXT NOT NULL DEFAULT '',
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Backfill the icon column for databases created before it existed.
+ALTER TABLE org_profiles ADD COLUMN IF NOT EXISTS icon TEXT NOT NULL DEFAULT '';
 `
 
 // EnsurePgOrgsSchema creates the four org-level tables if they don't
@@ -360,9 +363,9 @@ func NewPgOrgProfileStore(ctx context.Context, pool *pgxpool.Pool) (*PgOrgProfil
 
 func (s *PgOrgProfileStore) GetOrgProfile(ctx context.Context, tenant string) (OrgProfile, error) {
 	row := s.pool.QueryRow(ctx,
-		`SELECT tenant, display_name, updated_at FROM org_profiles WHERE tenant=$1`, tenant)
+		`SELECT tenant, display_name, icon, updated_at FROM org_profiles WHERE tenant=$1`, tenant)
 	var p OrgProfile
-	err := row.Scan(&p.Tenant, &p.DisplayName, &p.UpdatedAt)
+	err := row.Scan(&p.Tenant, &p.DisplayName, &p.Icon, &p.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return OrgProfile{}, ErrUnknownOrgProfile
 	}
@@ -378,12 +381,13 @@ func (s *PgOrgProfileStore) PutOrgProfile(ctx context.Context, p OrgProfile) err
 		updated = time.Now().UTC()
 	}
 	const q = `
-        INSERT INTO org_profiles (tenant, display_name, updated_at)
-        VALUES ($1,$2,$3)
+        INSERT INTO org_profiles (tenant, display_name, icon, updated_at)
+        VALUES ($1,$2,$3,$4)
         ON CONFLICT (tenant) DO UPDATE SET
             display_name = EXCLUDED.display_name,
+            icon         = EXCLUDED.icon,
             updated_at   = EXCLUDED.updated_at`
-	_, err := s.pool.Exec(ctx, q, p.Tenant, p.DisplayName, updated)
+	_, err := s.pool.Exec(ctx, q, p.Tenant, p.DisplayName, p.Icon, updated)
 	return err
 }
 
@@ -393,14 +397,14 @@ func (s *PgOrgProfileStore) ListOrgProfiles(ctx context.Context, tenants []strin
 		return out, nil
 	}
 	rows, err := s.pool.Query(ctx,
-		`SELECT tenant, display_name, updated_at FROM org_profiles WHERE tenant = ANY($1)`, tenants)
+		`SELECT tenant, display_name, icon, updated_at FROM org_profiles WHERE tenant = ANY($1)`, tenants)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var p OrgProfile
-		if err := rows.Scan(&p.Tenant, &p.DisplayName, &p.UpdatedAt); err != nil {
+		if err := rows.Scan(&p.Tenant, &p.DisplayName, &p.Icon, &p.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out[p.Tenant] = p

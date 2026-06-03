@@ -119,6 +119,15 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => mq.removeEventListener("change", apply);
   }, []);
   const location = useLocation();
+  // On small screens, close the slide-in drawer after navigating — the
+  // user picked a menu item, so the drawer has done its job and
+  // shouldn't keep covering the page. No-op on desktop (inline sidebar)
+  // and on first mount (the drawer already starts closed there).
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth <= MOBILE_BREAK) {
+      setNavCollapsed(true);
+    }
+  }, [location.pathname]);
   // Pending approvals count — surfaces a badge on the sidebar nav so
   // operators see "you have N decisions waiting" without visiting the
   // page. Polled every 30s; updates immediately on visibility change.
@@ -224,11 +233,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [inEditor]);
 
   // The hamburger toggles between the full sidebar and the icons-only
-  // rail at every viewport — the sidebar is now always visible, with
-  // small screens just defaulting to the rail variant. We persist the
-  // choice only on desktop: on a small screen the rail is a transient,
-  // per-session default, so a phone toggle must not overwrite the saved
-  // desktop layout (the matchMedia listener re-collapses on next load).
+  // rail (full ↔ icons-only) on desktop, and the slide-in drawer
+  // (open ↔ off-canvas) on small screens. We persist the choice only on
+  // desktop: on a small screen the open/closed state is transient, so a
+  // phone toggle must not overwrite the saved desktop layout (the
+  // matchMedia listener re-applies the right state on breakpoint cross).
   const toggleNav = () =>
     setNavCollapsed((x) => {
       const next = !x;
@@ -241,6 +250,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       }
       return next;
     });
+  // closeNav always closes (collapses) — used by the mobile drawer's
+  // scrim and on navigation. No persistence: closing the drawer is a
+  // mobile-transient action, not a desktop layout preference.
+  const closeNav = () => setNavCollapsed(true);
 
   // Top-bar branding. In the editor the open flow takes the slot; the
   // org's name/logo replaces the product wordmark once the org has a
@@ -470,6 +483,16 @@ export function AppShell({ children }: { children: ReactNode }) {
             />
           )}
         </aside>
+        {/* Scrim behind the mobile drawer — tap to close. Inert on
+            desktop (CSS hides it); only interactive on small screens
+            while the drawer is open. */}
+        <button
+          type="button"
+          className="sidebar-scrim"
+          aria-label={t("nav.closeMenu")}
+          tabIndex={navCollapsed ? -1 : 0}
+          onClick={closeNav}
+        />
         <main className={"main" + (inEditor ? " no-pad" : "")}>
           {children}
         </main>
