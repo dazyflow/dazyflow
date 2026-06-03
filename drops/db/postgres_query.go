@@ -36,6 +36,9 @@ func init() {
 					Notes:  "Empty params is fine when the SQL has no $N placeholders.",
 				},
 			},
+			RequiresConnections: []core.ConnectionRequirement{
+				{Kind: "secret", Name: "PG_DSN", Note: "Postgres connection string (postgres://user:pass@host:5432/db)"},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

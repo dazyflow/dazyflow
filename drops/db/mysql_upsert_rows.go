@@ -43,6 +43,9 @@ func init() {
 					Notes:  "Empty update_columns leaves existing rows untouched (MySQL approximation of DO NOTHING).",
 				},
 			},
+			RequiresConnections: []core.ConnectionRequirement{
+				{Kind: "secret", Name: "MYSQL_DSN", Note: "MySQL connection string (user:pass@host:3306/db)"},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

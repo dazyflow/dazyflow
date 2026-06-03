@@ -22,7 +22,7 @@ describe("explainRunError", () => {
       provider: "Slack",
       account: "marketing",
     });
-    expect(r!.action?.href).toBe("/connections");
+    expect(r!.action?.href).toBe("/integrations");
   });
 
   it("matches the OAuth-account-not-connected pattern (Google)", () => {
@@ -43,7 +43,7 @@ describe("explainRunError", () => {
     );
     expect(r!.headlineKey).toBe("explain.providerNotConnected");
     expect(r!.headlineValues).toEqual({ provider: "Slack" });
-    expect(r!.action?.href).toBe("/connections");
+    expect(r!.action?.href).toBe("/integrations");
   });
 
   it("matches Slack channel_not_found", () => {
@@ -69,14 +69,14 @@ describe("explainRunError", () => {
       "Slack rejected message: invalid_auth",
     );
     expect(r!.headlineKey).toBe("explain.slackInvalidAuth");
-    expect(r!.action?.href).toBe("/connections");
+    expect(r!.action?.href).toBe("/integrations");
   });
 
   it("matches a missing tenant secret with double quotes", () => {
     const r = explainRunError("", 'secret "postgres_dsn" not found');
     expect(r!.headlineKey).toBe("explain.credentialMissing");
     expect(r!.headlineValues).toEqual({ name: "postgres_dsn" });
-    expect(r!.action?.href).toBe("/connections?focus=postgres_dsn");
+    expect(r!.action?.href).toBe("/secrets?focus=postgres_dsn");
   });
 
   it("matches the builtin-secret variant", () => {
@@ -86,6 +86,6 @@ describe("explainRunError", () => {
 
   it("encodes special characters in the focus query param", () => {
     const r = explainRunError("", 'secret "my secret" not found');
-    expect(r!.action?.href).toBe("/connections?focus=my%20secret");
+    expect(r!.action?.href).toBe("/secrets?focus=my%20secret");
   });
 });

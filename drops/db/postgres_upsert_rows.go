@@ -43,6 +43,9 @@ func init() {
 					Notes:  "An empty update_columns becomes ON CONFLICT DO NOTHING — handy for idempotent event ingestion.",
 				},
 			},
+			RequiresConnections: []core.ConnectionRequirement{
+				{Kind: "secret", Name: "PG_DSN", Note: "Postgres connection string (postgres://user:pass@host:5432/db)"},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

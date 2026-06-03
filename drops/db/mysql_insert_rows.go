@@ -39,6 +39,9 @@ func init() {
 					Params: json.RawMessage(`{"dsn":"${tenant:MYSQL_DSN}","table":"orders","create_table":false,"column_types":{"id":"BIGINT","total":"DECIMAL(10,2)"}}`),
 				},
 			},
+			RequiresConnections: []core.ConnectionRequirement{
+				{Kind: "secret", Name: "MYSQL_DSN", Note: "MySQL connection string (user:pass@host:3306/db)"},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

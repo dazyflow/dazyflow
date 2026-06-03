@@ -31,7 +31,7 @@
     "flows": "Flows",
     "runs": "Runs",
     "approvals": "Approvals",
-    "connections": "Accounts",
+    "connections": "Secrets",
     "integrations": "Apps",
     "admin": "Admin",
     "toggleNav": "toggle navigation",
@@ -388,12 +388,16 @@
       "valuePlaceholder": "Paste the value",
       "storeOff": "Credential storage isn't enabled — ask your admin.",
       "oauthOff": "Connecting accounts isn't enabled — ask your admin.",
-      "connectFailed": "Couldn't connect: {{error}}"
+      "connectFailed": "Couldn't connect: {{error}}",
+      "edit": "Edit",
+      "fieldSet": "Set",
+      "fieldUnset": "Not set",
+      "disconnectFieldsConfirm": "Disconnect {{name}} and remove its stored connection details?"
     }
   },
   "connections": {
-    "title": "Accounts",
-    "intro": "Connect an app once here, then any flow you build can use it.",
+    "title": "Secrets",
+    "intro": "Store the secret values your flows need — API keys, database URLs. To connect an app like Slack or Gmail, use the Apps page.",
     "firstTileTitle": "Start with Slack and Google",
     "firstTileBody": "Most templates fire a notification or read a mailbox. Connecting Slack (for messages) and Google (for Gmail + Sheets) covers the majority of what you'll build first — pick the cards below and we'll guide you through the rest.",
     "setupIncompleteTitle": "Setup isn't finished on this server yet",
@@ -441,7 +445,8 @@
       "roleIdLabel": "Role ID",
       "secretIdLabel": "Secret ID",
       "save": "Save & test connection",
-      "saving": "Testing connection…"
+      "saving": "Testing connection…",
+      "unavailable": "This deployment doesn't have a secret store enabled, so a custom secret manager can't be configured."
     }
   },
   "connGate": {
@@ -500,6 +505,11 @@
     "cardUsersDesc": "Invite teammates and set roles.",
     "cardSSOTitle": "Single sign-on",
     "cardSSODesc": "Let members sign in with your identity provider.",
+    "cardSecretManagerTitle": "Secret manager",
+    "cardSecretManagerDesc": "Point flows at your own OpenBao / Vault.",
+    "secretManager": {
+      "needAdmin": "You need <0>tenant:admin</0> to configure the secret manager."
+    },
     "cardOAuthTitle": "Connector apps",
     "cardOAuthDesc": "Credentials for Google, Slack, GitHub, Notion.",
     "cardWorkspaceTitle": "Limits",

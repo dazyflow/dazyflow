@@ -54,7 +54,7 @@ export function explainRunError(
       headlineValues: { provider, account: acctMatch[2] },
       action: {
         labelKey: "explain.actionReconnect",
-        href: "/connections",
+        href: "/integrations",
       },
     };
   }
@@ -62,7 +62,7 @@ export function explainRunError(
   // "No <Provider> token: pass `token` directly or connect a
   // <Provider> account via /api/v1/oauth/.../authorize" — the
   // case where no account exists at all. We surface the provider
-  // and route to the Connections page.
+  // and route to the Apps page, where the app is connected.
   const noTokenMatch = msg.match(/^no (\w+) token:/i);
   if (noTokenMatch) {
     return {
@@ -70,7 +70,7 @@ export function explainRunError(
       headlineValues: { provider: capitalise(noTokenMatch[1]) },
       action: {
         labelKey: "explain.actionConnect",
-        href: "/connections",
+        href: "/integrations",
       },
     };
   }
@@ -102,7 +102,7 @@ export function explainRunError(
       headlineKey: "explain.slackInvalidAuth",
       action: {
         labelKey: "explain.actionReconnect",
-        href: "/connections",
+        href: "/integrations",
       },
     };
   }
@@ -122,7 +122,7 @@ export function explainRunError(
       headlineValues: { name },
       action: {
         labelKey: "explain.actionAddCredential",
-        href: `/connections?focus=${encodeURIComponent(name)}`,
+        href: `/secrets?focus=${encodeURIComponent(name)}`,
       },
     };
   }

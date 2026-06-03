@@ -31,7 +31,7 @@
     "flows": "Flöden",
     "runs": "Körningar",
     "approvals": "Godkännanden",
-    "connections": "Konton",
+    "connections": "Hemligheter",
     "integrations": "Appar",
     "admin": "Admin",
     "toggleNav": "växla navigering",
@@ -388,12 +388,16 @@
       "valuePlaceholder": "Klistra in värdet",
       "storeOff": "Lagring av uppgifter är inte aktiverad — be din administratör.",
       "oauthOff": "Anslutning av konton är inte aktiverad — be din administratör.",
-      "connectFailed": "Kunde inte ansluta: {{error}}"
+      "connectFailed": "Kunde inte ansluta: {{error}}",
+      "edit": "Redigera",
+      "fieldSet": "Angivet",
+      "fieldUnset": "Inte angivet",
+      "disconnectFieldsConfirm": "Koppla från {{name}} och ta bort dess lagrade anslutningsuppgifter?"
     }
   },
   "connections": {
-    "title": "Konton",
-    "intro": "Anslut en app en gång här, sedan kan alla flöden du bygger använda den.",
+    "title": "Hemligheter",
+    "intro": "Lagra de hemliga värden dina flöden behöver — API-nycklar, databas-URL:er. För att ansluta en app som Slack eller Gmail, använd Appar-sidan.",
     "firstTileTitle": "Börja med Slack och Google",
     "firstTileBody": "De flesta mallar skickar en notis eller läser en inkorg. Att ansluta Slack (för meddelanden) och Google (för Gmail + Sheets) täcker det mesta du bygger först — välj korten nedan så guidar vi dig genom resten.",
     "setupIncompleteTitle": "Servern är inte färdigkonfigurerad ännu",
@@ -441,7 +445,8 @@
       "roleIdLabel": "Role ID",
       "secretIdLabel": "Secret ID",
       "save": "Spara & testa anslutning",
-      "saving": "Testar anslutning…"
+      "saving": "Testar anslutning…",
+      "unavailable": "Den här installationen har inget hemlighetslager aktiverat, så en egen hemlighetshanterare kan inte konfigureras."
     }
   },
   "connGate": {
@@ -500,6 +505,11 @@
     "cardUsersDesc": "Bjud in teammedlemmar och sätt roller.",
     "cardSSOTitle": "Single sign-on",
     "cardSSODesc": "Låt medlemmar logga in med er identitetsleverantör.",
+    "cardSecretManagerTitle": "Hemlighetshanterare",
+    "cardSecretManagerDesc": "Peka flöden mot er egen OpenBao / Vault.",
+    "secretManager": {
+      "needAdmin": "Du behöver <0>tenant:admin</0> för att konfigurera hemlighetshanteraren."
+    },
     "cardOAuthTitle": "Connector-appar",
     "cardOAuthDesc": "Uppgifter för Google, Slack, GitHub, Notion.",
     "cardWorkspaceTitle": "Gränser",

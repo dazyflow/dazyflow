@@ -881,7 +881,7 @@ function EditorInner() {
   // your admin hasn't enabled the feature yet" so the banner + gate
   // can warn the user instead of dispatching a doomed run. End user
   // can't fix these themselves — separate UI affordance (no
-  // /connections set-up CTA on these rows).
+  // set-up CTA on these rows).
   const adminBlockedProviders = useMemo(
     () => unavailableProviders(nodes, manifestByID, paramsByID, providers),
     [nodes, manifestByID, paramsByID, providers],
@@ -1492,16 +1492,15 @@ function EditorInner() {
               )}
             </span>
             <span className="editor-conn-banner-actions">
-              {/* "Set up" CTA only when there's something the user can
-                  actually do on /connections. When the entire blockage
-                  is admin-side, route to /connections too (the P0.1
-                  SetupIncompleteBanner there names the operator + any
-                  support contact), but label it as a status-check
+              {/* Route to the Apps page, where each app needing setup is
+                  connected (OAuth) or keyed. When the blockage is
+                  admin-side, the same page surfaces the per-app "ask your
+                  admin" note; we just relabel the CTA as a status-check
                   rather than a fixable action. */}
               <button
                 type="button"
                 className="primary"
-                onClick={() => navigate("/connections")}
+                onClick={() => navigate("/integrations")}
               >
                 {userFixableSetup
                   ? t("editor.connNeededCta")
@@ -1634,7 +1633,7 @@ function EditorInner() {
               : undefined
           }
           providers={providers}
-          onConnect={() => navigate("/connections")}
+          onConnect={() => navigate("/integrations")}
         />
       </div>
       {paletteOpen && (
@@ -1678,7 +1677,7 @@ function EditorInner() {
           adminBlockedProviders={adminBlockedProviders}
           adminBlockedSecretRefs={adminBlockedSecretRefs}
           slackChannels={slackTargets}
-          onConnect={() => navigate("/connections")}
+          onConnect={() => navigate("/integrations")}
           onRunAnyway={() => void doRun()}
           onCancel={() => setGateOpen(false)}
         />

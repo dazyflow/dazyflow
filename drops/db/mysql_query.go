@@ -36,6 +36,9 @@ func init() {
 					Notes:  "Empty params is fine when the SQL has no ? placeholders.",
 				},
 			},
+			RequiresConnections: []core.ConnectionRequirement{
+				{Kind: "secret", Name: "MYSQL_DSN", Note: "MySQL connection string (user:pass@host:3306/db)"},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{

@@ -38,6 +38,9 @@ func init() {
 					Params: json.RawMessage(`{"dsn":"${tenant:PG_DSN}","schema":"sales","table":"orders","create_table":false,"column_types":{"id":"bigint","created_at":"timestamptz"}}`),
 				},
 			},
+			RequiresConnections: []core.ConnectionRequirement{
+				{Kind: "secret", Name: "PG_DSN", Note: "Postgres connection string (postgres://user:pass@host:5432/db)"},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

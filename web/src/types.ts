@@ -122,6 +122,19 @@ export type ConnectionRequirement = {
   note?: string;
 };
 
+// ConnectionField is one input of a multi-field service connection
+// (ntfy's server+token, SMTP's host/port/user/pass) — set once per
+// tenant on the integration page and injected into a node's unset
+// params at run time. `secret` masks the value; `key` is the param the
+// drop reads. Stored as the tenant secret conn/<slug>/<key>.
+export type ConnectionField = {
+  key: string;
+  label: string;
+  secret?: boolean;
+  required?: boolean;
+  placeholder?: string;
+};
+
 export type Manifest = {
   id: string;
   version: string;
@@ -146,6 +159,10 @@ export type Manifest = {
   // requires_connections lists the credentials a drop needs before it
   // can run — drives the per-integration "Connection" configure widget.
   requires_connections?: ConnectionRequirement[];
+  // connection_fields declares a multi-field service connection (endpoint
+  // + credentials) configured once per tenant — drives the multi-field
+  // connection card.
+  connection_fields?: ConnectionField[];
 };
 
 // JSONSchema is a relaxed subset of the JSON Schema spec — enough to

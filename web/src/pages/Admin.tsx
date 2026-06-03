@@ -7,6 +7,7 @@ import {
   ScrollText,
   ShieldCheck,
   Plug,
+  Lock,
 } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
@@ -52,6 +53,7 @@ export function Admin() {
         <AdminCard to="/admin/api-keys" icon={<KeyRound size={18} />} title={t("admin.cardApiKeysTitle")} desc={t("admin.cardApiKeysDesc")} />
         <AdminCard to="/admin/users" icon={<Users size={18} />} title={t("admin.cardUsersTitle")} desc={t("admin.cardUsersDesc")} />
         <AdminCard to="/admin/sso" icon={<ShieldCheck size={18} />} title={t("admin.cardSSOTitle")} desc={t("admin.cardSSODesc")} />
+        <AdminCard to="/admin/secret-manager" icon={<Lock size={18} />} title={t("admin.cardSecretManagerTitle")} desc={t("admin.cardSecretManagerDesc")} />
         <AdminCard to="/admin/workspace" icon={<SlidersHorizontal size={18} />} title={t("admin.cardWorkspaceTitle")} desc={t("admin.cardWorkspaceDesc")} />
         <AdminCard to="/admin/modules" icon={<Boxes size={18} />} title={t("admin.cardModulesTitle")} desc={t("admin.cardModulesDesc")} />
         <AdminCard to="/admin/audit" icon={<ScrollText size={18} />} title={t("admin.cardAuditTitle")} desc={t("admin.cardAuditDesc")} />

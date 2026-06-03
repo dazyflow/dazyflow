@@ -15,7 +15,7 @@ import {
   Building2,
   Boxes,
   LayoutTemplate,
-  Plug,
+  Key,
   Settings as SettingsIcon,
   MoreVertical,
 } from "lucide-react";
@@ -278,17 +278,17 @@ export function AppShell({ children }: { children: ReactNode }) {
             </NavLink>
           )}
           <div className="group-label">{t("nav.appsGroup")}</div>
-          {/* "My accounts" only appears for users who can actually manage
-              connections (secret:write — the editor role has it, viewers
-              don't). Without it the page is just hidden sections and dead
-              "Connect" buttons, so we keep it out of the menu rather than
-              show a non-techie a surface they can't use. */}
+          {/* "Secrets" only appears for users who can actually manage
+              them (secret:write — the editor role has it, viewers don't).
+              Without it the page is just hidden sections, so we keep it
+              out of the menu rather than show a non-techie a dead
+              surface. */}
           {hasPerm("secret:write") && (
             <NavLink
-              to="/connections"
+              to="/secrets"
               title={t("nav.connections")}
             >
-              <Plug size={18} />
+              <Key size={18} />
               <span className="nav-label">{t("nav.connections")}</span>
             </NavLink>
           )}

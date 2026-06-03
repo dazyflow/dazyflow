@@ -12,6 +12,7 @@ import {
   oauthProviderDisplay,
 } from "../integrationMeta";
 import type {
+  ConnectionField,
   ConnectionRequirement,
   Manifest,
   OAuthProviderStatus,
@@ -345,7 +346,13 @@ function IntegrationConnections({
   const [searchParams, setSearchParams] = useSearchParams();
 
   const reqs = useMemo(() => dedupeRequirements(drops), [drops]);
-  const needsSecret = reqs.some((r) => r.kind === "secret");
+  // A multi-field service connection (ntfy server+token, SMTP host/…) is
+  // declared identically across the integration's drops; take the first.
+  const connectionFields = useMemo(
+    () => drops.find((d) => d.connection_fields?.length)?.connection_fields ?? [],
+    [drops],
+  );
+  const needsSecret = reqs.some((r) => r.kind === "secret") || connectionFields.length > 0;
   const needsOAuth = reqs.some((r) => r.kind === "oauth");
 
   const [secrets, setSecrets] = useState<string[] | null>(null);
@@ -399,7 +406,7 @@ function IntegrationConnections({
     setSearchParams(next, { replace: true });
   };
 
-  if (reqs.length === 0) return null;
+  if (reqs.length === 0 && connectionFields.length === 0) return null;
 
   return (
     <section className="integration-connections">
@@ -416,6 +423,18 @@ function IntegrationConnections({
         </div>
       )}
       {error && <div className="card error">{error}</div>}
+      {connectionFields.length > 0 && (
+        <ConnectionFieldsCard
+          fields={connectionFields}
+          name={name}
+          slug={slug}
+          secrets={secrets}
+          loading={secrets === null && !secretsOff}
+          off={secretsOff}
+          canWrite={canWrite}
+          onChanged={refresh}
+        />
+      )}
       {reqs.map((req) =>
         req.kind === "secret" ? (
           <SecretCard
@@ -487,6 +506,7 @@ function SecretCard({
   const { t } = useTranslation();
   const { token } = useAuth();
   const [value, setValue] = useState("");
+  const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -506,6 +526,7 @@ function SecretCard({
     try {
       await api.putSecret(token, req.name, value);
       setValue("");
+      setEditing(false);
       onChanged();
     } catch (e) {
       setErr(e instanceof APIError ? e.message : (e as Error).message);
@@ -539,7 +560,7 @@ function SecretCard({
         <p className="connection-note">{t("integrations.connection.storeOff")}</p>
       ) : loading ? (
         <p className="connection-note">{t("common.loading")}</p>
-      ) : configured ? (
+      ) : configured && !editing ? (
         <>
           <label className="connection-field">
             <span className="connection-field-label">{fieldLabel}</span>
@@ -548,13 +569,16 @@ function SecretCard({
           {err && <div className="card error">{err}</div>}
           {canWrite && (
             <div className="connection-card-footer">
+              <button type="button" className="ghost" onClick={() => setEditing(true)}>
+                {t("integrations.connection.edit")}
+              </button>
               <button type="button" className="danger-outline" onClick={() => void remove()}>
                 {t("integrations.connection.disconnect")}
               </button>
             </div>
           )}
         </>
-      ) : canWrite ? (
+      ) : canWrite && (!configured || editing) ? (
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -576,6 +600,18 @@ function SecretCard({
             <button type="submit" className="primary" disabled={busy || !value}>
               {busy ? t("connections.saving") : t("connections.connect")}
             </button>
+            {configured && (
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => {
+                  setEditing(false);
+                  setValue("");
+                }}
+              >
+                {t("common.cancel")}
+              </button>
+            )}
           </div>
         </form>
       ) : (
@@ -634,6 +670,173 @@ function OAuthCard({
           </button>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+// ConnectionFieldsCard is the multi-field service connection — an
+// endpoint + credentials a tenant sets once (ntfy server+token, SMTP
+// host/user/pass) so flows only carry per-use params. Each field is
+// stored as the tenant secret conn/<slug>/<key>; secret fields are
+// password inputs, plain fields (a URL) are text. "Connected" means
+// every required field is set (or, when nothing is required, at least
+// one field is set). The engine injects these into a node's unset
+// params at run time — see core.injectConnectionDefaults.
+function ConnectionFieldsCard({
+  fields,
+  name,
+  slug,
+  secrets,
+  loading,
+  off,
+  canWrite,
+  onChanged,
+}: {
+  fields: ConnectionField[];
+  name: string;
+  slug: string;
+  secrets: string[] | null;
+  loading: boolean;
+  off: boolean;
+  canWrite: boolean;
+  onChanged: () => void;
+}) {
+  const { t } = useTranslation();
+  const { token } = useAuth();
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const keyFor = (f: ConnectionField) => `conn.${slug}.${f.key}`;
+  const isSet = (f: ConnectionField) => secrets?.includes(keyFor(f)) ?? false;
+  const required = fields.filter((f) => f.required);
+  const connected =
+    required.length > 0 ? required.every(isSet) : fields.some(isSet);
+
+  const save = async () => {
+    if (!token) return;
+    const pending = fields.filter((f) => (values[f.key] ?? "").trim() !== "");
+    if (pending.length === 0) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      for (const f of pending) {
+        await api.putSecret(token, keyFor(f), values[f.key]);
+      }
+      setValues({});
+      setEditing(false);
+      onChanged();
+    } catch (e) {
+      setErr(e instanceof APIError ? e.message : (e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const disconnect = async () => {
+    if (!token) return;
+    if (!window.confirm(t("integrations.connection.disconnectFieldsConfirm", { name }))) return;
+    try {
+      for (const f of fields) {
+        if (isSet(f)) await api.deleteSecret(token, keyFor(f));
+      }
+      onChanged();
+    } catch (e) {
+      setErr(e instanceof APIError ? e.message : (e as Error).message);
+    }
+  };
+
+  const showForm = canWrite && (!connected || editing);
+
+  return (
+    <div className="connection-card">
+      <ConnectionStatus
+        connected={connected}
+        title={
+          connected
+            ? t("integrations.connection.connectedTo", { name })
+            : t("integrations.connection.connectPrompt", { name })
+        }
+      />
+      {off ? (
+        <p className="connection-note">{t("integrations.connection.storeOff")}</p>
+      ) : loading ? (
+        <p className="connection-note">{t("common.loading")}</p>
+      ) : connected && !editing ? (
+        <>
+          <ul className="connection-fields-summary">
+            {fields.map((f) => (
+              <li key={f.key}>
+                <span className="connection-field-label">{f.label}</span>
+                <span className={isSet(f) ? "credentials-set" : "connection-note"}>
+                  {isSet(f)
+                    ? f.secret
+                      ? "••••••••"
+                      : t("integrations.connection.fieldSet")
+                    : t("integrations.connection.fieldUnset")}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {err && <div className="card error">{err}</div>}
+          {canWrite && (
+            <div className="connection-card-footer">
+              <button type="button" className="ghost" onClick={() => setEditing(true)}>
+                {t("integrations.connection.edit")}
+              </button>
+              <button type="button" className="danger-outline" onClick={() => void disconnect()}>
+                {t("integrations.connection.disconnect")}
+              </button>
+            </div>
+          )}
+        </>
+      ) : showForm ? (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save();
+          }}
+        >
+          {fields.map((f) => (
+            <label className="connection-field" key={f.key}>
+              <span className="connection-field-label">
+                {f.label}
+                {isSet(f) && (
+                  <span className="connection-field-set-hint"> · {t("integrations.connection.fieldSet")}</span>
+                )}
+              </span>
+              <input
+                type={f.secret ? "password" : "text"}
+                placeholder={f.placeholder ?? ""}
+                value={values[f.key] ?? ""}
+                onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                autoComplete="off"
+              />
+            </label>
+          ))}
+          {err && <div className="card error">{err}</div>}
+          <div className="connection-card-footer">
+            <button type="submit" className="primary" disabled={busy}>
+              {busy ? t("connections.saving") : t("connections.connect")}
+            </button>
+            {connected && (
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => {
+                  setEditing(false);
+                  setValues({});
+                }}
+              >
+                {t("common.cancel")}
+              </button>
+            )}
+          </div>
+        </form>
+      ) : (
+        <p className="connection-note">{t("integrations.connection.notConfigured")}</p>
+      )}
     </div>
   );
 }

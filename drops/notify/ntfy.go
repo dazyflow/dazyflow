@@ -32,6 +32,13 @@ func init() {
 			Examples: []core.ParamsExample{
 				{Title: "Alert to a topic", Params: json.RawMessage(`{"topic":"my-alerts","title":"Deploy done","message":"main is green","priority":"4","tags":["white_check_mark"]}`)},
 			},
+			// The server endpoint + access token are a per-tenant connection
+			// set once on the integration page (default is the public ntfy.sh);
+			// flows then only carry the per-notification 'topic'/'message'.
+			ConnectionFields: []core.ConnectionField{
+				{Key: "server", Label: "Server URL", Placeholder: "https://ntfy.sh"},
+				{Key: "token", Label: "Access token", Secret: true, Placeholder: "tk_… (for protected topics)"},
+			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{

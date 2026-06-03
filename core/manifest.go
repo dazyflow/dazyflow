@@ -1,6 +1,26 @@
 package core
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strings"
+)
+
+// ConnectionSlug normalises an Integration label into the slug used in
+// connection storage keys (lowercase, spaces → hyphens). Mirrors the web
+// integrationSlug so both sides agree on the key for a given integration.
+func ConnectionSlug(integration string) string {
+	return strings.ReplaceAll(strings.ToLower(strings.TrimSpace(integration)), " ", "-")
+}
+
+// ConnectionSecretKey is the tenant-secret name a connection field is
+// stored under: conn.<slug>.<field>. Dots (not slashes) because the
+// secret-name validator only allows [A-Za-z0-9_.-] — same convention as
+// the oauth.<provider>.<account> keys. The web hides the conn. prefix
+// from the raw Secrets list; these are managed via the integration's
+// connection card, not as ad-hoc secrets.
+func ConnectionSecretKey(integration, fieldKey string) string {
+	return "conn." + ConnectionSlug(integration) + "." + fieldKey
+}
 
 type ExecutionModel string
 
@@ -38,6 +58,27 @@ type ConnectionRequirement struct {
 	Kind string `json:"kind"`           // "oauth" | "secret"
 	Name string `json:"name"`           // provider ID OR recommended secret name
 	Note string `json:"note,omitempty"` // human-readable, e.g. "Anthropic API key"
+}
+
+// ConnectionField is one input of a multi-field service connection — a
+// drop whose endpoint + credentials are configured once per tenant
+// rather than typed on every node (ntfy's server+token, SMTP's
+// host/port/user/pass). Key is the param name the drop reads; Secret
+// masks the value in the UI and routes it through the engine's secret
+// redaction. Fields are persisted per-tenant (under the tenant secret
+// store) and, at run time, injected into any node param the author left
+// unset — so a flow author only fills the per-use params (topic,
+// recipient) while the connection details come from one place.
+//
+// A drop uses ConnectionFields OR RequiresConnections, whichever fits
+// its auth shape: RequiresConnections for a single secret / OAuth
+// account, ConnectionFields for an endpoint-plus-credential bundle.
+type ConnectionField struct {
+	Key         string `json:"key"`                   // param name the drop reads (e.g. "server", "token")
+	Label       string `json:"label"`                 // human field label
+	Secret      bool   `json:"secret,omitempty"`      // mask + redact (token/password); false = plain (URL/host)
+	Required    bool   `json:"required,omitempty"`    // counts toward "fully connected"
+	Placeholder string `json:"placeholder,omitempty"` // example value shown in the field
 }
 
 // ParamsExample is one worked params example for a drop. Title is the
@@ -145,6 +186,13 @@ type Manifest struct {
 	// paste an API key (set_secret) — without trying both. Empty for
 	// drops with no external auth (file IO, transforms, flow-control).
 	RequiresConnections []ConnectionRequirement `json:"requires_connections,omitempty"`
+
+	// ConnectionFields declares a multi-field service connection — the
+	// endpoint + credentials a tenant configures once (on the integration
+	// page) rather than on every node. At run time the engine injects any
+	// configured field into a node param the author left unset, so flows
+	// carry only per-use params. See ConnectionField.
+	ConnectionFields []ConnectionField `json:"connection_fields,omitempty"`
 
 	// Egress is the allowlist of external hosts a sandboxed (out-of-process)
 	// drop may reach via the broker's guarded fetch — the drop's *declared*

@@ -8,6 +8,58 @@ import (
 	"git.sr.ht/~klahr/hazyflow/core"
 )
 
+// injectConnectionDefaults fills a node's unset params from the tenant's
+// stored service connection (Manifest.ConnectionFields) — the
+// endpoint+credentials a tenant configures once for an integration.
+// Secret fields are injected as ${tenant:conn/...} references so the
+// normal resolver substitutes and redacts them; plain fields are
+// injected as their literal value (so e.g. an ntfy server URL still
+// shows in node output). Params the author already set, and fields the
+// tenant hasn't configured, are left untouched — so a drop's own
+// default (e.g. ntfy.sh) still applies. Called immediately before
+// resolveTemplatesCollecting so injected references resolve in the same
+// pass.
+func injectConnectionDefaults(ctx context.Context, providers map[string]core.SecretProvider, m core.Manifest, job *core.Job) {
+	if len(m.ConnectionFields) == 0 {
+		return
+	}
+	tp := providers["tenant"]
+	if tp == nil {
+		return
+	}
+	for _, f := range m.ConnectionFields {
+		if paramFilled(job.Params, f.Key) {
+			continue
+		}
+		key := core.ConnectionSecretKey(m.Integration, f.Key)
+		val, err := tp.Get(ctx, key)
+		if err != nil || val == "" {
+			continue // not configured — leave the param to the drop's default
+		}
+		if job.Params == nil {
+			job.Params = map[string]any{}
+		}
+		if f.Secret {
+			job.Params[f.Key] = "${tenant:" + key + "}"
+		} else {
+			job.Params[f.Key] = val
+		}
+	}
+}
+
+// paramFilled reports whether a param is already set to a non-empty
+// value — connection injection only fills genuinely-absent params.
+func paramFilled(p map[string]any, key string) bool {
+	v, ok := p[key]
+	if !ok || v == nil {
+		return false
+	}
+	if s, isStr := v.(string); isStr {
+		return strings.TrimSpace(s) != ""
+	}
+	return true
+}
+
 // resolveSecrets is the secret-only convenience wrapper around
 // resolveTemplates. Kept for code paths and tests that only care
 // about secret resolution; equivalent to passing prior=nil.

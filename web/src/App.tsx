@@ -6,7 +6,7 @@ import { SignUp } from "./pages/SignUp";
 import { Welcome } from "./pages/Welcome";
 import { Templates } from "./pages/Templates";
 import { Integrations, IntegrationDetail } from "./pages/Integrations";
-import { Connections } from "./pages/Connections";
+import { Secrets } from "./pages/Secrets";
 import { FlowList } from "./pages/FlowList";
 import { FlowEditor } from "./pages/FlowEditor";
 import { RunList } from "./pages/RunList";
@@ -21,6 +21,7 @@ import { AdminModules } from "./pages/AdminModules";
 import { AdminWorkspace } from "./pages/AdminWorkspace";
 import { AdminOrgSSO } from "./pages/AdminOrgSSO";
 import { AdminOAuthProviders } from "./pages/AdminOAuthProviders";
+import { AdminSecretManager } from "./pages/AdminSecretManager";
 import { AcceptInvite } from "./pages/AcceptInvite";
 
 export function App() {
@@ -55,7 +56,7 @@ export function App() {
           element={<LegacyPipelineRedirect />}
         />
         <Route path="/templates" element={<Templates />} />
-        <Route path="/connections" element={<Connections />} />
+        <Route path="/secrets" element={<Secrets />} />
         <Route path="/integrations" element={<Integrations />} />
         <Route path="/integrations/:slug" element={<IntegrationDetail />} />
         <Route path="/runs" element={<RunList />} />
@@ -70,6 +71,7 @@ export function App() {
         <Route path="/admin/workspace" element={<AdminWorkspace />} />
         <Route path="/admin/sso" element={<AdminOrgSSO />} />
         <Route path="/admin/oauth" element={<AdminOAuthProviders />} />
+        <Route path="/admin/secret-manager" element={<AdminSecretManager />} />
         <Route path="/invite/:token" element={<AcceptInvite />} />
         <Route path="*" element={<Navigate to="/flows" replace />} />
       </Routes>
