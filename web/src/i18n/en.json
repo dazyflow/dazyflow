@@ -181,14 +181,27 @@
       "anthropic": "Anthropic",
       "claudeDesktop": {
         "label": "Claude Desktop",
-        "configPath": "~/Library/Application Support/Claude/claude_desktop_config.json",
+        "configPath": {
+          "macos": "~/Library/Application Support/Claude/claude_desktop_config.json",
+          "windows": "%APPDATA%\\Claude\\claude_desktop_config.json",
+          "linux": "~/.config/Claude/claude_desktop_config.json"
+        },
         "instructions": "Open Claude Desktop → Settings → Developer → Edit Config, then paste the block below into the file (merging with any mcpServers entries you already have). Restart Claude Desktop to pick up the change."
       },
       "claudeCode": {
         "label": "Claude Code",
-        "configPath": "~/.claude.json",
+        "configPath": {
+          "macos": "~/.claude.json",
+          "windows": "%USERPROFILE%\\.claude.json",
+          "linux": "~/.claude.json"
+        },
         "instructions": "Edit ~/.claude.json and merge the mcpServers block below, or run the CLI command — Claude Code picks it up on the next session."
       }
+    },
+    "os": {
+      "macos": "macOS",
+      "windows": "Windows",
+      "linux": "Linux"
     }
   },
   "flowList": {

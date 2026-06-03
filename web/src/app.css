@@ -1032,6 +1032,40 @@
   padding-top: var(--space-3);
   border-top: 1px solid var(--border);
 }
+/* OS tabs — a small segmented control selecting which config-file path
+   to show (macOS / Windows / Linux). */
+.mcp-os-tabs {
+  display: inline-flex;
+  gap: 2px;
+  margin-bottom: var(--space-3);
+  padding: 2px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+}
+.mcp-os-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 3px 12px;
+  border-radius: var(--r-1);
+  cursor: pointer;
+}
+.mcp-os-icon {
+  display: block;
+  object-fit: contain;
+}
+.mcp-os-tab:hover:not(.active) {
+  color: var(--ink);
+}
+.mcp-os-tab.active {
+  background: var(--surface-3);
+  color: var(--ink);
+}
 .mcp-client-instructions > p {
   margin: 0 0 var(--space-3);
   color: var(--muted);
@@ -2339,17 +2373,21 @@ button.danger-outline:hover:not(:disabled) {
 
 /* Generic secondary button for the "From template" CTA on the
    flow list — pairs visually with the primary "New flow" button. */
+/* Secondary buttons match the default gray button so secondary actions
+   read the same everywhere — toolbars and modal footers alike — against
+   the purple .primary action. */
 .secondary {
-  padding: 8px 14px;
-  border: 1px solid var(--border-strong);
-  background: transparent;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
   color: var(--ink);
-  border-radius: 6px;
-  font-size: 13px;
+  border-radius: var(--r-2);
+  font-size: inherit;
   cursor: pointer;
 }
 .secondary:hover {
-  border-color: var(--accent, #9f83fe);
+  background: var(--surface-3);
+  border-color: var(--border-strong);
 }
 
 /* Editor layout: canvas | inspector. The catalog used to live to the

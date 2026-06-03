@@ -25,8 +25,12 @@ export function RevealSecretModal({
     }
   };
   return (
-    <div className="settings-backdrop">
-      <div className="settings-dialog" style={{ maxWidth: 540 }}>
+    <div className="settings-backdrop" onClick={onClose}>
+      <div
+        className="settings-dialog"
+        style={{ maxWidth: 540 }}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="settings-head">
           <h2>{t("revealSecret.title")}</h2>
         </div>

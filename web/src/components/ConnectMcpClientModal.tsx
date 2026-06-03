@@ -26,6 +26,24 @@ type Stage = "confirm" | "reveal";
 
 type ClientID = "claude-desktop" | "claude-code";
 
+// OS drives which config-file path we show — the only OS-dependent bit
+// (the JSON snippet is identical and the Claude Code CLI is
+// cross-platform). Default is best-effort from the browser.
+type OS = "macos" | "windows" | "linux";
+const OSES: OS[] = ["macos", "windows", "linux"];
+const OS_ICON: Record<OS, string> = {
+  macos: "/brands/os-apple.svg",
+  windows: "/brands/os-windows.svg",
+  linux: "/brands/os-linux.svg",
+};
+
+function detectOS(): OS {
+  const s = (navigator.userAgent + " " + (navigator.platform || "")).toLowerCase();
+  if (s.includes("win")) return "windows";
+  if (s.includes("linux") && !s.includes("android")) return "linux";
+  return "macos";
+}
+
 type ClientDef = {
   id: ClientID;
   labelKey: string;
@@ -109,10 +127,7 @@ export function ConnectMcpClientModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div
-      className="settings-backdrop"
-      onClick={stage === "confirm" ? onClose : undefined}
-    >
+    <div className="settings-backdrop" onClick={onClose}>
       <div
         className="settings-dialog"
         style={{ maxWidth: 680 }}
@@ -197,6 +212,7 @@ function ConfirmStage({
 function RevealStage({ issued, onDone }: { issued: IssuedAPIKey; onDone: () => void }) {
   const { t } = useTranslation();
   const [activeID, setActiveID] = useState<ClientID>(CLIENTS[0].id);
+  const [os, setOS] = useState<OS>(detectOS);
   const env: SnippetEnv = {
     url: window.location.origin,
     secret: issued.secret,
@@ -227,13 +243,35 @@ function RevealStage({ issued, onDone }: { issued: IssuedAPIKey; onDone: () => v
           ))}
         </div>
         <div className="mcp-client-instructions">
+          <div className="mcp-os-tabs" role="tablist">
+            {OSES.map((o) => (
+              <button
+                key={o}
+                type="button"
+                role="tab"
+                aria-selected={o === os}
+                className={"mcp-os-tab" + (o === os ? " active" : "")}
+                onClick={() => setOS(o)}
+              >
+                <img
+                  src={OS_ICON[o]}
+                  alt=""
+                  className="mcp-os-icon"
+                  width={14}
+                  height={14}
+                  draggable={false}
+                />
+                {t(`connectMcp.os.${o}`)}
+              </button>
+            ))}
+          </div>
           <p>{t(active.instructionsKey)}</p>
           <div className="sf-field">
             <div className="label-row">
               <label>{t("connectMcp.configPathLabel")}</label>
             </div>
             <input
-              value={t(active.configPathKey)}
+              value={t(`${active.configPathKey}.${os}`)}
               readOnly
               onFocus={(e) => e.currentTarget.select()}
               style={{ fontFamily: "var(--font-mono)" }}
