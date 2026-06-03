@@ -69,6 +69,16 @@ function wordStarts(s: string, tok: string): boolean {
   return false;
 }
 
+// pendingHistoryPop holds a deferred history.back() scheduled when the
+// palette closes. It lives at module scope so React StrictMode's
+// dev-only mount→unmount→mount probe can cancel it on remount: the
+// cleanup schedules the back() on a macrotask, and the immediate
+// remount clears it before it runs. Without this, the cleanup's
+// synchronous back() fired a popstate that the remounted listener
+// caught as a "Back" and closed the palette instantly. Only one palette
+// is ever mounted, so a single shared handle is safe.
+let pendingHistoryPop: ReturnType<typeof setTimeout> | null = null;
+
 export function QuickDropPalette({ drops, onClose, onPick }: Props) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
@@ -87,18 +97,33 @@ export function QuickDropPalette({ drops, onClose, onPick }: Props) {
   // next real Back behaves normally. Matters most for the fullscreen
   // mobile variant, where Back is the instinctive way to dismiss it.
   useEffect(() => {
-    window.history.pushState({ hazyPalette: true }, "");
+    // A remount (incl. StrictMode's dev probe) cancels any back() the
+    // previous cleanup scheduled — we're still open, so don't pop.
+    if (pendingHistoryPop) {
+      clearTimeout(pendingHistoryPop);
+      pendingHistoryPop = null;
+    }
+    // Only push when our marker isn't already on top, so the StrictMode
+    // remount doesn't stack a second entry.
+    if (!window.history.state?.hazyPalette) {
+      window.history.pushState({ hazyPalette: true }, "");
+    }
     const onPop = () => onCloseRef.current();
     window.addEventListener("popstate", onPop);
     return () => {
       window.removeEventListener("popstate", onPop);
       // If we're unmounting for a reason OTHER than the Back-button pop
       // (Esc/pick/backdrop), our pushed entry is still on top — remove
-      // it. The listener is already gone, so this back() won't re-fire
-      // onClose. After a real Back pop the entry is gone and state no
-      // longer carries our marker, so we skip (no double-pop).
+      // it. Defer to a macrotask so a StrictMode remount (which runs
+      // synchronously right after this cleanup) can cancel it above;
+      // otherwise the back()'s popstate would be caught by the new
+      // listener and close the palette the instant it opened. After a
+      // real Back pop the marker is already gone, so we skip it.
       if (window.history.state?.hazyPalette) {
-        window.history.back();
+        pendingHistoryPop = setTimeout(() => {
+          pendingHistoryPop = null;
+          if (window.history.state?.hazyPalette) window.history.back();
+        }, 0);
       }
     };
   }, []);

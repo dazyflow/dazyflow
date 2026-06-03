@@ -74,7 +74,7 @@ describe("explainRunError", () => {
 
   it("matches a missing tenant secret with double quotes", () => {
     const r = explainRunError("", 'secret "postgres_dsn" not found');
-    expect(r!.headlineKey).toBe("explain.credentialMissing");
+    expect(r!.headlineKey).toBe("explain.secretMissing");
     expect(r!.headlineValues).toEqual({ name: "postgres_dsn" });
     expect(r!.action?.href).toBe("/secrets?focus=postgres_dsn");
   });

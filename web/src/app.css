@@ -1472,6 +1472,10 @@
 /* ----- Credentials manager ----- */
 .credentials {
   margin-top: var(--space-5);
+  /* Match the Apps page content column (.integration-detail's
+     --integration-col: 640px) so the secrets list + add-secret form
+     line up to the same width rather than stretching edge-to-edge. */
+  max-width: 640px;
 }
 .credentials-list {
   list-style: none;
@@ -1513,10 +1517,12 @@
   font-size: 11px;
   color: var(--success);
 }
+/* Stacked add-secret form: name, value, and the Add button each on
+   their own row. */
 .credentials-add {
   display: flex;
+  flex-direction: column;
   gap: var(--space-2);
-  flex-wrap: wrap;
 }
 
 /* Bring-your-own secret-manager config panel (Connections page). */
@@ -1573,13 +1579,22 @@
   align-items: center;
 }
 .credentials-add input {
-  flex: 1;
-  min-width: 160px;
+  width: 100%;
+}
+/* Multiline secret values (private keys, JSON blobs, multi-line tokens). */
+.credentials-add textarea {
+  width: 100%;
+  min-height: 76px;
+  resize: vertical;
+  font-family: var(--font-mono);
+  font-size: 13px;
 }
 .credentials-add button.primary {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  /* Its own row, but sized to its content rather than full width. */
+  align-self: flex-start;
 }
 
 /* Per-integration "Connection" configure widget (integration detail
@@ -4194,6 +4209,30 @@ button.danger-outline:hover:not(:disabled) {
     width: 100%;
     height: 100%;
     max-height: 100%;
+    border: none;
+    border-radius: 0;
+  }
+}
+/* MCP connect modal: a touch wider than the default dialog, and goes
+   edge-to-edge on small screens so its client cards, OS tabs, and config
+   snippets get the whole viewport instead of a cramped centred card.
+   Mirrors the Ctrl+K palette's mobile treatment: 100dvh (so the mobile
+   URL bar collapsing doesn't clip the bottom) and no backdrop blur (the
+   dialog covers it anyway). 768px = the app's mobile break. */
+.mcp-connect-dialog {
+  max-width: 680px;
+}
+@media (max-width: 768px) {
+  .settings-backdrop:has(.mcp-connect-dialog) {
+    padding: 0;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .mcp-connect-dialog {
+    max-width: none;
+    width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
     border: none;
     border-radius: 0;
   }

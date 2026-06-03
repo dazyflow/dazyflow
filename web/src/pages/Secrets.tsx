@@ -182,7 +182,7 @@ function CredentialsManager({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [highlighted, setHighlighted] = useState<string | null>(null);
-  const valueInputRef = useRef<HTMLInputElement | null>(null);
+  const valueInputRef = useRef<HTMLTextAreaElement | null>(null);
   const rowRefs = useRef<Map<string, HTMLLIElement | null>>(new Map());
 
   // Apply the inbound ?focus= once. We wait until the secrets list
@@ -243,7 +243,7 @@ function CredentialsManager({
       {loading ? (
         <div className="card">{t("common.loading")}</div>
       ) : secrets.length === 0 ? (
-        <p className="credentials-empty">{t("connections.noCredentials")}</p>
+        <p className="credentials-empty">{t("connections.noSecrets")}</p>
       ) : (
         <ul className="credentials-list">
           {secrets.map((n) => (
@@ -263,8 +263,8 @@ function CredentialsManager({
                 <button
                   type="button"
                   className="icon-button danger"
-                  aria-label={t("connections.deleteCredential", { name: n })}
-                  title={t("connections.deleteCredential", { name: n })}
+                  aria-label={t("connections.deleteSecret", { name: n })}
+                  title={t("connections.deleteSecret", { name: n })}
                   onClick={() => remove(n)}
                 >
                   <Trash2 size={15} />
@@ -289,21 +289,22 @@ function CredentialsManager({
             onChange={(e) => setName(e.target.value)}
             aria-label={t("connections.nameLabel")}
           />
-          <input
+          <textarea
             ref={valueInputRef}
-            type="password"
+            rows={4}
             placeholder={t("connections.valuePlaceholder")}
             value={value}
             onChange={(e) => setValue(e.target.value)}
             aria-label={t("connections.valueLabel")}
             autoComplete="off"
+            spellCheck={false}
           />
           <button
             type="submit"
             className="primary"
             disabled={busy || !name.trim() || !value}
           >
-            <Plus size={15} /> {busy ? t("connections.saving") : t("connections.addCredential")}
+            <Plus size={15} /> {busy ? t("connections.saving") : t("connections.addSecret")}
           </button>
         </form>
       )}

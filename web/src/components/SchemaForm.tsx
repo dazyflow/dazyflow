@@ -595,13 +595,13 @@ function FieldWrap({
                 case "tenant":
                   return (
                     <li key={i}>
-                      {t("schemaForm.refCredential", { name: r.payload })}
+                      {t("schemaForm.refSecret", { name: r.payload })}
                       {" "}
                       <Link
                         to={`/secrets?focus=${encodeURIComponent(r.payload)}`}
                         className="link-button sf-ref-action"
                       >
-                        {t("schemaForm.refCredentialSetUp")}
+                        {t("schemaForm.refSecretSetUp")}
                       </Link>
                     </li>
                   );
@@ -758,17 +758,17 @@ function TenantSecretChip({
     <div className="sf-credential-chip">
       <Lock size={13} className="sf-credential-chip-glyph" />
       <span className="sf-credential-chip-label">
-        {t("schemaForm.credChipUses", { name: credName })}
+        {t("schemaForm.secretChipUses", { name: credName })}
       </span>
       <span className="sf-credential-chip-actions">
         <Link
           to={`/secrets?focus=${encodeURIComponent(credName)}`}
           className="link-button"
         >
-          {t("schemaForm.credChipSetUp")}
+          {t("schemaForm.secretChipSetUp")}
         </Link>
         <button type="button" className="link-button" onClick={onReplace}>
-          {t("schemaForm.credChipReplace")}
+          {t("schemaForm.secretChipReplace")}
         </button>
       </span>
     </div>

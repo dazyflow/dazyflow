@@ -78,10 +78,13 @@ const CLIENTS: ClientDef[] = [
     configPathKey: "connectMcp.clients.claudeCode.configPath",
     buildJSON: mcpServersJSON,
     buildCLI: ({ url, secret }) =>
-      // Trailing `--` separates `claude mcp add` flags from the
-      // command + args that Claude Code will spawn. Multi-line with
-      // backslashes for readability when the URL is long.
-      `claude mcp add hazyflow \\\n  --env HAZYFLOW_URL=${shellQuote(url)} \\\n  --env HAZYFLOW_API_KEY=${shellQuote(secret)} \\\n  -- hz-mcp`,
+      // Single line with double-quoted KEY=VALUE args so the command
+      // pastes cleanly into POSIX shells, Windows cmd.exe, AND
+      // PowerShell. Avoid backslash line-continuations (POSIX-only; cmd
+      // uses `^`, PowerShell uses a backtick) and POSIX single-quoting
+      // (cmd.exe doesn't treat `'` as a quote). The trailing `--`
+      // separates `claude mcp add` flags from the command it spawns.
+      `claude mcp add hazyflow --env "HAZYFLOW_URL=${url}" --env "HAZYFLOW_API_KEY=${secret}" -- hz-mcp`,
   },
 ];
 
@@ -129,8 +132,7 @@ export function ConnectMcpClientModal({ onClose }: { onClose: () => void }) {
   return (
     <div className="settings-backdrop" onClick={onClose}>
       <div
-        className="settings-dialog"
-        style={{ maxWidth: 680 }}
+        className="settings-dialog mcp-connect-dialog"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="settings-head">
@@ -365,13 +367,6 @@ function mcpServersJSON({ url, secret }: SnippetEnv): string {
     },
   };
   return JSON.stringify(config, null, 2);
-}
-
-// shellQuote wraps a value for safe paste into a POSIX shell. Single
-// quotes suppress all expansion; embedded single quotes get the
-// standard '"'"' dance.
-function shellQuote(v: string): string {
-  return "'" + v.replace(/'/g, `'"'"'`) + "'";
 }
 
 // ClaudeLogo is the Anthropic Claude mark — a stylized asterisk /

@@ -118,10 +118,10 @@ export function explainRunError(
   if (secretMatch) {
     const name = secretMatch[1];
     return {
-      headlineKey: "explain.credentialMissing",
+      headlineKey: "explain.secretMissing",
       headlineValues: { name },
       action: {
-        labelKey: "explain.actionAddCredential",
+        labelKey: "explain.actionAddSecret",
         href: `/secrets?focus=${encodeURIComponent(name)}`,
       },
     };

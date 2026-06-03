@@ -1766,7 +1766,7 @@ function ConnectionGate({
           )}
           {missingSecrets.length > 0 && (
             <>
-              <div className="conn-gate-section-head">{t("connGate.credsHead")}</div>
+              <div className="conn-gate-section-head">{t("connGate.secretsHead")}</div>
               <ul className="conn-gate-list">
                 {missingSecrets.map((name) => (
                   <li key={name}>
