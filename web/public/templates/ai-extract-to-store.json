@@ -22,7 +22,7 @@
         "system": "Extract every line item from the user's text as a JSON array of objects with the fields \"description\" (string) and \"amount\" (number). Reply with only the JSON array, no prose.",
         "max_tokens": 1024,
         "temperature": 0,
-        "api_key": "${secret:ANTHROPIC_API_KEY}"
+        "api_key": "${tenant:ANTHROPIC_API_KEY}"
       },
       "position": {"x": 540, "y": 200}
     },

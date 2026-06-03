@@ -38,7 +38,7 @@ func init() {
 				},
 				{
 					Title:  "Authenticated download to a scratch path",
-					Params: json.RawMessage(`{"url":"https://api.example.com/v1/dump","path":"scratch://dumps/today.bin","headers":{"Authorization":"Bearer ${secret:EXAMPLE_API_TOKEN}"},"timeout_ms":600000,"max_bytes":524288000}`),
+					Params: json.RawMessage(`{"url":"https://api.example.com/v1/dump","path":"scratch://dumps/today.bin","headers":{"Authorization":"Bearer ${tenant:EXAMPLE_API_TOKEN}"},"timeout_ms":600000,"max_bytes":524288000}`),
 					Notes:  "scratch:// files are cleaned up at the end of the run; bump max_bytes for large dumps.",
 				},
 			},

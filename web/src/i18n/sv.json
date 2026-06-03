@@ -369,6 +369,8 @@
     "intro": "Varje connector och inbyggd familj daemonen känner till. Klicka på en integration för att se dess drops, beskrivningar och användningsanteckningar.",
     "drop_one": "{{count}} drop",
     "drop_other": "{{count}} drops",
+    "connectedHead": "Anslutna",
+    "availableHead": "Tillgängliga",
     "backAll": "← Alla integrationer",
     "noDrops": "Inga drops registrerade för den här integrationen.",
     "officialDocs": "Officiell dokumentation ↗",
@@ -377,7 +379,18 @@
     "inputs": "Indata",
     "outputs": "Utdata",
     "paramsSchema": "Parameter-schema",
-    "required": "obligatorisk"
+    "required": "obligatorisk",
+    "connection": {
+      "connectedTo": "Ansluten till {{name}}",
+      "connectPrompt": "Anslut {{name}}",
+      "notConfigured": "Inte konfigurerad — be en administratör.",
+      "disconnect": "Koppla från",
+      "removeConfirm": "Koppla från och ta bort det lagrade värdet för {{name}}?",
+      "valuePlaceholder": "Klistra in värdet",
+      "storeOff": "Lagring av uppgifter är inte aktiverad — be din administratör.",
+      "oauthOff": "Anslutning av konton är inte aktiverad — be din administratör.",
+      "connectFailed": "Kunde inte ansluta: {{error}}"
+    }
   },
   "connections": {
     "title": "Dina anslutningar",

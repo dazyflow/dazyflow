@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Box } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, APIError } from "../api";
@@ -9,8 +9,13 @@ import {
   integrationMeta,
   integrationNameFromSlug,
   integrationSlug,
+  oauthProviderDisplay,
 } from "../integrationMeta";
-import type { Manifest } from "../types";
+import type {
+  ConnectionRequirement,
+  Manifest,
+  OAuthProviderStatus,
+} from "../types";
 
 // Integrations is the index page — one card per integration the
 // daemon knows about, derived from the live manifest registry plus
@@ -28,6 +33,12 @@ export function Integrations() {
   const { token } = useAuth();
   const [drops, setDrops] = useState<Manifest[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Connection state, used only to bucket cards into Connected vs
+  // Available. A feature being off / forbidden isn't an error here — it
+  // just means "nothing is connected", so those fetches fall back to []
+  // rather than blocking the page.
+  const [secrets, setSecrets] = useState<string[] | null>(null);
+  const [providers, setProviders] = useState<OAuthProviderStatus[] | null>(null);
 
   useEffect(() => {
     if (!token) return;
@@ -38,12 +49,33 @@ export function Integrations() {
         const msg = e instanceof APIError ? `${e.status}: ${e.message}` : (e as Error).message;
         setError(msg);
       });
+    api
+      .listSecrets(token)
+      .then((r) => setSecrets(r.secrets))
+      .catch(() => setSecrets([]));
+    api
+      .listProviders(token)
+      .then((r) => setProviders(r.providers))
+      .catch(() => setProviders([]));
   }, [token]);
 
   // Group drops by integration slug. The standard-library bucket
   // catches anything without an Integration field — matches the
   // NodeCatalog grouping rules.
   const groups = useMemo(() => buildGroups(drops ?? []), [drops]);
+
+  // Split into Connected (requires setup AND every requirement is
+  // satisfied) vs Available (everything else — no-setup integrations
+  // are available from the start, and not-yet-connected ones can be set
+  // up). Re-buckets automatically once secrets/providers load.
+  const { connected, available } = useMemo(() => {
+    const conn: typeof groups = [];
+    const avail: typeof groups = [];
+    for (const g of groups) {
+      (groupIsConnected(g.drops, secrets, providers) ? conn : avail).push(g);
+    }
+    return { connected: conn, available: avail };
+  }, [groups, secrets, providers]);
 
   if (error) {
     return (
@@ -66,60 +98,107 @@ export function Integrations() {
     <div className="page integrations-page">
       <h1>{t("integrations.title")}</h1>
       <p className="page-sub">{t("integrations.intro")}</p>
-      <div className="integration-grid">
-        {groups.map(({ slug, meta, drops }) => {
-          // Logo fallback chain: curated override → any drop's
-          // brand_logo → category-derived lucide glyph from the
-          // first drop. Drops carrying their own brand_logo means
-          // we render the right vendor mark even for integrations
-          // without a curated metadata entry (excel, mysql,
-          // postgres, sqlite all ship per-drop logos).
-          const brandLogo =
-            meta.brand_logo ?? drops.find((d) => d.brand_logo)?.brand_logo;
-          const headerDrop = drops[0];
-          const HeaderIcon = headerDrop
-            ? iconFor(headerDrop.icon, headerDrop.category)
-            : Box;
-          const headerBranded = isBrandedIcon(headerDrop?.icon);
-          return (
-            <Link
-              key={slug}
-              to={`/integrations/${encodeURIComponent(slug)}`}
-              style={{ textDecoration: "none", color: "inherit" }}
-            >
-              <div className="integration-card">
-                <div className="integration-card-head">
-                  {brandLogo ? (
-                    <img
-                      src={brandLogo}
-                      alt=""
-                      className="integration-card-logo"
-                      draggable={false}
-                    />
-                  ) : (
-                    <span className="integration-card-fallback-icon">
-                      <HeaderIcon
-                        size={headerBranded ? 22 : 18}
-                        strokeWidth={2.2}
-                      />
-                    </span>
-                  )}
-                  <h2>{meta.name}</h2>
-                </div>
-                <p className="integration-card-desc">
-                  {truncate(meta.description, 160)}
-                </p>
-                <div className="integration-card-meta">
-                  <span className="integration-card-count">
-                    {t("integrations.drop", { count: drops.length })}
-                  </span>
-                </div>
-              </div>
-            </Link>
-          );
-        })}
-      </div>
+      {connected.length > 0 && (
+        <>
+          <h2 className="integrations-section-head">{t("integrations.connectedHead")}</h2>
+          <div className="integration-grid">
+            {connected.map((g) => (
+              <IntegrationCard key={g.slug} {...g} connected />
+            ))}
+          </div>
+        </>
+      )}
+      {available.length > 0 && (
+        <>
+          <h2 className="integrations-section-head">{t("integrations.availableHead")}</h2>
+          <div className="integration-grid">
+            {available.map((g) => (
+              <IntegrationCard key={g.slug} {...g} connected={false} />
+            ))}
+          </div>
+        </>
+      )}
     </div>
+  );
+}
+
+// IntegrationCard is one tile in the index grid. `connected` shows a
+// green status dot next to the name — the at-a-glance "this is set up"
+// signal that pairs with the Connected section heading.
+function IntegrationCard({
+  slug,
+  meta,
+  drops,
+  connected,
+}: {
+  slug: string;
+  meta: { name: string; description: string; brand_logo?: string };
+  drops: Manifest[];
+  connected: boolean;
+}) {
+  const { t } = useTranslation();
+  // Logo fallback chain: curated override → any drop's brand_logo →
+  // category-derived lucide glyph from the first drop. Drops carrying
+  // their own brand_logo means we render the right vendor mark even for
+  // integrations without a curated metadata entry (excel, mysql,
+  // postgres, sqlite all ship per-drop logos).
+  const brandLogo = meta.brand_logo ?? drops.find((d) => d.brand_logo)?.brand_logo;
+  const headerDrop = drops[0];
+  const HeaderIcon = headerDrop ? iconFor(headerDrop.icon, headerDrop.category) : Box;
+  const headerBranded = isBrandedIcon(headerDrop?.icon);
+  return (
+    <Link
+      to={`/integrations/${encodeURIComponent(slug)}`}
+      style={{ textDecoration: "none", color: "inherit" }}
+    >
+      <div className="integration-card">
+        <div className="integration-card-head">
+          {brandLogo ? (
+            <img
+              src={brandLogo}
+              alt=""
+              className="integration-card-logo"
+              draggable={false}
+            />
+          ) : (
+            <span className="integration-card-fallback-icon">
+              <HeaderIcon size={headerBranded ? 22 : 18} strokeWidth={2.2} />
+            </span>
+          )}
+          <h2>{meta.name}</h2>
+          {connected && (
+            <span
+              className="connection-dot on integration-card-dot"
+              title={t("integrations.connectedHead")}
+            />
+          )}
+        </div>
+        <p className="integration-card-desc">{truncate(meta.description, 160)}</p>
+        <div className="integration-card-meta">
+          <span className="integration-card-count">
+            {t("integrations.drop", { count: drops.length })}
+          </span>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+// groupIsConnected reports whether an integration is fully set up: it
+// declares at least one connection requirement and every one is
+// satisfied (secret stored / oauth account connected). No-requirement
+// integrations return false — they're "available", not "connected".
+function groupIsConnected(
+  drops: Manifest[],
+  secrets: string[] | null,
+  providers: OAuthProviderStatus[] | null,
+): boolean {
+  const reqs = dedupeRequirements(drops);
+  if (reqs.length === 0) return false;
+  return reqs.every((req) =>
+    req.kind === "secret"
+      ? (secrets ?? []).includes(req.name)
+      : ((providers ?? []).find((p) => p.name === req.name)?.accounts.length ?? 0) > 0,
   );
 }
 
@@ -219,6 +298,8 @@ export function IntegrationDetail() {
         </div>
       </header>
 
+      <IntegrationConnections drops={integrationDrops} slug={slug} name={meta.name} />
+
       <h2 className="integration-drops-head">{t("integrations.dropsHead")}</h2>
       <div className="integration-drops">
         {integrationDrops.map((d) => (
@@ -226,6 +307,349 @@ export function IntegrationDetail() {
         ))}
       </div>
     </div>
+  );
+}
+
+// featureUnavailable: a 501 (not configured), 401/403 (not permitted)
+// from a connections endpoint means "this feature isn't usable for
+// this caller" — render an inert "ask your admin" note rather than an
+// error banner. Mirrors the same helper on the Connections page.
+function featureUnavailable(status: number): boolean {
+  return status === 501 || status === 401 || status === 403;
+}
+
+// IntegrationConnections is the configure widget: it turns each drop's
+// requires_connections into an actionable row, so a user sets up an
+// integration here (enter the API key / Connect the account) instead
+// of having to know the magic secret name on the raw Credentials list.
+// Secret-kind requirements get an inline key field that writes to the
+// manifest-declared name; oauth-kind requirements reuse the Connect
+// redirect (return_to bounces back to this page). Renders nothing when
+// the integration declares no connection requirements (e.g. the
+// standard library), so it's inert for everything that needs no auth.
+function IntegrationConnections({
+  drops,
+  slug,
+  name,
+}: {
+  drops: Manifest[];
+  slug: string;
+  name: string;
+}) {
+  const { t } = useTranslation();
+  const { token, hasPerm } = useAuth();
+  const canWrite = hasPerm("secret:write");
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const reqs = useMemo(() => dedupeRequirements(drops), [drops]);
+  const needsSecret = reqs.some((r) => r.kind === "secret");
+  const needsOAuth = reqs.some((r) => r.kind === "oauth");
+
+  const [secrets, setSecrets] = useState<string[] | null>(null);
+  const [secretsOff, setSecretsOff] = useState(false);
+  const [providers, setProviders] = useState<OAuthProviderStatus[] | null>(null);
+  const [providersOff, setProvidersOff] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = () => {
+    if (!token) return;
+    if (needsSecret) {
+      api
+        .listSecrets(token)
+        .then((r) => {
+          setSecrets(r.secrets);
+          setSecretsOff(false);
+        })
+        .catch((e) => {
+          if (e instanceof APIError && featureUnavailable(e.status)) setSecretsOff(true);
+          else setError(e instanceof APIError ? e.message : (e as Error).message);
+        });
+    }
+    if (needsOAuth) {
+      api
+        .listProviders(token)
+        .then((r) => {
+          setProviders(r.providers);
+          setProvidersOff(false);
+        })
+        .catch((e) => {
+          if (e instanceof APIError && featureUnavailable(e.status)) setProvidersOff(true);
+          else setError(e instanceof APIError ? e.message : (e as Error).message);
+        });
+    }
+  };
+  // reqs is derived from drops (stable per detail load), so token is the
+  // only real dependency; needsSecret/needsOAuth are read inside refresh.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(refresh, [token, slug]);
+
+  // OAuth bounces back to /integrations/:slug?oauth=success|error. Show
+  // the result once, then strip the params so a refresh doesn't re-show.
+  const oauthResult = searchParams.get("oauth");
+  const oauthError = searchParams.get("error") ?? "";
+  const dismissBanner = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("oauth");
+    next.delete("provider");
+    next.delete("account");
+    next.delete("error");
+    setSearchParams(next, { replace: true });
+  };
+
+  if (reqs.length === 0) return null;
+
+  return (
+    <section className="integration-connections">
+      {oauthResult === "error" && (
+        <div className="card connections-banner error">
+          <span>
+            {t("integrations.connection.connectFailed", {
+              error: oauthError || t("connections.unknownError"),
+            })}
+          </span>
+          <button type="button" className="link-button" onClick={dismissBanner}>
+            {t("common.dismiss")}
+          </button>
+        </div>
+      )}
+      {error && <div className="card error">{error}</div>}
+      {reqs.map((req) =>
+        req.kind === "secret" ? (
+          <SecretCard
+            key={`secret:${req.name}`}
+            req={req}
+            name={name}
+            configured={secrets?.includes(req.name) ?? false}
+            loading={secrets === null && !secretsOff}
+            off={secretsOff}
+            canWrite={canWrite}
+            onChanged={refresh}
+          />
+        ) : (
+          <OAuthCard
+            key={`oauth:${req.name}`}
+            req={req}
+            status={providers?.find((p) => p.name === req.name) ?? null}
+            loading={providers === null && !providersOff}
+            off={providersOff}
+            canWrite={canWrite}
+            slug={slug}
+          />
+        ),
+      )}
+    </section>
+  );
+}
+
+// ConnectionStatus is the card's headline — a status dot plus
+// "Connected to X" / "Connect X" — the at-a-glance state, shared by the
+// secret and oauth cards.
+function ConnectionStatus({
+  connected,
+  title,
+}: {
+  connected: boolean;
+  title: string;
+}) {
+  return (
+    <div className="connection-card-status">
+      <span className={"connection-dot " + (connected ? "on" : "off")} />
+      <h3>{title}</h3>
+    </div>
+  );
+}
+
+// SecretCard is the heart of the widget: a card titled by the
+// integration with an inline key field. The user pastes the value into
+// a field labelled by the manifest's note ("Anthropic API key") — they
+// never type the secret NAME. Saving writes under the declared name so
+// existing ${tenant:NAME} references resolve.
+function SecretCard({
+  req,
+  name,
+  configured,
+  loading,
+  off,
+  canWrite,
+  onChanged,
+}: {
+  req: ConnectionRequirement;
+  name: string;
+  configured: boolean;
+  loading: boolean;
+  off: boolean;
+  canWrite: boolean;
+  onChanged: () => void;
+}) {
+  const { t } = useTranslation();
+  const { token } = useAuth();
+  const [value, setValue] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  // Split the manifest note into a field label and a placeholder hint:
+  // "Anthropic API key (sk-ant-…)." → label "Anthropic API key",
+  // placeholder "sk-ant-…". Notes without a parenthetical fall back to
+  // the whole note as the label and a generic placeholder.
+  const note = req.note ?? req.name;
+  const paren = note.match(/^(.*?)\s*\(([^)]*)\)\s*\.?$/);
+  const fieldLabel = (paren ? paren[1] : note.replace(/\.$/, "")).trim();
+  const placeholder = paren ? paren[2] : t("integrations.connection.valuePlaceholder");
+
+  const save = async () => {
+    if (!token || !value) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await api.putSecret(token, req.name, value);
+      setValue("");
+      onChanged();
+    } catch (e) {
+      setErr(e instanceof APIError ? e.message : (e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!token) return;
+    if (!window.confirm(t("integrations.connection.removeConfirm", { name: req.name }))) return;
+    try {
+      await api.deleteSecret(token, req.name);
+      onChanged();
+    } catch (e) {
+      setErr(e instanceof APIError ? e.message : (e as Error).message);
+    }
+  };
+
+  return (
+    <div className="connection-card">
+      <ConnectionStatus
+        connected={configured}
+        title={
+          configured
+            ? t("integrations.connection.connectedTo", { name })
+            : t("integrations.connection.connectPrompt", { name })
+        }
+      />
+      {off ? (
+        <p className="connection-note">{t("integrations.connection.storeOff")}</p>
+      ) : loading ? (
+        <p className="connection-note">{t("common.loading")}</p>
+      ) : configured ? (
+        <>
+          <label className="connection-field">
+            <span className="connection-field-label">{fieldLabel}</span>
+            <input type="password" value="••••••••••" readOnly aria-label={fieldLabel} />
+          </label>
+          {err && <div className="card error">{err}</div>}
+          {canWrite && (
+            <div className="connection-card-footer">
+              <button type="button" className="danger-outline" onClick={() => void remove()}>
+                {t("integrations.connection.disconnect")}
+              </button>
+            </div>
+          )}
+        </>
+      ) : canWrite ? (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save();
+          }}
+        >
+          <label className="connection-field">
+            <span className="connection-field-label">{fieldLabel}</span>
+            <input
+              type="password"
+              placeholder={placeholder}
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              autoComplete="off"
+            />
+          </label>
+          {err && <div className="card error">{err}</div>}
+          <div className="connection-card-footer">
+            <button type="submit" className="primary" disabled={busy || !value}>
+              {busy ? t("connections.saving") : t("connections.connect")}
+            </button>
+          </div>
+        </form>
+      ) : (
+        <p className="connection-note">{t("integrations.connection.notConfigured")}</p>
+      )}
+    </div>
+  );
+}
+
+// OAuthCard surfaces an oauth-kind requirement as the same card. The
+// status comes from GET /oauth/providers; Connect does the full-page
+// authorize redirect, with return_to set to this page so the round-trip
+// lands back here.
+function OAuthCard({
+  req,
+  status,
+  loading,
+  off,
+  canWrite,
+  slug,
+}: {
+  req: ConnectionRequirement;
+  status: OAuthProviderStatus | null;
+  loading: boolean;
+  off: boolean;
+  canWrite: boolean;
+  slug: string;
+}) {
+  const { t } = useTranslation();
+  const meta = oauthProviderDisplay(req.name);
+  const connected = (status?.accounts.length ?? 0) > 0;
+  const connect = () => {
+    window.location.assign(
+      api.oauthAuthorizeUrl(req.name, `/integrations/${encodeURIComponent(slug)}`),
+    );
+  };
+
+  return (
+    <div className="connection-card">
+      <ConnectionStatus
+        connected={connected}
+        title={
+          connected
+            ? t("integrations.connection.connectedTo", { name: meta.name })
+            : t("integrations.connection.connectPrompt", { name: meta.name })
+        }
+      />
+      {off ? (
+        <p className="connection-note">{t("integrations.connection.oauthOff")}</p>
+      ) : loading ? (
+        <p className="connection-note">{t("common.loading")}</p>
+      ) : canWrite ? (
+        <div className="connection-card-footer">
+          <button type="button" className="primary" onClick={connect}>
+            {connected ? t("connections.connectAnother") : t("connections.connect")}
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// dedupeRequirements flattens requires_connections across every drop in
+// the integration into a unique list keyed by (kind, name) — Notion's
+// two drops both want NOTION_TOKEN, Google's many drops all ride one
+// "google" oauth — keeping the first note seen. Secret-kind first (the
+// gap this widget fills), then oauth; name-sorted within each.
+function dedupeRequirements(drops: Manifest[]): ConnectionRequirement[] {
+  const seen = new Map<string, ConnectionRequirement>();
+  for (const d of drops) {
+    for (const req of d.requires_connections ?? []) {
+      const key = `${req.kind}:${req.name}`;
+      if (!seen.has(key)) seen.set(key, req);
+    }
+  }
+  return [...seen.values()].sort((a, b) =>
+    a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === "secret" ? -1 : 1,
   );
 }
 

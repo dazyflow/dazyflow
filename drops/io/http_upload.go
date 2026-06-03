@@ -38,7 +38,7 @@ func init() {
 				},
 				{
 					Title:  "Multipart POST to a form-data API",
-					Params: json.RawMessage(`{"url":"https://api.example.com/v1/attachments","path":"workspace://uploads/photo.jpg","multipart":true,"field_name":"file","filename":"photo.jpg","headers":{"Authorization":"Bearer ${secret:EXAMPLE_API_TOKEN}"}}`),
+					Params: json.RawMessage(`{"url":"https://api.example.com/v1/attachments","path":"workspace://uploads/photo.jpg","multipart":true,"field_name":"file","filename":"photo.jpg","headers":{"Authorization":"Bearer ${tenant:EXAMPLE_API_TOKEN}"}}`),
 				},
 			},
 			ExecutionModel: core.ExecutionBatch,

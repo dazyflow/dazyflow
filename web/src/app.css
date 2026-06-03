@@ -1029,6 +1029,12 @@
   color: var(--muted);
 }
 /* ----- Integrations index + detail ----- */
+/* Section heading on the integrations index — "Connected" / "Available". */
+.integrations-section-head {
+  margin: var(--space-5) 0 var(--space-3);
+  font-size: 15px;
+  color: var(--muted);
+}
 .integration-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -1061,6 +1067,9 @@
 .integration-card-head h2 {
   margin: 0;
   font-size: 17px;
+}
+.integration-card-dot {
+  margin-left: auto;
 }
 .integration-card-logo {
   width: 32px;
@@ -1446,6 +1455,80 @@
   align-items: center;
   gap: 4px;
 }
+
+/* Per-integration "Connection" configure widget (integration detail
+   page). One card per credential requirement: a status headline (dot +
+   "Connected to X"), a labelled key field, and a primary action bottom-
+   right. Mirrors the AI-provider connect pattern. */
+.integration-connections {
+  margin-top: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-width: var(--integration-col);
+}
+.connection-card {
+  border: 1px solid var(--border);
+  border-radius: var(--r-3);
+  background: var(--surface);
+  padding: var(--space-4) var(--space-5);
+}
+.connection-card-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+.connection-card-status h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+.connection-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.connection-dot.on {
+  background: var(--success);
+}
+.connection-dot.off {
+  background: var(--muted);
+}
+.connection-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.connection-field-label {
+  font-size: 14px;
+  font-weight: 600;
+}
+.connection-field input {
+  width: 100%;
+}
+.connection-card-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-4);
+}
+.connection-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+/* Outlined destructive button — red text + red border on a transparent
+   fill, matching the old trash affordance. Used by Disconnect. */
+button.danger-outline {
+  background: transparent;
+  color: var(--danger);
+  border-color: var(--danger);
+}
+button.danger-outline:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  border-color: var(--danger);
+}
 .icon-button {
   background: none;
   border: 1px solid transparent;
@@ -1594,6 +1677,12 @@
   color: var(--muted);
 }
 
+/* Shared content width for the integration detail page — the Connection
+   card(s) and the Drops cards align to the same column. Change here to
+   re-flow every integration page. */
+.integration-detail {
+  --integration-col: 640px;
+}
 .integration-hero {
   display: flex;
   gap: 20px;
@@ -1638,6 +1727,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  max-width: var(--integration-col);
 }
 .drop-card {
   border: 1px solid var(--border);

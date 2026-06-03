@@ -1,6 +1,6 @@
 // Package claude hosts the native Claude (Anthropic Messages API)
 // connector, migrated from the scripted TS drop. It authenticates with an
-// api_key param (typically ${secret:ANTHROPIC_API_KEY}); there's no OAuth.
+// api_key param (typically ${tenant:ANTHROPIC_API_KEY}); there's no OAuth.
 package claude
 
 import (
@@ -38,8 +38,8 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"claude", "anthropic", "ai", "llm", "prompt"},
 			Examples: []core.ParamsExample{
-				{Title: "One-shot summary", Params: json.RawMessage(`{"model":"claude-sonnet-4-6","prompt":"Summarize the upstream text in one sentence.","max_tokens":256,"api_key":"${secret:ANTHROPIC_API_KEY}"}`), Notes: "Wire the text to summarise into the 'prompt' input; params.prompt or params.system is the instruction."},
-				{Title: "System-prompted classifier", Params: json.RawMessage(`{"model":"claude-sonnet-4-6","system":"Reply with exactly 'spam' or 'ham'.","prompt":"Your bank account has been compromised","max_tokens":4,"temperature":0,"api_key":"${secret:ANTHROPIC_API_KEY}"}`)},
+				{Title: "One-shot summary", Params: json.RawMessage(`{"model":"claude-sonnet-4-6","prompt":"Summarize the upstream text in one sentence.","max_tokens":256,"api_key":"${tenant:ANTHROPIC_API_KEY}"}`), Notes: "Wire the text to summarise into the 'prompt' input; params.prompt or params.system is the instruction."},
+				{Title: "System-prompted classifier", Params: json.RawMessage(`{"model":"claude-sonnet-4-6","system":"Reply with exactly 'spam' or 'ham'.","prompt":"Your bank account has been compromised","max_tokens":4,"temperature":0,"api_key":"${tenant:ANTHROPIC_API_KEY}"}`)},
 			},
 			RequiresConnections: []core.ConnectionRequirement{
 				{Kind: "secret", Name: "ANTHROPIC_API_KEY", Note: "Anthropic API key (sk-ant-…)."},
@@ -63,7 +63,7 @@ func init() {
 					"max_tokens":{"type":"integer","default":1024,"minimum":1},
 					"temperature":{"type":"number"},
 					"stop_sequences":{"type":"array","items":{"type":"string"}},
-					"api_key":{"type":"string","description":"Anthropic API key. Use ${secret:ANTHROPIC_API_KEY}."},
+					"api_key":{"type":"string","description":"Anthropic API key. Use ${tenant:ANTHROPIC_API_KEY}."},
 					"base_url":{"type":"string","description":"Override the API host."},
 					"timeout_ms":{"type":"integer","default":60000,"minimum":1}
 				}
@@ -78,7 +78,7 @@ func init() {
 func executeClaude(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	apiKey, _ := params.StringOpt(job.Params, "api_key")
 	if apiKey == "" {
-		return params.Err(job, "bad_param", "api_key is required (use ${secret:ANTHROPIC_API_KEY})"), nil
+		return params.Err(job, "bad_param", "api_key is required (use ${tenant:ANTHROPIC_API_KEY})"), nil
 	}
 
 	// Message precedence: prompt input → params.messages → params.prompt.

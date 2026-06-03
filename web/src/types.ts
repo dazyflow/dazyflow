@@ -109,6 +109,19 @@ export type Port = {
   required?: boolean;
 };
 
+// ConnectionRequirement is one credential a drop needs to run, surfaced
+// in the catalog (GET /drops) as requires_connections. kind is "oauth"
+// (authorize via a provider — the Connections "Connect" flow) or
+// "secret" (a value the user stores once and flows reference as
+// ${tenant:NAME}). `note` is the human label to show ("Anthropic API
+// key (sk-ant-…)"); `name` is the provider id (oauth) or secret name
+// (secret).
+export type ConnectionRequirement = {
+  kind: "oauth" | "secret";
+  name: string;
+  note?: string;
+};
+
 export type Manifest = {
   id: string;
   version: string;
@@ -130,6 +143,9 @@ export type Manifest = {
   idempotent?: boolean;
   awaits_approval?: boolean;
   submits_child_graph?: boolean;
+  // requires_connections lists the credentials a drop needs before it
+  // can run — drives the per-integration "Connection" configure widget.
+  requires_connections?: ConnectionRequirement[];
 };
 
 // JSONSchema is a relaxed subset of the JSON Schema spec — enough to

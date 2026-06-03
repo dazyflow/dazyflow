@@ -407,7 +407,7 @@ func startConnection(c *HazydClient) Tool {
 // listSecrets returns the names of secrets stored for the caller's
 // tenant (values never leave the daemon — write-only). LLM use:
 // confirm a secret exists by name before building a flow that
-// references it via ${secret:NAME}.
+// references it via ${tenant:NAME}.
 func listSecrets(c *HazydClient) Tool {
 	return Tool{
 		Name:        "list_secrets",
@@ -426,13 +426,13 @@ func listSecrets(c *HazydClient) Tool {
 // setSecret stores a secret value for the caller's tenant. Use when
 // the user pastes an API key in chat ("here's my Stripe key") — the
 // LLM stores it under a stable name and then references it via
-// ${secret:NAME} in any flow node that needs it.
+// ${tenant:NAME} in any flow node that needs it.
 func setSecret(c *HazydClient) Tool {
 	return Tool{
 		Name:        "set_secret",
-		Description: "Store a secret value under the given name in the caller's tenant. Overwrites if the name exists. After calling, reference the secret from a flow node's params as `${secret:NAME}` (the daemon resolves it at run time). Names must be A-Z 0-9 _ . / - .",
+		Description: "Store a secret value under the given name in the caller's tenant. Overwrites if the name exists. After calling, reference the secret from a flow node's params as `${tenant:NAME}` (the daemon resolves it at run time). Names must be A-Z 0-9 _ . / - .",
 		InputSchema: json.RawMessage(`{"type":"object","required":["name","value"],"properties":{
-			"name":  {"type":"string","description":"Stable name. Convention: SCREAMING_SNAKE_CASE. Becomes the key flow nodes reference via ${secret:NAME}."},
+			"name":  {"type":"string","description":"Stable name. Convention: SCREAMING_SNAKE_CASE. Becomes the key flow nodes reference via ${tenant:NAME}."},
 			"value": {"type":"string","description":"The literal secret value. Will be encrypted at rest by the daemon."}
 		}}`),
 		Handler: func(ctx context.Context, raw json.RawMessage) (ToolCallResult, error) {
@@ -461,7 +461,7 @@ func setSecret(c *HazydClient) Tool {
 func deleteSecret(c *HazydClient) Tool {
 	return Tool{
 		Name:        "delete_secret",
-		Description: "Permanently remove a secret. Idempotent: missing names succeed silently. Flows that still reference the deleted secret via ${secret:NAME} will fail at run time — pair with list_flows / get_flow before deleting if you're unsure.",
+		Description: "Permanently remove a secret. Idempotent: missing names succeed silently. Flows that still reference the deleted secret via ${tenant:NAME} will fail at run time — pair with list_flows / get_flow before deleting if you're unsure.",
 		InputSchema: json.RawMessage(`{"type":"object","required":["name"],"properties":{
 			"name": {"type":"string"}
 		}}`),

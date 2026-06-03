@@ -5,7 +5,7 @@
 // Each subdirectory is one bucket; the catalog UI groups them at runtime by
 // the Manifest.Integration / Manifest.Category fields, independent of this
 // directory layout. Connectors that need credentials use the OAuth provider
-// registry (a separate concept) or a ${secret:…} token.
+// registry (a separate concept) or a ${tenant:…} token.
 package drops
 
 import (

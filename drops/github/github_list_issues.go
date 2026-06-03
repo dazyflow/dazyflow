@@ -28,7 +28,7 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"github", "issue", "list", "query"},
 			Examples: []core.ParamsExample{
-				{Title: "Open bugs assigned to a teammate", Params: json.RawMessage(`{"owner":"example","repo":"widgets","state":"open","labels":["bug"],"assignee":"alice","token":"${secret:GITHUB_TOKEN}"}`)},
+				{Title: "Open bugs assigned to a teammate", Params: json.RawMessage(`{"owner":"example","repo":"widgets","state":"open","labels":["bug"],"assignee":"alice","token":"${tenant:GITHUB_TOKEN}"}`)},
 			},
 			RequiresConnections: []core.ConnectionRequirement{
 				{Kind: "oauth", Name: "github", Note: "GitHub OAuth — repo scope (issues:read)."},

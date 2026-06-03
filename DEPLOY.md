@@ -329,12 +329,12 @@ Every node you drop on the canvas — triggers, transforms, and the connectors
 native Go drop compiled into `hzd`. There is no plugin/marketplace install
 step and no separate runtime: the catalog is fixed at build time. Connectors
 that need credentials use the OAuth providers configured under **Admin →
-Connector apps** (`/admin/oauth`) or a `${secret:…}` token.
+Connector apps** (`/admin/oauth`) or a `${tenant:…}` token.
 
 ## Secrets
 
 Out of the box, secrets are held in the **built-in encrypted store** — flows
-reference them as `${secret:NAME}` (the `tenant://` provider), values are
+reference them as `${tenant:NAME}` (the `tenant://` provider), values are
 AES-256-GCM encrypted under a per-tenant key wrapped by `HAZYFLOW_MASTER_KEY`,
 and the UI is write-only (you never read a value back). That's the zero-infra
 default; no external dependency. For master-key handling and rotation, see

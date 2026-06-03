@@ -369,6 +369,8 @@
     "intro": "Every connector and built-in family the daemon knows about. Click an integration to see its drops, descriptions, and usage notes.",
     "drop_one": "{{count}} drop",
     "drop_other": "{{count}} drops",
+    "connectedHead": "Connected",
+    "availableHead": "Available",
     "backAll": "← All integrations",
     "noDrops": "No drops registered for this integration.",
     "officialDocs": "Official documentation ↗",
@@ -377,7 +379,18 @@
     "inputs": "Inputs",
     "outputs": "Outputs",
     "paramsSchema": "Params schema",
-    "required": "required"
+    "required": "required",
+    "connection": {
+      "connectedTo": "Connected to {{name}}",
+      "connectPrompt": "Connect {{name}}",
+      "notConfigured": "Not set up — ask an admin.",
+      "disconnect": "Disconnect",
+      "removeConfirm": "Disconnect and remove the stored value for {{name}}?",
+      "valuePlaceholder": "Paste the value",
+      "storeOff": "Credential storage isn't enabled — ask your admin.",
+      "oauthOff": "Connecting accounts isn't enabled — ask your admin.",
+      "connectFailed": "Couldn't connect: {{error}}"
+    }
   },
   "connections": {
     "title": "Your connections",

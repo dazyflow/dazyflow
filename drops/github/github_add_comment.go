@@ -27,7 +27,7 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"github", "comment", "issue", "pr"},
 			Examples: []core.ParamsExample{
-				{Title: "Acknowledge a triage issue", Params: json.RawMessage(`{"owner":"example","repo":"widgets","issue_number":142,"body":"Thanks — reproduced on main.","token":"${secret:GITHUB_TOKEN}"}`)},
+				{Title: "Acknowledge a triage issue", Params: json.RawMessage(`{"owner":"example","repo":"widgets","issue_number":142,"body":"Thanks — reproduced on main.","token":"${tenant:GITHUB_TOKEN}"}`)},
 			},
 			RequiresConnections: []core.ConnectionRequirement{
 				{Kind: "oauth", Name: "github", Note: "GitHub OAuth — repo scope (issues:write)."},
