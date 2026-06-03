@@ -109,7 +109,10 @@ export function TriggersModal({ graph, onClose, onSave }: Props) {
 
   return (
     <div className="settings-backdrop" onClick={onClose}>
-      <div className="settings-dialog" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="settings-dialog triggers-dialog"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="settings-head">
           <h2>{t("triggers.title")}</h2>
           <button
