@@ -379,6 +379,46 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 		}
 	})
 
+	t.Run("Enqueue_preserves_seed_result", func(t *testing.T) {
+		// A seeded node (SubmitGraphWithSeed pre-completing a
+		// webhook_input/trigger) is Enqueued already-succeeded WITH a
+		// Result. Get must return that Result intact — Postgres used to
+		// drop it (the INSERT omitted the result column), leaving the
+		// trigger succeeded-but-result-less so a downstream node's
+		// load_predecessors failed with "predecessor has no result yet".
+		s := mk(t)
+		ctx := t.Context()
+		seed := core.JobRecord{
+			ID: "seed-1", Kind: core.JobKindNode, GraphID: "g1", NodeID: "trigger", Tenant: "t",
+			Status: core.JobStatusSucceeded,
+			Result: &core.Result{
+				Status: core.StatusOK,
+				Output: map[string]core.Ref{
+					"body": {MIME: "application/json", Inline: map[string]any{"email": "ada@example.com"}},
+				},
+			},
+		}
+		mustEnqueue(t, s, ctx, seed)
+		got, err := s.Get(ctx, "seed-1")
+		if err != nil {
+			t.Fatalf("Get: %v", err)
+		}
+		if got.Status != core.JobStatusSucceeded {
+			t.Errorf("status = %q, want succeeded", got.Status)
+		}
+		if got.Result == nil {
+			t.Fatal("Result is nil — seed result was dropped on Enqueue")
+		}
+		ref, ok := got.Result.Output["body"]
+		if !ok {
+			t.Fatalf("Result.Output missing 'body': %+v", got.Result.Output)
+		}
+		body, ok := ref.Inline.(map[string]any)
+		if !ok || body["email"] != "ada@example.com" {
+			t.Errorf("body = %#v, want {email: ada@example.com}", ref.Inline)
+		}
+	})
+
 	t.Run("ListByGraph", func(t *testing.T) {
 		s := mk(t)
 		ctx := t.Context()

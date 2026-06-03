@@ -106,9 +106,30 @@ func (s *Postgres) Enqueue(ctx context.Context, rec core.JobRecord) error {
 	if len(rec.GraphPayload) > 0 {
 		graphPayload = rec.GraphPayload
 	}
+	// Persist Result at enqueue time. Most records are enqueued queued
+	// (no result), but seeded records (SubmitGraphWithSeed pre-completing
+	// a webhook_input/trigger node) arrive status=succeeded WITH a result.
+	// Dropping it here left the trigger succeeded-but-result-less, so a
+	// downstream node's load_predecessors failed with: predecessor
+	// "trigger" has no result yet. The in-memory store kept the whole
+	// record, which is why this only bit Postgres.
+	var resJSON any
+	if rec.Result != nil {
+		b, merr := json.Marshal(rec.Result)
+		if merr != nil {
+			return fmt.Errorf("marshal result: %w", merr)
+		}
+		resJSON = b
+	}
+	// A record enqueued already-terminal (a seed) is finished now; mirror
+	// complete() so run duration and the stuck-run reaper see a finish time.
+	var finished any
+	if core.IsTerminalStatus(status) {
+		finished = time.Now().UTC()
+	}
 	const q = `
-		INSERT INTO jobs (id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, enqueued_at, parent_node_rec_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, COALESCE($11, now()), $12)
+		INSERT INTO jobs (id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result, enqueued_at, finished_at, parent_node_rec_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, COALESCE($12, now()), $13, $14)
 	`
 	var enqueued any
 	if !rec.EnqueuedAt.IsZero() {
@@ -116,7 +137,7 @@ func (s *Postgres) Enqueue(ctx context.Context, rec core.JobRecord) error {
 	}
 	_, err = s.pool.Exec(ctx, q,
 		rec.ID, string(kind), rec.GraphRunID, rec.GraphID, rec.NodeID,
-		rec.Tenant, rec.Workspace, string(status), jobJSON, graphPayload, enqueued, rec.ParentNodeRecID)
+		rec.Tenant, rec.Workspace, string(status), jobJSON, graphPayload, resJSON, enqueued, finished, rec.ParentNodeRecID)
 	if err != nil {
 		return wrapPgErr(err)
 	}
