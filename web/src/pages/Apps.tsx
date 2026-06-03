@@ -228,7 +228,11 @@ export function AppDetail() {
   const { t } = useTranslation();
   const slugRaw = window.location.pathname.split("/").pop() ?? "";
   const slug = decodeURIComponent(slugRaw);
-  const { token } = useAuth();
+  const { token, hasPerm } = useAuth();
+  // Connecting/managing an app needs secret:write. Viewers can browse the
+  // catalog + drops, but the whole connection section is hidden for them
+  // (no read-only card, no "ask an admin" note) — it's not theirs to act on.
+  const canManageConnections = hasPerm("secret:write");
   const [drops, setDrops] = useState<Manifest[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -322,7 +326,9 @@ export function AppDetail() {
         </div>
       </header>
 
-      <IntegrationConnections drops={integrationDrops} slug={slug} name={meta.name} />
+      {canManageConnections && (
+        <IntegrationConnections drops={integrationDrops} slug={slug} name={meta.name} />
+      )}
 
       <h2 className="integration-drops-head">{t("integrations.dropsHead")}</h2>
       <div className="integration-drops">
@@ -689,6 +695,10 @@ function OAuthCard({
             {connected ? t("connections.connectAnother") : t("connections.connect")}
           </button>
         </div>
+      ) : !connected ? (
+        // Viewer (no secret:write) + not connected: mirror the secret
+        // cards' "ask an admin" note instead of a bare headline.
+        <p className="connection-note">{t("integrations.connection.notConfigured")}</p>
       ) : null}
     </div>
   );
