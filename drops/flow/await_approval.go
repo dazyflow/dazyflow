@@ -11,16 +11,15 @@ import (
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "await_approval",
-			Version:        "1.0",
-			Label:          "Await approval",
-			Color:          "#5a9bd4",
-			Icon:           "user-check",
-			Category:       "flow_control",
-			Provider:       "internal",
-			Tags:           []string{"human_in_the_loop", "approval", "pause", "wait"},
-			Description:    "Pause the graph until an external HTTP approval arrives. Emits the approval URL on `pending_url` so downstream nodes (email, Slack) can notify a human. On resume, emits the decision on `decision`, plus a control signal on either `approved` or `rejected` — wire downstream `then`/`else` branches accordingly.",
-			Summary:        "Park the flow until a human hits the approve or reject link, then route downstream by decision.",
+			ID:          "await_approval",
+			Version:     "1.0",
+			Label:       "Await approval",
+			Icon:        "user-check",
+			Category:    "flow_control",
+			Provider:    "internal",
+			Tags:        []string{"human_in_the_loop", "approval", "pause", "wait"},
+			Description: "Pause the graph until an external HTTP approval arrives. Emits the approval URL on `pending_url` so downstream nodes (email, Slack) can notify a human. On resume, emits the decision on `decision`, plus a control signal on either `approved` or `rejected` — wire downstream `then`/`else` branches accordingly.",
+			Summary:     "Park the flow until a human hits the approve or reject link, then route downstream by decision.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Ask a manager to approve a refund",

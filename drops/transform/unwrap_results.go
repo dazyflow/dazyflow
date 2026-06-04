@@ -23,7 +23,6 @@ func init() {
 			ID:          "unwrap_results",
 			Version:     "1.0",
 			Label:       "Unwrap results",
-			Color:       "#5a9bd4",
 			Icon:        "package-open",
 			Category:    "transformation",
 			Provider:    "internal",

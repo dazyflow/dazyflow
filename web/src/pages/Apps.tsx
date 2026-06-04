@@ -4,7 +4,7 @@ import { Box } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, APIError } from "../api";
 import { useAuth } from "../auth";
-import { iconFor, isBrandedIcon } from "../icons";
+import { iconFor, isBrandedIcon, categoryColor } from "../icons";
 import {
   integrationMeta,
   integrationNameFromSlug,
@@ -896,7 +896,7 @@ function DropCard({ drop }: { drop: Manifest }) {
   const { t } = useTranslation();
   const Icon = iconFor(drop.icon, drop.category);
   const branded = isBrandedIcon(drop.icon);
-  const color = drop.color ?? "#9f83fe";
+  const color = drop.color || categoryColor(drop.category) || "#9f83fe";
   return (
     <div className="drop-card">
       <div className="drop-card-head">

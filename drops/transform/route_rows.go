@@ -49,16 +49,15 @@ func init() {
 
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "route_rows",
-			Version:        "1.0",
-			Label:          "Route rows",
-			Color:          "#9c6dff",
-			Icon:           "git-branch",
-			Category:       "transformation",
-			Provider:       "internal",
-			Tags:           []string{"transform", "route", "branch", "fork", "etl"},
-			Description:    "N-way split. Param `routes` is an ordered list of {slot, filter} entries — for each row, the FIRST filter that returns true wins and the row goes to that slot's output port. Rows matching no route land on `default`. Use this to fan one row stream into per-category pipelines (e.g. route SE/NO/UK orders to different downstream processors). Output slot names are fixed (rows_1..rows_8 + default) for V1; semantic naming via variadic ports is a future enhancement.",
-			Summary:        "Route each row to one of N output slots based on the first matching CEL filter; rest go to default.",
+			ID:          "route_rows",
+			Version:     "1.0",
+			Label:       "Route rows",
+			Icon:        "git-branch",
+			Category:    "transformation",
+			Provider:    "internal",
+			Tags:        []string{"transform", "route", "branch", "fork", "etl"},
+			Description: "N-way split. Param `routes` is an ordered list of {slot, filter} entries — for each row, the FIRST filter that returns true wins and the row goes to that slot's output port. Rows matching no route land on `default`. Use this to fan one row stream into per-category pipelines (e.g. route SE/NO/UK orders to different downstream processors). Output slot names are fixed (rows_1..rows_8 + default) for V1; semantic naming via variadic ports is a future enhancement.",
+			Summary:     "Route each row to one of N output slots based on the first matching CEL filter; rest go to default.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Three-way split by country",

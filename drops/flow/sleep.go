@@ -7,23 +7,22 @@ import (
 	"time"
 
 	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/hazyflow/engine"
 )
 
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "sleep",
-			Version:        "1.0",
-			Label:          "Sleep",
-			Color:          "#5a9bd4",
-			Icon:           "timer",
-			Category:       "flow_control",
-			Provider:       "internal",
-			Tags:           []string{"timing", "delay", "passthrough"},
-			Description:    "Pause for a configurable duration. Forwards any input on the in port to out (or emits a control signal if input is empty).",
-			Summary:        "Hold the flow for a fixed number of milliseconds before forwarding the input downstream.",
+			ID:          "sleep",
+			Version:     "1.0",
+			Label:       "Sleep",
+			Icon:        "timer",
+			Category:    "flow_control",
+			Provider:    "internal",
+			Tags:        []string{"timing", "delay", "passthrough"},
+			Description: "Pause for a configurable duration. Forwards any input on the in port to out (or emits a control signal if input is empty).",
+			Summary:     "Hold the flow for a fixed number of milliseconds before forwarding the input downstream.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Throttle a polling loop by one second",

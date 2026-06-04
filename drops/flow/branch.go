@@ -17,7 +17,6 @@ func init() {
 			ID:          "branch",
 			Version:     "2.0",
 			Label:       "Branch",
-			Color:       "#5a9bd4",
 			Icon:        "git-branch",
 			Category:    "flow_control",
 			Provider:    "internal",

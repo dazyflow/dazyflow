@@ -13,16 +13,15 @@ import (
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "dedupe_rows",
-			Version:        "1.0",
-			Label:          "Dedupe rows",
-			Color:          "#9c6dff",
-			Icon:           "cpu",
-			Category:       "transformation",
-			Provider:       "internal",
-			Tags:           []string{"transform", "dedupe", "unique", "etl"},
-			Description:    "Drop duplicate rows. By default, two rows are duplicates when every cell matches; with 'by' set, duplicates share only the listed columns. 'keep' picks which copy of a duplicate group survives: \"first\" (default) or \"last\". Preserves input order for the surviving rows.",
-			Summary:        "Drop duplicate rows, optionally keyed on a subset of columns, keeping the first or last copy.",
+			ID:          "dedupe_rows",
+			Version:     "1.0",
+			Label:       "Dedupe rows",
+			Icon:        "cpu",
+			Category:    "transformation",
+			Provider:    "internal",
+			Tags:        []string{"transform", "dedupe", "unique", "etl"},
+			Description: "Drop duplicate rows. By default, two rows are duplicates when every cell matches; with 'by' set, duplicates share only the listed columns. 'keep' picks which copy of a duplicate group survives: \"first\" (default) or \"last\". Preserves input order for the surviving rows.",
+			Summary:     "Drop duplicate rows, optionally keyed on a subset of columns, keeping the first or last copy.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Dedupe on full row equality",

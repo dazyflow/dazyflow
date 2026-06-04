@@ -29,16 +29,15 @@ const (
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "group_aggregate",
-			Version:        "1.0",
-			Label:          "Group + aggregate",
-			Color:          "#9c6dff",
-			Icon:           "square-stack",
-			Category:       "transformation",
-			Provider:       "internal",
-			Tags:           []string{"transform", "group", "aggregate", "pivot", "sum", "etl", "sql"},
-			Description:    "Group rows by N columns and emit one row per group with aggregated values. Param `by` is the list of grouping columns. Param `aggregate` maps each output column to {op, column} — supported ops: count (no column needed), sum, avg, min, max, first, last, collect (gathers values into a list). Numeric ops coerce strings (\"30\") and ints/floats so Excel/JSON mixed inputs work without pre-casting. min/max falls back to lexical comparison when values aren't all numeric. Groups are emitted in first-seen order. by:[] = single group covering all rows — useful for whole-input totals.",
-			Summary:        "Group rows by N columns and emit one aggregated row per group (count/sum/avg/min/max/first/last/collect).",
+			ID:          "group_aggregate",
+			Version:     "1.0",
+			Label:       "Group + aggregate",
+			Icon:        "square-stack",
+			Category:    "transformation",
+			Provider:    "internal",
+			Tags:        []string{"transform", "group", "aggregate", "pivot", "sum", "etl", "sql"},
+			Description: "Group rows by N columns and emit one row per group with aggregated values. Param `by` is the list of grouping columns. Param `aggregate` maps each output column to {op, column} — supported ops: count (no column needed), sum, avg, min, max, first, last, collect (gathers values into a list). Numeric ops coerce strings (\"30\") and ints/floats so Excel/JSON mixed inputs work without pre-casting. min/max falls back to lexical comparison when values aren't all numeric. Groups are emitted in first-seen order. by:[] = single group covering all rows — useful for whole-input totals.",
+			Summary:     "Group rows by N columns and emit one aggregated row per group (count/sum/avg/min/max/first/last/collect).",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Orders per country, with revenue totals",

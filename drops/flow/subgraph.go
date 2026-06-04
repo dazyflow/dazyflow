@@ -6,23 +6,22 @@ import (
 	"fmt"
 
 	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/hazyflow/engine"
 )
 
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "subgraph",
-			Version:        "1.0",
-			Label:          "Subgraph",
-			Color:          "#5a9bd4",
-			Icon:           "square-stack",
-			Category:       "flow_control",
-			Provider:       "internal",
-			Tags:           []string{"compose", "reuse", "subgraph", "nested"},
-			Description:    "Run another graph (by ID, in the same workspace) as a single step. Inputs on this node are seeded onto specific child nodes via input_map; specific child node outputs become this node's outputs via output_map. The worker submits the child asynchronously; the parent is parked until the child terminates.",
-			Summary:        "Invoke another graph as a reusable step, seeding its inputs and projecting selected child outputs back up.",
+			ID:          "subgraph",
+			Version:     "1.0",
+			Label:       "Subgraph",
+			Icon:        "square-stack",
+			Category:    "flow_control",
+			Provider:    "internal",
+			Tags:        []string{"compose", "reuse", "subgraph", "nested"},
+			Description: "Run another graph (by ID, in the same workspace) as a single step. Inputs on this node are seeded onto specific child nodes via input_map; specific child node outputs become this node's outputs via output_map. The worker submits the child asynchronously; the parent is parked until the child terminates.",
+			Summary:     "Invoke another graph as a reusable step, seeding its inputs and projecting selected child outputs back up.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Call a shared customer-lookup subgraph",

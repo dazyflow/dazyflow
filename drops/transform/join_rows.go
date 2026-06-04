@@ -31,16 +31,15 @@ const rightSuffixDefault = "_right"
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "join_rows",
-			Version:        "1.0",
-			Label:          "Join rows",
-			Color:          "#9c6dff",
-			Icon:           "git-merge",
-			Category:       "transformation",
-			Provider:       "internal",
-			Tags:           []string{"transform", "join", "merge", "lookup", "etl", "sql"},
-			Description:    "SQL JOIN between two row streams. Param `on` maps left columns to right columns ({\"id\": \"user_id\"}). `kind` picks inner / left / right / outer. When the same key matches multiple right rows the output cartesians within that group (standard SQL behavior). Non-key right columns that collide with left column names get suffixed (default \"_right\", overridable via `right_suffix`). The right side's key columns are dropped from the output since they equal the left's by construction.",
-			Summary:        "SQL-style inner/left/right/outer join between two row streams keyed on one or more columns.",
+			ID:          "join_rows",
+			Version:     "1.0",
+			Label:       "Join rows",
+			Icon:        "git-merge",
+			Category:    "transformation",
+			Provider:    "internal",
+			Tags:        []string{"transform", "join", "merge", "lookup", "etl", "sql"},
+			Description: "SQL JOIN between two row streams. Param `on` maps left columns to right columns ({\"id\": \"user_id\"}). `kind` picks inner / left / right / outer. When the same key matches multiple right rows the output cartesians within that group (standard SQL behavior). Non-key right columns that collide with left column names get suffixed (default \"_right\", overridable via `right_suffix`). The right side's key columns are dropped from the output since they equal the left's by construction.",
+			Summary:     "SQL-style inner/left/right/outer join between two row streams keyed on one or more columns.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Inner join orders to customers",

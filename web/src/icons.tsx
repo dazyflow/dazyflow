@@ -21,6 +21,11 @@ import {
   Type,
   PackageOpen,
   Equal,
+  EqualNot,
+  ChevronRight,
+  ChevronLeft,
+  ChevronsRight,
+  ChevronsLeft,
   type LucideIcon,
 } from "lucide-react";
 import { GitIcon } from "./components/GitIcon";
@@ -57,6 +62,11 @@ const iconRegistry: Record<string, LucideIcon> = {
   text: Type,
   "package-open": PackageOpen,
   equal: Equal,
+  "equal-not": EqualNot,
+  "chevron-right": ChevronRight,
+  "chevron-left": ChevronLeft,
+  "chevrons-right": ChevronsRight,
+  "chevrons-left": ChevronsLeft,
 };
 
 // categoryFallback picks a sensible default icon when a manifest didn't
@@ -64,6 +74,7 @@ const iconRegistry: Record<string, LucideIcon> = {
 const categoryFallback: Record<string, LucideIcon> = {
   trigger: Webhook,
   flow_control: Workflow,
+  logic: Equal,
   network: Globe,
   io: FileInput,
   ai: Sparkles,
@@ -76,6 +87,27 @@ export function iconFor(name?: string, category?: string): LucideIcon {
   if (name && iconRegistry[name]) return iconRegistry[name];
   if (category && categoryFallback[category]) return categoryFallback[category];
   return Box;
+}
+
+// categoryColors tints the stdlib drops by role, the way Unreal Blueprint
+// colors its nodes — a single source of truth so the built-in drops don't
+// each duplicate a Color literal. Integration drops (Slack, GitHub, …) set
+// their own brand Color, which wins over this (see categoryColor()); these
+// hues only apply to the built-ins that leave Color empty. The values match
+// what those drops historically baked, so the canvas looks unchanged.
+const categoryColors: Record<string, string> = {
+  trigger: "#aa66dd", // purple — graph entry points (webhook, poll)
+  flow_control: "#5a9bd4", // blue — routing (branch, merge, sleep, …)
+  logic: "#46c46e", // green — pure predicates, à la Blueprint's pure nodes
+  transformation: "#9c6dff", // violet — pure data manipulation
+  value: "#e0a45e", // amber — literals / value sources
+};
+
+// categoryColor returns the role tint for a category, or undefined when the
+// category has none (so callers fall back to a per-node Color, then the
+// global default).
+export function categoryColor(category?: string): string | undefined {
+  return category ? categoryColors[category] : undefined;
 }
 
 // brandedIcons are self-coloured logos (e.g. the official Git mark)

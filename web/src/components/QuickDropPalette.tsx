@@ -7,7 +7,7 @@ import {
 } from "react";
 import { Search, Box } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { iconFor, isBrandedIcon } from "../icons";
+import { iconFor, isBrandedIcon, categoryColor } from "../icons";
 import type { Manifest } from "../types";
 
 type Props = {
@@ -304,7 +304,7 @@ function QuickRow({
   onPick: () => void;
 }) {
   const Icon = iconFor(drop.icon, drop.category);
-  const color = drop.color ?? "#9f83fe";
+  const color = drop.color || categoryColor(drop.category) || "#9f83fe";
   const branded = isBrandedIcon(drop.icon);
   return (
     <div

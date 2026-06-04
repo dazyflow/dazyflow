@@ -17,7 +17,6 @@ func init() {
 			ID:          "compare",
 			Version:     "2.0",
 			Label:       "Compare",
-			Color:       "#5a9bd4",
 			Icon:        "equal",
 			Category:    "flow_control",
 			Provider:    "internal",
@@ -91,7 +90,16 @@ func executeCompare(_ context.Context, job core.Job, _ chan<- core.Progress) (co
 	if op == "" {
 		op = "equals"
 	}
+	return compareWith(job, op)
+}
 
+// compareWith runs the comparison for an explicit operator. It's the shared
+// evaluator behind both the multi-op Compare node (which reads op from a
+// dropdown param) and the primitive operator drops in operators.go (>, <, ==,
+// …, which bake a fixed op). Keeping it in one place means a primitive can
+// never drift from Compare's semantics — they ARE Compare, minus the
+// dropdown.
+func compareWith(job core.Job, op string) (core.Result, error) {
 	field, _ := job.Params["field"].(string)
 	a, err := extractPath(operand(job, "A"), field)
 	if err != nil {

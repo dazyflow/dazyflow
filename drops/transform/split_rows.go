@@ -12,16 +12,15 @@ import (
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "split_rows",
-			Version:        "1.0",
-			Label:          "Split rows",
-			Color:          "#9c6dff",
-			Icon:           "git-branch",
-			Category:       "transformation",
-			Provider:       "internal",
-			Tags:           []string{"transform", "split", "fork", "branch", "filter", "etl"},
-			Description:    "Fork a row stream into two by a CEL predicate. Rows where the filter evaluates to true go out 'matched'; the rest go out 'unmatched'. Same expression surface as compute_rows.filter — `row.active && row.score >= 50` and similar. Use when you'd otherwise need map_rows twice (once with the filter, once with its negation): split_rows walks the input once and gives you both halves at the cost of nothing extra.",
-			Summary:        "Fork a row stream into matched/unmatched halves using a single CEL boolean expression.",
+			ID:          "split_rows",
+			Version:     "1.0",
+			Label:       "Split rows",
+			Icon:        "git-branch",
+			Category:    "transformation",
+			Provider:    "internal",
+			Tags:        []string{"transform", "split", "fork", "branch", "filter", "etl"},
+			Description: "Fork a row stream into two by a CEL predicate. Rows where the filter evaluates to true go out 'matched'; the rest go out 'unmatched'. Same expression surface as compute_rows.filter — `row.active && row.score >= 50` and similar. Use when you'd otherwise need map_rows twice (once with the filter, once with its negation): split_rows walks the input once and gives you both halves at the cost of nothing extra.",
+			Summary:     "Fork a row stream into matched/unmatched halves using a single CEL boolean expression.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Split valid vs invalid records",

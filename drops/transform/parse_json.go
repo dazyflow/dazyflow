@@ -16,7 +16,6 @@ func init() {
 			ID:          "parse_json",
 			Version:     "1.0",
 			Label:       "Parse JSON",
-			Color:       "#9c6dff",
 			Icon:        "braces",
 			Category:    "transformation",
 			Provider:    "internal",

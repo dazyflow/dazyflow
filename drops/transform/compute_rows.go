@@ -17,16 +17,15 @@ import (
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "compute_rows",
-			Version:        "1.0",
-			Label:          "Compute rows",
-			Color:          "#9c6dff",
-			Icon:           "cpu",
-			Category:       "transformation",
-			Provider:       "internal",
-			Tags:           []string{"transform", "compute", "expression", "cel", "derived", "filter", "etl"},
-			Description:    "Add derived columns and filter rows using CEL (Google's Common Expression Language) expressions. Each expression sees the row as the variable `row` (a map of string→dyn): `row.first_name + ' ' + row.last_name`, `row.age >= 18`, `row.score > 90 ? 'gold' : 'bronze'`. Compute adds or overwrites columns; filter drops rows whose expression evaluates to false. The expressive sibling of map_rows — reach for it only when static config can't say what you mean.",
-			Summary:        "Add derived columns and drop rows using CEL expressions evaluated against each row.",
+			ID:          "compute_rows",
+			Version:     "1.0",
+			Label:       "Compute rows",
+			Icon:        "cpu",
+			Category:    "transformation",
+			Provider:    "internal",
+			Tags:        []string{"transform", "compute", "expression", "cel", "derived", "filter", "etl"},
+			Description: "Add derived columns and filter rows using CEL (Google's Common Expression Language) expressions. Each expression sees the row as the variable `row` (a map of string→dyn): `row.first_name + ' ' + row.last_name`, `row.age >= 18`, `row.score > 90 ? 'gold' : 'bronze'`. Compute adds or overwrites columns; filter drops rows whose expression evaluates to false. The expressive sibling of map_rows — reach for it only when static config can't say what you mean.",
+			Summary:     "Add derived columns and drop rows using CEL expressions evaluated against each row.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Add a full_name column",

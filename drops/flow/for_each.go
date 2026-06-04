@@ -9,8 +9,8 @@ import (
 	"sync"
 
 	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/hazyflow/engine"
 )
 
 func init() {
@@ -19,7 +19,6 @@ func init() {
 			ID:          "for_each",
 			Version:     "1.0",
 			Label:       "For each",
-			Color:       "#5a9bd4",
 			Icon:        "repeat",
 			Category:    "flow_control",
 			Provider:    "internal",

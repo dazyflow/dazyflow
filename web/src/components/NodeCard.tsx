@@ -1,7 +1,7 @@
-import { Handle, Position, type NodeProps } from "@xyflow/react";
+import { Handle, Position, useStore, type NodeProps } from "@xyflow/react";
 import { AlertTriangle, AlertCircle } from "lucide-react";
 import i18n from "../i18n";
-import { iconFor, isBrandedIcon } from "../icons";
+import { iconFor, isBrandedIcon, categoryColor } from "../icons";
 import type { Manifest, Port, JSONSchema, Ref } from "../types";
 
 // HazyNodeData is the shape we stash on each React Flow node. We carry
@@ -71,10 +71,31 @@ function peekValue(ref: Ref): string {
 // still reads as a perimeter connection point. Label text is tinted to
 // match its dot's color so eye can pair "green dot ↔ green label" at a
 // glance.
+// OP_SYMBOL maps the logic-primitive drop IDs to the big glyph the compact
+// "operator chip" shows (Unreal-style). Falls back to the middle token of an
+// "A <op> B" label, so future operators (AND, +, …) render without a change
+// here.
+const OP_SYMBOL: Record<string, string> = {
+  eq: "=",
+  neq: "≠",
+  gt: ">",
+  gte: "≥",
+  lt: "<",
+  lte: "≤",
+};
+
+function operatorSymbol(m: Manifest): string {
+  if (m.id && OP_SYMBOL[m.id]) return OP_SYMBOL[m.id];
+  const parts = (m.label ?? "").trim().split(/\s+/);
+  if (parts.length === 3) return parts[1]; // "A > B" -> ">"
+  return m.label ?? "?";
+}
+
 export function HazyNode({ data, selected }: NodeProps) {
   const d = data as HazyNodeData;
   const Icon = iconFor(d.manifest?.icon, d.manifest?.category);
-  const color = d.manifest?.color ?? "#9f83fe";
+  const color =
+    d.manifest?.color || categoryColor(d.manifest?.category) || "#9f83fe";
 
   // Default to "in"/"out" when the manifest didn't ship port lists —
   // matches the engine's fallback ports.
@@ -129,6 +150,27 @@ export function HazyNode({ data, selected }: NodeProps) {
       : [];
 
   const statusClass = d.status ? " status-" + d.status : "";
+
+  // Compact "operator chip" for logic primitives (==, >, <, …): a small
+  // square showing just the operator glyph, Unreal-Blueprint style — no icon
+  // box, no title. A/B pins on the left, Result on the right; unconnected-pin
+  // defaults are edited in the Inspector (deliberately kept off the chip).
+  // Falls through to the standard card for any logic drop that isn't the
+  // two-operand shape these primitives use.
+  if (d.manifest?.category === "logic" && inputs.length >= 2) {
+    return (
+      <OperatorChip
+        d={d}
+        selected={selected}
+        color={color}
+        inputs={inputs}
+        outputs={outputs}
+        connectedInputs={connectedInputs}
+        connectedOutputs={connectedOutputs}
+        statusClass={statusClass}
+      />
+    );
+  }
 
   return (
     <div
@@ -326,6 +368,110 @@ export function HazyNode({ data, selected }: NodeProps) {
           title={d.configErrors.join("\n")}
           aria-label="needs configuration"
         >
+          <AlertCircle size={13} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// OperatorChip is the compact "operator chip" render for logic primitives
+// (==, >, <, …): a small square showing just the operator glyph, no icon box
+// or title. A/B pins on the left, Result on the right; unconnected-pin
+// defaults are edited in the Inspector (deliberately kept off the chip).
+//
+// It's a separate component so only the chips subscribe to viewport zoom (via
+// useStore) — regular nodes must not re-render on every zoom change.
+function OperatorChip({
+  d,
+  selected,
+  color,
+  inputs,
+  outputs,
+  connectedInputs,
+  connectedOutputs,
+  statusClass,
+}: {
+  d: HazyNodeData;
+  selected: boolean;
+  color: string;
+  inputs: Port[];
+  outputs: Port[];
+  connectedInputs: string[];
+  connectedOutputs: string[];
+  statusClass: string;
+}) {
+  const sym = operatorSymbol(d.manifest!);
+  // React Flow scales nodes with the viewport, so a fixed 28px glyph turns
+  // tiny when zoomed out. Counter-scale it to hold a legible on-screen size:
+  // grow the node-space font as zoom drops (fontSize * zoom ≈ OP_MIN_PX), but
+  // never below the 28px base (so zooming IN keeps it crisp, not shrunk) and
+  // never past OP_MAX_FONT (so the glyph can't overflow the 60px chip).
+  //
+  // The editor uses React Flow's default zoom floor (minZoom 0.5), so the
+  // reachable range is [0.5, 2]. OP_MIN_PX 16 means the clamp engages for
+  // zoom < ~0.57 — i.e. across the zoomed-out band the operator stays ≥16px
+  // on-screen while surrounding node text shrinks away. If minZoom is ever
+  // lowered, the same formula keeps the glyph legible further out (capped by
+  // OP_MAX_FONT, below which it finally shrinks with everything else).
+  const zoom = useStore((s) => s.transform[2]);
+  const OP_BASE_FONT = 28;
+  const OP_MAX_FONT = 40;
+  const OP_MIN_PX = 16; // target minimum on-screen px
+  const fontSize = Math.min(
+    OP_MAX_FONT,
+    Math.max(OP_BASE_FONT, OP_MIN_PX / (zoom || 1)),
+  );
+  return (
+    <div
+      className={
+        "hz-node hz-op" +
+        (selected ? " selected" : "") +
+        statusClass +
+        (d.lintMessage ? " lint-warn" : "") +
+        (d.configErrors?.length ? " config-err" : "") +
+        (d.paused ? " paused" : "")
+      }
+      style={{ ["--op-color"]: color } as React.CSSProperties}
+      title={d.label}
+    >
+      {d.breakpoint && (
+        <div className="hz-node-bp" aria-label="breakpoint" title="Breakpoint — run pauses after this node" />
+      )}
+      <Handle
+        type="target"
+        position={Position.Left}
+        id={inputs[0].port}
+        style={{ ...dotStyle(portColor(inputs[0].mime), connectedInputs.includes(inputs[0].port)), top: "32%" }}
+        title={portTooltip(inputs[0])}
+      />
+      <Handle
+        type="target"
+        position={Position.Left}
+        id={inputs[1].port}
+        style={{ ...dotStyle(portColor(inputs[1].mime), connectedInputs.includes(inputs[1].port)), top: "68%" }}
+        title={portTooltip(inputs[1])}
+      />
+      <span className="hz-op-symbol" style={{ fontSize }}>
+        {sym}
+      </span>
+      <Handle
+        type="source"
+        position={Position.Right}
+        id={outputs[0].port}
+        style={{ ...dotStyle(portColor(outputs[0].mime), connectedOutputs.includes(outputs[0].port)), top: "50%" }}
+        title={portTooltip(outputs[0])}
+      />
+      {d.status && (
+        <div className={"status-dot " + d.status} title={i18n.t("nodeCard.statusTooltip", { status: d.status })} />
+      )}
+      {d.lintMessage && (
+        <div className="hz-node-lint" title={d.lintMessage} aria-label="lint warning">
+          <AlertTriangle size={13} />
+        </div>
+      )}
+      {d.configErrors && d.configErrors.length > 0 && (
+        <div className="hz-node-config" title={d.configErrors.join("\n")} aria-label="needs configuration">
           <AlertCircle size={13} />
         </div>
       )}

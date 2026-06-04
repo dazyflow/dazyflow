@@ -14,16 +14,15 @@ import (
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "sort_rows",
-			Version:        "1.0",
-			Label:          "Sort rows",
-			Color:          "#9c6dff",
-			Icon:           "cpu",
-			Category:       "transformation",
-			Provider:       "internal",
-			Tags:           []string{"transform", "sort", "order", "etl"},
-			Description:    "Sort rows by one or more columns. The 'by' param accepts a list of column names (ascending) or {column, desc:true} objects for descending. Multi-column sorts are stable in the order listed — earlier keys win, later keys break ties.",
-			Summary:        "Stably sort rows by one or more columns, ascending or descending per key.",
+			ID:          "sort_rows",
+			Version:     "1.0",
+			Label:       "Sort rows",
+			Icon:        "cpu",
+			Category:    "transformation",
+			Provider:    "internal",
+			Tags:        []string{"transform", "sort", "order", "etl"},
+			Description: "Sort rows by one or more columns. The 'by' param accepts a list of column names (ascending) or {column, desc:true} objects for descending. Multi-column sorts are stable in the order listed — earlier keys win, later keys break ties.",
+			Summary:     "Stably sort rows by one or more columns, ascending or descending per key.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Sort by created_at ascending",

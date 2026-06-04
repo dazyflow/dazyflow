@@ -18,7 +18,6 @@ func init() {
 			ID:          "render_text",
 			Version:     "1.0",
 			Label:       "Render text",
-			Color:       "#9c6dff",
 			Icon:        "text",
 			Category:    "transformation",
 			Provider:    "internal",

@@ -60,6 +60,7 @@ import { useThemeMode } from "../theme";
 import i18n from "../i18n";
 import { api } from "../api";
 import { oauthProviderDisplay } from "../integrationMeta";
+import { categoryColor } from "../icons";
 import {
   requiredConnections,
   requiredSecrets,
@@ -2409,6 +2410,10 @@ function EditorInner() {
           }}
           fitView
           fitViewOptions={{ padding: 0.3 }}
+          // minZoom below React Flow's 0.5 default so large graphs fit on
+          // screen. The logic-operator chips counter-scale their glyph to
+          // stay legible this far out (see OperatorChip in NodeCard.tsx).
+          minZoom={0.2}
           proOptions={{ hideAttribution: true }}
           colorMode={themeMode}
         >
@@ -2431,9 +2436,10 @@ function EditorInner() {
               border: "1px solid var(--border)",
               borderRadius: "var(--r-2)",
             }}
-            nodeColor={(n) =>
-              (n.data as HazyNodeData)?.manifest?.color ?? "#9f83fe"
-            }
+            nodeColor={(n) => {
+              const m = (n.data as HazyNodeData)?.manifest;
+              return m?.color || categoryColor(m?.category) || "#9f83fe";
+            }}
           />
         </ReactFlow>
         {error && (

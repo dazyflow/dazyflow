@@ -2796,6 +2796,32 @@ button.danger-outline:hover:not(:disabled) {
   flex-direction: column;
   transition: border-color 120ms, box-shadow 120ms;
 }
+/* Compact "operator chip" for logic primitives (==, >, <, …): a small
+   square that shows just the operator glyph, Unreal-Blueprint style. No
+   icon box or title — A/B pins on the left edge, Result on the right.
+   --op-color is the category tint (green) passed inline by NodeCard. */
+.hz-node.hz-op {
+  min-width: 0;
+  width: 60px;
+  height: 60px;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  border-color: color-mix(in srgb, var(--op-color, #46c46e) 55%, var(--border));
+}
+.hz-node.hz-op.selected {
+  border-color: var(--op-color, #46c46e);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--op-color, #46c46e) 30%, transparent);
+}
+.hz-op-symbol {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--op-color, #46c46e);
+  user-select: none;
+}
+
 /* Header row: icon next to the title block. The ports section sits
    below it spanning the full card width so its left/right columns line
    up with the card edges (not indented under the icon). */

@@ -16,16 +16,15 @@ import (
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "webhook_input",
-			Version:        "1.0",
-			Label:          "Webhook input",
-			Color:          "#aa66dd",
-			Icon:           "webhook",
-			Category:       "trigger",
-			Provider:       "internal",
-			Tags:           []string{"webhook", "trigger", "http", "event"},
-			Description:    "Receives the body and headers of the inbound HTTP request that fired this graph. Pre-completed by the daemon when a webhook trigger matches; running the graph manually via 'hzctl graph run' will fail this node with no_trigger_data.",
-			Summary:        "Trigger that emits the body and headers of the inbound HTTP request that fired the graph.",
+			ID:          "webhook_input",
+			Version:     "1.0",
+			Label:       "Webhook input",
+			Icon:        "webhook",
+			Category:    "trigger",
+			Provider:    "internal",
+			Tags:        []string{"webhook", "trigger", "http", "event"},
+			Description: "Receives the body and headers of the inbound HTTP request that fired this graph. Pre-completed by the daemon when a webhook trigger matches; running the graph manually via 'hzctl graph run' will fail this node with no_trigger_data.",
+			Summary:     "Trigger that emits the body and headers of the inbound HTTP request that fired the graph.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Webhook input (no params)",

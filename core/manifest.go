@@ -130,6 +130,7 @@ type Manifest struct {
 	// Category is a single-bucket classification. Recommended values:
 	//   "trigger"        — starts a graph (cron, webhook)
 	//   "flow_control"   — branch, merge, split, sleep
+	//   "logic"          — pure predicates/operators (==, >, <, …)
 	//   "transformation" — pure data manipulation
 	//   "io"             — filesystem operations
 	//   "network"        — HTTP and other network protocols

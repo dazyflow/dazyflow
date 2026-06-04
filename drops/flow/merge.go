@@ -12,16 +12,15 @@ func init() {
 	min := 1
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "merge",
-			Version:        "1.0",
-			Label:          "Merge",
-			Color:          "#5a9bd4",
-			Icon:           "git-merge",
-			Category:       "flow_control",
-			Provider:       "internal",
-			Tags:           []string{"fan_in", "aggregate", "join"},
-			Description:    "Wait for N upstream inputs to arrive and emit them as a single list on the out port. Useful as a synchronization point in parallel branches.",
-			Summary:        "Synchronize parallel branches by collecting every upstream input into a single list emitted on out.",
+			ID:          "merge",
+			Version:     "1.0",
+			Label:       "Merge",
+			Icon:        "git-merge",
+			Category:    "flow_control",
+			Provider:    "internal",
+			Tags:        []string{"fan_in", "aggregate", "join"},
+			Description: "Wait for N upstream inputs to arrive and emit them as a single list on the out port. Useful as a synchronization point in parallel branches.",
+			Summary:     "Synchronize parallel branches by collecting every upstream input into a single list emitted on out.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "No configuration — merge takes no params",

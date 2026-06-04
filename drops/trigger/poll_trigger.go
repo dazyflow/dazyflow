@@ -12,16 +12,15 @@ import (
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "poll_trigger",
-			Version:        "1.0",
-			Label:          "Poll trigger",
-			Color:          "#aa66dd",
-			Icon:           "timer",
-			Category:       "trigger",
-			Provider:       "internal",
-			Tags:           []string{"poll", "trigger", "interval", "schedule"},
-			Description:    "Marks a graph as poll-driven — fires every N seconds (configured on the GRAPH'S 'poll' trigger, not on this node). Outputs `fired_at` (RFC3339 timestamp). For dedupe-against-seen behavior, store a cursor in the tenant secret store with a downstream node and read it back on the next fire.",
-			Summary:        "Trigger that fires the graph on the workspace's poll schedule, emitting the fire timestamp.",
+			ID:          "poll_trigger",
+			Version:     "1.0",
+			Label:       "Poll trigger",
+			Icon:        "timer",
+			Category:    "trigger",
+			Provider:    "internal",
+			Tags:        []string{"poll", "trigger", "interval", "schedule"},
+			Description: "Marks a graph as poll-driven — fires every N seconds (configured on the GRAPH'S 'poll' trigger, not on this node). Outputs `fired_at` (RFC3339 timestamp). For dedupe-against-seen behavior, store a cursor in the tenant secret store with a downstream node and read it back on the next fire.",
+			Summary:     "Trigger that fires the graph on the workspace's poll schedule, emitting the fire timestamp.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Poll trigger (interval lives on the graph trigger, not this node)",
