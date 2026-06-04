@@ -455,6 +455,11 @@ func main() {
 			ID:      fmt.Sprintf("hzd-dev-w%d", i),
 			Metrics: appMetrics,
 		}, jobs, eng, bus)
+		// Enable subgraph execution: the worker hands a parked subgraph
+		// node's child graph to the Service to submit and run. Without
+		// this, `subgraph` nodes park forever. Recursion is bounded by
+		// maxSubgraphDepth in SubmitChild.
+		w.SubGraphRunner = svc
 		bgWg.Add(1)
 		go func() {
 			defer bgWg.Done()

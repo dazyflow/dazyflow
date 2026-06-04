@@ -48,6 +48,7 @@ import {
   AlignHorizontalDistributeCenter,
   AlignVerticalDistributeCenter,
   StickyNote,
+  Group,
 } from "lucide-react";
 import { useAuth } from "../auth";
 import { useThemeMode } from "../theme";
@@ -1146,6 +1147,154 @@ function EditorInner() {
     setDirty(true);
   }, [screenToFlowPosition]);
 
+  // Collapse the selected nodes into a subgraph (#8): save a new child flow
+  // containing the selection + its internal edges, replace the selection in
+  // the parent with one `subgraph` node, and rewire the boundary edges via
+  // input_map/output_map. Boundary inputs use a seed-carrier node (module
+  // sleep, never runs) whose seeded `in` port feeds the real consumer — the
+  // pattern the engine's seed mechanism requires (verified end-to-end).
+  const collapseSelection = useCallback(async () => {
+    if (!token || !id) return;
+    const sel = nodes.filter((n) => n.selected);
+    if (sel.length < 1) return;
+    const S = new Set(sel.map((n) => n.id));
+
+    const internal: FlowEdge[] = [];
+    const incoming: FlowEdge[] = [];
+    const outgoing: FlowEdge[] = [];
+    for (const e of edges) {
+      const sIn = S.has(e.source);
+      const tIn = S.has(e.target);
+      if (sIn && tIn) internal.push(e);
+      else if (!sIn && tIn) incoming.push(e);
+      else if (sIn && !tIn) outgoing.push(e);
+    }
+
+    type ChildNode = {
+      id: string;
+      module: string;
+      params: Record<string, unknown>;
+      position: { x: number; y: number };
+    };
+    const childNodes: ChildNode[] = sel.map((n) => ({
+      id: n.id,
+      module: n.data.moduleID,
+      params: paramsByID[n.id] ?? {},
+      position: n.position,
+    }));
+    const childEdges = internal.map((e) => ({
+      from: e.source,
+      from_port: e.sourceHandle ?? "out",
+      to: e.target,
+      to_port: e.targetHandle ?? "in",
+    }));
+
+    // One seed-carrier per incoming boundary edge → input_map.
+    const inputMap: Record<string, string> = {};
+    const inRewire: { e: FlowEdge; parentPort: string }[] = [];
+    incoming.forEach((e, i) => {
+      const parentPort = `in_${i}`;
+      const carrierId = `__in_${i}`;
+      childNodes.push({
+        id: carrierId,
+        module: "sleep",
+        params: { ms: 0 },
+        position: { x: -260, y: i * 120 },
+      });
+      childEdges.push({
+        from: carrierId,
+        from_port: "in",
+        to: e.target,
+        to_port: e.targetHandle ?? "in",
+      });
+      inputMap[parentPort] = carrierId;
+      inRewire.push({ e, parentPort });
+    });
+
+    // Outgoing boundary edges → output_map, deduped by source node+port so
+    // one parent output port can fan out to several external consumers.
+    const outputMap: Record<string, { node: string; port: string }> = {};
+    const outRewire: { e: FlowEdge; parentPort: string }[] = [];
+    const outKey = new Map<string, string>();
+    outgoing.forEach((e) => {
+      const node = e.source;
+      const port = e.sourceHandle ?? "out";
+      const key = `${node}.${port}`;
+      let parentPort = outKey.get(key);
+      if (!parentPort) {
+        parentPort = `out_${outKey.size}`;
+        outKey.set(key, parentPort);
+        outputMap[parentPort] = { node, port };
+      }
+      outRewire.push({ e, parentPort });
+    });
+
+    // Persist the child flow first; bail (leaving the parent untouched) if
+    // it fails so we never strand a subgraph node pointing at nothing.
+    const childId = `${id}-grp-${Date.now().toString(36)}`;
+    try {
+      await api.saveGraph(token, {
+        id: childId,
+        tenant: activeTenant,
+        workspace: activeWorkspace,
+        nodes: childNodes,
+        edges: childEdges,
+        name: `${name ?? id} · group`,
+      } as unknown as Graph);
+    } catch (err) {
+      setError(`Could not create subgraph: ${(err as Error).message}`);
+      return;
+    }
+
+    const sgId = nextID(nodes, "subgraph");
+    const cx = sel.reduce((s, n) => s + n.position.x, 0) / sel.length;
+    const cy = sel.reduce((s, n) => s + n.position.y, 0) / sel.length;
+    const sgManifest = manifestByID.get("subgraph");
+
+    setNodes((nds) => [
+      ...nds.filter((n) => !S.has(n.id)),
+      {
+        id: sgId,
+        type: "hazy",
+        position: { x: cx, y: cy },
+        selected: true,
+        data: {
+          label: sgManifest?.label ?? "Subgraph",
+          moduleID: "subgraph",
+          manifest: sgManifest,
+        },
+      },
+    ]);
+    setEdges((eds) => {
+      const kept = eds.filter((e) => !S.has(e.source) && !S.has(e.target));
+      const newIn = inRewire.map(({ e, parentPort }) => ({
+        id: `${e.source}.${e.sourceHandle}->${sgId}.${parentPort}`,
+        source: e.source,
+        sourceHandle: e.sourceHandle,
+        target: sgId,
+        targetHandle: parentPort,
+        data: { waypoints: [] },
+      }));
+      const newOut = outRewire.map(({ e, parentPort }) => ({
+        id: `${sgId}.${parentPort}->${e.target}.${e.targetHandle}`,
+        source: sgId,
+        sourceHandle: parentPort,
+        target: e.target,
+        targetHandle: e.targetHandle,
+        data: { waypoints: [] },
+      }));
+      return [...kept, ...newIn, ...newOut];
+    });
+    setParamsByID((p) => {
+      const next = { ...p };
+      for (const nid of S) delete next[nid];
+      next[sgId] = { graph_id: childId, input_map: inputMap, output_map: outputMap };
+      return next;
+    });
+    setSelectedID(sgId);
+    setDirty(true);
+  }, [token, id, nodes, edges, paramsByID, activeTenant, activeWorkspace, name, manifestByID]);
+
   const onParamsChange = (id: string, params: Record<string, unknown>) => {
     setParamsByID((p) => ({ ...p, [id]: params }));
     setDirty(true);
@@ -1744,6 +1893,15 @@ function EditorInner() {
                   <AlignVerticalDistributeCenter size={15} />
                 </button>
               </div>
+              <button
+                className="ghost"
+                onClick={() => void collapseSelection()}
+                disabled={!hasPerm("graph:edit")}
+                title={t("editor.groupSubgraphTitle")}
+              >
+                <Group size={15} />
+                <span className="toolbar-label">{t("editor.groupSubgraph")}</span>
+              </button>
             </>
           )}
 

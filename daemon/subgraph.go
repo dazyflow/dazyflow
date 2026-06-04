@@ -15,6 +15,34 @@ type SubGraphRunner interface {
 	SubmitChild(ctx context.Context, parentRec core.JobRecord, graphID string, seeds map[string]core.Result) (string, error)
 }
 
+// maxSubgraphDepth caps how deeply subgraphs may nest. Reaching it almost
+// always means a flow references itself (directly or via a cycle); the cap
+// turns runaway recursion into a clean per-node error instead of resource
+// exhaustion.
+const maxSubgraphDepth = 8
+
+// subgraphDepth counts how many subgraph levels already sit above the
+// child about to be submitted, by following ParentNodeRecID links: from
+// the parent node-record up through its graph run, that run's parent
+// node, and so on. A top-level run (no ParentNodeRecID) ends the walk.
+func (s *Service) subgraphDepth(ctx context.Context, parentRec core.JobRecord) int {
+	depth := 1 // submitting this child is at least one level deep
+	runID := parentRec.GraphRunID
+	for i := 0; i < maxSubgraphDepth+2 && runID != ""; i++ {
+		run, err := s.Jobs.Get(ctx, runID)
+		if err != nil || run.ParentNodeRecID == "" {
+			break
+		}
+		parentNode, err := s.Jobs.Get(ctx, run.ParentNodeRecID)
+		if err != nil {
+			break
+		}
+		depth++
+		runID = parentNode.GraphRunID
+	}
+	return depth
+}
+
 // SubmitChild is Service's implementation of SubGraphRunner. The
 // principal is synthesized from the parent record's tenant/workspace
 // (the system never runs subgraphs as a different identity than the
@@ -38,6 +66,13 @@ func (s *Service) SubmitChild(
 	}
 	if g.Workspace == "" {
 		g.Workspace = parentRec.Workspace
+	}
+
+	// Guard against unbounded subgraph recursion: a flow that
+	// (transitively) references itself would otherwise spawn children
+	// forever. Walk the parent chain and refuse once nesting hits the cap.
+	if depth := s.subgraphDepth(ctx, parentRec); depth >= maxSubgraphDepth {
+		return "", fmt.Errorf("subgraph nesting too deep (%d levels; max %d) — a flow likely references itself", depth, maxSubgraphDepth)
 	}
 
 	// System principal scoped to the parent's tenant. Subgraphs may

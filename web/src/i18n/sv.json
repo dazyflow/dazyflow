@@ -965,6 +965,8 @@
     "distributeV": "Fördela vertikalt (jämnt mellanrum)",
     "addFrame": "Ram",
     "addFrameTitle": "Lägg till en kommentarsram för att gruppera noder",
+    "groupSubgraph": "Gruppera",
+    "groupSubgraphTitle": "Slå ihop de valda noderna till en delgraf",
     "flowSettings": "Flödesinställningar (triggers m.m.)",
     "inspector": "Inspector",
     "save": "Spara",

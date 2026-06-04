@@ -965,6 +965,8 @@
     "distributeV": "Distribute vertically (even spacing)",
     "addFrame": "Frame",
     "addFrameTitle": "Add a comment frame to group nodes",
+    "groupSubgraph": "Group",
+    "groupSubgraphTitle": "Collapse the selected nodes into a subgraph",
     "flowSettings": "Flow settings (triggers, etc.)",
     "inspector": "Inspector",
     "save": "Save",
