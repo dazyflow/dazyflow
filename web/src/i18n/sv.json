@@ -809,7 +809,9 @@
   "nodeCard": {
     "statusTooltip": "status: {{status}}",
     "portRequired": "obligatorisk",
-    "portOptional": "valfri"
+    "portOptional": "valfri",
+    "missingValue": "Obligatoriskt värde saknas: {{name}}",
+    "unwiredRequired": "Obligatorisk ingång ej kopplad: {{name}}"
   },
   "outputPreview": {
     "loading": "Laddar…",
@@ -967,6 +969,8 @@
     "addFrameTitle": "Lägg till en kommentarsram för att gruppera noder",
     "groupSubgraph": "Gruppera",
     "groupSubgraphTitle": "Slå ihop de valda noderna till en delgraf",
+    "configWarn": "{{count}} att konfigurera",
+    "configWarnTitle": "Drops saknar obligatoriska värden — ange dem innan körning",
     "flowSettings": "Flödesinställningar (triggers m.m.)",
     "inspector": "Inspector",
     "save": "Spara",

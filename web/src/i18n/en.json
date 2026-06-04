@@ -809,7 +809,9 @@
   "nodeCard": {
     "statusTooltip": "status: {{status}}",
     "portRequired": "required",
-    "portOptional": "optional"
+    "portOptional": "optional",
+    "missingValue": "Missing required value: {{name}}",
+    "unwiredRequired": "Required input not wired: {{name}}"
   },
   "outputPreview": {
     "loading": "Loading…",
@@ -967,6 +969,8 @@
     "addFrameTitle": "Add a comment frame to group nodes",
     "groupSubgraph": "Group",
     "groupSubgraphTitle": "Collapse the selected nodes into a subgraph",
+    "configWarn": "{{count}} to configure",
+    "configWarnTitle": "Drops are missing required values — set them before running",
     "flowSettings": "Flow settings (triggers, etc.)",
     "inspector": "Inspector",
     "save": "Save",

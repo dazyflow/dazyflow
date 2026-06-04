@@ -49,9 +49,11 @@ import {
   AlignVerticalDistributeCenter,
   StickyNote,
   Group,
+  AlertCircle,
 } from "lucide-react";
 import { useAuth } from "../auth";
 import { useThemeMode } from "../theme";
+import i18n from "../i18n";
 import { api } from "../api";
 import { oauthProviderDisplay } from "../integrationMeta";
 import {
@@ -1061,6 +1063,38 @@ function EditorInner() {
     return m;
   }, [edges]);
 
+  // Per-node configuration verification (#13): flag drops whose required
+  // values aren't set — a required param with no value (and no wired input
+  // of the same name supplying it), or a required input port that's neither
+  // wired nor given an inline default. Distinct from server lint (security
+  // advisories) and connection/secret checks.
+  const configErrorsByNode = useMemo(() => {
+    const errs = new Map<string, string[]>();
+    for (const n of nodes) {
+      const man = n.data.manifest;
+      if (!man) continue;
+      const params = paramsByID[n.id] ?? {};
+      const wired = new Set(connectedInputsByNode.get(n.id) ?? []);
+      const hasValue = (k: string) => {
+        const v = params[k];
+        return v != null && v !== "" && !(Array.isArray(v) && v.length === 0);
+      };
+      const missing = new Map<string, string>(); // dedup by key
+      for (const key of man.params_schema?.required ?? []) {
+        if (!hasValue(key) && !wired.has(key)) {
+          const name = man.params_schema?.properties?.[key]?.title ?? key;
+          missing.set(key, i18n.t("nodeCard.missingValue", { name }));
+        }
+      }
+      for (const p of man.inputs ?? []) {
+        if (!p.required || wired.has(p.port) || hasValue(p.port)) continue;
+        missing.set(p.port, i18n.t("nodeCard.unwiredRequired", { name: p.label ?? p.port }));
+      }
+      if (missing.size > 0) errs.set(n.id, [...missing.values()]);
+    }
+    return errs;
+  }, [nodes, paramsByID, connectedInputsByNode]);
+
   const displayNodes = useMemo<FlowNode<HazyNodeData>[]>(() => {
     // Inline fields show only for a single selection, so a multi-select
     // (e.g. for align/distribute) keeps every card collapsed.
@@ -1076,9 +1110,18 @@ function EditorInner() {
         connectedOutputs: connectedOutputsByNode.get(n.id) ?? [],
         inlineEditable: n.id === soleId,
         outputs: runOutputs[n.id],
+        configErrors: configErrorsByNode.get(n.id),
       },
     }));
-  }, [nodes, paramsByID, setNodeParam, connectedInputsByNode, connectedOutputsByNode, runOutputs]);
+  }, [
+    nodes,
+    paramsByID,
+    setNodeParam,
+    connectedInputsByNode,
+    connectedOutputsByNode,
+    runOutputs,
+    configErrorsByNode,
+  ]);
 
   // Frames rendered as comment nodes, with a fresh title-edit callback
   // that writes back into frameNodes state and dirties the graph.
@@ -2002,6 +2045,20 @@ function EditorInner() {
           </div>
 
           <span className="toolbar-spacer" />
+
+          {/* Config verification (#13): how many drops are still missing
+              required values. Sits next to Run as a non-blocking heads-up. */}
+          {configErrorsByNode.size > 0 && (
+            <span
+              className="editor-config-warn"
+              title={t("editor.configWarnTitle")}
+            >
+              <AlertCircle size={14} />
+              <span className="toolbar-label">
+                {t("editor.configWarn", { count: configErrorsByNode.size })}
+              </span>
+            </span>
+          )}
 
           {/* Primary action — pinned to the right edge as the focal point. */}
           <div className="toolbar-group">

@@ -2930,6 +2930,41 @@ button.danger-outline:hover:not(:disabled) {
   border: 1px solid var(--surface);
   z-index: 2;
 }
+/* Config verification (#13): a red border + red badge for a drop that's
+   missing required values. More severe than lint, so it sits left of the
+   lint badge and uses the danger color. */
+.hz-node.config-err {
+  border-color: var(--danger);
+}
+.hz-node-config {
+  position: absolute;
+  top: -7px;
+  right: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--danger);
+  color: #fff;
+  border: 1px solid var(--surface);
+  z-index: 2;
+}
+/* Toolbar heads-up: how many drops still need configuration. */
+.editor-config-warn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: var(--r-2);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
 /* Per-status border/glow on the whole node. Running pulses so it's
    unmistakable mid-canvas; terminal states stay static. Selected wins
    over status for border color so the user can still tell what's

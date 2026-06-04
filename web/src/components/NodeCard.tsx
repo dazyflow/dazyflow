@@ -1,5 +1,5 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, AlertCircle } from "lucide-react";
 import i18n from "../i18n";
 import { iconFor, isBrandedIcon } from "../icons";
 import type { Manifest, Port, JSONSchema, Ref } from "../types";
@@ -33,6 +33,9 @@ export type HazyNodeData = {
   // This node's output values from the latest run (#10), keyed by port —
   // shown as a hover-peek on each output port.
   outputs?: Record<string, Ref>;
+  // Required values this drop is still missing (#13) — drives a red
+  // "needs configuration" badge, distinct from the amber lint warning.
+  configErrors?: string[];
 };
 
 // peekValue renders a port's run value as a short, single-line string for
@@ -124,7 +127,15 @@ export function HazyNode({ data, selected }: NodeProps) {
   const statusClass = d.status ? " status-" + d.status : "";
 
   return (
-    <div className={"hz-node" + (selected ? " selected" : "") + statusClass + (d.lintMessage ? " lint-warn" : "")}>
+    <div
+      className={
+        "hz-node" +
+        (selected ? " selected" : "") +
+        statusClass +
+        (d.lintMessage ? " lint-warn" : "") +
+        (d.configErrors?.length ? " config-err" : "")
+      }
+    >
       {/* No declared inputs (sources/triggers): a single centered dot on
           the left edge, no label. */}
       {!hasDeclaredInputs && (
@@ -280,6 +291,15 @@ export function HazyNode({ data, selected }: NodeProps) {
       {d.lintMessage && (
         <div className="hz-node-lint" title={d.lintMessage} aria-label="lint warning">
           <AlertTriangle size={13} />
+        </div>
+      )}
+      {d.configErrors && d.configErrors.length > 0 && (
+        <div
+          className="hz-node-config"
+          title={d.configErrors.join("\n")}
+          aria-label="needs configuration"
+        >
+          <AlertCircle size={13} />
         </div>
       )}
     </div>
