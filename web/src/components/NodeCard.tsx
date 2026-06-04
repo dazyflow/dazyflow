@@ -94,7 +94,6 @@ export function HazyNode({ data, selected }: NodeProps) {
                 <div
                   key={"il-" + p.port}
                   className="hz-port-label hz-port-in"
-                  style={{ color: c }}
                 >
                   <Handle
                     type="target"
@@ -119,7 +118,6 @@ export function HazyNode({ data, selected }: NodeProps) {
               <div
                 key={"ol-" + p.port}
                 className="hz-port-label hz-port-out"
-                style={{ color: c }}
               >
                 <Handle
                   type="source"

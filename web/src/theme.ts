@@ -2,6 +2,8 @@
 // designed-fresh professional palette). Persisted per browser in
 // localStorage and applied as data-theme on <html>, which every CSS
 // token keys off. No server-side user setting yet — browser-local only.
+import { useEffect, useState } from "react";
+
 export type ThemeMode = "dark" | "light";
 
 const KEY = "hazyflow.theme";
@@ -30,4 +32,22 @@ export function applyTheme(mode: ThemeMode): void {
 // index.html.
 export function initTheme(): void {
   document.documentElement.setAttribute("data-theme", getTheme());
+}
+
+// useThemeMode tracks the live theme for components that can't key off CSS
+// tokens alone — e.g. React Flow's `colorMode`, which is a JS prop, not a
+// CSS variable. Reads the current data-theme and re-renders when it flips
+// (Settings toggles the attribute imperatively, with no React state).
+export function useThemeMode(): ThemeMode {
+  const [mode, setMode] = useState<ThemeMode>(getTheme);
+  useEffect(() => {
+    const root = document.documentElement;
+    const read = () =>
+      setMode(root.getAttribute("data-theme") === "light" ? "light" : "dark");
+    read();
+    const obs = new MutationObserver(read);
+    obs.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => obs.disconnect();
+  }, []);
+  return mode;
 }

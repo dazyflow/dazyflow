@@ -30,6 +30,7 @@ import {
 } from "@xyflow/react";
 import { Play, Save, Check, Square, Plus, Send, History, RotateCcw, X, Zap } from "lucide-react";
 import { useAuth } from "../auth";
+import { useThemeMode } from "../theme";
 import { api } from "../api";
 import { oauthProviderDisplay } from "../integrationMeta";
 import {
@@ -146,6 +147,7 @@ function EditorInner() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { token, me, hasPerm, activeTenant, activeWorkspace } = useAuth();
+  const themeMode = useThemeMode();
   const [manifests, setManifests] = useState<Manifest[]>([]);
   const manifestByID = useMemo(() => {
     const m = new Map<string, Manifest>();
@@ -781,7 +783,10 @@ function EditorInner() {
   // scheduled trigger can have started a run this editor doesn't know
   // about. Called on mount, after Run, and after every SSE terminal.
   const refreshLock = useCallback(async () => {
-    if (!token || !id) return;
+    // activeTenant/activeWorkspace resolve on a separate async path; until
+    // they do, the runs URL would be ".//<id>" which the API rejects (400).
+    // Wait for them — the effect re-runs once they land.
+    if (!token || !id || !activeTenant || !activeWorkspace) return;
     try {
       const { runs } = await api.listRuns(token, activeTenant, activeWorkspace, id, { limit: 20 });
       const active = runs.find(
@@ -1098,162 +1103,174 @@ function EditorInner() {
         onMouseMove={onCanvasMouseMove}
       >
         <div className="editor-toolbar">
-          <button
-            className="ghost editor-add-drop"
-            onClick={() => setPaletteOpen(true)}
-            title={t("editor.addDropTitle")}
-          >
-            <Plus size={14} />
-            <span className="toolbar-label">{t("editor.addDrop")}</span>
-            <kbd className="editor-add-drop-kbd toolbar-label">
-              {/* navigator.platform is deprecated; userAgent is the
-                  documented replacement and still works in every browser
-                  we target. */}
-              {navigator.userAgent.includes("Mac") ? "⌘K" : "Ctrl+K"}
-            </kbd>
-          </button>
-          {/* Flow settings moved to the top-bar three-dots menu (single
-              entry point). The toolbar gear used to live here. Triggers
-              ("how this flow starts") get their own labeled button so
-              the hosted-form link isn't buried in a menu. */}
-          {me && id && (
+          {/* Authoring tools — add nodes, configure how the flow starts. */}
+          <div className="toolbar-group">
             <button
-              className="ghost"
-              onClick={() => setTriggersOpen(true)}
-              title={t("editor.triggersTitle")}
+              className="ghost editor-add-drop"
+              onClick={() => setPaletteOpen(true)}
+              title={t("editor.addDropTitle")}
             >
-              <Zap size={14} style={{ verticalAlign: -2 }} />
-              <span className="toolbar-label" style={{ marginLeft: 6 }}>
-                {t("editor.triggers")}
-              </span>
+              <Plus size={15} />
+              <span className="toolbar-label">{t("editor.addDrop")}</span>
+              <kbd className="editor-add-drop-kbd toolbar-label">
+                {/* navigator.platform is deprecated; userAgent is the
+                    documented replacement and still works in every browser
+                    we target. */}
+                {navigator.userAgent.includes("Mac") ? "⌘K" : "Ctrl+K"}
+              </kbd>
             </button>
-          )}
-          {!dirty && !saving && !lockedRunID && !previewRef ? (
-            // Everything's saved and we're on the live graph — show a calm
-            // confirmation, not a greyed-out Save button.
-            <span className="editor-saved" title={t("editor.saved")}>
-              <Check size={14} style={{ verticalAlign: -2 }} />
-              <span className="toolbar-label" style={{ marginLeft: 6 }}>
-                {t("editor.saved")}
+            {/* Flow settings moved to the top-bar three-dots menu (single
+                entry point). The toolbar gear used to live here. Triggers
+                ("how this flow starts") get their own labeled button so
+                the hosted-form link isn't buried in a menu. */}
+            {me && id && (
+              <button
+                className="ghost"
+                onClick={() => setTriggersOpen(true)}
+                title={t("editor.triggersTitle")}
+              >
+                <Zap size={15} />
+                <span className="toolbar-label">{t("editor.triggers")}</span>
+              </button>
+            )}
+          </div>
+
+          <span className="toolbar-divider" aria-hidden="true" />
+
+          {/* Document state — save status and run history. */}
+          <div className="toolbar-group">
+            {!dirty && !saving && !lockedRunID && !previewRef ? (
+              // Everything's saved and we're on the live graph — show a calm
+              // confirmation, not a greyed-out Save button.
+              <span className="editor-saved" title={t("editor.saved")}>
+                <Check size={15} />
+                <span className="toolbar-label">{t("editor.saved")}</span>
               </span>
-            </span>
-          ) : (
-            <button
-              onClick={() => save()}
-              disabled={!dirty || saving || !hasPerm("graph:edit") || !!lockedRunID || !!previewRef}
-              title={
-                !hasPerm("graph:edit")
-                  ? t("editor.readOnly")
-                  : lockedRunID
-                  ? t("editor.lockedRun", { runID: lockedRunID.slice(0, 8) })
-                  : t("editor.save")
-              }
-            >
-              <Save size={14} style={{ verticalAlign: -2 }} />
-              <span className="toolbar-label" style={{ marginLeft: 6 }}>
-                {lockedRunID
-                  ? t("editor.locked")
-                  : saving
-                  ? t("editor.saving")
-                  : t("editor.save")}
-              </span>
-            </button>
-          )}
-          {me && id && (
-            <button
-              className="ghost"
-              onClick={openHistory}
-              title={t("editor.historyTitle")}
-            >
-              <History size={14} style={{ verticalAlign: -2 }} />
-              <span className="toolbar-label" style={{ marginLeft: 6 }}>
-                {t("editor.history")}
-              </span>
-            </button>
-          )}
-          {me && id && (
-            <span className="toolbar-run-history">
-              <RunHistory
-                tenant={activeTenant}
-                workspace={activeWorkspace}
-                graphID={id}
-                currentRunID={currentRunID}
-                onSelect={selectHistoricalRun}
-              />
-            </span>
-          )}
-          {hasWebhookTrigger ? (
-            <button
-              className="primary"
-              onClick={doTestEvent}
-              disabled={running || dirty || !hasPerm("graph:run") || !!lockedRunID}
-              title={
-                dirty
-                  ? t("editor.saveFirst")
-                  : lockedRunID
-                  ? t("editor.alreadyRunning", { runID: lockedRunID.slice(0, 8) })
-                  : hasPerm("graph:run")
-                  ? t("editor.testEventTooltip")
-                  : t("editor.missingRunPerm")
-              }
-            >
-              <Send size={14} style={{ verticalAlign: -2 }} />
-              <span className="toolbar-label" style={{ marginLeft: 6 }}>
-                {running ? t("editor.sending") : t("editor.testEvent")}
-              </span>
-            </button>
-          ) : (
-            <button
-              className="primary"
-              onClick={runWithLiveStatus}
-              disabled={running || dirty || !hasPerm("graph:run") || !!lockedRunID}
-              title={
-                dirty
-                  ? t("editor.saveFirst")
-                  : lockedRunID
-                  ? t("editor.alreadyRunning", { runID: lockedRunID.slice(0, 8) })
-                  : hasPerm("graph:run")
-                  ? t("editor.run")
-                  : t("editor.missingRunPerm")
-              }
-            >
-              <Play size={14} style={{ verticalAlign: -2 }} />
-              <span className="toolbar-label" style={{ marginLeft: 6 }}>
-                {running ? t("editor.running") : t("editor.run")}
-              </span>
-            </button>
-          )}
-          {lockedRunID && (
-            <button
-              className="ghost"
-              disabled={cancelling || !hasPerm("graph:run")}
-              title={
-                hasPerm("graph:run")
-                  ? t("editor.cancelRunTooltip", { runID: lockedRunID.slice(0, 8) })
-                  : t("editor.missingRunPerm")
-              }
-              onClick={async () => {
-                if (!token || !lockedRunID) return;
-                setCancelling(true);
-                setError(null);
-                try {
-                  await api.cancelRun(token, lockedRunID, "cancelled from editor");
-                  // The dispatcher's Terminal event will fire via SSE
-                  // and refreshLock will follow; just nudge the local
-                  // running flag so the Run button re-enables fast.
-                  setRunning(false);
-                  void refreshLock();
-                } catch (e) {
-                  setError((e as Error).message);
-                } finally {
-                  setCancelling(false);
+            ) : (
+              <button
+                className="editor-save"
+                onClick={() => save()}
+                disabled={!dirty || saving || !hasPerm("graph:edit") || !!lockedRunID || !!previewRef}
+                title={
+                  !hasPerm("graph:edit")
+                    ? t("editor.readOnly")
+                    : lockedRunID
+                    ? t("editor.lockedRun", { runID: lockedRunID.slice(0, 8) })
+                    : t("editor.save")
                 }
-              }}
-            >
-              <Square size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-              {cancelling ? t("editor.cancelling") : t("editor.cancel")}
-            </button>
-          )}
+              >
+                <Save size={15} />
+                <span className="toolbar-label">
+                  {lockedRunID
+                    ? t("editor.locked")
+                    : saving
+                    ? t("editor.saving")
+                    : t("editor.save")}
+                </span>
+              </button>
+            )}
+            {me && id && (
+              <button
+                className="ghost"
+                onClick={openHistory}
+                title={t("editor.historyTitle")}
+              >
+                <History size={15} />
+                <span className="toolbar-label">{t("editor.history")}</span>
+              </button>
+            )}
+            {me && id && (
+              <span className="toolbar-run-history">
+                <RunHistory
+                  tenant={activeTenant}
+                  workspace={activeWorkspace}
+                  graphID={id}
+                  currentRunID={currentRunID}
+                  onSelect={selectHistoricalRun}
+                />
+              </span>
+            )}
+          </div>
+
+          <span className="toolbar-spacer" />
+
+          {/* Primary action — pinned to the right edge as the focal point. */}
+          <div className="toolbar-group">
+            {hasWebhookTrigger ? (
+              <button
+                className="primary"
+                onClick={doTestEvent}
+                disabled={running || dirty || !hasPerm("graph:run") || !!lockedRunID}
+                title={
+                  dirty
+                    ? t("editor.saveFirst")
+                    : lockedRunID
+                    ? t("editor.alreadyRunning", { runID: lockedRunID.slice(0, 8) })
+                    : hasPerm("graph:run")
+                    ? t("editor.testEventTooltip")
+                    : t("editor.missingRunPerm")
+                }
+              >
+                <Send size={15} />
+                <span className="toolbar-label">
+                  {running ? t("editor.sending") : t("editor.testEvent")}
+                </span>
+              </button>
+            ) : (
+              <button
+                className="primary"
+                onClick={runWithLiveStatus}
+                disabled={running || dirty || !hasPerm("graph:run") || !!lockedRunID}
+                title={
+                  dirty
+                    ? t("editor.saveFirst")
+                    : lockedRunID
+                    ? t("editor.alreadyRunning", { runID: lockedRunID.slice(0, 8) })
+                    : hasPerm("graph:run")
+                    ? t("editor.run")
+                    : t("editor.missingRunPerm")
+                }
+              >
+                <Play size={15} />
+                <span className="toolbar-label">
+                  {running ? t("editor.running") : t("editor.run")}
+                </span>
+              </button>
+            )}
+            {lockedRunID && (
+              <button
+                className="ghost"
+                disabled={cancelling || !hasPerm("graph:run")}
+                title={
+                  hasPerm("graph:run")
+                    ? t("editor.cancelRunTooltip", { runID: lockedRunID.slice(0, 8) })
+                    : t("editor.missingRunPerm")
+                }
+                onClick={async () => {
+                  if (!token || !lockedRunID) return;
+                  setCancelling(true);
+                  setError(null);
+                  try {
+                    await api.cancelRun(token, lockedRunID, "cancelled from editor");
+                    // The dispatcher's Terminal event will fire via SSE
+                    // and refreshLock will follow; just nudge the local
+                    // running flag so the Run button re-enables fast.
+                    setRunning(false);
+                    void refreshLock();
+                  } catch (e) {
+                    setError((e as Error).message);
+                  } finally {
+                    setCancelling(false);
+                  }
+                }}
+              >
+                <Square size={15} />
+                <span className="toolbar-label">
+                  {cancelling ? t("editor.cancelling") : t("editor.cancel")}
+                </span>
+              </button>
+            )}
+          </div>
         </div>
         {previewRef && (
           <div className={`history-preview-banner${showHistory ? " with-panel" : ""}`}>
@@ -1343,7 +1360,7 @@ function EditorInner() {
           fitView
           fitViewOptions={{ padding: 0.3 }}
           proOptions={{ hideAttribution: true }}
-          colorMode="dark"
+          colorMode={themeMode}
         >
           {/* Dot colour is themed via CSS (.react-flow__background circle
               → var(--canvas-dot)); the prop is just a fallback. */}

@@ -2876,13 +2876,16 @@ button.danger-outline:hover:not(:disabled) {
   position: relative;
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--muted);
+  /* ink-soft (not muted): port names are secondary to the bold title but
+     must stay legible — muted washed out on the card surface in both
+     themes. The inward chevrons keep them visually subordinate. */
+  color: var(--ink-soft);
   line-height: 16px;
   white-space: nowrap;
 }
-/* Chevrons inherit the label's (dot-matched) color but stay subtle.
-   Inputs: ">" to the left of the left-aligned name; outputs: ">" to the
-   right of the right-aligned name — both point inward toward the card. */
+/* Chevrons inherit the label's ink-soft color but stay subtle via
+   opacity. Inputs: ">" to the left of the left-aligned name; outputs:
+   ">" to the right of the right-aligned name — both point inward. */
 .hz-port-label.hz-port-in::before {
   content: "> ";
   opacity: 0.55;
@@ -5094,46 +5097,116 @@ button.danger-outline:hover:not(:disabled) {
 }
 
 /* Editor top toolbar — fixed-height bar pinned above the canvas, full
-   width. ReactFlow lives in the remaining flex space below. */
+   width. Actions are grouped left-to-right (authoring · document state)
+   with the primary Run action pushed to the right edge by a flexible
+   spacer. ReactFlow lives in the remaining flex space below. */
 .editor-toolbar {
-  flex: 0 0 48px;
-  height: 48px;
+  flex: 0 0 52px;
+  height: 52px;
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-1);
   padding: 0 var(--space-3);
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   z-index: 5;
 }
+/* Related actions cluster tightly; clusters are separated by dividers
+   and the flexible spacer rather than by one uniform gap. */
+.editor-toolbar .toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+/* Thin vertical rule between action clusters. */
+.editor-toolbar .toolbar-divider {
+  flex: 0 0 auto;
+  width: 1px;
+  height: 22px;
+  margin: 0 6px;
+  background: var(--border);
+}
+/* Pushes the primary Run/Test action to the right edge of the bar. */
+.editor-toolbar .toolbar-spacer {
+  flex: 1 1 auto;
+}
+/* One compact, evenly-aligned shape for every toolbar control so icons
+   and labels line up via flex gap — no per-element vertical-align or
+   margin hacks needed in the markup. */
+.editor-toolbar button,
+.editor-toolbar .editor-saved {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: var(--r-2);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+/* Icons keep their size when horizontal space gets tight. */
+.editor-toolbar button svg,
+.editor-toolbar .editor-saved svg {
+  flex: 0 0 auto;
+}
+/* The primary action carries the most weight — a touch more padding and
+   heavier label so it reads as the focal point of the bar. */
+.editor-toolbar button.primary {
+  padding: 0 14px;
+  font-weight: 600;
+}
+/* Save while there are unsaved changes: a calm accent outline so it's
+   clearly the next thing to do, without shouting for attention. */
+.editor-toolbar .editor-save:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+.editor-toolbar .editor-save:not(:disabled):hover {
+  border-color: var(--accent);
+}
 /* Idle "all saved" status — a calm confirmation in place of the Save
    button when there's nothing to save. No button chrome; a soft success
    check + muted label, sized to sit flush with the toolbar buttons. */
 .editor-saved {
-  display: inline-flex;
-  align-items: center;
-  padding: var(--space-2) var(--space-3);
-  font-size: 14px;
-  font-weight: 500;
   color: var(--muted);
   user-select: none;
-  white-space: nowrap;
 }
 .editor-saved svg {
   color: var(--success);
 }
-/* Small-screen toolbar: drop the text labels next to the action icons,
-   the Ctrl+K hint, and the entire run-history switcher — keep just
-   the icons so the toolbar fits without wrapping. */
+/* The Ctrl+K hint sits inside the Add-drop button as a subtle key cap. */
+.editor-add-drop-kbd {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  color: var(--faint);
+  margin-left: 2px;
+}
+/* Small-screen toolbar: drop the text labels, the Ctrl+K hint, and the
+   run-history switcher, collapsing secondary actions to square icon
+   buttons. The primary action keeps its label — it's the focal point
+   and conveys run state. */
 @media (max-width: 768px) {
   .editor-toolbar .toolbar-label,
   .editor-toolbar .toolbar-run-history {
     display: none;
   }
-  .editor-toolbar .editor-add-drop {
-    /* Without the label the button collapses too much; restore a
-       tappable target. */
-    padding: 6px 8px;
+  .editor-toolbar button.primary .toolbar-label {
+    display: inline;
+  }
+  .editor-toolbar button:not(.primary) {
+    width: 36px;
+    padding: 0;
+    gap: 0;
+    justify-content: center;
+  }
+  .editor-toolbar .toolbar-divider {
+    margin: 0 4px;
   }
 }
 
