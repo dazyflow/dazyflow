@@ -21,8 +21,11 @@ export type HazyNodeData = {
   params?: Record<string, unknown>;
   setParam?: (key: string, value: unknown) => void;
   // Input port ids that currently have a wire — inline fields for these
-  // are hidden (the connection supplies the value).
+  // are hidden (the connection supplies the value), and the pin reads as
+  // filled (#11).
   connectedInputs?: string[];
+  // Output port ids that currently have a wire — drives the pin fill.
+  connectedOutputs?: string[];
   // True only when this is the SOLE selected node. Inline fields show just
   // for a single selection, so a multi-select (e.g. for alignment) keeps
   // every card collapsed — and align/distribute use the deselected height.
@@ -93,6 +96,7 @@ export function HazyNode({ data, selected }: NodeProps) {
     s.type === "boolean";
   const schemaProps = d.manifest?.params_schema?.properties;
   const connectedInputs = d.connectedInputs ?? [];
+  const connectedOutputs = d.connectedOutputs ?? [];
   const inputPortIds = new Set((d.manifest?.inputs ?? []).map((p) => p.port));
   const required = d.manifest?.params_schema?.required ?? [];
   // Two sources of inline fields:
@@ -128,7 +132,7 @@ export function HazyNode({ data, selected }: NodeProps) {
           type="target"
           position={Position.Left}
           id={inputs[0].port}
-          style={dotStyle(portColor(inputs[0].mime), inputs[0].required ?? false)}
+          style={dotStyle(portColor(inputs[0].mime), connectedInputs.includes(inputs[0].port))}
           title={portTooltip(inputs[0])}
         />
       )}
@@ -224,10 +228,15 @@ export function HazyNode({ data, selected }: NodeProps) {
                     type="target"
                     position={Position.Left}
                     id={p.port}
-                    style={dotStyle(c, p.required ?? false, "in")}
+                    style={dotStyle(c, connectedInputs.includes(p.port), "in")}
                     title={portTooltip(p)}
                   />
                   {p.label ?? p.port}
+                  {p.required && (
+                    <span className="hz-req" title={i18n.t("nodeCard.portRequired")}>
+                      *
+                    </span>
+                  )}
                 </div>
               );
             })}
@@ -249,7 +258,7 @@ export function HazyNode({ data, selected }: NodeProps) {
                   type="source"
                   position={Position.Right}
                   id={p.port}
-                  style={dotStyle(c, p.required ?? false, "out")}
+                  style={dotStyle(c, connectedOutputs.includes(p.port), "out")}
                   title={portTooltip(p)}
                 />
                 {p.label ?? p.port}
@@ -290,15 +299,15 @@ export function HazyNode({ data, selected }: NodeProps) {
 //     border so it lands on the perimeter — independent of label width or
 //     header height, which is what kept the old absolute-px math drifting.
 //
-// Visual encoding (Blueprint-style: colour = type, dotted out below):
+// Visual encoding (Blueprint-style):
 //   - color → first listed MIME on the port (see portColor)
-//   - fill  → required ports are a solid, full-strength dot; optional
-//             ports are a faint, thinner hollow ring of the same hue
-//             ("you don't have to wire this to make the graph valid")
-function dotStyle(color: string, required: boolean, place?: "in" | "out") {
+//   - fill  → CONNECTION STATE (#11): a wired port is a solid, full-strength
+//             dot; an unwired port is a faint, thinner hollow ring. (Required
+//             vs optional is shown by an asterisk on the label, not the fill.)
+function dotStyle(color: string, filled: boolean, place?: "in" | "out") {
   const base = {
-    background: required ? color : "var(--surface)",
-    border: required
+    background: filled ? color : "var(--surface)",
+    border: filled
       ? `1.5px solid ${color}`
       : `1px solid color-mix(in srgb, ${color} 50%, transparent)`,
     width: 10,

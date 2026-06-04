@@ -2872,6 +2872,14 @@ button.danger-outline:hover:not(:disabled) {
   align-items: flex-end;
   margin-left: auto;
 }
+/* Required-port marker (#11): a small accent asterisk after the label,
+   now that the dot fill encodes connection state instead of required-ness. */
+.hz-req {
+  color: var(--danger);
+  margin-left: 3px;
+  font-weight: 700;
+  cursor: help;
+}
 .hz-port-label {
   position: relative;
   font-family: var(--font-mono);

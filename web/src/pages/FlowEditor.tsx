@@ -1048,6 +1048,18 @@ function EditorInner() {
     }
     return m;
   }, [edges]);
+  // Output ports that have a wire leaving them — drives the connection-state
+  // pin fill (#11): a port is solid when wired, a faint ring when free.
+  const connectedOutputsByNode = useMemo(() => {
+    const m = new Map<string, string[]>();
+    for (const e of edges) {
+      if (!e.source || !e.sourceHandle) continue;
+      const arr = m.get(e.source) ?? [];
+      arr.push(e.sourceHandle);
+      m.set(e.source, arr);
+    }
+    return m;
+  }, [edges]);
 
   const displayNodes = useMemo<FlowNode<HazyNodeData>[]>(() => {
     // Inline fields show only for a single selection, so a multi-select
@@ -1061,11 +1073,12 @@ function EditorInner() {
         params: paramsByID[n.id],
         setParam: (key: string, value: unknown) => setNodeParam(n.id, key, value),
         connectedInputs: connectedInputsByNode.get(n.id) ?? [],
+        connectedOutputs: connectedOutputsByNode.get(n.id) ?? [],
         inlineEditable: n.id === soleId,
         outputs: runOutputs[n.id],
       },
     }));
-  }, [nodes, paramsByID, setNodeParam, connectedInputsByNode, runOutputs]);
+  }, [nodes, paramsByID, setNodeParam, connectedInputsByNode, connectedOutputsByNode, runOutputs]);
 
   // Frames rendered as comment nodes, with a fresh title-edit callback
   // that writes back into frameNodes state and dirties the graph.
