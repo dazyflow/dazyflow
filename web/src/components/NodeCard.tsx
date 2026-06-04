@@ -44,14 +44,19 @@ export function HazyNode({ data, selected }: NodeProps) {
   const outputs: Port[] = d.manifest?.outputs?.length
     ? d.manifest.outputs
     : [{ port: "out" }];
-  const inputsMulti = inputs.length > 1;
+  // Show labelled input rows whenever the drop actually declares inputs
+  // (single or multi) — symmetric with outputs, which always name what
+  // they emit. Sources/triggers declare none and fall back to the bare
+  // "in" dot below, so we don't splatter a meaningless "in" label on them.
+  const hasDeclaredInputs = !!d.manifest?.inputs?.length;
 
   const statusClass = d.status ? " status-" + d.status : "";
 
   return (
     <div className={"hz-node" + (selected ? " selected" : "") + statusClass + (d.lintMessage ? " lint-warn" : "")}>
-      {/* Single input: a centered dot on the left edge, no label. */}
-      {!inputsMulti && (
+      {/* No declared inputs (sources/triggers): a single centered dot on
+          the left edge, no label. */}
+      {!hasDeclaredInputs && (
         <Handle
           type="target"
           position={Position.Left}
@@ -86,7 +91,7 @@ export function HazyNode({ data, selected }: NodeProps) {
       </div>
 
       <div className="hz-ports">
-        {inputsMulti && (
+        {hasDeclaredInputs && (
           <div className="hz-port-col">
             {inputs.map((p) => {
               const c = portColor(p.mime);
@@ -149,7 +154,7 @@ export function HazyNode({ data, selected }: NodeProps) {
 }
 
 // dotStyle paints a handle by its port's MIME (color) and required-ness
-// (filled vs hollow), and positions it.
+// (fill) and positions it.
 //
 //   place omitted → single port: keep React Flow's default centering on
 //     the card's vertical midpoint.
@@ -161,17 +166,17 @@ export function HazyNode({ data, selected }: NodeProps) {
 //     border so it lands on the perimeter — independent of label width or
 //     header height, which is what kept the old absolute-px math drifting.
 //
-// Visual encoding:
+// Visual encoding (Blueprint-style: colour = type, dotted out below):
 //   - color → first listed MIME on the port (see portColor)
-//   - fill  → required ports are solid; optional ports are hollow rings of
-//             the same color, signalling "you don't have to wire this to
-//             make the graph valid"
-//   - missing MIME falls back to the neutral surface color so ports on
-//     legacy manifests without MIME annotations look unchanged
+//   - fill  → required ports are a solid, full-strength dot; optional
+//             ports are a faint, thinner hollow ring of the same hue
+//             ("you don't have to wire this to make the graph valid")
 function dotStyle(color: string, required: boolean, place?: "in" | "out") {
   const base = {
     background: required ? color : "var(--surface)",
-    border: `1.5px solid ${color}`,
+    border: required
+      ? `1.5px solid ${color}`
+      : `1px solid color-mix(in srgb, ${color} 50%, transparent)`,
     width: 10,
     height: 10,
   } as const;
@@ -202,7 +207,7 @@ function dotStyle(color: string, required: boolean, place?: "in" | "out") {
 // subtypes still get a sensible color, and fall back to the neutral
 // border color for ports that don't declare a MIME (the common case for
 // legacy manifests we haven't yet annotated).
-function portColor(mime: string[] | undefined): string {
+export function portColor(mime: string[] | undefined): string {
   if (!mime || mime.length === 0) return "var(--border-strong)";
   const m = mime[0];
   if (m.startsWith("text/")) return "#4a8";              // green — plain text

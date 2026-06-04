@@ -28,7 +28,26 @@ import {
   type NodeChange,
   type ReactFlowInstance,
 } from "@xyflow/react";
-import { Play, Save, Check, Square, Plus, Send, History, RotateCcw, X, Zap } from "lucide-react";
+import {
+  Play,
+  Save,
+  Check,
+  Square,
+  Plus,
+  Send,
+  History,
+  RotateCcw,
+  X,
+  Zap,
+  AlignStartVertical,
+  AlignCenterVertical,
+  AlignEndVertical,
+  AlignStartHorizontal,
+  AlignCenterHorizontal,
+  AlignEndHorizontal,
+  AlignHorizontalDistributeCenter,
+  AlignVerticalDistributeCenter,
+} from "lucide-react";
 import { useAuth } from "../auth";
 import { useThemeMode } from "../theme";
 import { api } from "../api";
@@ -53,7 +72,7 @@ import type {
 } from "../types";
 import { Inspector } from "../components/Inspector";
 import { LiveConsole } from "../components/LiveConsole";
-import { HazyNode, type HazyNodeData } from "../components/NodeCard";
+import { HazyNode, portColor, type HazyNodeData } from "../components/NodeCard";
 import { RunHistory } from "../components/RunHistory";
 import { SettingsModal } from "../components/SettingsModal";
 import { TriggersModal } from "../components/TriggersModal";
@@ -508,6 +527,28 @@ function EditorInner() {
     },
     [],
   );
+  // Wires are colored by their source (output) port's data type — the
+  // Blueprint convention — so a connection's type is readable along its
+  // whole length and matches the port dots. Derived from the live nodes
+  // (not baked into edge state) so colors settle in as manifests load
+  // async. Selected edges thicken; color stays full-strength.
+  const coloredEdges = useMemo(() => {
+    const byId = new Map(nodes.map((n) => [n.id, n]));
+    return edges.map((e) => {
+      const out = byId
+        .get(e.source)
+        ?.data.manifest?.outputs?.find((p) => p.port === (e.sourceHandle ?? "out"));
+      return {
+        ...e,
+        style: {
+          ...e.style,
+          stroke: portColor(out?.mime),
+          strokeWidth: e.selected ? 2.5 : 1.5,
+        },
+      };
+    });
+  }, [edges, nodes]);
+
   const onConnect = useCallback(
     (params: Connection) => {
       setEdges((eds) =>
@@ -523,6 +564,83 @@ function EditorInner() {
     },
     [],
   );
+
+  // Multi-select node alignment. React Flow stores selection (.selected)
+  // and measured size on the node objects, so we derive the count for the
+  // toolbar's enable state and recompute geometry on the live nodes.
+  const selectedCount = useMemo(
+    () => nodes.reduce((n, node) => n + (node.selected ? 1 : 0), 0),
+    [nodes],
+  );
+  const nodeBox = (n: FlowNode<HazyNodeData>) => ({
+    x: n.position.x,
+    y: n.position.y,
+    w: n.measured?.width ?? n.width ?? 0,
+    h: n.measured?.height ?? n.height ?? 0,
+  });
+  type AlignKind = "left" | "hcenter" | "right" | "top" | "vcenter" | "bottom";
+  const alignNodes = useCallback((kind: AlignKind) => {
+    setNodes((nds) => {
+      const sel = nds.filter((n) => n.selected);
+      if (sel.length < 2) return nds;
+      const b = sel.map((n) => ({ id: n.id, ...nodeBox(n) }));
+      const minX = Math.min(...b.map((v) => v.x));
+      const maxR = Math.max(...b.map((v) => v.x + v.w));
+      const minY = Math.min(...b.map((v) => v.y));
+      const maxB = Math.max(...b.map((v) => v.y + v.h));
+      const cx = (minX + maxR) / 2;
+      const cy = (minY + maxB) / 2;
+      const next = new Map(
+        b.map((v) => {
+          let { x, y } = v;
+          if (kind === "left") x = minX;
+          else if (kind === "right") x = maxR - v.w;
+          else if (kind === "hcenter") x = cx - v.w / 2;
+          else if (kind === "top") y = minY;
+          else if (kind === "bottom") y = maxB - v.h;
+          else if (kind === "vcenter") y = cy - v.h / 2;
+          return [v.id, { x, y }];
+        }),
+      );
+      return nds.map((n) =>
+        next.has(n.id) ? { ...n, position: next.get(n.id)! } : n,
+      );
+    });
+    setDirty(true);
+  }, []);
+  // Distribute: keep the two extreme nodes put and space the rest so their
+  // centers are evenly spaced along the axis. Needs 3+ to be meaningful.
+  const distributeNodes = useCallback((axis: "h" | "v") => {
+    setNodes((nds) => {
+      const sel = nds.filter((n) => n.selected);
+      if (sel.length < 3) return nds;
+      const horiz = axis === "h";
+      const items = sel.map((n) => {
+        const box = nodeBox(n);
+        const pos = horiz ? box.x : box.y;
+        const size = horiz ? box.w : box.h;
+        return { id: n.id, center: pos + size / 2, size };
+      });
+      items.sort((p, q) => p.center - q.center);
+      const first = items[0].center;
+      const last = items[items.length - 1].center;
+      const step = (last - first) / (items.length - 1);
+      const next = new Map(
+        items.map((it, i) => [it.id, first + step * i - it.size / 2]),
+      );
+      return nds.map((n) =>
+        next.has(n.id)
+          ? {
+              ...n,
+              position: horiz
+                ? { ...n.position, x: next.get(n.id)! }
+                : { ...n.position, y: next.get(n.id)! },
+            }
+          : n,
+      );
+    });
+    setDirty(true);
+  }, []);
 
   const onDragOver = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -1135,6 +1253,51 @@ function EditorInner() {
             )}
           </div>
 
+          {/* Align & distribute — appears only while 2+ nodes are selected,
+              so it never clutters the bar in the common single-select case.
+              Distribute needs 3+ to be meaningful. */}
+          {selectedCount >= 2 && (
+            <>
+              <span className="toolbar-divider" aria-hidden="true" />
+              <div className="toolbar-group toolbar-align">
+                <button className="ghost" title={t("editor.alignLeft")} onClick={() => alignNodes("left")}>
+                  <AlignStartVertical size={15} />
+                </button>
+                <button className="ghost" title={t("editor.alignHCenter")} onClick={() => alignNodes("hcenter")}>
+                  <AlignCenterVertical size={15} />
+                </button>
+                <button className="ghost" title={t("editor.alignRight")} onClick={() => alignNodes("right")}>
+                  <AlignEndVertical size={15} />
+                </button>
+                <button className="ghost" title={t("editor.alignTop")} onClick={() => alignNodes("top")}>
+                  <AlignStartHorizontal size={15} />
+                </button>
+                <button className="ghost" title={t("editor.alignVCenter")} onClick={() => alignNodes("vcenter")}>
+                  <AlignCenterHorizontal size={15} />
+                </button>
+                <button className="ghost" title={t("editor.alignBottom")} onClick={() => alignNodes("bottom")}>
+                  <AlignEndHorizontal size={15} />
+                </button>
+                <button
+                  className="ghost"
+                  title={t("editor.distributeH")}
+                  disabled={selectedCount < 3}
+                  onClick={() => distributeNodes("h")}
+                >
+                  <AlignHorizontalDistributeCenter size={15} />
+                </button>
+                <button
+                  className="ghost"
+                  title={t("editor.distributeV")}
+                  disabled={selectedCount < 3}
+                  onClick={() => distributeNodes("v")}
+                >
+                  <AlignVerticalDistributeCenter size={15} />
+                </button>
+              </div>
+            </>
+          )}
+
           <span className="toolbar-divider" aria-hidden="true" />
 
           {/* Document state — save status and run history. */}
@@ -1345,7 +1508,7 @@ function EditorInner() {
         )}
         <ReactFlow
           nodes={nodes}
-          edges={edges}
+          edges={coloredEdges}
           nodeTypes={nodeTypes}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}

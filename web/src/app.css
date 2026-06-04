@@ -5187,6 +5187,13 @@ button.danger-outline:hover:not(:disabled) {
   color: var(--faint);
   margin-left: 2px;
 }
+/* Align/distribute: compact square icon buttons, present only during a
+   multi-select. Tighter than the labelled toolbar buttons. */
+.editor-toolbar .toolbar-align button {
+  width: 30px;
+  padding: 0;
+  justify-content: center;
+}
 /* Small-screen toolbar: drop the text labels, the Ctrl+K hint, and the
    run-history switcher, collapsing secondary actions to square icon
    buttons. The primary action keeps its label — it's the focal point
