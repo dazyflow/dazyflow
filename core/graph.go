@@ -41,6 +41,11 @@ type Edge struct {
 	To       string  `json:"to"`
 	ToPort   string  `json:"to_port"`
 	OnError  OnError `json:"on_error"`
+	// Waypoints are optional editor-only routing knots: bend points the
+	// wire is drawn through. The engine ignores them entirely; they exist
+	// so the editor can redraw the same hand-tuned routing. Stored inline
+	// in the graph JSON, so no schema change is needed.
+	Waypoints []Position `json:"waypoints,omitempty"`
 }
 
 type Graph struct {

@@ -5187,6 +5187,19 @@ button.danger-outline:hover:not(:disabled) {
   color: var(--faint);
   margin-left: 2px;
 }
+/* Reroute knots: small draggable dots on a wire (approach-B reroute).
+   Filled with the wire's colour (set inline), a thin surface ring for
+   contrast against the canvas, and a grab cursor. */
+.reroute-knot {
+  stroke: var(--surface);
+  stroke-width: 1.5;
+  cursor: grab;
+  pointer-events: all;
+}
+.reroute-knot:hover {
+  stroke: var(--ink);
+}
+
 /* Align/distribute: compact square icon buttons, present only during a
    multi-select. Tighter than the labelled toolbar buttons. */
 .editor-toolbar .toolbar-align button {

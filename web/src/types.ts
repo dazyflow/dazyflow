@@ -17,6 +17,9 @@ export type Edge = {
   to: string;
   to_port: string;
   on_error?: string;
+  // Editor-only routing knots the wire is drawn through (flow coords).
+  // The engine ignores these; they round-trip to preserve hand-routing.
+  waypoints?: { x: number; y: number }[];
 };
 
 export type GraphTrigger = {

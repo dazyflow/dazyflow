@@ -65,6 +65,7 @@ import type {
   GraphTrigger,
   LintIssue,
   Manifest,
+  Port,
   JobStatus,
   OAuthProviderStatus,
   Revision,
@@ -74,6 +75,7 @@ import { Inspector } from "../components/Inspector";
 import { LiveConsole } from "../components/LiveConsole";
 import { HazyNode, portColor, type HazyNodeData } from "../components/NodeCard";
 import { RunHistory } from "../components/RunHistory";
+import { RerouteEdge } from "../components/RerouteEdge";
 import { SettingsModal } from "../components/SettingsModal";
 import { TriggersModal } from "../components/TriggersModal";
 import { QuickDropPalette } from "../components/QuickDropPalette";
@@ -82,6 +84,7 @@ import { QuickDropPalette } from "../components/QuickDropPalette";
 // is declared at module scope rather than inline in the component to
 // avoid unnecessary remounts on each render.
 const nodeTypes = { hazy: HazyNode };
+const edgeTypes = { reroute: RerouteEdge };
 
 // How long the editor waits after the last edit before autosaving. Short
 // enough to feel "always saved", long enough that a burst of edits (typing,
@@ -321,6 +324,7 @@ function EditorInner() {
         target: e.to,
         sourceHandle: e.from_port,
         targetHandle: e.to_port,
+        data: { waypoints: e.waypoints ?? [] },
         style: { stroke: "var(--accent)", strokeWidth: 1.5 },
       })),
     );
@@ -532,7 +536,7 @@ function EditorInner() {
   // whole length and matches the port dots. Derived from the live nodes
   // (not baked into edge state) so colors settle in as manifests load
   // async. Selected edges thicken; color stays full-strength.
-  const coloredEdges = useMemo(() => {
+  const coloredEdges = useMemo<FlowEdge[]>(() => {
     const byId = new Map(nodes.map((n) => [n.id, n]));
     return edges.map((e) => {
       const out = byId
@@ -540,10 +544,24 @@ function EditorInner() {
         ?.data.manifest?.outputs?.find((p) => p.port === (e.sourceHandle ?? "out"));
       return {
         ...e,
+        type: "reroute",
         style: {
           ...e.style,
           stroke: portColor(out?.mime),
           strokeWidth: e.selected ? 2.5 : 1.5,
+        },
+        // RerouteEdge mutates routing through this callback so the change
+        // lands in the controlled edge state (and marks the graph dirty).
+        data: {
+          ...e.data,
+          updateWaypoints: (wps: { x: number; y: number }[]) => {
+            setEdges((eds) =>
+              eds.map((x) =>
+                x.id === e.id ? { ...x, data: { ...x.data, waypoints: wps } } : x,
+              ),
+            );
+            setDirty(true);
+          },
         },
       };
     });
@@ -551,6 +569,7 @@ function EditorInner() {
 
   const onConnect = useCallback(
     (params: Connection) => {
+      connectMadeRef.current = true;
       setEdges((eds) =>
         addEdge(
           {
@@ -563,6 +582,121 @@ function EditorInner() {
       setDirty(true);
     },
     [],
+  );
+
+  // Drag-off-pin creation. Dragging a wire from a port and dropping it on
+  // empty canvas opens the quick palette, pre-filtered to drops with a
+  // port whose data type is compatible with the one you dragged from, and
+  // auto-wires the chosen drop to that port. connectStartRef remembers the
+  // source; connectMadeRef (set in onConnect) tells us a real connection
+  // was made so we don't also pop the palette.
+  const connectStartRef = useRef<{
+    nodeId: string;
+    handleId: string | null;
+    handleType: "source" | "target";
+  } | null>(null);
+  const connectMadeRef = useRef(false);
+  const [connectFrom, setConnectFrom] = useState<{
+    nodeId: string;
+    handleId: string | null;
+    handleType: "source" | "target";
+    screen: { x: number; y: number };
+  } | null>(null);
+  const onConnectStart = useCallback(
+    (
+      _e: unknown,
+      params: { nodeId: string | null; handleId: string | null; handleType: "source" | "target" | null },
+    ) => {
+      connectMadeRef.current = false;
+      connectStartRef.current = params.nodeId
+        ? {
+            nodeId: params.nodeId,
+            handleId: params.handleId,
+            handleType: params.handleType ?? "source",
+          }
+        : null;
+    },
+    [],
+  );
+  const onConnectEnd = useCallback((e: MouseEvent | TouchEvent) => {
+    const start = connectStartRef.current;
+    connectStartRef.current = null;
+    if (connectMadeRef.current || !start) return;
+    const pt =
+      "clientX" in e
+        ? { x: e.clientX, y: e.clientY }
+        : { x: e.changedTouches[0]?.clientX ?? 0, y: e.changedTouches[0]?.clientY ?? 0 };
+    setConnectFrom({ ...start, screen: pt });
+    setPaletteOpen(true);
+  }, []);
+
+  // The MIME of the port the user dragged from (its outputs if they grabbed
+  // a source handle, its inputs for a target handle).
+  const connectSourceMime = useMemo(() => {
+    if (!connectFrom) return undefined;
+    const src = nodes.find((n) => n.id === connectFrom.nodeId);
+    const ports =
+      connectFrom.handleType === "source"
+        ? src?.data.manifest?.outputs
+        : src?.data.manifest?.inputs;
+    return ports?.find((p) => p.port === connectFrom.handleId)?.mime;
+  }, [connectFrom, nodes]);
+
+  // Palette list filtered to drops that have a compatible port to wire to.
+  // Dragging from an output wants drops with a matching input, and vice
+  // versa. Falls back to the full list if nothing matches, so the user is
+  // never stuck with an empty palette.
+  const connectDrops = useMemo(() => {
+    if (!connectFrom) return manifests;
+    const wantInput = connectFrom.handleType === "source";
+    const matches = manifests.filter((m) => {
+      const ports = wantInput
+        ? m.inputs?.length
+          ? m.inputs
+          : [{ port: "in" } as Port]
+        : m.outputs?.length
+        ? m.outputs
+        : [{ port: "out" } as Port];
+      return ports.some((p) => mimeCompatible(p.mime, connectSourceMime));
+    });
+    return matches.length ? matches : manifests;
+  }, [connectFrom, connectSourceMime, manifests]);
+
+  // Spawn a drop and immediately wire it to the port the drag came from.
+  const spawnDropConnected = useCallback(
+    (
+      m: Manifest,
+      from: { nodeId: string; handleId: string | null; handleType: "source" | "target"; screen: { x: number; y: number } },
+    ) => {
+      const position = screenToFlowPosition(from.screen);
+      const newID = nextID(nodes, m.id);
+      setNodes((nds) => [
+        ...nds,
+        {
+          id: newID,
+          type: "hazy",
+          position,
+          data: { label: m.label, moduleID: m.id, manifest: m },
+        },
+      ]);
+      setParamsByID((p) => ({ ...p, [newID]: {} }));
+      const isSource = from.handleType === "source";
+      const conn: Connection = {
+        source: isSource ? from.nodeId : newID,
+        sourceHandle: isSource
+          ? from.handleId
+          : pickPort(m.outputs, connectSourceMime, "out"),
+        target: isSource ? newID : from.nodeId,
+        targetHandle: isSource
+          ? pickPort(m.inputs, connectSourceMime, "in")
+          : from.handleId,
+      };
+      setEdges((eds) =>
+        addEdge({ ...conn, style: { stroke: "var(--accent)", strokeWidth: 1.5 } }, eds),
+      );
+      setDirty(true);
+    },
+    [nodes, screenToFlowPosition, connectSourceMime],
   );
 
   // Multi-select node alignment. React Flow stores selection (.selected)
@@ -708,6 +842,127 @@ function EditorInner() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Copy / paste selected nodes as text. We hook the native copy/paste
+  // events (not keydown) so clipboardData is available synchronously —
+  // no async-clipboard permission prompt — and a tagged JSON envelope
+  // rides the OS clipboard, so a selection round-trips within a graph,
+  // across graphs/tabs, or pasted from chat. Both handlers stand down
+  // when focus is in a text field (or text is selected) so normal
+  // copy/paste of text still works.
+  useEffect(() => {
+    const inTextField = () => {
+      const el = document.activeElement as HTMLElement | null;
+      return (
+        !!el &&
+        (el.tagName === "INPUT" ||
+          el.tagName === "TEXTAREA" ||
+          el.isContentEditable)
+      );
+    };
+    const onCopy = (e: ClipboardEvent) => {
+      if (inTextField() || (window.getSelection()?.toString() ?? "")) return;
+      const sel = nodes.filter((n) => n.selected);
+      if (sel.length === 0) return;
+      const ids = new Set(sel.map((n) => n.id));
+      const payload = {
+        __hazyflow_clipboard: 1,
+        nodes: sel.map((n) => ({
+          id: n.id,
+          position: n.position,
+          data: {
+            label: n.data.label,
+            moduleID: n.data.moduleID,
+            manifest: n.data.manifest,
+          },
+        })),
+        edges: edges
+          .filter((ed) => ids.has(ed.source) && ids.has(ed.target))
+          .map((ed) => ({
+            source: ed.source,
+            target: ed.target,
+            sourceHandle: ed.sourceHandle,
+            targetHandle: ed.targetHandle,
+          })),
+        params: Object.fromEntries(sel.map((n) => [n.id, paramsByID[n.id] ?? {}])),
+      };
+      e.clipboardData?.setData("text/plain", JSON.stringify(payload));
+      e.preventDefault();
+    };
+    const onPaste = (e: ClipboardEvent) => {
+      if (inTextField()) return;
+      const text = e.clipboardData?.getData("text/plain") ?? "";
+      let payload: {
+        __hazyflow_clipboard?: number;
+        nodes?: { id: string; position: { x: number; y: number }; data?: HazyNodeData }[];
+        edges?: { source: string; target: string; sourceHandle?: string; targetHandle?: string }[];
+        params?: Record<string, Record<string, unknown>>;
+      };
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        return;
+      }
+      if (!payload || payload.__hazyflow_clipboard !== 1 || !payload.nodes?.length) return;
+      e.preventDefault();
+
+      // New IDs, derived against the live graph; a placeholder array keeps
+      // nextID incrementing across the batch so two pasted copies of the
+      // same drop don't collide.
+      const idMap = new Map<string, string>();
+      const working = [...nodes];
+      for (const cn of payload.nodes) {
+        const moduleID = cn.data?.moduleID ?? cn.id.replace(/_\d+$/, "");
+        const newID = nextID(working, moduleID);
+        idMap.set(cn.id, newID);
+        working.push({ id: newID } as FlowNode<HazyNodeData>);
+      }
+      const OFFSET = 48;
+      const newNodes: FlowNode<HazyNodeData>[] = payload.nodes.map((cn) => {
+        const moduleID = cn.data?.moduleID ?? cn.id.replace(/_\d+$/, "");
+        const manifest = manifestByID.get(moduleID) ?? cn.data?.manifest;
+        return {
+          id: idMap.get(cn.id)!,
+          type: "hazy",
+          position: { x: cn.position.x + OFFSET, y: cn.position.y + OFFSET },
+          selected: true,
+          data: { label: cn.data?.label ?? moduleID, moduleID, manifest },
+        };
+      });
+      const newEdges = (payload.edges ?? [])
+        .map((ed) => {
+          const s = idMap.get(ed.source);
+          const t = idMap.get(ed.target);
+          if (!s || !t) return null;
+          return {
+            id: `${s}.${ed.sourceHandle ?? "out"}->${t}.${ed.targetHandle ?? "in"}`,
+            source: s,
+            target: t,
+            sourceHandle: ed.sourceHandle,
+            targetHandle: ed.targetHandle,
+            style: { stroke: "var(--accent)", strokeWidth: 1.5 },
+          };
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null);
+      const newParams = Object.fromEntries(
+        payload.nodes.map((cn) => [idMap.get(cn.id)!, payload.params?.[cn.id] ?? {}]),
+      );
+
+      // Deselect everything, drop the clones in selected so they can be
+      // moved/aligned immediately.
+      setNodes((nds) => [...nds.map((n) => ({ ...n, selected: false })), ...newNodes]);
+      setEdges((eds) => [...eds, ...newEdges]);
+      setParamsByID((p) => ({ ...p, ...newParams }));
+      setSelectedID(newNodes.length === 1 ? newNodes[0].id : null);
+      setDirty(true);
+    };
+    window.addEventListener("copy", onCopy);
+    window.addEventListener("paste", onPaste);
+    return () => {
+      window.removeEventListener("copy", onCopy);
+      window.removeEventListener("paste", onPaste);
+    };
+  }, [nodes, edges, paramsByID, manifestByID]);
+
   const inspectorSelected = useMemo(
     () => nodes.find((n) => n.id === selectedID) ?? null,
     [nodes, selectedID],
@@ -745,6 +1000,9 @@ function EditorInner() {
       from_port: e.sourceHandle ?? "out",
       to: e.target,
       to_port: e.targetHandle ?? "in",
+      ...((e.data?.waypoints as { x: number; y: number }[] | undefined)?.length
+        ? { waypoints: e.data!.waypoints as { x: number; y: number }[] }
+        : {}),
     })),
     triggers: triggers.length > 0 ? triggers : undefined,
     visibility,
@@ -1510,9 +1768,12 @@ function EditorInner() {
           nodes={nodes}
           edges={coloredEdges}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onConnectStart={onConnectStart}
+          onConnectEnd={onConnectEnd}
           onInit={(inst) => (rfRef.current = inst)}
           onSelectionChange={(s) => {
             setSelectedID(s.nodes[0]?.id ?? null);
@@ -1842,21 +2103,30 @@ function EditorInner() {
       </div>
       {paletteOpen && (
         <QuickDropPalette
-          drops={manifests}
-          onClose={() => setPaletteOpen(false)}
-          onPick={(m) => {
-            // Use the most recent canvas-pointer position if we have
-            // one; otherwise drop into the viewport centre so a Ctrl+K
-            // hit before the mouse touched the canvas still lands
-            // somewhere visible.
-            const fallback = (() => {
-              const w = wrapperRef.current;
-              if (!w) return { x: window.innerWidth / 2, y: window.innerHeight / 2 };
-              const r = w.getBoundingClientRect();
-              return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-            })();
-            spawnDrop(m, lastPointer.current ?? fallback);
+          drops={connectFrom ? connectDrops : manifests}
+          onClose={() => {
             setPaletteOpen(false);
+            setConnectFrom(null);
+          }}
+          onPick={(m) => {
+            if (connectFrom) {
+              // Drag-off-pin: place at the drop point and auto-wire.
+              spawnDropConnected(m, connectFrom);
+            } else {
+              // Use the most recent canvas-pointer position if we have
+              // one; otherwise drop into the viewport centre so a Ctrl+K
+              // hit before the mouse touched the canvas still lands
+              // somewhere visible.
+              const fallback = (() => {
+                const w = wrapperRef.current;
+                if (!w) return { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+                const r = w.getBoundingClientRect();
+                return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+              })();
+              spawnDrop(m, lastPointer.current ?? fallback);
+            }
+            setPaletteOpen(false);
+            setConnectFrom(null);
           }}
         />
       )}
@@ -2009,6 +2279,23 @@ function ConnectionGate({
 
 // nextID generates a unique node ID for a freshly-dropped module by
 // counting existing nodes with the same module prefix.
+// mimeCompatible decides whether two ports can be wired together: an
+// untyped port (no MIME) accepts anything, otherwise the types must share
+// an entry or at least a top-level type (so text/plain ↔ text/markdown
+// count as compatible). Drives the drag-off-pin palette filter.
+function mimeCompatible(a?: string[], b?: string[]): boolean {
+  if (!a?.length || !b?.length) return true;
+  return a.some((x) => b.some((y) => x === y || x.split("/")[0] === y.split("/")[0]));
+}
+
+// pickPort returns the id of the first port whose MIME is compatible with
+// `otherMime`, falling back to the first declared port, then to the
+// engine's default handle id.
+function pickPort(ports: Port[] | undefined, otherMime: string[] | undefined, fallback: string): string {
+  if (!ports?.length) return fallback;
+  return (ports.find((p) => mimeCompatible(p.mime, otherMime)) ?? ports[0]).port;
+}
+
 function nextID(existing: FlowNode<HazyNodeData>[], moduleID: string): string {
   let i = existing.filter((n) => n.id.startsWith(moduleID)).length + 1;
   while (existing.some((n) => n.id === `${moduleID}_${i}`)) i++;
