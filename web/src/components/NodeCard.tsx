@@ -2,7 +2,7 @@ import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { AlertTriangle } from "lucide-react";
 import i18n from "../i18n";
 import { iconFor, isBrandedIcon } from "../icons";
-import type { Manifest, Port } from "../types";
+import type { Manifest, Port, JSONSchema } from "../types";
 
 // HazyNodeData is the shape we stash on each React Flow node. We carry
 // the live manifest so the canvas can render the same icon and label as
@@ -15,6 +15,14 @@ export type HazyNodeData = {
   // lintMessage is set when the last save flagged this node in a lint
   // issue (e.g. hardcoded secret). NodeCard shows a warning badge.
   lintMessage?: string;
+  // Inline param editing (#7): the node's live params and a per-key
+  // setter, injected by FlowEditor so the selected card can edit defaults
+  // directly on the canvas instead of only via the Inspector.
+  params?: Record<string, unknown>;
+  setParam?: (key: string, value: unknown) => void;
+  // Input port ids that currently have a wire — inline fields for these
+  // are hidden (the connection supplies the value).
+  connectedInputs?: string[];
 };
 
 // Layout: outputs always render as labeled rows on the right so every
@@ -49,6 +57,43 @@ export function HazyNode({ data, selected }: NodeProps) {
   // they emit. Sources/triggers declare none and fall back to the bare
   // "in" dot below, so we don't splatter a meaningless "in" label on them.
   const hasDeclaredInputs = !!d.manifest?.inputs?.length;
+
+  // Inline default editing (#7): on the SELECTED card, a compact field for
+  // each input PORT that maps to a primitive param and isn't currently
+  // wired — the Blueprint "unconnected pins get a default widget" idea.
+  // Once a wire connects the port, the field disappears (the wire wins).
+  // Advanced fields and rich types (arrays/objects) stay in the Inspector.
+  const isAdvanced = (s: JSONSchema) => !!(s.x_advanced || s["x-advanced"]);
+  const isPrimitive = (s: JSONSchema) =>
+    s.type === "string" ||
+    s.type === "integer" ||
+    s.type === "number" ||
+    s.type === "boolean";
+  const schemaProps = d.manifest?.params_schema?.properties;
+  const connectedInputs = d.connectedInputs ?? [];
+  const inputPortIds = new Set((d.manifest?.inputs ?? []).map((p) => p.port));
+  const required = d.manifest?.params_schema?.required ?? [];
+  // Two sources of inline fields:
+  //   1. an unconnected input PORT backed by a primitive param (Claude's
+  //      Prompt) — hidden once wired.
+  //   2. a REQUIRED primitive param that has no input port (a mandatory
+  //      literal you must set) — e.g. the Text source's `text`. Covers
+  //      input-less source drops without re-cluttering param-heavy ones.
+  const candidates = [
+    ...(d.manifest?.inputs ?? [])
+      .filter((p) => !connectedInputs.includes(p.port))
+      .map((p) => ({ key: p.port, label: p.label ?? p.port, schema: schemaProps?.[p.port] })),
+    ...required
+      .filter((k) => !inputPortIds.has(k))
+      .map((k) => ({ key: k, label: schemaProps?.[k]?.title ?? k, schema: schemaProps?.[k] })),
+  ];
+  const paramFields =
+    selected && schemaProps
+      ? candidates.filter(
+          (f): f is { key: string; label: string; schema: JSONSchema } =>
+            !!f.schema && !isAdvanced(f.schema) && isPrimitive(f.schema),
+        )
+      : [];
 
   const statusClass = d.status ? " status-" + d.status : "";
 
@@ -89,6 +134,59 @@ export function HazyNode({ data, selected }: NodeProps) {
           <div className="label">{d.label}</div>
         </div>
       </div>
+
+      {paramFields.length > 0 && (
+        // nodrag: keep React Flow from dragging the node while the user
+        // interacts with a field. nopan/nowheel similarly let the field
+        // behave like a normal input inside the canvas.
+        <div className="hz-node-params nodrag nowheel">
+          {paramFields.map(({ key, label, schema: s }) => {
+            const val = d.params?.[key] ?? s.default ?? "";
+            const set = (v: unknown) => d.setParam?.(key, v);
+            const multiline = s.type === "string" && s.format === "multiline";
+            return (
+              <label key={key} className="hz-param">
+                <span className="hz-param-label">{label}</span>
+                {s.enum ? (
+                  <select value={String(val)} onChange={(e) => set(e.target.value)}>
+                    {s.enum.map((o) => (
+                      <option key={String(o)} value={String(o)}>
+                        {String(o)}
+                      </option>
+                    ))}
+                  </select>
+                ) : s.type === "boolean" ? (
+                  <input
+                    type="checkbox"
+                    checked={!!val}
+                    onChange={(e) => set(e.target.checked)}
+                  />
+                ) : s.type === "integer" || s.type === "number" ? (
+                  <input
+                    type="number"
+                    value={val === "" ? "" : Number(val)}
+                    onChange={(e) =>
+                      set(e.target.value === "" ? "" : Number(e.target.value))
+                    }
+                  />
+                ) : multiline ? (
+                  <textarea
+                    rows={2}
+                    value={String(val)}
+                    onChange={(e) => set(e.target.value)}
+                  />
+                ) : (
+                  <input
+                    type="text"
+                    value={String(val)}
+                    onChange={(e) => set(e.target.value)}
+                  />
+                )}
+              </label>
+            );
+          })}
+        </div>
+      )}
 
       <div className="hz-ports">
         {hasDeclaredInputs && (

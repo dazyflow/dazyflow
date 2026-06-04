@@ -975,6 +975,47 @@ function EditorInner() {
     setDirty(true);
   };
 
+  // Per-key param setter for inline editing on the card (#7). Mirrors the
+  // Inspector's onParamsChange but merges a single key so the two views
+  // stay in sync on the same paramsByID store.
+  const setNodeParam = useCallback(
+    (id: string, key: string, value: unknown) => {
+      setParamsByID((p) => ({ ...p, [id]: { ...(p[id] ?? {}), [key]: value } }));
+      setDirty(true);
+    },
+    [],
+  );
+  // Inject live params + the per-key setter into each node's data so the
+  // selected card can render inline fields. Derived (like coloredEdges) so
+  // it recomputes when params change; base `nodes` stays the source of
+  // truth for selection/position via onNodesChange.
+  // Which input ports are wired, per node — drives hiding an inline field
+  // once its port has a connection.
+  const connectedInputsByNode = useMemo(() => {
+    const m = new Map<string, string[]>();
+    for (const e of edges) {
+      if (!e.target || !e.targetHandle) continue;
+      const arr = m.get(e.target) ?? [];
+      arr.push(e.targetHandle);
+      m.set(e.target, arr);
+    }
+    return m;
+  }, [edges]);
+
+  const displayNodes = useMemo<FlowNode<HazyNodeData>[]>(
+    () =>
+      nodes.map((n) => ({
+        ...n,
+        data: {
+          ...n.data,
+          params: paramsByID[n.id],
+          setParam: (key: string, value: unknown) => setNodeParam(n.id, key, value),
+          connectedInputs: connectedInputsByNode.get(n.id) ?? [],
+        },
+      })),
+    [nodes, paramsByID, setNodeParam, connectedInputsByNode],
+  );
+
   const onParamsChange = (id: string, params: Record<string, unknown>) => {
     setParamsByID((p) => ({ ...p, [id]: params }));
     setDirty(true);
@@ -1765,7 +1806,7 @@ function EditorInner() {
           </div>
         )}
         <ReactFlow
-          nodes={nodes}
+          nodes={displayNodes}
           edges={coloredEdges}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}

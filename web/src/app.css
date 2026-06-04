@@ -3007,6 +3007,42 @@ button.danger-outline:hover:not(:disabled) {
   color: var(--ink);
   line-height: 1.2;
 }
+/* Inline param editing (#7): a compact form revealed on the selected card.
+   Sits between the title and the port rows. Quiet labels, small inputs. */
+.hz-node-params {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px dashed var(--border);
+}
+.hz-param {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.hz-param-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.hz-node-params input,
+.hz-node-params textarea,
+.hz-node-params select {
+  font-size: 12px;
+  padding: 4px 6px;
+  border-radius: var(--r-1);
+}
+.hz-node-params textarea {
+  resize: vertical;
+  min-height: 34px;
+}
+.hz-param input[type="checkbox"] {
+  width: auto;
+  align-self: flex-start;
+}
 
 /* Live xterm.js console inside the inspector. Fixed height so the
    terminal has a stable viewport to render into; xterm handles

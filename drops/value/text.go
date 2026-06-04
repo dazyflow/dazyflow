@@ -39,7 +39,7 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs:        []core.Port{{Port: "out", Label: "Text", MIME: []string{"text/plain"}}},
-			ParamsSchema:   json.RawMessage(`{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}`),
+			ParamsSchema:   json.RawMessage(`{"type":"object","properties":{"text":{"type":"string","format":"multiline","title":"Text"}},"required":["text"]}`),
 			Idempotent:     true,
 		},
 		Execute: executeText,
