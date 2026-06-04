@@ -31,7 +31,7 @@ func TestForEach_E2E_WebhookToIteration(t *testing.T) {
 		Nodes: []core.Node{
 			{ID: "inbound", Module: "webhook_input"},
 			{ID: "iter", Module: "for_each", Params: map[string]any{
-				"step_module": "sleep",
+				"step_module": "delay",
 				"step_params": map[string]any{"ms": 1},
 				"item_port":   "in",
 				"concurrency": 3,

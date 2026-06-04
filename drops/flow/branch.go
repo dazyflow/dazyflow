@@ -46,6 +46,10 @@ func init() {
 			},
 			ParamsSchema: json.RawMessage(`{"type":"object"}`),
 			Idempotent:   true,
+			// Pure router: pass would emit on every success regardless of which
+			// port the payload took, so a node wired to it would fire on BOTH
+			// branches — defeating the routing. Route via 'in' → then/else.
+			NoPassthrough: true,
 		},
 		Execute: executeBranch,
 	})

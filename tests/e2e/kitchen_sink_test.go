@@ -220,8 +220,8 @@ func TestKitchenSink_AllPoliciesTogether(t *testing.T) {
 		Nodes: []core.Node{
 			{ID: "flaky", Module: "flaky"},
 			{ID: "explode", Module: "explode"},
-			{ID: "handler", Module: "sleep", Params: map[string]any{"ms": 5}},
-			{ID: "ignored", Module: "sleep", Params: map[string]any{"ms": 5}},
+			{ID: "handler", Module: "delay", Params: map[string]any{"ms": 5}},
+			{ID: "ignored", Module: "delay", Params: map[string]any{"ms": 5}},
 			{ID: "merger", Module: "merge"},
 			{ID: "reader", Module: "file_read", Params: map[string]any{"path": "seed.txt"}},
 			{ID: "writer", Module: "file_write", Params: map[string]any{"path": "out.txt"}},
@@ -377,8 +377,8 @@ func TestKitchenSink_ConcurrentGraphsIsolated(t *testing.T) {
 				Tenant:    "acme",
 				Workspace: "ws1",
 				Nodes: []core.Node{
-					{ID: "a", Module: "sleep", Params: map[string]any{"ms": 10}},
-					{ID: "b", Module: "sleep", Params: map[string]any{"ms": 10}},
+					{ID: "a", Module: "delay", Params: map[string]any{"ms": 10}},
+					{ID: "b", Module: "delay", Params: map[string]any{"ms": 10}},
 				},
 				Edges: []core.Edge{
 					{From: "a", FromPort: "out", To: "b", ToPort: "in"},
@@ -416,7 +416,7 @@ func TestKitchenSink_GraphRecordReflectsOutcome(t *testing.T) {
 			buildFunc: func(h *fullStack) core.Graph {
 				return core.Graph{
 					ID: "happy", Tenant: "acme", Workspace: "ws1",
-					Nodes: []core.Node{{ID: "a", Module: "sleep", Params: map[string]any{"ms": 1}}},
+					Nodes: []core.Node{{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}}},
 				}
 			},
 			want: core.JobStatusSucceeded,
@@ -438,7 +438,7 @@ func TestKitchenSink_GraphRecordReflectsOutcome(t *testing.T) {
 					ID: "rescued", Tenant: "acme", Workspace: "ws1",
 					Nodes: []core.Node{
 						{ID: "x", Module: "explode"},
-						{ID: "fb", Module: "sleep", Params: map[string]any{"ms": 1}},
+						{ID: "fb", Module: "delay", Params: map[string]any{"ms": 1}},
 					},
 					Edges: []core.Edge{
 						{From: "x", FromPort: "out", To: "fb", ToPort: "in", OnError: core.OnErrorFallback},

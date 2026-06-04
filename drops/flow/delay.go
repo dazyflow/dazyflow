@@ -14,13 +14,14 @@ import (
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:          "sleep",
+			ID:          "delay",
 			Version:     "1.0",
-			Label:       "Sleep",
+			Label:       "Delay",
+			Aliases:     []string{"sleep"}, // renamed from Sleep; old graphs still resolve
 			Icon:        "timer",
 			Category:    "flow_control",
 			Provider:    "internal",
-			Tags:        []string{"timing", "delay", "passthrough"},
+			Tags:        []string{"timing", "delay", "sleep", "wait", "passthrough"},
 			Description: "Pause for a configurable duration. Forwards any input on the in port to out (or emits a control signal if input is empty).",
 			Summary:     "Hold the flow for a fixed number of milliseconds before forwarding the input downstream.",
 			Examples: []core.ParamsExample{
@@ -43,11 +44,11 @@ func init() {
 			Idempotent:  true,
 			RetryPolicy: core.RetryExponentialBackoff,
 		},
-		Execute: executeSleep,
+		Execute: executeDelay,
 	})
 }
 
-func executeSleep(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
+func executeDelay(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
 	ms, err := paramInt(job.Params, "ms")
 	if err != nil {
 		return params.Err(job, "bad_param", err.Error()), nil
@@ -90,7 +91,7 @@ func executeSleep(ctx context.Context, job core.Job, progress chan<- core.Progre
 }
 
 // passthrough always emits on "out" so downstream nodes are activated
-// even when sleep is used as a pure delay (no input). When upstream did
+// even when the delay is used as a pure pause (no input). When upstream did
 // feed something in we forward it; otherwise we emit a control-signal
 // ref so the edge classifier sees an active output.
 func passthrough(input map[string]core.Ref) map[string]core.Ref {

@@ -135,7 +135,7 @@ func TestGRPC_SaveListLoadRun(t *testing.T) {
 	saveResp, err := gs.SaveGraph(ctx, &controlpb.SaveGraphRequest{Graph: &controlpb.Graph{
 		Id: "demo", Tenant: "acme", Workspace: "ws1",
 		Nodes: []*controlpb.Node{
-			{Id: "a", Module: "sleep", Params: []byte(`{"ms":10}`)},
+			{Id: "a", Module: "delay", Params: []byte(`{"ms":10}`)},
 		},
 	}})
 	if err != nil {
@@ -265,7 +265,7 @@ func TestGRPC_RunGraphByRef(t *testing.T) {
 
 	if _, err := gs.SaveGraph(ctx, &controlpb.SaveGraphRequest{Graph: &controlpb.Graph{
 		Id: "ref-run", Tenant: "acme", Workspace: "ws1",
-		Nodes: []*controlpb.Node{{Id: "a", Module: "sleep", Params: []byte(`{"ms":5}`)}},
+		Nodes: []*controlpb.Node{{Id: "a", Module: "delay", Params: []byte(`{"ms":5}`)}},
 	}}); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -416,7 +416,7 @@ func TestGRPC_ListModules(t *testing.T) {
 	for _, m := range resp.Drops {
 		seen[m.Id] = true
 	}
-	for _, want := range []string{"sleep", "merge", "file_read", "file_write"} {
+	for _, want := range []string{"delay", "merge", "file_read", "file_write"} {
 		if !seen[want] {
 			t.Errorf("missing module %q in: %v", want, seen)
 		}

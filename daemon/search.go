@@ -64,6 +64,11 @@ func searchManifests(manifests map[string]core.Manifest, q DropSearch) []core.Ma
 // filtersPass checks the category/provider/tag filters. Each filter is
 // OR-within (matches any value); across fields the conditions AND.
 func filtersPass(m core.Manifest, q DropSearch) bool {
+	// Hidden manifests (e.g. back-compat alias entries) resolve for
+	// validation/execution but never appear in the catalog/palette.
+	if m.Hidden {
+		return false
+	}
 	if len(q.Categories) > 0 && !slicesContainsIgnoreCase(q.Categories, m.Category) {
 		return false
 	}

@@ -130,7 +130,7 @@ func TestSkip_FailureDoesNotPropagateThroughSkipEdge(t *testing.T) {
 		ID: "skip-single", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
 			{ID: "src", Module: "boom"},
-			{ID: "dst", Module: "sleep", Params: map[string]any{"ms": 5}},
+			{ID: "dst", Module: "delay", Params: map[string]any{"ms": 5}},
 		},
 		Edges: []core.Edge{
 			{From: "src", FromPort: "out", To: "dst", ToPort: "in", OnError: core.OnErrorSkip},
@@ -167,8 +167,8 @@ func TestSkip_AbortEdgeStillPropagatesEvenWithSkipSibling(t *testing.T) {
 		ID: "skip-mixed", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
 			{ID: "src", Module: "boom"},
-			{ID: "skipped", Module: "sleep", Params: map[string]any{"ms": 5}},
-			{ID: "aborted", Module: "sleep", Params: map[string]any{"ms": 5}},
+			{ID: "skipped", Module: "delay", Params: map[string]any{"ms": 5}},
+			{ID: "aborted", Module: "delay", Params: map[string]any{"ms": 5}},
 		},
 		Edges: []core.Edge{
 			{From: "src", FromPort: "out", To: "skipped", ToPort: "in", OnError: core.OnErrorSkip},
@@ -267,8 +267,8 @@ func TestSkip_ChainOfSkips_AllRun(t *testing.T) {
 		ID: "skip-chain", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
 			{ID: "boom", Module: "boom"},
-			{ID: "s1", Module: "sleep", Params: map[string]any{"ms": 5}},
-			{ID: "s2", Module: "sleep", Params: map[string]any{"ms": 5}},
+			{ID: "s1", Module: "delay", Params: map[string]any{"ms": 5}},
+			{ID: "s2", Module: "delay", Params: map[string]any{"ms": 5}},
 		},
 		Edges: []core.Edge{
 			{From: "boom", FromPort: "out", To: "s1", ToPort: "in", OnError: core.OnErrorSkip},

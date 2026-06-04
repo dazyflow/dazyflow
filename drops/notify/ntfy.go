@@ -42,7 +42,7 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				{Port: "body", Label: "Message text (overrides params.message)"},
+				{Port: "body", Label: "Message"},
 			},
 			Outputs: []core.Port{
 				{Port: "meta", Label: "Delivery metadata"},

@@ -126,8 +126,8 @@ func TestE2E_AuthSaveLoadRun(t *testing.T) {
 		Tenant:    "acme",
 		Workspace: "ws1",
 		Nodes: []core.Node{
-			{ID: "warmup", Module: "sleep", Params: map[string]any{"ms": 10}},
-			{ID: "main", Module: "sleep", Params: map[string]any{"ms": 20}},
+			{ID: "warmup", Module: "delay", Params: map[string]any{"ms": 10}},
+			{ID: "main", Module: "delay", Params: map[string]any{"ms": 20}},
 		},
 		Edges: []core.Edge{
 			{From: "warmup", FromPort: "out", To: "main", ToPort: "in"},
@@ -210,7 +210,7 @@ func TestE2E_CrossTenantIsolation(t *testing.T) {
 	// Alice saves a graph in acme.
 	graph := core.Graph{
 		ID: "secret-pipeline", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "a", Module: "sleep", Params: map[string]any{"ms": 1}}},
+		Nodes: []core.Node{{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}}},
 	}
 	if _, err := svc.SaveGraph(ctx, alice, graph); err != nil {
 		t.Fatalf("SaveGraph as alice: %v", err)
@@ -241,14 +241,14 @@ func TestE2E_GraphHistoryAndPromotion(t *testing.T) {
 
 	g := core.Graph{
 		ID: "etl", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "v1", Module: "sleep", Params: map[string]any{"ms": 1}}},
+		Nodes: []core.Node{{ID: "v1", Module: "delay", Params: map[string]any{"ms": 1}}},
 	}
 	c1, err := svc.SaveGraph(ctx, alice, g)
 	if err != nil {
 		t.Fatalf("save v1: %v", err)
 	}
 
-	g.Nodes = []core.Node{{ID: "v2", Module: "sleep", Params: map[string]any{"ms": 1}}}
+	g.Nodes = []core.Node{{ID: "v2", Module: "delay", Params: map[string]any{"ms": 1}}}
 	c2, err := svc.SaveGraph(ctx, alice, g)
 	if err != nil {
 		t.Fatalf("save v2: %v", err)
@@ -299,8 +299,8 @@ func TestE2E_InvalidGraphRejected(t *testing.T) {
 	g := core.Graph{
 		ID: "bad", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{
-			{ID: "a", Module: "sleep", Params: map[string]any{"ms": 1}},
-			{ID: "b", Module: "sleep", Params: map[string]any{"ms": 1}},
+			{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}},
+			{ID: "b", Module: "delay", Params: map[string]any{"ms": 1}},
 		},
 		Edges: []core.Edge{
 			{From: "a", FromPort: "out", To: "b", ToPort: "in"},
@@ -322,7 +322,7 @@ func TestE2E_PrincipalLacksPermission(t *testing.T) {
 
 	g := core.Graph{
 		ID: "x", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "a", Module: "sleep", Params: map[string]any{"ms": 1}}},
+		Nodes: []core.Node{{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}}},
 	}
 	if _, err := svc.SaveGraph(ctx, alice, g); !errors.Is(err, core.ErrUnauthorized) {
 		t.Errorf("save without graph:edit: err = %v, want ErrUnauthorized", err)
@@ -368,7 +368,7 @@ func TestE2E_ProgressStreaming(t *testing.T) {
 
 	g := core.Graph{
 		ID: "watched", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "a", Module: "sleep", Params: map[string]any{"ms": 100}}},
+		Nodes: []core.Node{{ID: "a", Module: "delay", Params: map[string]any{"ms": 100}}},
 	}
 	if _, err := svc.SaveGraph(ctx, alice, g); err != nil {
 		t.Fatalf("Save: %v", err)

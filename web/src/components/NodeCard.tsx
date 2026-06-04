@@ -127,26 +127,34 @@ export function HazyNode({ data, selected }: NodeProps) {
   const connectedOutputs = d.connectedOutputs ?? [];
   const inputPortIds = new Set((d.manifest?.inputs ?? []).map((p) => p.port));
   const required = d.manifest?.params_schema?.required ?? [];
-  // Two sources of inline fields:
-  //   1. an unconnected input PORT backed by a primitive param (Claude's
-  //      Prompt) — hidden once wired.
-  //   2. a REQUIRED primitive param that has no input port (a mandatory
-  //      literal you must set) — e.g. the Text source's `text`. Covers
-  //      input-less source drops without re-cluttering param-heavy ones.
-  const candidates = [
-    ...(d.manifest?.inputs ?? [])
-      .filter((p) => !connectedInputs.includes(p.port))
-      .map((p) => ({ key: p.port, label: p.label ?? p.port, schema: schemaProps?.[p.port] })),
-    ...required
-      .filter((k) => !inputPortIds.has(k))
-      .map((k) => ({ key: k, label: schemaProps?.[k]?.title ?? k, schema: schemaProps?.[k] })),
-  ];
-  const paramFields =
+  const inlineEligible = (s?: JSONSchema): s is JSONSchema =>
+    !!s && !isAdvanced(s) && isPrimitive(s);
+
+  // Inline value editors come from two sources:
+  //   1. Unconnected input PORTS backed by a primitive param (e.g. HTTP
+  //      Request's url). These render their editor right on the pin row —
+  //      Unreal-style — and stay visible so values read at a glance; the
+  //      editor disappears once the pin is wired (the connection wins).
+  //   2. REQUIRED primitive params with NO input port (a mandatory literal,
+  //      e.g. the Text source's `text`). There's no pin to sit on, so they
+  //      stay in a small section shown only for the sole-selected node.
+  const inlineByPort: Record<string, JSONSchema> = {};
+  if (schemaProps) {
+    for (const p of d.manifest?.inputs ?? []) {
+      if (connectedInputs.includes(p.port)) continue;
+      const s = schemaProps[p.port];
+      if (inlineEligible(s)) inlineByPort[p.port] = s;
+    }
+  }
+  const nonPortFields =
     d.inlineEditable && schemaProps
-      ? candidates.filter(
-          (f): f is { key: string; label: string; schema: JSONSchema } =>
-            !!f.schema && !isAdvanced(f.schema) && isPrimitive(f.schema),
-        )
+      ? required
+          .filter((k) => !inputPortIds.has(k))
+          .map((k) => ({ key: k, label: schemaProps[k]?.title ?? k, schema: schemaProps[k] }))
+          .filter(
+            (f): f is { key: string; label: string; schema: JSONSchema } =>
+              inlineEligible(f.schema),
+          )
       : [];
 
   const statusClass = d.status ? " status-" + d.status : "";
@@ -156,8 +164,10 @@ export function HazyNode({ data, selected }: NodeProps) {
   // box, no title. A/B pins on the left, Result on the right; unconnected-pin
   // defaults are edited in the Inspector (deliberately kept off the chip).
   // Falls through to the standard card for any logic drop that isn't the
-  // two-operand shape these primitives use.
-  if (d.manifest?.category === "logic" && inputs.length >= 2) {
+  // two-operand shape these primitives use — e.g. In Range, whose three pins
+  // (Value/Min/Max) don't fit the chip's fixed A/B layout, so it renders as a
+  // normal node card.
+  if (d.manifest?.category === "logic" && inputs.length === 2) {
     return (
       <OperatorChip
         d={d}
@@ -222,59 +232,21 @@ export function HazyNode({ data, selected }: NodeProps) {
         </div>
       </div>
 
-      {paramFields.length > 0 && (
+      {nonPortFields.length > 0 && (
         // nodrag: keep React Flow from dragging the node while the user
-        // interacts with a field. nopan/nowheel similarly let the field
-        // behave like a normal input inside the canvas.
+        // interacts with a field. nowheel similarly lets the field behave
+        // like a normal input inside the canvas.
         <div className="hz-node-params nodrag nowheel">
-          {paramFields.map(({ key, label, schema: s }) => {
-            const val = d.params?.[key] ?? s.default ?? "";
-            const set = (v: unknown) => d.setParam?.(key, v);
-            const multiline = s.type === "string" && s.format === "multiline";
-            return (
-              <label key={key} className="hz-param">
-                <span className="hz-param-label">{label}</span>
-                {s.enum ? (
-                  <select
-                    value={String(val ?? s.default ?? "")}
-                    onChange={(e) => set(e.target.value)}
-                  >
-                    {s.enum.map((o, i) => (
-                      <option key={String(o)} value={String(o)}>
-                        {s.enumNames?.[i] ?? String(o)}
-                      </option>
-                    ))}
-                  </select>
-                ) : s.type === "boolean" ? (
-                  <input
-                    type="checkbox"
-                    checked={!!val}
-                    onChange={(e) => set(e.target.checked)}
-                  />
-                ) : s.type === "integer" || s.type === "number" ? (
-                  <input
-                    type="number"
-                    value={val === "" ? "" : Number(val)}
-                    onChange={(e) =>
-                      set(e.target.value === "" ? "" : Number(e.target.value))
-                    }
-                  />
-                ) : multiline ? (
-                  <textarea
-                    rows={2}
-                    value={String(val)}
-                    onChange={(e) => set(e.target.value)}
-                  />
-                ) : (
-                  <input
-                    type="text"
-                    value={String(val)}
-                    onChange={(e) => set(e.target.value)}
-                  />
-                )}
-              </label>
-            );
-          })}
+          {nonPortFields.map(({ key, label, schema: s }) => (
+            <label key={key} className="hz-param">
+              <span className="hz-param-label">{label}</span>
+              <ParamInput
+                schema={s}
+                value={d.params?.[key] ?? s.default ?? ""}
+                onChange={(v) => d.setParam?.(key, v)}
+              />
+            </label>
+          ))}
         </div>
       )}
 
@@ -284,28 +256,39 @@ export function HazyNode({ data, selected }: NodeProps) {
             {inputs.map((p) => {
               const c = portColor(p.mime);
               const isPass = p.port === "pass";
+              // Inline value editor for an unconnected, primitive-backed pin —
+              // sits right after the name, Unreal-style (see inlineByPort).
+              const field = inlineByPort[p.port];
               return (
-                <div
-                  key={"il-" + p.port}
-                  className={"hz-port-label hz-port-in" + (isPass ? " hz-pass-row" : "")}
-                >
-                  <Handle
-                    type="target"
-                    position={Position.Left}
-                    id={p.port}
-                    className={isPass ? "hz-pass-pin" : undefined}
-                    style={
-                      isPass
-                        ? passPinStyle("in")
-                        : dotStyle(c, connectedInputs.includes(p.port), "in")
-                    }
-                    title={isPass ? i18n.t("nodeCard.passThrough") : portTooltip(p)}
-                  />
-                  {p.label ?? p.port}
-                  {p.required && (
-                    <span className="hz-req" title={i18n.t("nodeCard.portRequired")}>
-                      *
-                    </span>
+                <div key={"il-" + p.port} className="hz-port-in-row">
+                  <div className={"hz-port-label hz-port-in" + (isPass ? " hz-pass-row" : "")}>
+                    <Handle
+                      type="target"
+                      position={Position.Left}
+                      id={p.port}
+                      className={isPass ? "hz-pass-pin" : undefined}
+                      style={
+                        isPass
+                          ? passPinStyle("in")
+                          : dotStyle(c, connectedInputs.includes(p.port), "in")
+                      }
+                      title={isPass ? i18n.t("nodeCard.passThrough") : portTooltip(p)}
+                    />
+                    {p.label ?? p.port}
+                    {p.required && (
+                      <span className="hz-req" title={i18n.t("nodeCard.portRequired")}>
+                        *
+                      </span>
+                    )}
+                  </div>
+                  {field && (
+                    <div className="hz-port-inline nodrag nowheel">
+                      <ParamInput
+                        schema={field}
+                        value={d.params?.[p.port] ?? field.default ?? ""}
+                        onChange={(v) => d.setParam?.(p.port, v)}
+                      />
+                    </div>
                   )}
                 </div>
               );
@@ -372,6 +355,52 @@ export function HazyNode({ data, selected }: NodeProps) {
         </div>
       )}
     </div>
+  );
+}
+
+// ParamInput renders the editor for one primitive param. The control follows
+// the schema: enum → select, boolean → checkbox, integer/number → number
+// input, multiline string → textarea, otherwise a text input. Shared by the
+// on-pin inline editors and the param-only section so the two never drift.
+function ParamInput({
+  schema: s,
+  value,
+  onChange,
+}: {
+  schema: JSONSchema;
+  value: unknown;
+  onChange: (v: unknown) => void;
+}) {
+  if (s.enum) {
+    return (
+      <select value={String(value ?? s.default ?? "")} onChange={(e) => onChange(e.target.value)}>
+        {s.enum.map((o, i) => (
+          <option key={String(o)} value={String(o)}>
+            {s.enumNames?.[i] ?? String(o)}
+          </option>
+        ))}
+      </select>
+    );
+  }
+  if (s.type === "boolean") {
+    return <input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} />;
+  }
+  if (s.type === "integer" || s.type === "number") {
+    return (
+      <input
+        type="number"
+        value={value === "" || value == null ? "" : Number(value)}
+        onChange={(e) => onChange(e.target.value === "" ? "" : Number(e.target.value))}
+      />
+    );
+  }
+  if (s.type === "string" && s.format === "multiline") {
+    return (
+      <textarea rows={2} value={String(value ?? "")} onChange={(e) => onChange(e.target.value)} />
+    );
+  }
+  return (
+    <input type="text" value={String(value ?? "")} onChange={(e) => onChange(e.target.value)} />
   );
 }
 

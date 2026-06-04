@@ -46,7 +46,7 @@ func TestScheduler_FiresGraphWithCronTrigger(t *testing.T) {
 	// Seed a graph that fires every minute and contains a single sleep.
 	graph := core.Graph{
 		ID: "hourly", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "tick", Module: "sleep", Params: map[string]any{"ms": 1}}},
+		Nodes: []core.Node{{ID: "tick", Module: "delay", Params: map[string]any{"ms": 1}}},
 		Triggers: []core.GraphTrigger{
 			{Type: "cron", Cron: "* * * * *"}, // every minute
 		},
@@ -118,7 +118,7 @@ func TestScheduler_IgnoresGraphWithoutTrigger(t *testing.T) {
 	// A graph with no triggers must not be picked up.
 	_, _ = wsStore.Save(core.Graph{
 		ID: "manual", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "a", Module: "sleep", Params: map[string]any{"ms": 1}}},
+		Nodes: []core.Node{{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}}},
 	}, "test")
 
 	sched := daemon.NewScheduler(svc)
@@ -144,7 +144,7 @@ func TestScheduler_RejectsBadCron(t *testing.T) {
 	}
 	_, _ = wsStore.Save(core.Graph{
 		ID: "bad-cron", Tenant: "acme", Workspace: "ws1",
-		Nodes:    []core.Node{{ID: "a", Module: "sleep", Params: map[string]any{"ms": 1}}},
+		Nodes:    []core.Node{{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}}},
 		Triggers: []core.GraphTrigger{{Type: "cron", Cron: "this is not a cron expression"}},
 	}, "test")
 
@@ -187,7 +187,7 @@ func TestScheduler_ImpossibleCronDateDoesNotFire(t *testing.T) {
 
 	_, _ = wsStore.Save(core.Graph{
 		ID: "feb30", Tenant: "acme", Workspace: "ws1",
-		Nodes:    []core.Node{{ID: "a", Module: "sleep", Params: map[string]any{"ms": 1}}},
+		Nodes:    []core.Node{{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}}},
 		Triggers: []core.GraphTrigger{{Type: "cron", Cron: "0 0 30 2 *"}}, // Feb 30: never
 	}, "test")
 

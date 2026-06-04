@@ -2880,17 +2880,6 @@ button.danger-outline:hover:not(:disabled) {
   line-height: 16px;
   white-space: nowrap;
 }
-/* Chevrons inherit the label's ink-soft color but stay subtle via
-   opacity. Inputs: ">" to the left of the left-aligned name; outputs:
-   ">" to the right of the right-aligned name — both point inward. */
-.hz-port-label.hz-port-in::before {
-  content: "> ";
-  opacity: 0.55;
-}
-.hz-port-label.hz-port-out::after {
-  content: " >";
-  opacity: 0.55;
-}
 /* Universal value-passthrough pin (port id "pass"): a triangle (Unreal
    exec-pin look) instead of a round data dot, so it reads as "threads a
    value through the node" rather than a typed data port. Neutral ink colour
@@ -2910,6 +2899,44 @@ button.danger-outline:hover:not(:disabled) {
 .hz-port-label.hz-pass-row {
   font-style: italic;
   opacity: 0.7;
+}
+/* Input pin row: the pin name and its inline value editor share one line,
+   the editor sitting right after the name (Unreal-style). The name stays
+   nowrap so the dot/label keep their place. Rows with no inline editor
+   collapse to just the label. */
+.hz-port-in-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.hz-port-inline {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+/* field-sizing lets each control shrink/grow to its own value, so the box
+   stays as small as the text it holds (Unreal-style). min-width keeps an
+   empty box clickable; max-width stops a long value from blowing out the
+   node — past it the field scrolls internally. */
+.hz-port-inline input,
+.hz-port-inline select,
+.hz-port-inline textarea {
+  field-sizing: content;
+  width: auto;
+  min-width: 3ch;
+  max-width: 24ch;
+  box-sizing: border-box;
+  font-size: 11px;
+  padding: 2px 5px;
+  border-radius: var(--r-1);
+}
+.hz-port-inline textarea {
+  resize: vertical;
+  min-height: 26px;
+}
+.hz-port-inline input[type="checkbox"] {
+  min-width: 0;
+  width: auto;
 }
 .hz-node:hover {
   border-color: var(--accent);

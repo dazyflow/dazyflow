@@ -1350,7 +1350,7 @@ function EditorInner() {
   // containing the selection + its internal edges, replace the selection in
   // the parent with one `subgraph` node, and rewire the boundary edges via
   // input_map/output_map. Boundary inputs use a seed-carrier node (module
-  // sleep, never runs) whose seeded `in` port feeds the real consumer — the
+  // delay, never runs) whose seeded `in` port feeds the real consumer — the
   // pattern the engine's seed mechanism requires (verified end-to-end).
   const collapseSelection = useCallback(async () => {
     if (!token || !id) return;
@@ -1396,7 +1396,7 @@ function EditorInner() {
       const carrierId = `__in_${i}`;
       childNodes.push({
         id: carrierId,
-        module: "sleep",
+        module: "delay",
         params: { ms: 0 },
         position: { x: -260, y: i * 120 },
       });

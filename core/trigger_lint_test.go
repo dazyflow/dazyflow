@@ -25,7 +25,7 @@ func TestLintTriggers_FlagsBadConfigs(t *testing.T) {
 		{
 			name: "valid cron — no warning",
 			graph: Graph{
-				Nodes:    []Node{{ID: "a", Module: "sleep"}},
+				Nodes:    []Node{{ID: "a", Module: "delay"}},
 				Triggers: []GraphTrigger{{Type: "cron", Cron: "0 9 * * *"}},
 			},
 		},
@@ -102,7 +102,7 @@ func TestLintTriggers_FlagsBadConfigs(t *testing.T) {
 		{
 			name: "public form with no webhook_input node",
 			graph: Graph{
-				Nodes:    []Node{{ID: "x", Module: "sleep"}},
+				Nodes:    []Node{{ID: "x", Module: "delay"}},
 				Triggers: []GraphTrigger{{Type: "webhook", Secret: "s", PublicForm: true}},
 			},
 			wantCode: "trigger_form_no_sink",
@@ -142,7 +142,7 @@ func TestLintTriggers_FlagsBadConfigs(t *testing.T) {
 // helper), since that's what the save path calls.
 func TestLintTriggers_WiredThroughLintGraph(t *testing.T) {
 	g := Graph{
-		Nodes:    []Node{{ID: "a", Module: "sleep"}},
+		Nodes:    []Node{{ID: "a", Module: "delay"}},
 		Triggers: []GraphTrigger{{Type: "cron", Cron: "0 0 30 2 *"}},
 	}
 	if !hasLintCode(LintGraph(g), "trigger_cron_never_fires") {

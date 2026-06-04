@@ -8,9 +8,9 @@ import (
 	"git.sr.ht/~klahr/hazyflow/core"
 )
 
-func TestSleep_Duration(t *testing.T) {
+func TestDelay_Duration(t *testing.T) {
 	start := time.Now()
-	res, err := executeSleep(t.Context(), core.Job{
+	res, err := executeDelay(t.Context(), core.Job{
 		Params: map[string]any{"ms": 100},
 	}, nil)
 	if err != nil {
@@ -25,14 +25,14 @@ func TestSleep_Duration(t *testing.T) {
 	}
 }
 
-func TestSleep_Cancel(t *testing.T) {
+func TestDelay_Cancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	go func() {
 		time.Sleep(20 * time.Millisecond)
 		cancel()
 	}()
 	start := time.Now()
-	res, err := executeSleep(ctx, core.Job{
+	res, err := executeDelay(ctx, core.Job{
 		Params: map[string]any{"ms": 5000},
 	}, nil)
 	if err == nil {
@@ -46,8 +46,8 @@ func TestSleep_Cancel(t *testing.T) {
 	}
 }
 
-func TestSleep_BadParam(t *testing.T) {
-	res, _ := executeSleep(t.Context(), core.Job{
+func TestDelay_BadParam(t *testing.T) {
+	res, _ := executeDelay(t.Context(), core.Job{
 		Params: map[string]any{},
 	}, nil)
 	if res.Status != core.StatusError {
@@ -55,8 +55,8 @@ func TestSleep_BadParam(t *testing.T) {
 	}
 }
 
-func TestSleep_Passthrough(t *testing.T) {
-	res, err := executeSleep(t.Context(), core.Job{
+func TestDelay_Passthrough(t *testing.T) {
+	res, err := executeDelay(t.Context(), core.Job{
 		Params: map[string]any{"ms": 10},
 		Input:  map[string]core.Ref{"in": {Ref: "x", MIME: "text/plain"}},
 	}, nil)

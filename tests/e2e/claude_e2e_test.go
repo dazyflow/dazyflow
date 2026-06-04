@@ -104,8 +104,8 @@ func TestClaude_E2E_ClassifyAndRoute(t *testing.T) {
 				Params: map[string]any{"op": "equals", "B": "urgent"},
 			},
 			{ID: "route", Module: "branch"},
-			{ID: "page_oncall", Module: "sleep", Params: map[string]any{"ms": 1}},
-			{ID: "queue_review", Module: "sleep", Params: map[string]any{"ms": 1}},
+			{ID: "page_oncall", Module: "delay", Params: map[string]any{"ms": 1}},
+			{ID: "queue_review", Module: "delay", Params: map[string]any{"ms": 1}},
 		},
 		Edges: []core.Edge{
 			// Compare tests the classification (A) against "urgent" (B) and

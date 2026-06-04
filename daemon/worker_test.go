@@ -75,9 +75,9 @@ func TestPerNode_LinearChain_ProgressesThroughDependencies(t *testing.T) {
 	g := core.Graph{
 		ID: "chain", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
-			{ID: "a", Module: "sleep", Params: map[string]any{"ms": 5}},
-			{ID: "b", Module: "sleep", Params: map[string]any{"ms": 5}},
-			{ID: "c", Module: "sleep", Params: map[string]any{"ms": 5}},
+			{ID: "a", Module: "delay", Params: map[string]any{"ms": 5}},
+			{ID: "b", Module: "delay", Params: map[string]any{"ms": 5}},
+			{ID: "c", Module: "delay", Params: map[string]any{"ms": 5}},
 		},
 		Edges: []core.Edge{
 			{From: "a", FromPort: "out", To: "b", ToPort: "in"},
@@ -114,7 +114,7 @@ func TestPerNode_TimeoutFailsTheNode(t *testing.T) {
 		ID: "tmo", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
 			{
-				ID: "slow", Module: "sleep",
+				ID: "slow", Module: "delay",
 				Params:         map[string]any{"ms": 2000},
 				TimeoutSeconds: 1,
 			},
@@ -146,9 +146,9 @@ func TestPerNode_DiamondSpreadsAcrossWorkers(t *testing.T) {
 	g := core.Graph{
 		ID: "diamond", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
-			{ID: "a", Module: "sleep", Params: map[string]any{"ms": 30}},
-			{ID: "b", Module: "sleep", Params: map[string]any{"ms": 30}},
-			{ID: "c", Module: "sleep", Params: map[string]any{"ms": 30}},
+			{ID: "a", Module: "delay", Params: map[string]any{"ms": 30}},
+			{ID: "b", Module: "delay", Params: map[string]any{"ms": 30}},
+			{ID: "c", Module: "delay", Params: map[string]any{"ms": 30}},
 			{ID: "d", Module: "merge"},
 		},
 		Edges: []core.Edge{
@@ -189,7 +189,7 @@ func TestPerNode_FailedPredecessorAbortsDescendants(t *testing.T) {
 		ID: "abort", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
 			{ID: "a", Module: "nonexistent"},
-			{ID: "b", Module: "sleep", Params: map[string]any{"ms": 5}},
+			{ID: "b", Module: "delay", Params: map[string]any{"ms": 5}},
 		},
 		Edges: []core.Edge{
 			{From: "a", FromPort: "out", To: "b", ToPort: "in"},
@@ -221,8 +221,8 @@ func TestPerNode_NodesExecuteInDependencyOrder(t *testing.T) {
 	g := core.Graph{
 		ID: "order", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
-			{ID: "first", Module: "sleep", Params: map[string]any{"ms": 30}},
-			{ID: "second", Module: "sleep", Params: map[string]any{"ms": 5}},
+			{ID: "first", Module: "delay", Params: map[string]any{"ms": 30}},
+			{ID: "second", Module: "delay", Params: map[string]any{"ms": 5}},
 		},
 		Edges: []core.Edge{
 			{From: "first", FromPort: "out", To: "second", ToPort: "in"},
@@ -258,7 +258,7 @@ func TestPerNode_LeaseExpiryAllowsReclaim(t *testing.T) {
 		ID:           graphRunID,
 		Kind:         core.JobKindGraph,
 		Status:       core.JobStatusRunning,
-		GraphPayload: []byte(`{"id":"g","nodes":[{"id":"a","module":"sleep","params":{"ms":5}}],"edges":[]}`),
+		GraphPayload: []byte(`{"id":"g","nodes":[{"id":"a","module":"delay","params":{"ms":5}}],"edges":[]}`),
 	}
 	if err := jobs.Enqueue(t.Context(), graphRec); err != nil {
 		t.Fatalf("seed graph: %v", err)
@@ -321,9 +321,9 @@ func TestPerNode_IdempotentDispatch_NoDoubleEnqueue(t *testing.T) {
 	g := core.Graph{
 		ID: "race", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
-			{ID: "a", Module: "sleep", Params: map[string]any{"ms": 1}},
-			{ID: "b", Module: "sleep", Params: map[string]any{"ms": 1}},
-			{ID: "c", Module: "sleep", Params: map[string]any{"ms": 1}},
+			{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}},
+			{ID: "b", Module: "delay", Params: map[string]any{"ms": 1}},
+			{ID: "c", Module: "delay", Params: map[string]any{"ms": 1}},
 			{ID: "merge", Module: "merge"},
 		},
 		Edges: []core.Edge{
@@ -373,9 +373,9 @@ func TestPerNode_TerminalOnlyPublishedOnce(t *testing.T) {
 	g := core.Graph{
 		ID: "once", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
-			{ID: "a", Module: "sleep", Params: map[string]any{"ms": 30}},
-			{ID: "b", Module: "sleep", Params: map[string]any{"ms": 30}},
-			{ID: "c", Module: "sleep", Params: map[string]any{"ms": 30}},
+			{ID: "a", Module: "delay", Params: map[string]any{"ms": 30}},
+			{ID: "b", Module: "delay", Params: map[string]any{"ms": 30}},
+			{ID: "c", Module: "delay", Params: map[string]any{"ms": 30}},
 		},
 	}
 	graphRunID, err := h.svc.SubmitGraph(t.Context(), h.principal, g)

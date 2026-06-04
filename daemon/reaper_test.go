@@ -15,8 +15,8 @@ func reapGraph() core.Graph {
 	return core.Graph{
 		ID: "g", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
-			{ID: "a", Module: "sleep", Params: map[string]any{"ms": 1}},
-			{ID: "b", Module: "sleep", Params: map[string]any{"ms": 1}},
+			{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}},
+			{ID: "b", Module: "delay", Params: map[string]any{"ms": 1}},
 		},
 		Edges: []core.Edge{{From: "a", FromPort: "out", To: "b", ToPort: "in"}},
 	}

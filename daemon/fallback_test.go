@@ -27,7 +27,7 @@ func TestFallback_ActivatesOnFailure(t *testing.T) {
 		ID: "fb-activate", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
 			{ID: "primary", Module: "boom"},
-			{ID: "handler", Module: "sleep", Params: map[string]any{"ms": 5}},
+			{ID: "handler", Module: "delay", Params: map[string]any{"ms": 5}},
 		},
 		Edges: []core.Edge{
 			{From: "primary", FromPort: "out", To: "handler", ToPort: "in", OnError: core.OnErrorFallback},
@@ -60,7 +60,7 @@ func TestFallback_DormantOnSuccess(t *testing.T) {
 		ID: "fb-dormant", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
 			{ID: "primary", Module: "source"},
-			{ID: "handler", Module: "sleep", Params: map[string]any{"ms": 5}},
+			{ID: "handler", Module: "delay", Params: map[string]any{"ms": 5}},
 		},
 		Edges: []core.Edge{
 			{From: "primary", FromPort: "out", To: "handler", ToPort: "in", OnError: core.OnErrorFallback},
@@ -91,8 +91,8 @@ func TestFallback_AbsorbsSiblingAbortEdge(t *testing.T) {
 		ID: "fb-absorb", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
 			{ID: "primary", Module: "boom"},
-			{ID: "lost", Module: "sleep", Params: map[string]any{"ms": 5}},
-			{ID: "handler", Module: "sleep", Params: map[string]any{"ms": 5}},
+			{ID: "lost", Module: "delay", Params: map[string]any{"ms": 5}},
+			{ID: "handler", Module: "delay", Params: map[string]any{"ms": 5}},
 		},
 		Edges: []core.Edge{
 			{From: "primary", FromPort: "out", To: "lost", ToPort: "in"},
@@ -130,9 +130,9 @@ func TestFallback_CascadesSkipToDownstream(t *testing.T) {
 		ID: "fb-cascade", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
 			{ID: "primary", Module: "boom"},
-			{ID: "lost", Module: "sleep", Params: map[string]any{"ms": 5}},
-			{ID: "downstream", Module: "sleep", Params: map[string]any{"ms": 5}},
-			{ID: "handler", Module: "sleep", Params: map[string]any{"ms": 5}},
+			{ID: "lost", Module: "delay", Params: map[string]any{"ms": 5}},
+			{ID: "downstream", Module: "delay", Params: map[string]any{"ms": 5}},
+			{ID: "handler", Module: "delay", Params: map[string]any{"ms": 5}},
 		},
 		Edges: []core.Edge{
 			{From: "primary", FromPort: "out", To: "lost", ToPort: "in"},
@@ -204,7 +204,7 @@ func TestFallback_NoFallbackPathStillAborts(t *testing.T) {
 		ID: "fb-baseline-abort", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
 			{ID: "primary", Module: "boom"},
-			{ID: "next", Module: "sleep", Params: map[string]any{"ms": 5}},
+			{ID: "next", Module: "delay", Params: map[string]any{"ms": 5}},
 		},
 		Edges: []core.Edge{
 			{From: "primary", FromPort: "out", To: "next", ToPort: "in"},

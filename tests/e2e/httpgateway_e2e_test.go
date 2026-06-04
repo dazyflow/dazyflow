@@ -68,8 +68,8 @@ func TestHTTPGateway_E2E_SubmitAndStreamSSE(t *testing.T) {
 	g := core.Graph{
 		ID: "stream-demo", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
-			{ID: "step1", Module: "sleep", Params: map[string]any{"ms": 5}},
-			{ID: "step2", Module: "sleep", Params: map[string]any{"ms": 5}},
+			{ID: "step1", Module: "delay", Params: map[string]any{"ms": 5}},
+			{ID: "step2", Module: "delay", Params: map[string]any{"ms": 5}},
 		},
 		Edges: []core.Edge{
 			{From: "step1", FromPort: "out", To: "step2", ToPort: "in"},
@@ -196,8 +196,8 @@ func TestHTTPGateway_E2E_PerNodeSSE(t *testing.T) {
 	g := core.Graph{
 		ID: "node-sse", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
-			{ID: "alpha", Module: "sleep", Params: map[string]any{"ms": 20}},
-			{ID: "beta", Module: "sleep", Params: map[string]any{"ms": 20}},
+			{ID: "alpha", Module: "delay", Params: map[string]any{"ms": 20}},
+			{ID: "beta", Module: "delay", Params: map[string]any{"ms": 20}},
 		},
 		Edges: []core.Edge{
 			{From: "alpha", FromPort: "out", To: "beta", ToPort: "in"},

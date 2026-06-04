@@ -77,7 +77,7 @@ func TestPassthrough_ThreadsValueThroughNode(t *testing.T) {
 		ID: "passflow", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
 			{ID: "src", Module: "value_source"},
-			{ID: "carry", Module: "sleep", Params: map[string]any{"ms": 1}},
+			{ID: "carry", Module: "delay", Params: map[string]any{"ms": 1}},
 		},
 		Edges: []core.Edge{
 			// Wire the value straight into the carrier's pass input.

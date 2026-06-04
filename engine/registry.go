@@ -12,10 +12,17 @@ import (
 type Registry struct {
 	mu    sync.RWMutex
 	nodes map[string]NativeDrop
+	// aliases maps a former module ID to the canonical ID it now resolves to,
+	// populated from each drop's Manifest.Aliases. Lets graphs saved before a
+	// rename keep working without a duplicate palette entry.
+	aliases map[string]string
 }
 
 func NewRegistry() *Registry {
-	return &Registry{nodes: make(map[string]NativeDrop)}
+	return &Registry{
+		nodes:   make(map[string]NativeDrop),
+		aliases: make(map[string]string),
+	}
 }
 
 // Register adds a native module. Returns an error if a module with the same
@@ -45,6 +52,18 @@ func (r *Registry) Register(n NativeDrop) error {
 	if _, exists := r.nodes[n.Manifest.ID]; exists {
 		return fmt.Errorf("module %q already registered", n.Manifest.ID)
 	}
+	for _, alias := range n.Manifest.Aliases {
+		if alias == "" {
+			return fmt.Errorf("module %q: empty alias", n.Manifest.ID)
+		}
+		if _, exists := r.nodes[alias]; exists {
+			return fmt.Errorf("module %q: alias %q collides with a registered module ID", n.Manifest.ID, alias)
+		}
+		if canon, exists := r.aliases[alias]; exists {
+			return fmt.Errorf("module %q: alias %q already maps to %q", n.Manifest.ID, alias, canon)
+		}
+		r.aliases[alias] = n.Manifest.ID
+	}
 	r.nodes[n.Manifest.ID] = n
 	return nil
 }
@@ -53,6 +72,12 @@ func (r *Registry) Get(id string) (core.Transport, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	n, ok := r.nodes[id]
+	if !ok {
+		// Fall back to an alias (e.g. a pre-rename module ID).
+		if canon, isAlias := r.aliases[id]; isAlias {
+			n, ok = r.nodes[canon]
+		}
+	}
 	if !ok {
 		return nil, false
 	}
@@ -64,9 +89,19 @@ func (r *Registry) Get(id string) (core.Transport, bool) {
 func (r *Registry) Manifests() map[string]core.Manifest {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	out := make(map[string]core.Manifest, len(r.nodes))
+	out := make(map[string]core.Manifest, len(r.nodes)+len(r.aliases))
 	for id, n := range r.nodes {
 		out[id] = n.Manifest
+	}
+	// Surface each alias as a Hidden copy of its canonical manifest, keyed by
+	// the old ID. Validation (which looks up manifests[node.Module]) resolves
+	// a pre-rename graph; the catalog filters Hidden, so the palette is
+	// unaffected.
+	for alias, canon := range r.aliases {
+		m := r.nodes[canon].Manifest
+		m.Hidden = true
+		m.Aliases = nil // the alias entry isn't itself aliased
+		out[alias] = m
 	}
 	return out
 }

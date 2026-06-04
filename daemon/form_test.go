@@ -229,7 +229,7 @@ func TestForm_NoWebhookInputNodeIs400(t *testing.T) {
 	_, wh, _, _, wsStore := startWebhookHarness(t)
 	g := core.Graph{
 		ID: "no-sink", Tenant: "acme", Workspace: "ws1",
-		Nodes:    []core.Node{{ID: "x", Module: "sleep", Params: map[string]any{"ms": 1}}},
+		Nodes:    []core.Node{{ID: "x", Module: "delay", Params: map[string]any{"ms": 1}}},
 		Triggers: []core.GraphTrigger{{Type: "webhook", Secret: "s", PublicForm: true}},
 	}
 	if _, err := wsStore.Save(g, "test"); err != nil {

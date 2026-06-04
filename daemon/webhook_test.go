@@ -48,7 +48,7 @@ func TestWebhook_FiresWithValidSecret(t *testing.T) {
 	_, wh, jobs, bus, wsStore := startWebhookHarness(t)
 	g := core.Graph{
 		ID: "wh-ok", Tenant: "acme", Workspace: "ws1",
-		Nodes:    []core.Node{{ID: "a", Module: "sleep", Params: map[string]any{"ms": 1}}},
+		Nodes:    []core.Node{{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}}},
 		Triggers: []core.GraphTrigger{{Type: "webhook", Secret: "s3cr3t"}},
 	}
 	if _, err := wsStore.Save(g, "test"); err != nil {
@@ -111,7 +111,7 @@ func TestWebhook_RejectsBadSecret(t *testing.T) {
 	_, wh, _, _, wsStore := startWebhookHarness(t)
 	_, _ = wsStore.Save(core.Graph{
 		ID: "wh-secret", Tenant: "acme", Workspace: "ws1",
-		Nodes:    []core.Node{{ID: "a", Module: "sleep", Params: map[string]any{"ms": 1}}},
+		Nodes:    []core.Node{{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}}},
 		Triggers: []core.GraphTrigger{{Type: "webhook", Secret: "correct"}},
 	}, "test")
 
@@ -160,7 +160,7 @@ func TestWebhook_GraphWithoutWebhookTriggerRejected(t *testing.T) {
 	// Graph exists but has no webhook trigger.
 	_, _ = wsStore.Save(core.Graph{
 		ID: "no-trigger", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "a", Module: "sleep", Params: map[string]any{"ms": 1}}},
+		Nodes: []core.Node{{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}}},
 	}, "test")
 
 	mux := http.NewServeMux()
@@ -423,7 +423,7 @@ func TestWebhook_BodyLimit(t *testing.T) {
 	wh.MaxBodyBytes = 16 // tiny cap so we don't shovel a megabyte
 	_, _ = wsStore.Save(core.Graph{
 		ID: "lim", Tenant: "acme", Workspace: "ws1",
-		Nodes:    []core.Node{{ID: "a", Module: "sleep", Params: map[string]any{"ms": 1}}},
+		Nodes:    []core.Node{{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}}},
 		Triggers: []core.GraphTrigger{{Type: "webhook", Secret: "s"}},
 	}, "test")
 	mux := http.NewServeMux()

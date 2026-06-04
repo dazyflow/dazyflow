@@ -35,8 +35,8 @@ func TestWebhookBody_E2E_JSONPropagation(t *testing.T) {
 				"field": "priority", "op": "equals", "B": "high",
 			}},
 			{ID: "decide", Module: "branch"},
-			{ID: "page", Module: "sleep", Params: map[string]any{"ms": 1}},
-			{ID: "queue", Module: "sleep", Params: map[string]any{"ms": 1}},
+			{ID: "page", Module: "delay", Params: map[string]any{"ms": 1}},
+			{ID: "queue", Module: "delay", Params: map[string]any{"ms": 1}},
 		},
 		Edges: []core.Edge{
 			{From: "inbound", FromPort: "body", To: "check", ToPort: "A"},

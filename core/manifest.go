@@ -237,6 +237,30 @@ type Manifest struct {
 	// child. The dispatcher will resume the parent when the child
 	// terminates. Only subgraph sets it today.
 	SubmitsChildGraph bool `json:"submits_child_graph,omitempty"`
+
+	// Aliases lists former IDs this drop still answers to, so graphs saved
+	// before a rename keep resolving. The engine routes an aliased module ID
+	// to this drop for both validation and execution, but aliases are marked
+	// Hidden in the catalog so the palette shows the drop only once under its
+	// canonical ID. E.g. "delay" carries Aliases ["sleep"].
+	Aliases []string `json:"aliases,omitempty"`
+
+	// Hidden keeps a manifest out of the catalog/palette listing (the
+	// search-backed drop browser) while leaving it valid for graph
+	// validation and execution. Set on the synthetic alias entries the
+	// registry emits for Aliases; authors don't set it directly.
+	Hidden bool `json:"hidden,omitempty"`
+
+	// NoPassthrough opts a drop OUT of the universal value-passthrough pin
+	// (WithPassthrough). The pin makes sense on linear processing drops that
+	// carry a single payload, but is wrong on two roles that set this:
+	//   - pure predicates (comparators / Compare): they emit a 1/0 verdict,
+	//     not a payload to thread; the pin is noise and, on the compact
+	//     operator chip, it would even steal an operand slot.
+	//   - pure routers (Branch): pass is emitted on every success regardless
+	//     of which port the payload took, so a node wired to it fires on
+	//     BOTH branches — punching a hole straight through the routing.
+	NoPassthrough bool `json:"no_passthrough,omitempty"`
 }
 
 func (m Manifest) Input(name string) (Port, bool) {
@@ -272,6 +296,9 @@ const PassPort = "pass"
 // already present. The port is untyped (wildcard MIME, connects to anything)
 // and never required.
 func WithPassthrough(m Manifest) Manifest {
+	if m.NoPassthrough {
+		return m // predicates/routers opt out — see NoPassthrough.
+	}
 	if len(m.Inputs) == 0 {
 		return m // sources/triggers originate flows; no pin to thread into
 	}

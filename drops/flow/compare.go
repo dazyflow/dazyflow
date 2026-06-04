@@ -74,6 +74,8 @@ func init() {
 				"required":["op"]
 			}`),
 			Idempotent: true,
+			// Pure predicate: emits a 1/0 verdict, not a payload to thread.
+			NoPassthrough: true,
 		},
 		Execute: executeCompare,
 	})

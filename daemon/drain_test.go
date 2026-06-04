@@ -23,7 +23,7 @@ func TestWorker_DrainsInFlightNodeOnShutdown(t *testing.T) {
 
 	g := core.Graph{
 		ID: "drain", Tenant: "t", Workspace: "ws",
-		Nodes: []core.Node{{ID: "s", Module: "sleep", Params: map[string]any{"ms": 250}}},
+		Nodes: []core.Node{{ID: "s", Module: "delay", Params: map[string]any{"ms": 250}}},
 	}
 	payload, err := json.Marshal(g)
 	if err != nil {

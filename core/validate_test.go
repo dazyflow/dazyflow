@@ -8,8 +8,8 @@ import (
 func TestValidate_HappyPath(t *testing.T) {
 	g := Graph{
 		Nodes: []Node{
-			{ID: "a", Module: "sleep"},
-			{ID: "b", Module: "sleep"},
+			{ID: "a", Module: "delay"},
+			{ID: "b", Module: "delay"},
 		},
 		Edges: []Edge{{From: "a", FromPort: "out", To: "b", ToPort: "in"}},
 	}

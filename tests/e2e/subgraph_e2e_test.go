@@ -68,8 +68,8 @@ func TestSubgraph_E2E_HappyPath(t *testing.T) {
 	child := core.Graph{
 		ID: "child-flow", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
-			{ID: "receive", Module: "sleep", Params: map[string]any{"ms": 1}},
-			{ID: "emit", Module: "sleep", Params: map[string]any{"ms": 1}},
+			{ID: "receive", Module: "delay", Params: map[string]any{"ms": 1}},
+			{ID: "emit", Module: "delay", Params: map[string]any{"ms": 1}},
 		},
 		Edges: []core.Edge{
 			{From: "receive", FromPort: "out", To: "emit", ToPort: "in"},
@@ -82,7 +82,7 @@ func TestSubgraph_E2E_HappyPath(t *testing.T) {
 	parent := core.Graph{
 		ID: "parent-flow", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
-			{ID: "prep", Module: "sleep", Params: map[string]any{"ms": 1}},
+			{ID: "prep", Module: "delay", Params: map[string]any{"ms": 1}},
 			{ID: "call_child", Module: "subgraph", Params: map[string]any{
 				"graph_id":  "child-flow",
 				"input_map": map[string]any{"in": "receive"},
@@ -90,7 +90,7 @@ func TestSubgraph_E2E_HappyPath(t *testing.T) {
 					"result": map[string]any{"node": "emit", "port": "out"},
 				},
 			}},
-			{ID: "after", Module: "sleep", Params: map[string]any{"ms": 1}},
+			{ID: "after", Module: "delay", Params: map[string]any{"ms": 1}},
 		},
 		Edges: []core.Edge{
 			{From: "prep", FromPort: "out", To: "call_child", ToPort: "in"},
@@ -142,7 +142,7 @@ func TestSubgraph_E2E_ChildFailurePropagatesToParent(t *testing.T) {
 	child := core.Graph{
 		ID: "child-broken", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
-			{ID: "broken", Module: "sleep", Params: map[string]any{"ms": -1}},
+			{ID: "broken", Module: "delay", Params: map[string]any{"ms": -1}},
 		},
 	}
 	if _, err := h.ws.Save(child, "test"); err != nil {

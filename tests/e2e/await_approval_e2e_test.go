@@ -91,12 +91,12 @@ func TestAwaitApproval_E2E_ApproveResumesDownstream(t *testing.T) {
 	g := core.Graph{
 		ID: "needs-approval", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
-			{ID: "prep", Module: "sleep", Params: map[string]any{"ms": 1}},
+			{ID: "prep", Module: "delay", Params: map[string]any{"ms": 1}},
 			{ID: "ask", Module: "await_approval", Params: map[string]any{
 				"prompt": "Refund $9,500 to customer?",
 			}},
-			{ID: "execute", Module: "sleep", Params: map[string]any{"ms": 1}},
-			{ID: "denied", Module: "sleep", Params: map[string]any{"ms": 1}},
+			{ID: "execute", Module: "delay", Params: map[string]any{"ms": 1}},
+			{ID: "denied", Module: "delay", Params: map[string]any{"ms": 1}},
 		},
 		Edges: []core.Edge{
 			{From: "prep", FromPort: "out", To: "ask", ToPort: "context"},
@@ -190,8 +190,8 @@ func TestAwaitApproval_E2E_RejectRoutesToRejectedBranch(t *testing.T) {
 		ID: "reject-flow", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
 			{ID: "ask", Module: "await_approval"},
-			{ID: "execute", Module: "sleep", Params: map[string]any{"ms": 1}},
-			{ID: "denied", Module: "sleep", Params: map[string]any{"ms": 1}},
+			{ID: "execute", Module: "delay", Params: map[string]any{"ms": 1}},
+			{ID: "denied", Module: "delay", Params: map[string]any{"ms": 1}},
 		},
 		Edges: []core.Edge{
 			{From: "ask", FromPort: "approved", To: "execute", ToPort: "in"},

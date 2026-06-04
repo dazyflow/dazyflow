@@ -59,15 +59,15 @@ func TestBranch_RoutesThroughDispatch(t *testing.T) {
 			g := core.Graph{
 				ID: "branch-" + c.name, Tenant: "t", Workspace: "ws",
 				Nodes: []core.Node{
-					{ID: "source", Module: "sleep", Params: map[string]any{"ms": 1}},
+					{ID: "source", Module: "delay", Params: map[string]any{"ms": 1}},
 					// The check is split out (Compare → Branch): Compare turns
 					// the numeric value into a boolean, Branch just routes.
 					{ID: "check", Module: "compare", Params: map[string]any{
 						"op": "greater_than", "B": c.threshold,
 					}},
 					{ID: "decide", Module: "branch"},
-					{ID: "yes", Module: "sleep", Params: map[string]any{"ms": 1}},
-					{ID: "no", Module: "sleep", Params: map[string]any{"ms": 1}},
+					{ID: "yes", Module: "delay", Params: map[string]any{"ms": 1}},
+					{ID: "no", Module: "delay", Params: map[string]any{"ms": 1}},
 				},
 				Edges: []core.Edge{
 					// source feeds A; Compare tests A > B (the threshold)…
