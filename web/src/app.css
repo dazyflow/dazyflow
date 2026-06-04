@@ -2865,6 +2865,26 @@ button.danger-outline:hover:not(:disabled) {
   content: " >";
   opacity: 0.55;
 }
+/* Universal value-passthrough pin (port id "pass"): a triangle (Unreal
+   exec-pin look) instead of a round data dot, so it reads as "threads a
+   value through the node" rather than a typed data port. Neutral ink colour
+   sets it apart from the type-coloured data dots; turns accent on hover. */
+.react-flow__handle.hz-pass-pin {
+  width: 12px;
+  height: 12px;
+  background: var(--ink);
+  border: none;
+  border-radius: 1px;
+  clip-path: polygon(12% 0, 100% 50%, 12% 100%);
+}
+.react-flow__handle.hz-pass-pin:hover {
+  background: var(--accent);
+}
+/* The pass row's label sits subordinate to the real data ports. */
+.hz-port-label.hz-pass-row {
+  font-style: italic;
+  opacity: 0.7;
+}
 .hz-node:hover {
   border-color: var(--accent);
 }

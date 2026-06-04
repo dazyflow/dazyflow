@@ -32,8 +32,8 @@ func init() {
 			Provider:    "internal",
 			Integration: "HTTP",
 			Tags:        []string{"http", "rest", "api", "webhook"},
-			Description: "Make an HTTP request to any URL — GET, POST, PUT, PATCH, or DELETE. Useful when the service you want to call doesn't have a dedicated connector here yet. Returns the response body on one port and status/headers on another. Private-network addresses are blocked by default to prevent accidental internal calls.",
-			Summary:     "Issue an arbitrary HTTP request and split the response into body/meta ports, with SSRF-guard and response-size cap.",
+			Description: "Make an HTTP request to any URL — GET, POST, PUT, PATCH, or DELETE. Useful when the service you want to call doesn't have a dedicated connector here yet. Returns the response body, the numeric status code, and the response headers on separate ports — so you can branch on the status code. Private-network addresses are blocked by default to prevent accidental internal calls.",
+			Summary:     "Issue an arbitrary HTTP request and split the response into body, status, and headers ports, with SSRF-guard and response-size cap.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Simple authenticated GET",
@@ -52,11 +52,17 @@ func init() {
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{{
 				Port:  "request_body",
-				Label: "Request body (optional, overrides params.body)",
+				Label: "Request body",
 			}},
 			Outputs: []core.Port{
+				// Status first: it's the field most flows branch on, so it
+				// sits at the top of the output column. Status and headers are
+				// separate ports (not one meta blob) so a downstream Branch can
+				// test the numeric status code directly — wire status →
+				// Compare with in_range [200,299] to fork on success, e.g.
+				{Port: "status", Label: "Status code", MIME: []string{"application/json"}},
 				{Port: "response_body", Label: "Response body"},
-				{Port: "response_meta", Label: "Status + headers (JSON)"},
+				{Port: "headers", Label: "Response headers", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(
 				`{
@@ -179,17 +185,16 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 		bodyInline = raw
 	}
 
-	meta := map[string]any{
-		"status":  resp.StatusCode,
-		"headers": flattenHeaders(resp.Header),
-	}
-
 	return core.Result{
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
 			"response_body": {MIME: contentType, Inline: bodyInline},
-			"response_meta": {MIME: "application/json", Inline: meta},
+			// status is emitted as a bare JSON number so a Branch's
+			// numeric comparison (greater_than/greater_or_equal/…) can
+			// test it without any parse step in between.
+			"status":  {MIME: "application/json", Inline: resp.StatusCode},
+			"headers": {MIME: "application/json", Inline: flattenHeaders(resp.Header)},
 		},
 	}, nil
 }

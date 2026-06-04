@@ -811,7 +811,8 @@
     "portRequired": "required",
     "portOptional": "optional",
     "missingValue": "Missing required value: {{name}}",
-    "unwiredRequired": "Required input not wired: {{name}}"
+    "unwiredRequired": "Required input not wired: {{name}}",
+    "passThrough": "Pass-through value — wire a value in to thread it unchanged out the matching pin"
   },
   "outputPreview": {
     "loading": "Loading…",

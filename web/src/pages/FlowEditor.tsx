@@ -1089,7 +1089,12 @@ function EditorInner() {
       const wired = new Set(connectedInputsByNode.get(n.id) ?? []);
       const hasValue = (k: string) => {
         const v = params[k];
-        return v != null && v !== "" && !(Array.isArray(v) && v.length === 0);
+        if (v != null && v !== "" && !(Array.isArray(v) && v.length === 0)) {
+          return true;
+        }
+        // A required param that ships a default is never "missing" — the
+        // default applies at run time (e.g. Compare's op defaults to equals).
+        return man.params_schema?.properties?.[k]?.default !== undefined;
       };
       const missing = new Map<string, string>(); // dedup by key
       for (const key of man.params_schema?.required ?? []) {

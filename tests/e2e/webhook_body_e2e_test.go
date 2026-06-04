@@ -29,15 +29,18 @@ func TestWebhookBody_E2E_JSONPropagation(t *testing.T) {
 		ID: "wh-body-flow", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{
 			{ID: "inbound", Module: "webhook_input"},
-			{ID: "decide", Module: "branch", Params: map[string]any{
-				"condition": map[string]any{
-					"field": "priority", "op": "equals", "value": "high",
-				},
+			// Compare reads the priority field out of A (the JSON body) and
+			// tests it against "high" (B), emitting 1/0; Branch routes on it.
+			{ID: "check", Module: "compare", Params: map[string]any{
+				"field": "priority", "op": "equals", "B": "high",
 			}},
+			{ID: "decide", Module: "branch"},
 			{ID: "page", Module: "sleep", Params: map[string]any{"ms": 1}},
 			{ID: "queue", Module: "sleep", Params: map[string]any{"ms": 1}},
 		},
 		Edges: []core.Edge{
+			{From: "inbound", FromPort: "body", To: "check", ToPort: "A"},
+			{From: "check", FromPort: "result", To: "decide", ToPort: "condition"},
 			{From: "inbound", FromPort: "body", To: "decide", ToPort: "in"},
 			{From: "decide", FromPort: "then", To: "page", ToPort: "in"},
 			{From: "decide", FromPort: "else", To: "queue", ToPort: "in"},

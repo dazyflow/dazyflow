@@ -15,11 +15,13 @@
       }
     },
     {
+      "id": "is_big",
+      "module": "compare",
+      "params": {"field": "amount", "op": "greater_than", "B": 1000}
+    },
+    {
       "id": "classify",
-      "module": "branch",
-      "params": {
-        "condition": {"field": "amount", "op": "greater_than", "value": 1000}
-      }
+      "module": "branch"
     },
     {
       "id": "notify_cfo",
@@ -54,6 +56,8 @@
     }
   ],
   "edges": [
+    {"from": "fetch_invoice", "from_port": "response_body", "to": "is_big", "to_port": "A"},
+    {"from": "is_big", "from_port": "result", "to": "classify", "to_port": "condition"},
     {"from": "fetch_invoice", "from_port": "response_body", "to": "classify", "to_port": "in"},
     {"from": "fetch_invoice", "from_port": "response_body", "to": "archive", "to_port": "in"},
     {"from": "classify", "from_port": "then", "to": "notify_cfo", "to_port": "request_body"},

@@ -255,3 +255,51 @@ func (m Manifest) Output(name string) (Port, bool) {
 	}
 	return Port{}, false
 }
+
+// PassPort is the reserved id of the universal value-passthrough pin every
+// processing drop carries (modelled on Unreal's exec pin, but it threads a
+// VALUE rather than execution). A value wired into the pass input is
+// re-emitted unchanged on the pass output when the node succeeds — so you can
+// carry a correlation id / context / payload along a chain without re-wiring
+// it through every node's data ports. The frontend draws it with a distinct
+// triangle symbol as the first input/output.
+const PassPort = "pass"
+
+// WithPassthrough returns m with the universal passthrough port prepended to
+// its inputs and outputs. It's a no-op for drops with no inputs (sources /
+// triggers — nothing upstream to thread from) and idempotent if the port is
+// already present. The port is untyped (wildcard MIME, connects to anything)
+// and never required.
+func WithPassthrough(m Manifest) Manifest {
+	if len(m.Inputs) == 0 {
+		return m // sources/triggers originate flows; no pin to thread into
+	}
+	if _, ok := m.Input(PassPort); ok {
+		return m
+	}
+	pin := Port{Port: PassPort, Label: "Pass-through"}
+	m.Inputs = append([]Port{pin}, m.Inputs...)
+	m.Outputs = append([]Port{pin}, m.Outputs...)
+	return m
+}
+
+// ApplyPassthrough copies the pass input ref onto the pass output of a
+// successful result, so the threaded value flows to the next node. Engines
+// call this for every node, giving the passthrough pin its behaviour without
+// any per-drop code. No-op when the node didn't succeed, had no pass input, or
+// already emitted a pass output of its own.
+func ApplyPassthrough(input map[string]Ref, result *Result) {
+	if result == nil || result.Status != StatusOK {
+		return
+	}
+	ref, ok := input[PassPort]
+	if !ok {
+		return
+	}
+	if result.Output == nil {
+		result.Output = map[string]Ref{}
+	}
+	if _, exists := result.Output[PassPort]; !exists {
+		result.Output[PassPort] = ref
+	}
+}

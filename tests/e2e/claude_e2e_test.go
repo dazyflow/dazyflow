@@ -99,16 +99,19 @@ func TestClaude_E2E_ClassifyAndRoute(t *testing.T) {
 				},
 			},
 			{
-				ID:     "route",
-				Module: "branch",
-				Params: map[string]any{
-					"condition": map[string]any{"op": "equals", "value": "urgent"},
-				},
+				ID:     "is_urgent",
+				Module: "compare",
+				Params: map[string]any{"op": "equals", "B": "urgent"},
 			},
+			{ID: "route", Module: "branch"},
 			{ID: "page_oncall", Module: "sleep", Params: map[string]any{"ms": 1}},
 			{ID: "queue_review", Module: "sleep", Params: map[string]any{"ms": 1}},
 		},
 		Edges: []core.Edge{
+			// Compare tests the classification (A) against "urgent" (B) and
+			// emits 1/0; Branch routes the text down then/else based on it.
+			{From: "classify", FromPort: "text", To: "is_urgent", ToPort: "A"},
+			{From: "is_urgent", FromPort: "result", To: "route", ToPort: "condition"},
 			{From: "classify", FromPort: "text", To: "route", ToPort: "in"},
 			{From: "route", FromPort: "then", To: "page_oncall", ToPort: "in"},
 			{From: "route", FromPort: "else", To: "queue_review", ToPort: "in"},

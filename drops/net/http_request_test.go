@@ -35,9 +35,11 @@ func TestHTTP_GETSucceeds(t *testing.T) {
 	if got, _ := res.Output["response_body"].Inline.(string); got != "hello" {
 		t.Errorf("body = %q, want hello", got)
 	}
-	meta, _ := res.Output["response_meta"].Inline.(map[string]any)
-	if meta["status"] != 200 {
-		t.Errorf("status = %v, want 200", meta["status"])
+	if status, _ := res.Output["status"].Inline.(int); status != 200 {
+		t.Errorf("status = %v, want 200", res.Output["status"].Inline)
+	}
+	if _, ok := res.Output["headers"].Inline.(map[string]string); !ok {
+		t.Errorf("headers port missing or wrong type: %T", res.Output["headers"].Inline)
 	}
 }
 

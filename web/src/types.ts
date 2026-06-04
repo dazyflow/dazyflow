@@ -196,6 +196,10 @@ export type JSONSchema = {
   // concrete sample to copy instead of guessing the format.
   examples?: unknown[];
   enum?: unknown[];
+  // enumNames supplies human-readable labels parallel to `enum` (same order
+  // and length). The select shows enumNames[i] but stores enum[i]. A common
+  // JSON Schema extension (react-jsonschema-form uses it too).
+  enumNames?: string[];
   // string
   minLength?: number;
   maxLength?: number;

@@ -96,25 +96,25 @@ func (r *NodeResolver) Resolve(_ context.Context, moduleID string) (core.Transpo
 // ValidateWithManifests before execution.
 func (r *NodeResolver) ManifestsForTenant(_ string) map[string]core.Manifest {
 	out := map[string]core.Manifest{}
-	if r.Native != nil {
-		for id, m := range r.Native.Manifests() {
-			out[id] = m
+	add := func(src map[string]core.Manifest) {
+		for id, m := range src {
+			// Every processing drop carries the universal passthrough pin,
+			// surfaced here once so the palette, validation, and input
+			// assembly all see it without per-drop wiring.
+			out[id] = core.WithPassthrough(m)
 		}
+	}
+	if r.Native != nil {
+		add(r.Native.Manifests())
 	}
 	if r.Local != nil {
-		for id, m := range r.Local.Manifests() {
-			out[id] = m
-		}
+		add(r.Local.Manifests())
 	}
 	if r.Remote != nil {
-		for id, m := range r.Remote.Manifests() {
-			out[id] = m
-		}
+		add(r.Remote.Manifests())
 	}
 	if r.MCP != nil {
-		for id, m := range r.MCP.Manifests() {
-			out[id] = m
-		}
+		add(r.MCP.Manifests())
 	}
 	return out
 }

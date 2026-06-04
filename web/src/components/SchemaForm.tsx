@@ -257,9 +257,9 @@ function SchemaField({ name, schema, required, value, onChange, workspace, accou
           onChange={(e) => onChange(e.target.value)}
         >
           {!required && <option value="">(unset)</option>}
-          {schema.enum.map((v) => (
+          {schema.enum.map((v, i) => (
             <option key={String(v)} value={String(v)}>
-              {String(v)}
+              {schema.enumNames?.[i] ?? String(v)}
             </option>
           ))}
         </select>
@@ -920,9 +920,9 @@ function ScalarValue({
         value={(value as string) ?? ""}
         onChange={(e) => onChange(e.target.value)}
       >
-        {schema.enum.map((v) => (
+        {schema.enum.map((v, i) => (
           <option key={String(v)} value={String(v)}>
-            {String(v)}
+            {schema.enumNames?.[i] ?? String(v)}
           </option>
         ))}
       </select>

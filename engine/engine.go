@@ -256,6 +256,7 @@ func (e *Engine) RunNode(
 	if result.JobID == "" {
 		result.JobID = job.ID
 	}
+	core.ApplyPassthrough(job.Input, &result)
 	// Scrub resolved secret values from the result before it leaves the
 	// engine (and lands in the job store / run-detail UI).
 	redactResult(&result, secrets)
@@ -342,6 +343,7 @@ func (e *Engine) runNode(
 	if result.JobID == "" {
 		result.JobID = job.ID
 	}
+	core.ApplyPassthrough(job.Input, &result)
 	// Scrub resolved secret values from the result before it leaves the
 	// engine (and lands in the job store / run-detail UI).
 	redactResult(&result, secrets)

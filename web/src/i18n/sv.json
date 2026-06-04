@@ -811,7 +811,8 @@
     "portRequired": "obligatorisk",
     "portOptional": "valfri",
     "missingValue": "Obligatoriskt värde saknas: {{name}}",
-    "unwiredRequired": "Obligatorisk ingång ej kopplad: {{name}}"
+    "unwiredRequired": "Obligatorisk ingång ej kopplad: {{name}}",
+    "passThrough": "Genomströmning — koppla in ett värde för att skicka det oförändrat vidare"
   },
   "outputPreview": {
     "loading": "Laddar…",

@@ -193,10 +193,13 @@ export function HazyNode({ data, selected }: NodeProps) {
               <label key={key} className="hz-param">
                 <span className="hz-param-label">{label}</span>
                 {s.enum ? (
-                  <select value={String(val)} onChange={(e) => set(e.target.value)}>
-                    {s.enum.map((o) => (
+                  <select
+                    value={String(val ?? s.default ?? "")}
+                    onChange={(e) => set(e.target.value)}
+                  >
+                    {s.enum.map((o, i) => (
                       <option key={String(o)} value={String(o)}>
-                        {String(o)}
+                        {s.enumNames?.[i] ?? String(o)}
                       </option>
                     ))}
                   </select>
@@ -238,17 +241,23 @@ export function HazyNode({ data, selected }: NodeProps) {
           <div className="hz-port-col">
             {inputs.map((p) => {
               const c = portColor(p.mime);
+              const isPass = p.port === "pass";
               return (
                 <div
                   key={"il-" + p.port}
-                  className="hz-port-label hz-port-in"
+                  className={"hz-port-label hz-port-in" + (isPass ? " hz-pass-row" : "")}
                 >
                   <Handle
                     type="target"
                     position={Position.Left}
                     id={p.port}
-                    style={dotStyle(c, connectedInputs.includes(p.port), "in")}
-                    title={portTooltip(p)}
+                    className={isPass ? "hz-pass-pin" : undefined}
+                    style={
+                      isPass
+                        ? passPinStyle("in")
+                        : dotStyle(c, connectedInputs.includes(p.port), "in")
+                    }
+                    title={isPass ? i18n.t("nodeCard.passThrough") : portTooltip(p)}
                   />
                   {p.label ?? p.port}
                   {p.required && (
@@ -268,17 +277,27 @@ export function HazyNode({ data, selected }: NodeProps) {
           {outputs.map((p) => {
             const c = portColor(p.mime);
             const ref = d.outputs?.[p.port];
+            const isPass = p.port === "pass";
             return (
               <div
                 key={"ol-" + p.port}
-                className={"hz-port-label hz-port-out" + (ref ? " has-value" : "")}
+                className={
+                  "hz-port-label hz-port-out" +
+                  (ref ? " has-value" : "") +
+                  (isPass ? " hz-pass-row" : "")
+                }
               >
                 <Handle
                   type="source"
                   position={Position.Right}
                   id={p.port}
-                  style={dotStyle(c, connectedOutputs.includes(p.port), "out")}
-                  title={portTooltip(p)}
+                  className={isPass ? "hz-pass-pin" : undefined}
+                  style={
+                    isPass
+                      ? passPinStyle("out")
+                      : dotStyle(c, connectedOutputs.includes(p.port), "out")
+                  }
+                  title={isPass ? i18n.t("nodeCard.passThrough") : portTooltip(p)}
                 />
                 {p.label ?? p.port}
                 {/* Watch port values (#10): the value this port emitted on
@@ -360,6 +379,27 @@ function dotStyle(color: string, filled: boolean, place?: "in" | "out") {
     } as const;
   }
   return base;
+}
+
+// passPinStyle positions the universal passthrough pin on the card edge.
+// Shape (the triangle) and colour come from the .hz-pass-pin CSS class — this
+// only supplies the edge offset, matching dotStyle's placement so pass and
+// data pins line up.
+function passPinStyle(place: "in" | "out") {
+  if (place === "in") {
+    return {
+      top: "50%",
+      left: 0,
+      right: "auto",
+      transform: "translate(calc(-50% - var(--space-3) - 1.5px), -50%)",
+    } as const;
+  }
+  return {
+    top: "50%",
+    left: "auto",
+    right: 0,
+    transform: "translate(calc(50% + var(--space-3) + 1.5px), -50%)",
+  } as const;
 }
 
 // portColor picks a hue from the port's first listed MIME. Three rules

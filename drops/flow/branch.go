@@ -7,118 +7,79 @@ import (
 	"strings"
 
 	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/hazyflow/engine"
 )
 
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "branch",
-			Version:        "1.0",
-			Label:          "Branch",
-			Color:          "#5a9bd4",
-			Icon:           "git-branch",
-			Category:       "flow_control",
-			Provider:       "internal",
-			Tags:           []string{"conditional", "routing", "if-else"},
-			Description:    "Route input to either the then or else output port based on a structured condition (equals/greater_than/contains/exists/...). Field paths into JSON inputs are supported.",
-			Summary:        "Send the input down the then or else port based on a field comparison against the upstream value.",
+			ID:          "branch",
+			Version:     "2.0",
+			Label:       "Branch",
+			Color:       "#5a9bd4",
+			Icon:        "git-branch",
+			Category:    "flow_control",
+			Provider:    "internal",
+			Tags:        []string{"conditional", "routing", "if-else"},
+			Description: "Route the payload on the 'in' port to either the then or else output, based on the boolean 'condition' input. Produce that boolean with a Compare drop (wire its result into condition) — true sends the payload down then, false (or a missing/empty condition) sends it down else. Nodes wired to the unused port stay dormant.",
+			Summary:     "Forward the input down the then or else port based on a boolean condition input.",
 			Examples: []core.ParamsExample{
 				{
-					Title:  "Send big orders to manual review",
-					Params: json.RawMessage(`{"condition":{"field":"total","op":"greater_than","value":500}}`),
-					Notes:  "Records with total > 500 leave on then; everything else on else.",
-				},
-				{
-					Title:  "Split by email domain",
-					Params: json.RawMessage(`{"condition":{"field":"email","op":"contains","value":"@acme.com"}}`),
-				},
-				{
-					Title:  "Check that a field is present",
-					Params: json.RawMessage(`{"condition":{"field":"customer_id","op":"exists"}}`),
+					Title:  "Branch is wired, not configured",
+					Params: json.RawMessage(`{}`),
+					Notes:  "Feed a Compare result into 'condition' and the value to route into 'in'. The test lives in the Compare drop, not here.",
 				},
 			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
-			Inputs:         []core.Port{{Port: "in", Required: true, Label: "Value to test"}},
-			Outputs: []core.Port{
-				{Port: "then", Label: "Taken when the condition is true"},
-				{Port: "else", Label: "Taken when the condition is false"},
+			// The check is split out (Unreal-Blueprint style): Branch is a
+			// pure router. 'condition' is the boolean decision (from a Compare
+			// drop or any boolean-emitting node); 'in' is the payload that
+			// continues down the chosen port.
+			Inputs: []core.Port{
+				{Port: "condition", Required: true, Label: "Condition", MIME: []string{"application/json"}},
+				{Port: "in", Required: true, Label: "Value"},
 			},
-			ParamsSchema: json.RawMessage(`{
-				"type":"object",
-				"properties":{
-					"condition":{
-						"type":"object",
-						"description":"Test applied to the upstream input. The matching record routes to the 'then' port; the failing one (or any other) routes to 'else'.",
-						"properties":{
-							"field":{"type":"string","description":"Dot-path into the input value. Empty matches against the whole input."},
-							"op":{"type":"string","enum":["equals","not_equals","less_than","greater_than","less_or_equal","greater_or_equal","contains","not_contains","exists","not_exists"],"description":"Comparison operator."},
-							"value":{
-								"description":"Comparison target. Type must match the field being compared.",
-								"oneOf":[
-									{"type":"string","title":"String"},
-									{"type":"number","title":"Number"},
-									{"type":"boolean","title":"Boolean"}
-								]
-							}
-						},
-						"required":["op"]
-					}
-				},
-				"required":["condition"]
-			}`),
-			Idempotent: true,
+			Outputs: []core.Port{
+				{Port: "then", Label: "True"},
+				{Port: "else", Label: "False"},
+			},
+			ParamsSchema: json.RawMessage(`{"type":"object"}`),
+			Idempotent:   true,
 		},
 		Execute: executeBranch,
 	})
 }
 
-type branchCondition struct {
-	Field string
-	Op    string
-	Value any
-}
-
-// executeBranch evaluates a single structured condition against the input
-// ref and emits the input on either the "then" or "else" output port —
-// never both. Downstream nodes wired to the unused port are dormant
-// (the engine treats missing-port-output as a skip-blocking edge).
+// executeBranch is a pure router: it forwards the 'in' payload down "then" or
+// "else" depending on the boolean "condition" input — never both. Downstream
+// nodes wired to the unused port are dormant (the engine treats a
+// missing-port-output as a skip-blocking edge).
 //
-// Why not a full expression language (CEL, JQ, JS)? It's the right
-// upgrade path but every choice has tradeoffs and trapdoor edges.
-// Structured conditions cover ~80% of practical routing cases and
-// keep the graph JSON readable.
+// Why no inline condition? The comparison logic lives in the Compare drop
+// (Unreal-Blueprint splits the check from the branch). Composing Compare →
+// Branch keeps each node single-purpose and lets conditions grow arbitrarily
+// complex without bloating the router.
 func executeBranch(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	input, ok := job.Input["in"]
+	payload, ok := job.Input["in"]
 	if !ok {
 		return params.Err(job, "missing_input", "input port 'in' is required"), nil
 	}
-	condRaw, ok := job.Params["condition"]
+	condRef, ok := job.Input["condition"]
 	if !ok {
-		return params.Err(job, "bad_param", "param 'condition' is required"), nil
+		return params.Err(job, "missing_input", "input port 'condition' is required — wire a boolean (e.g. a Compare result) into it"), nil
 	}
-	cond, err := parseCondition(condRaw)
-	if err != nil {
-		return params.Err(job, "bad_param", err.Error()), nil
-	}
-
-	value, err := extractField(input, cond.Field)
+	cond, err := asBool(condRef)
 	if err != nil {
 		return params.Err(job, "bad_input", err.Error()), nil
 	}
 
-	matched, err := evaluate(value, cond.Op, cond.Value)
-	if err != nil {
-		return params.Err(job, "bad_param", err.Error()), nil
-	}
-
 	output := map[string]core.Ref{}
-	if matched {
-		output["then"] = input
+	if cond {
+		output["then"] = payload
 	} else {
-		output["else"] = input
+		output["else"] = payload
 	}
 	return core.Result{
 		JobID:  job.ID,
@@ -127,161 +88,43 @@ func executeBranch(_ context.Context, job core.Job, _ chan<- core.Progress) (cor
 	}, nil
 }
 
-func parseCondition(raw any) (branchCondition, error) {
-	m, ok := raw.(map[string]any)
-	if !ok {
-		return branchCondition{}, fmt.Errorf("condition: expected object, got %T", raw)
-	}
-	c := branchCondition{}
-	if f, ok := m["field"].(string); ok {
-		c.Field = f
-	}
-	op, ok := m["op"].(string)
-	if !ok {
-		return branchCondition{}, fmt.Errorf("condition.op: required string")
-	}
-	c.Op = op
-	c.Value = m["value"]
-	return c, nil
-}
-
-// extractField navigates a dotted path inside the input. The input is
-// interpreted as JSON or a pre-decoded map. An empty field means "test
-// the whole input value".
-func extractField(input core.Ref, field string) (any, error) {
-	if field == "" {
-		return inlineValue(input), nil
-	}
-	root := inlineValue(input)
-	if root == nil {
-		return nil, fmt.Errorf("input has no inline value to extract field %q from", field)
-	}
-	// If root is a string that looks like JSON, decode it.
-	if s, ok := root.(string); ok {
-		var v any
-		if err := json.Unmarshal([]byte(s), &v); err == nil {
-			root = v
-		} else {
-			return nil, fmt.Errorf("input is a string but not JSON; cannot extract field %q", field)
-		}
-	}
-	current := root
-	for _, part := range strings.Split(field, ".") {
-		m, ok := current.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("field %q: navigated to non-object at %q", field, part)
-		}
-		v, exists := m[part]
-		if !exists {
-			return nil, nil // missing field — let exists/not_exists ops handle it
-		}
-		current = v
-	}
-	return current, nil
-}
-
-func inlineValue(ref core.Ref) any {
-	if ref.Inline != nil {
-		return ref.Inline
-	}
-	return nil
-}
-
-func evaluate(value any, op string, expected any) (bool, error) {
-	switch op {
-	case "exists":
-		return value != nil, nil
-	case "not_exists":
-		return value == nil, nil
-	case "equals":
-		return looseEqual(value, expected), nil
-	case "not_equals":
-		return !looseEqual(value, expected), nil
-	case "contains":
-		s, _ := value.(string)
-		e, _ := expected.(string)
-		return strings.Contains(s, e), nil
-	case "not_contains":
-		s, _ := value.(string)
-		e, _ := expected.(string)
-		return !strings.Contains(s, e), nil
-	case "less_than":
-		return numericCompare(value, expected, -1)
-	case "greater_than":
-		return numericCompare(value, expected, 1)
-	case "less_or_equal":
-		return numericCompareLE(value, expected)
-	case "greater_or_equal":
-		return numericCompareGE(value, expected)
-	default:
-		return false, fmt.Errorf("unknown op %q", op)
-	}
-}
-
-func looseEqual(a, b any) bool {
-	// Handle the common JSON-decoded number cases. JSON only has
-	// "number" and Go decodes everything to float64; user-typed JSON
-	// like {"value": 200} arrives as float64 too. Compare numerically
-	// when both sides convert.
-	an, aok := toFloat(a)
-	bn, bok := toFloat(b)
-	if aok && bok {
-		return an == bn
-	}
-	return a == b
-}
-
-func toFloat(v any) (float64, bool) {
-	switch x := v.(type) {
-	case int:
-		return float64(x), true
-	case int32:
-		return float64(x), true
-	case int64:
-		return float64(x), true
-	case float32:
-		return float64(x), true
-	case float64:
-		return x, true
-	case json.Number:
-		f, err := x.Float64()
-		return f, err == nil
-	}
-	return 0, false
-}
-
-// numericCompare returns true when sign(value - expected) matches `want`
-// (-1 for <, +1 for >).
-func numericCompare(value, expected any, want int) (bool, error) {
-	vf, ok1 := toFloat(value)
-	ef, ok2 := toFloat(expected)
-	if !ok1 || !ok2 {
-		return false, fmt.Errorf("non-numeric operand in <,> comparison: %T vs %T", value, expected)
-	}
-	switch {
-	case vf < ef:
-		return want == -1, nil
-	case vf > ef:
-		return want == 1, nil
-	default:
+// asBool coerces a condition ref into a boolean. It accepts a native bool
+// (the usual case, from Compare), the strings "true"/"false"/"1"/"0"/"yes"/
+// "no" (and JSON-encoded booleans), and treats numbers as truthy when nonzero.
+// A nil/absent inline value is false, so an unfired upstream routes to else.
+func asBool(ref core.Ref) (bool, error) {
+	switch v := ref.Inline.(type) {
+	case bool:
+		return v, nil
+	case nil:
 		return false, nil
+	case float64:
+		return v != 0, nil
+	case float32:
+		return v != 0, nil
+	case int:
+		return v != 0, nil
+	case int64:
+		return v != 0, nil
+	case json.Number:
+		f, err := v.Float64()
+		if err != nil {
+			return false, fmt.Errorf("condition %q is not a number", v.String())
+		}
+		return f != 0, nil
+	case string:
+		switch strings.TrimSpace(strings.ToLower(v)) {
+		case "true", "1", "yes":
+			return true, nil
+		case "false", "0", "no", "":
+			return false, nil
+		}
+		var b bool
+		if err := json.Unmarshal([]byte(v), &b); err == nil {
+			return b, nil
+		}
+		return false, fmt.Errorf("condition is a string %q that isn't a boolean", v)
+	default:
+		return false, fmt.Errorf("condition input must be a boolean, got %T", ref.Inline)
 	}
-}
-
-func numericCompareLE(value, expected any) (bool, error) {
-	vf, ok1 := toFloat(value)
-	ef, ok2 := toFloat(expected)
-	if !ok1 || !ok2 {
-		return false, fmt.Errorf("non-numeric operand in <= comparison: %T vs %T", value, expected)
-	}
-	return vf <= ef, nil
-}
-
-func numericCompareGE(value, expected any) (bool, error) {
-	vf, ok1 := toFloat(value)
-	ef, ok2 := toFloat(expected)
-	if !ok1 || !ok2 {
-		return false, fmt.Errorf("non-numeric operand in >= comparison: %T vs %T", value, expected)
-	}
-	return vf >= ef, nil
 }

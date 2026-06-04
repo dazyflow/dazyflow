@@ -60,14 +60,21 @@ func TestBranch_RoutesThroughDispatch(t *testing.T) {
 				ID: "branch-" + c.name, Tenant: "t", Workspace: "ws",
 				Nodes: []core.Node{
 					{ID: "source", Module: "sleep", Params: map[string]any{"ms": 1}},
-					{ID: "decide", Module: "branch", Params: map[string]any{
-						"condition": map[string]any{"op": "greater_than", "value": c.threshold},
+					// The check is split out (Compare → Branch): Compare turns
+					// the numeric value into a boolean, Branch just routes.
+					{ID: "check", Module: "compare", Params: map[string]any{
+						"op": "greater_than", "B": c.threshold,
 					}},
+					{ID: "decide", Module: "branch"},
 					{ID: "yes", Module: "sleep", Params: map[string]any{"ms": 1}},
 					{ID: "no", Module: "sleep", Params: map[string]any{"ms": 1}},
 				},
 				Edges: []core.Edge{
-					// source feeds the value (its inline content) to branch.in
+					// source feeds A; Compare tests A > B (the threshold)…
+					{From: "source", FromPort: "out", To: "check", ToPort: "A"},
+					// …that drives Branch's condition, while the value itself
+					// is the payload routed on branch.in.
+					{From: "check", FromPort: "result", To: "decide", ToPort: "condition"},
 					{From: "source", FromPort: "out", To: "decide", ToPort: "in"},
 					{From: "decide", FromPort: "then", To: "yes", ToPort: "in"},
 					{From: "decide", FromPort: "else", To: "no", ToPort: "in"},
