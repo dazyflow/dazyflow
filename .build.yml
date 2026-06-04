@@ -37,6 +37,14 @@ tasks:
   - vet: |
       cd hazyflow
       go vet ./...
+  - vuln: |
+      # Technical-vulnerability scan (ISO 27001 A.8.8): govulncheck cross-
+      # references the module graph against the Go vulnerability database
+      # and reports only vulns reachable from code we actually call, so a
+      # known-vulnerable dependency fails the build instead of shipping.
+      cd hazyflow
+      go install golang.org/x/vuln/cmd/govulncheck@latest
+      "$(go env GOPATH)/bin/govulncheck" ./...
   - hzctl-e2e: |
       # Guard the gRPC control plane + hzctl end to end: this demo builds
       # hzd + hzctl + a remote module, then drives SaveGraph/RunGraph over

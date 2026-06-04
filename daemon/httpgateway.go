@@ -826,6 +826,10 @@ func (h *HTTPGateway) signIn(rw http.ResponseWriter, r *http.Request) {
 	}
 	user, err := auth.VerifyPassword(r.Context(), h.Users, body.Email, body.Password)
 	if err != nil {
+		// Tenant is left empty: resolving it would reveal whether the
+		// email maps to an account, which the uniform error above
+		// deliberately hides.
+		h.auditAuth(r.Context(), r, "", strings.ToLower(strings.TrimSpace(body.Email)), "auth.signin_failed", "method=password")
 		writeJSONError(rw, http.StatusUnauthorized, "invalid email or password")
 		return
 	}
@@ -841,6 +845,7 @@ func (h *HTTPGateway) signIn(rw http.ResponseWriter, r *http.Request) {
 			writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("issue challenge: %v", cerr))
 			return
 		}
+		h.auditAuth(r.Context(), r, user.Tenant, user.Email, "auth.mfa_challenge", "method=password")
 		writeJSON(rw, http.StatusOK, map[string]any{
 			"totp_required": true,
 			"challenge":     challenge,
@@ -856,6 +861,7 @@ func (h *HTTPGateway) signIn(rw http.ResponseWriter, r *http.Request) {
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("issue session: %v", err))
 		return
 	}
+	h.auditAuth(r.Context(), r, sess.Tenant, sess.Subject, "auth.signin", "method=password")
 	http.SetCookie(rw, &http.Cookie{
 		Name:     sessionCookieName,
 		Value:    token,
@@ -923,7 +929,14 @@ func (h *HTTPGateway) signOut(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if token := credentialFromRequest(r); strings.HasPrefix(token, auth.SessionTokenPrefix) {
-		_ = h.Sessions.DeleteSession(r.Context(), auth.SessionLookupKey(token))
+		key := auth.SessionLookupKey(token)
+		// Resolve before deleting so the audit event carries the identity
+		// that signed out. Best-effort — an already-gone session just
+		// skips the record.
+		if sess, err := h.Sessions.GetSession(r.Context(), key); err == nil {
+			h.auditAuth(r.Context(), r, sess.Tenant, sess.Subject, "auth.signout", "")
+		}
+		_ = h.Sessions.DeleteSession(r.Context(), key)
 	}
 	http.SetCookie(rw, &http.Cookie{
 		Name:     sessionCookieName,

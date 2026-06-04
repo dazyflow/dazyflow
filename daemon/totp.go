@@ -236,9 +236,15 @@ func (h *HTTPGateway) totpVerify(rw http.ResponseWriter, r *http.Request) {
 		writeAPIError(rw, http.StatusBadRequest, "challenge_expired", "challenge has expired — sign in again")
 		return
 	case errors.Is(err, auth.ErrTOTPInvalid):
+		// The challenge is consumed inside ConsumeTOTPChallenge, so the
+		// email isn't returned on the failure path — the actor is left
+		// blank and the source IP (added by auditAuth) carries the
+		// brute-force signal.
+		h.auditAuth(r.Context(), r, "", "", "auth.signin_failed", "stage=mfa method=totp")
 		writeAPIError(rw, http.StatusUnauthorized, "totp_invalid", "invalid code")
 		return
 	case errors.Is(err, auth.ErrRecoveryCodeInvalid):
+		h.auditAuth(r.Context(), r, "", "", "auth.signin_failed", "stage=mfa method=recovery_code")
 		writeAPIError(rw, http.StatusUnauthorized, "recovery_code_invalid", "invalid recovery code")
 		return
 	case errors.Is(err, auth.ErrTOTPNotEnrolled):
@@ -263,6 +269,11 @@ func (h *HTTPGateway) totpVerify(rw http.ResponseWriter, r *http.Request) {
 		writeAPIError(rw, http.StatusInternalServerError, "internal_error", "could not create session")
 		return
 	}
+	mfaMethod := "totp"
+	if body.Code == "" && body.RecoveryCode != "" {
+		mfaMethod = "recovery_code"
+	}
+	h.auditAuth(r.Context(), r, sess.Tenant, sess.Subject, "auth.signin", "method="+mfaMethod)
 	http.SetCookie(rw, &http.Cookie{
 		Name:     sessionCookieName,
 		Value:    token,

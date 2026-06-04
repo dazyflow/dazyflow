@@ -179,6 +179,44 @@ func (h *HTTPGateway) audit(ctx context.Context, p core.Principal, action, targe
 	}
 }
 
+// auditAuth records an authentication-lifecycle event — sign-in, sign-out,
+// signup, and the MFA legs (ISO/IEC 27001:2022 A.8.15/A.8.16: detection of
+// anomalous sign-in activity such as credential stuffing).
+//
+// It differs from audit() in two ways. First, the actor is an email rather
+// than a resolved principal — a *failed* sign-in has no principal yet, only
+// the address that was tried. Second, the caller's source IP is appended to
+// Detail so a burst of failures from one IP is visible in the trail.
+//
+// Tenant is best-effort: it's the user's tenant on a successful sign-in, but
+// empty on a pre-auth failure — we don't resolve (and so don't reveal)
+// whether the attempted email maps to a tenant. Failed-login events
+// therefore land in the platform-level trail (a platform admin querying
+// ?tenant=) rather than a specific tenant's view. Best-effort like audit():
+// a write failure is logged, never blocking the auth path; a nil store is a
+// no-op.
+func (h *HTTPGateway) auditAuth(ctx context.Context, r *http.Request, tenant, actor, action, detail string) {
+	if h.Audit == nil {
+		return
+	}
+	ipNote := "ip=" + clientIP(r)
+	if detail == "" {
+		detail = ipNote
+	} else {
+		detail += " " + ipNote
+	}
+	if err := h.Audit.Append(ctx, core.AuditEvent{
+		Time:   time.Now(),
+		Tenant: tenant,
+		Actor:  actor,
+		Action: action,
+		Target: actor,
+		Detail: detail,
+	}); err != nil {
+		log.Printf("audit append (%s %s): %v", action, actor, err)
+	}
+}
+
 // listAudit serves GET /api/v1/admin/audit — the admin audit trail,
 // tenant:admin only, scoped to the caller's tenant (platform admins may
 // pass ?tenant=). Paginated via ?limit / ?offset.

@@ -144,6 +144,7 @@ func (h *HTTPGateway) signUp(rw http.ResponseWriter, r *http.Request) {
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("issue session: %v", err))
 		return
 	}
+	h.auditAuth(r.Context(), r, sess.Tenant, sess.Subject, "auth.signup", "method=password")
 	http.SetCookie(rw, &http.Cookie{
 		Name:     sessionCookieName,
 		Value:    token,
