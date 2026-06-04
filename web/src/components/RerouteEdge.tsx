@@ -21,6 +21,9 @@ type WP = { x: number; y: number };
 type RerouteData = {
   waypoints?: WP[];
   updateWaypoints?: (wps: WP[]) => void;
+  // True while data is flowing along this wire during a run (#9) — drives
+  // the travelling-dot animation.
+  active?: boolean;
 };
 
 // splinePath builds a smooth cubic curve passing through every point via
@@ -143,6 +146,15 @@ export function RerouteEdge({
   return (
     <>
       <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />
+      {/* Data-flow animation (#9): dots travel source→target along the path
+          while the downstream node is running. Two staggered dots read as
+          continuous flow. animateMotion follows the path's draw direction. */}
+      {d.active &&
+        [0, 0.6].map((delay, i) => (
+          <circle key={i} r={3.5} fill={stroke} className="reroute-flow">
+            <animateMotion dur="1.2s" repeatCount="indefinite" path={path} begin={`-${delay}s`} />
+          </circle>
+        ))}
       {/* Wide, invisible hit area so double-clicking anywhere near the wire
           drops a knot. pointerEvents: stroke keeps clicks on the line. */}
       <path

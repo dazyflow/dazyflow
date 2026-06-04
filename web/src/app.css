@@ -5266,6 +5266,12 @@ button.danger-outline:hover:not(:disabled) {
 .reroute-knot:hover {
   stroke: var(--ink);
 }
+/* Travelling data-flow dots (#9): don't intercept pointer events, and a
+   soft glow so they read as moving energy along the wire. */
+.reroute-flow {
+  pointer-events: none;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, currentColor 60%, transparent));
+}
 
 /* Align/distribute: compact square icon buttons, present only during a
    multi-select. Tighter than the labelled toolbar buttons. */

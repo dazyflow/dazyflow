@@ -581,18 +581,22 @@ function EditorInner() {
       const out = byId
         .get(e.source)
         ?.data.manifest?.outputs?.find((p) => p.port === (e.sourceHandle ?? "out"));
+      // Animate the wire while its downstream node is running — data is
+      // flowing into it. Node status is set live from the run's SSE stream.
+      const active = byId.get(e.target)?.data.status === "running";
       return {
         ...e,
         type: "reroute",
         style: {
           ...e.style,
           stroke: portColor(out?.mime),
-          strokeWidth: e.selected ? 2.5 : 1.5,
+          strokeWidth: e.selected ? 2.5 : active ? 2 : 1.5,
         },
         // RerouteEdge mutates routing through this callback so the change
         // lands in the controlled edge state (and marks the graph dirty).
         data: {
           ...e.data,
+          active,
           updateWaypoints: (wps: { x: number; y: number }[]) => {
             setEdges((eds) =>
               eds.map((x) =>
