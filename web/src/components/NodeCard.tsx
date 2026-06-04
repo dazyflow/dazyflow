@@ -36,6 +36,10 @@ export type HazyNodeData = {
   // Required values this drop is still missing (#13) — drives a red
   // "needs configuration" badge, distinct from the amber lint warning.
   configErrors?: string[];
+  // Breakpoint set on this node (#12) — shows a red breakpoint dot.
+  breakpoint?: boolean;
+  // The live run is currently paused after this node (#12).
+  paused?: boolean;
 };
 
 // peekValue renders a port's run value as a short, single-line string for
@@ -133,9 +137,13 @@ export function HazyNode({ data, selected }: NodeProps) {
         (selected ? " selected" : "") +
         statusClass +
         (d.lintMessage ? " lint-warn" : "") +
-        (d.configErrors?.length ? " config-err" : "")
+        (d.configErrors?.length ? " config-err" : "") +
+        (d.paused ? " paused" : "")
       }
     >
+      {d.breakpoint && (
+        <div className="hz-node-bp" aria-label="breakpoint" title="Breakpoint — run pauses after this node" />
+      )}
       {/* No declared inputs (sources/triggers): a single centered dot on
           the left edge, no label. */}
       {!hasDeclaredInputs && (

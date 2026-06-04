@@ -50,6 +50,10 @@ import {
   StickyNote,
   Group,
   AlertCircle,
+  CircleDot,
+  StepForward,
+  CircleOff,
+  PanelRight,
 } from "lucide-react";
 import { useAuth } from "../auth";
 import { useThemeMode } from "../theme";
@@ -77,7 +81,6 @@ import type {
   Visibility,
 } from "../types";
 import { Inspector } from "../components/Inspector";
-import { LiveConsole } from "../components/LiveConsole";
 import { HazyNode, portColor, type HazyNodeData } from "../components/NodeCard";
 import { CommentNode } from "../components/CommentNode";
 import { RunHistory } from "../components/RunHistory";
@@ -193,6 +196,12 @@ function EditorInner() {
   // Per-node output values from the current run (#10) — nodeId → port → Ref.
   // Populated as nodes finish; surfaced as a hover-peek on output ports.
   const [runOutputs, setRunOutputs] = useState<Record<string, Record<string, Ref>>>({});
+  // Breakpoints (#12): node IDs flagged to pause the run after they finish.
+  // Saved with the graph (node.breakpoint). pausedAt is the node the live
+  // run is currently holding after; stepping mirrors the run's step mode.
+  const [breakpoints, setBreakpoints] = useState<Set<string>>(() => new Set());
+  const [pausedAt, setPausedAt] = useState<string | null>(null);
+  const [stepping, setStepping] = useState(false);
   // Triggers live at graph-level (not per-node). Carried through so a
   // save doesn't accidentally drop the webhook secret / cron expression
   // a user configured in the settings modal.
@@ -267,14 +276,6 @@ function EditorInner() {
   // progress events. Cleared on every new run. The Inspector renders
   // the buffer for the currently-selected node.
   const [liveLogs, setLiveLogs] = useState<Record<string, string[]>>({});
-  // globalLog mirrors every line across every node, prefixed with the
-  // node ID, so the bottom-of-canvas console shows the whole pipeline.
-  const [globalLog, setGlobalLog] = useState<string[]>([]);
-  // The log strip is now always rendered as a collapsible header so
-  // users can find it before any run has produced output. Default
-  // collapsed to give the canvas back its vertical space until
-  // there's something to read.
-  const [logOpen, setLogOpen] = useState(false);
   // On narrow viewports the inspector is a bottom sheet. Selecting a node
   // rests it in a collapsed peek (just the head); the user taps the head
   // or chevron to expand, and X's it out (or taps the canvas) to dismiss.
@@ -294,10 +295,19 @@ function EditorInner() {
   }, []);
   // paletteOpen drives the Ctrl/Cmd+K quick-drop search popup.
   const [paletteOpen, setPaletteOpen] = useState(false);
-  // inspectorExpanded controls the narrow-screen bottom sheet. Selecting a
-  // node rests it in the collapsed peek state (just the head); the user
-  // taps to expand. Desktop ignores this (the panel is always in the grid).
+  // inspectorExpanded drives the narrow-screen fullscreen inspector overlay:
+  // false keeps it slid off-screen (the canvas shows the Inspect FAB instead),
+  // true slides it in over the canvas. Desktop ignores this (the panel is
+  // always in the grid).
   const [inspectorExpanded, setInspectorExpanded] = useState(false);
+  // Every genuine change of the selected node rests the narrow-screen
+  // inspector in its collapsed state, so a tap on a drop doesn't slam the
+  // full sheet over the canvas. Keyed on selectedID so it runs ONLY when the
+  // selection actually changes — not on React Flow's spurious re-fires, which
+  // would otherwise instantly undo the Inspect FAB opening the overlay.
+  useEffect(() => {
+    setInspectorExpanded(false);
+  }, [selectedID]);
 
   const rfRef = useRef<ReactFlowInstance<FlowNode<HazyNodeData>, FlowEdge> | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -354,6 +364,7 @@ function EditorInner() {
         connectable: false,
       })),
     );
+    setBreakpoints(new Set((g.nodes ?? []).filter((n) => n.breakpoint).map((n) => n.id)));
     setParamsByID(Object.fromEntries((g.nodes ?? []).map((n) => [n.id, n.params ?? {}])));
     setTriggers(g.triggers ?? []);
     setVisibility(g.visibility);
@@ -405,6 +416,7 @@ function EditorInner() {
           setNodes([]);
           setEdges([]);
           setFrameNodes([]);
+          setBreakpoints(new Set());
           setParamsByID({});
           setTriggers([]);
           setDirty(false);
@@ -1111,6 +1123,8 @@ function EditorInner() {
         inlineEditable: n.id === soleId,
         outputs: runOutputs[n.id],
         configErrors: configErrorsByNode.get(n.id),
+        breakpoint: breakpoints.has(n.id),
+        paused: pausedAt === n.id,
       },
     }));
   }, [
@@ -1121,6 +1135,120 @@ function EditorInner() {
     connectedOutputsByNode,
     runOutputs,
     configErrorsByNode,
+    breakpoints,
+    pausedAt,
+  ]);
+
+  // Toggle a breakpoint on the sole selected node (#12). Saved with the
+  // graph so it survives reloads.
+  const toggleBreakpoint = useCallback(() => {
+    const sel = nodes.filter((n) => n.selected);
+    if (sel.length !== 1) return;
+    const id = sel[0].id;
+    setBreakpoints((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+    setDirty(true);
+  }, [nodes]);
+
+  // Continue / Step a paused run (#12).
+  const resumeRun = useCallback(
+    (step: boolean) => {
+      if (!token || !currentRunID) return;
+      setPausedAt(null);
+      api.resumeRun(token, currentRunID, step).catch((e) => setError((e as Error).message));
+    },
+    [token, currentRunID],
+  );
+  // Stop the active (possibly paused) run. Cancels lockedRunID if known,
+  // else the run this editor started (currentRunID) — covers the brief
+  // window before refreshLock detects the lock. The cancel publishes a
+  // Terminal event over SSE, which subscribeToRun handles (clears pause
+  // state + refreshes the lock), so we don't refreshLock here.
+  const stopRun = useCallback(async () => {
+    const runID = lockedRunID || currentRunID;
+    if (!token || !runID) return;
+    setCancelling(true);
+    setError(null);
+    try {
+      await api.cancelRun(token, runID, "stopped from editor");
+      setRunning(false);
+      setPausedAt(null);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setCancelling(false);
+    }
+  }, [token, lockedRunID, currentRunID]);
+  // Clear every breakpoint in the graph.
+  const clearBreakpoints = useCallback(() => {
+    setBreakpoints((prev) => (prev.size === 0 ? prev : new Set()));
+    setDirty(true);
+  }, []);
+
+  // gdb-style debugging shortcuts (#12): c=continue, s/n=step, k=kill (stop),
+  // d=delete breakpoints, b=toggle breakpoint on the selected node. Plain
+  // keys only — we bail on any modifier (so Ctrl/Cmd+C copy still works) and
+  // when focus is in a text field. Each action no-ops unless it applies.
+  useEffect(() => {
+    const inText = () => {
+      const el = document.activeElement as HTMLElement | null;
+      return (
+        !!el &&
+        (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)
+      );
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || inText()) return;
+      switch (e.key.toLowerCase()) {
+        case "c":
+          if (pausedAt) {
+            e.preventDefault();
+            resumeRun(false);
+          }
+          break;
+        case "s":
+        case "n":
+          if (pausedAt) {
+            e.preventDefault();
+            resumeRun(true);
+          }
+          break;
+        case "k":
+          if (running || lockedRunID) {
+            e.preventDefault();
+            void stopRun();
+          }
+          break;
+        case "d":
+          if (breakpoints.size > 0) {
+            e.preventDefault();
+            clearBreakpoints();
+          }
+          break;
+        case "b":
+          if (nodes.filter((n) => n.selected).length === 1) {
+            e.preventDefault();
+            toggleBreakpoint();
+          }
+          break;
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [
+    pausedAt,
+    running,
+    lockedRunID,
+    breakpoints,
+    nodes,
+    resumeRun,
+    stopRun,
+    clearBreakpoints,
+    toggleBreakpoint,
   ]);
 
   // Frames rendered as comment nodes, with a fresh title-edit callback
@@ -1379,6 +1507,7 @@ function EditorInner() {
       module: n.data.moduleID,
       params: paramsByID[n.id] ?? {},
       position: n.position,
+      ...(breakpoints.has(n.id) ? { breakpoint: true } : {}),
     })),
     edges: edges.map((e) => ({
       from: e.source,
@@ -1582,8 +1711,9 @@ function EditorInner() {
       nds.map((n) => ({ ...n, data: { ...n.data, status: undefined } })),
     );
     setLiveLogs({});
-    setGlobalLog([]);
     setRunOutputs({});
+    setPausedAt(null);
+    setStepping(false);
     const abort = new AbortController();
     api
       .streamJob(
@@ -1634,7 +1764,6 @@ function EditorInner() {
             const stream = ev.progress?.data?.stream;
             const localPrefix = stream === "stderr" ? "[stderr] " : "";
             const localLine = localPrefix + line;
-            const globalLine = `[${ev.node_id}] ${localLine}`;
             setLiveLogs((prev) => {
               const cur = prev[ev.node_id!] ?? [];
               // Cap per-node buffer at 1000 lines to keep React state
@@ -1645,13 +1774,16 @@ function EditorInner() {
                   : [...cur, localLine];
               return { ...prev, [ev.node_id!]: next };
             });
-            setGlobalLog((prev) =>
-              prev.length >= 5000
-                ? [...prev.slice(-4999), globalLine]
-                : [...prev, globalLine],
-            );
+          }
+          if (kind === "paused") {
+            // Breakpoint hit (#12): the run is holding after this node.
+            const ev = data as { node_id?: string; stepping?: boolean };
+            setPausedAt(ev.node_id ?? null);
+            setStepping(!!ev.stepping);
           }
           if (kind === "terminal") {
+            setPausedAt(null);
+            setStepping(false);
             abort.abort();
             // The run that just held the lock might be the only active
             // one; ask the server before clearing the editor lock so
@@ -1902,12 +2034,6 @@ function EditorInner() {
             >
               <Plus size={15} />
               <span className="toolbar-label">{t("editor.addDrop")}</span>
-              <kbd className="editor-add-drop-kbd toolbar-label">
-                {/* navigator.platform is deprecated; userAgent is the
-                    documented replacement and still works in every browser
-                    we target. */}
-                {navigator.userAgent.includes("Mac") ? "⌘K" : "Ctrl+K"}
-              </kbd>
             </button>
             {/* Flow settings moved to the top-bar three-dots menu (single
                 entry point). The toolbar gear used to live here. Triggers
@@ -1987,6 +2113,24 @@ function EditorInner() {
             </>
           )}
 
+          {/* Breakpoint toggle (#12) — single selection only. */}
+          {selectedCount === 1 && (
+            <>
+              <span className="toolbar-divider" aria-hidden="true" />
+              <button
+                className={
+                  "ghost editor-bp" +
+                  (nodes.some((n) => n.selected && breakpoints.has(n.id)) ? " on" : "")
+                }
+                onClick={toggleBreakpoint}
+                title={`${t("editor.breakpointTitle")} — b`}
+              >
+                <CircleDot size={15} />
+                <span className="toolbar-label">{t("editor.breakpoint")}</span>
+              </button>
+            </>
+          )}
+
           <span className="toolbar-divider" aria-hidden="true" />
 
           {/* Document state — save status and run history. */}
@@ -2060,84 +2204,108 @@ function EditorInner() {
             </span>
           )}
 
-          {/* Primary action — pinned to the right edge as the focal point. */}
+          {/* Primary action — pinned to the right edge as the focal point.
+              While a run is active the button BECOMES a Stop button (click to
+              cancel) rather than a disabled "Running…" plus a separate Cancel.
+              Continue/Step live in the floating debug menu (see below). */}
           <div className="toolbar-group">
-            {hasWebhookTrigger ? (
+            {running || lockedRunID ? (
+              <button
+                className="primary run-stop"
+                onClick={() => void stopRun()}
+                disabled={cancelling || !hasPerm("graph:run")}
+                title={
+                  hasPerm("graph:run")
+                    ? t("editor.stopRunTooltip", {
+                        runID: (lockedRunID ?? currentRunID ?? "").slice(0, 8),
+                      })
+                    : t("editor.missingRunPerm")
+                }
+              >
+                <Square size={15} />
+                <span className="toolbar-label">
+                  {cancelling ? t("editor.stopping") : t("editor.stop")}
+                </span>
+              </button>
+            ) : hasWebhookTrigger ? (
               <button
                 className="primary"
                 onClick={doTestEvent}
-                disabled={running || dirty || !hasPerm("graph:run") || !!lockedRunID}
+                disabled={dirty || !hasPerm("graph:run")}
                 title={
                   dirty
                     ? t("editor.saveFirst")
-                    : lockedRunID
-                    ? t("editor.alreadyRunning", { runID: lockedRunID.slice(0, 8) })
                     : hasPerm("graph:run")
                     ? t("editor.testEventTooltip")
                     : t("editor.missingRunPerm")
                 }
               >
                 <Send size={15} />
-                <span className="toolbar-label">
-                  {running ? t("editor.sending") : t("editor.testEvent")}
-                </span>
+                <span className="toolbar-label">{t("editor.testEvent")}</span>
               </button>
             ) : (
               <button
                 className="primary"
                 onClick={runWithLiveStatus}
-                disabled={running || dirty || !hasPerm("graph:run") || !!lockedRunID}
+                disabled={dirty || !hasPerm("graph:run")}
                 title={
                   dirty
                     ? t("editor.saveFirst")
-                    : lockedRunID
-                    ? t("editor.alreadyRunning", { runID: lockedRunID.slice(0, 8) })
                     : hasPerm("graph:run")
                     ? t("editor.run")
                     : t("editor.missingRunPerm")
                 }
               >
                 <Play size={15} />
-                <span className="toolbar-label">
-                  {running ? t("editor.running") : t("editor.run")}
-                </span>
-              </button>
-            )}
-            {lockedRunID && (
-              <button
-                className="ghost"
-                disabled={cancelling || !hasPerm("graph:run")}
-                title={
-                  hasPerm("graph:run")
-                    ? t("editor.cancelRunTooltip", { runID: lockedRunID.slice(0, 8) })
-                    : t("editor.missingRunPerm")
-                }
-                onClick={async () => {
-                  if (!token || !lockedRunID) return;
-                  setCancelling(true);
-                  setError(null);
-                  try {
-                    await api.cancelRun(token, lockedRunID, "cancelled from editor");
-                    // The dispatcher's Terminal event will fire via SSE
-                    // and refreshLock will follow; just nudge the local
-                    // running flag so the Run button re-enables fast.
-                    setRunning(false);
-                    void refreshLock();
-                  } catch (e) {
-                    setError((e as Error).message);
-                  } finally {
-                    setCancelling(false);
-                  }
-                }}
-              >
-                <Square size={15} />
-                <span className="toolbar-label">
-                  {cancelling ? t("editor.cancelling") : t("editor.cancel")}
-                </span>
+                <span className="toolbar-label">{t("editor.run")}</span>
               </button>
             )}
           </div>
         </div>
+        {/* Floating debug menu (#12): fixed in the canvas's upper-left. Shown
+            while a run is active with breakpoints set, OR whenever the run is
+            paused — even if breakpoints were just cleared, so you can still
+            Continue/Step out of a break instead of being stranded. */}
+        {(pausedAt || (breakpoints.size > 0 && (running || !!lockedRunID))) && (
+          <div className="debug-menu" role="toolbar" aria-label="Debug">
+            <button
+              className="icon"
+              title={`${t("editor.continueTitle")} — c`}
+              disabled={!pausedAt}
+              onClick={() => resumeRun(false)}
+            >
+              <Play size={16} />
+            </button>
+            <button
+              className={"icon" + (stepping ? " on" : "")}
+              title={`${t("editor.stepTitle")} — s`}
+              disabled={!pausedAt}
+              onClick={() => resumeRun(true)}
+            >
+              <StepForward size={16} />
+            </button>
+            <button
+              className="icon"
+              title={`${t("editor.clearBreakpoints")} — d`}
+              disabled={breakpoints.size === 0}
+              onClick={clearBreakpoints}
+            >
+              <CircleOff size={16} />
+            </button>
+          </div>
+        )}
+        {/* Small screens: the inspector is hidden (no cramped bottom sheet);
+            this floating button opens it fullscreen. Shown when a node is
+            selected and the overlay isn't already open. */}
+        {isNarrow && selectedID && !inspectorExpanded && (
+          <button
+            className="inspect-fab icon primary"
+            title={t("editor.inspect")}
+            onClick={() => setInspectorExpanded(true)}
+          >
+            <PanelRight size={18} />
+          </button>
+        )}
         {previewRef && (
           <div className={`history-preview-banner${showHistory ? " with-panel" : ""}`}>
             <span className="history-preview-msg">
@@ -2227,10 +2395,12 @@ function EditorInner() {
           onConnectEnd={onConnectEnd}
           onInit={(inst) => (rfRef.current = inst)}
           onSelectionChange={(s) => {
+            // React Flow re-fires this on every node-array update, not just
+            // when the user picks a different node — so we must NOT collapse
+            // the inspector here (it would instantly undo the Inspect FAB's
+            // open). Collapsing on a genuine selection change is handled by
+            // the effect keyed on selectedID below.
             setSelectedID(s.nodes[0]?.id ?? null);
-            // Every new (or cleared) selection starts collapsed so a tap
-            // on a drop doesn't slam the full sheet over the canvas.
-            setInspectorExpanded(false);
           }}
           fitView
           fitViewOptions={{ padding: 0.3 }}
@@ -2433,42 +2603,6 @@ function EditorInner() {
             </span>
           </div>
         )}
-        <div className={"pipeline-log" + (logOpen ? " open" : " collapsed")}>
-          <div className="pipeline-log-bar">
-            <button
-              type="button"
-              className="ghost"
-              onClick={() => setLogOpen((v) => !v)}
-            >
-              {logOpen ? "▼" : "▲"} {t("editor.pipelineLog")}
-              <span className="muted" style={{ marginLeft: 8 }}>
-                {globalLog.length === 0
-                  ? t("editor.logEmpty")
-                  : t("editor.logLines", { count: globalLog.length })}
-              </span>
-            </button>
-            <button
-              type="button"
-              className="ghost"
-              onClick={() => setGlobalLog([])}
-              title={t("editor.logClearTitle")}
-              disabled={globalLog.length === 0}
-            >
-              {t("editor.logClear")}
-            </button>
-          </div>
-          {logOpen && (
-            <div className="pipeline-log-body">
-              {globalLog.length === 0 ? (
-                <div className="pipeline-log-empty">
-                  {t("editor.logEmptyHint")}
-                </div>
-              ) : (
-                <LiveConsole lines={globalLog} />
-              )}
-            </div>
-          )}
-        </div>
       </div>
       <div className="inspector">
         <Inspector
@@ -2505,12 +2639,10 @@ function EditorInner() {
           onClose={
             isNarrow
               ? () => {
-                  // Clear selection so the CSS bottom-sheet rule
-                  // (data-has-selection="false") hides the panel and
-                  // the canvas regains its full area. setNodes flips
-                  // React Flow's internal `selected` flag so the same
-                  // click on the node won't keep highlighting it
-                  // underneath.
+                  // Closing the fullscreen overlay returns to a clean canvas:
+                  // drop the selection so the Inspect FAB hides too. setNodes
+                  // flips React Flow's internal `selected` flag so the node
+                  // isn't left highlighted underneath; tap it again to inspect.
                   setSelectedID(null);
                   setInspectorExpanded(false);
                   setNodes((nds) =>

@@ -377,6 +377,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/me/runs/{run_id}/events", h.requireAuth(h.runEventsMe))
 	mux.HandleFunc("POST /api/v1/me/runs/{run_id}/cancel",
 		h.requireAuth(h.idempotencyMiddleware("/me/runs/{run_id}/cancel", h.cancelRunMe)))
+	mux.HandleFunc("POST /api/v1/me/runs/{run_id}/resume", h.requireAuth(h.resumeRunMe))
 
 	// /me/connections — LLM-friendly OAuth surface. List returns
 	// provider catalog + which accounts the caller has linked. Authorize
@@ -1516,6 +1517,41 @@ func (h *HTTPGateway) cancelRun(rw http.ResponseWriter, r *http.Request, p core.
 	writeJSON(rw, http.StatusOK, map[string]string{"status": "cancelled"})
 }
 
+// resumeRun continues a run paused at a breakpoint (#12). Body {"step":true}
+// advances one node and pauses again; otherwise the run continues to the
+// next breakpoint or completion.
+func (h *HTTPGateway) resumeRun(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	runID := r.PathValue("runID")
+	var body struct {
+		Step bool `json:"step"`
+	}
+	if r.ContentLength > 0 {
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
+			return
+		}
+	}
+	if err := h.svc.ResumeGraphRun(r.Context(), p, runID, body.Step); err != nil {
+		switch {
+		case errors.Is(err, core.ErrNotFound):
+			writeJSONError(rw, http.StatusNotFound, err.Error())
+		case errors.Is(err, core.ErrConflict):
+			writeJSONError(rw, http.StatusConflict, err.Error())
+		case errors.Is(err, core.ErrUnauthorized):
+			writeJSONError(rw, http.StatusForbidden, err.Error())
+		default:
+			writeJSONError(rw, http.StatusInternalServerError, err.Error())
+		}
+		return
+	}
+	action := "run.resume"
+	if body.Step {
+		action = "run.step"
+	}
+	h.audit(r.Context(), p, action, runID, "")
+	writeJSON(rw, http.StatusOK, map[string]string{"status": "resumed"})
+}
+
 func (h *HTTPGateway) runGraph(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant := r.PathValue("tenant")
 	workspace := r.PathValue("workspace")
@@ -1805,6 +1841,10 @@ func (h *HTTPGateway) jobEvents(rw http.ResponseWriter, r *http.Request, p core.
 			}
 			if ev.NodeStatus != nil {
 				writeSSE(rw, "node", ev.NodeStatus)
+				flusher.Flush()
+			}
+			if ev.Paused != nil {
+				writeSSE(rw, "paused", ev.Paused)
 				flusher.Flush()
 			}
 			if ev.Terminal != nil {

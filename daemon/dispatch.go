@@ -115,11 +115,36 @@ func (d *Dispatcher) AdvanceAfterCompletion(
 	if grec, err := d.store.Get(ctx, graphRunID); err == nil && core.IsTerminalStatus(grec.Status) {
 		return
 	}
+	// Breakpoint / step gate (#12): if this node carries a breakpoint (or
+	// the run is stepping), hold here — don't dispatch its dependents and
+	// don't complete the graph. The node keeps its Succeeded status (output
+	// inspectable); the run idles until Continue/Step re-drives it via
+	// Service.ResumeGraphRun. Only pause on success — a failed breakpoint
+	// node should still propagate failure normally.
+	if status == core.JobStatusSucceeded && shouldPauseAfter(graph, graphRunID, nodeID) {
+		breakpoints.addPaused(graphRunID, nodeID)
+		d.bus.Publish(graphRunID, BusEvent{Paused: &PausedEvent{
+			NodeID:   nodeID,
+			Stepping: breakpoints.isStepping(graphRunID),
+		}})
+		return
+	}
 	if status == core.JobStatusSucceeded ||
 		(status == core.JobStatusFailed && !d.failurePropagates(graph, nodeID)) {
 		d.dispatchReady(ctx, graph, graphRunID, nodeID)
 	}
 	d.maybeCompleteGraph(ctx, graph, graphRunID, nodeID, status, resultErr)
+}
+
+// resumeFrom re-drives advancement from the nodes a run is paused after —
+// dispatching their dependents and re-checking graph completion, exactly
+// the work AdvanceAfterCompletion skipped at the breakpoint. Shared by the
+// Continue and Step paths in Service.ResumeGraphRun.
+func (d *Dispatcher) resumeFrom(ctx context.Context, graph core.Graph, graphRunID string, nodeIDs []string) {
+	for _, nodeID := range nodeIDs {
+		d.dispatchReady(ctx, graph, graphRunID, nodeID)
+		d.maybeCompleteGraph(ctx, graph, graphRunID, nodeID, core.JobStatusSucceeded, nil)
+	}
 }
 
 // PublishNodeStatus emits a NodeStatusEvent for subscribers (the SSE
@@ -363,6 +388,7 @@ func (d *Dispatcher) maybeCompleteGraph(
 
 	final := &core.Result{Status: core.StatusOK}
 	if cerr := d.store.Complete(ctx, graphRunID, core.JobStatusSucceeded, final); cerr == nil {
+		breakpoints.clear(graphRunID)
 		d.reclaimScratch(graph, graphRunID)
 		d.bus.Publish(graphRunID, BusEvent{Terminal: &TerminalEvent{
 			JobID:  graphRunID,
@@ -410,6 +436,7 @@ func (d *Dispatcher) markGraphFailed(
 	}
 	result := &core.Result{Status: core.StatusError, Error: errPayload}
 	if cerr := d.store.Complete(ctx, graphRunID, core.JobStatusFailed, result); cerr == nil {
+		breakpoints.clear(graphRunID)
 		d.reclaimScratch(graph, graphRunID)
 		d.bus.Publish(graphRunID, BusEvent{Terminal: &TerminalEvent{
 			JobID:  graphRunID,

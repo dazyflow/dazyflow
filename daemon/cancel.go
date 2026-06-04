@@ -91,6 +91,7 @@ func (s *Service) CancelGraphRun(ctx context.Context, p core.Principal, graphRun
 		}
 	}
 
+	breakpoints.clear(graphRunID)
 	graphResult := &core.Result{Status: core.StatusError, Error: cancelErr}
 	if err := s.Jobs.Complete(ctx, graphRunID, core.JobStatusCancelled, graphResult); err != nil {
 		return fmt.Errorf("cancel graph record: %w", err)

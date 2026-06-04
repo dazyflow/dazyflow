@@ -8,11 +8,20 @@ import (
 )
 
 // BusEvent is what flows from a worker to subscribers waiting on a job.
-// Exactly one of Progress, NodeStatus, or Terminal is set per event.
+// Exactly one of Progress, NodeStatus, Terminal, or Paused is set per event.
 type BusEvent struct {
 	Progress   *engine.GraphProgress
 	NodeStatus *NodeStatusEvent
 	Terminal   *TerminalEvent
+	Paused     *PausedEvent
+}
+
+// PausedEvent fires when a run hits a breakpoint (or steps): execution has
+// stopped after NodeID and is holding for Continue/Step. The node's output
+// is fully available for inspection while paused. (#12)
+type PausedEvent struct {
+	NodeID   string `json:"node_id"`
+	Stepping bool   `json:"stepping"`
 }
 
 // NodeStatusEvent fires whenever a single node-record transitions to a

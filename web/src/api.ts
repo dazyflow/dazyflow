@@ -412,6 +412,16 @@ export const api = {
       `/me/runs/${encodeURIComponent(runID)}/cancel`,
       reason ? { reason } : {},
     ),
+  // resumeRun continues a run paused at a breakpoint (#12). step=true runs
+  // the next node(s) then pauses again; otherwise it runs to the next
+  // breakpoint or completion.
+  resumeRun: (token: string, runID: string, step = false) =>
+    request<{ status: string }>(
+      token,
+      "POST",
+      `/me/runs/${encodeURIComponent(runID)}/resume`,
+      { step },
+    ),
   listRuns: (
     token: string,
     tenant: string,

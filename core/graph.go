@@ -26,6 +26,12 @@ type Node struct {
 	// applies. Zero / unset = no per-node timeout; the graph-level
 	// TimeoutSeconds (if any) still applies.
 	TimeoutSeconds int `json:"timeout_seconds,omitempty"`
+
+	// Breakpoint, when set, pauses the run after this node completes and
+	// before its dependents are dispatched — a debugging aid so the
+	// operator can inspect this node's output, then Continue or Step.
+	// Honored by the dispatcher; see daemon/breakpoint.go.
+	Breakpoint bool `json:"breakpoint,omitempty"`
 }
 
 // Position is a canvas X/Y coordinate. Pixels in the UI's coordinate

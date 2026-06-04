@@ -9,6 +9,8 @@ export type Node = {
   env?: Record<string, string>;
   position?: Position;
   timeout_seconds?: number;
+  // Pause the run after this node completes (debugging) — see #12.
+  breakpoint?: boolean;
 };
 
 export type Edge = {

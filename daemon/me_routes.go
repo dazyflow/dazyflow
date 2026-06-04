@@ -863,3 +863,9 @@ func (h *HTTPGateway) cancelRunMe(rw http.ResponseWriter, r *http.Request, p cor
 	r2.SetPathValue("runID", r.PathValue("run_id"))
 	h.cancelRun(rw, r2, p)
 }
+
+func (h *HTTPGateway) resumeRunMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	r2 := r.Clone(r.Context())
+	r2.SetPathValue("runID", r.PathValue("run_id"))
+	h.resumeRun(rw, r2, p)
+}
