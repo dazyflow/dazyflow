@@ -47,6 +47,7 @@ import {
   AlignEndHorizontal,
   AlignHorizontalDistributeCenter,
   AlignVerticalDistributeCenter,
+  StickyNote,
 } from "lucide-react";
 import { useAuth } from "../auth";
 import { useThemeMode } from "../theme";
@@ -74,6 +75,7 @@ import type {
 import { Inspector } from "../components/Inspector";
 import { LiveConsole } from "../components/LiveConsole";
 import { HazyNode, portColor, type HazyNodeData } from "../components/NodeCard";
+import { CommentNode } from "../components/CommentNode";
 import { RunHistory } from "../components/RunHistory";
 import { RerouteEdge } from "../components/RerouteEdge";
 import { SettingsModal } from "../components/SettingsModal";
@@ -83,7 +85,7 @@ import { QuickDropPalette } from "../components/QuickDropPalette";
 // Custom node-types registry. React Flow caches by reference, so this
 // is declared at module scope rather than inline in the component to
 // avoid unnecessary remounts on each render.
-const nodeTypes = { hazy: HazyNode };
+const nodeTypes = { hazy: HazyNode, comment: CommentNode };
 const edgeTypes = { reroute: RerouteEdge };
 
 // How long the editor waits after the last edit before autosaving. Short
@@ -179,6 +181,11 @@ function EditorInner() {
 
   const [nodes, setNodes] = useState<FlowNode<HazyNodeData>[]>([]);
   const [edges, setEdges] = useState<FlowEdge[]>([]);
+  // Comment frames (#3) live in their own state as React Flow nodes of
+  // type "comment" — kept separate from `nodes` so node logic (align,
+  // copy/paste, params) ignores them, and so they serialize to the
+  // graph's engine-ignored `frames` metadata, not `nodes`.
+  const [frameNodes, setFrameNodes] = useState<FlowNode[]>([]);
   // Triggers live at graph-level (not per-node). Carried through so a
   // save doesn't accidentally drop the webhook secret / cron expression
   // a user configured in the settings modal.
@@ -328,6 +335,18 @@ function EditorInner() {
         style: { stroke: "var(--accent)", strokeWidth: 1.5 },
       })),
     );
+    setFrameNodes(
+      (g.frames ?? []).map((f) => ({
+        id: f.id,
+        type: "comment",
+        position: { x: f.x, y: f.y },
+        width: f.width,
+        height: f.height,
+        data: { title: f.title, color: f.color },
+        zIndex: -1,
+        connectable: false,
+      })),
+    );
     setParamsByID(Object.fromEntries((g.nodes ?? []).map((n) => [n.id, n.params ?? {}])));
     setTriggers(g.triggers ?? []);
     setVisibility(g.visibility);
@@ -378,6 +397,7 @@ function EditorInner() {
         if (msg.includes("404") || msg.toLowerCase().includes("not found")) {
           setNodes([]);
           setEdges([]);
+          setFrameNodes([]);
           setParamsByID({});
           setTriggers([]);
           setDirty(false);
@@ -514,14 +534,32 @@ function EditorInner() {
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
-      setNodes((nds) => applyNodeChanges(changes, nds) as FlowNode<HazyNodeData>[]);
-      // Selection + position mutate; only positional/data changes mark dirty.
+      // React Flow emits changes for real nodes AND comment frames in one
+      // batch; route each to its own state so resize/move/select/delete of
+      // a frame updates frameNodes (and frames serialize separately).
+      const frameIds = new Set(frameNodes.map((f) => f.id));
+      const frameChanges = changes.filter((c) => "id" in c && frameIds.has(c.id));
+      const nodeChanges = changes.filter((c) => !("id" in c) || !frameIds.has(c.id));
+      if (nodeChanges.length) {
+        setNodes((nds) => applyNodeChanges(nodeChanges, nds) as FlowNode<HazyNodeData>[]);
+      }
+      if (frameChanges.length) {
+        setFrameNodes((fns) => applyNodeChanges(frameChanges, fns));
+      }
+      // Selection-only changes don't dirty the graph; position/add/remove
+      // do, and a dimensions change only when it's an active resize (not
+      // React Flow's initial measurement, which would falsely dirty on
+      // load and trigger an autosave).
       const meaningful = changes.some(
-        (c) => c.type === "position" || c.type === "remove" || c.type === "add",
+        (c) =>
+          c.type === "position" ||
+          c.type === "remove" ||
+          c.type === "add" ||
+          (c.type === "dimensions" && (c as { resizing?: boolean }).resizing === true),
       );
       if (meaningful) setDirty(true);
     },
-    [],
+    [frameNodes],
   );
   const onEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
@@ -1002,19 +1040,111 @@ function EditorInner() {
     return m;
   }, [edges]);
 
-  const displayNodes = useMemo<FlowNode<HazyNodeData>[]>(
+  const displayNodes = useMemo<FlowNode<HazyNodeData>[]>(() => {
+    // Inline fields show only for a single selection, so a multi-select
+    // (e.g. for align/distribute) keeps every card collapsed.
+    const sel = nodes.filter((n) => n.selected);
+    const soleId = sel.length === 1 ? sel[0].id : null;
+    return nodes.map((n) => ({
+      ...n,
+      data: {
+        ...n.data,
+        params: paramsByID[n.id],
+        setParam: (key: string, value: unknown) => setNodeParam(n.id, key, value),
+        connectedInputs: connectedInputsByNode.get(n.id) ?? [],
+        inlineEditable: n.id === soleId,
+      },
+    }));
+  }, [nodes, paramsByID, setNodeParam, connectedInputsByNode]);
+
+  // Frames rendered as comment nodes, with a fresh title-edit callback
+  // that writes back into frameNodes state and dirties the graph.
+  const displayFrames = useMemo<FlowNode[]>(
     () =>
-      nodes.map((n) => ({
-        ...n,
+      frameNodes.map((f) => ({
+        ...f,
         data: {
-          ...n.data,
-          params: paramsByID[n.id],
-          setParam: (key: string, value: unknown) => setNodeParam(n.id, key, value),
-          connectedInputs: connectedInputsByNode.get(n.id) ?? [],
+          ...f.data,
+          onTitleChange: (title: string) => {
+            setFrameNodes((fns) =>
+              fns.map((x) => (x.id === f.id ? { ...x, data: { ...x.data, title } } : x)),
+            );
+            setDirty(true);
+          },
         },
       })),
-    [nodes, paramsByID, setNodeParam, connectedInputsByNode],
+    [frameNodes],
   );
+
+  // Move-with-contents: when a frame is dragged, the nodes it encloses move
+  // with it. We capture the enclosed nodes (and everyone's start position)
+  // at drag start, then apply the frame's delta — no reparenting, so the
+  // flat node model is untouched.
+  const frameDragRef = useRef<{
+    start: { x: number; y: number };
+    nodes: { id: string; x: number; y: number }[];
+  } | null>(null);
+  const onNodeDragStart = useCallback(
+    (_e: unknown, node: FlowNode) => {
+      if (node.type !== "comment") return;
+      const fx = node.position.x;
+      const fy = node.position.y;
+      const fw = node.width ?? node.measured?.width ?? 0;
+      const fh = node.height ?? node.measured?.height ?? 0;
+      const enclosed = nodes
+        .filter((n) => {
+          const nw = n.measured?.width ?? 0;
+          const nh = n.measured?.height ?? 0;
+          return (
+            n.position.x >= fx &&
+            n.position.y >= fy &&
+            n.position.x + nw <= fx + fw &&
+            n.position.y + nh <= fy + fh
+          );
+        })
+        .map((n) => ({ id: n.id, x: n.position.x, y: n.position.y }));
+      frameDragRef.current = { start: { x: fx, y: fy }, nodes: enclosed };
+    },
+    [nodes],
+  );
+  const onNodeDrag = useCallback((_e: unknown, node: FlowNode) => {
+    const ctx = frameDragRef.current;
+    if (!ctx || node.type !== "comment") return;
+    const dx = node.position.x - ctx.start.x;
+    const dy = node.position.y - ctx.start.y;
+    setNodes((nds) =>
+      nds.map((n) => {
+        const m = ctx.nodes.find((e) => e.id === n.id);
+        return m ? { ...n, position: { x: m.x + dx, y: m.y + dy } } : n;
+      }),
+    );
+  }, []);
+  const onNodeDragStop = useCallback(() => {
+    frameDragRef.current = null;
+  }, []);
+
+  // Add a comment frame at the centre of the current viewport.
+  const addFrame = useCallback(() => {
+    const r = wrapperRef.current?.getBoundingClientRect();
+    const c = r
+      ? screenToFlowPosition({ x: r.left + r.width / 2, y: r.top + r.height / 2 })
+      : { x: 0, y: 0 };
+    const id = `frame_${Date.now().toString(36)}`;
+    setFrameNodes((fns) => [
+      ...fns,
+      {
+        id,
+        type: "comment",
+        position: { x: c.x - 180, y: c.y - 120 },
+        width: 360,
+        height: 240,
+        data: { title: "", color: "#9f83fe" },
+        zIndex: -1,
+        connectable: false,
+      },
+    ]);
+    setDirty(true);
+  }, [screenToFlowPosition]);
 
   const onParamsChange = (id: string, params: Record<string, unknown>) => {
     setParamsByID((p) => ({ ...p, [id]: params }));
@@ -1045,6 +1175,18 @@ function EditorInner() {
         ? { waypoints: e.data!.waypoints as { x: number; y: number }[] }
         : {}),
     })),
+    frames:
+      frameNodes.length > 0
+        ? frameNodes.map((f) => ({
+            id: f.id,
+            title: (f.data?.title as string) ?? "",
+            color: (f.data?.color as string) ?? "",
+            x: f.position.x,
+            y: f.position.y,
+            width: f.width ?? f.measured?.width ?? 360,
+            height: f.height ?? f.measured?.height ?? 240,
+          }))
+        : undefined,
     triggers: triggers.length > 0 ? triggers : undefined,
     visibility,
     owner,
@@ -1550,6 +1692,14 @@ function EditorInner() {
                 <span className="toolbar-label">{t("editor.triggers")}</span>
               </button>
             )}
+            <button
+              className="ghost"
+              onClick={addFrame}
+              title={t("editor.addFrameTitle")}
+            >
+              <StickyNote size={15} />
+              <span className="toolbar-label">{t("editor.addFrame")}</span>
+            </button>
           </div>
 
           {/* Align & distribute — appears only while 2+ nodes are selected,
@@ -1806,11 +1956,17 @@ function EditorInner() {
           </div>
         )}
         <ReactFlow
-          nodes={displayNodes}
+          // Frames first so they paint behind the real nodes. Cast: comment
+          // nodes carry CommentData, not HazyNodeData — the array is mixed,
+          // but each renderer reads its own data shape.
+          nodes={[...displayFrames, ...displayNodes] as FlowNode<HazyNodeData>[]}
           edges={coloredEdges}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
           onNodesChange={onNodesChange}
+          onNodeDragStart={onNodeDragStart}
+          onNodeDrag={onNodeDrag}
+          onNodeDragStop={onNodeDragStop}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onConnectStart={onConnectStart}

@@ -23,6 +23,10 @@ export type HazyNodeData = {
   // Input port ids that currently have a wire — inline fields for these
   // are hidden (the connection supplies the value).
   connectedInputs?: string[];
+  // True only when this is the SOLE selected node. Inline fields show just
+  // for a single selection, so a multi-select (e.g. for alignment) keeps
+  // every card collapsed — and align/distribute use the deselected height.
+  inlineEditable?: boolean;
 };
 
 // Layout: outputs always render as labeled rows on the right so every
@@ -88,7 +92,7 @@ export function HazyNode({ data, selected }: NodeProps) {
       .map((k) => ({ key: k, label: schemaProps?.[k]?.title ?? k, schema: schemaProps?.[k] })),
   ];
   const paramFields =
-    selected && schemaProps
+    d.inlineEditable && schemaProps
       ? candidates.filter(
           (f): f is { key: string; label: string; schema: JSONSchema } =>
             !!f.schema && !isAdvanced(f.schema) && isPrimitive(f.schema),

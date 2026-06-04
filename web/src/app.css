@@ -5223,6 +5223,37 @@ button.danger-outline:hover:not(:disabled) {
   color: var(--faint);
   margin-left: 2px;
 }
+/* Comment frame (#3): a resizable, titled box behind the nodes. The box
+   fills its React Flow node wrapper; background/border tints are set
+   inline from the frame's color. */
+.hz-frame {
+  width: 100%;
+  height: 100%;
+  border: 1.5px solid var(--border);
+  border-radius: var(--r-3);
+  box-sizing: border-box;
+}
+.hz-frame-title {
+  width: auto;
+  max-width: calc(100% - 16px);
+  margin: 6px 8px;
+  background: transparent;
+  border: none;
+  padding: 2px 4px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.hz-frame-title:focus {
+  outline: none;
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  border-radius: var(--r-1);
+}
+.hz-frame-title::placeholder {
+  color: var(--faint);
+  font-weight: 500;
+}
+
 /* Reroute knots: small draggable dots on a wire (approach-B reroute).
    Filled with the wire's colour (set inline), a thin surface ring for
    contrast against the canvas, and a grab cursor. */

@@ -963,6 +963,8 @@
     "alignBottom": "Align bottom edges",
     "distributeH": "Distribute horizontally (even spacing)",
     "distributeV": "Distribute vertically (even spacing)",
+    "addFrame": "Frame",
+    "addFrameTitle": "Add a comment frame to group nodes",
     "flowSettings": "Flow settings (triggers, etc.)",
     "inspector": "Inspector",
     "save": "Save",

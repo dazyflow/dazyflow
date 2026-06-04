@@ -963,6 +963,8 @@
     "alignBottom": "Justera nederkanter",
     "distributeH": "Fördela horisontellt (jämnt mellanrum)",
     "distributeV": "Fördela vertikalt (jämnt mellanrum)",
+    "addFrame": "Ram",
+    "addFrameTitle": "Lägg till en kommentarsram för att gruppera noder",
     "flowSettings": "Flödesinställningar (triggers m.m.)",
     "inspector": "Inspector",
     "save": "Spara",

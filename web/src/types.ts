@@ -80,6 +80,18 @@ export type FlowSummary = {
   visibility?: Visibility;
 };
 
+// Frame is an editor-only comment box grouping nodes visually. The engine
+// ignores it; it round-trips so the editor can redraw the same boxes.
+export type Frame = {
+  id: string;
+  title?: string;
+  color?: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 export type Graph = {
   id: string;
   version?: string;
@@ -88,6 +100,7 @@ export type Graph = {
   nodes: Node[];
   edges: Edge[];
   triggers?: GraphTrigger[];
+  frames?: Frame[];
   visibility?: Visibility;
   owner?: string;
   name?: string;

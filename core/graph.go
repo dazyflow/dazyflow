@@ -48,6 +48,20 @@ type Edge struct {
 	Waypoints []Position `json:"waypoints,omitempty"`
 }
 
+// Frame is an editor-only comment box that visually groups nodes on the
+// canvas. The engine ignores frames entirely; they round-trip in the
+// graph JSON so the editor can redraw them. Position/size are in the
+// editor's flow coordinate system.
+type Frame struct {
+	ID     string  `json:"id"`
+	Title  string  `json:"title,omitempty"`
+	Color  string  `json:"color,omitempty"`
+	X      float64 `json:"x"`
+	Y      float64 `json:"y"`
+	Width  float64 `json:"width"`
+	Height float64 `json:"height"`
+}
+
 type Graph struct {
 	ID        string         `json:"id"`
 	Version   string         `json:"version"`
@@ -56,6 +70,8 @@ type Graph struct {
 	Nodes     []Node         `json:"nodes"`
 	Edges     []Edge         `json:"edges"`
 	Triggers  []GraphTrigger `json:"triggers,omitempty"`
+	// Frames are editor-only comment boxes — see Frame. Engine-ignored.
+	Frames []Frame `json:"frames,omitempty"`
 
 	// Display metadata. None of these affect engine behaviour — they
 	// are surfaces the UI shows in the flow list, switcher, and
