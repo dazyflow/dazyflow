@@ -68,6 +68,7 @@ import type {
   LintIssue,
   Manifest,
   Port,
+  Ref,
   JobStatus,
   OAuthProviderStatus,
   Revision,
@@ -187,6 +188,9 @@ function EditorInner() {
   // copy/paste, params) ignores them, and so they serialize to the
   // graph's engine-ignored `frames` metadata, not `nodes`.
   const [frameNodes, setFrameNodes] = useState<FlowNode[]>([]);
+  // Per-node output values from the current run (#10) — nodeId → port → Ref.
+  // Populated as nodes finish; surfaced as a hover-peek on output ports.
+  const [runOutputs, setRunOutputs] = useState<Record<string, Record<string, Ref>>>({});
   // Triggers live at graph-level (not per-node). Carried through so a
   // save doesn't accidentally drop the webhook secret / cron expression
   // a user configured in the settings modal.
@@ -1058,9 +1062,10 @@ function EditorInner() {
         setParam: (key: string, value: unknown) => setNodeParam(n.id, key, value),
         connectedInputs: connectedInputsByNode.get(n.id) ?? [],
         inlineEditable: n.id === soleId,
+        outputs: runOutputs[n.id],
       },
     }));
-  }, [nodes, paramsByID, setNodeParam, connectedInputsByNode]);
+  }, [nodes, paramsByID, setNodeParam, connectedInputsByNode, runOutputs]);
 
   // Frames rendered as comment nodes, with a fresh title-edit callback
   // that writes back into frameNodes state and dirties the graph.
@@ -1522,6 +1527,7 @@ function EditorInner() {
     );
     setLiveLogs({});
     setGlobalLog([]);
+    setRunOutputs({});
     const abort = new AbortController();
     api
       .streamJob(
@@ -1538,6 +1544,22 @@ function EditorInner() {
                   : n,
               ),
             );
+            // Once a node reaches a terminal state, pull its output values
+            // so the canvas can show a hover-peek on its ports (#10).
+            if (ev.status === "succeeded" || ev.status === "failed") {
+              const nodeID = ev.node_id;
+              api
+                .getNodeRecord(token, runID, nodeID)
+                .then((r) => {
+                  const out = r.Result?.output;
+                  if (out && Object.keys(out).length > 0) {
+                    setRunOutputs((m) => ({ ...m, [nodeID]: out }));
+                  }
+                })
+                .catch(() => {
+                  /* 404 = node hasn't materialised yet; ignore */
+                });
+            }
             setStatusRefreshKey((k) => k + 1);
           }
           if (kind === "progress") {

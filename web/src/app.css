@@ -3007,6 +3007,40 @@ button.danger-outline:hover:not(:disabled) {
   color: var(--ink);
   line-height: 1.2;
 }
+/* Watch port values (#10): an output port that emitted a value on the last
+   run gets a dotted underline hint; hovering reveals a peek popover with
+   the value. */
+.hz-port-out.has-value {
+  cursor: help;
+  text-decoration: underline dotted color-mix(in srgb, var(--ink-soft) 50%, transparent);
+  text-underline-offset: 3px;
+}
+.hz-port-peek {
+  display: none;
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  /* size to content (not the slim port row that anchors it), capped */
+  width: max-content;
+  max-width: 280px;
+  padding: 5px 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+  box-shadow: var(--shadow-pop);
+  z-index: 20;
+  pointer-events: none;
+}
+.hz-port-out.has-value:hover .hz-port-peek {
+  display: block;
+}
 /* Inline param editing (#7): a compact form revealed on the selected card.
    Sits between the title and the port rows. Quiet labels, small inputs. */
 .hz-node-params {

@@ -2,7 +2,7 @@ import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { AlertTriangle } from "lucide-react";
 import i18n from "../i18n";
 import { iconFor, isBrandedIcon } from "../icons";
-import type { Manifest, Port, JSONSchema } from "../types";
+import type { Manifest, Port, JSONSchema, Ref } from "../types";
 
 // HazyNodeData is the shape we stash on each React Flow node. We carry
 // the live manifest so the canvas can render the same icon and label as
@@ -27,7 +27,25 @@ export type HazyNodeData = {
   // for a single selection, so a multi-select (e.g. for alignment) keeps
   // every card collapsed — and align/distribute use the deselected height.
   inlineEditable?: boolean;
+  // This node's output values from the latest run (#10), keyed by port —
+  // shown as a hover-peek on each output port.
+  outputs?: Record<string, Ref>;
 };
+
+// peekValue renders a port's run value as a short, single-line string for
+// the hover peek. Strings show verbatim (truncated); other types as JSON;
+// empty/binary falls back to the MIME.
+function peekValue(ref: Ref): string {
+  const v = ref.data;
+  const cap = (s: string) => (s.length > 200 ? s.slice(0, 200) + "…" : s);
+  if (typeof v === "string") return cap(v) || (ref.mime ?? "(empty)");
+  if (v === undefined || v === null) return ref.mime ?? "(no value)";
+  try {
+    return cap(JSON.stringify(v));
+  } catch {
+    return String(v);
+  }
+}
 
 // Layout: outputs always render as labeled rows on the right so every
 // node names what it emits — a one-output drop (e.g. Text) reads as
@@ -221,10 +239,11 @@ export function HazyNode({ data, selected }: NodeProps) {
         <div className="hz-port-col right">
           {outputs.map((p) => {
             const c = portColor(p.mime);
+            const ref = d.outputs?.[p.port];
             return (
               <div
                 key={"ol-" + p.port}
-                className="hz-port-label hz-port-out"
+                className={"hz-port-label hz-port-out" + (ref ? " has-value" : "")}
               >
                 <Handle
                   type="source"
@@ -234,6 +253,9 @@ export function HazyNode({ data, selected }: NodeProps) {
                   title={portTooltip(p)}
                 />
                 {p.label ?? p.port}
+                {/* Watch port values (#10): the value this port emitted on
+                    the latest run, revealed on hover. */}
+                {ref && <span className="hz-port-peek nodrag nowheel">{peekValue(ref)}</span>}
               </div>
             );
           })}
