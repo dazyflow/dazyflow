@@ -16,7 +16,6 @@ import {
   ReactFlowProvider,
   Background,
   Controls,
-  MiniMap,
   addEdge,
   applyEdgeChanges,
   applyNodeChanges,
@@ -60,7 +59,6 @@ import { useThemeMode } from "../theme";
 import i18n from "../i18n";
 import { api } from "../api";
 import { oauthProviderDisplay } from "../integrationMeta";
-import { categoryColor } from "../icons";
 import {
   requiredConnections,
   requiredSecrets,
@@ -610,7 +608,7 @@ function EditorInner() {
         style: {
           ...e.style,
           stroke: portColor(out?.mime),
-          strokeWidth: e.selected ? 2.5 : active ? 2 : 1.5,
+          strokeWidth: e.selected ? 3 : active ? 2.5 : 2,
         },
         // RerouteEdge mutates routing through this callback so the change
         // lands in the controlled edge state (and marks the graph dirty).
@@ -2427,19 +2425,6 @@ function EditorInner() {
               background: "var(--surface)",
               border: "1px solid var(--border)",
               borderRadius: "var(--r-2)",
-            }}
-          />
-          <MiniMap
-            pannable
-            zoomable
-            style={{
-              background: "var(--surface)",
-              border: "1px solid var(--border)",
-              borderRadius: "var(--r-2)",
-            }}
-            nodeColor={(n) => {
-              const m = (n.data as HazyNodeData)?.manifest;
-              return m?.color || categoryColor(m?.category) || "#9f83fe";
             }}
           />
         </ReactFlow>

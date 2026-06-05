@@ -146,16 +146,26 @@ export function HazyNode({ data, selected }: NodeProps) {
       if (inlineEligible(s)) inlineByPort[p.port] = s;
     }
   }
-  const nonPortFields =
-    d.inlineEditable && schemaProps
-      ? required
-          .filter((k) => !inputPortIds.has(k))
-          .map((k) => ({ key: k, label: schemaProps[k]?.title ?? k, schema: schemaProps[k] }))
-          .filter(
-            (f): f is { key: string; label: string; schema: JSONSchema } =>
-              inlineEligible(f.schema),
-          )
-      : [];
+  // Required primitive params that have NO input port — mandatory literals
+  // typed on the node itself (e.g. Text's `text`, Number's `value`).
+  const literalFields = schemaProps
+    ? required
+        .filter((k) => !inputPortIds.has(k))
+        .map((k) => ({ key: k, label: schemaProps[k]?.title ?? k, schema: schemaProps[k] }))
+        .filter(
+          (f): f is { key: string; label: string; schema: JSONSchema } =>
+            inlineEligible(f.schema),
+        )
+    : [];
+  // A value source (Text, Number): no inputs, and the value it emits lives
+  // in a required primitive param. It's its own kind of node — it shows the
+  // value field always (that field IS the node) and an output pin, but no
+  // input connector, since you can't wire a value into a literal. Triggers
+  // are input-less too but carry no literal field, so they're not sources.
+  const isValueSource = !hasDeclaredInputs && literalFields.length > 0;
+  // Literal fields show always on a value source (its whole purpose), and
+  // only on the sole-selected node otherwise (the standard inline-edit case).
+  const showLiteralFields = literalFields.length > 0 && (isValueSource || !!d.inlineEditable);
 
   const statusClass = d.status ? " status-" + d.status : "";
 
@@ -196,9 +206,11 @@ export function HazyNode({ data, selected }: NodeProps) {
       {d.breakpoint && (
         <div className="hz-node-bp" aria-label="breakpoint" title="Breakpoint — run pauses after this node" />
       )}
-      {/* No declared inputs (sources/triggers): a single centered dot on
-          the left edge, no label. */}
-      {!hasDeclaredInputs && (
+      {/* No declared inputs (triggers): a single centered dot on the left
+          edge, no label. Value sources (Text, Number) are input-less too but
+          emit a literal — they get NO input connector, just their value
+          field and an output pin. */}
+      {!hasDeclaredInputs && !isValueSource && (
         <Handle
           type="target"
           position={Position.Left}
@@ -232,12 +244,12 @@ export function HazyNode({ data, selected }: NodeProps) {
         </div>
       </div>
 
-      {nonPortFields.length > 0 && (
+      {showLiteralFields && (
         // nodrag: keep React Flow from dragging the node while the user
         // interacts with a field. nowheel similarly lets the field behave
         // like a normal input inside the canvas.
         <div className="hz-node-params nodrag nowheel">
-          {nonPortFields.map(({ key, label, schema: s }) => (
+          {literalFields.map(({ key, label, schema: s }) => (
             <label key={key} className="hz-param">
               <span className="hz-param-label">{label}</span>
               <ParamInput
@@ -266,20 +278,21 @@ export function HazyNode({ data, selected }: NodeProps) {
                       type="target"
                       position={Position.Left}
                       id={p.port}
-                      className={isPass ? "hz-pass-pin" : undefined}
+                      className={
+                        isPass
+                          ? "hz-pass-pin" + (connectedInputs.includes(p.port) ? " connected" : "")
+                          : undefined
+                      }
                       style={
                         isPass
                           ? passPinStyle("in")
                           : dotStyle(c, connectedInputs.includes(p.port), "in")
                       }
                       title={isPass ? i18n.t("nodeCard.passThrough") : portTooltip(p)}
-                    />
-                    {p.label ?? p.port}
-                    {p.required && (
-                      <span className="hz-req" title={i18n.t("nodeCard.portRequired")}>
-                        *
-                      </span>
-                    )}
+                    >
+                      {isPass && <PassPinIcon />}
+                    </Handle>
+                    {!isPass && (p.label ?? p.port)}
                   </div>
                   {field && (
                     <div className="hz-port-inline nodrag nowheel">
@@ -316,30 +329,32 @@ export function HazyNode({ data, selected }: NodeProps) {
                   type="source"
                   position={Position.Right}
                   id={p.port}
-                  className={isPass ? "hz-pass-pin" : undefined}
+                  className={
+                    isPass
+                      ? "hz-pass-pin" + (connectedOutputs.includes(p.port) ? " connected" : "")
+                      : undefined
+                  }
                   style={
                     isPass
                       ? passPinStyle("out")
                       : dotStyle(c, connectedOutputs.includes(p.port), "out")
                   }
                   title={isPass ? i18n.t("nodeCard.passThrough") : portTooltip(p)}
-                />
-                {p.label ?? p.port}
+                >
+                  {isPass && <PassPinIcon />}
+                </Handle>
+                {!isPass && (p.label ?? p.port)}
                 {/* Watch port values (#10): the value this port emitted on
                     the latest run, revealed on hover. */}
-                {ref && <span className="hz-port-peek nodrag nowheel">{peekValue(ref)}</span>}
+                {!isPass && ref && (
+                  <span className="hz-port-peek nodrag nowheel">{peekValue(ref)}</span>
+                )}
               </div>
             );
           })}
         </div>
       </div>
 
-      {d.status && (
-        <div
-          className={"status-dot " + d.status}
-          title={i18n.t("nodeCard.statusTooltip", { status: d.status })}
-        />
-      )}
       {d.lintMessage && (
         <div className="hz-node-lint" title={d.lintMessage} aria-label="lint warning">
           <AlertTriangle size={13} />
@@ -506,9 +521,6 @@ function OperatorChip({
         style={{ ...dotStyle(portColor(outputs[0].mime), connectedOutputs.includes(outputs[0].port)), top: "50%" }}
         title={portTooltip(outputs[0])}
       />
-      {d.status && (
-        <div className={"status-dot " + d.status} title={i18n.t("nodeCard.statusTooltip", { status: d.status })} />
-      )}
       {d.lintMessage && (
         <div className="hz-node-lint" title={d.lintMessage} aria-label="lint warning">
           <AlertTriangle size={13} />
@@ -543,12 +555,14 @@ function OperatorChip({
 //             vs optional is shown by an asterisk on the label, not the fill.)
 function dotStyle(color: string, filled: boolean, place?: "in" | "out") {
   const base = {
-    background: filled ? color : "var(--surface)",
-    border: filled
-      ? `1.5px solid ${color}`
-      : `1px solid color-mix(in srgb, ${color} 50%, transparent)`,
-    width: 10,
-    height: 10,
+    // Empty pins were a faint 1px, half-transparent outline that washed
+    // out on the card surface. Give them a tinted fill plus a thicker,
+    // higher-contrast ring so an unconnected port is easy to spot and aim
+    // at; connected pins stay solid-colour.
+    background: filled ? color : `color-mix(in srgb, ${color} 22%, var(--surface))`,
+    border: filled ? `2px solid ${color}` : `2px solid color-mix(in srgb, ${color} 80%, transparent)`,
+    width: 12,
+    height: 12,
   } as const;
   if (place === "in") {
     return {
@@ -569,6 +583,20 @@ function dotStyle(color: string, filled: boolean, place?: "in" | "out") {
     } as const;
   }
   return base;
+}
+
+// PassPinIcon draws the universal passthrough pin as an Unreal-style exec
+// arrow: a rounded white triangle pointing right (same orientation for the
+// in-pin on the left edge and the out-pin on the right edge, mirroring UE's
+// exec flow). It's hollow when idle and fills in when a value is threaded
+// through — both states, plus the hover colour, are driven by CSS off the
+// .hz-pass-pin / .connected classes via currentColor.
+function PassPinIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M5 3.5 L12.5 8 L5 12.5 Z" />
+    </svg>
+  );
 }
 
 // passPinStyle positions the universal passthrough pin on the card edge.
@@ -602,6 +630,7 @@ export function portColor(mime: string[] | undefined): string {
   if (!mime || mime.length === 0) return "var(--border-strong)";
   const m = mime[0];
   if (m.startsWith("text/")) return "#4a8";              // green — plain text
+  if (m === "application/x-bool") return "#e0699f";      // rose  — boolean (true/false)
   if (m === "application/json") return "#5b8def";        // blue  — structured data
   if (m.startsWith("image/")) return "#e8a85e";          // amber — images
   if (m.startsWith("audio/") || m.startsWith("video/")) return "#c87fff"; // purple — media

@@ -12,22 +12,30 @@ func paramInt(params map[string]any, key string) (int, error) {
 	if !ok {
 		return 0, fmt.Errorf("missing param %q", key)
 	}
+	if n, ok := coerceInt(v); ok {
+		return n, nil
+	}
+	return 0, fmt.Errorf("param %q: expected number, got %T", key, v)
+}
+
+// coerceInt converts a JSON-ish numeric value to int, accepting the same
+// types paramInt does. Used to read numbers that arrive via a wired input
+// ref (core.Ref.Inline) rather than from params. Returns false for nil or
+// any non-numeric value.
+func coerceInt(v any) (int, bool) {
 	switch x := v.(type) {
 	case int:
-		return x, nil
+		return x, true
 	case int64:
-		return int(x), nil
+		return int(x), true
 	case float64:
-		return int(x), nil
+		return int(x), true
 	case json.Number:
-		i, err := x.Int64()
-		if err != nil {
-			return 0, fmt.Errorf("param %q: %w", key, err)
+		if i, err := x.Int64(); err == nil {
+			return int(i), true
 		}
-		return int(i), nil
-	default:
-		return 0, fmt.Errorf("param %q: expected number, got %T", key, v)
 	}
+	return 0, false
 }
 
 func emitProgress(ch chan<- core.Progress, job core.Job, pct float64, msg string) {

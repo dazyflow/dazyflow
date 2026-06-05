@@ -2861,14 +2861,6 @@ button.danger-outline:hover:not(:disabled) {
   align-items: flex-end;
   margin-left: auto;
 }
-/* Required-port marker (#11): a small accent asterisk after the label,
-   now that the dot fill encodes connection state instead of required-ness. */
-.hz-req {
-  color: var(--danger);
-  margin-left: 3px;
-  font-weight: 700;
-  cursor: help;
-}
 .hz-port-label {
   position: relative;
   font-family: var(--font-mono);
@@ -2884,21 +2876,56 @@ button.danger-outline:hover:not(:disabled) {
    exec-pin look) instead of a round data dot, so it reads as "threads a
    value through the node" rather than a typed data port. Neutral ink colour
    sets it apart from the type-coloured data dots; turns accent on hover. */
+/* Unreal-style exec pin: a rounded white arrow drawn by PassPinIcon's SVG.
+   The handle itself is just a transparent, correctly-sized hit area; the
+   arrow's colour comes from `color` (inherited as currentColor by the SVG),
+   so hover + connected are pure colour/fill swaps. z-index keeps it above
+   the card border. */
 .react-flow__handle.hz-pass-pin {
-  width: 12px;
-  height: 12px;
-  background: var(--ink);
+  width: 14px;
+  height: 14px;
+  background: transparent;
   border: none;
-  border-radius: 1px;
-  clip-path: polygon(12% 0, 100% 50%, 12% 100%);
+  border-radius: 0;
+  /* Theme-aware "white": near-white (#e9ecf3) in dark mode — the Unreal
+     exec-pin look — but dark ink in light mode so it doesn't vanish on the
+     pale card surface. Neutral, so it stays distinct from the type-coloured
+     data dots. */
+  color: var(--ink);
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.12s ease;
+}
+.react-flow__handle.hz-pass-pin svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+/* Idle: hollow white outline with rounded corners (linejoin) — the soft,
+   un-sharp arrow. */
+.react-flow__handle.hz-pass-pin svg path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+/* Connected: fill the arrow solid white. */
+.react-flow__handle.hz-pass-pin.connected svg path {
+  fill: currentColor;
 }
 .react-flow__handle.hz-pass-pin:hover {
-  background: var(--accent);
+  color: var(--accent);
+  background: transparent;
 }
-/* The pass row's label sits subordinate to the real data ports. */
+/* The pass row carries no label text (the exec arrow speaks for itself),
+   but the pin is positioned relative to this row — so hold its height to a
+   normal row line so the arrow centres correctly instead of collapsing. */
 .hz-port-label.hz-pass-row {
-  font-style: italic;
-  opacity: 0.7;
+  min-height: 16px;
 }
 /* Input pin row: the pin name and its inline value editor share one line,
    the editor sitting right after the name (Unreal-style). The name stays
@@ -3204,7 +3231,6 @@ button.danger-outline:hover:not(:disabled) {
 }
 .hz-param-label {
   font-size: 10px;
-  text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--muted);
 }
@@ -3282,40 +3308,6 @@ button.danger-outline:hover:not(:disabled) {
 .pipeline-log-bar button[disabled] {
   opacity: 0.4;
   cursor: not-allowed;
-}
-
-/* Status badge (per-node run state) */
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--status-pending);
-  flex-shrink: 0;
-}
-.status-dot.running {
-  background: var(--status-running);
-  animation: pulse 1.2s ease-in-out infinite;
-}
-.status-dot.succeeded {
-  background: var(--status-completed);
-}
-.status-dot.failed {
-  background: var(--status-failed);
-}
-.status-dot.awaiting {
-  background: var(--status-awaiting);
-}
-.status-dot.skipped {
-  background: var(--faint);
-}
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.4;
-  }
 }
 
 /* Admin stub */

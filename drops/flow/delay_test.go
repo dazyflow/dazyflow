@@ -55,15 +55,54 @@ func TestDelay_BadParam(t *testing.T) {
 	}
 }
 
-func TestDelay_Passthrough(t *testing.T) {
+func TestDelay_MsFromInput(t *testing.T) {
+	// The wired `ms` input overrides the param: the param asks for 5s but
+	// the input (a JSON-decoded number, so float64) says 10ms, so the node
+	// must return fast — proving the input wins.
+	start := time.Now()
 	res, err := executeDelay(t.Context(), core.Job{
-		Params: map[string]any{"ms": 10},
-		Input:  map[string]core.Ref{"in": {Ref: "x", MIME: "text/plain"}},
+		Params: map[string]any{"ms": 5000},
+		Input:  map[string]core.Ref{"ms": {Inline: float64(10)}},
 	}, nil)
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}
-	if res.Output["out"].Ref != "x" {
+	if res.Status != core.StatusOK {
+		t.Fatalf("status = %q, err=%+v", res.Status, res.Error)
+	}
+	if elapsed := time.Since(start); elapsed > 1*time.Second {
+		t.Errorf("input ms ignored; elapsed=%v, expected ~10ms", elapsed)
+	}
+}
+
+func TestDelay_Passthrough(t *testing.T) {
+	// A value wired into the universal pass pin is forwarded on pass out.
+	res, err := executeDelay(t.Context(), core.Job{
+		Params: map[string]any{"ms": 10},
+		Input:  map[string]core.Ref{core.PassPort: {Ref: "x", MIME: "text/plain"}},
+	}, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if res.Output[core.PassPort].Ref != "x" {
 		t.Errorf("passthrough failed: %+v", res.Output)
+	}
+}
+
+func TestDelay_EmitsControlSignalOnEmpty(t *testing.T) {
+	// Pure pause: nothing threaded in, but pass out still carries a control
+	// signal so a downstream node wired to it still fires.
+	res, err := executeDelay(t.Context(), core.Job{
+		Params: map[string]any{"ms": 10},
+	}, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	ref, ok := res.Output[core.PassPort]
+	if !ok {
+		t.Fatalf("no pass output on empty-input delay: %+v", res.Output)
+	}
+	if ref.MIME != "application/x-control" {
+		t.Errorf("pass MIME = %q, want application/x-control", ref.MIME)
 	}
 }

@@ -12,14 +12,19 @@ func got(t *testing.T, res core.Result) bool {
 	if res.Status != core.StatusOK {
 		t.Fatalf("status=%q (%+v)", res.Status, res.Error)
 	}
-	n, ok := res.Output["result"].Inline.(int)
-	if !ok {
-		t.Fatalf("result port missing or not an int: %#v", res.Output["result"].Inline)
+	// Compare emits an int (1/0); In Range emits a real bool. Accept both.
+	switch v := res.Output["result"].Inline.(type) {
+	case bool:
+		return v
+	case int:
+		if v != 0 && v != 1 {
+			t.Fatalf("result = %d, want 0 or 1", v)
+		}
+		return v == 1
+	default:
+		t.Fatalf("result port missing or not a bool/int: %#v", res.Output["result"].Inline)
+		return false
 	}
-	if n != 0 && n != 1 {
-		t.Fatalf("result = %d, want 0 or 1", n)
-	}
-	return n == 1
 }
 
 // cmp wires A and B as inputs and runs Compare with the given op.

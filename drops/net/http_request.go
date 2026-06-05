@@ -50,10 +50,15 @@ func init() {
 			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
-			Inputs: []core.Port{{
-				Port:  "request_body",
-				Label: "Request body",
-			}},
+			Inputs: []core.Port{
+				// url is both a param and an input port (same id) so it can be
+				// typed inline on the pin OR wired from an upstream node that
+				// builds the target URL. Listed first — it's the primary input.
+				// Typed text/plain so it reads as a string pin (green) and wires
+				// cleanly from a Text source.
+				{Port: "url", Label: "URL", MIME: []string{"text/plain"}},
+				{Port: "request_body", Label: "Request body"},
+			},
 			Outputs: []core.Port{
 				// Status first: it's the field most flows branch on, so it
 				// sits at the top of the output column. Status and headers are
@@ -68,7 +73,7 @@ func init() {
 				`{
 					"type":"object",
 					"properties":{
-						"url":{"type":"string","description":"Absolute URL of the resource to call."},
+						"url":{"type":"string","description":"Absolute URL of the resource to call. The url input port overrides this when connected."},
 						"method":{"type":"string","default":"GET","enum":["GET","POST","PUT","PATCH","DELETE","HEAD","OPTIONS"],"description":"HTTP verb. Methods with bodies (POST/PUT/PATCH) use the request_body input or the body param."},
 						"headers":{"type":"object","additionalProperties":{"type":"string"},"description":"Headers to send (one per key). Values may include ${env:NAME} placeholders that resolve to secrets."},
 						"body":{"type":"string","description":"Inline request body. The request_body input port overrides this when connected."},
@@ -96,12 +101,9 @@ const (
 )
 
 func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
-	url, err := params.String(job.Params, "url")
-	if err != nil {
-		return params.Err(job, "bad_param", err.Error()), nil
-	}
+	url := resolveURL(job)
 	if strings.TrimSpace(url) == "" {
-		return params.Err(job, "bad_param", "url is required"), nil
+		return params.Err(job, "bad_param", "url is required: wire the URL input or set the url param"), nil
 	}
 	// Operator egress allowlist (above the IP-level SSRF guard). No-op
 	// when no allowlist is configured.
@@ -197,6 +199,18 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 			"headers": {MIME: "application/json", Inline: flattenHeaders(resp.Header)},
 		},
 	}, nil
+}
+
+// resolveURL takes the target from the wired `url` input when it carries a
+// non-empty string, else falls back to the url param — so the URL can be a
+// literal in the graph or computed by an upstream node.
+func resolveURL(job core.Job) string {
+	if ref, ok := job.Input["url"]; ok {
+		if s, ok := ref.Inline.(string); ok && strings.TrimSpace(s) != "" {
+			return s
+		}
+	}
+	return params.StringDefault(job.Params, "url", "")
 }
 
 // buildRequestBody honors the input port first (so POST bodies can be

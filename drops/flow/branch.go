@@ -37,7 +37,7 @@ func init() {
 			// drop or any boolean-emitting node); 'in' is the payload that
 			// continues down the chosen port.
 			Inputs: []core.Port{
-				{Port: "condition", Required: true, Label: "Condition", MIME: []string{"application/json"}},
+				{Port: "condition", Required: true, Label: "Condition", MIME: []string{core.MIMEBool}},
 				{Port: "in", Required: true, Label: "Value"},
 			},
 			Outputs: []core.Port{

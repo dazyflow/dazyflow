@@ -290,6 +290,12 @@ func (m Manifest) Output(name string) (Port, bool) {
 // triangle symbol as the first input/output.
 const PassPort = "pass"
 
+// MIMEBool is the port type for a boolean value (true/false). Predicates
+// like In Range emit it on their result, and Branch's condition input
+// expects it — a dedicated type (vs. bare application/json) so the canvas
+// colours boolean pins distinctly and they read as a yes/no signal.
+const MIMEBool = "application/x-bool"
+
 // WithPassthrough returns m with the universal passthrough port prepended to
 // its inputs and outputs. It's a no-op for drops with no inputs (sources /
 // triggers — nothing upstream to thread from) and idempotent if the port is

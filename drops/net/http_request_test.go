@@ -43,6 +43,52 @@ func TestHTTP_GETSucceeds(t *testing.T) {
 	}
 }
 
+func TestHTTP_URLFromInput(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = w.Write([]byte("from-input"))
+	}))
+	defer srv.Close()
+
+	// No url param — the target comes entirely from the wired `url` input,
+	// proving the input port can drive the request on its own.
+	res, err := executeHTTPRequest(t.Context(), core.Job{
+		Params: map[string]any{"allow_private_networks": true},
+		Input:  map[string]core.Ref{"url": {Inline: srv.URL}},
+	}, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if res.Status != core.StatusOK {
+		t.Fatalf("status=%q (err=%+v)", res.Status, res.Error)
+	}
+	if got, _ := res.Output["response_body"].Inline.(string); got != "from-input" {
+		t.Errorf("body = %q, want from-input", got)
+	}
+}
+
+func TestHTTP_InputURLOverridesParam(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+
+	// Both set: the wired input must win over the param.
+	res, err := executeHTTPRequest(t.Context(), core.Job{
+		Params: map[string]any{
+			"url":                    "https://param.example.com/should-not-be-called",
+			"allow_private_networks": true,
+		},
+		Input: map[string]core.Ref{"url": {Inline: srv.URL}},
+	}, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if res.Status != core.StatusOK {
+		t.Fatalf("status=%q (err=%+v) — input URL should have been used", res.Status, res.Error)
+	}
+}
+
 func TestHTTP_POSTWithInputBody(t *testing.T) {
 	var seen string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

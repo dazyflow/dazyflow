@@ -143,12 +143,15 @@ func init() {
 			}},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
+			// Numeric operands: typed application/json (the number type here —
+			// the Number drop and HTTP's status code both emit it) so the pins
+			// read blue and wire cleanly from those sources.
 			Inputs: []core.Port{
-				{Port: "value", Label: "Value"},
-				{Port: "min", Label: "Min"},
-				{Port: "max", Label: "Max"},
+				{Port: "value", Label: "Value", MIME: []string{"application/json"}},
+				{Port: "min", Label: "Min", MIME: []string{"application/json"}},
+				{Port: "max", Label: "Max", MIME: []string{"application/json"}},
 			},
-			Outputs:       []core.Port{{Port: "result", Label: "Result", MIME: []string{"application/json"}}},
+			Outputs:       []core.Port{{Port: "result", Label: "Result", MIME: []string{core.MIMEBool}}},
 			ParamsSchema:  inRangeSchema,
 			Idempotent:    true,
 			NoPassthrough: true, // pure predicate — see the binary operators above.
@@ -185,15 +188,11 @@ func executeInRange(_ context.Context, job core.Job, _ chan<- core.Progress) (co
 		return params.Err(job, "bad_param", err.Error()), nil
 	}
 
-	out := 0
-	if matched {
-		out = 1
-	}
 	return core.Result{
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
-			"result": {MIME: "application/json", Inline: out},
+			"result": {MIME: core.MIMEBool, Inline: matched},
 		},
 	}, nil
 }
