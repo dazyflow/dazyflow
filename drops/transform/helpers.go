@@ -13,7 +13,19 @@ import (
 	"github.com/google/cel-go/cel"
 
 	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/drops/internal/limits"
 )
+
+// capRows rejects an input list that exceeds the per-drop row ceiling, so a
+// transform can't be made to hold (or amplify) an unbounded amount of data in
+// memory. Checked before the list is materialized/copied so the oversized
+// input is refused, not first allocated.
+func capRows(n int) error {
+	if max := limits.MaxRows(); n > max {
+		return fmt.Errorf("input has %d rows, exceeds the %d-row limit (raise HAZYFLOW_MAX_ROWS to process larger batches)", n, max)
+	}
+	return nil
+}
 
 // newRowCELEnv builds the CEL environment shared by the filtering and
 // computing drops (compute_rows, route_rows, split_rows). Two variables
@@ -56,8 +68,14 @@ func normalizeRows(inline any) ([]map[string]any, error) {
 	}
 	switch v := inline.(type) {
 	case []map[string]any:
+		if err := capRows(len(v)); err != nil {
+			return nil, err
+		}
 		return v, nil
 	case []map[string]string:
+		if err := capRows(len(v)); err != nil {
+			return nil, err
+		}
 		out := make([]map[string]any, len(v))
 		for i, r := range v {
 			m := make(map[string]any, len(r))
@@ -68,6 +86,9 @@ func normalizeRows(inline any) ([]map[string]any, error) {
 		}
 		return out, nil
 	case []any:
+		if err := capRows(len(v)); err != nil {
+			return nil, err
+		}
 		out := make([]map[string]any, 0, len(v))
 		for i, item := range v {
 			m, err := coerceRowMap(item)

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/drops/internal/limits"
 	"git.sr.ht/~klahr/hazyflow/engine"
 )
 
@@ -168,6 +169,10 @@ func executeJoinRows(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 	}
 	matchedRightKeys := make(map[string]bool, len(rightIndex)) // tracked for right/outer's "unmatched right" pass
 
+	// A many-to-many key produces left×right rows, so even with both inputs
+	// bounded the join output can explode (1M × 1M). Cap it as it builds and
+	// fail fast rather than letting the slice grow until the daemon OOMs.
+	maxOut := limits.MaxRows()
 	out := make([]map[string]any, 0, len(leftRows))
 	for _, lr := range leftRows {
 		k := joinKeyString(lr, leftKeys)
@@ -176,12 +181,18 @@ func executeJoinRows(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 			// No right rows for this key. Inner skips; left/outer
 			// emit the left with nil right-side columns.
 			if kind == joinKindLeft || kind == joinKindOuter {
+				if len(out) >= maxOut {
+					return joinTooLarge(job, maxOut), nil
+				}
 				out = append(out, mergeRow(lr, nil, leftHeaders, rightOut, leftKeys, rightKeysInLeftOrder))
 			}
 			continue
 		}
 		matchedRightKeys[k] = true
 		for _, rr := range matches {
+			if len(out) >= maxOut {
+				return joinTooLarge(job, maxOut), nil
+			}
 			out = append(out, mergeRow(lr, rr, leftHeaders, rightOut, leftKeys, rightKeysInLeftOrder))
 		}
 	}
@@ -198,6 +209,9 @@ func executeJoinRows(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 				continue
 			}
 			for _, rr := range rightIndex[k] {
+				if len(out) >= maxOut {
+					return joinTooLarge(job, maxOut), nil
+				}
 				out = append(out, mergeRow(nil, rr, leftHeaders, rightOut, leftKeys, rightKeysInLeftOrder))
 			}
 		}
@@ -211,6 +225,14 @@ func executeJoinRows(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 			"headers": {MIME: "application/json", Inline: outHeaders},
 		},
 	}, nil
+}
+
+// joinTooLarge is the structured error returned when a join's output would
+// exceed the row ceiling — a many-to-many key can multiply bounded inputs into
+// an unbounded result.
+func joinTooLarge(job core.Job, max int) core.Result {
+	return errResult(job, "too_large",
+		fmt.Sprintf("join output exceeds the %d-row limit (a many-to-many key multiplies the inputs); raise HAZYFLOW_MAX_ROWS or join on a more selective key", max))
 }
 
 // parseJoinParams pulls (on, kind, right_suffix) off Job.Params with

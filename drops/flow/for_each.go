@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/drops/internal/limits"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
 	"git.sr.ht/~klahr/hazyflow/engine"
 )
@@ -223,6 +224,16 @@ func executeForEach(ctx context.Context, job core.Job, progress chan<- core.Prog
 	}, nil
 }
 
+// capItems rejects an items list bigger than the row ceiling. for_each
+// allocates a result slot (and runs a sub-job) per item, so an unbounded list
+// is an OOM vector; fail fast before materializing it.
+func capItems(n int) error {
+	if max := limits.MaxRows(); n > max {
+		return fmt.Errorf("items list has %d entries, exceeds the %d-item limit (raise HAZYFLOW_MAX_ROWS to iterate larger lists)", n, max)
+	}
+	return nil
+}
+
 // normalizeItems coerces the items input into a list of Refs that can be
 // fed into the step. The list arrives as either:
 //   - []core.Ref     (from merge or another for_each)
@@ -231,14 +242,23 @@ func executeForEach(ctx context.Context, job core.Job, progress chan<- core.Prog
 func normalizeItems(ref core.Ref) ([]core.Ref, error) {
 	switch v := ref.Inline.(type) {
 	case []core.Ref:
+		if err := capItems(len(v)); err != nil {
+			return nil, err
+		}
 		return v, nil
 	case []any:
+		if err := capItems(len(v)); err != nil {
+			return nil, err
+		}
 		out := make([]core.Ref, len(v))
 		for i, item := range v {
 			out[i] = core.Ref{Inline: item}
 		}
 		return out, nil
 	case []map[string]any:
+		if err := capItems(len(v)); err != nil {
+			return nil, err
+		}
 		out := make([]core.Ref, len(v))
 		for i, item := range v {
 			out[i] = core.Ref{Inline: item}
