@@ -51,8 +51,8 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{
-				{Port: "path", Label: "Repository path (workspace-relative)"},
-				{Port: "meta", Label: "Checkout metadata (JSON)"},
+				{Port: "path", Label: "Repository path (workspace-relative)", MIME: []string{"text/plain"}},
+				{Port: "meta", Label: "Checkout metadata (JSON)", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(
 				`{

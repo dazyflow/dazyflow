@@ -55,8 +55,8 @@ func init() {
 				{Port: "prompt", Label: "Prompt"},
 			},
 			Outputs: []core.Port{
-				{Port: "text", Label: "Text"},
-				{Port: "response", Label: "Full response"},
+				{Port: "text", Label: "Text", MIME: []string{"text/plain"}},
+				{Port: "response", Label: "Full response", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

@@ -45,8 +45,8 @@ func init() {
 				{Port: "path", Label: "Repository path (overrides params.path)"},
 			},
 			Outputs: []core.Port{
-				{Port: "diff", Label: "Unified diff (patch text)"},
-				{Port: "meta", Label: "Diff metadata (JSON)"},
+				{Port: "diff", Label: "Unified diff (patch text)", MIME: []string{"text/plain"}},
+				{Port: "meta", Label: "Diff metadata (JSON)", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(
 				`{
@@ -132,7 +132,7 @@ func executeGitDiff(_ context.Context, job core.Job, progress chan<- core.Progre
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
-			"diff": {MIME: "text/x-diff", Inline: diffText},
+			"diff": {MIME: "text/plain", Inline: diffText},
 			"meta": {MIME: "application/json", Inline: meta},
 		},
 	}, nil

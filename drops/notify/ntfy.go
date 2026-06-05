@@ -45,7 +45,7 @@ func init() {
 				{Port: "body", Label: "Message"},
 			},
 			Outputs: []core.Port{
-				{Port: "meta", Label: "Delivery metadata"},
+				{Port: "meta", Label: "Delivery metadata", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

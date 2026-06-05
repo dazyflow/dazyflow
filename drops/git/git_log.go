@@ -47,8 +47,8 @@ func init() {
 				{Port: "path", Label: "Repository path (overrides params.path)"},
 			},
 			Outputs: []core.Port{
-				{Port: "commits", Label: "Commit list (JSON array)"},
-				{Port: "meta", Label: "Log metadata (JSON)"},
+				{Port: "commits", Label: "Commit list (JSON array)", MIME: []string{"application/json"}},
+				{Port: "meta", Label: "Log metadata (JSON)", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(
 				`{

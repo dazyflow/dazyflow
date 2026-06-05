@@ -49,7 +49,7 @@ func init() {
 			}},
 			Outputs: []core.Port{
 				{Port: "response_body", Label: "Response body"},
-				{Port: "meta", Label: "Status + bytes sent (JSON)"},
+				{Port: "meta", Label: "Status + bytes sent (JSON)", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(
 				`{

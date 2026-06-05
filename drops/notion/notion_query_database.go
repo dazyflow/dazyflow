@@ -36,7 +36,7 @@ func init() {
 			Outputs: []core.Port{
 				{Port: "pages", Label: "Array of Notion page objects", MIME: []string{"application/json"}},
 				{Port: "next_cursor", Label: "Cursor for the next page (empty when done)", MIME: []string{"text/plain"}},
-				{Port: "has_more", Label: "Whether more pages exist", MIME: []string{"text/plain"}},
+				{Port: "has_more", Label: "Whether more pages exist", MIME: []string{core.MIMEBool}},
 				{Port: "meta", Label: "Full Notion list-response object", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
@@ -104,17 +104,13 @@ func executeNotionQueryDatabase(ctx context.Context, job core.Job, _ chan<- core
 	if r.Results == nil {
 		r.Results = []any{}
 	}
-	hasMore := "false"
-	if r.HasMore {
-		hasMore = "true"
-	}
 	return core.Result{
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
 			"pages":       {MIME: "application/json", Inline: r.Results},
 			"next_cursor": {MIME: "text/plain", Inline: r.NextCursor},
-			"has_more":    {MIME: "text/plain", Inline: hasMore},
+			"has_more":    {MIME: core.MIMEBool, Inline: r.HasMore},
 			"meta":        {MIME: "application/json", Inline: meta},
 		},
 	}, nil

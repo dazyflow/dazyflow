@@ -47,10 +47,11 @@ func init() {
 			Inputs: []core.Port{{
 				Port:  "url",
 				Label: "URL (optional, overrides params.url)",
+				MIME:  []string{"text/plain"},
 			}},
 			Outputs: []core.Port{
 				{Port: "out", Label: "Downloaded file ref"},
-				{Port: "meta", Label: "Status + bytes + content-type (JSON)"},
+				{Port: "meta", Label: "Status + bytes + content-type (JSON)", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(
 				`{

@@ -71,9 +71,9 @@ func init() {
 				{Port: "path", Label: "Working directory (overrides params.path)"},
 			},
 			Outputs: []core.Port{
-				{Port: "stdout", Label: "Standard output"},
-				{Port: "stderr", Label: "Standard error"},
-				{Port: "meta", Label: "Command metadata (JSON)"},
+				{Port: "stdout", Label: "Standard output", MIME: []string{"text/plain"}},
+				{Port: "stderr", Label: "Standard error", MIME: []string{"text/plain"}},
+				{Port: "meta", Label: "Command metadata (JSON)", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(
 				`{

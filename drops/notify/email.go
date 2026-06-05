@@ -50,7 +50,7 @@ func init() {
 				{Port: "body", Label: "Email body (overrides params.body)"},
 			},
 			Outputs: []core.Port{
-				{Port: "meta", Label: "Delivery metadata (JSON)"},
+				{Port: "meta", Label: "Delivery metadata (JSON)", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(
 				`{

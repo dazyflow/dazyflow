@@ -66,7 +66,7 @@ func TestNotionQuery_ReturnsPagesAndCursor(t *testing.T) {
 	if len(res.Output["pages"].Inline.([]any)) != 2 {
 		t.Errorf("pages = %+v", res.Output["pages"].Inline)
 	}
-	if res.Output["next_cursor"].Inline != "cur123" || res.Output["has_more"].Inline != "true" {
+	if res.Output["next_cursor"].Inline != "cur123" || res.Output["has_more"].Inline != true {
 		t.Errorf("cursor/has_more = %v / %v", res.Output["next_cursor"].Inline, res.Output["has_more"].Inline)
 	}
 }

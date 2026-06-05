@@ -37,7 +37,7 @@ func init() {
 			// No inputs — webhook is the data source.
 			Outputs: []core.Port{
 				{Port: "body", Label: "Request body (string for text MIMEs, parsed object for JSON)"},
-				{Port: "headers", Label: "Request headers as a JSON object"},
+				{Port: "headers", Label: "Request headers as a JSON object", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{"type":"object"}`),
 			// Idempotent in the sense that retry is safe — but in
