@@ -101,10 +101,15 @@ func redactValue(v any, set *secretSet) any {
 	case []byte:
 		return []byte(redactString(string(tv), set))
 	case map[string]any:
+		// Redact keys as well as values: a module that echoes a secret as a
+		// map key (e.g. {<token>: "..."}) would otherwise leak it, since the
+		// key isn't a value we'd otherwise visit. Rebuild into a fresh map so
+		// a redacted key can't collide-then-clobber mid-iteration.
+		out := make(map[string]any, len(tv))
 		for k, val := range tv {
-			tv[k] = redactValue(val, set)
+			out[redactString(k, set)] = redactValue(val, set)
 		}
-		return tv
+		return out
 	case []any:
 		for i, val := range tv {
 			tv[i] = redactValue(val, set)
