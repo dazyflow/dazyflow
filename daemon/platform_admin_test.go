@@ -112,3 +112,36 @@ func TestSignup_ElevatesPlatformAdmin(t *testing.T) {
 		t.Errorf("non-admin should be 403 at the gate, got %d", got)
 	}
 }
+
+// TestSignup_AllowlistBypassesDisabledSignup proves the bootstrap hatch:
+// with self-serve signup OFF, an email in HAZYFLOW_PLATFORM_ADMINS can
+// still create its account (so a fresh instance can mint its first
+// super-admin without toggling EnableSignup), while everyone else still
+// gets the 501. And the bypass is self-limiting — a second attempt for
+// the same listed email is rejected as a duplicate, not silently reused.
+func TestSignup_AllowlistBypassesDisabledSignup(t *testing.T) {
+	h := newSignupHarness(t)
+	h.gw.EnableSignup = false // signup is closed for the world
+	h.gw.PlatformAdmins = []string{"boss@example.com"}
+
+	t.Run("listed email may sign up while signup is disabled", func(t *testing.T) {
+		rw := rawDo(t, h, "POST", "/api/v1/auth/signup", signupBody("boss@example.com", "supersecret"))
+		if rw.Code != http.StatusCreated {
+			t.Fatalf("status=%d body=%s, want 201", rw.Code, rw.Body.String())
+		}
+	})
+
+	t.Run("second attempt for the same email is a duplicate, not a reuse", func(t *testing.T) {
+		rw := rawDo(t, h, "POST", "/api/v1/auth/signup", signupBody("boss@example.com", "supersecret"))
+		if rw.Code != http.StatusConflict {
+			t.Errorf("status=%d, want 409 — the bypass must close after first claim", rw.Code)
+		}
+	})
+
+	t.Run("unlisted email still gets 501", func(t *testing.T) {
+		rw := rawDo(t, h, "POST", "/api/v1/auth/signup", signupBody("peon@example.com", "supersecret"))
+		if rw.Code != http.StatusNotImplemented {
+			t.Errorf("status=%d, want 501 — signup stays closed for non-admins", rw.Code)
+		}
+	})
+}

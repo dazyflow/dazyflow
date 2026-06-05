@@ -43,7 +43,10 @@ import (
 //     tier; plan gating is a T3 item once Stripe is wired.
 //
 // Deployments that don't want self-serve signup leave
-// `EnableSignup` false; the endpoint returns 501.
+// `EnableSignup` false; the endpoint returns 501 — except for emails in
+// the platform-admin allowlist (HAZYFLOW_PLATFORM_ADMINS), which may
+// always sign up so a fresh instance can bootstrap its first super-admin
+// without temporarily opening signup to the world.
 
 // signupRequest is the wire shape of POST /api/v1/auth/signup.
 type signupRequest struct {
@@ -52,10 +55,6 @@ type signupRequest struct {
 }
 
 func (h *HTTPGateway) signUp(rw http.ResponseWriter, r *http.Request) {
-	if !h.EnableSignup {
-		writeJSONError(rw, http.StatusNotImplemented, "self-serve signup is not enabled on this deployment")
-		return
-	}
 	if h.Users == nil || h.Sessions == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "users/sessions not configured")
 		return
@@ -66,6 +65,18 @@ func (h *HTTPGateway) signUp(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	email := strings.ToLower(strings.TrimSpace(body.Email))
+	// Signup is closed by default. Two ways through the gate: the operator
+	// enabled self-serve signup, or this email is in the platform-admin
+	// allowlist (HAZYFLOW_PLATFORM_ADMINS). The allowlist path is the
+	// bootstrap hatch — it lets a fresh instance mint its first super-admin
+	// without flipping EnableSignup on and back off. It's self-limiting:
+	// once the account exists the duplicate check below returns 409, so a
+	// listed email can be claimed exactly once. The new account is elevated
+	// to platform:admin at IssueSession time (see elevatePlatformAdmin).
+	if !h.EnableSignup && !h.isPlatformAdminEmail(email) {
+		writeJSONError(rw, http.StatusNotImplemented, "self-serve signup is not enabled on this deployment")
+		return
+	}
 	if err := validSignupEmail(email); err != nil {
 		writeJSONError(rw, http.StatusBadRequest, err.Error())
 		return

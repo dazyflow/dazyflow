@@ -158,6 +158,29 @@ sandboxes are git/filesystem-backed under `HAZYFLOW_DATA_DIR`.) Provide a
 stable `HAZYFLOW_MASTER_KEY` (32-byte base64); losing it makes every
 stored secret undecryptable.
 
+### First admin (bootstrap)
+
+A fresh instance has no users, and signup is invite-only by default
+(`HAZYFLOW_ENABLE_SIGNUP` off) — a chicken-and-egg, since there's no admin
+to send the first invite. Resolve it with the platform-admin allowlist:
+
+```sh
+HAZYFLOW_PLATFORM_ADMINS=you@example.com   # comma-separated for several
+```
+
+Emails in this allowlist may sign up via `POST /api/v1/auth/signup` (the
+web UI's sign-up form) **even while `HAZYFLOW_ENABLE_SIGNUP` is off** — so
+you don't have to open self-serve signup to the world just to create your
+own account. On sign-up (and every later sign-in) the listed email is
+granted `platform:admin`. The bypass is self-limiting: once the account
+exists, a second signup for that email is rejected as a duplicate, and
+signup stays closed for everyone else. From there you invite the rest of
+your team as the platform admin.
+
+(With Google SSO configured, the first sign-in by a listed email
+auto-provisions the account and elevates it the same way — no signup
+toggle involved at all.)
+
 ### Fail-closed config guard
 
 `hzd` **refuses to start** if it would run with a bundled insecure
