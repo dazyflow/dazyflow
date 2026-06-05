@@ -88,4 +88,43 @@ describe("explainRunError", () => {
     const r = explainRunError("", 'secret "my secret" not found');
     expect(r!.action?.href).toBe("/secrets?focus=my%20secret");
   });
+
+  it("maps structured infra/runtime codes to plain-English headlines", () => {
+    const cases: Record<string, string> = {
+      egress_blocked: "explain.egressBlocked",
+      ssrf_blocked: "explain.ssrfBlocked",
+      sandbox_escape: "explain.sandboxEscape",
+      too_large: "explain.tooLarge",
+      body_too_large: "explain.tooLarge",
+      quota_exceeded: "explain.quotaExceeded",
+      timeout: "explain.timeout",
+      cancelled: "explain.cancelled",
+      missing_input: "explain.missingInput",
+      bad_input: "explain.badInput",
+      bad_param: "explain.badParam",
+      eval: "explain.evalFailed",
+      unknown_step: "explain.unknownStep",
+      db: "explain.dbFailed",
+    };
+    for (const [code, headlineKey] of Object.entries(cases)) {
+      const r = explainRunError(code, "some low-level go error");
+      expect(r, code).not.toBeNull();
+      expect(r!.headlineKey, code).toBe(headlineKey);
+      // Infra codes are headline-only — no misleading fix-it button.
+      expect(r!.action, code).toBeUndefined();
+    }
+  });
+
+  it("leaves unmapped codes to the raw-detail fallback", () => {
+    expect(explainRunError("io", "read: connection reset")).toBeNull();
+    expect(explainRunError("node_failed", "node x failed")).toBeNull();
+  });
+
+  it("prefers a specific message match over the generic code map", () => {
+    // A bad_param code whose message is actually a missing-secret — the
+    // message-based match is more specific and must win.
+    const r = explainRunError("bad_param", 'secret "API_KEY" not found');
+    expect(r!.headlineKey).toBe("explain.secretMissing");
+    expect(r!.headlineValues).toEqual({ name: "API_KEY" });
+  });
 });

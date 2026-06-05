@@ -142,7 +142,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   gmail: {
     name: "Gmail",
     description:
-      "Send email, search your inbox, and read full message bodies. The classic use case: react to incoming emails as they arrive — pair the search drop with a polling trigger and the flow remembers which messages it has already processed, so reruns don't repeat work.",
+      "Send email, search your inbox, and read full message bodies. The classic use case: react to incoming emails as they arrive — pair the search step with a polling trigger and the flow remembers which messages it has already processed, so reruns don't repeat work.",
     technical_notes:
       "Gmail API + Google OAuth. access_type=offline + prompt=consent ride along on authorize so refresh_token persists across runs. Cursor dedupe lives in the tenant:// encrypted secret store via secret_set + ${tenant://...} template substitution; survives daemon restarts.",
     docs_url: "https://developers.google.com/gmail/api/guides",
@@ -153,7 +153,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Read rows from a spreadsheet, and append rows to it. Use it to keep a Sheet in sync with a database, log incoming events for non-technical teammates to inspect, or pull a reference table into other flows.",
     technical_notes:
-      "Shares the 'google' OAuth client with Gmail — one consent covers both. The rows + headers shape is interchangeable with the Excel and database drops, so a Sheet can feed straight into a Postgres upsert without intermediate transforms.",
+      "Shares the 'google' OAuth client with Gmail — one consent covers both. The rows + headers shape is interchangeable with the Excel and database steps, so a Sheet can feed straight into a Postgres upsert without intermediate transforms.",
     docs_url: "https://developers.google.com/sheets/api",
     brand_logo: "/brands/sheets.svg",
   },
@@ -171,7 +171,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Create pages, and query databases. Mirror Notion content into a database for analytics, react to new entries by polling, or write structured data from a flow into a project tracker without anyone leaving Notion.",
     technical_notes:
-      "OAuth + Notion API. Notion-Version pinned to 2022-06-28 so behaviour is stable across deployments. The 'fire on new database row' pattern composes from poll_trigger + notion_query_database + secret_set — same cursor-dedupe shape Gmail uses; no dedicated trigger drop needed.",
+      "OAuth + Notion API. Notion-Version pinned to 2022-06-28 so behaviour is stable across deployments. The 'fire on new database row' pattern composes from poll_trigger + notion_query_database + secret_set — same cursor-dedupe shape Gmail uses; no dedicated trigger step needed.",
     docs_url: "https://developers.notion.com/reference/intro",
     brand_logo: "/brands/notion.svg",
   },
@@ -183,18 +183,18 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   postgres: {
     name: "Postgres",
     description:
-      "Insert, upsert, and query rows against a Postgres database. Pair it with the Sheets, Excel, or webhook drops to keep your database in sync with whatever source of truth your team uses.",
+      "Insert, upsert, and query rows against a Postgres database. Pair it with the Sheets, Excel, or webhook steps to keep your database in sync with whatever source of truth your team uses.",
     technical_notes:
-      "Per-(tenant, DSN) pgxpool connection registry with lazy idle eviction. Pass the DSN via ${tenant:postgres_dsn} from the encrypted secret store rather than embedding it in graph JSON; the secret_set drop can rotate it without touching graphs.",
+      "Per-(tenant, DSN) pgxpool connection registry with lazy idle eviction. Pass the DSN via ${tenant:postgres_dsn} from the encrypted secret store rather than embedding it in graph JSON; the secret_set step can rotate it without touching graphs.",
     docs_url: "https://www.postgresql.org/docs/current/sql-commands.html",
     brand_logo: "/brands/postgres.svg",
   },
   mysql: {
     name: "MySQL",
     description:
-      "Insert, upsert, and query rows against MySQL or MariaDB. Drops in here speak the same rows-and-headers shape as the Postgres and Sheets drops, so the same ETL flow can target a MySQL endpoint with one node change.",
+      "Insert, upsert, and query rows against MySQL or MariaDB. Steps in here speak the same rows-and-headers shape as the Postgres and Sheets steps, so the same ETL flow can target a MySQL endpoint with one node change.",
     technical_notes:
-      "*sql.DB connection pool, lazy idle eviction. The upsert drop reports separate insert vs update counts via ROW_COUNT() semantics, so downstream notifications can say 'X new + Y updated' instead of a single total.",
+      "*sql.DB connection pool, lazy idle eviction. The upsert step reports separate insert vs update counts via ROW_COUNT() semantics, so downstream notifications can say 'X new + Y updated' instead of a single total.",
     docs_url: "https://dev.mysql.com/doc/",
     brand_logo: "/brands/mysql.svg",
   },
@@ -212,7 +212,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Read .xlsx workbooks into rows, and write rows back out as a fresh workbook. Useful when someone drops a file into the workspace and you want to clean it, join it against a reference table, or load it into a real database.",
     technical_notes:
-      "Backed by the excelize library. The rows + headers contract matches Sheets and the database drops, so an Excel file can feed straight into a Postgres upsert with one map_rows between.",
+      "Backed by the excelize library. The rows + headers contract matches Sheets and the database steps, so an Excel file can feed straight into a Postgres upsert with one map_rows between.",
     brand_logo: "/brands/excel.svg",
   },
   email: {
@@ -251,6 +251,6 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   "standard-library": {
     name: "Standard library",
     description:
-      "Built-in flow primitives that don't belong to any vendor: routing (branch, split_rows, route_rows), waiting (await_approval, sleep), file I/O (read, write), the transform family (map / sort / dedupe / join / group / compute), database drops (Postgres / MySQL / SQLite), and schedule triggers (cron, poll, webhook). The toolkit you reach for between the third-party integrations.",
+      "Built-in flow primitives that don't belong to any vendor: routing (branch, split_rows, route_rows), waiting (await_approval, sleep), file I/O (read, write), the transform family (map / sort / dedupe / join / group / compute), database steps (Postgres / MySQL / SQLite), and schedule triggers (cron, poll, webhook). The toolkit you reach for between the third-party integrations.",
   },
 };

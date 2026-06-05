@@ -127,8 +127,42 @@ export function explainRunError(
     };
   }
 
+  // Structured infra/runtime codes the daemon emits. For these the raw
+  // message is low-level (often a Go error string), so the CODE is the
+  // better signal — map each to a plain-English headline. The message-based
+  // matches above are more specific and take precedence; the raw code +
+  // message still render below the headline for anyone who wants detail.
+  // None of these have a single obvious fix-it destination, so they're
+  // headline-only (no action button) — honest guidance over a misleading link.
+  if (code && CODE_HEADLINES[code]) {
+    return { headlineKey: CODE_HEADLINES[code] };
+  }
+
   return null;
 }
+
+// CODE_HEADLINES maps a daemon error code to its plain-English headline key.
+// Kept deliberately small: only codes where the headline genuinely helps a
+// non-technical reader more than the raw text. Codes left out (io, no_sandbox,
+// node_failed, …) fall through to the raw-detail fallback — either their
+// message already carries the signal, or they indicate an internal problem a
+// friendly headline would only obscure.
+const CODE_HEADLINES: Record<string, string> = {
+  egress_blocked: "explain.egressBlocked",
+  ssrf_blocked: "explain.ssrfBlocked",
+  sandbox_escape: "explain.sandboxEscape",
+  too_large: "explain.tooLarge",
+  body_too_large: "explain.tooLarge",
+  quota_exceeded: "explain.quotaExceeded",
+  timeout: "explain.timeout",
+  cancelled: "explain.cancelled",
+  missing_input: "explain.missingInput",
+  bad_input: "explain.badInput",
+  bad_param: "explain.badParam",
+  eval: "explain.evalFailed",
+  unknown_step: "explain.unknownStep",
+  db: "explain.dbFailed",
+};
 
 function capitalise(s: string): string {
   if (!s) return s;
