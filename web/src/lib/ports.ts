@@ -11,10 +11,15 @@ export const PASS_PORT = "pass";
 
 // mimeCompatible reports whether two MIME sets could carry the same value.
 // An empty/absent set on either side is treated as "anything", so untyped
-// pins connect to everything.
+// pins connect to everything. Otherwise the sets must share an exact MIME
+// — this mirrors core.mimeCompatible (core/validate.go), the rule the
+// backend enforces on submit, so the drag-create palette only ever offers
+// drops the graph validator will actually accept. (No top-level category
+// matching: `application/json` is NOT interchangeable with `application/x-bool`
+// or `application/pdf`.)
 export function mimeCompatible(a?: string[], b?: string[]): boolean {
   if (!a?.length || !b?.length) return true;
-  return a.some((x) => b.some((y) => x === y || x.split("/")[0] === y.split("/")[0]));
+  return a.some((x) => b.some((y) => x === y));
 }
 
 // pickPort chooses which port on the spawned drop to auto-wire to. The

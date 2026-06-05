@@ -7,10 +7,14 @@ describe("mimeCompatible", () => {
     expect(mimeCompatible(undefined, ["text/plain"])).toBe(true);
     expect(mimeCompatible(["text/plain"], [])).toBe(true);
   });
-  it("matches exact and same-family types", () => {
+  it("requires an exact MIME overlap (mirrors the backend validator)", () => {
     expect(mimeCompatible(["text/plain"], ["text/plain"])).toBe(true);
-    expect(mimeCompatible(["text/markdown"], ["text/plain"])).toBe(true);
+    // Same family is NOT enough — must be the exact same MIME.
+    expect(mimeCompatible(["text/markdown"], ["text/plain"])).toBe(false);
+    expect(mimeCompatible(["application/json"], ["application/x-bool"])).toBe(false);
     expect(mimeCompatible(["image/png"], ["text/plain"])).toBe(false);
+    // Overlap anywhere in the sets still connects.
+    expect(mimeCompatible(["text/plain", "application/json"], ["application/json"])).toBe(true);
   });
 });
 
