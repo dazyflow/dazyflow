@@ -21,18 +21,18 @@ func init() {
 			Category:    "flow_control",
 			Provider:    "internal",
 			Tags:        []string{"condition", "predicate", "boolean", "test", "compare"},
-			Description: "Compare two values, A and B, and emit 1 (true) or 0 (false) on the Result port. Pick the test from a plain-language list — equals, is greater than, contains, is one of, is within range, and more. Wire A and B from upstream nodes, or type a literal default right on the node. Pair the Result with Branch (Result → Branch.condition) to route, since 1/0 reads as true/false.",
-			Summary:     "Compare A against B with a chosen operator and emit 1 or 0 on the Result port.",
+			Description: "Compare two values, A and B, and emit true or false on the Result port. Pick the test from a plain-language list — equals, is greater than, contains, is one of, is within range, and more. Wire A and B from upstream nodes, or type a literal default right on the node. Pair the Result with Branch (Result → Branch.condition) to route.",
+			Summary:     "Compare A against B with a chosen operator and emit true or false on the Result port.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Is the value over a threshold?",
 					Params: json.RawMessage(`{"op":"greater_than","B":1000}`),
-					Notes:  "Wire the number into A; B is the literal 1000. Result is 1 when A > 1000.",
+					Notes:  "Wire the number into A; B is the literal 1000. Result is true when A > 1000.",
 				},
 				{
 					Title:  "Status is one of an accepted set",
 					Params: json.RawMessage(`{"op":"one_of","B":[200,201,204]}`),
-					Notes:  "For one_of, B is a list — Result is 1 when A equals any element.",
+					Notes:  "For one_of, B is a list — Result is true when A equals any element.",
 				},
 				{
 					Title:  "Was it a 2xx success? (range)",
@@ -52,7 +52,7 @@ func init() {
 			Outputs: []core.Port{{
 				Port:  "result",
 				Label: "Result",
-				MIME:  []string{"application/json"},
+				MIME:  []string{core.MIMEBool},
 			}},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
@@ -74,14 +74,14 @@ func init() {
 				"required":["op"]
 			}`),
 			Idempotent: true,
-			// Pure predicate: emits a 1/0 verdict, not a payload to thread.
+			// Pure predicate: emits a boolean verdict, not a payload to thread.
 			NoPassthrough: true,
 		},
 		Execute: executeCompare,
 	})
 }
 
-// executeCompare evaluates "A <op> B" and emits 1 (true) or 0 (false) on the
+// executeCompare evaluates "A <op> B" and emits true or false on the
 // result port. It's the "check" half of the Unreal-Blueprint split: Compare
 // decides, Branch routes. Each operand comes from its input port when wired,
 // or from the matching literal param (typed on the node) otherwise.
@@ -116,15 +116,11 @@ func compareWith(job core.Job, op string) (core.Result, error) {
 		return params.Err(job, "bad_param", err.Error()), nil
 	}
 
-	out := 0
-	if matched {
-		out = 1
-	}
 	return core.Result{
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
-			"result": {MIME: "application/json", Inline: out},
+			"result": {MIME: core.MIMEBool, Inline: matched},
 		},
 	}, nil
 }

@@ -150,7 +150,7 @@ func TestApprovalListener_ValidTokenResumes(t *testing.T) {
 	if rec.Status != core.JobStatusSucceeded {
 		t.Errorf("node status = %q, want succeeded", rec.Status)
 	}
-	if rec.Result == nil || rec.Result.Output["decision"].Inline != "approve" {
-		t.Errorf("decision output = %+v, want approve", rec.Result)
+	if rec.Result == nil || rec.Result.Output["approved"].Inline != true {
+		t.Errorf("approved output = %+v, want true", rec.Result)
 	}
 }

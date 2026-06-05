@@ -11,3 +11,4 @@
 
 # Signing keys for hz-drops — NEVER commit the private key
 .keys/
+/node_modules/

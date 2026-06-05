@@ -18,7 +18,7 @@ func init() {
 			Category:    "flow_control",
 			Provider:    "internal",
 			Tags:        []string{"human_in_the_loop", "approval", "pause", "wait"},
-			Description: "Pause the graph until an external HTTP approval arrives. Emits the approval URL on `pending_url` so downstream nodes (email, Slack) can notify a human. On resume, emits the decision on `decision`, plus a control signal on either `approved` or `rejected` — wire downstream `then`/`else` branches accordingly.",
+			Description: "Pause the graph until an external HTTP approval arrives. Emits the approval URL on `pending_url` so downstream nodes (email, Slack) can notify a human. On resume, emits the decision as a boolean `Approved` (true/false — wire into a Branch), the `Approver` who decided, their `Comment`, and threads the input `Value` out as `Result`.",
 			Summary:     "Park the flow until a human hits the approve or reject link, then route downstream by decision.",
 			Examples: []core.ParamsExample{
 				{
@@ -33,18 +33,30 @@ func init() {
 			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
+			// await_approval hand-rolls its own `context` passthrough, threaded
+			// across the pause: Execute copies context in→out on the Awaiting
+			// result, and daemon.Service.Approve preserves it onto the resume
+			// result. The universal `pass` pin would be redundant AND wouldn't
+			// work here — engine.ApplyPassthrough only fires on StatusOK, never
+			// on this node's Awaiting result. So opt out of it.
+			NoPassthrough: true,
 			Inputs: []core.Port{{
+				// Untyped: the value can be anything the author wants to carry
+				// across the approval to downstream nodes. Port id stays
+				// "context" (daemon.Approve threads it on resume); label is Value.
 				Port:  "context",
-				Label: "Optional context payload (passed through to downstream)",
+				Label: "Value",
 			}},
 			Outputs: []core.Port{
-				{Port: "pending_url", Label: "Approval URL (emitted during pause)"},
-				{Port: "decision", Label: "approve | reject"},
-				{Port: "approver", Label: "Subject string from the resume call"},
-				{Port: "comment", Label: "Optional free-text from the resume call"},
-				{Port: "approved", Label: "Control signal — fires when decision=approve"},
-				{Port: "rejected", Label: "Control signal — fires when decision=reject"},
-				{Port: "context", Label: "Pass-through of the context input"},
+				{Port: "pending_url", Label: "Approval URL", MIME: []string{"text/plain"}},
+				// The decision as a single boolean: true on approve, false on
+				// reject. Wire it into a Branch condition (then = approved).
+				{Port: "approved", Label: "Approved", MIME: []string{core.MIMEBool}},
+				// The authenticated subject that made the decision.
+				{Port: "approver", Label: "Approver", MIME: []string{"text/plain"}},
+				{Port: "comment", Label: "Comment", MIME: []string{"text/plain"}},
+				// The input Value, threaded through the approval to downstream.
+				{Port: "context", Label: "Result"},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

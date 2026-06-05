@@ -603,15 +603,16 @@ func TestHTTPGateway_ApproveAuthedResumesAwaitingNode(t *testing.T) {
 	if rec.Status != core.JobStatusSucceeded {
 		t.Errorf("status = %q, want succeeded", rec.Status)
 	}
-	if rec.Result == nil || rec.Result.Output["decision"].Inline != "approve" {
-		t.Errorf("decision missing: %+v", rec.Result)
+	// The decision is surfaced as a single boolean: approve → approved true.
+	if rec.Result == nil || rec.Result.Output["approved"].Inline != true {
+		t.Errorf("approved output = %+v, want true", rec.Result)
 	}
 	if got, _ := rec.Result.Output["comment"].Inline.(string); got != "looks good" {
 		t.Errorf("comment = %q", got)
 	}
-	// Approver defaults to the principal's subject when not set.
+	// "Approved by" defaults to the authenticated principal's subject.
 	if got, _ := rec.Result.Output["approver"].Inline.(string); got != "alice" {
-		t.Errorf("approver = %q, want alice (principal subject)", got)
+		t.Errorf("approver output = %q, want alice (principal subject)", got)
 	}
 }
 
@@ -621,6 +622,9 @@ func TestHTTPGateway_ApproveAuthedResumesAwaitingNode(t *testing.T) {
 // could forge who approved in the audit trail and the node record.
 func TestHTTPGateway_ApproveAuthedIgnoresSpoofedApprover(t *testing.T) {
 	h := newGatewayHarness(t)
+	// The approver is no longer a graph output; attribution lives in the
+	// audit trail, so wire a log to observe it.
+	h.gw.Audit = NewMemAuditLog()
 	_ = h.store.Enqueue(t.Context(), core.JobRecord{
 		ID: "run-spoof", Kind: core.JobKindGraph,
 		GraphID: "g1", Tenant: "t", Workspace: "ws",
@@ -642,13 +646,24 @@ func TestHTTPGateway_ApproveAuthedIgnoresSpoofedApprover(t *testing.T) {
 	if rw.Code != http.StatusOK {
 		t.Fatalf("code = %d body = %s", rw.Code, rw.Body.String())
 	}
-	rec, _ := h.store.Get(t.Context(), NodeJobID("run-spoof", "a"))
-	got, _ := rec.Result.Output["approver"].Inline.(string)
-	if got == "mallory" {
+	// Attribution must come from the authenticated principal in the audit
+	// trail, never the client-supplied ?approver=.
+	events, _ := h.gw.Audit.List(t.Context(), core.AuditQuery{Tenant: "t"})
+	var approval *core.AuditEvent
+	for i := range events {
+		if events[i].Action == "approval" {
+			approval = &events[i]
+			break
+		}
+	}
+	if approval == nil {
+		t.Fatal("no approval audit event recorded")
+	}
+	if approval.Actor == "mallory" {
 		t.Fatal("spoofed ?approver= was honored; approval must be attributed to the principal")
 	}
-	if got != "alice" {
-		t.Errorf("approver = %q, want alice (the authenticated principal)", got)
+	if approval.Actor != "alice" {
+		t.Errorf("approval actor = %q, want alice (the authenticated principal)", approval.Actor)
 	}
 }
 

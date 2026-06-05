@@ -17,7 +17,7 @@ import (
 // the operator as the node's identity instead of a dropdown.
 //
 // They share Compare's shape — two operand pins A and B (wire them, or type a
-// literal default), and a Result port emitting 1/0 to feed Branch. The win is
+// literal default), and a Result port emitting a boolean to feed Branch. The win is
 // reading speed: an "A > B" node says what it does at a glance, no need to
 // open it and read the dropdown. The full Compare stays the power node for
 // the long tail (contains, one_of, exists).
@@ -49,9 +49,25 @@ type operatorSpec struct {
 	label   string
 	icon    string
 	op      string // the Compare operator this node bakes in
+	numeric bool   // true for ops whose operands must be numbers (>, >=, <, <=)
 	summary string
 	desc    string
 	example core.ParamsExample
+}
+
+// operandPorts builds the A/B input ports. Numeric ops type them
+// application/json (the number type — blue) so they read as number pins and
+// wire from Number / status; equality ops leave them untyped (any value), so
+// the pin is neutral and accepts strings, numbers, or bools alike.
+func operandPorts(numeric bool) []core.Port {
+	var mime []string
+	if numeric {
+		mime = []string{"application/json"}
+	}
+	return []core.Port{
+		{Port: "A", Label: "A", MIME: mime},
+		{Port: "B", Label: "B", MIME: mime},
+	}
 }
 
 func registerOperator(o operatorSpec) {
@@ -71,8 +87,8 @@ func registerOperator(o operatorSpec) {
 			Examples:       []core.ParamsExample{o.example},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
-			Inputs:         []core.Port{{Port: "A", Label: "A"}, {Port: "B", Label: "B"}},
-			Outputs:        []core.Port{{Port: "result", Label: "Result", MIME: []string{"application/json"}}},
+			Inputs:         operandPorts(o.numeric),
+			Outputs:        []core.Port{{Port: "result", Label: "Result", MIME: []string{core.MIMEBool}}},
 			ParamsSchema:   operandSchema,
 			Idempotent:     true,
 			// Pure predicate: no payload to thread, and on the chip the pass
@@ -88,39 +104,39 @@ func registerOperator(o operatorSpec) {
 func init() {
 	registerOperator(operatorSpec{
 		id: "eq", label: "A = B", icon: "equal", op: "equals",
-		summary: "Emit 1 when A equals B, else 0.",
-		desc:    "Emit 1 (true) on Result when A equals B, otherwise 0. The atomic equality node — wire A and B, or type literal defaults. Pair Result with Branch to route. Reach for Compare instead when you need richer tests (contains, one_of, ranges).",
-		example: core.ParamsExample{Title: "Status equals 200", Params: json.RawMessage(`{"B":200}`), Notes: "Wire the status into A; B is the literal 200. Result is 1 when A == 200."},
+		summary: "Emit true when A equals B, else false.",
+		desc:    "Emit true on Result when A equals B, otherwise false. The atomic equality node — wire A and B, or type literal defaults. Pair Result with Branch to route. Reach for Compare instead when you need richer tests (contains, one_of, ranges).",
+		example: core.ParamsExample{Title: "Status equals 200", Params: json.RawMessage(`{"B":200}`), Notes: "Wire the status into A; B is the literal 200. Result is true when A == 200."},
 	})
 	registerOperator(operatorSpec{
 		id: "neq", label: "A ≠ B", icon: "equal-not", op: "not_equals",
-		summary: "Emit 1 when A does not equal B, else 0.",
-		desc:    "Emit 1 (true) on Result when A does not equal B, otherwise 0. Pair Result with Branch to route.",
-		example: core.ParamsExample{Title: "State is not idle", Params: json.RawMessage(`{"B":"idle"}`), Notes: `Result is 1 when A is anything other than "idle".`},
+		summary: "Emit true when A does not equal B, else false.",
+		desc:    "Emit true on Result when A does not equal B, otherwise false. Pair Result with Branch to route.",
+		example: core.ParamsExample{Title: "State is not idle", Params: json.RawMessage(`{"B":"idle"}`), Notes: `Result is true when A is anything other than "idle".`},
 	})
 	registerOperator(operatorSpec{
-		id: "gt", label: "A > B", icon: "chevron-right", op: "greater_than",
-		summary: "Emit 1 when A is greater than B, else 0.",
-		desc:    "Emit 1 (true) on Result when numeric A is strictly greater than B, otherwise 0. Both operands must be numbers. Pair Result with Branch to route.",
-		example: core.ParamsExample{Title: "Over a threshold", Params: json.RawMessage(`{"B":1000}`), Notes: "Wire the number into A; B is the literal 1000. Result is 1 when A > 1000."},
+		id: "gt", label: "A > B", icon: "chevron-right", op: "greater_than", numeric: true,
+		summary: "Emit true when A is greater than B, else false.",
+		desc:    "Emit true on Result when numeric A is strictly greater than B, otherwise false. Both operands must be numbers. Pair Result with Branch to route.",
+		example: core.ParamsExample{Title: "Over a threshold", Params: json.RawMessage(`{"B":1000}`), Notes: "Wire the number into A; B is the literal 1000. Result is true when A > 1000."},
 	})
 	registerOperator(operatorSpec{
-		id: "gte", label: "A ≥ B", icon: "chevrons-right", op: "greater_or_equal",
-		summary: "Emit 1 when A is greater than or equal to B, else 0.",
-		desc:    "Emit 1 (true) on Result when numeric A is greater than or equal to B, otherwise 0. Pair Result with Branch to route.",
-		example: core.ParamsExample{Title: "At least N items", Params: json.RawMessage(`{"B":3}`), Notes: "Result is 1 when A >= 3."},
+		id: "gte", label: "A ≥ B", icon: "chevrons-right", op: "greater_or_equal", numeric: true,
+		summary: "Emit true when A is greater than or equal to B, else false.",
+		desc:    "Emit true on Result when numeric A is greater than or equal to B, otherwise false. Pair Result with Branch to route.",
+		example: core.ParamsExample{Title: "At least N items", Params: json.RawMessage(`{"B":3}`), Notes: "Result is true when A >= 3."},
 	})
 	registerOperator(operatorSpec{
-		id: "lt", label: "A < B", icon: "chevron-left", op: "less_than",
-		summary: "Emit 1 when A is less than B, else 0.",
-		desc:    "Emit 1 (true) on Result when numeric A is strictly less than B, otherwise 0. Both operands must be numbers. Pair Result with Branch to route.",
-		example: core.ParamsExample{Title: "Under a limit", Params: json.RawMessage(`{"B":100}`), Notes: "Result is 1 when A < 100."},
+		id: "lt", label: "A < B", icon: "chevron-left", op: "less_than", numeric: true,
+		summary: "Emit true when A is less than B, else false.",
+		desc:    "Emit true on Result when numeric A is strictly less than B, otherwise false. Both operands must be numbers. Pair Result with Branch to route.",
+		example: core.ParamsExample{Title: "Under a limit", Params: json.RawMessage(`{"B":100}`), Notes: "Result is true when A < 100."},
 	})
 	registerOperator(operatorSpec{
-		id: "lte", label: "A ≤ B", icon: "chevrons-left", op: "less_or_equal",
-		summary: "Emit 1 when A is less than or equal to B, else 0.",
-		desc:    "Emit 1 (true) on Result when numeric A is less than or equal to B, otherwise 0. Pair Result with Branch to route.",
-		example: core.ParamsExample{Title: "No more than N", Params: json.RawMessage(`{"B":5}`), Notes: "Result is 1 when A <= 5."},
+		id: "lte", label: "A ≤ B", icon: "chevrons-left", op: "less_or_equal", numeric: true,
+		summary: "Emit true when A is less than or equal to B, else false.",
+		desc:    "Emit true on Result when numeric A is less than or equal to B, otherwise false. Pair Result with Branch to route.",
+		example: core.ParamsExample{Title: "No more than N", Params: json.RawMessage(`{"B":5}`), Notes: "Result is true when A <= 5."},
 	})
 
 	// In Range — the ternary primitive (see file header). Value/Min/Max pins,
@@ -134,12 +150,12 @@ func init() {
 			Category:    "logic",
 			Provider:    "internal",
 			Tags:        []string{"condition", "predicate", "boolean", "compare", "logic", "in_range", "range", "between"},
-			Description: "Emit 1 (true) on Result when numeric Value falls between Min and Max, otherwise 0. Both bounds are inclusive by default (so Min=200, Max=299 matches every 2xx status); toggle InclusiveMin/InclusiveMax to make either end exclusive. Modelled on Unreal Blueprint's InRange node. Wire Value/Min/Max from upstream or type literal defaults; pair Result with Branch to route.",
-			Summary:     "Emit 1 when Min ≤ Value ≤ Max (bounds inclusive by default), else 0.",
+			Description: "Emit true on Result when numeric Value falls between Min and Max, otherwise false. Both bounds are inclusive by default (so Min=200, Max=299 matches every 2xx status); toggle InclusiveMin/InclusiveMax to make either end exclusive. Modelled on Unreal Blueprint's InRange node. Wire Value/Min/Max from upstream or type literal defaults; pair Result with Branch to route.",
+			Summary:     "Emit true when Min ≤ Value ≤ Max (bounds inclusive by default), else false.",
 			Examples: []core.ParamsExample{{
 				Title:  "Was it a 2xx success?",
 				Params: json.RawMessage(`{"min":200,"max":299}`),
-				Notes:  "Wire the status into Value; Min and Max are the literals 200 and 299. Result is 1 for 200–299 inclusive.",
+				Notes:  "Wire the status into Value; Min and Max are the literals 200 and 299. Result is true for 200–299 inclusive.",
 			}},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,

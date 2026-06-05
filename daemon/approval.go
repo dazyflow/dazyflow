@@ -88,19 +88,18 @@ func (s *Service) Approve(
 		return fmt.Errorf("node %s is %s, not awaiting", nodeID, rec.Status)
 	}
 
-	// Build the resume Result. Preserve any pending output the awaiting
-	// Execute already wrote (notably the context passthrough) so
-	// downstream nodes wired to that port still see their data.
+	// Build the resume Result. The decision is a single boolean `approved`
+	// (true on approve, false on reject) — feed it straight into a Branch.
+	// `approver` is the authenticated subject (set by the caller path, never
+	// client-spoofable).
 	output := map[string]core.Ref{
-		"decision": {MIME: "text/plain", Inline: decision.Decision},
+		"approved": {MIME: core.MIMEBool, Inline: decision.Decision == "approve"},
 		"approver": {MIME: "text/plain", Inline: decision.Approver},
 		"comment":  {MIME: "text/plain", Inline: decision.Comment},
 	}
-	if decision.Decision == "approve" {
-		output["approved"] = core.Ref{MIME: "application/x-control"}
-	} else {
-		output["rejected"] = core.Ref{MIME: "application/x-control"}
-	}
+	// Preserve any pending output the awaiting Execute already wrote (notably
+	// the context passthrough, surfaced as Result) so downstream nodes wired
+	// to that port still see their data.
 	if rec.Result != nil {
 		if ctxRef, ok := rec.Result.Output["context"]; ok {
 			output["context"] = ctxRef

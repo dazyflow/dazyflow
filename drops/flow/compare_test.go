@@ -53,13 +53,17 @@ func TestCompare_Equals(t *testing.T) {
 	}
 }
 
-func TestCompare_ResultIsIntNotBool(t *testing.T) {
+func TestCompare_ResultIsBool(t *testing.T) {
 	res := cmp(t, 1.0, 1.0, "equals", nil)
-	if _, ok := res.Output["result"].Inline.(int); !ok {
-		t.Fatalf("result must be an int 0/1, got %T", res.Output["result"].Inline)
+	b, ok := res.Output["result"].Inline.(bool)
+	if !ok {
+		t.Fatalf("result must be a bool, got %T", res.Output["result"].Inline)
 	}
-	if res.Output["result"].Inline.(int) != 1 {
-		t.Errorf("1 equals 1 should be 1")
+	if !b {
+		t.Errorf("1 equals 1 should be true")
+	}
+	if mime := res.Output["result"].MIME; mime != core.MIMEBool {
+		t.Errorf("result MIME = %q, want %q", mime, core.MIMEBool)
 	}
 }
 
