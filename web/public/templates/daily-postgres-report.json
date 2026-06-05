@@ -12,7 +12,7 @@
       "id": "query",
       "module": "postgres_query",
       "params": {
-        "dsn": "${tenant:postgres_dsn}",
+        "dsn": "${secret.postgres_dsn}",
         "sql": "SELECT count(*) AS total FROM orders WHERE created_at > now() - interval '24 hours'"
       },
       "position": {"x": 200, "y": 200}

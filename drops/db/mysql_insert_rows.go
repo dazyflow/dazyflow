@@ -31,12 +31,12 @@ func init() {
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Load Excel rows into a new table",
-					Params: json.RawMessage(`{"dsn":"${tenant:MYSQL_DSN}","table":"signups"}`),
+					Params: json.RawMessage(`{"dsn":"${secret.MYSQL_DSN}","table":"signups"}`),
 					Notes:  "create_table defaults to true, so the table is built from the upstream headers on first run.",
 				},
 				{
 					Title:  "Append into a pre-existing schema",
-					Params: json.RawMessage(`{"dsn":"${tenant:MYSQL_DSN}","table":"orders","create_table":false,"column_types":{"id":"BIGINT","total":"DECIMAL(10,2)"}}`),
+					Params: json.RawMessage(`{"dsn":"${secret.MYSQL_DSN}","table":"orders","create_table":false,"column_types":{"id":"BIGINT","total":"DECIMAL(10,2)"}}`),
 				},
 			},
 			RequiresConnections: []core.ConnectionRequirement{

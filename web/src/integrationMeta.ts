@@ -144,7 +144,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Send email, search your inbox, and read full message bodies. The classic use case: react to incoming emails as they arrive — pair the search step with a polling trigger and the flow remembers which messages it has already processed, so reruns don't repeat work.",
     technical_notes:
-      "Gmail API + Google OAuth. access_type=offline + prompt=consent ride along on authorize so refresh_token persists across runs. Cursor dedupe lives in the tenant:// encrypted secret store via secret_set + ${tenant://...} template substitution; survives daemon restarts.",
+      "Gmail API + Google OAuth. access_type=offline + prompt=consent ride along on authorize so refresh_token persists across runs. Cursor dedupe lives in the tenant:// encrypted secret store via secret_set + ${secret.//...} template substitution; survives daemon restarts.",
     docs_url: "https://developers.google.com/gmail/api/guides",
     brand_logo: "/brands/gmail.svg",
   },
@@ -185,7 +185,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Insert, upsert, and query rows against a Postgres database. Pair it with the Sheets, Excel, or webhook steps to keep your database in sync with whatever source of truth your team uses.",
     technical_notes:
-      "Per-(tenant, DSN) pgxpool connection registry with lazy idle eviction. Pass the DSN via ${tenant:postgres_dsn} from the encrypted secret store rather than embedding it in graph JSON; the secret_set step can rotate it without touching graphs.",
+      "Per-(tenant, DSN) pgxpool connection registry with lazy idle eviction. Pass the DSN via ${secret.postgres_dsn} from the encrypted secret store rather than embedding it in graph JSON; the secret_set step can rotate it without touching graphs.",
     docs_url: "https://www.postgresql.org/docs/current/sql-commands.html",
     brand_logo: "/brands/postgres.svg",
   },

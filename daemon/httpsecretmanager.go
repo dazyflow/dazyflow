@@ -12,7 +12,7 @@ import (
 )
 
 // Per-tenant "bring your own secret manager" config endpoints. A tenant points
-// the platform at its own OpenBao/Vault; flows then resolve ${vault:PATH#FIELD}
+// the platform at its own OpenBao/Vault; flows then resolve ${vault.PATH#FIELD}
 // against it. The config is stored encrypted in the tenant's own store and is
 // never returned with its credentials.
 //

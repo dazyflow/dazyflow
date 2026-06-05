@@ -24,7 +24,7 @@
       "params": {
         "step_module": "gmail_get_message",
         "step_params": {
-          "id": "${item:id}",
+          "id": "${item.id}",
           "account": "default",
           "format": "metadata"
         }

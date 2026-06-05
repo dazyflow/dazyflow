@@ -49,7 +49,7 @@ const (
 // either "oauth" (the user authorizes via a provider; check via
 // list_connections; mint a URL via start_connection) or "secret" (the
 // user pastes an API key the LLM stores via set_secret; flows
-// reference it as ${tenant:NAME}). Name carries the provider ID for
+// reference it as ${secret.NAME}). Name carries the provider ID for
 // oauth or the recommended secret-name slug for secret — note that
 // any secret-name a node param references is acceptable; the Name
 // field is just the canonical / suggested one. Note is a short human

@@ -178,7 +178,7 @@ func TestResolveTemplates_UpstreamInlineSubstitution(t *testing.T) {
 	}
 	job := &core.Job{
 		Params: map[string]any{
-			"message": "Loaded ${upstream:reader.meta.count} rows from ${upstream:reader.meta.source}",
+			"message": "Loaded ${upstream.reader.meta.count} rows from ${upstream.reader.meta.source}",
 		},
 	}
 	if err := resolveTemplates(t.Context(), nil, prior, job); err != nil {
@@ -203,8 +203,8 @@ func TestResolveTemplates_UpstreamInNestedParams(t *testing.T) {
 		Params: map[string]any{
 			"config": map[string]any{
 				"columns": []any{
-					"${upstream:reader.headers[0]}",
-					"${upstream:reader.headers[1]}",
+					"${upstream.reader.headers[0]}",
+					"${upstream.reader.headers[1]}",
 				},
 			},
 		},
@@ -233,7 +233,7 @@ func TestResolveTemplates_UpstreamMixedWithSecrets(t *testing.T) {
 	}
 	job := &core.Job{
 		Params: map[string]any{
-			"url": "https://hooks.example.com/${upstream:q.meta.id}?token=${env:WEBHOOK_TOKEN}",
+			"url": "https://hooks.example.com/${upstream.q.meta.id}?token=${env.WEBHOOK_TOKEN}",
 		},
 	}
 	if err := resolveTemplates(t.Context(), providers, prior, job); err != nil {
@@ -250,7 +250,7 @@ func TestResolveTemplates_UpstreamRefMissingBecomesError(t *testing.T) {
 	// don't want a typo'd nodeID to silently produce an empty value
 	// that lands somewhere problematic (a DSN, a destination path).
 	job := &core.Job{
-		Params: map[string]any{"x": "${upstream:typo.field}"},
+		Params: map[string]any{"x": "${upstream.typo.field}"},
 	}
 	err := resolveTemplates(t.Context(), nil, map[string]core.Result{}, job)
 	if err == nil {
@@ -267,12 +267,12 @@ func TestResolveTemplates_NoPriorMeansUnknownScheme(t *testing.T) {
 	// matters because secret resolution runs on jobs that don't
 	// always have prior data (single-job submissions, tests).
 	job := &core.Job{
-		Params: map[string]any{"x": "${upstream:loader.meta.id}"},
+		Params: map[string]any{"x": "${upstream.loader.meta.id}"},
 	}
 	if err := resolveTemplates(t.Context(), nil, nil, job); err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	if got := job.Params["x"].(string); got != "${upstream:loader.meta.id}" {
+	if got := job.Params["x"].(string); got != "${upstream.loader.meta.id}" {
 		t.Errorf("got %q, want placeholder preserved", got)
 	}
 }
@@ -288,7 +288,7 @@ func TestResolveTemplates_UpstreamInComplexJSON(t *testing.T) {
 	job := &core.Job{
 		Params: map[string]any{
 			"body": map[string]any{
-				"text":    "Loaded ${upstream:loader.meta.processed} rows into ${upstream:loader.meta.table}",
+				"text":    "Loaded ${upstream.loader.meta.processed} rows into ${upstream.loader.meta.table}",
 				"channel": "#data-ops",
 			},
 		},
@@ -313,7 +313,7 @@ func TestResolveTemplates_UpstreamObjectStringifiesAsJSON(t *testing.T) {
 		}},
 	}
 	job := &core.Job{
-		Params: map[string]any{"x": "${upstream:q.meta}"},
+		Params: map[string]any{"x": "${upstream.q.meta}"},
 	}
 	if err := resolveTemplates(t.Context(), nil, prior, job); err != nil {
 		t.Fatalf("resolve: %v", err)

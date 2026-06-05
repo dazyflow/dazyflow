@@ -26,8 +26,8 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"github", "issue", "create", "tracker"},
 			Examples: []core.ParamsExample{
-				{Title: "Minimal bug report", Params: json.RawMessage(`{"owner":"example","repo":"widgets","title":"Deploy failed: prod-eu-west","token":"${tenant:GITHUB_TOKEN}"}`)},
-				{Title: "Triage issue with labels and assignee", Params: json.RawMessage(`{"owner":"example","repo":"widgets","title":"5xx spike on /checkout","body":"Error rate jumped to 4.1%.","labels":["bug","priority/high"],"assignees":["alice"],"token":"${tenant:GITHUB_TOKEN}"}`)},
+				{Title: "Minimal bug report", Params: json.RawMessage(`{"owner":"example","repo":"widgets","title":"Deploy failed: prod-eu-west","token":"${secret.GITHUB_TOKEN}"}`)},
+				{Title: "Triage issue with labels and assignee", Params: json.RawMessage(`{"owner":"example","repo":"widgets","title":"5xx spike on /checkout","body":"Error rate jumped to 4.1%.","labels":["bug","priority/high"],"assignees":["alice"],"token":"${secret.GITHUB_TOKEN}"}`)},
 			},
 			RequiresConnections: []core.ConnectionRequirement{
 				{Kind: "oauth", Name: "github", Note: "GitHub OAuth — repo scope (issues:write)."},

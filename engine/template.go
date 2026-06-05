@@ -9,12 +9,13 @@ import (
 	"git.sr.ht/~klahr/hazyflow/core"
 )
 
-// placeholderPattern matches ${scheme:path}. Schemes are restricted to
-// lowercase alphanumerics + dash/underscore so things like JSON snippets
-// or shell variable references inside a string don't get misinterpreted.
-// Paths are anything up to the closing brace; nested ${...} is not
-// supported.
-var placeholderPattern = regexp.MustCompile(`\$\{([a-z0-9_-]+):([^}]*)\}`)
+// placeholderPattern matches ${scheme.path}. The scheme is the run of
+// lowercase alphanumerics + dash/underscore up to the FIRST dot (so
+// ${secret.db.password} → scheme "secret", path "db.password"). The scheme
+// charset keeps JSON snippets and shell variable references from being
+// misinterpreted. Paths run to the closing brace; nested ${...} is not
+// supported. The separator is the dot — colon is no longer accepted.
+var placeholderPattern = regexp.MustCompile(`\$\{([a-z0-9_-]+)\.([^}]*)\}`)
 
 // Substituter resolves one placeholder. ok=false means "not my scheme" —
 // the caller should leave the placeholder in place rather than treating
@@ -22,7 +23,7 @@ var placeholderPattern = regexp.MustCompile(`\$\{([a-z0-9_-]+):([^}]*)\}`)
 // in for_each.
 type Substituter func(ctx context.Context, scheme, path string) (string, bool, error)
 
-// SubstituteString replaces every ${scheme:path} occurrence in s using
+// SubstituteString replaces every ${scheme.path} occurrence in s using
 // substituter. Unknown schemes are left as-is so unrelated text (JSON
 // templates, shell snippets) survives unchanged.
 func SubstituteString(ctx context.Context, s string, substituter Substituter) (string, error) {
@@ -38,7 +39,7 @@ func SubstituteString(ctx context.Context, s string, substituter Substituter) (s
 		scheme, path := groups[1], groups[2]
 		v, ok, err := substituter(ctx, scheme, path)
 		if err != nil {
-			firstErr = fmt.Errorf("${%s:%s}: %w", scheme, path, err)
+			firstErr = fmt.Errorf("${%s.%s}: %w", scheme, path, err)
 			return match
 		}
 		if !ok {

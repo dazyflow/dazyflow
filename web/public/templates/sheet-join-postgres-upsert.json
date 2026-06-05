@@ -28,7 +28,7 @@
       "id": "lookup",
       "module": "postgres_query",
       "params": {
-        "dsn": "${tenant:postgres_dsn}",
+        "dsn": "${secret.postgres_dsn}",
         "sql": "SELECT customer_id, name AS customer_name, tier FROM customers"
       },
       "position": {
@@ -54,7 +54,7 @@
       "id": "upsert",
       "module": "postgres_upsert_rows",
       "params": {
-        "dsn": "${tenant:postgres_dsn}",
+        "dsn": "${secret.postgres_dsn}",
         "table": "sales_enriched",
         "conflict_columns": [
           "customer_id",

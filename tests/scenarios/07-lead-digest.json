@@ -24,9 +24,9 @@
           "account": "default",
           "parent_database_id": "REPLACE_WITH_NOTION_DB_ID",
           "properties": {
-            "Name": {"title": [{"text": {"content": "${item:name}"}}]},
-            "Email": {"email": "${item:email}"},
-            "Source": {"rich_text": [{"text": {"content": "${item:source}"}}]}
+            "Name": {"title": [{"text": {"content": "${item.name}"}}]},
+            "Email": {"email": "${item.email}"},
+            "Source": {"rich_text": [{"text": {"content": "${item.source}"}}]}
           }
         }
       }

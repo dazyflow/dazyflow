@@ -38,7 +38,7 @@ func init() {
 				},
 				{
 					Title:  "Authenticated download to a scratch path",
-					Params: json.RawMessage(`{"url":"https://api.example.com/v1/dump","path":"scratch://dumps/today.bin","headers":{"Authorization":"Bearer ${tenant:EXAMPLE_API_TOKEN}"},"timeout_ms":600000,"max_bytes":524288000}`),
+					Params: json.RawMessage(`{"url":"https://api.example.com/v1/dump","path":"scratch://dumps/today.bin","headers":{"Authorization":"Bearer ${secret.EXAMPLE_API_TOKEN}"},"timeout_ms":600000,"max_bytes":524288000}`),
 					Notes:  "scratch:// files are cleaned up at the end of the run; bump max_bytes for large dumps.",
 				},
 			},
@@ -60,7 +60,7 @@ func init() {
 						"url":{"type":"string","description":"Absolute URL to download."},
 						"path":{"type":"string","format":"workspace-path","description":"Destination path in the sandbox. Prefix with scratch:// for an ephemeral, run-scoped file."},
 						"method":{"type":"string","default":"GET","enum":["GET","POST"],"description":"HTTP verb."},
-						"headers":{"type":"object","additionalProperties":{"type":"string"},"description":"Request headers. Values may include ${tenant:NAME} secret placeholders (e.g. an Authorization bearer token)."},
+						"headers":{"type":"object","additionalProperties":{"type":"string"},"description":"Request headers. Values may include ${secret.NAME} secret placeholders (e.g. an Authorization bearer token)."},
 						"mkdirs":{"type":"boolean","description":"Create parent directories of path if missing."},
 						"timeout_ms":{"type":"integer","default":300000,"minimum":1,"description":"Hard deadline for the whole download, in milliseconds."},
 						"max_bytes":{"type":"integer","default":104857600,"minimum":0,"description":"Abort if the download exceeds this many bytes. Default 100 MiB; 0 = unlimited (still bounded by quota)."},

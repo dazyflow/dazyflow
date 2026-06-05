@@ -25,9 +25,9 @@
         "step_params": {
           "host": "smtp.example.com:587",
           "from": "front-desk@example.com",
-          "to": "${item:email}",
+          "to": "${item.email}",
           "subject": "Reminder: your appointment tomorrow",
-          "body": "Hi ${item:name}, this is a reminder of your appointment on ${item:date} at ${item:time}."
+          "body": "Hi ${item.name}, this is a reminder of your appointment on ${item.date} at ${item.time}."
         }
       }
     },
@@ -36,7 +36,7 @@
       "module": "for_each",
       "params": {
         "step_module": "ntfy",
-        "step_params": {"topic": "clinic-reminders", "message": "Reminder sent to ${item:name} for ${item:date} ${item:time}"}
+        "step_params": {"topic": "clinic-reminders", "message": "Reminder sent to ${item.name} for ${item.date} ${item.time}"}
       }
     },
     {

@@ -16,7 +16,7 @@ import {
 //      no OAuth provider, no tenant secret. It's the only template
 //      Sarah (the non-technical persona from the walkthrough) can
 //      run before her admin enables anything. If a future commit
-//      adds an `account` param or a ${tenant:...} reference here,
+//      adds an `account` param or a ${secret....} reference here,
 //      the test fails and the badge promise is broken.
 //
 //   2. An OAuth-needing template — Gmail → Slack alert — must
@@ -119,7 +119,7 @@ describe("form-to-store template — zero-setup trial path", () => {
     ).toEqual([]);
   });
 
-  it("references no ${tenant:NAME} credentials", () => {
+  it("references no ${secret.NAME} credentials", () => {
     const paramsByID = Object.fromEntries(
       (tpl.nodes ?? []).map((n) => [n.id, n.params ?? {}]),
     );
@@ -135,11 +135,11 @@ describe("form-to-store template — zero-setup trial path", () => {
     expect(unavailableSecretRefs(nodes, paramsByID, null)).toEqual([]);
 
     // Defensive belt-and-braces: serialise every param value and
-    // assert no ${tenant: shows up anywhere in the JSON. Catches a
+    // assert no ${secret. shows up anywhere in the JSON. Catches a
     // future commit that adds a ref inside an array/object the
     // recursive walker might miss.
     const flat = JSON.stringify(tpl.nodes ?? []);
-    expect(flat).not.toContain("${tenant:");
+    expect(flat).not.toContain("${secret.");
   });
 });
 
@@ -179,7 +179,7 @@ describe("gmail-new-email-to-slack template — admin-blocked path", () => {
     const { nodes, paramsByID } = frame();
     // The template seeds gmail_cursor itself on first fire via the
     // cursor-dedupe pattern, BUT this graph version doesn't ship a
-    // secret_set node — it just references ${tenant:gmail_cursor}.
+    // secret_set node — it just references ${secret.gmail_cursor}.
     // So with the store off, the reference is admin-blocked.
     expect(unavailableSecretRefs(nodes, paramsByID, null)).toEqual([
       "gmail_cursor",

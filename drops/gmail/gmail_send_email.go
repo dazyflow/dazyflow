@@ -32,8 +32,8 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"gmail", "email", "send", "smtp"},
 			Examples: []core.ParamsExample{
-				{Title: "Plain-text alert", Params: json.RawMessage(`{"to":"oncall@example.com","subject":"Build failed","body":"main is red","token":"${tenant:GMAIL_OAUTH}"}`)},
-				{Title: "Daily report with a PDF attachment", Params: json.RawMessage(`{"to":"me@example.com","subject":"Yesterday's comments","body":"Comments digest attached.","token":"${tenant:GMAIL_OAUTH}"}`), Notes: "Wire a file-producing node (e.g. sheets_export_pdf) into the variadic 'attachments' input."},
+				{Title: "Plain-text alert", Params: json.RawMessage(`{"to":"oncall@example.com","subject":"Build failed","body":"main is red","token":"${secret.GMAIL_OAUTH}"}`)},
+				{Title: "Daily report with a PDF attachment", Params: json.RawMessage(`{"to":"me@example.com","subject":"Yesterday's comments","body":"Comments digest attached.","token":"${secret.GMAIL_OAUTH}"}`), Notes: "Wire a file-producing node (e.g. sheets_export_pdf) into the variadic 'attachments' input."},
 			},
 			RequiresConnections: []core.ConnectionRequirement{
 				{Kind: "oauth", Name: "google", Note: "Google OAuth — gmail.send scope."},

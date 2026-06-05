@@ -36,11 +36,11 @@ func init() {
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Daily report via STARTTLS on port 587",
-					Params: json.RawMessage(`{"host":"smtp.example.com","port":587,"tls":"starttls","username":"${tenant:SMTP_USER}","password":"${tenant:SMTP_PASS}","from":"reports@example.com","to":["team@example.com"],"subject":"Daily sales report","body":"See attached."}`),
+					Params: json.RawMessage(`{"host":"smtp.example.com","port":587,"tls":"starttls","username":"${secret.SMTP_USER}","password":"${secret.SMTP_PASS}","from":"reports@example.com","to":["team@example.com"],"subject":"Daily sales report","body":"See attached."}`),
 				},
 				{
 					Title:  "Implicit TLS (port 465) to multiple recipients",
-					Params: json.RawMessage(`{"host":"smtp.example.com","port":465,"tls":"implicit","username":"${tenant:SMTP_USER}","password":"${tenant:SMTP_PASS}","from":"alerts@example.com","to":["oncall@example.com","cto@example.com"],"subject":"Alert: error rate above threshold"}`),
+					Params: json.RawMessage(`{"host":"smtp.example.com","port":465,"tls":"implicit","username":"${secret.SMTP_USER}","password":"${secret.SMTP_PASS}","from":"alerts@example.com","to":["oncall@example.com","cto@example.com"],"subject":"Alert: error rate above threshold"}`),
 					Notes:  "Body left empty here so it can be wired in from an upstream node.",
 				},
 			},
@@ -58,8 +58,8 @@ func init() {
 					"properties":{
 						"host":{"type":"string","description":"SMTP server hostname."},
 						"port":{"type":"integer","default":587,"minimum":1,"description":"SMTP server port."},
-						"username":{"type":"string","description":"SMTP auth username. ${env:NAME} resolves secrets."},
-						"password":{"type":"string","description":"SMTP auth password. ${env:NAME} resolves secrets."},
+						"username":{"type":"string","description":"SMTP auth username. ${env.NAME} resolves secrets."},
+						"password":{"type":"string","description":"SMTP auth password. ${env.NAME} resolves secrets."},
 						"from":{"type":"string","description":"From address (must match the auth identity for most providers)."},
 						"to":{"type":"array","items":{"type":"string"},"description":"Recipient addresses."},
 						"subject":{"type":"string","description":"Subject line."},

@@ -44,7 +44,7 @@
       "id": "upsert",
       "module": "postgres_upsert_rows",
       "params": {
-        "dsn": "${tenant:postgres_dsn}",
+        "dsn": "${secret.postgres_dsn}",
         "table": "notion_pages",
         "conflict_columns": [
           "id"

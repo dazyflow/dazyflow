@@ -35,7 +35,7 @@
         "account": "default",
         "owner": "REPLACE_OWNER",
         "repo": "REPLACE_REPO",
-        "title": "${upstream:shape.rows[0].title}",
+        "title": "${upstream.shape.rows[0].title}",
         "labels": ["from-slack"]
       },
       "position": {"x": 1220, "y": 200}

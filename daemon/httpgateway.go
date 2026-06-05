@@ -294,7 +294,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 
 	// Bring-your-own secret manager (OpenBao/Vault): per-tenant connection
 	// config behind the same secret-permission gate. Flows then resolve
-	// ${vault:PATH#FIELD} against the tenant's own manager.
+	// ${vault.PATH#FIELD} against the tenant's own manager.
 	mux.HandleFunc("GET /api/v1/secret-manager", h.requireAuth(h.getSecretManager))
 	mux.HandleFunc("PUT /api/v1/secret-manager", h.requireAuth(h.putSecretManager))
 	mux.HandleFunc("DELETE /api/v1/secret-manager", h.requireAuth(h.deleteSecretManager))

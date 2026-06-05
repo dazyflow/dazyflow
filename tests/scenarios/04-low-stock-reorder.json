@@ -28,9 +28,9 @@
       "params": {
         "step_module": "gmail_send_email",
         "step_params": {
-          "to": "${item:supplier_email}",
-          "subject": "Purchase order: ${item:sku}",
-          "body": "Please supply ${item:reorder_qty} units of ${item:sku} (${item:name})."
+          "to": "${item.supplier_email}",
+          "subject": "Purchase order: ${item.sku}",
+          "body": "Please supply ${item.reorder_qty} units of ${item.sku} (${item.name})."
         }
       }
     }

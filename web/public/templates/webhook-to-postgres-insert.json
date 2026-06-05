@@ -29,7 +29,7 @@
       "id": "insert",
       "module": "postgres_insert_rows",
       "params": {
-        "dsn": "${tenant:postgres_dsn}",
+        "dsn": "${secret.postgres_dsn}",
         "table": "events"
       },
       "position": {"x": 700, "y": 200}

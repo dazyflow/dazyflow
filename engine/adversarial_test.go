@@ -65,7 +65,7 @@ func sinkDrop() NativeDrop {
 	}
 }
 
-// TestRunNode_AdversarialUpstreamTemplates proves the ${upstream:…} resolver
+// TestRunNode_AdversarialUpstreamTemplates proves the ${upstream.…} resolver
 // never panics or hangs, whatever path syntax or payload shape an upstream
 // node produced — malformed paths degrade to a clean error, pathological
 // payloads resolve in bounded time.
@@ -91,21 +91,21 @@ func TestRunNode_AdversarialUpstreamTemplates(t *testing.T) {
 	}
 
 	templates := []string{
-		"${upstream:}",                         // empty path
-		"${upstream:src}",                      // node only, no port
-		"${upstream:nope.out}",                 // unknown node
-		"${upstream:src.missing}",              // unknown port
-		"${upstream:src.out.name}",             // valid nested
-		"${upstream:src.out.list[0]}",          // valid index
-		"${upstream:src.out.list[999999999]}",  // out of range
-		"${upstream:src.out.list[-1]}",         // negative
-		"${upstream:src.out.list[abc]}",        // non-numeric index
-		"${upstream:src.out.list[[[}",          // unclosed bracket
-		"${upstream:src.out.name.deeper.more}", // descend into a string
-		"${upstream:src.deep}",                 // huge JSON stringify
-		"${upstream:src.wide}",                 // 100k-element stringify
-		"${upstream:src.out" + strings.Repeat(".x", 10000) + "}", // 10k-segment path
-		"prefix ${upstream:src.out.name} and ${upstream:src.out.list[0]} suffix",
+		"${upstream.}",                         // empty path
+		"${upstream.src}",                      // node only, no port
+		"${upstream.nope.out}",                 // unknown node
+		"${upstream.src.missing}",              // unknown port
+		"${upstream.src.out.name}",             // valid nested
+		"${upstream.src.out.list[0]}",          // valid index
+		"${upstream.src.out.list[999999999]}",  // out of range
+		"${upstream.src.out.list[-1]}",         // negative
+		"${upstream.src.out.list[abc]}",        // non-numeric index
+		"${upstream.src.out.list[[[}",          // unclosed bracket
+		"${upstream.src.out.name.deeper.more}", // descend into a string
+		"${upstream.src.deep}",                 // huge JSON stringify
+		"${upstream.src.wide}",                 // 100k-element stringify
+		"${upstream.src.out" + strings.Repeat(".x", 10000) + "}", // 10k-segment path
+		"prefix ${upstream.src.out.name} and ${upstream.src.out.list[0]} suffix",
 	}
 
 	for _, tmpl := range templates {
@@ -172,17 +172,17 @@ func echoSecretDrop() NativeDrop {
 }
 
 // TestRunNode_SecretRedactionDefenseInDepth runs the full RunNode pipeline
-// (resolve ${tenant:api} → Execute echoes it everywhere → redact) and asserts
+// (resolve ${secret.api} → Execute echoes it everywhere → redact) and asserts
 // the plaintext secret survives nowhere in the persisted Result — including
 // when a malicious drop uses it as a map key.
 func TestRunNode_SecretRedactionDefenseInDepth(t *testing.T) {
 	const secret = "sk_live_aVeryRealLookingSecretValue_01234"
 	e := newEngineWith(t, echoSecretDrop())
-	e.Secrets = newProviders(stubProvider{scheme: "tenant", values: map[string]string{"api": secret}})
+	e.Secrets = newProviders(stubProvider{scheme: "secret", values: map[string]string{"api": secret}})
 
 	g := core.Graph{
 		ID: "g", Tenant: "acme",
-		Nodes: []core.Node{{ID: "n", Module: "echo_secret", Params: map[string]any{"token": "${tenant:api}"}}},
+		Nodes: []core.Node{{ID: "n", Module: "echo_secret", Params: map[string]any{"token": "${secret.api}"}}},
 	}
 	out := runNodeSafely(e, g, "n", nil, 2*time.Second)
 	if out.panicVal != nil {
@@ -222,9 +222,9 @@ func TestRunNode_TransformedSecretIsNotRedacted(t *testing.T) {
 				Output: map[string]core.Ref{"out": {Inline: string(r)}}}, nil
 		},
 	})
-	e.Secrets = newProviders(stubProvider{scheme: "tenant", values: map[string]string{"api": secret}})
+	e.Secrets = newProviders(stubProvider{scheme: "secret", values: map[string]string{"api": secret}})
 	g := core.Graph{ID: "g", Tenant: "acme",
-		Nodes: []core.Node{{ID: "n", Module: "b64_secret", Params: map[string]any{"token": "${tenant:api}"}}}}
+		Nodes: []core.Node{{ID: "n", Module: "b64_secret", Params: map[string]any{"token": "${secret.api}"}}}}
 	out := runNodeSafely(e, g, "n", nil, 2*time.Second)
 	if out.panicVal != nil {
 		t.Fatalf("PANIC: %v", out.panicVal)

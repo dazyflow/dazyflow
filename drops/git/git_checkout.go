@@ -58,7 +58,7 @@ func init() {
 				`{
 					"type":"object",
 					"properties":{
-						"url":{"type":"string","description":"Repository URL (https or ssh). Use ${env:NAME} placeholders for tokens embedded in the URL."},
+						"url":{"type":"string","description":"Repository URL (https or ssh). Use ${env.NAME} placeholders for tokens embedded in the URL."},
 						"ref":{"type":"string","description":"Branch, tag, or commit SHA to check out. Defaults to the remote HEAD."},
 						"path":{"type":"string","description":"Workspace-relative directory to clone into. Must not already exist."},
 						"depth":{"type":"integer","minimum":0,"description":"Shallow-clone depth. 0 (default) clones the full history."}

@@ -30,9 +30,9 @@
       "params": {
         "step_module": "gmail_send_email",
         "step_params": {
-          "to": "${item:client_email}",
-          "subject": "Reminder: invoice ${item:invoice_no} is overdue",
-          "body": "Hi ${item:client_name}, invoice ${item:invoice_no} for ${item:amount} is now ${item:days_overdue} days past due. Please arrange payment."
+          "to": "${item.client_email}",
+          "subject": "Reminder: invoice ${item.invoice_no} is overdue",
+          "body": "Hi ${item.client_name}, invoice ${item.invoice_no} for ${item.amount} is now ${item.days_overdue} days past due. Please arrange payment."
         }
       }
     },

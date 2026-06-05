@@ -293,7 +293,7 @@ func TestForEach_UnknownStepModuleFails(t *testing.T) {
 }
 
 // TestForEach_TemplatesItemFieldsIntoStepParams verifies the unlock —
-// each iteration gets its own copy of step_params with ${item:path}
+// each iteration gets its own copy of step_params with ${item.path}
 // placeholders substituted by the current item's fields. Without this,
 // you can't actually parameterize per-item HTTP calls / AI calls.
 func TestForEach_TemplatesItemFieldsIntoStepParams(t *testing.T) {
@@ -340,11 +340,11 @@ func TestForEach_TemplatesItemFieldsIntoStepParams(t *testing.T) {
 		Params: map[string]any{
 			"step_module": "test_capture_step",
 			"step_params": map[string]any{
-				"url":   "https://api.example.com/users/${item:id}",
-				"label": "user=${item:name}",
-				"tags":  []any{"id:${item:id}"},
+				"url":   "https://api.example.com/users/${item.id}",
+				"label": "user=${item.name}",
+				"tags":  []any{"id:${item.id}"},
 				"nested": map[string]any{
-					"who": "${item:name}",
+					"who": "${item.name}",
 				},
 			},
 			"concurrency": 1, // serialize for deterministic seen ordering
@@ -390,7 +390,7 @@ func TestForEach_TemplateMissingFieldFailsThatIteration(t *testing.T) {
 		Params: map[string]any{
 			"step_module": "test_echo_step",
 			"step_params": map[string]any{
-				"target": "/api/${item:id}",
+				"target": "/api/${item.id}",
 			},
 		},
 	}
@@ -418,7 +418,7 @@ func TestForEach_TemplatesScalarItems(t *testing.T) {
 		Params: map[string]any{
 			"step_module": "test_echo_step",
 			"step_params": map[string]any{
-				"who": "${item:}", // empty path = whole item
+				"who": "${item.}", // empty path = whole item
 			},
 		},
 	}

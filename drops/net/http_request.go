@@ -37,11 +37,11 @@ func init() {
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Simple authenticated GET",
-					Params: json.RawMessage(`{"url":"https://api.example.com/v1/users","method":"GET","headers":{"Authorization":"Bearer ${env:EXAMPLE_API_TOKEN}","Accept":"application/json"}}`),
+					Params: json.RawMessage(`{"url":"https://api.example.com/v1/users","method":"GET","headers":{"Authorization":"Bearer ${env.EXAMPLE_API_TOKEN}","Accept":"application/json"}}`),
 				},
 				{
 					Title:  "POST JSON payload, accept 201",
-					Params: json.RawMessage(`{"url":"https://api.example.com/v1/orders","method":"POST","headers":{"Content-Type":"application/json","Authorization":"Bearer ${env:EXAMPLE_API_TOKEN}"},"body":"{\"sku\":\"ABC-123\",\"qty\":2}","expect_status":[200,201]}`),
+					Params: json.RawMessage(`{"url":"https://api.example.com/v1/orders","method":"POST","headers":{"Content-Type":"application/json","Authorization":"Bearer ${env.EXAMPLE_API_TOKEN}"},"body":"{\"sku\":\"ABC-123\",\"qty\":2}","expect_status":[200,201]}`),
 				},
 				{
 					Title:  "DELETE with explicit status expectation and short timeout",
@@ -75,7 +75,7 @@ func init() {
 					"properties":{
 						"url":{"type":"string","description":"Absolute URL of the resource to call. The url input port overrides this when connected."},
 						"method":{"type":"string","default":"GET","enum":["GET","POST","PUT","PATCH","DELETE","HEAD","OPTIONS"],"description":"HTTP verb. Methods with bodies (POST/PUT/PATCH) use the request_body input or the body param."},
-						"headers":{"type":"object","additionalProperties":{"type":"string"},"description":"Headers to send (one per key). Values may include ${env:NAME} placeholders that resolve to secrets."},
+						"headers":{"type":"object","additionalProperties":{"type":"string"},"description":"Headers to send (one per key). Values may include ${env.NAME} placeholders that resolve to secrets."},
 						"body":{"type":"string","description":"Inline request body. The request_body input port overrides this when connected."},
 						"timeout_ms":{"type":"integer","default":30000,"minimum":1,"description":"Hard deadline for the full request, in milliseconds."},
 						"expect_status":{"type":"array","items":{"type":"integer"},"description":"Accepted response status codes. Empty defaults to 2xx."},

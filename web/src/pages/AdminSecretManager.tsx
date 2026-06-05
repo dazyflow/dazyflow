@@ -8,7 +8,7 @@ import type { SecretManagerConfig, SecretManagerStatus } from "../types";
 // AdminSecretManager is the tenant-level "point the platform at your own
 // OpenBao / HashiCorp Vault" config — set-once infrastructure, so it
 // lives under Admin alongside Connector apps and SSO, not on the
-// everyday Secrets page. Flows then resolve ${vault:PATH#FIELD} against
+// everyday Secrets page. Flows then resolve ${vault.PATH#FIELD} against
 // it. The form self-hides credentials (they're never read back) and the
 // page shows an unavailable note when the encrypted store that holds the
 // connection config isn't configured for this deployment.

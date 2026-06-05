@@ -1,7 +1,7 @@
 // Package notion hosts the native Notion connectors (notion_query_database,
 // notion_create_page), migrated from the scripted TS drops. Token
 // resolution mirrors the other connectors: an explicit `token` param wins
-// (covers ${tenant:NOTION_TOKEN} templating and a pasted integration
+// (covers ${secret.NOTION_TOKEN} templating and a pasted integration
 // token), otherwise the daemon's OAuth registry resolves the "notion"
 // provider via the SetTokenLookup hook wired at startup.
 package notion

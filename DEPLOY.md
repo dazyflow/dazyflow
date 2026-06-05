@@ -351,12 +351,12 @@ Every node you drop on the canvas — triggers, transforms, and the connectors
 native Go drop compiled into `hzd`. There is no plugin/marketplace install
 step and no separate runtime: the catalog is fixed at build time. Connectors
 that need credentials use the OAuth providers configured under **Admin →
-Connector apps** (`/admin/oauth`) or a `${tenant:…}` token.
+Connector apps** (`/admin/oauth`) or a `${secret.…}` token.
 
 ## Secrets
 
 Out of the box, secrets are held in the **built-in encrypted store** — flows
-reference them as `${tenant:NAME}` (the `tenant://` provider), values are
+reference them as `${secret.NAME}` (the `tenant://` provider), values are
 AES-256-GCM encrypted under a per-tenant key wrapped by `HAZYFLOW_MASTER_KEY`,
 and the UI is write-only (you never read a value back). That's the zero-infra
 default; no external dependency. For master-key handling and rotation, see
@@ -366,7 +366,7 @@ default; no external dependency. For master-key handling and rotation, see
 
 An org that already runs **OpenBao** or **HashiCorp Vault** can point the
 platform at it instead, and reference its secrets in flows as
-`${vault:PATH#FIELD}` (e.g. `${vault:stripe#api_key}` reads field `api_key` of
+`${vault.PATH#FIELD}` (e.g. `${vault.stripe#api_key}` reads field `api_key` of
 the KV-v2 secret at `stripe`). This is **additive** — it coexists with the
 built-in store; orgs that don't run a manager are unaffected.
 

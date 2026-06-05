@@ -81,7 +81,7 @@ real corporate workflows.
 
 ## Friction caught while building this demo
 
-1. **Secrets are whole-string substitutions.** `Authorization: env://KEY` resolves to whatever's in the env var. So the env var must contain `Bearer <token>` if the API expects Bearer auth — not just the token. Future: template-style substitution (`Bearer ${env:KEY}`) for partial-string injection.
+1. **Secrets are whole-string substitutions.** `Authorization: env://KEY` resolves to whatever's in the env var. So the env var must contain `Bearer <token>` if the API expects Bearer auth — not just the token. Future: template-style substitution (`Bearer ${env.KEY}`) for partial-string injection.
 
 2. **Webhook bodies are still ignored.** The graph has no access to `POST /trigger/... <body>`. Workflows that need the inbound data (e.g. "process the invoice whose ID is in the webhook payload") must hardcode IDs or fetch a "latest" endpoint. The fix is a `webhook_input` module the engine seeds with the body.
 

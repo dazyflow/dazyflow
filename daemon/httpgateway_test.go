@@ -1552,7 +1552,7 @@ func TestHTTPGateway_SaveGraph_IncludesLintInResponse(t *testing.T) {
 				ID: "call", Module: "http_request",
 				Params: map[string]any{
 					"url":     "https://api.example.com",
-					"headers": map[string]any{"Authorization": "Bearer ${tenant:api_key}"},
+					"headers": map[string]any{"Authorization": "Bearer ${secret.api_key}"},
 				},
 			},
 			{ID: "save", Module: "file_write", Params: map[string]any{"path": "out.txt"}},

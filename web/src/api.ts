@@ -187,6 +187,22 @@ function nodeViewToRecord(runID: string, n: NodeRunView): JobRecord {
   };
 }
 
+// SecretScope mirrors the daemon's secret scoping: tenant (shared by every
+// flow), workspace, or flow (only the named flow resolves it). The cascade
+// (${secret.NAME}) resolves flow → workspace → tenant; the explicit
+// ${secret.}/${secret.} schemes pin one scope.
+export type SecretScope = "tenant" | "workspace" | "flow";
+
+// secretQuery builds the ?scope=&flow= query for the secret endpoints. Tenant
+// scope and no flow yield an empty string, so existing callers are unchanged.
+function secretQuery(scope?: SecretScope, flow?: string): string {
+  const p = new URLSearchParams();
+  if (scope && scope !== "tenant") p.set("scope", scope);
+  if (flow) p.set("flow", flow);
+  const s = p.toString();
+  return s ? `?${s}` : "";
+}
+
 export const api = {
   // uploadWorkspaceFile sends a single file to a workspace sandbox via
   // multipart/form-data — used by the workspace-path widget in the
@@ -691,18 +707,20 @@ export const api = {
       `/admin/oauth-providers/${encodeURIComponent(name)}`,
     ),
 
-  // listSecrets returns the NAMES of the tenant's stored credentials —
+  // listSecrets returns the NAMES of the stored credentials at a scope —
   // never the values (the daemon has no read-back endpoint by design).
-  listSecrets: (token: string) =>
-    request<{ secrets: string[] }>(token, "GET", "/secrets"),
-  // putSecret creates or replaces a credential. Idempotent; 204 on
-  // success. Value is write-only from here on.
-  putSecret: (token: string, name: string, value: string) =>
-    request<void>(token, "PUT", `/secrets/${encodeURIComponent(name)}`, {
+  // Scope defaults to tenant; workspace uses the caller's workspace; flow
+  // requires the flow (graph) id.
+  listSecrets: (token: string, scope?: SecretScope, flow?: string) =>
+    request<{ secrets: string[] }>(token, "GET", "/secrets" + secretQuery(scope, flow)),
+  // putSecret creates or replaces a credential at a scope. Idempotent; 204
+  // on success. Value is write-only from here on.
+  putSecret: (token: string, name: string, value: string, scope?: SecretScope, flow?: string) =>
+    request<void>(token, "PUT", `/secrets/${encodeURIComponent(name)}` + secretQuery(scope, flow), {
       value,
     }),
-  deleteSecret: (token: string, name: string) =>
-    request<void>(token, "DELETE", `/secrets/${encodeURIComponent(name)}`),
+  deleteSecret: (token: string, name: string, scope?: SecretScope, flow?: string) =>
+    request<void>(token, "DELETE", `/secrets/${encodeURIComponent(name)}` + secretQuery(scope, flow)),
 
   // Bring-your-own secret manager (OpenBao/Vault) connection for this tenant.
   // getSecretManager returns a redacted view (no credentials); setSecretManager

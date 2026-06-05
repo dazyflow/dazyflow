@@ -213,7 +213,7 @@ func TestHTTPSecrets_NotConfiguredIs501(t *testing.T) {
 // ---- End-to-end via the engine path -----------------------------------------
 
 // TestEncryptedSecrets_ResolvedInJobParams confirms that a secret
-// PUT via the API can be resolved as `${tenant:NAME}` inside a job's
+// PUT via the API can be resolved as `${secret.NAME}` inside a job's
 // params at execution time. This is the contract that makes the
 // store usable by graphs.
 func TestEncryptedSecrets_ResolvedInJobParams(t *testing.T) {

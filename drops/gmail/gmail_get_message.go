@@ -26,8 +26,8 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"gmail", "email", "message", "fetch"},
 			Examples: []core.ParamsExample{
-				{Title: "Full message body for an ID from search", Params: json.RawMessage(`{"id":"18f9d3a2c0e1b4a5","token":"${tenant:GMAIL_OAUTH}"}`)},
-				{Title: "Headers-only fetch (faster)", Params: json.RawMessage(`{"id":"18f9d3a2c0e1b4a5","format":"metadata","token":"${tenant:GMAIL_OAUTH}"}`)},
+				{Title: "Full message body for an ID from search", Params: json.RawMessage(`{"id":"18f9d3a2c0e1b4a5","token":"${secret.GMAIL_OAUTH}"}`)},
+				{Title: "Headers-only fetch (faster)", Params: json.RawMessage(`{"id":"18f9d3a2c0e1b4a5","format":"metadata","token":"${secret.GMAIL_OAUTH}"}`)},
 			},
 			RequiresConnections: []core.ConnectionRequirement{
 				{Kind: "oauth", Name: "google", Note: "Google OAuth — gmail.readonly scope."},

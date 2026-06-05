@@ -785,8 +785,8 @@ func TestSubstituteValue_RecursesIntoSliceAndMap(t *testing.T) {
 		return "", false, nil
 	}
 	value := map[string]any{
-		"top":   "${env:TOP}",
-		"inner": []any{"${env:A}", "literal", map[string]any{"deep": "${env:DEEP}"}},
+		"top":   "${env.TOP}",
+		"inner": []any{"${env.A}", "literal", map[string]any{"deep": "${env.DEEP}"}},
 		"num":   42, // non-string scalar passes through default branch
 	}
 	out, err := SubstituteValue(t.Context(), value, sub)
@@ -819,7 +819,7 @@ func TestSubstituteValue_ErrorAtNestedKeyIsAnnotated(t *testing.T) {
 	}
 	value := map[string]any{
 		"outer": map[string]any{
-			"inner": []any{"${env:X}"},
+			"inner": []any{"${env.X}"},
 		},
 	}
 	_, err := SubstituteValue(t.Context(), value, sub)
@@ -840,9 +840,9 @@ func TestResolveSecrets_NestedSlice(t *testing.T) {
 	job := &core.Job{
 		Params: map[string]any{
 			"items": []any{
-				"${env:TOK}",
-				map[string]any{"auth": "${env:TOK}"},
-				[]any{"${env:TOK}", "literal"},
+				"${env.TOK}",
+				map[string]any{"auth": "${env.TOK}"},
+				[]any{"${env.TOK}", "literal"},
 			},
 		},
 	}
@@ -967,7 +967,7 @@ func TestSubstituteString_FirstErrorSkipsRemainingPlaceholders(t *testing.T) {
 		calls++
 		return "", true, errors.New("boom")
 	}
-	_, err := SubstituteString(t.Context(), "${env:A} and ${env:B}", sub)
+	_, err := SubstituteString(t.Context(), "${env.A} and ${env.B}", sub)
 	if err == nil {
 		t.Fatal("expected error")
 	}

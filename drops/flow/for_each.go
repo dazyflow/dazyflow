@@ -29,12 +29,12 @@ func init() {
 			Examples: []core.ParamsExample{
 				{
 					Title:  "POST each row to a webhook, 5 at a time",
-					Params: json.RawMessage(`{"step_module":"http","step_params":{"method":"POST","url":"https://api.example.com/orders","body":"${item:}"},"concurrency":5}`),
-					Notes:  "${item:} splices the whole item as JSON into the body. Use ${item:field.subfield} for a nested value.",
+					Params: json.RawMessage(`{"step_module":"http","step_params":{"method":"POST","url":"https://api.example.com/orders","body":"${item.}"},"concurrency":5}`),
+					Notes:  "${item.} splices the whole item as JSON into the body. Use ${item.field.subfield} for a nested value.",
 				},
 				{
 					Title:  "Send a templated email per recipient, stop on first failure",
-					Params: json.RawMessage(`{"step_module":"email_send","step_params":{"to":"${item:email}","subject":"Hi ${item:name}","body":"Welcome aboard."},"fail_fast":true}`),
+					Params: json.RawMessage(`{"step_module":"email_send","step_params":{"to":"${item.email}","subject":"Hi ${item.name}","body":"Welcome aboard."},"fail_fast":true}`),
 				},
 			},
 			ExecutionModel: core.ExecutionBatch,
@@ -290,12 +290,12 @@ func errorPayload(e *core.JobError) map[string]any {
 }
 
 // substituteItemParams produces a per-iteration copy of params with every
-// ${item:path} placeholder replaced by the corresponding field of the
+// ${item.path} placeholder replaced by the corresponding field of the
 // current item. The original params map is not mutated so concurrent
 // iterations don't race on each other's substitutions.
 //
-// Path syntax: dot-separated keys/indices. `${item:user.name}` walks
-// item.user.name; `${item:tags.0}` reads tags[0]; `${item:}` (empty path)
+// Path syntax: dot-separated keys/indices. `${item.user.name}` walks
+// item.user.name; `${item.tags.0}` reads tags[0]; `${item.}` (empty path)
 // stringifies the whole item. Missing fields fail the iteration.
 func substituteItemParams(ctx context.Context, params map[string]any, item core.Ref) (map[string]any, error) {
 	if len(params) == 0 {
@@ -310,7 +310,7 @@ func substituteItemParams(ctx context.Context, params map[string]any, item core.
 	return resolved.(map[string]any), nil
 }
 
-// itemSubstituter returns a Substituter that resolves ${item:path}. Any
+// itemSubstituter returns a Substituter that resolves ${item.path}. Any
 // other scheme is left alone — secret schemes were already resolved by
 // the engine on the parent for_each job's params.
 func itemSubstituter(item any) engine.Substituter {

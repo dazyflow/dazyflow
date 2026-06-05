@@ -77,7 +77,7 @@ closed, plus a scenario-authoring lesson:
   promise: most recurring jobs are "do X to the rows from the last day/week".
 - **`for_each` `item_port` footgun.** Pointing `item_port` at a typed input
   (e.g. a Gmail step's string `body`) injects the whole row object there and the
-  step rejects it. Feed per-item values through `${item:...}` in `step_params`
+  step rejects it. Feed per-item values through `${item....}` in `step_params`
   instead, and leave `item_port` at its default. (Caught when overdue-invoice
   sent zero emails despite routing correctly.)
 

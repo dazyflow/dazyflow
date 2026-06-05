@@ -54,6 +54,54 @@ type putSecretBody struct {
 	Value string `json:"value"`
 }
 
+// secretScopeFromRequest reads the ?scope= (and ?flow= for flow scope) query
+// params. Defaults to tenant scope so existing callers are unaffected.
+func secretScopeFromRequest(r *http.Request) (scope SecretScope, flow string, err error) {
+	switch s := SecretScope(r.URL.Query().Get("scope")); s {
+	case "", ScopeTenant:
+		return ScopeTenant, "", nil
+	case ScopeWorkspace:
+		return ScopeWorkspace, "", nil
+	case ScopeFlow:
+		flow = r.URL.Query().Get("flow")
+		if flow == "" {
+			return "", "", fmt.Errorf("scope=flow requires a flow id")
+		}
+		return ScopeFlow, flow, nil
+	default:
+		return "", "", fmt.Errorf("unknown scope %q", s)
+	}
+}
+
+// authorizeSecretScope gates a secret operation by scope. Tenant/workspace
+// reads need secret:read and writes secret:write (workspace additionally
+// requires a workspace-bound principal). Flow scope needs graph:edit — if you
+// can edit flows here you can manage a flow's own secrets; the resolution-time
+// blast-radius guard (a flow resolves only its own flow secrets) is what makes
+// this safe. Returns (status, message) with status 0 meaning authorized.
+func authorizeSecretScope(p core.Principal, scope SecretScope, write bool) (int, string) {
+	switch scope {
+	case ScopeFlow:
+		if err := core.Require(p, core.PermGraphEdit); err != nil {
+			return http.StatusForbidden, err.Error()
+		}
+	case ScopeWorkspace:
+		if p.Workspace == "" {
+			return http.StatusBadRequest, "workspace scope requires a workspace-bound principal"
+		}
+		fallthrough
+	default: // tenant
+		perm := core.PermSecretRead
+		if write {
+			perm = core.PermSecretWrite
+		}
+		if err := core.Require(p, perm); err != nil {
+			return http.StatusForbidden, err.Error()
+		}
+	}
+	return 0, ""
+}
+
 // putSecret writes a secret for the requesting principal's tenant.
 // PUT semantics: idempotent, replaces any existing value at the
 // same name. Returns 204 on success.
@@ -71,8 +119,13 @@ func (h *HTTPGateway) putSecret(rw http.ResponseWriter, r *http.Request, p core.
 		writeJSONError(rw, http.StatusForbidden, "principal has no tenant")
 		return
 	}
-	if err := core.Require(p, core.PermSecretWrite); err != nil {
-		writeJSONError(rw, http.StatusForbidden, err.Error())
+	scope, flow, err := secretScopeFromRequest(r)
+	if err != nil {
+		writeJSONError(rw, http.StatusBadRequest, err.Error())
+		return
+	}
+	if status, msg := authorizeSecretScope(p, scope, true); status != 0 {
+		writeJSONError(rw, status, msg)
 		return
 	}
 	r.Body = http.MaxBytesReader(rw, r.Body, maxSecretValueBytes)
@@ -86,12 +139,12 @@ func (h *HTTPGateway) putSecret(rw http.ResponseWriter, r *http.Request, p core.
 		writeJSONError(rw, http.StatusBadRequest, "value must not be empty")
 		return
 	}
-	if err := h.EncryptedSecrets.Put(r.Context(), p.Tenant, name, body.Value); err != nil {
+	if err := h.EncryptedSecrets.PutScoped(r.Context(), p.Tenant, p.Workspace, flow, scope, name, body.Value); err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("store secret: %v", err))
 		return
 	}
-	// Audit the name only — never the value.
-	h.audit(r.Context(), p, "secret.put", name, "")
+	// Audit the name + scope only — never the value.
+	h.audit(r.Context(), p, "secret.put", name, string(scope))
 	rw.WriteHeader(http.StatusNoContent)
 }
 
@@ -107,26 +160,28 @@ func (h *HTTPGateway) listSecrets(rw http.ResponseWriter, r *http.Request, p cor
 		writeJSONError(rw, http.StatusForbidden, "principal has no tenant")
 		return
 	}
-	// Listing names is gated on PermSecretRead even though values
-	// aren't returned — names alone can leak information (which
-	// services a tenant uses) and shouldn't be world-readable
-	// within the tenant.
-	if err := core.Require(p, core.PermSecretRead); err != nil {
-		writeJSONError(rw, http.StatusForbidden, err.Error())
+	scope, flow, err := secretScopeFromRequest(r)
+	if err != nil {
+		writeJSONError(rw, http.StatusBadRequest, err.Error())
 		return
 	}
-	names, err := h.EncryptedSecrets.List(r.Context(), p.Tenant)
+	// Listing names is gated on read/edit even though values aren't
+	// returned — names alone leak which services a flow uses.
+	if status, msg := authorizeSecretScope(p, scope, false); status != 0 {
+		writeJSONError(rw, status, msg)
+		return
+	}
+	// ListScoped strips the scope prefix and, at tenant scope, hides every
+	// reserved namespace (ws./flow./conn./oauth./cfg:).
+	names, err := h.EncryptedSecrets.ListScoped(r.Context(), p.Tenant, p.Workspace, flow, scope)
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("list secrets: %v", err))
 		return
 	}
-	// Hide internal "cfg:" entries (e.g. the BYO secret-manager config) — they
-	// aren't user secrets and shouldn't appear in the UI.
-	names = filterReservedSecretNames(names)
 	if names == nil {
 		names = []string{}
 	}
-	writeJSON(rw, http.StatusOK, map[string]any{"secrets": names})
+	writeJSON(rw, http.StatusOK, map[string]any{"secrets": names, "scope": string(scope)})
 }
 
 // deleteSecret removes a secret. Idempotent — deleting a missing
@@ -145,14 +200,19 @@ func (h *HTTPGateway) deleteSecret(rw http.ResponseWriter, r *http.Request, p co
 		writeJSONError(rw, http.StatusForbidden, "principal has no tenant")
 		return
 	}
-	if err := core.Require(p, core.PermSecretWrite); err != nil {
-		writeJSONError(rw, http.StatusForbidden, err.Error())
+	scope, flow, err := secretScopeFromRequest(r)
+	if err != nil {
+		writeJSONError(rw, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := h.EncryptedSecrets.Delete(r.Context(), p.Tenant, name); err != nil {
+	if status, msg := authorizeSecretScope(p, scope, true); status != 0 {
+		writeJSONError(rw, status, msg)
+		return
+	}
+	if err := h.EncryptedSecrets.DeleteScoped(r.Context(), p.Tenant, p.Workspace, flow, scope, name); err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("delete secret: %v", err))
 		return
 	}
-	h.audit(r.Context(), p, "secret.delete", name, "")
+	h.audit(r.Context(), p, "secret.delete", name, string(scope))
 	rw.WriteHeader(http.StatusNoContent)
 }

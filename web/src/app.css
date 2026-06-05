@@ -4464,6 +4464,51 @@ button.danger-outline:hover:not(:disabled) {
   color: var(--ink);
   border-bottom-color: var(--accent);
 }
+/* Secret scope switch (Secrets page) + flow-secret reference chips. */
+.secret-scope-switch {
+  display: inline-flex;
+  gap: 2px;
+  margin: var(--space-3) 0 var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 2px;
+  background: var(--surface-2);
+}
+.secret-scope-switch button {
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 12px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.secret-scope-switch button.active {
+  background: var(--surface);
+  color: var(--ink);
+}
+.secret-scope-help {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0 0 var(--space-3);
+  max-width: 60ch;
+}
+.flow-secret-refs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.flow-secret-refs code {
+  font-size: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 6px;
+}
 .settings-body {
   padding: var(--space-5);
   overflow-y: auto;

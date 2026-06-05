@@ -14,7 +14,7 @@ import (
 )
 
 // VaultProvider is the "bring your own secret manager" SecretProvider: it
-// resolves ${vault:PATH#FIELD} against each TENANT's own OpenBao / HashiCorp
+// resolves ${vault.PATH#FIELD} against each TENANT's own OpenBao / HashiCorp
 // Vault, rather than the built-in encrypted store. An org that already runs a
 // secret manager points the platform at it (per-tenant config) and references
 // its secrets in flows; an org that doesn't keeps using the built-in tenant://

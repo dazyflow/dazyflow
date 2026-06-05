@@ -96,7 +96,7 @@ func TestRunNode_RedactsLeakedSecret(t *testing.T) {
 		},
 	})
 	e.Secrets = newProviders(stubProvider{
-		scheme: "tenant",
+		scheme: "secret",
 		values: map[string]string{"api": secret},
 	})
 
@@ -104,7 +104,7 @@ func TestRunNode_RedactsLeakedSecret(t *testing.T) {
 		ID:     "g",
 		Tenant: "acme",
 		Nodes: []core.Node{
-			{ID: "n", Module: "echo", Params: map[string]any{"token": "${tenant:api}"}},
+			{ID: "n", Module: "echo", Params: map[string]any{"token": "${secret.api}"}},
 		},
 	}
 	res, err := e.RunNode(t.Context(), g, "run1", "n", nil, nil)

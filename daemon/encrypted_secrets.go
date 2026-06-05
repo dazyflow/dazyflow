@@ -160,26 +160,58 @@ func NewEncryptedSecrets(masterKey []byte, store secretsStore) (*EncryptedSecret
 	}, nil
 }
 
-// Scheme returns "tenant" — the scheme reflects the SCOPE of the
-// store (per-tenant) rather than its implementation (encrypted).
-// Graphs reference secrets as `tenant://slack_token`; tenant comes
-// from the job's principal, never from the path itself.
-func (e *EncryptedSecrets) Scheme() string { return "tenant" }
+// Scheme returns "secret" — the one and only reference scheme for the store.
+// Graphs reference any secret, at any scope, as ${secret.NAME}; the scope a
+// value lives at is chosen when it's saved, and Get resolves by precedence.
+func (e *EncryptedSecrets) Scheme() string { return "secret" }
 
-// Get implements core.SecretProvider. Reads the tenant from ctx
-// (set by Engine.RunNode via core.WithTenant), fetches the
-// ciphertext, decrypts with the cached/loaded DEK, and returns the
-// plaintext. Missing tenant in ctx is a hard error — refusing to
-// silently fall through to a global namespace is the whole point
-// of tenant scoping.
+// Get implements core.SecretProvider for the "secret" scheme. It resolves NAME
+// with flow → workspace → tenant precedence (GitHub-Actions style: the
+// nearest-scoped value of that name wins). Workspace/flow are read from ctx
+// (set by the engine via WithWorkspace/WithFlow); empty ones (e.g. the
+// in-process Run path) drop out, degrading the cascade to tenant. Missing
+// tenant in ctx is a hard error — refusing to fall through to a global
+// namespace is the whole point of tenant scoping.
 func (e *EncryptedSecrets) Get(ctx context.Context, name string) (string, error) {
 	tenant, ok := core.TenantFromContext(ctx)
 	if !ok {
-		return "", fmt.Errorf("tenant secret %q: no tenant in context", name)
+		return "", fmt.Errorf("secret %q: no tenant in context", name)
 	}
-	ct, nonce, err := e.store.getSecret(ctx, tenant, name)
+	ws, _ := core.WorkspaceFromContext(ctx)
+	flow, _ := core.FlowFromContext(ctx)
+
+	candidates := make([]string, 0, 3)
+	if flow != "" {
+		candidates = append(candidates, secretFlowPrefix+flow+"."+name)
+	}
+	if ws != "" {
+		candidates = append(candidates, secretWorkspacePrefix+ws+"."+name)
+	}
+	candidates = append(candidates, name) // tenant scope (bare name)
+
+	var lastErr error
+	for _, key := range candidates {
+		v, err := e.getRaw(ctx, tenant, key)
+		if err == nil {
+			return v, nil
+		}
+		if errors.Is(err, ErrSecretNotFound) {
+			lastErr = err
+			continue // try the next, broader scope
+		}
+		return "", err // decryption/store failure — operator-fixable, fail hard
+	}
+	return "", fmt.Errorf("secret://%s: %w", name, lastErr)
+}
+
+// getRaw fetches and decrypts a single secret by its exact storage name
+// within a tenant. Returns ErrSecretNotFound (from the store) when absent so
+// callers can implement scope cascades; a decryption failure is surfaced as a
+// structured error that doesn't leak crypto internals.
+func (e *EncryptedSecrets) getRaw(ctx context.Context, tenant, storageName string) (string, error) {
+	ct, nonce, err := e.store.getSecret(ctx, tenant, storageName)
 	if err != nil {
-		return "", fmt.Errorf("tenant://%s: %w", name, err)
+		return "", err
 	}
 	dek, err := e.dekFor(ctx, tenant)
 	if err != nil {
@@ -187,12 +219,7 @@ func (e *EncryptedSecrets) Get(ctx context.Context, name string) (string, error)
 	}
 	pt, err := dek.Open(nil, nonce, ct, nil)
 	if err != nil {
-		// Auth-failure on Open means either tampered ciphertext OR
-		// a KEK rotation we don't support yet OR a DB row from a
-		// different KEK. All three are operator-fixable, not user-
-		// fixable, so the error is structured but doesn't leak
-		// crypto internals.
-		return "", fmt.Errorf("tenant://%s: decryption failed", name)
+		return "", fmt.Errorf("tenant secret %q: decryption failed", storageName)
 	}
 	return string(pt), nil
 }

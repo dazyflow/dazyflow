@@ -665,7 +665,7 @@ function parseFieldRefs(raw: string): FieldRef[] {
 }
 
 // TENANT_FULL_REF matches when a string field's ENTIRE value is one
-// ${tenant:NAME} expression — no surrounding text. That's the case
+// ${secret.NAME} expression — no surrounding text. That's the case
 // where rendering an editable input is actively harmful: a non-
 // technical user is likely to overwrite the placeholder thinking
 // they need to "fill it in", silently breaking the template. The
@@ -680,7 +680,7 @@ const TENANT_FULL_REF = /^\$\{tenant:([^}]+)\}$/;
 // vs show input" toggle without breaking Rules of Hooks (useState
 // can't live inside a switch case directly).
 //
-// When the field's value is exactly one ${tenant:NAME} reference, it
+// When the field's value is exactly one ${secret.NAME} reference, it
 // renders the credential chip; the user can click Replace to flip to
 // the input and type whatever they want instead.
 function PlainStringField({
@@ -713,7 +713,7 @@ function PlainStringField({
           credName={credMatch[1]}
           onReplace={() => {
             // Clear the placeholder so the input opens empty rather
-            // than pre-filled with the ${tenant:...} string — the
+            // than pre-filled with the ${secret....} string — the
             // user clicked Replace, meaning "I want to type something
             // else", and seeing the chip's syntax mirrored in the
             // input would be confusing.
@@ -741,7 +741,7 @@ function PlainStringField({
 
 // TenantSecretChip is the read-only chip rendered in place of a
 // plain string input when the field's value is a single
-// ${tenant:NAME} reference. Mirrors the visual weight of the
+// ${secret.NAME} reference. Mirrors the visual weight of the
 // account-picker dropdown rather than a free-text box so the user
 // doesn't try to click into it to type. The Replace button flips the
 // containing component back to plain-input mode for the rare case

@@ -118,19 +118,19 @@ describe("requiredConnections", () => {
 describe("requiredSecrets", () => {
   it("returns [] when knownSecrets is null (store disabled / no permission)", () => {
     const nodes = [node("q", "postgres_query")];
-    const params = { q: { dsn: "${tenant:postgres_dsn}" } };
+    const params = { q: { dsn: "${secret.postgres_dsn}" } };
     expect(requiredSecrets(nodes, params, null)).toEqual([]);
   });
 
-  it("flags a ${tenant:NAME} ref that isn't stored yet", () => {
+  it("flags a ${secret.NAME} ref that isn't stored yet", () => {
     const nodes = [node("q", "postgres_query")];
-    const params = { q: { dsn: "${tenant:postgres_dsn}", sql: "SELECT 1" } };
+    const params = { q: { dsn: "${secret.postgres_dsn}", sql: "SELECT 1" } };
     expect(requiredSecrets(nodes, params, [])).toEqual(["postgres_dsn"]);
   });
 
   it("is satisfied when the secret exists", () => {
     const nodes = [node("q", "postgres_query")];
-    const params = { q: { dsn: "${tenant:postgres_dsn}" } };
+    const params = { q: { dsn: "${secret.postgres_dsn}" } };
     expect(requiredSecrets(nodes, params, ["postgres_dsn"])).toEqual([]);
   });
 
@@ -138,8 +138,8 @@ describe("requiredSecrets", () => {
     const nodes = [node("h", "http_request")];
     const params = {
       h: {
-        headers: { Authorization: "Bearer ${tenant:api_key}" },
-        tags: ["x", "${tenant:other}"],
+        headers: { Authorization: "Bearer ${secret.api_key}" },
+        tags: ["x", "${secret.other}"],
       },
     };
     expect(requiredSecrets(nodes, params, [])).toEqual(["api_key", "other"]);
@@ -151,7 +151,7 @@ describe("requiredSecrets", () => {
       node("save", "secret_set"),
     ];
     const params = {
-      read: { query: "after:${tenant:gmail_cursor}" },
+      read: { query: "after:${secret.gmail_cursor}" },
       save: { name: "gmail_cursor", value: "123" },
     };
     // gmail_cursor is written by the secret_set node, so it's not "missing".
@@ -161,8 +161,8 @@ describe("requiredSecrets", () => {
   it("dedupes a secret referenced by multiple nodes", () => {
     const nodes = [node("a", "postgres_query"), node("b", "postgres_upsert")];
     const params = {
-      a: { dsn: "${tenant:postgres_dsn}" },
-      b: { dsn: "${tenant:postgres_dsn}" },
+      a: { dsn: "${secret.postgres_dsn}" },
+      b: { dsn: "${secret.postgres_dsn}" },
     };
     expect(requiredSecrets(nodes, params, [])).toEqual(["postgres_dsn"]);
   });
@@ -231,18 +231,18 @@ describe("unavailableProviders", () => {
 describe("unavailableSecretRefs", () => {
   it("returns [] when knownSecrets is not null (regular path applies)", () => {
     const nodes = [node("q", "postgres_query")];
-    const params = { q: { dsn: "${tenant:postgres_dsn}" } };
+    const params = { q: { dsn: "${secret.postgres_dsn}" } };
     expect(unavailableSecretRefs(nodes, params, [])).toEqual([]);
   });
 
-  it("names every ${tenant:NAME} ref when the secret store is off", () => {
+  it("names every ${secret.NAME} ref when the secret store is off", () => {
     const nodes = [
       node("q", "postgres_query"),
       node("h", "http_request"),
     ];
     const params = {
-      q: { dsn: "${tenant:postgres_dsn}" },
-      h: { headers: { Authorization: "Bearer ${tenant:api_key}" } },
+      q: { dsn: "${secret.postgres_dsn}" },
+      h: { headers: { Authorization: "Bearer ${secret.api_key}" } },
     };
     expect(unavailableSecretRefs(nodes, params, null)).toEqual([
       "api_key",
@@ -256,7 +256,7 @@ describe("unavailableSecretRefs", () => {
       node("save", "secret_set"),
     ];
     const params = {
-      read: { query: "after:${tenant:gmail_cursor}" },
+      read: { query: "after:${secret.gmail_cursor}" },
       save: { name: "gmail_cursor", value: "123" },
     };
     expect(unavailableSecretRefs(nodes, params, null)).toEqual([]);

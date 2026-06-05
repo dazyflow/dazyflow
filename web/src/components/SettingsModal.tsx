@@ -1,8 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import type { Graph } from "../types";
+import { api, APIError } from "../api";
+import { useAuth } from "../auth";
 import { IconUpload } from "./IconUpload";
+import { CredentialsManager } from "./CredentialsManager";
 import { FlowIcon } from "../icons";
 
 // SettingsModal hosts graph-level configuration that doesn't fit in
@@ -16,7 +19,7 @@ type Props = {
   onSave: (next: Graph) => void | Promise<void>;
 };
 
-type Tab = "notifications" | "general";
+type Tab = "notifications" | "general" | "secrets";
 
 export function SettingsModal({ graph, onClose, onSave }: Props) {
   const { t } = useTranslation();
@@ -64,6 +67,13 @@ export function SettingsModal({ graph, onClose, onSave }: Props) {
             onClick={() => setTab("general")}
           >
             {t("settings.tabGeneral")}
+          </button>
+          <button
+            type="button"
+            className={tab === "secrets" ? "active" : ""}
+            onClick={() => setTab("secrets")}
+          >
+            {t("settings.tabSecrets")}
           </button>
         </div>
         <div className="settings-body">
@@ -239,6 +249,7 @@ export function SettingsModal({ graph, onClose, onSave }: Props) {
               </div>
             </div>
           )}
+          {tab === "secrets" && <FlowSecretsTab graph={graph} />}
         </div>
         <div className="settings-foot">
           <button onClick={onClose}>{t("settings.cancel")}</button>
@@ -253,6 +264,104 @@ export function SettingsModal({ graph, onClose, onSave }: Props) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// SECRET_REF matches a ${secret.NAME} reference in a param value — the one
+// secret reference form (scope is chosen when the secret is saved).
+const SECRET_REF = /\$\{secret\.([^}]+)\}/g;
+
+// collectSecretRefs returns the distinct secret references this flow's steps
+// use, as their full ${scope.NAME} form, so the author can see at a glance
+// what the flow depends on.
+function collectSecretRefs(graph: Graph): string[] {
+  const found = new Set<string>();
+  const scan = (v: unknown) => {
+    if (typeof v === "string") {
+      for (const m of v.matchAll(SECRET_REF)) found.add(m[0]);
+    } else if (Array.isArray(v)) {
+      v.forEach(scan);
+    } else if (v && typeof v === "object") {
+      Object.values(v).forEach(scan);
+    }
+  };
+  for (const n of graph.nodes) scan(n.params);
+  return [...found].sort();
+}
+
+// FlowSecretsTab manages secrets scoped to this one flow: only this flow can
+// resolve them, and they override workspace/tenant secrets of the same name.
+// It also surfaces the secret references the flow's steps already use, so the
+// author knows what to provide. Writing requires graph:edit.
+function FlowSecretsTab({ graph }: { graph: Graph }) {
+  const { t } = useTranslation();
+  const { token, hasPerm } = useAuth();
+  const canWrite = hasPerm("graph:edit");
+  const [secrets, setSecrets] = useState<string[] | null>(null);
+  const [off, setOff] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const refresh = () => {
+    if (!token) return;
+    setSecrets(null);
+    api
+      .listSecrets(token, "flow", graph.id)
+      .then((r) => {
+        setSecrets(r.secrets);
+        setOff(false);
+        setErr(null);
+      })
+      .catch((e) => {
+        const status = e instanceof APIError ? e.status : 0;
+        // 501 not configured / 401-403 not permitted → hide the manager.
+        if (status === 501 || status === 401 || status === 403) {
+          setOff(true);
+        } else {
+          setErr(e instanceof APIError ? e.message : (e as Error).message);
+        }
+      });
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(refresh, [token, graph.id]);
+
+  const referenced = useMemo(() => collectSecretRefs(graph), [graph]);
+
+  return (
+    <div>
+      <p className="settings-help">{t("settings.secrets.help")}</p>
+      <div className="sf-field">
+        <div className="label-row">
+          <label>{t("settings.secrets.referencedTitle")}</label>
+        </div>
+        {referenced.length === 0 ? (
+          <div className="desc">{t("settings.secrets.referencedNone")}</div>
+        ) : (
+          <ul className="flow-secret-refs">
+            {referenced.map((r) => (
+              <li key={r}>
+                <code>{r}</code>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      {!off && (
+        <div className="sf-field">
+          <div className="label-row">
+            <label>{t("settings.secrets.manageTitle")}</label>
+          </div>
+          {err && <div className="card error">{err}</div>}
+          <CredentialsManager
+            secrets={secrets ?? []}
+            loading={secrets === null}
+            canWrite={canWrite}
+            scope="flow"
+            flow={graph.id}
+            onChanged={refresh}
+          />
+        </div>
+      )}
     </div>
   );
 }

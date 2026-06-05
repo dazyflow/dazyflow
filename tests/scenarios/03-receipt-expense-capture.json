@@ -15,7 +15,7 @@
       "module": "for_each",
       "params": {
         "step_module": "gmail_get_message",
-        "step_params": {"account": "default", "id": "${item:id}"}
+        "step_params": {"account": "default", "id": "${item.id}"}
       }
     },
     {

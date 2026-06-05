@@ -22,7 +22,7 @@ func ntfyManifest() core.Manifest {
 
 func TestInjectConnectionDefaults_FillsUnsetFields(t *testing.T) {
 	providers := newProviders(stubProvider{
-		scheme: "tenant",
+		scheme: "secret",
 		values: map[string]string{
 			"conn.ntfy.server": "https://ntfy.acme.com",
 			"conn.ntfy.token":  "tk_secret",
@@ -35,8 +35,8 @@ func TestInjectConnectionDefaults_FillsUnsetFields(t *testing.T) {
 	if got := job.Params["server"]; got != "https://ntfy.acme.com" {
 		t.Fatalf("server = %v, want literal URL", got)
 	}
-	// Secret field injected as a ${tenant:...} reference (resolved + redacted later).
-	if got := job.Params["token"]; got != "${tenant:conn.ntfy.token}" {
+	// Secret field injected as a ${secret....} reference (resolved + redacted later).
+	if got := job.Params["token"]; got != "${secret.conn.ntfy.token}" {
 		t.Fatalf("token = %v, want tenant reference", got)
 	}
 	// Author-set param untouched.
@@ -47,7 +47,7 @@ func TestInjectConnectionDefaults_FillsUnsetFields(t *testing.T) {
 
 func TestInjectConnectionDefaults_DoesNotOverrideAuthorParams(t *testing.T) {
 	providers := newProviders(stubProvider{
-		scheme: "tenant",
+		scheme: "secret",
 		values: map[string]string{"conn.ntfy.server": "https://ntfy.acme.com"},
 	})
 	job := core.Job{Params: map[string]any{"server": "https://my.ntfy"}}
@@ -60,7 +60,7 @@ func TestInjectConnectionDefaults_DoesNotOverrideAuthorParams(t *testing.T) {
 func TestInjectConnectionDefaults_UnconfiguredLeavesDefaults(t *testing.T) {
 	// Tenant has nothing stored — params stay absent so the drop's own
 	// default (e.g. ntfy.sh) applies.
-	providers := newProviders(stubProvider{scheme: "tenant", values: map[string]string{}})
+	providers := newProviders(stubProvider{scheme: "secret", values: map[string]string{}})
 	job := core.Job{Params: map[string]any{"topic": "alerts"}}
 	injectConnectionDefaults(context.Background(), providers, ntfyManifest(), &job)
 	if _, ok := job.Params["server"]; ok {

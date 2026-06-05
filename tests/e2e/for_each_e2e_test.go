@@ -103,7 +103,7 @@ func TestForEach_E2E_WebhookToIteration(t *testing.T) {
 
 // TestForEach_E2E_PerItemHTTPWithTemplatedURL exercises the realistic
 // shape: webhook delivers a list of records, for_each runs http_request
-// once per record with ${item:id} in the URL and ${env:KEY} in the
+// once per record with ${item.id} in the URL and ${env.KEY} in the
 // Authorization header. Proves that:
 //   - Secret substitution reaches nested step_params via the engine's
 //     recursive walk on the outer for_each Job.
@@ -161,10 +161,10 @@ func TestForEach_E2E_PerItemHTTPWithTemplatedURL(t *testing.T) {
 			{ID: "fan", Module: "for_each", Params: map[string]any{
 				"step_module": "http_request",
 				"step_params": map[string]any{
-					"url":    srv.URL + "/items/${item:id}",
+					"url":    srv.URL + "/items/${item.id}",
 					"method": "GET",
 					"headers": map[string]any{
-						"Authorization": "Bearer ${env:UPSTREAM_TOKEN}",
+						"Authorization": "Bearer ${env.UPSTREAM_TOKEN}",
 					},
 					"allow_private_networks": true,
 				},

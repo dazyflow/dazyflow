@@ -511,7 +511,7 @@ function ConnectionStatus({
 // integration with an inline key field. The user pastes the value into
 // a field labelled by the manifest's note ("Anthropic API key") — they
 // never type the secret NAME. Saving writes under the declared name so
-// existing ${tenant:NAME} references resolve.
+// existing ${secret.NAME} references resolve.
 function SecretCard({
   req,
   name,

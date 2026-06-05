@@ -164,7 +164,7 @@ func TestResolveSecrets_InlinePlaceholder(t *testing.T) {
 	})
 	job := &core.Job{Params: map[string]any{
 		"headers": map[string]any{
-			"Authorization": "Bearer ${env:STRIPE_KEY}",
+			"Authorization": "Bearer ${env.STRIPE_KEY}",
 		},
 	}}
 	if err := resolveSecrets(t.Context(), providers, job); err != nil {
@@ -185,7 +185,7 @@ func TestResolveSecrets_MultiplePlaceholdersInOneString(t *testing.T) {
 		},
 	})
 	job := &core.Job{Params: map[string]any{
-		"dsn": "postgres://${env:USER}:${env:PASS}@db/app",
+		"dsn": "postgres://${env.USER}:${env.PASS}@db/app",
 	}}
 	if err := resolveSecrets(t.Context(), providers, job); err != nil {
 		t.Fatalf("resolve: %v", err)
@@ -196,17 +196,17 @@ func TestResolveSecrets_MultiplePlaceholdersInOneString(t *testing.T) {
 }
 
 func TestResolveSecrets_UnknownInlineSchemePassesThrough(t *testing.T) {
-	// ${item:foo} appears in a for_each step's params before iteration.
+	// ${item.foo} appears in a for_each step's params before iteration.
 	// The engine doesn't know "item" and must leave it untouched so
 	// for_each can substitute later.
 	providers := newProviders(stubProvider{scheme: "env"})
 	job := &core.Job{Params: map[string]any{
-		"url": "https://api/${item:id}",
+		"url": "https://api/${item.id}",
 	}}
 	if err := resolveSecrets(t.Context(), providers, job); err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	if job.Params["url"] != "https://api/${item:id}" {
+	if job.Params["url"] != "https://api/${item.id}" {
 		t.Errorf("url mutated: %v", job.Params["url"])
 	}
 }
@@ -217,7 +217,7 @@ func TestResolveSecrets_InlineFailureSurfaces(t *testing.T) {
 		values: map[string]string{}, // MISSING_KEY isn't there
 	})
 	job := &core.Job{Params: map[string]any{
-		"x": "prefix ${env:MISSING_KEY} suffix",
+		"x": "prefix ${env.MISSING_KEY} suffix",
 	}}
 	if err := resolveSecrets(t.Context(), providers, job); err == nil {
 		t.Fatal("expected error for missing secret in inline placeholder")

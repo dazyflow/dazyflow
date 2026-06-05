@@ -573,7 +573,7 @@ func triggerKinds() []map[string]any {
 				},
 			},
 			"examples": []map[string]any{
-				{"title": "Secret-protected webhook", "trigger": map[string]any{"type": "webhook", "secret": "${tenant:STRIPE_WEBHOOK_SECRET}"}},
+				{"title": "Secret-protected webhook", "trigger": map[string]any{"type": "webhook", "secret": "${secret.STRIPE_WEBHOOK_SECRET}"}},
 				{"title": "Public contact form", "trigger": map[string]any{"type": "webhook", "public_form": true, "form_fields": []string{"name", "email", "message"}, "form_title": "Get in touch"}},
 			},
 		},

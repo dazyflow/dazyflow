@@ -30,7 +30,7 @@ func TestLintGraph_SecretWithoutPersistenceSinkNoIssues(t *testing.T) {
 		Nodes: []Node{
 			node("a", "http_request", map[string]any{
 				"url":     "https://api.example.com",
-				"headers": map[string]any{"Authorization": "Bearer ${tenant:api_key}"},
+				"headers": map[string]any{"Authorization": "Bearer ${secret.api_key}"},
 			}),
 			node("b", "slack_send_message", map[string]any{
 				"channel": "#alerts",
@@ -49,7 +49,7 @@ func TestLintGraph_DirectEdgeToFileWriteWarns(t *testing.T) {
 		Nodes: []Node{
 			node("call", "http_request", map[string]any{
 				"url":     "https://api.example.com",
-				"headers": map[string]any{"Authorization": "Bearer ${tenant:api_key}"},
+				"headers": map[string]any{"Authorization": "Bearer ${secret.api_key}"},
 			}),
 			node("save", "file_write", map[string]any{"path": "out.txt"}),
 		},
@@ -78,7 +78,7 @@ func TestLintGraph_TransitivePathReaches(t *testing.T) {
 		Nodes: []Node{
 			node("call", "http_request", map[string]any{
 				"url":     "https://api.example.com",
-				"headers": map[string]any{"Authorization": "Bearer ${env:API_KEY}"},
+				"headers": map[string]any{"Authorization": "Bearer ${env.API_KEY}"},
 			}),
 			node("xform", "map_rows", map[string]any{"select": []any{"id"}}),
 			node("save", "file_write", map[string]any{"path": "out.txt"}),
@@ -105,7 +105,7 @@ func TestLintGraph_MultipleSinksFromOneSource(t *testing.T) {
 		Nodes: []Node{
 			node("call", "http_request", map[string]any{
 				"url":     "https://api.example.com",
-				"headers": map[string]any{"Authorization": "Bearer ${tenant:api_key}"},
+				"headers": map[string]any{"Authorization": "Bearer ${secret.api_key}"},
 			}),
 			node("save_file", "file_write", map[string]any{"path": "a.txt"}),
 			node("save_db", "postgres_insert_rows", map[string]any{"table": "logs"}),
@@ -138,7 +138,7 @@ func TestLintGraph_NestedSecretInArrayParamCaught(t *testing.T) {
 			node("call", "http_request", map[string]any{
 				"url": "https://api.example.com",
 				"headers": []any{
-					map[string]any{"name": "Authorization", "value": "Bearer ${tenant:t}"},
+					map[string]any{"name": "Authorization", "value": "Bearer ${secret.t}"},
 				},
 			}),
 			node("save", "file_write", map[string]any{"path": "out.txt"}),
@@ -156,7 +156,7 @@ func TestLintGraph_SecretInEnvAlsoCaught(t *testing.T) {
 			{
 				ID:     "call",
 				Module: "shell",
-				Env:    map[string]string{"TOKEN": "${env:GITHUB_TOKEN}"},
+				Env:    map[string]string{"TOKEN": "${env.GITHUB_TOKEN}"},
 			},
 			node("save", "file_write", map[string]any{"path": "out.txt"}),
 		},
@@ -168,13 +168,13 @@ func TestLintGraph_SecretInEnvAlsoCaught(t *testing.T) {
 }
 
 func TestLintGraph_NonSecretPlaceholdersDontTrigger(t *testing.T) {
-	// ${upstream:foo} and ${item:bar} aren't secret references —
+	// ${upstream.foo} and ${item.bar} aren't secret references —
 	// they pull from the graph itself / for_each loop variable.
 	// The lint must distinguish.
 	g := Graph{
 		Nodes: []Node{
 			node("call", "http_request", map[string]any{
-				"url": "https://api.example.com/${upstream:cfg.path}",
+				"url": "https://api.example.com/${upstream.cfg.path}",
 			}),
 			node("save", "file_write", map[string]any{"path": "out.txt"}),
 		},
@@ -186,12 +186,12 @@ func TestLintGraph_NonSecretPlaceholdersDontTrigger(t *testing.T) {
 }
 
 func TestLintGraph_AllSecretSchemesDetected(t *testing.T) {
-	for _, scheme := range []string{"env", "tenant", "builtin"} {
+	for _, scheme := range []string{"secret", "env", "builtin", "vault"} {
 		t.Run(scheme, func(t *testing.T) {
 			g := Graph{
 				Nodes: []Node{
 					node("call", "http_request", map[string]any{
-						"token": "${" + scheme + ":x}",
+						"token": "${" + scheme + ".x}",
 					}),
 					node("save", "file_write", map[string]any{"path": "o"}),
 				},
@@ -212,7 +212,7 @@ func TestLintGraph_SecretSetIsAPersistenceSink(t *testing.T) {
 		Nodes: []Node{
 			node("call", "http_request", map[string]any{
 				"url":     "https://api.example.com",
-				"headers": map[string]any{"Authorization": "Bearer ${tenant:k}"},
+				"headers": map[string]any{"Authorization": "Bearer ${secret.k}"},
 			}),
 			node("store", "secret_set", map[string]any{"name": "next_cursor"}),
 		},
@@ -234,7 +234,7 @@ func TestLintGraph_PathStopsAtFirstSink(t *testing.T) {
 		Nodes: []Node{
 			node("call", "http_request", map[string]any{
 				"url":     "https://api.example.com",
-				"headers": map[string]any{"Authorization": "Bearer ${tenant:k}"},
+				"headers": map[string]any{"Authorization": "Bearer ${secret.k}"},
 			}),
 			node("save1", "file_write", map[string]any{"path": "a.txt"}),
 			node("save2", "file_write", map[string]any{"path": "b.txt"}),
@@ -258,7 +258,7 @@ func TestLintGraph_MessageMentionsBothNodes(t *testing.T) {
 		Nodes: []Node{
 			node("call", "http_request", map[string]any{
 				"url":     "https://api.example.com",
-				"headers": map[string]any{"Authorization": "Bearer ${tenant:k}"},
+				"headers": map[string]any{"Authorization": "Bearer ${secret.k}"},
 			}),
 			node("save", "file_write", map[string]any{"path": "o"}),
 		},
@@ -319,7 +319,7 @@ func TestLintGraph_LiteralUnderSecretKeyFlagged(t *testing.T) {
 func TestLintGraph_PlaceholderUnderSecretKeyNotFlagged(t *testing.T) {
 	g := Graph{Nodes: []Node{
 		node("a", "http_request", map[string]any{
-			"headers": map[string]any{"Authorization": "Bearer ${tenant:gh_token}"},
+			"headers": map[string]any{"Authorization": "Bearer ${secret.gh_token}"},
 		}),
 	}}
 	if hasIssueCode(LintGraph(g), "hardcoded_secret") != nil {

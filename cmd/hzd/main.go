@@ -1020,8 +1020,10 @@ func setupEncryptedSecrets(ctx context.Context, masterKeyB64 string, secrets map
 	if err != nil {
 		log.Fatalf("encrypted secrets: %v", err)
 	}
-	secrets[es.Scheme()] = es
-	log.Printf("encrypted secret store enabled (scheme: %s://)", es.Scheme())
+	// One reference scheme: ${secret.NAME}. It cascades flow → workspace →
+	// tenant; scope is chosen when a secret is saved, not in the reference.
+	secrets[es.Scheme()] = es // "secret"
+	log.Printf("encrypted secret store enabled (scheme: %s.)", es.Scheme())
 	// secret_set drop's write hook — mirrors the SetTokenLookup
 	// pattern; keeps the integrations package free of a daemon
 	// import while still letting graphs write tenant cursors.

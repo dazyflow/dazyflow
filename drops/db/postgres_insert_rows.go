@@ -30,12 +30,12 @@ func init() {
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Load Excel rows into a new table",
-					Params: json.RawMessage(`{"dsn":"${tenant:PG_DSN}","table":"signups"}`),
+					Params: json.RawMessage(`{"dsn":"${secret.PG_DSN}","table":"signups"}`),
 					Notes:  "schema defaults to public and create_table defaults to true.",
 				},
 				{
 					Title:  "Append into a typed schema",
-					Params: json.RawMessage(`{"dsn":"${tenant:PG_DSN}","schema":"sales","table":"orders","create_table":false,"column_types":{"id":"bigint","created_at":"timestamptz"}}`),
+					Params: json.RawMessage(`{"dsn":"${secret.PG_DSN}","schema":"sales","table":"orders","create_table":false,"column_types":{"id":"bigint","created_at":"timestamptz"}}`),
 				},
 			},
 			RequiresConnections: []core.ConnectionRequirement{
@@ -73,9 +73,9 @@ func init() {
 // expect.
 //
 // Credentials never reach this code as plaintext from the graph JSON:
-// the engine resolves ${env:VAR} / ${tenant:NAME} placeholders in
+// the engine resolves ${env.VAR} / ${secret.NAME} placeholders in
 // params (see engine/secrets.go) before Execute is invoked, so a DSN
-// like "postgres://app:${env:DB_PROD_PWD}@db/orders" arrives with the
+// like "postgres://app:${env.DB_PROD_PWD}@db/orders" arrives with the
 // password already substituted. We hold the resolved DSN only for the
 // duration of the call.
 //

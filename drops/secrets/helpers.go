@@ -1,6 +1,6 @@
 // Package secrets contains drops that interact with the tenant://
 // encrypted secret store. The companion read path is template
-// substitution — anywhere a string param accepts `${tenant://name}`,
+// substitution — anywhere a string param accepts `${secret.//name}`,
 // the engine resolves it before Execute, so a dedicated read drop
 // would be redundant. This package only ships the symmetric write
 // surface (`secret_set`) and any future tenant-state writers.

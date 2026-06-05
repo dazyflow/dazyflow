@@ -38,7 +38,7 @@ func init() {
 				},
 				{
 					Title:  "Multipart POST to a form-data API",
-					Params: json.RawMessage(`{"url":"https://api.example.com/v1/attachments","path":"workspace://uploads/photo.jpg","multipart":true,"field_name":"file","filename":"photo.jpg","headers":{"Authorization":"Bearer ${tenant:EXAMPLE_API_TOKEN}"}}`),
+					Params: json.RawMessage(`{"url":"https://api.example.com/v1/attachments","path":"workspace://uploads/photo.jpg","multipart":true,"field_name":"file","filename":"photo.jpg","headers":{"Authorization":"Bearer ${secret.EXAMPLE_API_TOKEN}"}}`),
 				},
 			},
 			ExecutionModel: core.ExecutionBatch,
@@ -62,7 +62,7 @@ func init() {
 						"field_name":{"type":"string","default":"file","description":"Multipart form field name (multipart mode only)."},
 						"filename":{"type":"string","description":"Filename sent in multipart mode. Defaults to the base name of path."},
 						"content_type":{"type":"string","description":"Content-Type for raw mode. Defaults to a guess from the extension."},
-						"headers":{"type":"object","additionalProperties":{"type":"string"},"description":"Request headers (e.g. Authorization). Values may include ${tenant:NAME} secrets."},
+						"headers":{"type":"object","additionalProperties":{"type":"string"},"description":"Request headers (e.g. Authorization). Values may include ${secret.NAME} secrets."},
 						"timeout_ms":{"type":"integer","default":300000,"minimum":1,"description":"Hard deadline for the whole upload, in milliseconds."},
 						"expect_status":{"type":"array","items":{"type":"integer"},"description":"Accepted status codes. Empty defaults to 2xx."},
 						"allow_private_networks":{"type":"boolean","default":false,"description":"Disable the SSRF guard. Only for intentional local targets."}

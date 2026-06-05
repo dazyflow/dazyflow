@@ -69,17 +69,19 @@ export function slackChannels(
   return [...out].sort();
 }
 
-// TENANT_REF matches a ${tenant:NAME} secret reference. NAME is anything
-// up to the closing brace — the daemon's tenant:// secret-store scheme.
-const TENANT_REF = /\$\{tenant:([^}]+)\}/g;
+// SECRET_REF matches a ${secret.NAME} reference. The pre-run "missing secret"
+// gate checks referenced names against the known secret list. A name may live
+// at flow/workspace/tenant scope (cascade), so this is best-effort: it only
+// flags names the editor can't find at any scope it knows about.
+const SECRET_REF = /\$\{secret\.([^}]+)\}/g;
 
-// collectTenantRefs walks a param value (string / array / object) and
-// adds every ${tenant:NAME} secret name it finds to `out`. Params nest
-// arbitrarily (sql strings, header maps, step_params), so the walk is
-// recursive over the JSON-ish shape.
+// collectSecretRefs walks a param value (string / array / object) and
+// adds every ${secret.NAME} name it finds to `out`. Params nest arbitrarily
+// (sql strings, header maps, step_params), so the walk is recursive over the
+// JSON-ish shape.
 function collectTenantRefs(value: unknown, out: Set<string>): void {
   if (typeof value === "string") {
-    for (const m of value.matchAll(TENANT_REF)) out.add(m[1].trim());
+    for (const m of value.matchAll(SECRET_REF)) out.add(m[1].trim());
     return;
   }
   if (Array.isArray(value)) {
@@ -92,7 +94,7 @@ function collectTenantRefs(value: unknown, out: Set<string>): void {
 }
 
 // requiredSecrets returns the tenant-secret names a graph references via
-// ${tenant:NAME} but that don't exist yet — excluding names the graph
+// ${secret.NAME} but that don't exist yet — excluding names the graph
 // writes itself with a secret_set node (the cursor-dedupe pattern), so
 // a flow that seeds its own secret on first run isn't flagged. Returns
 // [] when knownSecrets is null (secret store disabled / no permission)
@@ -157,7 +159,7 @@ export function unavailableProviders(
 // unavailableSecretRefs is the partner of requiredSecrets for the
 // case where the encrypted secret store is off (knownSecrets === null).
 // Same rationale as unavailableProviders: distinguish "feature off,
-// admin has to enable it" from "all good." Returns the ${tenant:NAME}
+// admin has to enable it" from "all good." Returns the ${secret.NAME}
 // references the graph would need, dedup + sorted, excluding names the
 // graph writes itself with secret_set (those will populate on first run
 // even if the store is later enabled, so they're not blocking).

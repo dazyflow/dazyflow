@@ -8,10 +8,22 @@ import (
 	"git.sr.ht/~klahr/hazyflow/core"
 )
 
+// scopeCtx wraps ctx with the tenant, workspace, and flow (graph) ID so
+// secret providers can resolve layered secrets: a ${secret.NAME} reference
+// cascades flow → workspace → tenant, and ${secret.NAME} / ${secret.NAME}
+// pin a single scope. Empty workspace/flow (e.g. the in-process Run path)
+// simply degrade the cascade to the tenant level.
+func scopeCtx(ctx context.Context, graph core.Graph) context.Context {
+	ctx = core.WithTenant(ctx, graph.Tenant)
+	ctx = core.WithWorkspace(ctx, graph.Workspace)
+	ctx = core.WithFlow(ctx, graph.ID)
+	return ctx
+}
+
 // injectConnectionDefaults fills a node's unset params from the tenant's
 // stored service connection (Manifest.ConnectionFields) — the
 // endpoint+credentials a tenant configures once for an integration.
-// Secret fields are injected as ${tenant:conn/...} references so the
+// Secret fields are injected as ${secret.conn...} references so the
 // normal resolver substitutes and redacts them; plain fields are
 // injected as their literal value (so e.g. an ntfy server URL still
 // shows in node output). Params the author already set, and fields the
@@ -23,7 +35,7 @@ func injectConnectionDefaults(ctx context.Context, providers map[string]core.Sec
 	if len(m.ConnectionFields) == 0 {
 		return
 	}
-	tp := providers["tenant"]
+	tp := providers["secret"]
 	if tp == nil {
 		return
 	}
@@ -40,7 +52,7 @@ func injectConnectionDefaults(ctx context.Context, providers map[string]core.Sec
 			job.Params = map[string]any{}
 		}
 		if f.Secret {
-			job.Params[f.Key] = "${tenant:" + key + "}"
+			job.Params[f.Key] = "${secret." + key + "}"
 		} else {
 			job.Params[f.Key] = val
 		}
@@ -79,9 +91,9 @@ func resolveTemplates(ctx context.Context, providers map[string]core.SecretProvi
 // resolveTemplates walks job.Params and job.Env, replacing two kinds
 // of placeholder:
 //
-//	1. Secret refs: ${env:NAME} / ${tenant:NAME} / env://NAME (legacy)
+//	1. Secret refs: ${env.NAME} / ${secret.NAME} / env://NAME (legacy)
 //	   resolved against the registered SecretProviders.
-//	2. Upstream refs: ${upstream:nodeID.port.path…} resolved against
+//	2. Upstream refs: ${upstream.nodeID.port.path…} resolved against
 //	   the prior-node results passed in by the engine.
 //
 // Either or both can be nil/empty — the substituter chain skips
@@ -190,7 +202,7 @@ func resolveSlice(ctx context.Context, providers map[string]core.SecretProvider,
 
 // resolveString resolves both placeholder forms:
 //
-//  1. Inline:        "Bearer ${env:STRIPE_KEY}"   →  "Bearer sk_live_xyz"
+//  1. Inline:        "Bearer ${env.STRIPE_KEY}"   →  "Bearer sk_live_xyz"
 //  2. Whole-string:  "env://STRIPE_KEY"           →  "sk_live_xyz"
 //
 // The inline form runs first so we can compose with surrounding literal
@@ -198,7 +210,7 @@ func resolveSlice(ctx context.Context, providers map[string]core.SecretProvider,
 // where the token alone is the secret). The whole-string form is kept for
 // backwards compatibility with existing graphs.
 //
-// Unknown schemes (e.g. `${item:...}` outside for_each, or a literal
+// Unknown schemes (e.g. `${item....}` outside for_each, or a literal
 // URL like `http://...`) are left unchanged.
 func resolveString(ctx context.Context, providers map[string]core.SecretProvider, sub Substituter, set *secretSet, s string) (string, error) {
 	resolved, err := SubstituteString(ctx, s, sub)

@@ -45,7 +45,7 @@
       "module": "for_each",
       "params": {
         "step_module": "slack_send_message",
-        "step_params": {"channel": "#price-alerts", "text": "Price change on ${item:sku}: now ${item:price} (was ${item:price_right})"}
+        "step_params": {"channel": "#price-alerts", "text": "Price change on ${item.sku}: now ${item.price} (was ${item.price_right})"}
       }
     },
     {

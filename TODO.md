@@ -255,7 +255,7 @@ this no customer can try" to "needed before paid conversion."
   over `EncryptedSecrets.Put` next to the existing token-lookup
   wiring. The drop's `Description` and `poll_trigger`'s existing
   description document the explicit cursor pattern: read the
-  prior fire's cursor via `${tenant://...}` template
+  prior fire's cursor via `${secret.//...}` template
   substitution, write the new one with a downstream `secret_set`
   node. 11 tests cover happy path, input-port-wins-over-param,
   bytes input, structured-input rejection (friendly Message +
@@ -555,22 +555,22 @@ platform can demonstrate but not actually power a real workflow.
   seeds every `webhook_input` node in the graph. Cron triggers could
   reuse the same seeding path later.
 - [x] **Template-style secret substitution.** Shipped: `engine.SubstituteString`
-  / `engine.SubstituteValue` handle `${scheme:path}` inline anywhere in
+  / `engine.SubstituteValue` handle `${scheme.path}` inline anywhere in
   a string, with composition across multiple placeholders in one value.
   Wired into `resolveSecrets` so any string in `Job.Params` / `Job.Env`
   picks it up; the legacy whole-string `env://KEY` form is preserved.
-  `for_each` adds `${item:path}` per-iteration on a deep-copy of
+  `for_each` adds `${item.path}` per-iteration on a deep-copy of
   step_params (dot-separated path traversal over maps and lists; empty
   path = whole item; missing-field errors surface in the `errors`
   output keyed by iteration index). E2E proves
-  `url: "https://api/${item:id}"` + `Authorization: "Bearer ${env:TOKEN}"`
+  `url: "https://api/${item.id}"` + `Authorization: "Bearer ${env.TOKEN}"`
   routes correctly per item.
-- [x] **Upstream-output templating.** Shipped: `${upstream:nodeID.port.path[idx]…}`
+- [x] **Upstream-output templating.** Shipped: `${upstream.nodeID.port.path[idx]…}`
   resolves against prior-node results passed into `Engine.RunNode`.
   Dot-then-bracket path syntax over the port's Inline value (maps and
   slices). `resolveSecrets` renamed to `resolveTemplates` and now
   composes upstream + secret substituters in one pass — mixed strings
-  like `https://hooks/${upstream:q.meta.id}?token=${env:TOKEN}` resolve
+  like `https://hooks/${upstream.q.meta.id}?token=${env.TOKEN}` resolve
   in a single substitution. Maps/slices stringify as JSON for
   embedding; primitives use `fmt.Sprint`. Unknown nodeID errors out so
   typos don't silently produce empty values landing in DSNs/paths.
@@ -612,7 +612,7 @@ platform can demonstrate but not actually power a real workflow.
   `core.TenantFromContext`. Names without a prefix and
   cross-tenant prefixes are both rejected at the provider before
   the underlying env/builtin lookup runs — so tenant A's graph
-  can't read `${env:globex.api_key}` even if the env var exists.
+  can't read `${env.globex.api_key}` even if the env var exists.
   tenant:// was already isolated (per-tenant DEKs in
   `EncryptedSecrets`). 7 tests pin the matrix: matching prefix
   resolves, cross-tenant rejected, unprefixed rejected,

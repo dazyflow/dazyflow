@@ -28,11 +28,11 @@ func init() {
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Recent orders for one customer",
-					Params: json.RawMessage(`{"dsn":"${tenant:PG_DSN}","sql":"SELECT id, total FROM orders WHERE customer_id = $1 ORDER BY id DESC LIMIT 50","params":[42]}`),
+					Params: json.RawMessage(`{"dsn":"${secret.PG_DSN}","sql":"SELECT id, total FROM orders WHERE customer_id = $1 ORDER BY id DESC LIMIT 50","params":[42]}`),
 				},
 				{
 					Title:  "Count by status",
-					Params: json.RawMessage(`{"dsn":"${tenant:PG_DSN}","sql":"SELECT status, count(*) FROM orders GROUP BY status"}`),
+					Params: json.RawMessage(`{"dsn":"${secret.PG_DSN}","sql":"SELECT status, count(*) FROM orders GROUP BY status"}`),
 					Notes:  "Empty params is fine when the SQL has no $N placeholders.",
 				},
 			},

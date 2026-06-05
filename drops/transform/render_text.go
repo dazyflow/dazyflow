@@ -81,7 +81,7 @@ func init() {
 // and emits one scalar string — the shape the message sinks
 // (slack_send_message.body, gmail_send_email.body, github_create_issue.body)
 // actually consume. Without it, the only way to feed those ports was the
-// ${upstream:node.rows[0].col} param trick, which can only reach row 0;
+// ${upstream.node.rows[0].col} param trick, which can only reach row 0;
 // render_text spans every row.
 //
 // Each row renders to a line via either a CEL `template` expression

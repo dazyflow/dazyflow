@@ -131,7 +131,7 @@ export type Port = {
 // in the catalog (GET /drops) as requires_connections. kind is "oauth"
 // (authorize via a provider — the Connections "Connect" flow) or
 // "secret" (a value the user stores once and flows reference as
-// ${tenant:NAME}). `note` is the human label to show ("Anthropic API
+// ${secret.NAME}). `note` is the human label to show ("Anthropic API
 // key (sk-ant-…)"); `name` is the provider id (oauth) or secret name
 // (secret).
 export type ConnectionRequirement = {

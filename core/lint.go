@@ -29,17 +29,17 @@ type LintIssue struct {
 	NodeIDs  []string     `json:"node_ids,omitempty"`
 }
 
-// secretPlaceholderPattern matches `${env|tenant|builtin:<path>}` —
-// the schemes that resolve to a secret at execution time. Mirrors
-// engine.placeholderPattern but restricted to the resolvers the
-// lint cares about (upstream/item placeholders are graph-internal,
-// not secrets).
-var secretPlaceholderPattern = regexp.MustCompile(`\$\{(env|tenant|builtin):[^}]*\}`)
+// secretPlaceholderPattern matches the `${scheme.<path>}` schemes that
+// resolve to a secret at execution time: the scoped store (secret/tenant/
+// workspace/flow), env, builtin, and vault. Mirrors engine.placeholderPattern
+// (dot separator) but restricted to the resolvers the lint cares about
+// (upstream/item placeholders are graph-internal, not secrets).
+var secretPlaceholderPattern = regexp.MustCompile(`\$\{(secret|env|builtin|vault)\.[^}]*\}`)
 
-// templatePattern matches ANY `${scheme:...}` placeholder (secret or
+// templatePattern matches ANY `${scheme.path}` placeholder (secret or
 // upstream/item). A value containing one isn't a hardcoded literal, so
 // the hardcoded-secret rule skips it.
-var templatePattern = regexp.MustCompile(`\$\{[a-z]+:[^}]*\}`)
+var templatePattern = regexp.MustCompile(`\$\{[a-z0-9_-]+\.[^}]*\}`)
 
 // secretKeyName matches param/env key names that conventionally hold a
 // credential. A literal (non-placeholder) value under such a key is the
@@ -313,7 +313,7 @@ func hasSecretRef(v any) bool {
 }
 
 // lintHardcodedSecrets flags literal credentials pasted into a node's
-// params/env instead of referenced via ${tenant://name}. Two triggers:
+// params/env instead of referenced via ${secret.//name}. Two triggers:
 //   - a value matching a known provider-key/PEM pattern, anywhere; or
 //   - a long literal string under a secret-shaped key name (token,
 //     password, api_key, authorization, …) that isn't a ${...} template.
@@ -351,7 +351,7 @@ func hardcodedIssue(nodeID, module, field string) LintIssue {
 		Code:     "hardcoded_secret",
 		Severity: LintWarn,
 		Message: fmt.Sprintf(
-			"Node %q (module %s) appears to contain a hardcoded secret in %s. Hardcoded credentials get committed to the workspace git history and shown to anyone who can read the graph. Store it with the secret store and reference it as ${tenant://name} instead.",
+			"Node %q (module %s) appears to contain a hardcoded secret in %s. Hardcoded credentials get committed to the workspace git history and shown to anyone who can read the graph. Store it with the secret store and reference it as ${secret.//name} instead.",
 			nodeID, module, field,
 		),
 		NodeIDs: []string{nodeID},

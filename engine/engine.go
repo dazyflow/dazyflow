@@ -233,8 +233,9 @@ func (e *Engine) RunNode(
 			Error:  &core.JobError{Code: "sandbox", Message: err.Error()},
 		}, err
 	}
-	injectConnectionDefaults(core.WithTenant(ctx, job.Tenant), e.Secrets, manifest, &job)
-	secrets, err := resolveTemplatesCollecting(core.WithTenant(ctx, job.Tenant), e.Secrets, prior, &job)
+	sctx := scopeCtx(ctx, graph)
+	injectConnectionDefaults(sctx, e.Secrets, manifest, &job)
+	secrets, err := resolveTemplatesCollecting(sctx, e.Secrets, prior, &job)
 	if err != nil {
 		recordSpanError(span, err)
 		return core.Result{
@@ -317,8 +318,9 @@ func (e *Engine) runNode(
 			Error:  &core.JobError{Code: "sandbox", Message: err.Error()},
 		}, err
 	}
-	injectConnectionDefaults(core.WithTenant(ctx, job.Tenant), e.Secrets, transport.Manifest(), &job)
-	secrets, err := resolveTemplatesCollecting(core.WithTenant(ctx, job.Tenant), e.Secrets, prior, &job)
+	sctx := scopeCtx(ctx, graph)
+	injectConnectionDefaults(sctx, e.Secrets, transport.Manifest(), &job)
+	secrets, err := resolveTemplatesCollecting(sctx, e.Secrets, prior, &job)
 	if err != nil {
 		return core.Result{
 			Status: core.StatusError,

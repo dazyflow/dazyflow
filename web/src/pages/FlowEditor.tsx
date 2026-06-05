@@ -230,7 +230,7 @@ function EditorInner() {
   // the pre-run connection check. null = not loaded / OAuth disabled,
   // in which case the check is skipped (never blocks a run).
   const [providers, setProviders] = useState<OAuthProviderStatus[] | null>(null);
-  // Tenant secret NAMES (never values). Drives the ${tenant:NAME}
+  // Tenant secret NAMES (never values). Drives the ${secret.NAME}
   // credential check. null = store disabled / no permission → no gating.
   const [secrets, setSecrets] = useState<string[] | null>(null);
   // gateOpen shows the "set up first" modal that a blocked Run attempt
@@ -450,7 +450,7 @@ function EditorInner() {
       .catch(() => {
         if (!cancelled) setProviders(null);
       });
-    // Secret NAMES drive the ${tenant:NAME} credential check. Same
+    // Secret NAMES drive the ${secret.NAME} credential check. Same
     // can't-tell-so-don't-block semantics on error (disabled / 403).
     api
       .listSecrets(token)
@@ -1812,7 +1812,7 @@ function EditorInner() {
     () => requiredConnections(nodes, manifestByID, paramsByID, providers),
     [nodes, manifestByID, paramsByID, providers],
   );
-  // missingSecrets: ${tenant:NAME} credentials this graph references but
+  // missingSecrets: ${secret.NAME} credentials this graph references but
   // that aren't stored yet (excluding ones it writes itself).
   const missingSecrets = useMemo(
     () => requiredSecrets(nodes, paramsByID, secrets),
@@ -2758,7 +2758,7 @@ function ConnectionGate({
   missing: MissingConnection[];
   missingSecrets: string[];
   // adminBlockedProviders / adminBlockedSecretRefs name the OAuth
-  // providers and ${tenant:NAME} refs the graph would need but the
+  // providers and ${secret.NAME} refs the graph would need but the
   // operator hasn't enabled on this install. Rendered as a separate,
   // explicitly admin-side section so the user doesn't try to "Connect"
   // something they can't reach. Empty arrays = nothing admin-blocked.

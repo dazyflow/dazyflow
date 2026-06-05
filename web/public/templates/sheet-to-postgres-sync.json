@@ -30,7 +30,7 @@
       "id": "load",
       "module": "postgres_upsert_rows",
       "params": {
-        "dsn": "${tenant:postgres_dsn}",
+        "dsn": "${secret.postgres_dsn}",
         "table": "customers",
         "conflict_columns": ["id"],
         "create_table": true

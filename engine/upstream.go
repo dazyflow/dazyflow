@@ -10,15 +10,15 @@ import (
 	"git.sr.ht/~klahr/hazyflow/core"
 )
 
-// upstreamSubstituter resolves ${upstream:nodeID.port.path...} into a
+// upstreamSubstituter resolves ${upstream.nodeID.port.path...} into a
 // string drawn from a previously-completed node's output.
 //
 // Path syntax:
 //
-//	${upstream:excel_read.headers}        → entire headers value (JSON-stringified)
-//	${upstream:excel_read.headers[0]}     → first element of the headers array
-//	${upstream:postgres_query.rows[0].name}
-//	${upstream:loader.meta.status}        → a nested map field
+//	${upstream.excel_read.headers}        → entire headers value (JSON-stringified)
+//	${upstream.excel_read.headers[0]}     → first element of the headers array
+//	${upstream.postgres_query.rows[0].name}
+//	${upstream.loader.meta.status}        → a nested map field
 //
 // First segment is always the nodeID; second is the output port name;
 // remaining segments walk the port's Inline value as a tree of
@@ -27,7 +27,7 @@ import (
 // "expected map, got string at .name" rather than an empty result.
 //
 // Returns ok=false (not an error) when the scheme isn't "upstream"
-// or when prior is nil — that way an `${upstream:…}` reference in a
+// or when prior is nil — that way an `${upstream.…}` reference in a
 // graph triggered without recorded predecessor outputs degrades to
 // the literal placeholder rather than failing the run.
 func upstreamSubstituter(prior map[string]core.Result) Substituter {
