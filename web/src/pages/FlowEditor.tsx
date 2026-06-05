@@ -69,6 +69,7 @@ import {
   slackChannels,
   type MissingConnection,
 } from "../lib/requiredConnections";
+import { mimeCompatible, pickPort } from "../lib/ports";
 import type {
   Graph,
   GraphTrigger,
@@ -2873,23 +2874,6 @@ function ConnectionGate({
 
 // nextID generates a unique node ID for a freshly-dropped module by
 // counting existing nodes with the same module prefix.
-// mimeCompatible decides whether two ports can be wired together: an
-// untyped port (no MIME) accepts anything, otherwise the types must share
-// an entry or at least a top-level type (so text/plain ↔ text/markdown
-// count as compatible). Drives the drag-off-pin palette filter.
-function mimeCompatible(a?: string[], b?: string[]): boolean {
-  if (!a?.length || !b?.length) return true;
-  return a.some((x) => b.some((y) => x === y || x.split("/")[0] === y.split("/")[0]));
-}
-
-// pickPort returns the id of the first port whose MIME is compatible with
-// `otherMime`, falling back to the first declared port, then to the
-// engine's default handle id.
-function pickPort(ports: Port[] | undefined, otherMime: string[] | undefined, fallback: string): string {
-  if (!ports?.length) return fallback;
-  return (ports.find((p) => mimeCompatible(p.mime, otherMime)) ?? ports[0]).port;
-}
-
 function nextID(existing: FlowNode<HazyNodeData>[], moduleID: string): string {
   let i = existing.filter((n) => n.id.startsWith(moduleID)).length + 1;
   while (existing.some((n) => n.id === `${moduleID}_${i}`)) i++;
