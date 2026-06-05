@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"git.sr.ht/~klahr/hazyflow/core"
@@ -289,7 +290,11 @@ func looseEqual(a, b any) bool {
 	if aok && bok {
 		return an == bn
 	}
-	return a == b
+	// reflect.DeepEqual rather than `==`: the operands are arbitrary
+	// JSON-decoded values, and `==` panics when both sides are the same
+	// uncomparable type (a slice or map — e.g. two wired-in rows arrays).
+	// DeepEqual gives sensible structural equality and never panics.
+	return reflect.DeepEqual(a, b)
 }
 
 func toFloat(v any) (float64, bool) {

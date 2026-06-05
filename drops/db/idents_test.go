@@ -80,3 +80,45 @@ func TestQuoteIdentBacktick_DoublesEmbeddedBackticks(t *testing.T) {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
+
+// TestQuoteIdent_InjectionCannotBreakOut is a property test over a corpus of
+// SQL-injection payloads: whatever a (validated) identifier contains, the
+// quoted form must remain a single well-formed quoted identifier — i.e. every
+// interior delimiter is doubled, so the payload can never terminate the quote
+// and inject trailing SQL.
+func TestQuoteIdent_InjectionCannotBreakOut(t *testing.T) {
+	payloads := []string{
+		`x"; DROP TABLE users; --`,
+		`a" OR "1"="1`,
+		`"; SELECT pg_sleep(10); --`,
+		`col") ; DELETE FROM secrets; ("`,
+		`tab	and
+newline`,
+		strings.Repeat(`"`, 50),
+		"FÖRETAG",
+		"normal_col",
+	}
+	for _, p := range payloads {
+		// Double-quote style (Postgres / SQLite).
+		q := quoteIdent(p)
+		if len(q) < 2 || q[0] != '"' || q[len(q)-1] != '"' {
+			t.Errorf("quoteIdent(%q) not wrapped in double quotes: %q", p, q)
+			continue
+		}
+		// Strip the outer pair; every remaining " must be part of a doubled
+		// "" pair, i.e. the interior contains an even number of quotes.
+		if inner := q[1 : len(q)-1]; strings.Count(inner, `"`)%2 != 0 {
+			t.Errorf("quoteIdent(%q) leaves an unescaped quote — breakout possible: %q", p, q)
+		}
+
+		// Backtick style (MySQL): same property with backticks.
+		b := quoteIdentBacktick(p)
+		if len(b) < 2 || b[0] != '`' || b[len(b)-1] != '`' {
+			t.Errorf("quoteIdentBacktick(%q) not wrapped in backticks: %q", p, b)
+			continue
+		}
+		if inner := b[1 : len(b)-1]; strings.Count(inner, "`")%2 != 0 {
+			t.Errorf("quoteIdentBacktick(%q) leaves an unescaped backtick: %q", p, b)
+		}
+	}
+}
