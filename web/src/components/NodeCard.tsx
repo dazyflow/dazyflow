@@ -386,9 +386,11 @@ function ParamInput({
     return <input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} />;
   }
   if (s.type === "integer" || s.type === "number") {
+    const text = value === "" || value == null ? "" : String(Number(value));
     return (
       <input
         type="number"
+        size={fitSize(text)}
         value={value === "" || value == null ? "" : Number(value)}
         onChange={(e) => onChange(e.target.value === "" ? "" : Number(e.target.value))}
       />
@@ -399,10 +401,23 @@ function ParamInput({
       <textarea rows={2} value={String(value ?? "")} onChange={(e) => onChange(e.target.value)} />
     );
   }
+  const text = String(value ?? "");
   return (
-    <input type="text" value={String(value ?? "")} onChange={(e) => onChange(e.target.value)} />
+    <input
+      type="text"
+      size={fitSize(text)}
+      value={text}
+      onChange={(e) => onChange(e.target.value)}
+    />
   );
 }
+
+// fitSize gives the inline editor a width hint that hugs its content.
+// field-sizing:content (app.css) does this in Chrome, but Firefox/Safari
+// fall back to the input's default ~20ch box; driving the `size` attribute
+// off the current value keeps the box content-width everywhere. Clamped to
+// match the 3ch/24ch min/max-width bounds the CSS enforces on top.
+const fitSize = (text: string) => Math.max(3, Math.min(24, text.length || 1));
 
 // OperatorChip is the compact "operator chip" render for logic primitives
 // (==, >, <, …): a small square showing just the operator glyph, no icon box
