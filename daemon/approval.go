@@ -88,23 +88,31 @@ func (s *Service) Approve(
 		return fmt.Errorf("node %s is %s, not awaiting", nodeID, rec.Status)
 	}
 
-	// Build the resume Result. The decision is a single boolean `approved`
-	// (true on approve, false on reject) — feed it straight into a Branch.
-	// `approver` is the authenticated subject (set by the caller path, never
-	// client-spoofable).
-	output := map[string]core.Ref{
-		"approved": {MIME: core.MIMEBool, Inline: decision.Decision == "approve"},
-		"approver": {MIME: "text/plain", Inline: decision.Approver},
-		"comment":  {MIME: "text/plain", Inline: decision.Comment},
-	}
-	// Preserve any pending output the awaiting Execute already wrote (notably
-	// the context passthrough, surfaced as Result) so downstream nodes wired
-	// to that port still see their data.
+	// Build the resume Result. Start from whatever the awaiting Execute
+	// already emitted (pending_url, prompt, the stashed Value, …) so any
+	// port the pause wrote survives across the resume boundary.
+	output := map[string]core.Ref{}
 	if rec.Result != nil {
-		if ctxRef, ok := rec.Result.Output["context"]; ok {
-			output["context"] = ctxRef
+		for port, ref := range rec.Result.Output {
+			output[port] = ref
 		}
 	}
+	// Route the threaded Value out the decision port, Branch-style: it rides
+	// out `approved` on approve and `rejected` on reject, and exactly one of
+	// those ports is present so downstream edges fork by presence (the same
+	// mechanism Branch's then/else uses). The pause stashed the Value on the
+	// internal `context` key — consume it so it doesn't also leak as a port.
+	carried := output["context"]
+	delete(output, "context")
+	decisionPort := "approved"
+	if decision.Decision == "reject" {
+		decisionPort = "rejected"
+	}
+	output[decisionPort] = carried
+	// `approver` is the authenticated subject (set by the caller path, never
+	// client-spoofable); `comment` is their note.
+	output["approver"] = core.Ref{MIME: "text/plain", Inline: decision.Approver}
+	output["comment"] = core.Ref{MIME: "text/plain", Inline: decision.Comment}
 
 	resumeResult := &core.Result{
 		JobID:  nodeRecID,

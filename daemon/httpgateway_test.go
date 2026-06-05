@@ -603,9 +603,16 @@ func TestHTTPGateway_ApproveAuthedResumesAwaitingNode(t *testing.T) {
 	if rec.Status != core.JobStatusSucceeded {
 		t.Errorf("status = %q, want succeeded", rec.Status)
 	}
-	// The decision is surfaced as a single boolean: approve → approved true.
-	if rec.Result == nil || rec.Result.Output["approved"].Inline != true {
-		t.Errorf("approved output = %+v, want true", rec.Result)
+	// The decision is surfaced Branch-style: approve routes out the approved
+	// port (and not rejected).
+	if rec.Result == nil {
+		t.Fatalf("resume result is nil")
+	}
+	if _, ok := rec.Result.Output["approved"]; !ok {
+		t.Errorf("approved port missing on approve: %+v", rec.Result.Output)
+	}
+	if _, ok := rec.Result.Output["rejected"]; ok {
+		t.Errorf("rejected port should be absent on approve: %+v", rec.Result.Output)
 	}
 	if got, _ := rec.Result.Output["comment"].Inline.(string); got != "looks good" {
 		t.Errorf("comment = %q", got)

@@ -62,9 +62,9 @@ func newSubgraphHarness(t *testing.T) *subgraphHarness {
 func TestSubgraph_E2E_HappyPath(t *testing.T) {
 	h := newSubgraphHarness(t)
 
-	// Child graph — stores `receive` input and re-emits as `out` from `emit`.
-	// Since sleep passes its `in` through to `out`, a child of
-	// receive → emit will forward the parent's input back to the parent.
+	// Child graph — receive → emit. delay threads its input through on the
+	// universal `pass` pin, so the child forwards the parent's input back to
+	// the parent via emit's `pass` output.
 	child := core.Graph{
 		ID: "child-flow", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
@@ -72,7 +72,7 @@ func TestSubgraph_E2E_HappyPath(t *testing.T) {
 			{ID: "emit", Module: "delay", Params: map[string]any{"ms": 1}},
 		},
 		Edges: []core.Edge{
-			{From: "receive", FromPort: "out", To: "emit", ToPort: "in"},
+			{From: "receive", FromPort: "pass", To: "emit", ToPort: "pass"},
 		},
 	}
 	if _, err := h.ws.Save(child, "test"); err != nil {
@@ -87,14 +87,14 @@ func TestSubgraph_E2E_HappyPath(t *testing.T) {
 				"graph_id":  "child-flow",
 				"input_map": map[string]any{"in": "receive"},
 				"output_map": map[string]any{
-					"result": map[string]any{"node": "emit", "port": "out"},
+					"result": map[string]any{"node": "emit", "port": "pass"},
 				},
 			}},
 			{ID: "after", Module: "delay", Params: map[string]any{"ms": 1}},
 		},
 		Edges: []core.Edge{
-			{From: "prep", FromPort: "out", To: "call_child", ToPort: "in"},
-			{From: "call_child", FromPort: "result", To: "after", ToPort: "in"},
+			{From: "prep", FromPort: "pass", To: "call_child", ToPort: "in"},
+			{From: "call_child", FromPort: "result", To: "after", ToPort: "pass"},
 		},
 	}
 	if _, err := h.ws.Save(parent, "test"); err != nil {

@@ -272,7 +272,7 @@ func TestSkip_ChainOfSkips_AllRun(t *testing.T) {
 		},
 		Edges: []core.Edge{
 			{From: "boom", FromPort: "out", To: "s1", ToPort: "in", OnError: core.OnErrorSkip},
-			{From: "s1", FromPort: "out", To: "s2", ToPort: "in"},
+			{From: "s1", FromPort: "pass", To: "s2", ToPort: "pass"},
 		},
 	}
 	graphRunID, err := h.svc.SubmitGraph(t.Context(), h.principal, g)

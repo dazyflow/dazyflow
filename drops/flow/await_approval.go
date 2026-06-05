@@ -18,7 +18,7 @@ func init() {
 			Category:    "flow_control",
 			Provider:    "internal",
 			Tags:        []string{"human_in_the_loop", "approval", "pause", "wait"},
-			Description: "Pause the graph until an external HTTP approval arrives. Emits the approval URL on `pending_url` so downstream nodes (email, Slack) can notify a human. On resume, emits the decision as a boolean `Approved` (true/false — wire into a Branch), the `Approver` who decided, their `Comment`, and threads the input `Value` out as `Result`.",
+			Description: "Pause the graph until an external HTTP approval arrives. Emits the approval URL on `pending_url` so downstream nodes (email, Slack) can notify a human. On resume, routes the input `Value` out the `Approved` or `Rejected` port matching the decision (wire each to its follow-up — Branch-style, no separate Branch node needed), alongside the `Approver` who decided and their `Comment`.",
 			Summary:     "Park the flow until a human hits the approve or reject link, then route downstream by decision.",
 			Examples: []core.ParamsExample{
 				{
@@ -33,30 +33,34 @@ func init() {
 			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
-			// await_approval hand-rolls its own `context` passthrough, threaded
-			// across the pause: Execute copies context in→out on the Awaiting
-			// result, and daemon.Service.Approve preserves it onto the resume
-			// result. The universal `pass` pin would be redundant AND wouldn't
-			// work here — engine.ApplyPassthrough only fires on StatusOK, never
-			// on this node's Awaiting result. So opt out of it.
+			// await_approval threads its input Value across the pause itself:
+			// Execute stashes it on the Awaiting result, and
+			// daemon.Service.Approve routes it back out the Approved or Rejected
+			// port that matches the decision (Branch-style). The universal
+			// `pass` pin would be redundant AND wouldn't work here —
+			// engine.ApplyPassthrough only fires on StatusOK, never on this
+			// node's Awaiting result. So opt out of it.
 			NoPassthrough: true,
 			Inputs: []core.Port{{
 				// Untyped: the value can be anything the author wants to carry
 				// across the approval to downstream nodes. Port id stays
-				// "context" (daemon.Approve threads it on resume); label is Value.
+				// "context" (daemon.Approve routes it out the taken decision
+				// port on resume); label is Value.
 				Port:  "context",
 				Label: "Value",
 			}},
 			Outputs: []core.Port{
 				{Port: "pending_url", Label: "Approval URL", MIME: []string{"text/plain"}},
-				// The decision as a single boolean: true on approve, false on
-				// reject. Wire it into a Branch condition (then = approved).
-				{Port: "approved", Label: "Approved", MIME: []string{core.MIMEBool}},
+				// Branch-style decision ports: the input Value rides out exactly
+				// one of these — `approved` on approve, `rejected` on reject — so
+				// downstream edges fork on the decision by port presence, the
+				// same mechanism Branch's then/else uses, with no separate Branch
+				// node needed. Untyped: they carry whatever was threaded in.
+				{Port: "approved", Label: "Approved"},
+				{Port: "rejected", Label: "Rejected"},
 				// The authenticated subject that made the decision.
 				{Port: "approver", Label: "Approver", MIME: []string{"text/plain"}},
 				{Port: "comment", Label: "Comment", MIME: []string{"text/plain"}},
-				// The input Value, threaded through the approval to downstream.
-				{Port: "context", Label: "Result"},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
@@ -89,6 +93,9 @@ func executeAwaitApproval(_ context.Context, job core.Job, _ chan<- core.Progres
 	if prompt != "" {
 		output["prompt"] = core.Ref{MIME: "text/plain", Inline: prompt}
 	}
+	// Stash the carried Value on the awaiting result. The decision isn't
+	// known yet, so it can't go out approved/rejected here — Service.Approve
+	// routes it onto the taken port once the human decides.
 	if ctxRef, ok := job.Input["context"]; ok {
 		output["context"] = ctxRef
 	}

@@ -145,12 +145,19 @@ func TestApprovalListener_ValidTokenResumes(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", rw.Code, rw.Body.String())
 	}
 
-	// The awaiting node is now resumed (succeeded) with the decision recorded.
+	// The awaiting node is now resumed (succeeded) and routed out the
+	// approved port (Branch-style), not rejected.
 	rec, _ := store.Get(t.Context(), NodeJobID("run-1", "node-A"))
 	if rec.Status != core.JobStatusSucceeded {
 		t.Errorf("node status = %q, want succeeded", rec.Status)
 	}
-	if rec.Result == nil || rec.Result.Output["approved"].Inline != true {
-		t.Errorf("approved output = %+v, want true", rec.Result)
+	if rec.Result == nil {
+		t.Fatalf("resume result is nil")
+	}
+	if _, ok := rec.Result.Output["approved"]; !ok {
+		t.Errorf("approved port missing on approve: %+v", rec.Result.Output)
+	}
+	if _, ok := rec.Result.Output["rejected"]; ok {
+		t.Errorf("rejected port should be absent on approve: %+v", rec.Result.Output)
 	}
 }

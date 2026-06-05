@@ -99,7 +99,7 @@ func TestAwaitApproval_E2E_ApproveResumesDownstream(t *testing.T) {
 			{ID: "denied", Module: "delay", Params: map[string]any{"ms": 1}},
 		},
 		Edges: []core.Edge{
-			{From: "prep", FromPort: "out", To: "ask", ToPort: "context"},
+			{From: "prep", FromPort: "pass", To: "ask", ToPort: "context"},
 			{From: "ask", FromPort: "approved", To: "execute", ToPort: "in"},
 			{From: "ask", FromPort: "rejected", To: "denied", ToPort: "in"},
 		},
@@ -164,13 +164,17 @@ func TestAwaitApproval_E2E_ApproveResumesDownstream(t *testing.T) {
 		t.Errorf("denied status = %q, want skipped", denied.Status)
 	}
 
-	// The resumed ask record carries the decision and approver.
+	// The resumed ask record routed the Value out the approved port (and
+	// not rejected), and carries the approver.
 	resumed, _ := h.store.Get(t.Context(), daemon.NodeJobID(runID, "ask"))
 	if resumed.Status != core.JobStatusSucceeded {
 		t.Errorf("ask status = %q, want succeeded", resumed.Status)
 	}
-	if got, _ := resumed.Result.Output["decision"].Inline.(string); got != "approve" {
-		t.Errorf("decision = %q", got)
+	if _, ok := resumed.Result.Output["approved"]; !ok {
+		t.Errorf("approved port missing on approve: %v", resumed.Result.Output)
+	}
+	if _, ok := resumed.Result.Output["rejected"]; ok {
+		t.Errorf("rejected port should be absent on approve")
 	}
 	if got, _ := resumed.Result.Output["approver"].Inline.(string); got != "alice" {
 		t.Errorf("approver = %q", got)
@@ -231,6 +235,12 @@ func TestAwaitApproval_E2E_RejectRoutesToRejectedBranch(t *testing.T) {
 		t.Errorf("denied = %q, want succeeded", denied.Status)
 	}
 	resumed, _ := h.store.Get(t.Context(), daemon.NodeJobID(runID, "ask"))
+	if _, ok := resumed.Result.Output["rejected"]; !ok {
+		t.Errorf("rejected port missing on reject: %v", resumed.Result.Output)
+	}
+	if _, ok := resumed.Result.Output["approved"]; ok {
+		t.Errorf("approved port should be absent on reject")
+	}
 	if got, _ := resumed.Result.Output["comment"].Inline.(string); got != "too risky" {
 		t.Errorf("comment = %q", got)
 	}

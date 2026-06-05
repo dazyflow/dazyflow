@@ -130,7 +130,7 @@ func TestE2E_AuthSaveLoadRun(t *testing.T) {
 			{ID: "main", Module: "delay", Params: map[string]any{"ms": 20}},
 		},
 		Edges: []core.Edge{
-			{From: "warmup", FromPort: "out", To: "main", ToPort: "in"},
+			{From: "warmup", FromPort: "pass", To: "main", ToPort: "pass"},
 		},
 	}
 	commit, err := svc.SaveGraph(ctx, alice, graph)

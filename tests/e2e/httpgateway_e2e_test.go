@@ -72,7 +72,7 @@ func TestHTTPGateway_E2E_SubmitAndStreamSSE(t *testing.T) {
 			{ID: "step2", Module: "delay", Params: map[string]any{"ms": 5}},
 		},
 		Edges: []core.Edge{
-			{From: "step1", FromPort: "out", To: "step2", ToPort: "in"},
+			{From: "step1", FromPort: "pass", To: "step2", ToPort: "pass"},
 		},
 	}
 	body, _ := json.Marshal(g)
@@ -200,7 +200,7 @@ func TestHTTPGateway_E2E_PerNodeSSE(t *testing.T) {
 			{ID: "beta", Module: "delay", Params: map[string]any{"ms": 20}},
 		},
 		Edges: []core.Edge{
-			{From: "alpha", FromPort: "out", To: "beta", ToPort: "in"},
+			{From: "alpha", FromPort: "pass", To: "beta", ToPort: "pass"},
 		},
 	}
 	body, _ := json.Marshal(g)

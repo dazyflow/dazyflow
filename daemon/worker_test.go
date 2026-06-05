@@ -80,8 +80,8 @@ func TestPerNode_LinearChain_ProgressesThroughDependencies(t *testing.T) {
 			{ID: "c", Module: "delay", Params: map[string]any{"ms": 5}},
 		},
 		Edges: []core.Edge{
-			{From: "a", FromPort: "out", To: "b", ToPort: "in"},
-			{From: "b", FromPort: "out", To: "c", ToPort: "in"},
+			{From: "a", FromPort: "pass", To: "b", ToPort: "pass"},
+			{From: "b", FromPort: "pass", To: "c", ToPort: "pass"},
 		},
 	}
 	graphRunID, err := h.svc.SubmitGraph(t.Context(), h.principal, g)
@@ -152,10 +152,10 @@ func TestPerNode_DiamondSpreadsAcrossWorkers(t *testing.T) {
 			{ID: "d", Module: "merge"},
 		},
 		Edges: []core.Edge{
-			{From: "a", FromPort: "out", To: "b", ToPort: "in"},
-			{From: "a", FromPort: "out", To: "c", ToPort: "in"},
-			{From: "b", FromPort: "out", To: "d", ToPort: "items"},
-			{From: "c", FromPort: "out", To: "d", ToPort: "items"},
+			{From: "a", FromPort: "pass", To: "b", ToPort: "pass"},
+			{From: "a", FromPort: "pass", To: "c", ToPort: "pass"},
+			{From: "b", FromPort: "pass", To: "d", ToPort: "items"},
+			{From: "c", FromPort: "pass", To: "d", ToPort: "items"},
 		},
 	}
 	graphRunID, err := h.svc.SubmitGraph(t.Context(), h.principal, g)
@@ -225,7 +225,7 @@ func TestPerNode_NodesExecuteInDependencyOrder(t *testing.T) {
 			{ID: "second", Module: "delay", Params: map[string]any{"ms": 5}},
 		},
 		Edges: []core.Edge{
-			{From: "first", FromPort: "out", To: "second", ToPort: "in"},
+			{From: "first", FromPort: "pass", To: "second", ToPort: "pass"},
 		},
 	}
 	graphRunID, err := h.svc.SubmitGraph(t.Context(), h.principal, g)
@@ -327,9 +327,9 @@ func TestPerNode_IdempotentDispatch_NoDoubleEnqueue(t *testing.T) {
 			{ID: "merge", Module: "merge"},
 		},
 		Edges: []core.Edge{
-			{From: "a", FromPort: "out", To: "merge", ToPort: "items"},
-			{From: "b", FromPort: "out", To: "merge", ToPort: "items"},
-			{From: "c", FromPort: "out", To: "merge", ToPort: "items"},
+			{From: "a", FromPort: "pass", To: "merge", ToPort: "items"},
+			{From: "b", FromPort: "pass", To: "merge", ToPort: "items"},
+			{From: "c", FromPort: "pass", To: "merge", ToPort: "items"},
 		},
 	}
 	graphRunID, err := h.svc.SubmitGraph(t.Context(), h.principal, g)
