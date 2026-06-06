@@ -5444,6 +5444,50 @@ button.danger-outline:hover:not(:disabled) {
 .editor-saved svg {
   color: var(--success);
 }
+/* Trigger-discoverability nudge: a compact, dismissible tip pinned just
+   below the toolbar, centered over the canvas. Calm accent styling (not a
+   warning) — it's teaching, not alerting. */
+.editor-trigger-hint {
+  position: absolute;
+  top: 62px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(620px, calc(100% - 24px));
+  padding: 8px 8px 8px 14px;
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-radius: var(--r-3);
+  box-shadow: var(--shadow-2, 0 6px 20px rgba(0, 0, 0, 0.25));
+}
+.editor-trigger-hint-icon {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+.editor-trigger-hint-text {
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--text);
+}
+.editor-trigger-hint-cta {
+  flex: 0 0 auto;
+  height: 30px;
+  padding: 0 12px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.editor-trigger-hint-x {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 /* The Ctrl+K hint sits inside the Add-drop button as a subtle key cap. */
 .editor-add-drop-kbd {
   font-family: var(--font-mono);

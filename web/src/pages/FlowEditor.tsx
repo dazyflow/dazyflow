@@ -300,6 +300,18 @@ function EditorInner() {
   // true slides it in over the canvas. Desktop ignores this (the panel is
   // always in the grid).
   const [inspectorExpanded, setInspectorExpanded] = useState(false);
+  // First-timers don't realise that "how the flow starts" (a daily schedule,
+  // a form, a webhook) lives behind the Triggers button — separate from the
+  // steps they just built. So a flow with steps but no trigger gets a one-
+  // time nudge. Dismissal is remembered globally: once they've learned the
+  // concept we stop showing it on every new flow.
+  const [triggerHintDismissed, setTriggerHintDismissed] = useState(
+    () => localStorage.getItem("hazyflow.triggerHintSeen") === "1",
+  );
+  const dismissTriggerHint = () => {
+    localStorage.setItem("hazyflow.triggerHintSeen", "1");
+    setTriggerHintDismissed(true);
+  };
   // Every genuine change of the selected node rests the narrow-screen
   // inspector in its collapsed state, so a tap on a drop doesn't slam the
   // full sheet over the canvas. Keyed on selectedID so it runs ONLY when the
@@ -2497,6 +2509,40 @@ function EditorInner() {
             </button>
           </div>
         )}
+        {/* Trigger discoverability: a flow with steps but no trigger only
+            ever runs on a manual click. First-timers don't know "run it
+            daily" lives behind the Triggers button, so nudge them once —
+            with the action inline so they needn't hunt for it. Hidden while
+            a run is locked or an error banner is showing (same top slot). */}
+        {nodes.length > 0 &&
+          triggers.length === 0 &&
+          !triggerHintDismissed &&
+          !lockedRunID &&
+          !error && (
+            <div className="editor-trigger-hint" role="status">
+              <Zap size={15} className="editor-trigger-hint-icon" />
+              <span className="editor-trigger-hint-text">
+                {t("editor.triggerHint")}
+              </span>
+              <button
+                className="primary editor-trigger-hint-cta"
+                onClick={() => {
+                  dismissTriggerHint();
+                  setTriggersOpen(true);
+                }}
+              >
+                {t("editor.triggerHintCta")}
+              </button>
+              <button
+                className="ghost editor-trigger-hint-x"
+                onClick={dismissTriggerHint}
+                title={t("editor.dismiss")}
+                aria-label={t("editor.dismiss")}
+              >
+                <X size={14} />
+              </button>
+            </div>
+          )}
         {error && (
           <div
             role="alert"
