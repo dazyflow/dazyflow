@@ -22,6 +22,10 @@ export function Approvals() {
   // The key is `${runID}/${nodeID}`. Once a decision posts the row
   // disappears on the next refresh.
   const [acting, setActing] = useState<Record<string, "approve" | "reject">>({});
+  // Optional note attached to a decision, keyed by `${runID}/${nodeID}`.
+  // Sent with both approve and reject (matching the editor's inline panel),
+  // so an approver can leave a "why" without opening the flow.
+  const [comments, setComments] = useState<Record<string, string>>({});
 
   const refresh = useCallback(async () => {
     if (!token) return;
@@ -63,13 +67,9 @@ export function Approvals() {
     const key = `${item.run_id}/${item.node_id}`;
     setActing((s) => ({ ...s, [key]: decision }));
     try {
-      // Optional comment prompt only on reject — the common-case
-      // approval is one-click. Reject benefits from a "why".
-      let comment: string | undefined;
-      if (decision === "reject") {
-        const note = window.prompt(t("approvals.rejectReasonPrompt"));
-        if (note) comment = note;
-      }
+      // Both approve and reject carry the inline note (if any) — same
+      // shape as the editor's await_approval panel.
+      const comment = comments[key]?.trim() || undefined;
       await api.approveNode(token, item.run_id, item.node_id, decision, comment);
       await refresh();
     } catch (e) {
@@ -185,6 +185,16 @@ export function Approvals() {
                   </button>
                 </div>
               </div>
+              <textarea
+                className="approval-comment"
+                rows={2}
+                placeholder={t("approvals.commentPlaceholder")}
+                value={comments[key] ?? ""}
+                onChange={(e) =>
+                  setComments((c) => ({ ...c, [key]: e.target.value }))
+                }
+                disabled={!!inflight}
+              />
             </div>
           );
         })}

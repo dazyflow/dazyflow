@@ -504,7 +504,7 @@
     "waitingSuffix": "<0>{{count}}</0> waiting",
     "anyWorkspace": "(any)",
     "inboxZero": "Inbox zero — nothing waiting on your decision.",
-    "rejectReasonPrompt": "Reason for rejecting? (optional)",
+    "commentPlaceholder": "Add a comment (optional) — sent with your decision",
     "noPrompt": "(no prompt — step ID: {{nodeId}})",
     "reject": "Reject",
     "rejecting": "Rejecting…",

@@ -51,7 +51,7 @@ func init() {
 				"type":"object",
 				"properties":{
 					"server":{"type":"string","default":"https://ntfy.sh","description":"ntfy server base URL."},
-					"topic":{"type":"string","description":"A name you pick for this notification channel. To receive the messages, subscribe to this same topic in the ntfy app or open ntfy.sh/<your-topic> in a browser.","examples":["my-daily-hello"]},
+					"topic":{"type":"string","description":"A name you pick for this notification channel — letters, numbers, dashes or underscores, no spaces. To receive the messages, subscribe to this same topic in the ntfy app or open ntfy.sh/<your-topic> in a browser.","examples":["my-daily-hello"]},
 					"message":{"type":"string","description":"The text to send. Optional if you connect a Message input from another step.","examples":["Hello"]},
 					"title":{"type":"string","description":"Notification title."},
 					"priority":{"type":"string","enum":["1","2","3","4","5"],"enumNames":["1 — Min","2 — Low","3 — Default","4 — High","5 — Max"],"description":"How urgently it buzzes. Leave unset for the normal level."},

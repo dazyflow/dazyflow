@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import { useAuth } from "../auth";
@@ -130,9 +130,13 @@ function PortCard({ port, ref0 }: { port: string; ref0: Ref }) {
         {ref0.mime && <span className="port-mime">{ref0.mime}</span>}
       </div>
       {isPrimitive && typeof value === "string" ? (
-        <pre className="port-value">{value}</pre>
+        <pre className="port-value">
+          <Linkified text={value} />
+        </pre>
       ) : (
-        <pre className="port-value">{display}</pre>
+        <pre className="port-value">
+          <Linkified text={display} />
+        </pre>
       )}
       {tooBig && (
         <button
@@ -169,6 +173,33 @@ function ErrorBlock({
       )}
     </div>
   );
+}
+
+// Linkified renders text with any http(s) URLs turned into clickable
+// links. Lets a non-technical user tap a step's output URL directly —
+// e.g. an ntfy run emits the topic URL (ntfy.sh/<topic>); opening it
+// shows the notification and the subscribe button, closing the
+// "it said succeeded but my phone is silent" loop. Generic: any step
+// that emits a URL gets the same affordance.
+function Linkified({ text }: { text: string }) {
+  // Stops at quotes/brackets/whitespace so a URL embedded in JSON
+  // (`"url": "https://…"`) doesn't swallow the closing quote.
+  const re = /(https?:\/\/[^\s"'<>)\]}]+)/g;
+  const parts: ReactNode[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  let i = 0;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parts.push(text.slice(last, m.index));
+    parts.push(
+      <a key={i++} href={m[0]} target="_blank" rel="noopener noreferrer">
+        {m[0]}
+      </a>,
+    );
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return <>{parts}</>;
 }
 
 function formatValue(v: unknown): string {

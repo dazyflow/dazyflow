@@ -4393,6 +4393,24 @@ button.danger-outline:hover:not(:disabled) {
   gap: var(--space-2);
   flex-shrink: 0;
 }
+/* Optional decision note — full width below the prompt/actions row. */
+.approval-comment {
+  width: 100%;
+  margin-top: var(--space-3);
+  padding: var(--space-2);
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  resize: vertical;
+  box-sizing: border-box;
+}
+.approval-comment:focus {
+  outline: none;
+  border-color: var(--accent);
+}
 @media (max-width: 600px) {
   .approval-head {
     flex-direction: column;
