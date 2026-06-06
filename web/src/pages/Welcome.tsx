@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Trans, useTranslation } from "react-i18next";
-import { ArrowRight, Plug, Bell, Clock, Database } from "lucide-react";
+import { ArrowRight, Plug, Bell, Clock, Database, Zap } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { FlowIcon } from "../icons";
 import { api } from "../api";
@@ -41,6 +41,17 @@ const GOALS: {
 // secondary link under the goal grid. Same join key as the GOALS
 // entries above so /templates?category= round-trips correctly.
 const DEV_CATEGORY = "For developer teams";
+
+// QUICKSTART_TEMPLATE is the one zero-setup flow we put front-and-centre
+// above the goal grid: a daily ntfy push needs no admin, no OAuth, no
+// external account — just a topic name. The goal cards mostly route to
+// templates gated behind Slack/Gmail, so a brand-new owner with nothing
+// connected could otherwise dead-end. This deep-links straight to that
+// single template via /templates?template=<id> (the focus param the
+// Templates page filters on) so it lands on the card, not buried in a
+// category list. Must match the template `id` in
+// public/templates/index.json.
+const QUICKSTART_TEMPLATE = "daily-reminder-ntfy";
 
 // HAS_FLOWS_KEY mirrors App.tsx's RootRedirect signal. We read it
 // to decide between first-time and returning copy: a user who's
@@ -135,6 +146,26 @@ export function Welcome() {
         <p className="welcome-intro">
           {isReturning ? t("welcome.introReturning") : t("welcome.intro")}
         </p>
+        <Link
+          to={`/templates?template=${encodeURIComponent(QUICKSTART_TEMPLATE)}`}
+          className="welcome-featured"
+        >
+          <span className="welcome-featured-icon">
+            <Zap size={18} strokeWidth={2.2} />
+          </span>
+          <span className="welcome-featured-body">
+            <span className="welcome-featured-title">
+              {t("welcome.featuredTitle")}
+            </span>
+            <span className="welcome-featured-desc">
+              {t("welcome.featuredDesc")}
+            </span>
+          </span>
+          <span className="welcome-featured-cta">
+            {t("welcome.featuredCta")}
+            <ArrowRight size={15} />
+          </span>
+        </Link>
         <div className="welcome-goal-grid">
           {GOALS.map((g) => (
             <Link

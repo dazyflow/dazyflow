@@ -42,6 +42,11 @@ export function Templates() {
   // Goal-first entry from the Welcome page lands here with ?category=…
   // so the gallery opens already narrowed to the user's intent.
   const categoryFilter = searchParams.get("category");
+  // ?template=<id> is a tighter focus than category: the Welcome page's
+  // "fastest start" CTA deep-links here so the gallery opens on that one
+  // template (the zero-setup ntfy quickstart) instead of a category list
+  // it would otherwise be buried in. Takes precedence over category.
+  const templateFilter = searchParams.get("template");
 
   useEffect(() => {
     api
@@ -136,9 +141,16 @@ export function Templates() {
   // driven by first appearance in the index file, so curation controls
   // the layout without a hard-coded category list here. Entries with no
   // category fall into a catch-all bucket rendered last.
-  const visible = categoryFilter
-    ? templates.filter((tpl) => tpl.category === categoryFilter)
-    : templates;
+  // focusedTpl resolves the ?template= id to its summary so the filter
+  // chip can name it; null when the param is absent or unknown.
+  const focusedTpl = templateFilter
+    ? templates.find((tpl) => tpl.id === templateFilter) ?? null
+    : null;
+  const visible = templateFilter
+    ? templates.filter((tpl) => tpl.id === templateFilter)
+    : categoryFilter
+      ? templates.filter((tpl) => tpl.category === categoryFilter)
+      : templates;
   const groups: { category: string; items: TemplateSummary[] }[] = [];
   for (const tpl of visible) {
     const cat = tpl.category?.trim() || t("templates.uncategorized");
@@ -154,14 +166,21 @@ export function Templates() {
     <div className="page templates-page">
       <h1>{t("templates.title")}</h1>
       <p className="page-sub">{t("templates.intro")}</p>
-      {categoryFilter && (
+      {(categoryFilter || templateFilter) && (
         <div className="template-filter-chip">
-          <span>{t("templates.filteredBy", { category: categoryFilter })}</span>
+          <span>
+            {templateFilter
+              ? t("templates.filteredByTemplate", {
+                  title: focusedTpl?.title ?? templateFilter,
+                })
+              : t("templates.filteredBy", { category: categoryFilter })}
+          </span>
           <button
             type="button"
             className="ghost"
             onClick={() => {
               searchParams.delete("category");
+              searchParams.delete("template");
               setSearchParams(searchParams, { replace: true });
             }}
           >

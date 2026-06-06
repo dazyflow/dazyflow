@@ -964,6 +964,59 @@
   margin: var(--space-4) 0 var(--space-3);
   font-size: 15px;
 }
+/* Featured "fastest start" banner sits above the goal grid and deep-links
+   to the one zero-setup template (daily ntfy push). Accent border + tint
+   so a brand-new owner's eye lands here first — the goal cards below mostly
+   route to integration-gated templates. Layout mirrors .welcome-mcp. */
+.welcome-featured {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--accent);
+  border-radius: var(--r-3);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: border-color 120ms, transform 120ms, background 120ms;
+}
+.welcome-featured:hover {
+  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  text-decoration: none;
+}
+.welcome-featured-icon {
+  display: inline-flex;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.welcome-featured-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.welcome-featured-title {
+  font-weight: 600;
+  font-size: 15px;
+}
+.welcome-featured-desc {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.welcome-featured-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--accent);
+}
 /* Goal cards mirror the Apps index cards (.integration-card): a surface
    card with an icon + title head row and a description below. */
 .welcome-goal-grid {

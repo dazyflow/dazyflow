@@ -142,6 +142,9 @@
     "inTenant": " in organization <0>{{tenant}}</0>",
     "continueTitle": "Pick up where you left off",
     "intro": "So, what are we building today?",
+    "featuredTitle": "Fastest start — no accounts to connect",
+    "featuredDesc": "Send yourself a daily push notification with ntfy. Pick a topic, subscribe in the free app, and you're done in about two minutes.",
+    "featuredCta": "Try it",
     "goalsTitle": "What would you like to automate?",
     "goalNotifyTitle": "Get notified when something happens",
     "goalNotifyDesc": "A new form submission, email, or entry → a Slack message.",
@@ -397,6 +400,7 @@
     "adminBlockedTitle": "Your administrator hasn't enabled {{names}} yet — you can't use this template until they do.",
     "uncategorized": "More",
     "filteredBy": "Showing: {{category}}",
+    "filteredByTemplate": "Showing: {{title}}",
     "showAll": "Show all templates",
     "noneInCategory": "No templates in this category yet."
   },
