@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { api, APIError, type SecretScope } from "../api";
+import { api, APIError } from "../api";
 import { useAuth } from "../auth";
 import { CredentialsManager } from "../components/CredentialsManager";
 
@@ -36,16 +36,12 @@ export function Secrets() {
   const [secrets, setSecrets] = useState<string[] | null>(null);
   const [secretsOff, setSecretsOff] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Scope toggle: tenant (shared by every flow) vs workspace (this
-  // workspace only, overriding a same-named tenant secret). Flow-scoped
-  // secrets are managed per-flow in the editor's Settings → Secrets.
-  const [scope, setScope] = useState<SecretScope>("tenant");
 
   const refresh = () => {
     if (!token) return;
     setSecrets(null);
     api
-      .listSecrets(token, scope)
+      .listSecrets(token)
       .then((r) => {
         setSecrets(r.secrets);
         setSecretsOff(false);
@@ -57,11 +53,11 @@ export function Secrets() {
       });
   };
 
-  useEffect(refresh, [token, scope]);
+  useEffect(refresh, [token]);
 
-  // Belt-and-suspenders: the daemon already hides managed/reserved entries
-  // at every scope, but keep the client filter so oauth.*/conn.* never slip
-  // through if an older daemon returns them.
+  // Belt-and-suspenders: the daemon already hides managed/reserved entries,
+  // but keep the client filter so oauth.*/conn.* never slip through if an
+  // older daemon returns them.
   const userSecrets = (secrets ?? []).filter(
     (n) => !n.startsWith("oauth.") && !n.startsWith("conn."),
   );
@@ -76,39 +72,17 @@ export function Secrets() {
 
       {!secretsOff && (
         <>
-          <div className="secret-scope-switch" role="tablist" aria-label={t("connections.scopeTitle")}>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={scope === "tenant"}
-              className={scope === "tenant" ? "active" : ""}
-              onClick={() => setScope("tenant")}
-            >
-              {t("connections.scopeTenant")}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={scope === "workspace"}
-              className={scope === "workspace" ? "active" : ""}
-              onClick={() => setScope("workspace")}
-            >
-              {t("connections.scopeWorkspace")}
-            </button>
-          </div>
           <p className="secret-scope-help">{t("connections.scopeHelp")}</p>
           <CredentialsManager
             secrets={userSecrets}
             loading={secrets === null}
             canWrite={canWrite}
-            scope={scope}
             onChanged={refresh}
             // The editor's "Set up this credential" links route to
-            // /secrets?focus=NAME (tenant secrets), so the focus behaviour
-            // only applies on the tenant tab. Consumed once: scroll +
-            // highlight an existing row or pre-fill the add-form, then strip
-            // the param so a refresh doesn't re-fire the highlight.
-            focus={scope === "tenant" ? (searchParams.get("focus") ?? undefined) : undefined}
+            // /secrets?focus=NAME. Consumed once: scroll + highlight an
+            // existing row or pre-fill the add-form, then strip the param so
+            // a refresh doesn't re-fire the highlight.
+            focus={searchParams.get("focus") ?? undefined}
             onFocusConsumed={() => {
               const next = new URLSearchParams(searchParams);
               next.delete("focus");

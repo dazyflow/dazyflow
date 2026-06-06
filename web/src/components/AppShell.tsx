@@ -210,7 +210,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   // link still gets the right layout during the one-render redirect.
   const inEditor = /^\/(flows|pipelines)\/[^/]+/.test(location.pathname);
   const showAdmin =
-    hasPerm("tenant:admin") || hasPerm("graph:admin");
+    hasPerm("organization:admin") || hasPerm("graph:admin");
 
   // activeFlowName is published by the editor (via ActiveFlowContext) so
   // the top bar can show which flow is open in place of the wordmark.
@@ -403,7 +403,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               one might exist. Non-tech buyers whose flows don't use
               await_approval never see the link, removing a confusing
               "what's this?" entry from their default sidebar. */}
-          {(pendingCount > 0 || everHadApproval || hasPerm("tenant:admin")) && (
+          {(pendingCount > 0 || everHadApproval || hasPerm("organization:admin")) && (
             <NavLink
               to="/approvals"
               title={t("nav.approvals")}

@@ -57,32 +57,11 @@ func TenantFromContext(ctx context.Context) (string, bool) {
 	return v, ok && v != ""
 }
 
-// workspaceCtxKey / flowCtxKey carry the running flow's workspace and
-// flow (graph) ID through to secret providers so they can resolve
-// layered secrets: a ${secret.NAME} reference cascades flow → workspace
-// → tenant, and ${secret.NAME} / ${secret.NAME} pin a single scope. Both
-// are optional — an empty value just means that scope isn't available
-// (e.g. the in-process Engine.Run path with no workspace), and the
-// cascade degrades to the tenant level.
-type workspaceCtxKey struct{}
+// flowCtxKey carries the running flow's (graph) ID through to the secret
+// provider so it can resolve ${secret.NAME} by precedence: flow →
+// organization. It's optional — an empty value (e.g. the in-process
+// Engine.Run path) just degrades the cascade to the organization level.
 type flowCtxKey struct{}
-
-// WithWorkspace returns a derived context carrying the workspace. The
-// engine wraps the job's ctx with this before secret resolution so
-// workspace-scoped lookups can read it.
-func WithWorkspace(ctx context.Context, workspace string) context.Context {
-	if workspace == "" {
-		return ctx
-	}
-	return context.WithValue(ctx, workspaceCtxKey{}, workspace)
-}
-
-// WorkspaceFromContext returns the workspace carried by WithWorkspace,
-// or ("", false) when none was set.
-func WorkspaceFromContext(ctx context.Context) (string, bool) {
-	v, ok := ctx.Value(workspaceCtxKey{}).(string)
-	return v, ok && v != ""
-}
 
 // WithFlow returns a derived context carrying the flow (graph) ID.
 func WithFlow(ctx context.Context, flow string) context.Context {

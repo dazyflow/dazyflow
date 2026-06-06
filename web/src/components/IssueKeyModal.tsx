@@ -38,7 +38,7 @@ export const ROLE_TEMPLATES: Template[] = [
       "graph:admin",
       "secret:read",
       "secret:write",
-      "tenant:admin",
+      "organization:admin",
     ],
   },
 ];
@@ -50,7 +50,7 @@ export const ALL_PERMISSIONS: Permission[] = [
   "module:register",
   "secret:read",
   "secret:write",
-  "tenant:admin",
+  "organization:admin",
 ];
 
 type ExpiryChoice = "never" | "30d" | "90d" | "1y";

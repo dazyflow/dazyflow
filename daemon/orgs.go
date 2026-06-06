@@ -116,8 +116,8 @@ func (h *HTTPGateway) listMembers(rw http.ResponseWriter, r *http.Request, p cor
 		writeJSONError(rw, http.StatusNotImplemented, "memberships not configured")
 		return
 	}
-	if !p.Has(core.PermTenantAdmin) {
-		writeJSONError(rw, http.StatusForbidden, "tenant:admin required")
+	if !p.Has(core.PermOrganizationAdmin) {
+		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}
 	tenant := r.URL.Query().Get("tenant")
@@ -185,8 +185,8 @@ func (h *HTTPGateway) removeMember(rw http.ResponseWriter, r *http.Request, p co
 		writeJSONError(rw, http.StatusNotImplemented, "memberships not configured")
 		return
 	}
-	if !p.Has(core.PermTenantAdmin) {
-		writeJSONError(rw, http.StatusForbidden, "tenant:admin required")
+	if !p.Has(core.PermOrganizationAdmin) {
+		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}
 	email := strings.ToLower(strings.TrimSpace(r.PathValue("email")))
@@ -226,8 +226,8 @@ func (h *HTTPGateway) createInvitation(rw http.ResponseWriter, r *http.Request, 
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
 		return
 	}
-	if !p.Has(core.PermTenantAdmin) {
-		writeJSONError(rw, http.StatusForbidden, "tenant:admin required")
+	if !p.Has(core.PermOrganizationAdmin) {
+		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}
 	var body struct {
@@ -310,8 +310,8 @@ func (h *HTTPGateway) listInvitations(rw http.ResponseWriter, r *http.Request, p
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
 		return
 	}
-	if !p.Has(core.PermTenantAdmin) {
-		writeJSONError(rw, http.StatusForbidden, "tenant:admin required")
+	if !p.Has(core.PermOrganizationAdmin) {
+		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}
 	tenant := r.URL.Query().Get("tenant")
@@ -367,8 +367,8 @@ func (h *HTTPGateway) revokeInvitation(rw http.ResponseWriter, r *http.Request, 
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
 		return
 	}
-	if !p.Has(core.PermTenantAdmin) {
-		writeJSONError(rw, http.StatusForbidden, "tenant:admin required")
+	if !p.Has(core.PermOrganizationAdmin) {
+		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}
 	token := r.PathValue("token")
@@ -490,8 +490,8 @@ func (h *HTTPGateway) getOrgAuthConfig(rw http.ResponseWriter, r *http.Request, 
 		writeJSONError(rw, http.StatusNotImplemented, "org SSO config not configured")
 		return
 	}
-	if !p.Has(core.PermTenantAdmin) {
-		writeJSONError(rw, http.StatusForbidden, "tenant:admin required")
+	if !p.Has(core.PermOrganizationAdmin) {
+		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}
 	tenant := r.URL.Query().Get("tenant")
@@ -531,8 +531,8 @@ func (h *HTTPGateway) putOrgAuthConfig(rw http.ResponseWriter, r *http.Request, 
 		writeJSONError(rw, http.StatusNotImplemented, "org SSO config not configured")
 		return
 	}
-	if !p.Has(core.PermTenantAdmin) {
-		writeJSONError(rw, http.StatusForbidden, "tenant:admin required")
+	if !p.Has(core.PermOrganizationAdmin) {
+		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}
 	var body struct {
@@ -574,8 +574,8 @@ func (h *HTTPGateway) deleteOrgAuthConfig(rw http.ResponseWriter, _ *http.Reques
 		writeJSONError(rw, http.StatusNotImplemented, "org SSO config not configured")
 		return
 	}
-	if !p.Has(core.PermTenantAdmin) {
-		writeJSONError(rw, http.StatusForbidden, "tenant:admin required")
+	if !p.Has(core.PermOrganizationAdmin) {
+		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}
 	if err := h.OrgAuth.DeleteOrgAuth(context.Background(), p.Tenant); err != nil {

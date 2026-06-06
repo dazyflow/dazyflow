@@ -80,7 +80,7 @@ func RequireWorkspace(p Principal, tenant, workspace string) error {
 	if err := RequireTenant(p, tenant); err != nil {
 		return err
 	}
-	if p.Has(PermTenantAdmin) {
+	if p.Has(PermOrganizationAdmin) {
 		return nil
 	}
 	if workspace != "" && p.Workspace != "" && p.Workspace != workspace {
@@ -105,7 +105,7 @@ func AuthorizeGraphRun(p Principal, graph Graph) error {
 // AuthorizeGraphView returns nil if p may see this flow at all
 // (load, list, run). Org-visible flows allow any tenant/workspace
 // member; private flows require the principal to be the owner or
-// carry tenant:admin / graph:admin.
+// carry organization:admin / graph:admin.
 //
 // Returns ErrUnauthorized when the principal lacks read access —
 // callers typically translate that to a 404 (NOT 403) at the HTTP
@@ -163,9 +163,9 @@ func isOwner(p Principal, graph Graph) bool {
 
 // IsFlowAdminPrincipal is the override that lets administrators
 // recover otherwise-private flows — important when the original owner
-// leaves the tenant. graph:admin is the per-graph admin; tenant:admin
+// leaves the tenant. graph:admin is the per-graph admin; organization:admin
 // subsumes it. Exported so the daemon's save path can use it to gate
 // owner reassignment.
 func IsFlowAdminPrincipal(p Principal) bool {
-	return p.Has(PermTenantAdmin) || p.Has(PermGraphAdmin)
+	return p.Has(PermOrganizationAdmin) || p.Has(PermGraphAdmin)
 }

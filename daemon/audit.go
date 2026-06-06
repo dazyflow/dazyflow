@@ -218,15 +218,15 @@ func (h *HTTPGateway) auditAuth(ctx context.Context, r *http.Request, tenant, ac
 }
 
 // listAudit serves GET /api/v1/admin/audit — the admin audit trail,
-// tenant:admin only, scoped to the caller's tenant (platform admins may
+// organization:admin only, scoped to the caller's tenant (platform admins may
 // pass ?tenant=). Paginated via ?limit / ?offset.
 func (h *HTTPGateway) listAudit(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Audit == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "audit log not configured")
 		return
 	}
-	if !p.Has(core.PermTenantAdmin) {
-		writeJSONError(rw, http.StatusForbidden, "tenant:admin required")
+	if !p.Has(core.PermOrganizationAdmin) {
+		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}
 	// Force-scoped to the caller's own tenant — an admin can't read

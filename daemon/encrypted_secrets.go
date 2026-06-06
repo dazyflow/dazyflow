@@ -166,28 +166,24 @@ func NewEncryptedSecrets(masterKey []byte, store secretsStore) (*EncryptedSecret
 func (e *EncryptedSecrets) Scheme() string { return "secret" }
 
 // Get implements core.SecretProvider for the "secret" scheme. It resolves NAME
-// with flow → workspace → tenant precedence (GitHub-Actions style: the
-// nearest-scoped value of that name wins). Workspace/flow are read from ctx
-// (set by the engine via WithWorkspace/WithFlow); empty ones (e.g. the
-// in-process Run path) drop out, degrading the cascade to tenant. Missing
-// tenant in ctx is a hard error — refusing to fall through to a global
-// namespace is the whole point of tenant scoping.
+// with flow → organization precedence (GitHub-Actions style: the
+// nearest-scoped value of that name wins). The flow ID is read from ctx (set
+// by the engine via WithFlow); an empty one (e.g. the in-process Run path)
+// drops out, degrading the cascade to the organization. Missing tenant in ctx
+// is a hard error — refusing to fall through to a global namespace is the
+// whole point of organization scoping.
 func (e *EncryptedSecrets) Get(ctx context.Context, name string) (string, error) {
 	tenant, ok := core.TenantFromContext(ctx)
 	if !ok {
 		return "", fmt.Errorf("secret %q: no tenant in context", name)
 	}
-	ws, _ := core.WorkspaceFromContext(ctx)
 	flow, _ := core.FlowFromContext(ctx)
 
-	candidates := make([]string, 0, 3)
+	candidates := make([]string, 0, 2)
 	if flow != "" {
 		candidates = append(candidates, secretFlowPrefix+flow+"."+name)
 	}
-	if ws != "" {
-		candidates = append(candidates, secretWorkspacePrefix+ws+"."+name)
-	}
-	candidates = append(candidates, name) // tenant scope (bare name)
+	candidates = append(candidates, name) // organization scope (bare name)
 
 	var lastErr error
 	for _, key := range candidates {

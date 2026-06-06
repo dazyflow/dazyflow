@@ -462,7 +462,7 @@ func (h *HTTPGateway) listMyAPIKeysHandler(rw http.ResponseWriter, r *http.Reque
 }
 
 // issueMyAPIKeyHandler is POST /api/v1/me/api-keys — the self-issue
-// path used by the Connect MCP modal. No tenant:admin required; the
+// path used by the Connect MCP modal. No organization:admin required; the
 // service caps requested permissions to a subset of the caller's
 // own. Returns the secret exactly once.
 func (h *HTTPGateway) issueMyAPIKeyHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {

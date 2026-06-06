@@ -592,7 +592,7 @@ function FieldWrap({
           <ul>
             {refs.map((r, i) => {
               switch (r.kind) {
-                case "tenant":
+                case "secret":
                   return (
                     <li key={i}>
                       {t("schemaForm.refSecret", { name: r.payload })}
@@ -627,7 +627,7 @@ function FieldWrap({
 // a non-technical user has a one-click path from "this field uses a
 // credential" to "where do I store it."
 type FieldRef =
-  | { kind: "tenant"; payload: string }
+  | { kind: "secret"; payload: string }
   | { kind: "upstream"; payload: string }
   | { kind: "trigger"; payload: string }
   | { kind: "generic"; payload: string };
@@ -647,10 +647,10 @@ function parseFieldRefs(raw: string): FieldRef[] {
   while ((m = re.exec(raw)) !== null) {
     const ref = m[1].trim();
     let parsed: FieldRef;
-    if (ref.startsWith("tenant:")) {
-      parsed = { kind: "tenant", payload: ref.slice("tenant:".length) };
-    } else if (ref.startsWith("upstream:")) {
-      parsed = { kind: "upstream", payload: ref.slice("upstream:".length) };
+    if (ref.startsWith("secret.")) {
+      parsed = { kind: "secret", payload: ref.slice("secret.".length) };
+    } else if (ref.startsWith("upstream.")) {
+      parsed = { kind: "upstream", payload: ref.slice("upstream.".length) };
     } else if (ref.startsWith("trigger") || ref.startsWith("webhook")) {
       parsed = { kind: "trigger", payload: ref };
     } else {
@@ -664,7 +664,7 @@ function parseFieldRefs(raw: string): FieldRef[] {
   return out;
 }
 
-// TENANT_FULL_REF matches when a string field's ENTIRE value is one
+// SECRET_FULL_REF matches when a string field's ENTIRE value is one
 // ${secret.NAME} expression — no surrounding text. That's the case
 // where rendering an editable input is actively harmful: a non-
 // technical user is likely to overwrite the placeholder thinking
@@ -673,7 +673,7 @@ function parseFieldRefs(raw: string): FieldRef[] {
 // uses credential NAME" label + a Set-up link and an explicit
 // Replace affordance for when the user really does want to type
 // something else.
-const TENANT_FULL_REF = /^\$\{tenant:([^}]+)\}$/;
+const SECRET_FULL_REF = /^\$\{secret\.([^}]+)\}$/;
 
 // PlainStringField is the default text input for string-typed schema
 // fields. Wrapped as its own component so it can own the "show chip
@@ -697,7 +697,7 @@ function PlainStringField({
   onChange: (v: unknown) => void;
 }) {
   const raw = typeof value === "string" ? value : "";
-  const credMatch = TENANT_FULL_REF.exec(raw);
+  const credMatch = SECRET_FULL_REF.exec(raw);
   const [forceEdit, setForceEdit] = useState(false);
   // Reset the override whenever the underlying value transitions back
   // to (or stays) a single credential ref — e.g. a re-render after

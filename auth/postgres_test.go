@@ -45,7 +45,7 @@ func TestPgKeyStore_RoundTrip(t *testing.T) {
 		t.Fatalf("NewPgKeyStore: %v", err)
 	}
 
-	roles := []core.Role{{Name: "admin", Permissions: []core.Permission{core.PermTenantAdmin}}}
+	roles := []core.Role{{Name: "admin", Permissions: []core.Permission{core.PermOrganizationAdmin}}}
 	k := APIKey{ID: "k1", Tenant: "acme", Workspace: "default", Subject: "alice", Roles: roles, Salt: []byte("salt"), Hash: []byte("hash")}
 	if err := store.PutKey(ctx, k); err != nil {
 		t.Fatalf("PutKey: %v", err)

@@ -1,6 +1,6 @@
-// Package secrets contains drops that interact with the tenant://
-// encrypted secret store. The companion read path is template
-// substitution — anywhere a string param accepts `${secret.//name}`,
+// Package secrets contains drops that interact with the encrypted
+// secret store. The companion read path is template substitution —
+// anywhere a string param accepts `${secret.name}`,
 // the engine resolves it before Execute, so a dedicated read drop
 // would be redundant. This package only ships the symmetric write
 // surface (`secret_set`) and any future tenant-state writers.
@@ -20,7 +20,7 @@ import (
 	"sync"
 )
 
-// SecretWriter writes a value to the tenant:// secret store under
+// SecretWriter writes a value to the encrypted secret store under
 // (tenant, name). Implementations should be idempotent — same
 // (tenant, name, value) gives same result — and must enforce tenant
 // isolation at the store layer.

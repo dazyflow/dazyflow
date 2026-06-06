@@ -59,7 +59,7 @@ export function AdminAPIKeys() {
     );
   }, [keys, filter]);
 
-  if (!hasPerm("tenant:admin")) {
+  if (!hasPerm("organization:admin")) {
     return (
       <div className="card" style={{ color: "var(--danger)" }}>
         <Trans i18nKey="admin.apiKeys.needAdmin" components={[<code />]} />

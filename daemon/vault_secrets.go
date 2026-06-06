@@ -17,8 +17,8 @@ import (
 // resolves ${vault.PATH#FIELD} against each TENANT's own OpenBao / HashiCorp
 // Vault, rather than the built-in encrypted store. An org that already runs a
 // secret manager points the platform at it (per-tenant config) and references
-// its secrets in flows; an org that doesn't keeps using the built-in tenant://
-// store. The two coexist — this is additive, not a replacement.
+// its secrets in flows; an org that doesn't keeps using the built-in encrypted
+// secret store. The two coexist — this is additive, not a replacement.
 //
 // Vault and OpenBao share the same HTTP API, so one provider serves both; the
 // scheme is "vault" (the conventional name, also used in the SecretProvider

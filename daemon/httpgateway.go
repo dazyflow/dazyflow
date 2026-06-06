@@ -326,7 +326,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 
 	// /me surface. /me is the new alias for /whoami; /me/api-keys is
 	// new (self-issue + own-key list/revoke). Unlike /admin/api-keys
-	// these don't require tenant:admin — any authenticated principal
+	// these don't require organization:admin — any authenticated principal
 	// can derive sub-scopes of their own permissions.
 	mux.HandleFunc("GET /api/v1/me", h.requireAuth(h.meHandler))
 	// /me/totp — the caller manages their own 2FA. Status is readable
@@ -1063,8 +1063,8 @@ func (h *HTTPGateway) getOrgProfile(rw http.ResponseWriter, r *http.Request, p c
 		writeJSONError(rw, http.StatusNotImplemented, "org profiles not configured")
 		return
 	}
-	if !p.Has(core.PermTenantAdmin) {
-		writeJSONError(rw, http.StatusForbidden, "tenant:admin required")
+	if !p.Has(core.PermOrganizationAdmin) {
+		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}
 	tenant := r.URL.Query().Get("tenant")
@@ -1102,8 +1102,8 @@ func (h *HTTPGateway) putOrgProfile(rw http.ResponseWriter, r *http.Request, p c
 		writeJSONError(rw, http.StatusNotImplemented, "org profiles not configured")
 		return
 	}
-	if !p.Has(core.PermTenantAdmin) {
-		writeJSONError(rw, http.StatusForbidden, "tenant:admin required")
+	if !p.Has(core.PermOrganizationAdmin) {
+		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}
 	var body struct {
@@ -1341,7 +1341,7 @@ func errorCode(r *core.Result) string {
 }
 
 // listAPIKeys, issueAPIKey, revokeAPIKey power the Admin UI's API
-// keys card. All three require tenant:admin (enforced in Service);
+// keys card. All three require organization:admin (enforced in Service);
 // without an AdminKeys store wired up they return 501.
 func (h *HTTPGateway) listAPIKeys(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	// ?tenant= narrows to a specific tenant. Platform admins may pass

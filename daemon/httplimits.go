@@ -8,12 +8,12 @@ import (
 
 // workspaceLimits serves GET /api/v1/admin/limits — a read-only view of
 // the effective limits that apply to the caller's tenant: the per-tenant
-// disk quota (used + limit) plus the daemon-wide graph caps. tenant:admin
+// disk quota (used + limit) plus the daemon-wide graph caps. organization:admin
 // only. There's no write side — these are operator-configured (flags), so
 // the admin UI surfaces them rather than pretending to edit them.
 func (h *HTTPGateway) workspaceLimits(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !p.Has(core.PermTenantAdmin) {
-		writeJSONError(rw, http.StatusForbidden, "tenant:admin required")
+	if !p.Has(core.PermOrganizationAdmin) {
+		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}
 	out := map[string]any{

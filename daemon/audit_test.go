@@ -62,7 +62,7 @@ func TestAudit_EndpointRequiresAdmin(t *testing.T) {
 	if rw := h.do(t, "GET", "/api/v1/admin/audit", nil); rw.Code != http.StatusForbidden {
 		t.Fatalf("editor status = %d, want 403", rw.Code)
 	}
-	// tenant:admin token → 200.
+	// organization:admin token → 200.
 	if rw := h.adminDo(t, "GET", "/api/v1/admin/audit", nil); rw.Code != http.StatusOK {
 		t.Fatalf("admin status = %d, want 200", rw.Code)
 	}

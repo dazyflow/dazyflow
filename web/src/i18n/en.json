@@ -53,9 +53,9 @@
     "expandSidebar": "Expand sidebar",
     "signOut": "sign out",
     "switchWorkspace": "Switch workspace",
-    "switchTenant": "Switch tenant",
-    "tenants": "Tenants",
-    "pickTenant": "(pick tenant)",
+    "switchTenant": "Switch organization",
+    "tenants": "Organizations",
+    "pickTenant": "(pick organization)",
     "noSubject": "(no subject)"
   },
   "account": {
@@ -139,7 +139,7 @@
   "welcome": {
     "title": "Welcome to Hazyflow",
     "signedInAs": "Signed in as <0>{{subject}}</0>",
-    "inTenant": " in tenant <0>{{tenant}}</0>",
+    "inTenant": " in organization <0>{{tenant}}</0>",
     "continueTitle": "Pick up where you left off",
     "intro": "So, what are we building today?",
     "goalsTitle": "What would you like to automate?",
@@ -174,7 +174,7 @@
     "intro": "We'll mint an API key scoped to your account, then show you the config snippet for the MCP client you use. The key can run and edit flows in this workspace — nothing else.",
     "subjectLabel": "Your account",
     "workspaceLabel": "Workspace",
-    "workspaceAny": "any (tenant-wide)",
+    "workspaceAny": "any (organization-wide)",
     "scopeDesc": "The key inherits your workspace. Need broader scope? Issue a custom key from Admin → API keys.",
     "cancel": "Cancel",
     "create": "Create key",
@@ -247,7 +247,7 @@
     "tabGeneral": "General",
     "tabSecrets": "Secrets",
     "secrets": {
-      "help": "Secrets only this flow can use. They override workspace and tenant secrets of the same name, and no other flow can read them. Reference any secret as ${secret.NAME} — it resolves to the nearest value (flow, then workspace, then tenant).",
+      "help": "Secrets only this flow can use. They override workspace and organization secrets of the same name, and no other flow can read them. Reference any secret as ${secret.NAME} — it resolves to the nearest value (flow, then workspace, then organization).",
       "referencedTitle": "This flow references",
       "referencedNone": "No secret references found in this flow's steps yet.",
       "manageTitle": "Flow-only secrets"
@@ -345,15 +345,15 @@
       "timeoutDesc": "Auto-cancel the run if it hasn't finished by then. 0 / blank = no cap (the daemon's default still applies if one is set).",
       "flowId": "Flow ID",
       "flowIdDesc": "Changing the ID would orphan past runs; rename by creating a new flow and copying steps.",
-      "tenantWorkspace": "Tenant / Workspace",
+      "tenantWorkspace": "Organization / Workspace",
       "visibility": "Visibility",
       "orgVisible": "Org-visible",
       "orgVisibleDesc": "Anyone in this workspace can see and run the flow. Only you (the owner) can edit it.",
       "privateVisible": "Private",
-      "privateVisibleDesc": "Only you (and tenant admins, for recovery) can see the flow. Triggers still fire it.",
+      "privateVisibleDesc": "Only you (and organization admins, for recovery) can see the flow. Triggers still fire it.",
       "owner": "Owner",
       "ownerPlaceholder": "(set on first save)",
-      "ownerDesc": "Stamped by the daemon when the flow is first saved. Only tenant admins can transfer ownership."
+      "ownerDesc": "Stamped by the daemon when the flow is first saved. Only organization admins can transfer ownership."
     }
   },
   "triggers": {
@@ -434,10 +434,7 @@
   "connections": {
     "title": "Secrets",
     "intro": "Secrets let you manage reusable configuration data. They're encrypted and used for sensitive values like API keys, tokens, and database URLs — write-only, so a value is never shown again after you save it. To connect an app like Slack or Gmail, use the Apps page.",
-    "scopeTitle": "Scope",
-    "scopeTenant": "Tenant (shared)",
-    "scopeWorkspace": "This workspace",
-    "scopeHelp": "Tenant secrets are shared by every flow. Workspace secrets apply only to flows in this workspace and override a tenant secret of the same name. A single flow can also have its own — set those from the flow's Settings → Secrets.",
+    "scopeHelp": "These secrets are available to every flow in your organization. A single flow can override one with its own — set those in the flow's Settings → Secrets.",
     "firstTileTitle": "Start with Slack and Google",
     "firstTileBody": "Most templates fire a notification or read a mailbox. Connecting Slack (for messages) and Google (for Gmail + Sheets) covers the majority of what you'll build first — pick the cards below and we'll guide you through the rest.",
     "setupIncompleteTitle": "Setup isn't finished on this server yet",
@@ -532,7 +529,7 @@
   },
   "admin": {
     "title": "Admin",
-    "needAdmin": "You need <0>tenant:admin</0> or <0>graph:admin</0> to view this page.",
+    "needAdmin": "You need <0>organization:admin</0> or <0>graph:admin</0> to view this page.",
     "subtitle": "Organization <0>{{tenant}}</0> · workspace <1>{{workspace}}</1>",
     "anyWorkspace": "(any)",
     "groupOrg": "Organization",
@@ -546,7 +543,7 @@
     "cardSecretManagerTitle": "Secret manager",
     "cardSecretManagerDesc": "Point flows at your own OpenBao / Vault.",
     "secretManager": {
-      "needAdmin": "You need <0>tenant:admin</0> to configure the secret manager."
+      "needAdmin": "You need <0>organization:admin</0> to configure the secret manager."
     },
     "cardOAuthTitle": "Connector apps",
     "cardOAuthDesc": "Credentials for Google, Slack, GitHub, Notion.",
@@ -559,7 +556,7 @@
     "statusStub": "Stub",
     "statusReady": "Ready",
     "users": {
-      "needAdmin": "You need <0>tenant:admin</0> to manage people.",
+      "needAdmin": "You need <0>organization:admin</0> to manage people.",
       "title": "People",
       "subtitle": "Members of your organization. Invite by email.",
       "inviteButton": "Invite a teammate",
@@ -610,7 +607,7 @@
       "rolePermsLabel": "Permissions:"
     },
     "sso": {
-      "needAdmin": "You need <0>tenant:admin</0> to configure sign-in.",
+      "needAdmin": "You need <0>organization:admin</0> to configure sign-in.",
       "notConfigured": "Sign-in settings aren't enabled on this hzd instance.",
       "title": "Single sign-on",
       "subtitle": "Let members sign in with your identity provider instead of a password.",
@@ -674,13 +671,13 @@
       }
     },
     "apiKeys": {
-      "needAdmin": "You need <0>tenant:admin</0> to manage API keys.",
+      "needAdmin": "You need <0>organization:admin</0> to manage API keys.",
       "title": "API keys",
-      "subtitle": "Issue and revoke bearer tokens for this tenant.",
+      "subtitle": "Issue and revoke bearer tokens for this organization.",
       "issueKey": "Issue key",
       "issueFirst": "Issue your first key",
       "emptyTitle": "No API keys yet",
-      "emptyBody": "API keys are bearer tokens scripts and services use to call this tenant's API. Issue one for each integration so you can revoke them individually.",
+      "emptyBody": "API keys are bearer tokens scripts and services use to call this organization's API. Issue one for each integration so you can revoke them individually.",
       "notConfigured": "API key admin not configured on this hzd instance.",
       "searchPlaceholder": "Filter by id, subject, or role",
       "totalCount": "{{total}} key(s)",
@@ -708,7 +705,7 @@
     "oauth": {
       "title": "Connector apps",
       "subtitle": "Client credentials for the services your flows connect to. Saved encrypted; applied live.",
-      "needAdmin": "You need <0>tenant:admin</0> to manage OAuth providers.",
+      "needAdmin": "You need <0>organization:admin</0> to manage OAuth providers.",
       "notConfigured": "OAuth registry not enabled on this hzd instance — set HAZYFLOW_MASTER_KEY and HAZYFLOW_PUBLIC_BASE_URL to enable it.",
       "configured": "Configured",
       "fromEnv": "Configured via env var",
@@ -730,10 +727,10 @@
     },
     "audit": {
       "title": "Audit log",
-      "subtitle": "Administrative actions in this tenant — newest first.",
+      "subtitle": "Administrative actions in this organization — newest first.",
       "empty": "No audit events yet.",
       "notConfigured": "Audit log not configured on this hzd instance.",
-      "needAdmin": "You need <0>tenant:admin</0> to view the audit log.",
+      "needAdmin": "You need <0>organization:admin</0> to view the audit log.",
       "colTime": "Time",
       "colActor": "Actor",
       "colAction": "Action",
@@ -744,7 +741,7 @@
       "title": "Steps",
       "subtitle": "Steps registered on this daemon.",
       "empty": "No modules registered.",
-      "needAdmin": "You need <0>tenant:admin</0> to view the module registry.",
+      "needAdmin": "You need <0>organization:admin</0> to view the module registry.",
       "count_one": "{{count}} module",
       "count_other": "{{count}} modules",
       "idempotent": "idempotent",
@@ -754,7 +751,7 @@
     "workspace": {
       "title": "Organization",
       "subtitle": "Your organization's name, logo, and resource limits.",
-      "needAdmin": "You need <0>tenant:admin</0> to view workspace limits.",
+      "needAdmin": "You need <0>organization:admin</0> to view workspace limits.",
       "diskQuota": "Disk quota",
       "usage": "Usage",
       "unlimited": "unlimited",
@@ -866,15 +863,15 @@
     "templateViewerDesc": "Trigger graph runs. No editing, no secrets.",
     "templateOperator": "Operator",
     "templateOperatorDesc": "Run and edit flows. Read secrets.",
-    "templateAdmin": "Tenant admin",
-    "templateAdminDesc": "Everything operator can do, plus tenant management (other keys + secrets).",
+    "templateAdmin": "Organization admin",
+    "templateAdminDesc": "Everything operator can do, plus organization management (other keys + secrets).",
     "templateCustom": "Custom",
     "templateCustomDesc": "Pick individual permissions below.",
     "roleName": "Role name",
     "roleNameDesc": "Cosmetic — shown in the keys list to group similar keys.",
     "rolePlaceholder": "custom",
     "permissions": "Permissions *",
-    "tenantAdminWarning": "<0>tenant:admin</0> grants this key the power to issue more keys — only assign to fully-trusted operators.",
+    "tenantAdminWarning": "<0>organization:admin</0> grants this key the power to issue more keys — only assign to fully-trusted operators.",
     "expiryLabel": "Expires",
     "expiryNever": "Never",
     "expiry30d": "30 days",

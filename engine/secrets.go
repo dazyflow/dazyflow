@@ -8,14 +8,12 @@ import (
 	"git.sr.ht/~klahr/hazyflow/core"
 )
 
-// scopeCtx wraps ctx with the tenant, workspace, and flow (graph) ID so
-// secret providers can resolve layered secrets: a ${secret.NAME} reference
-// cascades flow → workspace → tenant, and ${secret.NAME} / ${secret.NAME}
-// pin a single scope. Empty workspace/flow (e.g. the in-process Run path)
-// simply degrade the cascade to the tenant level.
+// scopeCtx wraps ctx with the tenant (organization) and flow (graph) ID so
+// the secret provider can resolve ${secret.NAME} by precedence: flow →
+// organization, nearest scope winning. An empty flow (e.g. the in-process Run
+// path) degrades the cascade to the organization level.
 func scopeCtx(ctx context.Context, graph core.Graph) context.Context {
 	ctx = core.WithTenant(ctx, graph.Tenant)
-	ctx = core.WithWorkspace(ctx, graph.Workspace)
 	ctx = core.WithFlow(ctx, graph.ID)
 	return ctx
 }

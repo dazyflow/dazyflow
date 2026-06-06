@@ -187,11 +187,10 @@ function nodeViewToRecord(runID: string, n: NodeRunView): JobRecord {
   };
 }
 
-// SecretScope mirrors the daemon's secret scoping: tenant (shared by every
-// flow), workspace, or flow (only the named flow resolves it). The cascade
-// (${secret.NAME}) resolves flow → workspace → tenant; the explicit
-// ${secret.}/${secret.} schemes pin one scope.
-export type SecretScope = "tenant" | "workspace" | "flow";
+// SecretScope mirrors the daemon's secret scoping: tenant (the organization,
+// shared by every flow) or flow (only the named flow resolves it). Set when a
+// secret is saved; ${secret.NAME} resolves flow → organization.
+export type SecretScope = "tenant" | "flow";
 
 // secretQuery builds the ?scope=&flow= query for the secret endpoints. Tenant
 // scope and no flow yield an empty string, so existing callers are unchanged.

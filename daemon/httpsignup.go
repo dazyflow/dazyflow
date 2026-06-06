@@ -25,7 +25,7 @@ import (
 //	- a default workspace named "main";
 //	- two roles: `editor` (graph:run + graph:edit + graph:admin +
 //	  secret:read/write so OAuth flows work) and `tenant_owner`
-//	  (tenant:admin, so they can manage users + API keys in their
+//	  (organization:admin, so they can manage users + API keys in their
 //	  own tenant later);
 //	- an immediately-issued session (auto sign-in), matching the
 //	  cookie + token shape of the signin endpoint.
@@ -244,7 +244,7 @@ func defaultSignupRoles() []core.Role {
 		},
 		{
 			Name:        "tenant_owner",
-			Permissions: []core.Permission{core.PermTenantAdmin},
+			Permissions: []core.Permission{core.PermOrganizationAdmin},
 		},
 	}
 }

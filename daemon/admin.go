@@ -53,7 +53,7 @@ type IssuedAPIKey struct {
 }
 
 // ListAPIKeys returns every key in the scoped tenant. Requires
-// tenant:admin (within own tenant) or platform:admin (which can pass
+// organization:admin (within own tenant) or platform:admin (which can pass
 // any tenant). When tenant=="", uses the principal's own tenant.
 // Hash + salt are never exposed.
 func (s *Service) ListAPIKeys(ctx context.Context, p core.Principal, tenant string) ([]APIKeySummary, error) {
@@ -103,7 +103,7 @@ func (s *Service) IssueAPIKey(ctx context.Context, p core.Principal, params Issu
 	// Block the cross-tenant escalation: only a platform admin may mint a key
 	// carrying platform:admin. A tenant admin is the administrator of their own
 	// org and legitimately delegates lesser permissions (graph:*, secret:*,
-	// even tenant:admin) within it — resolveAdminTenant already pins those keys
+	// even organization:admin) within it — resolveAdminTenant already pins those keys
 	// to the caller's own tenant — but must never be able to grant the
 	// cross-tenant super-admin role and break out of that tenant.
 	if !isPlatformAdmin(p) {
@@ -166,7 +166,7 @@ var defaultSelfIssueRole = core.Role{
 // the right to mint regardless, but failing here gives a clearer error).
 //
 // Used by the Connect MCP modal — lets any signed-in user issue a key
-// for Claude without needing tenant:admin on the AdminAPIKeys page.
+// for Claude without needing organization:admin on the AdminAPIKeys page.
 func (s *Service) IssueOwnAPIKey(ctx context.Context, p core.Principal, params SelfIssueAPIKeyParams) (IssuedAPIKey, error) {
 	if s.AdminKeys == nil {
 		return IssuedAPIKey{}, errors.New("api key admin not configured")
@@ -382,15 +382,15 @@ func (s *Service) ListTenants(ctx context.Context, p core.Principal) ([]string, 
 	return out, nil
 }
 
-// requireAdmin verifies the principal carries tenant:admin or
+// requireAdmin verifies the principal carries organization:admin or
 // platform:admin. We deliberately don't accept graph:admin here —
 // graph admins can edit + run graphs but the API key surface affects
 // identity and belongs in its own permission lane.
 func requireAdmin(p core.Principal) error {
-	if p.Has(core.PermTenantAdmin) || p.Has(core.PermPlatformAdmin) {
+	if p.Has(core.PermOrganizationAdmin) || p.Has(core.PermPlatformAdmin) {
 		return nil
 	}
-	return fmt.Errorf("requires permission %q", core.PermTenantAdmin)
+	return fmt.Errorf("requires permission %q", core.PermOrganizationAdmin)
 }
 
 // requirePlatformAdmin gates instance-wide settings that every tenant

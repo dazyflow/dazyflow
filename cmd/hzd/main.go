@@ -53,7 +53,7 @@ func main() {
 	// where an env var would either silently re-run on every restart
 	// (rotate-master-key) or sit useless across the daemon's lifetime
 	// (import-users-from-json).
-	rotateKeyB64 := flag.String("rotate-master-key", "", "rotate the tenant:// encrypted-secret KEK: re-wrap every tenant DEK from HAZYFLOW_MASTER_KEY (the CURRENT key) to this new base64-encoded 32-byte key, print a report, and EXIT without serving. Re-runnable. After it succeeds, restart hzd with HAZYFLOW_MASTER_KEY set to the new key. No secret values are re-entered.")
+	rotateKeyB64 := flag.String("rotate-master-key", "", "rotate the encrypted-secret store's KEK: re-wrap every tenant DEK from HAZYFLOW_MASTER_KEY (the CURRENT key) to this new base64-encoded 32-byte key, print a report, and EXIT without serving. Re-runnable. After it succeeds, restart hzd with HAZYFLOW_MASTER_KEY set to the new key. No secret values are re-entered.")
 	importUsersFrom := flag.String("import-users-from-json", "", "one-time migration: import users from this JSON user file into the Postgres user store (requires HAZYFLOW_POSTGRES_DSN), then exit. Idempotent — accounts already in Postgres are skipped, never overwritten.")
 	flag.Parse()
 
@@ -327,7 +327,7 @@ func main() {
 	}
 	// env:// is always registered; HAZYFLOW_ISOLATE_SHARED_SECRETS gates
 	// per-tenant prefix enforcement (`<tenant>.<key>`) for multi-tenant
-	// deploys. tenant:// (encrypted, per-tenant) is set up below.
+	// deploys. The secret:// encrypted store (per-tenant) is set up below.
 	secrets := map[string]core.SecretProvider{}
 	envProvider := daemon.EnvProvider{Namespaced: isolateSharedSecrets}
 	secrets[envProvider.Scheme()] = envProvider
@@ -712,7 +712,7 @@ func main() {
 
 	if devKey {
 		adminRole := core.Role{Name: "admin", Permissions: []core.Permission{
-			core.PermTenantAdmin, core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
+			core.PermOrganizationAdmin, core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
 			core.PermSecretRead, core.PermSecretWrite,
 		}}
 		_, ct, err := auth.IssueAPIKey(ks, ctx, "dev", "dev", "default", "dev@local", []core.Role{adminRole}, nil)
@@ -975,7 +975,7 @@ func seedDefaultUser(ctx context.Context, users auth.UserStore, dev bool) {
 		return
 	}
 	adminRole := core.Role{Name: "admin", Permissions: []core.Permission{
-		core.PermTenantAdmin, core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
+		core.PermOrganizationAdmin, core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
 		core.PermSecretRead, core.PermSecretWrite,
 	}}
 	u := auth.User{
@@ -994,7 +994,7 @@ func seedDefaultUser(ctx context.Context, users auth.UserStore, dev bool) {
 	log.Printf("seeded sign-in: %s / test", u.Email)
 }
 
-// setupEncryptedSecrets wires the tenant:// encrypted store when a
+// setupEncryptedSecrets wires the secret:// encrypted store when a
 // master key is configured. The store provides per-tenant secret
 // isolation (separate DEK per tenant, AES-GCM wrapped by the KEK
 // in process memory) AND the write path for the secret_set drop —

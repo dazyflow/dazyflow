@@ -53,9 +53,9 @@
     "expandSidebar": "Fäll ut sidofältet",
     "signOut": "logga ut",
     "switchWorkspace": "Byt arbetsyta",
-    "switchTenant": "Byt tenant",
-    "tenants": "Tenants",
-    "pickTenant": "(välj tenant)",
+    "switchTenant": "Byt organisation",
+    "tenants": "Organisations",
+    "pickTenant": "(välj organisation)",
     "noSubject": "(inget subjekt)"
   },
   "account": {
@@ -139,7 +139,7 @@
   "welcome": {
     "title": "Välkommen till Hazyflow",
     "signedInAs": "Inloggad som <0>{{subject}}</0>",
-    "inTenant": " i tenant <0>{{tenant}}</0>",
+    "inTenant": " i organisation <0>{{tenant}}</0>",
     "continueTitle": "Fortsätt där du slutade",
     "intro": "Så, vad bygger vi idag?",
     "goalsTitle": "Vad vill du automatisera?",
@@ -247,7 +247,7 @@
     "tabGeneral": "Allmänt",
     "tabSecrets": "Hemligheter",
     "secrets": {
-      "help": "Hemligheter som bara det här flödet kan använda. De åsidosätter arbetsyte- och tenant-hemligheter med samma namn, och inget annat flöde kan läsa dem. Referera till valfri hemlighet som ${secret.NAMN} — den löser till närmaste värde (flöde, sedan arbetsyta, sedan tenant).",
+      "help": "Hemligheter som bara det här flödet kan använda. De åsidosätter arbetsyte- och organisation-hemligheter med samma namn, och inget annat flöde kan läsa dem. Referera till valfri hemlighet som ${secret.NAMN} — den löser till närmaste värde (flöde, sedan arbetsyta, sedan organisation).",
       "referencedTitle": "Det här flödet refererar till",
       "referencedNone": "Inga hemlighetsreferenser hittades i flödets steg ännu.",
       "manageTitle": "Hemligheter bara för det här flödet"
@@ -345,15 +345,15 @@
       "timeoutDesc": "Avbryt körningen automatiskt om den inte är klar innan dess. 0 / tomt = ingen gräns (daemonens standardgräns gäller fortfarande om en sådan är satt).",
       "flowId": "Flödes-ID",
       "flowIdDesc": "Om ID:t ändras blir tidigare körningar föräldralösa; byt namn genom att skapa ett nytt flöde och kopiera stegen.",
-      "tenantWorkspace": "Tenant / Arbetsyta",
+      "tenantWorkspace": "Organisation / Arbetsyta",
       "visibility": "Synlighet",
       "orgVisible": "Synlig för org",
       "orgVisibleDesc": "Alla i den här arbetsytan kan se och köra flödet. Endast du (ägaren) kan redigera det.",
       "privateVisible": "Privat",
-      "privateVisibleDesc": "Endast du (och tenant-admins, för återställning) kan se flödet. Triggers kör det fortfarande.",
+      "privateVisibleDesc": "Endast du (och organisation-admins, för återställning) kan se flödet. Triggers kör det fortfarande.",
       "owner": "Ägare",
       "ownerPlaceholder": "(sätts vid första sparningen)",
-      "ownerDesc": "Stämplas av daemonen när flödet sparas första gången. Endast tenant-admins kan överföra ägarskap."
+      "ownerDesc": "Stämplas av daemonen när flödet sparas första gången. Endast organisation-admins kan överföra ägarskap."
     }
   },
   "triggers": {
@@ -434,10 +434,7 @@
   "connections": {
     "title": "Hemligheter",
     "intro": "Hemligheter låter dig hantera återanvändbar konfigurationsdata. De är krypterade och används för känsliga värden som API-nycklar, tokens och databas-URL:er — skrivskyddade, så ett värde visas aldrig igen efter att du sparat det. För att ansluta en app som Slack eller Gmail, använd Appar-sidan.",
-    "scopeTitle": "Omfattning",
-    "scopeTenant": "Tenant (delad)",
-    "scopeWorkspace": "Den här arbetsytan",
-    "scopeHelp": "Tenant-hemligheter delas av alla flöden. Arbetsyte-hemligheter gäller bara flöden i den här arbetsytan och åsidosätter en tenant-hemlighet med samma namn. Ett enskilt flöde kan också ha egna — ange dem under flödets Inställningar → Hemligheter.",
+    "scopeHelp": "De här hemligheterna är tillgängliga för alla flöden i din organisation. Ett enskilt flöde kan åsidosätta en med sin egen — ange dem under flödets Inställningar → Hemligheter.",
     "firstTileTitle": "Börja med Slack och Google",
     "firstTileBody": "De flesta mallar skickar en notis eller läser en inkorg. Att ansluta Slack (för meddelanden) och Google (för Gmail + Sheets) täcker det mesta du bygger först — välj korten nedan så guidar vi dig genom resten.",
     "setupIncompleteTitle": "Servern är inte färdigkonfigurerad ännu",
@@ -532,7 +529,7 @@
   },
   "admin": {
     "title": "Admin",
-    "needAdmin": "Du behöver <0>tenant:admin</0> eller <0>graph:admin</0> för att se den här sidan.",
+    "needAdmin": "Du behöver <0>organization:admin</0> eller <0>graph:admin</0> för att se den här sidan.",
     "subtitle": "Organisation <0>{{tenant}}</0> · arbetsyta <1>{{workspace}}</1>",
     "anyWorkspace": "(alla)",
     "groupOrg": "Organisation",
@@ -546,7 +543,7 @@
     "cardSecretManagerTitle": "Hemlighetshanterare",
     "cardSecretManagerDesc": "Peka flöden mot er egen OpenBao / Vault.",
     "secretManager": {
-      "needAdmin": "Du behöver <0>tenant:admin</0> för att konfigurera hemlighetshanteraren."
+      "needAdmin": "Du behöver <0>organization:admin</0> för att konfigurera hemlighetshanteraren."
     },
     "cardOAuthTitle": "Connector-appar",
     "cardOAuthDesc": "Uppgifter för Google, Slack, GitHub, Notion.",
@@ -559,7 +556,7 @@
     "statusStub": "Stub",
     "statusReady": "Klar",
     "users": {
-      "needAdmin": "Du behöver <0>tenant:admin</0> för att hantera personer.",
+      "needAdmin": "Du behöver <0>organization:admin</0> för att hantera personer.",
       "title": "Personer",
       "subtitle": "Medlemmar i din organisation. Bjud in via e-post.",
       "inviteButton": "Bjud in en teammedlem",
@@ -610,7 +607,7 @@
       "rolePermsLabel": "Behörigheter:"
     },
     "sso": {
-      "needAdmin": "Du behöver <0>tenant:admin</0> för att konfigurera inloggning.",
+      "needAdmin": "Du behöver <0>organization:admin</0> för att konfigurera inloggning.",
       "notConfigured": "Inloggningsinställningar är inte aktiverade på den här hzd-instansen.",
       "title": "Single sign-on",
       "subtitle": "Låt medlemmar logga in med er identitetsleverantör istället för lösenord.",
@@ -674,13 +671,13 @@
       }
     },
     "apiKeys": {
-      "needAdmin": "Du behöver <0>tenant:admin</0> för att hantera API-nycklar.",
+      "needAdmin": "Du behöver <0>organization:admin</0> för att hantera API-nycklar.",
       "title": "API-nycklar",
-      "subtitle": "Skapa och återkalla bearer-tokens för den här tenanten.",
+      "subtitle": "Skapa och återkalla bearer-tokens för den här organisationen.",
       "issueKey": "Skapa nyckel",
       "issueFirst": "Skapa din första nyckel",
       "emptyTitle": "Inga API-nycklar än",
-      "emptyBody": "API-nycklar är bearer-tokens som skript och tjänster använder för att anropa tenantens API. Skapa en nyckel per integration så kan du återkalla dem en och en.",
+      "emptyBody": "API-nycklar är bearer-tokens som skript och tjänster använder för att anropa organisationens API. Skapa en nyckel per integration så kan du återkalla dem en och en.",
       "notConfigured": "API key admin är inte konfigurerat på den här hzd-instansen.",
       "searchPlaceholder": "Filtrera på id, subjekt eller roll",
       "totalCount": "{{total}} nyckel/nycklar",
@@ -708,7 +705,7 @@
     "oauth": {
       "title": "Connector-appar",
       "subtitle": "Uppgifter för tjänsterna dina flows ansluter till. Sparas krypterat; tillämpas direkt.",
-      "needAdmin": "Du behöver <0>tenant:admin</0> för att hantera OAuth-providers.",
+      "needAdmin": "Du behöver <0>organization:admin</0> för att hantera OAuth-providers.",
       "notConfigured": "OAuth-registret är inte aktiverat på den här hzd-instansen — sätt HAZYFLOW_MASTER_KEY och HAZYFLOW_PUBLIC_BASE_URL för att aktivera det.",
       "configured": "Konfigurerad",
       "fromEnv": "Konfigurerad via env-variabel",
@@ -730,10 +727,10 @@
     },
     "audit": {
       "title": "Granskningslogg",
-      "subtitle": "Administrativa åtgärder i den här tenanten — senaste först.",
+      "subtitle": "Administrativa åtgärder i den här organisationen — senaste först.",
       "empty": "Inga granskningshändelser ännu.",
       "notConfigured": "Granskningslogg är inte konfigurerad på den här hzd-instansen.",
-      "needAdmin": "Du behöver <0>tenant:admin</0> för att se granskningsloggen.",
+      "needAdmin": "Du behöver <0>organization:admin</0> för att se granskningsloggen.",
       "colTime": "Tid",
       "colActor": "Aktör",
       "colAction": "Åtgärd",
@@ -744,7 +741,7 @@
       "title": "Steg",
       "subtitle": "Steg registrerade på den här daemonen.",
       "empty": "Inga moduler registrerade.",
-      "needAdmin": "Du behöver <0>tenant:admin</0> för att se modulregistret.",
+      "needAdmin": "Du behöver <0>organization:admin</0> för att se modulregistret.",
       "count_one": "{{count}} modul",
       "count_other": "{{count}} moduler",
       "idempotent": "idempotent",
@@ -754,7 +751,7 @@
     "workspace": {
       "title": "Organisation",
       "subtitle": "Organisationens namn, logotyp och resursgränser.",
-      "needAdmin": "Du behöver <0>tenant:admin</0> för att se arbetsytans gränser.",
+      "needAdmin": "Du behöver <0>organization:admin</0> för att se arbetsytans gränser.",
       "diskQuota": "Diskkvot",
       "usage": "Användning",
       "unlimited": "obegränsat",
@@ -866,15 +863,15 @@
     "templateViewerDesc": "Trigga körningar av flöden. Ingen redigering, inga secrets.",
     "templateOperator": "Operator",
     "templateOperatorDesc": "Kör och redigera flöden. Läs secrets.",
-    "templateAdmin": "Tenant-admin",
-    "templateAdminDesc": "Allt en operator kan, plus tenant-hantering (andra nycklar + secrets).",
+    "templateAdmin": "Organisation-admin",
+    "templateAdminDesc": "Allt en operator kan, plus organisation-hantering (andra nycklar + secrets).",
     "templateCustom": "Anpassad",
     "templateCustomDesc": "Välj enskilda behörigheter nedan.",
     "roleName": "Rollnamn",
     "roleNameDesc": "Kosmetiskt — visas i nyckellistan för att gruppera liknande nycklar.",
     "rolePlaceholder": "custom",
     "permissions": "Behörigheter *",
-    "tenantAdminWarning": "<0>tenant:admin</0> ger den här nyckeln rätt att skapa fler nycklar — tilldela endast till helt betrodda operatörer.",
+    "tenantAdminWarning": "<0>organization:admin</0> ger den här nyckeln rätt att skapa fler nycklar — tilldela endast till helt betrodda operatörer.",
     "expiryLabel": "Går ut",
     "expiryNever": "Aldrig",
     "expiry30d": "30 dagar",

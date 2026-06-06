@@ -89,7 +89,7 @@ func rolePermissions(role string) []core.Permission {
 	switch role {
 	case "admin":
 		return []core.Permission{
-			core.PermTenantAdmin, core.PermGraphRun, core.PermGraphEdit,
+			core.PermOrganizationAdmin, core.PermGraphRun, core.PermGraphEdit,
 			core.PermGraphAdmin, core.PermModuleRegister,
 			core.PermSecretRead, core.PermSecretWrite,
 		}

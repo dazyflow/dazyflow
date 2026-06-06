@@ -34,7 +34,7 @@ export function AdminWorkspace() {
     void refresh();
   }, [refresh]);
 
-  if (!hasPerm("tenant:admin")) {
+  if (!hasPerm("organization:admin")) {
     return (
       <div className="card" style={{ color: "var(--danger)" }}>
         <Trans i18nKey="admin.workspace.needAdmin" components={[<code />]} />

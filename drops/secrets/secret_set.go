@@ -46,7 +46,7 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"name":  {"type":"string","description":"Secret name. Stored under tenant://<name>. Allowed characters: [A-Za-z0-9_.-], up to 128 chars."},
+					"name":  {"type":"string","description":"Secret name. Stored as an organization secret; reference it as ${secret.<name>}. Allowed characters: [A-Za-z0-9_.-], up to 128 chars."},
 					"value": {"type":"string","description":"Value to store. Overridden by the 'value' input port when connected."}
 				},
 				"required":["name"]
@@ -107,7 +107,7 @@ func executeSecretSet(ctx context.Context, job core.Job, _ chan<- core.Progress)
 	write := currentWriter()
 	if write == nil {
 		return params.Err(job, "not_configured",
-			"This deployment doesn't have an encrypted secret store wired up, so secret_set can't write anything. Start hzd with --master-key (or $HAZYFLOW_MASTER_KEY) to enable the tenant:// store."), nil
+			"This deployment doesn't have an encrypted secret store wired up, so secret_set can't write anything. Start hzd with --master-key (or $HAZYFLOW_MASTER_KEY) to enable the encrypted secret store."), nil
 	}
 	if err := write(ctx, job.Tenant, name, value); err != nil {
 		return params.ErrDetails(job, "write_failed",

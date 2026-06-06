@@ -7,7 +7,7 @@ import type { AuditEvent } from "../types";
 
 // AdminAudit shows the tenant's administrative trail — graph saves, runs,
 // secret/key changes, approvals, cancels — newest first. Read-only;
-// gated on tenant:admin (the backend enforces it too).
+// gated on organization:admin (the backend enforces it too).
 export function AdminAudit() {
   const { t } = useTranslation();
   const { token, hasPerm } = useAuth();
@@ -38,7 +38,7 @@ export function AdminAudit() {
     void refresh();
   }, [refresh]);
 
-  if (!hasPerm("tenant:admin")) {
+  if (!hasPerm("organization:admin")) {
     return (
       <div className="card" style={{ color: "var(--danger)" }}>
         <Trans i18nKey="admin.audit.needAdmin" components={[<code />]} />

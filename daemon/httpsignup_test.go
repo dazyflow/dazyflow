@@ -258,7 +258,7 @@ func TestSignup_GrantsEditorAndTenantOwnerRoles(t *testing.T) {
 	for _, required := range []string{
 		"graph:run", "graph:edit", "graph:admin",
 		"secret:read", "secret:write",
-		"tenant:admin",
+		"organization:admin",
 	} {
 		if !perms[required] {
 			t.Errorf("missing permission %q in default signup roles", required)

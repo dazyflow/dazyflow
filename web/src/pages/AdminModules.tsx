@@ -45,7 +45,7 @@ export function AdminModules() {
       .map(([cat, ms]) => [cat, ms.sort((a, b) => a.id.localeCompare(b.id))] as const);
   }, [drops]);
 
-  if (!hasPerm("tenant:admin")) {
+  if (!hasPerm("organization:admin")) {
     return (
       <div className="card" style={{ color: "var(--danger)" }}>
         <Trans i18nKey="admin.modules.needAdmin" components={[<code />]} />

@@ -144,7 +144,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Send email, search your inbox, and read full message bodies. The classic use case: react to incoming emails as they arrive — pair the search step with a polling trigger and the flow remembers which messages it has already processed, so reruns don't repeat work.",
     technical_notes:
-      "Gmail API + Google OAuth. access_type=offline + prompt=consent ride along on authorize so refresh_token persists across runs. Cursor dedupe lives in the tenant:// encrypted secret store via secret_set + ${secret.//...} template substitution; survives daemon restarts.",
+      "Gmail API + Google OAuth. access_type=offline + prompt=consent ride along on authorize so refresh_token persists across runs. Cursor dedupe lives in the encrypted secret store via secret_set + ${secret.…} template substitution; survives daemon restarts.",
     docs_url: "https://developers.google.com/gmail/api/guides",
     brand_logo: "/brands/gmail.svg",
   },

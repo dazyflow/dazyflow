@@ -7,7 +7,7 @@ import (
 
 var (
 	roleRunner = Role{Name: "runner", Permissions: []Permission{PermGraphRun}}
-	roleAdmin  = Role{Name: "admin", Permissions: []Permission{PermTenantAdmin, PermGraphRun, PermGraphEdit}}
+	roleAdmin  = Role{Name: "admin", Permissions: []Permission{PermOrganizationAdmin, PermGraphRun, PermGraphEdit}}
 )
 
 func TestRequire(t *testing.T) {

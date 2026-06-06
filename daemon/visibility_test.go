@@ -37,7 +37,7 @@ func newVisibilityHarness(t *testing.T) *visibilityHarness {
 	admin := core.Role{
 		Name: "admin",
 		Permissions: []core.Permission{
-			core.PermGraphRun, core.PermGraphEdit, core.PermTenantAdmin,
+			core.PermGraphRun, core.PermGraphEdit, core.PermOrganizationAdmin,
 		},
 	}
 	svc := &daemon.Service{
@@ -108,7 +108,7 @@ func TestVisibility_TenantAdminBypassesPrivate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	// Mallory (tenant:admin) can read alice's private flow.
+	// Mallory (organization:admin) can read alice's private flow.
 	if _, err := h.svc.LoadGraph(ctx, h.mallory, "t", "ws", "private-1", ""); err != nil {
 		t.Errorf("mallory should see private flows: %v", err)
 	}

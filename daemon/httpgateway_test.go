@@ -28,7 +28,7 @@ type gatewayHarness struct {
 	bus           *MemoryBus
 	ks            *auth.MemKeyStore
 	token         string // editor token
-	adminToken    string // tenant:admin token (issued lazily by adminDo)
+	adminToken    string // organization:admin token (issued lazily by adminDo)
 	platformToken string // platform:admin token (issued lazily by platformDo)
 }
 
@@ -59,12 +59,12 @@ func newGatewayHarness(t *testing.T) *gatewayHarness {
 	}
 }
 
-// adminDo runs the request with a tenant:admin bearer token, minting
+// adminDo runs the request with a organization:admin bearer token, minting
 // one on first use so individual tests don't have to wire it.
 func (h *gatewayHarness) adminDo(t *testing.T, method, path string, body any) *httptest.ResponseRecorder {
 	t.Helper()
 	if h.adminToken == "" {
-		role := core.Role{Name: "admin", Permissions: []core.Permission{core.PermTenantAdmin}}
+		role := core.Role{Name: "admin", Permissions: []core.Permission{core.PermOrganizationAdmin}}
 		_, tok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-admin", "t", "ws", "root", []core.Role{role}, nil)
 		if err != nil {
 			t.Fatalf("issue admin key: %v", err)
@@ -704,7 +704,7 @@ func TestHTTPGateway_ListAllRunsAcceptsWorkspaceNarrow(t *testing.T) {
 	})
 
 	// Issue an unscoped admin key for this tenant.
-	role := core.Role{Name: "ta", Permissions: []core.Permission{core.PermTenantAdmin}}
+	role := core.Role{Name: "ta", Permissions: []core.Permission{core.PermOrganizationAdmin}}
 	_, adminTok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-narrow-admin", "t", "", "root3", []core.Role{role}, nil)
 	if err != nil {
 		t.Fatalf("issue: %v", err)
@@ -796,7 +796,7 @@ func TestHTTPGateway_ListPendingApprovalsAcceptsWorkspaceNarrow(t *testing.T) {
 			}},
 		})
 	}
-	role := core.Role{Name: "ta", Permissions: []core.Permission{core.PermTenantAdmin}}
+	role := core.Role{Name: "ta", Permissions: []core.Permission{core.PermOrganizationAdmin}}
 	_, adminTok, _ := auth.IssueAPIKey(h.ks, t.Context(), "k-narrow-app-admin", "t", "", "root4", []core.Role{role}, nil)
 
 	doAdmin := func(path string) []string {
@@ -890,7 +890,7 @@ func TestHTTPGateway_CORSHeadersOnPreflight(t *testing.T) {
 
 func TestHTTPGateway_AdminListAPIKeys_RequiresTenantAdmin(t *testing.T) {
 	h := newGatewayHarness(t)
-	// Editor token (no tenant:admin) should be denied.
+	// Editor token (no organization:admin) should be denied.
 	rw := h.do(t, "GET", "/api/v1/admin/api-keys", nil)
 	if rw.Code != http.StatusForbidden {
 		t.Errorf("editor code = %d, want 403", rw.Code)
@@ -1079,7 +1079,7 @@ func TestHTTPGateway_ListWorkspaces_AdminSeesAllInTenant(t *testing.T) {
 		"other/ws": ws2, // different tenant — must NOT appear
 	}
 	// Issue a tenant-admin key with NO workspace binding.
-	role := core.Role{Name: "tenant-admin", Permissions: []core.Permission{core.PermTenantAdmin}}
+	role := core.Role{Name: "tenant-admin", Permissions: []core.Permission{core.PermOrganizationAdmin}}
 	_, tok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-floating-admin", "t", "", "root2", []core.Role{role}, nil)
 	if err != nil {
 		t.Fatalf("issue: %v", err)
@@ -1123,7 +1123,7 @@ func TestHTTPGateway_AdminListUsersGroupsBySubject(t *testing.T) {
 		},
 		{
 			"subject": "bob",
-			"roles":   []map[string]any{{"name": "ops", "permissions": []string{"tenant:admin"}}},
+			"roles":   []map[string]any{{"name": "ops", "permissions": []string{"organization:admin"}}},
 		},
 	} {
 		if rw := h.adminDo(t, "POST", "/api/v1/admin/api-keys", params); rw.Code != http.StatusCreated {
@@ -1270,7 +1270,7 @@ func TestHTTPGateway_PlatformAdminCanIssueInAnyTenant(t *testing.T) {
 	body, _ := json.Marshal(map[string]any{
 		"subject": "first-customer-admin",
 		"tenant":  "brand-new-tenant",
-		"roles":   []map[string]any{{"name": "ta", "permissions": []string{"tenant:admin"}}},
+		"roles":   []map[string]any{{"name": "ta", "permissions": []string{"organization:admin"}}},
 	})
 	req := httptest.NewRequest("POST", "/api/v1/admin/api-keys", bytes.NewBuffer(body))
 	req.Header.Set("Authorization", "Bearer "+platformTok)
@@ -1312,7 +1312,7 @@ func TestHTTPGateway_TenantAdminCantGrantPlatformAdmin(t *testing.T) {
 	}
 
 	// Tenant admin → refused.
-	taRole := core.Role{Name: "ta", Permissions: []core.Permission{core.PermTenantAdmin}}
+	taRole := core.Role{Name: "ta", Permissions: []core.Permission{core.PermOrganizationAdmin}}
 	_, taTok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-ta-esc", "t", "ws", "root", []core.Role{taRole}, nil)
 	if err != nil {
 		t.Fatal(err)

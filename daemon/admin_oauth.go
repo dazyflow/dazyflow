@@ -18,7 +18,7 @@ import (
 //	PUT    /api/v1/admin/oauth-providers/{name}    — set credentials, live-register
 //	DELETE /api/v1/admin/oauth-providers/{name}    — clear credentials, unregister
 //
-// All gated on tenant:admin OR platform:admin (same pattern as the
+// All gated on organization:admin OR platform:admin (same pattern as the
 // rest of /api/v1/admin/*). The endpoints write through the
 // encrypted secret store and update the in-memory registry; no
 // daemon restart needed for changes to take effect.

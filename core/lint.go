@@ -313,7 +313,7 @@ func hasSecretRef(v any) bool {
 }
 
 // lintHardcodedSecrets flags literal credentials pasted into a node's
-// params/env instead of referenced via ${secret.//name}. Two triggers:
+// params/env instead of referenced via ${secret.name}. Two triggers:
 //   - a value matching a known provider-key/PEM pattern, anywhere; or
 //   - a long literal string under a secret-shaped key name (token,
 //     password, api_key, authorization, …) that isn't a ${...} template.
@@ -351,7 +351,7 @@ func hardcodedIssue(nodeID, module, field string) LintIssue {
 		Code:     "hardcoded_secret",
 		Severity: LintWarn,
 		Message: fmt.Sprintf(
-			"Node %q (module %s) appears to contain a hardcoded secret in %s. Hardcoded credentials get committed to the workspace git history and shown to anyone who can read the graph. Store it with the secret store and reference it as ${secret.//name} instead.",
+			"Node %q (module %s) appears to contain a hardcoded secret in %s. Hardcoded credentials get committed to the workspace git history and shown to anyone who can read the graph. Store it with the secret store and reference it as ${secret.name} instead.",
 			nodeID, module, field,
 		),
 		NodeIDs: []string{nodeID},

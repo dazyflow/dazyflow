@@ -55,13 +55,12 @@ type putSecretBody struct {
 }
 
 // secretScopeFromRequest reads the ?scope= (and ?flow= for flow scope) query
-// params. Defaults to tenant scope so existing callers are unaffected.
+// params. Defaults to organization (tenant) scope so existing callers are
+// unaffected.
 func secretScopeFromRequest(r *http.Request) (scope SecretScope, flow string, err error) {
 	switch s := SecretScope(r.URL.Query().Get("scope")); s {
 	case "", ScopeTenant:
 		return ScopeTenant, "", nil
-	case ScopeWorkspace:
-		return ScopeWorkspace, "", nil
 	case ScopeFlow:
 		flow = r.URL.Query().Get("flow")
 		if flow == "" {
@@ -73,31 +72,25 @@ func secretScopeFromRequest(r *http.Request) (scope SecretScope, flow string, er
 	}
 }
 
-// authorizeSecretScope gates a secret operation by scope. Tenant/workspace
-// reads need secret:read and writes secret:write (workspace additionally
-// requires a workspace-bound principal). Flow scope needs graph:edit — if you
-// can edit flows here you can manage a flow's own secrets; the resolution-time
-// blast-radius guard (a flow resolves only its own flow secrets) is what makes
-// this safe. Returns (status, message) with status 0 meaning authorized.
+// authorizeSecretScope gates a secret operation by scope. Organization reads
+// need secret:read and writes secret:write. Flow scope needs graph:edit — if
+// you can edit flows here you can manage a flow's own secrets; the
+// resolution-time blast-radius guard (a flow resolves only its own flow
+// secrets) is what makes this safe. Returns (status, message) with status 0
+// meaning authorized.
 func authorizeSecretScope(p core.Principal, scope SecretScope, write bool) (int, string) {
-	switch scope {
-	case ScopeFlow:
+	if scope == ScopeFlow {
 		if err := core.Require(p, core.PermGraphEdit); err != nil {
 			return http.StatusForbidden, err.Error()
 		}
-	case ScopeWorkspace:
-		if p.Workspace == "" {
-			return http.StatusBadRequest, "workspace scope requires a workspace-bound principal"
-		}
-		fallthrough
-	default: // tenant
-		perm := core.PermSecretRead
-		if write {
-			perm = core.PermSecretWrite
-		}
-		if err := core.Require(p, perm); err != nil {
-			return http.StatusForbidden, err.Error()
-		}
+		return 0, ""
+	}
+	perm := core.PermSecretRead
+	if write {
+		perm = core.PermSecretWrite
+	}
+	if err := core.Require(p, perm); err != nil {
+		return http.StatusForbidden, err.Error()
 	}
 	return 0, ""
 }
@@ -139,7 +132,7 @@ func (h *HTTPGateway) putSecret(rw http.ResponseWriter, r *http.Request, p core.
 		writeJSONError(rw, http.StatusBadRequest, "value must not be empty")
 		return
 	}
-	if err := h.EncryptedSecrets.PutScoped(r.Context(), p.Tenant, p.Workspace, flow, scope, name, body.Value); err != nil {
+	if err := h.EncryptedSecrets.PutScoped(r.Context(), p.Tenant, flow, scope, name, body.Value); err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("store secret: %v", err))
 		return
 	}
@@ -173,7 +166,7 @@ func (h *HTTPGateway) listSecrets(rw http.ResponseWriter, r *http.Request, p cor
 	}
 	// ListScoped strips the scope prefix and, at tenant scope, hides every
 	// reserved namespace (ws./flow./conn./oauth./cfg:).
-	names, err := h.EncryptedSecrets.ListScoped(r.Context(), p.Tenant, p.Workspace, flow, scope)
+	names, err := h.EncryptedSecrets.ListScoped(r.Context(), p.Tenant, flow, scope)
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("list secrets: %v", err))
 		return
@@ -209,7 +202,7 @@ func (h *HTTPGateway) deleteSecret(rw http.ResponseWriter, r *http.Request, p co
 		writeJSONError(rw, status, msg)
 		return
 	}
-	if err := h.EncryptedSecrets.DeleteScoped(r.Context(), p.Tenant, p.Workspace, flow, scope, name); err != nil {
+	if err := h.EncryptedSecrets.DeleteScoped(r.Context(), p.Tenant, flow, scope, name); err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("delete secret: %v", err))
 		return
 	}

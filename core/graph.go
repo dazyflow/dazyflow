@@ -89,7 +89,7 @@ type Graph struct {
 
 	// Visibility controls who in the workspace can see/run this flow:
 	//   - "org" (default): any principal in the tenant+workspace
-	//   - "private":       only the Owner and tenant:admin principals
+	//   - "private":       only the Owner and organization:admin principals
 	// An empty value reads as "org" — keeps pre-visibility graphs
 	// behaving the way they always have.
 	Visibility Visibility `json:"visibility,omitempty"`

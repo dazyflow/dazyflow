@@ -53,7 +53,7 @@ func newFuzzHarness(f *testing.F) *fuzzHarness {
 	ks := auth.NewMemKeyStore()
 	role := core.Role{Name: "editor", Permissions: []core.Permission{
 		core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
-		core.PermSecretRead, core.PermSecretWrite, core.PermTenantAdmin,
+		core.PermSecretRead, core.PermSecretWrite, core.PermOrganizationAdmin,
 	}}
 	_, token, err := auth.IssueAPIKey(ks, context.Background(), "k1", "t", "ws", "alice", []core.Role{role}, nil)
 	if err != nil {

@@ -164,7 +164,7 @@ export function AdminOrgSSO() {
     return () => window.clearTimeout(id);
   }, [savedAt]);
 
-  if (!hasPerm("tenant:admin")) {
+  if (!hasPerm("organization:admin")) {
     return (
       <div className="card" style={{ color: "var(--danger)" }}>
         <Trans i18nKey="admin.sso.needAdmin" components={[<code />]} />

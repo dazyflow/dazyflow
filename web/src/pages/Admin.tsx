@@ -16,13 +16,13 @@ import { orgDisplayName } from "../lib/orgDisplayName";
 // Admin is the gating point for tenant-level configuration. Cards are
 // split into what an org admin manages and what only the platform
 // operator can touch (instance-wide settings), so scope is clear from
-// the grouping rather than per-card text. Role gate accepts tenant:admin
+// the grouping rather than per-card text. Role gate accepts organization:admin
 // (the right one) or graph:admin (a coarser fallback so power users who
 // set the system up land here before refining roles).
 export function Admin() {
   const { t } = useTranslation();
   const { me, hasPerm, activeTenant, activeWorkspace } = useAuth();
-  if (!hasPerm("tenant:admin") && !hasPerm("graph:admin")) {
+  if (!hasPerm("organization:admin") && !hasPerm("graph:admin")) {
     return (
       <div className="card" style={{ color: "var(--danger)" }}>
         <Trans i18nKey="admin.needAdmin" components={[<code />]} />

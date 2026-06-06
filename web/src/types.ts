@@ -239,7 +239,7 @@ export type Permission =
   | "module:register"
   | "secret:read"
   | "secret:write"
-  | "tenant:admin"
+  | "organization:admin"
   | "platform:admin";
 
 export type WhoAmI = {
