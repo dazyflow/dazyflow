@@ -986,6 +986,8 @@
     "triggerHintCta": "Add trigger",
     "dismiss": "Dismiss",
     "configBlock": "Can't run yet — “{{label}}” needs setup: {{detail}}. Fill it in, then run.",
+    "runFailed": "Run failed at “{{label}}” — {{detail}}",
+    "runFailedNoDetail": "open the step to see details",
     "alignLeft": "Align left edges",
     "alignHCenter": "Align horizontal centers",
     "alignRight": "Align right edges",

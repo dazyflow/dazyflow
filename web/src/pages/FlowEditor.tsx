@@ -1751,6 +1751,7 @@ function EditorInner() {
             // so the canvas can show a hover-peek on its ports (#10).
             if (ev.status === "succeeded" || ev.status === "failed") {
               const nodeID = ev.node_id;
+              const failed = ev.status === "failed";
               api
                 .getNodeRecord(token, runID, nodeID)
                 .then((r) => {
@@ -1758,9 +1759,33 @@ function EditorInner() {
                   if (out && Object.keys(out).length > 0) {
                     setRunOutputs((m) => ({ ...m, [nodeID]: out }));
                   }
+                  // A failed step otherwise only shows as a subtle red border
+                  // with the reason buried below the fold in the Inspector.
+                  // Raise it to a dismissible banner naming the step + the
+                  // user-facing message (not the developer `details`), so a
+                  // non-technical user knows the run didn't work and why.
+                  if (failed) {
+                    const label =
+                      rfRef.current?.getNode(nodeID)?.data?.label || nodeID;
+                    const detail =
+                      r.Result?.error?.message ||
+                      r.Result?.error?.code ||
+                      t("editor.runFailedNoDetail");
+                    setError(t("editor.runFailed", { label, detail }));
+                  }
                 })
                 .catch(() => {
                   /* 404 = node hasn't materialised yet; ignore */
+                  if (failed) {
+                    const label =
+                      rfRef.current?.getNode(nodeID)?.data?.label || nodeID;
+                    setError(
+                      t("editor.runFailed", {
+                        label,
+                        detail: t("editor.runFailedNoDetail"),
+                      }),
+                    );
+                  }
                 });
             }
             setStatusRefreshKey((k) => k + 1);

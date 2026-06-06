@@ -1,0 +1,24 @@
+{
+  "id": "daily-reminder-ntfy",
+  "version": "1",
+  "name": "Daily reminder to your phone",
+  "description": "Sends a notification to an ntfy topic every morning at 09:00. No accounts to connect — just pick a topic and subscribe to it in the ntfy app.",
+  "icon": "ntfy",
+  "triggers": [
+    { "type": "cron", "cron": "0 9 * * *" }
+  ],
+  "nodes": [
+    {
+      "id": "notify",
+      "module": "ntfy",
+      "params": {
+        "server": "https://ntfy.sh",
+        "topic": "my-daily-hello",
+        "message": "Hello! Your daily reminder.",
+        "title": "Daily reminder"
+      },
+      "position": { "x": 240, "y": 200 }
+    }
+  ],
+  "edges": []
+}

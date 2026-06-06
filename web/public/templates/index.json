@@ -23,6 +23,18 @@
       "graph_file": "/templates/gmail-new-email-to-slack.json"
     },
     {
+      "id": "daily-reminder-ntfy",
+      "title": "Daily reminder to your phone (ntfy)",
+      "use_case": "Get a notification pushed to your phone every morning — no accounts to connect, just subscribe to a topic in the free ntfy app.",
+      "category": "Get notified",
+      "description": "A daily cron trigger fires a single ntfy push to a topic you choose (default server: ntfy.sh). Change the topic and message, then subscribe to the same topic in the ntfy app to receive it. The simplest scheduled notification — zero external accounts.",
+      "icon": "ntfy",
+      "tags": ["ntfy", "daily", "reminder", "notification", "phone", "no-setup"],
+      "integrations": [],
+      "no_setup": true,
+      "graph_file": "/templates/daily-reminder-ntfy.json"
+    },
+    {
       "id": "daily-postgres-report",
       "title": "Daily numbers → Slack each morning",
       "use_case": "Post a short daily summary from your database to Slack every morning — e.g. 'Last 24h: 37 new orders'.",

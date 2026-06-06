@@ -28,7 +28,7 @@ func init() {
 			Icon:        "ntfy",
 			Color:       "#52bca6",
 			Provider:    "internal",
-			Tags:        []string{"ntfy", "push", "notify", "alert"},
+			Tags:        []string{"ntfy", "push", "notify", "notification", "alert", "phone", "reminder", "message", "ping"},
 			Examples: []core.ParamsExample{
 				{Title: "Alert to a topic", Params: json.RawMessage(`{"topic":"my-alerts","title":"Deploy done","message":"main is green","priority":"4","tags":["white_check_mark"]}`)},
 			},
@@ -54,7 +54,7 @@ func init() {
 					"topic":{"type":"string","description":"A name you pick for this notification channel. To receive the messages, subscribe to this same topic in the ntfy app or open ntfy.sh/<your-topic> in a browser.","examples":["my-daily-hello"]},
 					"message":{"type":"string","description":"The text to send. Optional if you connect a Message input from another step.","examples":["Hello"]},
 					"title":{"type":"string","description":"Notification title."},
-					"priority":{"type":"string","description":"1 (min) to 5 (max)."},
+					"priority":{"type":"string","enum":["1","2","3","4","5"],"enumNames":["1 — Min","2 — Low","3 — Default","4 — High","5 — Max"],"description":"How urgently it buzzes. Leave unset for the normal level."},
 					"tags":{"type":"array","items":{"type":"string"},"description":"Emoji/tag shortcodes."},
 					"click":{"type":"string","description":"URL opened when the notification is tapped."},
 					"token":{"type":"string","description":"Bearer token for protected topics."},
