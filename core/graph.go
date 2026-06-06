@@ -154,7 +154,7 @@ func (g Graph) EffectiveVisibility() Visibility {
 // GraphTrigger describes when the graph should fire automatically.
 // Currently three types are supported:
 //
-//	{"type": "cron",    "cron": "0 9 * * *"}              — daily 09:00 (workspace tz)
+//	{"type": "cron", "cron": "0 9 * * *", "tz": "Europe/Stockholm"}  — daily 09:00 in that zone
 //	{"type": "webhook", "secret": "<token>"}              — POST /trigger/<tenant>/<workspace>/<graph>
 //	{"type": "poll",    "interval_seconds": 300}          — fire every 5 minutes (interval-anchored)
 //
@@ -171,6 +171,15 @@ func (g Graph) EffectiveVisibility() Visibility {
 type GraphTrigger struct {
 	Type            string `json:"type"`                       // "cron", "webhook", or "poll"
 	Cron            string `json:"cron,omitempty"`             // for type=cron
+	// TZ is the IANA timezone (e.g. "Europe/Stockholm") the cron
+	// expression is interpreted in, for type=cron. It anchors the
+	// wall-clock fields to a real zone so "0 9 * * *" means 09:00 in
+	// the user's own timezone — and survives DST — rather than the
+	// daemon host's local time. The web UI stamps the editor's browser
+	// timezone here on every schedule edit, so a user only ever reasons
+	// about their own clock. Empty falls back to UTC (deterministic and
+	// host-independent), which is also what pre-tz graphs get.
+	TZ string `json:"tz,omitempty"`
 	Secret          string `json:"secret,omitempty"`           // for type=webhook (compared against Authorization header)
 	IntervalSeconds int    `json:"interval_seconds,omitempty"` // for type=poll; must be > 0
 	// PublicForm, on a webhook trigger, opts the graph into a hosted

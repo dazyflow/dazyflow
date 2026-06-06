@@ -27,6 +27,11 @@ export type Edge = {
 export type GraphTrigger = {
   type: string;
   cron?: string;
+  // tz is the IANA timezone (e.g. "Europe/Stockholm") a cron expression
+  // is interpreted in. The editor stamps the browser's timezone here so
+  // "every day at 09:00" fires at 09:00 on the user's own clock (and
+  // survives DST), independent of where the daemon runs. Empty = UTC.
+  tz?: string;
   secret?: string;
   // public_form opts a webhook trigger into a hosted intake form at
   // /form/<tenant>/<workspace>/<id> that visitors submit without any

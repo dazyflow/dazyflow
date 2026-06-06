@@ -272,6 +272,7 @@
       "cronExpression": "Cron expression",
       "cronNext": "Next:",
       "cronNextLocal": "Next fires (your time, {{tz}}):",
+      "scheduleTzNote": "Times are in your timezone ({{tz}}).",
       "cronHelp": "5-field cron: minute hour day-of-month month day-of-week. Example: <0> 0 9 * * 1-5</0> = 09:00 weekdays.",
       "scheduleLabel": "Schedule",
       "presetHourly": "Every hour",

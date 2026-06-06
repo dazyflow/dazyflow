@@ -60,6 +60,25 @@ type scheduledGraph struct {
 	interval   time.Duration // for poll triggers (zero when not used)
 }
 
+// parseCronInTZ parses a 5-field cron expression as evaluated in the
+// given IANA timezone, using robfig/cron's CRON_TZ= prefix so the
+// wall-clock fields anchor to a real zone (and track DST). An empty tz
+// defaults to UTC, which keeps firing deterministic regardless of the
+// daemon host's local time. A malformed tz surfaces as a parse error so
+// the caller can skip it (scheduler) or report it (validate endpoint),
+// rather than silently firing in the wrong zone. Used by BOTH the
+// scheduler and the validate endpoint so the preview a user sees and the
+// time the flow actually fires are computed identically.
+func parseCronInTZ(p cron.Parser, expr, tz string) (cron.Schedule, error) {
+	if tz == "" {
+		tz = "UTC"
+	}
+	if _, err := time.LoadLocation(tz); err != nil {
+		return nil, fmt.Errorf("bad timezone %q: %w", tz, err)
+	}
+	return p.Parse("CRON_TZ=" + tz + " " + expr)
+}
+
 // nextFireFrom returns the next time this entry should fire, given
 // the current time. Cron entries delegate to the cron parser; poll
 // entries add their interval to now (interval-anchored — see the
@@ -180,10 +199,10 @@ func (s *Scheduler) rescan(ctx context.Context) error {
 					if t.Cron == "" {
 						continue
 					}
-					sched, err := s.parser.Parse(t.Cron)
+					sched, err := parseCronInTZ(s.parser, t.Cron, t.TZ)
 					if err != nil {
-						s.logger.Printf("bad cron %q on %s/%s/%s: %v",
-							t.Cron, tenant, workspace, gid, err)
+						s.logger.Printf("bad cron %q (tz %q) on %s/%s/%s: %v",
+							t.Cron, t.TZ, tenant, workspace, gid, err)
 						continue
 					}
 					entry = &scheduledGraph{

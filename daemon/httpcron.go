@@ -25,6 +25,11 @@ const nextFiresPreview = 3
 
 type cronValidateRequest struct {
 	Expr string `json:"expr"`
+	// TZ is the IANA timezone the expression is interpreted in, so the
+	// preview matches the time the scheduler will actually fire (which
+	// reads the same field off the saved trigger). Empty defaults to UTC.
+	// The web editor sends its browser timezone here.
+	TZ string `json:"tz,omitempty"`
 }
 
 type cronValidateResponse struct {
@@ -54,7 +59,7 @@ func (h *HTTPGateway) validateCron(rw http.ResponseWriter, r *http.Request, _ co
 		})
 		return
 	}
-	sched, err := cronValidator.Parse(expr)
+	sched, err := parseCronInTZ(cronValidator, expr, body.TZ)
 	if err != nil {
 		writeJSON(rw, http.StatusOK, cronValidateResponse{
 			Valid: false,
@@ -62,10 +67,13 @@ func (h *HTTPGateway) validateCron(rw http.ResponseWriter, r *http.Request, _ co
 		})
 		return
 	}
-	// Compute the next N fire times anchored at "now". UTC keeps the
-	// preview deterministic regardless of where the daemon runs;
-	// the UI renders these to local time if it wants.
-	now := time.Now().UTC()
+	// Compute the next N fire times. The schedule already carries the
+	// requested timezone (via parseCronInTZ), so sched.Next anchors the
+	// wall-clock fields to that zone; we just need a current instant to
+	// start from. Returned as UTC instants — the UI renders them in the
+	// viewer's local clock, which for our own editor IS the timezone we
+	// evaluated in, so "every day at 09:00" previews as 09:00.
+	now := time.Now()
 	fires := make([]string, 0, nextFiresPreview)
 	t := now
 	for i := 0; i < nextFiresPreview; i++ {
@@ -73,7 +81,7 @@ func (h *HTTPGateway) validateCron(rw http.ResponseWriter, r *http.Request, _ co
 		if t.IsZero() {
 			break
 		}
-		fires = append(fires, t.Format(time.RFC3339))
+		fires = append(fires, t.UTC().Format(time.RFC3339))
 	}
 	writeJSON(rw, http.StatusOK, cronValidateResponse{
 		Valid:     true,

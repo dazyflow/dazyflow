@@ -92,8 +92,17 @@ export function TriggersModal({ graph, onClose, onSave }: Props) {
 
   const upsertWebhook = (patch: Partial<GraphTrigger>) =>
     upsert("webhook", () => ({ type: "webhook", secret: randomHex(16) }), patch);
+  // Cron triggers always carry the editor's browser timezone, stamped
+  // on every edit, so the user reasons purely in their own clock: the
+  // daemon interprets the expression in this zone (DST included) and the
+  // "next fires" preview is computed the same way. Re-stamping on each
+  // edit also upgrades legacy (pre-tz) triggers the moment they're touched.
   const upsertCron = (patch: Partial<GraphTrigger>) =>
-    upsert("cron", () => ({ type: "cron", cron: "0 9 * * *" }), patch);
+    upsert(
+      "cron",
+      () => ({ type: "cron", cron: "0 9 * * *", tz: browserTimeZone() }),
+      { tz: browserTimeZone(), ...patch },
+    );
 
   // Count any same-type extras so we can reassure the (rare) owner that
   // they're preserved, not silently dropped, by the singleton UI.
@@ -814,7 +823,10 @@ function useCronValidation(expr: string): CronValidation {
     setState({ kind: "checking" });
     const handle = setTimeout(async () => {
       try {
-        const res = await api.validateCron(token, trimmed);
+        // Validate in the viewer's own timezone — the same value stamped
+        // onto the saved trigger — so the previewed fire times are exactly
+        // what the scheduler will produce.
+        const res = await api.validateCron(token, trimmed, browserTimeZone());
         if (res.valid) {
           setState({ kind: "valid", nextFires: res.next_fires ?? [] });
         } else {
@@ -924,6 +936,16 @@ function TriggerScheduleField({
       </div>
 
       <SchedulePresetControls schedule={schedule} locale={locale} onChange={setSchedule} />
+
+      {/* Anchor the time to the user's own clock so a bare "at 09:00"
+          isn't read as UTC or the server's zone. Hidden for "hourly"
+          (no hour-of-day to anchor) and "custom" (whose own help line
+          covers it). */}
+      {schedule.kind !== "hourly" && schedule.kind !== "custom" && (
+        <div className="desc cron-tz-note">
+          {t("settings.triggers.scheduleTzNote", { tz })}
+        </div>
+      )}
 
       {validation.kind === "invalid" && (
         <div

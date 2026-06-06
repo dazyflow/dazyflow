@@ -396,13 +396,15 @@ export const api = {
   // using the SAME parser the scheduler uses, and returns the next
   // few fire times when it's valid. UI uses this to surface "bad
   // cron silently never fires" issues at save-time instead of after
-  // the user wonders why nothing ran.
-  validateCron: (token: string, expr: string) =>
+  // the user wonders why nothing ran. tz (an IANA name) anchors the
+  // expression to a real zone so the previewed fire times match when
+  // the flow actually fires — pass the viewer's browser timezone.
+  validateCron: (token: string, expr: string, tz?: string) =>
     request<{ valid: boolean; error?: string; next_fires?: string[] }>(
       token,
       "POST",
       "/validate/cron",
-      { expr },
+      { expr, tz },
     ),
   // sampleNode fires a partial run that ends at nodeID — the daemon
   // strips every node and edge outside nodeID's upstream chain before

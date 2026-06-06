@@ -272,6 +272,7 @@
       "cronExpression": "Cron-uttryck",
       "cronNext": "Nästa:",
       "cronNextLocal": "Nästa körningar (din tid, {{tz}}):",
+      "scheduleTzNote": "Tiderna gäller din tidszon ({{tz}}).",
       "cronHelp": "Cron med 5 fält: minut timme dag-i-månaden månad veckodag. Exempel: <0> 0 9 * * 1-5</0> = 09:00 på vardagar.",
       "scheduleLabel": "Schema",
       "presetHourly": "Varje timme",
