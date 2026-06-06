@@ -2578,6 +2578,12 @@ button.danger-outline:hover:not(:disabled) {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  /* Query container for the toolbar's label-collapse (see below). The
+     toolbar must respond to its OWN width, not the viewport's — opening
+     the Inspector steals ~320px from the canvas, so a 1366px viewport can
+     leave the toolbar ~800px wide while a viewport media query still
+     thinks it's roomy and keeps every label, overflowing into overlap. */
+  container: editor-canvas / inline-size;
 }
 /* ReactFlow's outer div is a direct child of .canvas; tell it to fill
    the space below the toolbar. */
@@ -5506,11 +5512,17 @@ button.danger-outline:hover:not(:disabled) {
   padding: 0;
   justify-content: center;
 }
-/* Small-screen toolbar: drop the text labels, the Ctrl+K hint, and the
+/* Tight toolbar: drop the text labels, the Ctrl+K hint, and the
    run-history switcher, collapsing secondary actions to square icon
    buttons. The primary action keeps its label — it's the focal point
-   and conveys run state. */
-@media (max-width: 768px) {
+   and conveys run state. Keyed on the canvas container's own width (see
+   `container: editor-canvas` on .editor .canvas) so it triggers whenever
+   the *toolbar* is short — including when the Inspector pane is open —
+   rather than only on a narrow viewport. The threshold sits above the
+   full-label content width (~900px with a node selected, when Breakpoint
+   + "N to configure" are also present) so labels collapse before they can
+   overlap. */
+@container editor-canvas (max-width: 960px) {
   .editor-toolbar .toolbar-label,
   .editor-toolbar .toolbar-run-history {
     display: none;

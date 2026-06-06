@@ -1915,6 +1915,19 @@ function EditorInner() {
 
   const runWithLiveStatus = async () => {
     if (!token || !me || !id) return;
+    // Hard-block a run that's missing a required value (e.g. ntfy with no
+    // topic). These guarantee a mid-run failure, so naming the field up
+    // front beats a cryptic daemon error. Unlike the connection gate there
+    // is no "Run anyway" — a required value really is required. Select the
+    // offending step so the Inspector opens on the field to fix.
+    if (configErrorsByNode.size > 0) {
+      const [nodeID, msgs] = [...configErrorsByNode.entries()][0];
+      const node = nodes.find((n) => n.id === nodeID);
+      const label = node?.data.label || node?.data.moduleID || nodeID;
+      setSelectedID(nodeID);
+      setError(t("editor.configBlock", { label, detail: msgs[0] }));
+      return;
+    }
     // Warn before a run that's missing a connected account or a
     // credential the graph needs — clearer than letting the daemon fail
     // mid-run with a "no token" / "secret not found" error. The modal
@@ -2048,10 +2061,29 @@ function EditorInner() {
               <button
                 className="ghost"
                 onClick={() => setTriggersOpen(true)}
-                title={t("editor.triggersTitle")}
+                title={
+                  triggers.length > 0
+                    ? t("editor.triggersActiveTitle")
+                    : t("editor.triggersTitle")
+                }
               >
                 <Zap size={15} />
                 <span className="toolbar-label">{t("editor.triggers")}</span>
+                {/* A dot signals the flow has a way to start on its own
+                    (schedule/form/webhook) — otherwise nothing on the canvas
+                    shows that a trigger is attached. */}
+                {triggers.length > 0 && (
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      width: 7,
+                      height: 7,
+                      borderRadius: "50%",
+                      background: "var(--success, #34d399)",
+                      marginLeft: 2,
+                    }}
+                  />
+                )}
               </button>
             )}
             <button
@@ -2428,6 +2460,43 @@ function EditorInner() {
             }}
           />
         </ReactFlow>
+        {/* A fresh flow is an empty black canvas with no hint of what to do.
+            Point first-timers straight at "Add step". Hidden once the palette
+            is open or any node exists. pointer-events:none lets clicks fall
+            through to the canvas except on the button itself. */}
+        {nodes.length === 0 && !paletteOpen && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              top: 48,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 10,
+              pointerEvents: "none",
+              textAlign: "center",
+              color: "var(--faint)",
+            }}
+          >
+            <Plus size={28} aria-hidden="true" />
+            <div style={{ fontWeight: 600, color: "var(--text)" }}>
+              {t("editor.emptyTitle")}
+            </div>
+            <div style={{ maxWidth: 320, fontSize: 13 }}>
+              {t("editor.emptyBody")}
+            </div>
+            <button
+              className="primary"
+              style={{ pointerEvents: "auto", marginTop: 4 }}
+              onClick={() => setPaletteOpen(true)}
+            >
+              <Plus size={15} />
+              <span>{t("editor.addDrop")}</span>
+            </button>
+          </div>
+        )}
         {error && (
           <div
             role="alert"

@@ -134,7 +134,19 @@ export function QuickDropPalette({ drops, onClose, onPick }: Props) {
   const matches = useMemo<Match[]>(() => {
     const q = query.trim();
     if (!q) {
+      // Default ordering leads with the user-facing connectors (Slack, ntfy,
+      // Gmail, …) and pushes the bare stdlib primitives down — with the raw
+      // comparison operators (A < B, A = B, …) dead last. Without this the
+      // alphabetised list opens on those operators, which reads as cryptic
+      // jargon to anyone who isn't a developer.
+      const tier = (d: Manifest) => {
+        if (!d.integration) return d.category === "logic" ? 3 : 2;
+        return 1; // a real connector
+      };
       const sorted = [...drops].sort((a, b) => {
+        const ta = tier(a);
+        const tb = tier(b);
+        if (ta !== tb) return ta - tb;
         const ai = a.integration ?? "~";
         const bi = b.integration ?? "~";
         if (ai !== bi) return ai.localeCompare(bi);
@@ -351,7 +363,8 @@ function QuickRow({
               <Box size={10} aria-hidden="true" /> stdlib
             </span>
           )}
-          <span className="quick-palette-row-id">{drop.id}</span>
+          {/* The raw module id (e.g. "lt", "eq") is developer jargon; the
+              human label above already identifies the step. */}
         </div>
       </div>
       {drop.category && (
