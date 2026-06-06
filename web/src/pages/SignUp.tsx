@@ -30,7 +30,10 @@ export function SignUp() {
   const [localErr, setLocalErr] = useState<string | null>(null);
   // signupAllowed starts as null = "still probing"; once the public
   // config endpoint resolves, false means the deployment is
-  // invite-only and we bounce back to /signin.
+  // invite-only and we bounce back to /signin. The page also stays
+  // open when admin_bootstrap is set: signup is disabled deployment-
+  // wide, but a platform-admin email can still claim its first account
+  // here (the server enforces the allowlist — see httpsignup.go).
   const [signupAllowed, setSignupAllowed] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -38,7 +41,7 @@ export function SignUp() {
     api
       .getPublicAuthConfig()
       .then((r) => {
-        if (!cancelled) setSignupAllowed(!!r.signup_enabled);
+        if (!cancelled) setSignupAllowed(!!r.signup_enabled || !!r.admin_bootstrap);
       })
       .catch(() => {
         if (!cancelled) setSignupAllowed(false);

@@ -920,6 +920,35 @@ func (h *HTTPGateway) isPlatformAdminEmail(email string) bool {
 	return false
 }
 
+// adminBootstrapAvailable reports whether at least one platform-admin
+// email in the allowlist has not yet claimed an account. It's the
+// signal the sign-up page uses to keep itself reachable on a
+// signup-disabled deployment: the backend already lets a listed email
+// through signUp (see httpsignup.go), but the page would otherwise
+// bounce to /signin because EnableSignup is false, leaving the
+// bootstrap hatch with no door. The check is self-limiting in lockstep
+// with that hatch — once every listed admin has signed up, GetByEmail
+// finds them all and this returns false, so the form disappears again
+// and a locked-down instance doesn't expose public signup forever.
+//
+// Unauthenticated callers reach this via getPublicAuthConfig; it leaks
+// only a single boolean, never which emails are listed. The allowlist
+// is tiny (typically 1-3), so the per-email lookups are cheap.
+func (h *HTTPGateway) adminBootstrapAvailable(ctx context.Context) bool {
+	if h.Users == nil || len(h.PlatformAdmins) == 0 {
+		return false
+	}
+	for _, email := range h.PlatformAdmins {
+		// Mirror signUp's existence test: a non-nil error or an empty
+		// email both mean "not claimed yet". Any unclaimed admin keeps
+		// the bootstrap door open.
+		if u, err := h.Users.GetByEmail(ctx, email); err != nil || u.Email == "" {
+			return true
+		}
+	}
+	return false
+}
+
 // signOut deletes the server-side session and clears the cookie. It
 // silently no-ops when no session is attached so the browser can hit
 // this on logout without inspecting state first.

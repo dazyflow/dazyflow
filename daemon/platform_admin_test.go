@@ -145,3 +145,56 @@ func TestSignup_AllowlistBypassesDisabledSignup(t *testing.T) {
 		}
 	})
 }
+
+// TestPublicAuthConfig_AdminBootstrap proves the sign-up page can find
+// the bootstrap door: GET /api/v1/auth/config reports admin_bootstrap
+// true while a listed platform-admin email is unclaimed (even though
+// signup_enabled is false), and flips to false once that email has an
+// account. The SignUp page keys off this flag to render instead of
+// bouncing to /signin, so the allowlist bypass in signUp is reachable.
+func TestPublicAuthConfig_AdminBootstrap(t *testing.T) {
+	h := newSignupHarness(t)
+	h.gw.EnableSignup = false // signup closed for the world
+	h.gw.PlatformAdmins = []string{"boss@example.com"}
+
+	bootstrapFlag := func() bool {
+		rw := rawDo(t, h, "GET", "/api/v1/auth/config", nil)
+		if rw.Code != http.StatusOK {
+			t.Fatalf("config status=%d body=%s", rw.Code, rw.Body.String())
+		}
+		var resp struct {
+			SignupEnabled  bool `json:"signup_enabled"`
+			AdminBootstrap bool `json:"admin_bootstrap"`
+		}
+		if err := json.Unmarshal(rw.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if resp.SignupEnabled {
+			t.Fatal("signup_enabled should be false in this harness")
+		}
+		return resp.AdminBootstrap
+	}
+
+	t.Run("open while the admin email is unclaimed", func(t *testing.T) {
+		if !bootstrapFlag() {
+			t.Error("admin_bootstrap should be true: a listed admin has no account yet")
+		}
+	})
+
+	t.Run("closes once the admin has signed up", func(t *testing.T) {
+		rw := rawDo(t, h, "POST", "/api/v1/auth/signup", signupBody("boss@example.com", "supersecret"))
+		if rw.Code != http.StatusCreated {
+			t.Fatalf("bootstrap signup status=%d body=%s", rw.Code, rw.Body.String())
+		}
+		if bootstrapFlag() {
+			t.Error("admin_bootstrap should be false: every listed admin is now claimed")
+		}
+	})
+
+	t.Run("stays closed with no allowlist", func(t *testing.T) {
+		h.gw.PlatformAdmins = nil
+		if bootstrapFlag() {
+			t.Error("admin_bootstrap must be false when no platform admins are configured")
+		}
+	})
+}

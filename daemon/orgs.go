@@ -590,9 +590,15 @@ func (h *HTTPGateway) deleteOrgAuthConfig(rw http.ResponseWriter, _ *http.Reques
 // sign-in page needs to render correctly (currently just whether
 // self-serve signup is enabled). Unauthenticated — the response holds
 // no secrets, just feature flags.
-func (h *HTTPGateway) getPublicAuthConfig(rw http.ResponseWriter, _ *http.Request) {
+func (h *HTTPGateway) getPublicAuthConfig(rw http.ResponseWriter, r *http.Request) {
 	writeJSON(rw, http.StatusOK, map[string]any{
 		"signup_enabled": h.EnableSignup,
+		// admin_bootstrap keeps the sign-up page reachable on a
+		// signup-disabled deployment while a platform-admin email is
+		// still unclaimed, so the first super-admin can bootstrap
+		// without flipping EnableSignup on. It self-clears once every
+		// listed admin has an account. See adminBootstrapAvailable.
+		"admin_bootstrap": h.adminBootstrapAvailable(r.Context()),
 		// wildcard_domain, when set, lets the sign-in page derive the
 		// target org from a "<org>.<domain>" host so a visit to
 		// acme.hazyflow.app preselects org=acme. Empty = feature off.
