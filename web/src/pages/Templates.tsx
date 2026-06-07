@@ -8,6 +8,7 @@ import {
   displayNameForIntegrationSlug,
   oauthProviderForIntegration,
 } from "../integrationMeta";
+import { browserTimeZone } from "../components/TriggersModal";
 import type { Graph, OAuthProviderStatus, TemplateSummary } from "../types";
 
 // Templates is the gallery page: lists pre-built workflows the user
@@ -108,6 +109,17 @@ export function Templates() {
         // owner intentionally left blank — the daemon stamps the
         // caller as owner on first save.
         owner: "",
+        // Stamp the forker's time zone onto Schedule (cron_trigger) nodes that
+        // ship without one. Templates are zone-neutral (a shared "0 9 * * *"
+        // means 9am wherever you are), so the fork is where it gets personalised
+        // — otherwise both the schedule and its fired_at would run in UTC.
+        nodes: (tplGraph.nodes ?? []).map((n) => {
+          const tz = (n.params as { tz?: unknown } | undefined)?.tz;
+          if (n.module === "cron_trigger" && !(typeof tz === "string" && tz.trim())) {
+            return { ...n, params: { ...(n.params ?? {}), tz: browserTimeZone() } };
+          }
+          return n;
+        }),
       };
       await api.saveGraph(token, cloned);
       navigate(`/flows/${encodeURIComponent(newID)}`);

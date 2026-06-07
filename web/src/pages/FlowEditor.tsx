@@ -167,6 +167,27 @@ function sampleValueFor(field: string): string {
   return `Sample ${field}`;
 }
 
+// stampScheduleTimezones fills a missing/blank tz on Schedule (cron_trigger)
+// nodes with the viewer's browser zone, returning the node list and whether
+// anything changed. Templates and older flows ship only `cron`; without a zone
+// both the schedule and its fired_at run in UTC. The editor stamps the zone on
+// add/edit, but a forked or pre-existing flow never went through that — so we
+// heal it once on load (and persist, since a Run executes the SAVED graph).
+function stampScheduleTimezones(
+  nodes: Graph["nodes"],
+): { nodes: Graph["nodes"]; changed: boolean } {
+  let changed = false;
+  const out = (nodes ?? []).map((n) => {
+    const tz = (n.params as { tz?: unknown } | undefined)?.tz;
+    if (n.module === "cron_trigger" && !(typeof tz === "string" && tz.trim())) {
+      changed = true;
+      return { ...n, params: { ...(n.params ?? {}), tz: browserTimeZone() } };
+    }
+    return n;
+  });
+  return { nodes: out, changed };
+}
+
 function EditorInner() {
   const { t } = useTranslation();
   const {
@@ -423,7 +444,16 @@ function EditorInner() {
       .loadGraph(token, activeTenant, activeWorkspace, id)
       .then((g) => {
         if (cancelled) return;
-        hydrateGraph(g);
+        // Heal a Schedule node that never got a time zone (template fork or a
+        // flow saved before tz stamping): stamp the viewer's zone and persist
+        // it. Persisting matters because Run executes the SAVED graph by id —
+        // an in-memory-only fix would never reach the run or the scheduler.
+        const { nodes, changed } = stampScheduleTimezones(g.nodes);
+        const migrated = changed ? { ...g, nodes } : g;
+        hydrateGraph(migrated);
+        if (changed && hasPerm("graph:edit")) {
+          api.saveGraph(token, migrated, true).catch(() => {});
+        }
       })
       .catch((e) => {
         if (cancelled) return;
@@ -447,7 +477,7 @@ function EditorInner() {
     return () => {
       cancelled = true;
     };
-  }, [token, me, id, activeTenant, activeWorkspace, hydrateGraph]);
+  }, [token, me, id, activeTenant, activeWorkspace, hydrateGraph, hasPerm]);
 
   // A fresh flow gets a fresh shot at showing the connections banner.
   useEffect(() => {
