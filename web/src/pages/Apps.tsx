@@ -45,7 +45,7 @@ export function Apps() {
         setError(msg);
       });
     api
-      .listSecrets(token)
+      .listSecrets(token, undefined, undefined, true)
       .then((r) => setSecrets(r.secrets))
       .catch(() => setSecrets([]));
     api
@@ -391,7 +391,7 @@ function IntegrationConnections({
     if (!token) return;
     if (needsSecret) {
       api
-        .listSecrets(token)
+        .listSecrets(token, undefined, undefined, true)
         .then((r) => {
           setSecrets(r.secrets);
           setSecretsOff(false);

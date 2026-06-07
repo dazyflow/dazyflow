@@ -22,6 +22,13 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	// Embed the IANA timezone database in the binary. The runtime image is
+	// alpine without tzdata (a scratch/distroless image would have none
+	// either), so without this time.LoadLocation fails and every tz-aware
+	// schedule — the scheduler (scheduler.go), the cron "next fires" preview,
+	// and a Schedule node's fired_at — silently falls back to UTC. Embedding
+	// makes LoadLocation work on any base image at ~450KB of binary.
+	_ "time/tzdata"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc"

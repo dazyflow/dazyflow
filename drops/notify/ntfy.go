@@ -47,17 +47,22 @@ func init() {
 			Outputs: []core.Port{
 				{Port: "meta", Label: "Delivery metadata", MIME: []string{"application/json"}},
 			},
+			// server + token are NOT params: they're the per-tenant connection
+			// (ConnectionFields above), injected into unset params at run time
+			// by injectConnectionDefaults. Declaring them here too would render
+			// confusing always-on node fields AND let a node value shadow the
+			// tenant connection (paramFilled skips injection) — and put a raw
+			// bearer token in the graph in plaintext. Flows carry only the
+			// per-notification fields.
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"server":{"type":"string","default":"https://ntfy.sh","description":"ntfy server base URL."},
 					"topic":{"type":"string","description":"A name you pick for this notification channel — letters, numbers, dashes or underscores, no spaces. To receive the messages, subscribe to this same topic in the ntfy app or open ntfy.sh/<your-topic> in a browser.","examples":["my-daily-hello"]},
 					"message":{"type":"string","description":"The text to send. Optional if you connect a Message input from another step.","examples":["Hello"]},
 					"title":{"type":"string","description":"Notification title."},
 					"priority":{"type":"string","enum":["1","2","3","4","5"],"enumNames":["1 — Min","2 — Low","3 — Default","4 — High","5 — Max"],"description":"How urgently it buzzes. Leave unset for the normal level."},
 					"tags":{"type":"array","items":{"type":"string"},"description":"Emoji/tag shortcodes."},
 					"click":{"type":"string","description":"URL opened when the notification is tapped."},
-					"token":{"type":"string","description":"Bearer token for protected topics."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
 				},
 				"required":["topic"]

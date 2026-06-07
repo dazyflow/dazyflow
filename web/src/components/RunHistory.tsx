@@ -5,6 +5,7 @@ import i18n from "../i18n";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import type { RunSummary, JobStatus } from "../types";
+import { absoluteTime } from "../lib/datetime";
 
 // RunHistory shows the current run (status dot + short ID) and opens a
 // dropdown listing recent runs on click. Picking one calls onSelect,
@@ -209,7 +210,7 @@ export function RunHistory({
                 </span>
                 <span
                   style={{ fontSize: 11, color: "var(--faint)" }}
-                  title={r.enqueued_at}
+                  title={absoluteTime(r.enqueued_at)}
                 >
                   {formatTime(r.enqueued_at)}
                   {r.finished_at && r.started_at && (

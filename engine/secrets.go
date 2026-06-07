@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -24,11 +25,22 @@ func scopeCtx(ctx context.Context, graph core.Graph) context.Context {
 // Secret fields are injected as ${secret.conn...} references so the
 // normal resolver substitutes and redacts them; plain fields are
 // injected as their literal value (so e.g. an ntfy server URL still
-// shows in node output). Params the author already set, and fields the
-// tenant hasn't configured, are left untouched — so a drop's own
-// default (e.g. ntfy.sh) still applies. Called immediately before
-// resolveTemplatesCollecting so injected references resolve in the same
-// pass.
+// shows in node output). Fields the tenant hasn't configured are left
+// untouched — so a drop's own default (e.g. ntfy.sh) still applies.
+//
+// Whether a configured connection may be overridden by a node param
+// depends on whether the field is also a declared param:
+//   - Declared param (e.g. claude's advanced api_key): the author may
+//     override per-node, so an already-set param wins — fill only when unset.
+//   - Not a declared param (e.g. ntfy server/token, which live solely on
+//     the connection): a configured connection is authoritative and
+//     overrides any value left in the graph. This matters because a stale
+//     value baked into a graph (an old template fork, or a param that used
+//     to be in the schema) is no longer editable in the UI, so without the
+//     override it would silently shadow the tenant's connection forever.
+//
+// Called immediately before resolveTemplatesCollecting so injected
+// references resolve in the same pass.
 func injectConnectionDefaults(ctx context.Context, providers map[string]core.SecretProvider, m core.Manifest, job *core.Job) {
 	if len(m.ConnectionFields) == 0 {
 		return
@@ -37,8 +49,12 @@ func injectConnectionDefaults(ctx context.Context, providers map[string]core.Sec
 	if tp == nil {
 		return
 	}
+	declared := declaredParamKeys(m.ParamsSchema)
 	for _, f := range m.ConnectionFields {
-		if paramFilled(job.Params, f.Key) {
+		// A declared param the author already set is an intentional per-node
+		// override — leave it. A non-declared connection field is a pure
+		// connection setting, so the connection always wins (below).
+		if declared[f.Key] && paramFilled(job.Params, f.Key) {
 			continue
 		}
 		key := core.ConnectionSecretKey(m.Integration, f.Key)
@@ -55,6 +71,28 @@ func injectConnectionDefaults(ctx context.Context, providers map[string]core.Sec
 			job.Params[f.Key] = val
 		}
 	}
+}
+
+// declaredParamKeys returns the property names declared in a manifest's
+// ParamsSchema. It tells a real, author-settable param apart from a
+// connection field that isn't a param at all — see injectConnectionDefaults.
+// A malformed or absent schema yields no keys (every connection field is then
+// treated as connection-authoritative, the safe default).
+func declaredParamKeys(schema json.RawMessage) map[string]bool {
+	if len(schema) == 0 {
+		return nil
+	}
+	var s struct {
+		Properties map[string]json.RawMessage `json:"properties"`
+	}
+	if err := json.Unmarshal(schema, &s); err != nil {
+		return nil
+	}
+	out := make(map[string]bool, len(s.Properties))
+	for k := range s.Properties {
+		out[k] = true
+	}
+	return out
 }
 
 // paramFilled reports whether a param is already set to a non-empty

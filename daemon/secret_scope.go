@@ -26,6 +26,7 @@ const (
 	ScopeFlow   SecretScope = "flow"
 
 	secretFlowPrefix = "flow."
+	secretConnPrefix = "conn."
 )
 
 // scopedSecretName maps (scope, flow, name) to the storage name. Organization
@@ -49,9 +50,28 @@ func scopedSecretName(scope SecretScope, flow, name string) (string, error) {
 // than a user's organization secret. The organization listing hides these.
 func isReservedSecretName(name string) bool {
 	return strings.HasPrefix(name, secretFlowPrefix) ||
-		strings.HasPrefix(name, "conn.") ||
+		strings.HasPrefix(name, secretConnPrefix) ||
 		strings.HasPrefix(name, "oauth.") ||
 		strings.HasPrefix(name, "cfg:")
+}
+
+// ListConnectionNames returns the connection secret names (the
+// conn.<slug>.<key> namespace) for a tenant, with the conn. prefix intact.
+// ListScoped hides these from the organization listing so the Credentials page
+// stays clean, but the Apps page needs them to tell which integrations are
+// connected — see the ?include=conn path in listSecrets.
+func (e *EncryptedSecrets) ListConnectionNames(ctx context.Context, tenant string) ([]string, error) {
+	all, err := e.List(ctx, tenant)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0)
+	for _, n := range all {
+		if strings.HasPrefix(n, secretConnPrefix) {
+			out = append(out, n)
+		}
+	}
+	return out, nil
 }
 
 // There is exactly one secret reference scheme — "secret" — implemented by

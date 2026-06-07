@@ -6,6 +6,7 @@ import i18n from "../i18n";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
 import { shouldShowTenantID } from "../lib/visibleTenant";
+import { absoluteTime } from "../lib/datetime";
 import type { PendingApproval } from "../types";
 
 // Approvals is the inbox for await_approval nodes parked across the
@@ -160,7 +161,7 @@ export function Approvals() {
                       {item.graph_id}
                     </Link>
                     <span>·</span>
-                    <span title={item.since}>{formatTime(item.since)}</span>
+                    <span title={absoluteTime(item.since)}>{formatTime(item.since)}</span>
                     <span>·</span>
                     <span style={{ fontFamily: "var(--font-mono)" }}>
                       {item.node_id}

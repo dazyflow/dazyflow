@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 
@@ -75,6 +76,45 @@ func TestHTTPSecrets_ValueNotInListResponse(t *testing.T) {
 	rw := h.do(t, "GET", "/api/v1/secrets", nil)
 	if strings.Contains(rw.Body.String(), "super-secret-value-12345") {
 		t.Errorf("LIST response leaked secret value: %s", rw.Body.String())
+	}
+}
+
+func TestHTTPSecrets_IncludeConn(t *testing.T) {
+	// The org listing hides the conn.<slug>.<key> namespace so the
+	// Credentials page stays clean, but ?include=conn opts it back in so
+	// the Apps page can tell which integrations are connected. Regression
+	// for the "Connect button clears with no effect" bug: the secret saved
+	// fine but was invisible to the page checking connection state.
+	h := newSecretsHarness(t)
+	h.do(t, "PUT", "/api/v1/secrets/regular_key", json.RawMessage(putBody("v1")))
+	h.do(t, "PUT", "/api/v1/secrets/conn.ntfy.server", json.RawMessage(putBody("https://ntfy.sh")))
+
+	list := func(path string) []string {
+		rw := h.do(t, "GET", path, nil)
+		if rw.Code != http.StatusOK {
+			t.Fatalf("GET %s status=%d body=%s", path, rw.Code, rw.Body.String())
+		}
+		var resp struct {
+			Secrets []string `json:"secrets"`
+		}
+		_ = json.Unmarshal(rw.Body.Bytes(), &resp)
+		return resp.Secrets
+	}
+
+	plain := list("/api/v1/secrets")
+	if slices.Contains(plain, "conn.ntfy.server") {
+		t.Errorf("default listing must hide conn.* names; got %v", plain)
+	}
+	if !slices.Contains(plain, "regular_key") {
+		t.Errorf("default listing must include normal secrets; got %v", plain)
+	}
+
+	withConn := list("/api/v1/secrets?include=conn")
+	if !slices.Contains(withConn, "conn.ntfy.server") {
+		t.Errorf("include=conn must surface conn.* names; got %v", withConn)
+	}
+	if !slices.Contains(withConn, "regular_key") {
+		t.Errorf("include=conn must still include normal secrets; got %v", withConn)
 	}
 }
 

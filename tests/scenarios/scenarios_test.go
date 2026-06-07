@@ -20,12 +20,16 @@ import (
 
 // combinedManifests is the full shipped catalog the app exposes. Every drop —
 // including the gmail/slack/sheets/… connectors — is now a native Go drop, so
-// the catalog is just the native registry.
+// the catalog is just the native registry. WithPassthrough is applied to each
+// manifest exactly as the engine's resolver does at run time (resolver.go), so
+// the universal `pass` pin is part of the validated surface — otherwise a graph
+// that legitimately wires through a pass pin (e.g. a trigger sequencing a
+// downstream step) would be falsely flagged as referencing a missing port.
 func combinedManifests(t *testing.T) map[string]core.Manifest {
 	t.Helper()
 	out := map[string]core.Manifest{}
 	for id, m := range engine.Default.Manifests() {
-		out[id] = m
+		out[id] = core.WithPassthrough(m)
 	}
 	return out
 }

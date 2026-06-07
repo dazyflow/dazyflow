@@ -711,9 +711,19 @@ export const api = {
   // listSecrets returns the NAMES of the stored credentials at a scope —
   // never the values (the daemon has no read-back endpoint by design).
   // Scope defaults to tenant; workspace uses the caller's workspace; flow
-  // requires the flow (graph) id.
-  listSecrets: (token: string, scope?: SecretScope, flow?: string) =>
-    request<{ secrets: string[] }>(token, "GET", "/secrets" + secretQuery(scope, flow)),
+  // requires the flow (graph) id. includeConnections opts the conn.<slug>.*
+  // namespace back into the tenant listing — the Apps page needs it to detect
+  // which integrations are connected; the Credentials page omits it to stay clean.
+  listSecrets: (
+    token: string,
+    scope?: SecretScope,
+    flow?: string,
+    includeConnections?: boolean,
+  ) => {
+    let q = secretQuery(scope, flow);
+    if (includeConnections) q += (q ? "&" : "?") + "include=conn";
+    return request<{ secrets: string[] }>(token, "GET", "/secrets" + q);
+  },
   // putSecret creates or replaces a credential at a scope. Idempotent; 204
   // on success. Value is write-only from here on.
   putSecret: (token: string, name: string, value: string, scope?: SecretScope, flow?: string) =>

@@ -212,11 +212,12 @@ export function HazyNode({ data, selected }: NodeProps) {
       {d.breakpoint && (
         <div className="hz-node-bp" aria-label="breakpoint" title="Breakpoint — run pauses after this node" />
       )}
-      {/* No declared inputs (triggers): a single centered dot on the left
-          edge, no label. Value sources (Text, Number) are input-less too but
-          emit a literal — they get NO input connector, just their value
-          field and an output pin. */}
-      {!hasDeclaredInputs && !isValueSource && (
+      {/* No declared inputs: a single centered dot on the left edge, no label.
+          Two kinds of input-less node get NO connector at all: value sources
+          (Text, Number), which emit a literal you can't wire into, and
+          triggers, which are the graph's entry points — nothing runs upstream
+          of them, so an input pin is meaningless. */}
+      {!hasDeclaredInputs && !isValueSource && !isTrigger && (
         <Handle
           type="target"
           position={Position.Left}

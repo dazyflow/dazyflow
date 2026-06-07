@@ -2880,7 +2880,11 @@ button.danger-outline:hover:not(:disabled) {
     var(--shadow);
 }
 .hz-node.hz-node-trigger .label {
-  color: #fff;
+  /* Theme-aware ink, not hardcoded white: the card surface mixes the accent
+     with --surface, so it's dark purple in dark mode (near-white ink reads)
+     but pale purple in light mode (near-black ink reads). #fff was invisible
+     on the light card. */
+  color: var(--ink);
   font-weight: 650;
 }
 /* Compact "operator chip" for logic primitives (==, >, <, …): a small

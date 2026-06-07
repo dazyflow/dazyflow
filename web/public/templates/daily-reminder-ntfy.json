@@ -17,7 +17,6 @@
       "id": "notify",
       "module": "ntfy",
       "params": {
-        "server": "https://ntfy.sh",
         "topic": "my-daily-hello",
         "message": "Hello! Your daily reminder.",
         "title": "Daily reminder"
@@ -25,5 +24,7 @@
       "position": { "x": 560, "y": 200 }
     }
   ],
-  "edges": []
+  "edges": [
+    {"from": "schedule", "from_port": "fired_at", "to": "notify", "to_port": "pass", "on_error": ""}
+  ]
 }

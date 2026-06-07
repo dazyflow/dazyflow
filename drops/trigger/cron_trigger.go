@@ -3,6 +3,7 @@ package trigger
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"git.sr.ht/~klahr/hazyflow/core"
@@ -77,11 +78,25 @@ func init() {
 // behaves identically whether the scheduler or a user fired it, which is
 // the natural mental model for "test this scheduled workflow now."
 func executeCronTrigger(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
+	// Stamp the fire moment in the schedule's OWN time zone (the tz set on
+	// this node — the editor auto-stamps the author's browser zone), so
+	// reading fired_at downstream shows the wall-clock time the schedule
+	// fired at (e.g. 09:00+02:00), not a UTC value the author has to convert
+	// in their head. Empty/invalid tz falls back to UTC, matching how the
+	// scheduler interprets a zone-less schedule. Still RFC3339 — just with an
+	// offset instead of "Z" — so downstream time parsing is unaffected.
+	// (poll_trigger stays UTC: it has no zone and its tests pin that.)
+	now := time.Now().UTC()
+	if tz, _ := job.Params["tz"].(string); strings.TrimSpace(tz) != "" {
+		if loc, err := time.LoadLocation(strings.TrimSpace(tz)); err == nil {
+			now = now.In(loc)
+		}
+	}
 	return core.Result{
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
-			"fired_at": {MIME: "text/plain", Inline: time.Now().UTC().Format(time.RFC3339)},
+			"fired_at": {MIME: "text/plain", Inline: now.Format(time.RFC3339)},
 		},
 	}, nil
 }

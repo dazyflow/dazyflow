@@ -171,6 +171,19 @@ func (h *HTTPGateway) listSecrets(rw http.ResponseWriter, r *http.Request, p cor
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("list secrets: %v", err))
 		return
 	}
+	// The Apps page detects which integrations are connected by checking
+	// for conn.<slug>.<key> names, which ListScoped hides from the org
+	// listing. ?include=conn opts those back in (full names retained) so
+	// connection state is visible without exposing them on the Credentials
+	// page, which doesn't pass the flag.
+	if scope == ScopeTenant && r.URL.Query().Get("include") == "conn" {
+		conns, err := h.EncryptedSecrets.ListConnectionNames(r.Context(), p.Tenant)
+		if err != nil {
+			writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("list connections: %v", err))
+			return
+		}
+		names = append(names, conns...)
+	}
 	if names == nil {
 		names = []string{}
 	}
