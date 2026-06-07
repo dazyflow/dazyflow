@@ -375,6 +375,23 @@ export const api = {
       "POST",
       `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/run`,
     ),
+  // setFlowEnabled pauses (enabled=false) or resumes a flow without deleting
+  // it — the scheduler skips disabled flows and webhook/form endpoints reject
+  // them, but manual Run still works. Idempotent; commits the flipped state.
+  setFlowEnabled: (
+    token: string,
+    tenant: string,
+    workspace: string,
+    id: string,
+    enabled: boolean,
+  ) =>
+    request<{ flow_id: string; enabled: boolean; commit: string }>(
+      token,
+      "POST",
+      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/${
+        enabled ? "enable" : "disable"
+      }`,
+    ),
   // testTrigger fires a webhook flow with a synthetic JSON payload so a
   // user can verify it end-to-end without wiring an external caller.
   // The daemon seeds webhook_input nodes with `sample` exactly as a real

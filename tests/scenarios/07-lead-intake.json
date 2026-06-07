@@ -3,20 +3,29 @@
   "version": "1",
   "tenant": "dev",
   "workspace": "default",
-  "triggers": [{"type": "webhook", "secret": "REPLACE_WITH_WEBHOOK_SECRET", "public_form": true}],
   "nodes": [
     {
       "id": "intake",
       "module": "webhook_input",
-      "params": {}
+      "params": {
+        "secret": "REPLACE_WITH_WEBHOOK_SECRET",
+        "public_form": true
+      }
     },
     {
       "id": "store_lead",
       "module": "builtin_store_append",
-      "params": {"table": "leads"}
+      "params": {
+        "table": "leads"
+      }
     }
   ],
   "edges": [
-    {"from": "intake", "from_port": "body", "to": "store_lead", "to_port": "rows"}
+    {
+      "from": "intake",
+      "from_port": "body",
+      "to": "store_lead",
+      "to_port": "rows"
+    }
   ]
 }

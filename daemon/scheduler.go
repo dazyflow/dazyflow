@@ -80,6 +80,22 @@ func parseCronInTZ(p cron.Parser, expr, tz string) (cron.Schedule, error) {
 	return p.Parse("CRON_TZ=" + tz + " " + expr)
 }
 
+// paramSeconds reads an integer-valued node param (e.g. a poll interval),
+// tolerating the float64 that JSON unmarshalling produces as well as a plain
+// int/int64. Returns 0 when the key is absent or not a number — which callers
+// treat as "unset" (manual-only).
+func paramSeconds(params map[string]any, key string) int {
+	switch v := params[key].(type) {
+	case float64:
+		return int(v)
+	case int:
+		return v
+	case int64:
+		return int(v)
+	}
+	return 0
+}
+
 // nextFireFrom returns the next time this entry should fire, given
 // the current time. Cron entries delegate to the cron parser; poll
 // entries add their interval to now (interval-anchored — see the
@@ -212,27 +228,12 @@ func (s *Scheduler) rescan(ctx context.Context) error {
 						workspace:  workspace,
 						scheduleFn: sched,
 					}
-				case "poll":
-					// Reject <= 0 (tight-loops) and absurdly large values:
-					// time.Duration is int64 ns, so IntervalSeconds *
-					// time.Second OVERFLOWS negative past ~292 years, which
-					// would make nextFireFrom return a past time and fire
-					// every tick — a runaway loop from one bad config value.
-					// A 1-year ceiling is generous for a poll and far under
-					// the overflow point.
-					if t.IntervalSeconds <= 0 || t.IntervalSeconds > core.MaxPollIntervalSeconds {
-						s.logger.Printf("bad poll interval %d on %s/%s/%s",
-							t.IntervalSeconds, tenant, workspace, gid)
-						continue
-					}
-					entry = &scheduledGraph{
-						graphID:   gid,
-						tenant:    tenant,
-						workspace: workspace,
-						interval:  time.Duration(t.IntervalSeconds) * time.Second,
-					}
 				default:
 					// "webhook" and any other type aren't scheduler-driven.
+					// "poll" is no longer a graph-level trigger — the interval
+					// lives on the poll_trigger NODE now (scanned below), so a
+					// legacy graph-level poll falls through here and is ignored
+					// (the trigger lint flags it for migration to a node).
 					continue
 				}
 
@@ -284,6 +285,40 @@ func (s *Scheduler) rescan(ctx context.Context) error {
 				}
 				next[k] = entry
 			}
+
+				// poll_trigger NODES carry their interval on the node (same
+				// model as cron_trigger above; poll is no longer a graph-level
+				// trigger). Same overflow/ceiling guard the old graph-level poll
+				// used: reject <= 0 and anything past the 1-year max, since
+				// IntervalSeconds * time.Second overflows int64 ns past ~292y and
+				// would otherwise fire every tick.
+				for _, node := range g.Nodes {
+					if node.Module != "poll_trigger" {
+						continue
+					}
+					secs := paramSeconds(node.Params, "interval_seconds")
+					if secs == 0 {
+						continue // unset — runs only on manual Run
+					}
+					if secs < 0 || secs > core.MaxPollIntervalSeconds {
+						s.logger.Printf("bad poll interval %d on node %s of %s/%s/%s",
+							secs, node.ID, tenant, workspace, gid)
+						continue
+					}
+					entry := &scheduledGraph{
+						graphID:   gid,
+						tenant:    tenant,
+						workspace: workspace,
+						interval:  time.Duration(secs) * time.Second,
+					}
+					k := fmt.Sprintf("%s/%s/%s@%s", tenant, workspace, gid, node.ID)
+					if existing, ok := s.tracked[k]; ok && !existing.scheduleAt.IsZero() {
+						entry.scheduleAt = existing.scheduleAt
+					} else {
+						entry.scheduleAt = entry.nextFireFrom(now)
+					}
+					next[k] = entry
+				}
 		}
 	}
 	s.mu.Lock()

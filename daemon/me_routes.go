@@ -262,19 +262,22 @@ func (h *HTTPGateway) triggerEndpoints(g core.Graph) []map[string]any {
 	}
 	out := []map[string]any{}
 	scope := g.Tenant + "/" + g.Workspace + "/" + g.ID
-	for _, t := range g.Triggers {
-		switch t.Type {
-		case "webhook":
+	// Trigger config lives on nodes now (the Triggers menu is gone): the
+	// webhook_input node carries the secret + hosted-form opt-in, and the
+	// Schedule/Poll nodes carry their schedule.
+	for _, n := range g.Nodes {
+		switch n.Module {
+		case webhookInputModuleID:
 			ep := map[string]any{
 				"kind":   "webhook",
 				"method": "POST",
 				"url":    base + "/trigger/" + scope,
 			}
-			if t.Secret != "" {
-				ep["auth"] = "Authorization: Bearer " + t.Secret
+			if s, _ := n.Params["secret"].(string); s != "" {
+				ep["auth"] = "Authorization: Bearer " + s
 			}
 			out = append(out, ep)
-			if t.PublicForm {
+			if pf, _ := n.Params["public_form"].(bool); pf {
 				out = append(out, map[string]any{
 					"kind":   "hosted_form",
 					"method": "GET (renders) / POST (submits)",
@@ -282,17 +285,31 @@ func (h *HTTPGateway) triggerEndpoints(g core.Graph) []map[string]any {
 					"note":   "Public page — possession of the URL is the only credential.",
 				})
 			}
-		case "cron":
+		case "cron_trigger":
+			if c, _ := n.Params["cron"].(string); c != "" {
+				out = append(out, map[string]any{
+					"kind": "cron",
+					"cron": c,
+					"note": "Server-side scheduler; no public URL.",
+				})
+			}
+		case "poll_trigger":
+			if secs := paramSeconds(n.Params, "interval_seconds"); secs > 0 {
+				out = append(out, map[string]any{
+					"kind":             "poll",
+					"interval_seconds": secs,
+					"note":             "Server-side scheduler; no public URL.",
+				})
+			}
+		}
+	}
+	// Legacy graph-level cron triggers still fire, so surface them too.
+	for _, t := range g.Triggers {
+		if t.Type == "cron" && t.Cron != "" {
 			out = append(out, map[string]any{
 				"kind": "cron",
 				"cron": t.Cron,
 				"note": "Server-side scheduler; no public URL.",
-			})
-		case "poll":
-			out = append(out, map[string]any{
-				"kind":             "poll",
-				"interval_seconds": t.IntervalSeconds,
-				"note":             "Server-side scheduler; no public URL.",
 			})
 		}
 	}

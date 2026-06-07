@@ -29,6 +29,7 @@ import {
 } from "@xyflow/react";
 import {
   Play,
+  Pause,
   Save,
   Check,
   Square,
@@ -57,7 +58,7 @@ import {
 import { useAuth } from "../auth";
 import { useThemeMode } from "../theme";
 import i18n from "../i18n";
-import { api } from "../api";
+import { api, APIError } from "../api";
 import { oauthProviderDisplay } from "../integrationMeta";
 import {
   requiredConnections,
@@ -86,7 +87,7 @@ import { CommentNode } from "../components/CommentNode";
 import { RunHistory } from "../components/RunHistory";
 import { RerouteEdge } from "../components/RerouteEdge";
 import { SettingsModal } from "../components/SettingsModal";
-import { TriggersModal, browserTimeZone } from "../components/TriggersModal";
+import { browserTimeZone } from "../components/TriggersModal";
 import { QuickDropPalette } from "../components/QuickDropPalette";
 
 // Custom node-types registry. React Flow caches by reference, so this
@@ -188,6 +189,73 @@ function stampScheduleTimezones(
   return { nodes: out, changed };
 }
 
+// migrateGraphLevelPoll moves a legacy graph-level poll trigger onto a
+// poll_trigger node — poll is configured on the node now (like cron), and the
+// scheduler no longer reads graph-level poll. It sets the interval on an
+// existing poll_trigger node, or adds one if the flow has none (older poll
+// flows were pure pipelines fired by the graph-level trigger), then drops the
+// graph-level poll trigger. Returns the new nodes/triggers and whether anything
+// changed, so the caller can persist the migration.
+function migrateGraphLevelPoll(
+  nodes: Graph["nodes"],
+  triggers: Graph["triggers"],
+): { nodes: Graph["nodes"]; triggers: Graph["triggers"]; changed: boolean } {
+  const polls = (triggers ?? []).filter((t) => t.type === "poll");
+  if (polls.length === 0) return { nodes, triggers, changed: false };
+  const secs = polls
+    .map((t) => (t as { interval_seconds?: number }).interval_seconds)
+    .find((n): n is number => typeof n === "number" && n > 0);
+  let out = nodes ?? [];
+  const existing = out.find((n) => n.module === "poll_trigger");
+  if (existing) {
+    const intv = (existing.params as { interval_seconds?: unknown } | undefined)?.interval_seconds;
+    if (typeof secs === "number" && !(typeof intv === "number" && intv > 0)) {
+      out = out.map((n) =>
+        n === existing
+          ? { ...n, params: { ...(n.params ?? {}), interval_seconds: secs } }
+          : n,
+      );
+    }
+  } else if (typeof secs === "number") {
+    const used = new Set(out.map((n) => n.id));
+    let pid = "poll";
+    for (let i = 1; used.has(pid); i++) pid = `poll_${i}`;
+    out = [
+      { id: pid, module: "poll_trigger", params: { interval_seconds: secs }, position: { x: -120, y: 120 } },
+      ...out,
+    ];
+  }
+  const rest = (triggers ?? []).filter((t) => t.type !== "poll");
+  return { nodes: out, triggers: rest.length ? rest : undefined, changed: true };
+}
+
+// migrateGraphLevelWebhook moves a legacy graph-level webhook trigger's config
+// (secret + hosted-form options) onto the webhook_input node — config lives on
+// the node now and the daemon ignores graph-level webhook triggers. Drops the
+// graph-level trigger. (If the flow has no webhook_input node the trigger was
+// already dead, so it's just removed.)
+function migrateGraphLevelWebhook(
+  nodes: Graph["nodes"],
+  triggers: Graph["triggers"],
+): { nodes: Graph["nodes"]; triggers: Graph["triggers"]; changed: boolean } {
+  const wh = (triggers ?? []).find((t) => t.type === "webhook");
+  if (!wh) return { nodes, triggers, changed: false };
+  const cfg: Record<string, unknown> = {};
+  if (wh.secret) cfg.secret = wh.secret;
+  if (wh.public_form) cfg.public_form = true;
+  if (wh.form_fields?.length) cfg.form_fields = wh.form_fields;
+  if (wh.form_title) cfg.form_title = wh.form_title;
+  let out = nodes ?? [];
+  const node = out.find((n) => n.module === "webhook_input");
+  if (node) {
+    out = out.map((n) =>
+      n === node ? { ...n, params: { ...(n.params ?? {}), ...cfg } } : n,
+    );
+  }
+  const rest = (triggers ?? []).filter((t) => t.type !== "webhook");
+  return { nodes: out, triggers: rest.length ? rest : undefined, changed: true };
+}
+
 function EditorInner() {
   const { t } = useTranslation();
   const {
@@ -236,8 +304,12 @@ function EditorInner() {
   const [icon, setIcon] = useState<string | undefined>(undefined);
   const [description, setDescription] = useState<string | undefined>(undefined);
   const [timeoutSeconds, setTimeoutSeconds] = useState<number | undefined>(undefined);
+  // disabled pauses automatic firing (scheduler + webhook/form). Carried in
+  // state so a full save preserves it (buildGraph includes it), and toggled
+  // instantly via the dedicated enable/disable endpoint.
+  const [disabled, setDisabled] = useState(false);
+  const [togglingEnabled, setTogglingEnabled] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [triggersOpen, setTriggersOpen] = useState(false);
   // Per-node params kept outside React Flow's node-data so the inspector
   // can mutate them without forcing canvas re-layout. They're merged
   // back into the graph payload on save.
@@ -316,6 +388,11 @@ function EditorInner() {
   }, []);
   // paletteOpen drives the Ctrl/Cmd+K quick-drop search popup.
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // On a fresh (empty) flow the palette is seeded with just the entry points
+  // (trigger drops) — every flow starts with one. paletteShowAll lets the user
+  // escape that filter to the full catalog (e.g. a manual-only flow with no
+  // trigger). Reset whenever the palette closes.
+  const [paletteShowAll, setPaletteShowAll] = useState(false);
   // inspectorExpanded drives the narrow-screen fullscreen inspector overlay:
   // false keeps it slid off-screen (the canvas shows the Inspect FAB instead),
   // true slides it in over the canvas. Desktop ignores this (the panel is
@@ -413,6 +490,7 @@ function EditorInner() {
     setIcon(g.icon);
     setDescription(g.description);
     setTimeoutSeconds(g.timeout_seconds);
+    setDisabled(g.disabled ?? false);
     setDirty(false);
   }, []);
 
@@ -444,12 +522,18 @@ function EditorInner() {
       .loadGraph(token, activeTenant, activeWorkspace, id)
       .then((g) => {
         if (cancelled) return;
-        // Heal a Schedule node that never got a time zone (template fork or a
-        // flow saved before tz stamping): stamp the viewer's zone and persist
-        // it. Persisting matters because Run executes the SAVED graph by id —
-        // an in-memory-only fix would never reach the run or the scheduler.
-        const { nodes, changed } = stampScheduleTimezones(g.nodes);
-        const migrated = changed ? { ...g, nodes } : g;
+        // One-time migrations on open, persisted because Run executes the
+        // SAVED graph by id (an in-memory-only fix would never reach the run or
+        // the scheduler):
+        //   1. stamp the viewer's zone on a Schedule node that lacks a tz.
+        //   2. move a legacy graph-level poll trigger onto a poll_trigger node.
+        const tzM = stampScheduleTimezones(g.nodes);
+        const pollM = migrateGraphLevelPoll(tzM.nodes, g.triggers);
+        const whM = migrateGraphLevelWebhook(pollM.nodes, pollM.triggers);
+        const changed = tzM.changed || pollM.changed || whM.changed;
+        const migrated = changed
+          ? { ...g, nodes: whM.nodes, triggers: whM.triggers }
+          : g;
         hydrateGraph(migrated);
         if (changed && hasPerm("graph:edit")) {
           api.saveGraph(token, migrated, true).catch(() => {});
@@ -772,6 +856,16 @@ function EditorInner() {
     return matches.length ? matches : manifests;
   }, [connectFrom, connectSourceMime, manifests]);
 
+  // Entry points (trigger drops) — what a brand-new flow's palette is seeded
+  // with, since every flow starts by deciding when it runs.
+  const entryPointDrops = useMemo(
+    () => manifests.filter((m) => m.category === "trigger"),
+    [manifests],
+  );
+  // A fresh flow (no nodes, not a drag-off-pin add) shows only entry points,
+  // unless the user has explicitly widened to the full catalog.
+  const paletteEntryMode = !connectFrom && nodes.length === 0 && !paletteShowAll;
+
   // Spawn a drop and immediately wire it to the port the drag came from.
   const spawnDropConnected = useCallback(
     (
@@ -919,44 +1013,6 @@ function EditorInner() {
     },
     [nodes, screenToFlowPosition],
   );
-
-  // addScheduleNode drops a cron_trigger ("Schedule") node onto the
-  // canvas, pre-filled with a sensible daily default + the user's
-  // timezone so it's scheduled immediately. The Triggers modal's
-  // Schedule tab calls this instead of writing a graph-level cron, so a
-  // flow's schedule has a single home (the node), edited with the
-  // inspector's picker. A no-op if the catalog hasn't loaded the
-  // cron_trigger manifest yet.
-  const addScheduleNode = useCallback(() => {
-    const m = manifestByID.get("cron_trigger");
-    if (!m) return;
-    const w = wrapperRef.current;
-    const screen = w
-      ? (() => {
-          const r = w.getBoundingClientRect();
-          return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-        })()
-      : { x: window.innerWidth / 2, y: window.innerHeight / 2 };
-    const position = screenToFlowPosition(screen);
-    // Compute the ID once and use it for BOTH the node and its params, so
-    // they can't diverge (e.g. on a rapid double-add before a re-render).
-    const newID = nextID(nodes, m.id);
-    setNodes((nds) => [
-      ...nds,
-      {
-        id: newID,
-        type: "hazy",
-        position,
-        data: { label: m.label, moduleID: m.id, manifest: m },
-      },
-    ]);
-    setParamsByID((p) => ({
-      ...p,
-      [newID]: { cron: "0 9 * * *", tz: browserTimeZone() },
-    }));
-    setDirty(true);
-    setTriggersOpen(false);
-  }, [manifestByID, nodes, screenToFlowPosition]);
 
   const onDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -1629,6 +1685,9 @@ function EditorInner() {
     icon,
     description,
     timeout_seconds: timeoutSeconds,
+    // Preserve the paused state across saves — omitting it would re-enable a
+    // disabled flow on the next node edit. omitempty on the Go side drops false.
+    ...(disabled ? { disabled: true } : {}),
     ...overrides,
   });
 
@@ -1972,6 +2031,27 @@ function EditorInner() {
   // doRun submits the graph and wires up live status. Separated from
   // the gate check so "Run anyway" in the setup modal can bypass the
   // warning and run directly.
+  // toggleEnabled pauses/resumes the flow via the dedicated endpoint — an
+  // instant, single-purpose commit (no need to save other in-flight edits).
+  // Pausing stops the scheduler and webhook/form endpoints; manual Run still
+  // works. Mainly the dev "off switch" for scheduled/interval triggers.
+  const toggleEnabled = async () => {
+    if (!token || !id || togglingEnabled) return;
+    const enable = disabled; // currently paused → enable; else pause
+    setTogglingEnabled(true);
+    setError(null);
+    try {
+      await api.setFlowEnabled(token, activeTenant, activeWorkspace, id, enable);
+      setDisabled(!enable);
+    } catch (e) {
+      const msg = e instanceof APIError ? e.message : (e as Error).message;
+      // A never-saved flow has nothing to pause yet.
+      setError(e instanceof APIError && e.status === 404 ? t("editor.pauseSaveFirst") : msg);
+    } finally {
+      setTogglingEnabled(false);
+    }
+  };
+
   const doRun = async () => {
     if (!token || !me || !id) return;
     // Acknowledge the Slack-channel reminder so subsequent runs of this
@@ -2116,6 +2196,7 @@ function EditorInner() {
     icon,
     description,
     timeout_seconds: timeoutSeconds,
+    ...(disabled ? { disabled: true } : {}),
   };
 
   // A flow can start on its own via a graph-level trigger (webhook/poll/
@@ -2125,12 +2206,12 @@ function EditorInner() {
   // secret and poll_trigger a poll interval (both graph-level), so a bare
   // such node must NOT suppress the "add a trigger" nudge. An unconfigured
   // Schedule node (blank cron) doesn't fire either, so it doesn't count.
-  const hasScheduledNode = nodes.some((n) => {
-    if ((n.data as HazyNodeData | undefined)?.moduleID !== "cron_trigger") return false;
-    const cron = paramsByID[n.id]?.cron;
-    return typeof cron === "string" && cron.trim() !== "";
-  });
-  const hasAnyTrigger = triggers.length > 0 || hasScheduledNode;
+  const hasAnyTrigger =
+    triggers.length > 0 ||
+    nodes.some((n) => {
+      const m = (n.data as HazyNodeData | undefined)?.moduleID;
+      return m === "cron_trigger" || m === "poll_trigger" || m === "webhook_input";
+    });
   const persistSettings = async (next: Graph) => {
     setTriggers(next.triggers ?? []);
     setVisibility(next.visibility);
@@ -2195,39 +2276,8 @@ function EditorInner() {
               <Plus size={15} />
               <span className="toolbar-label">{t("editor.addDrop")}</span>
             </button>
-            {/* Flow settings moved to the top-bar three-dots menu (single
-                entry point). The toolbar gear used to live here. Triggers
-                ("how this flow starts") get their own labeled button so
-                the hosted-form link isn't buried in a menu. */}
-            {me && id && (
-              <button
-                className="ghost"
-                onClick={() => setTriggersOpen(true)}
-                title={
-                  hasAnyTrigger
-                    ? t("editor.triggersActiveTitle")
-                    : t("editor.triggersTitle")
-                }
-              >
-                <Zap size={15} />
-                <span className="toolbar-label">{t("editor.triggers")}</span>
-                {/* A dot signals the flow has a way to start on its own
-                    (schedule/form/webhook) — otherwise nothing on the canvas
-                    shows that a trigger is attached. */}
-                {hasAnyTrigger && (
-                  <span
-                    aria-hidden="true"
-                    style={{
-                      width: 7,
-                      height: 7,
-                      borderRadius: "50%",
-                      background: "var(--success, #34d399)",
-                      marginLeft: 2,
-                    }}
-                  />
-                )}
-              </button>
-            )}
+            {/* Triggers are configured on their nodes now (Schedule / Poll /
+                Webhook input), so there's no separate Triggers menu. */}
             <button
               className="ghost"
               onClick={addFrame}
@@ -2440,6 +2490,25 @@ function EditorInner() {
               </button>
             )}
           </div>
+          {/* Enable/disable toggle — the dev "off switch". Pausing stops the
+              scheduler and webhook/form endpoints; manual Run still works.
+              Shown for any saved flow the user can edit; the paused state is
+              styled prominently so it's never a silent surprise. */}
+          {id && hasPerm("graph:edit") && (
+            <div className="toolbar-group">
+              <button
+                className={disabled ? "warning" : "ghost"}
+                onClick={() => void toggleEnabled()}
+                disabled={togglingEnabled}
+                title={disabled ? t("editor.resumeTitle") : t("editor.pauseTitle")}
+              >
+                {disabled ? <Play size={15} /> : <Pause size={15} />}
+                <span className="toolbar-label">
+                  {disabled ? t("editor.paused") : t("editor.enabledState")}
+                </span>
+              </button>
+            </div>
+          )}
         </div>
         {/* Floating debug menu (#12): fixed in the canvas's upper-left. Shown
             while a run is active with breakpoints set, OR whenever the run is
@@ -2624,10 +2693,10 @@ function EditorInner() {
           >
             <Plus size={28} aria-hidden="true" />
             <div style={{ fontWeight: 600, color: "var(--text)" }}>
-              {t("editor.emptyTitle")}
+              {t("editor.emptyEntryTitle")}
             </div>
             <div style={{ maxWidth: 320, fontSize: 13 }}>
-              {t("editor.emptyBody")}
+              {t("editor.emptyEntryBody")}
             </div>
             <button
               className="primary"
@@ -2635,7 +2704,7 @@ function EditorInner() {
               onClick={() => setPaletteOpen(true)}
             >
               <Plus size={15} />
-              <span>{t("editor.addDrop")}</span>
+              <span>{t("editor.addEntryPoint")}</span>
             </button>
           </div>
         )}
@@ -2654,15 +2723,6 @@ function EditorInner() {
               <span className="editor-trigger-hint-text">
                 {t("editor.triggerHint")}
               </span>
-              <button
-                className="primary editor-trigger-hint-cta"
-                onClick={() => {
-                  dismissTriggerHint();
-                  setTriggersOpen(true);
-                }}
-              >
-                {t("editor.triggerHintCta")}
-              </button>
               <button
                 className="ghost editor-trigger-hint-x"
                 onClick={dismissTriggerHint}
@@ -2852,6 +2912,9 @@ function EditorInner() {
           onChange={onInspectorChange}
           paramsByID={paramsByID}
           onParamsChange={onParamsChange}
+          graphMeta={
+            id ? { id, tenant: activeTenant, workspace: activeWorkspace, name } : undefined
+          }
           currentRunID={currentRunID}
           statusRefreshKey={statusRefreshKey}
           onDelete={(nodeID) => {
@@ -2928,10 +2991,15 @@ function EditorInner() {
       </div>
       {paletteOpen && (
         <QuickDropPalette
-          drops={connectFrom ? connectDrops : manifests}
+          drops={
+            connectFrom ? connectDrops : paletteEntryMode ? entryPointDrops : manifests
+          }
+          placeholder={paletteEntryMode ? t("quickPalette.placeholderEntry") : undefined}
+          onShowAll={paletteEntryMode ? () => setPaletteShowAll(true) : undefined}
           onClose={() => {
             setPaletteOpen(false);
             setConnectFrom(null);
+            setPaletteShowAll(false);
           }}
           onPick={(m) => {
             if (connectFrom) {
@@ -2960,17 +3028,6 @@ function EditorInner() {
           graph={settingsGraph}
           onClose={() => setSettingsOpen(false)}
           onSave={persistSettings}
-        />
-      )}
-      {triggersOpen && me && id && (
-        <TriggersModal
-          graph={settingsGraph}
-          onClose={() => setTriggersOpen(false)}
-          onSave={persistSettings}
-          onAddSchedule={addScheduleNode}
-          hasScheduleNode={nodes.some(
-            (n) => (n.data as HazyNodeData | undefined)?.moduleID === "cron_trigger",
-          )}
         />
       )}
       {gateOpen && (

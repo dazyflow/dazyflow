@@ -115,6 +115,9 @@ export type Graph = {
   description?: string;
   timeout_seconds?: number;
   failure_notify?: FailureNotify;
+  // disabled pauses all automatic firing (scheduler + webhook/form) without
+  // deleting the flow — the dev "off switch". Manual Run still works.
+  disabled?: boolean;
 };
 
 // FailureNotify mirrors core.FailureNotify in Go — the daemon's

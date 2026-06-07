@@ -51,18 +51,16 @@ func (w *WebhookListener) handleForm(rw http.ResponseWriter, r *http.Request) {
 		http.NotFound(rw, r)
 		return
 	}
-	tr, ok := publicFormTrigger(g)
+	fields, title, ok := publicFormConfig(g)
 	if !ok {
-		// Either no webhook trigger or the graph hasn't opted in. Don't
-		// reveal which — a plain 404 keeps non-public graphs invisible.
+		// Either no webhook_input node or it hasn't opted into a public form.
+		// Don't reveal which — a plain 404 keeps non-public graphs invisible.
 		http.NotFound(rw, r)
 		return
 	}
-	fields := tr.FormFields
 	if len(fields) == 0 {
 		fields = defaultFormFields
 	}
-	title := tr.FormTitle
 	if title == "" {
 		title = g.Name
 	}
@@ -157,15 +155,40 @@ func collectFormValues(declared []string, posted url.Values) map[string]any {
 	return out
 }
 
-// publicFormTrigger returns the graph's webhook trigger when it has
-// opted into the hosted form, else ok=false.
-func publicFormTrigger(g core.Graph) (core.GraphTrigger, bool) {
-	for _, t := range g.Triggers {
-		if t.Type == "webhook" && t.PublicForm {
-			return t, true
+// publicFormConfig returns the hosted-form fields and title from the graph's
+// webhook_input node when it has opted into a public form (the node's
+// public_form param), else ok=false. Config lives on the node now — the
+// Triggers menu is gone.
+func publicFormConfig(g core.Graph) (fields []string, title string, ok bool) {
+	for _, n := range g.Nodes {
+		if n.Module != webhookInputModuleID {
+			continue
 		}
+		if pf, _ := n.Params["public_form"].(bool); !pf {
+			continue
+		}
+		t, _ := n.Params["form_title"].(string)
+		return formStringSlice(n.Params["form_fields"]), t, true
 	}
-	return core.GraphTrigger{}, false
+	return nil, "", false
+}
+
+// formStringSlice coerces a node param into a []string, tolerating the []any
+// of strings that JSON unmarshalling produces (and an already-typed []string).
+func formStringSlice(v any) []string {
+	switch arr := v.(type) {
+	case []string:
+		return arr
+	case []any:
+		out := make([]string, 0, len(arr))
+		for _, it := range arr {
+			if s, ok := it.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+	return nil
 }
 
 // buildFormSeed mirrors buildWebhookSeed's output shape (body + headers

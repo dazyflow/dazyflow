@@ -112,10 +112,7 @@ func TestScheduler_FiresGraphWithPollTrigger(t *testing.T) {
 	graph := core.Graph{
 		ID: "poll-1", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{
-			{ID: "tick", Module: "poll_trigger"},
-		},
-		Triggers: []core.GraphTrigger{
-			{Type: "poll", IntervalSeconds: 60},
+			{ID: "tick", Module: "poll_trigger", Params: map[string]any{"interval_seconds": 60}},
 		},
 	}
 	if _, err := h.wsStore.Save(graph, "test"); err != nil {
@@ -140,10 +137,7 @@ func TestScheduler_PollTriggerFiresRepeatedlyOnInterval(t *testing.T) {
 	h := newPollHarness(t)
 	graph := core.Graph{
 		ID: "poll-rep", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "tick", Module: "poll_trigger"}},
-		Triggers: []core.GraphTrigger{
-			{Type: "poll", IntervalSeconds: 60},
-		},
+		Nodes: []core.Node{{ID: "tick", Module: "poll_trigger", Params: map[string]any{"interval_seconds": 60}}},
 	}
 	_, _ = h.wsStore.Save(graph, "test")
 	time.Sleep(80 * time.Millisecond)
@@ -161,36 +155,32 @@ func TestScheduler_PollTriggerFiresRepeatedlyOnInterval(t *testing.T) {
 }
 
 func TestScheduler_PollAndCronCoexistOnSameGraph(t *testing.T) {
-	// The trigger-index suffix in the tracked key means a graph with
-	// both cron AND poll triggers gets two scheduler entries — one
-	// per trigger — rather than one clobbering the other.
+	// The node-ID-keyed tracked entries mean a graph with both a Schedule
+	// (cron_trigger) node AND a Poll (poll_trigger) node gets two scheduler
+	// entries — one per node — rather than one clobbering the other.
 	h := newPollHarness(t)
 	graph := core.Graph{
 		ID: "hybrid", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "tick", Module: "poll_trigger"}},
-		Triggers: []core.GraphTrigger{
-			{Type: "cron", Cron: "* * * * *"},   // every minute
-			{Type: "poll", IntervalSeconds: 30}, // every 30s
+		Nodes: []core.Node{
+			{ID: "tick", Module: "poll_trigger", Params: map[string]any{"interval_seconds": 30}}, // every 30s
+			{ID: "sched", Module: "cron_trigger", Params: map[string]any{"cron": "* * * * *"}},   // every minute
 		},
 	}
 	_, _ = h.wsStore.Save(graph, "test")
 	time.Sleep(80 * time.Millisecond)
 	if h.sched.TrackedCount() != 2 {
-		t.Errorf("tracked=%d, want 2 (one per trigger)", h.sched.TrackedCount())
+		t.Errorf("tracked=%d, want 2 (one per trigger node)", h.sched.TrackedCount())
 	}
 }
 
 func TestScheduler_BadPollIntervalIsIgnored(t *testing.T) {
-	// Negative / zero interval is operator error — the scheduler
-	// logs and skips it rather than panicking or scheduling at
-	// time.Now+0 (which would tight-loop the worker).
+	// A negative interval is operator error — the scheduler logs and skips it
+	// rather than panicking or scheduling at time.Now+0 (which would tight-loop
+	// the worker). (A zero/absent interval is the separate "manual-only" state.)
 	h := newPollHarness(t)
 	graph := core.Graph{
 		ID: "bad-poll", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "tick", Module: "poll_trigger"}},
-		Triggers: []core.GraphTrigger{
-			{Type: "poll", IntervalSeconds: 0},
-		},
+		Nodes: []core.Node{{ID: "tick", Module: "poll_trigger", Params: map[string]any{"interval_seconds": -1}}},
 	}
 	_, _ = h.wsStore.Save(graph, "test")
 	time.Sleep(80 * time.Millisecond)
@@ -210,11 +200,8 @@ func TestScheduler_HugePollIntervalIsIgnored(t *testing.T) {
 	h := newPollHarness(t)
 	graph := core.Graph{
 		ID: "huge-poll", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "tick", Module: "poll_trigger"}},
-		Triggers: []core.GraphTrigger{
-			// >> maxInt64/1e9 seconds: the *time.Second multiply overflows.
-			{Type: "poll", IntervalSeconds: 1 << 60},
-		},
+		// >> maxInt64/1e9 seconds: the *time.Second multiply overflows.
+		Nodes: []core.Node{{ID: "tick", Module: "poll_trigger", Params: map[string]any{"interval_seconds": 1 << 60}}},
 	}
 	_, _ = h.wsStore.Save(graph, "test")
 	time.Sleep(120 * time.Millisecond) // let rescan + several ticks elapse

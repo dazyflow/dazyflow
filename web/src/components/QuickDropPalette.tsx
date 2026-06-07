@@ -14,6 +14,13 @@ type Props = {
   drops: Manifest[];
   onClose: () => void;
   onPick: (drop: Manifest) => void;
+  // placeholder overrides the search box hint (e.g. "Search entry points" when
+  // a fresh flow is being seeded with a trigger).
+  placeholder?: string;
+  // onShowAll, when set, renders an escape hatch that widens the list from a
+  // filtered subset (entry points) back to every drop — so a flow that wants
+  // no trigger (manual-only) isn't boxed in.
+  onShowAll?: () => void;
 };
 
 // Match describes one ranked search hit. Score is higher-is-better so the
@@ -79,7 +86,7 @@ function wordStarts(s: string, tok: string): boolean {
 // is ever mounted, so a single shared handle is safe.
 let pendingHistoryPop: ReturnType<typeof setTimeout> | null = null;
 
-export function QuickDropPalette({ drops, onClose, onPick }: Props) {
+export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAll }: Props) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -257,8 +264,8 @@ export function QuickDropPalette({ drops, onClose, onPick }: Props) {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={t("quickPalette.placeholder")}
-            aria-label={t("quickPalette.placeholder")}
+            placeholder={placeholder ?? t("quickPalette.placeholder")}
+            aria-label={placeholder ?? t("quickPalette.placeholder")}
             spellCheck={false}
             autoComplete="off"
           />
@@ -284,6 +291,11 @@ export function QuickDropPalette({ drops, onClose, onPick }: Props) {
             ))
           )}
         </div>
+        {onShowAll && (
+          <button type="button" className="quick-palette-showall" onClick={onShowAll}>
+            {t("quickPalette.showAll")}
+          </button>
+        )}
         <div className="quick-palette-hint">
           <span>
             <kbd>↑</kbd>

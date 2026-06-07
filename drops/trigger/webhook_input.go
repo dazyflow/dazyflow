@@ -18,7 +18,7 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "webhook_input",
 			Version:     "1.0",
-			Label:       "Webhook input",
+			Label:       "Webhook",
 			Icon:        "webhook",
 			Category:    "trigger",
 			Provider:    "internal",
@@ -39,7 +39,36 @@ func init() {
 				{Port: "body", Label: "Request body (string for text MIMEs, parsed object for JSON)"},
 				{Port: "headers", Label: "Request headers as a JSON object", MIME: []string{"application/json"}},
 			},
-			ParamsSchema: json.RawMessage(`{"type":"object"}`),
+			// Webhook + hosted-form config lives on the node now (like the
+			// Schedule/Poll nodes), read by the daemon's /trigger and /form
+			// handlers. secret guards the POST endpoint; public_form opts into a
+			// token-less hosted form whose fields/title are set here too.
+			ParamsSchema: json.RawMessage(`{
+				"type":"object",
+				"properties":{
+					"secret":{
+						"type":"string",
+						"title":"Secret",
+						"description":"Bearer token callers must send (Authorization: Bearer …) to POST this flow's /trigger endpoint. Leave blank only if you rely solely on a public hosted form."
+					},
+					"public_form":{
+						"type":"boolean",
+						"title":"Public hosted form",
+						"description":"Also expose a public intake form at /form/<tenant>/<workspace>/<id> — no token required (possession of the URL is the credential)."
+					},
+					"form_fields":{
+						"type":"array",
+						"items":{"type":"string"},
+						"title":"Form fields",
+						"description":"Field names the hosted form collects. Defaults to name, email, message."
+					},
+					"form_title":{
+						"type":"string",
+						"title":"Form title",
+						"description":"Heading shown on the hosted form. Defaults to the flow's name."
+					}
+				}
+			}`),
 			// Idempotent in the sense that retry is safe — but in
 			// practice retry is meaningless: a webhook fires the graph
 			// once and the seed value won't be re-derived on a retry.

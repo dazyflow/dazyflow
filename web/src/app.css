@@ -1816,6 +1816,15 @@ button.danger-outline:hover:not(:disabled) {
   background: color-mix(in srgb, var(--danger) 12%, transparent);
   border-color: var(--danger);
 }
+/* Paused-flow toggle: amber so a disabled flow is never a silent surprise. */
+button.warning {
+  background: color-mix(in srgb, var(--warning, #d9822b) 16%, transparent);
+  color: var(--warning, #d9822b);
+  border-color: color-mix(in srgb, var(--warning, #d9822b) 50%, transparent);
+}
+button.warning:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--warning, #d9822b) 26%, transparent);
+}
 .icon-button {
   background: none;
   border: 1px solid transparent;
@@ -6049,6 +6058,22 @@ button.danger-outline:hover:not(:disabled) {
   background: var(--surface-2);
   font-size: 11px;
   color: var(--faint);
+}
+/* Escape hatch under the entry-point list: widen to the full catalog. */
+.quick-palette-showall {
+  display: block;
+  width: 100%;
+  padding: var(--space-2) var(--space-4);
+  border: none;
+  border-top: 1px solid var(--border);
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  text-align: center;
+  cursor: pointer;
+}
+.quick-palette-showall:hover {
+  background: var(--surface-2);
 }
 .quick-palette-hint kbd {
   font-family: var(--font-mono);

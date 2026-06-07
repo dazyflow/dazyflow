@@ -29,7 +29,7 @@ func TestForEach_E2E_WebhookToIteration(t *testing.T) {
 	g := core.Graph{
 		ID: "fe-iter", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{
-			{ID: "inbound", Module: "webhook_input"},
+			{ID: "inbound", Module: "webhook_input", Params: map[string]any{"secret": "s"}},
 			{ID: "iter", Module: "for_each", Params: map[string]any{
 				"step_module": "delay",
 				"step_params": map[string]any{"ms": 1},
@@ -40,7 +40,6 @@ func TestForEach_E2E_WebhookToIteration(t *testing.T) {
 		Edges: []core.Edge{
 			{From: "inbound", FromPort: "body", To: "iter", ToPort: "items"},
 		},
-		Triggers: []core.GraphTrigger{{Type: "webhook", Secret: "s"}},
 	}
 	if _, err := wsStore.Save(g, "test"); err != nil {
 		t.Fatalf("save: %v", err)
@@ -157,7 +156,7 @@ func TestForEach_E2E_PerItemHTTPWithTemplatedURL(t *testing.T) {
 	g := core.Graph{
 		ID: "fe-http", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{
-			{ID: "inbound", Module: "webhook_input"},
+			{ID: "inbound", Module: "webhook_input", Params: map[string]any{"secret": "s"}},
 			{ID: "fan", Module: "for_each", Params: map[string]any{
 				"step_module": "http_request",
 				"step_params": map[string]any{
@@ -174,7 +173,6 @@ func TestForEach_E2E_PerItemHTTPWithTemplatedURL(t *testing.T) {
 		Edges: []core.Edge{
 			{From: "inbound", FromPort: "body", To: "fan", ToPort: "items"},
 		},
-		Triggers: []core.GraphTrigger{{Type: "webhook", Secret: "s"}},
 	}
 	if _, err := wsStore.Save(g, "test"); err != nil {
 		t.Fatalf("save: %v", err)

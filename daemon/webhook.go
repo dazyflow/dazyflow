@@ -273,10 +273,15 @@ func buildWebhookSeed(rawBody []byte, r *http.Request) core.Result {
 	}
 }
 
+// webhookSecret returns the bearer token guarding the graph's /trigger
+// endpoint. Config lives on the webhook_input node now (the Triggers menu is
+// gone); the secret is the node's `secret` param.
 func webhookSecret(g core.Graph) string {
-	for _, t := range g.Triggers {
-		if t.Type == "webhook" && t.Secret != "" {
-			return t.Secret
+	for _, n := range g.Nodes {
+		if n.Module == webhookInputModuleID {
+			if s, ok := n.Params["secret"].(string); ok && s != "" {
+				return s
+			}
 		}
 	}
 	return ""

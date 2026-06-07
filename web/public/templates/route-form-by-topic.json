@@ -4,53 +4,128 @@
   "name": "Route form submissions by topic",
   "description": "A hosted intake form whose submissions fan out by their 'topic' field: sales enquiries land in one list, support requests in another, everything else in a catch-all. route_rows does the N-way split — first matching filter wins, unmatched rows fall to 'default'. Zero external setup; each list lives in the built-in store.",
   "icon": "git-branch",
-  "triggers": [
-    {"type": "webhook", "secret": "", "public_form": true, "form_fields": ["name", "email", "topic", "message"], "form_title": "How can we help?"}
-  ],
   "nodes": [
     {
       "id": "trigger",
       "module": "webhook_input",
-      "params": {},
-      "position": {"x": 200, "y": 220}
+      "params": {
+        "public_form": true,
+        "form_fields": [
+          "name",
+          "email",
+          "topic",
+          "message"
+        ],
+        "form_title": "How can we help?"
+      },
+      "position": {
+        "x": 200,
+        "y": 220
+      }
     },
     {
       "id": "route",
       "module": "route_rows",
       "params": {
         "routes": [
-          {"slot": "rows_1", "filter": "row.topic == 'sales'"},
-          {"slot": "rows_2", "filter": "row.topic == 'support'"}
+          {
+            "slot": "rows_1",
+            "filter": "row.topic == 'sales'"
+          },
+          {
+            "slot": "rows_2",
+            "filter": "row.topic == 'support'"
+          }
         ]
       },
-      "position": {"x": 540, "y": 220}
+      "position": {
+        "x": 540,
+        "y": 220
+      }
     },
     {
       "id": "save_sales",
       "module": "builtin_store_append",
-      "params": {"table": "leads_sales"},
-      "position": {"x": 900, "y": 80}
+      "params": {
+        "table": "leads_sales"
+      },
+      "position": {
+        "x": 900,
+        "y": 80
+      }
     },
     {
       "id": "save_support",
       "module": "builtin_store_append",
-      "params": {"table": "leads_support"},
-      "position": {"x": 900, "y": 220}
+      "params": {
+        "table": "leads_support"
+      },
+      "position": {
+        "x": 900,
+        "y": 220
+      }
     },
     {
       "id": "save_other",
       "module": "builtin_store_append",
-      "params": {"table": "leads_other"},
-      "position": {"x": 900, "y": 360}
+      "params": {
+        "table": "leads_other"
+      },
+      "position": {
+        "x": 900,
+        "y": 360
+      }
     }
   ],
   "edges": [
-    {"from": "trigger", "from_port": "body", "to": "route", "to_port": "rows", "on_error": ""},
-    {"from": "route", "from_port": "rows_1", "to": "save_sales", "to_port": "rows", "on_error": ""},
-    {"from": "route", "from_port": "headers", "to": "save_sales", "to_port": "headers", "on_error": ""},
-    {"from": "route", "from_port": "rows_2", "to": "save_support", "to_port": "rows", "on_error": ""},
-    {"from": "route", "from_port": "headers", "to": "save_support", "to_port": "headers", "on_error": ""},
-    {"from": "route", "from_port": "default", "to": "save_other", "to_port": "rows", "on_error": ""},
-    {"from": "route", "from_port": "headers", "to": "save_other", "to_port": "headers", "on_error": ""}
+    {
+      "from": "trigger",
+      "from_port": "body",
+      "to": "route",
+      "to_port": "rows",
+      "on_error": ""
+    },
+    {
+      "from": "route",
+      "from_port": "rows_1",
+      "to": "save_sales",
+      "to_port": "rows",
+      "on_error": ""
+    },
+    {
+      "from": "route",
+      "from_port": "headers",
+      "to": "save_sales",
+      "to_port": "headers",
+      "on_error": ""
+    },
+    {
+      "from": "route",
+      "from_port": "rows_2",
+      "to": "save_support",
+      "to_port": "rows",
+      "on_error": ""
+    },
+    {
+      "from": "route",
+      "from_port": "headers",
+      "to": "save_support",
+      "to_port": "headers",
+      "on_error": ""
+    },
+    {
+      "from": "route",
+      "from_port": "default",
+      "to": "save_other",
+      "to_port": "rows",
+      "on_error": ""
+    },
+    {
+      "from": "route",
+      "from_port": "headers",
+      "to": "save_other",
+      "to_port": "headers",
+      "on_error": ""
+    }
   ]
 }

@@ -3,8 +3,12 @@
   "version": "1",
   "tenant": "dev",
   "workspace": "default",
-  "triggers": [{"type": "poll", "interval_seconds": 86400}],
   "nodes": [
+    {
+      "id": "poll",
+      "module": "poll_trigger",
+      "params": {"interval_seconds": 86400}
+    },
     {
       "id": "fetch_page",
       "module": "http_request",

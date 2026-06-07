@@ -4,10 +4,13 @@
   "name": "New Gmail → log to Sheet",
   "description": "Polls Gmail every 5 minutes for messages from the last few minutes and appends each to a Google Sheet. for_each fans the message IDs out to gmail_get_message; unwrap_results flattens the per-item results back into plain rows so compute_rows can read row.headers.* directly, and map_rows keeps just the columns you want. (A short poll window means an overlap can occasionally re-log a message.)",
   "icon": "mail",
-  "triggers": [
-    {"type": "poll", "interval_seconds": 300}
-  ],
   "nodes": [
+    {
+      "id": "poll",
+      "module": "poll_trigger",
+      "params": {"interval_seconds": 300},
+      "position": {"x": -120, "y": 200}
+    },
     {
       "id": "search",
       "module": "gmail_search_messages",

@@ -233,7 +233,11 @@ function TriggerEmpty({
 // toggle that, when flipped on, creates the webhook trigger behind the
 // scenes (via onChange → upsertWebhook) and reveals the form link,
 // embed snippet, field/title config, and recent-submission health.
-function FormTab({
+// FormTab + WebhookTab are exported so the node Inspector can render them
+// for a selected webhook_input node — its params ({secret, public_form,
+// form_fields, form_title}) are the same shape as the legacy GraphTrigger,
+// so they're passed straight in as `webhook` and onChange merges a patch.
+export function FormTab({
   graph,
   webhook,
   onChange,
@@ -328,7 +332,7 @@ function FormTab({
 // WebhookTab is the developer surface: bearer secret + generate, a curl
 // recipe, and the no-code form-tool bridge recipes. When no webhook
 // trigger exists it shows an empty state whose CTA creates one.
-function WebhookTab({
+export function WebhookTab({
   graph,
   webhook,
   onChange,
@@ -338,14 +342,16 @@ function WebhookTab({
   graph: Graph;
   webhook?: GraphTrigger;
   onChange: (patch: Partial<GraphTrigger>) => void;
-  onCreate: () => void;
-  onRemove: () => void;
+  onCreate?: () => void;
+  onRemove?: () => void;
 }) {
   const { t } = useTranslation();
   const { me } = useAuth();
   const baseURL = me?.public_base_url || "";
   if (!webhook) {
-    return (
+    // In the node Inspector the config object always exists, so this empty
+    // state only shows in the legacy modal (where onCreate is provided).
+    return onCreate ? (
       <TriggerEmpty
         icon={WebhookIcon}
         title={t("triggers.webhook.emptyTitle")}
@@ -353,7 +359,7 @@ function WebhookTab({
         cta={t("triggers.webhook.add")}
         onAdd={onCreate}
       />
-    );
+    ) : null;
   }
   return (
     <div>

@@ -78,61 +78,64 @@ func TestLintTriggers_FlagsBadConfigs(t *testing.T) {
 			wantCode: "trigger_cron_duplicate_source",
 		},
 		{
-			name: "valid poll — no warning",
+			name: "valid poll node — no warning",
+			graph: Graph{
+				Nodes: []Node{{ID: "p", Module: "poll_trigger", Params: map[string]any{"interval_seconds": 300}}},
+			},
+		},
+		{
+			name: "poll node with no interval — manual-only, no warning",
+			graph: Graph{
+				Nodes: []Node{{ID: "p", Module: "poll_trigger"}},
+			},
+		},
+		{
+			name: "negative poll interval (node)",
+			graph: Graph{
+				Nodes: []Node{{ID: "p", Module: "poll_trigger", Params: map[string]any{"interval_seconds": -5}}},
+			},
+			wantCode: "trigger_poll_interval",
+		},
+		{
+			name: "overflowing poll interval (node)",
+			graph: Graph{
+				Nodes: []Node{{ID: "p", Module: "poll_trigger", Params: map[string]any{"interval_seconds": 1 << 60}}},
+			},
+			wantCode: "trigger_poll_interval",
+		},
+		{
+			name: "legacy graph-level poll is deprecated",
 			graph: Graph{
 				Triggers: []GraphTrigger{{Type: "poll", IntervalSeconds: 300}},
 			},
+			wantCode: "trigger_poll_deprecated",
 		},
 		{
-			name: "zero poll interval",
+			name: "webhook node with secret — no warning",
 			graph: Graph{
-				Triggers: []GraphTrigger{{Type: "poll", IntervalSeconds: 0}},
-			},
-			wantCode: "trigger_poll_interval",
-		},
-		{
-			name: "negative poll interval",
-			graph: Graph{
-				Triggers: []GraphTrigger{{Type: "poll", IntervalSeconds: -5}},
-			},
-			wantCode: "trigger_poll_interval",
-		},
-		{
-			name: "overflowing poll interval",
-			graph: Graph{
-				Triggers: []GraphTrigger{{Type: "poll", IntervalSeconds: 1 << 60}},
-			},
-			wantCode: "trigger_poll_interval",
-		},
-		{
-			name: "webhook with secret — no warning",
-			graph: Graph{
-				Nodes:    []Node{webhookInputNode()},
-				Triggers: []GraphTrigger{{Type: "webhook", Secret: "s3cr3t"}},
+				Nodes: []Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secret": "s3cr3t"}}},
 			},
 		},
 		{
-			name: "webhook without secret and no form",
+			name: "webhook node with neither secret nor public form",
 			graph: Graph{
-				Nodes:    []Node{webhookInputNode()},
-				Triggers: []GraphTrigger{{Type: "webhook", Secret: ""}},
+				Nodes: []Node{webhookInputNode()},
 			},
 			wantCode: "trigger_webhook_no_secret",
 		},
 		{
-			name: "public form without secret is fine (form is secret-less)",
+			name: "webhook node with public form, no secret — fine (form is secret-less)",
 			graph: Graph{
-				Nodes:    []Node{webhookInputNode()},
-				Triggers: []GraphTrigger{{Type: "webhook", Secret: "", PublicForm: true}},
+				Nodes: []Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"public_form": true}}},
 			},
 		},
 		{
-			name: "public form with no webhook_input node",
+			name: "legacy graph-level webhook is deprecated",
 			graph: Graph{
-				Nodes:    []Node{{ID: "x", Module: "delay"}},
-				Triggers: []GraphTrigger{{Type: "webhook", Secret: "s", PublicForm: true}},
+				Nodes:    []Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secret": "s"}}},
+				Triggers: []GraphTrigger{{Type: "webhook", Secret: "s"}},
 			},
-			wantCode: "trigger_form_no_sink",
+			wantCode: "trigger_webhook_deprecated",
 		},
 		{
 			name: "unknown trigger type",

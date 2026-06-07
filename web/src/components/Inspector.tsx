@@ -11,11 +11,11 @@ import {
 } from "./SchemaForm";
 import { OutputPreview } from "./OutputPreview";
 import { LiveConsole } from "./LiveConsole";
-import { TriggerScheduleField, browserTimeZone } from "./TriggersModal";
+import { TriggerScheduleField, browserTimeZone, FormTab, WebhookTab } from "./TriggersModal";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import { oauthProviderForIntegration } from "../integrationMeta";
-import type { OAuthProviderStatus } from "../types";
+import type { OAuthProviderStatus, Graph, GraphTrigger } from "../types";
 
 type Props = {
   selected: Node<HazyNodeData> | null;
@@ -67,6 +67,11 @@ type Props = {
   // of a free-text box. Omitted/null = plain text (OAuth disabled).
   providers?: OAuthProviderStatus[] | null;
   onConnect?: () => void;
+  // graphMeta gives the webhook_input config UI (FormTab/WebhookTab) the
+  // tenant/workspace/id/name it needs to build the /trigger + /form URLs and
+  // the curl/embed recipes. The Triggers menu is gone — this config lives on
+  // the node now.
+  graphMeta?: { id: string; tenant: string; workspace: string; name?: string };
 };
 
 type Mode = "form" | "json";
@@ -92,6 +97,7 @@ export function Inspector({
   onDelete,
   providers,
   onConnect,
+  graphMeta,
 }: Props) {
   const { t } = useTranslation();
   const [sampling, setSampling] = useState(false);
@@ -180,6 +186,18 @@ export function Inspector({
   // so just opening it on a fresh node writes a real default rather than
   // leaving params blank. JSON mode still exposes the raw params.
   const isCronTrigger = d.moduleID === "cron_trigger";
+  // Webhook input carries its own config (secret + hosted form) — the Triggers
+  // menu is gone. Render the same Webhook/Form panels the menu used, but bound
+  // to the node's params (same {secret, public_form, form_fields, form_title}
+  // shape the old GraphTrigger had). webhookGraph is the minimal Graph the
+  // panels read for building the /trigger + /form URLs.
+  const isWebhookInput = d.moduleID === "webhook_input";
+  const webhookGraph = ({
+    id: graphMeta?.id ?? "",
+    tenant: graphMeta?.tenant ?? "",
+    workspace: graphMeta?.workspace ?? "",
+    name: graphMeta?.name ?? "",
+  } as Graph);
   // For OAuth-backed drops, turn the `account` param into a dropdown of
   // connected accounts. Skipped when OAuth is off (providers null) or
   // the drop isn't OAuth-backed (provider null).
@@ -446,7 +464,29 @@ export function Inspector({
           />
         )}
 
-        {mode === "form" && canForm && schema && !isCronTrigger && (
+        {mode === "form" && isWebhookInput && graphMeta && (
+          // The webhook_input node's config panels (secret + curl recipe, then
+          // the hosted-form toggle/fields/URL/embed/submission-health), bound
+          // to the node's params instead of a graph-level trigger.
+          <>
+            <WebhookTab
+              graph={webhookGraph}
+              webhook={currentParams as GraphTrigger}
+              onChange={(patch) =>
+                onParamsChange(selected.id, { ...currentParams, ...patch })
+              }
+            />
+            <FormTab
+              graph={webhookGraph}
+              webhook={currentParams as GraphTrigger}
+              onChange={(patch) =>
+                onParamsChange(selected.id, { ...currentParams, ...patch })
+              }
+            />
+          </>
+        )}
+
+        {mode === "form" && canForm && schema && !isCronTrigger && !isWebhookInput && (
           // key={selected.id} forces a fresh SchemaForm instance per
           // node so internal text state in JSONField / ArrayField /
           // etc. picks up the new node's value as its initial state

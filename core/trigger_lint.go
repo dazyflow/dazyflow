@@ -37,14 +37,6 @@ var cronLintAnchor = time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 func lintTriggers(g Graph) []LintIssue {
 	issues := make([]LintIssue, 0)
 
-	hasWebhookInput := false
-	for _, n := range g.Nodes {
-		if n.Module == "webhook_input" {
-			hasWebhookInput = true
-			break
-		}
-	}
-
 	for _, tr := range g.Triggers {
 		switch tr.Type {
 		case "cron":
@@ -67,26 +59,20 @@ func lintTriggers(g Graph) []LintIssue {
 					fmt.Sprintf("Cron trigger %q never matches a real calendar date (e.g. February 30th), so it will never fire.", expr)))
 			}
 		case "poll":
-			switch {
-			case tr.IntervalSeconds <= 0:
-				issues = append(issues, triggerIssue("trigger_poll_interval",
-					"A poll trigger's interval must be a positive number of seconds, so this one will never fire."))
-			case tr.IntervalSeconds > MaxPollIntervalSeconds:
-				issues = append(issues, triggerIssue("trigger_poll_interval",
-					fmt.Sprintf("A poll trigger's interval (%d seconds) exceeds the maximum of %d (1 year), so it will be ignored. Use a smaller interval.", tr.IntervalSeconds, MaxPollIntervalSeconds)))
-			}
+			// Poll is no longer a graph-level trigger — the interval lives on
+			// the poll_trigger node now (scanned by the scheduler). A legacy
+			// graph-level poll trigger is ignored at runtime, so flag it for
+			// migration rather than validating an interval the scheduler won't read.
+			issues = append(issues, triggerIssue("trigger_poll_deprecated",
+				"Poll schedules are now set on the Poll node, not as a graph-level trigger — this one is ignored. Add a poll_trigger node and set its interval (seconds)."))
 		case "webhook":
-			if tr.Secret == "" && !tr.PublicForm {
-				issues = append(issues, triggerIssue("trigger_webhook_no_secret",
-					"A webhook trigger has no secret, so its /trigger endpoint can't be called (callers must send the secret as a bearer token). Add a secret, or turn on the hosted form for a public, secret-less endpoint."))
-			}
-			if tr.PublicForm && !hasWebhookInput {
-				issues = append(issues, triggerIssue("trigger_form_no_sink",
-					"This flow's hosted form has no \"Webhook input\" node to deliver submissions to, so form posts will be rejected. Add a webhook_input node and wire it into the flow."))
-			}
+			// Webhook config (secret + hosted form) lives on the webhook_input
+			// node now — a graph-level webhook trigger is ignored at runtime.
+			issues = append(issues, triggerIssue("trigger_webhook_deprecated",
+				"Webhook config is now set on the Webhook input node, not as a graph-level trigger — this one is ignored. Set the secret (and hosted-form options) on the webhook_input node instead."))
 		default:
 			issues = append(issues, triggerIssue("trigger_unknown_type",
-				fmt.Sprintf("Trigger type %q isn't recognized, so this flow won't be triggered. Supported types are webhook, cron, and poll.", tr.Type)))
+				fmt.Sprintf("Trigger type %q isn't recognized, so this flow won't be triggered. The only graph-level trigger is cron; webhook and poll are configured on their nodes.", tr.Type)))
 		}
 	}
 
@@ -112,6 +98,43 @@ func lintTriggers(g Graph) []LintIssue {
 		if sched.Next(cronLintAnchor).IsZero() {
 			issues = append(issues, nodeTriggerIssue("trigger_cron_never_fires", n.ID,
 				fmt.Sprintf("Schedule node's cron %q never matches a real calendar date (e.g. February 30th), so it will never fire.", expr)))
+		}
+	}
+
+	// poll_trigger nodes carry their interval on the node (like cron_trigger's
+	// schedule). A blank interval is intentional ("run only on demand"), so
+	// it's not flagged — only a non-positive or over-the-ceiling value, which
+	// the scheduler would refuse to run.
+	for _, n := range g.Nodes {
+		if n.Module != "poll_trigger" {
+			continue
+		}
+		secs, ok := paramInt(n.Params, "interval_seconds")
+		if !ok || secs == 0 {
+			continue // unset/zero — manual-only, fine (mirrors a blank cron)
+		}
+		switch {
+		case secs < 0:
+			issues = append(issues, nodeTriggerIssue("trigger_poll_interval", n.ID,
+				"Poll node's interval must be a positive number of seconds, so it will never fire. Set how often it should run, or clear it to run only on demand."))
+		case secs > MaxPollIntervalSeconds:
+			issues = append(issues, nodeTriggerIssue("trigger_poll_interval", n.ID,
+				fmt.Sprintf("Poll node's interval (%d seconds) exceeds the maximum of %d (1 year), so it will be ignored. Use a smaller interval.", secs, MaxPollIntervalSeconds)))
+		}
+	}
+
+	// webhook_input nodes carry the secret + hosted-form opt-in. A node with
+	// neither a secret nor a public form is unreachable: the /trigger endpoint
+	// rejects unauthenticated POSTs and there's no form to receive submissions.
+	for _, n := range g.Nodes {
+		if n.Module != "webhook_input" {
+			continue
+		}
+		secret, _ := n.Params["secret"].(string)
+		publicForm, _ := n.Params["public_form"].(bool)
+		if strings.TrimSpace(secret) == "" && !publicForm {
+			issues = append(issues, nodeTriggerIssue("trigger_webhook_no_secret", n.ID,
+				"Webhook input has no secret and no public form, so nothing can reach it: the /trigger endpoint needs a bearer secret, or turn on the hosted form for a public, secret-less endpoint."))
 		}
 	}
 
@@ -152,4 +175,19 @@ func nodeTriggerIssue(code, nodeID, msg string) LintIssue {
 // nodes, so NodeIDs is left empty.
 func triggerIssue(code, msg string) LintIssue {
 	return LintIssue{Code: code, Severity: LintWarn, Message: msg}
+}
+
+// paramInt reads an integer-valued node param, tolerating the float64 that JSON
+// unmarshalling produces. The bool is false when the key is absent or not a
+// number, so callers can tell "unset" from a real value.
+func paramInt(params map[string]any, key string) (int, bool) {
+	switch v := params[key].(type) {
+	case float64:
+		return int(v), true
+	case int:
+		return v, true
+	case int64:
+		return int(v), true
+	}
+	return 0, false
 }
