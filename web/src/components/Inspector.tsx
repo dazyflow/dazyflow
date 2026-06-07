@@ -11,6 +11,7 @@ import {
 } from "./SchemaForm";
 import { OutputPreview } from "./OutputPreview";
 import { LiveConsole } from "./LiveConsole";
+import { TriggerScheduleField, browserTimeZone } from "./TriggersModal";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import { oauthProviderForIntegration } from "../integrationMeta";
@@ -172,6 +173,13 @@ export function Inspector({
   const d = selected.data;
   const schema = d.manifest?.params_schema;
   const canForm = supportsSchemaForm(schema);
+  // The cron_trigger node owns its schedule (Phase 2). In form mode we
+  // render the friendly preset picker (presets + time + "next fires"
+  // preview) instead of a raw cron text box — the same control the
+  // Triggers modal uses. The picker always emits a concrete 5-field cron,
+  // so just opening it on a fresh node writes a real default rather than
+  // leaving params blank. JSON mode still exposes the raw params.
+  const isCronTrigger = d.moduleID === "cron_trigger";
   // For OAuth-backed drops, turn the `account` param into a dropdown of
   // connected accounts. Skipped when OAuth is off (providers null) or
   // the drop isn't OAuth-backed (provider null).
@@ -421,7 +429,24 @@ export function Inspector({
           </div>
         )}
 
-        {mode === "form" && canForm && schema && (
+        {mode === "form" && canForm && schema && isCronTrigger && (
+          // key forces a fresh picker per node so its internal preset
+          // state re-derives from the new node's cron on selection.
+          <TriggerScheduleField
+            key={selected.id}
+            value={typeof currentParams.cron === "string" ? currentParams.cron : ""}
+            onChange={(cron) => {
+              if (cron === currentParams.cron) return;
+              onParamsChange(selected.id, {
+                ...currentParams,
+                cron,
+                tz: browserTimeZone(),
+              });
+            }}
+          />
+        )}
+
+        {mode === "form" && canForm && schema && !isCronTrigger && (
           // key={selected.id} forces a fresh SchemaForm instance per
           // node so internal text state in JSONField / ArrayField /
           // etc. picks up the new node's value as its initial state

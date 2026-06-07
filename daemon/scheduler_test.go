@@ -160,6 +160,62 @@ func TestScheduler_RejectsBadCron(t *testing.T) {
 	}
 }
 
+// TestScheduler_TracksCronTriggerNode verifies Phase 2: a schedule set on
+// a cron_trigger NODE (not on g.Triggers) is picked up by the scheduler.
+func TestScheduler_TracksCronTriggerNode(t *testing.T) {
+	ks := auth.NewMemKeyStore()
+	wsStore, _ := workspace.OpenFS("")
+	svc := &daemon.Service{
+		Auth:       auth.Chain{&auth.APIKeyAuthenticator{Store: ks}},
+		Workspaces: daemon.MapWorkspaces{"acme/ws1": wsStore},
+		Jobs:       jobstore.NewMemory(),
+		Engine:     &engine.Engine{Resolver: &engine.NodeResolver{Native: engine.Default}},
+		Bus:        daemon.NewMemoryBus(),
+	}
+	_, _ = wsStore.Save(core.Graph{
+		ID: "node-cron", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{{ID: "sched", Module: "cron_trigger", Params: map[string]any{"cron": "0 9 * * *", "tz": "Europe/Stockholm"}}},
+	}, "test")
+
+	sched := daemon.NewScheduler(svc)
+	sched.SetInterval(5*time.Millisecond, 30*time.Millisecond)
+	schedCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = sched.Run(schedCtx) }()
+	time.Sleep(100 * time.Millisecond)
+	if got := sched.TrackedCount(); got != 1 {
+		t.Errorf("tracked=%d, want 1 (cron_trigger node schedule should be picked up)", got)
+	}
+}
+
+// TestScheduler_IgnoresCronTriggerNodeWithoutSchedule confirms a blank
+// schedule on the node means "run only on demand" — not tracked, not fired.
+func TestScheduler_IgnoresCronTriggerNodeWithoutSchedule(t *testing.T) {
+	ks := auth.NewMemKeyStore()
+	wsStore, _ := workspace.OpenFS("")
+	svc := &daemon.Service{
+		Auth:       auth.Chain{&auth.APIKeyAuthenticator{Store: ks}},
+		Workspaces: daemon.MapWorkspaces{"acme/ws1": wsStore},
+		Jobs:       jobstore.NewMemory(),
+		Engine:     &engine.Engine{Resolver: &engine.NodeResolver{Native: engine.Default}},
+		Bus:        daemon.NewMemoryBus(),
+	}
+	_, _ = wsStore.Save(core.Graph{
+		ID: "node-cron-blank", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{{ID: "sched", Module: "cron_trigger", Params: map[string]any{}}},
+	}, "test")
+
+	sched := daemon.NewScheduler(svc)
+	sched.SetInterval(5*time.Millisecond, 30*time.Millisecond)
+	schedCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = sched.Run(schedCtx) }()
+	time.Sleep(100 * time.Millisecond)
+	if got := sched.TrackedCount(); got != 0 {
+		t.Errorf("tracked=%d, want 0 (blank node schedule must not fire)", got)
+	}
+}
+
 // TestScheduler_ImpossibleCronDateDoesNotFire guards a runaway-loop:
 // "0 0 30 2 *" (Feb 30 — never exists) PARSES fine, but cron.Schedule.
 // Next() gives up after 5 years and returns the ZERO time. The fire

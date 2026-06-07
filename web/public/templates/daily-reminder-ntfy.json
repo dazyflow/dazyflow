@@ -2,12 +2,17 @@
   "id": "daily-reminder-ntfy",
   "version": "1",
   "name": "Daily reminder to your phone",
-  "description": "Sends a notification to an ntfy topic every morning at 09:00. No accounts to connect — just pick a topic and subscribe to it in the ntfy app.",
+  "description": "A Schedule step fires every morning at 09:00 and an ntfy step pushes a notification to a topic you choose. No accounts to connect — just pick a topic and subscribe to it in the ntfy app.",
   "icon": "ntfy",
-  "triggers": [
-    { "type": "cron", "cron": "0 9 * * *" }
-  ],
   "nodes": [
+    {
+      "id": "schedule",
+      "module": "cron_trigger",
+      "params": {
+        "cron": "0 9 * * *"
+      },
+      "position": { "x": 240, "y": 200 }
+    },
     {
       "id": "notify",
       "module": "ntfy",
@@ -17,7 +22,7 @@
         "message": "Hello! Your daily reminder.",
         "title": "Daily reminder"
       },
-      "position": { "x": 240, "y": 200 }
+      "position": { "x": 560, "y": 200 }
     }
   ],
   "edges": []

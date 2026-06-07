@@ -384,7 +384,11 @@
       "emptyTitle": "No schedule set up",
       "emptyDesc": "Add a schedule to run this flow automatically — daily, weekly, or on a custom cadence.",
       "add": "Add a schedule",
-      "removeTitle": "Remove the schedule"
+      "removeTitle": "Remove the schedule",
+      "managedTitle": "Scheduled by a Schedule step",
+      "managedDesc": "This flow already has a Schedule step on the canvas. Select it there to change when the flow runs.",
+      "legacyWarn": "This flow also has an older graph-level schedule, so it will run twice at each time. Remove the old one to fix it.",
+      "removeLegacy": "Remove the old schedule"
     }
   },
   "templates": {

@@ -51,6 +51,33 @@ func TestLintTriggers_FlagsBadConfigs(t *testing.T) {
 			wantCode: "trigger_cron_never_fires",
 		},
 		{
+			name: "cron_trigger node with valid schedule — no warning",
+			graph: Graph{
+				Nodes: []Node{{ID: "sched", Module: "cron_trigger", Params: map[string]any{"cron": "0 9 * * *"}}},
+			},
+		},
+		{
+			name: "cron_trigger node with garbage schedule",
+			graph: Graph{
+				Nodes: []Node{{ID: "sched", Module: "cron_trigger", Params: map[string]any{"cron": "not a cron"}}},
+			},
+			wantCode: "trigger_cron_invalid",
+		},
+		{
+			name: "cron_trigger node with blank schedule — intentional manual, no warning",
+			graph: Graph{
+				Nodes: []Node{{ID: "sched", Module: "cron_trigger", Params: map[string]any{}}},
+			},
+		},
+		{
+			name: "schedule node AND graph-level cron — double-fire warning",
+			graph: Graph{
+				Nodes:    []Node{{ID: "sched", Module: "cron_trigger", Params: map[string]any{"cron": "0 9 * * *"}}},
+				Triggers: []GraphTrigger{{Type: "cron", Cron: "0 9 * * *"}},
+			},
+			wantCode: "trigger_cron_duplicate_source",
+		},
+		{
 			name: "valid poll — no warning",
 			graph: Graph{
 				Triggers: []GraphTrigger{{Type: "poll", IntervalSeconds: 300}},

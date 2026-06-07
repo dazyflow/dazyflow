@@ -86,7 +86,7 @@ import { CommentNode } from "../components/CommentNode";
 import { RunHistory } from "../components/RunHistory";
 import { RerouteEdge } from "../components/RerouteEdge";
 import { SettingsModal } from "../components/SettingsModal";
-import { TriggersModal } from "../components/TriggersModal";
+import { TriggersModal, browserTimeZone } from "../components/TriggersModal";
 import { QuickDropPalette } from "../components/QuickDropPalette";
 
 // Custom node-types registry. React Flow caches by reference, so this
@@ -882,6 +882,44 @@ function EditorInner() {
     },
     [nodes, screenToFlowPosition],
   );
+
+  // addScheduleNode drops a cron_trigger ("Schedule") node onto the
+  // canvas, pre-filled with a sensible daily default + the user's
+  // timezone so it's scheduled immediately. The Triggers modal's
+  // Schedule tab calls this instead of writing a graph-level cron, so a
+  // flow's schedule has a single home (the node), edited with the
+  // inspector's picker. A no-op if the catalog hasn't loaded the
+  // cron_trigger manifest yet.
+  const addScheduleNode = useCallback(() => {
+    const m = manifestByID.get("cron_trigger");
+    if (!m) return;
+    const w = wrapperRef.current;
+    const screen = w
+      ? (() => {
+          const r = w.getBoundingClientRect();
+          return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+        })()
+      : { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+    const position = screenToFlowPosition(screen);
+    // Compute the ID once and use it for BOTH the node and its params, so
+    // they can't diverge (e.g. on a rapid double-add before a re-render).
+    const newID = nextID(nodes, m.id);
+    setNodes((nds) => [
+      ...nds,
+      {
+        id: newID,
+        type: "hazy",
+        position,
+        data: { label: m.label, moduleID: m.id, manifest: m },
+      },
+    ]);
+    setParamsByID((p) => ({
+      ...p,
+      [newID]: { cron: "0 9 * * *", tz: browserTimeZone() },
+    }));
+    setDirty(true);
+    setTriggersOpen(false);
+  }, [manifestByID, nodes, screenToFlowPosition]);
 
   const onDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -2026,6 +2064,20 @@ function EditorInner() {
     description,
     timeout_seconds: timeoutSeconds,
   };
+
+  // A flow can start on its own via a graph-level trigger (webhook/poll/
+  // cron in g.triggers) OR a *configured* Schedule node — a cron_trigger
+  // whose cron param is set (the scheduler fires from it). Only cron_trigger
+  // is self-starting from the canvas: webhook_input still needs a webhook
+  // secret and poll_trigger a poll interval (both graph-level), so a bare
+  // such node must NOT suppress the "add a trigger" nudge. An unconfigured
+  // Schedule node (blank cron) doesn't fire either, so it doesn't count.
+  const hasScheduledNode = nodes.some((n) => {
+    if ((n.data as HazyNodeData | undefined)?.moduleID !== "cron_trigger") return false;
+    const cron = paramsByID[n.id]?.cron;
+    return typeof cron === "string" && cron.trim() !== "";
+  });
+  const hasAnyTrigger = triggers.length > 0 || hasScheduledNode;
   const persistSettings = async (next: Graph) => {
     setTriggers(next.triggers ?? []);
     setVisibility(next.visibility);
@@ -2099,7 +2151,7 @@ function EditorInner() {
                 className="ghost"
                 onClick={() => setTriggersOpen(true)}
                 title={
-                  triggers.length > 0
+                  hasAnyTrigger
                     ? t("editor.triggersActiveTitle")
                     : t("editor.triggersTitle")
                 }
@@ -2109,7 +2161,7 @@ function EditorInner() {
                 {/* A dot signals the flow has a way to start on its own
                     (schedule/form/webhook) — otherwise nothing on the canvas
                     shows that a trigger is attached. */}
-                {triggers.length > 0 && (
+                {hasAnyTrigger && (
                   <span
                     aria-hidden="true"
                     style={{
@@ -2540,7 +2592,7 @@ function EditorInner() {
             with the action inline so they needn't hunt for it. Hidden while
             a run is locked or an error banner is showing (same top slot). */}
         {nodes.length > 0 &&
-          triggers.length === 0 &&
+          !hasAnyTrigger &&
           !triggerHintDismissed &&
           !lockedRunID &&
           !error && (
@@ -2862,6 +2914,10 @@ function EditorInner() {
           graph={settingsGraph}
           onClose={() => setTriggersOpen(false)}
           onSave={persistSettings}
+          onAddSchedule={addScheduleNode}
+          hasScheduleNode={nodes.some(
+            (n) => (n.data as HazyNodeData | undefined)?.moduleID === "cron_trigger",
+          )}
         />
       )}
       {gateOpen && (

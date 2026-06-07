@@ -89,7 +89,63 @@ func lintTriggers(g Graph) []LintIssue {
 				fmt.Sprintf("Trigger type %q isn't recognized, so this flow won't be triggered. Supported types are webhook, cron, and poll.", tr.Type)))
 		}
 	}
+
+	// cron_trigger nodes carry their own schedule (Phase 2). Lint a
+	// configured one the same way as a graph-level cron trigger. A blank
+	// schedule is intentional ("run only on demand"), so it's not flagged —
+	// only a malformed or never-firing expression is.
+	for _, n := range g.Nodes {
+		if n.Module != "cron_trigger" {
+			continue
+		}
+		expr, _ := n.Params["cron"].(string)
+		expr = strings.TrimSpace(expr)
+		if expr == "" {
+			continue
+		}
+		sched, err := cronLintParser.Parse(expr)
+		if err != nil {
+			issues = append(issues, nodeTriggerIssue("trigger_cron_invalid", n.ID,
+				fmt.Sprintf("Schedule node's cron %q isn't valid (%v), so it will never fire. Use 5 fields: minute hour day-of-month month day-of-week.", expr, err)))
+			continue
+		}
+		if sched.Next(cronLintAnchor).IsZero() {
+			issues = append(issues, nodeTriggerIssue("trigger_cron_never_fires", n.ID,
+				fmt.Sprintf("Schedule node's cron %q never matches a real calendar date (e.g. February 30th), so it will never fire.", expr)))
+		}
+	}
+
+	// A flow shouldn't carry BOTH a Schedule node and a graph-level cron
+	// trigger: the scheduler tracks each independently, so the flow fires
+	// twice at every due time. This can arise when a Schedule node is added
+	// to a flow that still has a legacy graph-level cron — surface it so the
+	// owner removes one. (The two are otherwise complementary: only one cron
+	// authority should win.)
+	hasCronNode := false
+	for _, n := range g.Nodes {
+		if n.Module == "cron_trigger" {
+			hasCronNode = true
+			break
+		}
+	}
+	hasGraphCron := false
+	for _, tr := range g.Triggers {
+		if tr.Type == "cron" {
+			hasGraphCron = true
+			break
+		}
+	}
+	if hasCronNode && hasGraphCron {
+		issues = append(issues, triggerIssue("trigger_cron_duplicate_source",
+			"This flow has both a Schedule step and a graph-level schedule, so it will run twice at each scheduled time. Keep the Schedule step and remove the graph-level schedule on the Triggers → Schedule tab."))
+	}
 	return issues
+}
+
+// nodeTriggerIssue builds a trigger lint finding attributed to a specific
+// node (a cron_trigger), so the editor can pin the warning to that node.
+func nodeTriggerIssue(code, nodeID, msg string) LintIssue {
+	return LintIssue{Code: code, Severity: LintWarn, Message: msg, NodeIDs: []string{nodeID}}
 }
 
 // triggerIssue builds a trigger-level lint finding. Triggers aren't

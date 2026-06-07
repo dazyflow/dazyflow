@@ -36,11 +36,21 @@ type Props = {
   graph: Graph;
   onClose: () => void;
   onSave: (next: Graph) => void | Promise<void>;
+  // onAddSchedule inserts a cron_trigger ("Schedule") node onto the
+  // canvas and closes the modal. The Schedule tab calls this instead of
+  // writing a graph-level cron trigger, so a flow's schedule lives in one
+  // place (the node), edited with the inspector picker. Omitted ⇒ the tab
+  // falls back to the legacy graph-level cron editor.
+  onAddSchedule?: () => void;
+  // hasScheduleNode is true when the canvas already holds a cron_trigger
+  // node. settingsGraph carries no nodes, so the editor computes this from
+  // its live node state and passes it in.
+  hasScheduleNode?: boolean;
 };
 
 type Tab = "form" | "webhook" | "schedule";
 
-export function TriggersModal({ graph, onClose, onSave }: Props) {
+export function TriggersModal({ graph, onClose, onSave, onAddSchedule, hasScheduleNode }: Props) {
   const { t } = useTranslation();
   // Local working copy: edits only commit to the parent on Save.
   const [draft, setDraft] = useState<Graph>(graph);
@@ -161,7 +171,9 @@ export function TriggersModal({ graph, onClose, onSave }: Props) {
           {tab === "schedule" && (
             <ScheduleTab
               cron={cron}
+              hasScheduleNode={!!hasScheduleNode}
               onChange={(c) => upsertCron({ cron: c })}
+              onAddScheduleNode={onAddSchedule}
               onCreate={() => upsertCron({})}
               onRemove={() => remove("cron")}
             />
@@ -397,20 +409,58 @@ function WebhookTab({
   );
 }
 
-// ScheduleTab wraps the cron preset picker. Empty state when no cron
-// trigger exists; its CTA seeds a sensible daily default.
+// ScheduleTab wraps the cron preset picker. Three states, in priority
+// order: (1) a Schedule node already owns the schedule → point at it on
+// the canvas; (2) nothing scheduled → CTA adds a Schedule node (or, with
+// no node-insert callback, falls back to the legacy graph-level cron);
+// (3) a legacy graph-level cron exists → keep editing it inline so old
+// flows aren't stranded.
 function ScheduleTab({
   cron,
+  hasScheduleNode,
   onChange,
+  onAddScheduleNode,
   onCreate,
   onRemove,
 }: {
   cron?: GraphTrigger;
+  hasScheduleNode: boolean;
   onChange: (cron: string) => void;
+  onAddScheduleNode?: () => void;
   onCreate: () => void;
   onRemove: () => void;
 }) {
   const { t } = useTranslation();
+  if (hasScheduleNode) {
+    return (
+      <div className="trigger-empty">
+        <CalendarClock size={28} className="trigger-empty-icon" />
+        <div className="trigger-empty-title">
+          {t("triggers.schedule.managedTitle")}
+        </div>
+        <div className="desc">{t("triggers.schedule.managedDesc")}</div>
+        {/* If a legacy graph-level cron ALSO exists, the flow would fire
+            twice. Surface it here with a remove path so the duplicate-source
+            lint warning is actionable. */}
+        {cron && (
+          <div style={{ marginTop: 14 }}>
+            <div className="desc" style={{ color: "var(--danger)" }}>
+              {t("triggers.schedule.legacyWarn")}
+            </div>
+            <button
+              type="button"
+              className="ghost"
+              onClick={onRemove}
+              style={{ marginTop: 8 }}
+            >
+              <Trash2 size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+              {t("triggers.schedule.removeLegacy")}
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
   if (!cron) {
     return (
       <TriggerEmpty
@@ -418,7 +468,7 @@ function ScheduleTab({
         title={t("triggers.schedule.emptyTitle")}
         desc={t("triggers.schedule.emptyDesc")}
         cta={t("triggers.schedule.add")}
-        onAdd={onCreate}
+        onAdd={onAddScheduleNode ?? onCreate}
       />
     );
   }
@@ -844,7 +894,7 @@ function useCronValidation(expr: string): CronValidation {
 // TriggerScheduleField is the friendly cron picker: a chip row picks
 // the cadence, sub-controls collect the time/day, and a Custom escape
 // hatch keeps the raw expression. Emits a 5-field cron string upward.
-function TriggerScheduleField({
+export function TriggerScheduleField({
   value,
   onChange,
 }: {
@@ -1225,7 +1275,7 @@ function formatCronTime(iso: string, locale: string): string {
 
 // browserTimeZone returns the user's IANA timezone, or "UTC" if the
 // browser doesn't expose one.
-function browserTimeZone(): string {
+export function browserTimeZone(): string {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   } catch {

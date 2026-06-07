@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -239,6 +240,43 @@ func (s *Scheduler) rescan(ctx context.Context) error {
 				// cron AND a poll trigger gets two scheduler entries (one
 				// per trigger) instead of clobbering one with the other.
 				k := fmt.Sprintf("%s/%s/%s#%d", tenant, workspace, gid, triggerIdx)
+				if existing, ok := s.tracked[k]; ok && !existing.scheduleAt.IsZero() {
+					entry.scheduleAt = existing.scheduleAt
+				} else {
+					entry.scheduleAt = entry.nextFireFrom(now)
+				}
+				next[k] = entry
+			}
+
+			// cron_trigger NODES carry their own schedule (Phase 2: the
+			// cron expression lives on the node, not only on a graph-level
+			// trigger). Scan them in addition to g.Triggers so a
+			// node-authored schedule fires too. Keyed by node ID — stable
+			// across edits, unlike the trigger-array index used above, so
+			// rescans don't reshuffle keys and double-fire.
+			for _, node := range g.Nodes {
+				if node.Module != "cron_trigger" {
+					continue
+				}
+				expr, _ := node.Params["cron"].(string)
+				expr = strings.TrimSpace(expr)
+				if expr == "" {
+					continue // unscheduled node — runs only on manual Run
+				}
+				tz, _ := node.Params["tz"].(string)
+				sched, err := parseCronInTZ(s.parser, expr, tz)
+				if err != nil {
+					s.logger.Printf("bad cron %q (tz %q) on node %s of %s/%s/%s: %v",
+						expr, tz, node.ID, tenant, workspace, gid, err)
+					continue
+				}
+				entry := &scheduledGraph{
+					graphID:    gid,
+					tenant:     tenant,
+					workspace:  workspace,
+					scheduleFn: sched,
+				}
+				k := fmt.Sprintf("%s/%s/%s@%s", tenant, workspace, gid, node.ID)
 				if existing, ok := s.tracked[k]; ok && !existing.scheduleAt.IsZero() {
 					entry.scheduleAt = existing.scheduleAt
 				} else {

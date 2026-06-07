@@ -2855,6 +2855,34 @@ button.danger-outline:hover:not(:disabled) {
   flex-direction: column;
   transition: border-color 120ms, box-shadow 120ms;
 }
+/* Trigger nodes are the graph's entry points (schedule, webhook, poll,
+   service events). Invert the usual dark-surface card into an accent-filled
+   one so the eye lands on "where this flow starts" at a glance. --node-accent
+   is the category tint passed inline by NodeCard (purple for triggers). */
+.hz-node.hz-node-trigger {
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--node-accent, #aa66dd) 34%, var(--surface)),
+    color-mix(in srgb, var(--node-accent, #aa66dd) 15%, var(--surface))
+  );
+  border-color: var(--node-accent, #aa66dd);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--node-accent, #aa66dd) 45%, transparent),
+    var(--shadow);
+}
+.hz-node.hz-node-trigger:hover {
+  border-color: color-mix(in srgb, var(--node-accent, #aa66dd) 80%, #fff);
+}
+.hz-node.hz-node-trigger.selected {
+  border-color: var(--node-accent, #aa66dd);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--node-accent, #aa66dd) 60%, transparent),
+    var(--shadow);
+}
+.hz-node.hz-node-trigger .label {
+  color: #fff;
+  font-weight: 650;
+}
 /* Compact "operator chip" for logic primitives (==, >, <, …): a small
    square that shows just the operator glyph, Unreal-Blueprint style. No
    icon box or title — A/B pins on the left edge, Result on the right.

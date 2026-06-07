@@ -168,6 +168,10 @@ export function HazyNode({ data, selected }: NodeProps) {
   const showLiteralFields = literalFields.length > 0 && (isValueSource || !!d.inlineEditable);
 
   const statusClass = d.status ? " status-" + d.status : "";
+  // Triggers are the graph's entry points — render them with an inverted,
+  // accent-filled treatment so they stand out from ordinary steps. The
+  // category tint is threaded to CSS as --node-accent (purple for triggers).
+  const isTrigger = d.manifest?.category === "trigger";
 
   // Compact "operator chip" for logic primitives (==, >, <, …): a small
   // square showing just the operator glyph, Unreal-Blueprint style — no icon
@@ -198,10 +202,12 @@ export function HazyNode({ data, selected }: NodeProps) {
         "hz-node" +
         (selected ? " selected" : "") +
         statusClass +
+        (isTrigger ? " hz-node-trigger" : "") +
         (d.lintMessage ? " lint-warn" : "") +
         (d.configErrors?.length ? " config-err" : "") +
         (d.paused ? " paused" : "")
       }
+      style={isTrigger ? ({ "--node-accent": color } as React.CSSProperties) : undefined}
     >
       {d.breakpoint && (
         <div className="hz-node-bp" aria-label="breakpoint" title="Breakpoint — run pauses after this node" />

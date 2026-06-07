@@ -381,7 +381,11 @@
       "emptyTitle": "Inget schema konfigurerat",
       "emptyDesc": "Lägg till ett schema för att köra flödet automatiskt — dagligen, veckovis eller med en egen takt.",
       "add": "Lägg till ett schema",
-      "removeTitle": "Ta bort schemat"
+      "removeTitle": "Ta bort schemat",
+      "managedTitle": "Schemalagt av ett Schema-steg",
+      "managedDesc": "Det här flödet har redan ett Schema-steg på arbetsytan. Markera det där för att ändra när flödet körs.",
+      "legacyWarn": "Det här flödet har även ett äldre schema på grafnivå, så det körs två gånger vid varje tidpunkt. Ta bort det gamla för att åtgärda det.",
+      "removeLegacy": "Ta bort det gamla schemat"
     }
   },
   "templates": {
