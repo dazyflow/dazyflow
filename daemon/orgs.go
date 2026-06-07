@@ -244,6 +244,31 @@ func (h *HTTPGateway) createInvitation(rw http.ResponseWriter, r *http.Request, 
 		writeJSONError(rw, http.StatusBadRequest, err.Error())
 		return
 	}
+	// Cap the roles an inviter may grant. Mirrors the IssueAPIKey /
+	// IssueOwnAPIKey guards: only a platform admin may hand out the
+	// cross-tenant super-admin role, and a tenant admin can only delegate
+	// permissions they themselves hold. Without this an org admin could
+	// invite (or self-invite) a membership carrying platform:admin and,
+	// after switchOrg copies the membership roles into the session, break
+	// out of their own tenant. Only explicitly-requested roles are checked;
+	// the default editor role below is a trusted server-side grant.
+	if len(body.Roles) > 0 && !isPlatformAdmin(p) {
+		callerPerms := principalPermissions(p)
+		for _, role := range body.Roles {
+			for _, perm := range role.Permissions {
+				if perm == core.PermPlatformAdmin {
+					writeJSONError(rw, http.StatusForbidden,
+						fmt.Sprintf("only a platform admin may grant %q", core.PermPlatformAdmin))
+					return
+				}
+				if _, ok := callerPerms[perm]; !ok {
+					writeJSONError(rw, http.StatusForbidden,
+						fmt.Sprintf("cannot invite with permission %q: it exceeds your own permissions", perm))
+					return
+				}
+			}
+		}
+	}
 	if len(body.Roles) == 0 {
 		// Default to the editor role so the invited person can do
 		// graph work without needing a second admin action. The

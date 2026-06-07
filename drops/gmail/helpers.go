@@ -19,7 +19,13 @@ import (
 	"git.sr.ht/~klahr/hazyflow/core"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/sandbox"
+	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
 )
+
+// maxResponseBytes caps how much of an API response we buffer, so a
+// hostile or buggy upstream (reachable via the base_url override) can't
+// OOM the daemon by streaming an unbounded body.
+const maxResponseBytes = 64 << 20 // 64 MiB
 
 type TokenLookup func(ctx context.Context, account string) (string, error)
 
@@ -99,14 +105,24 @@ func gmailDo(ctx context.Context, method, url, token, contentType string, body [
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	// base_url is a tenant-supplied param, so guard the dial: the SSRF
+	// client blocks loopback/private/link-local targets and the egress
+	// allowlist (when set) bounds which public hosts the bearer token
+	// may be sent to.
+	if err := hfnet.EgressAllowed(url); err != nil {
+		return 0, nil, err
+	}
+	resp, err := hfnet.SafeHTTPClient(time.Duration(timeoutMS)*time.Millisecond, hfnet.PrivateEgressAllowed()).Do(req)
 	if err != nil {
 		return 0, nil, err
 	}
 	defer resp.Body.Close()
-	raw, err := io.ReadAll(resp.Body)
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
 	if err != nil {
 		return resp.StatusCode, nil, err
+	}
+	if int64(len(raw)) > maxResponseBytes {
+		return resp.StatusCode, nil, fmt.Errorf("gmail response exceeds %d bytes", maxResponseBytes)
 	}
 	return resp.StatusCode, raw, nil
 }

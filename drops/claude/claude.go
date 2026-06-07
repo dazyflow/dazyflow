@@ -17,12 +17,17 @@ import (
 
 	"git.sr.ht/~klahr/hazyflow/core"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
+	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
 	"git.sr.ht/~klahr/hazyflow/engine"
 )
 
 const (
 	apiVersion  = "2023-06-01"
 	defaultBase = "https://api.anthropic.com"
+	// maxResponseBytes caps how much of the API response we buffer, so a
+	// hostile or buggy upstream (reachable via the base_url override) can't
+	// OOM the daemon by streaming an unbounded body.
+	maxResponseBytes = 64 << 20 // 64 MiB
 )
 
 func init() {
@@ -137,14 +142,23 @@ func executeClaude(ctx context.Context, job core.Job, _ chan<- core.Progress) (c
 	req.Header.Set("x-api-key", apiKey)
 	req.Header.Set("anthropic-version", apiVersion)
 
-	// Claude hits a fixed vendor endpoint (api.anthropic.com), so no SSRF
-	// guard — same posture as the slack/gmail/sheets connectors.
-	resp, err := (&http.Client{Timeout: timeout}).Do(req)
+	// base_url is a tenant-overridable param (x_advanced), so the endpoint
+	// is NOT fixed — guard the dial like every other connector: the SSRF
+	// client blocks loopback/private/link-local targets (cloud metadata,
+	// internal services) and the egress allowlist (when the operator sets
+	// one) bounds which public hosts the x-api-key may be sent to.
+	if err := hfnet.EgressAllowed(endpoint); err != nil {
+		return params.Err(job, "egress_blocked", err.Error()), nil
+	}
+	resp, err := hfnet.SafeHTTPClient(timeout, hfnet.PrivateEgressAllowed()).Do(req)
 	if err != nil {
 		return params.Err(job, "claude_http_error", err.Error()), nil
 	}
 	defer resp.Body.Close()
-	respBody, _ := io.ReadAll(resp.Body)
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
+	if int64(len(respBody)) > maxResponseBytes {
+		return params.Err(job, "claude_http_error", "response exceeds "+strconv.Itoa(maxResponseBytes)+" bytes"), nil
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		code := "claude_api"
 		if resp.StatusCode == 429 {

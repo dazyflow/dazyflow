@@ -27,7 +27,14 @@ import (
 
 	"git.sr.ht/~klahr/hazyflow/core"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
+	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
 )
+
+// maxResponseBytes caps how much of an API response we buffer, so a
+// hostile or buggy upstream (reachable via the base_url override) can't
+// OOM the daemon by streaming an unbounded body. Generous enough for any
+// real Slack response.
+const maxResponseBytes = 64 << 20 // 64 MiB
 
 // TokenLookup resolves an account name to a Slack access token by
 // asking the daemon's OAuth registry. Returns ("", err) when the
@@ -198,14 +205,24 @@ func slackDo(ctx context.Context, method, url, token string, body []byte, timeou
 		req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	// base_url is a tenant-supplied param, so guard the dial: the SSRF
+	// client blocks loopback/private/link-local targets (cloud metadata,
+	// internal services) and the egress allowlist (when the operator sets
+	// one) bounds which public hosts the bearer token may be sent to.
+	if err := hfnet.EgressAllowed(url); err != nil {
+		return slackEnvelope{}, nil, err
+	}
+	resp, err := hfnet.SafeHTTPClient(time.Duration(timeoutMS)*time.Millisecond, hfnet.PrivateEgressAllowed()).Do(req)
 	if err != nil {
 		return slackEnvelope{}, nil, err
 	}
 	defer resp.Body.Close()
-	raw, err := io.ReadAll(resp.Body)
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
 	if err != nil {
 		return slackEnvelope{}, nil, err
+	}
+	if int64(len(raw)) > maxResponseBytes {
+		return slackEnvelope{}, nil, fmt.Errorf("slack response exceeds %d bytes", maxResponseBytes)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return slackEnvelope{}, nil, fmt.Errorf("slack returned %d: %s", resp.StatusCode, string(raw))

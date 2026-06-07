@@ -113,6 +113,9 @@ func (s *Service) IssueAPIKey(ctx context.Context, p core.Principal, params Issu
 			}
 		}
 	}
+	if err := s.reserveKeyID(ctx, params.ID, tenant); err != nil {
+		return IssuedAPIKey{}, err
+	}
 	id := params.ID
 	if id == "" {
 		generated, err := newID()
@@ -199,6 +202,9 @@ func (s *Service) IssueOwnAPIKey(ctx context.Context, p core.Principal, params S
 		}
 	}
 
+	if err := s.reserveKeyID(ctx, params.ID, p.Tenant); err != nil {
+		return IssuedAPIKey{}, err
+	}
 	id := params.ID
 	if id == "" {
 		generated, err := newID()
@@ -216,6 +222,29 @@ func (s *Service) IssueOwnAPIKey(ctx context.Context, p core.Principal, params S
 		APIKeySummary: redactKey(key, time.Now()),
 		Secret:        secret,
 	}, nil
+}
+
+// reserveKeyID guards the ON CONFLICT (id) upsert in PutKey, which
+// overwrites every column on a key-id collision. A caller-supplied ID
+// that already belongs to a *different* tenant must be rejected — else
+// issuing would silently hijack or revoke that tenant's key (key IDs are
+// not secret; they travel in the hzk_<id>_... wire format). An empty ID is
+// always server-generated, so it's free by construction.
+func (s *Service) reserveKeyID(ctx context.Context, id, tenant string) error {
+	if id == "" {
+		return nil
+	}
+	existing, err := s.AdminKeys.GetKey(ctx, id)
+	if err != nil {
+		if errors.Is(err, auth.ErrInvalidCredential) {
+			return nil // no key with that ID — it's free to use
+		}
+		return err
+	}
+	if existing.Tenant != tenant {
+		return fmt.Errorf("%w: key id %q is already in use", core.ErrUnauthorized, id)
+	}
+	return nil
 }
 
 // principalPermissions flattens the principal's roles into a perm set
@@ -346,6 +375,21 @@ func (s *Service) RevokeAPIKey(ctx context.Context, p core.Principal, id string)
 	}
 	if id == "" {
 		return errors.New("id is required")
+	}
+	// Revoke() keys only on id — the row's tenant isn't in its WHERE — so
+	// scope the revoke to the caller's tenant here, otherwise a tenant
+	// admin could revoke another tenant's key by id (a cross-tenant denial
+	// of service). Platform admins legitimately cross tenant boundaries.
+	// A key in another tenant returns the same not-found error as an
+	// unknown id so this can't be used to probe for foreign key ids.
+	key, err := s.AdminKeys.GetKey(ctx, id)
+	if err != nil {
+		// Unknown id (or unreadable). Defer to the store, which is
+		// idempotent and returns the canonical not-found error.
+		return s.AdminKeys.Revoke(ctx, id, time.Now())
+	}
+	if !isPlatformAdmin(p) && key.Tenant != p.Tenant {
+		return auth.ErrInvalidCredential
 	}
 	return s.AdminKeys.Revoke(ctx, id, time.Now())
 }

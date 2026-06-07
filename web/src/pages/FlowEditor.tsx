@@ -323,6 +323,13 @@ function EditorInner() {
 
   const rfRef = useRef<ReactFlowInstance<FlowNode<HazyNodeData>, FlowEdge> | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+  // streamAbortRef holds the AbortController for the one SSE run-stream
+  // that's currently active. subscribeToRun aborts the previous stream
+  // before opening a new one, and a mount-cleanup effect aborts it on
+  // unmount — so starting a run, sending a test event, or picking a
+  // historical run can never leave concurrent readers writing state (and
+  // nothing keeps streaming after the editor is gone).
+  const streamAbortRef = useRef<AbortController | null>(null);
   // lastPointer tracks the most recent mouse position over the canvas so
   // Ctrl+K can spawn the chosen drop where the user is looking. Falls
   // back to viewport centre when nothing has moved yet.
@@ -1761,6 +1768,10 @@ function EditorInner() {
   // function that aborts the stream.
   const subscribeToRun = (runID: string) => {
     if (!token) return () => {};
+    // Abort any stream still open from a prior run/test/history pick so we
+    // never run two readers writing the canvas at once (the returned cancel
+    // used to be discarded at most call sites, leaking the old stream).
+    streamAbortRef.current?.abort();
     // Clear status dots so we don't carry stale state across runs.
     setNodes((nds) =>
       nds.map((n) => ({ ...n, data: { ...n.data, status: undefined } })),
@@ -1770,6 +1781,7 @@ function EditorInner() {
     setPausedAt(null);
     setStepping(false);
     const abort = new AbortController();
+    streamAbortRef.current = abort;
     api
       .streamJob(
         token,
@@ -1876,7 +1888,12 @@ function EditorInner() {
       .catch(() => {
         /* aborted on terminal — expected */
       })
-      .finally(() => setRunning(false));
+      .finally(() => {
+        // Only clear the running flag if this is still the active stream;
+        // a superseded stream settling (because a newer run aborted it)
+        // must not flip the state the newer run just set.
+        if (streamAbortRef.current === abort) setRunning(false);
+      });
     return () => abort.abort();
   };
 
@@ -2046,6 +2063,12 @@ function EditorInner() {
     // render — subscribeToRun captures fresh setters via closure.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // Abort the live run-stream when the editor unmounts. subscribeToRun
+  // keeps streamAbortRef pointed at the current stream, whereas the [id]
+  // effect's own cleanup only captures the controller from when it ran —
+  // which a later run() / test-event / history pick may have superseded.
+  useEffect(() => () => streamAbortRef.current?.abort(), []);
 
   // settingsGraph + persistSettings are shared by the Settings and
   // Triggers modals — both edit graph-level fields and persist
