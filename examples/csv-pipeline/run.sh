@@ -11,6 +11,13 @@ set -euo pipefail
 cd "$(dirname "$0")"
 ROOT="$(cd ../.. && pwd)"
 
+# hzd runs on Postgres — there's no in-memory mode — so the demo needs a DB.
+# In CI the build manifest stands one up and exports HAZYFLOW_TEST_DB; locally,
+# `make pg` starts the bundled database on the same default DSN. Honour an
+# explicit HAZYFLOW_POSTGRES_DSN if the caller set one.
+: "${HAZYFLOW_POSTGRES_DSN:=${HAZYFLOW_TEST_DB:-postgres://hazyflow:hazyflow@localhost:5432/hazyflow_test?sslmode=disable}}"
+export HAZYFLOW_POSTGRES_DSN
+
 DATA_DIR=$(mktemp -d)
 trap 'rm -rf "$DATA_DIR" /tmp/hzd-demo /tmp/hzctl-demo /tmp/csv-xform-demo' EXIT
 
@@ -46,13 +53,19 @@ trap 'kill $XFORM_PID 2>/dev/null || true; kill $HZD_PID 2>/dev/null || true; rm
 wait_for 127.0.0.1 60001 csv_uppercase
 
 echo "[4/6] starting hzd with the remote registered"
+# HAZYFLOW_DEV=1 downgrades the insecure-defaults guard (default DB password,
+# empty master key) to warnings so the demo runs without provisioning real
+# secrets; DEV_KEY=1 mints the dev token we grep out below.
 HAZYFLOW_LISTEN=":50099" \
+HAZYFLOW_DEV=1 \
 HAZYFLOW_DEV_KEY=1 \
 HAZYFLOW_DATA_DIR="$DATA_DIR" \
 HAZYFLOW_REMOTE_MODULES="csv_uppercase=127.0.0.1:60001" \
 /tmp/hzd-demo > /tmp/hzd.log 2>&1 &
 HZD_PID=$!
-wait_for 127.0.0.1 50099 hzd
+# Dump hzd's log if it never binds — otherwise a startup failure (e.g. an
+# unreachable DB) shows only as an opaque timeout.
+wait_for 127.0.0.1 50099 hzd || { echo "    --- hzd log ---"; sed 's/^/    /' /tmp/hzd.log; exit 1; }
 # The dev token is minted during boot; poll the log until it appears.
 TOKEN=""
 for _ in $(seq 1 100); do
