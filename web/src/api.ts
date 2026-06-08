@@ -24,6 +24,7 @@ import type {
   NodeRunView,
   SecretManagerStatus,
   SecretManagerConfig,
+  ServiceInfo,
   UserSummary,
   WhoAmI,
   WorkspaceLimits,
@@ -267,6 +268,11 @@ export const api = {
       signalUnauthorized: false,
     }),
   whoami: (token: string | null) => request<WhoAmI>(token, "GET", "/me"),
+
+  // serviceInfo fetches the public GET /api/v1 descriptor. No token
+  // required — path "" resolves to API_BASE ("/api/v1"). The UI uses the
+  // build block for the account-menu version footer.
+  serviceInfo: () => request<ServiceInfo>(null, "GET", ""),
 
   // --- TOTP 2FA ---------------------------------------------------------
   // totpVerify is leg 2 of sign-in: it redeems the challenge from leg 1

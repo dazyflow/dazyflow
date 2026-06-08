@@ -37,6 +37,7 @@ import (
 
 	"git.sr.ht/~klahr/hazyflow/auth"
 	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/core/buildinfo"
 	"git.sr.ht/~klahr/hazyflow/daemon"
 	_ "git.sr.ht/~klahr/hazyflow/drops"
 	gitdrop "git.sr.ht/~klahr/hazyflow/drops/git"
@@ -757,7 +758,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("listen %s: %v", listen, err)
 	}
-	log.Printf("hzd listening on %s", listen)
+	log.Printf("hzd %s listening on %s", buildinfo.String(), listen)
 
 	go func() {
 		<-ctx.Done()

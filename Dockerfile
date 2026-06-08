@@ -45,6 +45,14 @@ COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod \
     go mod download
 COPY . .
+# Version stamping. These default to "dev"/"unknown" so a bare
+# `docker build` still produces a runnable image; the Makefile
+# (build/up/restart/rebuild) and CI pass real values computed from git
+# via --build-arg. They flow into the linker -X flags below and surface
+# at runtime on GET /api/v1 and in the startup log (see core/buildinfo).
+ARG VERSION=dev
+ARG COMMIT=unknown
+ARG BUILD_DATE=unknown
 # Static, stripped binary. CGO is off (pure-Go pgx + go-git, no sqlite
 # in the daemon path) so it runs on distroless static-nonroot.
 #
@@ -58,7 +66,11 @@ COPY . .
 ENV CGO_ENABLED=0 GOOS=linux
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    go build -trimpath -ldflags="-s -w" -o /out/hzd ./cmd/hzd
+    go build -trimpath -ldflags="-s -w \
+      -X git.sr.ht/~klahr/hazyflow/core/buildinfo.Version=${VERSION} \
+      -X git.sr.ht/~klahr/hazyflow/core/buildinfo.Commit=${COMMIT} \
+      -X git.sr.ht/~klahr/hazyflow/core/buildinfo.Date=${BUILD_DATE}" \
+      -o /out/hzd ./cmd/hzd
 RUN mkdir -p /data/workspace /data/sandbox /data/state
 
 # ---- 3. runtime -------------------------------------------------------

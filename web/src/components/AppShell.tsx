@@ -98,6 +98,24 @@ export function AppShell({ children }: { children: ReactNode }) {
     activeTenant,
     setActiveTenant,
   } = useAuth();
+  // Daemon version for the account-menu footer. Public GET /api/v1, so
+  // no token needed; fetched once on mount. Stays null (footer hidden)
+  // if the request fails — it's purely informational.
+  const [serverVersion, setServerVersion] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    api
+      .serviceInfo()
+      .then((info) => {
+        if (live) setServerVersion(info.build?.version || null);
+      })
+      .catch(() => {
+        /* informational only — leave the footer hidden on failure */
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
   // navCollapsed drives the icons-only rail. We persist the user's
   // explicit choice across reloads; if they haven't picked one yet we
   // default to collapsed on small viewports (where the full sidebar
@@ -480,6 +498,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               onSignOut={signOut}
               collapsed={navCollapsed}
               showAdmin={showAdmin}
+              version={serverVersion}
             />
           )}
         </aside>
@@ -686,11 +705,13 @@ function AccountMenu({
   onSignOut,
   collapsed,
   showAdmin,
+  version,
 }: {
   email: string;
   onSignOut: () => void;
   collapsed: boolean;
   showAdmin: boolean;
+  version: string | null;
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -799,6 +820,15 @@ function AccountMenu({
               <LogOut size={14} />
               {t("account.signOut")}
             </button>
+            {/* Version footer — informational, not a menu item. Hidden
+                until the GET /api/v1 fetch resolves. "dev" on an
+                unstamped local build; a release shows e.g. "v0.1.0". */}
+            {version && (
+              <>
+                <div className="workspace-pop-sep" role="separator" />
+                <div className="account-pop-version">hzd v{version}</div>
+              </>
+            )}
           </div>,
           document.body,
         )}

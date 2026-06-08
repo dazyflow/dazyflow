@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/core/buildinfo"
 	yaml "go.yaml.in/yaml/v3"
 )
 
@@ -145,8 +146,19 @@ type CatalogSummary struct {
 // point. An LLM lands here and follows links to everything else.
 type ServiceDescriptor struct {
 	Service string `json:"service"`
+	// Version is the API contract version (apiVersion). It moves only
+	// when the HTTP surface changes shape — distinct from the daemon
+	// build below, which advances every release.
 	Version string `json:"version"`
-	Auth    struct {
+	// Build is the running binary's release metadata, stamped at build
+	// time (see core/buildinfo). The web UI reads it for its footer and
+	// operators can curl GET /api/v1 to confirm which version is live.
+	Build struct {
+		Version string `json:"version"` // git describe, "dev" if unstamped
+		Commit  string `json:"commit"`
+		Date    string `json:"date"`
+	} `json:"build"`
+	Auth struct {
 		Scheme  string `json:"scheme"`
 		IssueAt string `json:"issue_at"`
 	} `json:"auth"`
@@ -164,6 +176,9 @@ func (h *HTTPGateway) serviceDescriptor(rw http.ResponseWriter, _ *http.Request)
 		Service: apiService,
 		Version: apiVersion,
 	}
+	d.Build.Version = buildinfo.Version
+	d.Build.Commit = buildinfo.Commit
+	d.Build.Date = buildinfo.Date
 	d.Auth.Scheme = "Bearer"
 	d.Auth.IssueAt = "/api/v1/me/api-keys"
 	d.Links = map[string]string{

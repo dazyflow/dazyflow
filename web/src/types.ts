@@ -250,6 +250,19 @@ export type Permission =
   | "organization:admin"
   | "platform:admin";
 
+// ServiceInfo mirrors the GET /api/v1 ServiceDescriptor — the public
+// discovery entry point. The UI only reads the build block (shown in the
+// account-menu footer); the rest of the descriptor is for API clients.
+export type ServiceInfo = {
+  service: string;
+  version: string; // API contract version
+  build: {
+    version: string; // daemon release ("dev" on an unstamped build)
+    commit: string;
+    date: string;
+  };
+};
+
 export type WhoAmI = {
   subject: string;
   tenant: string;

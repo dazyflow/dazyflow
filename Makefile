@@ -3,9 +3,27 @@
 
 COMPOSE ?= docker compose
 
+# Version metadata stamped into the binary (see core/buildinfo). Computed
+# from git so every build carries the same identity: the native `make
+# bin`, the Compose image, and CI all read these. Exported so the
+# `docker compose` invoked by up/build/restart/rebuild picks them up as
+# build args (docker-compose.yml maps them onto the Dockerfile ARGs).
+VERSION    ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+COMMIT     ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+export VERSION COMMIT BUILD_DATE
+
+# Linker flags for the native `make bin` build. -s -w strip the symbol
+# and DWARF tables; the -X flags inject the version vars into buildinfo.
+LDFLAGS := -s -w \
+  -X git.sr.ht/~klahr/hazyflow/core/buildinfo.Version=$(VERSION) \
+  -X git.sr.ht/~klahr/hazyflow/core/buildinfo.Commit=$(COMMIT) \
+  -X git.sr.ht/~klahr/hazyflow/core/buildinfo.Date=$(BUILD_DATE)
+
 .DEFAULT_GOAL := help
 
-.PHONY: help up down restart logs ps build rebuild env pg pg-down dev web test vet fmt check ci
+.PHONY: help up down restart logs ps build rebuild env pg pg-down dev web test vet fmt check ci \
+        bin version major minor patch _bump upgrade
 
 help: ## List targets
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sort | \
@@ -72,6 +90,67 @@ vet: ## Run go vet
 
 fmt: ## Format Go sources
 	gofmt -w .
+
+## --- Build & release ---
+# The Compose targets above (build/rebuild/up/restart) already stamp the
+# image: VERSION/COMMIT/BUILD_DATE are exported, so `docker compose` reads
+# them as build args. These targets cover the native binary and tagging.
+
+bin: ## Build a stamped native hzd binary (CGO off, trimmed, stripped)
+	CGO_ENABLED=0 go build -trimpath -ldflags="$(LDFLAGS)" -o hzd ./cmd/hzd
+	@ls -lh hzd
+
+version: ## Print the version that a build would stamp right now
+	@echo "version=$(VERSION) commit=$(COMMIT) date=$(BUILD_DATE)"
+
+# major/minor/patch cut an annotated release tag, bumping from the latest
+# existing tag (0.0.0 if none yet). They delegate to the shared _bump
+# recipe so the semver arithmetic lives in one place.
+#
+# Update CHANGELOG.md FIRST — move the [Unreleased] entries under a new
+# [X.Y.Z] - YYYY-MM-DD heading and commit — so the tag points at the
+# commit where the changelog announces the version. The tag is local;
+# the recipe prints the push command.
+#
+#   make patch   0.1.0 -> 0.1.1
+#   make minor   0.1.0 -> 0.2.0
+#   make major   0.1.0 -> 1.0.0
+major: ## Cut a major release tag (X+1.0.0)
+	@$(MAKE) --no-print-directory _bump BUMP=major
+minor: ## Cut a minor release tag (x.Y+1.0)
+	@$(MAKE) --no-print-directory _bump BUMP=minor
+patch: ## Cut a patch release tag (x.y.Z+1)
+	@$(MAKE) --no-print-directory _bump BUMP=patch
+
+_bump:
+	@CUR=$$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.0); \
+	MAJOR=$$(echo "$$CUR" | cut -d. -f1); \
+	MINOR=$$(echo "$$CUR" | cut -d. -f2); \
+	PATCH=$$(echo "$$CUR" | cut -d. -f3); \
+	case "$(BUMP)" in \
+		major) MAJOR=$$((MAJOR + 1)); MINOR=0; PATCH=0 ;; \
+		minor) MINOR=$$((MINOR + 1)); PATCH=0 ;; \
+		patch) PATCH=$$((PATCH + 1)) ;; \
+		*) echo "Use: make major|minor|patch"; exit 1 ;; \
+	esac; \
+	NEW="$$MAJOR.$$MINOR.$$PATCH"; \
+	git tag -a "$$NEW" -m "Release $$NEW"; \
+	echo "$$CUR -> $$NEW"; \
+	echo "Push with: git push origin master $$NEW"
+
+upgrade: ## Check out the latest release tag, rebuild the stack, return to master
+	git fetch --tags
+	@LATEST=$$(git tag --sort=-v:refname | head -1); \
+	if [ -z "$$LATEST" ]; then \
+		echo "No release tags yet — nothing to upgrade to."; exit 1; \
+	fi; \
+	echo "Upgrading to $$LATEST"; \
+	git checkout "$$LATEST"; \
+	VERSION="$$LATEST" \
+	COMMIT="$$(git rev-parse --short HEAD)" \
+	BUILD_DATE="$$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+	$(COMPOSE) up -d --build; \
+	git checkout master
 
 ## --- Gates (run locally; CI on builds.sr.ht is advisory, not blocking) ---
 # These mirror .build.yml so a push never lands red. gofmt is intentionally

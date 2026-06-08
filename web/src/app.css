@@ -621,6 +621,15 @@
 .account-pop-row.danger:hover {
   background: color-mix(in srgb, var(--danger) 14%, transparent);
 }
+/* Version footer in the account pop — muted, non-interactive, monospace
+   so the version reads as an identifier. */
+.account-pop-version {
+  padding: 6px 10px 2px;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--text-muted, #888);
+  user-select: text;
+}
 
 /* App settings page (per-user prefs). Constrains the form column so a
    single control doesn't stretch edge to edge on wide monitors. */

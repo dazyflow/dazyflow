@@ -55,6 +55,14 @@ services:
       # route out ("dial tcp …: network is unreachable"); harmless on a
       # normal host where the bridge works fine.
       network: host
+      # Version stamping. The Makefile (up/build/restart/rebuild) exports
+      # VERSION/COMMIT/BUILD_DATE from git before invoking compose; the
+      # :-dev defaults keep a bare `docker compose build` runnable. See
+      # the Dockerfile ARGs and core/buildinfo.
+      args:
+        VERSION: ${VERSION:-dev}
+        COMMIT: ${COMMIT:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
     restart: unless-stopped
     # env_file forwards every HAZYFLOW_* var the operator sets in .env
     # straight to the container — see .env.example for the full
