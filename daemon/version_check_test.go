@@ -2,11 +2,52 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+	"time"
+
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/core/buildinfo"
 )
+
+// resetReleaseCache clears the process-wide memo so a test fetches fresh.
+// The cache is package-global, so tests that exercise latestRelease must
+// reset it to avoid reading another case's cached answer.
+func resetReleaseCache() {
+	releaseCache.mu.Lock()
+	releaseCache.ok = false
+	releaseCache.url = ""
+	releaseCache.ver = semver{}
+	releaseCache.raw = ""
+	releaseCache.fetchedAt = time.Time{}
+	releaseCache.mu.Unlock()
+}
+
+// versionServer is a stub upstream: a 200 returns a service descriptor with
+// the given build.version; any other status returns that status with no body.
+func versionServer(t *testing.T, status int, version string) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if status != http.StatusOK {
+			w.WriteHeader(status)
+			return
+		}
+		io.WriteString(w, `{"service":"hazyflow","build":{"version":"`+version+`"}}`)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// setVersion overrides the build stamp for a test, returning a restore func.
+func setVersion(v string) func() {
+	prev := buildinfo.Version
+	buildinfo.Version = v
+	return func() { buildinfo.Version = prev }
+}
 
 func TestParseSemver(t *testing.T) {
 	cases := []struct {
@@ -111,4 +152,134 @@ func TestUpdateAvailableDecision(t *testing.T) {
 			t.Errorf("update available for %q vs 0.2.0 = %v, want %v", c.current, got, c.want)
 		}
 	}
+}
+
+func TestLatestRelease(t *testing.T) {
+	t.Run("disabled when URL empty", func(t *testing.T) {
+		resetReleaseCache()
+		if _, _, err := latestRelease(context.Background(), ""); err == nil {
+			t.Error("want error for empty URL")
+		}
+	})
+
+	t.Run("caches after first fetch", func(t *testing.T) {
+		resetReleaseCache()
+		var hits atomic.Int32
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			hits.Add(1)
+			io.WriteString(w, `{"build":{"version":"1.4.0"}}`)
+		}))
+		defer srv.Close()
+		for i := 0; i < 3; i++ {
+			v, raw, err := latestRelease(context.Background(), srv.URL)
+			if err != nil || raw != "1.4.0" || (v != semver{1, 4, 0}) {
+				t.Fatalf("call %d: v=%v raw=%q err=%v", i, v, raw, err)
+			}
+		}
+		if got := hits.Load(); got != 1 {
+			t.Errorf("upstream hit %d times, want 1 (subsequent calls cached)", got)
+		}
+	})
+
+	t.Run("rejects unparseable upstream version", func(t *testing.T) {
+		resetReleaseCache()
+		srv := versionServer(t, http.StatusOK, "nightly")
+		if _, _, err := latestRelease(context.Background(), srv.URL); err == nil {
+			t.Error("want error for a non-semver upstream version")
+		}
+	})
+}
+
+// TestFetchLatestVersion_Unreachable covers the dial-error branch: a closed
+// server's port refuses connections, so the GET fails before any response.
+func TestFetchLatestVersion_Unreachable(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	url := srv.URL
+	srv.Close()
+	if _, err := fetchLatestVersion(context.Background(), url); err == nil {
+		t.Error("want error dialing a closed server")
+	}
+}
+
+// TestAdminVersion drives the handler through every branch: the platform-admin
+// gate, the disabled and unreachable degradations, and the three comparison
+// outcomes (update-available, up-to-date, dev-build-not-comparable).
+func TestAdminVersion(t *testing.T) {
+	adminP := core.Principal{Roles: []core.Role{{Name: "p", Permissions: []core.Permission{core.PermPlatformAdmin}}}}
+	userP := core.Principal{Roles: []core.Role{{Name: "e", Permissions: []core.Permission{core.PermGraphRun}}}}
+
+	call := func(gw *HTTPGateway, p core.Principal) (int, versionStatus) {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/version", nil)
+		gw.adminVersion(rec, req, p)
+		var vs versionStatus
+		_ = json.Unmarshal(rec.Body.Bytes(), &vs)
+		return rec.Code, vs
+	}
+
+	t.Run("forbidden for non-platform-admin", func(t *testing.T) {
+		if code, _ := call(&HTTPGateway{UpdateURL: "http://x"}, userP); code != http.StatusForbidden {
+			t.Errorf("code = %d, want 403", code)
+		}
+	})
+
+	t.Run("disabled when no URL", func(t *testing.T) {
+		resetReleaseCache()
+		code, vs := call(&HTTPGateway{UpdateURL: ""}, adminP)
+		if code != http.StatusOK || vs.CheckError != "update check disabled" {
+			t.Errorf("code=%d err=%q, want 200/disabled", code, vs.CheckError)
+		}
+		if vs.Current != buildinfo.Version {
+			t.Errorf("current=%q, want running build %q", vs.Current, buildinfo.Version)
+		}
+	})
+
+	t.Run("unreachable upstream degrades to a note", func(t *testing.T) {
+		resetReleaseCache()
+		srv := versionServer(t, http.StatusInternalServerError, "")
+		code, vs := call(&HTTPGateway{UpdateURL: srv.URL}, adminP)
+		if code != http.StatusOK || vs.CheckError != "could not reach the release server" {
+			t.Errorf("code=%d err=%q, want 200/unreachable", code, vs.CheckError)
+		}
+		if vs.Latest != "" {
+			t.Errorf("latest=%q, want empty on failed check", vs.Latest)
+		}
+	})
+
+	t.Run("update available when behind", func(t *testing.T) {
+		resetReleaseCache()
+		defer setVersion("0.1.0")()
+		srv := versionServer(t, http.StatusOK, "0.2.0")
+		code, vs := call(&HTTPGateway{UpdateURL: srv.URL}, adminP)
+		if code != http.StatusOK {
+			t.Fatalf("code=%d", code)
+		}
+		if vs.Latest != "0.2.0" || !vs.UpdateAvailable {
+			t.Errorf("latest=%q update=%v, want 0.2.0/true", vs.Latest, vs.UpdateAvailable)
+		}
+		if vs.UpgradeCommand == "" {
+			t.Error("want an upgrade command in the response")
+		}
+	})
+
+	t.Run("up to date when equal", func(t *testing.T) {
+		resetReleaseCache()
+		defer setVersion("0.2.0")()
+		srv := versionServer(t, http.StatusOK, "0.2.0")
+		_, vs := call(&HTTPGateway{UpdateURL: srv.URL}, adminP)
+		if vs.UpdateAvailable || vs.Latest != "0.2.0" {
+			t.Errorf("latest=%q update=%v, want 0.2.0/false", vs.Latest, vs.UpdateAvailable)
+		}
+	})
+
+	t.Run("dev build is not comparable", func(t *testing.T) {
+		resetReleaseCache()
+		defer setVersion("dev")()
+		srv := versionServer(t, http.StatusOK, "0.2.0")
+		_, vs := call(&HTTPGateway{UpdateURL: srv.URL}, adminP)
+		if vs.UpdateAvailable || vs.Latest != "0.2.0" {
+			t.Errorf("latest=%q update=%v, want 0.2.0/false (dev not comparable)", vs.Latest, vs.UpdateAvailable)
+		}
+	})
 }
