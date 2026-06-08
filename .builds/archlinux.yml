@@ -1,18 +1,13 @@
-# sourcehut CI manifest (builds.sr.ht). Runs the Go suite — including
-# the Postgres-gated jobstore/auth tests via a local Postgres service —
-# and the web typecheck + production build.
-#
-# The Postgres path was historically un-exercised (tests gated on
-# HAZYFLOW_TEST_DB with no DB in CI); this wires one up so a schema or
-# query regression fails the build instead of lurking until deploy.
 image: archlinux
 packages:
   - go
   - nodejs
   - npm
   - postgresql
+secrets:
+  - 6a3daa36-3866-48d4-8846-ecfa57a0d0dd
 sources:
-  - https://git.sr.ht/~klahr/hazyflow
+  - git@git.sr.ht:~klahr/hazyflow
 environment:
   HAZYFLOW_TEST_DB: postgres://hazyflow:hazyflow@localhost:5432/hazyflow_test
 tasks:
