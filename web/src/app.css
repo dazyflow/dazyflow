@@ -2630,6 +2630,95 @@ button.warning:hover:not(:disabled) {
   background: var(--surface-2);
   color: var(--ink);
 }
+/* Identity header: the drop's own icon + editable name stand in for the
+   old generic "INSPECTOR" title, so the panel reads as the thing being
+   edited. Overrides panel-head's uppercase/tracking for real-text content. */
+.inspector-head.panel-head {
+  text-transform: none;
+  letter-spacing: normal;
+  align-items: center;
+  gap: var(--space-2);
+}
+.inspector-identity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  flex: 1;
+}
+.inspector-drop-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-2);
+}
+.inspector-drop-icon img {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+.inspector-identity-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 1px;
+}
+/* The node's name, edited in place as the title. Looks like text until
+   hovered/focused, when it reveals it's an input. */
+.inspector-name {
+  background: transparent;
+  border: none;
+  margin: -2px -4px;
+  padding: 2px 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  text-transform: none;
+  letter-spacing: normal;
+  border-radius: var(--r-2);
+  min-width: 0;
+  width: 100%;
+}
+.inspector-name:hover {
+  background: var(--surface-2);
+}
+.inspector-name:focus {
+  outline: none;
+  background: var(--surface-2);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.inspector-subtitle {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--faint);
+  text-transform: none;
+  letter-spacing: normal;
+  padding-left: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.inspector-info {
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--faint);
+  cursor: help;
+}
+.inspector-info:hover {
+  color: var(--muted);
+}
+/* "Run this step" — the partial-run action, styled as the purple primary
+   button (icon + label) so it mirrors the flow-level Run and reads clearly
+   as an action rather than a faint link. Sized to its content. */
+.inspector-run-step {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+}
 .editor-add-drop-kbd {
   font-family: var(--font-mono);
   font-size: 10px;

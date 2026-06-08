@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import type { Node } from "@xyflow/react";
 import { useTranslation } from "react-i18next";
-import { X, Trash2, ChevronUp, ChevronDown } from "lucide-react";
+import { X, Trash2, ChevronUp, ChevronDown, Info, Play } from "lucide-react";
+import { iconFor, categoryColor } from "../icons";
 import type { HazyNodeData } from "./NodeCard";
 import {
   SchemaForm,
@@ -179,6 +180,13 @@ export function Inspector({
   const d = selected.data;
   const schema = d.manifest?.params_schema;
   const canForm = supportsSchemaForm(schema);
+  // Drop identity for the header — the same icon + color the canvas node
+  // shows, so the inspector reads as "this drop" at a glance rather than a
+  // generic panel. Mirrors NodeCard's icon resolution.
+  const DropIcon = iconFor(d.manifest?.icon, d.manifest?.category);
+  const dropColor =
+    d.manifest?.color || categoryColor(d.manifest?.category) || "#9f83fe";
+  const brandLogo = d.manifest?.brand_logo;
   // The cron_trigger node owns its schedule (Phase 2). In form mode we
   // render the friendly preset picker (presets + time + "next fires"
   // preview) instead of a raw cron text box — the same control the
@@ -219,7 +227,7 @@ export function Inspector({
   return (
     <>
       <div
-        className="panel-head"
+        className="panel-head inspector-head"
         // On narrow screens the head is the peek strip of the collapsed
         // bottom sheet — tapping it (anywhere but the buttons) expands.
         // No-op once expanded; the chevron handles collapsing.
@@ -228,9 +236,48 @@ export function Inspector({
           onToggleExpand && !expanded ? { cursor: "pointer" } : undefined
         }
       >
-        <span>{t("inspector.title")}</span>
+        <span className="inspector-identity">
+          {/* The drop's own icon + color, matching the canvas node, so the
+              panel reads as the thing you're editing. */}
+          <span
+            className="inspector-drop-icon"
+            style={{
+              color: dropColor,
+              background: `color-mix(in srgb, ${dropColor} 14%, transparent)`,
+            }}
+          >
+            {brandLogo ? (
+              <img src={brandLogo} alt="" draggable={false} />
+            ) : (
+              <DropIcon size={18} strokeWidth={2.2} />
+            )}
+          </span>
+          <span className="inspector-identity-text">
+            {/* The node's display name, edited inline as the title — this
+                replaces the old separate "Label" field. */}
+            <input
+              className="inspector-name"
+              value={d.label}
+              placeholder={d.manifest?.label || d.moduleID}
+              spellCheck={false}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => onChange(selected.id, { label: e.target.value })}
+              aria-label={t("inspector.label")}
+            />
+            <span className="inspector-subtitle">{d.moduleID}</span>
+          </span>
+          {d.manifest?.description && (
+            <span
+              className="inspector-info"
+              title={d.manifest.description}
+              aria-label={d.manifest.description}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Info size={14} />
+            </span>
+          )}
+        </span>
         <span className="inspector-head-right">
-          <span style={{ color: "var(--faint)", fontSize: 11 }}>{d.moduleID}</span>
           {onToggleExpand && (
             <button
               type="button"
@@ -284,21 +331,11 @@ export function Inspector({
             />
           </div>
         )}
-        <div className="sf-field">
-          <div className="label-row">
-            <label>{t("inspector.label")}</label>
-          </div>
-          <input
-            value={d.label}
-            onChange={(e) => onChange(selected.id, { label: e.target.value })}
-          />
-        </div>
-
         {onSample && (
           <div className="sf-field">
             <button
               type="button"
-              className="ghost"
+              className="primary inspector-run-step"
               disabled={sampling}
               onClick={async () => {
                 if (!onSample) return;
@@ -314,6 +351,7 @@ export function Inspector({
               }}
               title={t("inspector.sampleTitle")}
             >
+              <Play size={15} />
               {sampling ? t("inspector.sampling") : t("inspector.sample")}
             </button>
             {sampleError && (
@@ -321,9 +359,6 @@ export function Inspector({
                 {sampleError}
               </div>
             )}
-            <div className="desc">
-              {t("inspector.sampleDesc")}
-            </div>
           </div>
         )}
 
@@ -550,15 +585,6 @@ export function Inspector({
               nodeID={selected.id}
               refreshKey={statusRefreshKey}
             />
-          </div>
-        )}
-
-        {d.manifest?.description && (
-          <div className="inspector-section">
-            <h4>{t("inspector.about")}</h4>
-            <div style={{ fontSize: 13, color: "var(--muted)" }}>
-              {d.manifest.description}
-            </div>
           </div>
         )}
 
