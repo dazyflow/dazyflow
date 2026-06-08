@@ -39,3 +39,8 @@ tasks:
       cd hazyflow/web
       npm ci
       npm run build
+
+triggers:
+  - action: email
+    condition: failure
+    to: klahr@r8.rs
