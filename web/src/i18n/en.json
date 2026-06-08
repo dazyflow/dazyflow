@@ -543,6 +543,18 @@
     "anyWorkspace": "(any)",
     "groupOrg": "Organization",
     "groupPlatform": "Platform",
+    "groupSystem": "System",
+    "system": {
+      "title": "Daemon version",
+      "currentLabel": "Current",
+      "latestLabel": "latest",
+      "checking": "Checking for updates…",
+      "upToDate": "You're on the latest release.",
+      "updateAvailable": "Update available — latest is <0>{{latest}}</0>.",
+      "devBuild": "Running an unstamped development build.",
+      "checkFailed": "Couldn't check for updates right now.",
+      "upgradeHint": "Upgrade from the project root with:"
+    },
     "cardApiKeysTitle": "API keys",
     "cardApiKeysDesc": "Issue and revoke access tokens.",
     "cardUsersTitle": "People",

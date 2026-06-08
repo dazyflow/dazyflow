@@ -539,6 +539,18 @@
     "anyWorkspace": "(alla)",
     "groupOrg": "Organisation",
     "groupPlatform": "Plattform",
+    "groupSystem": "System",
+    "system": {
+      "title": "Daemon-version",
+      "currentLabel": "Nuvarande",
+      "latestLabel": "senaste",
+      "checking": "Söker efter uppdateringar…",
+      "upToDate": "Du kör den senaste versionen.",
+      "updateAvailable": "Uppdatering tillgänglig — senaste är <0>{{latest}}</0>.",
+      "devBuild": "Kör en ostämplad utvecklingsbuild.",
+      "checkFailed": "Kunde inte söka efter uppdateringar just nu.",
+      "upgradeHint": "Uppgradera från projektroten med:"
+    },
     "cardApiKeysTitle": "API-nycklar",
     "cardApiKeysDesc": "Skapa och återkalla åtkomsttokens.",
     "cardUsersTitle": "Personer",

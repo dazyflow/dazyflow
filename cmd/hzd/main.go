@@ -707,6 +707,14 @@ func main() {
 		if len(gw.PlatformAdmins) > 0 {
 			log.Printf("platform admins (from HAZYFLOW_PLATFORM_ADMINS): %v", gw.PlatformAdmins)
 		}
+		// Upstream URL for the admin System section's update check: the
+		// canonical deployment's public /api/v1, whose build.version is the
+		// latest release. Defaults to the project's production origin; set
+		// HAZYFLOW_UPDATE_URL="" to disable the check (the page still loads).
+		gw.UpdateURL = strings.TrimSpace(envStr("HAZYFLOW_UPDATE_URL", daemon.DefaultUpdateURL))
+		if gw.UpdateURL != "" {
+			log.Printf("update check enabled (source: %s)", gw.UpdateURL)
+		}
 		gwLn, err := net.Listen("tcp", httpListen)
 		if err != nil {
 			log.Fatalf("http gateway: cannot bind %s: %v", httpListen, err)

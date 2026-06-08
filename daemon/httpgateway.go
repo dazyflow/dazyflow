@@ -105,6 +105,14 @@ type HTTPGateway struct {
 	// $HAZYFLOW_PLATFORM_ADMINS.
 	PlatformAdmins []string
 
+	// UpdateURL is the canonical deployment's public service descriptor
+	// (GET /api/v1), whose build.version the admin System section reads as
+	// "the latest released version" to compare against this build. No auth
+	// — it's a public endpoint. Empty disables the check (the page still
+	// loads). Wired from $HAZYFLOW_UPDATE_URL, defaulting to the project's
+	// production origin.
+	UpdateURL string
+
 	// EnableMetrics mounts an unauthenticated GET /metrics Prometheus
 	// endpoint. Off by default: it exposes tenant names + disk usage, so
 	// operators opt in via --metrics and restrict scrape access at the
@@ -406,6 +414,10 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/admin/tenants", h.requireAuth(h.listTenants))
 	mux.HandleFunc("GET /api/v1/admin/audit", h.requireAuth(h.listAudit))
 	mux.HandleFunc("GET /api/v1/admin/limits", h.requireAuth(h.workspaceLimits))
+	// Version self-check for the System section of the admin page: compares
+	// the running build against the newest upstream release tag. Platform
+	// admins only (the answer is instance-wide, not per-org).
+	mux.HandleFunc("GET /api/v1/admin/version", h.requireAuth(h.adminVersion))
 	// OAuth provider configuration: paste client_id + client_secret in
 	// the admin UI instead of HAZYFLOW_OAUTH_*_CLIENT_ID env vars + a
 	// restart. Persisted creds win over env on the next boot.

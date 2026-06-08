@@ -263,6 +263,20 @@ export type ServiceInfo = {
   };
 };
 
+// VersionStatus mirrors GET /api/v1/admin/version (platform-admin only).
+// Powers the System section of the admin page: the running build paired
+// with the newest upstream release tag, so the UI can show "up to date" vs
+// "update available" and surface the CLI command to upgrade.
+export type VersionStatus = {
+  current: string; // running release ("dev" on an unstamped build)
+  commit: string;
+  date: string;
+  latest?: string; // newest upstream tag; absent if the check couldn't run
+  update_available: boolean;
+  upgrade_command: string; // CLI hint, e.g. "make upgrade"
+  check_error?: string; // set (non-fatal) when the upstream check failed
+};
+
 export type WhoAmI = {
   subject: string;
   tenant: string;

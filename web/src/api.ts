@@ -26,6 +26,7 @@ import type {
   SecretManagerConfig,
   ServiceInfo,
   UserSummary,
+  VersionStatus,
   WhoAmI,
   WorkspaceLimits,
 } from "./types";
@@ -312,6 +313,10 @@ export const api = {
   },
   listTenants: (token: string) =>
     request<{ tenants: string[] }>(token, "GET", "/admin/tenants"),
+  // adminVersion drives the System section: running build vs. the newest
+  // upstream release. Platform-admin only (403 otherwise).
+  adminVersion: (token: string) =>
+    request<VersionStatus>(token, "GET", "/admin/version"),
   listDrops: async (token: string, query?: string) => {
     // Daemon emits both "drops" (canonical) and "modules" (legacy alias)
     // during the rename transition; accept either so older daemons keep
