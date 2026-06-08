@@ -61,15 +61,20 @@ var KnownOAuthProviderDefaults = []OAuthProviderDefault{
 			"https://www.googleapis.com/auth/gmail.send",
 			"https://www.googleapis.com/auth/spreadsheets",
 			// Restricted scopes: gmail.readonly powers gmail_search /
-			// gmail_get; drive.readonly powers sheets_export_pdf.
+			// gmail_get; drive.readonly powers sheets_export_pdf;
+			// forms.responses.readonly + forms.body.readonly power the
+			// google_form_trigger (read new responses, plus the question
+			// titles used to key each answer).
 			//
 			// These grant freely on an INTERNAL Workspace app (no
 			// verification). On an EXTERNAL app, Google blocks restricted-
 			// scope consent until the app passes its security assessment —
 			// so a multi-org / External deployment must get the app verified
-			// (or drop these two) before outside companies can connect.
+			// (or drop these) before outside companies can connect.
 			"https://www.googleapis.com/auth/gmail.readonly",
 			"https://www.googleapis.com/auth/drive.readonly",
+			"https://www.googleapis.com/auth/forms.responses.readonly",
+			"https://www.googleapis.com/auth/forms.body.readonly",
 		},
 		AuthorizeExtras: map[string]string{
 			// Required for refresh_token (Google's "first consent only"
@@ -77,6 +82,13 @@ var KnownOAuthProviderDefaults = []OAuthProviderDefault{
 			// one and access expires in ~1h with no refresh path).
 			"access_type": "offline",
 			"prompt":      "consent",
+			// Incremental authorization: when a connect requests only one
+			// service's scopes (see scopeSubsetForIntegration), Google
+			// MERGES the new grant with any already held instead of
+			// replacing it. So connecting for Sheets after Gmail keeps the
+			// Gmail grant, and the user only ever sees consent for the
+			// service they're actually connecting.
+			"include_granted_scopes": "true",
 		},
 		SetupHelp: "Create OAuth credentials in Google Cloud Console (APIs & Services → Credentials → Create OAuth client ID, type Web). Add the daemon's /api/v1/oauth/google/callback URL as an authorized redirect URI.",
 	},
@@ -88,6 +100,53 @@ var KnownOAuthProviderDefaults = []OAuthProviderDefault{
 		Scopes:       nil, // Notion uses workspace-scope, no per-scope list.
 		SetupHelp:    "Create a public integration at notion.so/my-integrations; OAuth client ID + secret appear under Capabilities → OAuth.",
 	},
+}
+
+// googleScopeGroups maps a connector's Integration label (Manifest.Integration)
+// to the minimal Google scopes that integration needs. It drives incremental
+// authorization: connecting Google for one integration requests only its
+// scopes, so a user wiring up Gmail never sees a Sheets/Forms consent screen.
+// include_granted_scopes=true (on the google provider's AuthorizeExtras)
+// merges each grant with any already held, so connecting for a second service
+// tops up rather than replaces.
+//
+// Keyed by the same labels the drops set (drops/gmail, drops/sheets,
+// drops/trigger/gform) and the Apps page passes back as ?integration=.
+var googleScopeGroups = map[string][]string{
+	"Gmail": {
+		"https://www.googleapis.com/auth/gmail.send",
+		"https://www.googleapis.com/auth/gmail.readonly",
+	},
+	"Google Sheets": {
+		"https://www.googleapis.com/auth/spreadsheets",
+		"https://www.googleapis.com/auth/drive.readonly",
+	},
+	"Google Forms": {
+		"https://www.googleapis.com/auth/forms.responses.readonly",
+		"https://www.googleapis.com/auth/forms.body.readonly",
+	},
+}
+
+// scopeSubsetForIntegration returns the minimal scopes to request when
+// connecting `provider` for a specific `integration`. Returns nil when the
+// provider has no scope groups or the integration is unknown/empty — callers
+// then fall back to the provider's full scope list (request-everything, the
+// legacy behaviour, still available for a deliberate "connect all" flow).
+func scopeSubsetForIntegration(provider, integration string) []string {
+	if provider != "google" || integration == "" {
+		return nil
+	}
+	return googleScopeGroups[integration]
+}
+
+// providerUsesIncrementalScopes reports whether a provider grants scopes
+// incrementally (per integration) rather than all-at-once. For such a
+// provider a connected account is never "globally stale" merely for lacking
+// some other service's scopes — that scope is topped up the moment the user
+// connects for that service, so the all-scopes staleness pill would be a
+// false alarm.
+func providerUsesIncrementalScopes(provider string) bool {
+	return provider == "google"
 }
 
 // providerDefault returns the defaults entry for name, or nil if the

@@ -299,6 +299,9 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/secrets", h.requireAuth(h.listSecrets))
 	mux.HandleFunc("PUT /api/v1/secrets/{name}", h.requireAuth(h.putSecret))
 	mux.HandleFunc("DELETE /api/v1/secrets/{name}", h.requireAuth(h.deleteSecret))
+	mux.HandleFunc("GET /api/v1/resources", h.requireAuth(h.listResources))
+	mux.HandleFunc("PUT /api/v1/resources/{name}", h.requireAuth(h.putResource))
+	mux.HandleFunc("DELETE /api/v1/resources/{name}", h.requireAuth(h.deleteResource))
 
 	// Bring-your-own secret manager (OpenBao/Vault): per-tenant connection
 	// config behind the same secret-permission gate. Flows then resolve
@@ -358,6 +361,8 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/me/flows", h.requireAuth(h.listFlowsMe))
 	mux.HandleFunc("GET /api/v1/me/flows/{flow_id}", h.requireAuth(h.loadFlowMe))
 	mux.HandleFunc("GET /api/v1/me/flows/{flow_id}/history", h.requireAuth(h.historyFlowMe))
+	mux.HandleFunc("GET /api/v1/me/flows/{flow_id}/references", h.requireAuth(h.listReferences))
+	mux.HandleFunc("GET /api/v1/me/flows/{flow_id}/input-fields", h.requireAuth(h.listInputFields))
 	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/restore",
 		h.requireAuth(h.idempotencyMiddleware("/me/flows/{flow_id}/restore", h.restoreFlowMe)))
 	mux.HandleFunc("PUT /api/v1/me/flows/{flow_id}",

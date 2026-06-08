@@ -26,5 +26,6 @@ import (
 	_ "git.sr.ht/~klahr/hazyflow/drops/slack"
 	_ "git.sr.ht/~klahr/hazyflow/drops/transform"
 	_ "git.sr.ht/~klahr/hazyflow/drops/trigger"
+	_ "git.sr.ht/~klahr/hazyflow/drops/trigger/gform"
 	_ "git.sr.ht/~klahr/hazyflow/drops/value"
 )

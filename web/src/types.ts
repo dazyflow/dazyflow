@@ -277,6 +277,39 @@ export type VersionStatus = {
   check_error?: string; // set (non-fatal) when the upstream check failed
 };
 
+// ReferenceItem is one insertable ${…} token the reference picker offers,
+// from GET /me/flows/{flow_id}/references. Kind-specific fields are
+// optional; `token` is what gets inserted, `label` (and the per-kind
+// fields) drive how it's described in the picker.
+export type ReferenceItem = {
+  token: string;
+  label?: string;
+  name?: string; // secrets, resources
+  scope?: string; // secrets: flow|tenant
+  node_id?: string; // upstream
+  node_label?: string; // upstream
+  port?: string; // upstream
+  field?: string; // trigger
+};
+
+// ResourceDef mirrors a flow/org-scoped resource definition — a named
+// pointer at external content (e.g. a Google Sheet) referenced in params
+// as ${resource.NAME}. config is type-specific (for google_sheet:
+// spreadsheet_id, range, account). Unlike a secret, config is not
+// sensitive and round-trips through the API.
+export type ResourceDef = {
+  name: string;
+  type: string;
+  config: Record<string, unknown>;
+};
+
+export type ReferenceGroups = {
+  secrets: ReferenceItem[];
+  upstream: ReferenceItem[];
+  trigger: ReferenceItem[];
+  resources: ReferenceItem[];
+};
+
 export type WhoAmI = {
   subject: string;
   tenant: string;

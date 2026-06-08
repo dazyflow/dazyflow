@@ -120,7 +120,7 @@ func resolveSecrets(ctx context.Context, providers map[string]core.SecretProvide
 // effect of substituting them into the job). Equivalent to discarding
 // the secretSet that resolveTemplatesCollecting returns.
 func resolveTemplates(ctx context.Context, providers map[string]core.SecretProvider, prior map[string]core.Result, job *core.Job) error {
-	_, err := resolveTemplatesCollecting(ctx, providers, prior, job)
+	_, err := resolveTemplatesCollecting(ctx, providers, nil, prior, job)
 	return err
 }
 
@@ -147,24 +147,32 @@ func resolveTemplates(ctx context.Context, providers map[string]core.SecretProvi
 // into its output would otherwise leak the secret into storage). Only
 // values from the secret providers are collected — upstream-ref
 // substitutions are ordinary data flow, not secrets.
-func resolveTemplatesCollecting(ctx context.Context, providers map[string]core.SecretProvider, prior map[string]core.Result, job *core.Job) (*secretSet, error) {
+func resolveTemplatesCollecting(ctx context.Context, providers map[string]core.SecretProvider, resources map[string]core.ResourceProvider, prior map[string]core.Result, job *core.Job) (*secretSet, error) {
 	set := newSecretSet()
 	if job == nil {
 		return set, nil
 	}
+	// rr fetches ${resource.…} content, cached per pass. Whole-string
+	// resource refs are intercepted in resolveMap/resolveSlice (so they
+	// stay structured); the inline form goes through the chain below.
+	rr := newResourceResolver(resources)
 	// Build the substituter chain once per job. The order matters:
 	// upstream first so a node ID that happens to share a name with
 	// a secret provider (e.g. a node called "env") doesn't get
-	// shadowed. The secret substituter is wrapped to record every
-	// plaintext it resolves into set.
+	// shadowed. The resource substituter handles only the inline form.
+	// The secret substituter is wrapped to record every plaintext it
+	// resolves into set.
 	sub := chainSubstituters(
 		upstreamSubstituter(prior),
+		rr.substituter(),
 		recordingSecretSubstituter(providers, set),
 	)
-	if err := resolveMap(ctx, providers, sub, set, job.Params); err != nil {
+	if err := resolveMap(ctx, providers, sub, set, rr, job.Params); err != nil {
 		return set, fmt.Errorf("params: %w", err)
 	}
 	for k, v := range job.Env {
+		// Env values are strings, never structured — a resource ref in an
+		// env var resolves through the inline (stringified) path.
 		resolved, err := resolveString(ctx, providers, sub, set, v)
 		if err != nil {
 			return set, fmt.Errorf("env[%q]: %w", k, err)
@@ -192,21 +200,31 @@ func chainSubstituters(subs ...Substituter) Substituter {
 	}
 }
 
-func resolveMap(ctx context.Context, providers map[string]core.SecretProvider, sub Substituter, set *secretSet, m map[string]any) error {
+func resolveMap(ctx context.Context, providers map[string]core.SecretProvider, sub Substituter, set *secretSet, rr *resourceResolver, m map[string]any) error {
 	for k, v := range m {
 		switch tv := v.(type) {
 		case string:
+			// A whole-string ${resource.…} resolves to the provider's
+			// structured value (real array/object) and is NOT re-walked —
+			// it's fetched data, not a template. Everything else (inline
+			// refs, secrets, upstream) goes through resolveString.
+			if val, ok, err := rr.wholeValue(ctx, tv); err != nil {
+				return fmt.Errorf("%s: %w", k, err)
+			} else if ok {
+				m[k] = val
+				continue
+			}
 			resolved, err := resolveString(ctx, providers, sub, set, tv)
 			if err != nil {
 				return fmt.Errorf("%s: %w", k, err)
 			}
 			m[k] = resolved
 		case map[string]any:
-			if err := resolveMap(ctx, providers, sub, set, tv); err != nil {
+			if err := resolveMap(ctx, providers, sub, set, rr, tv); err != nil {
 				return fmt.Errorf("%s.%w", k, err)
 			}
 		case []any:
-			if err := resolveSlice(ctx, providers, sub, set, tv); err != nil {
+			if err := resolveSlice(ctx, providers, sub, set, rr, tv); err != nil {
 				return fmt.Errorf("%s[%w]", k, err)
 			}
 		}
@@ -214,21 +232,27 @@ func resolveMap(ctx context.Context, providers map[string]core.SecretProvider, s
 	return nil
 }
 
-func resolveSlice(ctx context.Context, providers map[string]core.SecretProvider, sub Substituter, set *secretSet, items []any) error {
+func resolveSlice(ctx context.Context, providers map[string]core.SecretProvider, sub Substituter, set *secretSet, rr *resourceResolver, items []any) error {
 	for i, v := range items {
 		switch tv := v.(type) {
 		case string:
+			if val, ok, err := rr.wholeValue(ctx, tv); err != nil {
+				return fmt.Errorf("[%d]: %w", i, err)
+			} else if ok {
+				items[i] = val
+				continue
+			}
 			resolved, err := resolveString(ctx, providers, sub, set, tv)
 			if err != nil {
 				return fmt.Errorf("[%d]: %w", i, err)
 			}
 			items[i] = resolved
 		case map[string]any:
-			if err := resolveMap(ctx, providers, sub, set, tv); err != nil {
+			if err := resolveMap(ctx, providers, sub, set, rr, tv); err != nil {
 				return err
 			}
 		case []any:
-			if err := resolveSlice(ctx, providers, sub, set, tv); err != nil {
+			if err := resolveSlice(ctx, providers, sub, set, rr, tv); err != nil {
 				return err
 			}
 		}

@@ -618,10 +618,12 @@ func (h *HTTPGateway) listConnectionsMe(rw http.ResponseWriter, r *http.Request,
 // Accepts ?account= (defaults "default") and ?return_to= (defaults
 // /integrations) — same semantics as the legacy redirect path.
 func (h *HTTPGateway) startConnectionMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	provider := r.PathValue("provider")
 	target, status, msg := h.buildAuthorizeURL(p,
-		r.PathValue("provider"),
+		provider,
 		r.URL.Query().Get("account"),
 		r.URL.Query().Get("return_to"),
+		scopeSubsetForIntegration(provider, r.URL.Query().Get("integration")),
 	)
 	if status != http.StatusOK {
 		// Code mapping: 501 = OAuth subsystem not configured;

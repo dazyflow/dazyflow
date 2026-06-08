@@ -99,6 +99,51 @@ func TestSheetsAppend_MapsRowsToColumns(t *testing.T) {
 	}
 }
 
+func TestSheetsAppend_MappingProjectsAndOrdersColumns(t *testing.T) {
+	// A Google Form response keyed by question title, mapped to differently
+	// named sheet columns in an explicit order. The mapping must override
+	// the 'headers' input, rename/reorder, and blank a missing source.
+	var sent map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(b, &sent)
+		_ = json.NewEncoder(w).Encode(map[string]any{"updates": map[string]any{"updatedRows": 2}})
+	}))
+	defer srv.Close()
+	withSheetsEnv(t, srv.URL)
+
+	res, err := executeSheetsAppend(context.Background(), core.Job{
+		Params: map[string]any{
+			"spreadsheet_id": "S1",
+			"mapping": []any{
+				map[string]any{"column": "Email", "source": "Email Address"},
+				map[string]any{"column": "Name", "source": "Full Name"},
+				map[string]any{"column": "Notes", "source": "Missing"},
+			},
+		},
+		Input: map[string]core.Ref{
+			// Wrong order + an ignored 'headers' input on purpose.
+			"headers": {Inline: []any{"Full Name", "Email Address"}},
+			"rows": {Inline: []map[string]any{
+				{"Full Name": "Ada", "Email Address": "a@x"},
+				{"Full Name": "Bo", "Email Address": "b@y"},
+			}},
+		},
+	}, nil)
+	if err != nil || res.Status != core.StatusOK {
+		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
+	}
+	values := sent["values"].([]any)
+	if len(values) != 2 {
+		t.Fatalf("values = %+v", values)
+	}
+	first := values[0].([]any)
+	// Column order Email, Name, Notes — projected from the mapped sources.
+	if first[0] != "a@x" || first[1] != "Ada" || first[2] != "" {
+		t.Errorf("first row = %+v (want [a@x Ada \"\"])", first)
+	}
+}
+
 func TestSheetsAppend_MissingRowsInput(t *testing.T) {
 	withSheetsEnv(t, "http://unused")
 	res, _ := executeSheetsAppend(context.Background(), core.Job{

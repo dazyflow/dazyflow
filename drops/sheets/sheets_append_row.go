@@ -17,7 +17,7 @@ func init() {
 			Version:     "1.0",
 			Label:       "Sheets append row",
 			Summary:     "Append rows to a Google Sheet, mapping each object to columns by header.",
-			Description: "Append rows to a Google Sheet. Wire a rows list into the 'rows' input; columns are taken from the 'headers' input or derived from the row keys. Each object becomes a row.",
+			Description: "Append rows to a Google Sheet. Wire a rows list into the 'rows' input; columns are taken from the 'headers' input or derived from the row keys. Each object becomes a row. Set a 'mapping' to pick exactly which incoming field lands in which sheet column (e.g. a Google Form response's question titles → your sheet's columns) — the mapping's columns then define the row, in order.",
 			Integration: "Google Sheets",
 			Category:    "network",
 			Icon:        "file-output",
@@ -50,6 +50,19 @@ func init() {
 					"range":{"type":"string","default":"Sheet1","description":"Sheet/range the append targets."},
 					"value_input_option":{"type":"string","enum":["RAW","USER_ENTERED"],"default":"USER_ENTERED"},
 					"insert_data_option":{"type":"string","enum":["OVERWRITE","INSERT_ROWS"],"default":"INSERT_ROWS"},
+					"mapping":{
+						"type":"array",
+						"title":"Column mapping",
+						"format":"sheet-mapping",
+						"description":"Map each incoming field to a sheet column. When set, these columns (in order) define the appended row and the 'headers' input is ignored. Leave empty to use the row keys / 'headers' input.",
+						"items":{
+							"type":"object",
+							"properties":{
+								"column":{"type":"string","title":"Sheet column"},
+								"source":{"type":"string","title":"From field"}
+							}
+						}
+					},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
 				},
 				"required":["spreadsheet_id"]
@@ -84,6 +97,16 @@ func executeSheetsAppend(ctx context.Context, job core.Job, _ chan<- core.Progre
 	if h, ok := job.Input["headers"]; ok && h.Inline != nil {
 		headers = normalizeHeaders(h.Inline)
 	}
+
+	// An explicit column mapping wins over both the 'headers' input and
+	// key-derivation: the mapping's columns (in order) become the row, and
+	// each incoming row is projected field→column. This is the "Google Form
+	// response → sheet column" path — see parseMapping/projectRows.
+	if cmap := parseMapping(job.Params); len(cmap) > 0 {
+		headers = mappingColumns(cmap)
+		rows = projectRows(rows, cmap)
+	}
+
 	if headers == nil {
 		headers = deriveHeaders(rows)
 	}

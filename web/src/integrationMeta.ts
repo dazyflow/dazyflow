@@ -104,6 +104,7 @@ const integrationToProvider: Record<string, string> = {
   slack: "slack",
   gmail: "google",
   "google-sheets": "google",
+  "google-forms": "google",
   github: "github",
   notion: "notion",
 };
@@ -156,6 +157,15 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
       "Shares the 'google' OAuth client with Gmail — one consent covers both. The rows + headers shape is interchangeable with the Excel and database steps, so a Sheet can feed straight into a Postgres upsert without intermediate transforms.",
     docs_url: "https://developers.google.com/sheets/api",
     brand_logo: "/brands/sheets.svg",
+  },
+  "google-forms": {
+    name: "Google Forms",
+    description:
+      "Fire a flow when a Google Form gets new responses, each keyed by its question title — wire it straight into a Sheets append to log submissions, or into any step that takes records.",
+    technical_notes:
+      "Shares the 'google' OAuth client with Gmail and Sheets; incremental authorization means connecting Forms only requests the forms.* scopes (responses + body, read-only), without re-consenting Gmail/Sheets. The trigger polls forms.responses.list against a per-flow cursor in the encrypted secret store.",
+    docs_url: "https://developers.google.com/forms/api",
+    brand_logo: "/brands/forms.svg",
   },
   github: {
     name: "GitHub",

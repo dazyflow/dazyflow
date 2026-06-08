@@ -27,6 +27,12 @@ const (
 
 	secretFlowPrefix = "flow."
 	secretConnPrefix = "conn."
+	// secretResourcePrefix namespaces flow-resource definitions (Phase 4:
+	// ${resource.NAME}). A flow-scoped resource is stored as
+	// "flow.<flowID>.res.<name>"; an org one as "res.<name>". The values
+	// are config (a sheet pointer), not credentials, but they live in the
+	// same store and are hidden from the Credentials listing.
+	secretResourcePrefix = "res."
 )
 
 // scopedSecretName maps (scope, flow, name) to the storage name. Organization
@@ -52,6 +58,8 @@ func isReservedSecretName(name string) bool {
 	return strings.HasPrefix(name, secretFlowPrefix) ||
 		strings.HasPrefix(name, secretConnPrefix) ||
 		strings.HasPrefix(name, "oauth.") ||
+		strings.HasPrefix(name, "cursor.") ||
+		strings.HasPrefix(name, secretResourcePrefix) ||
 		strings.HasPrefix(name, "cfg:")
 }
 
@@ -123,9 +131,17 @@ func (e *EncryptedSecrets) ListScoped(ctx context.Context, tenant, flow string, 
 		prefix := secretFlowPrefix + flow + "."
 		out := make([]string, 0)
 		for _, n := range all {
-			if strings.HasPrefix(n, prefix) {
-				out = append(out, strings.TrimPrefix(n, prefix))
+			if !strings.HasPrefix(n, prefix) {
+				continue
 			}
+			name := strings.TrimPrefix(n, prefix)
+			// A flow-scoped value can itself sit in a reserved namespace —
+			// notably resource defs stored as flow.<flow>.res.<name>. Those
+			// aren't user secrets, so keep them out of the Credentials list.
+			if isReservedSecretName(name) {
+				continue
+			}
+			out = append(out, name)
 		}
 		return out, nil
 	default:

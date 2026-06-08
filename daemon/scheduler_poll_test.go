@@ -131,6 +131,38 @@ func TestScheduler_FiresGraphWithPollTrigger(t *testing.T) {
 	}
 }
 
+func TestScheduler_TracksGoogleFormTrigger(t *testing.T) {
+	// google_form_trigger uses the same node-interval mechanism as
+	// poll_trigger: a node carrying interval_seconds is tracked and fired
+	// on that interval (the node does the Forms fetch in-band). Assert
+	// tracking without advancing the clock, so the node never actually
+	// fires (which would need a live Google token).
+	h := newPollHarness(t)
+	graph := core.Graph{
+		ID: "gform-1", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{
+			{ID: "form", Module: "google_form_trigger", Params: map[string]any{"form_id": "F1", "interval_seconds": 300}},
+		},
+	}
+	if _, err := h.wsStore.Save(graph, "test"); err != nil {
+		t.Fatalf("save graph: %v", err)
+	}
+	time.Sleep(80 * time.Millisecond) // let rescan pick it up
+	if h.sched.TrackedCount() != 1 {
+		t.Fatalf("tracked=%d, want 1 (google_form_trigger should schedule like poll)", h.sched.TrackedCount())
+	}
+	// A blank/zero interval is manual-only — not tracked.
+	graph2 := core.Graph{
+		ID: "gform-manual", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{{ID: "form", Module: "google_form_trigger", Params: map[string]any{"form_id": "F1"}}},
+	}
+	_, _ = h.wsStore.Save(graph2, "test")
+	time.Sleep(80 * time.Millisecond)
+	if h.sched.TrackedCount() != 1 {
+		t.Errorf("tracked=%d, want 1 (manual-only gform must not schedule)", h.sched.TrackedCount())
+	}
+}
+
 func TestScheduler_PollTriggerFiresRepeatedlyOnInterval(t *testing.T) {
 	// Confirm the interval-anchored schedule advances correctly —
 	// after one fire, the next should be `interval` seconds later.

@@ -965,7 +965,24 @@
     "refSecretSetUp": "Set up →",
     "secretChipUses": "Uses secret {{name}}",
     "secretChipSetUp": "Set up",
-    "secretChipReplace": "Replace"
+    "secretChipReplace": "Replace",
+    "mapping": {
+      "column": "Sheet column",
+      "source": "From field",
+      "add": "Add column",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "fieldsFrom": "Field suggestions from {{source}}"
+    },
+    "refPicker": {
+      "insert": "Insert a reference",
+      "loading": "Loading…",
+      "empty": "Nothing to reference yet",
+      "upstream": "From earlier steps",
+      "trigger": "From the trigger",
+      "resources": "Resources",
+      "secrets": "Secrets"
+    }
   },
   "inspector": {
     "title": "Inspector",

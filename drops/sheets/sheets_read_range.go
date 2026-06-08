@@ -3,6 +3,7 @@ package sheets
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/url"
 
 	"git.sr.ht/~klahr/hazyflow/core"
@@ -58,13 +59,38 @@ func init() {
 }
 
 func executeSheetsRead(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
+	if sheetID(params.StringDefault(job.Params, "spreadsheet_id", "")) == "" {
+		return params.Err(job, "bad_param", "'spreadsheet_id' is required"), nil
+	}
+	headers, rows, err := ReadRange(ctx, job)
+	if err != nil {
+		return params.Err(job, "sheets_error", err.Error()), nil
+	}
+	return core.Result{
+		JobID:  job.ID,
+		Status: core.StatusOK,
+		Output: map[string]core.Ref{
+			"rows":    {MIME: "application/json", Inline: rows},
+			"headers": {MIME: "application/json", Inline: headers},
+		},
+	}, nil
+}
+
+// ReadRange fetches a sheet range and flattens it to ordered headers + row
+// objects — the exact read the sheets_read_range node performs, exported so
+// the daemon's resource provider (${resource.NAME} of type google_sheet)
+// can reuse it instead of reimplementing the Google call. Reads
+// spreadsheet_id, range, account/token, value_render_option, headers,
+// timeout_ms and base_url from job.Params; resolves the Google token via
+// the package's SetTokenLookup hook (tenant rides on ctx).
+func ReadRange(ctx context.Context, job core.Job) (headers []string, rows []map[string]any, err error) {
 	id := sheetID(params.StringDefault(job.Params, "spreadsheet_id", ""))
 	if id == "" {
-		return params.Err(job, "bad_param", "'spreadsheet_id' is required"), nil
+		return nil, nil, fmt.Errorf("'spreadsheet_id' is required")
 	}
 	token, err := resolveToken(ctx, job)
 	if err != nil {
-		return params.Err(job, "auth", err.Error()), nil
+		return nil, nil, err
 	}
 	rng := params.StringDefault(job.Params, "range", "Sheet1")
 
@@ -75,23 +101,16 @@ func executeSheetsRead(ctx context.Context, job core.Job, _ chan<- core.Progress
 
 	status, body, err := googleDo(ctx, "GET", endpoint, token, "", nil, params.IntDefault(job.Params, "timeout_ms", 15000))
 	if err != nil {
-		return params.Err(job, "sheets_http_error", err.Error()), nil
+		return nil, nil, err
 	}
 	if status < 200 || status >= 300 {
-		return params.Err(job, "sheets_error", sheetsErr(body)), nil
+		return nil, nil, fmt.Errorf("%s", sheetsErr(body))
 	}
 
 	var parsed struct {
 		Values [][]any `json:"values"`
 	}
 	_ = json.Unmarshal(body, &parsed)
-	headers, rows := flattenValues(parsed.Values, params.BoolDefault(job.Params, "headers", true))
-	return core.Result{
-		JobID:  job.ID,
-		Status: core.StatusOK,
-		Output: map[string]core.Ref{
-			"rows":    {MIME: "application/json", Inline: rows},
-			"headers": {MIME: "application/json", Inline: headers},
-		},
-	}, nil
+	headers, rows = flattenValues(parsed.Values, params.BoolDefault(job.Params, "headers", true))
+	return headers, rows, nil
 }

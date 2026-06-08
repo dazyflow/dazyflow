@@ -32,10 +32,15 @@ import (
 // oauthAuthorize starts the flow. Requires bearer auth so we know
 // which tenant the resulting token belongs to.
 func (h *HTTPGateway) oauthAuthorize(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	provider := r.PathValue("provider")
 	target, status, msg := h.buildAuthorizeURL(p,
-		r.PathValue("provider"),
+		provider,
 		r.URL.Query().Get("account"),
 		r.URL.Query().Get("return_to"),
+		// ?integration=<label> requests only that service's scopes
+		// (incremental authorization); empty/unknown → the provider's full
+		// scope set, unchanged.
+		scopeSubsetForIntegration(provider, r.URL.Query().Get("integration")),
 	)
 	if status != http.StatusOK {
 		writeJSONError(rw, status, msg)
@@ -53,7 +58,10 @@ func (h *HTTPGateway) oauthAuthorize(rw http.ResponseWriter, r *http.Request, p 
 // Pulled out so the JSON variant doesn't have to fake an http.Redirect
 // just to capture the target — and so the URL-building logic stays
 // single-source as more providers / extras are added.
-func (h *HTTPGateway) buildAuthorizeURL(p core.Principal, providerName, account, returnTo string) (string, int, string) {
+// scopes, when non-empty, overrides the provider's full scope list — used
+// for incremental authorization (request only one integration's scopes).
+// nil/empty falls back to the provider's complete Scopes.
+func (h *HTTPGateway) buildAuthorizeURL(p core.Principal, providerName, account, returnTo string, scopes []string) (string, int, string) {
 	if h.OAuth == nil {
 		return "", http.StatusNotImplemented, "OAuth not configured"
 	}
@@ -99,8 +107,12 @@ func (h *HTTPGateway) buildAuthorizeURL(p core.Principal, providerName, account,
 	q.Set("redirect_uri", h.OAuth.redirectURI(providerName))
 	q.Set("response_type", "code")
 	q.Set("state", state)
-	if len(prov.Scopes) > 0 {
-		q.Set("scope", strings.Join(prov.Scopes, " "))
+	reqScopes := prov.Scopes
+	if len(scopes) > 0 {
+		reqScopes = scopes // incremental: only this integration's scopes
+	}
+	if len(reqScopes) > 0 {
+		q.Set("scope", strings.Join(reqScopes, " "))
 	}
 	for k, v := range prov.AuthorizeExtras {
 		q.Set(k, v)
@@ -250,7 +262,12 @@ func (h *HTTPGateway) oauthListProviders(rw http.ResponseWriter, r *http.Request
 		// (typical cause: we added a new scope after the user
 		// connected, so the access token can't call the new endpoint).
 		// The frontend renders a "Reconnect required" pill on these.
-		if provider, ok := h.OAuth.Provider(n); ok && len(provider.Scopes) > 0 {
+		// Skip the all-scopes staleness check for providers that authorize
+		// incrementally (Google): an account connected for one service
+		// legitimately lacks the others' scopes, so comparing against the
+		// full set would flag every account as needing reconnection. Those
+		// scopes are topped up per-integration at connect time instead.
+		if provider, ok := h.OAuth.Provider(n); ok && len(provider.Scopes) > 0 && !providerUsesIncrementalScopes(n) {
 			stale := h.staleAccounts(r.Context(), p.Tenant, n, connected[n], provider.Scopes)
 			if len(stale) > 0 {
 				row["stale_accounts"] = stale

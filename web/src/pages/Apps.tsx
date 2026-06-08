@@ -482,6 +482,7 @@ function IntegrationConnections({
             off={providersOff}
             canWrite={canWrite}
             slug={slug}
+            integration={name}
           />
         ),
       )}
@@ -658,6 +659,7 @@ function OAuthCard({
   off,
   canWrite,
   slug,
+  integration,
 }: {
   req: ConnectionRequirement;
   status: OAuthProviderStatus | null;
@@ -665,13 +667,17 @@ function OAuthCard({
   off: boolean;
   canWrite: boolean;
   slug: string;
+  integration: string;
 }) {
   const { t } = useTranslation();
   const meta = oauthProviderDisplay(req.name);
   const connected = (status?.accounts.length ?? 0) > 0;
   const connect = () => {
+    // Pass the integration so the consent screen requests only this
+    // service's scopes (incremental authorization) — e.g. connecting from
+    // the Google Sheets page won't ask for Gmail/Forms.
     window.location.assign(
-      api.oauthAuthorizeUrl(req.name, `/apps/${encodeURIComponent(slug)}`),
+      api.oauthAuthorizeUrl(req.name, `/apps/${encodeURIComponent(slug)}`, undefined, integration),
     );
   };
 

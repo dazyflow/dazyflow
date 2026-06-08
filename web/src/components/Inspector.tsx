@@ -533,6 +533,17 @@ export function Inspector({
             value={currentParams}
             workspace={workspace}
             accountPicker={accountPicker}
+            references={
+              workspace && graphMeta?.id
+                ? {
+                    token: workspace.token,
+                    tenant: graphMeta.tenant,
+                    workspace: graphMeta.workspace,
+                    flowId: graphMeta.id,
+                    nodeId: selected.id,
+                  }
+                : undefined
+            }
             showAdvanced={showAdvanced}
             onChange={(v) => onParamsChange(selected.id, v)}
           />

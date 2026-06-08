@@ -200,6 +200,20 @@ func (e *EncryptedSecrets) Get(ctx context.Context, name string) (string, error)
 	return "", fmt.Errorf("secret://%s: %w", name, lastErr)
 }
 
+// GetExact reads a single value by its exact storage name within an
+// explicit tenant — no flow→organization cascade, no tenant-from-context.
+// It's the read counterpart of Put, used for daemon-internal bookkeeping
+// stored under reserved name prefixes (e.g. a trigger's poll cursor under
+// "cursor.…", which Get's cascade would mishandle). Returns
+// ErrSecretNotFound when absent so callers can treat "never written" as a
+// first-run rather than an error.
+func (e *EncryptedSecrets) GetExact(ctx context.Context, tenant, name string) (string, error) {
+	if tenant == "" {
+		return "", fmt.Errorf("get secret %q: tenant required", name)
+	}
+	return e.getRaw(ctx, tenant, name)
+}
+
 // getRaw fetches and decrypts a single secret by its exact storage name
 // within a tenant. Returns ErrSecretNotFound (from the store) when absent so
 // callers can implement scope cascades; a decryption failure is surfaced as a

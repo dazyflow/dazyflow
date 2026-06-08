@@ -961,7 +961,24 @@
     "refSecretSetUp": "Lägg till →",
     "secretChipUses": "Använder hemlighet {{name}}",
     "secretChipSetUp": "Lägg till",
-    "secretChipReplace": "Ersätt"
+    "secretChipReplace": "Ersätt",
+    "mapping": {
+      "column": "Kalkylarkskolumn",
+      "source": "Från fält",
+      "add": "Lägg till kolumn",
+      "moveUp": "Flytta upp",
+      "moveDown": "Flytta ner",
+      "fieldsFrom": "Fältförslag från {{source}}"
+    },
+    "refPicker": {
+      "insert": "Infoga en referens",
+      "loading": "Laddar…",
+      "empty": "Inget att referera till än",
+      "upstream": "Från tidigare steg",
+      "trigger": "Från utlösaren",
+      "resources": "Resurser",
+      "secrets": "Hemligheter"
+    }
   },
   "inspector": {
     "title": "Inspector",

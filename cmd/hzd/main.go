@@ -49,6 +49,7 @@ import (
 	secretsdrop "git.sr.ht/~klahr/hazyflow/drops/secrets"
 	"git.sr.ht/~klahr/hazyflow/drops/sheets"
 	"git.sr.ht/~klahr/hazyflow/drops/slack"
+	"git.sr.ht/~klahr/hazyflow/drops/trigger/gform"
 	"git.sr.ht/~klahr/hazyflow/engine"
 	"git.sr.ht/~klahr/hazyflow/engine/jobstore"
 	"git.sr.ht/~klahr/hazyflow/engine/mcp"
@@ -389,6 +390,32 @@ func main() {
 		Sandbox: sandbox,
 		Quota:   quota,
 		Secrets: secrets,
+	}
+	// Flow resources: ${resource.NAME} resolves to live external content at
+	// template-resolution time. Wired only when the encrypted store exists
+	// (it holds the definitions). The google_sheet fetcher reuses the sheets
+	// drop's ReadRange; the fetcher lives here, not in daemon, so the daemon
+	// package stays free of connector imports (same pattern as the token
+	// hooks). The sheets token lookup is wired in wireConnectorTokenHooks.
+	if encryptedSecrets != nil {
+		eng.Resources = map[string]core.ResourceProvider{
+			"resource": &daemon.ResourceProvider{
+				Secrets: encryptedSecrets,
+				Fetchers: map[string]daemon.ResourceFetcher{
+					"google_sheet": func(ctx context.Context, def core.ResourceDef) (any, error) {
+						job := core.Job{Params: map[string]any{}}
+						for k, v := range def.Config {
+							job.Params[k] = v
+						}
+						headers, rows, err := sheets.ReadRange(ctx, job)
+						if err != nil {
+							return nil, err
+						}
+						return map[string]any{"rows": rows, "headers": headers}, nil
+					},
+				},
+			},
+		}
 	}
 	svc := &daemon.Service{
 		Auth: auth.Chain{
@@ -1046,6 +1073,22 @@ func setupEncryptedSecrets(ctx context.Context, masterKeyB64 string, secrets map
 	secretsdrop.SetSecretWriter(func(ctx context.Context, tenant, name, value string) error {
 		return es.Put(ctx, tenant, name, value)
 	})
+	// google_form_trigger's poll cursor — a read/write pair on the same
+	// store, keyed by the reserved "cursor." prefix (hidden from the
+	// Credentials UI). GetExact reads by exact name with no flow cascade;
+	// ErrSecretNotFound (first fire) surfaces as the empty string.
+	gform.SetCursorStore(
+		func(ctx context.Context, tenant, name string) (string, error) {
+			v, err := es.GetExact(ctx, tenant, name)
+			if errors.Is(err, daemon.ErrSecretNotFound) {
+				return "", nil
+			}
+			return v, err
+		},
+		func(ctx context.Context, tenant, name, value string) error {
+			return es.Put(ctx, tenant, name, value)
+		},
+	)
 	return es
 }
 
@@ -1102,5 +1145,13 @@ func wireConnectorTokenHooks(reg *daemon.OAuthRegistry) {
 	github.SetTokenLookup(bind("github"))
 	gmail.SetTokenLookup(bind("google"))
 	sheets.SetTokenLookup(bind("google"))
+	gform.SetTokenLookup(bind("google"))
 	notion.SetTokenLookup(bind("notion"))
+	// Live Sheets-mapping field hints for the Google Form source: resolve a
+	// form's question titles via the Forms API (gform.FieldNames). Wired here
+	// — where the gform drop is importable — so the daemon package stays
+	// connector-free. Needs the token lookup above, so register after it.
+	daemon.SetGoogleFormFieldFetcher(func(ctx context.Context, node core.Node) ([]string, error) {
+		return gform.FieldNames(ctx, core.Job{Params: node.Params})
+	})
 }

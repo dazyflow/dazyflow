@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Lock, Plus, Upload, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { JSONSchema } from "../types";
+import type { JSONSchema, ReferenceGroups, ReferenceItem } from "../types";
 import { api, APIError } from "../api";
 
 // SchemaForm renders manifest.params_schema as a typed form. The
@@ -39,12 +39,26 @@ export type AccountPicker = {
   providerLabel?: string;
 };
 
+// ReferenceCtx, when supplied, enables the "insert reference" picker on
+// string fields: a small button that lists the flow's referenceable data
+// (secrets, upstream node outputs, trigger fields, resources) from
+// GET /me/flows/{flow_id}/references and inserts the chosen ${…} token at
+// the cursor. Omitted in tests/standalone, where fields stay plain.
+export type ReferenceCtx = {
+  token: string;
+  tenant: string;
+  workspace: string;
+  flowId: string;
+  nodeId: string;
+};
+
 type Props = {
   schema: JSONSchema;
   value: Record<string, unknown>;
   onChange: (next: Record<string, unknown>) => void;
   workspace?: WorkspaceCtx;
   accountPicker?: AccountPicker;
+  references?: ReferenceCtx;
   // showAdvanced controls whether developer-flavored fields appear in
   // the form. Default false — a non-tech owner shouldn't have to
   // explain to themselves what `timeout_ms` or `page_token` mean. The
@@ -61,6 +75,7 @@ export function SchemaForm({
   onChange,
   workspace,
   accountPicker,
+  references,
   showAdvanced,
 }: Props) {
   const { t } = useTranslation();
@@ -82,6 +97,7 @@ export function SchemaForm({
       value={value[key]}
       workspace={workspace}
       accountPicker={accountPicker}
+      references={references}
       onChange={(v) => {
         const next = { ...value };
         if (v === undefined) delete next[key];
@@ -210,9 +226,10 @@ type FieldProps = {
   onChange: (v: unknown) => void;
   workspace?: WorkspaceCtx;
   accountPicker?: AccountPicker;
+  references?: ReferenceCtx;
 };
 
-function SchemaField({ name, schema, required, value, onChange, workspace, accountPicker }: FieldProps) {
+function SchemaField({ name, schema, required, value, onChange, workspace, accountPicker, references }: FieldProps) {
   const { t } = useTranslation();
   // The OAuth `account` field becomes a dropdown of connected accounts
   // (plus a Connect affordance) when the editor supplies a picker. Plain
@@ -319,6 +336,7 @@ function SchemaField({ name, schema, required, value, onChange, workspace, accou
           required={required}
           value={value}
           onChange={onChange}
+          references={references}
         />
       );
     case "integer":
@@ -406,6 +424,20 @@ function SchemaField({ name, schema, required, value, onChange, workspace, accou
         </FieldWrap>
       );
     case "array":
+      // format:"sheet-mapping" gets the column-mapping editor — paired
+      // "sheet column ← from field" rows — instead of the generic
+      // array-of-objects JSON. Used by sheets_append_row's `mapping`.
+      if (schema.format === "sheet-mapping") {
+        return (
+          <FieldWrap name={name} schema={schema} required={required}>
+            <MappingField
+              value={(value as MappingRow[]) ?? []}
+              onChange={onChange}
+              references={references}
+            />
+          </FieldWrap>
+        );
+      }
       if (schema.items) {
         return (
           <FieldWrap name={name} schema={schema} required={required}>
@@ -630,6 +662,7 @@ type FieldRef =
   | { kind: "secret"; payload: string }
   | { kind: "upstream"; payload: string }
   | { kind: "trigger"; payload: string }
+  | { kind: "resource"; payload: string }
   | { kind: "generic"; payload: string };
 
 // parseFieldRefs extracts every ${...} placeholder from a raw string
@@ -651,6 +684,8 @@ function parseFieldRefs(raw: string): FieldRef[] {
       parsed = { kind: "secret", payload: ref.slice("secret.".length) };
     } else if (ref.startsWith("upstream.")) {
       parsed = { kind: "upstream", payload: ref.slice("upstream.".length) };
+    } else if (ref.startsWith("resource.")) {
+      parsed = { kind: "resource", payload: ref.slice("resource.".length) };
     } else if (ref.startsWith("trigger") || ref.startsWith("webhook")) {
       parsed = { kind: "trigger", payload: ref };
     } else {
@@ -689,16 +724,39 @@ function PlainStringField({
   required,
   value,
   onChange,
+  references,
 }: {
   name: string;
   schema: JSONSchema;
   required: boolean;
   value: unknown;
   onChange: (v: unknown) => void;
+  references?: ReferenceCtx;
 }) {
   const raw = typeof value === "string" ? value : "";
   const credMatch = SECRET_FULL_REF.exec(raw);
   const [forceEdit, setForceEdit] = useState(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  // insertRef splices a ${…} token at the input's cursor (or appends when
+  // unfocused), then fires onChange so the value round-trips like a keystroke.
+  const insertRef = (token: string) => {
+    const el = inputRef.current;
+    const cur = (value as string) ?? "";
+    if (!el) {
+      onChange((cur + token) || undefined);
+      return;
+    }
+    const start = el.selectionStart ?? cur.length;
+    const end = el.selectionEnd ?? cur.length;
+    const next = cur.slice(0, start) + token + cur.slice(end);
+    onChange(next === "" && !required ? undefined : next);
+    // Restore focus + place the caret after the inserted token.
+    requestAnimationFrame(() => {
+      el.focus();
+      const pos = start + token.length;
+      el.setSelectionRange(pos, pos);
+    });
+  };
   // Reset the override whenever the underlying value transitions back
   // to (or stays) a single credential ref — e.g. a re-render after
   // load. Keeps the chip the default state across navigation.
@@ -726,16 +784,136 @@ function PlainStringField({
   }
   return (
     <FieldWrap name={name} schema={schema} required={required} value={value}>
-      <input
-        type="text"
-        value={(value as string) ?? (schema.default as string | undefined) ?? ""}
-        placeholder={schema.default ? String(schema.default) : undefined}
-        onChange={(e) => {
-          const v = e.target.value;
-          onChange(v === "" && !required ? undefined : v);
-        }}
-      />
+      <div className="field-with-ref">
+        <input
+          ref={inputRef}
+          type="text"
+          value={(value as string) ?? (schema.default as string | undefined) ?? ""}
+          placeholder={schema.default ? String(schema.default) : undefined}
+          onChange={(e) => {
+            const v = e.target.value;
+            onChange(v === "" && !required ? undefined : v);
+          }}
+        />
+        {references && <ReferenceMenu ctx={references} onInsert={insertRef} />}
+      </div>
     </FieldWrap>
+  );
+}
+
+// ReferenceMenu is the insert-a-reference affordance: a "{}" button that
+// opens a grouped list of the flow's referenceable data (secrets, upstream
+// node outputs, trigger fields, resources) fetched lazily from
+// GET /me/flows/{flow_id}/references. Clicking an item inserts its ${…}
+// token into the field. Purely additive — the user can still type tokens
+// by hand. Closes on outside click / Escape.
+function ReferenceMenu({
+  ctx,
+  onInsert,
+}: {
+  ctx: ReferenceCtx;
+  onInsert: (token: string) => void;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const [groups, setGroups] = useState<ReferenceGroups | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open || groups || error) return;
+    api
+      .listReferences(ctx.token, ctx.tenant, ctx.workspace, ctx.flowId, ctx.nodeId)
+      .then((r) => setGroups(r.groups))
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+  }, [open, groups, error, ctx]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const sections: { kind: keyof ReferenceGroups; label: string }[] = [
+    { kind: "upstream", label: t("schemaForm.refPicker.upstream") },
+    { kind: "trigger", label: t("schemaForm.refPicker.trigger") },
+    { kind: "resources", label: t("schemaForm.refPicker.resources") },
+    { kind: "secrets", label: t("schemaForm.refPicker.secrets") },
+  ];
+  const describe = (kind: keyof ReferenceGroups, it: ReferenceItem): string => {
+    if (kind === "upstream") {
+      return it.node_label && it.port
+        ? `${it.node_label} · ${it.label || it.port}`
+        : it.node_id || it.token;
+    }
+    if (kind === "secrets" || kind === "resources") return it.name || it.token;
+    if (kind === "trigger") return it.field || it.token;
+    return it.label || it.token;
+  };
+  const hasAny =
+    groups &&
+    sections.some((s) => groups[s.kind] && groups[s.kind].length > 0);
+
+  return (
+    <div className="ref-menu" ref={wrapRef}>
+      <button
+        type="button"
+        className="ghost ref-insert-btn"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={t("schemaForm.refPicker.insert")}
+        aria-label={t("schemaForm.refPicker.insert")}
+      >
+        {"{ }"}
+      </button>
+      {open && (
+        <div className="ref-pop" role="menu">
+          {error && <div className="ref-pop-msg ref-pop-error">{error}</div>}
+          {!groups && !error && (
+            <div className="ref-pop-msg">{t("schemaForm.refPicker.loading")}</div>
+          )}
+          {groups && !hasAny && (
+            <div className="ref-pop-msg">{t("schemaForm.refPicker.empty")}</div>
+          )}
+          {groups &&
+            sections.map((s) => {
+              const items = groups[s.kind] ?? [];
+              if (items.length === 0) return null;
+              return (
+                <div key={s.kind} className="ref-pop-group">
+                  <div className="ref-pop-group-label">{s.label}</div>
+                  {items.map((it) => (
+                    <button
+                      key={it.token}
+                      type="button"
+                      role="menuitem"
+                      className="ref-pop-row"
+                      onClick={() => {
+                        onInsert(it.token);
+                        setOpen(false);
+                      }}
+                    >
+                      <span className="ref-pop-desc">{describe(s.kind, it)}</span>
+                      <span className="ref-pop-token">{it.token}</span>
+                    </button>
+                  ))}
+                </div>
+              );
+            })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -897,6 +1075,148 @@ function ArrayField({
         <Plus size={12} style={{ marginRight: 4, verticalAlign: -1 }} />
         {t("schemaForm.add")}
       </button>
+    </div>
+  );
+}
+
+// MappingRow is one entry of a sheet-mapping array: which sheet column,
+// and which incoming field feeds it.
+type MappingRow = { column?: string; source?: string };
+
+// MappingField is the column-mapping editor for sheets_append_row's
+// `mapping` param. Each row pairs a destination sheet column with the
+// incoming field (a key/path into each row object — e.g. a Google Form
+// question title) that fills it. Column order is the appended-row order,
+// so rows can be reordered. Empties out to undefined so an untouched
+// mapping doesn't bloat saved params.
+function MappingField({
+  value,
+  onChange,
+  references,
+}: {
+  value: MappingRow[];
+  onChange: (v: unknown) => void;
+  references?: ReferenceCtx;
+}) {
+  const { t } = useTranslation();
+  const rows: MappingRow[] = Array.isArray(value) ? value : [];
+  // Source-aware field suggestions: the node feeding this Sheets append's
+  // `rows` input is a "row source" (a Google Form, a hosted webhook form,
+  // …) that declares the fields its records carry. We offer them via a
+  // <datalist> so the `source` box autocompletes the right field names
+  // while staying free-text (a Google Form's dynamic question titles can
+  // still be typed). The source label is shown as a hint.
+  const [fieldHints, setFieldHints] = useState<string[]>([]);
+  const [sourceLabel, setSourceLabel] = useState<string | null>(null);
+  useEffect(() => {
+    if (!references) return;
+    let live = true;
+    api
+      .listInputFields(
+        references.token,
+        references.tenant,
+        references.workspace,
+        references.flowId,
+        references.nodeId,
+      )
+      .then((r) => {
+        if (!live) return;
+        setFieldHints(r.fields ?? []);
+        setSourceLabel(r.source?.label ?? null);
+      })
+      .catch(() => {
+        /* hints are optional — leave the box free-text on failure */
+      });
+    return () => {
+      live = false;
+    };
+  }, [references]);
+  const listId = references ? `mapping-fields-${references.nodeId}` : undefined;
+  const commit = (next: MappingRow[]) => onChange(next.length ? next : undefined);
+  const setRow = (i: number, patch: Partial<MappingRow>) =>
+    commit(rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  const remove = (i: number) => commit(rows.filter((_, idx) => idx !== i));
+  const move = (i: number, dir: -1 | 1) => {
+    const j = i + dir;
+    if (j < 0 || j >= rows.length) return;
+    const next = rows.slice();
+    [next[i], next[j]] = [next[j], next[i]];
+    commit(next);
+  };
+  return (
+    <div className="mapping-field">
+      {rows.map((r, i) => (
+        <div key={i} className="mapping-row">
+          <input
+            type="text"
+            className="mapping-col"
+            placeholder={t("schemaForm.mapping.column")}
+            value={r.column ?? ""}
+            onChange={(e) => setRow(i, { column: e.target.value })}
+          />
+          <span className="mapping-arrow" aria-hidden>
+            ←
+          </span>
+          <input
+            type="text"
+            className="mapping-src"
+            placeholder={t("schemaForm.mapping.source")}
+            list={listId}
+            value={r.source ?? ""}
+            onChange={(e) => setRow(i, { source: e.target.value })}
+          />
+          <button
+            type="button"
+            className="ghost sf-remove"
+            onClick={() => move(i, -1)}
+            disabled={i === 0}
+            aria-label={t("schemaForm.mapping.moveUp")}
+          >
+            ↑
+          </button>
+          <button
+            type="button"
+            className="ghost sf-remove"
+            onClick={() => move(i, 1)}
+            disabled={i === rows.length - 1}
+            aria-label={t("schemaForm.mapping.moveDown")}
+          >
+            ↓
+          </button>
+          <button
+            type="button"
+            className="ghost sf-remove"
+            onClick={() => remove(i)}
+            aria-label={t("schemaForm.remove")}
+          >
+            <X size={14} />
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        className="sf-add"
+        onClick={() => commit([...rows, { column: "", source: "" }])}
+      >
+        <Plus size={12} style={{ marginRight: 4, verticalAlign: -1 }} />
+        {t("schemaForm.mapping.add")}
+      </button>
+      {/* Field suggestions for the `source` boxes, scoped to whatever row
+          source feeds this node. Free-text still works. */}
+      {fieldHints.length > 0 && (
+        <>
+          <datalist id={listId}>
+            {fieldHints.map((f) => (
+              <option key={f} value={f} />
+            ))}
+          </datalist>
+          {sourceLabel && (
+            <div className="mapping-hint">
+              {t("schemaForm.mapping.fieldsFrom", { source: sourceLabel })}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

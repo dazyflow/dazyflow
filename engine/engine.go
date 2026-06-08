@@ -45,6 +45,13 @@ type Engine struct {
 	// Unresolved values stay in the JobStore so audit trails never
 	// capture cleartext secrets.
 	Secrets map[string]core.SecretProvider
+	// Resources is an optional registry of resource providers keyed by
+	// scheme ("resource"). When set, the engine resolves ${resource.NAME}
+	// references in Job.Params to live external content (e.g. a Google
+	// Sheet's rows) before Execute — a whole-string ref yields the
+	// structured value, an inline one the stringified form. A fetch
+	// failure fails the node with code "resource".
+	Resources map[string]core.ResourceProvider
 	// ApprovalSigner is optional. When set and the resolved module's
 	// manifest has AwaitsApproval=true, the engine populates
 	// Job.ApprovalURL pre-Execute so the module can emit the URL on
@@ -235,12 +242,12 @@ func (e *Engine) RunNode(
 	}
 	sctx := scopeCtx(ctx, graph)
 	injectConnectionDefaults(sctx, e.Secrets, manifest, &job)
-	secrets, err := resolveTemplatesCollecting(sctx, e.Secrets, prior, &job)
+	secrets, err := resolveTemplatesCollecting(sctx, e.Secrets, e.Resources, prior, &job)
 	if err != nil {
 		recordSpanError(span, err)
 		return core.Result{
 			Status: core.StatusError,
-			Error:  &core.JobError{Code: "secret", Message: err.Error()},
+			Error:  &core.JobError{Code: templateErrCode(err), Message: err.Error()},
 		}, err
 	}
 	if manifest.AwaitsApproval && e.ApprovalSigner != nil {
@@ -320,11 +327,11 @@ func (e *Engine) runNode(
 	}
 	sctx := scopeCtx(ctx, graph)
 	injectConnectionDefaults(sctx, e.Secrets, transport.Manifest(), &job)
-	secrets, err := resolveTemplatesCollecting(sctx, e.Secrets, prior, &job)
+	secrets, err := resolveTemplatesCollecting(sctx, e.Secrets, e.Resources, prior, &job)
 	if err != nil {
 		return core.Result{
 			Status: core.StatusError,
-			Error:  &core.JobError{Code: "secret", Message: err.Error()},
+			Error:  &core.JobError{Code: templateErrCode(err), Message: err.Error()},
 		}, err
 	}
 	jobIDsFromSpan(ctx, &job)

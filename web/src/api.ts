@@ -22,6 +22,8 @@ import type {
   RunSummary,
   RunView,
   NodeRunView,
+  ReferenceGroups,
+  ResourceDef,
   SecretManagerStatus,
   SecretManagerConfig,
   ServiceInfo,
@@ -269,6 +271,49 @@ export const api = {
       signalUnauthorized: false,
     }),
   whoami: (token: string | null) => request<WhoAmI>(token, "GET", "/me"),
+
+  // listReferences returns everything a param on `node` can reference in a
+  // flow — secrets, upstream node outputs, trigger/form fields, resources —
+  // as ready-to-insert ${…} tokens. Powers the param editor's insert-
+  // reference picker. node is optional (omit to list all nodes).
+  listReferences: (
+    token: string,
+    tenant: string,
+    workspace: string,
+    id: string,
+    node?: string,
+  ) =>
+    request<{ flow: string; node: string; groups: ReferenceGroups }>(
+      token,
+      "GET",
+      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/references${
+        node ? `?node=${encodeURIComponent(node)}` : ""
+      }`,
+    ),
+
+  // listInputFields returns the record fields the node feeding `node`'s
+  // `port` (default "rows") emits — e.g. a Google Form's structural keys or
+  // a hosted form's declared fields — so the Sheets mapping editor can
+  // suggest them. Empty when nothing is wired in or the producer isn't a
+  // known row source.
+  listInputFields: (
+    token: string,
+    tenant: string,
+    workspace: string,
+    id: string,
+    node: string,
+    port?: string,
+  ) =>
+    request<{
+      source: { node_id: string; module: string; label?: string } | null;
+      fields: string[];
+    }>(
+      token,
+      "GET",
+      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/input-fields?node=${encodeURIComponent(node)}${
+        port ? `&port=${encodeURIComponent(port)}` : ""
+      }`,
+    ),
 
   // serviceInfo fetches the public GET /api/v1 descriptor. No token
   // required — path "" resolves to API_BASE ("/api/v1"). The UI uses the
@@ -686,9 +731,13 @@ export const api = {
   // 302s to the provider, so the caller does window.location.assign().
   // Auth rides on the session cookie (same-origin); the daemon bounces
   // the user back to `returnTo` with ?oauth=success|error appended.
-  oauthAuthorizeUrl: (provider: string, returnTo: string, account?: string) => {
+  // integration (the Manifest.Integration label, e.g. "Google Sheets")
+  // requests incremental authorization: only that service's scopes appear
+  // on the consent screen. Omit it to request the provider's full scope set.
+  oauthAuthorizeUrl: (provider: string, returnTo: string, account?: string, integration?: string) => {
     const qs = new URLSearchParams({ return_to: returnTo });
     if (account) qs.set("account", account);
+    if (integration) qs.set("integration", integration);
     return `${API_BASE}/oauth/${encodeURIComponent(provider)}/authorize?${qs.toString()}`;
   },
   // disconnectConnection deletes a stored OAuth connection (forgets the
@@ -760,6 +809,30 @@ export const api = {
     }),
   deleteSecret: (token: string, name: string, scope?: SecretScope, flow?: string) =>
     request<void>(token, "DELETE", `/secrets/${encodeURIComponent(name)}` + secretQuery(scope, flow)),
+
+  // Flow resources (${resource.NAME}) — named pointers at external content
+  // (e.g. a Google Sheet) the engine fetches live. CRUD mirrors secrets'
+  // scope/flow query; config is returned by list (it isn't sensitive).
+  listResources: (token: string, scope?: SecretScope, flow?: string) =>
+    request<{ resources: ResourceDef[]; scope: string }>(
+      token,
+      "GET",
+      "/resources" + secretQuery(scope, flow),
+    ),
+  putResource: (
+    token: string,
+    name: string,
+    type: string,
+    config: Record<string, unknown>,
+    scope?: SecretScope,
+    flow?: string,
+  ) =>
+    request<void>(token, "PUT", `/resources/${encodeURIComponent(name)}` + secretQuery(scope, flow), {
+      type,
+      config,
+    }),
+  deleteResource: (token: string, name: string, scope?: SecretScope, flow?: string) =>
+    request<void>(token, "DELETE", `/resources/${encodeURIComponent(name)}` + secretQuery(scope, flow)),
 
   // Bring-your-own secret manager (OpenBao/Vault) connection for this tenant.
   // getSecretManager returns a redacted view (no credentials); setSecretManager

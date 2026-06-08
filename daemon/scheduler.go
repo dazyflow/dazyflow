@@ -292,8 +292,13 @@ func (s *Scheduler) rescan(ctx context.Context) error {
 				// used: reject <= 0 and anything past the 1-year max, since
 				// IntervalSeconds * time.Second overflows int64 ns past ~292y and
 				// would otherwise fire every tick.
+				//
+				// google_form_trigger uses the identical interval mechanism: the
+				// scheduler just fires the graph on the node's interval_seconds,
+				// and the node itself fetches new Form responses since its stored
+				// cursor at execute time (see drops/trigger/gform).
 				for _, node := range g.Nodes {
-					if node.Module != "poll_trigger" {
+					if node.Module != "poll_trigger" && node.Module != "google_form_trigger" {
 						continue
 					}
 					secs := paramSeconds(node.Params, "interval_seconds")

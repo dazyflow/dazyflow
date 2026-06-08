@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"regexp"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -265,6 +266,105 @@ func normalizeRows(inline any) ([]map[string]any, error) {
 		return parsed, nil
 	}
 	return nil, fmt.Errorf("rows: unsupported input type %T", inline)
+}
+
+// columnMapping is one row of the sheets_append_row `mapping` param:
+// the named sheet column and the field (key/path) in each incoming row
+// whose value fills it.
+type columnMapping struct {
+	Column string
+	Source string
+}
+
+// parseMapping reads the optional `mapping` param — an array of
+// {column, source} objects (JSON-decoded as []any of map[string]any).
+// Entries without a column are skipped; a missing/non-array param yields
+// nil (the legacy header-derivation path). A JSON string is also accepted
+// so the value can round-trip through a text field.
+func parseMapping(p map[string]any) []columnMapping {
+	raw, ok := p["mapping"]
+	if !ok || raw == nil {
+		return nil
+	}
+	if s, isStr := raw.(string); isStr {
+		if s == "" {
+			return nil
+		}
+		var decoded []map[string]any
+		if err := json.Unmarshal([]byte(s), &decoded); err != nil {
+			return nil
+		}
+		arr := make([]any, len(decoded))
+		for i, m := range decoded {
+			arr[i] = m
+		}
+		raw = arr
+	}
+	arr, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]columnMapping, 0, len(arr))
+	for _, item := range arr {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		col, _ := m["column"].(string)
+		if col == "" {
+			continue
+		}
+		src, _ := m["source"].(string)
+		out = append(out, columnMapping{Column: col, Source: src})
+	}
+	return out
+}
+
+func mappingColumns(cmap []columnMapping) []string {
+	cols := make([]string, len(cmap))
+	for i, c := range cmap {
+		cols[i] = c.Column
+	}
+	return cols
+}
+
+// projectRows rebuilds each incoming row as an object keyed by the mapping's
+// columns, pulling each column's value from the row at the mapped source
+// field. A missing source yields "" (matching the append builder's blank
+// fill). The downstream values-matrix builder then reads row[column] for
+// each header in order.
+func projectRows(rows []map[string]any, cmap []columnMapping) []map[string]any {
+	out := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		rec := make(map[string]any, len(cmap))
+		for _, c := range cmap {
+			rec[c.Column] = lookupField(row, c.Source)
+		}
+		out = append(out, rec)
+	}
+	return out
+}
+
+// lookupField reads source from row, supporting dotted paths (e.g.
+// "user.email") for nested objects. Returns "" when absent so a missing
+// field becomes a blank cell rather than a JSON null.
+func lookupField(row map[string]any, source string) any {
+	if source == "" {
+		return ""
+	}
+	var cur any = row
+	for _, part := range strings.Split(source, ".") {
+		m, ok := cur.(map[string]any)
+		if !ok {
+			return ""
+		}
+		v, ok := m[part]
+		if !ok {
+			return ""
+		}
+		cur = v
+	}
+	return cur
 }
 
 func normalizeHeaders(inline any) []string {
