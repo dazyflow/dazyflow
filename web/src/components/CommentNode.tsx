@@ -1,4 +1,5 @@
 import { NodeResizer, type NodeProps } from "@xyflow/react";
+import { Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 // CommentNode is an editor-only "frame": a resizable, titled, colored box
@@ -12,6 +13,10 @@ export type CommentData = {
   // Injected by FlowEditor so title edits land in the controlled frame
   // state (and mark the graph dirty).
   onTitleChange?: (title: string) => void;
+  // Injected by FlowEditor: removes this frame. Frames live in their own
+  // state and aren't reachable from the Inspector, so this button is the
+  // only delete affordance on touch devices (no Delete/Backspace key).
+  onRequestDelete?: () => void;
 };
 
 export function CommentNode({ data, selected }: NodeProps) {
@@ -33,6 +38,21 @@ export function CommentNode({ data, selected }: NodeProps) {
     >
       {/* Drag handles to resize the box; only shown while selected. */}
       <NodeResizer color={color} isVisible={!!selected} minWidth={140} minHeight={90} />
+      {selected && d.onRequestDelete && (
+        <button
+          type="button"
+          className="hz-frame-delete nodrag nopan"
+          aria-label="Delete comment"
+          title="Delete comment"
+          onClick={(e) => {
+            // Stop the canvas from re-selecting/dragging on the same tap.
+            e.stopPropagation();
+            d.onRequestDelete?.();
+          }}
+        >
+          <Trash2 size={14} />
+        </button>
+      )}
       <input
         className="hz-frame-title nodrag"
         value={title}

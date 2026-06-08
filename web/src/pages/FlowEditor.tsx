@@ -1413,6 +1413,13 @@ function EditorInner() {
             );
             setDirty(true);
           },
+          // Touch-device delete: frames aren't reachable from the Inspector,
+          // so the comment's own trash button removes it from frame state.
+          onRequestDelete: () => {
+            setFrameNodes((fns) => fns.filter((x) => x.id !== f.id));
+            setSelectedID((cur) => (cur === f.id ? null : cur));
+            setDirty(true);
+          },
         },
       })),
     [frameNodes],

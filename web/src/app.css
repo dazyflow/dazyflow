@@ -5688,15 +5688,40 @@ button.warning:hover:not(:disabled) {
    fills its React Flow node wrapper; background/border tints are set
    inline from the frame's color. */
 .hz-frame {
+  position: relative;
   width: 100%;
   height: 100%;
   border: 1.5px solid var(--border);
   border-radius: var(--r-3);
   box-sizing: border-box;
 }
+/* Delete affordance, shown only while the frame is selected — the touch
+   path to remove a comment (frames aren't in the Inspector, and a phone has
+   no Delete key). Sized as a comfortable tap target. */
+.hz-frame-delete {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+}
+.hz-frame-delete:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+}
 .hz-frame-title {
   width: auto;
-  max-width: calc(100% - 16px);
+  max-width: calc(100% - 42px);
   margin: 6px 8px;
   background: transparent;
   border: none;
