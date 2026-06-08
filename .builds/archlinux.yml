@@ -12,10 +12,10 @@ environment:
   HAZYFLOW_TEST_DB: postgres://hazyflow:hazyflow@localhost:5432/hazyflow_test
 tasks:
   - postgres: |
-      # Spin a throwaway Postgres for the integration-gated tests.
       sudo -iu postgres initdb -D /var/lib/postgres/data
-      sudo -iu postgres pg_ctl -D /var/lib/postgres/data -l /tmp/pg.log -o "-p 5432" start
-      # Wait for it to accept connections.
+      sudo install -d -o postgres -g postgres /run/postgresql
+      sudo -iu postgres pg_ctl -D /var/lib/postgres/data -l /tmp/pg.log -o "-p 5432" -w start \
+        || { echo "=== pg.log ==="; cat /tmp/pg.log; exit 1; }
       for i in $(seq 1 30); do pg_isready -h localhost -p 5432 && break; sleep 1; done
       sudo -iu postgres psql -c "CREATE USER hazyflow WITH PASSWORD 'hazyflow';"
       sudo -iu postgres psql -c "CREATE DATABASE hazyflow_test OWNER hazyflow;"
@@ -24,27 +24,15 @@ tasks:
       go build ./...
   - test: |
       cd hazyflow
-      # HAZYFLOW_TEST_DB is set in the environment, so the Postgres-gated
-      # jobstore + auth tests run for real here. -race guards against
-      # concurrency regressions (e.g. the workspace.Store / scheduler
-      # data race fixed in the mutex change) creeping back in.
       go test -race ./...
   - vet: |
       cd hazyflow
       go vet ./...
   - vuln: |
-      # Technical-vulnerability scan (ISO 27001 A.8.8): govulncheck cross-
-      # references the module graph against the Go vulnerability database
-      # and reports only vulns reachable from code we actually call, so a
-      # known-vulnerable dependency fails the build instead of shipping.
       cd hazyflow
       go install golang.org/x/vuln/cmd/govulncheck@latest
       "$(go env GOPATH)/bin/govulncheck" ./...
   - hzctl-e2e: |
-      # Guard the gRPC control plane + hzctl end to end: this demo builds
-      # hzd + hzctl + a remote module, then drives SaveGraph/RunGraph over
-      # gRPC and asserts the output. Fails the build if the control API or
-      # the CLI that depends on it regresses.
       cd hazyflow
       bash examples/csv-pipeline/run.sh
   - web: |
