@@ -124,6 +124,10 @@ var googleScopeGroups = map[string][]string{
 	"Google Forms": {
 		"https://www.googleapis.com/auth/forms.responses.readonly",
 		"https://www.googleapis.com/auth/forms.body.readonly",
+		// drive.metadata.readonly powers the form picker: the Forms API has
+		// no "list my forms", so the dropdown lists form files via Drive.
+		// Metadata-only (names + ids, no content) — least privilege.
+		"https://www.googleapis.com/auth/drive.metadata.readonly",
 	},
 }
 

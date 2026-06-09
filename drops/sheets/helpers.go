@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -365,6 +366,90 @@ func lookupField(row map[string]any, source string) any {
 		cur = v
 	}
 	return cur
+}
+
+// ListDriveFiles lists the connected account's Drive files of a given
+// MIME type (most-recent first) as {id, name} options — the backend for
+// the spreadsheet and form pickers (both are Drive file types). Reuses the
+// package's Google client + token hook; reads `account`/`token`/`timeout_ms`
+// from job.Params. The form/spreadsheet ID a caller stores IS the Drive
+// file id, so the option ID drops straight into spreadsheet_id / form_id.
+func ListDriveFiles(ctx context.Context, job core.Job, mimeType string) ([]core.AccountResource, error) {
+	token, err := resolveToken(ctx, job)
+	if err != nil {
+		return nil, err
+	}
+	q := url.Values{}
+	q.Set("q", "mimeType='"+mimeType+"' and trashed=false")
+	q.Set("fields", "files(id,name)")
+	q.Set("orderBy", "modifiedTime desc")
+	q.Set("pageSize", "100")
+	endpoint := driveBaseURL(job) + "/files?" + q.Encode()
+	status, body, err := googleDo(ctx, "GET", endpoint, token, "", nil, params.IntDefault(job.Params, "timeout_ms", 15000))
+	if err != nil {
+		return nil, err
+	}
+	if status < 200 || status >= 300 {
+		return nil, fmt.Errorf("%s", sheetsErr(body))
+	}
+	var parsed struct {
+		Files []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"files"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return nil, fmt.Errorf("drive files.list decode: %w", err)
+	}
+	out := make([]core.AccountResource, 0, len(parsed.Files))
+	for _, f := range parsed.Files {
+		out = append(out, core.AccountResource{ID: f.ID, Name: f.Name})
+	}
+	return out, nil
+}
+
+// ListSheetTabs lists the tab (sheet) titles within a spreadsheet as
+// {id, name} options — the backend for the tab/range picker, which depends
+// on the chosen spreadsheet_id. The tab title is both the id and the label
+// (append/read target a tab by name). Reads spreadsheet_id (ID or URL) and
+// account/token from job.Params.
+func ListSheetTabs(ctx context.Context, job core.Job) ([]core.AccountResource, error) {
+	id := sheetID(params.StringDefault(job.Params, "spreadsheet_id", ""))
+	if id == "" {
+		return nil, fmt.Errorf("spreadsheet_id is required")
+	}
+	token, err := resolveToken(ctx, job)
+	if err != nil {
+		return nil, err
+	}
+	q := url.Values{}
+	q.Set("fields", "sheets.properties.title")
+	endpoint := sheetsBaseURL(job) + "/spreadsheets/" + url.PathEscape(id) + "?" + q.Encode()
+	status, body, err := googleDo(ctx, "GET", endpoint, token, "", nil, params.IntDefault(job.Params, "timeout_ms", 15000))
+	if err != nil {
+		return nil, err
+	}
+	if status < 200 || status >= 300 {
+		return nil, fmt.Errorf("%s", sheetsErr(body))
+	}
+	var parsed struct {
+		Sheets []struct {
+			Properties struct {
+				Title string `json:"title"`
+			} `json:"properties"`
+		} `json:"sheets"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return nil, fmt.Errorf("spreadsheets.get decode: %w", err)
+	}
+	out := make([]core.AccountResource, 0, len(parsed.Sheets))
+	for _, s := range parsed.Sheets {
+		if s.Properties.Title == "" {
+			continue
+		}
+		out = append(out, core.AccountResource{ID: s.Properties.Title, Name: s.Properties.Title})
+	}
+	return out, nil
 }
 
 func normalizeHeaders(inline any) []string {

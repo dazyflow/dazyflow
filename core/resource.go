@@ -2,6 +2,18 @@ package core
 
 import "context"
 
+// AccountResource is one selectable thing inside a connected account — a
+// Google Form, a spreadsheet, a Slack channel — surfaced by the resource
+// pickers so a user chooses from a dropdown instead of pasting an opaque
+// ID. ID is what gets stored in the param; Name is the human label. Kept
+// here (not in daemon) so connector packages can return it from their
+// listers without importing daemon. Distinct from ResourceDef, which is a
+// stored ${resource.NAME} definition — different concept, similar word.
+type AccountResource struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 // ResourceDef is a named, flow/organization-scoped configuration a user
 // sets up once and references in node params as ${resource.NAME}. Unlike a
 // secret (an opaque stored value), a resource points at external content —

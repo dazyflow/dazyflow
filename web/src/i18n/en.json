@@ -970,9 +970,19 @@
       "column": "Sheet column",
       "source": "From field",
       "add": "Add column",
+      "autoMap": "Auto-map {{count}} fields",
       "moveUp": "Move up",
       "moveDown": "Move down",
       "fieldsFrom": "Field suggestions from {{source}}"
+    },
+    "resourcePicker": {
+      "loading": "Loading…",
+      "choose": "Choose a {{noun}}…",
+      "enterId": "Enter ID manually",
+      "pickFromList": "Pick from your account",
+      "idPlaceholder": "{{noun}} name or ID",
+      "connectHint": "Connect the account to pick a {{noun}} from a list.",
+      "needsDependency": "Choose a {{dep}} first to pick a {{noun}}."
     },
     "refPicker": {
       "insert": "Insert a reference",

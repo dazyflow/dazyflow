@@ -46,8 +46,8 @@ func init() {
 					"base_url":{"type":"string","description":"Override the API host (testing)."},
 					"account":{"type":"string","default":"default"},
 					"token":{"type":"string","description":"Raw access token; overrides 'account'."},
-					"spreadsheet_id":{"type":"string","description":"Spreadsheet ID or full URL."},
-					"range":{"type":"string","default":"Sheet1","description":"Sheet/range the append targets."},
+					"spreadsheet_id":{"type":"string","format":"google-spreadsheet","description":"Spreadsheet ID or full URL."},
+					"range":{"type":"string","format":"google-sheet-tab","default":"Sheet1","description":"Sheet/range the append targets."},
 					"value_input_option":{"type":"string","enum":["RAW","USER_ENTERED"],"default":"USER_ENTERED"},
 					"insert_data_option":{"type":"string","enum":["OVERWRITE","INSERT_ROWS"],"default":"INSERT_ROWS"},
 					"mapping":{

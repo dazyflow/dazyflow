@@ -315,6 +315,30 @@ export const api = {
       }`,
     ),
 
+  // listAccountResources lists a connected account's selectable items of a
+  // kind (e.g. provider "google", kind "spreadsheets" or "forms") so a param
+  // can offer a dropdown instead of an opaque ID. account defaults to
+  // "default" server-side. A 502 means "not connected" / provider error —
+  // the picker falls back to manual entry.
+  // extra carries dependent params (e.g. spreadsheet_id for the tabs kind),
+  // forwarded to the lister as query params.
+  listAccountResources: (
+    token: string,
+    provider: string,
+    kind: string,
+    account?: string,
+    extra?: Record<string, string>,
+  ) => {
+    const qs = new URLSearchParams({ kind });
+    if (account) qs.set("account", account);
+    for (const [k, v] of Object.entries(extra ?? {})) qs.set(k, v);
+    return request<{ resources: { id: string; name: string }[] }>(
+      token,
+      "GET",
+      `/oauth/${encodeURIComponent(provider)}/resources?${qs.toString()}`,
+    );
+  },
+
   // serviceInfo fetches the public GET /api/v1 descriptor. No token
   // required — path "" resolves to API_BASE ("/api/v1"). The UI uses the
   // build block for the account-menu version footer.

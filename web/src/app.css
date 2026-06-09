@@ -3983,6 +3983,11 @@ button.warning:hover:not(:disabled) {
   font-size: 11px;
   color: var(--muted);
 }
+.mapping-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
 .mapping-row .sf-remove {
   width: 28px;
   height: 32px;
@@ -3994,6 +3999,29 @@ button.warning:hover:not(:disabled) {
 .mapping-row .sf-remove:disabled {
   opacity: 0.35;
   cursor: default;
+}
+
+/* Account resource picker: a dropdown of the connected account's forms /
+   spreadsheets, with a manual-entry escape hatch beneath. */
+.resource-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.resource-picker > select,
+.resource-picker > input {
+  flex: 1;
+  min-width: 0;
+}
+.resource-picker-toggle {
+  flex-shrink: 0;
+  font-size: 12px;
+}
+.resource-picker-hint {
+  flex-basis: 100%;
+  font-size: 11px;
+  color: var(--muted);
 }
 
 /* Insert-reference picker: the "{ }" button sits flush after a string

@@ -1154,4 +1154,22 @@ func wireConnectorTokenHooks(reg *daemon.OAuthRegistry) {
 	daemon.SetGoogleFormFieldFetcher(func(ctx context.Context, node core.Node) ([]string, error) {
 		return gform.FieldNames(ctx, core.Job{Params: node.Params})
 	})
+	// Account resource pickers: list the connected Google account's
+	// spreadsheets and forms (both Drive file types) so the node editors
+	// offer a dropdown instead of an ID box. Wired here so the daemon
+	// stays connector-free; both reuse the sheets package's Drive client.
+	driveLister := func(mimeType string) daemon.ResourceLister {
+		return func(ctx context.Context, account string, _ map[string]string) ([]core.AccountResource, error) {
+			return sheets.ListDriveFiles(ctx, core.Job{Params: map[string]any{"account": account}}, mimeType)
+		}
+	}
+	daemon.RegisterResourceLister("google", "spreadsheets", driveLister("application/vnd.google-apps.spreadsheet"))
+	daemon.RegisterResourceLister("google", "forms", driveLister("application/vnd.google-apps.form"))
+	// Tabs depend on the chosen spreadsheet (passed through as ?spreadsheet_id=).
+	daemon.RegisterResourceLister("google", "tabs", func(ctx context.Context, account string, extra map[string]string) ([]core.AccountResource, error) {
+		return sheets.ListSheetTabs(ctx, core.Job{Params: map[string]any{
+			"account":        account,
+			"spreadsheet_id": extra["spreadsheet_id"],
+		}})
+	})
 }

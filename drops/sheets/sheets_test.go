@@ -99,6 +99,66 @@ func TestSheetsAppend_MapsRowsToColumns(t *testing.T) {
 	}
 }
 
+func TestListDriveFiles(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/files") {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		if q := r.URL.Query().Get("q"); !strings.Contains(q, "vnd.google-apps.spreadsheet") {
+			t.Errorf("query missing mimeType filter: %q", q)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"files": []map[string]any{
+				{"id": "S1", "name": "Q2 Leads"},
+				{"id": "S2", "name": "Inbox Log"},
+			},
+		})
+	}))
+	defer srv.Close()
+	withSheetsEnv(t, srv.URL)
+
+	got, err := ListDriveFiles(context.Background(),
+		core.Job{Params: map[string]any{"account": "default"}},
+		"application/vnd.google-apps.spreadsheet")
+	if err != nil {
+		t.Fatalf("ListDriveFiles: %v", err)
+	}
+	if len(got) != 2 || got[0].ID != "S1" || got[0].Name != "Q2 Leads" {
+		t.Errorf("options = %+v", got)
+	}
+}
+
+func TestListSheetTabs(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "/spreadsheets/S1") {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"sheets": []map[string]any{
+				{"properties": map[string]any{"title": "Inbox"}},
+				{"properties": map[string]any{"title": "Archive"}},
+			},
+		})
+	}))
+	defer srv.Close()
+	withSheetsEnv(t, srv.URL)
+
+	got, err := ListSheetTabs(context.Background(),
+		core.Job{Params: map[string]any{"account": "default", "spreadsheet_id": "S1"}})
+	if err != nil {
+		t.Fatalf("ListSheetTabs: %v", err)
+	}
+	if len(got) != 2 || got[0].ID != "Inbox" || got[0].Name != "Inbox" || got[1].ID != "Archive" {
+		t.Errorf("tabs = %+v", got)
+	}
+
+	// No spreadsheet_id → error (the dependent picker surfaces this as 502
+	// and prompts the user to pick a spreadsheet first).
+	if _, err := ListSheetTabs(context.Background(), core.Job{Params: map[string]any{}}); err == nil {
+		t.Error("missing spreadsheet_id should error")
+	}
+}
+
 func TestSheetsAppend_MappingProjectsAndOrdersColumns(t *testing.T) {
 	// A Google Form response keyed by question title, mapped to differently
 	// named sheet columns in an explicit order. The mapping must override

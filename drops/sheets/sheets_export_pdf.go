@@ -44,7 +44,7 @@ func init() {
 					"base_url":{"type":"string","description":"Override the API host (testing)."},
 					"account":{"type":"string","default":"default"},
 					"token":{"type":"string","description":"Raw access token; overrides 'account'."},
-					"spreadsheet_id":{"type":"string","description":"Spreadsheet ID or full URL."},
+					"spreadsheet_id":{"type":"string","format":"google-spreadsheet","description":"Spreadsheet ID or full URL."},
 					"path":{"type":"string","description":"Sandbox path to write to. Defaults to scratch://sheet-<id>.pdf."},
 					"timeout_ms":{"type":"integer","default":30000,"minimum":1}
 				},

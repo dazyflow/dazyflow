@@ -310,6 +310,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/v1/secret-manager", h.requireAuth(h.putSecretManager))
 	mux.HandleFunc("DELETE /api/v1/secret-manager", h.requireAuth(h.deleteSecretManager))
 	mux.HandleFunc("GET /api/v1/oauth/providers", h.requireAuth(h.oauthListProviders))
+	mux.HandleFunc("GET /api/v1/oauth/{provider}/resources", h.requireAuth(h.listAccountResources))
 	mux.HandleFunc("GET /api/v1/oauth/{provider}/authorize", h.requireAuth(h.oauthAuthorize))
 	// Callback is UNAUTHENTICATED — the OAuth provider redirects the
 	// user's browser back here without a Bearer token. State-token

@@ -48,7 +48,7 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"form_id":{"type":"string","title":"Form ID","description":"Google Form ID, or paste the …/forms/d/<id>/edit URL."},
+					"form_id":{"type":"string","format":"google-form","title":"Form ID","description":"Google Form ID, or paste the …/forms/d/<id>/edit URL."},
 					"account":{"type":"string","default":"default","description":"Which connected Google account to use."},
 					"interval_seconds":{
 						"type":"integer",

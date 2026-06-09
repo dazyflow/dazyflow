@@ -966,9 +966,19 @@
       "column": "Kalkylarkskolumn",
       "source": "Från fält",
       "add": "Lägg till kolumn",
+      "autoMap": "Mappa {{count}} fält automatiskt",
       "moveUp": "Flytta upp",
       "moveDown": "Flytta ner",
       "fieldsFrom": "Fältförslag från {{source}}"
+    },
+    "resourcePicker": {
+      "loading": "Laddar…",
+      "choose": "Välj {{noun}}…",
+      "enterId": "Ange ID manuellt",
+      "pickFromList": "Välj från ditt konto",
+      "idPlaceholder": "{{noun}}-namn eller ID",
+      "connectHint": "Anslut kontot för att välja {{noun}} från en lista.",
+      "needsDependency": "Välj {{dep}} först för att välja {{noun}}."
     },
     "refPicker": {
       "insert": "Infoga en referens",

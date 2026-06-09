@@ -98,6 +98,7 @@ export function SchemaForm({
       workspace={workspace}
       accountPicker={accountPicker}
       references={references}
+      siblings={value}
       onChange={(v) => {
         const next = { ...value };
         if (v === undefined) delete next[key];
@@ -227,9 +228,12 @@ type FieldProps = {
   workspace?: WorkspaceCtx;
   accountPicker?: AccountPicker;
   references?: ReferenceCtx;
+  // siblings is the other params on the same node — lets a field react to a
+  // peer's value (e.g. the resource picker lists for the chosen `account`).
+  siblings?: Record<string, unknown>;
 };
 
-function SchemaField({ name, schema, required, value, onChange, workspace, accountPicker, references }: FieldProps) {
+function SchemaField({ name, schema, required, value, onChange, workspace, accountPicker, references, siblings }: FieldProps) {
   const { t } = useTranslation();
   // The OAuth `account` field becomes a dropdown of connected accounts
   // (plus a Connect affordance) when the editor supplies a picker. Plain
@@ -284,7 +288,40 @@ function SchemaField({ name, schema, required, value, onChange, workspace, accou
     );
   }
   switch (schema.type) {
-    case "string":
+    case "string": {
+      // Account resource pickers: a string param whose format names a
+      // connected-account resource (google-spreadsheet, google-form) renders
+      // a dropdown of the account's items instead of an ID box. Needs the
+      // references ctx for the auth token; without it, falls through to the
+      // plain input (so tests/standalone still work).
+      const picker = schema.format ? RESOURCE_PICKERS[schema.format] : undefined;
+      if (picker && references) {
+        // Dependent pickers (e.g. tabs need a spreadsheet_id) read their
+        // deps from sibling params; a missing one means "choose that first".
+        const extra: Record<string, string> = {};
+        let missingDep: string | undefined;
+        for (const dep of picker.dependsOn ?? []) {
+          const v = siblings?.[dep];
+          if (typeof v === "string" && v.trim()) extra[dep] = v;
+          else missingDep = dep;
+        }
+        return (
+          <FieldWrap name={name} schema={schema} required={required} value={value}>
+            <ResourcePickerField
+              provider={picker.provider}
+              kind={picker.kind}
+              noun={picker.noun}
+              required={required}
+              value={value}
+              onChange={onChange}
+              references={references}
+              account={typeof siblings?.account === "string" ? siblings.account : undefined}
+              extra={extra}
+              missingDep={missingDep}
+            />
+          </FieldWrap>
+        );
+      }
       if (schema.format === "workspace-path" && workspace) {
         return (
           <FieldWrap name={name} schema={schema} required={required}>
@@ -339,6 +376,7 @@ function SchemaField({ name, schema, required, value, onChange, workspace, accou
           references={references}
         />
       );
+    }
     case "integer":
     case "number":
       return (
@@ -697,6 +735,166 @@ function parseFieldRefs(raw: string): FieldRef[] {
     out.push(parsed);
   }
   return out;
+}
+
+// RESOURCE_PICKERS maps a string field's `format` to the connected-account
+// resource it should pick from. The dropdown lists the account's items
+// (via GET /oauth/{provider}/resources?kind=) so the user selects instead
+// of pasting an ID. Adding a picker is one entry here + a manifest format +
+// a backend lister.
+const RESOURCE_PICKERS: Record<
+  string,
+  { provider: string; kind: string; noun: string; dependsOn?: string[] }
+> = {
+  "google-spreadsheet": { provider: "google", kind: "spreadsheets", noun: "spreadsheet" },
+  "google-form": { provider: "google", kind: "forms", noun: "form" },
+  // Tabs are listed from the chosen spreadsheet — a dependent picker.
+  "google-sheet-tab": { provider: "google", kind: "tabs", noun: "tab", dependsOn: ["spreadsheet_id"] },
+};
+
+// ResourcePickerField renders a dropdown of a connected account's resources
+// (forms, spreadsheets) and stores the chosen ID. It degrades gracefully: a
+// manual-entry toggle is always available, and if the account isn't
+// connected (the list errors) it falls back to a plain ID box with a hint.
+// Account is the connection's default — the common case; a non-default
+// `account` param isn't threaded in this version.
+function ResourcePickerField({
+  provider,
+  kind,
+  noun,
+  required,
+  value,
+  onChange,
+  references,
+  account,
+  extra,
+  missingDep,
+}: {
+  provider: string;
+  kind: string;
+  noun: string;
+  required: boolean;
+  value: unknown;
+  onChange: (v: unknown) => void;
+  references: ReferenceCtx;
+  // account is the sibling `account` param — list resources for the account
+  // the node actually uses. Undefined → the connection's default.
+  account?: string;
+  // extra carries dependent params (e.g. spreadsheet_id for tabs).
+  extra?: Record<string, string>;
+  // missingDep names an unmet dependency (e.g. no spreadsheet chosen yet) —
+  // the picker can't list until it's set, so it prompts for that first.
+  missingDep?: string;
+}) {
+  const { t } = useTranslation();
+  const [opts, setOpts] = useState<{ id: string; name: string }[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [manual, setManual] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const cur = typeof value === "string" ? value : "";
+  const extraKey = JSON.stringify(extra ?? {});
+
+  useEffect(() => {
+    if (missingDep) {
+      setOpts(null);
+      setErr(null);
+      return;
+    }
+    let live = true;
+    setErr(null);
+    setOpts(null);
+    api
+      .listAccountResources(references.token, provider, kind, account || undefined, extra)
+      .then((r) => live && setOpts(r.resources))
+      .catch((e) => live && setErr(e instanceof Error ? e.message : String(e)));
+    return () => {
+      live = false;
+    };
+    // extraKey stringifies `extra` for a stable dep; missingDep gates fetching.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [provider, kind, references.token, account, extraKey, missingDep, reloadKey]);
+
+  // Dependency not chosen yet (e.g. no spreadsheet): can't list, so let the
+  // user type a value and explain what to pick first.
+  if (missingDep) {
+    const depNoun = missingDep.replace(/_id$/, "").replace(/_/g, " ");
+    return (
+      <div className="resource-picker">
+        <input
+          type="text"
+          value={cur}
+          placeholder={t("schemaForm.resourcePicker.idPlaceholder", { noun })}
+          onChange={(e) => onChange(e.target.value === "" && !required ? undefined : e.target.value)}
+        />
+        <div className="resource-picker-hint">
+          {t("schemaForm.resourcePicker.needsDependency", { dep: depNoun, noun })}
+        </div>
+      </div>
+    );
+  }
+
+  // Manual entry, or the list failed (not connected) → plain ID box + a way
+  // back to the picker.
+  if (manual || err) {
+    return (
+      <div className="resource-picker">
+        <input
+          type="text"
+          value={cur}
+          placeholder={t("schemaForm.resourcePicker.idPlaceholder", { noun })}
+          onChange={(e) => onChange(e.target.value === "" && !required ? undefined : e.target.value)}
+        />
+        <button
+          type="button"
+          className="ghost resource-picker-toggle"
+          onClick={() => {
+            setManual(false);
+            setReloadKey((k) => k + 1);
+          }}
+        >
+          {t("schemaForm.resourcePicker.pickFromList")}
+        </button>
+        {err && (
+          <div className="resource-picker-hint">
+            {t("schemaForm.resourcePicker.connectHint", { noun })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const options = opts ?? [];
+  const curKnown = cur === "" || options.some((o) => o.id === cur);
+  return (
+    <div className="resource-picker">
+      <select
+        value={cur}
+        disabled={opts === null}
+        onChange={(e) => onChange(e.target.value === "" ? undefined : e.target.value)}
+      >
+        <option value="">
+          {opts === null
+            ? t("schemaForm.resourcePicker.loading")
+            : t("schemaForm.resourcePicker.choose", { noun })}
+        </option>
+        {/* Keep a pre-set / externally-set id selectable even if it's not in
+            the fetched list (different account, manual paste). */}
+        {!curKnown && cur !== "" && <option value={cur}>{cur}</option>}
+        {options.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.name}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        className="ghost resource-picker-toggle"
+        onClick={() => setManual(true)}
+      >
+        {t("schemaForm.resourcePicker.enterId")}
+      </button>
+    </div>
+  );
 }
 
 // SECRET_FULL_REF matches when a string field's ENTIRE value is one
@@ -1143,6 +1341,16 @@ function MappingField({
     [next[i], next[j]] = [next[j], next[i]];
     commit(next);
   };
+  // Auto-map: append an identity row (column = source = field) for every
+  // source field not already mapped, so a Forms→Sheets flow gets a column
+  // per question in one click. Skips already-mapped sources, so it's safe to
+  // press after hand-editing (it just fills the gaps).
+  const mappedSources = new Set(
+    rows.map((r) => (r.source ?? "").trim()).filter(Boolean),
+  );
+  const unmappedHints = fieldHints.filter((f) => !mappedSources.has(f));
+  const autoMap = () =>
+    commit([...rows, ...unmappedHints.map((f) => ({ column: f, source: f }))]);
   return (
     <div className="mapping-field">
       {rows.map((r, i) => (
@@ -1193,14 +1401,23 @@ function MappingField({
           </button>
         </div>
       ))}
-      <button
-        type="button"
-        className="sf-add"
-        onClick={() => commit([...rows, { column: "", source: "" }])}
-      >
-        <Plus size={12} style={{ marginRight: 4, verticalAlign: -1 }} />
-        {t("schemaForm.mapping.add")}
-      </button>
+      <div className="mapping-actions">
+        <button
+          type="button"
+          className="sf-add"
+          onClick={() => commit([...rows, { column: "", source: "" }])}
+        >
+          <Plus size={12} style={{ marginRight: 4, verticalAlign: -1 }} />
+          {t("schemaForm.mapping.add")}
+        </button>
+        {/* One-click: a column per source field. Shown only when the source
+            exposes fields not yet mapped. */}
+        {unmappedHints.length > 0 && (
+          <button type="button" className="sf-add mapping-automap" onClick={autoMap}>
+            {t("schemaForm.mapping.autoMap", { count: unmappedHints.length })}
+          </button>
+        )}
+      </div>
       {/* Field suggestions for the `source` boxes, scoped to whatever row
           source feeds this node. Free-text still works. */}
       {fieldHints.length > 0 && (

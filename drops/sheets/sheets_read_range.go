@@ -44,8 +44,8 @@ func init() {
 					"base_url":{"type":"string","description":"Override the API host (testing)."},
 					"account":{"type":"string","default":"default"},
 					"token":{"type":"string","description":"Raw access token; overrides 'account'."},
-					"spreadsheet_id":{"type":"string","description":"Spreadsheet ID or full URL."},
-					"range":{"type":"string","default":"Sheet1","description":"A1 range or sheet/named range."},
+					"spreadsheet_id":{"type":"string","format":"google-spreadsheet","description":"Spreadsheet ID or full URL."},
+					"range":{"type":"string","format":"google-sheet-tab","default":"Sheet1","description":"A1 range or sheet/named range."},
 					"headers":{"type":"boolean","default":true,"description":"Treat the first row as column headers."},
 					"value_render_option":{"type":"string","enum":["FORMATTED_VALUE","UNFORMATTED_VALUE","FORMULA"],"default":"FORMATTED_VALUE"},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
