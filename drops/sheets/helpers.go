@@ -328,6 +328,48 @@ func parseMapping(p map[string]any) []columnMapping {
 	return out
 }
 
+// quoteSheetTab wraps a tab name in single quotes for A1 notation so names
+// with spaces or punctuation parse (e.g. 'Inbox Log'!A1). Embedded single
+// quotes are doubled, per the Sheets reference grammar.
+func quoteSheetTab(tab string) string {
+	return "'" + strings.ReplaceAll(tab, "'", "''") + "'"
+}
+
+// readSheetHeaders fetches the first row of a tab as its existing column
+// headers, left-to-right. An empty sheet (no first row) yields nil. The
+// append drop uses this to place each mapped value under its named column
+// by position — so the column you map to decides where the value lands,
+// independent of the mapping rows' order.
+func readSheetHeaders(ctx context.Context, job core.Job, id, tab, token string, timeoutMS int) ([]string, error) {
+	rng := quoteSheetTab(tab) + "!1:1"
+	q := url.Values{}
+	q.Set("majorDimension", "ROWS")
+	endpoint := sheetsBaseURL(job) + "/spreadsheets/" + url.PathEscape(id) + "/values/" + url.PathEscape(rng) + "?" + q.Encode()
+	status, body, err := googleDo(ctx, "GET", endpoint, token, "", nil, timeoutMS)
+	if err != nil {
+		return nil, err
+	}
+	if status < 200 || status >= 300 {
+		return nil, fmt.Errorf("%s", sheetsErr(body))
+	}
+	var parsed struct {
+		Values [][]any `json:"values"`
+	}
+	_ = json.Unmarshal(body, &parsed)
+	if len(parsed.Values) == 0 {
+		return nil, nil
+	}
+	out := make([]string, 0, len(parsed.Values[0]))
+	for _, c := range parsed.Values[0] {
+		if c == nil {
+			out = append(out, "")
+			continue
+		}
+		out = append(out, fmt.Sprintf("%v", c))
+	}
+	return out, nil
+}
+
 func mappingColumns(cmap []columnMapping) []string {
 	cols := make([]string, len(cmap))
 	for i, c := range cmap {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/url"
+	"strconv"
 
 	"git.sr.ht/~klahr/hazyflow/core"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
@@ -38,21 +39,27 @@ func init() {
 				{Port: "headers", Label: "Headers", MIME: []string{"application/json"}},
 			},
 			Outputs: []core.Port{
+				// meta is the full structured result (blue/json) for advanced
+				// wiring + debugging; the scalars below (green/text) expose the
+				// values you actually chain on without cracking open the JSON.
 				{Port: "meta", Label: "Append metadata", MIME: []string{"application/json"}},
+				{Port: "appended_rows", Label: "Rows appended", MIME: []string{"text/plain"}},
+				{Port: "updated_range", Label: "Updated range", MIME: []string{"text/plain"}},
+				{Port: "url", Label: "Sheet URL", MIME: []string{"text/plain"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
 					"account":{"type":"string","default":"default"},
-					"spreadsheet_id":{"type":"string","format":"google-spreadsheet","description":"The spreadsheet to append to."},
+					"spreadsheet_id":{"type":"string","format":"google-spreadsheet","title":"Spreadsheet","description":"The spreadsheet to append to."},
 					"range":{"type":"string","format":"google-sheet-tab","default":"Sheet1","description":"The sheet tab the append targets."},
-					"value_input_option":{"type":"string","enum":["RAW","USER_ENTERED"],"default":"USER_ENTERED"},
-					"insert_data_option":{"type":"string","enum":["OVERWRITE","INSERT_ROWS"],"default":"INSERT_ROWS"},
+					"value_input_option":{"type":"string","title":"Value format","enum":["RAW","USER_ENTERED"],"enumNames":["Plain text (store exactly as given)","Smart (interpret formulas, dates & numbers)"],"default":"USER_ENTERED"},
+					"insert_data_option":{"type":"string","title":"Adding rows","enum":["OVERWRITE","INSERT_ROWS"],"enumNames":["Overwrite existing cells","Insert new rows"],"default":"INSERT_ROWS"},
 					"mapping":{
 						"type":"array",
 						"title":"Column mapping",
 						"format":"sheet-mapping",
-						"description":"Map each incoming field to a sheet column. Both sides are picked from dropdowns — the sheet's own columns and the upstream record's fields. When set, these columns (in order) define the appended row and the 'headers' input is ignored. Leave empty to use the row keys / 'headers' input.",
+						"description":"Map each incoming field to a sheet column. Both sides are picked from dropdowns — the sheet's own columns and the upstream record's fields. Each value is written under the column you choose (the row order here doesn't matter); a column the sheet doesn't have yet is added at the end. When set, this replaces the 'headers' input. Leave empty to use the row keys / 'headers' input.",
 						"items":{
 							"type":"object",
 							"properties":{
@@ -91,17 +98,40 @@ func executeSheetsAppend(ctx context.Context, job core.Job, _ chan<- core.Progre
 		return params.Err(job, "bad_input", err.Error()), nil
 	}
 
+	rng := params.StringDefault(job.Params, "range", "Sheet1")
+	timeout := params.IntDefault(job.Params, "timeout_ms", 15000)
+
 	var headers []string
 	if h, ok := job.Input["headers"]; ok && h.Inline != nil {
 		headers = normalizeHeaders(h.Inline)
 	}
 
-	// An explicit column mapping wins over both the 'headers' input and
-	// key-derivation: the mapping's columns (in order) become the row, and
-	// each incoming row is projected field→column. This is the "Google Form
-	// response → sheet column" path — see parseMapping/projectRows.
+	// An explicit column mapping is placed BY COLUMN NAME, not by row order:
+	// we read the sheet's existing header row and position each mapped value
+	// under its named column. So the column you map to decides where the value
+	// lands, and the order of the mapping rows is irrelevant. Any mapped column
+	// the sheet doesn't have yet is added as a new trailing column (its header
+	// is written below before the append). Without a mapping we keep the old
+	// behaviour: the 'headers' input or row keys, placed in order.
+	var writeHeaderCols []string // set when a new column must be (re)written to row 1
 	if cmap := parseMapping(job.Params); len(cmap) > 0 {
-		headers = mappingColumns(cmap)
+		existing, herr := readSheetHeaders(ctx, job, id, rng, token, timeout)
+		if herr != nil {
+			return params.Err(job, "sheets_error", herr.Error()), nil
+		}
+		cols := append([]string{}, existing...)
+		seen := map[string]bool{}
+		for _, c := range existing {
+			seen[c] = true
+		}
+		for _, c := range mappingColumns(cmap) {
+			if c != "" && !seen[c] {
+				cols = append(cols, c)
+				seen[c] = true
+				writeHeaderCols = cols // a new column → row 1 needs (re)writing
+			}
+		}
+		headers = cols
 		rows = projectRows(rows, cmap)
 	}
 
@@ -122,21 +152,52 @@ func executeSheetsAppend(ctx context.Context, job core.Job, _ chan<- core.Progre
 		values = append(values, rec)
 	}
 	if len(values) == 0 {
+		// Nothing to write (empty rows / all-filtered). Still emit every port
+		// — with zero counts and an empty range — so downstream wiring never
+		// sees a missing port. The url still points at the target sheet.
 		return core.Result{
 			JobID:  job.ID,
 			Status: core.StatusOK,
-			Output: map[string]core.Ref{"meta": {MIME: "application/json", Inline: map[string]any{"appended_rows": 0}}},
+			Output: appendOutputs(id, "", 0, map[string]any{
+				"appended_rows":   0,
+				"spreadsheet_id":  id,
+				"updated_range":   "",
+				"updated_rows":    0,
+				"updated_columns": 0,
+				"updated_cells":   0,
+			}),
 		}, nil
 	}
 
-	rng := params.StringDefault(job.Params, "range", "Sheet1")
+	// Create any new mapped columns by (re)writing the header row first, so the
+	// appended values line up with their named columns. RAW so the header text
+	// is stored verbatim (no formula/date parsing).
+	if len(writeHeaderCols) > 0 {
+		hdr := make([]any, len(writeHeaderCols))
+		for i, c := range writeHeaderCols {
+			hdr[i] = c
+		}
+		hdrRange := quoteSheetTab(rng) + "!A1"
+		hq := url.Values{}
+		hq.Set("valueInputOption", "RAW")
+		hdrEndpoint := sheetsBaseURL(job) + "/spreadsheets/" + url.PathEscape(id) + "/values/" + url.PathEscape(hdrRange) + "?" + hq.Encode()
+		hdrBody, _ := json.Marshal(map[string]any{"range": hdrRange, "majorDimension": "ROWS", "values": [][]any{hdr}})
+		hstatus, hbody, herr := googleDo(ctx, "PUT", hdrEndpoint, token, "application/json; charset=utf-8", hdrBody, timeout)
+		if herr != nil {
+			return params.Err(job, "sheets_http_error", herr.Error()), nil
+		}
+		if hstatus < 200 || hstatus >= 300 {
+			return params.Err(job, "sheets_error", sheetsErr(hbody)), nil
+		}
+	}
+
 	q := url.Values{}
 	q.Set("valueInputOption", params.StringDefault(job.Params, "value_input_option", "USER_ENTERED"))
 	q.Set("insertDataOption", params.StringDefault(job.Params, "insert_data_option", "INSERT_ROWS"))
 	endpoint := sheetsBaseURL(job) + "/spreadsheets/" + url.PathEscape(id) + "/values/" + url.PathEscape(rng) + ":append?" + q.Encode()
 
 	reqBody, _ := json.Marshal(map[string]any{"range": rng, "majorDimension": "ROWS", "values": values})
-	status, body, err := googleDo(ctx, "POST", endpoint, token, "application/json; charset=utf-8", reqBody, params.IntDefault(job.Params, "timeout_ms", 15000))
+	status, body, err := googleDo(ctx, "POST", endpoint, token, "application/json; charset=utf-8", reqBody, timeout)
 	if err != nil {
 		return params.Err(job, "sheets_http_error", err.Error()), nil
 	}
@@ -156,13 +217,37 @@ func executeSheetsAppend(ctx context.Context, job core.Job, _ chan<- core.Progre
 	return core.Result{
 		JobID:  job.ID,
 		Status: core.StatusOK,
-		Output: map[string]core.Ref{"meta": {MIME: "application/json", Inline: map[string]any{
+		Output: appendOutputs(id, parsed.Updates.UpdatedRange, len(values), map[string]any{
 			"appended_rows":   len(values),
 			"spreadsheet_id":  id,
 			"updated_range":   parsed.Updates.UpdatedRange,
 			"updated_rows":    parsed.Updates.UpdatedRows,
 			"updated_columns": parsed.Updates.UpdatedColumns,
 			"updated_cells":   parsed.Updates.UpdatedCells,
-		}}},
+		}),
 	}, nil
+}
+
+// appendOutputs bundles the drop's four output ports: the full structured
+// `meta` (json) plus the scalar `appended_rows`, `updated_range`, and `url`
+// (text) so common downstream steps can wire them without a JSON extract.
+// Used by both the success path and the empty (zero-row) path so the port
+// set is identical either way.
+func appendOutputs(id, updatedRange string, count int, meta map[string]any) map[string]core.Ref {
+	return map[string]core.Ref{
+		"meta":          {MIME: "application/json", Inline: meta},
+		"appended_rows": {MIME: "text/plain", Inline: strconv.Itoa(count)},
+		"updated_range": {MIME: "text/plain", Inline: updatedRange},
+		"url":           {MIME: "text/plain", Inline: sheetURL(id)},
+	}
+}
+
+// sheetURL builds a deep link to the spreadsheet's editor — handy for a
+// "done, here's your sheet" notification downstream. Empty id → empty link
+// rather than a bogus URL.
+func sheetURL(id string) string {
+	if id == "" {
+		return ""
+	}
+	return "https://docs.google.com/spreadsheets/d/" + id + "/edit"
 }

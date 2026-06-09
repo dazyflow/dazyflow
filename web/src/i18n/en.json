@@ -888,6 +888,7 @@
   "nodeCard": {
     "statusTooltip": "status: {{status}}",
     "pickerUnset": "Not set",
+    "pickerLoading": "…",
     "portRequired": "required",
     "portOptional": "optional",
     "missingValue": "Missing required value: {{name}}",
@@ -1009,11 +1010,8 @@
       "sourcePlaceholder": "From field…",
       "add": "Add column",
       "autoMap": "Auto-map {{count}} matching",
-      "moveUp": "Move up",
-      "moveDown": "Move down",
       "needsSheet": "Choose a spreadsheet on this node first, then map its columns.",
-      "noColumns": "This sheet has no header row yet — add column headers to the sheet, then map onto them.",
-      "fieldsFrom": "Fields from {{source}}"
+      "noColumns": "This sheet has no header row yet — add column headers to the sheet, then map onto them."
     },
     "resourcePicker": {
       "loading": "Loading…",

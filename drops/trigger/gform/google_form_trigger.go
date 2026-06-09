@@ -48,8 +48,8 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"form_id":{"type":"string","format":"google-form","title":"Form"},
 					"account":{"type":"string","default":"default"},
+					"form_id":{"type":"string","format":"google-form","title":"Form"},
 					"interval_seconds":{
 						"type":"integer",
 						"title":"Check every (seconds)",

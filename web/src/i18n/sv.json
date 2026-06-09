@@ -884,6 +884,7 @@
   "nodeCard": {
     "statusTooltip": "status: {{status}}",
     "pickerUnset": "Inte angivet",
+    "pickerLoading": "…",
     "portRequired": "obligatorisk",
     "portOptional": "valfri",
     "missingValue": "Obligatoriskt värde saknas: {{name}}",
@@ -1005,11 +1006,8 @@
       "sourcePlaceholder": "Från fält…",
       "add": "Lägg till kolumn",
       "autoMap": "Mappa {{count}} matchande automatiskt",
-      "moveUp": "Flytta upp",
-      "moveDown": "Flytta ner",
       "needsSheet": "Välj ett kalkylark på den här noden först, mappa sedan dess kolumner.",
-      "noColumns": "Det här arket har ingen rubrikrad än — lägg till kolumnrubriker i arket och mappa sedan mot dem.",
-      "fieldsFrom": "Fält från {{source}}"
+      "noColumns": "Det här arket har ingen rubrikrad än — lägg till kolumnrubriker i arket och mappa sedan mot dem."
     },
     "resourcePicker": {
       "loading": "Laddar…",

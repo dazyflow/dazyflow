@@ -115,6 +115,13 @@ export function SchemaForm({
   const basic: [string, JSONSchema][] = [];
   const advanced: [string, JSONSchema][] = [];
   for (const [key, propSchema] of Object.entries(props)) {
+    // Hidden developer knobs never render in the form (the backend still
+    // honours its default). timeout_ms is the request-timeout dial present on
+    // most network drops — pure noise for a non-tech owner, and on a drop
+    // where it's the only advanced field it was dragging in a whole Advanced
+    // section by itself. A value set via a template/API is preserved (we just
+    // don't show it).
+    if (HIDDEN_FIELD_KEYS.has(key)) continue;
     if (isAdvancedField(key, propSchema, props)) advanced.push([key, propSchema]);
     else basic.push([key, propSchema]);
   }
@@ -188,6 +195,13 @@ const ADVANCED_FIELD_NAMES = new Set([
   "next_page_token",
   "cursor",
 ]);
+
+// HIDDEN_FIELD_KEYS never render in the form at all — pure developer knobs
+// a non-tech owner never needs. The backend still applies each one's default,
+// and a value set via template/API is preserved (just not shown). timeout_ms
+// is the request-timeout dial on most network drops; hiding it also removes
+// the lone-field "Advanced" section it used to drag in by itself.
+const HIDDEN_FIELD_KEYS = new Set(["timeout_ms"]);
 
 // isAdvancedField decides whether a top-level property of a drop's
 // params_schema is "advanced" (hidden by default). Three signals
@@ -277,7 +291,13 @@ function SchemaField({ name, schema, required, value, onChange, workspace, accou
           value={(value as string) ?? schema.default ?? ""}
           onChange={(e) => onChange(e.target.value)}
         >
-          {!required && <option value="">(unset)</option>}
+          {/* Only offer a blank "(unset)" on an optional enum with NO
+              default. When the field has a default, "unset" just falls back
+              to that default anyway, so the empty option is confusing noise —
+              the dropdown always shows a real, sensible choice instead. */}
+          {!required && schema.default === undefined && (
+            <option value="">(unset)</option>
+          )}
           {schema.enum.map((v, i) => (
             <option key={String(v)} value={String(v)}>
               {schema.enumNames?.[i] ?? String(v)}
@@ -653,7 +673,6 @@ function FieldWrap({
         </label>
       </div>
       {stack ? <div>{children}</div> : children}
-      {schema.description && <div className="desc">{schema.description}</div>}
       {example !== undefined && (
         <div className="desc sf-example">{t("schemaForm.example", { value: example })}</div>
       )}
@@ -753,14 +772,23 @@ const RESOURCE_PICKERS: Record<
   "google-sheet-tab": { provider: "google", kind: "tabs", noun: "tab", dependsOn: ["spreadsheet_id"] },
 };
 
+// resourceNameCache remembers id→name for resources we've resolved this
+// session (keyed by provider:kind:id), so re-opening a node shows the
+// spreadsheet/form's friendly name immediately instead of a blank box while
+// the live list refetches. Stale names self-correct: once the fresh list
+// loads, its name wins. We never fall back to showing the raw id.
+const resourceNameCache = new Map<string, string>();
+const resourceCacheKey = (provider: string, kind: string, id: string) =>
+  `${provider}:${kind}:${id}`;
+
 // ResourcePickerField renders a dropdown of a connected account's resources
 // (forms, spreadsheets) and stores the chosen ID. The picker is the ONLY way
 // to set the value — there's no free-text entry (it just complicated the
 // drops). If the account isn't connected (the list errors) it prompts to
-// connect + offers a retry; a value set externally (template/API) stays
-// selected even if it's not in the fetched list. Account is the connection's
-// default — the common case; a non-default `account` param isn't threaded in
-// this version.
+// connect + offers a retry. The raw id is never shown: until its name
+// resolves the box shows the cached name (if known) or the empty placeholder.
+// Account is the connection's default — the common case; a non-default
+// `account` param isn't threaded in this version.
 function ResourcePickerField({
   provider,
   kind,
@@ -805,7 +833,15 @@ function ResourcePickerField({
     setOpts(null);
     api
       .listAccountResources(references.token, provider, kind, account || undefined, extra)
-      .then((r) => live && setOpts(r.resources))
+      .then((r) => {
+        if (!live) return;
+        // Remember every resolved name so a later mount can label the id
+        // instantly from cache while its own fetch is in flight.
+        for (const o of r.resources) {
+          resourceNameCache.set(resourceCacheKey(provider, kind, o.id), o.name);
+        }
+        setOpts(r.resources);
+      })
       .catch((e) => live && setErr(e instanceof Error ? e.message : String(e)));
     return () => {
       live = false;
@@ -849,10 +885,21 @@ function ResourcePickerField({
 
   const options = opts ?? [];
   const curKnown = cur === "" || options.some((o) => o.id === cur);
+  // While the live list is loading, label a set id from the session cache so
+  // the user sees the spreadsheet/form name, not a blank box. Never the raw id.
+  const cachedName =
+    cur !== "" && !curKnown
+      ? resourceNameCache.get(resourceCacheKey(provider, kind, cur))
+      : undefined;
+  const showCur = curKnown || cachedName !== undefined;
   return (
     <div className="resource-picker">
+      {/* The raw id is never an option. A set id shows its resolved name (from
+          the live list, or the cache while that loads); if neither knows it,
+          the box shows the empty placeholder. The stored value is untouched
+          either way, so it still saves correctly. */}
       <select
-        value={cur}
+        value={showCur ? cur : ""}
         disabled={opts === null}
         onChange={(e) => onChange(e.target.value === "" ? undefined : e.target.value)}
       >
@@ -861,9 +908,9 @@ function ResourcePickerField({
             ? t("schemaForm.resourcePicker.loading")
             : t("schemaForm.resourcePicker.choose", { noun })}
         </option>
-        {/* Keep a pre-set / externally-set id selectable even if it's not in
-            the fetched list (different account, or set via the API). */}
-        {!curKnown && cur !== "" && <option value={cur}>{cur}</option>}
+        {!curKnown && cachedName !== undefined && (
+          <option value={cur}>{cachedName}</option>
+        )}
         {options.map((o) => (
           <option key={o.id} value={o.id}>
             {o.name}
@@ -1284,7 +1331,6 @@ function MappingField({
   // "From field" options: the fields of whatever row source feeds this
   // node's `rows` input (a Google Form, a hosted webhook form, …).
   const [fieldHints, setFieldHints] = useState<string[]>([]);
-  const [sourceLabel, setSourceLabel] = useState<string | null>(null);
   useEffect(() => {
     if (!references) return;
     let live = true;
@@ -1299,7 +1345,6 @@ function MappingField({
       .then((r) => {
         if (!live) return;
         setFieldHints(r.fields ?? []);
-        setSourceLabel(r.source?.label ?? null);
       })
       .catch(() => {
         /* optional — the source select just shows no options on failure */
@@ -1340,13 +1385,6 @@ function MappingField({
   const setRow = (i: number, patch: Partial<MappingRow>) =>
     commit(rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
   const remove = (i: number) => commit(rows.filter((_, idx) => idx !== i));
-  const move = (i: number, dir: -1 | 1) => {
-    const j = i + dir;
-    if (j < 0 || j >= rows.length) return;
-    const next = rows.slice();
-    [next[i], next[j]] = [next[j], next[i]];
-    commit(next);
-  };
   // Auto-map: for every source field that has a same-named sheet column not
   // already mapped, add an identity row. One click to line a Form up with a
   // sheet whose headers match the question titles.
@@ -1389,40 +1427,22 @@ function MappingField({
       {rows.map((r, i) => (
         <div key={i} className="mapping-row">
           {pickerSelect(
-            r.column ?? "",
-            cols,
-            t("schemaForm.mapping.columnPlaceholder"),
-            (v) => setRow(i, { column: v }),
-            "mapping-col",
-          )}
-          <span className="mapping-arrow" aria-hidden>
-            ←
-          </span>
-          {pickerSelect(
             r.source ?? "",
             fieldHints,
             t("schemaForm.mapping.sourcePlaceholder"),
             (v) => setRow(i, { source: v }),
             "mapping-src",
           )}
-          <button
-            type="button"
-            className="ghost sf-remove"
-            onClick={() => move(i, -1)}
-            disabled={i === 0}
-            aria-label={t("schemaForm.mapping.moveUp")}
-          >
-            ↑
-          </button>
-          <button
-            type="button"
-            className="ghost sf-remove"
-            onClick={() => move(i, 1)}
-            disabled={i === rows.length - 1}
-            aria-label={t("schemaForm.mapping.moveDown")}
-          >
-            ↓
-          </button>
+          <span className="mapping-arrow" aria-hidden>
+            →
+          </span>
+          {pickerSelect(
+            r.column ?? "",
+            cols,
+            t("schemaForm.mapping.columnPlaceholder"),
+            (v) => setRow(i, { column: v }),
+            "mapping-col",
+          )}
           <button
             type="button"
             className="ghost sf-remove"
@@ -1458,13 +1478,7 @@ function MappingField({
         <div className="mapping-hint">{t("schemaForm.mapping.needsSheet")}</div>
       ) : columnOpts !== null && columnOpts.length === 0 ? (
         <div className="mapping-hint">{t("schemaForm.mapping.noColumns")}</div>
-      ) : (
-        sourceLabel && (
-          <div className="mapping-hint">
-            {t("schemaForm.mapping.fieldsFrom", { source: sourceLabel })}
-          </div>
-        )
-      )}
+      ) : null}
     </div>
   );
 }

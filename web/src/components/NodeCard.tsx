@@ -17,11 +17,12 @@ const PICKER_FORMATS = new Set([
 
 // peekValue renders a port's run value as a short, single-line string for
 // the hover peek. Strings show verbatim (truncated); other types as JSON;
-// empty/binary falls back to the MIME.
+// an empty string reads as "(empty)" (not the MIME — that looked like a
+// stray "text/plain" type label); a missing value falls back to the MIME.
 function peekValue(ref: Ref): string {
   const v = ref.data;
   const cap = (s: string) => (s.length > 200 ? s.slice(0, 200) + "…" : s);
-  if (typeof v === "string") return cap(v) || (ref.mime ?? "(empty)");
+  if (typeof v === "string") return cap(v) || "(empty)";
   if (v === undefined || v === null) return ref.mime ?? "(no value)";
   try {
     return cap(JSON.stringify(v));
@@ -239,21 +240,25 @@ export function HazyNode({ data, selected }: NodeProps) {
         // like a normal input inside the canvas.
         <div className="hz-node-params nodrag nowheel">
           {visibleLiteralFields.map(({ key, label, schema: s }) => {
-            // Resource-picker params show read-only as the resolved name
-            // (or the raw id until resolved) — you change them via the
-            // inspector picker, not by typing on the card.
+            // Resource-picker params show read-only as the resolved resource
+            // name — never the opaque id. Until the name resolves (it's
+            // fetched + cached by the editor) a value shows a neutral "…"
+            // placeholder; an unset param shows the choose-prompt. You change
+            // them via the inspector picker, not by typing on the card.
             if (s.format && PICKER_FORMATS.has(s.format)) {
               const raw = d.params?.[key];
               const idStr = typeof raw === "string" ? raw : "";
-              const display = d.resourceLabels?.[key] ?? idStr;
+              const name = d.resourceLabels?.[key];
+              const text =
+                name ??
+                (idStr
+                  ? i18n.t("nodeCard.pickerLoading")
+                  : i18n.t("nodeCard.pickerUnset"));
               return (
                 <label key={key} className="hz-param">
                   <span className="hz-param-label">{label}</span>
-                  <span
-                    className="hz-param-readonly"
-                    title={idStr || undefined}
-                  >
-                    {display || i18n.t("nodeCard.pickerUnset")}
+                  <span className="hz-param-readonly" title={name || undefined}>
+                    {text}
                   </span>
                 </label>
               );
