@@ -646,7 +646,17 @@ func (h *HTTPGateway) startConnectionMe(rw http.ResponseWriter, r *http.Request,
 // account settings). Gated on secret:write, the same permission the
 // connect flow requires.
 func (h *HTTPGateway) disconnectConnectionMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if err := core.Require(p, core.PermSecretWrite); err != nil {
+	provider := r.PathValue("provider")
+	// Disconnecting forgets the stored token. Base bar is secret:write —
+	// except Google, an org-shared credential managed by org admins on the
+	// /admin/google page; disconnecting affects everyone's flows, so it takes
+	// the same org-admin bar as connecting (see buildAuthorizeURL).
+	if provider == "google" {
+		if !core.CanAdminOrg(p) {
+			writeAPIError(rw, http.StatusForbidden, "forbidden", "disconnecting a Google account requires organization:admin")
+			return
+		}
+	} else if err := core.Require(p, core.PermSecretWrite); err != nil {
 		writeAPIError(rw, http.StatusForbidden, "forbidden", err.Error())
 		return
 	}
@@ -658,7 +668,6 @@ func (h *HTTPGateway) disconnectConnectionMe(rw http.ResponseWriter, r *http.Req
 		writeAPIError(rw, http.StatusForbidden, "forbidden", "principal has no tenant")
 		return
 	}
-	provider := r.PathValue("provider")
 	if providerDefault(provider) == nil {
 		writeAPIError(rw, http.StatusNotFound, "unknown_provider",
 			fmt.Sprintf("unknown OAuth provider %q", provider))

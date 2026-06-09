@@ -382,10 +382,6 @@ function EditorInner() {
     if (fromURL) return fromURL;
     return id ? localStorage.getItem(`hazyflow.lastRun.${id}`) : null;
   });
-  // statusRefreshKey bumps every time the SSE stream delivers a node
-  // status event. The Inspector forwards it to OutputPreview so a
-  // running node's output card refreshes without the user re-selecting.
-  const [statusRefreshKey, setStatusRefreshKey] = useState(0);
   // liveLogs holds per-node stdout/stderr lines streamed via SSE
   // progress events. Cleared on every new run. The Inspector renders
   // the buffer for the currently-selected node.
@@ -753,9 +749,14 @@ function EditorInner() {
       const out = byId
         .get(e.source)
         ?.data.manifest?.outputs?.find((p) => p.port === (e.sourceHandle ?? "out"));
-      // Animate the wire while its downstream node is running — data is
-      // flowing into it. Node status is set live from the run's SSE stream.
-      const active = byId.get(e.target)?.data.status === "running";
+      // Animate the wire while either end is running — data is flowing into
+      // the wire (source running) or out of it (target running). Lighting
+      // both ends keeps the pulse continuous as the run walks the graph, and
+      // means fast in-process nodes still show flow via their slower
+      // neighbour. Node status is set live from the run's SSE stream.
+      const active =
+        byId.get(e.source)?.data.status === "running" ||
+        byId.get(e.target)?.data.status === "running";
       return {
         ...e,
         type: "reroute",
@@ -2078,7 +2079,6 @@ function EditorInner() {
                   }
                 });
             }
-            setStatusRefreshKey((k) => k + 1);
           }
           if (kind === "progress") {
             // GraphProgress shape from the daemon:
@@ -3092,7 +3092,6 @@ function EditorInner() {
             id ? { id, tenant: activeTenant, workspace: activeWorkspace, name } : undefined
           }
           currentRunID={currentRunID}
-          statusRefreshKey={statusRefreshKey}
           onDelete={(nodeID) => {
             // Remove the node and any edge touching it, drop its stashed
             // params, and clear selection. This is the touch-device
@@ -3112,10 +3111,6 @@ function EditorInner() {
           liveLogs={inspectorSelected ? liveLogs[inspectorSelected.id] : undefined}
           workspace={
             token ? { token, tenant: activeTenant, workspace: activeWorkspace } : undefined
-          }
-          expanded={inspectorExpanded}
-          onToggleExpand={
-            isNarrow ? () => setInspectorExpanded((v) => !v) : undefined
           }
           onClose={
             isNarrow
@@ -3149,10 +3144,9 @@ function EditorInner() {
                     id,
                     nodeID,
                   );
-                  // Reuse the same SSE plumbing the regular Run uses.
-                  // The Inspector's OutputPreview reads from
-                  // currentRunID, so swapping it here makes the
-                  // sample's output land in the same spot.
+                  // Reuse the same SSE plumbing the regular Run uses, so
+                  // the sample drives node statuses + live logs from the
+                  // same currentRunID the regular Run does.
                   setCurrentRunID(job_id);
                   setLockedRunID(job_id);
                   localStorage.setItem(`hazyflow.lastRun.${id}`, job_id);

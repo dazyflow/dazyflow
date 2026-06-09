@@ -143,6 +143,18 @@ func scopeSubsetForIntegration(provider, integration string) []string {
 	return googleScopeGroups[integration]
 }
 
+// scopeGroupsForProvider returns the integration→scopes map for a provider
+// that authorizes incrementally (only Google today), or nil. The
+// /admin/google accounts endpoint inverts it to report, per connected
+// account, which services its grant covers — so the scope→service mapping
+// stays single-source with the connect path's scopeSubsetForIntegration.
+func scopeGroupsForProvider(provider string) map[string][]string {
+	if provider == "google" {
+		return googleScopeGroups
+	}
+	return nil
+}
+
 // providerUsesIncrementalScopes reports whether a provider grants scopes
 // incrementally (per integration) rather than all-at-once. For such a
 // provider a connected account is never "globally stale" merely for lacking

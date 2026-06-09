@@ -21,6 +21,7 @@ import { AdminModules } from "./pages/AdminModules";
 import { AdminWorkspace } from "./pages/AdminWorkspace";
 import { AdminOrgSSO } from "./pages/AdminOrgSSO";
 import { AdminOAuthProviders } from "./pages/AdminOAuthProviders";
+import { AdminGoogle } from "./pages/AdminGoogle";
 import { AdminSecretManager } from "./pages/AdminSecretManager";
 import { AcceptInvite } from "./pages/AcceptInvite";
 
@@ -71,6 +72,7 @@ export function App() {
         <Route path="/admin/workspace" element={<AdminWorkspace />} />
         <Route path="/admin/sso" element={<AdminOrgSSO />} />
         <Route path="/admin/oauth" element={<AdminOAuthProviders />} />
+        <Route path="/admin/google" element={<AdminGoogle />} />
         <Route path="/admin/secret-manager" element={<AdminSecretManager />} />
         <Route path="/invite/:token" element={<AcceptInvite />} />
         <Route path="*" element={<Navigate to="/flows" replace />} />

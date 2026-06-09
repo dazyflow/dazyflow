@@ -12,6 +12,7 @@ import type {
   Revision,
   MemberSummary,
   OAuthProviderStatus,
+  GoogleAccountsResponse,
   OrgAuthConfig,
   OrgProfile,
   Role,
@@ -749,6 +750,35 @@ export const api = {
         stale_accounts: p.stale_accounts ?? [],
       })),
     };
+  },
+  // googleAccounts returns each connected Google account with the
+  // services its grant covers — the data behind /admin/google. Org-admin
+  // only (403 otherwise); 404/501 when Google OAuth isn't set up.
+  googleAccounts: (token: string) =>
+    request<GoogleAccountsResponse>(
+      token,
+      "GET",
+      "/oauth/google/accounts",
+    ),
+  // startConnection asks the daemon for the consent URL (instead of the
+  // 302-redirect authorize endpoint) so the caller can surface errors —
+  // a bad account name, missing org-admin, or unconfigured provider —
+  // before navigating. On success the caller does
+  // window.location.assign(authorize_url). account names the connection;
+  // integration requests only that service's scopes (incremental top-up).
+  startConnection: (
+    token: string,
+    provider: string,
+    opts: { account?: string; integration?: string; returnTo: string },
+  ) => {
+    const qs = new URLSearchParams({ return_to: opts.returnTo });
+    if (opts.account) qs.set("account", opts.account);
+    if (opts.integration) qs.set("integration", opts.integration);
+    return request<{ authorize_url: string }>(
+      token,
+      "POST",
+      `/me/connections/${encodeURIComponent(provider)}/authorize?${qs.toString()}`,
+    );
   },
   // oauthAuthorizeUrl builds the URL the browser navigates to in order
   // to start an OAuth consent flow. It is NOT fetched — the daemon

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 
 	"git.sr.ht/~klahr/hazyflow/core"
@@ -68,9 +69,16 @@ func (h *HTTPGateway) buildAuthorizeURL(p core.Principal, providerName, account,
 	if p.Tenant == "" {
 		return "", http.StatusForbidden, "principal has no tenant"
 	}
-	if err := core.Require(p, core.PermSecretWrite); err != nil {
-		// OAuth ends up WRITING a token to the secret store; gate on
-		// the same permission that gates direct secret writes.
+	// Connecting WRITES a token to the secret store, so the base bar is
+	// secret:write — except Google, whose connections are org-shared
+	// credentials managed centrally by org admins on the /admin/google page.
+	// Connecting (or topping up) a Google account is an organization:admin
+	// action; secret:write alone isn't enough.
+	if providerName == "google" {
+		if !core.CanAdminOrg(p) {
+			return "", http.StatusForbidden, "connecting a Google account requires organization:admin"
+		}
+	} else if err := core.Require(p, core.PermSecretWrite); err != nil {
 		return "", http.StatusForbidden, err.Error()
 	}
 	prov, ok := h.OAuth.Provider(providerName)
@@ -276,6 +284,104 @@ func (h *HTTPGateway) oauthListProviders(rw http.ResponseWriter, r *http.Request
 		out = append(out, row)
 	}
 	writeJSON(rw, http.StatusOK, map[string]any{"providers": out})
+}
+
+// connectedAccounts returns the account names this tenant has a stored
+// oauth.<provider>.<account> token for. One List() call + prefix match,
+// shared by oauthListProviders and oauthListAccounts.
+func (h *HTTPGateway) connectedAccounts(ctx context.Context, tenant, provider string) []string {
+	if h.EncryptedSecrets == nil {
+		return nil
+	}
+	all, err := h.EncryptedSecrets.List(ctx, tenant)
+	if err != nil {
+		return nil
+	}
+	pfx := "oauth." + provider + "."
+	out := make([]string, 0)
+	for _, name := range all {
+		if strings.HasPrefix(name, pfx) {
+			out = append(out, name[len(pfx):])
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// oauthListAccounts is GET /api/v1/oauth/{provider}/accounts — the data
+// behind the org-admin /admin/google page. For each connected account it
+// reports the services its current grant covers, so an admin can see at a
+// glance whether (say) Forms is authorized or a top-up/new connection is
+// needed. Org-admin only: Google connections are org-shared credentials.
+//
+// Response:
+//
+//	{
+//	  "provider": "google",
+//	  "services": ["Gmail","Google Forms","Google Sheets"],
+//	  "accounts": [
+//	    {"account":"default","coverage":{"Gmail":true,"Google Forms":false,...},
+//	     "scopes":["..."]}
+//	  ]
+//	}
+func (h *HTTPGateway) oauthListAccounts(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	if h.OAuth == nil {
+		writeAPIError(rw, http.StatusNotImplemented, "oauth_not_configured", "OAuth not configured")
+		return
+	}
+	if p.Tenant == "" {
+		writeAPIError(rw, http.StatusForbidden, "forbidden", "principal has no tenant")
+		return
+	}
+	if !core.CanAdminOrg(p) {
+		writeAPIError(rw, http.StatusForbidden, "forbidden", "organization:admin required")
+		return
+	}
+	provider := r.PathValue("provider")
+	if _, ok := h.OAuth.Provider(provider); !ok {
+		writeAPIError(rw, http.StatusNotFound, "provider_not_found",
+			fmt.Sprintf("unknown OAuth provider %q", provider))
+		return
+	}
+
+	groups := scopeGroupsForProvider(provider)
+	services := make([]string, 0, len(groups))
+	for svc := range groups {
+		services = append(services, svc)
+	}
+	sort.Strings(services)
+
+	ctx := r.Context()
+	accounts := make([]map[string]any, 0)
+	for _, account := range h.connectedAccounts(ctx, p.Tenant, provider) {
+		tok, err := h.OAuth.GetOAuthToken(core.WithTenant(ctx, p.Tenant), provider, account)
+		var grantedSet map[string]struct{}
+		scopeList := make([]string, 0)
+		if err == nil && tok != nil {
+			grantedSet = splitScopes(tok.Scope)
+			for s := range grantedSet {
+				scopeList = append(scopeList, s)
+			}
+			sort.Strings(scopeList)
+		}
+		coverage := make(map[string]bool, len(services))
+		for _, svc := range services {
+			// An empty/unknown grant covers nothing; grantedCovers over an
+			// empty required set would be vacuously true, so guard on the
+			// granted set existing first.
+			coverage[svc] = grantedSet != nil && grantedCovers(grantedSet, groups[svc])
+		}
+		accounts = append(accounts, map[string]any{
+			"account":  account,
+			"coverage": coverage,
+			"scopes":   scopeList,
+		})
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"provider": provider,
+		"services": services,
+		"accounts": accounts,
+	})
 }
 
 // staleAccounts compares each connected account's stored token scope

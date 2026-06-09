@@ -48,15 +48,14 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"form_id":{"type":"string","format":"google-form","title":"Form","description":"The Google Form to watch for responses."},
-					"account":{"type":"string","default":"default","description":"Which connected Google account to use."},
+					"form_id":{"type":"string","format":"google-form","title":"Form"},
+					"account":{"type":"string","default":"default"},
 					"interval_seconds":{
 						"type":"integer",
 						"title":"Check every (seconds)",
 						"minimum":1,
 						"maximum":31622400,
-						"default":300,
-						"description":"How often to poll for new responses (e.g. 300 = every 5 minutes). Leave blank to run only when you press Run."
+						"default":300
 					},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
 				},

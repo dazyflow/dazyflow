@@ -1791,6 +1791,72 @@
 .connection-card form .connection-field + .connection-field {
   margin-top: var(--space-3);
 }
+
+/* /admin/google: one card per connected Google account, with a
+   per-service permission matrix (✓ granted / ✗ missing) and top-up
+   actions. Reuses .connection-card for the frame. */
+.google-accounts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.google-account-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+.google-account-name {
+  font-weight: 600;
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+.google-account-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+.google-coverage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.google-coverage-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 13px;
+}
+/* Missing service: muted text + red mark. Granted: green mark, normal ink. */
+.google-coverage-icon {
+  display: inline-flex;
+  color: var(--danger);
+}
+.google-coverage-row.granted .google-coverage-icon {
+  color: var(--success, #2e9e5b);
+}
+.google-coverage-row:not(.granted) .google-coverage-svc {
+  color: var(--muted);
+}
+.google-add-perm {
+  margin-left: auto;
+  font-size: 12px;
+  padding: 2px 8px;
+}
+/* Icon + label buttons that collapse to icon-only on mobile: gap (not an
+   icon margin) spaces them, so hiding .btn-label leaves a centered icon. */
+.icon-text-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+@media (max-width: 768px) {
+  /* Google admin page: drop button labels, keep the icons. */
+  .admin-google .btn-label {
+    display: none;
+  }
+}
 .connection-fields-summary {
   list-style: none;
   margin: 0;
@@ -3830,10 +3896,6 @@ button.warning:hover:not(:disabled) {
   color: var(--muted);
   margin: 0;
 }
-.sf-field .required {
-  color: var(--accent);
-  font-weight: 600;
-}
 .sf-field .desc {
   font-size: 11px;
   color: var(--faint);
@@ -4143,23 +4205,6 @@ button.warning:hover:not(:disabled) {
   background: var(--surface);
   color: var(--ink);
   box-shadow: var(--shadow);
-}
-/* "Show advanced" sits next to the Form/Raw mode toggle as a flat
-   checkbox + label — same visual row, lower visual weight than the
-   primary mode chips so the eye reads Form/JSON first and discovers
-   the toggle on a second pass. */
-.sf-show-advanced {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: var(--space-2);
-  font-size: 12px;
-  color: var(--muted);
-  user-select: none;
-  white-space: nowrap;
-}
-.sf-show-advanced input[type="checkbox"] {
-  margin: 0;
 }
 
 /* Collapsible Advanced section inside a node's param form: a hairline

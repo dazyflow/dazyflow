@@ -595,6 +595,24 @@ export type OAuthProviderStatus = {
   stale_accounts?: string[];
 };
 
+// GoogleAccount is one connected Google account from
+// GET /api/v1/oauth/google/accounts: the account name plus, per service
+// (Gmail / Google Sheets / Google Forms), whether its current OAuth grant
+// covers that service. Drives the /admin/google permission matrix.
+export type GoogleAccount = {
+  account: string;
+  coverage: Record<string, boolean>;
+  scopes: string[];
+};
+
+// GoogleAccountsResponse is the full payload: the service list (column
+// headers, sorted) plus one entry per connected account.
+export type GoogleAccountsResponse = {
+  provider: string;
+  services: string[];
+  accounts: GoogleAccount[];
+};
+
 // AdminOAuthProvider is one row from GET /api/v1/admin/oauth-providers:
 // the per-provider control panel state. configured = the registry
 // currently has client_id + client_secret for it (either from env

@@ -623,13 +623,14 @@ function valueMatches(value: unknown, schema: JSONSchema): boolean {
 function FieldWrap({
   name,
   schema,
-  required,
   stack,
   value,
   children,
 }: {
   name: string;
   schema: JSONSchema;
+  // required is still accepted by every call site but no longer rendered —
+  // the non-tech UI drops the "*" required marker entirely.
   required: boolean;
   stack?: boolean;
   // value is passed for fields that can hold a ${...} reference
@@ -648,8 +649,7 @@ function FieldWrap({
     <div className="sf-field">
       <div className="label-row">
         <label htmlFor={name}>
-          {humanize(name)}
-          {required && <span className="required"> *</span>}
+          {schema.title || humanize(name)}
         </label>
       </div>
       {stack ? <div>{children}</div> : children}

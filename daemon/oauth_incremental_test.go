@@ -41,7 +41,8 @@ func newGoogleOAuthHarness(t *testing.T) *gatewayHarness {
 // split scope set + the full query of the consent URL it 302s to.
 func authorizeScopes(t *testing.T, h *gatewayHarness, query string) (map[string]bool, url.Values) {
 	t.Helper()
-	rw := h.do(t, "GET", "/api/v1/oauth/google/authorize?"+query, nil)
+	// Connecting Google now requires organization:admin (org-shared credential).
+	rw := h.adminDo(t, "GET", "/api/v1/oauth/google/authorize?"+query, nil)
 	if rw.Code != http.StatusFound {
 		t.Fatalf("authorize status=%d body=%s", rw.Code, rw.Body.String())
 	}

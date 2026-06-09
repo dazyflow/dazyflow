@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import type { Node } from "@xyflow/react";
+import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { X, Trash2, ChevronUp, ChevronDown, Info, Play } from "lucide-react";
+import { X, Trash2, Info, Play } from "lucide-react";
 import { iconFor, categoryColor } from "../icons";
 import type { HazyNodeData } from "./nodeCardShared";
 import {
@@ -10,7 +11,6 @@ import {
   type WorkspaceCtx,
   type AccountPicker,
 } from "./SchemaForm";
-import { OutputPreview } from "./OutputPreview";
 import { LiveConsole } from "./LiveConsole";
 import { TriggerScheduleField, browserTimeZone, FormTab, WebhookTab } from "./TriggersModal";
 import { useAuth } from "../auth";
@@ -27,13 +27,12 @@ type Props = {
   paramsByID: Record<string, Record<string, unknown>>;
   onParamsChange: (id: string, params: Record<string, unknown>) => void;
   // currentRunID is the most-recent run for this graph (set when the
-  // user clicks Run). When set, the inspector shows an Output section
-  // with the selected node's last result.
+  // user clicks Run). Used by the inline approval panel for
+  // await_approval nodes.
   currentRunID: string | null;
-  statusRefreshKey?: number;
   // liveLogs streams stdout/stderr lines from the currently-selected
   // node's in-flight run. When non-empty the inspector renders a
-  // scrolling console above the static "Last run output" section.
+  // scrolling console.
   liveLogs?: string[];
   // workspace gives form fields with format:"workspace-path" the
   // context they need to upload files into the active sandbox.
@@ -51,14 +50,6 @@ type Props = {
   // The close affordance is only rendered when this prop is set so
   // desktop layouts (where the inspector is always visible) stay clean.
   onClose?: () => void;
-  // expanded + onToggleExpand drive the narrow-screen bottom sheet's
-  // peek/expand behavior. When onToggleExpand is set (narrow layout), the
-  // head renders a chevron and the head itself becomes tappable to expand
-  // from the collapsed peek state. `expanded` flips the chevron and the
-  // head's tap-to-expand affordance. Both omitted on desktop, where the
-  // panel is always fully visible in the grid.
-  expanded?: boolean;
-  onToggleExpand?: () => void;
   // onDelete removes the selected node (and its edges). This is the
   // only delete affordance on touch devices, where there's no
   // Delete/Backspace key to trigger React Flow's built-in removal.
@@ -77,55 +68,28 @@ type Props = {
 
 type Mode = "form" | "json";
 
-// SHOW_ADVANCED_KEY persists the "show advanced" toggle so a
-// developer who wants to see every param doesn't have to re-flip
-// the checkbox on every node selection or page reload.
-const SHOW_ADVANCED_KEY = "hazyflow.inspector.showAdvanced";
-
 export function Inspector({
   selected,
   onChange,
   paramsByID,
   onParamsChange,
   currentRunID,
-  statusRefreshKey,
   liveLogs,
   workspace,
   onSample,
   onClose,
-  expanded,
-  onToggleExpand,
   onDelete,
   providers,
   onConnect,
   graphMeta,
 }: Props) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [sampling, setSampling] = useState(false);
   const [sampleError, setSampleError] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>("form");
   const [jsonText, setJsonText] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
-  // showAdvanced controls whether developer-flavored params
-  // (timeouts, pagination cursors, raw-token OAuth bypass) appear
-  // in the form. Default off so a non-tech owner sees only the
-  // fields a forked template actually wants them to touch. The
-  // toggle persists per-browser — once a developer flips it, it
-  // stays flipped across reloads + node selections.
-  const [showAdvanced, setShowAdvanced] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem(SHOW_ADVANCED_KEY) === "1";
-    } catch {
-      return false;
-    }
-  });
-  useEffect(() => {
-    try {
-      localStorage.setItem(SHOW_ADVANCED_KEY, showAdvanced ? "1" : "0");
-    } catch {
-      /* localStorage might be blocked in a strict-mode iframe */
-    }
-  }, [showAdvanced]);
   // Inline approval state. Lives at the Inspector level (not per-node)
   // because the panel only ever shows one node at a time; if you click
   // away mid-typing your comment is discarded — same shape as the
@@ -210,12 +174,18 @@ export function Inspector({
   // connected accounts. Skipped when OAuth is off (providers null) or
   // the drop isn't OAuth-backed (provider null).
   const accountProvider = oauthProviderForIntegration(d.manifest?.integration);
+  // Google accounts are shared org credentials managed centrally on
+  // /admin/google (org-admin only), so the picker's connect CTA routes
+  // there instead of starting an inline OAuth flow from a node. Every
+  // other provider connects inline via the passed-in onConnect.
+  const connectAction =
+    accountProvider === "google" ? () => navigate("/admin/google") : onConnect;
   const accountPicker: AccountPicker | undefined =
-    accountProvider && providers && onConnect
+    accountProvider && providers && connectAction
       ? {
           options:
             providers.find((p) => p.name === accountProvider)?.accounts ?? [],
-          onConnect,
+          onConnect: connectAction,
           // providerLabel is the integration's user-facing name
           // ("Gmail", "Slack") — drives the inline "Connect Gmail"
           // button when no accounts are connected. Falls back to a
@@ -226,16 +196,7 @@ export function Inspector({
 
   return (
     <>
-      <div
-        className="panel-head inspector-head"
-        // On narrow screens the head is the peek strip of the collapsed
-        // bottom sheet — tapping it (anywhere but the buttons) expands.
-        // No-op once expanded; the chevron handles collapsing.
-        onClick={onToggleExpand && !expanded ? onToggleExpand : undefined}
-        style={
-          onToggleExpand && !expanded ? { cursor: "pointer" } : undefined
-        }
-      >
+      <div className="panel-head inspector-head">
         <span className="inspector-identity">
           {/* The drop's own icon + color, matching the canvas node, so the
               panel reads as the thing you're editing. */}
@@ -264,7 +225,6 @@ export function Inspector({
               onChange={(e) => onChange(selected.id, { label: e.target.value })}
               aria-label={t("inspector.label")}
             />
-            <span className="inspector-subtitle">{d.moduleID}</span>
           </span>
           {d.manifest?.description && (
             <span
@@ -278,25 +238,6 @@ export function Inspector({
           )}
         </span>
         <span className="inspector-head-right">
-          {onToggleExpand && (
-            <button
-              type="button"
-              className="ghost icon"
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleExpand();
-              }}
-              aria-expanded={!!expanded}
-              aria-label={
-                expanded ? t("inspector.collapse") : t("inspector.expand")
-              }
-              title={
-                expanded ? t("inspector.collapse") : t("inspector.expand")
-              }
-            >
-              {expanded ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
-            </button>
-          )}
           {onClose && (
             <button
               type="button"
@@ -314,23 +255,6 @@ export function Inspector({
         </span>
       </div>
       <div className="inspector-body">
-        {/* Node ID is internal chrome (the slug the engine references
-            the node by). Useful for developers and debugging, noise
-            for a non-tech owner editing a forked template — gated
-            behind the same Show-advanced toggle as the technical
-            params below. */}
-        {showAdvanced && (
-          <div className="sf-field">
-            <div className="label-row">
-              <label>{t("inspector.nodeId")}</label>
-            </div>
-            <input
-              value={selected.id}
-              disabled
-              style={{ fontFamily: "var(--font-mono)" }}
-            />
-          </div>
-        )}
         {onSample && (
           <div className="sf-field">
             <button
@@ -451,37 +375,6 @@ export function Inspector({
           </div>
         )}
 
-        {canForm && (
-          <div className="sf-mode-toggle" role="tablist">
-            <button
-              type="button"
-              className={mode === "form" ? "active" : ""}
-              onClick={() => setMode("form")}
-            >
-              {t("inspector.modeForm")}
-            </button>
-            <button
-              type="button"
-              className={mode === "json" ? "active" : ""}
-              onClick={() => {
-                setJsonText(JSON.stringify(currentParams, null, 2));
-                setJsonError(null);
-                setMode("json");
-              }}
-            >
-              {t("inspector.modeJson")}
-            </button>
-            <label className="sf-show-advanced">
-              <input
-                type="checkbox"
-                checked={showAdvanced}
-                onChange={(e) => setShowAdvanced(e.target.checked)}
-              />
-              {t("inspector.showAdvanced")}
-            </label>
-          </div>
-        )}
-
         {mode === "form" && canForm && schema && isCronTrigger && (
           // key forces a fresh picker per node so its internal preset
           // state re-derives from the new node's cron on selection.
@@ -544,7 +437,6 @@ export function Inspector({
                   }
                 : undefined
             }
-            showAdvanced={showAdvanced}
             onChange={(v) => onParamsChange(selected.id, v)}
           />
         )}
@@ -585,17 +477,6 @@ export function Inspector({
           <div className="inspector-section">
             <h4>{t("inspector.liveOutput")}</h4>
             <LiveConsole lines={liveLogs} />
-          </div>
-        )}
-
-        {currentRunID && (
-          <div className="inspector-section">
-            <h4>{t("inspector.lastRunOutput")}</h4>
-            <OutputPreview
-              runID={currentRunID}
-              nodeID={selected.id}
-              refreshKey={statusRefreshKey}
-            />
           </div>
         )}
 
