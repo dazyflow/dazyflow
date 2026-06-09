@@ -59,6 +59,13 @@ type Props = {
   workspace?: WorkspaceCtx;
   accountPicker?: AccountPicker;
   references?: ReferenceCtx;
+  // wiredKeys lists param keys fed by a connected input port. A wired param
+  // is overridden by the wire, so its editor (e.g. the spreadsheet picker)
+  // renders disabled — the wire decides the value.
+  wiredKeys?: string[];
+  // resourceLabels maps a picker key → its resolved resource name (traced
+  // from upstream when wired), so a disabled picker can name the resource.
+  resourceLabels?: Record<string, string>;
   // showAdvanced controls whether developer-flavored fields appear in
   // the form. Default false — a non-tech owner shouldn't have to
   // explain to themselves what `timeout_ms` or `page_token` mean. The
@@ -76,9 +83,12 @@ export function SchemaForm({
   workspace,
   accountPicker,
   references,
+  wiredKeys,
+  resourceLabels,
   showAdvanced,
 }: Props) {
   const { t } = useTranslation();
+  const wired = new Set(wiredKeys ?? []);
   if (schema.type !== "object" || !schema.properties) {
     return (
       <div className="sf-fallback-hint">
@@ -98,6 +108,8 @@ export function SchemaForm({
       workspace={workspace}
       accountPicker={accountPicker}
       references={references}
+      wired={wired.has(key)}
+      resolvedName={resourceLabels?.[key]}
       siblings={value}
       onChange={(v) => {
         const next = { ...value };
@@ -242,12 +254,18 @@ type FieldProps = {
   workspace?: WorkspaceCtx;
   accountPicker?: AccountPicker;
   references?: ReferenceCtx;
+  // wired is true when this param is fed by a connected input port; the
+  // resource picker then renders disabled (the wire overrides the value).
+  wired?: boolean;
+  // resolvedName is the picker resource's friendly name (traced from upstream
+  // when wired), shown in the disabled picker's note.
+  resolvedName?: string;
   // siblings is the other params on the same node — lets a field react to a
   // peer's value (e.g. the resource picker lists for the chosen `account`).
   siblings?: Record<string, unknown>;
 };
 
-function SchemaField({ name, schema, required, value, onChange, workspace, accountPicker, references, siblings }: FieldProps) {
+function SchemaField({ name, schema, required, value, onChange, workspace, accountPicker, references, wired, resolvedName, siblings }: FieldProps) {
   const { t } = useTranslation();
   // The OAuth `account` field becomes a dropdown of connected accounts
   // (plus a Connect affordance) when the editor supplies a picker. Plain
@@ -337,6 +355,8 @@ function SchemaField({ name, schema, required, value, onChange, workspace, accou
               account={typeof siblings?.account === "string" ? siblings.account : undefined}
               extra={extra}
               missingDep={missingDep}
+              disabled={wired}
+              wiredName={resolvedName}
             />
           </FieldWrap>
         );
@@ -426,17 +446,19 @@ function SchemaField({ name, schema, required, value, onChange, workspace, accou
         </FieldWrap>
       );
     case "boolean": {
+      // A plain Yes/No dropdown reads far clearer under a question-style
+      // title ("First row is headers → Yes") than a checkbox labelled with a
+      // generic "Enabled/Disabled", and matches the other dropdowns.
       const cur = (value as boolean | undefined) ?? (schema.default as boolean | undefined) ?? false;
       return (
-        <FieldWrap name={name} schema={schema} required={required} stack>
-          <label className="sf-checkbox">
-            <input
-              type="checkbox"
-              checked={cur}
-              onChange={(e) => onChange(e.target.checked)}
-            />
-            <span>{cur ? t("schemaForm.enabled") : t("schemaForm.disabled")}</span>
-          </label>
+        <FieldWrap name={name} schema={schema} required={required}>
+          <select
+            value={cur ? "yes" : "no"}
+            onChange={(e) => onChange(e.target.value === "yes")}
+          >
+            <option value="yes">{t("schemaForm.yes")}</option>
+            <option value="no">{t("schemaForm.no")}</option>
+          </select>
         </FieldWrap>
       );
     }
@@ -799,6 +821,8 @@ function ResourcePickerField({
   account,
   extra,
   missingDep,
+  disabled,
+  wiredName,
 }: {
   provider: string;
   kind: string;
@@ -814,6 +838,12 @@ function ResourcePickerField({
   // missingDep names an unmet dependency (e.g. no spreadsheet chosen yet) —
   // the picker can't list until it's set, so it prompts for that first.
   missingDep?: string;
+  // disabled: the param is fed by a connected input port, so the wire decides
+  // the value — the picker is replaced by a read-only "set upstream" note.
+  disabled?: boolean;
+  // wiredName: the resolved resource name the wire points at, named in the
+  // disabled note so the user still sees which sheet/form it is.
+  wiredName?: string;
 }) {
   const { t } = useTranslation();
   const [opts, setOpts] = useState<{ id: string; name: string }[] | null>(null);
@@ -823,7 +853,7 @@ function ResourcePickerField({
   const extraKey = JSON.stringify(extra ?? {});
 
   useEffect(() => {
-    if (missingDep) {
+    if (missingDep || disabled) {
       setOpts(null);
       setErr(null);
       return;
@@ -846,9 +876,23 @@ function ResourcePickerField({
     return () => {
       live = false;
     };
-    // extraKey stringifies `extra` for a stable dep; missingDep gates fetching.
+    // extraKey stringifies `extra` for a stable dep; missingDep/disabled gate fetching.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [provider, kind, references.token, account, extraKey, missingDep, reloadKey]);
+  }, [provider, kind, references.token, account, extraKey, missingDep, disabled, reloadKey]);
+
+  // Overridden by a connected input port — the wire decides the value, so the
+  // picker is replaced by a read-only note rather than an editable dropdown.
+  if (disabled) {
+    return (
+      <div className="resource-picker">
+        <div className="resource-picker-hint">
+          {wiredName
+            ? t("schemaForm.resourcePicker.wiredNamed", { name: wiredName })
+            : t("schemaForm.resourcePicker.wired")}
+        </div>
+      </div>
+    );
+  }
 
   // Dependency not chosen yet (e.g. no spreadsheet): can't list until it's
   // set, so prompt for that first. No free-text fallback — the picker is the
@@ -1529,14 +1573,13 @@ function ScalarValue({
       );
     case "boolean":
       return (
-        <label className="sf-checkbox">
-          <input
-            type="checkbox"
-            checked={!!value}
-            onChange={(e) => onChange(e.target.checked)}
-          />
-          <span>{value ? t("schemaForm.enabled") : t("schemaForm.disabled")}</span>
-        </label>
+        <select
+          value={value ? "yes" : "no"}
+          onChange={(e) => onChange(e.target.value === "yes")}
+        >
+          <option value="yes">{t("schemaForm.yes")}</option>
+          <option value="no">{t("schemaForm.no")}</option>
+        </select>
       );
     case "object":
     case "array":

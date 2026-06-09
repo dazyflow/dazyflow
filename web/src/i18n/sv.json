@@ -885,6 +885,7 @@
     "statusTooltip": "status: {{status}}",
     "pickerUnset": "Inte angivet",
     "pickerLoading": "…",
+    "pickerWired": "Från uppströms",
     "portRequired": "obligatorisk",
     "portOptional": "valfri",
     "missingValue": "Obligatoriskt värde saknas: {{name}}",
@@ -977,8 +978,8 @@
   },
   "schemaForm": {
     "advancedSection": "Avancerat ({{count}})",
-    "enabled": "Aktiverad",
-    "disabled": "Avaktiverad",
+    "yes": "Ja",
+    "no": "Nej",
     "remove": "ta bort",
     "add": "Lägg till",
     "keyPlaceholder": "nyckel",
@@ -1014,7 +1015,9 @@
       "choose": "Välj {{noun}}…",
       "retry": "Försök igen",
       "connectHint": "Anslut kontot för att välja {{noun}} från en lista.",
-      "needsDependency": "Välj {{dep}} först för att välja {{noun}}."
+      "needsDependency": "Välj {{dep}} först för att välja {{noun}}.",
+      "wired": "Anges av ett anslutet steg.",
+      "wiredNamed": "{{name}} — anges av ett anslutet steg"
     },
     "refPicker": {
       "insert": "Infoga en referens",

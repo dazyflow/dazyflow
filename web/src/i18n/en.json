@@ -889,6 +889,7 @@
     "statusTooltip": "status: {{status}}",
     "pickerUnset": "Not set",
     "pickerLoading": "…",
+    "pickerWired": "From upstream",
     "portRequired": "required",
     "portOptional": "optional",
     "missingValue": "Missing required value: {{name}}",
@@ -981,8 +982,8 @@
   },
   "schemaForm": {
     "advancedSection": "Advanced ({{count}})",
-    "enabled": "Enabled",
-    "disabled": "Disabled",
+    "yes": "Yes",
+    "no": "No",
     "remove": "remove",
     "add": "Add",
     "keyPlaceholder": "key",
@@ -1018,7 +1019,9 @@
       "choose": "Choose a {{noun}}…",
       "retry": "Retry",
       "connectHint": "Connect the account to pick a {{noun}} from a list.",
-      "needsDependency": "Choose a {{dep}} first to pick a {{noun}}."
+      "needsDependency": "Choose a {{dep}} first to pick a {{noun}}.",
+      "wired": "Set by a connected step.",
+      "wiredNamed": "{{name}} — set by a connected step"
     },
     "refPicker": {
       "insert": "Insert a reference",

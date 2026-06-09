@@ -34,6 +34,11 @@ func init() {
 			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
+			Inputs: []core.Port{
+				// Optional: wire a spreadsheet id in to override the picker, so a
+				// reference can be threaded from an upstream sheet step.
+				{Port: "spreadsheet_id", Label: "Spreadsheet ID", MIME: []string{"text/plain"}},
+			},
 			Outputs: []core.Port{
 				{Port: "pdf", Label: "The exported PDF (file ref)", MIME: []string{"application/pdf"}},
 				{Port: "meta", Label: "Export metadata", MIME: []string{"application/json"}},
@@ -55,7 +60,7 @@ func init() {
 }
 
 func executeSheetsExportPDF(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	id := sheetID(params.StringDefault(job.Params, "spreadsheet_id", ""))
+	id := resolveSpreadsheetID(job)
 	if id == "" {
 		return params.Err(job, "bad_param", "'spreadsheet_id' is required"), nil
 	}

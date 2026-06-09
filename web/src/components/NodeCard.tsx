@@ -117,6 +117,9 @@ export function HazyNode({ data, selected }: NodeProps) {
     for (const p of d.manifest?.inputs ?? []) {
       if (connectedInputs.includes(p.port)) continue;
       const s = schemaProps[p.port];
+      // Picker-format params (spreadsheet/form) keep their read-only name
+      // display below — never a raw-id text box on the pin row.
+      if (s?.format && PICKER_FORMATS.has(s.format)) continue;
       if (inlineEligible(s)) inlineByPort[p.port] = s;
     }
   }
@@ -124,7 +127,14 @@ export function HazyNode({ data, selected }: NodeProps) {
   // typed on the node itself (e.g. Text's `text`, Number's `value`).
   const literalFields = schemaProps
     ? required
-        .filter((k) => !inputPortIds.has(k))
+        // Drop params that live on an input pin — EXCEPT picker-format ones
+        // (spreadsheet/form), which keep their read-only identity display even
+        // when they're also a wireable port (the wire just overrides them).
+        .filter((k) => {
+          const sch = schemaProps[k];
+          const isPicker = !!(sch?.format && PICKER_FORMATS.has(sch.format));
+          return isPicker || !inputPortIds.has(k);
+        })
         .map((k) => ({ key: k, label: schemaProps[k]?.title ?? k, schema: schemaProps[k] }))
         .filter(
           (f): f is { key: string; label: string; schema: JSONSchema } =>
@@ -249,11 +259,15 @@ export function HazyNode({ data, selected }: NodeProps) {
               const raw = d.params?.[key];
               const idStr = typeof raw === "string" ? raw : "";
               const name = d.resourceLabels?.[key];
-              const text =
-                name ??
-                (idStr
-                  ? i18n.t("nodeCard.pickerLoading")
-                  : i18n.t("nodeCard.pickerUnset"));
+              // A wired input port overrides the picker. Prefer the resolved
+              // name (traced from the upstream step) so the card shows the
+              // real sheet; fall back to "From upstream" only if we can't.
+              const text = connectedInputs.includes(key)
+                ? name ?? i18n.t("nodeCard.pickerWired")
+                : name ??
+                  (idStr
+                    ? i18n.t("nodeCard.pickerLoading")
+                    : i18n.t("nodeCard.pickerUnset"));
               return (
                 <label key={key} className="hz-param">
                   <span className="hz-param-label">{label}</span>

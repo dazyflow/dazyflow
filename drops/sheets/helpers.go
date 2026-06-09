@@ -328,6 +328,27 @@ func parseMapping(p map[string]any) []columnMapping {
 	return out
 }
 
+// resolveSpreadsheetID picks the spreadsheet to act on: a wired
+// 'spreadsheet_id' input port wins over the picked param, so a spreadsheet
+// reference can be threaded in from an upstream sheet step (e.g. append row's
+// 'spreadsheet_id' output). Either form may be a full URL or a bare id —
+// sheetID extracts the id. Empty input falls back to the param.
+func resolveSpreadsheetID(job core.Job) string {
+	if in, ok := job.Input["spreadsheet_id"]; ok && in.Inline != nil {
+		switch v := in.Inline.(type) {
+		case string:
+			if s := strings.TrimSpace(v); s != "" {
+				return sheetID(s)
+			}
+		case []byte:
+			if s := strings.TrimSpace(string(v)); s != "" {
+				return sheetID(s)
+			}
+		}
+	}
+	return sheetID(params.StringDefault(job.Params, "spreadsheet_id", ""))
+}
+
 // quoteSheetTab wraps a tab name in single quotes for A1 notation so names
 // with spaces or punctuation parse (e.g. 'Inbox Log'!A1). Embedded single
 // quotes are doubled, per the Sheets reference grammar.

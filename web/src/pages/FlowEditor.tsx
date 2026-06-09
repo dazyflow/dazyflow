@@ -1326,24 +1326,63 @@ function EditorInner() {
   // Per-node {paramKey → resolved name} for the picker params, derived from
   // the resolved-names cache. Absent entries fall back to the id on the card.
   const resourceLabelsByNode = useMemo(() => {
+    const byId = new Map(nodes.map((n) => [n.id, n]));
+    const propsOf = (id: string) =>
+      manifestByID.get((byId.get(id)?.data as HazyNodeData | undefined)?.moduleID ?? "")
+        ?.params_schema?.properties;
+    // resolveOwn turns a node's OWN picker param value into a friendly name
+    // (via the id→name cache), or undefined if unpicked/unresolved.
+    const resolveOwn = (id: string, key: string): string | undefined => {
+      const sch = propsOf(id)?.[key] as { format?: string } | undefined;
+      const kind = RESOURCE_PICKER_KINDS[sch?.format ?? ""];
+      const pp = paramsByID[id] ?? {};
+      if (!kind || typeof pp[key] !== "string" || !pp[key]) return undefined;
+      const account = typeof pp.account === "string" ? pp.account : undefined;
+      return resourceNames.get(`${kind}:${account ?? "default"}:${pp[key] as string}`);
+    };
+    // Incoming wire per (target, targetHandle) → its source port, so a picker
+    // param fed by a wire can borrow the upstream step's resolved name.
+    const incoming = new Map<string, { source: string; sourceHandle?: string }>();
+    for (const e of edges) {
+      if (e.target && e.targetHandle) {
+        incoming.set(`${e.target}:${e.targetHandle}`, {
+          source: e.source,
+          sourceHandle: e.sourceHandle ?? undefined,
+        });
+      }
+    }
+    // resolveName follows wires: a WIRED picker takes its name from whatever
+    // it's connected to (recursively up the chain), so switching the sheet
+    // upstream propagates downstream — the node's own (now-overridden) value
+    // is ignored. Unwired → the node's own picked value. The seen-guard stops
+    // a cyclic graph from looping.
+    const resolveName = (
+      id: string,
+      key: string,
+      seen = new Set<string>(),
+    ): string | undefined => {
+      const guard = `${id}:${key}`;
+      if (seen.has(guard)) return undefined;
+      seen.add(guard);
+      const up = incoming.get(guard);
+      if (up?.source && up.sourceHandle) return resolveName(up.source, up.sourceHandle, seen);
+      return resolveOwn(id, key);
+    };
     const m = new Map<string, Record<string, string>>();
     for (const n of nodes) {
-      const props = manifestByID.get((n.data as HazyNodeData).moduleID)
-        ?.params_schema?.properties;
+      const props = propsOf(n.id);
       if (!props) continue;
-      const p = paramsByID[n.id] ?? {};
       const labels: Record<string, string> = {};
       for (const [key, sch] of Object.entries(props)) {
         const kind = RESOURCE_PICKER_KINDS[(sch as { format?: string }).format ?? ""];
-        if (!kind || typeof p[key] !== "string" || !p[key]) continue;
-        const account = typeof p.account === "string" ? p.account : undefined;
-        const name = resourceNames.get(`${kind}:${account ?? "default"}:${p[key]}`);
+        if (!kind) continue;
+        const name = resolveName(n.id, key);
         if (name) labels[key] = name;
       }
       if (Object.keys(labels).length) m.set(n.id, labels);
     }
     return m;
-  }, [nodes, paramsByID, manifestByID, resourceNames]);
+  }, [nodes, paramsByID, manifestByID, resourceNames, edges]);
 
   const displayNodes = useMemo<FlowNode<HazyNodeData>[]>(() => {
     // Inline fields show only for a single selection, so a multi-select
@@ -3088,6 +3127,12 @@ function EditorInner() {
           onChange={onInspectorChange}
           paramsByID={paramsByID}
           onParamsChange={onParamsChange}
+          wiredPorts={
+            inspectorSelected ? connectedInputsByNode.get(inspectorSelected.id) ?? [] : []
+          }
+          resourceLabels={
+            inspectorSelected ? resourceLabelsByNode.get(inspectorSelected.id) : undefined
+          }
           graphMeta={
             id ? { id, tenant: activeTenant, workspace: activeWorkspace, name } : undefined
           }

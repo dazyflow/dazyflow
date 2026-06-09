@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"git.sr.ht/~klahr/hazyflow/core"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
@@ -34,6 +35,12 @@ func init() {
 			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
+			Inputs: []core.Port{
+				// Optional: wire a spreadsheet id in to override the picker, so a
+				// reference can be threaded from an upstream sheet step (e.g.
+				// append row's 'spreadsheet_id' output).
+				{Port: "spreadsheet_id", Label: "Spreadsheet ID", MIME: []string{"text/plain"}},
+			},
 			Outputs: []core.Port{
 				{Port: "rows", Label: "Rows", MIME: []string{"application/json"}},
 				{Port: "headers", Label: "Headers", MIME: []string{"application/json"}},
@@ -42,10 +49,11 @@ func init() {
 				"type":"object",
 				"properties":{
 					"account":{"type":"string","default":"default"},
-					"spreadsheet_id":{"type":"string","format":"google-spreadsheet","description":"The spreadsheet to read."},
-					"range":{"type":"string","format":"google-sheet-tab","default":"Sheet1","description":"The sheet tab or named range to read."},
-					"headers":{"type":"boolean","default":true,"description":"Treat the first row as column headers."},
-					"value_render_option":{"type":"string","enum":["FORMATTED_VALUE","UNFORMATTED_VALUE","FORMULA"],"default":"FORMATTED_VALUE"},
+					"spreadsheet_id":{"type":"string","format":"google-spreadsheet","title":"Spreadsheet","description":"The spreadsheet to read."},
+					"range":{"type":"string","format":"google-sheet-tab","title":"Tab","default":"Sheet1","description":"The sheet tab or named range to read."},
+						"cells":{"type":"string","title":"Cells","examples":["A1:D5"],"description":"Optional cell range within the tab (A1 notation). Leave blank to read the whole tab."},
+					"headers":{"type":"boolean","title":"First row is headers","default":true,"description":"Treat the first row as column headers."},
+					"value_render_option":{"type":"string","title":"Value format","enum":["FORMATTED_VALUE","UNFORMATTED_VALUE","FORMULA"],"enumNames":["As displayed","Raw values","Formulas"],"default":"FORMATTED_VALUE"},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
 				},
 				"required":["spreadsheet_id"]
@@ -57,7 +65,7 @@ func init() {
 }
 
 func executeSheetsRead(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	if sheetID(params.StringDefault(job.Params, "spreadsheet_id", "")) == "" {
+	if resolveSpreadsheetID(job) == "" {
 		return params.Err(job, "bad_param", "'spreadsheet_id' is required"), nil
 	}
 	headers, rows, err := ReadRange(ctx, job)
@@ -82,7 +90,7 @@ func executeSheetsRead(ctx context.Context, job core.Job, _ chan<- core.Progress
 // timeout_ms from job.Params; resolves the Google token via the package's
 // SetTokenLookup hook (tenant rides on ctx).
 func ReadRange(ctx context.Context, job core.Job) (headers []string, rows []map[string]any, err error) {
-	id := sheetID(params.StringDefault(job.Params, "spreadsheet_id", ""))
+	id := resolveSpreadsheetID(job)
 	if id == "" {
 		return nil, nil, fmt.Errorf("'spreadsheet_id' is required")
 	}
@@ -91,6 +99,12 @@ func ReadRange(ctx context.Context, job core.Job) (headers []string, rows []map[
 		return nil, nil, err
 	}
 	rng := params.StringDefault(job.Params, "range", "Sheet1")
+	// An optional cell range narrows the read to a block within the tab
+	// (A1 notation). Quote the tab so names with spaces parse, e.g.
+	// 'Inbox Log'!A1:D5. Blank → read the whole tab/named range as before.
+	if cells := strings.TrimSpace(params.StringDefault(job.Params, "cells", "")); cells != "" {
+		rng = quoteSheetTab(rng) + "!" + cells
+	}
 
 	q := url.Values{}
 	q.Set("valueRenderOption", params.StringDefault(job.Params, "value_render_option", "FORMATTED_VALUE"))

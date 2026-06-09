@@ -26,6 +26,14 @@ type Props = {
   // round-trip through React Flow's internal state.
   paramsByID: Record<string, Record<string, unknown>>;
   onParamsChange: (id: string, params: Record<string, unknown>) => void;
+  // wiredPorts lists the node's input ports that currently have a wire. A
+  // param whose key is wired is overridden by that wire, so its editor (e.g.
+  // the spreadsheet picker) is shown disabled — the wire decides the value.
+  wiredPorts?: string[];
+  // resourceLabels maps a picker param key → its resolved resource name
+  // (traced from upstream when wired), so the disabled picker can name the
+  // sheet the wire actually points at rather than just "set by a step".
+  resourceLabels?: Record<string, string>;
   // currentRunID is the most-recent run for this graph (set when the
   // user clicks Run). Used by the inline approval panel for
   // await_approval nodes.
@@ -73,6 +81,8 @@ export function Inspector({
   onChange,
   paramsByID,
   onParamsChange,
+  wiredPorts,
+  resourceLabels,
   currentRunID,
   liveLogs,
   workspace,
@@ -426,6 +436,8 @@ export function Inspector({
             value={currentParams}
             workspace={workspace}
             accountPicker={accountPicker}
+            wiredKeys={wiredPorts}
+            resourceLabels={resourceLabels}
             references={
               workspace && graphMeta?.id
                 ? {

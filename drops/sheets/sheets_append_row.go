@@ -37,23 +37,28 @@ func init() {
 			Inputs: []core.Port{
 				{Port: "rows", Label: "Rows", Required: true, MIME: []string{"application/json"}},
 				{Port: "headers", Label: "Headers", MIME: []string{"application/json"}},
+				// Optional: wire a spreadsheet id in to override the picker, so a
+				// reference can be threaded from an upstream sheet step.
+				{Port: "spreadsheet_id", Label: "Spreadsheet ID", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
 				// meta is the full structured result (blue/json) for advanced
 				// wiring + debugging; the scalars below (green/text) expose the
 				// values you actually chain on without cracking open the JSON.
+				// spreadsheet_id is emitted so it can feed another sheet step's
+				// 'spreadsheet_id' input (read range, export, another append).
 				{Port: "meta", Label: "Append metadata", MIME: []string{"application/json"}},
 				{Port: "appended_rows", Label: "Rows appended", MIME: []string{"text/plain"}},
 				{Port: "updated_range", Label: "Updated range", MIME: []string{"text/plain"}},
-				{Port: "url", Label: "Sheet URL", MIME: []string{"text/plain"}},
+				{Port: "spreadsheet_id", Label: "Spreadsheet ID", MIME: []string{"text/plain"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
 					"account":{"type":"string","default":"default"},
 					"spreadsheet_id":{"type":"string","format":"google-spreadsheet","title":"Spreadsheet","description":"The spreadsheet to append to."},
-					"range":{"type":"string","format":"google-sheet-tab","default":"Sheet1","description":"The sheet tab the append targets."},
-					"value_input_option":{"type":"string","title":"Value format","enum":["RAW","USER_ENTERED"],"enumNames":["Plain text (store exactly as given)","Smart (interpret formulas, dates & numbers)"],"default":"USER_ENTERED"},
+					"range":{"type":"string","format":"google-sheet-tab","title":"Tab","default":"Sheet1","description":"The sheet tab the append targets."},
+					"value_input_option":{"type":"string","title":"Value format","enum":["RAW","USER_ENTERED"],"enumNames":["Raw values","Like typing in Sheets"],"default":"USER_ENTERED"},
 					"insert_data_option":{"type":"string","title":"Adding rows","enum":["OVERWRITE","INSERT_ROWS"],"enumNames":["Overwrite existing cells","Insert new rows"],"default":"INSERT_ROWS"},
 					"mapping":{
 						"type":"array",
@@ -80,7 +85,7 @@ func init() {
 }
 
 func executeSheetsAppend(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	id := sheetID(params.StringDefault(job.Params, "spreadsheet_id", ""))
+	id := resolveSpreadsheetID(job)
 	if id == "" {
 		return params.Err(job, "bad_param", "'spreadsheet_id' is required"), nil
 	}
@@ -229,25 +234,16 @@ func executeSheetsAppend(ctx context.Context, job core.Job, _ chan<- core.Progre
 }
 
 // appendOutputs bundles the drop's four output ports: the full structured
-// `meta` (json) plus the scalar `appended_rows`, `updated_range`, and `url`
-// (text) so common downstream steps can wire them without a JSON extract.
+// `meta` (json) plus the scalar `appended_rows`, `updated_range`, and
+// `spreadsheet_id` (text) so common downstream steps can wire them without a
+// JSON extract — notably `spreadsheet_id` into another sheet step's input.
 // Used by both the success path and the empty (zero-row) path so the port
 // set is identical either way.
 func appendOutputs(id, updatedRange string, count int, meta map[string]any) map[string]core.Ref {
 	return map[string]core.Ref{
-		"meta":          {MIME: "application/json", Inline: meta},
-		"appended_rows": {MIME: "text/plain", Inline: strconv.Itoa(count)},
-		"updated_range": {MIME: "text/plain", Inline: updatedRange},
-		"url":           {MIME: "text/plain", Inline: sheetURL(id)},
+		"meta":           {MIME: "application/json", Inline: meta},
+		"appended_rows":  {MIME: "text/plain", Inline: strconv.Itoa(count)},
+		"updated_range":  {MIME: "text/plain", Inline: updatedRange},
+		"spreadsheet_id": {MIME: "text/plain", Inline: id},
 	}
-}
-
-// sheetURL builds a deep link to the spreadsheet's editor — handy for a
-// "done, here's your sheet" notification downstream. Empty id → empty link
-// rather than a bogus URL.
-func sheetURL(id string) string {
-	if id == "" {
-		return ""
-	}
-	return "https://docs.google.com/spreadsheets/d/" + id + "/edit"
 }
