@@ -890,6 +890,8 @@
     "portOptional": "valfri",
     "missingValue": "Obligatoriskt värde saknas: {{name}}",
     "unwiredRequired": "Obligatorisk ingång ej kopplad: {{name}}",
+    "loopBodyUnwired": "Koppla Loop body-stiftet till steget du vill köra för varje rad.",
+    "loopNested": "En loop kan inte köras inuti en annan loop ännu — flytta ut det här steget ur den yttre loopens body.",
     "passThrough": "Genomströmning — koppla in ett värde för att skicka det oförändrat vidare"
   },
   "outputPreview": {
@@ -1026,8 +1028,25 @@
       "upstream": "Från tidigare steg",
       "trigger": "Från utlösaren",
       "resources": "Resurser",
-      "secrets": "Hemligheter"
+      "secrets": "Hemligheter",
+      "itemFields": "Från varje rad"
     }
+  },
+  "forEach": {
+    "runStep": "Kör steg",
+    "choose": "Välj ett steg…",
+    "pickHint": "Välj ett steg som körs en gång per rad, fyll sedan i dess fält — använd ”Från varje rad” i fältets { }-meny för att infoga en kolumn.",
+    "bodyHint": "Koppla Loop body-stiftet till det första steget du vill köra för varje rad. Alla steg efter det körs också en gång per rad.",
+    "rowColumns": "Varje rads kolumner",
+    "noColumns": "Koppla en lista till items-ingången för att se dess kolumner här.",
+    "concurrency": "Rader åt gången",
+    "concurrencyPlaceholder": "Alla samtidigt",
+    "failFast": "Stoppa vid första felet",
+    "failFastNo": "Nej — fortsätt, samla felen",
+    "failFastYes": "Ja — stoppa vid första raden som misslyckas"
+  },
+  "loopBody": {
+    "runsPerRow": "Det här steget körs en gång per rad. Använd ”Från varje rad” i fältets { }-meny för att infoga en kolumn."
   },
   "inspector": {
     "title": "Inspector",

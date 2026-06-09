@@ -21,9 +21,10 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "gmail_send_email",
 			Version:     "1.0",
-			Label:       "Gmail send email",
+			Label:       "Gmail",
+			Subtitle:    "Send email",
 			Summary:     "Send an email as the connected Gmail account, with optional CC/BCC, HTML, and file attachments.",
-			Description: "Send an email from the connected mailbox. Body text comes from params.body or the 'body' input; attach files by wiring file-producing nodes (e.g. sheets_export_pdf) into the variadic 'attachments' input.",
+			Description: "Send an email from the connected mailbox. To, Subject and Body can be typed as params or wired in from upstream (the matching input port overrides the param) — handy for per-recipient sends. Attach files by wiring file-producing nodes (e.g. sheets_export_pdf) into the variadic 'attachments' input.",
 			Integration: "Gmail",
 			Category:    "network",
 			Icon:        "mail",
@@ -41,8 +42,14 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				{Port: "body", Label: "Email body (overrides params.body)"},
-				{Port: "attachments", Label: "Files to attach", Variadic: true},
+				// To and Body are required (an email needs a recipient and
+				// content); each input overrides its param. Subject is optional
+				// (defaults to "(no subject)"). All text so they wire from any
+				// string output (e.g. a sheet's Email / Name column).
+				{Port: "to", Label: "To", Required: true, MIME: []string{"text/plain"}},
+				{Port: "subject", Label: "Subject", MIME: []string{"text/plain"}},
+				{Port: "body", Label: "Body", MIME: []string{"text/plain"}},
+				{Port: "attachments", Label: "Attachments", Variadic: true},
 			},
 			Outputs: []core.Port{
 				{Port: "meta", Label: "Delivery metadata", MIME: []string{"application/json"}},
@@ -53,12 +60,12 @@ func init() {
 					"base_url":{"type":"string","description":"Override the API host (testing)."},
 					"account":{"type":"string","default":"default"},
 					"token":{"type":"string","description":"Raw access token; overrides 'account'."},
-					"to":{"type":"string","description":"Recipient(s), comma-separated."},
+					"to":{"type":"string","description":"Recipient(s), comma-separated. Overridden by the 'To' input."},
 					"cc":{"type":"string"},
 					"bcc":{"type":"string"},
-					"subject":{"type":"string"},
-					"body":{"type":"string","description":"Body text. Overridden by the 'body' input."},
-					"format":{"type":"string","enum":["text","html"],"default":"text"},
+					"subject":{"type":"string","description":"Overridden by the 'Subject' input."},
+					"body":{"type":"string","description":"Body text. Overridden by the 'Body' input."},
+					"format":{"type":"string","enum":["text","html"],"enumNames":["Text","HTML"],"default":"html"},
 					"reply_to":{"type":"string"},
 					"thread_id":{"type":"string","description":"Gmail thread ID to reply within."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
@@ -78,34 +85,63 @@ type gmailAttachment struct {
 	data     []byte
 }
 
+// textInputOr returns the text wired into input port `port` (string or raw
+// bytes), or `fallback` when the port is unwired/empty. ok is false only when
+// the port carries a NON-text value — a wiring mistake the caller rejects.
+// Lets To, Subject and Body each be supplied by an upstream wire or a param.
+func textInputOr(job core.Job, port, fallback string) (val string, ok bool) {
+	in, present := job.Input[port]
+	if !present || in.Inline == nil {
+		return fallback, true
+	}
+	switch v := in.Inline.(type) {
+	case string:
+		if v != "" {
+			return v, true
+		}
+		return fallback, true
+	case []byte:
+		if len(v) > 0 {
+			return string(v), true
+		}
+		return fallback, true
+	}
+	return "", false
+}
+
 func executeGmailSend(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	to, _ := params.StringOpt(job.Params, "to")
+	// to / subject / body each take their value from the matching input port
+	// when one is wired, otherwise from the param (the "input overrides param"
+	// pattern). A non-text value wired into any of them is a mistake we reject.
+	to, ok := textInputOr(job, "to", params.StringDefault(job.Params, "to", ""))
+	if !ok {
+		return params.Err(job, "bad_input", "'To' input must be text"), nil
+	}
 	if to == "" {
-		return params.Err(job, "bad_param", "'to' is required"), nil
+		return params.Err(job, "bad_param", "'to' is required — set it or wire the 'To' input"), nil
 	}
 	token, err := resolveToken(ctx, job)
 	if err != nil {
 		return params.Err(job, "auth", err.Error()), nil
 	}
 
-	body := params.StringDefault(job.Params, "body", "")
-	if in, ok := job.Input["body"]; ok && in.Inline != nil {
-		switch v := in.Inline.(type) {
-		case string:
-			body = v
-		case []byte:
-			body = string(v)
-		default:
-			return params.Err(job, "bad_input", "body input must be text"), nil
-		}
+	// Body is optional — an empty body is allowed (send a subject-only email).
+	// Minimal friction for non-tech authors; To is the only hard requirement.
+	body, ok := textInputOr(job, "body", params.StringDefault(job.Params, "body", ""))
+	if !ok {
+		return params.Err(job, "bad_input", "'Body' input must be text"), nil
 	}
-	if body == "" {
-		return params.Err(job, "bad_input", "no body — set params.body or wire the 'body' input port"), nil
+	subject, ok := textInputOr(job, "subject", params.StringDefault(job.Params, "subject", "(no subject)"))
+	if !ok {
+		return params.Err(job, "bad_input", "'Subject' input must be text"), nil
 	}
 
-	bodyContentType := `text/plain; charset="utf-8"`
-	if params.StringDefault(job.Params, "format", "text") == "html" {
-		bodyContentType = `text/html; charset="utf-8"`
+	// Default to HTML (matches the schema default) so an unset format isn't
+	// sent as plain text when the form shows HTML selected. Explicit "text"
+	// still sends text/plain.
+	bodyContentType := `text/html; charset="utf-8"`
+	if params.StringDefault(job.Params, "format", "html") == "text" {
+		bodyContentType = `text/plain; charset="utf-8"`
 	}
 
 	atts, jerr := loadAttachments(job)
@@ -118,7 +154,7 @@ func executeGmailSend(ctx context.Context, job core.Job, _ chan<- core.Progress)
 		cc:              params.StringDefault(job.Params, "cc", ""),
 		bcc:             params.StringDefault(job.Params, "bcc", ""),
 		replyTo:         params.StringDefault(job.Params, "reply_to", ""),
-		subject:         params.StringDefault(job.Params, "subject", "(no subject)"),
+		subject:         subject,
 		bodyContentType: bodyContentType,
 	}, body, atts)
 

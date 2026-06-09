@@ -44,6 +44,12 @@ func init() {
 				Label: "List to iterate (Inline = []any or []core.Ref)",
 			}},
 			Outputs: []core.Port{
+				// body is a control pin (not data): wiring it to a node marks
+				// that node + its downstream chain as the loop body the engine
+				// runs once per item. The dispatcher excludes those nodes from
+				// normal execution (see loopBodyOwners). Empty = legacy mode
+				// (for_each runs step_module internally).
+				{Port: "body", Label: "Loop body", MIME: []string{"application/x-hazyflow-exec"}},
 				{Port: "results", Label: "Per-item Result list", MIME: []string{MIMEList}},
 				{Port: "errors", Label: "Failures keyed by item index", MIME: []string{"application/json"}},
 			},
@@ -56,8 +62,7 @@ func init() {
 						"item_port":{"type":"string","default":"in"},
 						"concurrency":{"type":"integer","minimum":1},
 						"fail_fast":{"type":"boolean","default":false}
-					},
-					"required":["step_module"]
+					}
 				}`,
 			),
 			Idempotent: true,
@@ -81,11 +86,6 @@ func resolveStep(ctx context.Context, moduleID string) (core.Transport, bool) {
 }
 
 func executeForEach(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
-	stepModule, err := params.String(job.Params, "step_module")
-	if err != nil {
-		return params.Err(job, "bad_param", err.Error()), nil
-	}
-	stepParams, _ := job.Params["step_params"].(map[string]any)
 	itemPort, _ := job.Params["item_port"].(string)
 	if itemPort == "" {
 		itemPort = "in"
@@ -105,11 +105,94 @@ func executeForEach(ctx context.Context, job core.Job, progress chan<- core.Prog
 		return params.Err(job, "bad_input", err.Error()), nil
 	}
 
+	// Body mode: the for_each's `body` pin is wired, so the daemon handed us
+	// a runner that executes the body subgraph in-process once per item. The
+	// row reaches the body nodes through their ${item.…} params (resolved by
+	// the engine), so item_port/step_params don't apply here. Preferred over
+	// the legacy step_module path whenever a runner is present.
+	if runner, ok := engine.BodyRunnerFromContext(ctx); ok {
+		return runForEachItems(ctx, job, progress, items, concurrency, failFast,
+			func(rctx context.Context, _ int, item core.Ref) (core.Ref, any) {
+				gr, execErr := runner(rctx, item)
+				res := core.Ref{MIME: "application/json", Inline: bodyResultPayload(gr)}
+				if execErr != nil {
+					return res, execErr.Error()
+				}
+				if gr.Status == core.StatusError {
+					return res, errorPayload(gr.Error)
+				}
+				return res, nil
+			}), nil
+	}
+
+	// Legacy mode: run a single configured step module per item, splicing
+	// ${item.…} into its step_params.
+	stepModule, err := params.String(job.Params, "step_module")
+	if err != nil {
+		return params.Err(job, "bad_param", err.Error()), nil
+	}
+	if stepModule == "" {
+		return params.Err(job, "bad_param", "wire the For each `body` pin (loop body), or set step_module"), nil
+	}
+	stepParams, _ := job.Params["step_params"].(map[string]any)
 	transport, ok := resolveStep(ctx, stepModule)
 	if !ok {
 		return params.Err(job, "unknown_step", fmt.Sprintf("step module %q is not registered", stepModule)), nil
 	}
 
+	return runForEachItems(ctx, job, progress, items, concurrency, failFast,
+		func(rctx context.Context, idx int, item core.Ref) (core.Ref, any) {
+			resolvedParams, err := substituteItemParams(rctx, stepParams, item)
+			if err != nil {
+				// Leave results[idx] empty (zero Ref) — the iteration never
+				// produced a step result.
+				return core.Ref{}, map[string]any{"code": "template", "message": err.Error()}
+			}
+			subJob := core.Job{
+				ID:            fmt.Sprintf("%s#%d", job.ID, idx),
+				GraphID:       job.GraphID,
+				NodeID:        fmt.Sprintf("%s[%d]", job.NodeID, idx),
+				TraceID:       job.TraceID,
+				SpanID:        job.SpanID,
+				Input:         map[string]core.Ref{itemPort: item},
+				Params:        resolvedParams,
+				Env:           job.Env,
+				Cleanup:       core.CleanupOnNodeComplete,
+				WorkspaceRoot: job.WorkspaceRoot,
+				Tenant:        job.Tenant,
+				QuotaLimit:    job.QuotaLimit,
+				QuotaUsed:     job.QuotaUsed,
+			}
+			stepResult, execErr := transport.Execute(rctx, subJob, nil)
+			res := core.Ref{MIME: "application/json", Inline: stepResultPayload(stepResult)}
+			if execErr != nil {
+				return res, execErr.Error()
+			}
+			if stepResult.Status == core.StatusError {
+				return res, errorPayload(stepResult.Error)
+			}
+			return res, nil
+		}), nil
+}
+
+// itemFunc runs one iteration. It returns the Ref to record at results[idx]
+// and, when the iteration failed, a JSON-serializable error entry to record
+// under errors[idx] (nil on success).
+type itemFunc func(ctx context.Context, idx int, item core.Ref) (core.Ref, any)
+
+// runForEachItems is the shared fan-out skeleton for both modes: it runs
+// `run` once per item up to `concurrency` at a time, collects results in
+// order and failures keyed by index, and (when fail_fast) cancels the
+// remaining iterations on the first failure.
+func runForEachItems(
+	ctx context.Context,
+	job core.Job,
+	progress chan<- core.Progress,
+	items []core.Ref,
+	concurrency int,
+	failFast bool,
+	run itemFunc,
+) core.Result {
 	if len(items) == 0 {
 		return core.Result{
 			JobID:  job.ID,
@@ -118,12 +201,12 @@ func executeForEach(ctx context.Context, job core.Job, progress chan<- core.Prog
 				"results": {MIME: MIMEList, Inline: []core.Ref{}},
 				"errors":  {MIME: "application/json", Inline: map[string]any{}},
 			},
-		}, nil
+		}
 	}
 
 	results := make([]core.Ref, len(items))
-	errors := make(map[string]any)
-	var errorsMu sync.Mutex
+	errs := make(map[string]any)
+	var errsMu sync.Mutex
 
 	gate := concurrency
 	if gate == 0 || gate > len(items) {
@@ -144,57 +227,17 @@ func executeForEach(ctx context.Context, job core.Job, progress chan<- core.Prog
 		go func(idx int, value core.Ref) {
 			defer wg.Done()
 			defer func() { <-sem }()
-
 			if runCtx.Err() != nil {
 				return
 			}
-
-			resolvedParams, err := substituteItemParams(runCtx, stepParams, value)
-			if err != nil {
-				errorsMu.Lock()
-				errors[fmt.Sprintf("%d", idx)] = map[string]any{
-					"code":    "template",
-					"message": err.Error(),
-				}
-				errorsMu.Unlock()
-				if failFast {
-					cancel()
-				}
-				return
-			}
-			subJob := core.Job{
-				ID:            fmt.Sprintf("%s#%d", job.ID, idx),
-				GraphID:       job.GraphID,
-				NodeID:        fmt.Sprintf("%s[%d]", job.NodeID, idx),
-				TraceID:       job.TraceID,
-				SpanID:        job.SpanID,
-				Input:         map[string]core.Ref{itemPort: value},
-				Params:        resolvedParams,
-				Env:           job.Env,
-				Cleanup:       core.CleanupOnNodeComplete,
-				WorkspaceRoot: job.WorkspaceRoot,
-				Tenant:        job.Tenant,
-				QuotaLimit:    job.QuotaLimit,
-				QuotaUsed:     job.QuotaUsed,
-			}
-
-			stepResult, execErr := transport.Execute(runCtx, subJob, nil)
+			res, errEntry := run(runCtx, idx, value)
 			emitProgress(progress, job, float64(idx+1)/float64(len(items)),
 				fmt.Sprintf("item %d/%d done", idx+1, len(items)))
-
-			results[idx] = core.Ref{
-				MIME:   "application/json",
-				Inline: stepResultPayload(stepResult),
-			}
-
-			if execErr != nil || stepResult.Status == core.StatusError {
-				errorsMu.Lock()
-				if execErr != nil {
-					errors[fmt.Sprintf("%d", idx)] = execErr.Error()
-				} else {
-					errors[fmt.Sprintf("%d", idx)] = errorPayload(stepResult.Error)
-				}
-				errorsMu.Unlock()
+			results[idx] = res
+			if errEntry != nil {
+				errsMu.Lock()
+				errs[fmt.Sprintf("%d", idx)] = errEntry
+				errsMu.Unlock()
 				if failFast {
 					cancel()
 				}
@@ -205,11 +248,11 @@ func executeForEach(ctx context.Context, job core.Job, progress chan<- core.Prog
 
 	status := core.StatusOK
 	var jobErr *core.JobError
-	if len(errors) > 0 && failFast {
+	if len(errs) > 0 && failFast {
 		status = core.StatusError
 		jobErr = &core.JobError{
 			Code:    "item_failed",
-			Message: fmt.Sprintf("for_each aborted: %d/%d items failed", len(errors), len(items)),
+			Message: fmt.Sprintf("for_each aborted: %d/%d items failed", len(errs), len(items)),
 		}
 	}
 
@@ -218,10 +261,33 @@ func executeForEach(ctx context.Context, job core.Job, progress chan<- core.Prog
 		Status: status,
 		Output: map[string]core.Ref{
 			"results": {MIME: MIMEList, Inline: results},
-			"errors":  {MIME: "application/json", Inline: errors},
+			"errors":  {MIME: "application/json", Inline: errs},
 		},
 		Error: jobErr,
-	}, nil
+	}
+}
+
+// bodyResultPayload summarizes one body-subgraph run for the results list:
+// the overall status plus each body node's status/output/error. Downstream
+// consumers of the for_each `results` port read a node's output from
+// results[idx].nodes.<nodeID>.output.
+func bodyResultPayload(gr engine.GraphResult) map[string]any {
+	nodes := make(map[string]any, len(gr.Nodes))
+	for id, r := range gr.Nodes {
+		entry := map[string]any{"status": r.Status}
+		if len(r.Output) > 0 {
+			entry["output"] = r.Output
+		}
+		if r.Error != nil {
+			entry["error"] = errorPayload(r.Error)
+		}
+		nodes[id] = entry
+	}
+	payload := map[string]any{"status": gr.Status, "nodes": nodes}
+	if gr.Error != nil {
+		payload["error"] = errorPayload(gr.Error)
+	}
+	return payload
 }
 
 // capItems rejects an items list bigger than the row ceiling. for_each

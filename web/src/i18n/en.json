@@ -894,6 +894,8 @@
     "portOptional": "optional",
     "missingValue": "Missing required value: {{name}}",
     "unwiredRequired": "Required input not wired: {{name}}",
+    "loopBodyUnwired": "Wire the Loop body pin to the step you want to run for each row.",
+    "loopNested": "A loop can't run inside another loop yet — move this step out of the outer loop's body.",
     "passThrough": "Pass-through value — wire a value in to thread it unchanged out the matching pin"
   },
   "outputPreview": {
@@ -1030,8 +1032,25 @@
       "upstream": "From earlier steps",
       "trigger": "From the trigger",
       "resources": "Resources",
-      "secrets": "Secrets"
+      "secrets": "Secrets",
+      "itemFields": "From each row"
     }
+  },
+  "forEach": {
+    "runStep": "Run step",
+    "choose": "Choose a step…",
+    "pickHint": "Pick a step to run once for each row, then fill its fields — use “From each row” in a field's { } menu to insert a column.",
+    "bodyHint": "Wire the Loop body pin to the first step you want to run for each row. Every step after it runs once per row too.",
+    "rowColumns": "Each row's columns",
+    "noColumns": "Connect a list to the items input to see its columns here.",
+    "concurrency": "Rows at a time",
+    "concurrencyPlaceholder": "All at once",
+    "failFast": "Stop on first failure",
+    "failFastNo": "No — keep going, collect failures",
+    "failFastYes": "Yes — stop at the first failing row"
+  },
+  "loopBody": {
+    "runsPerRow": "This step runs once per row. Use “From each row” in a field's { } menu to insert a column."
   },
   "inspector": {
     "title": "Inspector",

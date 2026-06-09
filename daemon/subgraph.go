@@ -109,6 +109,9 @@ func (s *Service) submitGraphWithParent(
 	if err := core.Validate(g); err != nil {
 		return "", fmt.Errorf("invalid graph: %w", err)
 	}
+	if err := validateLoopBodies(g); err != nil {
+		return "", fmt.Errorf("invalid graph: %w", err)
+	}
 	for nodeID := range seeds {
 		if _, ok := g.Node(nodeID); !ok {
 			return "", fmt.Errorf("seed targets node %q which is not in graph", nodeID)

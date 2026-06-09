@@ -163,6 +163,9 @@ func resolveTemplatesCollecting(ctx context.Context, providers map[string]core.S
 	// The secret substituter is wrapped to record every plaintext it
 	// resolves into set.
 	sub := chainSubstituters(
+		// item first: a loop body's ${item.path} is the most specific scheme
+		// and never collides with the others. No-op when no item is on ctx.
+		itemSubstituter(ctx),
 		upstreamSubstituter(prior),
 		rr.substituter(),
 		recordingSecretSubstituter(providers, set),

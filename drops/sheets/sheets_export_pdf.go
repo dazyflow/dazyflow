@@ -16,7 +16,8 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "sheets_export_pdf",
 			Version:     "1.0",
-			Label:       "Sheets export PDF",
+			Label:       "Google Sheets",
+			Subtitle:    "Export PDF",
 			Summary:     "Export a Google Sheet as a PDF into the run's sandbox.",
 			Description: "Render a Google Sheet to PDF via the Drive export API and write it into the run's scratch sandbox. Wire the 'pdf' output into a file-consuming node (e.g. gmail_send_email's attachments). Paste a sheet URL or its ID.",
 			Integration: "Google Sheets",

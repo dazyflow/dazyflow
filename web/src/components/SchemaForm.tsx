@@ -66,6 +66,10 @@ type Props = {
   // resourceLabels maps a picker key → its resolved resource name (traced
   // from upstream when wired), so a disabled picker can name the resource.
   resourceLabels?: Record<string, string>;
+  // extraReferenceItems are extra insertable tokens offered on every string
+  // field's "{}" menu — used by the for_each step editor to expose
+  // ${item.<field>} for the iterated list's columns.
+  extraReferenceItems?: { label: string; token: string }[];
   // showAdvanced controls whether developer-flavored fields appear in
   // the form. Default false — a non-tech owner shouldn't have to
   // explain to themselves what `timeout_ms` or `page_token` mean. The
@@ -85,6 +89,7 @@ export function SchemaForm({
   references,
   wiredKeys,
   resourceLabels,
+  extraReferenceItems,
   showAdvanced,
 }: Props) {
   const { t } = useTranslation();
@@ -110,6 +115,7 @@ export function SchemaForm({
       references={references}
       wired={wired.has(key)}
       resolvedName={resourceLabels?.[key]}
+      extraReferenceItems={extraReferenceItems}
       siblings={value}
       onChange={(v) => {
         const next = { ...value };
@@ -213,7 +219,13 @@ const ADVANCED_FIELD_NAMES = new Set([
 // and a value set via template/API is preserved (just not shown). timeout_ms
 // is the request-timeout dial on most network drops; hiding it also removes
 // the lone-field "Advanced" section it used to drag in by itself.
-const HIDDEN_FIELD_KEYS = new Set(["timeout_ms"]);
+const HIDDEN_FIELD_KEYS = new Set([
+  "timeout_ms", // request-timeout dial
+  "base_url", // API-host override — a test seam pointing at a mock server
+  "token", // raw access-token override; the account picker is the user path
+  "thread_id", // Gmail reply-in-thread by opaque id — wire it, don't type it
+  "reply_to", // org-admin sets a default centrally; not per-flow (see /admin/google)
+]);
 
 // isAdvancedField decides whether a top-level property of a drop's
 // params_schema is "advanced" (hidden by default). Three signals
@@ -260,12 +272,14 @@ type FieldProps = {
   // resolvedName is the picker resource's friendly name (traced from upstream
   // when wired), shown in the disabled picker's note.
   resolvedName?: string;
+  // extraReferenceItems are extra "{}"-menu tokens (e.g. ${item.<field>}).
+  extraReferenceItems?: { label: string; token: string }[];
   // siblings is the other params on the same node — lets a field react to a
   // peer's value (e.g. the resource picker lists for the chosen `account`).
   siblings?: Record<string, unknown>;
 };
 
-function SchemaField({ name, schema, required, value, onChange, workspace, accountPicker, references, wired, resolvedName, siblings }: FieldProps) {
+function SchemaField({ name, schema, required, value, onChange, workspace, accountPicker, references, wired, resolvedName, extraReferenceItems, siblings }: FieldProps) {
   const { t } = useTranslation();
   // The OAuth `account` field becomes a dropdown of connected accounts
   // (plus a Connect affordance) when the editor supplies a picker. Plain
@@ -413,6 +427,7 @@ function SchemaField({ name, schema, required, value, onChange, workspace, accou
           value={value}
           onChange={onChange}
           references={references}
+          extraReferenceItems={extraReferenceItems}
         />
       );
     }
@@ -991,6 +1006,7 @@ function PlainStringField({
   value,
   onChange,
   references,
+  extraReferenceItems,
 }: {
   name: string;
   schema: JSONSchema;
@@ -998,6 +1014,7 @@ function PlainStringField({
   value: unknown;
   onChange: (v: unknown) => void;
   references?: ReferenceCtx;
+  extraReferenceItems?: { label: string; token: string }[];
 }) {
   const raw = typeof value === "string" ? value : "";
   const credMatch = SECRET_FULL_REF.exec(raw);
@@ -1061,7 +1078,13 @@ function PlainStringField({
             onChange(v === "" && !required ? undefined : v);
           }}
         />
-        {references && <ReferenceMenu ctx={references} onInsert={insertRef} />}
+        {references && (
+          <ReferenceMenu
+            ctx={references}
+            onInsert={insertRef}
+            extraItems={extraReferenceItems}
+          />
+        )}
       </div>
     </FieldWrap>
   );
@@ -1076,9 +1099,13 @@ function PlainStringField({
 function ReferenceMenu({
   ctx,
   onInsert,
+  extraItems,
 }: {
   ctx: ReferenceCtx;
   onInsert: (token: string) => void;
+  // extraItems are caller-supplied tokens shown as a group above the fetched
+  // references — used by the for_each step editor to offer ${item.<field>}.
+  extraItems?: { label: string; token: string }[];
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -1126,9 +1153,11 @@ function ReferenceMenu({
     if (kind === "trigger") return it.field || it.token;
     return it.label || it.token;
   };
+  const hasExtra = !!extraItems && extraItems.length > 0;
   const hasAny =
-    groups &&
-    sections.some((s) => groups[s.kind] && groups[s.kind].length > 0);
+    hasExtra ||
+    (groups &&
+      sections.some((s) => groups[s.kind] && groups[s.kind].length > 0));
 
   return (
     <div className="ref-menu" ref={wrapRef}>
@@ -1145,8 +1174,30 @@ function ReferenceMenu({
       </button>
       {open && (
         <div className="ref-pop" role="menu">
+          {hasExtra && (
+            <div className="ref-pop-group">
+              <div className="ref-pop-group-label">
+                {t("schemaForm.refPicker.itemFields")}
+              </div>
+              {extraItems!.map((it) => (
+                <button
+                  key={it.token}
+                  type="button"
+                  role="menuitem"
+                  className="ref-pop-row"
+                  onClick={() => {
+                    onInsert(it.token);
+                    setOpen(false);
+                  }}
+                >
+                  <span className="ref-pop-desc">{it.label}</span>
+                  <span className="ref-pop-token">{it.token}</span>
+                </button>
+              ))}
+            </div>
+          )}
           {error && <div className="ref-pop-msg ref-pop-error">{error}</div>}
-          {!groups && !error && (
+          {!groups && !error && !hasExtra && (
             <div className="ref-pop-msg">{t("schemaForm.refPicker.loading")}</div>
           )}
           {groups && !hasAny && (

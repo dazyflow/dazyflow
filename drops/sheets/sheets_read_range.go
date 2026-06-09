@@ -17,7 +17,8 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "sheets_read_range",
 			Version:     "1.0",
-			Label:       "Sheets read range",
+			Label:       "Google Sheets",
+			Subtitle:    "Read range",
 			Summary:     "Read a range from a Google Sheet into rows + headers.",
 			Description: "Read a range of a Google Sheet. The first row becomes the column headers (unless headers=false), and each subsequent row becomes an object keyed by header. Paste a sheet URL or its ID.",
 			Integration: "Google Sheets",

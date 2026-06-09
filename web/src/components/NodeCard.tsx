@@ -196,6 +196,7 @@ export function HazyNode({ data, selected }: NodeProps) {
         (selected ? " selected" : "") +
         statusClass +
         (isTrigger ? " hz-node-trigger" : "") +
+        (d.loopOwned ? " hz-loop-owned" : "") +
         (d.lintMessage ? " lint-warn" : "") +
         (d.configErrors?.length ? " config-err" : "") +
         (d.paused ? " paused" : "")
@@ -241,6 +242,9 @@ export function HazyNode({ data, selected }: NodeProps) {
         )}
         <div className="hz-node-body">
           <div className="label">{d.label}</div>
+          {d.manifest?.subtitle && (
+            <div className="hz-node-subtitle">{d.manifest.subtitle}</div>
+          )}
         </div>
       </div>
 

@@ -20,6 +20,9 @@ import (
 // scenarios are correctly handled later when a worker completes a
 // regular node and triggers the engine's full dispatcher.
 func enqueueReadyDependents(ctx context.Context, store core.JobStore, graph core.Graph, graphRunID, sourceNodeID string) {
+	// Loop-body nodes run once per item under their for_each, never standalone,
+	// so the seed path must skip them just as the live dispatcher does.
+	bodyOwners := loopBodyOwners(graph)
 	dependents := map[string]struct{}{}
 	for _, e := range graph.Edges {
 		if e.From == sourceNodeID {
@@ -27,6 +30,9 @@ func enqueueReadyDependents(ctx context.Context, store core.JobStore, graph core
 		}
 	}
 	for nodeID := range dependents {
+		if _, owned := bodyOwners[nodeID]; owned {
+			continue
+		}
 		if !allPredsSucceeded(ctx, store, graph, graphRunID, nodeID) {
 			continue
 		}
@@ -80,6 +86,9 @@ func (s *Service) SubmitGraphWithSeed(
 		return "", err
 	}
 	if err := core.Validate(g); err != nil {
+		return "", fmt.Errorf("invalid graph: %w", err)
+	}
+	if err := validateLoopBodies(g); err != nil {
 		return "", fmt.Errorf("invalid graph: %w", err)
 	}
 	// Resource-exhaustion guard: refuse a graph whose node count exceeds
@@ -249,7 +258,13 @@ func populateSeededRun(
 // to short-circuit graphs whose entire computation was satisfied by
 // seeds (e.g. a one-node graph that just receives a webhook).
 func allNodesAccountedFor(ctx context.Context, store core.JobStore, g core.Graph, graphRunID string) bool {
+	bodyOwners := loopBodyOwners(g)
 	for _, n := range g.Nodes {
+		// Loop-body nodes never run in the parent run, so they hold no
+		// record and must not block the "all accounted for" short-circuit.
+		if _, owned := bodyOwners[n.ID]; owned {
+			continue
+		}
 		rec, err := store.Get(ctx, NodeJobID(graphRunID, n.ID))
 		if err != nil {
 			return false

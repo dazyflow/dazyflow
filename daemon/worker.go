@@ -407,6 +407,15 @@ func (w *Worker) runNode(ctx context.Context, graph core.Graph, rec core.JobReco
 		execCtx, cancelDeadline = context.WithTimeout(ctx, timeout)
 		defer cancelDeadline()
 	}
+	// Loop body: when this node is a for_each whose `body` pin is wired, hand
+	// the drop a runner that executes the body subgraph in-process once per
+	// item (the drop owns iteration; the engine owns one body pass). The body
+	// nodes are already excluded from normal dispatch (see loopBodyOwners).
+	if node, ok := graph.Node(rec.NodeID); ok && node.Module == "for_each" {
+		if body, isLoop := extractLoopBody(graph, rec.NodeID); isLoop {
+			execCtx = engine.WithBodyRunner(execCtx, w.bodyRunner(body))
+		}
+	}
 	result, err := w.engine.RunNode(execCtx, graph, rec.GraphRunID, rec.NodeID, prior, nodeProgress)
 	close(nodeProgress)
 	<-forwardDone
@@ -425,6 +434,31 @@ func (w *Worker) runNode(ctx context.Context, graph core.Graph, rec core.JobReco
 		}, nil
 	}
 	return result, err
+}
+
+// bodyRunner builds the engine.BodyRunner the for_each drop calls once per
+// item. Each call runs the body subgraph fully in-process via Engine.Run
+// with the item on the context so the body nodes' ${item.…} params resolve
+// to that row.
+//
+// The drop may call the runner from several goroutines at once (concurrency
+// > 1). Engine.RunNode resolves a node's params IN PLACE, so every call gets
+// a fresh deep copy of the body graph — otherwise concurrent iterations
+// would race on (and clobber) the shared node Params, and every row would
+// see the last row's values. The clone is a JSON round-trip, which is exact
+// because the graph already round-trips through JSON as its stored payload.
+func (w *Worker) bodyRunner(body core.Graph) engine.BodyRunner {
+	bodyJSON, marshalErr := json.Marshal(body)
+	return func(ctx context.Context, item core.Ref) (engine.GraphResult, error) {
+		if marshalErr != nil {
+			return engine.GraphResult{}, fmt.Errorf("clone loop body: %w", marshalErr)
+		}
+		var g core.Graph
+		if err := json.Unmarshal(bodyJSON, &g); err != nil {
+			return engine.GraphResult{}, fmt.Errorf("clone loop body: %w", err)
+		}
+		return w.engine.Run(engine.WithLoopItem(ctx, item.Inline), g, nil)
+	}
 }
 
 // fetchGraph loads the graph payload from the graph-record.

@@ -164,6 +164,10 @@ func (d *Dispatcher) PublishNodeStatus(
 }
 
 func (d *Dispatcher) dispatchReady(ctx context.Context, graph core.Graph, graphRunID, completedNodeID string) {
+	// Loop-body nodes run once per item under their for_each (see loopBodyOwners),
+	// never standalone — so the normal dispatcher must skip them, including the
+	// for_each's own "body" pin edge that feeds the body entry node.
+	bodyOwners := loopBodyOwners(graph)
 	dependents := map[string]struct{}{}
 	for _, edge := range graph.Edges {
 		if edge.From == completedNodeID {
@@ -171,6 +175,9 @@ func (d *Dispatcher) dispatchReady(ctx context.Context, graph core.Graph, graphR
 		}
 	}
 	for nodeID := range dependents {
+		if _, owned := bodyOwners[nodeID]; owned {
+			continue
+		}
 		switch decision, reason := d.analyzeDependent(ctx, graph, graphRunID, nodeID); decision {
 		case depEnqueue:
 			newRec := core.JobRecord{
@@ -364,8 +371,14 @@ func (d *Dispatcher) maybeCompleteGraph(
 		byNode[r.NodeID] = r
 	}
 
+	// Loop-body nodes never run in the parent run (the for_each executes them
+	// once per item), so they hold no record here and must not gate completion.
+	bodyOwners := loopBodyOwners(graph)
 	nodeResults := make(map[string]core.Result, len(graph.Nodes))
 	for _, n := range graph.Nodes {
+		if _, owned := bodyOwners[n.ID]; owned {
+			continue
+		}
 		rec, ok := byNode[n.ID]
 		// A missing or non-terminal node means the run isn't done yet.
 		// Under-fetching here can only err toward "not complete", never

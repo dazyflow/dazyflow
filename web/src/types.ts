@@ -169,6 +169,9 @@ export type Manifest = {
   id: string;
   version: string;
   label: string;
+  // subtitle is an optional short action line shown under the label (e.g.
+  // label "Google Sheets", subtitle "Append rows").
+  subtitle?: string;
   color?: string;
   icon?: string;
   // brand_logo, when set, is the asset path (or URL) of a vendor logo

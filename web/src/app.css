@@ -3105,6 +3105,16 @@ button.warning:hover:not(:disabled) {
   flex: 1;
   min-width: 0;
 }
+/* Optional action line under the node title (e.g. "Google Sheets" /
+   "Append rows"). Muted + smaller so the product name reads first. */
+.hz-node-subtitle {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 /* Multi-port rows: input names left-aligned, output names right-aligned.
    Each row is a positioning context (position: relative) so its handle
    dot — rendered inside the row — centers on the label vertically and is
@@ -3279,6 +3289,17 @@ button.warning:hover:not(:disabled) {
 .hz-node.paused {
   border-color: var(--status-on-hold);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-on-hold) 35%, transparent);
+}
+/* Loop body: a node that runs once per row inside a for_each. The dashed
+   border (matching the for_each `body` pin's exec convention) signals "this
+   doesn't run on its own — the loop drives it" without adding chrome. */
+.hz-node.hz-loop-owned {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border-strong));
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+}
+.hz-node.hz-loop-owned.selected {
+  border-style: solid;
 }
 /* Toolbar breakpoint toggle reads as "armed" when active. */
 .editor-toolbar .editor-bp.on {
@@ -6568,4 +6589,45 @@ button.warning:hover:not(:disabled) {
 }
 .flow-status-paused {
   --c: #d99a2b;
+}
+
+/* for_each editor: the chosen step's param form sits in a subtly inset block
+   under the "Run step" picker, so it reads as "the step this loop runs". */
+.for-each-step-params {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px dashed var(--border);
+}
+.for-each-hint {
+  margin-top: var(--space-2);
+  font-size: 12px;
+  color: var(--muted);
+}
+/* "Runs once per row" banner — shown atop the for_each editor and atop a
+   loop-body node's form so the per-row behaviour is explicit. */
+.hz-loop-banner {
+  margin-bottom: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm, 6px);
+}
+/* The list of columns a row exposes, rendered as little code chips. */
+.for-each-columns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+.for-each-column {
+  padding: 2px 8px;
+  font-size: 12px;
+  background: var(--surface-2, var(--surface));
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
 }

@@ -103,9 +103,14 @@ type Port struct {
 }
 
 type Manifest struct {
-	ID             string          `json:"id"`
-	Version        string          `json:"version"`
-	Label          string          `json:"label"`
+	ID      string `json:"id"`
+	Version string `json:"version"`
+	Label   string `json:"label"`
+	// Subtitle is an optional short action line shown under the Label on the
+	// node card / inspector / palette — e.g. Label "Google Sheets" with
+	// Subtitle "Append rows". Lets several drops share a product name as their
+	// title and disambiguate by action. Empty → no subtitle (title only).
+	Subtitle       string          `json:"subtitle,omitempty"`
 	Color          string          `json:"color"`
 	ExecutionModel ExecutionModel  `json:"execution_model"`
 	ProcessModel   ProcessModel    `json:"process_model"`

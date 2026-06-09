@@ -44,6 +44,7 @@ function scoreDrop(drop: Manifest, query: string): number {
   const label = drop.label.toLowerCase();
   const id = drop.id.toLowerCase();
   const integration = (drop.integration ?? "").toLowerCase();
+  const subtitle = (drop.subtitle ?? "").toLowerCase();
   const description = (drop.description ?? "").toLowerCase();
   const tags = (drop.tags ?? []).map((t) => t.toLowerCase());
 
@@ -55,8 +56,12 @@ function scoreDrop(drop: Manifest, query: string): number {
     else if (id.startsWith(tok)) s = Math.max(s, 450);
     else if (integration.startsWith(tok)) s = Math.max(s, 380);
     else if (wordStarts(label, tok)) s = Math.max(s, 300);
+    // The subtitle holds the action ("Append rows") when several drops
+    // share a product title, so it ranks close to the label.
+    else if (subtitle.startsWith(tok) || wordStarts(subtitle, tok)) s = Math.max(s, 290);
     else if (wordStarts(integration, tok)) s = Math.max(s, 250);
     else if (label.includes(tok)) s = Math.max(s, 200);
+    else if (subtitle.includes(tok)) s = Math.max(s, 170);
     else if (integration.includes(tok)) s = Math.max(s, 150);
     else if (tags.some((t) => t.includes(tok))) s = Math.max(s, 110);
     else if (description.includes(tok)) s = Math.max(s, 60);
@@ -366,7 +371,15 @@ function QuickRow({
       <div className="quick-palette-row-text">
         <div className="quick-palette-row-name">{drop.label}</div>
         <div className="quick-palette-row-meta">
-          {drop.integration ? (
+          {/* The action subtitle ("Append rows") disambiguates drops that
+              share a product title; it stands in for the integration line
+              (which would just repeat the title). Falls back to the
+              integration, or a stdlib chip. */}
+          {drop.subtitle ? (
+            <span className="quick-palette-row-integration">
+              {drop.subtitle}
+            </span>
+          ) : drop.integration ? (
             <span className="quick-palette-row-integration">
               {drop.integration}
             </span>
@@ -375,8 +388,6 @@ function QuickRow({
               <Box size={10} aria-hidden="true" /> stdlib
             </span>
           )}
-          {/* The raw module id (e.g. "lt", "eq") is developer jargon; the
-              human label above already identifies the step. */}
         </div>
       </div>
       {drop.category && (

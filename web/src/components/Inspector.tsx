@@ -12,11 +12,12 @@ import {
   type AccountPicker,
 } from "./SchemaForm";
 import { LiveConsole } from "./LiveConsole";
+import { ForEachEditor } from "./ForEachEditor";
 import { TriggerScheduleField, browserTimeZone, FormTab, WebhookTab } from "./TriggersModal";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import { oauthProviderForIntegration } from "../integrationMeta";
-import type { OAuthProviderStatus, Graph, GraphTrigger } from "../types";
+import type { OAuthProviderStatus, Graph, GraphTrigger, Manifest } from "../types";
 
 type Props = {
   selected: Node<HazyNodeData> | null;
@@ -26,6 +27,9 @@ type Props = {
   // round-trip through React Flow's internal state.
   paramsByID: Record<string, Record<string, unknown>>;
   onParamsChange: (id: string, params: Record<string, unknown>) => void;
+  // manifests is the full drop catalog — the for_each editor uses it to
+  // populate its "Run step" picker and render the chosen step's form.
+  manifests?: Manifest[];
   // wiredPorts lists the node's input ports that currently have a wire. A
   // param whose key is wired is overridden by that wire, so its editor (e.g.
   // the spreadsheet picker) is shown disabled — the wire decides the value.
@@ -34,6 +38,11 @@ type Props = {
   // (traced from upstream when wired), so the disabled picker can name the
   // sheet the wire actually points at rather than just "set by a step".
   resourceLabels?: Record<string, string>;
+  // loopOwnerNodeId is set when the selected node runs inside a for_each
+  // loop body — it's the id of the owning for_each. The form then offers
+  // ${item.<column>} reference tokens (the columns of that loop's list) and
+  // shows a "runs once per row" banner.
+  loopOwnerNodeId?: string;
   // currentRunID is the most-recent run for this graph (set when the
   // user clicks Run). Used by the inline approval panel for
   // await_approval nodes.
@@ -81,8 +90,10 @@ export function Inspector({
   onChange,
   paramsByID,
   onParamsChange,
+  manifests,
   wiredPorts,
   resourceLabels,
+  loopOwnerNodeId,
   currentRunID,
   liveLogs,
   workspace,
@@ -108,6 +119,37 @@ export function Inspector({
   const [approving, setApproving] = useState<"approve" | "reject" | null>(null);
   const [approveError, setApproveError] = useState<string | null>(null);
   const { token } = useAuth();
+
+  // Loop-body reference tokens: when the selected node runs inside a for_each
+  // (loopOwnerNodeId set), fetch the columns of that loop's list and offer
+  // them as ${item.<column>} inserts in every string field's "{}" menu —
+  // mirroring ForEachEditor for the legacy step path.
+  const [loopItemFields, setLoopItemFields] = useState<string[]>([]);
+  useEffect(() => {
+    if (!loopOwnerNodeId || !workspace || !graphMeta?.id) {
+      setLoopItemFields([]);
+      return;
+    }
+    let live = true;
+    api
+      .listInputFields(
+        workspace.token,
+        graphMeta.tenant,
+        graphMeta.workspace,
+        graphMeta.id,
+        loopOwnerNodeId,
+        "items",
+      )
+      .then((r) => live && setLoopItemFields(r.fields ?? []))
+      .catch(() => live && setLoopItemFields([]));
+    return () => {
+      live = false;
+    };
+  }, [loopOwnerNodeId, workspace, graphMeta?.id, graphMeta?.tenant, graphMeta?.workspace]);
+  const loopItemReferenceItems = loopItemFields.map((f) => ({
+    label: f,
+    token: "${item." + f + "}",
+  }));
 
   // Sync JSON text whenever selection or params change. We track
   // dependencies on the selected ID and the current params snapshot so
@@ -168,6 +210,20 @@ export function Inspector({
   // so just opening it on a fresh node writes a real default rather than
   // leaving params blank. JSON mode still exposes the raw params.
   const isCronTrigger = d.moduleID === "cron_trigger";
+  // for_each gets a bespoke editor (step picker + the chosen step's form)
+  // instead of the raw step_module/step_params fields.
+  const isForEach = d.moduleID === "for_each";
+  // Shared reference context for the form's "{}" insert-a-reference menu.
+  const refCtx =
+    workspace && graphMeta?.id
+      ? {
+          token: workspace.token,
+          tenant: graphMeta.tenant,
+          workspace: graphMeta.workspace,
+          flowId: graphMeta.id,
+          nodeId: selected.id,
+        }
+      : undefined;
   // Webhook input carries its own config (secret + hosted form) — the Triggers
   // menu is gone. Render the same Webhook/Form panels the menu used, but bound
   // to the node's params (same {secret, public_form, form_fields, form_title}
@@ -235,6 +291,9 @@ export function Inspector({
               onChange={(e) => onChange(selected.id, { label: e.target.value })}
               aria-label={t("inspector.label")}
             />
+            {d.manifest?.subtitle && (
+              <span className="inspector-subtitle">{d.manifest.subtitle}</span>
+            )}
           </span>
           {d.manifest?.description && (
             <span
@@ -424,33 +483,41 @@ export function Inspector({
           </>
         )}
 
-        {mode === "form" && canForm && schema && !isCronTrigger && !isWebhookInput && (
+        {mode === "form" && isForEach && (
+          <ForEachEditor
+            params={currentParams}
+            onChange={(v) => onParamsChange(selected.id, v)}
+            manifests={manifests ?? []}
+            references={refCtx}
+            workspace={workspace}
+          />
+        )}
+
+        {mode === "form" && canForm && schema && !isCronTrigger && !isWebhookInput && !isForEach && (
           // key={selected.id} forces a fresh SchemaForm instance per
           // node so internal text state in JSONField / ArrayField /
           // etc. picks up the new node's value as its initial state
           // — without needing a useEffect resync that would clobber
           // the user's mid-typing keystrokes.
-          <SchemaForm
-            key={selected.id}
-            schema={schema}
-            value={currentParams}
-            workspace={workspace}
-            accountPicker={accountPicker}
-            wiredKeys={wiredPorts}
-            resourceLabels={resourceLabels}
-            references={
-              workspace && graphMeta?.id
-                ? {
-                    token: workspace.token,
-                    tenant: graphMeta.tenant,
-                    workspace: graphMeta.workspace,
-                    flowId: graphMeta.id,
-                    nodeId: selected.id,
-                  }
-                : undefined
-            }
-            onChange={(v) => onParamsChange(selected.id, v)}
-          />
+          <>
+            {loopOwnerNodeId && (
+              <div className="hz-loop-banner">
+                {t("loopBody.runsPerRow")}
+              </div>
+            )}
+            <SchemaForm
+              key={selected.id}
+              schema={schema}
+              value={currentParams}
+              workspace={workspace}
+              accountPicker={accountPicker}
+              wiredKeys={wiredPorts}
+              resourceLabels={resourceLabels}
+              references={refCtx}
+              extraReferenceItems={loopOwnerNodeId ? loopItemReferenceItems : undefined}
+              onChange={(v) => onParamsChange(selected.id, v)}
+            />
+          </>
         )}
 
         {(mode === "json" || !canForm) && (

@@ -208,6 +208,23 @@ func TestValidateWithManifests(t *testing.T) {
 			wantSub: "required input",
 		},
 		{
+			// A required input filled by an inline param (the inline-pin UX,
+			// and how a for_each body node draws ${item.…}) is satisfied even
+			// without a wire.
+			name: "required input satisfied by inline param",
+			g: Graph{
+				Nodes: []Node{{ID: "k", Module: "sink", Params: map[string]any{"in": "hello"}}},
+			},
+			wantSub: "",
+		},
+		{
+			name: "required input with empty param still unconnected",
+			g: Graph{
+				Nodes: []Node{{ID: "k", Module: "sink", Params: map[string]any{"in": ""}}},
+			},
+			wantSub: "required input",
+		},
+		{
 			name: "non-variadic fan-in",
 			g: Graph{
 				Nodes: []Node{

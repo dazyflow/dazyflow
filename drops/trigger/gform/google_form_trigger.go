@@ -18,7 +18,8 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "google_form_trigger",
 			Version:     "1.0",
-			Label:       "Google Form",
+			Label:       "Google Forms",
+			Subtitle:    "New responses",
 			Summary:     "Fires when a Google Form gets new responses, emitting each answer keyed by its question title.",
 			Description: "Polls a Google Form for new responses on the interval set on this node and emits the ones it hasn't seen before. `responses` is a list of objects (one per response) keyed by question title, plus `responseId` and `submittedTime`; wire it straight into a Sheets append. The node remembers how far it has read, so each response fires once. Leave the interval blank to fetch on demand (the Run button).",
 			Integration: "Google Forms",

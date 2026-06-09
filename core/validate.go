@@ -128,7 +128,14 @@ func ValidateWithManifests(g Graph, manifests map[string]Manifest) error {
 		}
 		for _, p := range m.Inputs {
 			count := incoming[inputKey{n.ID, p.Port}]
-			if p.Required && count == 0 {
+			if p.Required && count == 0 && !hasInlineParamValue(n.Params, p.Port) {
+				// A required input is satisfied either by a wire OR by an
+				// inline param of the same name — many drops read
+				// input-or-param (e.g. gmail's `to` via textInputOr), and the
+				// inline-pin editor fills required inputs without a wire. Only
+				// flag it when there's no value from either source. This also
+				// lets a for_each body node (run standalone via Engine.Run)
+				// draw a required input from its ${item.…} param.
 				errs = append(errs, fmt.Errorf("node %q: required input %q is unconnected",
 					n.ID, p.Port))
 			}
@@ -150,6 +157,25 @@ func ValidateWithManifests(g Graph, manifests map[string]Manifest) error {
 	}
 
 	return errors.Join(errs...)
+}
+
+// hasInlineParamValue reports whether params carries a usable value for the
+// given input port name — the inline-param fallback for a required input that
+// isn't wired. A nil map, missing key, nil value, or empty string counts as
+// "no value"; anything else (including a "${…}" template, resolved later) is
+// treated as supplied.
+func hasInlineParamValue(params map[string]any, port string) bool {
+	if params == nil {
+		return false
+	}
+	v, ok := params[port]
+	if !ok || v == nil {
+		return false
+	}
+	if s, isStr := v.(string); isStr {
+		return s != ""
+	}
+	return true
 }
 
 // mimeCompatible returns true when the two MIME sets overlap. An empty set

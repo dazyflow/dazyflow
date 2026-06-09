@@ -36,6 +36,10 @@ export type HazyNodeData = {
   // Required values this drop is still missing (#13) — drives a red
   // "needs configuration" badge, distinct from the amber lint warning.
   configErrors?: string[];
+  // True when this node runs inside a for_each loop body (reachable from a
+  // for_each's `body` pin). Drives the dashed "runs once per row" card style
+  // and the ${item.…} reference menu in its form.
+  loopOwned?: boolean;
   // Breakpoint set on this node (#12) — shows a red breakpoint dot.
   breakpoint?: boolean;
   // The live run is currently paused after this node (#12).
@@ -54,6 +58,7 @@ export type HazyNodeData = {
 export function portColor(mime: string[] | undefined): string {
   if (!mime || mime.length === 0) return "var(--border-strong)";
   const m = mime[0];
+  if (m === "application/x-hazyflow-exec") return "#e6e6e6"; // white — control/exec flow (loop body)
   if (m.startsWith("text/")) return "#4a8"; // green — plain text
   if (m === "application/x-bool") return "#e0699f"; // rose  — boolean (true/false)
   if (m === "application/json") return "#5b8def"; // blue  — structured data

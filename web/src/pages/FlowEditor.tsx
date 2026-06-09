@@ -1245,6 +1245,36 @@ function EditorInner() {
   // of the same name supplying it), or a required input port that's neither
   // wired nor given an inline default. Distinct from server lint (security
   // advisories) and connection/secret checks.
+  // loopOwnerByNode mirrors the daemon's loopBodyOwners (daemon/loopbody.go):
+  // a node is "loop-owned" when it's reachable from a for_each's `body` output
+  // pin. Maps owned nodeID → the for_each node that owns it. Drives the dashed
+  // card style, the ${item.…} reference menu for body nodes, and the
+  // nested-loop config check below.
+  const loopOwnerByNode = useMemo(() => {
+    const moduleOf = (id: string) =>
+      (nodes.find((n) => n.id === id)?.data as HazyNodeData | undefined)?.moduleID;
+    const outEdges = new Map<string, string[]>();
+    for (const e of edges) {
+      if (!e.target) continue;
+      const list = outEdges.get(e.source);
+      if (list) list.push(e.target);
+      else outEdges.set(e.source, [e.target]);
+    }
+    const owners = new Map<string, string>();
+    for (const e of edges) {
+      if (e.sourceHandle !== "body" || moduleOf(e.source) !== "for_each") continue;
+      const forEach = e.source;
+      const stack = [e.target];
+      while (stack.length) {
+        const n = stack.pop();
+        if (!n || n === forEach || owners.has(n)) continue;
+        owners.set(n, forEach);
+        stack.push(...(outEdges.get(n) ?? []));
+      }
+    }
+    return owners;
+  }, [nodes, edges]);
+
   const configErrorsByNode = useMemo(() => {
     const errs = new Map<string, string[]>();
     for (const n of nodes) {
@@ -1272,10 +1302,28 @@ function EditorInner() {
         if (!p.required || wired.has(p.port) || hasValue(p.port)) continue;
         missing.set(p.port, i18n.t("nodeCard.unwiredRequired", { name: p.label ?? p.port }));
       }
+      // for_each is configured by wiring its `body` pin (the loop-body
+      // feature), not by a required param — flag an unwired body so a loop
+      // that would silently do nothing reads as "needs configuration".
+      // Legacy step_module flows are still valid (they set step_module).
+      if (man.id === "for_each") {
+        const hasBody = edges.some((e) => e.source === n.id && e.sourceHandle === "body");
+        const hasStep =
+          typeof params.step_module === "string" && params.step_module !== "";
+        if (!hasBody && !hasStep) {
+          missing.set("__body", i18n.t("nodeCard.loopBodyUnwired"));
+        }
+        // A loop inside another loop's body isn't supported yet (the inner
+        // body would run once, not per inner-item). Flag the nested loop so
+        // it's caught at edit time, not as silent wrong output.
+        if (loopOwnerByNode.has(n.id)) {
+          missing.set("__nested", i18n.t("nodeCard.loopNested"));
+        }
+      }
       if (missing.size > 0) errs.set(n.id, [...missing.values()]);
     }
     return errs;
-  }, [nodes, paramsByID, connectedInputsByNode]);
+  }, [nodes, paramsByID, connectedInputsByNode, edges, loopOwnerByNode]);
 
   // Resolve resource-picker IDs (spreadsheet_id/form_id) to their human
   // names so the card shows the name, not the opaque id. We fetch each
@@ -1401,6 +1449,7 @@ function EditorInner() {
         outputs: runOutputs[n.id],
         configErrors: configErrorsByNode.get(n.id),
         resourceLabels: resourceLabelsByNode.get(n.id),
+        loopOwned: loopOwnerByNode.has(n.id),
         breakpoint: breakpoints.has(n.id),
         paused: pausedAt === n.id,
       },
@@ -1414,6 +1463,7 @@ function EditorInner() {
     runOutputs,
     configErrorsByNode,
     resourceLabelsByNode,
+    loopOwnerByNode,
     breakpoints,
     pausedAt,
   ]);
@@ -3127,11 +3177,15 @@ function EditorInner() {
           onChange={onInspectorChange}
           paramsByID={paramsByID}
           onParamsChange={onParamsChange}
+          manifests={manifests}
           wiredPorts={
             inspectorSelected ? connectedInputsByNode.get(inspectorSelected.id) ?? [] : []
           }
           resourceLabels={
             inspectorSelected ? resourceLabelsByNode.get(inspectorSelected.id) : undefined
+          }
+          loopOwnerNodeId={
+            inspectorSelected ? loopOwnerByNode.get(inspectorSelected.id) : undefined
           }
           graphMeta={
             id ? { id, tenant: activeTenant, workspace: activeWorkspace, name } : undefined
