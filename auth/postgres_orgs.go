@@ -73,6 +73,37 @@ func EnsurePgOrgsSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	return err
 }
 
+// MigrateLegacyOrgAdminPerm rewrites the pre-rename "tenant:admin" permission
+// to "organization:admin" in stored role sets, in both the users and
+// memberships tables. Accounts created before the rename still carry the dead
+// string in their JSONB roles, so the org-admin checks (which look for
+// "organization:admin") reject them even though they're org owners. This is
+// idempotent — only rows still containing the old string are touched — and
+// safe to run on every boot. Returns the number of rows updated.
+func MigrateLegacyOrgAdminPerm(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+	if pool == nil {
+		return 0, fmt.Errorf("nil pool")
+	}
+	const (
+		legacy  = `"tenant:admin"`
+		current = `"organization:admin"`
+	)
+	var total int64
+	// Table names are a fixed allowlist (never user input) — they can't be
+	// bound as parameters, so they're concatenated from constants here.
+	for _, tbl := range []string{"users", "memberships"} {
+		ct, err := pool.Exec(ctx,
+			`UPDATE `+tbl+` SET roles = REPLACE(roles::text, $1, $2)::jsonb `+
+				`WHERE roles::text LIKE '%' || $1 || '%'`,
+			legacy, current)
+		if err != nil {
+			return total, fmt.Errorf("migrate %s roles: %w", tbl, err)
+		}
+		total += ct.RowsAffected()
+	}
+	return total, nil
+}
+
 // ---- memberships ----------------------------------------------------
 
 type PgMembershipStore struct {

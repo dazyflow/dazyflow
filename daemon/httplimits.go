@@ -12,7 +12,7 @@ import (
 // only. There's no write side — these are operator-configured (flags), so
 // the admin UI surfaces them rather than pretending to edit them.
 func (h *HTTPGateway) workspaceLimits(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !p.Has(core.PermOrganizationAdmin) {
+	if !core.CanAdminOrg(p) {
 		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}

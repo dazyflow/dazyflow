@@ -53,6 +53,16 @@ func Require(p Principal, perms ...Permission) error {
 	return nil
 }
 
+// CanAdminOrg reports whether the principal may perform organization-admin
+// actions on the org it's acting in. True for an organization admin, and
+// also for a platform admin — the cross-tenant super-admin is a superset
+// that can administer any org (RequireTenant already lets it cross tenant
+// boundaries). Use this instead of a bare Has(PermOrganizationAdmin) so a
+// platform operator isn't locked out of per-org settings.
+func CanAdminOrg(p Principal) bool {
+	return p.Has(PermOrganizationAdmin) || p.Has(PermPlatformAdmin)
+}
+
 // RequireTenant checks that the principal's tenant matches the requested
 // one. Cross-tenant access is never allowed, even for tenant admins of a
 // different tenant.

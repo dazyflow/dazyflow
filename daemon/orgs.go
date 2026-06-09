@@ -116,7 +116,7 @@ func (h *HTTPGateway) listMembers(rw http.ResponseWriter, r *http.Request, p cor
 		writeJSONError(rw, http.StatusNotImplemented, "memberships not configured")
 		return
 	}
-	if !p.Has(core.PermOrganizationAdmin) {
+	if !core.CanAdminOrg(p) {
 		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}
@@ -185,7 +185,7 @@ func (h *HTTPGateway) removeMember(rw http.ResponseWriter, r *http.Request, p co
 		writeJSONError(rw, http.StatusNotImplemented, "memberships not configured")
 		return
 	}
-	if !p.Has(core.PermOrganizationAdmin) {
+	if !core.CanAdminOrg(p) {
 		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}
@@ -226,7 +226,7 @@ func (h *HTTPGateway) createInvitation(rw http.ResponseWriter, r *http.Request, 
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
 		return
 	}
-	if !p.Has(core.PermOrganizationAdmin) {
+	if !core.CanAdminOrg(p) {
 		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}
@@ -335,7 +335,7 @@ func (h *HTTPGateway) listInvitations(rw http.ResponseWriter, r *http.Request, p
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
 		return
 	}
-	if !p.Has(core.PermOrganizationAdmin) {
+	if !core.CanAdminOrg(p) {
 		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}
@@ -392,7 +392,7 @@ func (h *HTTPGateway) revokeInvitation(rw http.ResponseWriter, r *http.Request, 
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
 		return
 	}
-	if !p.Has(core.PermOrganizationAdmin) {
+	if !core.CanAdminOrg(p) {
 		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}
@@ -515,7 +515,7 @@ func (h *HTTPGateway) getOrgAuthConfig(rw http.ResponseWriter, r *http.Request, 
 		writeJSONError(rw, http.StatusNotImplemented, "org SSO config not configured")
 		return
 	}
-	if !p.Has(core.PermOrganizationAdmin) {
+	if !core.CanAdminOrg(p) {
 		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}
@@ -556,7 +556,7 @@ func (h *HTTPGateway) putOrgAuthConfig(rw http.ResponseWriter, r *http.Request, 
 		writeJSONError(rw, http.StatusNotImplemented, "org SSO config not configured")
 		return
 	}
-	if !p.Has(core.PermOrganizationAdmin) {
+	if !core.CanAdminOrg(p) {
 		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}
@@ -599,7 +599,7 @@ func (h *HTTPGateway) deleteOrgAuthConfig(rw http.ResponseWriter, _ *http.Reques
 		writeJSONError(rw, http.StatusNotImplemented, "org SSO config not configured")
 		return
 	}
-	if !p.Has(core.PermOrganizationAdmin) {
+	if !core.CanAdminOrg(p) {
 		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}

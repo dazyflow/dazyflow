@@ -431,7 +431,7 @@ func (s *Service) ListTenants(ctx context.Context, p core.Principal) ([]string, 
 // graph admins can edit + run graphs but the API key surface affects
 // identity and belongs in its own permission lane.
 func requireAdmin(p core.Principal) error {
-	if p.Has(core.PermOrganizationAdmin) || p.Has(core.PermPlatformAdmin) {
+	if core.CanAdminOrg(p) {
 		return nil
 	}
 	return fmt.Errorf("requires permission %q", core.PermOrganizationAdmin)

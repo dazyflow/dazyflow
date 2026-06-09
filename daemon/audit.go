@@ -225,7 +225,7 @@ func (h *HTTPGateway) listAudit(rw http.ResponseWriter, r *http.Request, p core.
 		writeJSONError(rw, http.StatusNotImplemented, "audit log not configured")
 		return
 	}
-	if !p.Has(core.PermOrganizationAdmin) {
+	if !core.CanAdminOrg(p) {
 		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}

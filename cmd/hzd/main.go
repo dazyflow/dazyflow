@@ -638,6 +638,16 @@ func main() {
 		}
 		memberships, invitations, orgAuthStore, orgProfileStore = pgMembers, pgInvites, pgOrgAuth, pgOrgProfile
 		log.Print("memberships + invitations + org-auth + org-profile stores: postgres-backed")
+
+		// One-time, idempotent: migrate pre-rename "tenant:admin" roles to
+		// "organization:admin" so accounts created before the rename can use
+		// the org-admin endpoints (which now check organization:admin). Runs
+		// every boot but only touches rows still carrying the old string.
+		if n, err := auth.MigrateLegacyOrgAdminPerm(ctx, pgPool); err != nil {
+			log.Printf("WARNING: legacy org-admin permission migration failed: %v", err)
+		} else if n > 0 {
+			log.Printf("migrated %d role row(s): tenant:admin → organization:admin", n)
+		}
 	}
 
 	if httpListen != "" {

@@ -1110,7 +1110,7 @@ func (h *HTTPGateway) getOrgProfile(rw http.ResponseWriter, r *http.Request, p c
 		writeJSONError(rw, http.StatusNotImplemented, "org profiles not configured")
 		return
 	}
-	if !p.Has(core.PermOrganizationAdmin) {
+	if !core.CanAdminOrg(p) {
 		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}
@@ -1149,7 +1149,7 @@ func (h *HTTPGateway) putOrgProfile(rw http.ResponseWriter, r *http.Request, p c
 		writeJSONError(rw, http.StatusNotImplemented, "org profiles not configured")
 		return
 	}
-	if !p.Has(core.PermOrganizationAdmin) {
+	if !core.CanAdminOrg(p) {
 		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}
