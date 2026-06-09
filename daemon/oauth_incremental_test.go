@@ -61,7 +61,7 @@ func TestScopeSubsetForIntegration(t *testing.T) {
 	cases := map[string][]string{
 		"Gmail":         {"https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.readonly"},
 		"Google Sheets": {"https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.readonly"},
-		"Google Forms":  {"https://www.googleapis.com/auth/forms.responses.readonly", "https://www.googleapis.com/auth/forms.body.readonly"},
+		"Google Forms":  {"https://www.googleapis.com/auth/forms.responses.readonly", "https://www.googleapis.com/auth/forms.body.readonly", "https://www.googleapis.com/auth/drive.metadata.readonly"},
 	}
 	for integ, want := range cases {
 		got := scopeSubsetForIntegration("google", integ)

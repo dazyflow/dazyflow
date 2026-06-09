@@ -82,7 +82,10 @@ import type {
   Visibility,
 } from "../types";
 import { Inspector } from "../components/Inspector";
-import { HazyNode, portColor, type HazyNodeData } from "../components/NodeCard";
+import { FlowStatusChip } from "../components/FlowStatusChip";
+import { flowRunStatus } from "../flowStatus";
+import { HazyNode } from "../components/NodeCard";
+import { portColor, type HazyNodeData } from "../components/nodeCardShared";
 import { CommentNode } from "../components/CommentNode";
 import { RunHistory } from "../components/RunHistory";
 import { RerouteEdge } from "../components/RerouteEdge";
@@ -167,6 +170,15 @@ function sampleValueFor(field: string): string {
   }
   return `Sample ${field}`;
 }
+
+// RESOURCE_PICKER_KINDS maps a string param's `format` to the account
+// resource kind whose list resolves an opaque id → human name (for the node
+// card). google-sheet-tab is omitted: its stored value is already the tab
+// name, so it needs no lookup. Mirrors RESOURCE_PICKERS in SchemaForm.
+const RESOURCE_PICKER_KINDS: Record<string, string> = {
+  "google-form": "forms",
+  "google-spreadsheet": "spreadsheets",
+};
 
 // stampScheduleTimezones fills a missing/blank tz on Schedule (cron_trigger)
 // nodes with the viewer's browser zone, returning the node list and whether
@@ -314,6 +326,15 @@ function EditorInner() {
   // can mutate them without forcing canvas re-layout. They're merged
   // back into the graph payload on save.
   const [paramsByID, setParamsByID] = useState<Record<string, Record<string, unknown>>>({});
+  // Resolved resource-picker names (spreadsheet_id/form_id → human name), so
+  // the node card can show "My Intake Form" instead of the opaque id. Keyed
+  // `${kind}:${account}:${id}`. Populated lazily by resolveResourceNamesEffect.
+  const [resourceNames, setResourceNames] = useState<Map<string, string>>(
+    () => new Map(),
+  );
+  // (kind:account) sets we've already fetched, so we don't refetch every
+  // render. A failed fetch is removed so it can retry.
+  const fetchedResourceSets = useRef<Set<string>>(new Set());
   const [selectedID, setSelectedID] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1255,6 +1276,74 @@ function EditorInner() {
     return errs;
   }, [nodes, paramsByID, connectedInputsByNode]);
 
+  // Resolve resource-picker IDs (spreadsheet_id/form_id) to their human
+  // names so the card shows the name, not the opaque id. We fetch each
+  // (kind, account) list once and cache id→name; google-sheet-tab needs no
+  // lookup (its value is already the tab name).
+  useEffect(() => {
+    if (!token) return;
+    const combos = new Map<string, { kind: string; account?: string }>();
+    for (const n of nodes) {
+      const props = manifestByID.get((n.data as HazyNodeData).moduleID)
+        ?.params_schema?.properties;
+      if (!props) continue;
+      const p = paramsByID[n.id] ?? {};
+      for (const [key, sch] of Object.entries(props)) {
+        const kind = RESOURCE_PICKER_KINDS[(sch as { format?: string }).format ?? ""];
+        if (!kind || typeof p[key] !== "string" || !p[key]) continue;
+        const account = typeof p.account === "string" ? p.account : undefined;
+        combos.set(`${kind}:${account ?? "default"}`, { kind, account });
+      }
+    }
+    // Fetch each (kind, account) list once and merge id→name. No per-run
+    // "live" guard: the fetchedResourceSets ref already dedups across the
+    // effect's several settling re-runs, and gating the single in-flight
+    // fetch on a per-run flag would discard its result when the effect
+    // re-runs before it resolves (the ref then blocks any retry). Applying
+    // the result unconditionally is safe — setResourceNames on an unmounted
+    // editor is a no-op in React 18.
+    for (const [ck, { kind, account }] of combos) {
+      if (fetchedResourceSets.current.has(ck)) continue;
+      fetchedResourceSets.current.add(ck);
+      api
+        .listAccountResources(token, "google", kind, account)
+        .then((r) => {
+          setResourceNames((prev) => {
+            const next = new Map(prev);
+            for (const o of r.resources)
+              next.set(`${kind}:${account ?? "default"}:${o.id}`, o.name);
+            return next;
+          });
+        })
+        .catch(() => {
+          // Allow a retry on the next change (e.g. once the account connects).
+          fetchedResourceSets.current.delete(ck);
+        });
+    }
+  }, [nodes, paramsByID, manifestByID, token]);
+
+  // Per-node {paramKey → resolved name} for the picker params, derived from
+  // the resolved-names cache. Absent entries fall back to the id on the card.
+  const resourceLabelsByNode = useMemo(() => {
+    const m = new Map<string, Record<string, string>>();
+    for (const n of nodes) {
+      const props = manifestByID.get((n.data as HazyNodeData).moduleID)
+        ?.params_schema?.properties;
+      if (!props) continue;
+      const p = paramsByID[n.id] ?? {};
+      const labels: Record<string, string> = {};
+      for (const [key, sch] of Object.entries(props)) {
+        const kind = RESOURCE_PICKER_KINDS[(sch as { format?: string }).format ?? ""];
+        if (!kind || typeof p[key] !== "string" || !p[key]) continue;
+        const account = typeof p.account === "string" ? p.account : undefined;
+        const name = resourceNames.get(`${kind}:${account ?? "default"}:${p[key]}`);
+        if (name) labels[key] = name;
+      }
+      if (Object.keys(labels).length) m.set(n.id, labels);
+    }
+    return m;
+  }, [nodes, paramsByID, manifestByID, resourceNames]);
+
   const displayNodes = useMemo<FlowNode<HazyNodeData>[]>(() => {
     // Inline fields show only for a single selection, so a multi-select
     // (e.g. for align/distribute) keeps every card collapsed.
@@ -1271,6 +1360,7 @@ function EditorInner() {
         inlineEditable: n.id === soleId,
         outputs: runOutputs[n.id],
         configErrors: configErrorsByNode.get(n.id),
+        resourceLabels: resourceLabelsByNode.get(n.id),
         breakpoint: breakpoints.has(n.id),
         paused: pausedAt === n.id,
       },
@@ -1283,6 +1373,7 @@ function EditorInner() {
     connectedOutputsByNode,
     runOutputs,
     configErrorsByNode,
+    resourceLabelsByNode,
     breakpoints,
     pausedAt,
   ]);
@@ -1730,6 +1821,13 @@ function EditorInner() {
   // writes its own explicit checkpoint commit.
   const saveRef = useRef(save);
   saveRef.current = save;
+  // Mirrors for the unload-flush effect below: it registers its listener
+  // once, but must read the latest dirty state and graph when the page is
+  // actually being torn down.
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
+  const buildGraphRef = useRef(buildGraph);
+  buildGraphRef.current = buildGraph;
   useEffect(() => {
     if (!dirty || saving || !token || !me || !id) return;
     if (!hasPerm("graph:edit") || lockedRunID) return;
@@ -1762,6 +1860,38 @@ function EditorInner() {
     id,
     hasPerm,
   ]);
+
+  // Flush a pending edit when the page unloads (refresh, close, navigate).
+  // The debounced autosave clears its timer on unmount, so a refresh within
+  // the ~1.5s window — or before an in-flight save returns — would otherwise
+  // silently drop the change: you pick a form/sheet, refresh, and see the
+  // previously-saved value reappear. A keepalive PUT survives unload AND can
+  // send the Authorization header (sendBeacon can't), so the latest graph
+  // lands even on a fast refresh. Best-effort: a 409 from an active run is
+  // the only realistic loss, and the in-app autosave already covers the rest.
+  useEffect(() => {
+    const flush = () => {
+      if (!dirtyRef.current || !token || !id || !hasPerm("graph:edit")) return;
+      const g = buildGraphRef.current();
+      const path = `/me/flows/${encodeURIComponent(`${g.tenant}/${g.workspace}/${g.id}`)}?autosave=1`;
+      try {
+        void fetch((import.meta.env.VITE_API_BASE ?? "") + "/api/v1" + path, {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          credentials: "include",
+          body: JSON.stringify(g),
+          keepalive: true,
+        });
+      } catch {
+        /* best-effort on unload */
+      }
+    };
+    window.addEventListener("pagehide", flush);
+    return () => window.removeEventListener("pagehide", flush);
+  }, [token, id, hasPerm]);
 
   // --- Version history ------------------------------------------------
   // openHistory loads the flow's commit log into the side panel.
@@ -1857,6 +1987,20 @@ function EditorInner() {
       // Best-effort; a transient failure shouldn't break the editor.
     }
   }, [token, id, activeTenant, activeWorkspace]);
+
+  // Self-heal the edit lock. lockedRunID is set when a run is active, but
+  // scheduler-driven runs (a poll/cron trigger firing) never reach this
+  // editor's SSE terminal, so nothing would otherwise clear the lock — and a
+  // flow that polls (e.g. every 60s) would catch a run at mount or on an
+  // autosave 409, then stay "locked" forever, silently blocking all saves.
+  // While locked, re-poll so the lock releases once the run finishes and the
+  // pending autosave (re-armed on the lockedRunID change) can write. Only
+  // runs while locked, so there's no idle polling cost.
+  useEffect(() => {
+    if (!lockedRunID) return;
+    const h = window.setInterval(() => void refreshLock(), 3000);
+    return () => window.clearInterval(h);
+  }, [lockedRunID, refreshLock]);
 
   // subscribeToRun opens the SSE stream for runID and applies per-node
   // status frames to the canvas. Shared by Run (new run just started)
@@ -2217,8 +2361,29 @@ function EditorInner() {
     triggers.length > 0 ||
     nodes.some((n) => {
       const m = (n.data as HazyNodeData | undefined)?.moduleID;
-      return m === "cron_trigger" || m === "poll_trigger" || m === "webhook_input";
+      return (
+        m === "cron_trigger" ||
+        m === "poll_trigger" ||
+        m === "google_form_trigger" ||
+        m === "webhook_input"
+      );
     });
+  // runStatus drives the header chip: unlike hasAnyTrigger (presence of a
+  // trigger node), this reflects whether a trigger is actually *configured*
+  // to fire — the same rule the scheduler enrolls on. So a poll/form node
+  // with a blank interval reads "Manual only", not a false "Live".
+  const runStatus = useMemo(
+    () =>
+      flowRunStatus(
+        disabled,
+        triggers,
+        nodes.map((n) => ({
+          module: (n.data as HazyNodeData | undefined)?.moduleID ?? "",
+          params: (n.data as HazyNodeData | undefined)?.params ?? {},
+        })),
+      ),
+    [disabled, triggers, nodes],
+  );
   const persistSettings = async (next: Graph) => {
     setTriggers(next.triggers ?? []);
     setVisibility(next.visibility);
@@ -2425,6 +2590,10 @@ function EditorInner() {
           </div>
 
           <span className="toolbar-spacer" />
+
+          {/* Run-status chip: tells the owner at a glance whether this flow
+              fires on its own (Live), only on Run (Manual), or is paused. */}
+          <FlowStatusChip status={runStatus} />
 
           {/* Config verification (#13): how many drops are still missing
               required values. Sits next to Run as a non-blocking heads-up. */}

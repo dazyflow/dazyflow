@@ -611,6 +611,10 @@ type FlowSummary struct {
 	Description string          `json:"description,omitempty"`
 	Owner       string          `json:"owner,omitempty"`
 	Visibility  core.Visibility `json:"visibility,omitempty"`
+	// RunStatus is "live" / "manual" / "paused" — whether the flow fires on
+	// its own. The list already loads each full graph, so classifying it
+	// here is free and saves the UI an N+1 fetch to show the status chip.
+	RunStatus core.FlowRunStatus `json:"run_status,omitempty"`
 }
 
 // ListFlowSummaries is the HTTP-list flavor of ListGraphs — same
@@ -646,6 +650,7 @@ func (s *Service) ListFlowSummaries(ctx context.Context, p core.Principal, tenan
 			Description: g.Description,
 			Owner:       g.Owner,
 			Visibility:  g.EffectiveVisibility(),
+			RunStatus:   core.FlowRunStatusOf(g),
 		})
 	}
 	return out, nil

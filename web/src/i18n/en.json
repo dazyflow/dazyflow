@@ -1,4 +1,18 @@
 {
+  "flowStatus": {
+    "live": {
+      "label": "Live",
+      "tip": "This flow runs on its own — a trigger is configured (a schedule, a poll/form interval, or a webhook) and the flow is enabled."
+    },
+    "manual": {
+      "label": "Manual only",
+      "tip": "This flow runs only when you press Run. Add a trigger and set its schedule or interval to make it start automatically."
+    },
+    "paused": {
+      "label": "Paused",
+      "tip": "This flow is disabled, so it never fires automatically. Manual Run still works. Re-enable it to resume its triggers."
+    }
+  },
   "explain": {
     "oauthAccountMissing": "We can't reach {{provider}}: the account \"{{account}}\" isn't connected on your Hazyflow workspace.",
     "providerNotConnected": "{{provider}} isn't connected yet on your Hazyflow workspace.",
@@ -850,6 +864,7 @@
   },
   "nodeCard": {
     "statusTooltip": "status: {{status}}",
+    "pickerUnset": "Not set",
     "portRequired": "required",
     "portOptional": "optional",
     "missingValue": "Missing required value: {{name}}",
@@ -967,20 +982,20 @@
     "secretChipSetUp": "Set up",
     "secretChipReplace": "Replace",
     "mapping": {
-      "column": "Sheet column",
-      "source": "From field",
+      "columnPlaceholder": "Sheet column…",
+      "sourcePlaceholder": "From field…",
       "add": "Add column",
-      "autoMap": "Auto-map {{count}} fields",
+      "autoMap": "Auto-map {{count}} matching",
       "moveUp": "Move up",
       "moveDown": "Move down",
-      "fieldsFrom": "Field suggestions from {{source}}"
+      "needsSheet": "Choose a spreadsheet on this node first, then map its columns.",
+      "noColumns": "This sheet has no header row yet — add column headers to the sheet, then map onto them.",
+      "fieldsFrom": "Fields from {{source}}"
     },
     "resourcePicker": {
       "loading": "Loading…",
       "choose": "Choose a {{noun}}…",
-      "enterId": "Enter ID manually",
-      "pickFromList": "Pick from your account",
-      "idPlaceholder": "{{noun}} name or ID",
+      "retry": "Retry",
       "connectHint": "Connect the account to pick a {{noun}} from a list.",
       "needsDependency": "Choose a {{dep}} first to pick a {{noun}}."
     },

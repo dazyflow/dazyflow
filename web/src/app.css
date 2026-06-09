@@ -3440,6 +3440,20 @@ button.warning:hover:not(:disabled) {
   letter-spacing: 0.04em;
   color: var(--muted);
 }
+/* Read-only display for resource-picker params (the resolved form/sheet
+   name). Looks like a value, not an editable field — editing is in the
+   inspector picker. */
+.hz-param-readonly {
+  font-size: 12px;
+  padding: 4px 6px;
+  border-radius: var(--r-1);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .hz-node-params input,
 .hz-node-params textarea,
 .hz-node-params select {
@@ -3957,8 +3971,9 @@ button.warning:hover:not(:disabled) {
   padding: var(--space-1) var(--space-3);
 }
 
-/* sheet-mapping editor: paired "column ← from field" rows. The two text
-   inputs flex; the arrow and the move/remove buttons stay fixed-width. */
+/* sheet-mapping editor: paired "column ← from field" rows. Both sides are
+   dropdowns (sheet columns / upstream fields) that flex; the arrow and the
+   move/remove buttons stay fixed-width. */
 .mapping-field {
   display: flex;
   flex-direction: column;
@@ -4002,15 +4017,14 @@ button.warning:hover:not(:disabled) {
 }
 
 /* Account resource picker: a dropdown of the connected account's forms /
-   spreadsheets, with a manual-entry escape hatch beneath. */
+   spreadsheets. The picker is the only entry path (no manual ID box). */
 .resource-picker {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
 }
-.resource-picker > select,
-.resource-picker > input {
+.resource-picker > select {
   flex: 1;
   min-width: 0;
 }
@@ -6472,4 +6486,41 @@ button.warning:hover:not(:disabled) {
   .quick-palette-hint {
     display: none;
   }
+}
+
+/* ── Flow status chip (live / manual / paused) ─────────────────────────
+   At-a-glance "will this run on its own?" badge. One --c per state drives
+   a tinted bg + border + ink so the three read as a family. Used in the
+   editor header, the Triggers modal, and per-row in the flow list. */
+.flow-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: var(--r-pill);
+  border: 1px solid color-mix(in srgb, var(--c) 40%, var(--border));
+  background: color-mix(in srgb, var(--c) 14%, var(--surface));
+  color: var(--c);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+.flow-status-md {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+.flow-status-sm {
+  padding: 2px 7px;
+  font-size: 11px;
+}
+.flow-status-chip svg {
+  flex: none;
+}
+.flow-status-live {
+  --c: var(--status-completed);
+}
+.flow-status-manual {
+  --c: var(--muted);
+}
+.flow-status-paused {
+  --c: #d99a2b;
 }

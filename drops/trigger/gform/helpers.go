@@ -28,8 +28,8 @@ import (
 )
 
 // maxResponseBytes caps how much of an API response we buffer so a hostile
-// or buggy upstream (reachable via the base_url override) can't OOM the
-// daemon. A form's responses list can be large; 32 MiB is generous.
+// or buggy upstream can't OOM the daemon. A form's responses list can be
+// large; 32 MiB is generous.
 const maxResponseBytes = 32 << 20
 
 const formsAPIBase = "https://forms.googleapis.com/v1"
@@ -52,6 +52,9 @@ func SetTokenLookup(fn TokenLookup) {
 }
 
 func resolveToken(ctx context.Context, job core.Job) (string, error) {
+	// `token` is no longer a user-facing param (removed from the schema), but
+	// the engine still honors it when present — the integration-test seam for
+	// standing in for a connected account. The UI path uses the account lookup.
 	if t, _ := params.StringOpt(job.Params, "token"); t != "" {
 		return t, nil
 	}
@@ -63,7 +66,7 @@ func resolveToken(ctx context.Context, job core.Job) (string, error) {
 	fn := tokenLookup
 	tokenLookupMu.RUnlock()
 	if fn == nil {
-		return "", fmt.Errorf("no Google token: pass `token` directly or connect a Google account via /api/v1/oauth/google/authorize")
+		return "", fmt.Errorf("no Google token: connect a Google account via /api/v1/oauth/google/authorize")
 	}
 	tok, err := fn(ctx, account)
 	if err != nil {
@@ -137,6 +140,9 @@ func SetHTTPBase(base string) {
 	formsBase = base
 }
 
+// base_url is no longer a user-facing param (removed from the schema) but is
+// still honored when present — the integration tests point it at an httptest
+// server. The egress guard in googleGet still bounds the dial.
 func formsBaseURL(job core.Job) string {
 	if b, _ := params.StringOpt(job.Params, "base_url"); b != "" {
 		return b
@@ -157,9 +163,9 @@ func googleGet(ctx context.Context, url, token string, timeoutMS int) (int, []by
 		return 0, nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	// base_url is a tenant-supplied param, so guard the dial: the SSRF
-	// client blocks loopback/private/link-local targets and the egress
-	// allowlist (when set) bounds which public hosts the bearer token may
+	// Guard the dial as defence in depth: the SSRF client blocks
+	// loopback/private/link-local targets and the egress allowlist (when
+	// set) bounds which public hosts the bearer token may
 	// reach.
 	if err := hfnet.EgressAllowed(url); err != nil {
 		return 0, nil, err

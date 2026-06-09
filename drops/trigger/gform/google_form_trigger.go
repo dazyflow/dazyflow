@@ -41,14 +41,14 @@ func init() {
 			ExecutionModel: core.ExecutionTrigger,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{
-				{Port: "responses", Label: "New responses (list of objects)", MIME: []string{"application/json"}},
-				{Port: "count", Label: "How many new responses", MIME: []string{"text/plain"}},
-				{Port: "fired_at", Label: "RFC3339 timestamp of this fire", MIME: []string{"text/plain"}},
+				{Port: "responses", Label: "New responses", MIME: []string{"application/json"}},
+				{Port: "count", Label: "Count", MIME: []string{"text/plain"}},
+				{Port: "fired_at", Label: "Timestamp", MIME: []string{"text/plain"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"form_id":{"type":"string","format":"google-form","title":"Form ID","description":"Google Form ID, or paste the …/forms/d/<id>/edit URL."},
+					"form_id":{"type":"string","format":"google-form","title":"Form","description":"The Google Form to watch for responses."},
 					"account":{"type":"string","default":"default","description":"Which connected Google account to use."},
 					"interval_seconds":{
 						"type":"integer",
@@ -58,8 +58,6 @@ func init() {
 						"default":300,
 						"description":"How often to poll for new responses (e.g. 300 = every 5 minutes). Leave blank to run only when you press Run."
 					},
-					"base_url":{"type":"string","description":"Override the Forms API host (testing)."},
-					"token":{"type":"string","description":"Raw access token; overrides 'account'."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
 				},
 				"required":["form_id"]
@@ -147,8 +145,8 @@ func emitOutput(out []map[string]any) map[string]core.Ref {
 // the daemon's row-source registry uses to populate the Sheets mapping
 // suggestions: a real Forms API call (forms.get) resolves the titles, so a
 // user mapping a form to a sheet sees the actual question labels. Reads
-// form_id/account/token/base_url/timeout_ms from job.Params; the tenant
-// rides on ctx for the OAuth lookup.
+// form_id/account/timeout_ms from job.Params; the tenant rides on ctx for
+// the OAuth lookup.
 func FieldNames(ctx context.Context, job core.Job) ([]string, error) {
 	formID := extractFormID(params.StringDefault(job.Params, "form_id", ""))
 	if formID == "" {

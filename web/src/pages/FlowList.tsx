@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import { FlowIcon, isBrandedIcon } from "../icons";
+import { FlowStatusChip } from "../components/FlowStatusChip";
 import { isImageIcon } from "../lib/iconImage";
 import { shouldShowTenantID } from "../lib/visibleTenant";
 import type { FlowSummary } from "../types";
@@ -182,6 +183,9 @@ export function FlowList() {
                       </span>
                     )}
                   </span>
+                  {f.run_status && (
+                    <FlowStatusChip status={f.run_status} size="sm" />
+                  )}
                   {isPrivate ? (
                     <span
                       className="vis-badge private"

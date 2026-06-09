@@ -16,8 +16,8 @@ func init() {
 			ID:          "sheets_append_row",
 			Version:     "1.0",
 			Label:       "Sheets append row",
-			Summary:     "Append rows to a Google Sheet, mapping each object to columns by header.",
-			Description: "Append rows to a Google Sheet. Wire a rows list into the 'rows' input; columns are taken from the 'headers' input or derived from the row keys. Each object becomes a row. Set a 'mapping' to pick exactly which incoming field lands in which sheet column (e.g. a Google Form response's question titles → your sheet's columns) — the mapping's columns then define the row, in order.",
+			Summary:     "Append rows to a Google Sheet, matching each object's fields to columns by header.",
+			Description: "Append rows to a Google Sheet. Wire a rows list into the 'rows' input; columns are taken from the 'headers' input or derived from the row keys. Each object becomes a row. Set a 'mapping' to pick which incoming field fills which sheet column (e.g. a Google Form response's question titles → your sheet's columns) — both sides are chosen from dropdowns (the upstream record's fields and the sheet's own columns), and the mapping's columns then define the row, in order.",
 			Integration: "Google Sheets",
 			Category:    "network",
 			Icon:        "file-output",
@@ -35,7 +35,7 @@ func init() {
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
 				{Port: "rows", Label: "Rows", Required: true, MIME: []string{"application/json"}},
-				{Port: "headers", Label: "Headers (column order)", MIME: []string{"application/json"}},
+				{Port: "headers", Label: "Headers", MIME: []string{"application/json"}},
 			},
 			Outputs: []core.Port{
 				{Port: "meta", Label: "Append metadata", MIME: []string{"application/json"}},
@@ -43,18 +43,16 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"base_url":{"type":"string","description":"Override the API host (testing)."},
 					"account":{"type":"string","default":"default"},
-					"token":{"type":"string","description":"Raw access token; overrides 'account'."},
-					"spreadsheet_id":{"type":"string","format":"google-spreadsheet","description":"Spreadsheet ID or full URL."},
-					"range":{"type":"string","format":"google-sheet-tab","default":"Sheet1","description":"Sheet/range the append targets."},
+					"spreadsheet_id":{"type":"string","format":"google-spreadsheet","description":"The spreadsheet to append to."},
+					"range":{"type":"string","format":"google-sheet-tab","default":"Sheet1","description":"The sheet tab the append targets."},
 					"value_input_option":{"type":"string","enum":["RAW","USER_ENTERED"],"default":"USER_ENTERED"},
 					"insert_data_option":{"type":"string","enum":["OVERWRITE","INSERT_ROWS"],"default":"INSERT_ROWS"},
 					"mapping":{
 						"type":"array",
 						"title":"Column mapping",
 						"format":"sheet-mapping",
-						"description":"Map each incoming field to a sheet column. When set, these columns (in order) define the appended row and the 'headers' input is ignored. Leave empty to use the row keys / 'headers' input.",
+						"description":"Map each incoming field to a sheet column. Both sides are picked from dropdowns — the sheet's own columns and the upstream record's fields. When set, these columns (in order) define the appended row and the 'headers' input is ignored. Leave empty to use the row keys / 'headers' input.",
 						"items":{
 							"type":"object",
 							"properties":{

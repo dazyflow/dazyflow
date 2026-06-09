@@ -3,44 +3,17 @@ import { AlertTriangle, AlertCircle } from "lucide-react";
 import i18n from "../i18n";
 import { iconFor, isBrandedIcon, categoryColor } from "../icons";
 import type { Manifest, Port, JSONSchema, Ref } from "../types";
+import { type HazyNodeData, portColor } from "./nodeCardShared";
 
-// HazyNodeData is the shape we stash on each React Flow node. We carry
-// the live manifest so the canvas can render the same icon and label as
-// the catalog without a second lookup.
-export type HazyNodeData = {
-  label: string;
-  moduleID: string;
-  manifest?: Manifest;
-  status?: string;
-  // lintMessage is set when the last save flagged this node in a lint
-  // issue (e.g. hardcoded secret). NodeCard shows a warning badge.
-  lintMessage?: string;
-  // Inline param editing (#7): the node's live params and a per-key
-  // setter, injected by FlowEditor so the selected card can edit defaults
-  // directly on the canvas instead of only via the Inspector.
-  params?: Record<string, unknown>;
-  setParam?: (key: string, value: unknown) => void;
-  // Input port ids that currently have a wire — inline fields for these
-  // are hidden (the connection supplies the value), and the pin reads as
-  // filled (#11).
-  connectedInputs?: string[];
-  // Output port ids that currently have a wire — drives the pin fill.
-  connectedOutputs?: string[];
-  // True only when this is the SOLE selected node. Inline fields show just
-  // for a single selection, so a multi-select (e.g. for alignment) keeps
-  // every card collapsed — and align/distribute use the deselected height.
-  inlineEditable?: boolean;
-  // This node's output values from the latest run (#10), keyed by port —
-  // shown as a hover-peek on each output port.
-  outputs?: Record<string, Ref>;
-  // Required values this drop is still missing (#13) — drives a red
-  // "needs configuration" badge, distinct from the amber lint warning.
-  configErrors?: string[];
-  // Breakpoint set on this node (#12) — shows a red breakpoint dot.
-  breakpoint?: boolean;
-  // The live run is currently paused after this node (#12).
-  paused?: boolean;
-};
+// PICKER_FORMATS are the string-param formats whose value is an opaque
+// resource ID chosen from a dropdown. On the card they render read-only as
+// the resolved resource name (editing happens via the inspector picker).
+// google-sheet-tab's value is already the human tab name, so it shows as-is.
+const PICKER_FORMATS = new Set([
+  "google-form",
+  "google-spreadsheet",
+  "google-sheet-tab",
+]);
 
 // peekValue renders a port's run value as a short, single-line string for
 // the hover peek. Strings show verbatim (truncated); other types as JSON;
@@ -163,9 +136,18 @@ export function HazyNode({ data, selected }: NodeProps) {
   // input connector, since you can't wire a value into a literal. Triggers
   // are input-less too but carry no literal field, so they're not sources.
   const isValueSource = !hasDeclaredInputs && literalFields.length > 0;
-  // Literal fields show always on a value source (its whole purpose), and
-  // only on the sole-selected node otherwise (the standard inline-edit case).
-  const showLiteralFields = literalFields.length > 0 && (isValueSource || !!d.inlineEditable);
+  // Resource-picker fields (the read-only resolved name — the spreadsheet,
+  // the form) show ALWAYS: they identify the node at a glance, the way the
+  // Google Form trigger always shows its form. Other literal fields (editable
+  // inputs) stay gated to a value source or the sole-selected node, so the
+  // canvas doesn't fill with input boxes.
+  const showOtherLiterals = isValueSource || !!d.inlineEditable;
+  const visibleLiteralFields = literalFields.filter(
+    (f) =>
+      (f.schema.format && PICKER_FORMATS.has(f.schema.format)) ||
+      showOtherLiterals,
+  );
+  const showLiteralFields = visibleLiteralFields.length > 0;
 
   const statusClass = d.status ? " status-" + d.status : "";
   // Triggers are the graph's entry points — render them with an inverted,
@@ -256,16 +238,37 @@ export function HazyNode({ data, selected }: NodeProps) {
         // interacts with a field. nowheel similarly lets the field behave
         // like a normal input inside the canvas.
         <div className="hz-node-params nodrag nowheel">
-          {literalFields.map(({ key, label, schema: s }) => (
-            <label key={key} className="hz-param">
-              <span className="hz-param-label">{label}</span>
-              <ParamInput
-                schema={s}
-                value={d.params?.[key] ?? s.default ?? ""}
-                onChange={(v) => d.setParam?.(key, v)}
-              />
-            </label>
-          ))}
+          {visibleLiteralFields.map(({ key, label, schema: s }) => {
+            // Resource-picker params show read-only as the resolved name
+            // (or the raw id until resolved) — you change them via the
+            // inspector picker, not by typing on the card.
+            if (s.format && PICKER_FORMATS.has(s.format)) {
+              const raw = d.params?.[key];
+              const idStr = typeof raw === "string" ? raw : "";
+              const display = d.resourceLabels?.[key] ?? idStr;
+              return (
+                <label key={key} className="hz-param">
+                  <span className="hz-param-label">{label}</span>
+                  <span
+                    className="hz-param-readonly"
+                    title={idStr || undefined}
+                  >
+                    {display || i18n.t("nodeCard.pickerUnset")}
+                  </span>
+                </label>
+              );
+            }
+            return (
+              <label key={key} className="hz-param">
+                <span className="hz-param-label">{label}</span>
+                <ParamInput
+                  schema={s}
+                  value={d.params?.[key] ?? s.default ?? ""}
+                  onChange={(v) => d.setParam?.(key, v)}
+                />
+              </label>
+            );
+          })}
         </div>
       )}
 
@@ -633,18 +636,6 @@ function passPinStyle(place: "in" | "out") {
 // subtypes still get a sensible color, and fall back to the neutral
 // border color for ports that don't declare a MIME (the common case for
 // legacy manifests we haven't yet annotated).
-export function portColor(mime: string[] | undefined): string {
-  if (!mime || mime.length === 0) return "var(--border-strong)";
-  const m = mime[0];
-  if (m.startsWith("text/")) return "#4a8";              // green — plain text
-  if (m === "application/x-bool") return "#e0699f";      // rose  — boolean (true/false)
-  if (m === "application/json") return "#5b8def";        // blue  — structured data
-  if (m.startsWith("image/")) return "#e8a85e";          // amber — images
-  if (m.startsWith("audio/") || m.startsWith("video/")) return "#c87fff"; // purple — media
-  if (m.startsWith("application/")) return "#9a9a9a";    // gray  — generic binary/file
-  return "var(--border-strong)";
-}
-
 // portTooltip is rendered as the handle's HTML title attribute — the
 // browser shows it on hover. Cheap discoverability for single-port
 // nodes where there's no in-card port label to read.

@@ -85,6 +85,10 @@ export type FlowSummary = {
   description?: string;
   owner?: string;
   visibility?: Visibility;
+  // run_status ("live" | "manual" | "paused") is computed server-side by
+  // core.FlowRunStatusOf so the list can show the status chip without
+  // fetching each full graph. Optional: older daemons omit it.
+  run_status?: "live" | "manual" | "paused";
 };
 
 // Frame is an editor-only comment box grouping nodes visually. The engine

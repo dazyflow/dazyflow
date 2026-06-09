@@ -1172,4 +1172,18 @@ func wireConnectorTokenHooks(reg *daemon.OAuthRegistry) {
 			"spreadsheet_id": extra["spreadsheet_id"],
 		}})
 	})
+	// Sheet columns power the Sheets append mapping editor's "Sheet column"
+	// dropdown — the header row of the chosen spreadsheet + tab. Depends on
+	// spreadsheet_id and (optionally) the range/tab, passed through as query
+	// params by the picker.
+	daemon.RegisterResourceLister("google", "sheet-columns", func(ctx context.Context, account string, extra map[string]string) ([]core.AccountResource, error) {
+		p := map[string]any{
+			"account":        account,
+			"spreadsheet_id": extra["spreadsheet_id"],
+		}
+		if r := extra["range"]; r != "" {
+			p["range"] = r
+		}
+		return sheets.ListSheetColumns(ctx, core.Job{Params: p})
+	})
 }

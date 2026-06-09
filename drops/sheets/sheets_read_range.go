@@ -41,11 +41,9 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"base_url":{"type":"string","description":"Override the API host (testing)."},
 					"account":{"type":"string","default":"default"},
-					"token":{"type":"string","description":"Raw access token; overrides 'account'."},
-					"spreadsheet_id":{"type":"string","format":"google-spreadsheet","description":"Spreadsheet ID or full URL."},
-					"range":{"type":"string","format":"google-sheet-tab","default":"Sheet1","description":"A1 range or sheet/named range."},
+					"spreadsheet_id":{"type":"string","format":"google-spreadsheet","description":"The spreadsheet to read."},
+					"range":{"type":"string","format":"google-sheet-tab","default":"Sheet1","description":"The sheet tab or named range to read."},
 					"headers":{"type":"boolean","default":true,"description":"Treat the first row as column headers."},
 					"value_render_option":{"type":"string","enum":["FORMATTED_VALUE","UNFORMATTED_VALUE","FORMULA"],"default":"FORMATTED_VALUE"},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
@@ -80,9 +78,9 @@ func executeSheetsRead(ctx context.Context, job core.Job, _ chan<- core.Progress
 // objects — the exact read the sheets_read_range node performs, exported so
 // the daemon's resource provider (${resource.NAME} of type google_sheet)
 // can reuse it instead of reimplementing the Google call. Reads
-// spreadsheet_id, range, account/token, value_render_option, headers,
-// timeout_ms and base_url from job.Params; resolves the Google token via
-// the package's SetTokenLookup hook (tenant rides on ctx).
+// spreadsheet_id, range, account, value_render_option, headers and
+// timeout_ms from job.Params; resolves the Google token via the package's
+// SetTokenLookup hook (tenant rides on ctx).
 func ReadRange(ctx context.Context, job core.Job) (headers []string, rows []map[string]any, err error) {
 	id := sheetID(params.StringDefault(job.Params, "spreadsheet_id", ""))
 	if id == "" {

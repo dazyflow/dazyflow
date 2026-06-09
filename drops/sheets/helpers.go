@@ -1,8 +1,7 @@
 // Package sheets hosts the native Google Sheets connectors
 // (sheets_read_range, sheets_append_row, sheets_export_pdf), migrated from
 // the scripted TS drops. They authenticate with Google OAuth (the "google"
-// provider) via the SetTokenLookup hook the daemon wires at startup, or an
-// explicit `token` param.
+// provider) via the SetTokenLookup hook the daemon wires at startup.
 package sheets
 
 import (
@@ -25,9 +24,8 @@ import (
 )
 
 // maxResponseBytes caps how much of an API response we buffer, so a
-// hostile or buggy upstream (reachable via the base_url override) can't
-// OOM the daemon by streaming an unbounded body. Generous enough for the
-// PDF export path.
+// hostile or buggy upstream can't OOM the daemon by streaming an unbounded
+// body. Generous enough for the PDF export path.
 const maxResponseBytes = 64 << 20 // 64 MiB
 
 const (
@@ -49,6 +47,11 @@ func SetTokenLookup(fn TokenLookup) {
 }
 
 func resolveToken(ctx context.Context, job core.Job) (string, error) {
+	// `token` is no longer a user-facing param (removed from the schema), but
+	// the engine still honors it when present: it's the injection seam the
+	// integration tests use to stand in for a connected account, and a
+	// programmatic API caller may set it. The UI path always goes through the
+	// account lookup below.
 	if t, _ := params.StringOpt(job.Params, "token"); t != "" {
 		return t, nil
 	}
@@ -60,7 +63,7 @@ func resolveToken(ctx context.Context, job core.Job) (string, error) {
 	fn := tokenLookup
 	tokenLookupMu.RUnlock()
 	if fn == nil {
-		return "", fmt.Errorf("no Google token: pass `token` directly or connect a Google account via /api/v1/oauth/google/authorize")
+		return "", fmt.Errorf("no Google token: connect a Google account via /api/v1/oauth/google/authorize")
 	}
 	tok, err := fn(ctx, account)
 	if err != nil {
@@ -86,6 +89,10 @@ func SetHTTPBases(sheets, drive string) {
 	sheetsBase, driveBase = sheets, drive
 }
 
+// base_url is no longer a user-facing param (removed from the schema), but
+// like `token` the engine still honors it when present — the integration
+// tests point it at an httptest server. The SafeHTTPClient + egress guard in
+// googleDo still bound where the bearer token can be sent.
 func sheetsBaseURL(job core.Job) string {
 	if b, _ := params.StringOpt(job.Params, "base_url"); b != "" {
 		return b
@@ -122,9 +129,9 @@ func googleDo(ctx context.Context, method, url, token, contentType string, body 
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
-	// base_url is a tenant-supplied param, so guard the dial: the SSRF
-	// client blocks loopback/private/link-local targets and the egress
-	// allowlist (when set) bounds which public hosts the bearer token
+	// Guard the dial: base_url can still arrive via the API/test params, so
+	// the SSRF client blocks loopback/private/link-local targets and the
+	// egress allowlist (when set) bounds which public hosts the bearer token
 	// may be sent to.
 	if err := hfnet.EgressAllowed(url); err != nil {
 		return 0, nil, err
@@ -280,8 +287,8 @@ type columnMapping struct {
 // parseMapping reads the optional `mapping` param — an array of
 // {column, source} objects (JSON-decoded as []any of map[string]any).
 // Entries without a column are skipped; a missing/non-array param yields
-// nil (the legacy header-derivation path). A JSON string is also accepted
-// so the value can round-trip through a text field.
+// nil (the header-derivation path). A JSON string is also accepted so the
+// value can round-trip through a text field.
 func parseMapping(p map[string]any) []columnMapping {
 	raw, ok := p["mapping"]
 	if !ok || raw == nil {
@@ -368,10 +375,64 @@ func lookupField(row map[string]any, source string) any {
 	return cur
 }
 
+// ListSheetColumns reads the header row (row 1) of a spreadsheet tab and
+// returns each non-empty header as a {id, name} option (id == name == the
+// header text). It's the backend for the mapping editor's "Sheet column"
+// dropdown, so a user maps onto real, existing columns instead of typing.
+// Depends on the chosen spreadsheet_id and range (tab); reads account from
+// job.Params. An empty header row yields no options.
+func ListSheetColumns(ctx context.Context, job core.Job) ([]core.AccountResource, error) {
+	id := sheetID(params.StringDefault(job.Params, "spreadsheet_id", ""))
+	if id == "" {
+		return nil, fmt.Errorf("spreadsheet_id is required")
+	}
+	token, err := resolveToken(ctx, job)
+	if err != nil {
+		return nil, err
+	}
+	// Read just the first row of the target tab. range defaults to the tab
+	// the append uses; "<tab>!1:1" pins it to the header row.
+	tab := params.StringDefault(job.Params, "range", "Sheet1")
+	rng := tab + "!1:1"
+	q := url.Values{}
+	q.Set("majorDimension", "ROWS")
+	endpoint := sheetsBaseURL(job) + "/spreadsheets/" + url.PathEscape(id) + "/values/" + url.PathEscape(rng) + "?" + q.Encode()
+	status, body, err := googleDo(ctx, "GET", endpoint, token, "", nil, params.IntDefault(job.Params, "timeout_ms", 15000))
+	if err != nil {
+		return nil, err
+	}
+	if status < 200 || status >= 300 {
+		return nil, fmt.Errorf("%s", sheetsErr(body))
+	}
+	var parsed struct {
+		Values [][]any `json:"values"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return nil, fmt.Errorf("values.get decode: %w", err)
+	}
+	if len(parsed.Values) == 0 {
+		return []core.AccountResource{}, nil
+	}
+	seen := map[string]struct{}{}
+	out := make([]core.AccountResource, 0, len(parsed.Values[0]))
+	for _, h := range parsed.Values[0] {
+		name := strings.TrimSpace(cell(h))
+		if name == "" {
+			continue
+		}
+		if _, dup := seen[name]; dup {
+			continue
+		}
+		seen[name] = struct{}{}
+		out = append(out, core.AccountResource{ID: name, Name: name})
+	}
+	return out, nil
+}
+
 // ListDriveFiles lists the connected account's Drive files of a given
 // MIME type (most-recent first) as {id, name} options — the backend for
 // the spreadsheet and form pickers (both are Drive file types). Reuses the
-// package's Google client + token hook; reads `account`/`token`/`timeout_ms`
+// package's Google client + token hook; reads `account`/`timeout_ms`
 // from job.Params. The form/spreadsheet ID a caller stores IS the Drive
 // file id, so the option ID drops straight into spreadsheet_id / form_id.
 func ListDriveFiles(ctx context.Context, job core.Job, mimeType string) ([]core.AccountResource, error) {

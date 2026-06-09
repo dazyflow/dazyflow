@@ -3,7 +3,7 @@ import type { Node } from "@xyflow/react";
 import { useTranslation } from "react-i18next";
 import { X, Trash2, ChevronUp, ChevronDown, Info, Play } from "lucide-react";
 import { iconFor, categoryColor } from "../icons";
-import type { HazyNodeData } from "./NodeCard";
+import type { HazyNodeData } from "./nodeCardShared";
 import {
   SchemaForm,
   supportsSchemaForm,

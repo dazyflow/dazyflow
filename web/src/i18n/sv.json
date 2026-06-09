@@ -1,4 +1,18 @@
 {
+  "flowStatus": {
+    "live": {
+      "label": "Aktiv",
+      "tip": "Det här flödet körs av sig självt — en utlösare är konfigurerad (ett schema, ett poll-/formulärintervall eller en webhook) och flödet är aktiverat."
+    },
+    "manual": {
+      "label": "Endast manuell",
+      "tip": "Det här flödet körs bara när du trycker på Kör. Lägg till en utlösare och ange dess schema eller intervall för att starta det automatiskt."
+    },
+    "paused": {
+      "label": "Pausad",
+      "tip": "Det här flödet är inaktiverat och utlöses därför aldrig automatiskt. Manuell körning fungerar fortfarande. Aktivera det igen för att återuppta utlösarna."
+    }
+  },
   "explain": {
     "oauthAccountMissing": "Vi når inte {{provider}}: kontot \"{{account}}\" är inte anslutet i din Hazyflow-arbetsyta.",
     "providerNotConnected": "{{provider}} är inte anslutet ännu i din Hazyflow-arbetsyta.",
@@ -846,6 +860,7 @@
   },
   "nodeCard": {
     "statusTooltip": "status: {{status}}",
+    "pickerUnset": "Inte angivet",
     "portRequired": "obligatorisk",
     "portOptional": "valfri",
     "missingValue": "Obligatoriskt värde saknas: {{name}}",
@@ -963,20 +978,20 @@
     "secretChipSetUp": "Lägg till",
     "secretChipReplace": "Ersätt",
     "mapping": {
-      "column": "Kalkylarkskolumn",
-      "source": "Från fält",
+      "columnPlaceholder": "Kalkylarkskolumn…",
+      "sourcePlaceholder": "Från fält…",
       "add": "Lägg till kolumn",
-      "autoMap": "Mappa {{count}} fält automatiskt",
+      "autoMap": "Mappa {{count}} matchande automatiskt",
       "moveUp": "Flytta upp",
       "moveDown": "Flytta ner",
-      "fieldsFrom": "Fältförslag från {{source}}"
+      "needsSheet": "Välj ett kalkylark på den här noden först, mappa sedan dess kolumner.",
+      "noColumns": "Det här arket har ingen rubrikrad än — lägg till kolumnrubriker i arket och mappa sedan mot dem.",
+      "fieldsFrom": "Fält från {{source}}"
     },
     "resourcePicker": {
       "loading": "Laddar…",
       "choose": "Välj {{noun}}…",
-      "enterId": "Ange ID manuellt",
-      "pickFromList": "Välj från ditt konto",
-      "idPlaceholder": "{{noun}}-namn eller ID",
+      "retry": "Försök igen",
       "connectHint": "Anslut kontot för att välja {{noun}} från en lista.",
       "needsDependency": "Välj {{dep}} först för att välja {{noun}}."
     },
