@@ -103,20 +103,60 @@ func extractLoopBody(graph core.Graph, forEachID string) (core.Graph, bool) {
 		return core.Graph{}, false
 	}
 
+	// Disabled switch inside the body: a disabled node is pruned, and so is
+	// anything reachable ONLY through it — mirroring the main flow's skip
+	// cascade ("off prunes the branch"). Reachability is recomputed over the
+	// body with disabled nodes removed: keep the entry nodes (targets of the
+	// for_each's `body` pin) that aren't disabled, plus everything they
+	// still reach. A body whose every node is pruned stays ok=true with
+	// zero nodes — the for_each then runs an empty pass per item rather
+	// than falling back to legacy mode.
+	disabled := map[string]bool{}
+	for _, n := range graph.Nodes {
+		disabled[n.ID] = n.Disabled
+	}
+	outEdges := map[string][]string{}
+	for _, e := range graph.Edges {
+		_, fromBody := bodyIDs[e.From]
+		_, toBody := bodyIDs[e.To]
+		if fromBody && toBody {
+			outEdges[e.From] = append(outEdges[e.From], e.To)
+		}
+	}
+	kept := map[string]struct{}{}
+	var stack []string
+	for _, e := range graph.Edges {
+		if e.FromPort == "body" && e.From == forEachID && !disabled[e.To] {
+			stack = append(stack, e.To)
+		}
+	}
+	for len(stack) > 0 {
+		n := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if _, seen := kept[n]; seen || disabled[n] {
+			continue
+		}
+		if _, inBody := bodyIDs[n]; !inBody {
+			continue
+		}
+		kept[n] = struct{}{}
+		stack = append(stack, outEdges[n]...)
+	}
+
 	sub := core.Graph{
 		ID:        graph.ID,
 		Tenant:    graph.Tenant,
 		Workspace: graph.Workspace,
 	}
 	for _, n := range graph.Nodes {
-		if _, ok := bodyIDs[n.ID]; ok {
+		if _, ok := kept[n.ID]; ok {
 			sub.Nodes = append(sub.Nodes, n)
 		}
 	}
 	for _, e := range graph.Edges {
-		_, fromBody := bodyIDs[e.From]
-		_, toBody := bodyIDs[e.To]
-		if fromBody && toBody {
+		_, fromKept := kept[e.From]
+		_, toKept := kept[e.To]
+		if fromKept && toKept {
 			sub.Edges = append(sub.Edges, e)
 		}
 	}

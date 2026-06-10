@@ -24,13 +24,21 @@ import (
 // free-text rather than erroring.
 type RowFieldFunc func(ctx context.Context, node core.Node) ([]string, error)
 
-var rowSources = map[string]RowFieldFunc{}
+// rowSource pairs the field extractor with the OUTPUT port that carries the
+// record list — so the reference picker can offer "first row" field tokens
+// (${upstream.<id>.<port>[0].<field>}) for exactly that port.
+type rowSource struct {
+	listPort string
+	fields   RowFieldFunc
+}
 
-// RegisterRowSource registers a field extractor for a node module. Adding a
-// source is exactly this one call plus the extractor — that's the whole
-// extension surface.
-func RegisterRowSource(module string, fn RowFieldFunc) {
-	rowSources[module] = fn
+var rowSources = map[string]rowSource{}
+
+// RegisterRowSource registers a field extractor for a node module, naming
+// the output port that emits the record list. Adding a source is exactly
+// this one call plus the extractor — that's the whole extension surface.
+func RegisterRowSource(module, listPort string, fn RowFieldFunc) {
+	rowSources[module] = rowSource{listPort: listPort, fields: fn}
 }
 
 // googleFormFieldFetcher, when set by cmd/hzd (which can reach the gform
@@ -51,19 +59,31 @@ func SetGoogleFormFieldFetcher(fn func(ctx context.Context, node core.Node) ([]s
 // isn't wired or fails.
 var googleFormStructuralKeys = []string{"responseId", "submittedTime"}
 
+// sheetsFieldFetcher, when set by cmd/hzd, fetches a Google Sheet's live
+// header row so sheets_read_range can act as a row source. Injected for the
+// same reason as the Forms fetcher: daemon stays free of connector imports.
+var sheetsFieldFetcher func(ctx context.Context, node core.Node) ([]string, error)
+
+// SetSheetsFieldFetcher installs the live Sheets header resolver.
+func SetSheetsFieldFetcher(fn func(ctx context.Context, node core.Node) ([]string, error)) {
+	sheetsFieldFetcher = fn
+}
+
 func init() {
-	// Built-in row sources. Two today, to prove the registry is generic:
+	// Built-in row sources:
 	//  - the hosted webhook form, whose fields are its declared form_fields;
 	//  - the Google Form trigger, which fetches its question titles live via
-	//    the injected fetcher (falling back to the structural keys).
-	RegisterRowSource("webhook_input", func(_ context.Context, n core.Node) ([]string, error) {
+	//    the injected fetcher (falling back to the structural keys);
+	//  - Gmail search, whose match stubs always carry id + threadId;
+	//  - Sheets read range, whose fields are the sheet's live header row.
+	RegisterRowSource("webhook_input", "body", func(_ context.Context, n core.Node) ([]string, error) {
 		fs := stringSliceParam(n.Params, "form_fields")
 		if len(fs) == 0 {
 			fs = defaultFormFields
 		}
 		return fs, nil
 	})
-	RegisterRowSource("google_form_trigger", func(ctx context.Context, n core.Node) ([]string, error) {
+	RegisterRowSource("google_form_trigger", "responses", func(ctx context.Context, n core.Node) ([]string, error) {
 		if googleFormFieldFetcher != nil {
 			if fields, err := googleFormFieldFetcher(ctx, n); err == nil && len(fields) > 0 {
 				return fields, nil
@@ -72,6 +92,16 @@ func init() {
 			// degrade to the structural keys rather than erroring.
 		}
 		return googleFormStructuralKeys, nil
+	})
+	RegisterRowSource("gmail_search_messages", "messages", func(_ context.Context, _ core.Node) ([]string, error) {
+		// Gmail search stubs are structurally fixed — no live fetch needed.
+		return []string{"id", "threadId"}, nil
+	})
+	RegisterRowSource("sheets_read_range", "rows", func(ctx context.Context, n core.Node) ([]string, error) {
+		if sheetsFieldFetcher == nil {
+			return nil, nil
+		}
+		return sheetsFieldFetcher(ctx, n)
 	})
 }
 
@@ -137,11 +167,11 @@ func (h *HTTPGateway) inputFieldsFor(ctx context.Context, p core.Principal, g co
 			info.Label = m.Label
 		}
 	}
-	extractor, ok := rowSources[n.Module]
+	src, ok := rowSources[n.Module]
 	if !ok {
 		return info, nil
 	}
-	fields, err := extractor(ctx, n)
+	fields, err := src.fields(ctx, n)
 	if err != nil {
 		// Hints are best-effort — a failed live fetch leaves the box free-text.
 		return info, nil

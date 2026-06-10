@@ -285,6 +285,16 @@ func classifyEdge(predRec core.JobRecord, edge core.Edge) edgeOutcome {
 		if edge.OnError == core.OnErrorFallback {
 			return edgeDormant
 		}
+		// The pass pin is a CONTROL pin (Unreal-style exec): wiring it means
+		// "run after this step", whether or not a value threaded through the
+		// predecessor's pass-in. Without this, a pass→pass sequencing wire
+		// from a node with an empty pass-in reads as dormant and silently
+		// skips everything downstream. The no-output dormancy below is for
+		// DATA routing (e.g. branch emitting only then/else) — control
+		// edges activate on success alone.
+		if edge.FromPort == core.PassPort {
+			return edgeActive
+		}
 		if predRec.Result == nil || predRec.Result.Output == nil {
 			return edgeDormant
 		}

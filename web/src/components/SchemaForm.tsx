@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Lock, Plus, Upload, X } from "lucide-react";
+import { Braces, Lock, Plus, Upload, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { JSONSchema, ReferenceGroups, ReferenceItem } from "../types";
+import { type TokenLabels, friendlyTokenText } from "./nodeCardShared";
 import { api, APIError } from "../api";
 
 // SchemaForm renders manifest.params_schema as a typed form. The
@@ -70,6 +71,9 @@ type Props = {
   // field's "{}" menu — used by the for_each step editor to expose
   // ${item.<field>} for the iterated list's columns.
   extraReferenceItems?: { label: string; token: string }[];
+  // tokenLabels maps "nodeId.port" → friendly step·port names so a field
+  // whose value is one ${upstream.…} token renders as a readable chip.
+  tokenLabels?: TokenLabels;
   // showAdvanced controls whether developer-flavored fields appear in
   // the form. Default false — a non-tech owner shouldn't have to
   // explain to themselves what `timeout_ms` or `page_token` mean. The
@@ -90,6 +94,7 @@ export function SchemaForm({
   wiredKeys,
   resourceLabels,
   extraReferenceItems,
+  tokenLabels,
   showAdvanced,
 }: Props) {
   const { t } = useTranslation();
@@ -116,6 +121,7 @@ export function SchemaForm({
       wired={wired.has(key)}
       resolvedName={resourceLabels?.[key]}
       extraReferenceItems={extraReferenceItems}
+      tokenLabels={tokenLabels}
       siblings={value}
       onChange={(v) => {
         const next = { ...value };
@@ -274,12 +280,14 @@ type FieldProps = {
   resolvedName?: string;
   // extraReferenceItems are extra "{}"-menu tokens (e.g. ${item.<field>}).
   extraReferenceItems?: { label: string; token: string }[];
+  // tokenLabels: "nodeId.port" → friendly step·port names for token chips.
+  tokenLabels?: TokenLabels;
   // siblings is the other params on the same node — lets a field react to a
   // peer's value (e.g. the resource picker lists for the chosen `account`).
   siblings?: Record<string, unknown>;
 };
 
-function SchemaField({ name, schema, required, value, onChange, workspace, accountPicker, references, wired, resolvedName, extraReferenceItems, siblings }: FieldProps) {
+function SchemaField({ name, schema, required, value, onChange, workspace, accountPicker, references, wired, resolvedName, extraReferenceItems, tokenLabels, siblings }: FieldProps) {
   const { t } = useTranslation();
   // The OAuth `account` field becomes a dropdown of connected accounts
   // (plus a Connect affordance) when the editor supplies a picker. Plain
@@ -428,6 +436,7 @@ function SchemaField({ name, schema, required, value, onChange, workspace, accou
           onChange={onChange}
           references={references}
           extraReferenceItems={extraReferenceItems}
+          tokenLabels={tokenLabels}
         />
       );
     }
@@ -1007,6 +1016,7 @@ function PlainStringField({
   onChange,
   references,
   extraReferenceItems,
+  tokenLabels,
 }: {
   name: string;
   schema: JSONSchema;
@@ -1015,9 +1025,14 @@ function PlainStringField({
   onChange: (v: unknown) => void;
   references?: ReferenceCtx;
   extraReferenceItems?: { label: string; token: string }[];
+  tokenLabels?: TokenLabels;
 }) {
+  const { t } = useTranslation();
   const raw = typeof value === "string" ? value : "";
   const credMatch = SECRET_FULL_REF.exec(raw);
+  // Any other whole-value ${…} reference renders as a friendly chip too —
+  // worded like the {} menu ("Gmail · Matching emails → first → id").
+  const tokenText = credMatch ? null : friendlyTokenText(raw, tokenLabels);
   const [forceEdit, setForceEdit] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
   // insertRef splices a ${…} token at the input's cursor (or appends when
@@ -1041,10 +1056,10 @@ function PlainStringField({
     });
   };
   // Reset the override whenever the underlying value transitions back
-  // to (or stays) a single credential ref — e.g. a re-render after
-  // load. Keeps the chip the default state across navigation.
+  // to (or stays) a single reference — e.g. a re-render after load.
+  // Keeps the chip the default state across navigation.
   useEffect(() => {
-    if (credMatch) setForceEdit(false);
+    if (credMatch || tokenText) setForceEdit(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [raw]);
   if (credMatch && !forceEdit) {
@@ -1062,6 +1077,30 @@ function PlainStringField({
             setForceEdit(true);
           }}
         />
+      </FieldWrap>
+    );
+  }
+  if (tokenText && !forceEdit) {
+    return (
+      <FieldWrap name={name} schema={schema} required={required}>
+        <div className="sf-credential-chip">
+          <Braces size={13} className="sf-credential-chip-glyph" />
+          <span className="sf-credential-chip-label">{tokenText}</span>
+          <span className="sf-credential-chip-actions">
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => {
+                // Same contract as the secret chip: Replace clears the
+                // value so the input opens empty (no raw ${…} confusion).
+                onChange(undefined);
+                setForceEdit(true);
+              }}
+            >
+              {t("schemaForm.secretChipReplace")}
+            </button>
+          </span>
+        </div>
       </FieldWrap>
     );
   }

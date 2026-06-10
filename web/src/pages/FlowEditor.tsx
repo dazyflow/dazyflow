@@ -303,6 +303,10 @@ function EditorInner() {
   const [breakpoints, setBreakpoints] = useState<Set<string>>(() => new Set());
   const [pausedAt, setPausedAt] = useState<string | null>(null);
   const [stepping, setStepping] = useState(false);
+  // Disabled steps: node IDs switched off. Saved with the graph
+  // (node.disabled); at run time the engine skips them and everything
+  // downstream (the skip cascade) — a setup-time aid.
+  const [disabledNodes, setDisabledNodes] = useState<Set<string>>(() => new Set());
   // Triggers live at graph-level (not per-node). Carried through so a
   // save doesn't accidentally drop the webhook secret / cron expression
   // a user configured in the settings modal.
@@ -499,6 +503,7 @@ function EditorInner() {
       })),
     );
     setBreakpoints(new Set((g.nodes ?? []).filter((n) => n.breakpoint).map((n) => n.id)));
+    setDisabledNodes(new Set((g.nodes ?? []).filter((n) => n.disabled).map((n) => n.id)));
     setParamsByID(Object.fromEntries((g.nodes ?? []).map((n) => [n.id, n.params ?? {}])));
     setTriggers(g.triggers ?? []);
     setVisibility(g.visibility);
@@ -567,6 +572,7 @@ function EditorInner() {
           setEdges([]);
           setFrameNodes([]);
           setBreakpoints(new Set());
+          setDisabledNodes(new Set());
           setParamsByID({});
           setTriggers([]);
           setDirty(false);
@@ -1280,6 +1286,8 @@ function EditorInner() {
     for (const n of nodes) {
       const man = n.data.manifest;
       if (!man) continue;
+      // A switched-off step never runs, so don't nag about its config.
+      if (disabledNodes.has(n.id)) continue;
       const params = paramsByID[n.id] ?? {};
       const wired = new Set(connectedInputsByNode.get(n.id) ?? []);
       const hasValue = (k: string) => {
@@ -1432,6 +1440,50 @@ function EditorInner() {
     return m;
   }, [nodes, paramsByID, manifestByID, resourceNames, edges]);
 
+  // offByCascade: nodes that WILL be skipped at run time because a step
+  // upstream of them is switched off (the engine's skip cascade) — shown
+  // greyed so the canvas honestly previews what a run would do. The
+  // disabled node itself is not in this set (it gets the stronger
+  // hz-node-off style + chip).
+  const offByCascade = useMemo(() => {
+    if (disabledNodes.size === 0) return new Set<string>();
+    const outEdges = new Map<string, string[]>();
+    for (const e of edges) {
+      const list = outEdges.get(e.source);
+      if (list) list.push(e.target);
+      else outEdges.set(e.source, [e.target]);
+    }
+    const off = new Set<string>();
+    const stack = [...disabledNodes];
+    while (stack.length) {
+      const n = stack.pop()!;
+      for (const dep of outEdges.get(n) ?? []) {
+        if (off.has(dep)) continue;
+        off.add(dep);
+        stack.push(dep);
+      }
+    }
+    for (const id of disabledNodes) off.delete(id);
+    return off;
+  }, [disabledNodes, edges]);
+
+  // tokenLabels: "nodeId.port" → "Gmail · Matching emails" — lets fields
+  // whose value is one ${upstream.…} token render the friendly chip the
+  // {} menu words it with.
+  const tokenLabels = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const n of nodes) {
+      const d = n.data as HazyNodeData;
+      const man = d.manifest ?? manifestByID.get(d.moduleID);
+      if (!man) continue;
+      const nodeLabel = man.label || d.moduleID;
+      for (const p of man.outputs ?? []) {
+        m[`${n.id}.${p.port}`] = `${nodeLabel} · ${p.label ?? p.port}`;
+      }
+    }
+    return m;
+  }, [nodes, manifestByID]);
+
   const displayNodes = useMemo<FlowNode<HazyNodeData>[]>(() => {
     // Inline fields show only for a single selection, so a multi-select
     // (e.g. for align/distribute) keeps every card collapsed.
@@ -1450,6 +1502,9 @@ function EditorInner() {
         configErrors: configErrorsByNode.get(n.id),
         resourceLabels: resourceLabelsByNode.get(n.id),
         loopOwned: loopOwnerByNode.has(n.id),
+        disabled: disabledNodes.has(n.id),
+        offByCascade: offByCascade.has(n.id),
+        tokenLabels,
         breakpoint: breakpoints.has(n.id),
         paused: pausedAt === n.id,
       },
@@ -1464,9 +1519,24 @@ function EditorInner() {
     configErrorsByNode,
     resourceLabelsByNode,
     loopOwnerByNode,
+    disabledNodes,
+    offByCascade,
+    tokenLabels,
     breakpoints,
     pausedAt,
   ]);
+
+  // Switch a step on/off (saved with the graph as node.disabled). Off = the
+  // engine skips it and everything downstream at run time.
+  const toggleNodeDisabled = useCallback((nodeID: string) => {
+    setDisabledNodes((prev) => {
+      const next = new Set(prev);
+      if (next.has(nodeID)) next.delete(nodeID);
+      else next.add(nodeID);
+      return next;
+    });
+    setDirty(true);
+  }, []);
 
   // Toggle a breakpoint on the sole selected node (#12). Saved with the
   // graph so it survives reloads.
@@ -1844,6 +1914,7 @@ function EditorInner() {
       params: paramsByID[n.id] ?? {},
       position: n.position,
       ...(breakpoints.has(n.id) ? { breakpoint: true } : {}),
+      ...(disabledNodes.has(n.id) ? { disabled: true } : {}),
     })),
     edges: edges.map((e) => ({
       from: e.source,
@@ -3187,6 +3258,9 @@ function EditorInner() {
           loopOwnerNodeId={
             inspectorSelected ? loopOwnerByNode.get(inspectorSelected.id) : undefined
           }
+          nodeDisabled={inspectorSelected ? disabledNodes.has(inspectorSelected.id) : false}
+          onToggleDisabled={toggleNodeDisabled}
+          tokenLabels={tokenLabels}
           graphMeta={
             id ? { id, tenant: activeTenant, workspace: activeWorkspace, name } : undefined
           }

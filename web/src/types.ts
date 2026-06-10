@@ -11,6 +11,9 @@ export type Node = {
   timeout_seconds?: number;
   // Pause the run after this node completes (debugging) — see #12.
   breakpoint?: boolean;
+  // Step switched off: skipped at run time, and everything downstream
+  // of it is skipped too (setup-time aid).
+  disabled?: boolean;
 };
 
 export type Edge = {

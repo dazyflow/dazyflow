@@ -3290,6 +3290,95 @@ button.warning:hover:not(:disabled) {
   border-color: var(--status-on-hold);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-on-hold) 35%, transparent);
 }
+/* Step switched off: dimmed + desaturated so it reads "not part of the run"
+   at a glance; the chip names the state. Hover restores most of the
+   opacity so the card stays inspectable. */
+.hz-node.hz-node-off {
+  opacity: 0.45;
+  filter: grayscale(0.7);
+}
+.hz-node.hz-node-off:hover,
+.hz-node.hz-node-off.selected {
+  opacity: 0.8;
+}
+/* Downstream of a switched-off step: the run-time skip cascade will skip
+   these too, so grey them as a preview — softer than the off node itself
+   (no chip, less dimming), and hover still restores readability. */
+.hz-node.hz-node-off-cascade {
+  opacity: 0.55;
+  filter: grayscale(0.6);
+}
+.hz-node.hz-node-off-cascade:hover,
+.hz-node.hz-node-off-cascade.selected {
+  opacity: 0.85;
+}
+.hz-node-offchip {
+  position: absolute;
+  top: -9px;
+  right: 10px;
+  padding: 1px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  z-index: 3;
+}
+/* Token chip on the canvas card's inline editor — a whole-value ${…}
+   reference rendered as readable words ("Gmail · Matching emails → first →
+   id"). Click switches to the raw editable token. */
+.hz-token-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 200px;
+  padding: 1px 4px 1px 8px;
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-radius: 999px;
+}
+.hz-token-chip-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hz-token-chip-x {
+  flex: none;
+  padding: 0 3px;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--muted);
+  background: none;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.hz-token-chip-x:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 20%, var(--surface));
+}
+
+/* Inspector header on/off switch. */
+.inspector-onoff {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+.inspector-onoff input {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
 /* Loop body: a node that runs once per row inside a for_each. The dashed
    border (matching the for_each `body` pin's exec convention) signals "this
    doesn't run on its own — the loop drives it" without adding chrome. */

@@ -1265,6 +1265,12 @@ func wireConnectorTokenHooks(reg *daemon.OAuthRegistry) {
 	daemon.SetGoogleFormFieldFetcher(func(ctx context.Context, node core.Node) ([]string, error) {
 		return gform.FieldNames(ctx, core.Job{Params: node.Params})
 	})
+	// Sheets read range acts as a row source (loop columns, "first row"
+	// reference tokens): its record fields are the sheet's live header row.
+	daemon.SetSheetsFieldFetcher(func(ctx context.Context, node core.Node) ([]string, error) {
+		headers, _, err := sheets.ReadRange(ctx, core.Job{Params: node.Params})
+		return headers, err
+	})
 	// Account resource pickers: list the connected Google account's
 	// spreadsheets and forms (both Drive file types) so the node editors
 	// offer a dropdown instead of an ID box. Wired here so the daemon

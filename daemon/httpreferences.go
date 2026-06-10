@@ -51,11 +51,15 @@ func (h *HTTPGateway) listReferences(rw http.ResponseWriter, r *http.Request, p 
 		return
 	}
 
+	// Tenant + flow ride on ctx so live row-source fetches (Sheets headers,
+	// Form questions) can resolve the right OAuth account — same scoping as
+	// the input-fields endpoint.
+	ctx := core.WithFlow(core.WithTenant(r.Context(), p.Tenant), id)
 	groups := referenceGroups{
-		Secrets:   h.secretRefs(r.Context(), p, id),
-		Upstream:  h.upstreamRefs(r.Context(), p, g, node),
+		Secrets:   h.secretRefs(ctx, p, id),
+		Upstream:  h.upstreamRefs(ctx, p, g, node),
 		Trigger:   triggerFieldTokens(g),
-		Resources: h.resourceRefs(r.Context(), p, id),
+		Resources: h.resourceRefs(ctx, p, id),
 	}
 	writeJSON(rw, http.StatusOK, map[string]any{
 		"flow":   id,
@@ -202,6 +206,31 @@ func (h *HTTPGateway) upstreamRefs(ctx context.Context, p core.Principal, g core
 				NodeLabel: nodeLabel,
 				Port:      port.Port,
 			})
+			// When this port carries a record LIST (the node is a registered
+			// row source), also offer the first row's fields as ready-made
+			// tokens — e.g. "Matching emails → first → id" inserting
+			// ${upstream.search.messages[0].id}. Spares non-techies from
+			// hand-typing the [0].field indexing syntax. Best-effort: a
+			// failed live fetch (Sheets headers etc.) just adds nothing.
+			if src, isSource := rowSources[n.Module]; isSource && port.Port == src.listPort {
+				fields, ferr := src.fields(ctx, n)
+				if ferr != nil {
+					continue
+				}
+				portName := port.Label
+				if portName == "" {
+					portName = port.Port
+				}
+				for _, f := range fields {
+					out = append(out, referenceItem{
+						Token:     "${upstream." + n.ID + "." + port.Port + "[0]." + f + "}",
+						Label:     portName + " → first → " + f,
+						NodeID:    n.ID,
+						NodeLabel: nodeLabel,
+						Port:      port.Port,
+					})
+				}
+			}
 		}
 	}
 	return out

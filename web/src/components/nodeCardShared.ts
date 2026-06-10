@@ -2,7 +2,61 @@
 // than in NodeCard.tsx so that file exports ONLY its component — a mixed
 // component/value module breaks React Fast Refresh, which silently leaves
 // the editor running stale code until a full reload.
+import i18n from "../i18n";
 import type { Manifest, Ref } from "../types";
+
+// TokenLabels maps "nodeId.port" → the friendly step·port name (e.g.
+// "Gmail · Matching emails"), so a ${upstream.…} token renders the way the
+// {} reference menu words it. Built by FlowEditor from the manifests.
+export type TokenLabels = Record<string, string>;
+
+// FULL_TOKEN matches when a string is EXACTLY one ${scheme.path} reference
+// (whitespace-trimmed) — only then do we render a chip; mixed text+token
+// values stay as editable text.
+const FULL_TOKEN = /^\$\{([a-zA-Z]+)\.([^}]+)\}$/;
+
+// friendlyTokenText renders a whole-value reference token the way the {}
+// menu describes it ("Gmail · Matching emails → first → id", "Each row →
+// Email") — null when the value isn't a single token or can't be parsed,
+// in which case the caller shows the raw text.
+export function friendlyTokenText(raw: string, labels?: TokenLabels): string | null {
+  const m = FULL_TOKEN.exec(raw.trim());
+  if (!m) return null;
+  const scheme = m[1];
+  const path = m[2];
+  const t = (k: string) => i18n.t("tokenChip." + k);
+  switch (scheme) {
+    case "item":
+      return `${t("eachRow")} → ${path}`;
+    case "trigger":
+      return `${t("form")} → ${path.replace(/^body\./, "")}`;
+    case "resource":
+      return `${t("resource")} → ${path}`;
+    case "secret":
+      return `${t("secret")} → ${path}`;
+    case "upstream": {
+      const mm = /^([^.[\]]+)\.([^.[\]]+)(.*)$/.exec(path);
+      if (!mm) return null;
+      const [, node, port, rest] = mm;
+      const parts: string[] = [labels?.[node + "." + port] ?? node + " · " + port];
+      let r = rest;
+      while (r.length) {
+        let s: RegExpExecArray | null;
+        if ((s = /^\[(\d+)\]/.exec(r))) {
+          parts.push(s[1] === "0" ? t("first") : "#" + (Number(s[1]) + 1));
+          r = r.slice(s[0].length);
+        } else if ((s = /^\.([^.[\]]+)/.exec(r))) {
+          parts.push(s[1]);
+          r = r.slice(s[0].length);
+        } else {
+          return null; // unparseable tail — show the raw token instead
+        }
+      }
+      return parts.join(" → ");
+    }
+  }
+  return null;
+}
 
 // HazyNodeData is the shape we stash on each React Flow node. We carry the
 // live manifest so the canvas can render the same icon and label as the
@@ -40,6 +94,15 @@ export type HazyNodeData = {
   // for_each's `body` pin). Drives the dashed "runs once per row" card style
   // and the ${item.…} reference menu in its form.
   loopOwned?: boolean;
+  // Step switched off (node.disabled): dimmed card with an "Off" chip; at
+  // run time the engine skips it and everything downstream.
+  disabled?: boolean;
+  // Downstream of a switched-off step: will be skipped by the cascade at
+  // run time. Greyed (softer than the off node itself, no chip).
+  offByCascade?: boolean;
+  // "nodeId.port" → friendly step·port names, for rendering ${upstream.…}
+  // tokens in inline editors the way the {} menu words them.
+  tokenLabels?: TokenLabels;
   // Breakpoint set on this node (#12) — shows a red breakpoint dot.
   breakpoint?: boolean;
   // The live run is currently paused after this node (#12).

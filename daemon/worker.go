@@ -207,6 +207,27 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 		return
 	}
 
+	// Disabled switch: the node is off — record it as skipped without
+	// executing. dispatchReady then evaluates its dependents, and the
+	// standard skip cascade (skipped predecessor blocks a default edge)
+	// prunes everything downstream; maybeCompleteGraph still completes the
+	// run since skipped is terminal.
+	if node, ok := graph.Node(rec.NodeID); ok && node.Disabled {
+		if stopLease() {
+			w.cfg.Logger.Printf("[%s] %s: lease lost; abandoning (reclaimed elsewhere)", w.cfg.ID, rec.ID)
+			return
+		}
+		if cerr := w.completeNode(ctx, rec.ID, core.JobStatusSkipped, nil); cerr != nil {
+			w.cfg.Logger.Printf("[%s] skip disabled %s: %v", w.cfg.ID, rec.ID, cerr)
+			return
+		}
+		w.cfg.Logger.Printf("[%s] %s skipped (step is switched off)", w.cfg.ID, rec.ID)
+		w.dispatcher.PublishNodeStatus(rec.GraphRunID, rec.NodeID, core.JobStatusSkipped, nil)
+		w.dispatcher.dispatchReady(ctx, graph, rec.GraphRunID, rec.NodeID)
+		w.dispatcher.maybeCompleteGraph(ctx, graph, rec.GraphRunID, rec.NodeID, core.JobStatusSkipped, nil)
+		return
+	}
+
 	prior, fetchErr := w.fetchPredecessors(ctx, graph, rec)
 	if fetchErr != nil {
 		if stopLease() {

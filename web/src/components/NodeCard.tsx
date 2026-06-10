@@ -3,7 +3,12 @@ import { AlertTriangle, AlertCircle } from "lucide-react";
 import i18n from "../i18n";
 import { iconFor, isBrandedIcon, categoryColor } from "../icons";
 import type { Manifest, Port, JSONSchema, Ref } from "../types";
-import { type HazyNodeData, portColor } from "./nodeCardShared";
+import {
+  type HazyNodeData,
+  type TokenLabels,
+  portColor,
+  friendlyTokenText,
+} from "./nodeCardShared";
 
 // PICKER_FORMATS are the string-param formats whose value is an opaque
 // resource ID chosen from a dropdown. On the card they render read-only as
@@ -204,6 +209,8 @@ export function HazyNode({ data, selected }: NodeProps) {
         statusClass +
         (isTrigger ? " hz-node-trigger" : "") +
         (d.loopOwned ? " hz-loop-owned" : "") +
+        (d.disabled ? " hz-node-off" : "") +
+        (!d.disabled && d.offByCascade ? " hz-node-off-cascade" : "") +
         (d.lintMessage ? " lint-warn" : "") +
         (d.configErrors?.length ? " config-err" : "") +
         (d.paused ? " paused" : "")
@@ -212,6 +219,11 @@ export function HazyNode({ data, selected }: NodeProps) {
     >
       {d.breakpoint && (
         <div className="hz-node-bp" aria-label="breakpoint" title="Breakpoint — run pauses after this node" />
+      )}
+      {d.disabled && (
+        <div className="hz-node-offchip" title={i18n.t("nodeCard.offTitle")}>
+          {i18n.t("nodeCard.off")}
+        </div>
       )}
       {/* No declared inputs: a single centered dot on the left edge, no label.
           Two kinds of input-less node get NO connector at all: value sources
@@ -295,6 +307,7 @@ export function HazyNode({ data, selected }: NodeProps) {
                   schema={s}
                   value={d.params?.[key] ?? s.default ?? ""}
                   onChange={(v) => d.setParam?.(key, v)}
+                  tokenLabels={d.tokenLabels}
                 />
               </label>
             );
@@ -340,6 +353,7 @@ export function HazyNode({ data, selected }: NodeProps) {
                         schema={field}
                         value={d.params?.[p.port] ?? field.default ?? ""}
                         onChange={(v) => d.setParam?.(p.port, v)}
+                        tokenLabels={d.tokenLabels}
                       />
                     </div>
                   )}
@@ -421,11 +435,35 @@ function ParamInput({
   schema: s,
   value,
   onChange,
+  tokenLabels,
 }: {
   schema: JSONSchema;
   value: unknown;
   onChange: (v: unknown) => void;
+  tokenLabels?: TokenLabels;
 }) {
+  // When the whole value is one ${…} reference, show it the way the {}
+  // menu words it ("Gmail · Matching emails → first → id") — the raw
+  // syntax is NEVER revealed. The × clears the value (an empty box then
+  // appears); re-pick a reference via the field's {} menu in the inspector.
+  const rawStr = typeof value === "string" ? value : "";
+  const friendly = rawStr ? friendlyTokenText(rawStr, tokenLabels) : null;
+  if (friendly) {
+    return (
+      <span className="hz-token-chip nodrag">
+        <span className="hz-token-chip-text">{friendly}</span>
+        <button
+          type="button"
+          className="hz-token-chip-x"
+          aria-label={i18n.t("tokenChip.clear")}
+          title={i18n.t("tokenChip.clear")}
+          onClick={() => onChange("")}
+        >
+          ×
+        </button>
+      </span>
+    );
+  }
   if (s.enum) {
     return (
       <select value={String(value ?? s.default ?? "")} onChange={(e) => onChange(e.target.value)}>
@@ -527,6 +565,7 @@ function OperatorChip({
         "hz-node hz-op" +
         (selected ? " selected" : "") +
         statusClass +
+        (d.disabled ? " hz-node-off" : "") +
         (d.lintMessage ? " lint-warn" : "") +
         (d.configErrors?.length ? " config-err" : "") +
         (d.paused ? " paused" : "")

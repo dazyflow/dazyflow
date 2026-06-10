@@ -95,6 +95,38 @@ func TestReferences_UpstreamAncestorsTriggerAndSecrets(t *testing.T) {
 	}
 }
 
+// A row-source upstream (here: Gmail search, whose match stubs always carry
+// id + threadId) also offers ready-made FIRST-ROW field tokens, so a user
+// can pick "first match → id" instead of hand-typing the [0].id syntax.
+func TestReferences_FirstRowFieldTokens(t *testing.T) {
+	h := newGatewayHarness(t)
+	g := core.Graph{
+		ID: "fr", Tenant: "t", Workspace: "ws",
+		Nodes: []core.Node{
+			{ID: "search", Module: "gmail_search_messages", Params: map[string]any{"query": "x"}},
+			{ID: "readmail", Module: "gmail_get_message", Params: map[string]any{}},
+		},
+		Edges: []core.Edge{
+			{From: "search", FromPort: "pass", To: "readmail", ToPort: "pass"},
+		},
+	}
+	if _, err := h.ws.Save(g, "test"); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	flowID := url.PathEscape("t/ws/fr")
+	rw := h.do(t, "GET", "/api/v1/me/flows/"+flowID+"/references?node=readmail", nil)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rw.Code, rw.Body.String())
+	}
+	up := refTokens(t, rw.Body.Bytes())["upstream"]
+	if !up["${upstream.search.messages}"] {
+		t.Errorf("whole-port token missing: %v", up)
+	}
+	if !up["${upstream.search.messages[0].id}"] || !up["${upstream.search.messages[0].threadId}"] {
+		t.Errorf("first-row field tokens missing: %v", up)
+	}
+}
+
 func TestReferences_NoNodeListsAllNodes(t *testing.T) {
 	h := newGatewayHarness(t)
 	g := core.Graph{

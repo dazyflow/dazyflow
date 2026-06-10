@@ -32,6 +32,13 @@ type Node struct {
 	// operator can inspect this node's output, then Continue or Step.
 	// Honored by the dispatcher; see daemon/breakpoint.go.
 	Breakpoint bool `json:"breakpoint,omitempty"`
+
+	// Disabled switches the node off: at run time it is recorded as
+	// skipped without executing, and the standard skip cascade then skips
+	// its dependents too — "off" prunes the whole branch. A setup-time
+	// aid (e.g. don't actually send emails while testing the rest of a
+	// flow). Honored by the worker; see daemon/worker.go.
+	Disabled bool `json:"disabled,omitempty"`
 }
 
 // Position is a canvas X/Y coordinate. Pixels in the UI's coordinate

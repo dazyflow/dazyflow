@@ -896,6 +896,8 @@
     "unwiredRequired": "Required input not wired: {{name}}",
     "loopBodyUnwired": "Wire the Loop body pin to the step you want to run for each row.",
     "loopNested": "A loop can't run inside another loop yet — move this step out of the outer loop's body.",
+    "off": "Off",
+    "offTitle": "This step is switched off — it and everything after it are skipped when the flow runs.",
     "passThrough": "Pass-through value — wire a value in to thread it unchanged out the matching pin"
   },
   "outputPreview": {
@@ -1052,11 +1054,23 @@
   "loopBody": {
     "runsPerRow": "This step runs once per row. Use “From each row” in a field's { } menu to insert a column."
   },
+  "tokenChip": {
+    "eachRow": "Each row",
+    "form": "Form",
+    "resource": "Resource",
+    "secret": "Secret",
+    "first": "first",
+    "clear": "Remove"
+  },
   "inspector": {
     "title": "Inspector",
     "empty": "Select a step to edit.",
     "close": "Close inspector",
     "label": "Label",
+    "stepOn": "On",
+    "stepOff": "Off",
+    "stepOnHint": "This step runs. Switch off to skip it (and everything after it) while setting up.",
+    "stepOffHint": "This step is switched off — it and everything after it are skipped when the flow runs.",
     "sampleTitle": "Run this step and its upstream chain — skip everything downstream. Useful when wiring fields against real upstream data.",
     "sample": "Run this step",
     "sampling": "Running…",
@@ -1152,7 +1166,6 @@
     "cancelRunTooltip": "Cancel run {{runID}}",
     "lintWarning_one": "Saved with {{count}} warning",
     "lintWarning_other": "Saved with {{count}} warnings",
-    "dismiss": "Dismiss",
     "dismissLint": "dismiss lint",
     "connNeeded": "This flow needs setup first: {{items}}.",
     "connNeededLead": "Connect to run this flow:",

@@ -43,6 +43,13 @@ type Props = {
   // ${item.<column>} reference tokens (the columns of that loop's list) and
   // shows a "runs once per row" banner.
   loopOwnerNodeId?: string;
+  // nodeDisabled + onToggleDisabled drive the step's on/off switch. Off =
+  // skipped at run time, along with everything downstream.
+  nodeDisabled?: boolean;
+  onToggleDisabled?: (id: string) => void;
+  // tokenLabels: "nodeId.port" → friendly step·port names so fields holding
+  // one ${upstream.…} token render as a readable chip.
+  tokenLabels?: Record<string, string>;
   // currentRunID is the most-recent run for this graph (set when the
   // user clicks Run). Used by the inline approval panel for
   // await_approval nodes.
@@ -94,6 +101,9 @@ export function Inspector({
   wiredPorts,
   resourceLabels,
   loopOwnerNodeId,
+  nodeDisabled,
+  onToggleDisabled,
+  tokenLabels,
   currentRunID,
   liveLogs,
   workspace,
@@ -313,6 +323,23 @@ export function Inspector({
           )}
         </span>
         <span className="inspector-head-right">
+          {onToggleDisabled && (
+            <label
+              className="inspector-onoff"
+              title={t(nodeDisabled ? "inspector.stepOffHint" : "inspector.stepOnHint")}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <input
+                type="checkbox"
+                checked={!nodeDisabled}
+                onChange={() => onToggleDisabled(selected.id)}
+                aria-label={t("inspector.stepOn")}
+              />
+              <span className="inspector-onoff-label">
+                {t(nodeDisabled ? "inspector.stepOff" : "inspector.stepOn")}
+              </span>
+            </label>
+          )}
           {onClose && (
             <button
               type="button"
@@ -521,6 +548,7 @@ export function Inspector({
               resourceLabels={resourceLabels}
               references={refCtx}
               extraReferenceItems={loopOwnerNodeId ? loopItemReferenceItems : undefined}
+              tokenLabels={tokenLabels}
               onChange={(v) => onParamsChange(selected.id, v)}
             />
           </>
