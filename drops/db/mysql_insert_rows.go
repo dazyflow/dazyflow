@@ -122,7 +122,7 @@ func executeMySQLInsertRows(ctx context.Context, job core.Job, _ chan<- core.Pro
 	}
 
 	createTable := true
-	if v, present := paramBool(job.Params, "create_table"); present {
+	if v, present := params.Bool(job.Params, "create_table"); present {
 		createTable = v
 	}
 	if createTable && len(headers) > 0 {

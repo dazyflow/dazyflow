@@ -2,12 +2,8 @@ package auth
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"os"
 	"strings"
-	"sync"
 	"time"
 	"unicode"
 )
@@ -41,91 +37,6 @@ type OrgProfileStore interface {
 }
 
 var ErrUnknownOrgProfile = errors.New("no profile for tenant")
-
-// JSONOrgProfileStore is the dev / single-node backing. Same shape as
-// the rest of the JSON auth stores in this package.
-type JSONOrgProfileStore struct {
-	mu    sync.RWMutex
-	path  string
-	items map[string]OrgProfile
-}
-
-func OpenJSONOrgProfileStore(path string) (*JSONOrgProfileStore, error) {
-	s := &JSONOrgProfileStore{path: path, items: make(map[string]OrgProfile)}
-	if path == "" {
-		return s, nil
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return s, nil
-		}
-		return nil, fmt.Errorf("read %q: %w", path, err)
-	}
-	var slice []OrgProfile
-	if err := json.Unmarshal(data, &slice); err != nil {
-		return nil, fmt.Errorf("parse %q: %w", path, err)
-	}
-	for _, p := range slice {
-		s.items[p.Tenant] = p
-	}
-	return s, nil
-}
-
-func (s *JSONOrgProfileStore) GetOrgProfile(_ context.Context, tenant string) (OrgProfile, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	p, ok := s.items[tenant]
-	if !ok {
-		return OrgProfile{}, ErrUnknownOrgProfile
-	}
-	return p, nil
-}
-
-func (s *JSONOrgProfileStore) PutOrgProfile(_ context.Context, p OrgProfile) error {
-	if p.Tenant == "" {
-		return fmt.Errorf("tenant required")
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.items[p.Tenant] = p
-	return s.flushLocked()
-}
-
-// ListOrgProfiles is a bulk lookup the gateway uses to populate the
-// org switcher: one call returns the display names for every org the
-// user belongs to. Unknown tenants are silently absent from the
-// result map (the UI falls back to the raw ID).
-func (s *JSONOrgProfileStore) ListOrgProfiles(_ context.Context, tenants []string) (map[string]OrgProfile, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	out := make(map[string]OrgProfile, len(tenants))
-	for _, t := range tenants {
-		if p, ok := s.items[t]; ok {
-			out[t] = p
-		}
-	}
-	return out, nil
-}
-
-func (s *JSONOrgProfileStore) flushLocked() error {
-	if s.path == "" {
-		return nil
-	}
-	slice := make([]OrgProfile, 0, len(s.items))
-	for _, p := range s.items {
-		slice = append(slice, p)
-	}
-	data, err := json.MarshalIndent(slice, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, s.path)
-}
 
 // DefaultOrgDisplayName picks a sensible initial name for the org an
 // account is signing up into. Logic:

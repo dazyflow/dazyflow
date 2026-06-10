@@ -186,7 +186,7 @@ func executePostgresUpsertRows(ctx context.Context, job core.Job, _ chan<- core.
 	qualified := fmt.Sprintf("%s.%s", quoteIdent(schema), quoteIdent(table))
 
 	createTable := true
-	if v, present := paramBool(job.Params, "create_table"); present {
+	if v, present := params.Bool(job.Params, "create_table"); present {
 		createTable = v
 	}
 	if createTable && len(headers) > 0 {

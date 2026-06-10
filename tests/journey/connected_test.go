@@ -37,7 +37,7 @@ func TestJourney_OverdueInvoice_RunsWithConnectedAccounts(t *testing.T) {
 	s := newStack(t)
 	me := s.signUp(t, "office@agency.example")
 
-	raw, g := readGraph(t, "../scenarios/01-overdue-invoice-chaser.json")
+	_, g := readGraph(t, "../scenarios/01-overdue-invoice-chaser.json")
 
 	// The Sheets + Gmail nodes are scripted connectors; point each at the mock
 	// via the base_url override (the scripted analog of the old SetHTTPBase),
@@ -46,7 +46,7 @@ func TestJourney_OverdueInvoice_RunsWithConnectedAccounts(t *testing.T) {
 	patchParams(&g, "read_invoices", mock)
 	patchParams(&g, "log_reminded", mock)
 	patchStepParams(&g, "send_reminders", mock)
-	raw = fillBlanks(mustJSON(t, g))
+	raw := fillBlanks(mustJSON(t, g))
 
 	const flowID = "overdue-invoice-chaser"
 	if r := me.saveFlow(flowID, raw); r.status != 200 {

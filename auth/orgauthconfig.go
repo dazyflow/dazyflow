@@ -2,12 +2,8 @@ package auth
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"os"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -50,78 +46,3 @@ type OrgAuthStore interface {
 }
 
 var ErrUnknownOrgAuth = errors.New("no auth config for tenant")
-
-// JSONOrgAuthStore is the JSON-file backing for dev / single-node.
-type JSONOrgAuthStore struct {
-	mu    sync.RWMutex
-	path  string
-	items map[string]OrgAuthConfig
-}
-
-func OpenJSONOrgAuthStore(path string) (*JSONOrgAuthStore, error) {
-	s := &JSONOrgAuthStore{path: path, items: make(map[string]OrgAuthConfig)}
-	if path == "" {
-		return s, nil
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return s, nil
-		}
-		return nil, fmt.Errorf("read %q: %w", path, err)
-	}
-	var slice []OrgAuthConfig
-	if err := json.Unmarshal(data, &slice); err != nil {
-		return nil, fmt.Errorf("parse %q: %w", path, err)
-	}
-	for _, c := range slice {
-		s.items[c.Tenant] = c
-	}
-	return s, nil
-}
-
-func (s *JSONOrgAuthStore) GetOrgAuth(_ context.Context, tenant string) (OrgAuthConfig, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	c, ok := s.items[tenant]
-	if !ok {
-		return OrgAuthConfig{}, ErrUnknownOrgAuth
-	}
-	return c, nil
-}
-
-func (s *JSONOrgAuthStore) PutOrgAuth(_ context.Context, cfg OrgAuthConfig) error {
-	if cfg.Tenant == "" {
-		return fmt.Errorf("tenant required")
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.items[cfg.Tenant] = cfg
-	return s.flushLocked()
-}
-
-func (s *JSONOrgAuthStore) DeleteOrgAuth(_ context.Context, tenant string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.items, tenant)
-	return s.flushLocked()
-}
-
-func (s *JSONOrgAuthStore) flushLocked() error {
-	if s.path == "" {
-		return nil
-	}
-	slice := make([]OrgAuthConfig, 0, len(s.items))
-	for _, c := range s.items {
-		slice = append(slice, c)
-	}
-	data, err := json.MarshalIndent(slice, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, s.path)
-}

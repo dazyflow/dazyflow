@@ -1,17 +1,14 @@
 package daemon
 
 import (
-	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	"git.sr.ht/~klahr/hazyflow/core"
 )
@@ -49,42 +46,6 @@ func NewWebhookListener(svc *Service) *WebhookListener {
 		svc:          svc,
 		logger:       log.New(log.Writer(), "webhook: ", log.LstdFlags),
 		MaxBodyBytes: 1 * 1024 * 1024, // 1 MiB default
-	}
-}
-
-// ServeListener serves on an already-bound listener. Lets cmd/hzd bind
-// on the main goroutine and fail-loud on a port-in-use error instead of
-// the bind error vanishing into a background goroutine.
-func (w *WebhookListener) ServeListener(ctx context.Context, ln net.Listener) error {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/trigger/", w.handleTrigger)
-	mux.HandleFunc("/form/", w.handleForm)
-	mux.HandleFunc("/healthz", func(rw http.ResponseWriter, _ *http.Request) {
-		rw.WriteHeader(http.StatusOK)
-		_, _ = rw.Write([]byte("ok"))
-	})
-
-	srv := &http.Server{
-		Handler:           mux,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       60 * time.Second,
-	}
-
-	errC := make(chan error, 1)
-	go func() {
-		w.logger.Printf("listening on %s", ln.Addr())
-		errC <- srv.Serve(ln)
-	}()
-
-	select {
-	case <-ctx.Done():
-		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		return srv.Shutdown(shutdown)
-	case err := <-errC:
-		return err
 	}
 }
 

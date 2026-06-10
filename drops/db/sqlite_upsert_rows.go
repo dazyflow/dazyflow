@@ -195,7 +195,7 @@ func executeSQLiteUpsertRows(_ context.Context, job core.Job, _ chan<- core.Prog
 	defer db.Close()
 
 	createTable := true
-	if v, present := paramBool(job.Params, "create_table"); present {
+	if v, present := params.Bool(job.Params, "create_table"); present {
 		createTable = v
 	}
 	if createTable && len(headers) > 0 {

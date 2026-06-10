@@ -9,18 +9,8 @@ import (
 	"strings"
 )
 
-func paramBool(params map[string]any, key string) (bool, bool) {
-	v, ok := params[key]
-	if !ok {
-		return false, false
-	}
-	b, ok := v.(bool)
-	return b, ok
-}
-
-// paramInt accepts JSON numbers (float64), Go ints, or int64. Matches
-// io/helpers.go's variant so a `limit:5` param works identically in
-// either package.
+// paramInt accepts JSON numbers (float64), Go ints, or int64, so a
+// `limit:5` param works whether it arrived natively or via JSON.
 func paramInt(params map[string]any, key string) (int, bool) {
 	v, ok := params[key]
 	if !ok {

@@ -6,15 +6,6 @@ import (
 	"git.sr.ht/~klahr/hazyflow/core"
 )
 
-func paramBool(params map[string]any, key string) (bool, bool) {
-	v, ok := params[key]
-	if !ok {
-		return false, false
-	}
-	b, ok := v.(bool)
-	return b, ok
-}
-
 func paramIntSlice(params map[string]any, key string) []int {
 	v, ok := params[key]
 	if !ok {

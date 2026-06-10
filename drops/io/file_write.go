@@ -110,7 +110,7 @@ func executeFileWrite(_ context.Context, job core.Job, _ chan<- core.Progress) (
 		defer release()
 	}
 
-	if mkdirs, _ := paramBool(job.Params, "mkdirs"); mkdirs {
+	if mkdirs, _ := params.Bool(job.Params, "mkdirs"); mkdirs {
 		if err := root.MkdirAll(path.Dir(destRel), 0o755); err != nil {
 			if isSandboxEscape(err) {
 				return params.Err(job, "sandbox_escape", fmt.Sprintf("mkdirs %q escapes its sandbox root", dest)), nil

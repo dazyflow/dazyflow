@@ -103,7 +103,7 @@ func executeFilePicker(_ context.Context, job core.Job, _ chan<- core.Progress) 
 	}
 
 	fileRef := core.Ref{MIME: mime, Ref: path}
-	if inline, _ := paramBool(job.Params, "inline"); inline {
+	if inline, _ := params.Bool(job.Params, "inline"); inline {
 		f, err := root.Open(rel)
 		if err != nil {
 			return params.Err(job, "io", fmt.Sprintf("open %q: %v", path, err)), nil

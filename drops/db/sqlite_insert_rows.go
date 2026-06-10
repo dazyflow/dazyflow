@@ -172,11 +172,11 @@ func executeSQLiteInsertRows(_ context.Context, job core.Job, _ chan<- core.Prog
 
 	// create_table defaults to true (matches the schema). The user
 	// only opts out when they've pre-created the table with custom
-	// indexes / constraints they don't want overwritten. paramBool
+	// indexes / constraints they don't want overwritten. params.Bool
 	// returns (val, present) so we can distinguish "unset" from
 	// "explicit false."
 	createTable := true
-	if v, present := paramBool(job.Params, "create_table"); present {
+	if v, present := params.Bool(job.Params, "create_table"); present {
 		createTable = v
 	}
 	if createTable && len(headers) > 0 {

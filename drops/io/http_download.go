@@ -134,7 +134,7 @@ func executeHTTPDownload(ctx context.Context, job core.Job, _ chan<- core.Progre
 		return params.Err(job, "unexpected_status", fmt.Sprintf("got %d", resp.StatusCode)), nil
 	}
 
-	if mkdirs, _ := paramBool(job.Params, "mkdirs"); mkdirs {
+	if mkdirs, _ := params.Bool(job.Params, "mkdirs"); mkdirs {
 		if err := root.MkdirAll(path.Dir(rel), 0o755); err != nil {
 			if isSandboxEscape(err) {
 				return params.Err(job, "sandbox_escape", fmt.Sprintf("mkdirs %q escapes its sandbox root", dest)), nil

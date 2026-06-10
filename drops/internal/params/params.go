@@ -77,6 +77,20 @@ func IntDefault(params map[string]any, key string, def int) int {
 	return def
 }
 
+// Bool returns the bool at key and whether a usable bool was present.
+// The second result lets callers tell "explicitly set to false" apart
+// from "absent" — e.g. an override that should only apply when the
+// param was actually provided. Use BoolDefault when that distinction
+// doesn't matter.
+func Bool(params map[string]any, key string) (bool, bool) {
+	v, ok := params[key]
+	if !ok {
+		return false, false
+	}
+	b, ok := v.(bool)
+	return b, ok
+}
+
 // BoolDefault returns the bool at key, falling back to def for
 // missing / wrong-type values.
 func BoolDefault(params map[string]any, key string, def bool) bool {

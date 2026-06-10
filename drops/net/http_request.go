@@ -118,7 +118,7 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 	// allow_private_networks disables the SSRF guard; only honor it when the
 	// operator has opted in (HAZYFLOW_ALLOW_PRIVATE_EGRESS). Otherwise it's a
 	// tenant-controllable SSRF bypass to metadata/localhost/internal hosts.
-	reqAllowPrivate, _ := paramBool(job.Params, "allow_private_networks")
+	reqAllowPrivate, _ := params.Bool(job.Params, "allow_private_networks")
 	allowPrivate := reqAllowPrivate && PrivateEgressAllowed()
 
 	headers, err := paramHeaders(job.Params, "headers")
