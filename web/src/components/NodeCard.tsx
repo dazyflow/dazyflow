@@ -159,17 +159,13 @@ export function HazyNode({ data, selected }: NodeProps) {
   // input connector, since you can't wire a value into a literal. Triggers
   // are input-less too but carry no literal field, so they're not sources.
   const isValueSource = !hasDeclaredInputs && literalFields.length > 0;
-  // Resource-picker fields (the read-only resolved name — the spreadsheet,
-  // the form) show ALWAYS: they identify the node at a glance, the way the
-  // Google Form trigger always shows its form. Other literal fields (editable
-  // inputs) stay gated to a value source or the sole-selected node, so the
-  // canvas doesn't fill with input boxes.
-  const showOtherLiterals = isValueSource || !!d.inlineEditable;
-  const visibleLiteralFields = literalFields.filter(
-    (f) =>
-      (f.schema.format && PICKER_FORMATS.has(f.schema.format)) ||
-      showOtherLiterals,
-  );
+  // Required literal fields show ALWAYS — no hidden config on a card. They
+  // identify the node at a glance (the spreadsheet, the ntfy topic) the way
+  // the Google Form trigger always shows its form. Pickers and ordinary
+  // literals render READ-ONLY (edit via the inspector); only a value
+  // source's literal (Text's text, Number's value — the field IS the node)
+  // stays editable on the card.
+  const visibleLiteralFields = literalFields;
   const showLiteralFields = visibleLiteralFields.length > 0;
 
   const statusClass = d.status ? " status-" + d.status : "";
@@ -300,15 +296,32 @@ export function HazyNode({ data, selected }: NodeProps) {
                 </label>
               );
             }
+            // A value source's literal IS the node — keep it editable.
+            // Every other required literal renders read-only: visible at all
+            // times, edited via the inspector.
+            if (isValueSource) {
+              return (
+                <label key={key} className="hz-param">
+                  <span className="hz-param-label">{label}</span>
+                  <ParamInput
+                    schema={s}
+                    value={d.params?.[key] ?? s.default ?? ""}
+                    onChange={(v) => d.setParam?.(key, v)}
+                    tokenLabels={d.tokenLabels}
+                  />
+                </label>
+              );
+            }
+            const rawVal = d.params?.[key] ?? s.default ?? "";
+            const strVal = typeof rawVal === "string" ? rawVal : String(rawVal);
+            const friendly =
+              typeof rawVal === "string" ? friendlyTokenText(rawVal, d.tokenLabels) : null;
             return (
               <label key={key} className="hz-param">
                 <span className="hz-param-label">{label}</span>
-                <ParamInput
-                  schema={s}
-                  value={d.params?.[key] ?? s.default ?? ""}
-                  onChange={(v) => d.setParam?.(key, v)}
-                  tokenLabels={d.tokenLabels}
-                />
+                <span className="hz-param-readonly">
+                  {friendly ?? (strVal || i18n.t("nodeCard.pickerUnset"))}
+                </span>
               </label>
             );
           })}

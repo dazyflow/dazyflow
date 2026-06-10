@@ -44,6 +44,43 @@ func TestNtfy_PostsBodyAndHeaders(t *testing.T) {
 	}
 }
 
+// A body over ntfy's message limit would be treated as a file-attachment
+// upload (rejected by public servers) — the drop truncates instead, without
+// splitting a multi-byte character.
+func TestNtfy_TruncatesLongMessage(t *testing.T) {
+	hfnet.SetAllowPrivateEgress(true)
+	defer hfnet.SetAllowPrivateEgress(false)
+
+	var gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(`{"id":"x"}`))
+	}))
+	defer srv.Close()
+
+	// 5000 bytes of "å" (2 bytes each) — over the 4000-byte cap, with the cut
+	// landing mid-rune unless the truncation backs up to a rune boundary.
+	long := strings.Repeat("å", 2500)
+	res, err := executeNtfy(context.Background(), core.Job{
+		Params: map[string]any{"server": srv.URL, "topic": "alerts"},
+		Input:  map[string]core.Ref{"message": {Inline: long}},
+	}, nil)
+	if err != nil || res.Status != core.StatusOK {
+		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
+	}
+	if len(gotBody) > 4003 { // 4000 + ellipsis (3 bytes)
+		t.Errorf("body not truncated: %d bytes", len(gotBody))
+	}
+	if !strings.HasSuffix(gotBody, "…") {
+		t.Errorf("truncated body should end with ellipsis")
+	}
+	if !strings.HasPrefix(gotBody, "å") || strings.ContainsRune(gotBody, '�') {
+		t.Errorf("multi-byte characters must not be split")
+	}
+}
+
 func TestNtfy_MissingTopic(t *testing.T) {
 	res, _ := executeNtfy(context.Background(), core.Job{Params: map[string]any{"message": "hi"}}, nil)
 	if res.Status != core.StatusError || res.Error.Code != "bad_param" {

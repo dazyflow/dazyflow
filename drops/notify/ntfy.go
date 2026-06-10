@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"git.sr.ht/~klahr/hazyflow/core"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
@@ -20,9 +21,10 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "ntfy",
 			Version:     "1.0",
-			Label:       "ntfy push",
-			Summary:     "Send a push notification to an ntfy topic (ntfy.sh or self-hosted).",
-			Description: "Publish a push notification to an ntfy topic. The message comes from the 'body' input or params.message; title, priority, tags and a click URL are optional. Works with ntfy.sh or any self-hosted ntfy server.",
+			Label:       "ntfy",
+			Subtitle:    "Send notification",
+			Summary:     "Send a push notification to your phone via an ntfy topic.",
+			Description: "Send a push notification to an ntfy topic — subscribe to the same topic in the free ntfy app to receive it on your phone. The message can be typed on the step or wired in from another step; title, priority, tags and a tap link are optional.",
 			Integration: "ntfy",
 			Category:    "network",
 			Icon:        "ntfy",
@@ -42,11 +44,18 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				{Port: "body", Label: "Message"},
+				// Named after their params so the card shows inline editable
+				// boxes (Unreal-style); a wired value overrides the typed one.
+				// The old "body" port name is still accepted at run time for
+				// flows saved before the rename.
+				{Port: "title", Label: "Title", MIME: []string{"text/plain"}},
+				{Port: "message", Label: "Message", MIME: []string{"text/plain"}},
 			},
-			Outputs: []core.Port{
-				{Port: "meta", Label: "Delivery metadata", MIME: []string{"application/json"}},
-			},
+			// No declared outputs: sending a notification is a "do" step —
+			// chain via the pass-through pin. The delivery details are still
+			// EMITTED under "meta" for run records, just not a pin (same as
+			// gmail send / sheets append).
+			Outputs: []core.Port{},
 			// server + token are NOT params: they're the per-tenant connection
 			// (ConnectionFields above), injected into unset params at run time
 			// by injectConnectionDefaults. Declaring them here too would render
@@ -57,12 +66,12 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"topic":{"type":"string","description":"A name you pick for this notification channel — letters, numbers, dashes or underscores, no spaces. To receive the messages, subscribe to this same topic in the ntfy app or open ntfy.sh/<your-topic> in a browser.","examples":["my-daily-hello"]},
-					"message":{"type":"string","description":"The text to send. Optional if you connect a Message input from another step.","examples":["Hello"]},
-					"title":{"type":"string","description":"Notification title."},
-					"priority":{"type":"string","enum":["1","2","3","4","5"],"enumNames":["1 — Min","2 — Low","3 — Default","4 — High","5 — Max"],"description":"How urgently it buzzes. Leave unset for the normal level."},
-					"tags":{"type":"array","items":{"type":"string"},"description":"Emoji/tag shortcodes."},
-					"click":{"type":"string","description":"URL opened when the notification is tapped."},
+					"topic":{"type":"string","title":"Topic","description":"A name you pick for this notification channel — letters, numbers, dashes or underscores, no spaces. To receive the messages, subscribe to this same topic in the ntfy app or open ntfy.sh/<your-topic> in a browser.","examples":["my-daily-hello"]},
+					"message":{"type":"string","title":"Message","description":"The text to send. Optional if you connect a Message input from another step.","examples":["Hello"]},
+					"title":{"type":"string","title":"Title","description":"Notification title."},
+					"priority":{"type":"string","title":"Priority","enum":["1","2","3","4","5"],"enumNames":["1 — Min","2 — Low","3 — Default","4 — High","5 — Max"],"description":"How urgently it buzzes. Leave unset for the normal level."},
+					"tags":{"type":"array","title":"Tags","items":{"type":"string"},"description":"Emoji/tag shortcodes."},
+					"click":{"type":"string","title":"Link to open","description":"Web address opened when the notification is tapped."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
 				},
 				"required":["topic"]
@@ -82,7 +91,13 @@ func executeNtfy(ctx context.Context, job core.Job, _ chan<- core.Progress) (cor
 	server := strings.TrimRight(params.StringDefault(job.Params, "server", "https://ntfy.sh"), "/")
 
 	body := params.StringDefault(job.Params, "message", "")
-	if in, ok := job.Input["body"]; ok && in.Inline != nil {
+	// The Message input overrides the param. "message" is the declared port;
+	// "body" is accepted too for flows saved before the rename.
+	in, ok := job.Input["message"]
+	if !ok {
+		in, ok = job.Input["body"]
+	}
+	if ok && in.Inline != nil {
 		switch v := in.Inline.(type) {
 		case string:
 			body = v
@@ -93,6 +108,19 @@ func executeNtfy(ctx context.Context, job core.Job, _ chan<- core.Progress) (cor
 				body = string(b)
 			}
 		}
+	}
+
+	// ntfy treats a body over its message limit (~4 KiB) as a file-attachment
+	// upload, which public servers reject ("attachments not allowed"). A push
+	// notification is a glance, not a document — truncate long input (e.g. a
+	// whole email body wired into Message) instead of failing the run.
+	const ntfyMaxMessage = 4000
+	if len(body) > ntfyMaxMessage {
+		cut := ntfyMaxMessage
+		for cut > 0 && !utf8.RuneStart(body[cut]) {
+			cut-- // don't split a multi-byte character (å, emoji, …)
+		}
+		body = body[:cut] + "…"
 	}
 
 	url := server + "/" + topic
@@ -107,8 +135,15 @@ func executeNtfy(ctx context.Context, job core.Job, _ chan<- core.Progress) (cor
 	if err != nil {
 		return params.Err(job, "bad_param", err.Error()), nil
 	}
-	if v, _ := params.StringOpt(job.Params, "title"); v != "" {
-		req.Header.Set("Title", v)
+	title, _ := params.StringOpt(job.Params, "title")
+	// The Title input overrides the param when wired.
+	if in, ok := job.Input["title"]; ok && in.Inline != nil {
+		if s, isStr := in.Inline.(string); isStr && s != "" {
+			title = s
+		}
+	}
+	if title != "" {
+		req.Header.Set("Title", title)
 	}
 	if v, _ := params.StringOpt(job.Params, "priority"); v != "" {
 		req.Header.Set("Priority", v)

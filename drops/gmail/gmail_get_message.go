@@ -46,9 +46,9 @@ func init() {
 				// Friendly scalar pins instead of a JSON blob — same move as
 				// sheets append. The full flattened message is still EMITTED
 				// under "message" for run records/debugging, just not a pin.
+				{Port: "date", Label: "Date", MIME: []string{"text/plain"}},
 				{Port: "from", Label: "From", MIME: []string{"text/plain"}},
 				{Port: "subject", Label: "Subject", MIME: []string{"text/plain"}},
-				{Port: "date", Label: "Date", MIME: []string{"text/plain"}},
 				{Port: "body", Label: "Body", MIME: []string{"text/plain"}},
 			},
 			ParamsSchema: json.RawMessage(`{
