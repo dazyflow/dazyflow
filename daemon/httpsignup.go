@@ -32,13 +32,9 @@ import (
 //
 // What this DELIBERATELY isn't (yet):
 //
-//   - Email verification — the signup is "instant try" today. Adding
-//     verification means an email-sending dependency and a longer
-//     onboarding click path. The intentionally-narrow MVP defers it
-//     until there's a deliverability story (SES / SendGrid / SMTP
-//     config).
-//   - Captcha / anti-abuse — signup-spam protection comes with
-//     verification or a per-IP rate limit (already on TODO).
+//   - Captcha — the per-IP auth rate limit plus email verification
+//     (active when HAZYFLOW_SMTP_URL + PUBLIC_BASE_URL are set; see
+//     email_verification.go) are the current anti-abuse story.
 //   - Plan selection / billing — every signup lands on the free
 //     tier; plan gating is a T3 item once Stripe is wired.
 //
@@ -92,11 +88,11 @@ func (h *HTTPGateway) signUp(rw http.ResponseWriter, r *http.Request) {
 	// safe; the duplicate-rejection happens at PutUser time too.
 	if existing, err := h.Users.GetByEmail(r.Context(), email); err == nil && existing.Email != "" {
 		// "email already in use" is a real fact a malicious enumeration
-		// attempt would mine for. But hiding it (always say "account
-		// created, check your email") only works when there IS email
-		// verification — without it the next step (sign in) reveals
-		// the truth anyway. Until verification ships, we tell the
-		// truth and rely on rate-limiting (TODO) to slow enumeration.
+		// attempt would mine for. Signup stays instant-try even with
+		// verification active (the session is issued before the link is
+		// clicked), so hiding the conflict would just defer the truth to
+		// the sign-in attempt; we tell it and rely on the per-IP auth
+		// rate limit to slow enumeration.
 		writeJSONError(rw, http.StatusConflict, "an account with that email already exists")
 		return
 	}
@@ -143,6 +139,11 @@ func (h *HTTPGateway) signUp(rw http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Verification email (active only with a mailer + public base URL):
+	// best-effort, never blocks the signup. The UI shows the pending
+	// banner via whoami until the link is clicked.
+	verificationSent := h.sendVerificationEmail(r, user)
+
 	// Auto sign-in: issue a session immediately so the UI can land
 	// the user on the welcome page without an extra round trip
 	// through the sign-in form.
@@ -171,6 +172,10 @@ func (h *HTTPGateway) signUp(rw http.ResponseWriter, r *http.Request) {
 		"tenant":     sess.Tenant,
 		"workspace":  sess.Workspace,
 		"expires_at": sess.ExpiresAt,
+		// True when a confirmation email went out — the UI can word the
+		// welcome step accordingly. False on deployments without a
+		// mailer (verification inactive) or on a send failure.
+		"verification_email_sent": verificationSent,
 	})
 }
 

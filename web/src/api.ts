@@ -258,6 +258,20 @@ export const api = {
   // page without an extra round trip.
   signUp: (email: string, password: string) =>
     request<SignInResponse>(null, "POST", "/auth/signup", { email, password }),
+  // Email verification: verifyEmail consumes the emailed link's
+  // email+token pair (no auth — the click can land in any browser);
+  // resendVerification re-mints + re-sends for the signed-in user.
+  verifyEmail: (email: string, verifyToken: string) =>
+    request<{ verified: boolean }>(null, "POST", "/auth/verify-email", {
+      email,
+      token: verifyToken,
+    }),
+  resendVerification: (token: string) =>
+    request<{ sent: boolean; already_verified?: boolean }>(
+      token,
+      "POST",
+      "/me/verification/resend",
+    ),
   // Template gallery: index lives at /templates/index.json under the
   // web app's static assets (NOT /api/v1/...). Each template entry
   // points at its own graph file, fetched lazily when the user

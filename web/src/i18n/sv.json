@@ -73,6 +73,21 @@
     "pickTenant": "(välj organisation)",
     "noSubject": "(inget subjekt)"
   },
+  "verifyEmail": {
+    "working": "Bekräftar din e-postadress…",
+    "okTitle": "E-postadressen bekräftad",
+    "okBody": "Din adress är verifierad — allt klart.",
+    "toApp": "Tillbaka till dina flöden",
+    "toSignin": "Logga in",
+    "failedTitle": "Kunde inte bekräfta",
+    "failedHint": "Länken kan ha gått ut. Logga in och använd bannerns knapp för att få en ny.",
+    "badLink": "Länken saknar e-postadress eller token.",
+    "banner": "Bekräfta din e-postadress — vi skickade en länk när du registrerade dig.",
+    "bannerSent": "Verifieringsmejl skickat — kolla din inkorg.",
+    "bannerResend": "Skicka igen",
+    "bannerSending": "Skickar…",
+    "bannerDismiss": "Dölj tills vidare"
+  },
   "usage": {
     "title": "Förbrukning",
     "subtitle": "Flödeskörningar och stegexekveringar för organisationen, per månad.",

@@ -1,0 +1,71 @@
+import { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { CheckCircle2, MailWarning } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { api, APIError } from "../api";
+import { useAuth } from "../auth";
+
+// VerifyEmail is the landing page for the confirmation link
+// (/verify-email?email=…&token=…). It works signed-in or not — the
+// token in the link is the proof, not the session — so it's routed in
+// both App trees. On success it refreshes whoami so the pending banner
+// disappears without a reload.
+export function VerifyEmail() {
+  const { t } = useTranslation();
+  const { token: sessionToken, refreshMe } = useAuth();
+  const [params] = useSearchParams();
+  const [state, setState] = useState<"working" | "ok" | "failed">("working");
+  const [errMsg, setErrMsg] = useState("");
+
+  const email = params.get("email") ?? "";
+  const verifyToken = params.get("token") ?? "";
+
+  useEffect(() => {
+    if (!email || !verifyToken) {
+      setState("failed");
+      setErrMsg(t("verifyEmail.badLink"));
+      return;
+    }
+    api
+      .verifyEmail(email, verifyToken)
+      .then(async () => {
+        setState("ok");
+        if (sessionToken) await refreshMe();
+      })
+      .catch((e) => {
+        setState("failed");
+        setErrMsg(e instanceof APIError ? e.message : (e as Error).message);
+      });
+    // Run once for the link in the URL — re-running on auth changes
+    // would double-post the token.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div className="auth-page" style={{ display: "grid", placeItems: "center", minHeight: "60vh" }}>
+      <div className="card" style={{ maxWidth: 440, textAlign: "center", padding: "var(--space-6)" }}>
+        {state === "working" && <p>{t("verifyEmail.working")}</p>}
+        {state === "ok" && (
+          <>
+            <CheckCircle2 size={36} style={{ color: "var(--success, #22c55e)" }} />
+            <h1 style={{ marginTop: "var(--space-3)" }}>{t("verifyEmail.okTitle")}</h1>
+            <p className="sub">{t("verifyEmail.okBody")}</p>
+            <p>
+              <Link to={sessionToken ? "/flows" : "/signin"} className="primary-link">
+                {sessionToken ? t("verifyEmail.toApp") : t("verifyEmail.toSignin")}
+              </Link>
+            </p>
+          </>
+        )}
+        {state === "failed" && (
+          <>
+            <MailWarning size={36} style={{ color: "var(--danger)" }} />
+            <h1 style={{ marginTop: "var(--space-3)" }}>{t("verifyEmail.failedTitle")}</h1>
+            <p className="sub">{errMsg}</p>
+            <p className="sub">{t("verifyEmail.failedHint")}</p>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}

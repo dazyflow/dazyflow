@@ -332,6 +332,11 @@ export type WhoAmI = {
   // --public-base-url). Used to build correct webhook/hosted-form URLs.
   // Empty when unset — the UI falls back to a localhost hint.
   public_base_url?: string;
+  // email_verified / verification_pending drive the "confirm your email"
+  // banner. pending is false on deployments without a mailer and for
+  // API-key principals.
+  email_verified?: boolean;
+  verification_pending?: boolean;
   // support_contact is an operator-set email or URL (e.g.
   // "support@acme.com" or "https://acme.com/help") surfaced on UI
   // surfaces that depend on server-side setup the end user can't fix

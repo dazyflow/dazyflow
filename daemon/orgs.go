@@ -395,6 +395,11 @@ func (h *HTTPGateway) createInvitation(rw http.ResponseWriter, r *http.Request, 
 		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}
+	// Anti-abuse: on verification-active deployments an unverified
+	// signup can't use the operator's mailer to send invitations.
+	if !h.requireVerifiedInviter(rw, r, p) {
+		return
+	}
 	var body struct {
 		Email     string      `json:"email"`
 		Roles     []core.Role `json:"roles"`

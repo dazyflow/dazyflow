@@ -72,6 +72,9 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret_enc  BYTEA;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled     BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enrolled_at TIMESTAMPTZ;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_codes   JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS verified_at       TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS verify_token_hash BYTEA;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS verify_expires_at TIMESTAMPTZ;
 `
 
 // EnsurePgAuthSchema creates the api_keys / sessions / users tables if
@@ -319,7 +322,8 @@ func unmarshalRecoveryCodes(b []byte) ([]string, error) {
 func (s *PgUserStore) GetByEmail(ctx context.Context, email string) (User, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 	const q = `SELECT email, password_hash, subject, tenant, workspace, roles, created_at,
-	                  totp_secret_enc, totp_enabled, totp_enrolled_at, recovery_codes
+	                  totp_secret_enc, totp_enabled, totp_enrolled_at, recovery_codes,
+	                  verified_at, verify_token_hash, verify_expires_at
 	             FROM users WHERE email=$1`
 	var (
 		u           User
@@ -329,6 +333,7 @@ func (s *PgUserStore) GetByEmail(ctx context.Context, email string) (User, error
 	err := s.pool.QueryRow(ctx, q, email).Scan(
 		&u.Email, &u.PasswordHash, &u.Subject, &u.Tenant, &u.Workspace, &rolesRaw, &u.CreatedAt,
 		&u.TOTPSecretEnc, &u.TOTPEnabled, &u.TOTPEnrolledAt, &recoveryRaw,
+		&u.VerifiedAt, &u.VerifyTokenHash, &u.VerifyExpiresAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -368,22 +373,27 @@ func (s *PgUserStore) PutUser(ctx context.Context, u User) error {
 	}
 	const q = `
 		INSERT INTO users (email, password_hash, subject, tenant, workspace, roles, created_at,
-		                   totp_secret_enc, totp_enabled, totp_enrolled_at, recovery_codes)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+		                   totp_secret_enc, totp_enabled, totp_enrolled_at, recovery_codes,
+		                   verified_at, verify_token_hash, verify_expires_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
 		ON CONFLICT (email) DO UPDATE SET
 		  password_hash=EXCLUDED.password_hash, subject=EXCLUDED.subject,
 		  tenant=EXCLUDED.tenant, workspace=EXCLUDED.workspace, roles=EXCLUDED.roles,
 		  totp_secret_enc=EXCLUDED.totp_secret_enc, totp_enabled=EXCLUDED.totp_enabled,
-		  totp_enrolled_at=EXCLUDED.totp_enrolled_at, recovery_codes=EXCLUDED.recovery_codes
+		  totp_enrolled_at=EXCLUDED.totp_enrolled_at, recovery_codes=EXCLUDED.recovery_codes,
+		  verified_at=EXCLUDED.verified_at, verify_token_hash=EXCLUDED.verify_token_hash,
+		  verify_expires_at=EXCLUDED.verify_expires_at
 	`
 	_, err = s.pool.Exec(ctx, q, u.Email, u.PasswordHash, u.Subject, u.Tenant, u.Workspace, roles, created,
-		u.TOTPSecretEnc, u.TOTPEnabled, u.TOTPEnrolledAt, recovery)
+		u.TOTPSecretEnc, u.TOTPEnabled, u.TOTPEnrolledAt, recovery,
+		u.VerifiedAt, u.VerifyTokenHash, u.VerifyExpiresAt)
 	return err
 }
 
 func (s *PgUserStore) ListUsers(ctx context.Context) ([]User, error) {
 	rows, err := s.pool.Query(ctx, `SELECT email, password_hash, subject, tenant, workspace, roles, created_at,
-	                                       totp_secret_enc, totp_enabled, totp_enrolled_at, recovery_codes
+	                                       totp_secret_enc, totp_enabled, totp_enrolled_at, recovery_codes,
+	                                       verified_at, verify_token_hash, verify_expires_at
 	                                  FROM users ORDER BY email`)
 	if err != nil {
 		return nil, err
@@ -397,7 +407,8 @@ func (s *PgUserStore) ListUsers(ctx context.Context) ([]User, error) {
 			recoveryRaw []byte
 		)
 		if err := rows.Scan(&u.Email, &u.PasswordHash, &u.Subject, &u.Tenant, &u.Workspace, &rolesRaw, &u.CreatedAt,
-			&u.TOTPSecretEnc, &u.TOTPEnabled, &u.TOTPEnrolledAt, &recoveryRaw); err != nil {
+			&u.TOTPSecretEnc, &u.TOTPEnabled, &u.TOTPEnrolledAt, &recoveryRaw,
+			&u.VerifiedAt, &u.VerifyTokenHash, &u.VerifyExpiresAt); err != nil {
 			return nil, err
 		}
 		roles, err := unmarshalRoles(rolesRaw)

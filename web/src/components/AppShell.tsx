@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   Menu,
+  MailWarning,
   LogOut,
   Workflow,
   ShieldCheck,
@@ -19,6 +20,7 @@ import {
   Key,
   Settings as SettingsIcon,
   MoreVertical,
+  X,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api";
@@ -521,6 +523,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           onClick={closeNav}
         />
         <main className={"main" + (inEditor ? " no-pad" : "")}>
+          {/* "Confirm your email" nag — only on verification-active
+              deployments for unverified password accounts. Hidden in the
+              editor so it never eats canvas height. */}
+          {me?.verification_pending && !inEditor && <VerifyEmailBanner />}
           {children}
         </main>
       </div>
@@ -896,6 +902,66 @@ function FlowMenu({ onOpenSettings }: { onOpenSettings: () => void }) {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+// VerifyEmailBanner nags an unverified account to confirm its address,
+// with a resend button. Dismissal is per-render-tree only (state, not
+// storage) — the nag should come back next visit until verified.
+function VerifyEmailBanner() {
+  const { t } = useTranslation();
+  const { token, refreshMe } = useAuth();
+  const [sent, setSent] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [hidden, setHidden] = useState(false);
+
+  if (hidden) return null;
+  const resend = async () => {
+    if (!token) return;
+    setBusy(true);
+    try {
+      const r = await api.resendVerification(token);
+      if (r.already_verified) {
+        await refreshMe(); // banner disappears via whoami
+        return;
+      }
+      setSent(true);
+    } catch {
+      // The button stays — the user can retry.
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div
+      className="card"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "var(--space-3)",
+        marginBottom: "var(--space-4)",
+        borderColor: "var(--warning, #d97706)",
+      }}
+    >
+      <MailWarning size={18} style={{ color: "var(--warning, #d97706)", flexShrink: 0 }} />
+      <div style={{ flex: 1 }}>
+        {sent ? t("verifyEmail.bannerSent") : t("verifyEmail.banner")}
+      </div>
+      {!sent && (
+        <button className="ghost" disabled={busy} onClick={() => void resend()}>
+          {busy ? t("verifyEmail.bannerSending") : t("verifyEmail.bannerResend")}
+        </button>
+      )}
+      <button
+        type="button"
+        className="icon-button"
+        onClick={() => setHidden(true)}
+        aria-label={t("verifyEmail.bannerDismiss")}
+        title={t("verifyEmail.bannerDismiss")}
+      >
+        <X size={14} />
+      </button>
     </div>
   );
 }

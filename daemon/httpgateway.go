@@ -295,6 +295,8 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	}
 	mux.HandleFunc("POST /api/v1/auth/signin", h.rateLimitAuth(h.signIn))
 	mux.HandleFunc("POST /api/v1/auth/signup", h.rateLimitAuth(h.signUp))
+	mux.HandleFunc("POST /api/v1/auth/verify-email", h.rateLimitAuth(h.verifyEmail))
+	mux.HandleFunc("POST /api/v1/me/verification/resend", h.requireAuth(h.resendVerification))
 	mux.HandleFunc("POST /api/v1/auth/signout", h.signOut)
 	// Leg 2 of sign-in for TOTP-enrolled users. Unauthenticated (the
 	// challenge token is the principal) and rate-limited like the rest
@@ -1037,6 +1039,7 @@ func (h *HTTPGateway) whoami(rw http.ResponseWriter, r *http.Request, p core.Pri
 	// memberships still sees a single entry and the switcher gracefully
 	// hides itself.
 	memberships := h.collectMemberships(r.Context(), p)
+	emailVerified, verificationPending := h.verificationStatus(r, p)
 	writeJSON(rw, http.StatusOK, map[string]any{
 		"subject":     p.Subject,
 		"tenant":      p.Tenant,
@@ -1044,6 +1047,11 @@ func (h *HTTPGateway) whoami(rw http.ResponseWriter, r *http.Request, p core.Pri
 		"roles":       p.Roles,
 		"permissions": perms,
 		"memberships": memberships,
+		// email_verified / verification_pending drive the "confirm your
+		// email" banner. pending is false on deployments without a
+		// mailer (nothing to verify against) and for API-key callers.
+		"email_verified":       emailVerified,
+		"verification_pending": verificationPending,
 		// public_base_url lets the UI build externally-correct webhook /
 		// hosted-form URLs instead of guessing the host. Empty when the
 		// operator hasn't set --public-base-url; the UI falls back to a

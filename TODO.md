@@ -648,7 +648,20 @@ this no customer can try" to "needed before paid conversion."
   **Open:** per-workspace
   roles (one Membership row carries one role set for the whole org);
   org-ownership transfer (removing/editing the home owner is blocked);
-  invite email delivery shipped 2026-06-10 (operator mailer, see below); signup email VERIFICATION still open (needs a gating-semantics call).
+  invite email delivery shipped 2026-06-10 (operator mailer, see below); signup email verification shipped 2026-06-11: auto-active when
+  HAZYFLOW_SMTP_URL + PUBLIC_BASE_URL are set — token (sha256 + 48h
+  expiry) rides on the User record (mem/JSON/Pg, migration ALTERs),
+  signup emails the link, POST /auth/verify-email consumes it
+  (constant-time compare, enumeration-safe error shape, idempotent on
+  verified accounts), /me/verification/resend re-mints, whoami carries
+  email_verified/verification_pending, the shell shows a resend banner,
+  and /verify-email lands the link signed-in or not. Gating is soft by
+  design (runs + sign-in stay open; instant-try funnel intact) with ONE
+  hard gate: unverified accounts can't send invitations through the
+  operator's mailer. Verified end-to-end in the browser through the
+  real signup form + a real SMTP exchange. Open: hard-gating more
+  surfaces (outbound-email drops?) if abuse shows up; cleanup sweep for
+  never-verified stale accounts.
 - [x] **BYO cloud secret providers** (Vault / AWS Secrets Manager /
   GCP Secret Manager). Shipped (2026-06-10) — Vault/OpenBao already
   existed; AWS + GCP added on the same model (per-tenant config in the

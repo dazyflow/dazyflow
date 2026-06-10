@@ -13,6 +13,7 @@ import { RunList } from "./pages/RunList";
 import { RunDetail } from "./pages/RunDetail";
 import { Approvals } from "./pages/Approvals";
 import { Usage } from "./pages/Usage";
+import { VerifyEmail } from "./pages/VerifyEmail";
 import { Settings } from "./pages/Settings";
 import { Admin } from "./pages/Admin";
 import { AdminAPIKeys } from "./pages/AdminAPIKeys";
@@ -38,6 +39,9 @@ export function App() {
       <Routes>
         <Route path="/signup" element={<SignUp />} />
         <Route path="/signin" element={<SignIn />} />
+        {/* The verification link can land in a signed-out browser —
+            the token is the proof, no session needed. */}
+        <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/invite/:token" element={<AcceptInvite />} />
         <Route path="*" element={<SignIn />} />
       </Routes>
@@ -65,6 +69,7 @@ export function App() {
         <Route path="/runs/:runID" element={<RunDetail />} />
         <Route path="/approvals" element={<Approvals />} />
         <Route path="/usage" element={<Usage />} />
+        <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/admin" element={<Admin />} />
         <Route path="/admin/api-keys" element={<AdminAPIKeys />} />

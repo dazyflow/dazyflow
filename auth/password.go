@@ -42,7 +42,19 @@ type User struct {
 	TOTPEnabled        bool       `json:"totp_enabled,omitempty"`
 	TOTPEnrolledAt     *time.Time `json:"totp_enrolled_at,omitempty"`
 	RecoveryCodeHashes []string   `json:"recovery_code_hashes,omitempty"`
+
+	// Email-verification state. All three are zero on deployments
+	// without a transactional mailer (verification can't run there) and
+	// on accounts created before the feature; omitempty keeps existing
+	// stores byte-compatible. VerifyTokenHash is the SHA-256 of the
+	// emailed token — the store never holds the clickable secret.
+	VerifiedAt      *time.Time `json:"verified_at,omitempty"`
+	VerifyTokenHash []byte     `json:"verify_token_hash,omitempty"`
+	VerifyExpiresAt *time.Time `json:"verify_expires_at,omitempty"`
 }
+
+// EmailVerified reports whether the account's address was confirmed.
+func (u User) EmailVerified() bool { return u.VerifiedAt != nil }
 
 // UserStore is the password-auth lookup boundary. Implementations may
 // back themselves with a JSON file (this package's JSONUserStore), a

@@ -73,6 +73,21 @@
     "pickTenant": "(pick organization)",
     "noSubject": "(no subject)"
   },
+  "verifyEmail": {
+    "working": "Confirming your email…",
+    "okTitle": "Email confirmed",
+    "okBody": "Your address is verified — you're all set.",
+    "toApp": "Back to your flows",
+    "toSignin": "Sign in",
+    "failedTitle": "Could not confirm",
+    "failedHint": "The link may have expired. Sign in and use the banner's resend button to get a fresh one.",
+    "badLink": "This link is missing its email or token.",
+    "banner": "Confirm your email address — we sent you a link when you signed up.",
+    "bannerSent": "Verification email sent — check your inbox.",
+    "bannerResend": "Resend email",
+    "bannerSending": "Sending…",
+    "bannerDismiss": "Hide for now"
+  },
   "usage": {
     "title": "Usage",
     "subtitle": "Flow runs and step executions for this organization, by month.",
