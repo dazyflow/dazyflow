@@ -38,8 +38,7 @@ type resolverCtxKey struct{}
 
 // WithResolver carries the engine's Resolver to an executing node so composite
 // drops (for_each, subgraph) resolve their sub-modules through the SAME catalogs
-// as top-level nodes — native, scripted, remote, MCP — not just the native
-// registry. The engine wires this around every node's Execute.
+// as top-level nodes — native, remote, MCP — not just the native registry. The engine wires this around every node's Execute.
 func WithResolver(ctx context.Context, r Resolver) context.Context {
 	if r == nil {
 		return ctx
@@ -53,12 +52,12 @@ func ResolverFromContext(ctx context.Context) (Resolver, bool) {
 	return r, ok
 }
 
-// NodeResolver is the default Resolver. It consults catalogs in the order
-// listed in the spec: native registry → local descriptors → remote
-// descriptors → MCP tools.
+// NodeResolver is the default Resolver. It consults catalogs in order:
+// native registry → remote (gRPC) modules → MCP tools. (A subprocess
+// "local descriptor" catalog existed in the plugin era; it was never
+// wired into hzd and was removed once every drop went native.)
 type NodeResolver struct {
 	Native *Registry
-	Local  *LocalCatalog
 	Remote *RemoteCatalog
 	MCP    *mcp.Catalog
 }
@@ -71,11 +70,6 @@ func (r *NodeResolver) Resolve(_ context.Context, moduleID string) (core.Transpo
 	// behavior doesn't fork per version).
 	if r.Native != nil {
 		if t, ok := r.Native.Get(id); ok {
-			return t, nil
-		}
-	}
-	if r.Local != nil {
-		if t, ok := r.Local.Get(id); ok {
 			return t, nil
 		}
 	}
@@ -106,9 +100,6 @@ func (r *NodeResolver) ManifestsForTenant(_ string) map[string]core.Manifest {
 	}
 	if r.Native != nil {
 		add(r.Native.Manifests())
-	}
-	if r.Local != nil {
-		add(r.Local.Manifests())
 	}
 	if r.Remote != nil {
 		add(r.Remote.Manifests())

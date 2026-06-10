@@ -24,7 +24,7 @@ import (
 type RemoteDescriptor struct {
 	ID       string
 	Endpoint string
-	Insecure bool      // explicit opt-in to cleartext for dev/test
+	Insecure bool // explicit opt-in to cleartext for dev/test
 	TLS      *RemoteTLS
 }
 
@@ -88,7 +88,7 @@ func (t *RemoteTransport) Close() error {
 }
 
 // RemoteCatalog discovers remote modules from descriptor files in the same
-// directory as LocalCatalog. Connection + manifest fetch happen at Register
+// directory keyed by module ID. Connection + manifest fetch happen at Register
 // time so the engine can validate graphs without a per-node RPC.
 type RemoteCatalog struct {
 	DialTimeout time.Duration

@@ -8,7 +8,7 @@ import (
 	"git.sr.ht/~klahr/hazyflow/core"
 )
 
-// OIDCConfig is what hzd.toml's [auth] section maps to when provider="oidc".
+// OIDCConfig configures the (scaffold) OIDC authenticator.
 type OIDCConfig struct {
 	Issuer   string
 	Audience string

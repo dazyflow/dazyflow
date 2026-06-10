@@ -56,8 +56,8 @@ type fakeQuota struct {
 	usedErr error
 }
 
-func (q *fakeQuota) Limit(tenant string) int64           { return q.limit }
-func (q *fakeQuota) Used(tenant string) (int64, error)   { return q.used, q.usedErr }
+func (q *fakeQuota) Limit(tenant string) int64         { return q.limit }
+func (q *fakeQuota) Used(tenant string) (int64, error) { return q.used, q.usedErr }
 
 // ----------------------------------------------------------------------
 // Engine.populateSandbox
@@ -266,8 +266,10 @@ func TestEngine_RunNode_SandboxError(t *testing.T) {
 // the secret-resolution failure branch in RunNode.
 type failingSecretProvider struct{}
 
-func (failingSecretProvider) Scheme() string                                  { return "env" }
-func (failingSecretProvider) Get(_ context.Context, _ string) (string, error) { return "", errors.New("provider down") }
+func (failingSecretProvider) Scheme() string { return "env" }
+func (failingSecretProvider) Get(_ context.Context, _ string) (string, error) {
+	return "", errors.New("provider down")
+}
 
 func TestEngine_RunNode_SecretError(t *testing.T) {
 	e := newEngineWith(t, NativeDrop{
@@ -330,30 +332,11 @@ func TestEngine_RunNode_ApprovalURLAttached(t *testing.T) {
 // NodeResolver chain
 // ----------------------------------------------------------------------
 
-func TestNodeResolver_ChainHitsLocal(t *testing.T) {
-	// Native miss, Local hit. Use a bufconn-backed remote so the remote
-	// catalog is populated but the local catalog wins first.
-	reg := NewRegistry()
-	local := NewLocalCatalog()
-	// Hand-poke a transport into the local catalog so we don't have to
-	// spawn a subprocess.
-	local.nodes["m"] = &LocalTransport{manifest: core.Manifest{ID: "m"}}
-	r := &NodeResolver{Native: reg, Local: local}
-	tr, err := r.Resolve(context.Background(), "m")
-	if err != nil {
-		t.Fatalf("Resolve: %v", err)
-	}
-	if tr.Manifest().ID != "m" {
-		t.Errorf("manifest.id = %q", tr.Manifest().ID)
-	}
-}
-
 func TestNodeResolver_ChainHitsRemote(t *testing.T) {
 	reg := NewRegistry()
-	local := NewLocalCatalog()
 	remote := NewRemoteCatalog()
 	remote.nodes["m"] = &RemoteTransport{manifest: core.Manifest{ID: "m"}}
-	r := &NodeResolver{Native: reg, Local: local, Remote: remote}
+	r := &NodeResolver{Native: reg, Remote: remote}
 	tr, err := r.Resolve(context.Background(), "m")
 	if err != nil || tr.Manifest().ID != "m" {
 		t.Errorf("Resolve = (%v,%v)", tr, err)
@@ -375,13 +358,11 @@ func TestNodeResolver_ChainHitsMCP(t *testing.T) {
 func TestNodeResolver_Manifests_MergesAllCatalogs(t *testing.T) {
 	reg := NewRegistry()
 	_ = reg.Register(NativeDrop{Manifest: validTestManifest("native-mod"), Execute: noopExecute})
-	local := NewLocalCatalog()
-	local.nodes["local-mod"] = &LocalTransport{manifest: core.Manifest{ID: "local-mod"}}
 	remote := NewRemoteCatalog()
 	remote.nodes["remote-mod"] = &RemoteTransport{manifest: core.Manifest{ID: "remote-mod"}}
-	r := &NodeResolver{Native: reg, Local: local, Remote: remote, MCP: mcp.NewCatalog()}
+	r := &NodeResolver{Native: reg, Remote: remote, MCP: mcp.NewCatalog()}
 	m := r.Manifests()
-	for _, want := range []string{"native-mod", "local-mod", "remote-mod"} {
+	for _, want := range []string{"native-mod", "remote-mod"} {
 		if _, ok := m[want]; !ok {
 			t.Errorf("missing %q in merged Manifests (%v)", want, manifestKeys(m))
 		}
@@ -750,9 +731,9 @@ func TestUpstream_IndexValue_Variants(t *testing.T) {
 
 func TestUpstream_IndexValue_OutOfRange_AllTypes(t *testing.T) {
 	for name, value := range map[string]any{
-		"[]string":             []string{"only"},
-		"[]map[string]any":     []map[string]any{{"k": "v"}},
-		"[]map[string]string":  []map[string]string{{"k": "v"}},
+		"[]string":            []string{"only"},
+		"[]map[string]any":    []map[string]any{{"k": "v"}},
+		"[]map[string]string": []map[string]string{{"k": "v"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			prior := map[string]core.Result{
