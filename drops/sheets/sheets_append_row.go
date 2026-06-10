@@ -3,6 +3,7 @@ package sheets
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"strconv"
 
@@ -43,12 +44,12 @@ func init() {
 				{Port: "spreadsheet_id", Label: "Spreadsheet ID", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				// meta is the full structured result (blue/json) for advanced
-				// wiring + debugging; the scalars below (green/text) expose the
-				// values you actually chain on without cracking open the JSON.
-				// spreadsheet_id is emitted so it can feed another sheet step's
-				// 'spreadsheet_id' input (read range, export, another append).
-				{Port: "meta", Label: "Append metadata", MIME: []string{"application/json"}},
+				// Only the friendly scalars are declared as ports; the full
+				// structured result is still EMITTED under "meta" (see
+				// appendOutputs) so run records keep it for debugging, but it's
+				// not a pin — undeclared outputs can't be wired and don't
+				// clutter the card. spreadsheet_id is emitted so it can feed
+				// another sheet step's 'spreadsheet_id' input.
 				{Port: "appended_rows", Label: "Rows appended", MIME: []string{"text/plain"}},
 				{Port: "updated_range", Label: "Updated range", MIME: []string{"text/plain"}},
 				{Port: "spreadsheet_id", Label: "Spreadsheet ID", MIME: []string{"text/plain"}},
@@ -150,7 +151,7 @@ func executeSheetsAppend(ctx context.Context, job core.Job, _ chan<- core.Progre
 		rec := make([]any, len(headers))
 		for i, h := range headers {
 			if v, ok := row[h]; ok {
-				rec[i] = v
+				rec[i] = cellValue(v)
 			} else {
 				rec[i] = ""
 			}
@@ -232,6 +233,28 @@ func executeSheetsAppend(ctx context.Context, job core.Job, _ chan<- core.Progre
 			"updated_cells":   parsed.Updates.UpdatedCells,
 		}),
 	}, nil
+}
+
+// cellValue makes any row field safe to send as a Sheets cell. The API only
+// accepts scalars (string/number/bool/null); a nested object or list — e.g.
+// a row coming from for_each's Failed rows, whose entries carry a structured
+// `data`/`error` — would fail the WHOLE append, so those are written as their
+// JSON text instead. Scalars pass through untouched (Sheets keeps numbers as
+// numbers).
+func cellValue(v any) any {
+	switch v.(type) {
+	case nil, string, bool,
+		int, int8, int16, int32, int64,
+		uint, uint8, uint16, uint32, uint64,
+		float32, float64, json.Number:
+		return v
+	default:
+		b, err := json.Marshal(v)
+		if err != nil {
+			return fmt.Sprintf("%v", v)
+		}
+		return string(b)
+	}
 }
 
 // appendOutputs bundles the drop's four output ports: the full structured

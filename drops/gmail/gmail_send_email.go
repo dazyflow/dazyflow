@@ -51,9 +51,13 @@ func init() {
 				{Port: "body", Label: "Body", MIME: []string{"text/plain"}},
 				{Port: "attachments", Label: "Attachments", Variadic: true},
 			},
-			Outputs: []core.Port{
-				{Port: "meta", Label: "Delivery metadata", MIME: []string{"application/json"}},
-			},
+			// No declared outputs: sending an email is a "do" step — "after it
+			// sends, do X" chains through the pass-through pin, which fires on
+			// success. The Gmail message id is still EMITTED under "meta" (see
+			// the Execute result) so run records keep it for debugging; it's
+			// just not a pin. Re-expose it as a named port if a reply-in-thread
+			// feature ever needs to wire it.
+			Outputs: []core.Port{},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{

@@ -41,8 +41,11 @@ func init() {
 				{Port: "spreadsheet_id", Label: "Spreadsheet ID", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				{Port: "pdf", Label: "The exported PDF (file ref)", MIME: []string{"application/pdf"}},
+				{Port: "pdf", Label: "PDF", MIME: []string{"application/pdf"}},
 				{Port: "meta", Label: "Export metadata", MIME: []string{"application/json"}},
+				// spreadsheet_id is re-emitted (same as append's) so any sheet
+				// step downstream can target the same spreadsheet by wire.
+				{Port: "spreadsheet_id", Label: "Spreadsheet ID", MIME: []string{"text/plain"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
@@ -107,6 +110,7 @@ func executeSheetsExportPDF(ctx context.Context, job core.Job, _ chan<- core.Pro
 			"meta": {MIME: "application/json", Inline: map[string]any{
 				"spreadsheet_id": id, "path": dest, "bytes": len(body), "mime": "application/pdf",
 			}},
+			"spreadsheet_id": {MIME: "text/plain", Inline: id},
 		},
 	}, nil
 }

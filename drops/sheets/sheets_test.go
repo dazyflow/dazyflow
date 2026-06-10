@@ -99,6 +99,42 @@ func TestSheetsAppend_MapsRowsToColumns(t *testing.T) {
 	}
 }
 
+// Nested objects/lists in a row (e.g. for_each Failed rows entries) must not
+// fail the append — they're written as JSON text; scalars stay scalars.
+func TestSheetsAppend_StringifiesNestedValues(t *testing.T) {
+	var sent map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(b, &sent)
+		_ = json.NewEncoder(w).Encode(map[string]any{"updates": map[string]any{"updatedRows": 1}})
+	}))
+	defer srv.Close()
+	withSheetsEnv(t, srv.URL)
+
+	res, err := executeSheetsAppend(context.Background(), core.Job{
+		Params: map[string]any{"spreadsheet_id": "S1"},
+		Input: map[string]core.Ref{
+			"rows": {Inline: []map[string]any{{
+				"row":   2,
+				"data":  map[string]any{"Email": "b@y", "Name": "Bo"},
+				"error": map[string]any{"code": "auth"},
+			}}},
+			"headers": {Inline: []any{"row", "data", "error"}},
+		},
+	}, nil)
+	if err != nil || res.Status != core.StatusOK {
+		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
+	}
+	first := sent["values"].([]any)[0].([]any)
+	if first[0] != float64(2) {
+		t.Errorf("scalar cell = %v (%T), want number 2 kept as-is", first[0], first[0])
+	}
+	dataCell, _ := first[1].(string)
+	if !strings.Contains(dataCell, `"Name":"Bo"`) {
+		t.Errorf("nested cell = %v, want JSON text", first[1])
+	}
+}
+
 func TestListDriveFiles(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasSuffix(r.URL.Path, "/files") {

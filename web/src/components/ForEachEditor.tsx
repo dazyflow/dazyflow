@@ -24,26 +24,22 @@ export function ForEachEditor({ params, onChange, references }: Props) {
   const { t } = useTranslation();
 
   // Columns of the list feeding `items`, shown so the user knows what they
-  // can reference as ${column} inside the body steps.
+  // can reference as ${column} inside the body steps. Deps are the context's
+  // primitive fields, not the object itself — the parent recreates the
+  // references object every render, so an object dep would refetch per render.
   const [itemFields, setItemFields] = useState<string[]>([]);
+  const { token, tenant, workspace: ws, flowId, nodeId } = references ?? {};
   useEffect(() => {
-    if (!references) return;
+    if (!token || !flowId || !nodeId) return;
     let live = true;
     api
-      .listInputFields(
-        references.token,
-        references.tenant,
-        references.workspace,
-        references.flowId,
-        references.nodeId,
-        "items",
-      )
+      .listInputFields(token, tenant ?? "", ws ?? "", flowId, nodeId, "items")
       .then((r) => live && setItemFields(r.fields ?? []))
-      .catch(() => live && setItemFields([]));
+      .catch(() => live && setItemFields((prev) => (prev.length ? [] : prev)));
     return () => {
       live = false;
     };
-  }, [references]);
+  }, [token, tenant, ws, flowId, nodeId]);
 
   const concurrency =
     typeof params.concurrency === "number" ? params.concurrency : undefined;

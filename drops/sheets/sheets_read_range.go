@@ -45,6 +45,9 @@ func init() {
 			Outputs: []core.Port{
 				{Port: "rows", Label: "Rows", MIME: []string{"application/json"}},
 				{Port: "headers", Label: "Headers", MIME: []string{"application/json"}},
+				// spreadsheet_id is re-emitted (same as append's) so any sheet
+				// step downstream can target the same spreadsheet by wire.
+				{Port: "spreadsheet_id", Label: "Spreadsheet ID", MIME: []string{"text/plain"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
@@ -66,7 +69,8 @@ func init() {
 }
 
 func executeSheetsRead(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	if resolveSpreadsheetID(job) == "" {
+	id := resolveSpreadsheetID(job)
+	if id == "" {
 		return params.Err(job, "bad_param", "'spreadsheet_id' is required"), nil
 	}
 	headers, rows, err := ReadRange(ctx, job)
@@ -77,8 +81,9 @@ func executeSheetsRead(ctx context.Context, job core.Job, _ chan<- core.Progress
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
-			"rows":    {MIME: "application/json", Inline: rows},
-			"headers": {MIME: "application/json", Inline: headers},
+			"rows":           {MIME: "application/json", Inline: rows},
+			"headers":        {MIME: "application/json", Inline: headers},
+			"spreadsheet_id": {MIME: "text/plain", Inline: id},
 		},
 	}, nil
 }

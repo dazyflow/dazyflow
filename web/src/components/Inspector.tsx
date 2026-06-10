@@ -125,15 +125,21 @@ export function Inspector({
   // them as ${item.<column>} inserts in every string field's "{}" menu —
   // mirroring ForEachEditor for the legacy step path.
   const [loopItemFields, setLoopItemFields] = useState<string[]>([]);
+  // Deps are primitives only: the `workspace` object is recreated by the
+  // parent on every render, so depending on it re-runs this effect each
+  // render — and the no-owner branch setting a fresh [] each time spins an
+  // infinite render loop. The functional set (keep the same ref when already
+  // empty) guards the same way.
+  const wsToken = workspace?.token;
   useEffect(() => {
-    if (!loopOwnerNodeId || !workspace || !graphMeta?.id) {
-      setLoopItemFields([]);
+    if (!loopOwnerNodeId || !wsToken || !graphMeta?.id) {
+      setLoopItemFields((prev) => (prev.length ? [] : prev));
       return;
     }
     let live = true;
     api
       .listInputFields(
-        workspace.token,
+        wsToken,
         graphMeta.tenant,
         graphMeta.workspace,
         graphMeta.id,
@@ -141,11 +147,11 @@ export function Inspector({
         "items",
       )
       .then((r) => live && setLoopItemFields(r.fields ?? []))
-      .catch(() => live && setLoopItemFields([]));
+      .catch(() => live && setLoopItemFields((prev) => (prev.length ? [] : prev)));
     return () => {
       live = false;
     };
-  }, [loopOwnerNodeId, workspace, graphMeta?.id, graphMeta?.tenant, graphMeta?.workspace]);
+  }, [loopOwnerNodeId, wsToken, graphMeta?.id, graphMeta?.tenant, graphMeta?.workspace]);
   const loopItemReferenceItems = loopItemFields.map((f) => ({
     label: f,
     token: "${item." + f + "}",

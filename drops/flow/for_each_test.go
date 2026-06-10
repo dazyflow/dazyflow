@@ -153,7 +153,7 @@ func TestForEach_RunsStepPerItemInOrder(t *testing.T) {
 			t.Errorf("results[%d] = %q, want %q", i, got, want)
 		}
 	}
-	errs, _ := res.Output["errors"].Inline.(map[string]any)
+	errs, _ := res.Output["errors"].Inline.([]any)
 	if len(errs) != 0 {
 		t.Errorf("errors = %+v, want empty", errs)
 	}
@@ -177,13 +177,23 @@ func TestForEach_CollectsPerItemErrorsWithoutFailFast(t *testing.T) {
 	if res.Status != core.StatusOK {
 		t.Fatalf("status = %q, want ok (fail_fast=false)", res.Status)
 	}
-	errs, _ := res.Output["errors"].Inline.(map[string]any)
+	errs, _ := res.Output["errors"].Inline.([]any)
 	if len(errs) != 1 {
-		t.Fatalf("errors = %+v, want exactly index 1", errs)
+		t.Fatalf("errors = %+v, want exactly one failed row", errs)
 	}
-	got, ok := errs["1"].(map[string]any)
+	entry, ok := errs[0].(map[string]any)
 	if !ok {
-		t.Fatalf("errors[1] = %+v", errs["1"])
+		t.Fatalf("errors[0] = %+v", errs[0])
+	}
+	if entry["row"] != 2 {
+		t.Errorf("row = %v, want 2 (1-based, second item failed)", entry["row"])
+	}
+	if entry["data"] != "bad" {
+		t.Errorf("data = %v, want the failing item back", entry["data"])
+	}
+	got, ok := entry["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("error = %+v", entry["error"])
 	}
 	if got["code"] != "boom" {
 		t.Errorf("code = %v, want boom", got["code"])
@@ -213,9 +223,10 @@ func TestForEach_FailFastStopsEarly(t *testing.T) {
 	if res.Error == nil || res.Error.Code != "item_failed" {
 		t.Errorf("err = %+v, want item_failed", res.Error)
 	}
-	errs, _ := res.Output["errors"].Inline.(map[string]any)
-	if len(errs) == 0 || errs["1"] == nil {
-		t.Errorf("expected error on index 1, got %+v", errs)
+	errs, _ := res.Output["errors"].Inline.([]any)
+	rowOf := func(e any) any { m, _ := e.(map[string]any); return m["row"] }
+	if len(errs) == 0 || rowOf(errs[0]) != 2 {
+		t.Errorf("expected a failed row entry for row 2, got %+v", errs)
 	}
 }
 
@@ -399,12 +410,16 @@ func TestForEach_TemplateMissingFieldFailsThatIteration(t *testing.T) {
 		t.Fatalf("execute: %v", err)
 	}
 	// Without fail_fast the iteration should continue and surface the
-	// missing-field error keyed by the failing index.
-	errs, _ := res.Output["errors"].Inline.(map[string]any)
-	if errs["1"] == nil {
-		t.Fatalf("expected error for index 1, got %+v", errs)
+	// missing-field failure as a failed-row entry (row 2, 1-based).
+	errs, _ := res.Output["errors"].Inline.([]any)
+	if len(errs) != 1 {
+		t.Fatalf("expected one failed row, got %+v", errs)
 	}
-	errPayload := errs["1"].(map[string]any)
+	entry := errs[0].(map[string]any)
+	if entry["row"] != 2 {
+		t.Errorf("row = %v, want 2", entry["row"])
+	}
+	errPayload := entry["error"].(map[string]any)
 	if errPayload["code"] != "template" {
 		t.Errorf("code = %v, want template", errPayload["code"])
 	}

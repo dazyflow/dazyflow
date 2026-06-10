@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,7 +25,7 @@ func init() {
 			Category:    "flow_control",
 			Provider:    "internal",
 			Tags:        []string{"iterate", "loop", "fan_out", "map"},
-			Description: "Run a configured step module once per item in an input list. Items execute in parallel up to params.concurrency. Outputs `results` (one Result per item, in order) and `errors` (a map of failing indices). Set fail_fast=true to abort on the first failure; otherwise the iteration continues and per-item errors surface on the errors port.",
+			Description: "Run the loop body (the steps wired to the `body` pin) once per item in an input list — or, in legacy mode, a configured step module. Items execute in parallel up to params.concurrency. Outputs `results` (one entry per item, in order) and `errors` (a list of failed rows: {row, data, error}, row is 1-based). Set fail_fast=true to abort on the first failure; otherwise the iteration continues and failures surface on the errors port.",
 			Summary:     "Fan out a list and run the same step module on every item, optionally in parallel, collecting results in order.",
 			Examples: []core.ParamsExample{
 				{
@@ -41,7 +42,7 @@ func init() {
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{{
 				Port:  "items",
-				Label: "List to iterate (Inline = []any or []core.Ref)",
+				Label: "List",
 			}},
 			Outputs: []core.Port{
 				// body is a control pin (not data): wiring it to a node marks
@@ -50,8 +51,8 @@ func init() {
 				// normal execution (see loopBodyOwners). Empty = legacy mode
 				// (for_each runs step_module internally).
 				{Port: "body", Label: "Loop body", MIME: []string{"application/x-hazyflow-exec"}},
-				{Port: "results", Label: "Per-item Result list", MIME: []string{MIMEList}},
-				{Port: "errors", Label: "Failures keyed by item index", MIME: []string{"application/json"}},
+				{Port: "results", Label: "Results", MIME: []string{MIMEList}},
+				{Port: "errors", Label: "Failed rows", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(
 				`{
@@ -199,13 +200,21 @@ func runForEachItems(
 			Status: core.StatusOK,
 			Output: map[string]core.Ref{
 				"results": {MIME: MIMEList, Inline: []core.Ref{}},
-				"errors":  {MIME: "application/json", Inline: map[string]any{}},
+				"errors":  {MIME: "application/json", Inline: []any{}},
 			},
 		}
 	}
 
 	results := make([]core.Ref, len(items))
-	errs := make(map[string]any)
+	// failures collects one entry per failed row, ordered by row at the end.
+	// Each entry is {row, data, error}: row is 1-based (people count rows
+	// from 1), data is the row itself (so "Failed rows" is self-describing —
+	// you can see WHO failed without cross-referencing), error is the cause.
+	type failure struct {
+		idx   int
+		entry map[string]any
+	}
+	var failures []failure
 	var errsMu sync.Mutex
 
 	gate := concurrency
@@ -236,7 +245,11 @@ func runForEachItems(
 			results[idx] = res
 			if errEntry != nil {
 				errsMu.Lock()
-				errs[fmt.Sprintf("%d", idx)] = errEntry
+				failures = append(failures, failure{idx: idx, entry: map[string]any{
+					"row":   idx + 1,
+					"data":  value.Inline,
+					"error": errEntry,
+				}})
 				errsMu.Unlock()
 				if failFast {
 					cancel()
@@ -246,13 +259,19 @@ func runForEachItems(
 	}
 	wg.Wait()
 
+	sort.Slice(failures, func(a, b int) bool { return failures[a].idx < failures[b].idx })
+	failedRows := make([]any, len(failures))
+	for i, f := range failures {
+		failedRows[i] = f.entry
+	}
+
 	status := core.StatusOK
 	var jobErr *core.JobError
-	if len(errs) > 0 && failFast {
+	if len(failures) > 0 && failFast {
 		status = core.StatusError
 		jobErr = &core.JobError{
 			Code:    "item_failed",
-			Message: fmt.Sprintf("for_each aborted: %d/%d items failed", len(errs), len(items)),
+			Message: fmt.Sprintf("for_each aborted: %d/%d items failed", len(failures), len(items)),
 		}
 	}
 
@@ -261,7 +280,7 @@ func runForEachItems(
 		Status: status,
 		Output: map[string]core.Ref{
 			"results": {MIME: MIMEList, Inline: results},
-			"errors":  {MIME: "application/json", Inline: errs},
+			"errors":  {MIME: "application/json", Inline: failedRows},
 		},
 		Error: jobErr,
 	}

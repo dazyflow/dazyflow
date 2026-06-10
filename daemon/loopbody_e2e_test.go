@@ -267,16 +267,22 @@ func TestLoopBody_PerItemErrorIsolation(t *testing.T) {
 		t.Fatalf("loop status = %q, want succeeded", loopRec.Status)
 	}
 	errsRef := loopRec.Result.Output["errors"]
-	errsMap, ok := errsRef.Inline.(map[string]any)
+	errsList, ok := errsRef.Inline.([]any)
 	if !ok {
-		t.Fatalf("errors = %#v, want map", errsRef.Inline)
+		t.Fatalf("errors = %#v, want list of failed rows", errsRef.Inline)
 	}
-	// Exactly the one failing row (Bo, index 1) is recorded.
-	if len(errsMap) != 1 {
-		t.Errorf("errors = %v, want exactly 1 entry", errsMap)
+	// Exactly the one failing row (Bo, 1-based row 2) is recorded, carrying
+	// the row's own data so the entry is self-describing.
+	if len(errsList) != 1 {
+		t.Fatalf("errors = %v, want exactly 1 failed row", errsList)
 	}
-	if _, ok := errsMap["1"]; !ok {
-		t.Errorf("errors = %v, want a key for index 1 (the failing row)", errsMap)
+	entry, _ := errsList[0].(map[string]any)
+	if entry["row"] != 2 {
+		t.Errorf("row = %v, want 2 (Bo is the second row)", entry["row"])
+	}
+	data, _ := entry["data"].(map[string]any)
+	if data["name"] != "Bo" {
+		t.Errorf("data = %v, want the failing row's fields (name=Bo)", data)
 	}
 }
 
