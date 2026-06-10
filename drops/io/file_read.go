@@ -17,14 +17,15 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "file_read",
 			Version:     "1.0",
-			Label:       "File read",
+			Label:       "File",
+			Subtitle:    "Read",
 			Color:       "#4a8",
 			Icon:        "file-input",
 			Category:    "io",
 			Provider:    "internal",
 			Tags:        []string{"filesystem", "read", "sandbox"},
-			Description: "Read a file from the workspace sandbox. Path is workspace-relative. Set inline:true to embed file contents in the Ref for remote-module consumption.",
-			Summary:     "Emit a sandbox-bound Ref to a workspace file, optionally inlining its bytes for remote (gRPC) modules.",
+			Description: "Read a file from the workspace so later steps can use it. Set inline:true to embed the file's contents directly for remote modules that don't share the workspace.",
+			Summary:     "Read a workspace file and hand it to the next step.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Reference a CSV by path",
@@ -39,10 +40,10 @@ func init() {
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{{
 				Port:  "out",
-				Label: "File ref",
+				Label: "File",
 			}},
 			ParamsSchema: json.RawMessage(
-				`{"type":"object","properties":{"path":{"type":"string","format":"workspace-path"},"mime":{"type":"string"}},"required":["path"]}`,
+				`{"type":"object","properties":{"path":{"type":"string","title":"File","format":"workspace-path","description":"The workspace file to read."},"mime":{"type":"string","title":"File type (MIME)","x_advanced":true,"description":"Override the file's type. Defaults to a generic binary type."}},"required":["path"]}`,
 			),
 			Idempotent: true,
 		},

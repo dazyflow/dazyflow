@@ -21,7 +21,7 @@ func init() {
 			Label:       "Google Forms",
 			Subtitle:    "New responses",
 			Summary:     "Fires when a Google Form gets new responses, emitting each answer keyed by its question title.",
-			Description: "Polls a Google Form for new responses on the interval set on this node and emits the ones it hasn't seen before. `responses` is a list of objects (one per response) keyed by question title, plus `responseId` and `submittedTime`; wire it straight into a Sheets append. The node remembers how far it has read, so each response fires once. Leave the interval blank to fetch on demand (the Run button).",
+			Description: "Watches a Google Form and fires when new responses arrive (each response exactly once). `responses` is a list of objects keyed by question title — wire it straight into a Sheets append. When a check finds nothing new, the rest of the flow is skipped. Leave the interval blank to check only when you press Run.",
 			Integration: "Google Forms",
 			Category:    "trigger",
 			Icon:        "clipboard-list",
@@ -73,8 +73,9 @@ func init() {
 
 // executeGoogleFormTrigger fetches Form responses newer than this node's
 // stored cursor, keys each by question title, advances the cursor to the
-// newest response seen, and emits the batch. Empty batches are valid (a
-// downstream Sheets append of [] is a no-op). The node runs in-band like
+// newest response seen, and emits the batch. An EMPTY batch emits no
+// outputs, which skips everything downstream (see emitOutput) — an empty
+// poll is a non-event, not a run of the flow. The node runs in-band like
 // poll_trigger: the daemon scheduler only fires the graph on the interval;
 // all Google I/O and cursor bookkeeping happen here.
 func executeGoogleFormTrigger(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
@@ -132,6 +133,14 @@ func executeGoogleFormTrigger(ctx context.Context, job core.Job, _ chan<- core.P
 }
 
 func emitOutput(out []map[string]any) map[string]core.Ref {
+	// No new responses → emit NOTHING. Ports without a value make their
+	// edges dormant, so the dispatcher skips everything downstream — the
+	// flow doesn't churn (append 0 rows, send empty notifications) on every
+	// empty poll. The trigger only "fires" in a meaningful sense when a
+	// response actually arrived.
+	if len(out) == 0 {
+		return map[string]core.Ref{}
+	}
 	return map[string]core.Ref{
 		"responses": {MIME: "application/json", Inline: out},
 		"count":     {MIME: "text/plain", Inline: strconv.Itoa(len(out))},

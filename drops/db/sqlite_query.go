@@ -19,7 +19,8 @@ func init() {
 		Manifest: core.Manifest{
 			ID:             "sqlite_query",
 			Version:        "1.0",
-			Label:          "SQLite query",
+			Label:          "SQLite",
+			Subtitle:       "Query",
 			Color:          "#0a6abf",
 			Icon:           "database",
 			BrandLogo:      "/brands/sqlite.svg",
@@ -49,10 +50,10 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"path":   {"type":"string","format":"workspace-path"},
-					"sql":    {"type":"string"},
-					"params": {"type":"array","items":{}},
-					"limit":  {"type":"integer","minimum":1}
+					"path":   {"type":"string","format":"workspace-path","title":"Database file"},
+					"sql":    {"type":"string","title":"SQL"},
+					"params": {"type":"array","items":{},"title":"Query values"},
+					"limit":  {"type":"integer","minimum":1,"title":"Row limit"}
 				},
 				"required":["path","sql"]
 			}`),

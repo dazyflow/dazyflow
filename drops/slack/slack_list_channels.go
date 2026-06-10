@@ -16,9 +16,10 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "slack_list_channels",
 			Version:     "1.0",
-			Label:       "Slack list channels",
-			Summary:     "List the Slack channels the connected bot can see, optionally filtered by channel type.",
-			Description: "List the channels your Slack bot can see. Useful for filling a channel picker, or for flows that fan out to every matching channel.",
+			Label:       "Slack",
+			Subtitle:    "List channels",
+			Summary:     "Get the list of Slack channels your connected bot can see.",
+			Description: "Get the list of channels your Slack bot can see, as one row per channel. Wire the Channels output into a For each to do something per channel — for example, send the same announcement to every room the bot is in.",
 			Integration: "Slack",
 			Category:    "network",
 			Icon:        "globe",
@@ -43,6 +44,9 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{
+				// The channel list IS the product of this step (one row per
+				// channel), so it stays a pin — it's data to wire onward, not
+				// a debugging blob.
 				{Port: "channels", Label: "Channels", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
@@ -51,9 +55,9 @@ func init() {
 					"base_url":{"type":"string","description":"Override the API host (proxy / self-hosted / testing)."},
 					"account":{"type":"string","default":"default"},
 					"token":{"type":"string","description":"Raw bot token; overrides 'account'."},
-					"types":{"type":"string","default":"public_channel,private_channel","description":"Comma-separated channel types: public_channel, private_channel, mpim, im."},
-					"limit":{"type":"integer","default":200,"minimum":1,"maximum":1000},
-					"exclude_archived":{"type":"boolean","default":true},
+					"types":{"type":"string","title":"Which channels","default":"public_channel,private_channel","enum":["public_channel","public_channel,private_channel","im,mpim","public_channel,private_channel,im,mpim"],"enumNames":["Public channels","Public + private channels","Direct messages","Everything the bot can see"]},
+					"limit":{"type":"integer","title":"Max channels","x_advanced":true,"default":200,"minimum":1,"maximum":1000},
+					"exclude_archived":{"type":"boolean","title":"Skip archived channels","default":true},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
 				}
 			}`),

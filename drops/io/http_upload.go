@@ -22,15 +22,16 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "http_upload",
 			Version:     "1.0",
-			Label:       "HTTP upload",
+			Label:       "HTTP",
+			Subtitle:    "Upload file",
 			Color:       "#5599ee",
 			Icon:        "upload",
 			Category:    "io",
 			Provider:    "internal",
 			Integration: "HTTP",
 			Tags:        []string{"http", "upload", "file", "sandbox"},
-			Description: "Upload a file from the workspace sandbox to a URL, streaming it from disk. Raw mode (default) PUTs the file bytes directly — what S3/GCS/Azure presigned URLs expect; multipart mode POSTs it as a form field for APIs that want multipart/form-data. Reads scratch:// paths too. Private-network addresses are blocked by default.",
-			Summary:     "Stream a sandbox file to a remote URL as a raw PUT body (presigned-URL style) or a multipart/form-data POST.",
+			Description: "Send a workspace file to a web address, streaming it from disk. By default the file bytes are sent directly — what upload links from S3/GCS/Azure expect; turn on 'Send as form upload' for services that want the file as a form attachment. Reads scratch:// paths too. Private-network addresses are blocked by default.",
+			Summary:     "Send a workspace file to a web address — directly (upload links) or as a form attachment.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "PUT to an S3 presigned URL",
@@ -44,28 +45,33 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{{
+				// A wired file (e.g. from file_write / http_download) overrides
+				// the 'path' param.
 				Port:  "in",
-				Label: "File ref to upload (optional, overrides params.path)",
+				Label: "File",
 			}},
 			Outputs: []core.Port{
-				{Port: "response_body", Label: "Response body"},
-				{Port: "meta", Label: "Status + bytes sent (JSON)", MIME: []string{"application/json"}},
+				// Only the response is a pin; the structured result (status,
+				// bytes sent) is still EMITTED under "meta" (see the Execute
+				// result) so run records keep it for debugging — it's just not
+				// a pin (same as gmail send / sheets append).
+				{Port: "response_body", Label: "Response"},
 			},
 			ParamsSchema: json.RawMessage(
 				`{
 					"type":"object",
 					"properties":{
-						"url":{"type":"string","description":"Absolute destination URL."},
-						"path":{"type":"string","format":"workspace-path","description":"Sandbox file to upload (or wire the 'in' input). scratch:// supported."},
-						"multipart":{"type":"boolean","default":false,"description":"false = raw body (PUT the bytes, e.g. presigned URLs); true = multipart/form-data POST."},
-						"method":{"type":"string","enum":["PUT","POST"],"description":"Defaults to PUT for raw, POST for multipart."},
-						"field_name":{"type":"string","default":"file","description":"Multipart form field name (multipart mode only)."},
-						"filename":{"type":"string","description":"Filename sent in multipart mode. Defaults to the base name of path."},
-						"content_type":{"type":"string","description":"Content-Type for raw mode. Defaults to a guess from the extension."},
-						"headers":{"type":"object","additionalProperties":{"type":"string"},"description":"Request headers (e.g. Authorization). Values may include ${secret.NAME} secrets."},
+						"url":{"type":"string","title":"URL","description":"The web address to upload to."},
+						"path":{"type":"string","title":"File to upload","format":"workspace-path","description":"The workspace file to send (or wire the File input). scratch:// supported."},
+						"multipart":{"type":"boolean","title":"Send as form upload","default":false,"description":"Off = send the file bytes directly (what upload links expect). On = send as a form attachment for services that ask for one."},
+						"method":{"type":"string","title":"Method","enum":["PUT","POST"],"description":"Defaults to PUT for a direct upload, POST for a form upload."},
+						"field_name":{"type":"string","title":"Form field name","default":"file","x_advanced":true,"description":"Field name used for a form upload."},
+						"filename":{"type":"string","title":"Filename","x_advanced":true,"description":"Filename sent with a form upload. Defaults to the file's own name."},
+						"content_type":{"type":"string","title":"Content type","x_advanced":true,"description":"Content-Type for a direct upload. Defaults to a guess from the file extension."},
+						"headers":{"type":"object","title":"Headers","additionalProperties":{"type":"string"},"x_advanced":true,"description":"Request headers (e.g. Authorization). Values may include ${secret.NAME} secrets."},
 						"timeout_ms":{"type":"integer","default":300000,"minimum":1,"description":"Hard deadline for the whole upload, in milliseconds."},
-						"expect_status":{"type":"array","items":{"type":"integer"},"description":"Accepted status codes. Empty defaults to 2xx."},
-						"allow_private_networks":{"type":"boolean","default":false,"description":"Disable the SSRF guard. Only for intentional local targets."}
+						"expect_status":{"type":"array","title":"Accepted status codes","items":{"type":"integer"},"x_advanced":true,"description":"Status codes treated as success. Empty defaults to 2xx."},
+						"allow_private_networks":{"type":"boolean","title":"Allow private networks","default":false,"x_advanced":true,"description":"Disable the private-address guard. Only for intentional local targets."}
 					},
 					"required":["url"]
 				}`,

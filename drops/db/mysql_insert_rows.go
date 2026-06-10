@@ -18,7 +18,8 @@ func init() {
 		Manifest: core.Manifest{
 			ID:             "mysql_insert_rows",
 			Version:        "1.0",
-			Label:          "MySQL insert rows",
+			Label:          "MySQL",
+			Subtitle:       "Insert rows",
 			Color:          "#00758f",
 			Icon:           "database",
 			BrandLogo:      "/brands/mysql.svg",
@@ -49,12 +50,12 @@ func init() {
 				{Port: "headers", Label: "Headers", Required: false, MIME: []string{"application/json"}},
 			},
 			Outputs: []core.Port{
-				{Port: "inserted", Label: "Inserted count", MIME: []string{"application/json"}},
+				{Port: "inserted", Label: "Rows inserted", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"dsn":          {"type":"string"},
+					"dsn":          {"type":"string","title":"Connection string"},
 					"table":        {"type":"string"},
 					"create_table": {"type":"boolean","default":true,"description":"Auto-create the table from headers when missing. Defaults true."},
 					"column_types": {"type":"object","additionalProperties":{"type":"string"}}

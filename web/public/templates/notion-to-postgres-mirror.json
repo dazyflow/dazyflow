@@ -1,7 +1,7 @@
 {
   "id": "notion-to-postgres-mirror",
   "version": "1",
-  "name": "Mirror Notion DB \u2192 Postgres",
+  "name": "Mirror Notion DB → Postgres",
   "description": "Hourly: read every page in a Notion database and upsert into a Postgres table. Keeps Postgres in sync as the source-of-truth for downstream analytics queries that Notion's API can't easily serve.",
   "icon": "database",
   "triggers": [
@@ -59,7 +59,7 @@
   "edges": [
     {
       "from": "query",
-      "from_port": "pages",
+      "from_port": "rows",
       "to": "shape",
       "to_port": "rows",
       "on_error": ""

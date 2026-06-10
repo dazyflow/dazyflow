@@ -21,14 +21,15 @@ func init() {
 		Manifest: core.Manifest{
 			ID:             "git_log",
 			Version:        "1.0",
-			Label:          "Git log",
+			Label:          "Git",
+			Subtitle:       "Log",
 			Color:          "#f05033",
 			Icon:           "git",
 			Category:       "io",
 			Provider:       "internal",
 			Integration:    "Git",
 			Tags:           []string{"git", "log", "history", "vcs"},
-			Description: "List recent commits in a checked-out repo. Returns each commit's SHA, author, time, and summary. Useful for showing release notes, attributing changes, or building 'what landed today' reports.",
+			Description: "List recent commits in a checked-out repo — each with its SHA, author, time, and summary line. Useful for showing release notes, attributing changes, or building 'what landed today' reports.",
 			Summary:     "Walk a checked-out repo's history and return recent commits with SHA, author, timestamp, and summary.",
 			Examples: []core.ParamsExample{
 				{
@@ -44,19 +45,24 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				{Port: "path", Label: "Repository path (overrides params.path)"},
+				// Named after its param so the card shows an inline editable
+				// box; a wired value (e.g. git checkout's path output)
+				// overrides the typed one.
+				{Port: "path", Label: "Repository folder"},
 			},
 			Outputs: []core.Port{
-				{Port: "commits", Label: "Commit list (JSON array)", MIME: []string{"application/json"}},
-				{Port: "meta", Label: "Log metadata (JSON)", MIME: []string{"application/json"}},
+				// Only the commit list is a pin; the walk summary (start,
+				// count, truncated) is still EMITTED under "meta" so run
+				// records keep it for debugging — it's just not a pin.
+				{Port: "commits", Label: "Commits", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(
 				`{
 					"type":"object",
 					"properties":{
-						"path":{"type":"string","description":"Workspace-relative repository directory. Overridden by the path input port if connected."},
-						"ref":{"type":"string","default":"HEAD","description":"Starting ref — branch, tag, or commit SHA. Defaults to HEAD."},
-						"limit":{"type":"integer","default":20,"minimum":1,"maximum":1000,"description":"Maximum number of commits to return."}
+						"path":{"type":"string","title":"Folder","description":"Workspace folder holding the repository. Overridden by the 'Repository folder' input."},
+						"ref":{"type":"string","title":"Start at","default":"HEAD","description":"Where to start walking back from — branch, tag, or commit SHA. Defaults to the latest commit (HEAD)."},
+						"limit":{"type":"integer","title":"Max commits","default":20,"minimum":1,"maximum":1000,"description":"How many commits to return at most."}
 					}
 				}`,
 			),

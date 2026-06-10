@@ -16,9 +16,10 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "github_add_comment",
 			Version:     "1.0",
-			Label:       "GitHub add comment",
+			Label:       "GitHub",
+			Subtitle:    "Add comment",
 			Summary:     "Add a comment to a GitHub issue or pull request.",
-			Description: "Comment on a GitHub issue or PR (they share a number space). The comment body supports Markdown and can come from the 'body' input or params.",
+			Description: "Comment on a GitHub issue or PR (they share a number space). The comment can be typed on the step or wired in from another step (the input overrides the typed value); Markdown works. Outputs a link to the posted comment.",
 			Integration: "GitHub",
 			Category:    "network",
 			Icon:        "git-branch",
@@ -35,20 +36,25 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				{Port: "body", Label: "Comment body (overrides params.body; Markdown)"},
+				// Named after its param so the card shows an inline editable
+				// box (Unreal-style); a wired value overrides the typed one.
+				{Port: "body", Label: "Comment"},
 			},
 			Outputs: []core.Port{
-				{Port: "meta", Label: "Created comment metadata", MIME: []string{"application/json"}},
+				// Only the friendly scalar is a pin; the full comment metadata
+				// (id, node_id, …) is still EMITTED under "meta" so run records
+				// keep it for debugging — it's just not a pin.
+				{Port: "comment_url", Label: "Comment link", MIME: []string{"text/plain"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
 					"account":{"type":"string","default":"default"},
 					"token":{"type":"string"},
-					"owner":{"type":"string"},
-					"repo":{"type":"string"},
-					"issue_number":{"type":"integer","description":"Issue OR PR number (shared number space)."},
-					"body":{"type":"string","description":"Comment body. Overridden by the 'body' input port."},
+					"owner":{"type":"string","title":"Repo owner","description":"The username or organization the repo lives under."},
+					"repo":{"type":"string","title":"Repo name","description":"The repo's name, without the owner part."},
+					"issue_number":{"type":"integer","title":"Issue or PR number","description":"The number from the issue/PR link — issues and PRs share one number space."},
+					"body":{"type":"string","title":"Comment","description":"What to say (Markdown works). Overridden by the 'Comment' input."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
 				},
 				"required":["owner","repo","issue_number"]
@@ -98,8 +104,11 @@ func executeGitHubAddComment(ctx context.Context, job core.Job, _ chan<- core.Pr
 	return core.Result{
 		JobID:  job.ID,
 		Status: core.StatusOK,
-		Output: map[string]core.Ref{"meta": {MIME: "application/json", Inline: map[string]any{
-			"id": c.ID, "node_id": c.NodeID, "html_url": c.HTMLURL,
-		}}},
+		Output: map[string]core.Ref{
+			"comment_url": {MIME: "text/plain", Inline: c.HTMLURL},
+			"meta": {MIME: "application/json", Inline: map[string]any{
+				"id": c.ID, "node_id": c.NodeID, "html_url": c.HTMLURL,
+			}},
+		},
 	}, nil
 }

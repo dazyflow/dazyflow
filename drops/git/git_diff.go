@@ -19,14 +19,15 @@ func init() {
 		Manifest: core.Manifest{
 			ID:             "git_diff",
 			Version:        "1.0",
-			Label:          "Git diff",
+			Label:          "Git",
+			Subtitle:       "Diff",
 			Color:          "#f05033",
 			Icon:           "git",
 			Category:       "io",
 			Provider:       "internal",
 			Integration:    "Git",
 			Tags:           []string{"git", "diff", "patch", "vcs"},
-			Description: "Get a unified diff between two refs in a checked-out repo. Default compares the most recent commit (HEAD~1..HEAD), but you can specify any two refs. Returns the patch text plus a short summary of what changed.",
+			Description: "Show what changed between two points in a checked-out repo's history, as a unified diff (patch text). By default it shows the most recent commit's changes (HEAD~1..HEAD), but you can compare any two branches, tags, or commits.",
 			Summary:     "Produce a unified diff (patch text) between two git refs in a checked-out workspace repo.",
 			Examples: []core.ParamsExample{
 				{
@@ -42,19 +43,25 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				{Port: "path", Label: "Repository path (overrides params.path)"},
+				// Named after its param so the card shows an inline editable
+				// box; a wired value (e.g. git checkout's path output)
+				// overrides the typed one.
+				{Port: "path", Label: "Repository folder"},
 			},
 			Outputs: []core.Port{
-				{Port: "diff", Label: "Unified diff (patch text)", MIME: []string{"text/plain"}},
-				{Port: "meta", Label: "Diff metadata (JSON)", MIME: []string{"application/json"}},
+				// Only the diff text is a pin; the change summary
+				// (files_changed, insertions, …) is still EMITTED under
+				// "meta" so run records keep it for debugging — it's just
+				// not a pin.
+				{Port: "diff", Label: "Diff", MIME: []string{"text/plain"}},
 			},
 			ParamsSchema: json.RawMessage(
 				`{
 					"type":"object",
 					"properties":{
-						"path":{"type":"string","description":"Workspace-relative repository directory. Overridden by the path input port if connected."},
-						"from":{"type":"string","default":"HEAD~1","description":"Base ref — branch, tag, or commit SHA. Defaults to HEAD~1."},
-						"to":{"type":"string","default":"HEAD","description":"Target ref. Defaults to HEAD."}
+						"path":{"type":"string","title":"Folder","description":"Workspace folder holding the repository. Overridden by the 'Repository folder' input."},
+						"from":{"type":"string","title":"Compare from","default":"HEAD~1","description":"Starting point — branch, tag, or commit SHA. Defaults to the commit before the latest (HEAD~1)."},
+						"to":{"type":"string","title":"Compare to","default":"HEAD","description":"End point. Defaults to the latest commit (HEAD)."}
 					}
 				}`,
 			),

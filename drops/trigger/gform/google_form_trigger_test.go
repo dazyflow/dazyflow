@@ -184,12 +184,14 @@ func TestNoNewResponses_EmptyNoCursorChange(t *testing.T) {
 	store["acme/cursor.gform.flowA.trigger1"] = "2026-06-01T10:00:00Z" // same as the only response
 
 	res := runTrigger(t, "acme")
-	out := responsesOf(t, res)
-	if len(out) != 0 {
-		t.Fatalf("want 0, got %d", len(out))
+	// An empty poll emits NO outputs at all — ports without values make
+	// their edges dormant, so the dispatcher skips the rest of the flow
+	// (an empty check is a non-event, not a run).
+	if len(res.Output) != 0 {
+		t.Fatalf("empty poll must emit no outputs, got %v", res.Output)
 	}
-	if res.Output["count"].Inline != "0" {
-		t.Errorf("count = %v", res.Output["count"].Inline)
+	if res.Status != core.StatusOK {
+		t.Errorf("status = %q, want ok", res.Status)
 	}
 	if got := store["acme/cursor.gform.flowA.trigger1"]; got != "2026-06-01T10:00:00Z" {
 		t.Errorf("cursor should be unchanged, got %q", got)

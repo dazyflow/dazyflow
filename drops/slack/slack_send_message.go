@@ -14,9 +14,10 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "slack_send_message",
 			Version:     "1.0",
-			Label:       "Slack send message",
-			Summary:     "Post a message to a Slack channel as the connected bot, with optional thread_ts and Block Kit.",
-			Description: "Post a message to a Slack channel. The simplest path: set the channel and either type your message in 'text' or wire upstream text into the 'body' input. For richer formatting — buttons, dividers, images — use Block Kit blocks instead of plain text.",
+			Label:       "Slack",
+			Subtitle:    "Send message",
+			Summary:     "Send a message to a Slack channel as your connected bot.",
+			Description: "Send a message to a Slack channel. Channel and Message can be typed on the step or wired in from another step (a wired input overrides the typed value) — handy for sending a sheet row, an email summary, or any upstream text straight into Slack.",
 			Integration: "Slack",
 			Category:    "network",
 			Icon:        "message-square",
@@ -41,22 +42,31 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				{Port: "body", Label: "Message text (overrides params.text)"},
-				{Port: "blocks", Label: "Block Kit array (overrides params.blocks; text becomes the push-notification fallback)"},
+				// channel and text are named after their params so the card
+				// shows inline editable boxes (Unreal-style); a wired value
+				// overrides the typed one. The old "body" port name is still
+				// accepted at run time for flows saved before the rename.
+				{Port: "channel", Label: "Channel", MIME: []string{"text/plain"}},
+				{Port: "text", Label: "Message", MIME: []string{"text/plain"}},
+				{Port: "blocks", Label: "Blocks"},
 			},
-			Outputs: []core.Port{
-				{Port: "meta", Label: "Delivery metadata", MIME: []string{"application/json"}},
-			},
+			// No declared outputs: sending a message is a "do" step — "after
+			// it sends, do X" chains through the pass-through pin, which fires
+			// on success. The channel id and message timestamp are still
+			// EMITTED under "meta" (see the Execute result) so run records
+			// keep them for debugging; they're just not pins. Re-expose ts as
+			// a named port if a reply-in-thread feature ever needs to wire it.
+			Outputs: []core.Port{},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
 					"base_url":{"type":"string","description":"Override the API host (proxy / self-hosted / testing)."},
 					"account":{"type":"string","default":"default","description":"Name of the connected Slack workspace."},
 					"token":{"type":"string","description":"Raw bot token (xoxb-…). Overrides 'account'."},
-					"channel":{"type":"string","description":"Channel ID (C123) or name (#data-ops). Bot must already be a member."},
-					"text":{"type":"string","description":"Plain-text message body (Slack mrkdwn)."},
-					"thread_ts":{"type":"string","description":"Parent message timestamp to reply in thread."},
-					"blocks":{"type":"array","items":{},"description":"Block Kit elements; overrides text rendering for rich messages."},
+					"channel":{"type":"string","title":"Channel","description":"Where to send it — a channel name like #general, or a channel ID. The bot must already be a member. Overridden by the 'Channel' input."},
+					"text":{"type":"string","title":"Message","description":"The text to send. Overridden by the 'Message' input."},
+					"thread_ts":{"type":"string","title":"Reply in thread","x_advanced":true,"description":"Timestamp of a parent message to reply under."},
+					"blocks":{"type":"array","items":{},"title":"Blocks","x_advanced":true,"description":"Slack Block Kit layout for rich messages; replaces the plain text rendering."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
 				},
 				"required":["channel"]
@@ -68,18 +78,46 @@ func init() {
 	})
 }
 
+// textInputOr returns the text wired into input port `port` (string or raw
+// bytes), or `fallback` when the port is unwired/empty. ok is false only when
+// the port carries a NON-text value — a wiring mistake the caller rejects.
+// Lets Channel and Message each be supplied by an upstream wire or a param.
+func textInputOr(job core.Job, port, fallback string) (val string, ok bool) {
+	in, present := job.Input[port]
+	if !present || in.Inline == nil {
+		return fallback, true
+	}
+	switch v := in.Inline.(type) {
+	case string:
+		if v != "" {
+			return v, true
+		}
+		return fallback, true
+	case []byte:
+		if len(v) > 0 {
+			return string(v), true
+		}
+		return fallback, true
+	}
+	return "", false
+}
+
 // executeSlackSendMessage posts to chat.postMessage as the connected bot.
-// Behaviour mirrors the former scripted drop: the 'body' input overrides
-// params.text, the 'blocks' input/param carries Block Kit, and Slack's
-// logical failures (HTTP 200 + {ok:false}) are surfaced as slack_error.
+// channel / text each take their value from the matching input port when one
+// is wired, otherwise from the param (the "input overrides param" pattern);
+// the legacy 'body' port still feeds text for flows saved before the rename.
+// Slack's logical failures (HTTP 200 + {ok:false}) surface as slack_error.
 func executeSlackSendMessage(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	token, err := resolveToken(ctx, job)
 	if err != nil {
 		return params.Err(job, "auth", err.Error()), nil
 	}
-	channel, _ := params.StringOpt(job.Params, "channel")
+	channel, ok := textInputOr(job, "channel", params.StringDefault(job.Params, "channel", ""))
+	if !ok {
+		return params.Err(job, "bad_input", "'Channel' input must be text"), nil
+	}
 	if channel == "" {
-		return params.Err(job, "bad_param", "'channel' is required"), nil
+		return params.Err(job, "bad_param", "'channel' is required — set it or wire the 'Channel' input"), nil
 	}
 
 	text := params.StringDefault(job.Params, "text", "")
@@ -88,6 +126,11 @@ func executeSlackSendMessage(ctx context.Context, job core.Job, _ chan<- core.Pr
 	} else if ok {
 		text = t
 	}
+	// The declared 'text' port wins over both the param and the legacy port.
+	text, ok = textInputOr(job, "text", text)
+	if !ok {
+		return params.Err(job, "bad_input", "'Message' input must be text"), nil
+	}
 
 	blocks, jerr := resolveBlocks(job)
 	if jerr != nil {
@@ -95,7 +138,7 @@ func executeSlackSendMessage(ctx context.Context, job core.Job, _ chan<- core.Pr
 	}
 
 	if text == "" && blocks == nil {
-		return params.Err(job, "bad_input", "This Slack message has no content. Set 'text', wire its 'body' input, or provide Block Kit blocks."), nil
+		return params.Err(job, "bad_input", "This Slack message has no content. Type a message, wire the 'Message' input, or provide blocks."), nil
 	}
 
 	payload := map[string]any{"channel": channel}

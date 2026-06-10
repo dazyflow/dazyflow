@@ -20,7 +20,8 @@ func init() {
 		Manifest: core.Manifest{
 			ID:             "sqlite_upsert_rows",
 			Version:        "1.0",
-			Label:          "SQLite upsert rows",
+			Label:          "SQLite",
+			Subtitle:       "Upsert rows",
 			Color:          "#0a6abf",
 			Icon:           "database",
 			BrandLogo:      "/brands/sqlite.svg",
@@ -53,12 +54,12 @@ func init() {
 				{Port: "headers", Label: "Headers", Required: false, MIME: []string{"application/json"}},
 			},
 			Outputs: []core.Port{
-				{Port: "processed", Label: "Processed count", MIME: []string{"application/json"}},
+				{Port: "processed", Label: "Rows processed", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"path":             {"type":"string","format":"workspace-path"},
+					"path":             {"type":"string","format":"workspace-path","title":"Database file"},
 					"table":            {"type":"string"},
 					"conflict_columns": {"type":"array","items":{"type":"string"}},
 					"update_columns":   {"type":"array","items":{"type":"string"}},

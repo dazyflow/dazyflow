@@ -8,8 +8,13 @@
     {
       "id": "poll",
       "module": "poll_trigger",
-      "params": {"interval_seconds": 300},
-      "position": {"x": -120, "y": 200}
+      "params": {
+        "interval_seconds": 300
+      },
+      "position": {
+        "x": -120,
+        "y": 200
+      }
     },
     {
       "id": "search",
@@ -19,7 +24,10 @@
         "max_results": 20,
         "account": "default"
       },
-      "position": {"x": 200, "y": 200}
+      "position": {
+        "x": 200,
+        "y": 200
+      }
     },
     {
       "id": "fetch",
@@ -32,13 +40,21 @@
           "format": "metadata"
         }
       },
-      "position": {"x": 520, "y": 200}
+      "position": {
+        "x": 520,
+        "y": 200
+      }
     },
     {
       "id": "unwrap",
       "module": "unwrap_results",
-      "params": {"port": "message"},
-      "position": {"x": 840, "y": 200}
+      "params": {
+        "port": "message"
+      },
+      "position": {
+        "x": 840,
+        "y": 200
+      }
     },
     {
       "id": "render",
@@ -48,7 +64,10 @@
         "prefix": "*New mail*\n",
         "empty": "No new mail."
       },
-      "position": {"x": 1160, "y": 200}
+      "position": {
+        "x": 1160,
+        "y": 200
+      }
     },
     {
       "id": "notify",
@@ -57,13 +76,40 @@
         "channel": "#inbox",
         "account": "default"
       },
-      "position": {"x": 1480, "y": 200}
+      "position": {
+        "x": 1480,
+        "y": 200
+      }
     }
   ],
   "edges": [
-    {"from": "search", "from_port": "messages", "to": "fetch", "to_port": "items", "on_error": ""},
-    {"from": "fetch", "from_port": "results", "to": "unwrap", "to_port": "results", "on_error": ""},
-    {"from": "unwrap", "from_port": "rows", "to": "render", "to_port": "rows", "on_error": ""},
-    {"from": "render", "from_port": "text", "to": "notify", "to_port": "body", "on_error": ""}
+    {
+      "from": "search",
+      "from_port": "messages",
+      "to": "fetch",
+      "to_port": "items",
+      "on_error": ""
+    },
+    {
+      "from": "fetch",
+      "from_port": "results",
+      "to": "unwrap",
+      "to_port": "results",
+      "on_error": ""
+    },
+    {
+      "from": "unwrap",
+      "from_port": "rows",
+      "to": "render",
+      "to_port": "rows",
+      "on_error": ""
+    },
+    {
+      "from": "render",
+      "from_port": "text",
+      "to": "notify",
+      "to_port": "text",
+      "on_error": ""
+    }
   ]
 }

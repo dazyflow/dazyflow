@@ -50,7 +50,7 @@
       "from": "render",
       "from_port": "text",
       "to": "notify",
-      "to_port": "body",
+      "to_port": "text",
       "on_error": ""
     }
   ]

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/url"
+	"strconv"
 
 	"git.sr.ht/~klahr/hazyflow/core"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
@@ -15,9 +16,10 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "github_create_issue",
 			Version:     "1.0",
-			Label:       "GitHub create issue",
+			Label:       "GitHub",
+			Subtitle:    "Create issue",
 			Summary:     "Open a new issue on a GitHub repo with title, body, labels and assignees.",
-			Description: "Open a new issue on a GitHub repo. The body supports Markdown and can come from the 'body' input or params.",
+			Description: "Open a new issue on a GitHub repo. Title and Body can be typed on the step or wired in from another step (the matching input overrides the typed value); the body supports Markdown. Outputs the new issue's link and number so a follow-up step can post it somewhere or comment on it.",
 			Integration: "GitHub",
 			Category:    "network",
 			Icon:        "git-branch",
@@ -35,23 +37,31 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				{Port: "body", Label: "Issue body (overrides params.body; Markdown)"},
+				// Named after their params so the card shows inline editable
+				// boxes (Unreal-style); a wired value overrides the typed one.
+				{Port: "title", Label: "Title", MIME: []string{"text/plain"}},
+				{Port: "body", Label: "Body"},
 			},
 			Outputs: []core.Port{
-				{Port: "meta", Label: "Created issue metadata", MIME: []string{"application/json"}},
+				// Only the friendly scalars are pins; the full issue metadata
+				// (id, node_id, state, …) is still EMITTED under "meta" so run
+				// records keep it for debugging — it's just not a pin (same as
+				// gmail send / sheets append).
+				{Port: "issue_url", Label: "Issue link", MIME: []string{"text/plain"}},
+				{Port: "issue_number", Label: "Issue number", MIME: []string{"text/plain"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
 					"account":{"type":"string","default":"default"},
 					"token":{"type":"string","description":"Raw access token; overrides 'account'."},
-					"owner":{"type":"string","description":"Repo owner — username or organization."},
-					"repo":{"type":"string","description":"Repo name (without the owner prefix)."},
-					"title":{"type":"string","description":"Issue title."},
-					"body":{"type":"string","description":"Issue body (Markdown). Overridden by the 'body' input."},
-					"labels":{"type":"array","items":{"type":"string"},"description":"Labels to attach (must exist)."},
-					"assignees":{"type":"array","items":{"type":"string"},"description":"GitHub usernames to assign."},
-					"milestone":{"type":"integer","description":"Milestone number (not name)."},
+					"owner":{"type":"string","title":"Repo owner","description":"The username or organization the repo lives under."},
+					"repo":{"type":"string","title":"Repo name","description":"The repo's name, without the owner part."},
+					"title":{"type":"string","title":"Title","description":"Issue title. Overridden by the 'Title' input."},
+					"body":{"type":"string","title":"Body","description":"Issue text (Markdown works). Overridden by the 'Body' input."},
+					"labels":{"type":"array","title":"Labels","items":{"type":"string"},"description":"Labels to attach — they must already exist on the repo."},
+					"assignees":{"type":"array","title":"Assignees","items":{"type":"string"},"description":"GitHub usernames to assign."},
+					"milestone":{"type":"integer","title":"Milestone number","x_advanced":true,"description":"Milestone number (not name)."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
 				},
 				"required":["owner","repo","title"]
@@ -63,15 +73,44 @@ func init() {
 	})
 }
 
+// textInputOr returns the text wired into input port `port` (string or raw
+// bytes), or `fallback` when the port is unwired/empty. ok is false only when
+// the port carries a NON-text value — a wiring mistake the caller rejects.
+// Lets Title be supplied by an upstream wire or a param (same pattern as
+// gmail send's To/Subject/Body).
+func textInputOr(job core.Job, port, fallback string) (val string, ok bool) {
+	in, present := job.Input[port]
+	if !present || in.Inline == nil {
+		return fallback, true
+	}
+	switch v := in.Inline.(type) {
+	case string:
+		if v != "" {
+			return v, true
+		}
+		return fallback, true
+	case []byte:
+		if len(v) > 0 {
+			return string(v), true
+		}
+		return fallback, true
+	}
+	return "", false
+}
+
 func executeGitHubCreateIssue(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	owner, _ := params.StringOpt(job.Params, "owner")
 	repo, _ := params.StringOpt(job.Params, "repo")
-	title, _ := params.StringOpt(job.Params, "title")
 	if owner == "" || repo == "" {
 		return params.Err(job, "bad_param", "'owner' and 'repo' are required"), nil
 	}
+	// The Title input overrides the param when wired (input-overrides-param).
+	title, ok := textInputOr(job, "title", params.StringDefault(job.Params, "title", ""))
+	if !ok {
+		return params.Err(job, "bad_input", "'Title' input must be text"), nil
+	}
 	if title == "" {
-		return params.Err(job, "bad_param", "title must not be empty"), nil
+		return params.Err(job, "bad_param", "title must not be empty — set it or wire the 'Title' input"), nil
 	}
 	token, err := resolveToken(ctx, job)
 	if err != nil {
@@ -116,8 +155,12 @@ func executeGitHubCreateIssue(ctx context.Context, job core.Job, _ chan<- core.P
 	return core.Result{
 		JobID:  job.ID,
 		Status: core.StatusOK,
-		Output: map[string]core.Ref{"meta": {MIME: "application/json", Inline: map[string]any{
-			"number": i.Number, "html_url": i.HTMLURL, "id": i.ID, "node_id": i.NodeID, "state": i.State,
-		}}},
+		Output: map[string]core.Ref{
+			"issue_url":    {MIME: "text/plain", Inline: i.HTMLURL},
+			"issue_number": {MIME: "text/plain", Inline: strconv.Itoa(i.Number)},
+			"meta": {MIME: "application/json", Inline: map[string]any{
+				"number": i.Number, "html_url": i.HTMLURL, "id": i.ID, "node_id": i.NodeID, "state": i.State,
+			}},
+		},
 	}, nil
 }

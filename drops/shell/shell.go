@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -41,13 +42,14 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "shell",
 			Version:     "1.0",
-			Label:       "Run command",
+			Label:       "Shell",
+			Subtitle:    "Run command",
 			Color:       "#7f5af0",
 			Icon:        "terminal",
 			Category:    "io",
 			Provider:    "internal",
 			Tags:        []string{"build", "exec", "shell", "command", "ci"},
-			Description: "Run a shell command inside a workspace-relative directory (commonly fed by git_checkout). Captures stdout/stderr and the exit code. Always returns ok so downstream notification nodes still fire on failure — branch on meta.success / meta.exit_code.",
+			Description: "Run a shell command inside a workspace-relative directory (commonly fed by git_checkout). Captures stdout/stderr and the exit code. Always returns ok so downstream notification nodes still fire on failure — branch on the 'Exit code' output (0 = success).",
 			Summary:     "Run a command in a workspace directory and capture its output and exit code.",
 			Examples: []core.ParamsExample{
 				{
@@ -71,9 +73,15 @@ func init() {
 				{Port: "path", Label: "Working directory (overrides params.path)"},
 			},
 			Outputs: []core.Port{
+				// Only the friendly scalars are declared as ports; the full
+				// structured result (command, args, path, success, duration_ms,
+				// error) is still EMITTED under "meta" (see executeShell) so run
+				// records keep it for debugging, but it's not a pin — undeclared
+				// outputs can't be wired and don't clutter the card. Branch on
+				// exit_code ("0" = success) for fail/notify paths.
 				{Port: "stdout", Label: "Standard output", MIME: []string{"text/plain"}},
 				{Port: "stderr", Label: "Standard error", MIME: []string{"text/plain"}},
-				{Port: "meta", Label: "Command metadata (JSON)", MIME: []string{"application/json"}},
+				{Port: "exit_code", Label: "Exit code", MIME: []string{"text/plain"}},
 			},
 			ParamsSchema: json.RawMessage(
 				`{
@@ -83,7 +91,7 @@ func init() {
 						"command":{"type":"string","description":"Executable to run. Resolved via PATH unless absolute."},
 						"args":{"type":"array","items":{"type":"string"},"description":"Argument vector. Defaults to []."},
 						"timeout_ms":{"type":"integer","default":600000,"minimum":1,"description":"Hard deadline for the command, in milliseconds. Default 10 min."},
-						"max_output_bytes":{"type":"integer","default":1048576,"minimum":0,"description":"Truncate stdout/stderr beyond this. Default 1 MiB."}
+						"max_output_bytes":{"type":"integer","default":1048576,"minimum":0,"x_advanced":true,"description":"Truncate stdout/stderr beyond this. Default 1 MiB."}
 					},
 					"required":["command"]
 				}`,
@@ -226,9 +234,10 @@ func executeShell(ctx context.Context, job core.Job, progress chan<- core.Progre
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
-			"stdout": {MIME: "text/plain", Inline: combined.String()},
-			"stderr": {MIME: "text/plain", Inline: ""},
-			"meta":   {MIME: "application/json", Inline: meta},
+			"stdout":    {MIME: "text/plain", Inline: combined.String()},
+			"stderr":    {MIME: "text/plain", Inline: ""},
+			"exit_code": {MIME: "text/plain", Inline: strconv.Itoa(exitCode)},
+			"meta":      {MIME: "application/json", Inline: meta},
 		},
 	}, nil
 }

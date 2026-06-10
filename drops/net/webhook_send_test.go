@@ -60,6 +60,24 @@ func TestWebhookSend_StringBody(t *testing.T) {
 	}
 }
 
+func TestWebhookSend_URLFromInput(t *testing.T) {
+	SetAllowPrivateEgress(true)
+	defer SetAllowPrivateEgress(false)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+	// Both set: the wired URL input must win over the param (the param URL
+	// points nowhere and would fail the send if used).
+	res, _ := executeWebhookSend(context.Background(), core.Job{
+		Params: map[string]any{"url": "https://param.example.invalid/should-not-be-called", "body": "x"},
+		Input:  map[string]core.Ref{"url": {Inline: srv.URL}},
+	}, nil)
+	if res.Status != core.StatusOK {
+		t.Errorf("status=%q (%+v) — input URL should have been used", res.Status, res.Error)
+	}
+}
+
 func TestWebhookSend_MissingURL(t *testing.T) {
 	res, _ := executeWebhookSend(context.Background(), core.Job{Params: map[string]any{}}, nil)
 	if res.Status != core.StatusError || res.Error.Code != "bad_param" {

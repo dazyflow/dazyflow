@@ -17,7 +17,8 @@ func init() {
 		Manifest: core.Manifest{
 			ID:             "postgres_upsert_rows",
 			Version:        "1.0",
-			Label:          "Postgres upsert rows",
+			Label:          "Postgres",
+			Subtitle:       "Upsert rows",
 			Color:          "#336791",
 			Icon:           "database",
 			BrandLogo:      "/brands/postgres.svg",
@@ -53,12 +54,12 @@ func init() {
 				{Port: "headers", Label: "Headers", Required: false, MIME: []string{"application/json"}},
 			},
 			Outputs: []core.Port{
-				{Port: "processed", Label: "Processed count", MIME: []string{"application/json"}},
+				{Port: "processed", Label: "Rows processed", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"dsn":              {"type":"string"},
+					"dsn":              {"type":"string","title":"Connection string"},
 					"schema":           {"type":"string","default":"public"},
 					"table":            {"type":"string"},
 					"conflict_columns": {"type":"array","items":{"type":"string"}},

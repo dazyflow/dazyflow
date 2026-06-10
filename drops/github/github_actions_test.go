@@ -64,9 +64,32 @@ func TestGitHubCreateIssue_Posts(t *testing.T) {
 	if srv.lastBody["title"] != "boom" {
 		t.Errorf("body = %+v", srv.lastBody)
 	}
+	// The friendly scalar pins carry the link and number; the full
+	// metadata blob is still emitted under "meta" (undeclared pin).
+	if got := res.Output["issue_url"].Inline; got != "https://gh/i/7" {
+		t.Errorf("issue_url = %v", got)
+	}
+	if got := res.Output["issue_number"].Inline; got != "7" {
+		t.Errorf("issue_number = %v", got)
+	}
 	meta := res.Output["meta"].Inline.(map[string]any)
 	if meta["number"] != 7 {
 		t.Errorf("meta = %+v", meta)
+	}
+}
+
+func TestGitHubCreateIssue_TitleInputOverridesParam(t *testing.T) {
+	srv := newGHServer(t, 201, map[string]any{"number": 2})
+	withGHEnv(t, srv.URL)
+	res, _ := executeGitHubCreateIssue(context.Background(), core.Job{
+		Params: map[string]any{"owner": "o", "repo": "r", "title": "typed"},
+		Input:  map[string]core.Ref{"title": {Inline: "wired"}},
+	}, nil)
+	if res.Status != core.StatusOK {
+		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
+	}
+	if srv.lastBody["title"] != "wired" {
+		t.Errorf("title = %v, want the wired input to win", srv.lastBody["title"])
 	}
 }
 
@@ -115,6 +138,14 @@ func TestGitHubAddComment_Posts(t *testing.T) {
 	}
 	if srv.lastPath != "/repos/o/r/issues/12/comments" {
 		t.Errorf("path = %q", srv.lastPath)
+	}
+	// The friendly scalar pin carries the link; the full metadata blob
+	// is still emitted under "meta" (undeclared pin).
+	if got := res.Output["comment_url"].Inline; got != "https://gh/c/5" {
+		t.Errorf("comment_url = %v", got)
+	}
+	if res.Output["meta"].Inline == nil {
+		t.Error("meta key should still be emitted")
 	}
 }
 

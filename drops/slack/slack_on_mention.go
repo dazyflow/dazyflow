@@ -13,7 +13,8 @@ func init() {
 		Manifest: core.Manifest{
 			ID:             "slack_on_mention",
 			Version:        "1.0",
-			Label:          "Slack on mention",
+			Label:          "Slack",
+			Subtitle:       "On mention",
 			Color:          "#4A154B",
 			Icon:           "mail", // fallback; BrandLogo wins in the UI
 			BrandLogo:      "/brands/slack.svg",
@@ -21,8 +22,8 @@ func init() {
 			Provider:       "internal",
 			Integration:    "Slack",
 			Tags:           []string{"slack", "trigger", "mention", "event", "events-api"},
-			Description:    "Fires when someone @-mentions your bot in Slack. Each fire receives the message text, the channel, the user who sent it, and the raw event for advanced use. Filter by channel via the channel_filter param if you only want to react in certain rooms.",
-			Summary:        "Trigger that fires on every Slack app_mention event, optionally narrowed to one channel.",
+			Description:    "Starts this flow whenever someone @-mentions your bot in Slack. The message, who sent it, and where it was sent are available as outputs to wire into the next steps — e.g. reply, log the request to a sheet, or forward it by email. Set 'Only in channel' to react in just one room.",
+			Summary:        "Starts the flow when someone @-mentions your bot in Slack.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Fire on any @-mention in the workspace",
@@ -40,17 +41,21 @@ func init() {
 			ExecutionModel: core.ExecutionTrigger,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{
-				{Port: "text", Label: "Message text (the user's message that mentioned the bot)", MIME: []string{"text/plain"}},
-				{Port: "user", Label: "Slack user_id of the mentioner", MIME: []string{"text/plain"}},
-				{Port: "channel", Label: "Slack channel_id the mention happened in", MIME: []string{"text/plain"}},
-				{Port: "team", Label: "Slack team_id (workspace) the mention came from", MIME: []string{"text/plain"}},
-				{Port: "ts", Label: "Message timestamp (Slack ts; use this to reply in thread)", MIME: []string{"text/plain"}},
-				{Port: "event", Label: "Full Slack event payload as JSON — advanced use", MIME: []string{"application/json"}},
+				{Port: "text", Label: "Message", MIME: []string{"text/plain"}},
+				{Port: "user", Label: "From user", MIME: []string{"text/plain"}},
+				{Port: "channel", Label: "Channel", MIME: []string{"text/plain"}},
+				{Port: "team", Label: "Workspace", MIME: []string{"text/plain"}},
+				{Port: "ts", Label: "Time", MIME: []string{"text/plain"}},
+				// The whole event stays a wireable pin: compositions template
+				// across several of its fields through ONE wire (e.g. the
+				// mention→GitHub-issue template uses user+channel+text
+				// together), which the scalar pins can't express.
+				{Port: "event", Label: "Raw event", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"channel_filter": {"type":"string","description":"Optional channel ID (e.g. C0123) the graph should fire for. When set, mentions in other channels DO NOT fire this graph — the events handler skips dispatch at the gateway, saving the worker round-trip. Empty (default) means fire for every channel the bot is mentioned in."}
+					"channel_filter": {"type":"string","title":"Only in channel","description":"React only to mentions in this one channel (use the channel ID, e.g. C0123). Mentions elsewhere are ignored. Leave empty to react everywhere the bot is mentioned."}
 				}
 			}`),
 			// Same shape as webhook_input: retry of a trigger is

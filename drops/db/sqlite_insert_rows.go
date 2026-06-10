@@ -24,7 +24,8 @@ func init() {
 		Manifest: core.Manifest{
 			ID:             "sqlite_insert_rows",
 			Version:        "1.0",
-			Label:          "SQLite insert rows",
+			Label:          "SQLite",
+			Subtitle:       "Insert rows",
 			Color:          "#0a6abf",
 			Icon:           "database",
 			BrandLogo:      "/brands/sqlite.svg",
@@ -52,12 +53,12 @@ func init() {
 				{Port: "headers", Label: "Headers", Required: false, MIME: []string{"application/json"}},
 			},
 			Outputs: []core.Port{
-				{Port: "inserted", Label: "Inserted count", MIME: []string{"application/json"}},
+				{Port: "inserted", Label: "Rows inserted", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"path":         {"type":"string","format":"workspace-path","description":"SQLite file path inside the workspace sandbox. Created on first insert."},
+					"path":         {"type":"string","format":"workspace-path","title":"Database file","description":"SQLite file path inside the workspace sandbox. Created on first insert."},
 					"table":        {"type":"string","description":"Target table. Created from headers when create_table=true (the default)."},
 					"create_table": {"type":"boolean","default":true,"description":"Auto-create the table from the supplied headers if it doesn't exist. Set false to fail loudly when the table is missing."},
 					"column_types": {"type":"object","additionalProperties":{"type":"string"},"description":"Override per-column type (e.g. {\"age\":\"INTEGER\",\"created_at\":\"DATETIME\"}). Defaults to TEXT for every header."}

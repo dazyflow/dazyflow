@@ -15,9 +15,10 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "notion_create_page",
 			Version:     "1.0",
-			Label:       "Notion create page",
-			Summary:     "Create a Notion page under a database or page, with properties and optional body content.",
-			Description: "Create a Notion page. Set its properties (title, status, etc.) and an optional body via the 'content' input — plain text becomes paragraph blocks, or pass Notion block objects directly. Parent must be exactly one of a database or a page.",
+			Label:       "Notion",
+			Subtitle:    "Create page",
+			Summary:     "Add a page to Notion — a row in a database or a subpage — with a title and body text.",
+			Description: "Add a page to Notion. Type a Title and an optional Page body (blank lines start new paragraphs), then pick where it goes: a database (the page becomes a row) or a parent page (it becomes a subpage). Title and Page body can also be wired in from upstream — a wire overrides the typed value. Extra database columns (Status, dates, tags…) go in the advanced 'properties' field as raw Notion JSON.",
 			Integration: "Notion",
 			Category:    "network",
 			Icon:        "file-output",
@@ -26,7 +27,8 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"notion", "page", "create", "write"},
 			Examples: []core.ParamsExample{
-				{Title: "Add a row to a tasks database", Params: json.RawMessage(`{"account":"default","parent_database_id":"11111111-2222-3333-4444-555555555555","properties":{"Name":{"title":[{"text":{"content":"Follow up with Ada"}}]}}}`)},
+				{Title: "Add a row to a tasks database", Params: json.RawMessage(`{"account":"default","title":"Follow up with Ada","parent_database_id":"11111111-2222-3333-4444-555555555555"}`)},
+				{Title: "Row with extra columns (advanced)", Params: json.RawMessage(`{"account":"default","title":"Follow up with Ada","parent_database_id":"11111111-2222-3333-4444-555555555555","properties":{"Status":{"select":{"name":"Todo"}}}}`)},
 			},
 			RequiresConnections: []core.ConnectionRequirement{
 				{Kind: "secret", Name: "NOTION_TOKEN", Note: "Notion integration token (or connect via OAuth)."},
@@ -34,25 +36,35 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				{Port: "content", Label: "Page body — plain text (→ paragraphs) or Notion block objects"},
+				// Editable on the card (inline pin editors — each port name
+				// matches its string param) and wireable; a wired value
+				// overrides the param. 'content' also accepts Notion block
+				// objects wired in — an array/object passes through, plain
+				// text becomes paragraph blocks.
+				{Port: "title", Label: "Title", MIME: []string{"text/plain"}},
+				{Port: "content", Label: "Page body"},
 			},
 			Outputs: []core.Port{
-				{Port: "id", Label: "Created page ID", MIME: []string{"text/plain"}},
-				{Port: "url", Label: "Created page URL", MIME: []string{"text/plain"}},
-				{Port: "meta", Label: "Full Notion page object", MIME: []string{"application/json"}},
+				// Friendly scalar pins — same move as gmail_get_message. The
+				// full Notion page object is still EMITTED under "meta" for
+				// run records/debugging, just not a pin.
+				{Port: "title", Label: "Title", MIME: []string{"text/plain"}},
+				{Port: "url", Label: "Page URL", MIME: []string{"text/plain"}},
+				{Port: "id", Label: "Page ID", MIME: []string{"text/plain"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
 					"account":{"type":"string","default":"default"},
 					"token":{"type":"string","description":"Raw Notion token; overrides 'account'."},
-					"parent_database_id":{"type":"string","description":"Parent database UUID. Set exactly one of this or parent_page_id."},
-					"parent_page_id":{"type":"string","description":"Parent page UUID. Set exactly one of this or parent_database_id."},
-					"properties":{"type":"object","description":"Notion properties object (passed through verbatim)."},
-					"children":{"type":"array","items":{},"description":"Notion block objects for the page body."},
+					"title":{"type":"string","title":"Title","description":"The page title. Overridden by the 'Title' input when wired."},
+					"content":{"type":"string","title":"Page body","description":"Plain text for the page body — blank lines start a new paragraph. Overridden by the 'Page body' input when wired."},
+					"parent_database_id":{"type":"string","title":"Add to database","description":"The database the page goes into (as a new row) — paste its ID. Set this or 'Add under page', not both."},
+					"parent_page_id":{"type":"string","title":"Add under page","description":"The page the new page goes under (as a subpage) — paste its ID. Set this or 'Add to database', not both."},
+					"properties":{"type":"object","title":"Properties (Notion JSON)","x_advanced":true,"description":"Raw Notion properties object for extra database columns, passed through verbatim and merged with Title (advanced)."},
+					"children":{"type":"array","items":{},"title":"Body blocks (Notion JSON)","x_advanced":true,"description":"Raw Notion block objects for the page body (advanced)."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
-				},
-				"required":["properties"]
+				}
 			}`),
 			Idempotent:  false,
 			RetryPolicy: core.RetryExponentialBackoff,
@@ -61,15 +73,45 @@ func init() {
 	})
 }
 
+// textInputOr returns the text wired into input port `port` (string or raw
+// bytes), or `fallback` when the port is unwired/empty. ok is false only when
+// the port carries a NON-text value — a wiring mistake the caller rejects.
+// Lets Title (and query's Database ID) be supplied by an upstream wire or a
+// param — same helper as gmail send's, kept local to the package.
+func textInputOr(job core.Job, port, fallback string) (val string, ok bool) {
+	in, present := job.Input[port]
+	if !present || in.Inline == nil {
+		return fallback, true
+	}
+	switch v := in.Inline.(type) {
+	case string:
+		if v != "" {
+			return v, true
+		}
+		return fallback, true
+	case []byte:
+		if len(v) > 0 {
+			return string(v), true
+		}
+		return fallback, true
+	}
+	return "", false
+}
+
 func executeNotionCreatePage(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	dbID, _ := params.StringOpt(job.Params, "parent_database_id")
 	pgID, _ := params.StringOpt(job.Params, "parent_page_id")
 	if (dbID == "") == (pgID == "") {
-		return params.Err(job, "bad_param", "set exactly one of parent_database_id or parent_page_id"), nil
+		return params.Err(job, "bad_param", "set exactly one of 'Add to database' or 'Add under page'"), nil
 	}
-	props, ok := job.Params["properties"]
-	if !ok || props == nil {
-		return params.Err(job, "bad_param", `missing param "properties"`), nil
+	// The Title input pin overrides the param when wired.
+	title, ok := textInputOr(job, "title", params.StringDefault(job.Params, "title", ""))
+	if !ok {
+		return params.Err(job, "bad_input", "'Title' input must be text"), nil
+	}
+	props, errMsg := mergedProperties(job, title)
+	if errMsg != "" {
+		return params.Err(job, "bad_param", errMsg), nil
 	}
 	token, err := resolveToken(ctx, job)
 	if err != nil {
@@ -88,8 +130,12 @@ func executeNotionCreatePage(ctx context.Context, job core.Job, _ chan<- core.Pr
 	if c, ok := job.Params["children"].([]any); ok {
 		children = append(children, c...)
 	}
+	// The Page body input overrides the param; both turn plain text into
+	// paragraph blocks (wired block objects pass through as-is).
 	if in, ok := job.Input["content"]; ok && in.Inline != nil {
 		children = append(children, contentBlocks(in.Inline)...)
+	} else if c := params.StringDefault(job.Params, "content", ""); strings.TrimSpace(c) != "" {
+		children = append(children, paragraphsToBlocks(c)...)
 	}
 	if len(children) > 0 {
 		payload["children"] = children
@@ -115,11 +161,69 @@ func executeNotionCreatePage(ctx context.Context, job core.Job, _ chan<- core.Pr
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
-			"id":   {MIME: "text/plain", Inline: page.ID},
-			"url":  {MIME: "text/plain", Inline: page.URL},
+			"title": {MIME: "text/plain", Inline: pageTitle(meta)},
+			"url":   {MIME: "text/plain", Inline: page.URL},
+			"id":    {MIME: "text/plain", Inline: page.ID},
+			// Full Notion page object — emitted for run records, not a pin.
 			"meta": {MIME: "application/json", Inline: meta},
 		},
 	}, nil
+}
+
+// mergedProperties combines the friendly Title with the advanced raw
+// 'properties' param. Title becomes the page's title property under the key
+// "title" — Notion's fixed ID for the title property, valid for both
+// database and page parents — unless the raw properties already carry a
+// title-type property (then the raw one wins). A page needs at least a
+// title, so empty-both is rejected via the returned message.
+func mergedProperties(job core.Job, title string) (props any, errMsg string) {
+	raw := job.Params["properties"]
+	base, isMap := raw.(map[string]any)
+	if raw != nil && !isMap {
+		// Non-object 'properties' param: pass it through verbatim and let
+		// Notion report the shape error.
+		return raw, ""
+	}
+	merged := make(map[string]any, len(base)+1)
+	for k, v := range base {
+		merged[k] = v
+	}
+	if title != "" && !hasTitleProperty(merged) {
+		merged["title"] = map[string]any{"title": richTextChunks(title)}
+	}
+	if len(merged) == 0 {
+		return nil, "give the page a Title — set the param, wire the 'Title' input, or set 'properties'"
+	}
+	return merged, ""
+}
+
+// hasTitleProperty reports whether a raw properties object already sets a
+// title-type property (a value object carrying a "title" key).
+func hasTitleProperty(props map[string]any) bool {
+	for _, v := range props {
+		if m, ok := v.(map[string]any); ok {
+			if _, has := m["title"]; has {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// pageTitle pulls the plain-text title out of a Notion page object — the
+// property whose type is "title", whatever the database named it.
+func pageTitle(page map[string]any) string {
+	props, _ := page["properties"].(map[string]any)
+	for _, v := range props {
+		m, ok := v.(map[string]any)
+		if !ok {
+			continue
+		}
+		if t, _ := m["type"].(string); t == "title" {
+			return richTextPlain(m["title"])
+		}
+	}
+	return ""
 }
 
 // contentBlocks converts a 'content' input value into Notion block

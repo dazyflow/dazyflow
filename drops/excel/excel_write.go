@@ -19,9 +19,10 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "excel_write",
 			Version:     "1.0",
-			Label:       "Excel: write",
-			Summary:     "Serialize a row stream into an .xlsx workbook in the workspace, optionally appending to an existing sheet.",
-			Description: "Write a row stream (array of objects) to an .xlsx workbook in the workspace. Wire a 'headers' input to fix column order; otherwise columns are derived from the first row. With append:true, rows are added to an existing sheet of the same name.",
+			Label:       "Excel",
+			Subtitle:    "Write sheet",
+			Summary:     "Write rows to an Excel file, matching each row's fields to columns by header.",
+			Description: "Write rows to an Excel (.xlsx) file in the workspace. Wire a rows list into the 'Rows' input; columns are taken from the 'Headers' input or derived from the row fields. Turn on 'Add to existing sheet' to add the rows under what's already there instead of starting the file over.",
 			Integration: "Excel",
 			Category:    "io",
 			Icon:        "file-spreadsheet",
@@ -37,18 +38,27 @@ func init() {
 			Inputs: []core.Port{
 				{Port: "rows", Label: "Rows", Required: true, MIME: []string{"application/json"}},
 				{Port: "headers", Label: "Headers", MIME: []string{"application/json"}},
+				// Named after the param so the card shows an inline editable box
+				// (Unreal-style); a wired value overrides the typed one — e.g. a
+				// date-stamped filename built by an upstream step, or an Excel
+				// read's 'path' output to write back to the same file.
+				{Port: "path", Label: "File", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				{Port: "out", Label: "Written path", MIME: []string{xlsxMIME}},
+				{Port: "out", Label: "File", MIME: []string{xlsxMIME}},
+				// path is re-emitted as text so another Excel step downstream can
+				// target the same file by wire (mirrors sheets append's
+				// spreadsheet_id).
+				{Port: "path", Label: "File path", MIME: []string{"text/plain"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"path":{"type":"string","description":"Workspace-relative destination .xlsx."},
-					"sheet":{"type":"string","description":"Sheet name (default \"Sheet1\")."},
-					"append":{"type":"boolean","description":"Append rows to an existing sheet of the same name instead of overwriting."},
-					"autosize":{"type":"boolean","description":"Accepted for compatibility; not applied."},
-					"freezeRow":{"type":"integer","description":"Accepted for compatibility; not applied."}
+					"path":{"type":"string","title":"File","examples":["reports/sales.xlsx"],"description":"Where to save the .xlsx in the workspace. Ignored when a 'File' input is wired."},
+					"sheet":{"type":"string","title":"Sheet","default":"Sheet1","description":"The sheet (tab) to write."},
+					"append":{"type":"boolean","title":"Add to existing sheet","default":false,"description":"Add the rows under what's already on the sheet instead of replacing it."},
+					"autosize":{"type":"boolean","description":"Accepted for compatibility; not applied.","x_advanced":true},
+					"freezeRow":{"type":"integer","description":"Accepted for compatibility; not applied.","x_advanced":true}
 				},
 				"required":["path"]
 			}`),
@@ -59,7 +69,12 @@ func init() {
 }
 
 func executeExcelWrite(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	path := wsPath(params.StringDefault(job.Params, "path", ""))
+	path := params.StringDefault(job.Params, "path", "")
+	// The File input overrides the param when wired (same as excel_read).
+	if in, ok := job.Input["path"]; ok && in.Inline != nil {
+		path = cellStr(in.Inline)
+	}
+	path = wsPath(path)
 	if path == "" {
 		return params.Err(job, "bad_param", "'path' is required"), nil
 	}
@@ -147,6 +162,9 @@ func executeExcelWrite(_ context.Context, job core.Job, _ chan<- core.Progress) 
 	return core.Result{
 		JobID:  job.ID,
 		Status: core.StatusOK,
-		Output: map[string]core.Ref{"out": {MIME: xlsxMIME, Ref: path}},
+		Output: map[string]core.Ref{
+			"out":  {MIME: xlsxMIME, Ref: path},
+			"path": {MIME: "text/plain", Inline: path},
+		},
 	}, nil
 }

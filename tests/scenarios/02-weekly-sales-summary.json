@@ -3,35 +3,63 @@
   "version": "1",
   "tenant": "dev",
   "workspace": "default",
-  "triggers": [{"type": "cron", "cron": "0 8 * * 1"}],
+  "triggers": [
+    {
+      "type": "cron",
+      "cron": "0 8 * * 1"
+    }
+  ],
   "nodes": [
     {
       "id": "read_orders",
       "module": "sheets_read_range",
-      "params": {"account": "default", "spreadsheet_id": "REPLACE_WITH_SHEET_ID", "range": "Orders"}
+      "params": {
+        "account": "default",
+        "spreadsheet_id": "REPLACE_WITH_SHEET_ID",
+        "range": "Orders"
+      }
     },
     {
       "id": "last_week",
       "module": "route_rows",
       "params": {
-        "routes": [{"slot": "rows_1", "filter": "timestamp(string(row.order_date) + \"T00:00:00Z\") > timestamp(string(now)) - duration(\"168h\")"}]
+        "routes": [
+          {
+            "slot": "rows_1",
+            "filter": "timestamp(string(row.order_date) + \"T00:00:00Z\") > timestamp(string(now)) - duration(\"168h\")"
+          }
+        ]
       }
     },
     {
       "id": "totals_by_person",
       "module": "group_aggregate",
       "params": {
-        "by": ["salesperson"],
+        "by": [
+          "salesperson"
+        ],
         "aggregate": {
-          "revenue": {"op": "sum", "column": "amount"},
-          "orders": {"op": "count"}
+          "revenue": {
+            "op": "sum",
+            "column": "amount"
+          },
+          "orders": {
+            "op": "count"
+          }
         }
       }
     },
     {
       "id": "ranked",
       "module": "sort_rows",
-      "params": {"by": [{"column": "revenue", "desc": true}]}
+      "params": {
+        "by": [
+          {
+            "column": "revenue",
+            "desc": true
+          }
+        ]
+      }
     },
     {
       "id": "compose",
@@ -43,14 +71,41 @@
     {
       "id": "post",
       "module": "slack_send_message",
-      "params": {"channel": "#sales"}
+      "params": {
+        "channel": "#sales"
+      }
     }
   ],
   "edges": [
-    {"from": "read_orders", "from_port": "rows", "to": "last_week", "to_port": "rows"},
-    {"from": "last_week", "from_port": "rows_1", "to": "totals_by_person", "to_port": "rows"},
-    {"from": "totals_by_person", "from_port": "rows", "to": "ranked", "to_port": "rows"},
-    {"from": "ranked", "from_port": "rows", "to": "compose", "to_port": "prompt"},
-    {"from": "compose", "from_port": "text", "to": "post", "to_port": "body"}
+    {
+      "from": "read_orders",
+      "from_port": "rows",
+      "to": "last_week",
+      "to_port": "rows"
+    },
+    {
+      "from": "last_week",
+      "from_port": "rows_1",
+      "to": "totals_by_person",
+      "to_port": "rows"
+    },
+    {
+      "from": "totals_by_person",
+      "from_port": "rows",
+      "to": "ranked",
+      "to_port": "rows"
+    },
+    {
+      "from": "ranked",
+      "from_port": "rows",
+      "to": "compose",
+      "to_port": "prompt"
+    },
+    {
+      "from": "compose",
+      "from_port": "text",
+      "to": "post",
+      "to_port": "text"
+    }
   ]
 }

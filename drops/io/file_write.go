@@ -18,14 +18,15 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "file_write",
 			Version:     "1.0",
-			Label:       "File write",
+			Label:       "File",
+			Subtitle:    "Write",
 			Color:       "#4a8",
 			Icon:        "file-output",
 			Category:    "io",
 			Provider:    "internal",
 			Tags:        []string{"filesystem", "write", "sandbox"},
-			Description: "Write a file to the workspace sandbox. Accepts inline data or a workspace-relative source Ref. Respects per-tenant disk quotas.",
-			Summary:     "Copy an input Ref's bytes to a workspace-relative destination, refusing escapes and pre-checking against the tenant disk quota.",
+			Description: "Save incoming data as a file in the workspace. Wire anything into the Data input — text, JSON, or a file from another step — and it's written to the path you choose. Workspace storage limits are respected.",
+			Summary:     "Save incoming data as a workspace file.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Drop a generated artifact into the reports folder",
@@ -40,15 +41,15 @@ func init() {
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{{
 				Port:     "in",
-				Label:    "Source ref",
+				Label:    "Data",
 				Required: true,
 			}},
 			Outputs: []core.Port{{
 				Port:  "out",
-				Label: "Written path",
+				Label: "Saved file",
 			}},
 			ParamsSchema: json.RawMessage(
-				`{"type":"object","properties":{"path":{"type":"string","format":"workspace-path"},"mkdirs":{"type":"boolean"}},"required":["path"]}`,
+				`{"type":"object","properties":{"path":{"type":"string","title":"Save to","format":"workspace-path","description":"Where to save the file in the workspace."},"mkdirs":{"type":"boolean","title":"Create missing folders","description":"Create the folders in 'Save to' if they don't exist yet."}},"required":["path"]}`,
 			),
 		},
 		Execute: executeFileWrite,

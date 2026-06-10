@@ -30,7 +30,8 @@ func init() {
 		Manifest: core.Manifest{
 			ID:             "builtin_store_append",
 			Version:        "1.0",
-			Label:          "Save to built-in store",
+			Label:          "Built-in store",
+			Subtitle:       "Save",
 			Color:          "#0a6abf",
 			Icon:           "database",
 			Category:       "io",
@@ -57,7 +58,7 @@ func init() {
 				{Port: "headers", Label: "Headers", Required: false, MIME: []string{"application/json"}},
 			},
 			Outputs: []core.Port{
-				{Port: "inserted", Label: "Inserted count", MIME: []string{"application/json"}},
+				{Port: "inserted", Label: "Rows saved", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
@@ -75,7 +76,8 @@ func init() {
 		Manifest: core.Manifest{
 			ID:             "builtin_store_query",
 			Version:        "1.0",
-			Label:          "Read from built-in store",
+			Label:          "Built-in store",
+			Subtitle:       "Read",
 			Color:          "#0a6abf",
 			Icon:           "database",
 			Category:       "io",
@@ -104,9 +106,9 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"sql":    {"type":"string","description":"A SELECT to run against the built-in store.","examples":["SELECT * FROM leads ORDER BY submitted_at DESC LIMIT 50"]},
-					"params": {"type":"array","items":{},"description":"Values for any ? placeholders in the SQL, in order."},
-					"limit":  {"type":"integer","minimum":1,"description":"Optional cap on the number of rows returned."}
+					"sql":    {"type":"string","title":"SQL","description":"A SELECT to run against the built-in store.","examples":["SELECT * FROM leads ORDER BY submitted_at DESC LIMIT 50"]},
+					"params": {"type":"array","items":{},"title":"Query values","description":"Values for any ? placeholders in the SQL, in order."},
+					"limit":  {"type":"integer","minimum":1,"title":"Row limit","description":"Optional cap on the number of rows returned."}
 				},
 				"required":["sql"]
 			}`),

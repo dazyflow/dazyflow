@@ -17,7 +17,8 @@ func init() {
 		Manifest: core.Manifest{
 			ID:             "mysql_upsert_rows",
 			Version:        "1.0",
-			Label:          "MySQL upsert rows",
+			Label:          "MySQL",
+			Subtitle:       "Upsert rows",
 			Color:          "#00758f",
 			Icon:           "database",
 			BrandLogo:      "/brands/mysql.svg",
@@ -53,12 +54,12 @@ func init() {
 				{Port: "headers", Label: "Headers", Required: false, MIME: []string{"application/json"}},
 			},
 			Outputs: []core.Port{
-				{Port: "processed", Label: "Processed count", MIME: []string{"application/json"}},
+				{Port: "processed", Label: "Rows processed", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"dsn":              {"type":"string"},
+					"dsn":              {"type":"string","title":"Connection string"},
 					"table":            {"type":"string"},
 					"conflict_columns": {"type":"array","items":{"type":"string"}},
 					"update_columns":   {"type":"array","items":{"type":"string"}},

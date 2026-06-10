@@ -13,7 +13,8 @@ func init() {
 		Manifest: core.Manifest{
 			ID:             "github_on_new_pr",
 			Version:        "1.0",
-			Label:          "GitHub on new PR",
+			Label:          "GitHub",
+			Subtitle:       "On new PR",
 			Color:          "#24292f",
 			Icon:           "git-merge",
 			BrandLogo:      "/brands/github.svg",
@@ -21,7 +22,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "GitHub",
 			Tags:           []string{"github", "trigger", "pull-request", "pr", "webhook", "events"},
-			Description: "Fires when a pull request is opened. Reopens and pushed-updates don't fire this trigger — it's specifically the 'new PR' moment. Outputs the PR number, title, body, author, source/target branches, and the web URL.",
+			Description: "Starts the flow when a pull request is opened on the connected repo. Reopens and pushed-updates don't fire it — it's specifically the 'new PR' moment. Outputs the PR's number, title, description, author, source/target branches, and a link to it.",
 			Summary:     "Trigger that fires once when a pull request is opened on a connected GitHub repo.",
 			Examples: []core.ParamsExample{
 				{
@@ -36,15 +37,18 @@ func init() {
 			ExecutionModel: core.ExecutionTrigger,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{
+				// The raw pull_request payload is still EMITTED under "event"
+				// by the daemon's webhook seed (see daemon/github_events.go),
+				// just not declared as a pin — undeclared outputs can't be
+				// wired and don't clutter the card.
 				{Port: "number", Label: "PR number", MIME: []string{"text/plain"}},
-				{Port: "title", Label: "PR title", MIME: []string{"text/plain"}},
-				{Port: "body", Label: "PR description (markdown)", MIME: []string{"text/plain"}},
-				{Port: "author", Label: "Login of the PR author", MIME: []string{"text/plain"}},
-				{Port: "head_ref", Label: "Source branch name", MIME: []string{"text/plain"}},
-				{Port: "base_ref", Label: "Target branch name", MIME: []string{"text/plain"}},
-				{Port: "html_url", Label: "Web URL of the PR", MIME: []string{"text/plain"}},
-				{Port: "repository", Label: "Repository object", MIME: []string{"application/json"}},
-				{Port: "event", Label: "Raw pull_request event payload — advanced use", MIME: []string{"application/json"}},
+				{Port: "title", Label: "Title", MIME: []string{"text/plain"}},
+				{Port: "body", Label: "Description", MIME: []string{"text/plain"}},
+				{Port: "author", Label: "Author", MIME: []string{"text/plain"}},
+				{Port: "head_ref", Label: "Source branch", MIME: []string{"text/plain"}},
+				{Port: "base_ref", Label: "Target branch", MIME: []string{"text/plain"}},
+				{Port: "html_url", Label: "PR link", MIME: []string{"text/plain"}},
+				{Port: "repository", Label: "Repository", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{"type":"object"}`),
 			Idempotent:   false,

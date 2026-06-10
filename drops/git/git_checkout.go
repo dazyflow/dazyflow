@@ -28,14 +28,15 @@ func init() {
 		Manifest: core.Manifest{
 			ID:             "git_checkout",
 			Version:        "1.0",
-			Label:          "Git checkout",
+			Label:          "Git",
+			Subtitle:       "Checkout",
 			Color:          "#f05033",
 			Icon:           "git",
 			Category:       "io",
 			Provider:       "internal",
 			Integration:    "Git",
 			Tags:           []string{"git", "clone", "checkout", "vcs"},
-			Description: "Clone a git repository into your workspace, optionally checking out a specific branch, tag, or commit. The cloned files become available to downstream nodes — useful for inspecting source code, pulling templates, or staging files for processing.",
+			Description: "Fetch a copy of a git repository into your workspace, optionally switching to a specific branch, tag, or commit. The files become available to the steps after this one — useful for inspecting source code, pulling templates, or staging files for processing.",
 			Summary:     "Clone a remote git repository into the workspace and optionally check out a specific branch, tag, or commit SHA.",
 			Examples: []core.ParamsExample{
 				{
@@ -51,17 +52,20 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{
-				{Port: "path", Label: "Repository path (workspace-relative)", MIME: []string{"text/plain"}},
-				{Port: "meta", Label: "Checkout metadata (JSON)", MIME: []string{"application/json"}},
+				// Only the friendly scalars are pins; the full checkout
+				// metadata (url, ref, mode, …) is still EMITTED under "meta"
+				// so run records keep it for debugging — it's just not a pin.
+				{Port: "path", Label: "Repository folder", MIME: []string{"text/plain"}},
+				{Port: "sha", Label: "Commit SHA", MIME: []string{"text/plain"}},
 			},
 			ParamsSchema: json.RawMessage(
 				`{
 					"type":"object",
 					"properties":{
-						"url":{"type":"string","description":"Repository URL (https or ssh). Use ${env.NAME} placeholders for tokens embedded in the URL."},
-						"ref":{"type":"string","description":"Branch, tag, or commit SHA to check out. Defaults to the remote HEAD."},
-						"path":{"type":"string","description":"Workspace-relative directory to clone into. Must not already exist."},
-						"depth":{"type":"integer","minimum":0,"description":"Shallow-clone depth. 0 (default) clones the full history."}
+						"url":{"type":"string","title":"Repository URL","description":"Where the repository lives (https or ssh address). Use ${env.NAME} placeholders for tokens embedded in the URL."},
+						"ref":{"type":"string","title":"Branch, tag, or commit","description":"What to switch to after fetching. Leave empty for the repo's default branch."},
+						"path":{"type":"string","title":"Folder","description":"Workspace folder to put the files in."},
+						"depth":{"type":"integer","title":"Clone depth","x_advanced":true,"minimum":0,"description":"Shallow-clone depth. 0 (default) clones the full history."}
 					},
 					"required":["url","path"]
 				}`,
@@ -139,6 +143,7 @@ func executeGitCheckout(ctx context.Context, job core.Job, progress chan<- core.
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
 			"path": {MIME: "text/plain", Ref: cleanRel, Inline: cleanRel},
+			"sha":  {MIME: "text/plain", Inline: sha},
 			"meta": {MIME: "application/json", Inline: meta},
 		},
 	}, nil

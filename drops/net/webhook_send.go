@@ -19,9 +19,10 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "webhook_send",
 			Version:     "1.0",
-			Label:       "Webhook send",
-			Summary:     "POST/PUT/PATCH a JSON or text body to an outbound webhook URL.",
-			Description: "Send an HTTP request with a body to an external URL — the outbound counterpart to the webhook trigger. The body comes from the 'body' input (a string, or an object that's JSON-encoded) or params.body. Shares the operator egress allowlist and SSRF guard with http_request.",
+			Label:       "Webhook",
+			Subtitle:    "Send",
+			Summary:     "Send data to a webhook URL — tell another service that something happened.",
+			Description: "Send data to a webhook URL — the outbound counterpart to the webhook trigger. The URL and Body can be typed on the step or wired in from upstream (the matching input overrides the param); text is sent as-is, an object or list is sent as JSON. Private-network addresses are blocked by default.",
 			Integration: "Webhook",
 			Category:    "network",
 			Icon:        "webhook",
@@ -34,19 +35,25 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				{Port: "body", Label: "Request body (string sent as-is; object/array JSON-encoded)"},
+				// Named after their params so the card shows inline editable
+				// boxes (Unreal-style); a wired value overrides the typed one.
+				// url first — it's the primary input.
+				{Port: "url", Label: "URL", MIME: []string{"text/plain"}},
+				{Port: "body", Label: "Body"},
 			},
-			Outputs: []core.Port{
-				{Port: "meta", Label: "Delivery metadata", MIME: []string{"application/json"}},
-			},
+			// No declared outputs: sending a webhook is a "do" step — chain via
+			// the pass-through pin. The delivery details (url, method, status,
+			// bytes sent, response text) are still EMITTED under "meta" for run
+			// records, just not a pin (same as gmail send / ntfy).
+			Outputs: []core.Port{},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"url":{"type":"string","description":"Destination URL."},
-					"method":{"type":"string","enum":["POST","PUT","PATCH"],"default":"POST"},
-					"body":{"type":"string","description":"Body when the 'body' input is not wired."},
-					"content_type":{"type":"string","default":"application/json","description":"Content-Type for a string body."},
-					"headers":{"type":"object","description":"Extra request headers."},
+					"url":{"type":"string","title":"URL","description":"The webhook address to send to. The URL input overrides this when connected."},
+					"method":{"type":"string","title":"Method","enum":["POST","PUT","PATCH"],"default":"POST"},
+					"body":{"type":"string","title":"Body","description":"Text to send. The Body input overrides this when connected."},
+					"content_type":{"type":"string","title":"Content type","default":"application/json","x_advanced":true,"description":"Content-Type sent with a text body."},
+					"headers":{"type":"object","title":"Headers","x_advanced":true,"description":"Extra request headers."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
 				},
 				"required":["url"]
@@ -59,9 +66,11 @@ func init() {
 }
 
 func executeWebhookSend(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	url, _ := params.StringOpt(job.Params, "url")
+	// The URL input overrides the param when wired (resolveURL, shared with
+	// http_request) — so the destination can be computed by an upstream node.
+	url := resolveURL(job)
 	if url == "" {
-		return params.Err(job, "bad_param", "'url' is required"), nil
+		return params.Err(job, "bad_param", "'url' is required — set it or wire the URL input"), nil
 	}
 	method := strings.ToUpper(params.StringDefault(job.Params, "method", "POST"))
 	if method != "POST" && method != "PUT" && method != "PATCH" {

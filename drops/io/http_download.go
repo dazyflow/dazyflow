@@ -22,15 +22,16 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "http_download",
 			Version:     "1.0",
-			Label:       "HTTP download",
+			Label:       "HTTP",
+			Subtitle:    "Download file",
 			Color:       "#5599ee",
 			Icon:        "download",
 			Category:    "io",
 			Provider:    "internal",
 			Integration: "HTTP",
 			Tags:        []string{"http", "download", "file", "sandbox"},
-			Description: "Download a URL to a file in the workspace sandbox, streaming the response to disk (handles bodies too large to hold in memory). Honors per-tenant quotas as it writes and aborts cleanly if the budget or max_bytes is exceeded. Use a scratch:// path for intermediate downloads that should be reclaimed when the run ends. Private-network addresses are blocked by default.",
-			Summary:     "Stream a URL to a workspace (or scratch://) file, enforcing quota and a max_bytes ceiling and blocking private-network targets by default.",
+			Description: "Download a file from a web address and save it in the workspace. The download streams to disk, so files too large to hold in memory are fine; workspace storage limits are respected as it writes. Use a scratch:// path for in-between files that should be cleaned up when the run ends. Private-network addresses are blocked by default.",
+			Summary:     "Download a file from a web address and save it in the workspace, ready for the next step to use.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Save a public report to the workspace",
@@ -45,27 +46,32 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{{
+				// Named after its param so the card shows an inline editable
+				// box; a wired value overrides the typed one.
 				Port:  "url",
-				Label: "URL (optional, overrides params.url)",
+				Label: "URL",
 				MIME:  []string{"text/plain"},
 			}},
 			Outputs: []core.Port{
-				{Port: "out", Label: "Downloaded file ref"},
-				{Port: "meta", Label: "Status + bytes + content-type (JSON)", MIME: []string{"application/json"}},
+				// Only the file is a pin; the structured result (status, bytes,
+				// content_type) is still EMITTED under "meta" (see the Execute
+				// result) so run records keep it for debugging — it's just not
+				// a pin (same as gmail send / sheets append).
+				{Port: "out", Label: "Downloaded file"},
 			},
 			ParamsSchema: json.RawMessage(
 				`{
 					"type":"object",
 					"properties":{
-						"url":{"type":"string","description":"Absolute URL to download."},
-						"path":{"type":"string","format":"workspace-path","description":"Destination path in the sandbox. Prefix with scratch:// for an ephemeral, run-scoped file."},
-						"method":{"type":"string","default":"GET","enum":["GET","POST"],"description":"HTTP verb."},
-						"headers":{"type":"object","additionalProperties":{"type":"string"},"description":"Request headers. Values may include ${secret.NAME} secret placeholders (e.g. an Authorization bearer token)."},
-						"mkdirs":{"type":"boolean","description":"Create parent directories of path if missing."},
+						"url":{"type":"string","title":"URL","description":"The web address to download. The URL input overrides this when connected."},
+						"path":{"type":"string","title":"Save to","format":"workspace-path","description":"Where to save the file in the workspace. Prefix with scratch:// for an in-between file that's cleaned up after the run."},
+						"method":{"type":"string","title":"Method","default":"GET","enum":["GET","POST"]},
+						"mkdirs":{"type":"boolean","title":"Create missing folders","description":"Create the folders in 'Save to' if they don't exist yet."},
+						"headers":{"type":"object","title":"Headers","additionalProperties":{"type":"string"},"x_advanced":true,"description":"Request headers. Values may include ${secret.NAME} secret placeholders (e.g. an Authorization bearer token)."},
 						"timeout_ms":{"type":"integer","default":300000,"minimum":1,"description":"Hard deadline for the whole download, in milliseconds."},
-						"max_bytes":{"type":"integer","default":104857600,"minimum":0,"description":"Abort if the download exceeds this many bytes. Default 100 MiB; 0 = unlimited (still bounded by quota)."},
-						"expect_status":{"type":"array","items":{"type":"integer"},"description":"Accepted status codes. Empty defaults to 2xx."},
-						"allow_private_networks":{"type":"boolean","default":false,"description":"Disable the SSRF guard. Only for intentional local targets."}
+						"max_bytes":{"type":"integer","title":"Max download bytes","default":104857600,"minimum":0,"x_advanced":true,"description":"Abort if the download exceeds this many bytes. Default 100 MiB; 0 = unlimited (still bounded by quota)."},
+						"expect_status":{"type":"array","title":"Accepted status codes","items":{"type":"integer"},"x_advanced":true,"description":"Status codes treated as success. Empty defaults to 2xx."},
+						"allow_private_networks":{"type":"boolean","title":"Allow private networks","default":false,"x_advanced":true,"description":"Disable the private-address guard. Only for intentional local targets."}
 					},
 					"required":["url","path"]
 				}`,

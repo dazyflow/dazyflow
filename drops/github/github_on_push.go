@@ -13,7 +13,8 @@ func init() {
 		Manifest: core.Manifest{
 			ID:             "github_on_push",
 			Version:        "1.0",
-			Label:          "GitHub on push",
+			Label:          "GitHub",
+			Subtitle:       "On push",
 			Color:          "#24292f",
 			Icon:           "git-branch",
 			BrandLogo:      "/brands/github.svg",
@@ -21,7 +22,7 @@ func init() {
 			Provider:       "internal",
 			Integration:    "GitHub",
 			Tags:           []string{"github", "trigger", "push", "webhook", "events"},
-			Description: "Fires when commits are pushed to your repo. Receives the branch (ref), the before/after commit SHAs, the commits list, the repo, and the pusher. Common uses: post a deploy alert when commits land on main, or kick off a CI-shaped pipeline.",
+			Description: "Starts the flow when commits are pushed to the connected repo. Outputs the branch (ref), the before/after commit SHAs, the commits list, the repo, and who pushed. Common uses: post a deploy alert when commits land on main, or kick off a CI-shaped pipeline.",
 			Summary:     "Trigger that fires when commits are pushed to a connected GitHub repo, with ref, SHAs, and commit list.",
 			Examples: []core.ParamsExample{
 				{
@@ -36,13 +37,17 @@ func init() {
 			ExecutionModel: core.ExecutionTrigger,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{
-				{Port: "ref", Label: "Pushed git ref (e.g. refs/heads/main)", MIME: []string{"text/plain"}},
-				{Port: "before", Label: "Previous HEAD SHA before the push", MIME: []string{"text/plain"}},
-				{Port: "after", Label: "New HEAD SHA after the push", MIME: []string{"text/plain"}},
-				{Port: "commits", Label: "Array of commit objects in this push", MIME: []string{"application/json"}},
-				{Port: "repository", Label: "Repository object (full GitHub payload)", MIME: []string{"application/json"}},
-				{Port: "pusher", Label: "User who pushed", MIME: []string{"application/json"}},
-				{Port: "event", Label: "Raw push event payload — advanced use", MIME: []string{"application/json"}},
+				{Port: "ref", Label: "Branch ref", MIME: []string{"text/plain"}},
+				{Port: "before", Label: "Commit before", MIME: []string{"text/plain"}},
+				{Port: "after", Label: "Commit after", MIME: []string{"text/plain"}},
+				{Port: "commits", Label: "Commits", MIME: []string{"application/json"}},
+				{Port: "repository", Label: "Repository", MIME: []string{"application/json"}},
+				{Port: "pusher", Label: "Pushed by", MIME: []string{"application/json"}},
+				// The whole push payload stays a wireable pin: compositions
+				// template across several of its fields through ONE wire
+				// (e.g. the push→Slack template renders commits+ref+pusher
+				// together), which the scalar pins can't express.
+				{Port: "event", Label: "Raw event", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{"type":"object"}`),
 			Idempotent:   false,

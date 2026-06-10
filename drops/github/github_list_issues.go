@@ -17,9 +17,10 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "github_list_issues",
 			Version:     "1.0",
-			Label:       "GitHub list issues",
+			Label:       "GitHub",
+			Subtitle:    "List issues",
 			Summary:     "List issues on a GitHub repo filtered by state, labels, assignee, and update time.",
-			Description: "Query issues on a GitHub repo. Pairs with a poll trigger for 'fire on new issue' workflows: filter by `since` (last-seen timestamp) and process what comes back.",
+			Description: "Fetch a list of issues from a GitHub repo, filtered by open/closed state, labels or assignee. Pairs with a poll trigger for 'fire on new issue' workflows: filter by 'Updated after' (last-seen timestamp) and process what comes back.",
 			Integration: "GitHub",
 			Category:    "network",
 			Icon:        "git-branch",
@@ -43,13 +44,13 @@ func init() {
 				"properties":{
 					"account":{"type":"string","default":"default"},
 					"token":{"type":"string","description":"Raw access token; overrides 'account'."},
-					"owner":{"type":"string"},
-					"repo":{"type":"string"},
-					"state":{"type":"string","enum":["open","closed","all"],"default":"open"},
-					"labels":{"type":"array","items":{"type":"string"},"description":"Comma-joined; multiple labels are AND-ed."},
-					"assignee":{"type":"string","description":"Filter by assignee. 'none' = unassigned, '*' = any."},
-					"since":{"type":"string","description":"RFC3339 timestamp; only issues updated after this."},
-					"per_page":{"type":"integer","default":30,"minimum":1,"maximum":100},
+					"owner":{"type":"string","title":"Repo owner","description":"The username or organization the repo lives under."},
+					"repo":{"type":"string","title":"Repo name","description":"The repo's name, without the owner part."},
+					"state":{"type":"string","title":"State","enum":["open","closed","all"],"enumNames":["Open","Closed","All"],"default":"open"},
+					"labels":{"type":"array","title":"Labels","items":{"type":"string"},"description":"Only issues carrying ALL of these labels."},
+					"assignee":{"type":"string","title":"Assignee","description":"Only issues assigned to this username. 'none' = unassigned, '*' = any."},
+					"since":{"type":"string","title":"Updated after","x_advanced":true,"description":"RFC3339 timestamp; only issues updated after this."},
+					"per_page":{"type":"integer","title":"Max results","x_advanced":true,"default":30,"minimum":1,"maximum":100},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
 				},
 				"required":["owner","repo"]

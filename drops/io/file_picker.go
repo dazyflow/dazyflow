@@ -17,7 +17,8 @@ func init() {
 		Manifest: core.Manifest{
 			ID:       "file_picker",
 			Version:  "1.0",
-			Label:    "File picker",
+			Label:    "File",
+			Subtitle: "Pick file",
 			Color:    "#7a8cff",
 			Icon:     "file-input",
 			Category: "io",
@@ -29,8 +30,8 @@ func init() {
 			// through the sandbox. Useful as the front of a pipeline
 			// where the user picks an input file via the schema-form's
 			// workspace-path picker.
-			Description: "Pick a file from the workspace sandbox. Outputs both the workspace-relative path (string) and a file reference (MIME-tagged Ref) so downstream readers can open it through the sandbox without re-resolving anywhere else. By default the file's bytes are NOT inlined — set inline=true for handoff to remote modules that don't share the workspace filesystem.",
-			Summary:     "Surface a chosen workspace file as a stable path + MIME-tagged Ref for downstream readers, with opt-in byte inlining for remote modules.",
+			Description: "Pick a workspace file to start a flow with. The chosen file comes out on the File port for reader steps (Excel, CSV, …), and its path on the Path port. By default the file's bytes are NOT loaded into memory — set inline=true for handoff to remote modules that don't share the workspace.",
+			Summary:     "Pick a workspace file and hand it to the steps that follow.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Pick a spreadsheet to feed into excel_read",
@@ -45,16 +46,18 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{
-				{Port: "path", Label: "Workspace-relative path", MIME: []string{"text/plain"}},
-				{Port: "file", Label: "File reference (Ref locator, sandbox-relative)"},
+				// File first — it's the pin most flows wire onward; Path is
+				// there for steps that want the location as text.
+				{Port: "file", Label: "File"},
+				{Port: "path", Label: "Path", MIME: []string{"text/plain"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"required":["path"],
 				"properties":{
-					"path": {"type":"string","format":"workspace-path","description":"Pick a file from the workspace."},
-					"mime": {"type":"string","description":"Optional override; defaults to a guess from the file extension."},
-					"inline": {"type":"boolean","default":false,"description":"Read the bytes into the Ref now (needed for remote modules that don't share the workspace filesystem). Default off so large files don't sit in memory."}
+					"path": {"type":"string","title":"File","format":"workspace-path","description":"Pick a file from the workspace."},
+					"mime": {"type":"string","title":"File type (MIME)","x_advanced":true,"description":"Override the file's type. Defaults to a guess from the file extension."},
+					"inline": {"type":"boolean","title":"Inline file bytes","default":false,"x_advanced":true,"description":"Load the file into memory now (needed for remote modules that don't share the workspace). Default off so large files don't sit in memory."}
 				}
 			}`),
 			Idempotent: true,

@@ -15,7 +15,8 @@ func init() {
 		Manifest: core.Manifest{
 			ID:             "secret_set",
 			Version:        "1.0",
-			Label:          "Set tenant secret",
+			Label:          "Secrets",
+			Subtitle:       "Set secret",
 			Color:          "#7c3aed",
 			Icon:           "database",
 			Category:       "system",
@@ -38,10 +39,13 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				{Port: "value", Label: "Value to store (string; overrides params.value)"},
+				// Overrides params.value when wired (see executeSecretSet).
+				{Port: "value", Label: "Value"},
 			},
 			Outputs: []core.Port{
-				{Port: "name", Label: "Echo of the name that was written", MIME: []string{"text/plain"}},
+				// Echoes the name that was written — never the value, so a
+				// downstream node can't leak the secret into a Result.
+				{Port: "name", Label: "Secret name", MIME: []string{"text/plain"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

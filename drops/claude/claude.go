@@ -36,6 +36,7 @@ func init() {
 			ID:          "claude",
 			Version:     "1.0",
 			Label:       "Claude",
+			Subtitle:    "Ask",
 			Summary:     "Send a prompt to Claude and get a single-turn text response back.",
 			Description: "Send a prompt to Claude and get a response back — summarise upstream text, classify inputs, or generate responses. The graph itself is your agent loop.",
 			Integration: "Claude",
@@ -60,8 +61,12 @@ func init() {
 				{Port: "prompt", Label: "Prompt"},
 			},
 			Outputs: []core.Port{
+				// Only the text answer is declared as a port; the raw Messages
+				// API response (stop_reason, usage, content blocks) is still
+				// EMITTED under "response" (see executeClaude) so run records
+				// keep it for debugging, but it's not a pin — re-expose it as a
+				// named port if a feature ever needs to wire usage/stop_reason.
 				{Port: "text", Label: "Text", MIME: []string{"text/plain"}},
-				{Port: "response", Label: "Full response", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

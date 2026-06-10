@@ -25,15 +25,16 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "http_request",
 			Version:     "1.0",
-			Label:       "HTTP request",
+			Label:       "HTTP",
+			Subtitle:    "Request",
 			Color:       "#5599ee",
 			Icon:        "globe",
 			Category:    "network",
 			Provider:    "internal",
 			Integration: "HTTP",
 			Tags:        []string{"http", "rest", "api", "webhook"},
-			Description: "Make an HTTP request to any URL — GET, POST, PUT, PATCH, or DELETE. Useful when the service you want to call doesn't have a dedicated connector here yet. Returns the response body, the numeric status code, and the response headers on separate ports — so you can branch on the status code. Private-network addresses are blocked by default to prevent accidental internal calls.",
-			Summary:     "Issue an arbitrary HTTP request and split the response into body, status, and headers ports, with SSRF-guard and response-size cap.",
+			Description: "Call any web address (API) — GET, POST, PUT, PATCH, or DELETE. Useful when the service you want to talk to doesn't have a dedicated step here yet. The response, the status code, and the headers come out on separate ports, so a Branch can test the status directly. Private-network addresses are blocked by default to prevent accidental internal calls.",
+			Summary:     "Call a web address (API) and get the response, status code, and headers back as separate ports.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Simple authenticated GET",
@@ -57,7 +58,7 @@ func init() {
 				// Typed text/plain so it reads as a string pin (green) and wires
 				// cleanly from a Text source.
 				{Port: "url", Label: "URL", MIME: []string{"text/plain"}},
-				{Port: "request_body", Label: "Request body"},
+				{Port: "request_body", Label: "Body"},
 			},
 			Outputs: []core.Port{
 				// Status first: it's the field most flows branch on, so it
@@ -65,22 +66,22 @@ func init() {
 				// separate ports (not one meta blob) so a downstream Branch can
 				// test the numeric status code directly — wire status →
 				// Compare with in_range [200,299] to fork on success, e.g.
-				{Port: "status", Label: "Status code", MIME: []string{"application/json"}},
-				{Port: "response_body", Label: "Response body"},
-				{Port: "headers", Label: "Response headers", MIME: []string{"application/json"}},
+				{Port: "status", Label: "Status", MIME: []string{"application/json"}},
+				{Port: "response_body", Label: "Response"},
+				{Port: "headers", Label: "Headers", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(
 				`{
 					"type":"object",
 					"properties":{
-						"url":{"type":"string","description":"Absolute URL of the resource to call. The url input port overrides this when connected."},
-						"method":{"type":"string","default":"GET","enum":["GET","POST","PUT","PATCH","DELETE","HEAD","OPTIONS"],"description":"HTTP verb. Methods with bodies (POST/PUT/PATCH) use the request_body input or the body param."},
-						"headers":{"type":"object","additionalProperties":{"type":"string"},"description":"Headers to send (one per key). Values may include ${env.NAME} placeholders that resolve to secrets."},
-						"body":{"type":"string","description":"Inline request body. The request_body input port overrides this when connected."},
+						"url":{"type":"string","title":"URL","description":"The web address to call. The URL input overrides this when connected."},
+						"method":{"type":"string","title":"Method","default":"GET","enum":["GET","POST","PUT","PATCH","DELETE","HEAD","OPTIONS"],"description":"What kind of request to make. GET fetches data; POST/PUT/PATCH send the Body along."},
+						"body":{"type":"string","title":"Body","description":"Text to send with the request (POST/PUT/PATCH). The Body input overrides this when connected."},
+						"headers":{"type":"object","title":"Headers","additionalProperties":{"type":"string"},"x_advanced":true,"description":"Extra request headers (one per key). Values may include ${env.NAME} placeholders that resolve to secrets."},
 						"timeout_ms":{"type":"integer","default":30000,"minimum":1,"description":"Hard deadline for the full request, in milliseconds."},
-						"expect_status":{"type":"array","items":{"type":"integer"},"description":"Accepted response status codes. Empty defaults to 2xx."},
-						"max_body_bytes":{"type":"integer","default":10485760,"minimum":0,"description":"Truncate responses larger than this. Default 10 MiB."},
-						"allow_private_networks":{"type":"boolean","default":false,"description":"Disable the SSRF guard. Only enable when calling a local service intentionally."}
+						"expect_status":{"type":"array","title":"Accepted status codes","items":{"type":"integer"},"x_advanced":true,"description":"Status codes treated as success. Empty defaults to 2xx."},
+						"max_body_bytes":{"type":"integer","title":"Max response bytes","default":10485760,"minimum":0,"x_advanced":true,"description":"Fail responses larger than this. Default 10 MiB."},
+						"allow_private_networks":{"type":"boolean","title":"Allow private networks","default":false,"x_advanced":true,"description":"Disable the private-address guard. Only enable when calling a local service intentionally."}
 					},
 					"required":["url"]
 				}`,

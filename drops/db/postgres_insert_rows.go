@@ -17,7 +17,8 @@ func init() {
 		Manifest: core.Manifest{
 			ID:             "postgres_insert_rows",
 			Version:        "1.0",
-			Label:          "Postgres insert rows",
+			Label:          "Postgres",
+			Subtitle:       "Insert rows",
 			Color:          "#336791",
 			Icon:           "database",
 			BrandLogo:      "/brands/postgres.svg",
@@ -48,12 +49,12 @@ func init() {
 				{Port: "headers", Label: "Headers", Required: false, MIME: []string{"application/json"}},
 			},
 			Outputs: []core.Port{
-				{Port: "inserted", Label: "Inserted count", MIME: []string{"application/json"}},
+				{Port: "inserted", Label: "Rows inserted", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"dsn":          {"type":"string"},
+					"dsn":          {"type":"string","title":"Connection string"},
 					"schema":       {"type":"string","default":"public"},
 					"table":        {"type":"string"},
 					"create_table": {"type":"boolean","default":true,"description":"Auto-create the table from headers when missing. Defaults true."},

@@ -52,6 +52,10 @@ func TestExcelRead_HeadersAndRows(t *testing.T) {
 	if rows[0].(map[string]any)["name"] != "Ada" || rows[1].(map[string]any)["amount"] != "250" {
 		t.Errorf("rows = %+v", rows)
 	}
+	// The file path is re-emitted so downstream Excel steps can wire it.
+	if res.Output["path"].Inline != "data.xlsx" {
+		t.Errorf("path = %+v", res.Output["path"].Inline)
+	}
 }
 
 func TestExcelRead_Typed(t *testing.T) {
@@ -115,6 +119,11 @@ func TestExcelWrite_RoundTrip(t *testing.T) {
 	if res.Output["out"].Ref != "out.xlsx" {
 		t.Errorf("out ref = %q", res.Output["out"].Ref)
 	}
+	// The file path is also emitted as text so it can feed another Excel
+	// step's 'path' input.
+	if res.Output["path"].Inline != "out.xlsx" {
+		t.Errorf("path = %+v", res.Output["path"].Inline)
+	}
 
 	f, err := excelize.OpenFile(filepath.Join(ws, "out.xlsx"))
 	if err != nil {
@@ -155,6 +164,27 @@ func TestExcelWrite_Append(t *testing.T) {
 	rows, _ := f.GetRows("Events")
 	if len(rows) != 3 { // header + 2 data rows
 		t.Errorf("rows after append = %+v (want 3)", rows)
+	}
+}
+
+func TestExcelWrite_WiredPathOverridesParam(t *testing.T) {
+	ws := t.TempDir()
+	res, _ := executeExcelWrite(context.Background(), core.Job{
+		Params:        map[string]any{"path": "ignored.xlsx"},
+		WorkspaceRoot: ws,
+		Input: map[string]core.Ref{
+			"rows": {Inline: []map[string]any{{"a": "1"}}},
+			"path": {Inline: "wired.xlsx"},
+		},
+	}, nil)
+	if res.Status != core.StatusOK {
+		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
+	}
+	if res.Output["out"].Ref != "wired.xlsx" {
+		t.Errorf("out ref = %q, want wired.xlsx", res.Output["out"].Ref)
+	}
+	if _, err := excelize.OpenFile(filepath.Join(ws, "wired.xlsx")); err != nil {
+		t.Errorf("wired.xlsx not written: %v", err)
 	}
 }
 

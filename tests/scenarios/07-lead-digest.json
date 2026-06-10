@@ -3,17 +3,29 @@
   "version": "1",
   "tenant": "dev",
   "workspace": "default",
-  "triggers": [{"type": "cron", "cron": "0 9 * * 1"}],
+  "triggers": [
+    {
+      "type": "cron",
+      "cron": "0 9 * * 1"
+    }
+  ],
   "nodes": [
     {
       "id": "week_leads",
       "module": "builtin_store_query",
-      "params": {"sql": "SELECT name, email, source, created_at FROM leads WHERE created_at > now() - interval '7 days'"}
+      "params": {
+        "sql": "SELECT name, email, source, created_at FROM leads WHERE created_at > now() - interval '7 days'"
+      }
     },
     {
       "id": "dedupe",
       "module": "dedupe_rows",
-      "params": {"by": ["email"], "keep": "first"}
+      "params": {
+        "by": [
+          "email"
+        ],
+        "keep": "first"
+      }
     },
     {
       "id": "create_pages",
@@ -24,9 +36,27 @@
           "account": "default",
           "parent_database_id": "REPLACE_WITH_NOTION_DB_ID",
           "properties": {
-            "Name": {"title": [{"text": {"content": "${item.name}"}}]},
-            "Email": {"email": "${item.email}"},
-            "Source": {"rich_text": [{"text": {"content": "${item.source}"}}]}
+            "Name": {
+              "title": [
+                {
+                  "text": {
+                    "content": "${item.name}"
+                  }
+                }
+              ]
+            },
+            "Email": {
+              "email": "${item.email}"
+            },
+            "Source": {
+              "rich_text": [
+                {
+                  "text": {
+                    "content": "${item.source}"
+                  }
+                }
+              ]
+            }
           }
         }
       }
@@ -34,24 +64,60 @@
     {
       "id": "count",
       "module": "group_aggregate",
-      "params": {"by": [], "aggregate": {"total": {"op": "count"}}}
+      "params": {
+        "by": [],
+        "aggregate": {
+          "total": {
+            "op": "count"
+          }
+        }
+      }
     },
     {
       "id": "compose",
       "module": "claude",
-      "params": {"prompt": "Write a one-line Slack recap announcing this many new leads captured last week."}
+      "params": {
+        "prompt": "Write a one-line Slack recap announcing this many new leads captured last week."
+      }
     },
     {
       "id": "post",
       "module": "slack_send_message",
-      "params": {"channel": "#sales"}
+      "params": {
+        "channel": "#sales"
+      }
     }
   ],
   "edges": [
-    {"from": "week_leads", "from_port": "rows", "to": "dedupe", "to_port": "rows"},
-    {"from": "dedupe", "from_port": "rows", "to": "create_pages", "to_port": "items"},
-    {"from": "dedupe", "from_port": "rows", "to": "count", "to_port": "rows"},
-    {"from": "count", "from_port": "rows", "to": "compose", "to_port": "prompt"},
-    {"from": "compose", "from_port": "text", "to": "post", "to_port": "body"}
+    {
+      "from": "week_leads",
+      "from_port": "rows",
+      "to": "dedupe",
+      "to_port": "rows"
+    },
+    {
+      "from": "dedupe",
+      "from_port": "rows",
+      "to": "create_pages",
+      "to_port": "items"
+    },
+    {
+      "from": "dedupe",
+      "from_port": "rows",
+      "to": "count",
+      "to_port": "rows"
+    },
+    {
+      "from": "count",
+      "from_port": "rows",
+      "to": "compose",
+      "to_port": "prompt"
+    },
+    {
+      "from": "compose",
+      "from_port": "text",
+      "to": "post",
+      "to_port": "text"
+    }
   ]
 }

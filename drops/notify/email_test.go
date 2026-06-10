@@ -73,7 +73,6 @@ func TestExecuteEmail_Validation(t *testing.T) {
 	}{
 		{"missing host", func(p map[string]any) { delete(p, "host") }, "bad_param"},
 		{"missing from", func(p map[string]any) { delete(p, "from") }, "bad_param"},
-		{"missing subject", func(p map[string]any) { delete(p, "subject") }, "bad_param"},
 		{"no recipients", func(p map[string]any) { delete(p, "to") }, "bad_param"},
 		{"empty recipient list", func(p map[string]any) { p["to"] = []any{} }, "bad_param"},
 	}
@@ -92,6 +91,67 @@ func TestExecuteEmail_Validation(t *testing.T) {
 				t.Errorf("code = %q, want %q", res.Error.Code, c.wantCode)
 			}
 		})
+	}
+}
+
+func TestExecuteEmail_RejectsNonTextInputs(t *testing.T) {
+	// To and Subject inputs override their params, but only carry text — a
+	// structured value wired into either is a mistake we reject up front.
+	base := map[string]any{
+		"host": "smtp.x.test",
+		"from": "me@x.test",
+		"to":   []any{"you@x.test"},
+	}
+	cases := []struct {
+		name string
+		port string
+	}{
+		{"non-text To", "to"},
+		{"non-text Subject", "subject"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			res, err := executeEmail(t.Context(), core.Job{
+				ID:     "j",
+				Params: base,
+				Input:  map[string]core.Ref{c.port: {Inline: map[string]any{"oops": true}}},
+			}, nil)
+			if err != nil {
+				t.Fatalf("execute: %v", err)
+			}
+			if res.Status != core.StatusError || res.Error.Code != "bad_input" {
+				t.Fatalf("res = %+v, want error/bad_input", res)
+			}
+		})
+	}
+}
+
+func TestSplitRecipients(t *testing.T) {
+	// The To input is comma-separated text; whitespace is trimmed and
+	// empties dropped so a trailing comma doesn't break the send.
+	got := splitRecipients(" a@x.test, b@x.test ,, ")
+	if len(got) != 2 || got[0] != "a@x.test" || got[1] != "b@x.test" {
+		t.Errorf("got %v, want [a@x.test b@x.test]", got)
+	}
+}
+
+func TestEmailTextInputOr(t *testing.T) {
+	job := core.Job{Input: map[string]core.Ref{
+		"wired": {Inline: "from-wire"},
+		"empty": {Inline: ""},
+		"bytes": {Inline: []byte("raw")},
+	}}
+	if v, ok := emailTextInputOr(job, "wired", "fallback"); !ok || v != "from-wire" {
+		t.Errorf("wired: got %q/%v, want from-wire/true", v, ok)
+	}
+	if v, ok := emailTextInputOr(job, "empty", "fallback"); !ok || v != "fallback" {
+		t.Errorf("empty falls back: got %q/%v, want fallback/true", v, ok)
+	}
+	if v, ok := emailTextInputOr(job, "bytes", "fallback"); !ok || v != "raw" {
+		t.Errorf("bytes: got %q/%v, want raw/true", v, ok)
+	}
+	if v, ok := emailTextInputOr(job, "absent", "fallback"); !ok || v != "fallback" {
+		t.Errorf("absent: got %q/%v, want fallback/true", v, ok)
 	}
 }
 

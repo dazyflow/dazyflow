@@ -15,7 +15,8 @@ func init() {
 		Manifest: core.Manifest{
 			ID:             "mysql_query",
 			Version:        "1.0",
-			Label:          "MySQL query",
+			Label:          "MySQL",
+			Subtitle:       "Query",
 			Color:          "#00758f",
 			Icon:           "database",
 			BrandLogo:      "/brands/mysql.svg",
@@ -48,10 +49,10 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"dsn":    {"type":"string"},
-					"sql":    {"type":"string"},
-					"params": {"type":"array","items":{}},
-					"limit":  {"type":"integer","minimum":1}
+					"dsn":    {"type":"string","title":"Connection string"},
+					"sql":    {"type":"string","title":"SQL"},
+					"params": {"type":"array","items":{},"title":"Query values"},
+					"limit":  {"type":"integer","minimum":1,"title":"Row limit"}
 				},
 				"required":["dsn","sql"]
 			}`),

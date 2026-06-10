@@ -18,9 +18,10 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "excel_read",
 			Version:     "1.0",
-			Label:       "Excel: read",
-			Summary:     "Read rows from an .xlsx workbook in the workspace; the first row is the headers by default.",
-			Description: "Read an .xlsx workbook from the workspace into a row stream. The first row becomes the object keys (headers) unless headers:false. Restrict to a cell range (e.g. \"A1:D100\") or skip leading rows; flip on typed mode for native numbers/booleans instead of strings.",
+			Label:       "Excel",
+			Subtitle:    "Read sheet",
+			Summary:     "Read an Excel file into rows + headers.",
+			Description: "Read an Excel (.xlsx) file from the workspace. The first row becomes the column headers (unless 'First row is headers' is off), and each following row becomes an object keyed by header. Type the file path on the step or wire it in from an earlier step.",
 			Integration: "Excel",
 			Category:    "io",
 			Icon:        "file-spreadsheet",
@@ -34,21 +35,27 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				{Port: "path", Label: "Workspace path (overrides params.path when wired)", MIME: []string{"text/plain"}},
+				// Named after the param so the card shows an inline editable box
+				// (Unreal-style); a wired value overrides the typed one — e.g. a
+				// file path threaded from an upstream Excel write's 'path' output.
+				{Port: "path", Label: "File", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
 				{Port: "rows", Label: "Rows", MIME: []string{"application/json"}},
 				{Port: "headers", Label: "Headers", MIME: []string{"application/json"}},
+				// path is re-emitted so any Excel step downstream can target the
+				// same file by wire (mirrors sheets_read_range's spreadsheet_id).
+				{Port: "path", Label: "File path", MIME: []string{"text/plain"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"path":{"type":"string","description":"Workspace-relative path to the .xlsx. Ignored if a 'path' input is wired."},
-					"sheet":{"type":"string","description":"Sheet name; defaults to the first sheet."},
-					"headers":{"type":"boolean","description":"Treat the first row as headers (default true). False → rows are arrays."},
-					"skip":{"type":"integer","description":"Skip this many leading rows before reading."},
-					"range":{"type":"string","description":"Cell range, e.g. \"A1:D100\"."},
-					"typed":{"type":"boolean","description":"Return native numbers/booleans instead of strings."}
+					"path":{"type":"string","title":"File","examples":["reports/sales.xlsx"],"description":"The .xlsx file in the workspace. Ignored when a 'File' input is wired."},
+					"sheet":{"type":"string","title":"Sheet","description":"The sheet (tab) to read. Leave blank for the first sheet."},
+					"headers":{"type":"boolean","title":"First row is headers","default":true,"description":"Treat the first row as column headers."},
+					"range":{"type":"string","title":"Cells","examples":["A1:D100"],"description":"Optional cell range within the sheet. Leave blank to read the whole sheet."},
+					"skip":{"type":"integer","title":"Skip rows","description":"Skip this many rows at the top (e.g. a title banner) before reading.","x_advanced":true},
+					"typed":{"type":"boolean","title":"Keep numbers as numbers","default":false,"description":"Output numbers and TRUE/FALSE as real values instead of text."}
 				}
 			}`),
 			Idempotent: true,
@@ -108,11 +115,11 @@ func executeExcelRead(_ context.Context, job core.Job, _ chan<- core.Progress) (
 			}
 			rows = append(rows, arr)
 		}
-		return rowsResult(job, rows, []string{}), nil
+		return rowsResult(job, path, rows, []string{}), nil
 	}
 
 	if len(grid) == 0 {
-		return rowsResult(job, []any{}, []string{}), nil
+		return rowsResult(job, path, []any{}, []string{}), nil
 	}
 	headers := append([]string{}, grid[0]...)
 	rows := make([]any, 0, len(grid)-1)
@@ -127,16 +134,17 @@ func executeExcelRead(_ context.Context, job core.Job, _ chan<- core.Progress) (
 		}
 		rows = append(rows, rec)
 	}
-	return rowsResult(job, rows, headers), nil
+	return rowsResult(job, path, rows, headers), nil
 }
 
-func rowsResult(job core.Job, rows []any, headers []string) core.Result {
+func rowsResult(job core.Job, path string, rows []any, headers []string) core.Result {
 	return core.Result{
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
 			"rows":    {MIME: "application/json", Inline: rows},
 			"headers": {MIME: "application/json", Inline: headers},
+			"path":    {MIME: "text/plain", Inline: path},
 		},
 	}
 }
