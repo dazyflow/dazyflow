@@ -125,6 +125,14 @@ export function Usage() {
                   {t("usage.subscriptionStatus", { status: billing.subscription_status })}
                 </div>
               )}
+              {!billing.polling_allowed && (
+                <div className="sub" style={{ color: "var(--warning, #d97706)" }}>
+                  {t("usage.pollingGated")}
+                </div>
+              )}
+              {billing.can_upgrade && (
+                <div className="sub">{t("usage.proPitch")}</div>
+              )}
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               {billing.can_upgrade && (

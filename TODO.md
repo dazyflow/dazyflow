@@ -130,8 +130,11 @@ Per-tenant metering → Stripe + plan gates → team features. Specced under
   manifests shipped 2026-05-27** — `deploy/docker-compose.yml` (hzd +
   Postgres, durable, metrics on) and `deploy/k8s/hazyflow.yaml`
   (Deployment ×2 + Service + Secret, liveness `/healthz` + readiness
-  `/readyz` probes), with `deploy/README.md`. Still open: confirm the
-  image build in CI (`.build.yml` doesn't yet build the Docker image).
+  `/readyz` probes), with `deploy/README.md`. Image build in CI shipped 2026-06-10: `.builds/archlinux.yml`
+  gained a rootless `podman build` task (podman handles the
+  Dockerfile's BuildKit cache mounts; local docker without buildx
+  cannot — that's a builder limitation, not a Dockerfile bug).
+  Not pushed from CI; releases tag and push by hand.
 - [x] **`/healthz` + `/readyz` + `/metrics`** (2026-05-27) — liveness,
   readiness (pings Postgres when configured), and a Prometheus `/metrics`
   endpoint behind `--metrics` with per-tenant disk gauges
@@ -421,8 +424,12 @@ this no customer can try" to "needed before paid conversion."
   the customer_id pin carried the created id). **Open:** invoice
   creation (multi-call: items → invoice → finalize — add when asked);
   a signed `stripe_on_event` webhook trigger if polling latency ever
-  matters; a seed template demonstrating the events-cursor
-  composition.
+  matters; ~~a seed template demonstrating the events-cursor
+  composition~~ (shipped 2026-06-10: stripe-payment-to-slack —
+  poll → list_events with the cursor secret wired into After id →
+  for_each Slack message per event → secret_set saves Last id;
+  list_events now treats non-evt_ cursors as "no cursor" so the
+  documented "-" placeholder works on the first run).
 - [~] **Template gallery in the editor.** Shipped: static gallery
   at `/templates`. `web/public/templates/index.json` lists
   available templates; each template's graph lives in its own
@@ -501,8 +508,15 @@ this no customer can try" to "needed before paid conversion."
   race-recheck firing without a bus event, 500-from-webhook
   doesn't panic, payload-shape pinning. Webhook-only v1 covers
   Slack (incoming-webhook URLs), Discord, Teams, PagerDuty,
-  custom receivers. **Open follow-up (needs product
-  decision):** typed Slack-channel / email pickers — the
+  custom receivers. **Email channel shipped 2026-06-10:**
+  `FailureNotify.Email` + a daemon `Mailer` (one operator SMTP
+  account via HAZYFLOW_SMTP_URL/_FROM, smtp/smtps/starttls/none,
+  hand-rolled ~150 lines) sends a plain-text failure summary;
+  the Settings → Notifications tab gained the email field. The
+  same mailer delivers invitation links (createInvitation emails
+  the accept URL when configured + the URL is absolute, response
+  carries email_sent). **Open follow-up (needs product
+  decision):** typed Slack-channel picker — the
   user picks a connected Slack account + channel, the
   daemon dispatches via `slack_send_message` instead of an
   incoming-webhook URL. Needs a UX call on the picker shape
@@ -594,13 +608,15 @@ this no customer can try" to "needed before paid conversion."
   past_due/forged-sig/unconfigured/unknown-event), full
   capped→webhook-upgrade→uncapped loop; verified end-to-end in the
   browser (402 with friendly message at the cap, signed webhook
-  flips the page to Pro and the run goes through). **Open:** the
-  other gates — free tier "no polling triggers" and premium
-  connectors — need a product call on where to enforce (save vs
-  fire time); webhook event-ID dedupe (Stripe retries are idempotent
-  upserts today, fine for plan flips); billing-day alignment (see
-  metering entry); usage page shows the cap but plans/pricing copy
-  is not in-product yet.
+  flips the page to Pro and the run goes through). **Follow-ups shipped 2026-06-10:** polling gate
+  (HAZYFLOW_FREE_POLLING_TRIGGERS=0 → the scheduler skips cron/poll
+  fires for free tenants, fire-time enforcement, fail-open, surfaced
+  as polling_allowed on /me/billing + Usage-page copy); webhook
+  event-ID dedupe (stripe_webhook_events table, INSERT ON CONFLICT
+  is the atomic first-time test, replays ack without re-applying,
+  fail-open); pro-pitch copy on the Usage page. **Still open:**
+  premium-connector gate (needs a product call on which connectors);
+  billing-day alignment (see metering entry).
 - [~] **Team features.** Shipped (2026-06-10), the role-split slice —
   multi-user-per-tenant + shared workflows already worked (memberships,
   invitations, switchOrg); what was missing was the viewer role and the
@@ -625,12 +641,14 @@ this no customer can try" to "needed before paid conversion."
   platform:admin/non-admin) over a fake membership store; verified
   end-to-end in the browser (invite a viewer → accept → dropdown
   shows viewer → switch to editor → membership perms really change).
-  **Open:** demoted members keep their current session roles until
-  they switch orgs / sign in again (switchOrg re-stamps from the
-  membership) — forced revocation needs a session sweep; per-workspace
+  **Follow-up shipped 2026-06-10:** membership role changes and
+  removals now sweep the member's live sessions
+  (auth.SessionRevoker on mem/pg/caching stores; best-effort from
+  the PATCH/DELETE member handlers) so demotion is immediate.
+  **Open:** per-workspace
   roles (one Membership row carries one role set for the whole org);
   org-ownership transfer (removing/editing the home owner is blocked);
-  invite email delivery still copy-the-link (SMTP story pending).
+  invite email delivery shipped 2026-06-10 (operator mailer, see below); signup email VERIFICATION still open (needs a gating-semantics call).
 - [x] **BYO cloud secret providers** (Vault / AWS Secrets Manager /
   GCP Secret Manager). Shipped (2026-06-10) — Vault/OpenBao already
   existed; AWS + GCP added on the same model (per-tenant config in the

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"git.sr.ht/~klahr/hazyflow/core"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
@@ -81,6 +82,13 @@ func executeListEvents(ctx context.Context, job core.Job, _ chan<- core.Progress
 	q.Set("limit", strconv.Itoa(limit))
 	// Stripe's event list is newest-first; ending_before=<cursor> returns
 	// only entries NEWER than the cursor — exactly the poll semantics.
+	// Anything that isn't an event id (evt_…) is treated as "no cursor":
+	// the cursor-secret pattern needs a placeholder value on the very
+	// first run (a secret has to exist before ${secret.…} resolves), and
+	// sending that placeholder to Stripe would 400 the whole poll.
+	if !strings.HasPrefix(afterID, "evt_") {
+		afterID = ""
+	}
 	if afterID != "" {
 		q.Set("ending_before", afterID)
 	}
@@ -106,9 +114,10 @@ func executeListEvents(ctx context.Context, job core.Job, _ chan<- core.Progress
 		return params.Err(job, "stripe_error", "could not decode Stripe events response"), nil
 	}
 	// last_id is the NEWEST seen event — the next poll's cursor. With no
-	// new events it echoes the incoming cursor, so a Set-secret step
+	// new events it echoes the incoming cursor (placeholder included, so
+	// the first idle poll round-trips it), and a Set-secret step
 	// downstream never clobbers a good cursor with an empty value.
-	lastID := afterID
+	lastID, _ := textInputOr(job, "after_id", params.StringDefault(job.Params, "after_id", ""))
 	if len(parsed.Data) > 0 {
 		if id, ok := parsed.Data[0]["id"].(string); ok {
 			lastID = id

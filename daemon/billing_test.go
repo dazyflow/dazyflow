@@ -2,11 +2,14 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // planStoreContract runs the behavior shared by both backends.
@@ -82,8 +85,58 @@ func TestPgPlanStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPgPlanStore: %v", err)
 	}
-	if _, err := pool.Exec(ctx, "TRUNCATE tenant_plans"); err != nil {
+	if _, err := pool.Exec(ctx, "TRUNCATE tenant_plans, stripe_webhook_events"); err != nil {
 		t.Fatalf("truncate: %v", err)
 	}
 	planStoreContract(t, store)
+
+	// Event dedupe rides the same store: first insert wins, replay is seen.
+	if first, err := store.MarkStripeEvent(ctx, "evt_pg"); err != nil || !first {
+		t.Errorf("pg first = %v/%v", first, err)
+	}
+	if again, err := store.MarkStripeEvent(ctx, "evt_pg"); err != nil || again {
+		t.Errorf("pg replay = %v/%v", again, err)
+	}
+}
+
+// The trigger gate: free tenants are refused when FreePollingDisabled,
+// pro tenants and ungated deployments pass.
+func TestCheckTriggerQuota(t *testing.T) {
+	plans := NewMemPlanStore()
+	svc := &Service{Plans: plans}
+
+	// Default: gate off → free tenant passes.
+	if err := svc.checkTriggerQuota(context.Background(), "t"); err != nil {
+		t.Errorf("ungated: %v", err)
+	}
+	svc.FreePollingDisabled = true
+	if err := svc.checkTriggerQuota(context.Background(), "t"); !errors.Is(err, core.ErrPlanLimit) {
+		t.Errorf("gated free tenant err = %v, want ErrPlanLimit", err)
+	}
+	_ = plans.SetPlan(context.Background(), TenantPlan{Tenant: "t", Plan: PlanPro})
+	if err := svc.checkTriggerQuota(context.Background(), "t"); err != nil {
+		t.Errorf("gated pro tenant: %v", err)
+	}
+	// No plan store at all: fail open.
+	bare := &Service{FreePollingDisabled: true}
+	if err := bare.checkTriggerQuota(context.Background(), "t"); err != nil {
+		t.Errorf("no-plan-store should fail open: %v", err)
+	}
+}
+
+// Stripe event-id dedupe: first marking wins, replays report seen.
+func TestMemPlanStore_MarkStripeEvent(t *testing.T) {
+	store := NewMemPlanStore()
+	first, err := store.MarkStripeEvent(context.Background(), "evt_1")
+	if err != nil || !first {
+		t.Fatalf("first = %v/%v, want true", first, err)
+	}
+	again, err := store.MarkStripeEvent(context.Background(), "evt_1")
+	if err != nil || again {
+		t.Errorf("replay = %v/%v, want false", again, err)
+	}
+	other, _ := store.MarkStripeEvent(context.Background(), "evt_2")
+	if !other {
+		t.Errorf("different event should be first")
+	}
 }

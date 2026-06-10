@@ -52,14 +52,34 @@ type PlanStore interface {
 	SetPlan(ctx context.Context, p TenantPlan) error
 }
 
+// StripeEventDeduper is an optional PlanStore extension: record a Stripe
+// webhook event id, reporting whether this is the FIRST time it's seen.
+// Stripe retries deliveries, and while the plan upserts are idempotent,
+// dedupe keeps replays from re-running side effects (audit noise today,
+// anything heavier tomorrow).
+type StripeEventDeduper interface {
+	MarkStripeEvent(ctx context.Context, id string) (first bool, err error)
+}
+
 // MemPlanStore is the in-process PlanStore for dev/tests.
 type MemPlanStore struct {
 	mu    sync.Mutex
 	plans map[string]TenantPlan
+	seen  map[string]bool
 }
 
 func NewMemPlanStore() *MemPlanStore {
-	return &MemPlanStore{plans: map[string]TenantPlan{}}
+	return &MemPlanStore{plans: map[string]TenantPlan{}, seen: map[string]bool{}}
+}
+
+func (m *MemPlanStore) MarkStripeEvent(_ context.Context, id string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.seen[id] {
+		return false, nil
+	}
+	m.seen[id] = true
+	return true, nil
 }
 
 func (m *MemPlanStore) GetPlan(_ context.Context, tenant string) (TenantPlan, error) {
@@ -79,6 +99,27 @@ func (m *MemPlanStore) SetPlan(_ context.Context, p TenantPlan) error {
 	}
 	m.plans[p.Tenant] = p
 	return nil
+}
+
+// checkTriggerQuota is the free-tier scheduling gate, called by the
+// scheduler before firing a cron/poll trigger. Same fail-open policy as
+// checkRunQuota: a billing-store hiccup must not silence everyone's
+// schedules.
+func (s *Service) checkTriggerQuota(ctx context.Context, tenant string) error {
+	if !s.FreePollingDisabled || s.Plans == nil {
+		return nil
+	}
+	plan, err := s.Plans.GetPlan(ctx, tenant)
+	if err != nil {
+		if s.Logger != nil {
+			s.Logger.Printf("trigger gate [%s]: read plan (failing open): %v", tenant, err)
+		}
+		return nil
+	}
+	if plan.Plan == PlanPro {
+		return nil
+	}
+	return fmt.Errorf("%w: schedules and polling triggers are a Pro feature — manual runs still work", core.ErrPlanLimit)
 }
 
 // checkRunQuota is the free-tier run gate, called by SubmitGraphWithSeed

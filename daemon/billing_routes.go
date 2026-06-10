@@ -90,6 +90,9 @@ func (h *HTTPGateway) billingMe(rw http.ResponseWriter, r *http.Request, p core.
 		"subscription_status": plan.SubscriptionStatus,
 		"free_runs_per_month": h.svc.FreeRunsPerMonth,
 		"runs_this_month":     runsThisMonth,
+		// polling_allowed tells the Usage page why a free tenant's
+		// schedules aren't firing on gated deployments.
+		"polling_allowed": !h.svc.FreePollingDisabled || plan.Plan == PlanPro,
 		// Upgrade is offered only when Stripe is actually configured;
 		// manage (portal) additionally needs an existing customer.
 		"can_upgrade": h.Billing != nil && h.Billing.Stripe != nil && plan.Plan != PlanPro,
@@ -164,6 +167,7 @@ func (h *HTTPGateway) billingPortal(rw http.ResponseWriter, r *http.Request, p c
 // stripeEvent is the slice of Stripe's event envelope the plan-sync
 // cares about.
 type stripeEvent struct {
+	ID   string `json:"id"`
 	Type string `json:"type"`
 	Data struct {
 		Object struct {
@@ -207,6 +211,16 @@ func (h *HTTPGateway) stripeEvents(rw http.ResponseWriter, r *http.Request) {
 	if err := json.Unmarshal(body, &ev); err != nil {
 		http.Error(rw, "bad event payload", http.StatusBadRequest)
 		return
+	}
+	// Stripe retries deliveries; the event id dedupes them so a replay
+	// acks without re-applying. Fails OPEN on store errors — the plan
+	// upserts are idempotent, so processing twice beats dropping one.
+	if dd, ok := h.svc.Plans.(StripeEventDeduper); ok && ev.ID != "" {
+		if first, err := dd.MarkStripeEvent(r.Context(), ev.ID); err == nil && !first {
+			h.Billing.logger.Printf("replayed event %s (%s) — already processed, acking", ev.ID, ev.Type)
+			rw.WriteHeader(http.StatusOK)
+			return
+		}
 	}
 	if err := h.applyStripeEvent(r, ev); err != nil {
 		// 500 so Stripe retries — plan flips must not be lost to a

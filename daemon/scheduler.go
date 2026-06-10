@@ -360,6 +360,14 @@ func (s *Scheduler) fireDue(ctx context.Context) {
 }
 
 func (s *Scheduler) fireGraph(ctx context.Context, e *scheduledGraph) {
+	// Plan gate (T3): on deployments that keep scheduling off the free
+	// plan, skip the fire (logged, not silent — and the Usage page tells
+	// the tenant why). The run-limit gate inside SubmitGraph still
+	// applies on top for pro-allowed fires.
+	if err := s.svc.checkTriggerQuota(ctx, e.tenant); err != nil {
+		s.logger.Printf("skip %s/%s/%s: %v", e.tenant, e.workspace, e.graphID, err)
+		return
+	}
 	store, err := s.svc.Workspaces.Open(e.tenant, e.workspace)
 	if err != nil {
 		s.logger.Printf("open ws %s/%s: %v", e.tenant, e.workspace, err)

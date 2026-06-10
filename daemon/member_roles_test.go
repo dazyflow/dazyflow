@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"git.sr.ht/~klahr/hazyflow/auth"
 	"git.sr.ht/~klahr/hazyflow/core"
@@ -179,5 +180,62 @@ func TestUpdateMemberRoles_Guards(t *testing.T) {
 	})
 	if rw.Code != http.StatusForbidden {
 		t.Errorf("non-admin: status = %d, want 403", rw.Code)
+	}
+}
+
+// Changing or removing a membership sweeps the member's live sessions,
+// so a demotion takes effect immediately instead of at session expiry.
+func TestUpdateMemberRoles_SweepsSessions(t *testing.T) {
+	h := newGatewayHarness(t)
+	store := newFakeMembershipStore()
+	h.gw.Memberships = store
+	seedMember(t, store, "member@example.com", "t", core.TeamRoleEditor())
+
+	users, err := auth.OpenJSONUserStore("") // empty path = in-memory
+	if err != nil {
+		t.Fatalf("open user store: %v", err)
+	}
+	member := auth.User{Subject: "member-subj", Email: "member@example.com", Tenant: "home-org"}
+	if err := users.PutUser(t.Context(), member); err != nil {
+		t.Fatalf("put user: %v", err)
+	}
+	sessions := auth.NewMemSessionStore()
+	h.gw.Users = users
+	h.gw.Sessions = sessions
+	if _, _, err := auth.IssueSession(t.Context(), sessions, member, time.Hour); err != nil {
+		t.Fatalf("issue session: %v", err)
+	}
+	// A bystander's session must survive the sweep.
+	other := auth.User{Subject: "other-subj", Email: "other@example.com", Tenant: "elsewhere"}
+	_, otherToken, err := auth.IssueSession(t.Context(), sessions, other, time.Hour)
+	if err != nil {
+		t.Fatalf("issue other session: %v", err)
+	}
+
+	rw := teamAdminDo(t, h, "PATCH", "/api/v1/admin/members/member@example.com", map[string]any{
+		"roles": []core.Role{core.TeamRoleViewer()},
+	})
+	if rw.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rw.Code, rw.Body.String())
+	}
+
+	if n, _ := sessions.RevokeSubjectSessions(t.Context(), "member-subj"); n != 0 {
+		t.Errorf("member still had %d live session(s) after the role change", n)
+	}
+	if _, err := sessions.GetSession(t.Context(), auth.SessionLookupKey(otherToken)); err != nil {
+		t.Errorf("bystander session was swept too: %v", err)
+	}
+
+	// Removal sweeps as well: re-seed, re-issue, DELETE.
+	seedMember(t, store, "member@example.com", "t", core.TeamRoleViewer())
+	if _, _, err := auth.IssueSession(t.Context(), sessions, member, time.Hour); err != nil {
+		t.Fatalf("re-issue session: %v", err)
+	}
+	rw = teamAdminDo(t, h, "DELETE", "/api/v1/admin/members/member@example.com", nil)
+	if rw.Code != http.StatusNoContent {
+		t.Fatalf("DELETE status = %d, body %s", rw.Code, rw.Body.String())
+	}
+	if n, _ := sessions.RevokeSubjectSessions(t.Context(), "member-subj"); n != 0 {
+		t.Errorf("member still had %d live session(s) after removal", n)
 	}
 }

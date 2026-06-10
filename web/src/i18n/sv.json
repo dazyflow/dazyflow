@@ -87,7 +87,9 @@
     "runsUsed": "{{used}} av {{limit}} gratis körningar använda den här månaden",
     "subscriptionStatus": "Prenumerationsstatus: {{status}}",
     "upgrade": "Uppgradera till Pro",
-    "manageBilling": "Hantera fakturering"
+    "manageBilling": "Hantera fakturering",
+    "proPitch": "Pro tar bort månadstaket för körningar och låser upp schemalagda triggers.",
+    "pollingGated": "Scheman och polling-triggers är pausade på gratisplanen — uppgradera för att aktivera dem. Manuella körningar fungerar fortfarande."
   },
   "account": {
     "menu": "Kontomeny",
@@ -363,7 +365,9 @@
     "notifications": {
       "help": "Få en notifiering när en körning av det här flödet misslyckas. Daemonen POSTar en JSON-payload till webhook-URL:en — fungerar med Slacks incoming-webhook-URL:er, Discord, Teams, PagerDuty events API eller valfri egen mottagare.",
       "webhookLabel": "Webhook-URL för fel",
-      "webhookDesc": "POSTad payload innehåller <0>graph_id</0>, <0>run_id</0>, <0>error_code</0>, <0>error_message</0>, <0>failed_node</0>, <0>run_url</0>. Lämna tomt för att stänga av."
+      "webhookDesc": "POSTad payload innehåller <0>graph_id</0>, <0>run_id</0>, <0>error_code</0>, <0>error_message</0>, <0>failed_node</0>, <0>run_url</0>. Lämna tomt för att stänga av.",
+      "emailLabel": "E-post vid fel",
+      "emailDesc": "Få en sammanfattning via e-post när en körning misslyckas. Kräver att serverns e-postleverans är konfigurerad (fråga din administratör om inget kommer fram)."
     },
     "general": {
       "displayName": "Visningsnamn",

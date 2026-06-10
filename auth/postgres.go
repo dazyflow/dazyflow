@@ -274,6 +274,14 @@ func (s *PgSessionStore) DeleteSession(ctx context.Context, id string) error {
 	return err
 }
 
+func (s *PgSessionStore) RevokeSubjectSessions(ctx context.Context, subject string) (int, error) {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM sessions WHERE subject=$1`, subject)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
 // ---- Users ----------------------------------------------------------
 
 type PgUserStore struct {

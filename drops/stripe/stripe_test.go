@@ -292,3 +292,21 @@ func TestManifests(t *testing.T) {
 		}
 	}
 }
+
+// A placeholder cursor (the first-run value of the cursor secret, before
+// any real event id has been saved) is ignored rather than sent to
+// Stripe, and round-trips on idle polls.
+func TestListEvents_PlaceholderCursorIgnored(t *testing.T) {
+	f := newFakeStripe(t)
+	res := run(t, f, "stripe_list_events", nil, map[string]core.Ref{"after_id": {Inline: "-"}})
+	if res.Status != core.StatusOK {
+		t.Fatalf("res = %+v", res)
+	}
+	if f.lastForm.Get("ending_before") != "" {
+		t.Errorf("placeholder was sent to Stripe: %v", f.lastForm)
+	}
+	// Events existed, so the cursor advances past the placeholder.
+	if res.Output["last_id"].Inline != "evt_2" {
+		t.Errorf("last_id = %v", res.Output["last_id"].Inline)
+	}
+}

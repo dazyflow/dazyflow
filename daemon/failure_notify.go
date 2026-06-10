@@ -69,7 +69,8 @@ type FailurePayload struct {
 // event. Important because some hot deployment loops trigger many
 // graphs.
 func (s *Service) startFailureNotifier(graph core.Graph, runID string) {
-	if graph.FailureNotify == nil || graph.FailureNotify.Webhook == "" {
+	if graph.FailureNotify == nil ||
+		(graph.FailureNotify.Webhook == "" && graph.FailureNotify.Email == "") {
 		return
 	}
 	// Subscribe SYNCHRONOUSLY before spawning the goroutine so a
@@ -152,6 +153,12 @@ func (s *Service) watchForFailure(ctx context.Context, graph core.Graph, runID s
 // them back to the user because the dispatcher runs after the run
 // has already terminated — there's no in-progress request to fail.
 func (s *Service) fireFailureNotification(ctx context.Context, graph core.Graph, payload FailurePayload) {
+	if graph.FailureNotify.Email != "" {
+		s.fireFailureEmail(ctx, graph, payload)
+	}
+	if graph.FailureNotify.Webhook == "" {
+		return
+	}
 	url := graph.FailureNotify.Webhook
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -175,6 +182,42 @@ func (s *Service) fireFailureNotification(ctx context.Context, graph core.Graph,
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 8*1024))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		s.logFailureNotifyError(graph, fmt.Errorf("non-2xx status %d", resp.StatusCode))
+	}
+}
+
+// fireFailureEmail sends the plain-text failure summary through the
+// operator's transactional mailer. Same best-effort contract as the
+// webhook channel.
+func (s *Service) fireFailureEmail(ctx context.Context, graph core.Graph, payload FailurePayload) {
+	if s.Mailer == nil {
+		s.logFailureNotifyError(graph, fmt.Errorf("email channel configured but no mailer on this deployment (set HAZYFLOW_SMTP_URL)"))
+		return
+	}
+	name := graph.Name
+	if name == "" {
+		name = graph.ID
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "Your flow %q failed.\n\n", name)
+	if payload.FailedNode != "" {
+		fmt.Fprintf(&b, "Failed step:  %s\n", payload.FailedNode)
+	}
+	if payload.ErrorMessage != "" {
+		fmt.Fprintf(&b, "Error:        %s", payload.ErrorMessage)
+		if payload.ErrorCode != "" {
+			fmt.Fprintf(&b, " (%s)", payload.ErrorCode)
+		}
+		b.WriteString("\n")
+	}
+	if payload.FinishedAt != "" {
+		fmt.Fprintf(&b, "Finished at:  %s\n", payload.FinishedAt)
+	}
+	if payload.RunURL != "" {
+		fmt.Fprintf(&b, "\nRun details:  %s\n", payload.RunURL)
+	}
+	subject := fmt.Sprintf("Flow %q failed", name)
+	if err := s.Mailer.Send(ctx, graph.FailureNotify.Email, subject, b.String()); err != nil {
+		s.logFailureNotifyError(graph, fmt.Errorf("email: %w", err))
 	}
 }
 

@@ -213,7 +213,33 @@ func (h *HTTPGateway) removeMember(rw http.ResponseWriter, r *http.Request, p co
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
+	// Same rationale as updateMemberRoles: removal takes effect now, not
+	// whenever the removed member's session happens to expire.
+	h.revokeMemberSessions(r.Context(), email)
 	rw.WriteHeader(http.StatusNoContent)
+}
+
+// revokeMemberSessions force-signs-out the user behind email (all their
+// sessions, every org — a session carries one role set, and re-signing
+// in rebuilds it from the current memberships). Best-effort: a failed
+// sweep logs and moves on; sessions also expire on their own TTL.
+func (h *HTTPGateway) revokeMemberSessions(ctx context.Context, email string) {
+	if h.Users == nil || h.Sessions == nil {
+		return
+	}
+	rev, ok := h.Sessions.(auth.SessionRevoker)
+	if !ok {
+		return
+	}
+	u, err := h.Users.GetByEmail(ctx, email)
+	if err != nil {
+		return // no local user record (e.g. SSO-only) — nothing to sweep
+	}
+	if n, err := rev.RevokeSubjectSessions(ctx, u.Subject); err != nil {
+		h.logger.Printf("session sweep for %s: %v", email, err)
+	} else if n > 0 {
+		h.logger.Printf("session sweep for %s: %d session(s) revoked after membership change", email, n)
+	}
 }
 
 // capRolesToCaller rejects roles whose permissions exceed the caller's
@@ -311,6 +337,10 @@ func (h *HTTPGateway) updateMemberRoles(rw http.ResponseWriter, r *http.Request,
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
+	// Demotion takes effect NOW, not at the member's next sign-in: kill
+	// their live sessions so the next request re-authenticates against
+	// the new roles. Best-effort — the role change above is the truth.
+	h.revokeMemberSessions(r.Context(), email)
 	roleNames := make([]string, 0, len(body.Roles))
 	for _, role := range body.Roles {
 		roleNames = append(roleNames, role.Name)
@@ -392,6 +422,23 @@ func (h *HTTPGateway) createInvitation(rw http.ResponseWriter, r *http.Request, 
 		return
 	}
 	h.audit(r.Context(), p, "invitation.create", token, "email="+email)
+	// Deliver the invite by email when the operator wired a mailer AND
+	// the accept URL is absolute (no public base URL = a path-only link
+	// that's useless in an inbox). Best-effort: the response always
+	// carries the link for copy/paste, emailed or not.
+	emailSent := false
+	if acceptURL := h.inviteURL(token); h.svc.Mailer != nil && strings.HasPrefix(acceptURL, "http") {
+		body := fmt.Sprintf(
+			"%s invited you to join their organization on Hazyflow.\n\n"+
+				"Accept the invitation:\n%s\n\n"+
+				"The link expires %s. If you weren't expecting this, ignore this email.",
+			p.Subject, acceptURL, inv.ExpiresAt.Format("2006-01-02"))
+		if err := h.svc.Mailer.Send(r.Context(), email, "You're invited to Hazyflow", body); err != nil {
+			h.logger.Printf("invite email to %s: %v", email, err)
+		} else {
+			emailSent = true
+		}
+	}
 	writeJSON(rw, http.StatusCreated, map[string]any{
 		"token":      token,
 		"email":      email,
@@ -400,6 +447,7 @@ func (h *HTTPGateway) createInvitation(rw http.ResponseWriter, r *http.Request, 
 		"roles":      inv.Roles,
 		"expires_at": inv.ExpiresAt,
 		"accept_url": h.inviteURL(token),
+		"email_sent": emailSent,
 	})
 }
 

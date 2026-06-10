@@ -114,6 +114,25 @@ func (c *CachingSessionStore) DeleteSession(ctx context.Context, id string) erro
 	return c.inner.DeleteSession(ctx, id)
 }
 
+// RevokeSubjectSessions forwards to the inner store and drops the
+// subject's cached entries so the revocation is immediate, not
+// TTL-delayed.
+func (c *CachingSessionStore) RevokeSubjectSessions(ctx context.Context, subject string) (int, error) {
+	rev, ok := c.inner.(SessionRevoker)
+	if !ok {
+		return 0, nil
+	}
+	n, err := rev.RevokeSubjectSessions(ctx, subject)
+	c.mu.Lock()
+	for id, e := range c.items {
+		if e.sess.Subject == subject {
+			delete(c.items, id)
+		}
+	}
+	c.mu.Unlock()
+	return n, err
+}
+
 func (c *CachingSessionStore) put(id string, sess Session, now time.Time) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

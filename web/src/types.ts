@@ -132,6 +132,8 @@ export type Graph = {
 // when a run of this graph terminates with status=failed.
 export type FailureNotify = {
   webhook?: string;
+  // Failure summary by email — needs the operator mailer (HAZYFLOW_SMTP_URL).
+  email?: string;
 };
 
 export type Port = {
@@ -676,6 +678,9 @@ export type BillingInfo = {
   subscription_status?: string;
   free_runs_per_month: number;
   runs_this_month: number;
+  // False when this deployment keeps schedules/polling triggers off the
+  // free plan and the tenant is free.
+  polling_allowed: boolean;
   can_upgrade: boolean;
   can_manage: boolean;
 };

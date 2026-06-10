@@ -87,7 +87,9 @@
     "runsUsed": "{{used}} of {{limit}} free runs used this month",
     "subscriptionStatus": "Subscription status: {{status}}",
     "upgrade": "Upgrade to Pro",
-    "manageBilling": "Manage billing"
+    "manageBilling": "Manage billing",
+    "proPitch": "Pro removes the monthly run cap and unlocks scheduled & polling triggers.",
+    "pollingGated": "Schedules and polling triggers are paused on the Free plan — upgrade to enable them. Manual runs still work."
   },
   "account": {
     "menu": "Account menu",
@@ -366,7 +368,9 @@
     "notifications": {
       "help": "Get pinged when a run of this flow fails. The daemon POSTs a JSON payload to the webhook URL — works with Slack incoming-webhook URLs, Discord, Teams, PagerDuty events API, or any custom receiver.",
       "webhookLabel": "Failure webhook URL",
-      "webhookDesc": "POSTed payload includes <0>graph_id</0>, <0>run_id</0>, <0>error_code</0>, <0>error_message</0>, <0>failed_node</0>, <0>run_url</0>. Leave blank to disable."
+      "webhookDesc": "POSTed payload includes <0>graph_id</0>, <0>run_id</0>, <0>error_code</0>, <0>error_message</0>, <0>failed_node</0>, <0>run_url</0>. Leave blank to disable.",
+      "emailLabel": "Email on failure",
+      "emailDesc": "Get a plain-text summary by email when a run fails. Requires the server's email delivery to be set up (ask your administrator if nothing arrives)."
     },
     "general": {
       "displayName": "Display name",

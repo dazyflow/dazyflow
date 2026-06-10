@@ -148,6 +148,19 @@ func main() {
 	if freeRunsPerMonth > 0 {
 		log.Printf("plan gate enabled: free tier capped at %d runs/month (pro unlimited)", freeRunsPerMonth)
 	}
+	freePollingDisabled := !envBool("HAZYFLOW_FREE_POLLING_TRIGGERS", true)
+	if freePollingDisabled {
+		log.Print("plan gate enabled: schedules/polling triggers are Pro-only (free tenants run manually)")
+	}
+	// Transactional mailer (invitation links, failure-notification email).
+	// Off without HAZYFLOW_SMTP_URL; everything degrades to links/webhooks.
+	mailer, err := daemon.NewMailerFromURL(envStr("HAZYFLOW_SMTP_URL", ""), envStr("HAZYFLOW_SMTP_FROM", ""))
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+	if mailer != nil {
+		log.Printf("transactional mailer enabled (from %s) — invites and failure notifications go out by email", mailer.From)
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -384,8 +397,10 @@ func main() {
 		Usage: stores.usage,
 		// Billing (T3): plan resolution + the free-tier run gate.
 		// FreeRunsPerMonth=0 (the default) disables enforcement.
-		Plans:            stores.plans,
-		FreeRunsPerMonth: freeRunsPerMonth,
+		Plans:               stores.plans,
+		FreeRunsPerMonth:    freeRunsPerMonth,
+		FreePollingDisabled: freePollingDisabled,
+		Mailer:              mailer,
 	}
 
 	// Approval-link flow: when HAZYFLOW_APPROVAL_HMAC_SECRET is set,

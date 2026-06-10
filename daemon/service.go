@@ -288,6 +288,17 @@ type Service struct {
 	// entirely — self-hosted deployments without billing never hit a
 	// gate. Requires Usage + Plans to enforce.
 	FreeRunsPerMonth int
+
+	// FreePollingDisabled keeps schedule/poll triggers off the free plan
+	// (the scheduler skips firing them; manual Run still works). False
+	// (the default) leaves scheduling open to everyone. Configured by
+	// HAZYFLOW_FREE_POLLING_TRIGGERS=0; requires Plans to enforce.
+	FreePollingDisabled bool
+
+	// Mailer, when set, delivers the platform's transactional email
+	// (invitation links, failure-notification emails). Nil = those
+	// channels are off; everything degrades to its link/webhook form.
+	Mailer *Mailer
 }
 
 func (s *Service) bus() Bus {

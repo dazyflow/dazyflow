@@ -92,9 +92,10 @@ export function SettingsModal({ graph, onClose, onSave }: Props) {
                   value={draft.failure_notify?.webhook ?? ""}
                   onChange={(e) => {
                     const v = e.target.value.trim();
+                    const next = { ...draft.failure_notify, webhook: v || undefined };
                     setDraft({
                       ...draft,
-                      failure_notify: v ? { webhook: v } : undefined,
+                      failure_notify: next.webhook || next.email ? next : undefined,
                     });
                   }}
                 />
@@ -104,6 +105,25 @@ export function SettingsModal({ graph, onClose, onSave }: Props) {
                     components={[<code />]}
                   />
                 </div>
+              </div>
+              <div className="sf-field">
+                <div className="label-row">
+                  <label>{t("settings.notifications.emailLabel")}</label>
+                </div>
+                <input
+                  type="email"
+                  placeholder="oncall@example.com"
+                  value={draft.failure_notify?.email ?? ""}
+                  onChange={(e) => {
+                    const v = e.target.value.trim();
+                    const next = { ...draft.failure_notify, email: v || undefined };
+                    setDraft({
+                      ...draft,
+                      failure_notify: next.webhook || next.email ? next : undefined,
+                    });
+                  }}
+                />
+                <div className="desc">{t("settings.notifications.emailDesc")}</div>
               </div>
             </div>
           )}

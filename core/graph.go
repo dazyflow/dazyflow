@@ -227,6 +227,10 @@ type FailureNotify struct {
 	// Webhook is the URL to POST the failure payload to. Empty means
 	// "no notification" — same as not setting FailureNotify at all.
 	Webhook string `json:"webhook,omitempty"`
+	// Email, when set, receives a plain-text failure summary through
+	// the operator's transactional mailer (HAZYFLOW_SMTP_URL). Ignored
+	// (logged) on deployments without a mailer.
+	Email string `json:"email,omitempty"`
 }
 
 func (g Graph) Node(id string) (Node, bool) {

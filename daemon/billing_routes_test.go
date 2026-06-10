@@ -218,3 +218,28 @@ func TestPlanGate_WebhookUpgradeLiftsCap(t *testing.T) {
 		t.Fatalf("pro tenant still gated: %v", err)
 	}
 }
+
+// A replayed delivery (same event id) acks without re-applying: the
+// downgrade in the replay must not undo a later upgrade.
+func TestStripeWebhook_ReplayedEventIgnored(t *testing.T) {
+	h, plans, _ := billingHarness(t)
+
+	ev := `{
+		"id": "evt_once",
+		"type": "checkout.session.completed",
+		"data": {"object": {"customer": "cus_9", "subscription": "sub_9", "client_reference_id": "t"}}
+	}`
+	if rw := postStripeEvent(t, h, ev); rw.Code != http.StatusOK {
+		t.Fatalf("first delivery: %d", rw.Code)
+	}
+	// Simulate state moving on after the first processing…
+	_ = plans.SetPlan(t.Context(), TenantPlan{Tenant: "t", Plan: PlanPro, StripeCustomerID: "cus_LATER"})
+	// …then Stripe retries the original delivery.
+	if rw := postStripeEvent(t, h, ev); rw.Code != http.StatusOK {
+		t.Fatalf("replay: %d", rw.Code)
+	}
+	p, _ := plans.GetPlan(t.Context(), "t")
+	if p.StripeCustomerID != "cus_LATER" {
+		t.Errorf("replay re-applied the stale event: %+v", p)
+	}
+}

@@ -26,6 +26,10 @@ CREATE TABLE IF NOT EXISTS tenant_plans (
     current_period_end     TIMESTAMPTZ,
     updated_at             TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE TABLE IF NOT EXISTS stripe_webhook_events (
+    id          TEXT PRIMARY KEY,
+    received_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 `
 
 func NewPgPlanStore(ctx context.Context, pool *pgxpool.Pool) (*PgPlanStore, error) {
@@ -55,6 +59,18 @@ func (s *PgPlanStore) GetPlan(ctx context.Context, tenant string) (TenantPlan, e
 		p.CurrentPeriodEnd = *periodEnd
 	}
 	return p, nil
+}
+
+// MarkStripeEvent records a webhook event id; the INSERT's conflict
+// outcome is the atomic first-time test, so concurrent replicas
+// processing the same retry agree on exactly one "first".
+func (s *PgPlanStore) MarkStripeEvent(ctx context.Context, id string) (bool, error) {
+	tag, err := s.pool.Exec(ctx,
+		`INSERT INTO stripe_webhook_events (id) VALUES ($1) ON CONFLICT (id) DO NOTHING`, id)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
 }
 
 func (s *PgPlanStore) SetPlan(ctx context.Context, p TenantPlan) error {

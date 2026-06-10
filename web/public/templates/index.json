@@ -7,8 +7,14 @@
       "category": "Get notified",
       "description": "Catches an incoming HTTP POST and posts its JSON body to a Slack channel. render_text renders the payload into a string Slack can display. Useful for piping alerts from external systems (monitoring, build CI, Stripe events) into your team chat.",
       "icon": "webhook",
-      "tags": ["website form", "slack", "notify"],
-      "integrations": ["slack"],
+      "tags": [
+        "website form",
+        "slack",
+        "notify"
+      ],
+      "integrations": [
+        "slack"
+      ],
       "graph_file": "/templates/webhook-to-slack.json"
     },
     {
@@ -18,9 +24,36 @@
       "category": "Get notified",
       "description": "Polls Gmail every 5 minutes for messages from the last few minutes. for_each expands the matching IDs to full messages, unwrap_results flattens them into rows, and render_text joins one line per message into a single Slack post. A short poll window means an overlap can occasionally re-notify a message.",
       "icon": "mail",
-      "tags": ["email", "slack", "poll"],
-      "integrations": ["gmail", "slack"],
+      "tags": [
+        "email",
+        "slack",
+        "poll"
+      ],
+      "integrations": [
+        "gmail",
+        "slack"
+      ],
       "graph_file": "/templates/gmail-new-email-to-slack.json"
+    },
+    {
+      "id": "stripe-payment-to-slack",
+      "title": "Stripe payment → Slack ping",
+      "use_case": "Get a Slack message for every successful Stripe payment, each one exactly once.",
+      "category": "Get notified",
+      "description": "Polls Stripe for new payment_intent.succeeded events and posts one Slack message per payment. Demonstrates the cursor-dedupe pattern: the poll reads its cursor from a STRIPE_EVENT_CURSOR secret and saves the newest event id back after each round, so nothing fires twice. Swap the event types for failed invoices or new subscriptions.",
+      "icon": "credit-card",
+      "tags": [
+        "stripe",
+        "payments",
+        "slack",
+        "poll",
+        "cursor"
+      ],
+      "integrations": [
+        "stripe",
+        "slack"
+      ],
+      "graph_file": "/templates/stripe-payment-to-slack.json"
     },
     {
       "id": "daily-reminder-ntfy",
@@ -29,7 +62,14 @@
       "category": "Get notified",
       "description": "A daily cron trigger fires a single ntfy push to a topic you choose (default server: ntfy.sh). Change the topic and message, then subscribe to the same topic in the ntfy app to receive it. The simplest scheduled notification — zero external accounts.",
       "icon": "ntfy",
-      "tags": ["ntfy", "daily", "reminder", "notification", "phone", "no-setup"],
+      "tags": [
+        "ntfy",
+        "daily",
+        "reminder",
+        "notification",
+        "phone",
+        "no-setup"
+      ],
       "integrations": [],
       "no_setup": true,
       "graph_file": "/templates/daily-reminder-ntfy.json"
@@ -41,8 +81,16 @@
       "category": "Scheduled reports",
       "description": "Runs a SELECT every morning at 09:00, renders the result into a summary line with render_text, and posts it to Slack. Wire your own SQL + channel; the rest stays.",
       "icon": "clock",
-      "tags": ["daily", "database", "slack", "report"],
-      "integrations": ["postgres", "slack"],
+      "tags": [
+        "daily",
+        "database",
+        "slack",
+        "report"
+      ],
+      "integrations": [
+        "postgres",
+        "slack"
+      ],
       "graph_file": "/templates/daily-postgres-report.json"
     },
     {
@@ -52,8 +100,16 @@
       "category": "Scheduled reports",
       "description": "Every morning, queries yesterday's orders, groups them by country with sum/avg/count, then renders one line per country and posts the whole block to Slack. Shows group_aggregate feeding render_text — the reducer that turns many rows into one message.",
       "icon": "clock",
-      "tags": ["daily", "database", "report", "slack"],
-      "integrations": ["postgres", "slack"],
+      "tags": [
+        "daily",
+        "database",
+        "report",
+        "slack"
+      ],
+      "integrations": [
+        "postgres",
+        "slack"
+      ],
       "graph_file": "/templates/daily-group-aggregate-report.json"
     },
     {
@@ -63,8 +119,17 @@
       "category": "Scheduled reports",
       "description": "Cron-fires every morning, exports a Google Sheet as a PDF, and emails it to you as an attachment. Two nodes: sheets_export_pdf renders the PDF into the run's scratch sandbox; gmail_send_email picks it up via its variadic attachments port. Paste a sheet URL straight into the export node — the drop extracts the file ID for you.",
       "icon": "mail",
-      "tags": ["daily", "pdf", "google sheets", "email", "report"],
-      "integrations": ["sheets", "gmail"],
+      "tags": [
+        "daily",
+        "pdf",
+        "google sheets",
+        "email",
+        "report"
+      ],
+      "integrations": [
+        "sheets",
+        "gmail"
+      ],
       "graph_file": "/templates/daily-sheet-to-pdf-email.json"
     },
     {
@@ -74,8 +139,15 @@
       "category": "Scheduled reports",
       "description": "Reads an .xlsx, renames + selects columns, filters incomplete rows, totals what's left, renders a plain-text summary with render_text, and emails it via Gmail. A full cleaning pipeline with a non-Slack outbound.",
       "icon": "mail",
-      "tags": ["excel", "email", "cleanup"],
-      "integrations": ["excel", "gmail"],
+      "tags": [
+        "excel",
+        "email",
+        "cleanup"
+      ],
+      "integrations": [
+        "excel",
+        "gmail"
+      ],
       "graph_file": "/templates/excel-clean-and-email.json"
     },
     {
@@ -85,7 +157,13 @@
       "category": "Spreadsheets & data",
       "description": "A hosted intake form (public_form webhook) writes each submission into the built-in per-workspace store via builtin_store_append. Zero external dependencies — the fastest way to start collecting structured data.",
       "icon": "database",
-      "tags": ["form", "no-setup", "store", "collect", "starter"],
+      "tags": [
+        "form",
+        "no-setup",
+        "store",
+        "collect",
+        "starter"
+      ],
       "integrations": [],
       "no_setup": true,
       "graph_file": "/templates/form-to-store.json"
@@ -97,7 +175,12 @@
       "category": "Spreadsheets & data",
       "description": "A hosted intake form whose submissions fan out by their 'topic' field into separate built-in store tables. route_rows does the N-way split (first matching filter wins; unmatched rows fall to 'default'). Zero external setup.",
       "icon": "git-branch",
-      "tags": ["form", "routing", "no-setup", "store"],
+      "tags": [
+        "form",
+        "routing",
+        "no-setup",
+        "store"
+      ],
       "integrations": [],
       "no_setup": true,
       "graph_file": "/templates/route-form-by-topic.json"
@@ -109,8 +192,15 @@
       "category": "Spreadsheets & data",
       "description": "Posts free text to a webhook; Claude turns it into structured rows; parse_json reads the model's JSON (stripping any Markdown code fence automatically) and appends the rows to the built-in store. The 'messy text in, clean table out' pattern. Needs an ANTHROPIC_API_KEY secret.",
       "icon": "sparkles",
-      "tags": ["ai", "extract", "webhook", "store"],
-      "integrations": ["claude"],
+      "tags": [
+        "ai",
+        "extract",
+        "webhook",
+        "store"
+      ],
+      "integrations": [
+        "claude"
+      ],
       "graph_file": "/templates/ai-extract-to-store.json"
     },
     {
@@ -120,8 +210,15 @@
       "category": "Spreadsheets & data",
       "description": "Polls Gmail every 5 minutes and appends recent matching messages to a Google Sheet. for_each fetches each message; unwrap_results flattens the per-item results into rows; compute_rows + map_rows keep just from/subject/received. A short poll window can occasionally re-log a message.",
       "icon": "mail",
-      "tags": ["email", "google sheets", "archive"],
-      "integrations": ["gmail", "sheets"],
+      "tags": [
+        "email",
+        "google sheets",
+        "archive"
+      ],
+      "integrations": [
+        "gmail",
+        "sheets"
+      ],
       "graph_file": "/templates/gmail-to-sheet.json"
     },
     {
@@ -131,8 +228,15 @@
       "category": "Spreadsheets & data",
       "description": "Load rows from an .xlsx file in your workspace into a SQLite table. Renames the 'first_name' column to 'name' on the way through; remove or extend the map_rows node to match your own schema.",
       "icon": "database",
-      "tags": ["excel", "database", "starter"],
-      "integrations": ["excel", "sqlite"],
+      "tags": [
+        "excel",
+        "database",
+        "starter"
+      ],
+      "integrations": [
+        "excel",
+        "sqlite"
+      ],
       "graph_file": "/templates/excel-to-sqlite.json"
     },
     {
@@ -142,8 +246,16 @@
       "category": "Spreadsheets & data",
       "description": "Reads contacts from an .xlsx, drops duplicate rows (keeping the most recent per email), sorts the survivors by name, and saves the clean list to the built-in store. Shows dedupe_rows and sort_rows back to back — the two workhorses of list hygiene.",
       "icon": "database",
-      "tags": ["excel", "dedupe", "sort", "cleanup", "store"],
-      "integrations": ["excel"],
+      "tags": [
+        "excel",
+        "dedupe",
+        "sort",
+        "cleanup",
+        "store"
+      ],
+      "integrations": [
+        "excel"
+      ],
       "graph_file": "/templates/excel-dedupe-sort-to-store.json"
     },
     {
@@ -153,8 +265,16 @@
       "category": "Spreadsheets & data",
       "description": "Reads a Google Sheet on a schedule, upserts every row into a Postgres table (so re-runs don't create duplicates). Perfect for ops teams maintaining a master list in Sheets that downstream services consume from the DB.",
       "icon": "database",
-      "tags": ["google sheets", "database", "scheduled", "no duplicates"],
-      "integrations": ["sheets", "postgres"],
+      "tags": [
+        "google sheets",
+        "database",
+        "scheduled",
+        "no duplicates"
+      ],
+      "integrations": [
+        "sheets",
+        "postgres"
+      ],
       "graph_file": "/templates/sheet-to-postgres-sync.json"
     },
     {
@@ -164,8 +284,14 @@
       "category": "Spreadsheets & data",
       "description": "Receive a JSON webhook POST and insert it as a row in an events table. Use case: collect Stripe / GitHub / internal-service events into one analytics table without writing a custom collector.",
       "icon": "database",
-      "tags": ["website form", "database", "events"],
-      "integrations": ["postgres"],
+      "tags": [
+        "website form",
+        "database",
+        "events"
+      ],
+      "integrations": [
+        "postgres"
+      ],
       "graph_file": "/templates/webhook-to-postgres-insert.json"
     },
     {
@@ -175,8 +301,16 @@
       "category": "Spreadsheets & data",
       "description": "Hourly: read a Google Sheet, left-join each row against a Postgres lookup table, upsert the enriched result back to Postgres. Shows join_rows in a real ETL position.",
       "icon": "database",
-      "tags": ["google sheets", "database", "scheduled", "advanced"],
-      "integrations": ["sheets", "postgres"],
+      "tags": [
+        "google sheets",
+        "database",
+        "scheduled",
+        "advanced"
+      ],
+      "integrations": [
+        "sheets",
+        "postgres"
+      ],
       "graph_file": "/templates/sheet-join-postgres-upsert.json"
     },
     {
@@ -186,8 +320,16 @@
       "category": "Spreadsheets & data",
       "description": "Hourly upsert every Notion page from a database into a Postgres table. Lets you run analytics queries Notion's API can't easily serve.",
       "icon": "database",
-      "tags": ["notion", "database", "scheduled", "advanced"],
-      "integrations": ["notion", "postgres"],
+      "tags": [
+        "notion",
+        "database",
+        "scheduled",
+        "advanced"
+      ],
+      "integrations": [
+        "notion",
+        "postgres"
+      ],
       "graph_file": "/templates/notion-to-postgres-mirror.json"
     },
     {
@@ -197,8 +339,15 @@
       "category": "For developer teams",
       "description": "Receive a GitHub issue webhook, render the payload into one Slack line with render_text, and post it to your triage channel. Configure the repo's webhook URL to the flow's /trigger endpoint and you're routing.",
       "icon": "git-branch",
-      "tags": ["github", "slack", "triage"],
-      "integrations": ["github", "slack"],
+      "tags": [
+        "github",
+        "slack",
+        "triage"
+      ],
+      "integrations": [
+        "github",
+        "slack"
+      ],
       "graph_file": "/templates/github-issue-to-slack.json"
     },
     {
@@ -208,8 +357,15 @@
       "category": "For developer teams",
       "description": "When @-mentioned in Slack, create a GitHub issue with the mention text. compute_rows builds the title and body; render_text feeds the body in as a clean string. Routes chat scrollback into a tracked queue.",
       "icon": "git-branch",
-      "tags": ["slack", "github", "triage"],
-      "integrations": ["slack", "github"],
+      "tags": [
+        "slack",
+        "github",
+        "triage"
+      ],
+      "integrations": [
+        "slack",
+        "github"
+      ],
       "graph_file": "/templates/slack-mention-to-github-issue.json"
     },
     {
@@ -219,8 +375,15 @@
       "category": "For developer teams",
       "description": "Listens to GitHub push webhooks and posts a one-line Slack alert naming the branch, pusher, and commit count. render_text turns the push event into the message. Narrow it to one branch by adding a split_rows on row.ref and wiring only the 'matched' port onward.",
       "icon": "git-branch",
-      "tags": ["github", "slack", "deploy"],
-      "integrations": ["github", "slack"],
+      "tags": [
+        "github",
+        "slack",
+        "deploy"
+      ],
+      "integrations": [
+        "github",
+        "slack"
+      ],
       "graph_file": "/templates/github-push-to-slack-deploy.json"
     }
   ]

@@ -4,6 +4,7 @@ packages:
   - nodejs
   - npm
   - postgresql
+  - podman
 secrets:
   - 6a3daa36-3866-48d4-8846-ecfa57a0d0dd
 sources:
@@ -39,6 +40,13 @@ tasks:
       cd hazyflow/web
       npm ci
       npm run build
+  # Confirm the deployable image actually builds — deploy/ references it
+  # but nothing exercised the Dockerfile until now. Rootless podman, no
+  # daemon needed in the build VM. Not pushed anywhere; releases tag and
+  # push by hand (see deploy/README.md).
+  - docker-image: |
+      cd hazyflow
+      podman build -t hazyflow/hzd:ci .
 
 triggers:
   - action: email

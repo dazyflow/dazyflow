@@ -56,6 +56,14 @@ type SessionStore interface {
 	DeleteSession(ctx context.Context, id string) error
 }
 
+// SessionRevoker is an optional SessionStore extension: revoke every
+// session a subject holds, forcing re-sign-in. Used when an admin
+// changes or removes a member's roles — without it the member's live
+// sessions keep the old roles until they happen to sign in again.
+type SessionRevoker interface {
+	RevokeSubjectSessions(ctx context.Context, subject string) (int, error)
+}
+
 // MemSessionStore keeps sessions in process memory. They die on daemon
 // restart — users re-sign-in, which matches the dev-deployment
 // expectation (and matches the API-key keystore's behavior).
@@ -90,6 +98,19 @@ func (s *MemSessionStore) DeleteSession(_ context.Context, id string) error {
 	defer s.mu.Unlock()
 	delete(s.sessions, id)
 	return nil
+}
+
+func (s *MemSessionStore) RevokeSubjectSessions(_ context.Context, subject string) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for id, sess := range s.sessions {
+		if sess.Subject == subject {
+			delete(s.sessions, id)
+			n++
+		}
+	}
+	return n, nil
 }
 
 // SessionAuthenticator slots into the auth Chain alongside
