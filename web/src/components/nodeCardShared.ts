@@ -114,6 +114,62 @@ export type HazyNodeData = {
   resourceLabels?: Record<string, string>;
 };
 
+// cronToWords renders a 5-field cron expression in plain words ("Every day
+// at 09:00", "Every Mon, Wed at 08:00") for the preset shapes the schedule
+// picker produces. Anything fancier falls back to the raw expression; an
+// empty schedule reads as "manual only".
+export function cronToWords(cron: string): string {
+  const t = (k: string, o?: Record<string, unknown>) => i18n.t("nodeCard.schedule." + k, o);
+  const trimmed = (cron ?? "").trim();
+  if (!trimmed) return t("manual");
+  const parts = trimmed.split(/\s+/);
+  if (parts.length !== 5) return trimmed;
+  const [min, hr, dom, mon, dow] = parts;
+  if (mon !== "*") return trimmed;
+  const m = /^\d+$/.test(min) ? Number(min) : null;
+  const h = /^\d+$/.test(hr) ? Number(hr) : null;
+  const two = (n: number) => String(n).padStart(2, "0");
+  const time = h != null && m != null ? `${two(h)}:${two(m)}` : null;
+  const dayName = (d: number) =>
+    // cron day-of-week: 0 = Sunday; 2026-06-07 is a Sunday.
+    new Intl.DateTimeFormat(i18n.language, { weekday: "short", timeZone: "UTC" }).format(
+      new Date(Date.UTC(2026, 5, 7 + (d % 7))),
+    );
+  if (dom === "*" && dow === "*") {
+    if (time) return t("daily", { time });
+    if (hr === "*" && m != null) return t("hourly", { minute: two(m) });
+    return trimmed;
+  }
+  if (dom === "*" && time && /^[\d,]+$/.test(dow)) {
+    const days = dow.split(",").map((d) => dayName(Number(d))).join(", ");
+    return t("weekly", { days, time });
+  }
+  if (dow === "*" && time && /^\d+$/.test(dom)) {
+    return t("monthly", { day: dom, time });
+  }
+  return trimmed;
+}
+
+// secondsToWords renders an interval in plain words ("Every 5 minutes",
+// "Every 2 hours") using the largest unit that divides evenly. Unset/zero
+// reads as manual-only, matching cronToWords.
+export function secondsToWords(seconds: number | null | undefined): string {
+  const t = (k: string, o?: Record<string, unknown>) => i18n.t("nodeCard.interval." + k, o);
+  if (!seconds || seconds <= 0) return i18n.t("nodeCard.schedule.manual");
+  const units: { size: number; key: string }[] = [
+    { size: 86400, key: "days" },
+    { size: 3600, key: "hours" },
+    { size: 60, key: "minutes" },
+    { size: 1, key: "seconds" },
+  ];
+  for (const u of units) {
+    if (seconds % u.size === 0) {
+      return t(u.key, { count: seconds / u.size });
+    }
+  }
+  return t("seconds", { count: seconds });
+}
+
 // portColor maps a port's MIME hint to the pin colour convention
 // (string=green, bool=rose, json=blue, image=amber, media=purple,
 // generic binary=gray, unknown=border). Pure — shared by the canvas pins

@@ -44,7 +44,7 @@ func init() {
 			Outputs: []core.Port{
 				{Port: "responses", Label: "New responses", MIME: []string{"application/json"}},
 				{Port: "count", Label: "Count", MIME: []string{"text/plain"}},
-				{Port: "fired_at", Label: "Timestamp", MIME: []string{"text/plain"}},
+				{Port: "fired_at", Label: "Time", MIME: []string{"text/plain"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

@@ -20,8 +20,8 @@ func init() {
 			Category:    "trigger",
 			Provider:    "internal",
 			Tags:        []string{"cron", "schedule", "trigger", "daily", "recurring", "timer"},
-			Description: "Fires the graph on a recurring schedule. Set the cron expression (and optional time zone) right here on the node — the scheduler reads them and runs the flow at each due time. Outputs `fired_at` (RFC3339 timestamp). Leave the schedule blank to run only on demand; running manually (Run button / 'hzctl graph run') fires it once, stamping the current time.",
-			Summary:     "Trigger that fires the graph on the cron schedule set on this node, emitting the fire timestamp.",
+			Description: "Starts the flow on a recurring schedule — pick daily, weekly, monthly or hourly on the step (a custom cron expression also works). The Time output is when it fired. With no schedule set, the flow runs only when you press Run.",
+			Summary:     "Starts the flow on a schedule — daily, weekly, monthly or hourly.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Every day at 09:00",
@@ -37,7 +37,7 @@ func init() {
 			ExecutionModel: core.ExecutionTrigger,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{
-				{Port: "fired_at", Label: "RFC3339 timestamp of this fire", MIME: []string{"text/plain"}},
+				{Port: "fired_at", Label: "Time", MIME: []string{"text/plain"}},
 			},
 			// cron + tz live on the node (Phase 2: schedule config is on the
 			// entry point). Neither is required — a blank schedule means
@@ -48,9 +48,10 @@ func init() {
 				"properties": {
 					"cron": {
 						"type": "string",
-						"title": "Schedule (cron)",
+						"title": "Runs",
+						"format": "cron",
 						"default": "0 9 * * *",
-						"description": "5-field cron expression — minute hour day-of-month month day-of-week. \"0 9 * * *\" = every day at 09:00. Leave blank to run only when you press Run.",
+						"description": "When the flow runs — picked with the schedule editor. (Stored as a 5-field cron expression; \"0 9 * * *\" = every day at 09:00.) Leave blank to run only when you press Run.",
 						"examples": ["0 9 * * *", "*/15 * * * *", "0 8 * * 1"]
 					},
 					"tz": {

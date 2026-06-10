@@ -894,7 +894,24 @@
     "loopNested": "En loop kan inte köras inuti en annan loop ännu — flytta ut det här steget ur den yttre loopens body.",
     "off": "Av",
     "offTitle": "Det här steget är avstängt — det och allt efter det hoppas över när flödet körs.",
-    "passThrough": "Genomströmning — koppla in ett värde för att skicka det oförändrat vidare"
+    "passThrough": "Genomströmning — koppla in ett värde för att skicka det oförändrat vidare",
+    "schedule": {
+      "manual": "Manuell — körs när du trycker Kör",
+      "daily": "Varje dag kl {{time}}",
+      "hourly": "Varje timme vid :{{minute}}",
+      "weekly": "Varje {{days}} kl {{time}}",
+      "monthly": "Dag {{day}} varje månad kl {{time}}"
+    },
+    "interval": {
+      "seconds_one": "Varje sekund",
+      "seconds_other": "Var {{count}}:e sekund",
+      "minutes_one": "Varje minut",
+      "minutes_other": "Var {{count}}:e minut",
+      "hours_one": "Varje timme",
+      "hours_other": "Var {{count}}:e timme",
+      "days_one": "Varje dag",
+      "days_other": "Var {{count}}:e dag"
+    }
   },
   "outputPreview": {
     "loading": "Laddar…",
@@ -1035,6 +1052,12 @@
       "resources": "Resurser",
       "secrets": "Hemligheter",
       "itemFields": "Från varje rad"
+    },
+    "duration": {
+      "seconds": "sekunder",
+      "minutes": "minuter",
+      "hours": "timmar",
+      "days": "dagar"
     }
   },
   "forEach": {

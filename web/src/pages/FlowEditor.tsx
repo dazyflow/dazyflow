@@ -317,6 +317,14 @@ function EditorInner() {
   // engine behaviour but must round-trip through save() so the user's
   // chosen name/icon/description survive reloads.
   const [name, setName] = useState<string | undefined>(undefined);
+  // Browser tab title mirrors the flow: "<FLOW NAME> | Hazyflow". Reset on
+  // unmount so list pages go back to the plain app title.
+  useEffect(() => {
+    document.title = name ? `${name} | Hazyflow` : "Hazyflow";
+    return () => {
+      document.title = "Hazyflow";
+    };
+  }, [name]);
   const [icon, setIcon] = useState<string | undefined>(undefined);
   const [description, setDescription] = useState<string | undefined>(undefined);
   const [timeoutSeconds, setTimeoutSeconds] = useState<number | undefined>(undefined);

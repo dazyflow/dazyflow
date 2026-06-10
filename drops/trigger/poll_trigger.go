@@ -19,8 +19,8 @@ func init() {
 			Category:    "trigger",
 			Provider:    "internal",
 			Tags:        []string{"poll", "trigger", "interval", "schedule"},
-			Description: "Fires the graph on a fixed interval — set `interval_seconds` right here on the node and the scheduler runs the flow that often. Outputs `fired_at` (RFC3339 timestamp). Leave the interval unset to run only on demand. For dedupe-against-seen behavior, store a cursor in the tenant secret store with a downstream node and read it back on the next fire.",
-			Summary:     "Trigger that fires the graph on the interval set on this node, emitting the fire timestamp.",
+			Description: "Starts the flow over and over at a fixed pace — every few minutes, hours or days. The Time output is when it fired. With no interval set, the flow runs only when you press Run.",
+			Summary:     "Starts the flow over and over at a fixed pace — e.g. every 5 minutes.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Every 5 minutes",
@@ -31,7 +31,7 @@ func init() {
 			ExecutionModel: core.ExecutionTrigger,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{
-				{Port: "fired_at", Label: "RFC3339 timestamp of this fire", MIME: []string{"text/plain"}},
+				{Port: "fired_at", Label: "Time", MIME: []string{"text/plain"}},
 			},
 			// interval_seconds lives on the node (like cron_trigger's schedule),
 			// read by the scheduler. Max mirrors core.MaxPollIntervalSeconds
@@ -42,11 +42,12 @@ func init() {
 				"properties":{
 					"interval_seconds":{
 						"type":"integer",
-						"title":"Every (seconds)",
+						"title":"Every",
+						"format":"duration-seconds",
 						"minimum":1,
 						"maximum":31622400,
 						"default":300,
-						"description":"How often to fire, in seconds (e.g. 300 = every 5 minutes). Leave blank to run only when you press Run."
+						"description":"How often the flow runs. Leave blank to run only when you press Run."
 					}
 				}
 			}`),

@@ -442,6 +442,19 @@ function SchemaField({ name, schema, required, value, onChange, workspace, accou
     }
     case "integer":
     case "number":
+      // format:"duration-seconds" renders as value + unit (minutes/hours/…)
+      // instead of a raw seconds box — the canonical stored value stays an
+      // integer of seconds.
+      if (schema.format === "duration-seconds") {
+        return (
+          <FieldWrap name={name} schema={schema} required={required}>
+            <DurationSecondsField
+              value={typeof value === "number" ? value : (schema.default as number | undefined)}
+              onChange={onChange}
+            />
+          </FieldWrap>
+        );
+      }
       return (
         <FieldWrap name={name} schema={schema} required={required}>
           <input
@@ -1305,6 +1318,61 @@ function TenantSecretChip({
           {t("schemaForm.secretChipReplace")}
         </button>
       </span>
+    </div>
+  );
+}
+
+// DurationSecondsField edits an interval as value + unit ("5 minutes")
+// while storing canonical seconds — non-techies never do the ×60 math.
+// The displayed unit is the largest one that divides the value evenly.
+function DurationSecondsField({
+  value,
+  onChange,
+}: {
+  value: number | undefined;
+  onChange: (v: unknown) => void;
+}) {
+  const { t } = useTranslation();
+  const UNITS = [
+    { key: "days", size: 86400 },
+    { key: "hours", size: 3600 },
+    { key: "minutes", size: 60 },
+    { key: "seconds", size: 1 },
+  ];
+  const fit = (secs: number | undefined) => {
+    if (!secs || secs <= 0) return { amount: "", unit: 60 };
+    for (const u of UNITS) {
+      if (secs % u.size === 0) return { amount: String(secs / u.size), unit: u.size };
+    }
+    return { amount: String(secs), unit: 1 };
+  };
+  const cur = fit(value);
+  const commit = (amountStr: string, unit: number) => {
+    const n = parseInt(amountStr, 10);
+    if (amountStr === "" || Number.isNaN(n) || n <= 0) {
+      onChange(undefined);
+      return;
+    }
+    onChange(n * unit);
+  };
+  return (
+    <div className="sf-duration">
+      <input
+        type="number"
+        min={1}
+        value={cur.amount}
+        onChange={(e) => commit(e.target.value, cur.unit)}
+      />
+      <select
+        value={cur.unit}
+        onChange={(e) => commit(cur.amount || "1", Number(e.target.value))}
+      >
+        {UNITS.map((u) => (
+          <option key={u.key} value={u.size}>
+            {t("schemaForm.duration." + u.key)}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }

@@ -4166,6 +4166,18 @@ button.warning:hover:not(:disabled) {
   flex-shrink: 0;
   user-select: none;
 }
+/* Duration field: value + unit side by side ("5 [minutes ▾]"). */
+.sf-duration {
+  display: flex;
+  gap: var(--space-2);
+}
+.sf-duration input {
+  width: 90px;
+}
+.sf-duration select {
+  flex: 1;
+}
+
 .mapping-hint.mapping-warn {
   color: var(--warning, #c98a2b);
 }

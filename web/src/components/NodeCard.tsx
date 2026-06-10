@@ -8,6 +8,8 @@ import {
   type TokenLabels,
   portColor,
   friendlyTokenText,
+  cronToWords,
+  secondsToWords,
 } from "./nodeCardShared";
 
 // PICKER_FORMATS are the string-param formats whose value is an opaque
@@ -136,9 +138,23 @@ export function HazyNode({ data, selected }: NodeProps) {
     }
   }
   // Required primitive params that have NO input port — mandatory literals
-  // typed on the node itself (e.g. Text's `text`, Number's `value`).
+  // typed on the node itself (e.g. Text's `text`, Number's `value`). Params
+  // with format:"cron" join even when optional: a Schedule card must say
+  // WHEN it fires at a glance.
+  const literalKeys = schemaProps
+    ? [
+        ...new Set([
+          ...required,
+          ...Object.keys(schemaProps).filter(
+            (k) =>
+              schemaProps[k]?.format === "cron" ||
+              schemaProps[k]?.format === "duration-seconds",
+          ),
+        ]),
+      ]
+    : [];
   const literalFields = schemaProps
-    ? required
+    ? literalKeys
         // Drop params that live on an input pin — EXCEPT picker-format ones
         // (spreadsheet/form), which keep their read-only identity display even
         // when they're also a wireable port (the wire just overrides them).
@@ -293,6 +309,32 @@ export function HazyNode({ data, selected }: NodeProps) {
                   <span className="hz-param-readonly" title={name || undefined}>
                     {text}
                   </span>
+                </label>
+              );
+            }
+            // An interval shows in words ("Every 5 minutes"), never raw
+            // seconds; edited via the inspector's value+unit field.
+            if (s.format === "duration-seconds") {
+              const secs = d.params?.[key] ?? s.default;
+              return (
+                <label key={key} className="hz-param">
+                  <span className="hz-param-label">{label}</span>
+                  <span className="hz-param-readonly">
+                    {secondsToWords(typeof secs === "number" ? secs : null)}
+                  </span>
+                </label>
+              );
+            }
+            // A schedule shows in words ("Every day at 09:00"), never as a
+            // cron expression; edited via the inspector's schedule picker.
+            if (s.format === "cron") {
+              const cronVal = typeof d.params?.[key] === "string"
+                ? (d.params[key] as string)
+                : String(s.default ?? "");
+              return (
+                <label key={key} className="hz-param">
+                  <span className="hz-param-label">{label}</span>
+                  <span className="hz-param-readonly">{cronToWords(cronVal)}</span>
                 </label>
               );
             }

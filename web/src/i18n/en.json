@@ -898,7 +898,24 @@
     "loopNested": "A loop can't run inside another loop yet — move this step out of the outer loop's body.",
     "off": "Off",
     "offTitle": "This step is switched off — it and everything after it are skipped when the flow runs.",
-    "passThrough": "Pass-through value — wire a value in to thread it unchanged out the matching pin"
+    "passThrough": "Pass-through value — wire a value in to thread it unchanged out the matching pin",
+    "schedule": {
+      "manual": "Manual — runs when you press Run",
+      "daily": "Every day at {{time}}",
+      "hourly": "Every hour at :{{minute}}",
+      "weekly": "Every {{days}} at {{time}}",
+      "monthly": "Day {{day}} of every month at {{time}}"
+    },
+    "interval": {
+      "seconds_one": "Every second",
+      "seconds_other": "Every {{count}} seconds",
+      "minutes_one": "Every minute",
+      "minutes_other": "Every {{count}} minutes",
+      "hours_one": "Every hour",
+      "hours_other": "Every {{count}} hours",
+      "days_one": "Every day",
+      "days_other": "Every {{count}} days"
+    }
   },
   "outputPreview": {
     "loading": "Loading…",
@@ -1039,6 +1056,12 @@
       "resources": "Resources",
       "secrets": "Secrets",
       "itemFields": "From each row"
+    },
+    "duration": {
+      "seconds": "seconds",
+      "minutes": "minutes",
+      "hours": "hours",
+      "days": "days"
     }
   },
   "forEach": {
