@@ -1,0 +1,111 @@
+package stripe
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/url"
+	"strconv"
+
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/hazyflow/engine"
+)
+
+func init() {
+	engine.Register(engine.NativeDrop{
+		Manifest: core.Manifest{
+			ID:          "stripe_create_refund",
+			Version:     "1.0",
+			Label:       "Stripe",
+			Subtitle:    "Create refund",
+			Summary:     "Refund a Stripe payment, fully or partially — pairs naturally with an approval step upstream.",
+			Description: "Refund a payment by its payment_intent id (pi_…). Leave Amount empty for a full refund, or set it in the smallest currency unit (cents/öre) for a partial one. Wire the id in from upstream — e.g. a support form or a Slack approval — and put an Approval step before this one for the classic 'approve in Slack → refund' flow. Retries reuse the same Idempotency-Key, so a flaky run can't refund twice.",
+			Integration: "Stripe",
+			Category:    "network",
+			Icon:        "credit-card",
+			BrandLogo:   "/brands/stripe.svg",
+			Color:       "#635BFF",
+			Provider:    "internal",
+			Tags:        []string{"stripe", "refund", "payment", "billing", "support"},
+			Examples: []core.ParamsExample{
+				{Title: "Full refund", Params: json.RawMessage(`{"payment_intent":"pi_3MtwBwLkdIwHu7ix28a3tqPa"}`), Notes: "Wire the id into the 'Payment intent' input from a form or webhook instead of typing it."},
+				{Title: "Partial refund, marked as requested by the customer", Params: json.RawMessage(`{"payment_intent":"pi_3MtwBwLkdIwHu7ix28a3tqPa","amount":500,"reason":"requested_by_customer"}`), Notes: "amount is in the smallest currency unit — 500 = €5.00 / $5.00."},
+			},
+			RequiresConnections: []core.ConnectionRequirement{
+				{Kind: "secret", Name: "STRIPE_API_KEY", Note: "Stripe secret API key (sk_live_… / sk_test_…)."},
+			},
+			ExecutionModel: core.ExecutionBatch,
+			ProcessModel:   core.ProcessLongLived,
+			Inputs: []core.Port{
+				{Port: "payment_intent", Label: "Payment intent", Required: true, MIME: []string{"text/plain"}},
+			},
+			Outputs: []core.Port{
+				{Port: "refund_id", Label: "Refund ID", MIME: []string{"text/plain"}},
+				{Port: "status", Label: "Status", MIME: []string{"text/plain"}},
+			},
+			ParamsSchema: json.RawMessage(`{
+				"type":"object",
+				"properties":{
+					"api_key":{"type":"string","title":"API key","default":"${secret.STRIPE_API_KEY}","x_advanced":true,"description":"Stripe secret key. The default reads the STRIPE_API_KEY secret."},
+					"payment_intent":{"type":"string","title":"Payment intent","description":"The pi_… id to refund. Overridden by the 'Payment intent' input."},
+					"amount":{"type":"integer","title":"Amount","minimum":1,"description":"Partial-refund amount in the smallest currency unit (500 = 5.00). Empty = refund everything."},
+					"reason":{"type":"string","title":"Reason","enum":["","duplicate","fraudulent","requested_by_customer"],"enumNames":["(none)","Duplicate","Fraudulent","Requested by customer"],"description":"Stripe's refund-reason label, shown in the dashboard."},
+					"base_url":{"type":"string","description":"Override the API host (testing)."},
+					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
+				},
+				"required":["api_key"]
+			}`),
+			Idempotent:  false,
+			RetryPolicy: core.RetryExponentialBackoff,
+		},
+		Execute: executeCreateRefund,
+	})
+}
+
+func executeCreateRefund(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
+	pi, ok := textInputOr(job, "payment_intent", params.StringDefault(job.Params, "payment_intent", ""))
+	if !ok {
+		return params.Err(job, "bad_input", "'Payment intent' input must be text"), nil
+	}
+	if pi == "" {
+		return params.Err(job, "bad_param", "'payment_intent' is required — set it or wire the 'Payment intent' input"), nil
+	}
+
+	form := url.Values{}
+	form.Set("payment_intent", pi)
+	if amount := params.IntDefault(job.Params, "amount", 0); amount > 0 {
+		form.Set("amount", strconv.Itoa(amount))
+	}
+	if reason := params.StringDefault(job.Params, "reason", ""); reason != "" {
+		form.Set("reason", reason)
+	}
+
+	status, body, err := stripeDo(ctx, job, http.MethodPost, baseURL(job)+"/refunds", form.Encode())
+	if err != nil {
+		return params.Err(job, "stripe_http_error", err.Error()), nil
+	}
+	if status < 200 || status >= 300 {
+		return params.Err(job, "stripe_error", fmt.Sprintf("Stripe returned %d: %s", status, extractStripeError(body))), nil
+	}
+	var parsed struct {
+		ID     string `json:"id"`
+		Status string `json:"status"`
+		Amount int64  `json:"amount"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil || parsed.ID == "" {
+		return params.Err(job, "stripe_error", "Stripe response had no refund id"), nil
+	}
+	return core.Result{
+		JobID:  job.ID,
+		Status: core.StatusOK,
+		Output: map[string]core.Ref{
+			"refund_id": {MIME: "text/plain", Inline: parsed.ID},
+			"status":    {MIME: "text/plain", Inline: parsed.Status},
+			"meta": {MIME: "application/json", Inline: map[string]any{
+				"id": parsed.ID, "status": parsed.Status, "amount": parsed.Amount, "payment_intent": pi,
+			}},
+		},
+	}, nil
+}

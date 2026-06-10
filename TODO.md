@@ -395,6 +395,34 @@ this no customer can try" to "needed before paid conversion."
   cursor-dedupe composition handles it (same pattern Gmail
   uses). A seed template that demonstrates the composition is
   the natural follow-up.
+- [~] **Stripe launch connector.** Shipped (2026-06-10), five drops in
+  `drops/stripe/`: `stripe_create_customer` (email/name/description
+  pins, customer_id out), `stripe_create_payment_link` (price + wired
+  quantity → hosted checkout `url` pin — the "order row → payment link
+  → email/Slack it" flow), `stripe_create_refund` (payment_intent pin,
+  partial amount + reason; pairs with await_approval upstream),
+  `stripe_list_events` (types filter; `after_id` cursor in →
+  `ending_before`, `last_id` out — echoes the cursor on empty so a
+  Set-secret step never clobbers it; the poll_trigger + secret_set
+  composition covers "on new payment / failed invoice / new
+  subscription" without per-event trigger drops) and
+  `stripe_search_customers` (dashboard search syntax, customers +
+  count out). Auth: api_key param defaulting to
+  ${secret.STRIPE_API_KEY} (x_advanced, so the card stays clean —
+  ${vault./aws./gcp.…} work too), `RequiresConnections` secret so the
+  connection gate fires. All POSTs carry the job's Idempotency-Key
+  (Stripe honors it → retries can't double-charge); base_url test
+  seam goes through the SSRF guard like the other connectors.
+  Official Blurple wordmark at /brands/stripe.svg (from Stripe's
+  logo kit). 9 httptest-backed tests + the repo-wide adversarial/
+  invariants harnesses; verified end-to-end in the browser (catalog +
+  palette show all five branded; a real run resolved the secret,
+  called a fake Stripe with the right key + idempotency header, and
+  the customer_id pin carried the created id). **Open:** invoice
+  creation (multi-call: items → invoice → finalize — add when asked);
+  a signed `stripe_on_event` webhook trigger if polling latency ever
+  matters; a seed template demonstrating the events-cursor
+  composition.
 - [~] **Template gallery in the editor.** Shipped: static gallery
   at `/templates`. `web/public/templates/index.json` lists
   available templates; each template's graph lives in its own
