@@ -97,11 +97,8 @@ func executeCreateCustomer(ctx context.Context, job core.Job, _ chan<- core.Prog
 	}
 
 	status, body, err := stripeDo(ctx, job, http.MethodPost, baseURL(job)+"/customers", form.Encode())
-	if err != nil {
-		return params.Err(job, "stripe_http_error", err.Error()), nil
-	}
-	if status < 200 || status >= 300 {
-		return params.Err(job, "stripe_error", fmt.Sprintf("Stripe returned %d: %s", status, extractStripeError(body))), nil
+	if r := stripeFailure(job, status, body, err); r != nil {
+		return *r, nil
 	}
 	var parsed struct {
 		ID    string `json:"id"`

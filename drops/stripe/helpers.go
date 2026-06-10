@@ -164,3 +164,18 @@ func textInputOr(job core.Job, port, fallback string) (val string, ok bool) {
 	}
 	return "", false
 }
+
+// stripeFailure maps a transport error or a non-2xx Stripe response to
+// an error Result. Returns nil when the call succeeded — the shared
+// epilogue of every drop's stripeDo call.
+func stripeFailure(job core.Job, status int, body []byte, err error) *core.Result {
+	if err != nil {
+		r := params.Err(job, "stripe_http_error", err.Error())
+		return &r
+	}
+	if status < 200 || status >= 300 {
+		r := params.Err(job, "stripe_error", fmt.Sprintf("Stripe returned %d: %s", status, extractStripeError(body)))
+		return &r
+	}
+	return nil
+}

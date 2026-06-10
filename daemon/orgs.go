@@ -229,6 +229,10 @@ func (h *HTTPGateway) revokeMemberSessions(ctx context.Context, email string) {
 	}
 	rev, ok := h.Sessions.(auth.SessionRevoker)
 	if !ok {
+		// Every in-tree store implements SessionRevoker; a custom one
+		// that doesn't leaves demoted members holding stale roles until
+		// session expiry — say so instead of degrading silently.
+		h.logger.Printf("session store %T cannot revoke by subject — %s keeps existing sessions until they expire", h.Sessions, email)
 		return
 	}
 	u, err := h.Users.GetByEmail(ctx, email)
@@ -240,6 +244,28 @@ func (h *HTTPGateway) revokeMemberSessions(ctx context.Context, email string) {
 	} else if n > 0 {
 		h.logger.Printf("session sweep for %s: %d session(s) revoked after membership change", email, n)
 	}
+}
+
+// resolveCatalogRoles fills in permissions for name-only roles from the
+// canonical team catalog (core.TeamRoleViewer/Editor/Admin), so clients
+// send {"name":"viewer"} and the grant is always the server's CURRENT
+// definition — the TS mirror can't drift. Roles carrying explicit
+// permissions pass through as custom; a name-only role outside the
+// catalog is a mistake, not an empty grant.
+func resolveCatalogRoles(roles []core.Role) ([]core.Role, error) {
+	out := make([]core.Role, len(roles))
+	for i, r := range roles {
+		if len(r.Permissions) > 0 {
+			out[i] = r
+			continue
+		}
+		cat, ok := core.TeamRoleByName(r.Name)
+		if !ok {
+			return nil, fmt.Errorf("role %q has no permissions and is not a catalog role (viewer/editor/admin)", r.Name)
+		}
+		out[i] = cat
+	}
+	return out, nil
 }
 
 // capRolesToCaller rejects roles whose permissions exceed the caller's
@@ -274,11 +300,6 @@ func capRolesToCaller(p core.Principal, roles []core.Role) error {
 // the org must always keep its owner-admin), and roles can't be emptied
 // (removing access is DELETE's job). Role grants are capped to the
 // caller's own permissions, same as invitations.
-//
-// Caveat: a member's active session keeps its current roles until they
-// switch orgs or sign in again — switchOrg re-stamps the session from
-// the membership. Good enough for cooperative demotion; forced
-// revocation would need a session sweep (follow-up).
 func (h *HTTPGateway) updateMemberRoles(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Memberships == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "memberships not configured")
@@ -312,6 +333,12 @@ func (h *HTTPGateway) updateMemberRoles(rw http.ResponseWriter, r *http.Request,
 		writeJSONError(rw, http.StatusBadRequest, "roles required — to remove access, delete the membership instead")
 		return
 	}
+	roles, err := resolveCatalogRoles(body.Roles)
+	if err != nil {
+		writeJSONError(rw, http.StatusBadRequest, err.Error())
+		return
+	}
+	body.Roles = roles
 	if err := capRolesToCaller(p, body.Roles); err != nil {
 		writeJSONError(rw, http.StatusForbidden, err.Error())
 		return
@@ -355,10 +382,10 @@ func (h *HTTPGateway) updateMemberRoles(rw http.ResponseWriter, r *http.Request,
 }
 
 // createInvitation handler. Body: {email, roles, workspace}. Mints
-// a token, stores a pending Invitation, returns the token + accept
-// URL. SMTP delivery is a follow-up; for now the response carries
-// the accept URL so the admin can copy/paste it into their channel
-// of choice.
+// a token, stores a pending Invitation, and returns the token + accept
+// URL. When the operator wired a mailer the link is also emailed; the
+// response always carries the URL so the admin can copy/paste it into
+// their channel of choice either way.
 func (h *HTTPGateway) createInvitation(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Invitations == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
@@ -382,10 +409,17 @@ func (h *HTTPGateway) createInvitation(rw http.ResponseWriter, r *http.Request, 
 		writeJSONError(rw, http.StatusBadRequest, err.Error())
 		return
 	}
-	// Cap the roles an inviter may grant (see capRolesToCaller). Only
-	// explicitly-requested roles are checked; the default editor role
-	// below is a trusted server-side grant.
+	// Resolve catalog names to the server's role definitions, then cap
+	// the grant to the caller's own permissions (see capRolesToCaller).
+	// Only explicitly-requested roles are checked; the default editor
+	// role below is a trusted server-side grant.
 	if len(body.Roles) > 0 {
+		roles, err := resolveCatalogRoles(body.Roles)
+		if err != nil {
+			writeJSONError(rw, http.StatusBadRequest, err.Error())
+			return
+		}
+		body.Roles = roles
 		if err := capRolesToCaller(p, body.Roles); err != nil {
 			writeJSONError(rw, http.StatusForbidden, err.Error())
 			return

@@ -435,6 +435,15 @@ func main() {
 	// when HAZYFLOW_ENABLE_METRICS is on.
 	appMetrics := daemon.NewMetrics()
 
+	// Workers count node executions through a buffered recorder so the
+	// hot completion path never blocks on the metering upsert; the
+	// flusher drains every few seconds and once more on shutdown.
+	bufferedUsage := daemon.NewBufferedUsage(stores.usage)
+	bgWg.Add(1)
+	go func() {
+		defer bgWg.Done()
+		bufferedUsage.Run(ctx, 5*time.Second)
+	}()
 	startBackgroundJobs(ctx, backgroundDeps{
 		svc:         svc,
 		jobs:        jobs,
@@ -442,7 +451,7 @@ func main() {
 		eng:         eng,
 		pgPool:      pgPool,
 		metrics:     appMetrics,
-		usage:       stores.usage,
+		usage:       bufferedUsage,
 		workerCount: workerCount,
 	}, &bgWg)
 
@@ -681,6 +690,10 @@ func openCoreStores(ctx context.Context, dsn string, maxConns, minConns int, ses
 	if err != nil {
 		log.Fatalf("postgres plan store: %v", err)
 	}
+	// Plans sit on the run-submission and scheduler hot paths but only
+	// change via the Stripe webhook (which writes through this cache);
+	// other replicas converge within the TTL.
+	cachedPlans := daemon.NewCachedPlanStore(pgPlans, 0)
 	if sessionCacheTTL > 0 {
 		log.Printf("session lookup cache: ttl=%s", sessionCacheTTL)
 	}
@@ -693,7 +706,7 @@ func openCoreStores(ctx context.Context, dsn string, maxConns, minConns int, ses
 		sessions: auth.NewCachingSessionStore(pgSessions, sessionCacheTTL, 0),
 		jobs:     pgJobs,
 		usage:    pgUsage,
-		plans:    pgPlans,
+		plans:    cachedPlans,
 	}
 }
 

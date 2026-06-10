@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Cloud, Lock, Trash2 } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { api, APIError } from "../api";
 import { useAuth } from "../auth";
 import type {
+  AwsSecretManagerConfig,
   AwsSecretManagerStatus,
+  GcpSecretManagerConfig,
   GcpSecretManagerStatus,
   SecretManagerConfig,
   SecretManagerStatus,
@@ -283,54 +285,42 @@ export function AdminSecretManager() {
   );
 }
 
-// AwsSection is the AWS Secrets Manager slot: region + static access key.
-// Same lifecycle as the Vault section — credentials never read back,
-// save connection-tests, delete disconnects.
-function AwsSection({ canWrite }: { canWrite: boolean }) {
-  const { t } = useTranslation();
+// useProviderSlot owns the lifecycle every cloud provider section
+// shares: load the redacted status (quiet on unavailable deployments —
+// the Vault section already shows the page-level note), edit/save with
+// connection-test errors surfaced, and confirm-then-disconnect.
+// Credentials never come back from GET, so each save re-enters them.
+function useProviderSlot<S extends { configured: boolean }, C>(
+  get: (token: string) => Promise<S>,
+  set: (token: string, cfg: C) => Promise<void>,
+  del: (token: string) => Promise<void>,
+  removeConfirm: string,
+) {
   const { token } = useAuth();
-  const [status, setStatus] = useState<AwsSecretManagerStatus | null>(null);
+  const [status, setStatus] = useState<S | null>(null);
   const [editing, setEditing] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [region, setRegion] = useState("");
-  const [accessKeyID, setAccessKeyID] = useState("");
-  const [secretAccessKey, setSecretAccessKey] = useState("");
 
-  const load = () => {
+  const load = useCallback(() => {
     if (!token) return;
-    api
-      .getSecretManagerAws(token)
+    get(token)
       .then(setStatus)
       .catch((e) => {
-        // Unavailable deployments already show the page-level note via
-        // the Vault section; stay quiet here.
         if (!(e instanceof APIError && featureUnavailable(e.status))) {
           setErr(e instanceof APIError ? e.message : (e as Error).message);
         }
       });
-  };
-  useEffect(load, [token]);
+  }, [token, get]);
+  useEffect(load, [load]);
 
-  const startEdit = () => {
-    setRegion(status?.region ?? "");
-    setAccessKeyID(status?.access_key_id ?? "");
-    setSecretAccessKey("");
-    setErr(null);
-    setEditing(true);
-  };
-
-  const save = async () => {
+  const save = async (cfg: C, onSaved: () => void) => {
     if (!token) return;
     setBusy(true);
     setErr(null);
     try {
-      await api.setSecretManagerAws(token, {
-        region: region.trim(),
-        access_key_id: accessKeyID.trim(),
-        secret_access_key: secretAccessKey,
-      });
-      setSecretAccessKey("");
+      await set(token, cfg);
+      onSaved(); // caller clears its credential fields
       setEditing(false);
       load();
     } catch (e) {
@@ -342,48 +332,81 @@ function AwsSection({ canWrite }: { canWrite: boolean }) {
 
   const remove = async () => {
     if (!token) return;
-    if (!window.confirm(t("connections.secretManager.awsRemoveConfirm"))) return;
+    if (!window.confirm(removeConfirm)) return;
     try {
-      await api.deleteSecretManagerAws(token);
-      setStatus({ configured: false });
+      await del(token);
       load();
     } catch (e) {
       setErr(e instanceof APIError ? e.message : (e as Error).message);
     }
   };
 
-  const configured = status?.configured ?? false;
-  const showForm = canWrite && (editing || !configured);
-  const canSave = region.trim() !== "" && accessKeyID.trim() !== "" && secretAccessKey !== "";
+  const startEdit = () => {
+    setErr(null);
+    setEditing(true);
+  };
 
+  return { status, editing, setEditing, err, busy, startEdit, save, remove };
+}
+
+// ProviderShell renders the shared chrome around a provider slot: the
+// section heading + intro, the error card, the configured status card
+// with Edit/Disconnect, and the form wrapper with Save/Cancel. The
+// provider-specific parts come in as props (summary line, form fields).
+function ProviderShell({
+  canWrite,
+  headKey,
+  introKey,
+  slot,
+  configuredSummary,
+  fields,
+  canSave,
+  onSave,
+  onStartEdit,
+}: {
+  canWrite: boolean;
+  headKey: string;
+  introKey: string;
+  slot: ReturnType<typeof useProviderSlot<any, any>>;
+  configuredSummary: React.ReactNode;
+  fields: React.ReactNode;
+  canSave: boolean;
+  onSave: () => void;
+  onStartEdit: () => void;
+}) {
+  const { t } = useTranslation();
+  const configured = slot.status?.configured ?? false;
+  const showForm = canWrite && (slot.editing || !configured);
   return (
     <div>
       <h2 className="admin-section-head" style={{ marginTop: "var(--space-4)" }}>
         <Cloud size={15} style={{ marginRight: 6, verticalAlign: -2 }} />
-        {t("connections.secretManager.awsHead")}
+        {t(headKey)}
       </h2>
       <div className="sub" style={{ marginBottom: "var(--space-2)" }}>
-        {t("connections.secretManager.awsIntro")}
+        {t(introKey)}
       </div>
-      {err && <div className="card error">{err}</div>}
+      {slot.err && <div className="card error">{slot.err}</div>}
 
-      {configured && !editing && (
+      {configured && !slot.editing && (
         <div className="card secret-manager-status">
-          <div className="secret-manager-status-info">
-            <code>{status?.region}</code>
-            <span className="credentials-set">
-              {t("connections.secretManager.awsSummary", { keyId: status?.access_key_id })}
-            </span>
-          </div>
+          <div className="secret-manager-status-info">{configuredSummary}</div>
           {canWrite && (
             <div className="secret-manager-actions">
-              <button type="button" className="ghost" onClick={startEdit}>
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => {
+                  onStartEdit();
+                  slot.startEdit();
+                }}
+              >
                 {t("connections.secretManager.edit")}
               </button>
               <button
                 type="button"
                 className="icon-button danger"
-                onClick={() => void remove()}
+                onClick={() => void slot.remove()}
                 aria-label={t("connections.secretManager.remove")}
                 title={t("connections.secretManager.remove")}
               >
@@ -399,9 +422,74 @@ function AwsSection({ canWrite }: { canWrite: boolean }) {
           className="secret-manager-form"
           onSubmit={(e) => {
             e.preventDefault();
-            void save();
+            onSave();
           }}
         >
+          {fields}
+          <div className="secret-manager-form-actions">
+            <button type="submit" className="primary" disabled={slot.busy || !canSave}>
+              {slot.busy
+                ? t("connections.secretManager.saving")
+                : t("connections.secretManager.save")}
+            </button>
+            {configured && (
+              <button type="button" className="ghost" onClick={() => slot.setEditing(false)}>
+                {t("common.cancel")}
+              </button>
+            )}
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
+// AwsSection: region + static access key. Only the fields and the
+// summary line are AWS-specific; the lifecycle is the shared slot.
+function AwsSection({ canWrite }: { canWrite: boolean }) {
+  const { t } = useTranslation();
+  const slot = useProviderSlot<AwsSecretManagerStatus, AwsSecretManagerConfig>(
+    api.getSecretManagerAws,
+    api.setSecretManagerAws,
+    api.deleteSecretManagerAws,
+    t("connections.secretManager.awsRemoveConfirm"),
+  );
+  const [region, setRegion] = useState("");
+  const [accessKeyID, setAccessKeyID] = useState("");
+  const [secretAccessKey, setSecretAccessKey] = useState("");
+
+  return (
+    <ProviderShell
+      canWrite={canWrite}
+      headKey="connections.secretManager.awsHead"
+      introKey="connections.secretManager.awsIntro"
+      slot={slot}
+      onStartEdit={() => {
+        setRegion(slot.status?.region ?? "");
+        setAccessKeyID(slot.status?.access_key_id ?? "");
+        setSecretAccessKey("");
+      }}
+      configuredSummary={
+        <>
+          <code>{slot.status?.region}</code>
+          <span className="credentials-set">
+            {t("connections.secretManager.awsSummary", { keyId: slot.status?.access_key_id })}
+          </span>
+        </>
+      }
+      canSave={region.trim() !== "" && accessKeyID.trim() !== "" && secretAccessKey !== ""}
+      onSave={() =>
+        void slot.save(
+          {
+            region: region.trim(),
+            access_key_id: accessKeyID.trim(),
+            secret_access_key: secretAccessKey,
+          },
+          () => setSecretAccessKey(""),
+        )
+      }
+      fields={
+        <>
           <div className="secret-manager-row">
             <label>
               {t("connections.secretManager.awsRegionLabel")}
@@ -433,137 +521,51 @@ function AwsSection({ canWrite }: { canWrite: boolean }) {
               autoComplete="off"
             />
           </label>
-          <div className="secret-manager-form-actions">
-            <button type="submit" className="primary" disabled={busy || !canSave}>
-              {busy
-                ? t("connections.secretManager.saving")
-                : t("connections.secretManager.save")}
-            </button>
-            {configured && (
-              <button type="button" className="ghost" onClick={() => setEditing(false)}>
-                {t("common.cancel")}
-              </button>
-            )}
-          </div>
-        </form>
-      )}
-    </div>
+        </>
+      }
+    />
   );
 }
 
-// GcpSection is the GCP Secret Manager slot: project + a pasted
-// service-account key file.
+// GcpSection: project + pasted service-account key file.
 function GcpSection({ canWrite }: { canWrite: boolean }) {
   const { t } = useTranslation();
-  const { token } = useAuth();
-  const [status, setStatus] = useState<GcpSecretManagerStatus | null>(null);
-  const [editing, setEditing] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const slot = useProviderSlot<GcpSecretManagerStatus, GcpSecretManagerConfig>(
+    api.getSecretManagerGcp,
+    api.setSecretManagerGcp,
+    api.deleteSecretManagerGcp,
+    t("connections.secretManager.gcpRemoveConfirm"),
+  );
   const [projectID, setProjectID] = useState("");
   const [keyJSON, setKeyJSON] = useState("");
 
-  const load = () => {
-    if (!token) return;
-    api
-      .getSecretManagerGcp(token)
-      .then(setStatus)
-      .catch((e) => {
-        if (!(e instanceof APIError && featureUnavailable(e.status))) {
-          setErr(e instanceof APIError ? e.message : (e as Error).message);
-        }
-      });
-  };
-  useEffect(load, [token]);
-
-  const startEdit = () => {
-    setProjectID(status?.project_id ?? "");
-    setKeyJSON("");
-    setErr(null);
-    setEditing(true);
-  };
-
-  const save = async () => {
-    if (!token) return;
-    setBusy(true);
-    setErr(null);
-    try {
-      await api.setSecretManagerGcp(token, {
-        project_id: projectID.trim(),
-        service_account_key: keyJSON,
-      });
-      setKeyJSON("");
-      setEditing(false);
-      load();
-    } catch (e) {
-      setErr(e instanceof APIError ? e.message : (e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const remove = async () => {
-    if (!token) return;
-    if (!window.confirm(t("connections.secretManager.gcpRemoveConfirm"))) return;
-    try {
-      await api.deleteSecretManagerGcp(token);
-      setStatus({ configured: false });
-      load();
-    } catch (e) {
-      setErr(e instanceof APIError ? e.message : (e as Error).message);
-    }
-  };
-
-  const configured = status?.configured ?? false;
-  const showForm = canWrite && (editing || !configured);
-  const canSave = projectID.trim() !== "" && keyJSON.trim() !== "";
-
   return (
-    <div>
-      <h2 className="admin-section-head" style={{ marginTop: "var(--space-4)" }}>
-        <Cloud size={15} style={{ marginRight: 6, verticalAlign: -2 }} />
-        {t("connections.secretManager.gcpHead")}
-      </h2>
-      <div className="sub" style={{ marginBottom: "var(--space-2)" }}>
-        {t("connections.secretManager.gcpIntro")}
-      </div>
-      {err && <div className="card error">{err}</div>}
-
-      {configured && !editing && (
-        <div className="card secret-manager-status">
-          <div className="secret-manager-status-info">
-            <code>{status?.project_id}</code>
-            <span className="credentials-set">
-              {t("connections.secretManager.gcpSummary", { email: status?.client_email })}
-            </span>
-          </div>
-          {canWrite && (
-            <div className="secret-manager-actions">
-              <button type="button" className="ghost" onClick={startEdit}>
-                {t("connections.secretManager.edit")}
-              </button>
-              <button
-                type="button"
-                className="icon-button danger"
-                onClick={() => void remove()}
-                aria-label={t("connections.secretManager.remove")}
-                title={t("connections.secretManager.remove")}
-              >
-                <Trash2 size={15} />
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {showForm && (
-        <form
-          className="secret-manager-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void save();
-          }}
-        >
+    <ProviderShell
+      canWrite={canWrite}
+      headKey="connections.secretManager.gcpHead"
+      introKey="connections.secretManager.gcpIntro"
+      slot={slot}
+      onStartEdit={() => {
+        setProjectID(slot.status?.project_id ?? "");
+        setKeyJSON("");
+      }}
+      configuredSummary={
+        <>
+          <code>{slot.status?.project_id}</code>
+          <span className="credentials-set">
+            {t("connections.secretManager.gcpSummary", { email: slot.status?.client_email })}
+          </span>
+        </>
+      }
+      canSave={projectID.trim() !== "" && keyJSON.trim() !== ""}
+      onSave={() =>
+        void slot.save(
+          { project_id: projectID.trim(), service_account_key: keyJSON },
+          () => setKeyJSON(""),
+        )
+      }
+      fields={
+        <>
           <label>
             {t("connections.secretManager.gcpProjectLabel")}
             <input
@@ -585,20 +587,8 @@ function GcpSection({ canWrite }: { canWrite: boolean }) {
               spellCheck={false}
             />
           </label>
-          <div className="secret-manager-form-actions">
-            <button type="submit" className="primary" disabled={busy || !canSave}>
-              {busy
-                ? t("connections.secretManager.saving")
-                : t("connections.secretManager.save")}
-            </button>
-            {configured && (
-              <button type="button" className="ghost" onClick={() => setEditing(false)}>
-                {t("common.cancel")}
-              </button>
-            )}
-          </div>
-        </form>
-      )}
-    </div>
+        </>
+      }
+    />
   );
 }

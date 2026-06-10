@@ -121,3 +121,84 @@ func TestPgUsageStore(t *testing.T) {
 	}
 	usageStoreContract(t, store)
 }
+
+// countingUsage wraps MemUsageStore and counts inner write calls.
+type countingUsage struct {
+	*MemUsageStore
+	nodeWrites int
+}
+
+func (c *countingUsage) AddNodeExecutions(ctx context.Context, tenant string, n int, now time.Time) error {
+	c.nodeWrites++
+	return c.MemUsageStore.AddNodeExecutions(ctx, tenant, n, now)
+}
+
+func TestBufferedUsage(t *testing.T) {
+	inner := &countingUsage{MemUsageStore: NewMemUsageStore()}
+	b := NewBufferedUsage(inner)
+	ctx := context.Background()
+
+	// 50 node executions accumulate without touching the store…
+	for i := 0; i < 50; i++ {
+		if err := b.AddNodeExecutions(ctx, "acme", 1, usageNow); err != nil {
+			t.Fatalf("add: %v", err)
+		}
+	}
+	if inner.nodeWrites != 0 {
+		t.Fatalf("inner writes before flush = %d", inner.nodeWrites)
+	}
+	// …runs pass straight through (the run gate reads them)…
+	if err := b.AddRun(ctx, "acme", usageNow); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	// …and a read flushes first, so the caller sees everything.
+	got, err := b.Usage(ctx, "acme", 1)
+	if err != nil {
+		t.Fatalf("usage: %v", err)
+	}
+	if inner.nodeWrites != 1 {
+		t.Errorf("inner writes after read-flush = %d, want 1 (batched)", inner.nodeWrites)
+	}
+	if len(got) != 1 || got[0].NodeExecutions != 50 || got[0].GraphRuns != 1 {
+		t.Errorf("buckets = %+v, want 50 executions / 1 run", got)
+	}
+	// A flush with nothing pending writes nothing.
+	if err := b.Flush(ctx); err != nil || inner.nodeWrites != 1 {
+		t.Errorf("idle flush: err=%v writes=%d", err, inner.nodeWrites)
+	}
+}
+
+func TestCachedPlanStore(t *testing.T) {
+	inner := NewMemPlanStore()
+	c := NewCachedPlanStore(inner, time.Minute)
+	ctx := context.Background()
+
+	// First read goes through; the second is served from cache even if
+	// the inner store changes underneath (TTL staleness by design).
+	p, err := c.GetPlan(ctx, "acme")
+	if err != nil || p.Plan != PlanFree {
+		t.Fatalf("first read = %+v/%v", p, err)
+	}
+	_ = inner.SetPlan(ctx, TenantPlan{Tenant: "acme", Plan: PlanPro}) // behind the cache's back
+	p, _ = c.GetPlan(ctx, "acme")
+	if p.Plan != PlanFree {
+		t.Errorf("cached read = %q, want the cached free plan", p.Plan)
+	}
+	// SetPlan through the cache writes through AND refreshes it.
+	if err := c.SetPlan(ctx, TenantPlan{Tenant: "acme", Plan: PlanPro}); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	p, _ = c.GetPlan(ctx, "acme")
+	if p.Plan != PlanPro {
+		t.Errorf("after write-through = %q, want pro", p.Plan)
+	}
+	// The dedupe extension passes through to the inner store.
+	first, err := c.MarkStripeEvent(ctx, "evt_x")
+	if err != nil || !first {
+		t.Errorf("dedupe first = %v/%v", first, err)
+	}
+	again, _ := c.MarkStripeEvent(ctx, "evt_x")
+	if again {
+		t.Error("dedupe replay reported first=true through the cache")
+	}
+}

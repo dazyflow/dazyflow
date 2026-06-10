@@ -7,13 +7,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 
 	"git.sr.ht/~klahr/hazyflow/core"
@@ -30,24 +28,18 @@ import (
 // the SDK is a dependency tree two orders of magnitude bigger than the ~100
 // lines of signing below. Same trade /metrics and the Stripe client made.
 type AwsSecretsProvider struct {
-	client awsSecretsClient
+	client *awsAPIClient
 	// loadConfig returns the calling tenant's connection config. ok=false
 	// means the tenant hasn't configured AWS (a clear "not configured"
 	// error, not a failure). Backed by the encrypted store in production.
 	loadConfig func(ctx context.Context, tenant string) (cfg AwsSecretsConfig, ok bool, err error)
-	ttl        time.Duration
-
-	mu    sync.Mutex
-	cache map[string]vaultCacheEntry // same shape as the Vault provider's cache
+	cache      *tenantSecretCache
 }
 
 // NewAwsSecretsProvider builds the provider. ttl <= 0 uses defaultVaultCacheTTL
 // (the BYO providers share one staleness policy).
-func NewAwsSecretsProvider(client awsSecretsClient, loadConfig func(context.Context, string) (AwsSecretsConfig, bool, error), ttl time.Duration) *AwsSecretsProvider {
-	if ttl <= 0 {
-		ttl = defaultVaultCacheTTL
-	}
-	return &AwsSecretsProvider{client: client, loadConfig: loadConfig, ttl: ttl, cache: map[string]vaultCacheEntry{}}
+func NewAwsSecretsProvider(client *awsAPIClient, loadConfig func(context.Context, string) (AwsSecretsConfig, bool, error), ttl time.Duration) *AwsSecretsProvider {
+	return &AwsSecretsProvider{client: client, loadConfig: loadConfig, cache: newTenantSecretCache(ttl)}
 }
 
 // NewAwsSecretsProviderForStore builds the production provider with each
@@ -88,7 +80,7 @@ func (p *AwsSecretsProvider) Get(ctx context.Context, ref string) (string, error
 		return "", fmt.Errorf("aws reference %q must be NAME or NAME#field", ref)
 	}
 	key := tenant + "\x00" + ref
-	if v, ok := p.cached(key); ok {
+	if v, ok := p.cache.get(key); ok {
 		return v, nil
 	}
 
@@ -107,24 +99,8 @@ func (p *AwsSecretsProvider) Get(ctx context.Context, ref string) (string, error
 	if err != nil {
 		return "", fmt.Errorf("aws: secret %q: %w", name, err)
 	}
-	p.store(key, val)
+	p.cache.put(key, val)
 	return val, nil
-}
-
-func (p *AwsSecretsProvider) cached(key string) (string, bool) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	e, ok := p.cache[key]
-	if !ok || !e.exp.After(nowFunc()) {
-		return "", false
-	}
-	return e.value, true
-}
-
-func (p *AwsSecretsProvider) store(key, val string) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.cache[key] = vaultCacheEntry{value: val, exp: nowFunc().Add(p.ttl)}
 }
 
 // splitCloudSecretRef parses "NAME" / "NAME#field" for the aws/gcp providers.
@@ -193,42 +169,15 @@ func (c AwsSecretsConfig) endpointURL() string {
 const awsConfigSecretName = "cfg:secret-manager-aws"
 
 func saveAwsConfig(ctx context.Context, es *EncryptedSecrets, tenant string, cfg AwsSecretsConfig) error {
-	if err := cfg.validate(); err != nil {
-		return err
-	}
-	b, err := json.Marshal(cfg)
-	if err != nil {
-		return err
-	}
-	return es.Put(ctx, tenant, awsConfigSecretName, string(b))
+	return saveProviderConfig(ctx, es, tenant, awsConfigSecretName, cfg)
 }
 
 func loadAwsConfig(ctx context.Context, es *EncryptedSecrets, tenant string) (AwsSecretsConfig, bool, error) {
-	raw, err := es.Get(core.WithTenant(ctx, tenant), awsConfigSecretName)
-	if err != nil {
-		if errors.Is(err, ErrSecretNotFound) {
-			return AwsSecretsConfig{}, false, nil
-		}
-		return AwsSecretsConfig{}, false, err
-	}
-	var cfg AwsSecretsConfig
-	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
-		return AwsSecretsConfig{}, false, fmt.Errorf("decode AWS secret-manager config: %w", err)
-	}
-	return cfg, true, nil
+	return loadProviderConfig[AwsSecretsConfig](ctx, es, tenant, awsConfigSecretName)
 }
 
 func deleteAwsConfig(ctx context.Context, es *EncryptedSecrets, tenant string) error {
-	return es.Delete(ctx, tenant, awsConfigSecretName)
-}
-
-// awsSecretsClient is the minimal Secrets Manager surface the provider needs.
-// Split out so tests run without AWS.
-type awsSecretsClient interface {
-	getSecretValue(ctx context.Context, cfg AwsSecretsConfig, name string) (string, error)
-	// verify checks the credentials sign correctly and the account answers,
-	// without needing a real secret to exist.
-	verify(ctx context.Context, cfg AwsSecretsConfig) error
+	return deleteProviderConfig(ctx, es, tenant, awsConfigSecretName)
 }
 
 // awsAPIClient speaks Secrets Manager's JSON-RPC ("x-amz-json-1.1") protocol

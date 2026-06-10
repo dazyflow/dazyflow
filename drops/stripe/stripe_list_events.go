@@ -66,10 +66,11 @@ func init() {
 }
 
 func executeListEvents(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	afterID, ok := textInputOr(job, "after_id", params.StringDefault(job.Params, "after_id", ""))
+	rawAfterID, ok := textInputOr(job, "after_id", params.StringDefault(job.Params, "after_id", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'After id' input must be text"), nil
 	}
+	afterID := rawAfterID
 	limit := params.IntDefault(job.Params, "limit", 25)
 	if limit < 1 {
 		limit = 1
@@ -101,11 +102,8 @@ func executeListEvents(ctx context.Context, job core.Job, _ chan<- core.Progress
 	}
 
 	status, body, err := stripeDo(ctx, job, http.MethodGet, baseURL(job)+"/events?"+q.Encode(), "")
-	if err != nil {
-		return params.Err(job, "stripe_http_error", err.Error()), nil
-	}
-	if status < 200 || status >= 300 {
-		return params.Err(job, "stripe_error", fmt.Sprintf("Stripe returned %d: %s", status, extractStripeError(body))), nil
+	if r := stripeFailure(job, status, body, err); r != nil {
+		return *r, nil
 	}
 	var parsed struct {
 		Data []map[string]any `json:"data"`
@@ -117,7 +115,7 @@ func executeListEvents(ctx context.Context, job core.Job, _ chan<- core.Progress
 	// new events it echoes the incoming cursor (placeholder included, so
 	// the first idle poll round-trips it), and a Set-secret step
 	// downstream never clobbers a good cursor with an empty value.
-	lastID, _ := textInputOr(job, "after_id", params.StringDefault(job.Params, "after_id", ""))
+	lastID := rawAfterID
 	if len(parsed.Data) > 0 {
 		if id, ok := parsed.Data[0]["id"].(string); ok {
 			lastID = id

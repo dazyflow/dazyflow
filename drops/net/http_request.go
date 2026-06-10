@@ -12,12 +12,13 @@ import (
 	stdnet "net"
 	"net/http"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/hazyflow/engine"
 )
 
 func init() {
@@ -280,8 +281,25 @@ func flattenHeaders(h http.Header) map[string]string {
 // instead of a bare http.Client. SSRF rejections surface as a dial
 // error whose message contains "ssrf_blocked" (see IsSSRFError).
 func SafeHTTPClient(timeout time.Duration, allowPrivate bool) *http.Client {
-	return buildClient(timeout, allowPrivate)
+	// Clients are cached per (timeout, allowPrivate): a fresh client per
+	// call would rebuild its Transport each time, so the idle-connection
+	// pool never got reused and every connector API call paid a new
+	// TCP+TLS handshake. There are only a handful of distinct timeouts
+	// across the drops, so the cache stays tiny.
+	key := clientKey{timeout: timeout, allowPrivate: allowPrivate}
+	if c, ok := clientCache.Load(key); ok {
+		return c.(*http.Client)
+	}
+	c, _ := clientCache.LoadOrStore(key, buildClient(timeout, allowPrivate))
+	return c.(*http.Client)
 }
+
+type clientKey struct {
+	timeout      time.Duration
+	allowPrivate bool
+}
+
+var clientCache sync.Map
 
 // IsSSRFError reports whether a client.Do error came from the SSRF
 // dial guard, so callers can map it to a friendly error code.

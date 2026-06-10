@@ -3,7 +3,6 @@ package daemon
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -30,28 +29,17 @@ type VaultProvider struct {
 	// the tenant hasn't configured a secret manager (a clear "not configured"
 	// error, not a failure). Backed by the encrypted store in production.
 	loadConfig func(ctx context.Context, tenant string) (cfg VaultConfig, ok bool, err error)
-	ttl        time.Duration
-
-	mu    sync.Mutex
-	cache map[string]vaultCacheEntry
-}
-
-type vaultCacheEntry struct {
-	value string
-	exp   time.Time
+	cache      *tenantSecretCache
 }
 
 // defaultVaultCacheTTL bounds how stale a resolved value can be. Short enough
 // that a rotated upstream secret is picked up quickly, long enough that a busy
-// flow doesn't round-trip the manager every run.
+// flow doesn't round-trip the manager every run. Shared by all BYO providers.
 const defaultVaultCacheTTL = 60 * time.Second
 
 // NewVaultProvider builds the provider. ttl <= 0 uses defaultVaultCacheTTL.
 func NewVaultProvider(client vaultClient, loadConfig func(context.Context, string) (VaultConfig, bool, error), ttl time.Duration) *VaultProvider {
-	if ttl <= 0 {
-		ttl = defaultVaultCacheTTL
-	}
-	return &VaultProvider{client: client, loadConfig: loadConfig, ttl: ttl, cache: map[string]vaultCacheEntry{}}
+	return &VaultProvider{client: client, loadConfig: loadConfig, cache: newTenantSecretCache(ttl)}
 }
 
 // NewVaultProviderForStore builds the production provider: a real OpenBao/Vault
@@ -91,7 +79,7 @@ func (p *VaultProvider) Get(ctx context.Context, ref string) (string, error) {
 		return "", err
 	}
 	key := tenant + "\x00" + path + "\x00" + field
-	if v, ok := p.cached(key); ok {
+	if v, ok := p.cache.get(key); ok {
 		return v, nil
 	}
 
@@ -110,24 +98,8 @@ func (p *VaultProvider) Get(ctx context.Context, ref string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("vault: secret %q has no field %q", path, field)
 	}
-	p.store(key, val)
+	p.cache.put(key, val)
 	return val, nil
-}
-
-func (p *VaultProvider) cached(key string) (string, bool) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	e, ok := p.cache[key]
-	if !ok || !e.exp.After(nowFunc()) {
-		return "", false
-	}
-	return e.value, true
-}
-
-func (p *VaultProvider) store(key, val string) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.cache[key] = vaultCacheEntry{value: val, exp: nowFunc().Add(p.ttl)}
 }
 
 // nowFunc is a clock seam for the cache-expiry tests.
@@ -201,37 +173,18 @@ type vaultClient interface {
 // filtered out of the user-facing secret listing (see filterReservedSecretNames).
 const vaultConfigSecretName = "cfg:secret-manager"
 
-// saveVaultConfig validates and persists a tenant's secret-manager config
-// (encrypted, in the tenant's own store).
+// saveVaultConfig / loadVaultConfig / deleteVaultConfig are the vault
+// bindings of the shared per-provider config storage.
 func saveVaultConfig(ctx context.Context, es *EncryptedSecrets, tenant string, cfg VaultConfig) error {
-	if err := cfg.validate(); err != nil {
-		return err
-	}
-	b, err := json.Marshal(cfg)
-	if err != nil {
-		return err
-	}
-	return es.Put(ctx, tenant, vaultConfigSecretName, string(b))
+	return saveProviderConfig(ctx, es, tenant, vaultConfigSecretName, cfg)
 }
 
-// loadVaultConfig returns a tenant's config; ok=false when none is set.
 func loadVaultConfig(ctx context.Context, es *EncryptedSecrets, tenant string) (VaultConfig, bool, error) {
-	raw, err := es.Get(core.WithTenant(ctx, tenant), vaultConfigSecretName)
-	if err != nil {
-		if errors.Is(err, ErrSecretNotFound) {
-			return VaultConfig{}, false, nil
-		}
-		return VaultConfig{}, false, err
-	}
-	var cfg VaultConfig
-	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
-		return VaultConfig{}, false, fmt.Errorf("decode secret-manager config: %w", err)
-	}
-	return cfg, true, nil
+	return loadProviderConfig[VaultConfig](ctx, es, tenant, vaultConfigSecretName)
 }
 
 func deleteVaultConfig(ctx context.Context, es *EncryptedSecrets, tenant string) error {
-	return es.Delete(ctx, tenant, vaultConfigSecretName)
+	return deleteProviderConfig(ctx, es, tenant, vaultConfigSecretName)
 }
 
 // filterReservedSecretNames drops internal "cfg:" entries (e.g. the secret-

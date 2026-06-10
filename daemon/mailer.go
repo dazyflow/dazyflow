@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"mime"
 	"net"
@@ -10,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"git.sr.ht/~klahr/hazyflow/internal/smtputil"
 )
 
 // Mailer sends the platform's own transactional email — invitation
@@ -94,59 +95,17 @@ func NewMailerFromURL(rawURL, from string) (*Mailer, error) {
 // caller treats a returned error as "log and move on" — transactional
 // email must never fail the action that triggered it.
 func (m *Mailer) Send(ctx context.Context, to, subject, body string) error {
-	addr := net.JoinHostPort(m.host, m.port)
-	var conn net.Conn
-	var err error
-	dialer := &net.Dialer{Timeout: m.timeout}
-	if m.tlsMode == "implicit" {
-		conn, err = (&tls.Dialer{NetDialer: dialer, Config: &tls.Config{ServerName: m.host}}).DialContext(ctx, "tcp", addr)
-	} else {
-		conn, err = dialer.DialContext(ctx, "tcp", addr)
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, m.timeout)
+		defer cancel()
 	}
-	if err != nil {
-		return fmt.Errorf("dial %s: %w", addr, err)
-	}
-	if dl, ok := ctx.Deadline(); ok {
-		_ = conn.SetDeadline(dl)
-	} else {
-		_ = conn.SetDeadline(time.Now().Add(m.timeout))
-	}
-
-	c, err := smtp.NewClient(conn, m.host)
-	if err != nil {
-		conn.Close()
-		return fmt.Errorf("smtp client: %w", err)
-	}
-	defer c.Close()
-	if m.tlsMode == "starttls" {
-		if ok, _ := c.Extension("STARTTLS"); ok {
-			if err := c.StartTLS(&tls.Config{ServerName: m.host}); err != nil {
-				return fmt.Errorf("starttls: %w", err)
-			}
-		}
-	}
+	var auth smtp.Auth
 	if m.username != "" {
-		if err := c.Auth(smtp.PlainAuth("", m.username, m.password, m.host)); err != nil {
-			return fmt.Errorf("auth: %w", err)
-		}
+		auth = smtp.PlainAuth("", m.username, m.password, m.host)
 	}
-	if err := c.Mail(m.From); err != nil {
-		return fmt.Errorf("mail from: %w", err)
-	}
-	if err := c.Rcpt(to); err != nil {
-		return fmt.Errorf("rcpt %s: %w", to, err)
-	}
-	w, err := c.Data()
-	if err != nil {
-		return fmt.Errorf("data: %w", err)
-	}
-	if _, err := w.Write(mailerMessage(m.From, to, subject, body)); err != nil {
-		return fmt.Errorf("write body: %w", err)
-	}
-	if err := w.Close(); err != nil {
-		return fmt.Errorf("close body: %w", err)
-	}
-	return c.Quit()
+	return smtputil.Send(ctx, net.JoinHostPort(m.host, m.port), m.host, m.tlsMode,
+		auth, m.From, []string{to}, mailerMessage(m.From, to, subject, body))
 }
 
 // mailerMessage assembles a plain-text RFC 822 message. Address headers

@@ -130,6 +130,26 @@ func TestUpdateMemberRoles(t *testing.T) {
 	if len(resp.Roles) != 1 || resp.Roles[0].Name != "viewer" {
 		t.Errorf("response roles = %+v", resp.Roles)
 	}
+
+	// Name-only roles resolve to the SERVER's catalog definition — the
+	// client never has to (and shouldn't) ship permission lists.
+	rw = teamAdminDo(t, h, "PATCH", "/api/v1/admin/members/member@example.com", map[string]any{
+		"roles": []map[string]any{{"name": "editor"}},
+	})
+	if rw.Code != http.StatusOK {
+		t.Fatalf("name-only status = %d, body %s", rw.Code, rw.Body.String())
+	}
+	m, _ = store.GetMembership(t.Context(), "member@example.com", "t")
+	if len(m.Roles) != 1 || !m.Roles[0].Has(core.PermGraphEdit) || !m.Roles[0].Has(core.PermSecretWrite) {
+		t.Errorf("name-only editor did not resolve to catalog perms: %+v", m.Roles)
+	}
+	// A name-only role outside the catalog is a 400, not an empty grant.
+	rw = teamAdminDo(t, h, "PATCH", "/api/v1/admin/members/member@example.com", map[string]any{
+		"roles": []map[string]any{{"name": "superuser"}},
+	})
+	if rw.Code != http.StatusBadRequest {
+		t.Errorf("unknown name-only role status = %d, want 400", rw.Code)
+	}
 }
 
 func TestUpdateMemberRoles_Guards(t *testing.T) {

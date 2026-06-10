@@ -5,7 +5,6 @@ package notify
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"mime"
@@ -18,6 +17,7 @@ import (
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
 	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
 	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/hazyflow/internal/smtputil"
 )
 
 func init() {
@@ -213,7 +213,7 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 	}
 
 	emitProgress(progress, job, 0.3, "dial "+addr)
-	if err := sendEmail(ctx, addr, host, tlsMode, auth, from, to, msg); err != nil {
+	if err := smtputil.Send(ctx, addr, host, tlsMode, auth, from, to, msg); err != nil {
 		return params.Err(job, "send_failed", err.Error()), nil
 	}
 	emitProgress(progress, job, 1.0, "delivered")
@@ -263,59 +263,4 @@ func buildMessage(from string, to []string, subject, body string, atts []mailmsg
 	sb.WriteString(body + "\r\n")
 	mailmsg.WriteAttachmentParts(&sb, boundary, atts)
 	return []byte(sb.String())
-}
-
-func sendEmail(ctx context.Context, addr, host, mode string, auth smtp.Auth, from string, to []string, msg []byte) error {
-	var conn net.Conn
-	var err error
-	switch mode {
-	case "implicit":
-		dialer := tls.Dialer{Config: &tls.Config{ServerName: host}}
-		conn, err = dialer.DialContext(ctx, "tcp", addr)
-	default:
-		dialer := &net.Dialer{}
-		conn, err = dialer.DialContext(ctx, "tcp", addr)
-	}
-	if err != nil {
-		return fmt.Errorf("dial %s: %w", addr, err)
-	}
-
-	c, err := smtp.NewClient(conn, host)
-	if err != nil {
-		conn.Close()
-		return fmt.Errorf("smtp client: %w", err)
-	}
-	defer c.Close()
-
-	if mode == "starttls" {
-		if ok, _ := c.Extension("STARTTLS"); ok {
-			if err := c.StartTLS(&tls.Config{ServerName: host}); err != nil {
-				return fmt.Errorf("starttls: %w", err)
-			}
-		}
-	}
-	if auth != nil {
-		if err := c.Auth(auth); err != nil {
-			return fmt.Errorf("auth: %w", err)
-		}
-	}
-	if err := c.Mail(from); err != nil {
-		return fmt.Errorf("mail from: %w", err)
-	}
-	for _, rcpt := range to {
-		if err := c.Rcpt(rcpt); err != nil {
-			return fmt.Errorf("rcpt %s: %w", rcpt, err)
-		}
-	}
-	w, err := c.Data()
-	if err != nil {
-		return fmt.Errorf("data: %w", err)
-	}
-	if _, err := w.Write(msg); err != nil {
-		return fmt.Errorf("write body: %w", err)
-	}
-	if err := w.Close(); err != nil {
-		return fmt.Errorf("close body: %w", err)
-	}
-	return c.Quit()
 }

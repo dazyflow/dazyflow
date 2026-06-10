@@ -1,9 +1,6 @@
 package daemon
 
 import (
-	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -37,16 +34,7 @@ type secretManagerView struct {
 }
 
 func (h *HTTPGateway) getSecretManager(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if h.EncryptedSecrets == nil {
-		writeJSONError(rw, http.StatusNotImplemented, "encrypted secret store is not configured")
-		return
-	}
-	if p.Tenant == "" {
-		writeJSONError(rw, http.StatusForbidden, "principal has no tenant")
-		return
-	}
-	if err := core.Require(p, core.PermSecretRead); err != nil {
-		writeJSONError(rw, http.StatusForbidden, err.Error())
+	if !h.secretManagerGate(rw, p, core.PermSecretRead) {
 		return
 	}
 	cfg, ok, err := loadVaultConfig(r.Context(), h.EncryptedSecrets, p.Tenant)
@@ -68,62 +56,14 @@ func (h *HTTPGateway) getSecretManager(rw http.ResponseWriter, r *http.Request, 
 }
 
 func (h *HTTPGateway) putSecretManager(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if h.EncryptedSecrets == nil {
-		writeJSONError(rw, http.StatusNotImplemented, "encrypted secret store is not configured")
-		return
-	}
-	if p.Tenant == "" {
-		writeJSONError(rw, http.StatusForbidden, "principal has no tenant")
-		return
-	}
-	if err := core.Require(p, core.PermSecretWrite); err != nil {
-		writeJSONError(rw, http.StatusForbidden, err.Error())
-		return
-	}
-	r.Body = http.MaxBytesReader(rw, r.Body, maxSecretValueBytes)
-	var cfg VaultConfig
-	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
-		return
-	}
-	if err := cfg.validate(); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, err.Error())
-		return
-	}
-	// Connection-test before persisting, so a bad address/credential fails here
-	// rather than silently breaking every flow that references a vault secret.
-	ctx, cancel := context.WithTimeout(r.Context(), vaultVerifyTimeout)
-	defer cancel()
-	if err := VerifyVaultConfig(ctx, cfg, vaultVerifyTimeout); err != nil {
-		writeJSONError(rw, http.StatusBadGateway, fmt.Sprintf("could not reach the secret manager: %v", err))
-		return
-	}
-	if err := saveVaultConfig(r.Context(), h.EncryptedSecrets, p.Tenant, cfg); err != nil {
-		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("save secret-manager config: %v", err))
-		return
-	}
-	// Audit the connection target + auth method — never the credentials.
-	h.audit(r.Context(), p, "secret_manager.put", cfg.Address, cfg.Auth.Method)
-	rw.WriteHeader(http.StatusNoContent)
+	putSecretManagerConfig(h, rw, r, p, "the secret manager", vaultConfigSecretName,
+		VerifyVaultConfig,
+		// Audit the connection target + auth method — never the credentials.
+		func(cfg VaultConfig) (string, string, string) {
+			return "secret_manager.put", cfg.Address, cfg.Auth.Method
+		})
 }
 
 func (h *HTTPGateway) deleteSecretManager(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if h.EncryptedSecrets == nil {
-		writeJSONError(rw, http.StatusNotImplemented, "encrypted secret store is not configured")
-		return
-	}
-	if p.Tenant == "" {
-		writeJSONError(rw, http.StatusForbidden, "principal has no tenant")
-		return
-	}
-	if err := core.Require(p, core.PermSecretWrite); err != nil {
-		writeJSONError(rw, http.StatusForbidden, err.Error())
-		return
-	}
-	if err := deleteVaultConfig(r.Context(), h.EncryptedSecrets, p.Tenant); err != nil && !errors.Is(err, ErrSecretNotFound) {
-		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("delete secret-manager config: %v", err))
-		return
-	}
-	h.audit(r.Context(), p, "secret_manager.delete", "", "")
-	rw.WriteHeader(http.StatusNoContent)
+	deleteSecretManagerConfig(h, rw, r, p, "secret-manager", vaultConfigSecretName, "secret_manager.delete")
 }

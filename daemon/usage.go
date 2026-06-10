@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -104,4 +105,99 @@ func (m *MemUsageStore) Usage(_ context.Context, tenant string, months int) ([]U
 		out = out[:months]
 	}
 	return out, nil
+}
+
+// BufferedUsage batches node-execution counts in memory and flushes
+// them to the inner store on an interval. Without it every executed
+// node attempt is a synchronous upsert against the SAME (tenant, month)
+// row — a lock-contention point once many workers serve one busy
+// tenant. Runs pass through unbatched (they're far rarer, and the run
+// gate reads them); reads flush first so the gate and the Usage page
+// never lag behind by more than the in-flight call. Losing one unflushed
+// window on crash is within the metering's documented best-effort
+// contract.
+type BufferedUsage struct {
+	inner UsageStore
+
+	mu      sync.Mutex
+	pending map[string]int // tenant + "\x00" + period → executions
+}
+
+func NewBufferedUsage(inner UsageStore) *BufferedUsage {
+	return &BufferedUsage{inner: inner, pending: map[string]int{}}
+}
+
+func (b *BufferedUsage) AddRun(ctx context.Context, tenant string, now time.Time) error {
+	return b.inner.AddRun(ctx, tenant, now)
+}
+
+func (b *BufferedUsage) AddNodeExecutions(_ context.Context, tenant string, n int, now time.Time) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.pending[tenant+"\x00"+usagePeriod(now)] += n
+	return nil
+}
+
+func (b *BufferedUsage) Usage(ctx context.Context, tenant string, months int) ([]UsageCounters, error) {
+	// Flush first so reads never lag by more than the in-flight call. A
+	// failed flush already re-queued its counts; the read proceeds on
+	// whatever the inner store has.
+	_ = b.Flush(ctx)
+	return b.inner.Usage(ctx, tenant, months)
+}
+
+// Flush writes all pending counts through. Counts that fail to write
+// are re-queued so a transient store error loses nothing.
+func (b *BufferedUsage) Flush(ctx context.Context) error {
+	var firstErr error
+	for key, n := range b.snapshot() {
+		tenant, periodKey, _ := strings.Cut(key, "\x00")
+		// Reconstruct a timestamp inside the bucket's month so the
+		// inner store lands the count in the right period.
+		ts, err := time.Parse("2006-01", periodKey)
+		if err != nil {
+			continue // unreachable: keys are built from usagePeriod
+		}
+		if err := b.inner.AddNodeExecutions(ctx, tenant, n, ts); err != nil {
+			b.mu.Lock()
+			b.pending[key] += n
+			b.mu.Unlock()
+			if firstErr == nil {
+				firstErr = err
+			}
+		}
+	}
+	return firstErr
+}
+
+// snapshot drains the pending map under the lock.
+func (b *BufferedUsage) snapshot() map[string]int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	out := b.pending
+	b.pending = map[string]int{}
+	return out
+}
+
+// Run flushes every interval until ctx is cancelled, then flushes one
+// last time so a graceful shutdown loses nothing.
+func (b *BufferedUsage) Run(ctx context.Context, every time.Duration) {
+	if every <= 0 {
+		every = 5 * time.Second
+	}
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			_ = b.Flush(context.WithoutCancel(ctx))
+			return
+		case <-t.C:
+			if err := b.Flush(ctx); err != nil {
+				// Logged by callers' stores already; nothing more to do —
+				// the counts are re-queued.
+				continue
+			}
+		}
+	}
 }

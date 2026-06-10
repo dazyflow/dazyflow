@@ -1,9 +1,6 @@
 package daemon
 
 import (
-	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 
@@ -74,44 +71,16 @@ func (h *HTTPGateway) getSecretManagerAws(rw http.ResponseWriter, r *http.Reques
 }
 
 func (h *HTTPGateway) putSecretManagerAws(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !h.secretManagerGate(rw, p, core.PermSecretWrite) {
-		return
-	}
-	r.Body = http.MaxBytesReader(rw, r.Body, maxSecretValueBytes)
-	var cfg AwsSecretsConfig
-	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
-		return
-	}
-	if err := cfg.validate(); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, err.Error())
-		return
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), vaultVerifyTimeout)
-	defer cancel()
-	if err := VerifyAwsConfig(ctx, cfg, vaultVerifyTimeout); err != nil {
-		writeJSONError(rw, http.StatusBadGateway, fmt.Sprintf("could not reach AWS Secrets Manager: %v", err))
-		return
-	}
-	if err := saveAwsConfig(r.Context(), h.EncryptedSecrets, p.Tenant, cfg); err != nil {
-		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("save AWS secret-manager config: %v", err))
-		return
-	}
-	// Audit the region + key id — never the secret access key.
-	h.audit(r.Context(), p, "secret_manager.aws.put", cfg.Region, cfg.AccessKeyID)
-	rw.WriteHeader(http.StatusNoContent)
+	putSecretManagerConfig(h, rw, r, p, "AWS Secrets Manager", awsConfigSecretName,
+		VerifyAwsConfig,
+		// Audit the region + key id — never the secret access key.
+		func(cfg AwsSecretsConfig) (string, string, string) {
+			return "secret_manager.aws.put", cfg.Region, cfg.AccessKeyID
+		})
 }
 
 func (h *HTTPGateway) deleteSecretManagerAws(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !h.secretManagerGate(rw, p, core.PermSecretWrite) {
-		return
-	}
-	if err := deleteAwsConfig(r.Context(), h.EncryptedSecrets, p.Tenant); err != nil && !errors.Is(err, ErrSecretNotFound) {
-		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("delete AWS secret-manager config: %v", err))
-		return
-	}
-	h.audit(r.Context(), p, "secret_manager.aws.delete", "", "")
-	rw.WriteHeader(http.StatusNoContent)
+	deleteSecretManagerConfig(h, rw, r, p, "AWS Secrets Manager", awsConfigSecretName, "secret_manager.aws.delete")
 }
 
 // ── GCP ────────────────────────────────────────────────────────────────
@@ -147,46 +116,18 @@ func (h *HTTPGateway) getSecretManagerGcp(rw http.ResponseWriter, r *http.Reques
 }
 
 func (h *HTTPGateway) putSecretManagerGcp(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !h.secretManagerGate(rw, p, core.PermSecretWrite) {
-		return
-	}
-	r.Body = http.MaxBytesReader(rw, r.Body, maxSecretValueBytes)
-	var cfg GcpSecretsConfig
-	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
-		return
-	}
-	if err := cfg.validate(); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, err.Error())
-		return
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), vaultVerifyTimeout)
-	defer cancel()
-	if err := VerifyGcpConfig(ctx, cfg, vaultVerifyTimeout); err != nil {
-		writeJSONError(rw, http.StatusBadGateway, fmt.Sprintf("could not reach GCP Secret Manager: %v", err))
-		return
-	}
-	if err := saveGcpConfig(r.Context(), h.EncryptedSecrets, p.Tenant, cfg); err != nil {
-		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("save GCP secret-manager config: %v", err))
-		return
-	}
-	// Audit the project + service account — never the private key.
-	email := ""
-	if key, err := cfg.key(); err == nil {
-		email = key.ClientEmail
-	}
-	h.audit(r.Context(), p, "secret_manager.gcp.put", cfg.ProjectID, email)
-	rw.WriteHeader(http.StatusNoContent)
+	putSecretManagerConfig(h, rw, r, p, "GCP Secret Manager", gcpConfigSecretName,
+		VerifyGcpConfig,
+		// Audit the project + service account — never the private key.
+		func(cfg GcpSecretsConfig) (string, string, string) {
+			email := ""
+			if key, err := cfg.key(); err == nil {
+				email = key.ClientEmail
+			}
+			return "secret_manager.gcp.put", cfg.ProjectID, email
+		})
 }
 
 func (h *HTTPGateway) deleteSecretManagerGcp(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !h.secretManagerGate(rw, p, core.PermSecretWrite) {
-		return
-	}
-	if err := deleteGcpConfig(r.Context(), h.EncryptedSecrets, p.Tenant); err != nil && !errors.Is(err, ErrSecretNotFound) {
-		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("delete GCP secret-manager config: %v", err))
-		return
-	}
-	h.audit(r.Context(), p, "secret_manager.gcp.delete", "", "")
-	rw.WriteHeader(http.StatusNoContent)
+	deleteSecretManagerConfig(h, rw, r, p, "GCP Secret Manager", gcpConfigSecretName, "secret_manager.gcp.delete")
 }

@@ -195,7 +195,8 @@ function MemberCard({
     if (next !== "viewer" && next !== "editor" && next !== "admin") return;
     setSavingRole(true);
     try {
-      await api.updateMemberRoles(token, member.email, [rolePresetFor(next)]);
+      // Name-only: the server fills in the catalog role's permissions.
+      await api.updateMemberRoles(token, member.email, [{ name: next, permissions: [] }]);
       onChanged();
     } catch (e) {
       alert((e as Error).message);
@@ -438,9 +439,12 @@ function InviteModal({
     if (!token || !canSubmit) return;
     setSubmitting(true);
     try {
+      // Send the role by NAME only — the server resolves the catalog
+      // role to its current permission set, so the lists in
+      // rolePresetFor below are display-only and can't drift the grant.
       const inv = await api.createInvitation(token, {
         email: trimmed,
-        roles: [selectedRole],
+        roles: [{ name: roleName, permissions: [] }],
       });
       onIssued(inv);
     } catch (e) {
@@ -533,9 +537,9 @@ function InviteModal({
   );
 }
 
-// The team role catalog — mirrors core.TeamRoleViewer/Editor/Admin on
-// the server (the server re-validates against the caller's own
-// permissions, so this is display + convenience, not authority).
+// The team role catalog — DISPLAY ONLY. Grants are sent by name and the
+// server resolves them via core.TeamRoleByName, so these permission
+// lists exist purely for the invite modal's preview chips.
 type TeamRoleName = "viewer" | "editor" | "admin";
 
 const TEAM_ROLE_NAMES: TeamRoleName[] = ["viewer", "editor", "admin"];

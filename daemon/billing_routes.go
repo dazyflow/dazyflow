@@ -42,9 +42,10 @@ func NewBillingHandler(stripe *StripeClient, webhookSecret string) *BillingHandl
 	}
 }
 
-// resolveBillingTenant applies the same scope rule as usageMe: the
+// resolveTenantScope applies the shared /me/* scope rule: the
 // principal's own tenant unless a platform admin asks about another.
-func resolveBillingTenant(rw http.ResponseWriter, r *http.Request, p core.Principal) (string, bool) {
+// Used by the usage and billing handlers.
+func resolveTenantScope(rw http.ResponseWriter, r *http.Request, p core.Principal) (string, bool) {
 	tenant := r.URL.Query().Get("tenant")
 	if tenant == "" {
 		tenant = p.Tenant
@@ -66,7 +67,7 @@ func resolveBillingTenant(rw http.ResponseWriter, r *http.Request, p core.Princi
 // plan state: plan, whether upgrading is possible on this deployment,
 // the free-tier cap (0 = no enforcement), and this month's run count.
 func (h *HTTPGateway) billingMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	tenant, ok := resolveBillingTenant(rw, r, p)
+	tenant, ok := resolveTenantScope(rw, r, p)
 	if !ok {
 		return
 	}
@@ -80,10 +81,7 @@ func (h *HTTPGateway) billingMe(rw http.ResponseWriter, r *http.Request, p core.
 	}
 	var runsThisMonth int64
 	if h.svc.Usage != nil {
-		if buckets, err := h.svc.Usage.Usage(r.Context(), tenant, 1); err == nil &&
-			len(buckets) > 0 && buckets[0].Period == usagePeriod(time.Now()) {
-			runsThisMonth = buckets[0].GraphRuns
-		}
+		runsThisMonth, _ = h.svc.runsThisMonth(r.Context(), tenant)
 	}
 	writeJSON(rw, http.StatusOK, map[string]any{
 		"plan":                plan.Plan,
@@ -108,7 +106,7 @@ func (h *HTTPGateway) billingCheckout(rw http.ResponseWriter, r *http.Request, p
 			"billing is not enabled on this deployment")
 		return
 	}
-	tenant, ok := resolveBillingTenant(rw, r, p)
+	tenant, ok := resolveTenantScope(rw, r, p)
 	if !ok {
 		return
 	}
@@ -136,7 +134,7 @@ func (h *HTTPGateway) billingPortal(rw http.ResponseWriter, r *http.Request, p c
 			"billing is not enabled on this deployment")
 		return
 	}
-	tenant, ok := resolveBillingTenant(rw, r, p)
+	tenant, ok := resolveTenantScope(rw, r, p)
 	if !ok {
 		return
 	}

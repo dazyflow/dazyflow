@@ -10,7 +10,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -34,21 +33,15 @@ import (
 // cloud.google.com/go + google.golang.org/api — the provider needs one GET
 // and one token exchange; same dependency trade as the AWS provider.
 type GcpSecretsProvider struct {
-	client gcpSecretsClient
+	client *gcpAPIClient
 	// loadConfig returns the calling tenant's connection config. ok=false
 	// means the tenant hasn't configured GCP.
 	loadConfig func(ctx context.Context, tenant string) (cfg GcpSecretsConfig, ok bool, err error)
-	ttl        time.Duration
-
-	mu    sync.Mutex
-	cache map[string]vaultCacheEntry
+	cache      *tenantSecretCache
 }
 
-func NewGcpSecretsProvider(client gcpSecretsClient, loadConfig func(context.Context, string) (GcpSecretsConfig, bool, error), ttl time.Duration) *GcpSecretsProvider {
-	if ttl <= 0 {
-		ttl = defaultVaultCacheTTL
-	}
-	return &GcpSecretsProvider{client: client, loadConfig: loadConfig, ttl: ttl, cache: map[string]vaultCacheEntry{}}
+func NewGcpSecretsProvider(client *gcpAPIClient, loadConfig func(context.Context, string) (GcpSecretsConfig, bool, error), ttl time.Duration) *GcpSecretsProvider {
+	return &GcpSecretsProvider{client: client, loadConfig: loadConfig, cache: newTenantSecretCache(ttl)}
 }
 
 func NewGcpSecretsProviderForStore(es *EncryptedSecrets, httpTimeout time.Duration) *GcpSecretsProvider {
@@ -85,7 +78,7 @@ func (p *GcpSecretsProvider) Get(ctx context.Context, ref string) (string, error
 		return "", fmt.Errorf("gcp reference %q must be NAME or NAME#field", ref)
 	}
 	key := tenant + "\x00" + ref
-	if v, ok := p.cached(key); ok {
+	if v, ok := p.cache.get(key); ok {
 		return v, nil
 	}
 
@@ -104,24 +97,8 @@ func (p *GcpSecretsProvider) Get(ctx context.Context, ref string) (string, error
 	if err != nil {
 		return "", fmt.Errorf("gcp: secret %q: %w", name, err)
 	}
-	p.store(key, val)
+	p.cache.put(key, val)
 	return val, nil
-}
-
-func (p *GcpSecretsProvider) cached(key string) (string, bool) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	e, ok := p.cache[key]
-	if !ok || !e.exp.After(nowFunc()) {
-		return "", false
-	}
-	return e.value, true
-}
-
-func (p *GcpSecretsProvider) store(key, val string) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.cache[key] = vaultCacheEntry{value: val, exp: nowFunc().Add(p.ttl)}
 }
 
 // GcpSecretsConfig is one tenant's connection to GCP Secret Manager: the
@@ -182,40 +159,15 @@ func (c GcpSecretsConfig) endpointURL() string {
 const gcpConfigSecretName = "cfg:secret-manager-gcp"
 
 func saveGcpConfig(ctx context.Context, es *EncryptedSecrets, tenant string, cfg GcpSecretsConfig) error {
-	if err := cfg.validate(); err != nil {
-		return err
-	}
-	b, err := json.Marshal(cfg)
-	if err != nil {
-		return err
-	}
-	return es.Put(ctx, tenant, gcpConfigSecretName, string(b))
+	return saveProviderConfig(ctx, es, tenant, gcpConfigSecretName, cfg)
 }
 
 func loadGcpConfig(ctx context.Context, es *EncryptedSecrets, tenant string) (GcpSecretsConfig, bool, error) {
-	raw, err := es.Get(core.WithTenant(ctx, tenant), gcpConfigSecretName)
-	if err != nil {
-		if errors.Is(err, ErrSecretNotFound) {
-			return GcpSecretsConfig{}, false, nil
-		}
-		return GcpSecretsConfig{}, false, err
-	}
-	var cfg GcpSecretsConfig
-	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
-		return GcpSecretsConfig{}, false, fmt.Errorf("decode GCP secret-manager config: %w", err)
-	}
-	return cfg, true, nil
+	return loadProviderConfig[GcpSecretsConfig](ctx, es, tenant, gcpConfigSecretName)
 }
 
 func deleteGcpConfig(ctx context.Context, es *EncryptedSecrets, tenant string) error {
-	return es.Delete(ctx, tenant, gcpConfigSecretName)
-}
-
-// gcpSecretsClient is the minimal Secret Manager surface the provider needs.
-// Split out so tests run without GCP.
-type gcpSecretsClient interface {
-	accessSecret(ctx context.Context, cfg GcpSecretsConfig, name string) (string, error)
-	verify(ctx context.Context, cfg GcpSecretsConfig) error
+	return deleteProviderConfig(ctx, es, tenant, gcpConfigSecretName)
 }
 
 // gcpAPIClient speaks Secret Manager's REST API with service-account JWT →

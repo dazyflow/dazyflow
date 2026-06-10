@@ -3,7 +3,6 @@ package stripe
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -84,11 +83,8 @@ func executeSearchCustomers(ctx context.Context, job core.Job, _ chan<- core.Pro
 	q.Set("limit", strconv.Itoa(limit))
 
 	status, body, err := stripeDo(ctx, job, http.MethodGet, baseURL(job)+"/customers/search?"+q.Encode(), "")
-	if err != nil {
-		return params.Err(job, "stripe_http_error", err.Error()), nil
-	}
-	if status < 200 || status >= 300 {
-		return params.Err(job, "stripe_error", fmt.Sprintf("Stripe returned %d: %s", status, extractStripeError(body))), nil
+	if r := stripeFailure(job, status, body, err); r != nil {
+		return *r, nil
 	}
 	var parsed struct {
 		Data []map[string]any `json:"data"`

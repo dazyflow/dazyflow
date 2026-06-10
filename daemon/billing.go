@@ -101,6 +101,35 @@ func (m *MemPlanStore) SetPlan(_ context.Context, p TenantPlan) error {
 	return nil
 }
 
+// tenantIsFree resolves whether the plan gates apply to tenant. Fails
+// OPEN (reports pro) on plan-store errors: a billing-infrastructure
+// hiccup must degrade to "no gate" rather than "product down".
+func (s *Service) tenantIsFree(ctx context.Context, tenant, gate string) bool {
+	plan, err := s.Plans.GetPlan(ctx, tenant)
+	if err != nil {
+		if s.Logger != nil {
+			s.Logger.Printf("%s [%s]: read plan (failing open): %v", gate, tenant, err)
+		}
+		return false
+	}
+	return plan.Plan != PlanPro
+}
+
+// runsThisMonth reads the tenant's current-month run count from the
+// metering buckets. One home for the "current bucket" semantics, shared
+// by the run gate and the billing view — when billing-day anchoring
+// lands, both change together.
+func (s *Service) runsThisMonth(ctx context.Context, tenant string) (int64, error) {
+	buckets, err := s.Usage.Usage(ctx, tenant, 1)
+	if err != nil {
+		return 0, err
+	}
+	if len(buckets) > 0 && buckets[0].Period == usagePeriod(time.Now()) {
+		return buckets[0].GraphRuns, nil
+	}
+	return 0, nil
+}
+
 // checkTriggerQuota is the free-tier scheduling gate, called by the
 // scheduler before firing a cron/poll trigger. Same fail-open policy as
 // checkRunQuota: a billing-store hiccup must not silence everyone's
@@ -109,14 +138,7 @@ func (s *Service) checkTriggerQuota(ctx context.Context, tenant string) error {
 	if !s.FreePollingDisabled || s.Plans == nil {
 		return nil
 	}
-	plan, err := s.Plans.GetPlan(ctx, tenant)
-	if err != nil {
-		if s.Logger != nil {
-			s.Logger.Printf("trigger gate [%s]: read plan (failing open): %v", tenant, err)
-		}
-		return nil
-	}
-	if plan.Plan == PlanPro {
+	if !s.tenantIsFree(ctx, tenant, "trigger gate") {
 		return nil
 	}
 	return fmt.Errorf("%w: schedules and polling triggers are a Pro feature — manual runs still work", core.ErrPlanLimit)
@@ -124,38 +146,91 @@ func (s *Service) checkTriggerQuota(ctx context.Context, tenant string) error {
 
 // checkRunQuota is the free-tier run gate, called by SubmitGraphWithSeed
 // before any run state is written. Pro tenants and deployments without
-// enforcement configured pass through. Fails OPEN on plan/usage store
-// errors: a billing-infrastructure hiccup must degrade to "runs work,
-// maybe one too many" rather than "product down" — the counters
-// themselves stay correct either way.
+// enforcement configured pass through; usage-store errors fail open too.
 func (s *Service) checkRunQuota(ctx context.Context, tenant string) error {
 	if s.FreeRunsPerMonth <= 0 || s.Plans == nil || s.Usage == nil {
 		return nil
 	}
-	plan, err := s.Plans.GetPlan(ctx, tenant)
-	if err != nil {
-		if s.Logger != nil {
-			s.Logger.Printf("plan gate [%s]: read plan (failing open): %v", tenant, err)
-		}
+	if !s.tenantIsFree(ctx, tenant, "plan gate") {
 		return nil
 	}
-	if plan.Plan == PlanPro {
-		return nil
-	}
-	buckets, err := s.Usage.Usage(ctx, tenant, 1)
+	used, err := s.runsThisMonth(ctx, tenant)
 	if err != nil {
 		if s.Logger != nil {
 			s.Logger.Printf("plan gate [%s]: read usage (failing open): %v", tenant, err)
 		}
 		return nil
 	}
-	var used int64
-	if len(buckets) > 0 && buckets[0].Period == usagePeriod(time.Now()) {
-		used = buckets[0].GraphRuns
-	}
 	if used >= int64(s.FreeRunsPerMonth) {
 		return fmt.Errorf("%w: %d of %d free runs used this month — upgrade to keep your flows running",
 			core.ErrPlanLimit, used, s.FreeRunsPerMonth)
 	}
 	return nil
+}
+
+// CachedPlanStore fronts a PlanStore with a short-TTL read cache. Plans
+// sit on the hottest paths — every gated submission and every scheduled
+// fire reads one — but change only via the Stripe webhook, whose
+// SetPlan writes through this cache so the SAME replica sees the flip
+// immediately. Other replicas converge within ttl (default 30s): an
+// acceptable upgrade lag, in keeping with the gates' fail-open posture.
+type CachedPlanStore struct {
+	inner PlanStore
+	ttl   time.Duration
+
+	mu      sync.Mutex
+	entries map[string]planCacheEntry
+}
+
+type planCacheEntry struct {
+	plan TenantPlan
+	exp  time.Time
+}
+
+func NewCachedPlanStore(inner PlanStore, ttl time.Duration) *CachedPlanStore {
+	if ttl <= 0 {
+		ttl = 30 * time.Second
+	}
+	return &CachedPlanStore{inner: inner, ttl: ttl, entries: map[string]planCacheEntry{}}
+}
+
+func (c *CachedPlanStore) GetPlan(ctx context.Context, tenant string) (TenantPlan, error) {
+	c.mu.Lock()
+	if e, ok := c.entries[tenant]; ok && e.exp.After(nowFunc()) {
+		c.mu.Unlock()
+		return e.plan, nil
+	}
+	c.mu.Unlock()
+	plan, err := c.inner.GetPlan(ctx, tenant)
+	if err != nil {
+		return plan, err
+	}
+	c.store(tenant, plan)
+	return plan, nil
+}
+
+func (c *CachedPlanStore) SetPlan(ctx context.Context, p TenantPlan) error {
+	if err := c.inner.SetPlan(ctx, p); err != nil {
+		return err
+	}
+	if p.Plan == "" {
+		p.Plan = PlanFree // mirror the stores' normalization
+	}
+	c.store(p.Tenant, p)
+	return nil
+}
+
+func (c *CachedPlanStore) store(tenant string, plan TenantPlan) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.entries[tenant] = planCacheEntry{plan: plan, exp: nowFunc().Add(c.ttl)}
+}
+
+// MarkStripeEvent passes the webhook dedupe through to the inner store,
+// so wrapping a PgPlanStore doesn't silently lose replay protection.
+func (c *CachedPlanStore) MarkStripeEvent(ctx context.Context, id string) (bool, error) {
+	if dd, ok := c.inner.(StripeEventDeduper); ok {
+		return dd.MarkStripeEvent(ctx, id)
+	}
+	return true, nil
 }

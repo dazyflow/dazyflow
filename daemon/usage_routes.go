@@ -19,18 +19,8 @@ func (h *HTTPGateway) usageMe(rw http.ResponseWriter, r *http.Request, p core.Pr
 			"usage metering is not enabled on this deployment")
 		return
 	}
-	tenant := r.URL.Query().Get("tenant")
-	if tenant == "" {
-		tenant = p.Tenant
-	}
-	if tenant == "" {
-		writeAPIError(rw, http.StatusBadRequest, "missing_scope",
-			"tenant required (no principal binding)")
-		return
-	}
-	if p.Tenant != "" && tenant != p.Tenant && !isPlatformAdmin(p) {
-		writeAPIError(rw, http.StatusForbidden, "forbidden_scope",
-			"cannot read usage for another tenant")
+	tenant, ok := resolveTenantScope(rw, r, p)
+	if !ok {
 		return
 	}
 
