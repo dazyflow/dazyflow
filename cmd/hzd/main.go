@@ -158,28 +158,7 @@ func main() {
 		}()
 	}
 
-	// Egress allowlist for the http_request drop (operator policy).
-	if httpEgressAllow != "" {
-		if err := hfnet.SetEgressAllowlist(strings.Split(httpEgressAllow, ",")); err != nil {
-			log.Fatalf("HAZYFLOW_HTTP_EGRESS_ALLOW: %v", err)
-		}
-		log.Printf("http_request egress allowlist active: %s", httpEgressAllow)
-	}
-
-	// The http_* drops expose an `allow_private_networks` param that disables
-	// the SSRF guard (reaching loopback/private/link-local incl. cloud
-	// metadata). On an untrusted multi-tenant deployment that's a
-	// tenant-controllable SSRF bypass, so the param is ignored unless the
-	// operator opts in here. Default off.
-	if envBool("HAZYFLOW_ALLOW_PRIVATE_EGRESS", false) {
-		hfnet.SetAllowPrivateEgress(true)
-		log.Print("WARNING: HAZYFLOW_ALLOW_PRIVATE_EGRESS=1 — flows may set allow_private_networks to reach private/loopback hosts (SSRF guard becomes opt-out)")
-	}
-
-	// Route git-over-https clones (git_checkout / git_log) through an
-	// SSRF-guarded client (blocks private/loopback/link-local at dial, e.g.
-	// cloud metadata), so a clone URL can't be used to reach internal services.
-	gitdrop.InstallGuardedHTTPTransport(hfnet.SafeHTTPClient(60*time.Second, false))
+	applyNetworkPolicy(httpEgressAllow)
 
 	// hzd runs on Postgres — there is no in-memory mode. Fail fast and
 	// clearly when the DSN is missing, before the insecure-defaults guard
@@ -193,77 +172,12 @@ func main() {
 	// for local development.
 	validateProductionConfig(devMode, postgresDSN, masterKeyB64)
 
-	// Durable stores: keys / sessions / users / jobs / secrets / org
-	// metadata all persist to one shared pgxpool and survive a restart.
-	// (The NewMem* implementations live on only as test fixtures.)
-	// Declared as interfaces so a fake can slot in under test.
-	var (
-		ks       auth.AdminKeyStore
-		users    auth.UserStore
-		sessions auth.SessionStore
-		jobs     core.JobStore
-		pgPool   *pgxpool.Pool
-	)
-	{
-		poolCfg, err := pgxpool.ParseConfig(postgresDSN)
-		if err != nil {
-			log.Fatalf("postgres dsn: %v", err)
-		}
-		// Pool sizing: pgx defaults MaxConns to max(4, NumCPU), which is
-		// too small for real multi-tenant load — every worker, the
-		// gateway, the scheduler, and the reaper share this one pool, so
-		// 4 connections starve under even modest concurrency. We default
-		// to 20 (override with HAZYFLOW_PG_MAX_CONNS) and keep a couple of
-		// warm connections so a burst doesn't pay connect latency.
-		if pgMaxConns > 0 {
-			poolCfg.MaxConns = int32(pgMaxConns)
-		} else {
-			poolCfg.MaxConns = 20
-		}
-		if pgMinConns > 0 {
-			poolCfg.MinConns = int32(pgMinConns)
-		} else if poolCfg.MinConns < 2 {
-			poolCfg.MinConns = 2
-		}
-		if poolCfg.MinConns > poolCfg.MaxConns {
-			poolCfg.MinConns = poolCfg.MaxConns
-		}
-		pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
-		if err != nil {
-			log.Fatalf("postgres connect: %v", err)
-		}
-		pgPool = pool
-		defer pool.Close()
-		log.Printf("postgres pool: max_conns=%d min_conns=%d", poolCfg.MaxConns, poolCfg.MinConns)
-		if poolCfg.MaxConns < 10 {
-			log.Printf("WARNING: postgres pool max_conns=%d is low for production; set HAZYFLOW_PG_MAX_CONNS to 20+ once you have real concurrent load", poolCfg.MaxConns)
-		}
-		pgKeys, err := auth.NewPgKeyStore(ctx, pool)
-		if err != nil {
-			log.Fatalf("postgres key store: %v", err)
-		}
-		pgUsers, err := auth.NewPgUserStore(ctx, pool)
-		if err != nil {
-			log.Fatalf("postgres user store: %v", err)
-		}
-		pgSessions, err := auth.NewPgSessionStore(ctx, pool)
-		if err != nil {
-			log.Fatalf("postgres session store: %v", err)
-		}
-		pgJobs, err := jobstore.NewPostgresFromPool(ctx, pool)
-		if err != nil {
-			log.Fatalf("postgres job store: %v", err)
-		}
-		// Front the session store with a short-TTL read cache so the
-		// per-request auth lookup doesn't hammer the pool. Returns the
-		// raw store when the TTL is 0.
-		ks, users, sessions, jobs = pgKeys, pgUsers, auth.NewCachingSessionStore(pgSessions, sessionCacheTTL, 0), pgJobs
-		if sessionCacheTTL > 0 {
-			log.Printf("session lookup cache: ttl=%s", sessionCacheTTL)
-		}
-		seedDefaultUser(ctx, users, devKey || devMode)
-		log.Print("postgres stores enabled: jobs, api-keys, sessions, users (durable across restart)")
-	}
+	// Durable stores: keys / sessions / users / jobs all persist to one
+	// shared pgxpool and survive a restart. Declared as interfaces so a
+	// fake can slot in under test.
+	stores := openCoreStores(ctx, postgresDSN, pgMaxConns, pgMinConns, sessionCacheTTL, devKey || devMode)
+	ks, users, sessions, jobs, pgPool := stores.keys, stores.users, stores.sessions, stores.jobs, stores.pool
+	defer pgPool.Close()
 
 	// One-time migration: import a JSON user file into the Postgres user
 	// store, then exit. Idempotent (existing accounts skipped). Lets a dev
@@ -483,133 +397,15 @@ func main() {
 	// when HAZYFLOW_ENABLE_METRICS is on.
 	appMetrics := daemon.NewMetrics()
 
-	// Spin up worker goroutines. Each is independent and competes for
-	// claims; the JobStore makes that contention safe.
-	for i := 0; i < workerCount; i++ {
-		w := daemon.NewWorker(daemon.WorkerConfig{
-			ID:      fmt.Sprintf("hzd-dev-w%d", i),
-			Metrics: appMetrics,
-		}, jobs, eng, bus)
-		// Enable subgraph execution: the worker hands a parked subgraph
-		// node's child graph to the Service to submit and run. Without
-		// this, `subgraph` nodes park forever. Recursion is bounded by
-		// maxSubgraphDepth in SubmitChild.
-		w.SubGraphRunner = svc
-		bgWg.Add(1)
-		go func() {
-			defer bgWg.Done()
-			if err := w.Run(ctx); err != nil && err != context.Canceled {
-				log.Printf("worker stopped: %v", err)
-			}
-		}()
-	}
-
-	// Cron scheduler fires graphs that declare cron triggers in their
-	// JSON. Always on — the only reason to disable it would be a
-	// worker-only node in a fleet, and we don't support that yet.
-	sched := daemon.NewScheduler(svc)
-	// Multi-node: gate firing on a Postgres advisory-lock leader so
-	// only one hzd fires each schedule. Single-node (no DSN) stays
-	// the default always-leader.
-	if pgPool != nil {
-		leader := daemon.NewPgLeader(pgPool, daemon.SchedulerLockKey)
-		go leader.Run(ctx)
-		sched.SetLeader(leader.IsLeader)
-		log.Print("scheduler: leader election via postgres advisory lock")
-	}
-	bgWg.Add(1)
-	go func() {
-		defer bgWg.Done()
-		if err := sched.Run(ctx); err != nil && err != context.Canceled {
-			log.Printf("scheduler stopped: %v", err)
-		}
-	}()
-
-	// Orphaned-graph-run reaper. A worker that dies between a run's last node
-	// going terminal and the dispatcher's completion check leaves the graph
-	// record stuck "running" with nothing left to re-fire it. This sweep
-	// re-runs the completion check for running graph runs and finalizes the
-	// ones that are actually done — once at startup (recovering runs orphaned
-	// by a prior crash) and then on an interval. Idempotent across replicas.
-	reaperDispatcher := daemon.NewDispatcher(jobs, bus, eng, log.New(os.Stderr, "reaper: ", log.LstdFlags))
-	reapInterval := envDuration("HAZYFLOW_REAP_INTERVAL", time.Minute)
-	bgWg.Add(1)
-	go func() {
-		defer bgWg.Done()
-		runReap := func() {
-			if n, err := reaperDispatcher.ReapStuckGraphRuns(ctx); err != nil {
-				if ctx.Err() == nil {
-					log.Printf("reaper sweep: %v", err)
-				}
-			} else if n > 0 {
-				log.Printf("reaper: recovered %d orphaned graph run(s)", n)
-			}
-		}
-		runReap() // startup pass: recover runs the previous process orphaned
-		t := time.NewTicker(reapInterval)
-		defer t.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-t.C:
-				runReap()
-			}
-		}
-	}()
-
-	// Retention sweeps. The jobs table (full run history, JSON payloads)
-	// and audit_events grow without bound otherwise. Each retention <= 0
-	// disables that sweep; runs once at startup, then hourly.
-	{
-		jobRetention := envDuration("HAZYFLOW_JOB_RETENTION", 30*24*time.Hour)
-		auditRetention := envDuration("HAZYFLOW_AUDIT_RETENTION", 90*24*time.Hour)
-		if jobRetention > 0 || auditRetention > 0 {
-			retentionAudit, err := daemon.NewPgAuditLog(ctx, pgPool)
-			if err != nil {
-				log.Fatalf("retention: audit log: %v", err)
-			}
-			jobPruner, _ := jobs.(interface {
-				PruneTerminal(context.Context, time.Duration, int) (int, error)
-			})
-			bgWg.Add(1)
-			go func() {
-				defer bgWg.Done()
-				sweep := func() {
-					if jobRetention > 0 && jobPruner != nil {
-						if n, err := jobPruner.PruneTerminal(ctx, jobRetention, 5000); err != nil {
-							if ctx.Err() == nil {
-								log.Printf("retention: prune jobs: %v", err)
-							}
-						} else if n > 0 {
-							log.Printf("retention: pruned %d terminal job row(s)", n)
-						}
-					}
-					if auditRetention > 0 {
-						if n, err := retentionAudit.Prune(ctx, auditRetention, 5000); err != nil {
-							if ctx.Err() == nil {
-								log.Printf("retention: prune audit: %v", err)
-							}
-						} else if n > 0 {
-							log.Printf("retention: pruned %d audit row(s)", n)
-						}
-					}
-				}
-				sweep() // startup pass
-				t := time.NewTicker(time.Hour)
-				defer t.Stop()
-				for {
-					select {
-					case <-ctx.Done():
-						return
-					case <-t.C:
-						sweep()
-					}
-				}
-			}()
-			log.Printf("retention sweeps: jobs=%s audit=%s (0 = disabled)", jobRetention, auditRetention)
-		}
-	}
+	startBackgroundJobs(ctx, backgroundDeps{
+		svc:         svc,
+		jobs:        jobs,
+		bus:         bus,
+		eng:         eng,
+		pgPool:      pgPool,
+		metrics:     appMetrics,
+		workerCount: workerCount,
+	}, &bgWg)
 
 	// Membership / invitation / per-org-auth / per-org-profile stores all
 	// live in Postgres tables (managed by auth.EnsurePgOrgsSchema).
@@ -651,116 +447,33 @@ func main() {
 	}
 
 	if httpListen != "" {
-		gw := daemon.NewHTTPGateway(svc)
-		gw.Users = users
-		gw.Sessions = sessions
-		gw.SessionTTL = sessionTTL
-		// TOTP 2FA: enabled only when HAZYFLOW_TOTP_KEY decodes to a
-		// 32-byte AES key. Absent/malformed → 2FA stays off (the /totp
-		// endpoints 503 and sign-in never asks for a second factor), so
-		// installs that don't want 2FA simply leave the var unset. The
-		// in-memory challenge store bridges the two sign-in legs.
-		if totpKey, terr := auth.LoadTOTPKey(); terr == nil {
-			gw.TOTPKey = totpKey
-			gw.TOTPChallenges = auth.NewMemTOTPChallengeStore()
-			log.Print("two-factor authentication (TOTP) enabled (HAZYFLOW_TOTP_KEY set)")
-		} else if !errors.Is(terr, auth.ErrTOTPKeyMissing) {
-			// Set-but-broken is an operator mistake worth shouting about;
-			// merely unset is the silent, supported "2FA off" path.
-			log.Fatalf("HAZYFLOW_TOTP_KEY: %v", terr)
-		}
-		gw.Memberships = memberships
-		gw.Invitations = invitations
-		gw.OrgAuth = orgAuthStore
-		gw.Profiles = orgProfileStore
-		gw.EncryptedSecrets = encryptedSecrets // nil disables /api/v1/secrets endpoints
-		gw.OAuth = oauthRegistry               // nil disables /api/v1/oauth/* endpoints
-		gw.Approval = approvalListener         // nil leaves POST /approve/ unregistered
-		gw.EnableSignup = enableSignup         // false disables POST /api/v1/auth/signup
-		gw.EnableMetrics = enableMetrics       // false disables GET /metrics
-		gw.Metrics = appMetrics                // HTTP RED + per-node latency series
-		gw.DBPool = pgPool                     // nil = no pool-saturation metrics (dev)
-		if enableMetrics {
-			log.Print("metrics endpoint enabled at GET /metrics (unauthenticated — restrict scrape access)")
-		}
-		gw.AuthRateLimit = daemon.NewAuthRateLimiter(authRatePerMin, authRateBurst)
-		if gw.AuthRateLimit != nil {
-			log.Printf("auth rate limit: %d/min per IP (burst %d)", authRatePerMin, authRateBurst)
-		}
-		gw.TrustProxyHeaders = trustProxyHeaders
-		if trustProxyHeaders {
-			log.Print("trusting X-Forwarded-Proto from reverse proxy (Secure cookies + HSTS on forwarded-https)")
-		}
-		gw.WebDist = webDist       // empty disables static frontend serving
-		gw.LandingDir = landingDir // empty disables the marketing landing; / serves the SPA
-		// Audit trail: Postgres-backed (durable). Powers GET /api/v1/admin/audit.
-		auditLog, err := daemon.NewPgAuditLog(ctx, pgPool)
-		if err != nil {
-			log.Fatalf("postgres audit log: %v", err)
-		}
-		gw.Audit = auditLog
-		// Readiness gates on the DB being reachable.
-		pool := pgPool
-		gw.ReadyCheck = func(ctx context.Context) error { return pool.Ping(ctx) }
-		if webDist != "" {
-			log.Printf("serving frontend bundle from %s", webDist)
-		}
-		if landingDir != "" {
-			if webDist == "" {
-				log.Printf("HAZYFLOW_LANDING_DIR %s ignored: requires HAZYFLOW_WEB_DIST (the landing auth-gate falls back to the SPA shell for signed-in users)", landingDir)
-			} else {
-				log.Printf("serving marketing landing from %s (GET / auth-gated: anonymous -> landing.html, signed-in -> app)", landingDir)
-			}
-		}
-		if slackSigningSecret != "" {
-			gw.SlackEvents = daemon.NewSlackEventsHandler(svc, slackSigningSecret)
-			log.Print("Slack events endpoint enabled at /api/v1/events/slack/<tenant>")
-		}
-		if githubWebhookSecret != "" {
-			gw.GitHubEvents = daemon.NewGitHubEventsHandler(svc, githubWebhookSecret)
-			log.Print("GitHub events endpoint enabled at /api/v1/events/github/<tenant>")
-		}
-		if webOrigin != "" {
-			for _, o := range strings.Split(webOrigin, ",") {
-				o = strings.TrimSpace(o)
-				if o != "" {
-					gw.AllowedOrigins = append(gw.AllowedOrigins, o)
-				}
-			}
-		}
-		gw.WildcardDomain = wildcardDomain
-		if wildcardDomain != "" {
-			log.Printf("per-org subdomains enabled for *.%s (CORS/CSRF allow subdomains; sign-in derives org from host)", wildcardDomain)
-		}
-		// Bootstrap the platform:admin super-admin role from an email
-		// allowlist (normalize to lowercase + trimmed so the gateway can
-		// compare exactly). This is the only grant path — see the field
-		// doc on HTTPGateway.PlatformAdmins.
-		for _, e := range strings.Split(envStr("HAZYFLOW_PLATFORM_ADMINS", ""), ",") {
-			if e = strings.ToLower(strings.TrimSpace(e)); e != "" {
-				gw.PlatformAdmins = append(gw.PlatformAdmins, e)
-			}
-		}
-		if len(gw.PlatformAdmins) > 0 {
-			log.Printf("platform admins (from HAZYFLOW_PLATFORM_ADMINS): %v", gw.PlatformAdmins)
-		}
-		// Upstream URL for the admin System section's update check: the
-		// canonical deployment's public /api/v1, whose build.version is the
-		// latest release. Defaults to the project's production origin; set
-		// HAZYFLOW_UPDATE_URL="" to disable the check (the page still loads).
-		gw.UpdateURL = strings.TrimSpace(envStr("HAZYFLOW_UPDATE_URL", daemon.DefaultUpdateURL))
-		if gw.UpdateURL != "" {
-			log.Printf("update check enabled (source: %s)", gw.UpdateURL)
-		}
-		gwLn, err := net.Listen("tcp", httpListen)
-		if err != nil {
-			log.Fatalf("http gateway: cannot bind %s: %v", httpListen, err)
-		}
-		go func() {
-			if err := gw.ServeListener(ctx, gwLn); err != nil && err != http.ErrServerClosed {
-				log.Printf("http gateway stopped: %v", err)
-			}
-		}()
+		buildGateway(ctx, gatewayDeps{
+			svc:              svc,
+			users:            users,
+			sessions:         sessions,
+			sessionTTL:       sessionTTL,
+			memberships:      memberships,
+			invitations:      invitations,
+			orgAuth:          orgAuthStore,
+			profiles:         orgProfileStore,
+			encryptedSecrets: encryptedSecrets,
+			oauth:            oauthRegistry,
+			approval:         approvalListener,
+			metrics:          appMetrics,
+			pgPool:           pgPool,
+			httpListen:       httpListen,
+			webDist:          webDist,
+			landingDir:       landingDir,
+			webOrigin:        webOrigin,
+			wildcardDomain:   wildcardDomain,
+			slackSigning:     slackSigningSecret,
+			githubWebhook:    githubWebhookSecret,
+			enableSignup:     enableSignup,
+			enableMetrics:    enableMetrics,
+			trustProxy:       trustProxyHeaders,
+			authRatePerMin:   authRatePerMin,
+			authRateBurst:    authRateBurst,
+		})
 	}
 
 	if devKey {
@@ -827,6 +540,394 @@ func main() {
 	} else {
 		log.Printf("shutdown grace (%s) elapsed with work still in flight; exiting (in-flight jobs will be reclaimed)", grace)
 	}
+}
+
+// applyNetworkPolicy installs the operator's outbound-network policy: the
+// http_request egress allowlist, the optional private-egress opt-in (which
+// turns the SSRF guard into opt-out), and the SSRF-guarded HTTP transport for
+// git-over-https clones. All three are process-global side effects.
+func applyNetworkPolicy(httpEgressAllow string) {
+	if httpEgressAllow != "" {
+		if err := hfnet.SetEgressAllowlist(strings.Split(httpEgressAllow, ",")); err != nil {
+			log.Fatalf("HAZYFLOW_HTTP_EGRESS_ALLOW: %v", err)
+		}
+		log.Printf("http_request egress allowlist active: %s", httpEgressAllow)
+	}
+	// The http_* drops expose an `allow_private_networks` param that disables
+	// the SSRF guard (reaching loopback/private/link-local incl. cloud
+	// metadata). On an untrusted multi-tenant deployment that's a
+	// tenant-controllable SSRF bypass, so the param is ignored unless the
+	// operator opts in here. Default off.
+	if envBool("HAZYFLOW_ALLOW_PRIVATE_EGRESS", false) {
+		hfnet.SetAllowPrivateEgress(true)
+		log.Print("WARNING: HAZYFLOW_ALLOW_PRIVATE_EGRESS=1 — flows may set allow_private_networks to reach private/loopback hosts (SSRF guard becomes opt-out)")
+	}
+	// Route git-over-https clones (git_checkout / git_log) through an
+	// SSRF-guarded client (blocks private/loopback/link-local at dial, e.g.
+	// cloud metadata), so a clone URL can't be used to reach internal services.
+	gitdrop.InstallGuardedHTTPTransport(hfnet.SafeHTTPClient(60*time.Second, false))
+}
+
+// coreStores bundles the durable control-plane stores that share one pool.
+type coreStores struct {
+	pool     *pgxpool.Pool
+	keys     auth.AdminKeyStore
+	users    auth.UserStore
+	sessions auth.SessionStore
+	jobs     core.JobStore
+}
+
+// openCoreStores connects the shared pgxpool and opens the key / user /
+// session / job stores on top of it; the session store is fronted with a
+// short-TTL read cache. devSeed seeds the bundled default user for local
+// development. Fatal on any failure — hzd has no in-memory fallback. The
+// caller owns the returned pool and must Close it.
+func openCoreStores(ctx context.Context, dsn string, maxConns, minConns int, sessionCacheTTL time.Duration, devSeed bool) coreStores {
+	poolCfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		log.Fatalf("postgres dsn: %v", err)
+	}
+	// Pool sizing: pgx defaults MaxConns to max(4, NumCPU), which is too
+	// small for real multi-tenant load — every worker, the gateway, the
+	// scheduler, and the reaper share this one pool, so 4 connections starve
+	// under even modest concurrency. Default to 20 (override with
+	// HAZYFLOW_PG_MAX_CONNS) and keep a couple of warm connections.
+	if maxConns > 0 {
+		poolCfg.MaxConns = int32(maxConns)
+	} else {
+		poolCfg.MaxConns = 20
+	}
+	if minConns > 0 {
+		poolCfg.MinConns = int32(minConns)
+	} else if poolCfg.MinConns < 2 {
+		poolCfg.MinConns = 2
+	}
+	if poolCfg.MinConns > poolCfg.MaxConns {
+		poolCfg.MinConns = poolCfg.MaxConns
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
+	if err != nil {
+		log.Fatalf("postgres connect: %v", err)
+	}
+	log.Printf("postgres pool: max_conns=%d min_conns=%d", poolCfg.MaxConns, poolCfg.MinConns)
+	if poolCfg.MaxConns < 10 {
+		log.Printf("WARNING: postgres pool max_conns=%d is low for production; set HAZYFLOW_PG_MAX_CONNS to 20+ once you have real concurrent load", poolCfg.MaxConns)
+	}
+	pgKeys, err := auth.NewPgKeyStore(ctx, pool)
+	if err != nil {
+		log.Fatalf("postgres key store: %v", err)
+	}
+	pgUsers, err := auth.NewPgUserStore(ctx, pool)
+	if err != nil {
+		log.Fatalf("postgres user store: %v", err)
+	}
+	pgSessions, err := auth.NewPgSessionStore(ctx, pool)
+	if err != nil {
+		log.Fatalf("postgres session store: %v", err)
+	}
+	pgJobs, err := jobstore.NewPostgresFromPool(ctx, pool)
+	if err != nil {
+		log.Fatalf("postgres job store: %v", err)
+	}
+	if sessionCacheTTL > 0 {
+		log.Printf("session lookup cache: ttl=%s", sessionCacheTTL)
+	}
+	seedDefaultUser(ctx, pgUsers, devSeed)
+	log.Print("postgres stores enabled: jobs, api-keys, sessions, users (durable across restart)")
+	return coreStores{
+		pool:     pool,
+		keys:     pgKeys,
+		users:    pgUsers,
+		sessions: auth.NewCachingSessionStore(pgSessions, sessionCacheTTL, 0),
+		jobs:     pgJobs,
+	}
+}
+
+// backgroundDeps are the long-lived services the background goroutines need.
+type backgroundDeps struct {
+	svc         *daemon.Service
+	jobs        core.JobStore
+	bus         daemon.Bus
+	eng         *engine.Engine
+	pgPool      *pgxpool.Pool
+	metrics     *daemon.Metrics
+	workerCount int
+}
+
+// startBackgroundJobs launches the worker pool, the cron scheduler (with
+// Postgres leader election when a pool is present), the orphaned-run reaper,
+// and the retention sweeps. Every goroutine registers with bgWg and stops on
+// ctx cancel, so shutdown can drain them.
+func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitGroup) {
+	// Spin up worker goroutines. Each is independent and competes for
+	// claims; the JobStore makes that contention safe.
+	for i := 0; i < d.workerCount; i++ {
+		w := daemon.NewWorker(daemon.WorkerConfig{
+			ID:      fmt.Sprintf("hzd-dev-w%d", i),
+			Metrics: d.metrics,
+		}, d.jobs, d.eng, d.bus)
+		// Enable subgraph execution: the worker hands a parked subgraph
+		// node's child graph to the Service to submit and run. Without this,
+		// `subgraph` nodes park forever. Recursion is bounded in SubmitChild.
+		w.SubGraphRunner = d.svc
+		bgWg.Add(1)
+		go func() {
+			defer bgWg.Done()
+			if err := w.Run(ctx); err != nil && err != context.Canceled {
+				log.Printf("worker stopped: %v", err)
+			}
+		}()
+	}
+
+	// Cron scheduler fires graphs that declare cron triggers. Always on.
+	sched := daemon.NewScheduler(d.svc)
+	// Multi-node: gate firing on a Postgres advisory-lock leader so only one
+	// hzd fires each schedule. Single-node stays the default always-leader.
+	if d.pgPool != nil {
+		leader := daemon.NewPgLeader(d.pgPool, daemon.SchedulerLockKey)
+		go leader.Run(ctx)
+		sched.SetLeader(leader.IsLeader)
+		log.Print("scheduler: leader election via postgres advisory lock")
+	}
+	bgWg.Add(1)
+	go func() {
+		defer bgWg.Done()
+		if err := sched.Run(ctx); err != nil && err != context.Canceled {
+			log.Printf("scheduler stopped: %v", err)
+		}
+	}()
+
+	// Orphaned-graph-run reaper. A worker that dies between a run's last node
+	// going terminal and the dispatcher's completion check leaves the graph
+	// record stuck "running" with nothing left to re-fire it. This sweep
+	// re-runs the completion check for running graph runs and finalizes the
+	// ones that are actually done — once at startup (recovering runs orphaned
+	// by a prior crash) and then on an interval. Idempotent across replicas.
+	reaperDispatcher := daemon.NewDispatcher(d.jobs, d.bus, d.eng, log.New(os.Stderr, "reaper: ", log.LstdFlags))
+	reapInterval := envDuration("HAZYFLOW_REAP_INTERVAL", time.Minute)
+	bgWg.Add(1)
+	go func() {
+		defer bgWg.Done()
+		runReap := func() {
+			if n, err := reaperDispatcher.ReapStuckGraphRuns(ctx); err != nil {
+				if ctx.Err() == nil {
+					log.Printf("reaper sweep: %v", err)
+				}
+			} else if n > 0 {
+				log.Printf("reaper: recovered %d orphaned graph run(s)", n)
+			}
+		}
+		runReap() // startup pass: recover runs the previous process orphaned
+		t := time.NewTicker(reapInterval)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				runReap()
+			}
+		}
+	}()
+
+	startRetentionSweeps(ctx, d.jobs, d.pgPool, bgWg)
+}
+
+// startRetentionSweeps prunes the jobs table and audit_events on an hourly
+// interval (after a startup pass), bounded by HAZYFLOW_JOB_RETENTION /
+// HAZYFLOW_AUDIT_RETENTION. A retention <= 0 disables that sweep; when both
+// are off no goroutine is started.
+func startRetentionSweeps(ctx context.Context, jobs core.JobStore, pgPool *pgxpool.Pool, bgWg *sync.WaitGroup) {
+	jobRetention := envDuration("HAZYFLOW_JOB_RETENTION", 30*24*time.Hour)
+	auditRetention := envDuration("HAZYFLOW_AUDIT_RETENTION", 90*24*time.Hour)
+	if jobRetention <= 0 && auditRetention <= 0 {
+		return
+	}
+	retentionAudit, err := daemon.NewPgAuditLog(ctx, pgPool)
+	if err != nil {
+		log.Fatalf("retention: audit log: %v", err)
+	}
+	jobPruner, _ := jobs.(interface {
+		PruneTerminal(context.Context, time.Duration, int) (int, error)
+	})
+	bgWg.Add(1)
+	go func() {
+		defer bgWg.Done()
+		sweep := func() {
+			if jobRetention > 0 && jobPruner != nil {
+				if n, err := jobPruner.PruneTerminal(ctx, jobRetention, 5000); err != nil {
+					if ctx.Err() == nil {
+						log.Printf("retention: prune jobs: %v", err)
+					}
+				} else if n > 0 {
+					log.Printf("retention: pruned %d terminal job row(s)", n)
+				}
+			}
+			if auditRetention > 0 {
+				if n, err := retentionAudit.Prune(ctx, auditRetention, 5000); err != nil {
+					if ctx.Err() == nil {
+						log.Printf("retention: prune audit: %v", err)
+					}
+				} else if n > 0 {
+					log.Printf("retention: pruned %d audit row(s)", n)
+				}
+			}
+		}
+		sweep() // startup pass
+		t := time.NewTicker(time.Hour)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				sweep()
+			}
+		}
+	}()
+	log.Printf("retention sweeps: jobs=%s audit=%s (0 = disabled)", jobRetention, auditRetention)
+}
+
+// gatewayDeps groups the stores, services, and operator settings the HTTP
+// gateway is wired from.
+type gatewayDeps struct {
+	svc              *daemon.Service
+	users            auth.UserStore
+	sessions         auth.SessionStore
+	sessionTTL       time.Duration
+	memberships      auth.MembershipStore
+	invitations      auth.InvitationStore
+	orgAuth          auth.OrgAuthStore
+	profiles         auth.OrgProfileStore
+	encryptedSecrets *daemon.EncryptedSecrets
+	oauth            *daemon.OAuthRegistry
+	approval         *daemon.ApprovalListener
+	metrics          *daemon.Metrics
+	pgPool           *pgxpool.Pool
+	httpListen       string
+	webDist          string
+	landingDir       string
+	webOrigin        string
+	wildcardDomain   string
+	slackSigning     string
+	githubWebhook    string
+	enableSignup     bool
+	enableMetrics    bool
+	trustProxy       bool
+	authRatePerMin   int
+	authRateBurst    int
+}
+
+// buildGateway configures the HTTP gateway from d, binds its listener, and
+// serves it in a background goroutine tied to ctx. Fatal on a bind error or
+// a set-but-broken TOTP / audit configuration.
+func buildGateway(ctx context.Context, d gatewayDeps) {
+	gw := daemon.NewHTTPGateway(d.svc)
+	gw.Users = d.users
+	gw.Sessions = d.sessions
+	gw.SessionTTL = d.sessionTTL
+	// TOTP 2FA: enabled only when HAZYFLOW_TOTP_KEY decodes to a 32-byte AES
+	// key. Absent/malformed → 2FA stays off (the /totp endpoints 503 and
+	// sign-in never asks for a second factor). The in-memory challenge store
+	// bridges the two sign-in legs.
+	if totpKey, terr := auth.LoadTOTPKey(); terr == nil {
+		gw.TOTPKey = totpKey
+		gw.TOTPChallenges = auth.NewMemTOTPChallengeStore()
+		log.Print("two-factor authentication (TOTP) enabled (HAZYFLOW_TOTP_KEY set)")
+	} else if !errors.Is(terr, auth.ErrTOTPKeyMissing) {
+		// Set-but-broken is an operator mistake worth shouting about; merely
+		// unset is the silent, supported "2FA off" path.
+		log.Fatalf("HAZYFLOW_TOTP_KEY: %v", terr)
+	}
+	gw.Memberships = d.memberships
+	gw.Invitations = d.invitations
+	gw.OrgAuth = d.orgAuth
+	gw.Profiles = d.profiles
+	gw.EncryptedSecrets = d.encryptedSecrets // nil disables /api/v1/secrets endpoints
+	gw.OAuth = d.oauth                       // nil disables /api/v1/oauth/* endpoints
+	gw.Approval = d.approval                 // nil leaves POST /approve/ unregistered
+	gw.EnableSignup = d.enableSignup         // false disables POST /api/v1/auth/signup
+	gw.EnableMetrics = d.enableMetrics       // false disables GET /metrics
+	gw.Metrics = d.metrics                   // HTTP RED + per-node latency series
+	gw.DBPool = d.pgPool                     // nil = no pool-saturation metrics (dev)
+	if d.enableMetrics {
+		log.Print("metrics endpoint enabled at GET /metrics (unauthenticated — restrict scrape access)")
+	}
+	gw.AuthRateLimit = daemon.NewAuthRateLimiter(d.authRatePerMin, d.authRateBurst)
+	if gw.AuthRateLimit != nil {
+		log.Printf("auth rate limit: %d/min per IP (burst %d)", d.authRatePerMin, d.authRateBurst)
+	}
+	gw.TrustProxyHeaders = d.trustProxy
+	if d.trustProxy {
+		log.Print("trusting X-Forwarded-Proto from reverse proxy (Secure cookies + HSTS on forwarded-https)")
+	}
+	gw.WebDist = d.webDist       // empty disables static frontend serving
+	gw.LandingDir = d.landingDir // empty disables the marketing landing; / serves the SPA
+	// Audit trail: Postgres-backed (durable). Powers GET /api/v1/admin/audit.
+	auditLog, err := daemon.NewPgAuditLog(ctx, d.pgPool)
+	if err != nil {
+		log.Fatalf("postgres audit log: %v", err)
+	}
+	gw.Audit = auditLog
+	// Readiness gates on the DB being reachable.
+	pool := d.pgPool
+	gw.ReadyCheck = func(ctx context.Context) error { return pool.Ping(ctx) }
+	if d.webDist != "" {
+		log.Printf("serving frontend bundle from %s", d.webDist)
+	}
+	if d.landingDir != "" {
+		if d.webDist == "" {
+			log.Printf("HAZYFLOW_LANDING_DIR %s ignored: requires HAZYFLOW_WEB_DIST (the landing auth-gate falls back to the SPA shell for signed-in users)", d.landingDir)
+		} else {
+			log.Printf("serving marketing landing from %s (GET / auth-gated: anonymous -> landing.html, signed-in -> app)", d.landingDir)
+		}
+	}
+	if d.slackSigning != "" {
+		gw.SlackEvents = daemon.NewSlackEventsHandler(d.svc, d.slackSigning)
+		log.Print("Slack events endpoint enabled at /api/v1/events/slack/<tenant>")
+	}
+	if d.githubWebhook != "" {
+		gw.GitHubEvents = daemon.NewGitHubEventsHandler(d.svc, d.githubWebhook)
+		log.Print("GitHub events endpoint enabled at /api/v1/events/github/<tenant>")
+	}
+	if d.webOrigin != "" {
+		for _, o := range strings.Split(d.webOrigin, ",") {
+			o = strings.TrimSpace(o)
+			if o != "" {
+				gw.AllowedOrigins = append(gw.AllowedOrigins, o)
+			}
+		}
+	}
+	gw.WildcardDomain = d.wildcardDomain
+	if d.wildcardDomain != "" {
+		log.Printf("per-org subdomains enabled for *.%s (CORS/CSRF allow subdomains; sign-in derives org from host)", d.wildcardDomain)
+	}
+	// Bootstrap the platform:admin super-admin role from an email allowlist
+	// (normalize to lowercase + trimmed so the gateway can compare exactly).
+	// This is the only grant path — see the field doc on PlatformAdmins.
+	for _, e := range strings.Split(envStr("HAZYFLOW_PLATFORM_ADMINS", ""), ",") {
+		if e = strings.ToLower(strings.TrimSpace(e)); e != "" {
+			gw.PlatformAdmins = append(gw.PlatformAdmins, e)
+		}
+	}
+	if len(gw.PlatformAdmins) > 0 {
+		log.Printf("platform admins (from HAZYFLOW_PLATFORM_ADMINS): %v", gw.PlatformAdmins)
+	}
+	// Upstream URL for the admin System section's update check. Defaults to
+	// the project's production origin; set HAZYFLOW_UPDATE_URL="" to disable.
+	gw.UpdateURL = strings.TrimSpace(envStr("HAZYFLOW_UPDATE_URL", daemon.DefaultUpdateURL))
+	if gw.UpdateURL != "" {
+		log.Printf("update check enabled (source: %s)", gw.UpdateURL)
+	}
+	gwLn, err := net.Listen("tcp", d.httpListen)
+	if err != nil {
+		log.Fatalf("http gateway: cannot bind %s: %v", d.httpListen, err)
+	}
+	go func() {
+		if err := gw.ServeListener(ctx, gwLn); err != nil && err != http.ErrServerClosed {
+			log.Printf("http gateway stopped: %v", err)
+		}
+	}()
 }
 
 // waitForGroup waits for wg up to timeout. Returns true if the group finished,

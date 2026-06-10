@@ -109,30 +109,11 @@ func executePostgresInsertRows(ctx context.Context, job core.Job, _ chan<- core.
 		return params.Err(job, "bad_param", fmt.Sprintf("schema name %q: %v", schema, err)), nil
 	}
 
-	rowsRef, ok := job.Input["rows"]
-	if !ok {
-		return params.Err(job, "missing_input", "input port 'rows' is required"), nil
+	ri, errRes := parseRowsInput(job)
+	if errRes != nil {
+		return *errRes, nil
 	}
-	rows, err := normalizeRows(rowsRef.Inline)
-	if err != nil {
-		return params.Err(job, "bad_input", err.Error()), nil
-	}
-
-	var headers []string
-	if h, ok := job.Input["headers"]; ok && h.Inline != nil {
-		headers, err = normalizeHeaders(h.Inline)
-		if err != nil {
-			return params.Err(job, "bad_input", err.Error()), nil
-		}
-	}
-	if headers == nil {
-		headers = deriveHeaders(rows)
-	}
-	for _, h := range headers {
-		if err := validateIdent(h); err != nil {
-			return params.Err(job, "bad_input", fmt.Sprintf("column %q: %v", h, err)), nil
-		}
-	}
+	rows, headers := ri.rows, ri.headers
 
 	pool, err := defaultPGRegistry.pgPool(ctx, job.Tenant, dsn)
 	if err != nil {

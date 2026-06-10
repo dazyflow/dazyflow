@@ -284,11 +284,7 @@ func (h *HTTPGateway) googleSignInCallback(rw http.ResponseWriter, r *http.Reque
 		st, hasState = consumeGoogleState(state)
 	}
 	if errStr := r.URL.Query().Get("error"); errStr != "" {
-		if hasState && st.Test {
-			h.redirectTestError(rw, r, st, "denied")
-			return
-		}
-		writeJSONError(rw, http.StatusBadRequest, "google: "+errStr)
+		h.signInError(rw, r, st, "denied", http.StatusBadRequest, "google: "+errStr)
 		return
 	}
 	code := r.URL.Query().Get("code")
@@ -302,50 +298,20 @@ func (h *HTTPGateway) googleSignInCallback(rw http.ResponseWriter, r *http.Reque
 	}
 	cfg, err := h.OrgAuth.GetOrgAuth(r.Context(), st.Tenant)
 	if err != nil || !cfg.GoogleEnabled() {
-		if st.Test {
-			h.redirectTestError(rw, r, st, "not_configured")
-			return
-		}
-		writeJSONError(rw, http.StatusBadRequest, "Google sign-in is no longer configured for that organization")
+		h.signInError(rw, r, st, "not_configured", http.StatusBadRequest,
+			"Google sign-in is no longer configured for that organization")
 		return
 	}
 	tok, info, err := exchangeGoogleCode(r.Context(), cfg, code, h.googleRedirectURI())
 	if err != nil {
-		if st.Test {
-			h.redirectTestError(rw, r, st, classifyGoogleError(err))
-			return
-		}
-		writeJSONError(rw, http.StatusBadGateway, err.Error())
+		h.signInError(rw, r, st, classifyGoogleError(err), http.StatusBadGateway, err.Error())
 		return
 	}
 	_ = tok // access token isn't stored — sign-in is one-shot
 	email := strings.ToLower(strings.TrimSpace(info.Email))
-	if email == "" {
-		if st.Test {
-			h.redirectTestError(rw, r, st, "no_email")
-			return
-		}
-		writeJSONError(rw, http.StatusBadGateway, "google didn't return an email")
+	if reason, status, msg := validateGoogleClaims(info, email, cfg); reason != "" {
+		h.signInError(rw, r, st, reason, status, msg)
 		return
-	}
-	if !info.EmailVerified {
-		if st.Test {
-			h.redirectTestError(rw, r, st, "not_verified")
-			return
-		}
-		writeJSONError(rw, http.StatusForbidden, "google didn't verify this email")
-		return
-	}
-	if cfg.GoogleWorkspaceDomain != "" {
-		if !strings.EqualFold(info.HD, cfg.GoogleWorkspaceDomain) {
-			if st.Test {
-				h.redirectTestError(rw, r, st, "domain_mismatch")
-				return
-			}
-			writeJSONError(rw, http.StatusForbidden,
-				fmt.Sprintf("only %s users can sign into this organization via Google", cfg.GoogleWorkspaceDomain))
-			return
-		}
 	}
 	// An admin Test sign-in only verifies the Google side: the code
 	// exchange succeeded (so client_id/secret are right), the redirect URI
@@ -362,68 +328,13 @@ func (h *HTTPGateway) googleSignInCallback(rw http.ResponseWriter, r *http.Reque
 		http.Redirect(rw, r, appendQuery(target, "test", "ok"), http.StatusFound)
 		return
 	}
-	// Resolve which org the user lands in:
-	//   - If they already have a User record, use their home tenant.
-	//   - If they have a Membership in this org, switch their session to it.
-	//   - If neither, create a Membership in this org and use it as the
-	//     active tenant. Their User record gets created with this org as
-	//     their home so the next sign-in is consistent.
-	user, err := h.Users.GetByEmail(r.Context(), email)
-	isNew := err != nil
-	if isNew {
-		user = auth.User{
-			Email:     email,
-			Subject:   email,
-			Tenant:    st.Tenant,
-			Workspace: "main",
-			Roles:     defaultSignupRoles(),
-			CreatedAt: time.Now().UTC(),
-		}
-		if err := h.Users.PutUser(r.Context(), user); err != nil {
-			writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("create user: %v", err))
-			return
-		}
-		// Seed a sensible org display name for the brand-new home org —
-		// SSO sign-ins typically come from a Workspace domain, so the
-		// default ("Acme" from acme.com) lands close to what the owner
-		// would have picked.
-		if h.Profiles != nil {
-			if name := auth.DefaultOrgDisplayName(email); name != "" {
-				_ = h.Profiles.PutOrgProfile(r.Context(), auth.OrgProfile{
-					Tenant:      user.Tenant,
-					DisplayName: name,
-					UpdatedAt:   time.Now().UTC(),
-				})
-			}
-		}
+	// Resolve the user (creating one on first SSO sign-in) and the org they
+	// land in, then issue a session against that resolved active org.
+	user, isNew, ok := h.resolveSignInUser(rw, r, email, st)
+	if !ok {
+		return
 	}
-	activeTenant := user.Tenant
-	activeWorkspace := user.Workspace
-	activeRoles := user.Roles
-	if !isNew && user.Tenant != st.Tenant && h.Memberships != nil {
-		if m, err := h.Memberships.GetMembership(r.Context(), email, st.Tenant); err == nil {
-			activeTenant = m.Tenant
-			activeWorkspace = m.Workspace
-			activeRoles = m.Roles
-		} else {
-			// Auto-create a membership: the workspace admin who turned
-			// SSO on for the domain has implicitly authorized everyone
-			// in that domain to join. We give the basic editor role.
-			m = auth.Membership{
-				UserEmail: email,
-				Tenant:    st.Tenant,
-				Workspace: "main",
-				Roles:     defaultSignupRoles(),
-				CreatedAt: time.Now().UTC(),
-			}
-			if err := h.Memberships.PutMembership(r.Context(), m); err == nil {
-				activeTenant = m.Tenant
-				activeWorkspace = m.Workspace
-				activeRoles = m.Roles
-			}
-		}
-	}
-	// Issue session against the resolved active org.
+	activeTenant, activeWorkspace, activeRoles := h.resolveActiveOrg(r, user, isNew, email, st)
 	ttl := h.SessionTTL
 	if ttl <= 0 {
 		ttl = 24 * time.Hour
@@ -438,17 +349,113 @@ func (h *HTTPGateway) googleSignInCallback(rw http.ResponseWriter, r *http.Reque
 		return
 	}
 	h.auditAuth(r.Context(), r, sess.Tenant, sess.Subject, "auth.signin", "method=google")
+	h.completeSignIn(rw, r, st, sess, token)
+}
+
+// signInError ends a Google sign-in attempt. An admin "Test" attempt (st.Test)
+// routes to the friendly test-error page keyed by testReason (which the admin
+// UI polls for); a real sign-in gets a JSON error with the given HTTP status.
+// When state was never consumed, st is the zero value (st.Test == false), so
+// early errors take the JSON path.
+func (h *HTTPGateway) signInError(rw http.ResponseWriter, r *http.Request, st googleSignInState, testReason string, status int, msg string) {
+	if st.Test {
+		h.redirectTestError(rw, r, st, testReason)
+		return
+	}
+	writeJSONError(rw, status, msg)
+}
+
+// validateGoogleClaims enforces the three sign-in preconditions on Google's
+// returned profile: a non-empty email, a verified email, and (when the org
+// restricts to a Workspace domain) a matching hd= claim. It returns the
+// test-error reason, HTTP status, and user-facing message for the first
+// failure, or ("", 0, "") when the claims pass.
+func validateGoogleClaims(info googleUserInfo, email string, cfg auth.OrgAuthConfig) (reason string, status int, msg string) {
+	if email == "" {
+		return "no_email", http.StatusBadGateway, "google didn't return an email"
+	}
+	if !info.EmailVerified {
+		return "not_verified", http.StatusForbidden, "google didn't verify this email"
+	}
+	if cfg.GoogleWorkspaceDomain != "" && !strings.EqualFold(info.HD, cfg.GoogleWorkspaceDomain) {
+		return "domain_mismatch", http.StatusForbidden,
+			fmt.Sprintf("only %s users can sign into this organization via Google", cfg.GoogleWorkspaceDomain)
+	}
+	return "", 0, ""
+}
+
+// resolveSignInUser looks up the user by email, creating a User record (and
+// seeding a default org profile) on first SSO sign-in. ok is false when a
+// create failed and an error response has already been written — the caller
+// must then return without further output.
+func (h *HTTPGateway) resolveSignInUser(rw http.ResponseWriter, r *http.Request, email string, st googleSignInState) (user auth.User, isNew, ok bool) {
+	user, err := h.Users.GetByEmail(r.Context(), email)
+	isNew = err != nil
+	if !isNew {
+		return user, false, true
+	}
+	user = auth.User{
+		Email:     email,
+		Subject:   email,
+		Tenant:    st.Tenant,
+		Workspace: "main",
+		Roles:     defaultSignupRoles(),
+		CreatedAt: time.Now().UTC(),
+	}
+	if err := h.Users.PutUser(r.Context(), user); err != nil {
+		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("create user: %v", err))
+		return auth.User{}, false, false
+	}
+	// Seed a sensible org display name for the brand-new home org — SSO
+	// sign-ins typically come from a Workspace domain, so the default
+	// ("Acme" from acme.com) lands close to what the owner would have picked.
+	if h.Profiles != nil {
+		if name := auth.DefaultOrgDisplayName(email); name != "" {
+			_ = h.Profiles.PutOrgProfile(r.Context(), auth.OrgProfile{
+				Tenant:      user.Tenant,
+				DisplayName: name,
+				UpdatedAt:   time.Now().UTC(),
+			})
+		}
+	}
+	return user, true, true
+}
+
+// resolveActiveOrg picks the (tenant, workspace, roles) the session lands in.
+// An existing user signing into a different org than their home tenant uses
+// (or auto-gets) a Membership in that org — the workspace admin who enabled
+// SSO for the domain has implicitly authorized everyone in it to join, with
+// the basic editor role. Everyone else lands in their home org.
+func (h *HTTPGateway) resolveActiveOrg(r *http.Request, user auth.User, isNew bool, email string, st googleSignInState) (tenant, workspace string, roles []core.Role) {
+	if isNew || user.Tenant == st.Tenant || h.Memberships == nil {
+		return user.Tenant, user.Workspace, user.Roles
+	}
+	if m, err := h.Memberships.GetMembership(r.Context(), email, st.Tenant); err == nil {
+		return m.Tenant, m.Workspace, m.Roles
+	}
+	m := auth.Membership{
+		UserEmail: email,
+		Tenant:    st.Tenant,
+		Workspace: "main",
+		Roles:     defaultSignupRoles(),
+		CreatedAt: time.Now().UTC(),
+	}
+	if err := h.Memberships.PutMembership(r.Context(), m); err == nil {
+		return m.Tenant, m.Workspace, m.Roles
+	}
+	return user.Tenant, user.Workspace, user.Roles
+}
+
+// completeSignIn delivers the freshly-issued session to the browser and lands
+// the user at their return path. When the sign-in started on a different host
+// than this apex callback (per-org subdomains), it stashes the session under a
+// single-use handoff token and bounces to that host's /auth/handoff so the
+// cookie is scoped to one subdomain; otherwise it sets the cookie inline.
+func (h *HTTPGateway) completeSignIn(rw http.ResponseWriter, r *http.Request, st googleSignInState, sess auth.Session, token string) {
 	target := st.ReturnTo
 	if !safeReturnPath(target) {
 		target = "/"
 	}
-	// Option B handoff: this callback always runs on the apex (the single
-	// registered redirect_uri), but the session cookie must live on the
-	// org subdomain the user started from. When the start host differs
-	// from the callback host, stash the freshly-issued session under a
-	// single-use token and bounce to that host's /auth/handoff, which
-	// sets the host-only cookie there. This keeps cookies scoped to one
-	// subdomain instead of sharing a parent-domain cookie across orgs.
 	if st.Host != "" && !sameHost(st.Host, r.Host) {
 		code, err := mintHandoff(token, sess.ExpiresAt)
 		if err != nil {

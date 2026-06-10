@@ -108,74 +108,19 @@ func executePostgresUpsertRows(ctx context.Context, job core.Job, _ chan<- core.
 		return params.Err(job, "bad_param", fmt.Sprintf("schema name %q: %v", schema, err)), nil
 	}
 
-	conflictCols, err := paramStringArray(job.Params, "conflict_columns")
-	if err != nil {
-		return params.Err(job, "bad_param", err.Error()), nil
-	}
-	if len(conflictCols) == 0 {
-		return params.Err(job, "bad_param", "conflict_columns must list at least one column"), nil
-	}
-	for _, c := range conflictCols {
-		if err := validateIdent(c); err != nil {
-			return params.Err(job, "bad_param", fmt.Sprintf("conflict column %q: %v", c, err)), nil
-		}
+	conflictCols, updateCols, updateColsExplicit, errRes := parseConflictUpdateCols(job)
+	if errRes != nil {
+		return *errRes, nil
 	}
 
-	// update_columns: nil = "use all non-conflict columns" (the default
-	// upsert semantics); empty slice present in params = "DO NOTHING"
-	// (explicit user intent to skip updates). We distinguish via the
-	// param's presence, not just its length.
-	var updateCols []string
-	var updateColsExplicit bool
-	if raw, ok := job.Params["update_columns"]; ok {
-		updateColsExplicit = true
-		uc, err := normalizeStringArray(raw, "update_columns")
-		if err != nil {
-			return params.Err(job, "bad_param", err.Error()), nil
-		}
-		updateCols = uc
-		for _, c := range updateCols {
-			if err := validateIdent(c); err != nil {
-				return params.Err(job, "bad_param", fmt.Sprintf("update column %q: %v", c, err)), nil
-			}
-		}
+	ri, errRes := parseRowsInput(job)
+	if errRes != nil {
+		return *errRes, nil
 	}
+	rows, headers := ri.rows, ri.headers
 
-	rowsRef, ok := job.Input["rows"]
-	if !ok {
-		return params.Err(job, "missing_input", "input port 'rows' is required"), nil
-	}
-	rows, err := normalizeRows(rowsRef.Inline)
-	if err != nil {
-		return params.Err(job, "bad_input", err.Error()), nil
-	}
-
-	var headers []string
-	if h, ok := job.Input["headers"]; ok && h.Inline != nil {
-		headers, err = normalizeHeaders(h.Inline)
-		if err != nil {
-			return params.Err(job, "bad_input", err.Error()), nil
-		}
-	}
-	if headers == nil {
-		headers = deriveHeaders(rows)
-	}
-	for _, h := range headers {
-		if err := validateIdent(h); err != nil {
-			return params.Err(job, "bad_input", fmt.Sprintf("column %q: %v", h, err)), nil
-		}
-	}
-	// conflict_columns must be present in headers — otherwise we have
-	// no value to plug into the conflict target.
-	headerSet := map[string]struct{}{}
-	for _, h := range headers {
-		headerSet[h] = struct{}{}
-	}
-	for _, c := range conflictCols {
-		if _, ok := headerSet[c]; !ok {
-			return params.Err(job, "bad_param",
-				fmt.Sprintf("conflict_column %q is not in headers", c)), nil
-		}
+	if errRes := checkConflictInHeaders(job, conflictCols, headers); errRes != nil {
+		return *errRes, nil
 	}
 
 	pool, err := defaultPGRegistry.pgPool(ctx, job.Tenant, dsn)
