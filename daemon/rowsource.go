@@ -94,8 +94,9 @@ func init() {
 		return googleFormStructuralKeys, nil
 	})
 	RegisterRowSource("gmail_search_messages", "messages", func(_ context.Context, _ core.Node) ([]string, error) {
-		// Gmail search stubs are structurally fixed — no live fetch needed.
-		return []string{"id", "threadId"}, nil
+		// Search expands every match into a real email record — these
+		// fields are structurally fixed, no live fetch needed.
+		return []string{"date", "from", "subject", "body", "id"}, nil
 	})
 	RegisterRowSource("sheets_read_range", "rows", func(ctx context.Context, n core.Node) ([]string, error) {
 		if sheetsFieldFetcher == nil {

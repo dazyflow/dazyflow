@@ -4166,6 +4166,9 @@ button.warning:hover:not(:disabled) {
   flex-shrink: 0;
   user-select: none;
 }
+.mapping-hint.mapping-warn {
+  color: var(--warning, #c98a2b);
+}
 .mapping-hint {
   font-size: 11px;
   color: var(--muted);

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/url"
 	"strconv"
+	"sync"
 
 	"git.sr.ht/~klahr/hazyflow/core"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
@@ -19,7 +20,7 @@ func init() {
 			Label:       "Gmail",
 			Subtitle:    "Search emails",
 			Summary:     "Find emails in the connected mailbox, using the same search you'd type in Gmail.",
-			Description: "Find emails in the connected mailbox. The search works exactly like Gmail's own search box (e.g. 'from:boss@company.com is:unread' or 'newer_than:1d'). Matching emails come out as a list of message IDs — wire it into a For each and read each one with Gmail · Read email.",
+			Description: "Find emails in the connected mailbox. The search works exactly like Gmail's own search box (e.g. 'from:boss@company.com is:unread' or 'newer_than:1d'). Each match comes out as a real email — date, sender, subject and body — ready to log to a sheet, loop over with For each, or wire into Gmail · Read email to take the newest one.",
 			Integration: "Gmail",
 			Category:    "network",
 			Icon:        "search",
@@ -42,11 +43,11 @@ func init() {
 				{Port: "query", Label: "Search", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				// Matching emails is a list of {id, threadId} stubs (all the
-				// Gmail search API returns) — feed it to For each + Read email
-				// to expand. next_page_token is still EMITTED for API callers
-				// that paginate by hand, but not declared: pagination is dev
-				// plumbing a flow can't loop on anyway.
+				// Matching emails is a list of real email records — {date,
+				// from, subject, body, id, threadId} — expanded from Gmail's
+				// ID stubs at run time. next_page_token is still EMITTED for
+				// API callers that paginate by hand, but not declared:
+				// pagination is dev plumbing a flow can't loop on anyway.
 				{Port: "messages", Label: "Matching emails", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
@@ -105,11 +106,47 @@ func executeGmailSearch(ctx context.Context, job core.Job, _ chan<- core.Progres
 	if parsed.Messages == nil {
 		parsed.Messages = []any{}
 	}
+
+	// Gmail's search API returns only {id, threadId} stubs. Expand every
+	// match into a real email record (date / from / subject / body) with
+	// bounded concurrency, so downstream steps work with emails, never IDs.
+	// A failed fetch degrades that one entry to its stub rather than
+	// failing the whole search.
+	timeout := params.IntDefault(job.Params, "timeout_ms", 15000)
+	msgs := make([]any, len(parsed.Messages))
+	sem := make(chan struct{}, 5)
+	var wg sync.WaitGroup
+	for i, m := range parsed.Messages {
+		stub, _ := m.(map[string]any)
+		id := str(stub["id"])
+		msgs[i] = map[string]any{"id": id, "threadId": str(stub["threadId"])}
+		if id == "" {
+			continue
+		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(i int, id string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			ep := baseURL(job) + "/users/me/messages/" + url.PathEscape(id) + "?format=full"
+			st, b, ferr := gmailDo(ctx, "GET", ep, token, "", nil, timeout)
+			if ferr != nil || st < 200 || st >= 300 {
+				return
+			}
+			var raw map[string]any
+			if json.Unmarshal(b, &raw) != nil {
+				return
+			}
+			msgs[i] = friendlyMessage(flatten(raw))
+		}(i, id)
+	}
+	wg.Wait()
+
 	return core.Result{
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
-			"messages":        {MIME: "application/json", Inline: parsed.Messages},
+			"messages":        {MIME: "application/json", Inline: msgs},
 			"next_page_token": {MIME: "text/plain", Inline: parsed.NextPageToken},
 		},
 	}, nil

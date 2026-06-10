@@ -19,7 +19,7 @@ func init() {
 			Label:       "Gmail",
 			Subtitle:    "Read email",
 			Summary:     "Read one email — who sent it, the subject, the date, and the body.",
-			Description: "Read a single email by its message ID. The typical pattern: wire Gmail · Search emails into a For each, put this step in the loop body, and set Message ID to the row's id — each matching email then comes out as friendly From / Subject / Date / Body values.",
+			Description: "Read one email as friendly Date / From / Subject / Body values. Wire Search emails' Matching emails straight into Message ID to read the FIRST match — or, to read every match, wire Matching emails into a For each and put this step in the loop body with Message ID = the row's id.",
 			Integration: "Gmail",
 			Category:    "network",
 			Icon:        "mail-open",
@@ -38,9 +38,12 @@ func init() {
 			Inputs: []core.Port{
 				// Editable on the card (inline pin editor — the port name
 				// matches the string param) and wireable; a wired value
-				// overrides the param. Inside a For each body this is
-				// typically ${item.id} from Search emails' rows.
-				{Port: "id", Label: "Message ID", MIME: []string{"text/plain"}},
+				// overrides the param. Accepts EITHER a single message ID
+				// (text, e.g. ${item.id} inside a For each) OR Search emails'
+				// "Matching emails" list wired straight in — then the FIRST
+				// match is read. That makes the obvious drag (Matching
+				// emails → Message ID) just work.
+				{Port: "id", Label: "Email", MIME: []string{"text/plain", "application/json"}},
 			},
 			Outputs: []core.Port{
 				// Friendly scalar pins instead of a JSON blob — same move as
@@ -71,10 +74,9 @@ func init() {
 
 func executeGmailGetMessage(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	// The Message ID input pin overrides the param when wired.
-	idParam, _ := params.StringOpt(job.Params, "id")
-	id, ok := textInputOr(job, "id", idParam)
+	id, ok := resolveMessageID(job)
 	if !ok {
-		return params.Err(job, "bad_input", "input port 'id' must be text"), nil
+		return params.Err(job, "bad_input", "input port 'id' must be a message ID or a list of matches"), nil
 	}
 	if id == "" {
 		return params.Err(job, "bad_param", "'id' is required"), nil
@@ -133,4 +135,61 @@ func executeGmailGetMessage(ctx context.Context, job core.Job, _ chan<- core.Pro
 			"message": {MIME: "application/json", Inline: msg},
 		},
 	}, nil
+}
+
+// resolveMessageID extracts the message ID to read. The Message ID input
+// accepts three shapes so the obvious wirings all work; the param is the
+// fallback when nothing is wired:
+//
+//   - a plain ID string (or templated ${item.id} / ${upstream…} text);
+//   - ONE search stub {id, threadId} — e.g. a single match plucked upstream;
+//   - a LIST of stubs (Search emails' "Matching emails" wired straight in) —
+//     the FIRST match is read.
+//
+// ok=false only for a wired value of an unusable shape.
+func resolveMessageID(job core.Job) (id string, ok bool) {
+	fallback, _ := params.StringOpt(job.Params, "id")
+	in, present := job.Input["id"]
+	if !present || in.Inline == nil {
+		return fallback, true
+	}
+	stubID := func(v any) string {
+		m, isMap := v.(map[string]any)
+		if !isMap {
+			return ""
+		}
+		s, _ := m["id"].(string)
+		return s
+	}
+	switch v := in.Inline.(type) {
+	case string:
+		if v != "" {
+			return v, true
+		}
+		return fallback, true
+	case []byte:
+		if len(v) > 0 {
+			return string(v), true
+		}
+		return fallback, true
+	case map[string]any:
+		if s := stubID(v); s != "" {
+			return s, true
+		}
+		return "", false
+	case []any:
+		if len(v) == 0 {
+			// An empty match list isn't a wiring mistake — fall back to the
+			// param (and to the clear "'id' is required" error when unset).
+			return fallback, true
+		}
+		if s := stubID(v[0]); s != "" {
+			return s, true
+		}
+		if s, isStr := v[0].(string); isStr && s != "" {
+			return s, true
+		}
+		return "", false
+	}
+	return "", false
 }

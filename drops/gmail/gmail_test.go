@@ -26,6 +26,23 @@ func withGmailEnv(t *testing.T, base string) {
 func TestGmailSearch_ReturnsMessages(t *testing.T) {
 	var gotQuery string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Per-message expansion fetch (format=full) — return a real message.
+		if strings.Contains(r.URL.Path, "/messages/") {
+			id := r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"id": id, "threadId": "t-" + id, "snippet": "snip " + id,
+				"payload": map[string]any{
+					"headers": []any{
+						map[string]any{"name": "From", "value": id + "@x"},
+						map[string]any{"name": "Subject", "value": "Hi " + id},
+						map[string]any{"name": "Date", "value": "Tue, 10 Jun 2026"},
+					},
+					"mimeType": "text/plain",
+					"body":     map[string]any{"data": base64.RawURLEncoding.EncodeToString([]byte("body " + id))},
+				},
+			})
+			return
+		}
 		gotQuery = r.URL.Query().Get("q")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"messages":      []any{map[string]any{"id": "a"}, map[string]any{"id": "b"}},
@@ -44,8 +61,14 @@ func TestGmailSearch_ReturnsMessages(t *testing.T) {
 	if gotQuery != "is:unread" {
 		t.Errorf("q = %q", gotQuery)
 	}
-	if len(res.Output["messages"].Inline.([]any)) != 2 || res.Output["next_page_token"].Inline != "tok" {
-		t.Errorf("out = %+v", res.Output)
+	msgs := res.Output["messages"].Inline.([]any)
+	if len(msgs) != 2 || res.Output["next_page_token"].Inline != "tok" {
+		t.Fatalf("out = %+v", res.Output)
+	}
+	// Every match is a REAL email record, never an ID stub.
+	first := msgs[0].(map[string]any)
+	if first["subject"] != "Hi a" || first["from"] != "a@x" || first["body"] != "body a" {
+		t.Errorf("first match = %+v, want expanded email fields", first)
 	}
 }
 
@@ -89,6 +112,45 @@ func TestGmailGetMessage_FlattensHeadersAndBody(t *testing.T) {
 func TestGmailGetMessage_MissingID(t *testing.T) {
 	withGmailEnv(t, "http://unused")
 	res, _ := executeGmailGetMessage(context.Background(), core.Job{Params: map[string]any{}}, nil)
+	if res.Status != core.StatusError || res.Error.Code != "bad_param" {
+		t.Errorf("status=%q code=%v", res.Status, res.Error)
+	}
+}
+
+// Wiring Search emails' "Matching emails" list straight into Message ID
+// reads the FIRST match — the obvious drag just works.
+func TestGmailGetMessage_TakesFirstOfWiredMatchList(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": "m-first", "snippet": "s"})
+	}))
+	defer srv.Close()
+	withGmailEnv(t, srv.URL)
+
+	res, err := executeGmailGetMessage(context.Background(), core.Job{
+		Params: map[string]any{},
+		Input: map[string]core.Ref{"id": {Inline: []any{
+			map[string]any{"id": "m-first", "threadId": "t1"},
+			map[string]any{"id": "m-second", "threadId": "t2"},
+		}}},
+	}, nil)
+	if err != nil || res.Status != core.StatusOK {
+		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
+	}
+	if !strings.Contains(gotPath, "/messages/m-first") {
+		t.Errorf("fetched %q, want the first match m-first", gotPath)
+	}
+}
+
+// An EMPTY wired match list (search found nothing) falls back to the param /
+// the clear "required" error — not a confusing bad-input failure.
+func TestGmailGetMessage_EmptyWiredMatchList(t *testing.T) {
+	withGmailEnv(t, "http://unused")
+	res, _ := executeGmailGetMessage(context.Background(), core.Job{
+		Params: map[string]any{},
+		Input:  map[string]core.Ref{"id": {Inline: []any{}}},
+	}, nil)
 	if res.Status != core.StatusError || res.Error.Code != "bad_param" {
 		t.Errorf("status=%q code=%v", res.Status, res.Error)
 	}

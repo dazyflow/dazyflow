@@ -13,8 +13,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"git.sr.ht/~klahr/hazyflow/core"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
@@ -141,6 +143,46 @@ func extractGmailError(body []byte) string {
 		return string(body[:200])
 	}
 	return string(body)
+}
+
+// friendlyMessage reduces a flattened message (see flatten) to the friendly
+// record shape Search emails emits per match: date / from / subject / body
+// plus the ids. Body prefers plain text, then HTML, then the snippet, and is
+// capped so one huge email can't bloat a whole result list — Read email
+// returns the uncapped body when a single message needs it all.
+func friendlyMessage(msg map[string]any) map[string]any {
+	headers, _ := msg["headers"].(map[string]any)
+	header := func(name string) string {
+		for k, v := range headers {
+			if strings.EqualFold(k, name) {
+				return str(v)
+			}
+		}
+		return ""
+	}
+	body := str(msg["body_text"])
+	if body == "" {
+		body = str(msg["body_html"])
+	}
+	if body == "" {
+		body = str(msg["snippet"])
+	}
+	const maxBody = 20000
+	if len(body) > maxBody {
+		cut := maxBody
+		for cut > 0 && !utf8.RuneStart(body[cut]) {
+			cut-- // don't split a multi-byte character
+		}
+		body = body[:cut] + "…"
+	}
+	return map[string]any{
+		"id":       str(msg["id"]),
+		"threadId": str(msg["threadId"]),
+		"date":     header("Date"),
+		"from":     header("From"),
+		"subject":  header("Subject"),
+		"body":     body,
+	}
 }
 
 // flatten turns a raw Gmail message into convenience fields: id, threadId,

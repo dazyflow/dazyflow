@@ -1528,15 +1528,23 @@ function MappingField({
     .filter((f) => cols.includes(f) && !mappedCols.has(f))
     .map((f) => ({ column: f, source: f }));
 
+  // Which row (if any) is naming a NEW sheet column via a free-text input —
+  // the column dropdown only lists the sheet's existing headers, so without
+  // this there'd be no way to map onto a column the sheet doesn't have yet
+  // (the backend creates it on append).
+  const [newColIdx, setNewColIdx] = useState<number | null>(null);
+  const NEW_COL = "__new_column__";
+
   // A <select> that keeps an out-of-list current value selectable (e.g. a
   // column saved before its header changed) so editing one row never silently
-  // drops another's value.
+  // drops another's value. withNew adds the "+ New column…" choice.
   const pickerSelect = (
     cur: string,
     options: string[],
     placeholder: string,
     onPick: (v: string) => void,
     className: string,
+    withNew = false,
   ) => {
     const known = cur === "" || options.includes(cur);
     return (
@@ -1552,6 +1560,7 @@ function MappingField({
             {o}
           </option>
         ))}
+        {withNew && <option value={NEW_COL}>{t("schemaForm.mapping.newColumn")}</option>}
       </select>
     );
   };
@@ -1570,12 +1579,34 @@ function MappingField({
           <span className="mapping-arrow" aria-hidden>
             →
           </span>
-          {pickerSelect(
-            r.column ?? "",
-            cols,
-            t("schemaForm.mapping.columnPlaceholder"),
-            (v) => setRow(i, { column: v }),
-            "mapping-col",
+          {newColIdx === i ? (
+            <input
+              className="mapping-col"
+              autoFocus
+              placeholder={t("schemaForm.mapping.newColumnPlaceholder")}
+              value={r.column ?? ""}
+              onChange={(e) => setRow(i, { column: e.target.value })}
+              onBlur={() => setNewColIdx(null)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") setNewColIdx(null);
+              }}
+            />
+          ) : (
+            pickerSelect(
+              r.column ?? "",
+              cols,
+              t("schemaForm.mapping.columnPlaceholder"),
+              (v) => {
+                if (v === NEW_COL) {
+                  setRow(i, { column: "" });
+                  setNewColIdx(i);
+                } else {
+                  setRow(i, { column: v });
+                }
+              },
+              "mapping-col",
+              true,
+            )
           )}
           <button
             type="button"
@@ -1613,6 +1644,13 @@ function MappingField({
       ) : columnOpts !== null && columnOpts.length === 0 ? (
         <div className="mapping-hint">{t("schemaForm.mapping.noColumns")}</div>
       ) : null}
+      {/* An incomplete pair (only one side picked) is ignored at run time —
+          say so instead of silently dropping the column. */}
+      {rows.some((r) => (r.source && !r.column) || (!r.source && r.column)) && (
+        <div className="mapping-hint mapping-warn">
+          {t("schemaForm.mapping.incomplete")}
+        </div>
+      )}
     </div>
   );
 }

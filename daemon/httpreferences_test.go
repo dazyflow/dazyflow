@@ -122,7 +122,7 @@ func TestReferences_FirstRowFieldTokens(t *testing.T) {
 	if !up["${upstream.search.messages}"] {
 		t.Errorf("whole-port token missing: %v", up)
 	}
-	if !up["${upstream.search.messages[0].id}"] || !up["${upstream.search.messages[0].threadId}"] {
+	if !up["${upstream.search.messages[0].subject}"] || !up["${upstream.search.messages[0].from}"] {
 		t.Errorf("first-row field tokens missing: %v", up)
 	}
 }
