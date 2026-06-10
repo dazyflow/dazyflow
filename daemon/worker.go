@@ -413,7 +413,7 @@ func (w *Worker) runNode(ctx context.Context, graph core.Graph, rec core.JobReco
 	// nodes are already excluded from normal dispatch (see loopBodyOwners).
 	if node, ok := graph.Node(rec.NodeID); ok && node.Module == "for_each" {
 		if body, isLoop := extractLoopBody(graph, rec.NodeID); isLoop {
-			execCtx = engine.WithBodyRunner(execCtx, w.bodyRunner(body))
+			execCtx = engine.WithBodyRunner(execCtx, w.bodyRunner(body, rec.GraphRunID))
 		}
 	}
 	result, err := w.engine.RunNode(execCtx, graph, rec.GraphRunID, rec.NodeID, prior, nodeProgress)
@@ -447,7 +447,7 @@ func (w *Worker) runNode(ctx context.Context, graph core.Graph, rec core.JobReco
 // would race on (and clobber) the shared node Params, and every row would
 // see the last row's values. The clone is a JSON round-trip, which is exact
 // because the graph already round-trips through JSON as its stored payload.
-func (w *Worker) bodyRunner(body core.Graph) engine.BodyRunner {
+func (w *Worker) bodyRunner(body core.Graph, graphRunID string) engine.BodyRunner {
 	bodyJSON, marshalErr := json.Marshal(body)
 	return func(ctx context.Context, item core.Ref) (engine.GraphResult, error) {
 		if marshalErr != nil {
@@ -457,6 +457,11 @@ func (w *Worker) bodyRunner(body core.Graph) engine.BodyRunner {
 		if err := json.Unmarshal(bodyJSON, &g); err != nil {
 			return engine.GraphResult{}, fmt.Errorf("clone loop body: %w", err)
 		}
+		// The parent run's ID rides along so body nodes get the parent's
+		// per-run scratch space (file-writing drops like sheets_export_pdf
+		// work inside a loop; the dispatcher reclaims the scratch when the
+		// parent run finishes).
+		ctx = engine.WithLoopRunID(ctx, graphRunID)
 		return w.engine.Run(engine.WithLoopItem(ctx, item.Inline), g, nil)
 	}
 }

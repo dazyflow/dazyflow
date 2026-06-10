@@ -2,6 +2,9 @@ package daemon_test
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"sync"
 	"testing"
@@ -165,6 +168,120 @@ func newLoopE2EHarness(t *testing.T, rec *recorder) *loopHarness {
 	go func() { _ = w.Run(wctx) }()
 
 	return &loopHarness{svc: svc, jobs: jobs, bus: bus, principal: p}
+}
+
+// A body node inherits the PARENT run's scratch space, so file-writing drops
+// (e.g. sheets_export_pdf) work inside a loop. The fixture writes a per-row
+// file into job.ScratchRoot and fails the row if scratch is absent.
+func TestLoopBody_BodyNodesGetParentScratch(t *testing.T) {
+	rec := &recorder{}
+	reg := engine.NewRegistry()
+
+	_ = reg.Register(engine.NativeDrop{
+		Manifest: core.Manifest{
+			ID: "rows", Version: "1.0", Summary: "rows",
+			Examples:       []core.ParamsExample{{Title: "default"}},
+			ExecutionModel: core.ExecutionBatch, ProcessModel: core.ProcessLongLived,
+			Outputs: []core.Port{{Port: "out"}},
+		},
+		Execute: func(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
+			return core.Result{JobID: job.ID, Status: core.StatusOK,
+				Output: map[string]core.Ref{"out": {Inline: []any{
+					map[string]any{"name": "Ada"},
+					map[string]any{"name": "Bo"},
+				}}}}, nil
+		},
+	})
+	// scratchfx — writes name.txt into the run's scratch and reads it back.
+	_ = reg.Register(engine.NativeDrop{
+		Manifest: core.Manifest{
+			ID: "scratchfx", Version: "1.0", Summary: "scratch fixture",
+			Examples:       []core.ParamsExample{{Title: "default"}},
+			ExecutionModel: core.ExecutionBatch, ProcessModel: core.ProcessLongLived,
+			Inputs:         []core.Port{{Port: "in"}},
+			Outputs:        []core.Port{{Port: "meta"}},
+			ParamsSchema:   []byte(`{"type":"object","properties":{"name":{"type":"string"}}}`),
+		},
+		Execute: func(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
+			if job.ScratchRoot == "" {
+				return core.Result{JobID: job.ID, Status: core.StatusError,
+					Error: &core.JobError{Code: "no_scratch", Message: "body node has no scratch root"}}, nil
+			}
+			name, _ := job.Params["name"].(string)
+			p := filepath.Join(job.ScratchRoot, name+".txt")
+			if err := os.WriteFile(p, []byte(name), 0o644); err != nil {
+				return core.Result{JobID: job.ID, Status: core.StatusError,
+					Error: &core.JobError{Code: "write", Message: err.Error()}}, nil
+			}
+			back, err := os.ReadFile(p)
+			if err != nil || string(back) != name {
+				return core.Result{JobID: job.ID, Status: core.StatusError,
+					Error: &core.JobError{Code: "read", Message: fmt.Sprintf("%v %q", err, back)}}, nil
+			}
+			rec.add(name)
+			return core.Result{JobID: job.ID, Status: core.StatusOK}, nil
+		},
+	})
+
+	for _, id := range []string{"for_each"} {
+		mf, _ := engine.Default.Manifests()[id]
+		nt, _ := engine.Default.Get(id)
+		_ = reg.Register(engine.NativeDrop{Manifest: mf,
+			Execute: func(ctx context.Context, j core.Job, p chan<- core.Progress) (core.Result, error) {
+				return nt.Execute(ctx, j, p)
+			}})
+	}
+
+	sb, err := daemon.NewFSSandbox(t.TempDir())
+	if err != nil {
+		t.Fatalf("sandbox: %v", err)
+	}
+	eng := &engine.Engine{Resolver: &engine.NodeResolver{Native: reg}, Sandbox: sb}
+	ks := auth.NewMemKeyStore()
+	role := core.Role{Name: "editor", Permissions: []core.Permission{
+		core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
+	}}
+	_, _, _ = auth.IssueAPIKey(ks, t.Context(), "k", "t", "ws", "u", []core.Role{role}, nil)
+	p := core.Principal{Subject: "u", Tenant: "t", Workspace: "ws", Roles: []core.Role{role}}
+	ws, _ := workspace.OpenFS("")
+	jobs := jobstore.NewMemory()
+	bus := daemon.NewMemoryBus()
+	svc := &daemon.Service{
+		Auth:       auth.Chain{&auth.APIKeyAuthenticator{Store: ks}},
+		Workspaces: daemon.MapWorkspaces{"t/ws": ws},
+		Jobs:       jobs, Engine: eng, Bus: bus,
+	}
+	wctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	w := daemon.NewWorker(daemon.WorkerConfig{
+		ID: "w", PollInterval: 5 * time.Millisecond, MaxRetries: 1,
+		RetryBackoff: func(int) time.Duration { return time.Millisecond },
+	}, jobs, eng, bus)
+	go func() { _ = w.Run(wctx) }()
+
+	g := core.Graph{
+		ID: "loop-scratch", Tenant: "t", Workspace: "ws",
+		Nodes: []core.Node{
+			{ID: "rows", Module: "rows"},
+			{ID: "loop", Module: "for_each"},
+			{ID: "write", Module: "scratchfx", Params: map[string]any{"name": "${item.name}"}},
+		},
+		Edges: []core.Edge{
+			{From: "rows", FromPort: "out", To: "loop", ToPort: "items"},
+			{From: "loop", FromPort: "body", To: "write", ToPort: "in"},
+		},
+	}
+	graphRunID, err := svc.SubmitGraph(t.Context(), p, g)
+	if err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	terminal := waitForTerminalEvent(t, bus, jobs, graphRunID, 5*time.Second)
+	if terminal.Status != core.JobStatusSucceeded {
+		t.Fatalf("graph status = %q, want succeeded (err=%+v)", terminal.Status, terminal.Error)
+	}
+	if got := rec.sorted(); len(got) != 2 || got[0] != "Ada" || got[1] != "Bo" {
+		t.Fatalf("scratch writes per row = %v, want [Ada Bo]", got)
+	}
 }
 
 // End-to-end: a wired for_each body runs the body node once per row, with

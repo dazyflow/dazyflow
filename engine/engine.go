@@ -318,8 +318,11 @@ func (e *Engine) runNode(
 		Env:     node.Env,
 		Cleanup: core.CleanupOnGraphComplete,
 	}
-	// In-process Run path has no per-run ID, so no scratch dir.
-	if err := e.populateSandbox(&job, graph, ""); err != nil {
+	// The in-process Run path has no per-run ID of its own — but a loop-body
+	// run carries the PARENT run's ID on ctx (WithLoopRunID) so body nodes
+	// share the parent's scratch space. Outside a loop this stays "" (no
+	// scratch), as before.
+	if err := e.populateSandbox(&job, graph, loopRunIDFromContext(ctx)); err != nil {
 		return core.Result{
 			Status: core.StatusError,
 			Error:  &core.JobError{Code: "sandbox", Message: err.Error()},

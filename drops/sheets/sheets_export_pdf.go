@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/url"
+	"strings"
 
 	"git.sr.ht/~klahr/hazyflow/core"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
@@ -18,8 +19,8 @@ func init() {
 			Version:     "1.0",
 			Label:       "Google Sheets",
 			Subtitle:    "Export PDF",
-			Summary:     "Export a Google Sheet as a PDF into the run's sandbox.",
-			Description: "Render a Google Sheet to PDF via the Drive export API and write it into the run's scratch sandbox. Wire the 'pdf' output into a file-consuming node (e.g. gmail_send_email's attachments). Paste a sheet URL or its ID.",
+			Summary:     "Turn a Google Sheet into a PDF file.",
+			Description: "Turn a Google Sheet into a PDF file. Wire the 'PDF' output into a step that takes files — e.g. Gmail's Attachments to email it. The file lives in the run's scratch space (advanced: override the file name via 'path').",
 			Integration: "Google Sheets",
 			Category:    "network",
 			Icon:        "file-output",
@@ -42,8 +43,9 @@ func init() {
 			},
 			Outputs: []core.Port{
 				{Port: "pdf", Label: "PDF", MIME: []string{"application/pdf"}},
-				{Port: "meta", Label: "Export metadata", MIME: []string{"application/json"}},
-				// spreadsheet_id is re-emitted (same as append's) so any sheet
+				// The structured result is still EMITTED under "meta" for run
+				// records/debugging but not declared as a pin (same as append
+				// rows and gmail). spreadsheet_id is re-emitted so any sheet
 				// step downstream can target the same spreadsheet by wire.
 				{Port: "spreadsheet_id", Label: "Spreadsheet ID", MIME: []string{"text/plain"}},
 			},
@@ -51,8 +53,8 @@ func init() {
 				"type":"object",
 				"properties":{
 					"account":{"type":"string","default":"default"},
-					"spreadsheet_id":{"type":"string","format":"google-spreadsheet","description":"The spreadsheet to export."},
-					"path":{"type":"string","description":"Sandbox path to write to. Defaults to scratch://sheet-<id>.pdf."},
+					"spreadsheet_id":{"type":"string","format":"google-spreadsheet","title":"Spreadsheet","description":"The spreadsheet to export."},
+					"path":{"type":"string","title":"File name","examples":["Survey results.pdf"],"description":"What to call the PDF — also the attachment name when emailed. '.pdf' is added for you; leave blank for an automatic name."},
 					"timeout_ms":{"type":"integer","default":30000,"minimum":1}
 				},
 				"required":["spreadsheet_id"]
@@ -72,7 +74,20 @@ func executeSheetsExportPDF(ctx context.Context, job core.Job, _ chan<- core.Pro
 	if err != nil {
 		return params.Err(job, "auth", err.Error()), nil
 	}
-	dest := params.StringDefault(job.Params, "path", sandbox.Scheme+"sheet-"+id+".pdf")
+	// 'path' is a plain file name ("Svar.pdf") — non-techies shouldn't see
+	// the scratch:// scheme. A bare name lands in the run's scratch space;
+	// ".pdf" is appended when missing; an explicit scheme (scratch://… from
+	// older flows or templates) passes through untouched.
+	dest := strings.TrimSpace(params.StringDefault(job.Params, "path", ""))
+	switch {
+	case dest == "":
+		dest = sandbox.Scheme + "sheet-" + id + ".pdf"
+	case !strings.Contains(dest, "://"):
+		dest = sandbox.Scheme + dest
+	}
+	if !strings.HasSuffix(strings.ToLower(dest), ".pdf") {
+		dest += ".pdf"
+	}
 
 	q := url.Values{}
 	q.Set("mimeType", "application/pdf")

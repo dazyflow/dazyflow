@@ -18,12 +18,19 @@ const PICKER_FORMATS = new Set([
 // peekValue renders a port's run value as a short, single-line string for
 // the hover peek. Strings show verbatim (truncated); other types as JSON;
 // an empty string reads as "(empty)" (not the MIME — that looked like a
-// stray "text/plain" type label); a missing value falls back to the MIME.
+// stray "text/plain" type label). A FILE output (ref set, no inline value)
+// shows its file name — "Svar.pdf" reads better than "application/pdf".
 function peekValue(ref: Ref): string {
   const v = ref.data;
   const cap = (s: string) => (s.length > 200 ? s.slice(0, 200) + "…" : s);
   if (typeof v === "string") return cap(v) || "(empty)";
-  if (v === undefined || v === null) return ref.mime ?? "(no value)";
+  if (v === undefined || v === null) {
+    if (ref.ref) {
+      const base = ref.ref.replace(/^[a-z]+:\/\//, "").split("/").pop();
+      if (base) return base;
+    }
+    return ref.mime ?? "(no value)";
+  }
   try {
     return cap(JSON.stringify(v));
   } catch {

@@ -278,3 +278,32 @@ func TestSheetsExportPDF_WritesToScratch(t *testing.T) {
 		t.Errorf("scratch file: %v / %q", err, string(written))
 	}
 }
+
+// 'path' is a friendly file name: a bare "Svar" lands in scratch as
+// "Svar.pdf" (scheme + extension added); an explicit scratch:// path from an
+// older flow still passes through.
+func TestSheetsExportPDF_FriendlyFileName(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("%PDF-1.4 fake"))
+	}))
+	defer srv.Close()
+	withSheetsEnv(t, srv.URL)
+
+	for _, tc := range []struct{ path, wantFile string }{
+		{"Svar", "Svar.pdf"},
+		{"Survey results.pdf", "Survey results.pdf"},
+		{"scratch://legacy.pdf", "legacy.pdf"},
+	} {
+		scratch := t.TempDir()
+		res, err := executeSheetsExportPDF(context.Background(), core.Job{
+			Params:      map[string]any{"spreadsheet_id": "S1", "path": tc.path},
+			ScratchRoot: scratch,
+		}, nil)
+		if err != nil || res.Status != core.StatusOK {
+			t.Fatalf("path %q: status=%q err=%+v", tc.path, res.Status, res.Error)
+		}
+		if _, err := os.Stat(scratch + "/" + tc.wantFile); err != nil {
+			t.Errorf("path %q: expected file %q: %v", tc.path, tc.wantFile, err)
+		}
+	}
+}

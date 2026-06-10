@@ -122,6 +122,27 @@ func stringifyItemValue(v any) string {
 	}
 }
 
+type loopRunIDCtxKey struct{}
+
+// WithLoopRunID carries the parent graph-run's ID into an in-process body
+// run (Engine.Run) so body nodes inherit the parent run's per-run scratch
+// space. Without it, Engine.Run has no run ID and populateSandbox skips
+// scratch entirely — a body node that writes files (e.g. sheets_export_pdf)
+// would fail inside a loop. Scoping body files to the PARENT run is also
+// what makes cleanup correct: the dispatcher reclaims that scratch when the
+// parent run finishes.
+func WithLoopRunID(ctx context.Context, runID string) context.Context {
+	if runID == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, loopRunIDCtxKey{}, runID)
+}
+
+func loopRunIDFromContext(ctx context.Context) string {
+	s, _ := ctx.Value(loopRunIDCtxKey{}).(string)
+	return s
+}
+
 // BodyRunner runs a for_each body subgraph once for a single item and
 // returns the body's per-node results. The daemon builds this (capturing the
 // engine + the extracted body subgraph) and hands it to the for_each drop
