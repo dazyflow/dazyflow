@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/drops/internal/mailmsg"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
 	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
 	"git.sr.ht/~klahr/hazyflow/engine"
@@ -33,7 +34,7 @@ func init() {
 			Integration: "Email",
 			Tags:        []string{"email", "smtp", "notify", "report"},
 			Summary:     "Send an email through any mail server (SMTP) — daily summaries, alerts, or a build's output straight into someone's inbox.",
-			Description: "Send an email through your own mail server (SMTP). To, Subject and Body can be typed on the step or wired in from upstream (the matching input port overrides the param) — handy for per-recipient sends or mailing another step's output.",
+			Description: "Send an email through your own mail server (SMTP). To, Subject and Body can be typed on the step or wired in from upstream (the matching input port overrides the param) — handy for per-recipient sends or mailing another step's output. Attach files by wiring file-producing nodes (e.g. sheets_export_pdf) into the variadic 'attachments' input. The server connection (host, login, sender) lives under Advanced.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Daily report via STARTTLS on port 587",
@@ -56,6 +57,7 @@ func init() {
 				{Port: "to", Label: "To", Required: true, MIME: []string{"text/plain"}},
 				{Port: "subject", Label: "Subject", MIME: []string{"text/plain"}},
 				{Port: "body", Label: "Body", MIME: []string{"text/plain"}},
+				{Port: "attachments", Label: "Attachments", Variadic: true},
 			},
 			// No declared outputs: sending an email is a "do" step — "after it
 			// sends, do X" chains through the pass-through pin, which fires on
@@ -63,21 +65,25 @@ func init() {
 			// (see the Execute result) so run records keep them for debugging;
 			// they're just not a pin (same as gmail send / ntfy).
 			Outputs: []core.Port{},
+			// The server connection (host/port/tls/login/from) is x_advanced:
+			// it's set once per provider, so it stays out of the node card and
+			// the Inspector's main form — the visible surface matches Gmail
+			// send (To / Subject / Body / Attachments).
 			ParamsSchema: json.RawMessage(
 				`{
 					"type":"object",
 					"properties":{
-						"host":{"type":"string","title":"Mail server","description":"Your SMTP server's address, e.g. smtp.example.com. Your email provider lists this in its settings."},
-						"port":{"type":"integer","title":"Port","default":587,"minimum":1,"description":"Mail server port — usually 587 (STARTTLS) or 465 (SSL/TLS)."},
-						"tls":{"type":"string","title":"Connection security","enum":["starttls","implicit","none"],"enumNames":["STARTTLS (port 587)","SSL/TLS (port 465)","None — insecure"],"default":"starttls","description":"How the connection is encrypted. Match what your provider says for the port you chose; None is for local testing only."},
-						"username":{"type":"string","title":"Username","description":"Mail server login, usually your email address. ${secret.NAME} keeps it out of the flow."},
-						"password":{"type":"string","title":"Password","description":"Mail server password or app password. ${secret.NAME} keeps it out of the flow."},
-						"from":{"type":"string","title":"From address","description":"The sender address — most providers require it to match the login."},
+						"host":{"type":"string","title":"Mail server","x_advanced":true,"description":"Your SMTP server's address, e.g. smtp.example.com. Your email provider lists this in its settings."},
+						"port":{"type":"integer","title":"Port","default":587,"minimum":1,"x_advanced":true,"description":"Mail server port — usually 587 (STARTTLS) or 465 (SSL/TLS)."},
+						"tls":{"type":"string","title":"Connection security","enum":["starttls","implicit","none"],"enumNames":["STARTTLS (port 587)","SSL/TLS (port 465)","None — insecure"],"default":"starttls","x_advanced":true,"description":"How the connection is encrypted. Match what your provider says for the port you chose; None is for local testing only."},
+						"username":{"type":"string","title":"Username","x_advanced":true,"description":"Mail server login, usually your email address. ${secret.NAME} keeps it out of the flow."},
+						"password":{"type":"string","title":"Password","x_advanced":true,"description":"Mail server password or app password. ${secret.NAME} keeps it out of the flow."},
+						"from":{"type":"string","title":"From address","x_advanced":true,"description":"The sender address. Defaults to the username — most providers require them to match anyway."},
 						"to":{"type":"array","title":"To","items":{"type":"string"},"description":"Recipient addresses. Overridden by the 'To' input (comma-separated)."},
 						"subject":{"type":"string","title":"Subject","description":"Subject line. Overridden by the 'Subject' input."},
 						"body":{"type":"string","title":"Body","description":"Email body text. Overridden by the 'Body' input."}
 					},
-					"required":["host","from","to"]
+					"required":["host","to"]
 				}`,
 			),
 			Idempotent:  false,
@@ -129,9 +135,14 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 	if err != nil {
 		return params.Err(job, "bad_param", err.Error()), nil
 	}
-	from, err := params.String(job.Params, "from")
-	if err != nil {
-		return params.Err(job, "bad_param", err.Error()), nil
+	// From defaults to the username — the SMTP login is usually the sender
+	// address, and most providers require the two to match anyway.
+	from := params.StringDefault(job.Params, "from", "")
+	if from == "" {
+		from = params.StringDefault(job.Params, "username", "")
+	}
+	if from == "" {
+		return params.Err(job, "bad_param", "'from' is required — set From address (or Username) under Advanced"), nil
 	}
 
 	// to / subject / body each take their value from the matching input port
@@ -182,6 +193,11 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 		}
 	}
 
+	atts, jerr := mailmsg.LoadAttachments(job)
+	if jerr != nil {
+		return core.Result{JobID: job.ID, Status: core.StatusError, Error: jerr}, nil
+	}
+
 	addr := net.JoinHostPort(host, fmt.Sprint(port))
 	// SSRF guard: the SMTP host is a tenant-supplied param, so refuse
 	// private/loopback/link-local targets (internal services, metadata)
@@ -189,7 +205,7 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 	if err := hfnet.CheckDialHost(addr); err != nil {
 		return params.Err(job, "ssrf_blocked", err.Error()), nil
 	}
-	msg := buildMessage(from, to, subject, body)
+	msg := buildMessage(from, to, subject, body, atts)
 
 	var auth smtp.Auth
 	if username != "" {
@@ -219,17 +235,33 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 	}, nil
 }
 
-func buildMessage(from string, to []string, subject, body string) []byte {
+// buildMessage assembles the RFC 822 message. Address headers are stripped
+// of CR/LF to defeat header injection; the subject is MIME-word encoded;
+// multipart/mixed is used only when attachments exist (same shape as
+// gmail send's buildRFC822).
+func buildMessage(from string, to []string, subject, body string, atts []mailmsg.Attachment) []byte {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "From: %s\r\n", from)
-	fmt.Fprintf(&sb, "To: %s\r\n", strings.Join(to, ", "))
+	fmt.Fprintf(&sb, "From: %s\r\n", mailmsg.StripCRLF(from))
+	fmt.Fprintf(&sb, "To: %s\r\n", mailmsg.StripCRLF(strings.Join(to, ", ")))
 	// RFC 2047 encoded-word — non-ASCII subjects must not ride as raw
 	// UTF-8 bytes in a header, or receiving clients mojibake them.
 	fmt.Fprintf(&sb, "Subject: %s\r\n", mime.QEncoding.Encode("utf-8", subject))
 	sb.WriteString("MIME-Version: 1.0\r\n")
+
+	if len(atts) == 0 {
+		sb.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
+		sb.WriteString("\r\n")
+		sb.WriteString(body)
+		return []byte(sb.String())
+	}
+
+	boundary := "hazyflow-" + mailmsg.RandomHex(16)
+	sb.WriteString(`Content-Type: multipart/mixed; boundary="` + boundary + `"` + "\r\n\r\n")
+	sb.WriteString("--" + boundary + "\r\n")
 	sb.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
-	sb.WriteString("\r\n")
-	sb.WriteString(body)
+	sb.WriteString("Content-Transfer-Encoding: 8bit\r\n\r\n")
+	sb.WriteString(body + "\r\n")
+	mailmsg.WriteAttachmentParts(&sb, boundary, atts)
 	return []byte(sb.String())
 }
 

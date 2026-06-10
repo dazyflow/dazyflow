@@ -6251,6 +6251,21 @@ button.warning:hover:not(:disabled) {
     margin: 0 4px;
   }
 }
+/* Small screens: even the primary Run/Stop/Test-event button drops its
+   label and becomes a square icon button — the accent colour alone marks
+   it as the focal point, and the label would otherwise crowd out the
+   status chip and pause toggle on phone widths. */
+@container editor-canvas (max-width: 640px) {
+  .editor-toolbar button.primary .toolbar-label {
+    display: none;
+  }
+  .editor-toolbar button.primary {
+    width: 36px;
+    padding: 0;
+    gap: 0;
+    justify-content: center;
+  }
+}
 
 /* ───────── AI chat panel ─────────
  * Right-edge sidebar. Fixed positioning rather than flex so it

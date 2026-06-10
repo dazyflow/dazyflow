@@ -1,14 +1,16 @@
 package notify
 
 import (
+	"encoding/base64"
 	"strings"
 	"testing"
 
 	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/drops/internal/mailmsg"
 )
 
 func TestBuildMessage(t *testing.T) {
-	msg := string(buildMessage("me@x.test", []string{"a@x.test", "b@x.test"}, "Hello", "the body"))
+	msg := string(buildMessage("me@x.test", []string{"a@x.test", "b@x.test"}, "Hello", "the body", nil))
 
 	// Headers are CRLF-terminated and separated from the body by a blank line.
 	wantHeaders := []string{
@@ -35,12 +37,63 @@ func TestBuildMessage(t *testing.T) {
 func TestBuildMessage_EncodesNonASCIISubject(t *testing.T) {
 	// A non-ASCII subject must not ride as raw UTF-8 in the header — it
 	// has to be an RFC 2047 encoded-word, or clients mojibake it.
-	msg := string(buildMessage("me@x.test", []string{"a@x.test"}, "Café ☕", "body"))
+	msg := string(buildMessage("me@x.test", []string{"a@x.test"}, "Café ☕", "body", nil))
 	if strings.Contains(msg, "Subject: Café ☕") {
 		t.Error("subject was emitted as raw UTF-8, want RFC 2047 encoded-word")
 	}
 	if !strings.Contains(msg, "Subject: =?utf-8?q?") {
 		t.Errorf("subject not encoded as expected:\n%s", msg)
+	}
+}
+
+func TestBuildMessage_Attachments(t *testing.T) {
+	// With attachments the message switches to multipart/mixed: a text body
+	// part followed by one base64 part per attachment (same shape as gmail
+	// send). Without them it stays a bare text/plain message (tested above).
+	msg := string(buildMessage("me@x.test", []string{"a@x.test"}, "Report", "see attached", []mailmsg.Attachment{
+		{Filename: "report.pdf", MIME: "application/pdf", Data: []byte("%PDF-fake")},
+	}))
+	for _, want := range []string{
+		`Content-Type: multipart/mixed; boundary="hazyflow-`,
+		"Content-Type: text/plain; charset=UTF-8\r\n",
+		`Content-Disposition: attachment; filename="report.pdf"`,
+		"Content-Type: application/pdf\r\n",
+		base64.StdEncoding.EncodeToString([]byte("%PDF-fake")),
+	} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("message missing %q\n---\n%s", want, msg)
+		}
+	}
+}
+
+func TestBuildMessage_StripsHeaderCRLF(t *testing.T) {
+	// CR/LF in address values must not split headers (header injection):
+	// the smuggled text may survive inline in the From value, but it must
+	// never start a header line of its own.
+	msg := string(buildMessage("me@x.test\r\nBcc: evil@x.test", []string{"a@x.test"}, "hi", "body", nil))
+	if strings.Contains(msg, "\r\nBcc:") {
+		t.Errorf("injected header line survived:\n%s", msg)
+	}
+}
+
+func TestExecuteEmail_FromDefaultsToUsername(t *testing.T) {
+	// From is optional when Username is set — the login is usually the
+	// sender address. With neither, the send is rejected up front. The
+	// loopback host trips the SSRF guard AFTER param validation, proving
+	// the from/username fallback was accepted.
+	res, err := executeEmail(t.Context(), core.Job{
+		ID: "j",
+		Params: map[string]any{
+			"host":     "127.0.0.1",
+			"username": "me@x.test",
+			"to":       []any{"you@x.test"},
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if res.Error == nil || res.Error.Code != "ssrf_blocked" {
+		t.Fatalf("res = %+v, want ssrf_blocked (from fallback accepted)", res)
 	}
 }
 

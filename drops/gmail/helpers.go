@@ -20,7 +20,6 @@ import (
 
 	"git.sr.ht/~klahr/hazyflow/core"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/sandbox"
 	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
 )
 
@@ -264,29 +263,4 @@ func str(v any) string {
 		return ""
 	}
 	return fmt.Sprintf("%v", v)
-}
-
-// readRefBytes returns the bytes behind an input Ref: inline []byte/string,
-// or a sandbox file when the ref carries a path.
-func readRefBytes(job core.Job, ref core.Ref) ([]byte, error) {
-	switch v := ref.Inline.(type) {
-	case []byte:
-		return v, nil
-	case string:
-		return []byte(v), nil
-	}
-	if ref.Ref == "" {
-		return nil, fmt.Errorf("attachment has no inline bytes and no path")
-	}
-	root, rel, err := sandbox.OpenRoot(job, ref.Ref)
-	if err != nil {
-		return nil, err
-	}
-	defer root.Close()
-	f, err := root.Open(rel)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	return io.ReadAll(f)
 }

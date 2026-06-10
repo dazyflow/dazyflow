@@ -2,16 +2,14 @@ package gmail
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"mime"
-	"path"
 	"strings"
 
 	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/drops/internal/mailmsg"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
 	"git.sr.ht/~klahr/hazyflow/engine"
 )
@@ -83,12 +81,6 @@ func init() {
 	})
 }
 
-type gmailAttachment struct {
-	filename string
-	mime     string
-	data     []byte
-}
-
 // textInputOr returns the text wired into input port `port` (string or raw
 // bytes), or `fallback` when the port is unwired/empty. ok is false only when
 // the port carries a NON-text value — a wiring mistake the caller rejects.
@@ -148,7 +140,7 @@ func executeGmailSend(ctx context.Context, job core.Job, _ chan<- core.Progress)
 		bodyContentType = `text/plain; charset="utf-8"`
 	}
 
-	atts, jerr := loadAttachments(job)
+	atts, jerr := mailmsg.LoadAttachments(job)
 	if jerr != nil {
 		return core.Result{JobID: job.ID, Status: core.StatusError, Error: jerr}, nil
 	}
@@ -191,33 +183,6 @@ func executeGmailSend(ctx context.Context, job core.Job, _ chan<- core.Progress)
 	}, nil
 }
 
-func loadAttachments(job core.Job) ([]gmailAttachment, *core.JobError) {
-	refs := core.VariadicInputs(job.Input, "attachments")
-	out := make([]gmailAttachment, 0, len(refs))
-	for i, r := range refs {
-		data, err := readRefBytes(job, r)
-		if err != nil {
-			return nil, &core.JobError{Code: "bad_input", Message: fmt.Sprintf("attachment %d: %v", i, err)}
-		}
-		mt := r.MIME
-		if mt == "" {
-			mt = "application/octet-stream"
-		}
-		out = append(out, gmailAttachment{filename: attachmentFilename(r, i), mime: mt, data: data})
-	}
-	return out, nil
-}
-
-func attachmentFilename(ref core.Ref, idx int) string {
-	if ref.Ref != "" {
-		base := path.Base(strings.TrimPrefix(ref.Ref, "scratch://"))
-		if base != "." && base != "/" && base != "" {
-			return base
-		}
-	}
-	return fmt.Sprintf("attachment-%d%s", idx+1, extForMIME(ref.MIME))
-}
-
 type rfcHeaders struct {
 	to, cc, bcc, replyTo, subject, bodyContentType string
 }
@@ -225,13 +190,13 @@ type rfcHeaders struct {
 // buildRFC822 assembles the message Gmail's send endpoint wants. Header
 // values are stripped of CR/LF to defeat header injection; the subject is
 // MIME-word encoded; multipart/mixed is used only when attachments exist.
-func buildRFC822(h rfcHeaders, body string, atts []gmailAttachment) string {
+func buildRFC822(h rfcHeaders, body string, atts []mailmsg.Attachment) string {
 	var lines []string
 	add := func(name, value string) {
 		if value == "" {
 			return
 		}
-		lines = append(lines, name+": "+stripCRLF(value))
+		lines = append(lines, name+": "+mailmsg.StripCRLF(value))
 	}
 	add("To", h.to)
 	add("Cc", h.cc)
@@ -246,7 +211,7 @@ func buildRFC822(h rfcHeaders, body string, atts []gmailAttachment) string {
 		return strings.Join(lines, "\r\n") + "\r\n\r\n" + body
 	}
 
-	boundary := "hazyflow-" + randomHex(16)
+	boundary := "hazyflow-" + mailmsg.RandomHex(16)
 	add("Content-Type", `multipart/mixed; boundary="`+boundary+`"`)
 
 	var b strings.Builder
@@ -255,92 +220,6 @@ func buildRFC822(h rfcHeaders, body string, atts []gmailAttachment) string {
 	b.WriteString("Content-Type: " + h.bodyContentType + "\r\n")
 	b.WriteString("Content-Transfer-Encoding: 8bit\r\n\r\n")
 	b.WriteString(body + "\r\n")
-	for _, a := range atts {
-		b.WriteString("--" + boundary + "\r\n")
-		b.WriteString("Content-Type: " + stripCRLF(a.mime) + "\r\n")
-		b.WriteString("Content-Disposition: " + dispositionHeader(a.filename) + "\r\n")
-		b.WriteString("Content-Transfer-Encoding: base64\r\n\r\n")
-		b.WriteString(wrap76(base64.StdEncoding.EncodeToString(a.data)) + "\r\n")
-	}
-	b.WriteString("--" + boundary + "--\r\n")
+	mailmsg.WriteAttachmentParts(&b, boundary, atts)
 	return b.String()
-}
-
-func stripCRLF(s string) string {
-	return strings.NewReplacer("\r", "", "\n", "").Replace(s)
-}
-
-func wrap76(b64 string) string {
-	var rows []string
-	for i := 0; i < len(b64); i += 76 {
-		end := i + 76
-		if end > len(b64) {
-			end = len(b64)
-		}
-		rows = append(rows, b64[i:end])
-	}
-	return strings.Join(rows, "\r\n")
-}
-
-func randomHex(n int) string {
-	b := make([]byte, n)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
-}
-
-// dispositionHeader produces an attachment Content-Disposition: ASCII
-// filenames are quoted; non-ASCII use RFC 2231 filename*=utf-8”…
-func dispositionHeader(filename string) string {
-	if isASCII(filename) {
-		return `attachment; filename="` + stripCRLF(strings.ReplaceAll(filename, `"`, "")) + `"`
-	}
-	var pct strings.Builder
-	for _, b := range []byte(filename) {
-		if isAttrChar(b) {
-			pct.WriteByte(b)
-		} else {
-			fmt.Fprintf(&pct, "%%%02X", b)
-		}
-	}
-	return "attachment; filename*=utf-8''" + pct.String()
-}
-
-func isASCII(s string) bool {
-	for _, r := range s {
-		if r > 127 {
-			return false
-		}
-	}
-	return true
-}
-
-// isAttrChar reports RFC 5987 attr-char (safe unencoded in filename*).
-func isAttrChar(b byte) bool {
-	switch {
-	case b >= 'A' && b <= 'Z', b >= 'a' && b <= 'z', b >= '0' && b <= '9':
-		return true
-	}
-	return strings.IndexByte("!#$&+-.^_`|~", b) >= 0
-}
-
-func extForMIME(m string) string {
-	switch strings.ToLower(strings.TrimSpace(strings.SplitN(m, ";", 2)[0])) {
-	case "application/pdf":
-		return ".pdf"
-	case "text/plain":
-		return ".txt"
-	case "text/csv":
-		return ".csv"
-	case "text/html":
-		return ".html"
-	case "application/json":
-		return ".json"
-	case "image/png":
-		return ".png"
-	case "image/jpeg":
-		return ".jpg"
-	case "application/zip":
-		return ".zip"
-	}
-	return ".bin"
 }
