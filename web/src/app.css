@@ -4166,6 +4166,26 @@ button.warning:hover:not(:disabled) {
   flex-shrink: 0;
   user-select: none;
 }
+/* Webhook node's developer surface: collapsed by default in the inspector
+   (the hosted form leads; secret/curl/recipes live behind this). */
+.webhook-dev {
+  margin-top: var(--space-4);
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-3);
+}
+.webhook-dev > summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+  user-select: none;
+}
+.webhook-dev > summary:hover {
+  color: var(--text);
+}
+.webhook-dev-body {
+  margin-top: var(--space-3);
+}
+
 /* Duration field: value + unit side by side ("5 [minutes ▾]"). */
 .sf-duration {
   display: flex;

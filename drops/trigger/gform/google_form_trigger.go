@@ -53,10 +53,12 @@ func init() {
 					"form_id":{"type":"string","format":"google-form","title":"Form"},
 					"interval_seconds":{
 						"type":"integer",
-						"title":"Check every (seconds)",
+						"title":"Check every",
+						"format":"duration-seconds",
 						"minimum":1,
 						"maximum":31622400,
-						"default":300
+						"default":300,
+						"description":"How often to look for new responses. Leave blank to check only when you press Run."
 					},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
 				},

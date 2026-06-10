@@ -495,17 +495,12 @@ export function Inspector({
         )}
 
         {mode === "form" && isWebhookInput && graphMeta && (
-          // The webhook_input node's config panels (secret + curl recipe, then
-          // the hosted-form toggle/fields/URL/embed/submission-health), bound
-          // to the node's params instead of a graph-level trigger.
+          // The webhook_input node's config, friendliest path first: the
+          // hosted form (toggle/fields/URL/preview/submissions) leads, and
+          // the developer surface (bearer secret, curl recipe, form-tool
+          // bridges) is tucked into a collapsed disclosure — present for
+          // those who need it, invisible noise for everyone else.
           <>
-            <WebhookTab
-              graph={webhookGraph}
-              webhook={currentParams as GraphTrigger}
-              onChange={(patch) =>
-                onParamsChange(selected.id, { ...currentParams, ...patch })
-              }
-            />
             <FormTab
               graph={webhookGraph}
               webhook={currentParams as GraphTrigger}
@@ -513,6 +508,18 @@ export function Inspector({
                 onParamsChange(selected.id, { ...currentParams, ...patch })
               }
             />
+            <details className="webhook-dev">
+              <summary>{t("inspector.webhookDevSummary")}</summary>
+              <div className="webhook-dev-body">
+                <WebhookTab
+                  graph={webhookGraph}
+                  webhook={currentParams as GraphTrigger}
+                  onChange={(patch) =>
+                    onParamsChange(selected.id, { ...currentParams, ...patch })
+                  }
+                />
+              </div>
+            </details>
           </>
         )}
 

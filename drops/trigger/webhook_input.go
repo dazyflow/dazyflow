@@ -23,8 +23,8 @@ func init() {
 			Category:    "trigger",
 			Provider:    "internal",
 			Tags:        []string{"webhook", "trigger", "http", "event"},
-			Description: "Receives the body and headers of the inbound HTTP request that fired this graph. Pre-completed by the daemon when a webhook trigger matches; running the graph manually via 'hzctl graph run' will fail this node with no_trigger_data.",
-			Summary:     "Trigger that emits the body and headers of the inbound HTTP request that fired the graph.",
+			Description: "Starts the flow when something is sent to its web address — a submission from the flow's hosted form, or an HTTP request from another system. Data is what was sent (form fields / JSON); Headers carries the request's metadata.",
+			Summary:     "Starts the flow when its form is submitted or its web address receives data.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Webhook input (no params)",
@@ -36,8 +36,8 @@ func init() {
 			ProcessModel:   core.ProcessLongLived,
 			// No inputs — webhook is the data source.
 			Outputs: []core.Port{
-				{Port: "body", Label: "Request body (string for text MIMEs, parsed object for JSON)"},
-				{Port: "headers", Label: "Request headers as a JSON object", MIME: []string{"application/json"}},
+				{Port: "body", Label: "Data"},
+				{Port: "headers", Label: "Headers", MIME: []string{"application/json"}},
 			},
 			// Webhook + hosted-form config lives on the node now (like the
 			// Schedule/Poll nodes), read by the daemon's /trigger and /form
@@ -89,7 +89,7 @@ func executeWebhookInput(_ context.Context, job core.Job, _ chan<- core.Progress
 		Status: core.StatusError,
 		Error: &core.JobError{
 			Code:    "no_trigger_data",
-			Message: "webhook_input has no body — this graph must be fired via its webhook trigger (POST /trigger/<tenant>/<workspace>/<graph>), not run manually",
+			Message: "nothing was sent to this flow — it starts from its form or web address; submit the form (or POST the trigger URL) instead of pressing Run",
 		},
 	}, nil
 }

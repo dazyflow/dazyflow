@@ -367,15 +367,20 @@ export function WebhookTab({
         <p className="settings-help" style={{ margin: 0 }}>
           {t("triggers.webhook.help")}
         </p>
-        <button
-          type="button"
-          className="ghost"
-          onClick={onRemove}
-          aria-label={t("settings.triggers.removeAria")}
-          title={t("triggers.webhook.removeTitle")}
-        >
-          <Trash2 size={14} />
-        </button>
+        {/* Remove only exists in the legacy modal (which passes onRemove);
+            in the node Inspector the trigger IS the node, so a trash button
+            here would do nothing. */}
+        {onRemove && (
+          <button
+            type="button"
+            className="ghost"
+            onClick={onRemove}
+            aria-label={t("settings.triggers.removeAria")}
+            title={t("triggers.webhook.removeTitle")}
+          >
+            <Trash2 size={14} />
+          </button>
+        )}
       </div>
       <div className="sf-field">
         <div className="label-row">

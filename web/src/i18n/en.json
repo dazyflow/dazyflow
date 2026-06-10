@@ -1110,7 +1110,8 @@
     "mustBeObject": "must be a JSON object",
     "liveOutput": "Console",
     "deleteNode": "Delete step",
-    "deleteConfirm": "Delete step \"{{id}}\" and its connections?"
+    "deleteConfirm": "Delete step \"{{id}}\" and its connections?",
+    "webhookDevSummary": "For developers — trigger this flow by HTTP request"
   },
   "editor": {
     "back": "Back",

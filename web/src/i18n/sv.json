@@ -1107,7 +1107,8 @@
     "liveOutput": "Konsol",
     "about": "Om",
     "deleteNode": "Ta bort steg",
-    "deleteConfirm": "Ta bort steg \"{{id}}\" och dess kopplingar?"
+    "deleteConfirm": "Ta bort steg \"{{id}}\" och dess kopplingar?",
+    "webhookDevSummary": "För utvecklare — starta flödet via HTTP-anrop"
   },
   "editor": {
     "back": "Tillbaka",
