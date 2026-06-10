@@ -216,6 +216,114 @@ func (h *HTTPGateway) removeMember(rw http.ResponseWriter, r *http.Request, p co
 	rw.WriteHeader(http.StatusNoContent)
 }
 
+// capRolesToCaller rejects roles whose permissions exceed the caller's
+// own. Mirrors the IssueAPIKey / IssueOwnAPIKey guards: only a platform
+// admin may hand out the cross-tenant super-admin role, and a tenant
+// admin can only delegate permissions they themselves hold. Without
+// this an org admin could grant (or self-grant) a membership carrying
+// platform:admin and, after switchOrg copies the membership roles into
+// the session, break out of their own tenant. Shared by createInvitation
+// and updateMemberRoles so the two grant paths can't drift.
+func capRolesToCaller(p core.Principal, roles []core.Role) error {
+	if isPlatformAdmin(p) {
+		return nil
+	}
+	callerPerms := principalPermissions(p)
+	for _, role := range roles {
+		for _, perm := range role.Permissions {
+			if perm == core.PermPlatformAdmin {
+				return fmt.Errorf("only a platform admin may grant %q", core.PermPlatformAdmin)
+			}
+			if _, ok := callerPerms[perm]; !ok {
+				return fmt.Errorf("cannot grant permission %q: it exceeds your own permissions", perm)
+			}
+		}
+	}
+	return nil
+}
+
+// updateMemberRoles changes an existing member's roles in place —
+// PATCH /api/v1/admin/members/{email} with {"roles":[...]}. The home
+// owner can't be edited here (their roles live on the User record, and
+// the org must always keep its owner-admin), and roles can't be emptied
+// (removing access is DELETE's job). Role grants are capped to the
+// caller's own permissions, same as invitations.
+//
+// Caveat: a member's active session keeps its current roles until they
+// switch orgs or sign in again — switchOrg re-stamps the session from
+// the membership. Good enough for cooperative demotion; forced
+// revocation would need a session sweep (follow-up).
+func (h *HTTPGateway) updateMemberRoles(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	if h.Memberships == nil {
+		writeJSONError(rw, http.StatusNotImplemented, "memberships not configured")
+		return
+	}
+	if !core.CanAdminOrg(p) {
+		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
+		return
+	}
+	email := strings.ToLower(strings.TrimSpace(r.PathValue("email")))
+	if email == "" {
+		writeJSONError(rw, http.StatusBadRequest, "email required")
+		return
+	}
+	tenant := r.URL.Query().Get("tenant")
+	if tenant == "" {
+		tenant = p.Tenant
+	}
+	if tenant != p.Tenant && !isPlatformAdmin(p) {
+		writeJSONError(rw, http.StatusForbidden, "cannot modify another tenant")
+		return
+	}
+	var body struct {
+		Roles []core.Role `json:"roles"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
+		return
+	}
+	if len(body.Roles) == 0 {
+		writeJSONError(rw, http.StatusBadRequest, "roles required — to remove access, delete the membership instead")
+		return
+	}
+	if err := capRolesToCaller(p, body.Roles); err != nil {
+		writeJSONError(rw, http.StatusForbidden, err.Error())
+		return
+	}
+	// Guard: the home owner's roles aren't membership-backed.
+	if h.Users != nil {
+		if u, err := h.Users.GetByEmail(r.Context(), email); err == nil && u.Tenant == tenant {
+			writeJSONError(rw, http.StatusConflict, "cannot change the org owner's roles")
+			return
+		}
+	}
+	m, err := h.Memberships.GetMembership(r.Context(), email, tenant)
+	if err != nil {
+		if errors.Is(err, auth.ErrUnknownMembership) {
+			writeJSONError(rw, http.StatusNotFound, "no such member")
+			return
+		}
+		writeJSONError(rw, http.StatusInternalServerError, err.Error())
+		return
+	}
+	m.Roles = body.Roles
+	if err := h.Memberships.PutMembership(r.Context(), m); err != nil {
+		writeJSONError(rw, http.StatusInternalServerError, err.Error())
+		return
+	}
+	roleNames := make([]string, 0, len(body.Roles))
+	for _, role := range body.Roles {
+		roleNames = append(roleNames, role.Name)
+	}
+	h.audit(r.Context(), p, "member.roles.update", email, "roles="+strings.Join(roleNames, ","))
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"email":     m.UserEmail,
+		"tenant":    m.Tenant,
+		"workspace": m.Workspace,
+		"roles":     m.Roles,
+	})
+}
+
 // createInvitation handler. Body: {email, roles, workspace}. Mints
 // a token, stores a pending Invitation, returns the token + accept
 // URL. SMTP delivery is a follow-up; for now the response carries
@@ -244,42 +352,20 @@ func (h *HTTPGateway) createInvitation(rw http.ResponseWriter, r *http.Request, 
 		writeJSONError(rw, http.StatusBadRequest, err.Error())
 		return
 	}
-	// Cap the roles an inviter may grant. Mirrors the IssueAPIKey /
-	// IssueOwnAPIKey guards: only a platform admin may hand out the
-	// cross-tenant super-admin role, and a tenant admin can only delegate
-	// permissions they themselves hold. Without this an org admin could
-	// invite (or self-invite) a membership carrying platform:admin and,
-	// after switchOrg copies the membership roles into the session, break
-	// out of their own tenant. Only explicitly-requested roles are checked;
-	// the default editor role below is a trusted server-side grant.
-	if len(body.Roles) > 0 && !isPlatformAdmin(p) {
-		callerPerms := principalPermissions(p)
-		for _, role := range body.Roles {
-			for _, perm := range role.Permissions {
-				if perm == core.PermPlatformAdmin {
-					writeJSONError(rw, http.StatusForbidden,
-						fmt.Sprintf("only a platform admin may grant %q", core.PermPlatformAdmin))
-					return
-				}
-				if _, ok := callerPerms[perm]; !ok {
-					writeJSONError(rw, http.StatusForbidden,
-						fmt.Sprintf("cannot invite with permission %q: it exceeds your own permissions", perm))
-					return
-				}
-			}
+	// Cap the roles an inviter may grant (see capRolesToCaller). Only
+	// explicitly-requested roles are checked; the default editor role
+	// below is a trusted server-side grant.
+	if len(body.Roles) > 0 {
+		if err := capRolesToCaller(p, body.Roles); err != nil {
+			writeJSONError(rw, http.StatusForbidden, err.Error())
+			return
 		}
 	}
 	if len(body.Roles) == 0 {
 		// Default to the editor role so the invited person can do
 		// graph work without needing a second admin action. The
 		// inviter can override with body.Roles.
-		body.Roles = []core.Role{{
-			Name: "editor",
-			Permissions: []core.Permission{
-				core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
-				core.PermSecretRead, core.PermSecretWrite,
-			},
-		}}
+		body.Roles = []core.Role{core.TeamRoleEditor()}
 	}
 	if body.Workspace == "" {
 		body.Workspace = "main"

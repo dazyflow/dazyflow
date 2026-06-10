@@ -235,13 +235,7 @@ func mintTenantID() (string, error) {
 // keys, invite users via the team-features T3 item).
 func defaultSignupRoles() []core.Role {
 	return []core.Role{
-		{
-			Name: "editor",
-			Permissions: []core.Permission{
-				core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
-				core.PermSecretRead, core.PermSecretWrite,
-			},
-		},
+		core.TeamRoleEditor(),
 		{
 			Name:        "tenant_owner",
 			Permissions: []core.Permission{core.PermOrganizationAdmin},

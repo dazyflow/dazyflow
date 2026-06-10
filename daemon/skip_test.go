@@ -9,9 +9,9 @@ import (
 	"git.sr.ht/~klahr/hazyflow/auth"
 	"git.sr.ht/~klahr/hazyflow/core"
 	"git.sr.ht/~klahr/hazyflow/daemon"
+	_ "git.sr.ht/~klahr/hazyflow/drops" // register sleep/merge
 	"git.sr.ht/~klahr/hazyflow/engine"
 	"git.sr.ht/~klahr/hazyflow/engine/jobstore"
-	_ "git.sr.ht/~klahr/hazyflow/drops" // register sleep/merge
 	"git.sr.ht/~klahr/hazyflow/workspace"
 )
 
@@ -35,7 +35,8 @@ type skipHarness struct {
 	jobs      core.JobStore
 	bus       *daemon.MemoryBus
 	principal core.Principal
-	executed  *atomic.Int32 // counts boom invocations for assertions
+	executed  *atomic.Int32         // counts boom invocations for assertions
+	usage     *daemon.MemUsageStore // usage-metering assertions (usage_e2e_test.go)
 }
 
 func newSkipHarness(t *testing.T) *skipHarness {
@@ -101,12 +102,14 @@ func newSkipHarness(t *testing.T) *skipHarness {
 	ws, _ := workspace.OpenFS("")
 	jobs := jobstore.NewMemory()
 	bus := daemon.NewMemoryBus()
+	usage := daemon.NewMemUsageStore()
 	svc := &daemon.Service{
 		Auth:       auth.Chain{&auth.APIKeyAuthenticator{Store: ks}},
 		Workspaces: daemon.MapWorkspaces{"t/ws": ws},
 		Jobs:       jobs,
 		Engine:     eng,
 		Bus:        bus,
+		Usage:      usage,
 	}
 
 	wctx, cancel := context.WithCancel(context.Background())
@@ -116,10 +119,11 @@ func newSkipHarness(t *testing.T) *skipHarness {
 		PollInterval: 5 * time.Millisecond,
 		MaxRetries:   1, // disable retry so we test skip in isolation
 		RetryBackoff: func(int) time.Duration { return time.Millisecond },
+		Usage:        usage,
 	}, jobs, eng, bus)
 	go func() { _ = w.Run(wctx) }()
 
-	return &skipHarness{svc: svc, jobs: jobs, bus: bus, principal: p, executed: executed}
+	return &skipHarness{svc: svc, jobs: jobs, bus: bus, principal: p, executed: executed, usage: usage}
 }
 
 func TestSkip_FailureDoesNotPropagateThroughSkipEdge(t *testing.T) {

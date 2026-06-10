@@ -173,6 +173,7 @@ function MemberCard({
   const { t } = useTranslation();
   const { token } = useAuth();
   const [removing, setRemoving] = useState(false);
+  const [savingRole, setSavingRole] = useState(false);
 
   const remove = async () => {
     if (!token) return;
@@ -185,6 +186,21 @@ function MemberCard({
       alert((e as Error).message);
     } finally {
       setRemoving(false);
+    }
+  };
+
+  const currentRole = teamRoleOf(member.roles);
+  const changeRole = async (next: string) => {
+    if (!token || next === currentRole) return;
+    if (next !== "viewer" && next !== "editor" && next !== "admin") return;
+    setSavingRole(true);
+    try {
+      await api.updateMemberRoles(token, member.email, [rolePresetFor(next)]);
+      onChanged();
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setSavingRole(false);
     }
   };
 
@@ -212,6 +228,36 @@ function MemberCard({
         </div>
       </div>
       <div className="user-card-actions">
+        {/* Role picker — members only; the owner's roles aren't
+            membership-backed (the server answers 409 anyway). A custom
+            multi-role set shows as "custom"; picking a catalog role
+            replaces it. */}
+        {!member.home && (
+          <select
+            value={currentRole ?? "custom"}
+            disabled={savingRole}
+            onChange={(e) => void changeRole(e.target.value)}
+            title={t("admin.users.changeRoleTitle")}
+            aria-label={t("admin.users.changeRoleTitle")}
+          >
+            {currentRole === null && (
+              <option value="custom" disabled>
+                {t("admin.users.roleCustom")}
+              </option>
+            )}
+            {TEAM_ROLE_NAMES.map((n) => (
+              <option key={n} value={n}>
+                {t(
+                  n === "viewer"
+                    ? "admin.users.roleViewer"
+                    : n === "editor"
+                    ? "admin.users.roleEditor"
+                    : "admin.users.roleAdmin",
+                )}
+              </option>
+            ))}
+          </select>
+        )}
         {!member.home && (
           <button onClick={remove} disabled={removing} title={t("admin.users.removeTitle")}>
             <Trash2 size={12} style={{ marginRight: 4, verticalAlign: -1 }} />
@@ -369,7 +415,7 @@ function InviteModal({
   const { t } = useTranslation();
   const { token } = useAuth();
   const [email, setEmail] = useState("");
-  const [roleName, setRoleName] = useState<"editor" | "admin">("editor");
+  const [roleName, setRoleName] = useState<TeamRoleName>("editor");
   const [submitting, setSubmitting] = useState(false);
 
   const trimmed = email.trim();
@@ -441,6 +487,14 @@ function InviteModal({
             <div className="role-template-grid">
               <button
                 type="button"
+                className={"role-template" + (roleName === "viewer" ? " active" : "")}
+                onClick={() => setRoleName("viewer")}
+              >
+                <div className="role-template-name">{t("admin.users.roleViewer")}</div>
+                <div className="role-template-desc">{t("admin.users.roleViewerDesc")}</div>
+              </button>
+              <button
+                type="button"
                 className={"role-template" + (roleName === "editor" ? " active" : "")}
                 onClick={() => setRoleName("editor")}
               >
@@ -479,7 +533,14 @@ function InviteModal({
   );
 }
 
-function rolePresetFor(name: "editor" | "admin"): Role {
+// The team role catalog — mirrors core.TeamRoleViewer/Editor/Admin on
+// the server (the server re-validates against the caller's own
+// permissions, so this is display + convenience, not authority).
+type TeamRoleName = "viewer" | "editor" | "admin";
+
+const TEAM_ROLE_NAMES: TeamRoleName[] = ["viewer", "editor", "admin"];
+
+function rolePresetFor(name: TeamRoleName): Role {
   if (name === "admin") {
     return {
       name: "admin",
@@ -493,6 +554,9 @@ function rolePresetFor(name: "editor" | "admin"): Role {
       ],
     };
   }
+  if (name === "viewer") {
+    return { name: "viewer", permissions: ["graph:run"] };
+  }
   return {
     name: "editor",
     permissions: [
@@ -503,6 +567,16 @@ function rolePresetFor(name: "editor" | "admin"): Role {
       "secret:write",
     ],
   };
+}
+
+// teamRoleOf reduces a member's stored role set to a catalog name when
+// it matches one (single role named viewer/editor/admin), or null for
+// custom/multi-role sets — those show as "custom" and stay editable
+// only via the API.
+function teamRoleOf(roles: Role[]): TeamRoleName | null {
+  if (roles.length !== 1) return null;
+  const n = roles[0].name;
+  return n === "viewer" || n === "editor" || n === "admin" ? n : null;
 }
 
 // absoluteInviteURL turns a path-only accept_url (returned when the

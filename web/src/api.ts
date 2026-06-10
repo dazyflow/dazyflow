@@ -27,7 +27,13 @@ import type {
   ResourceDef,
   SecretManagerStatus,
   SecretManagerConfig,
+  AwsSecretManagerStatus,
+  AwsSecretManagerConfig,
+  GcpSecretManagerStatus,
+  GcpSecretManagerConfig,
+  BillingInfo,
   ServiceInfo,
+  UsageCounters,
   UserSummary,
   VersionStatus,
   WhoAmI,
@@ -580,6 +586,33 @@ export const api = {
     request<RunView>(token, "GET", `/me/runs/${encodeURIComponent(jobID)}`).then(
       runViewToRecord,
     ),
+  // Billing: plan state for the Usage page, and the two Stripe
+  // redirects (Checkout to upgrade, billing portal to manage/cancel).
+  getBilling: (token: string, tenant?: string) => {
+    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
+    return request<BillingInfo>(token, "GET", "/me/billing" + qs);
+  },
+  createCheckout: (token: string, tenant?: string) => {
+    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
+    return request<{ url: string }>(token, "POST", "/me/billing/checkout" + qs);
+  },
+  createBillingPortal: (token: string, tenant?: string) => {
+    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
+    return request<{ url: string }>(token, "POST", "/me/billing/portal" + qs);
+  },
+  // Usage metering: the tenant's graph-run + node-execution counts,
+  // one bucket per month, newest first (current month always present).
+  getUsage: (token: string, opts: { tenant?: string; months?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.tenant) qs.set("tenant", opts.tenant);
+    if (opts.months) qs.set("months", String(opts.months));
+    const q = qs.toString();
+    return request<{ usage: UsageCounters[] }>(
+      token,
+      "GET",
+      "/me/usage" + (q ? "?" + q : ""),
+    );
+  },
   listPendingApprovals: (token: string, opts: { workspace?: string; tenant?: string } = {}) => {
     const qs = new URLSearchParams();
     if (opts.workspace) qs.set("workspace", opts.workspace);
@@ -897,6 +930,20 @@ export const api = {
     request<void>(token, "PUT", "/secret-manager", cfg),
   deleteSecretManager: (token: string) =>
     request<void>(token, "DELETE", "/secret-manager"),
+  // AWS / GCP flavours — same contract, separate config slots, so a
+  // tenant can run vault://, aws://, and gcp:// side by side.
+  getSecretManagerAws: (token: string) =>
+    request<AwsSecretManagerStatus>(token, "GET", "/secret-manager/aws"),
+  setSecretManagerAws: (token: string, cfg: AwsSecretManagerConfig) =>
+    request<void>(token, "PUT", "/secret-manager/aws", cfg),
+  deleteSecretManagerAws: (token: string) =>
+    request<void>(token, "DELETE", "/secret-manager/aws"),
+  getSecretManagerGcp: (token: string) =>
+    request<GcpSecretManagerStatus>(token, "GET", "/secret-manager/gcp"),
+  setSecretManagerGcp: (token: string, cfg: GcpSecretManagerConfig) =>
+    request<void>(token, "PUT", "/secret-manager/gcp", cfg),
+  deleteSecretManagerGcp: (token: string) =>
+    request<void>(token, "DELETE", "/secret-manager/gcp"),
 
   switchOrg: (token: string, tenant: string) =>
     request<{ tenant: string; workspace: string; roles: Role[] }>(
@@ -916,6 +963,18 @@ export const api = {
       token,
       "DELETE",
       `/admin/members/${encodeURIComponent(email)}${qs}`,
+    );
+  },
+  // updateMemberRoles replaces a member's role set (viewer/editor/admin
+  // from the catalog, or a custom set). The home owner can't be changed
+  // this way — the server answers 409.
+  updateMemberRoles: (token: string, email: string, roles: Role[], tenant?: string) => {
+    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
+    return request<{ email: string; roles: Role[] }>(
+      token,
+      "PATCH",
+      `/admin/members/${encodeURIComponent(email)}${qs}`,
+      { roles },
     );
   },
 

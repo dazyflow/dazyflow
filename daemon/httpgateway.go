@@ -134,6 +134,12 @@ type HTTPGateway struct {
 	// webhook-secret flag/env is set.
 	GitHubEvents *GitHubEventsHandler
 
+	// Billing holds the Stripe wiring (Checkout/portal client + webhook
+	// secret). Nil = checkout/portal/webhook routes return 501; the
+	// read-only GET /me/billing still works so the UI can render the
+	// plan state on deployments without Stripe.
+	Billing *BillingHandler
+
 	// Memberships powers the multi-org model: one user can be a member
 	// of many orgs (in addition to the "home" org their User record
 	// names). Nil means the deployment is still single-org per user —
@@ -309,6 +315,12 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/secret-manager", h.requireAuth(h.getSecretManager))
 	mux.HandleFunc("PUT /api/v1/secret-manager", h.requireAuth(h.putSecretManager))
 	mux.HandleFunc("DELETE /api/v1/secret-manager", h.requireAuth(h.deleteSecretManager))
+	mux.HandleFunc("GET /api/v1/secret-manager/aws", h.requireAuth(h.getSecretManagerAws))
+	mux.HandleFunc("PUT /api/v1/secret-manager/aws", h.requireAuth(h.putSecretManagerAws))
+	mux.HandleFunc("DELETE /api/v1/secret-manager/aws", h.requireAuth(h.deleteSecretManagerAws))
+	mux.HandleFunc("GET /api/v1/secret-manager/gcp", h.requireAuth(h.getSecretManagerGcp))
+	mux.HandleFunc("PUT /api/v1/secret-manager/gcp", h.requireAuth(h.putSecretManagerGcp))
+	mux.HandleFunc("DELETE /api/v1/secret-manager/gcp", h.requireAuth(h.deleteSecretManagerGcp))
 	mux.HandleFunc("GET /api/v1/oauth/providers", h.requireAuth(h.oauthListProviders))
 	mux.HandleFunc("GET /api/v1/oauth/{provider}/accounts", h.requireAuth(h.oauthListAccounts))
 	mux.HandleFunc("GET /api/v1/oauth/{provider}/resources", h.requireAuth(h.listAccountResources))
@@ -360,6 +372,10 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// the existing jobID verbatim. Handlers in daemon/me_routes.go
 	// translate to the legacy graph + job service methods. Mutating
 	// routes honor Idempotency-Key for replay-safe retries.
+	mux.HandleFunc("GET /api/v1/me/usage", h.requireAuth(h.usageMe))
+	mux.HandleFunc("GET /api/v1/me/billing", h.requireAuth(h.billingMe))
+	mux.HandleFunc("POST /api/v1/me/billing/checkout", h.requireAuth(h.billingCheckout))
+	mux.HandleFunc("POST /api/v1/me/billing/portal", h.requireAuth(h.billingPortal))
 	mux.HandleFunc("GET /api/v1/me/flows", h.requireAuth(h.listFlowsMe))
 	mux.HandleFunc("GET /api/v1/me/flows/{flow_id}", h.requireAuth(h.loadFlowMe))
 	mux.HandleFunc("GET /api/v1/me/flows/{flow_id}/history", h.requireAuth(h.historyFlowMe))
@@ -412,6 +428,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// as a stranger; the HMAC signature is the auth.
 	mux.HandleFunc("POST /api/v1/events/slack/{tenant}", h.slackEvents)
 	mux.HandleFunc("POST /api/v1/events/github/{tenant}", h.githubEvents)
+	mux.HandleFunc("POST /api/v1/events/stripe", h.stripeEvents)
 	mux.HandleFunc("GET /api/v1/approvals/pending", h.requireAuth(h.listPendingApprovals))
 	mux.HandleFunc("POST /api/v1/approvals/{runID}/{nodeID}", h.requireAuth(h.approveAuthed))
 	mux.HandleFunc("GET /api/v1/admin/api-keys", h.requireAuth(h.listAPIKeys))
@@ -448,6 +465,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/admin/invitations", h.requireAuth(h.listInvitations))
 	mux.HandleFunc("DELETE /api/v1/admin/invitations/{token}", h.requireAuth(h.revokeInvitation))
 	mux.HandleFunc("GET /api/v1/admin/members", h.requireAuth(h.listMembers))
+	mux.HandleFunc("PATCH /api/v1/admin/members/{email}", h.requireAuth(h.updateMemberRoles))
 	mux.HandleFunc("DELETE /api/v1/admin/members/{email}", h.requireAuth(h.removeMember))
 	mux.HandleFunc("GET /api/v1/invitations/{token}", h.viewInvitation)
 	mux.HandleFunc("POST /api/v1/invitations/{token}/accept", h.requireAuth(h.acceptInvitation))
@@ -1562,6 +1580,12 @@ func (h *HTTPGateway) runGraph(rw http.ResponseWriter, r *http.Request, p core.P
 	}
 	runID, err := h.svc.SubmitGraph(r.Context(), p, g)
 	if err != nil {
+		// Plan-gate refusals get 402 so the web client can show an
+		// upgrade prompt instead of a generic error toast.
+		if errors.Is(err, core.ErrPlanLimit) {
+			writeJSONError(rw, http.StatusPaymentRequired, err.Error())
+			return
+		}
 		writeJSONError(rw, http.StatusBadRequest, err.Error())
 		return
 	}

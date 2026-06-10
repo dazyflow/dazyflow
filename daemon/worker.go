@@ -41,6 +41,11 @@ type WorkerConfig struct {
 	// terminal status) for the /metrics endpoint. Nil disables it.
 	Metrics *Metrics
 
+	// Usage, when set, counts executed node attempts per tenant per
+	// month (T3 metering). Best-effort: a metering failure is logged,
+	// never affects the node's outcome.
+	Usage UsageStore
+
 	// DefaultNodeTimeout is the wall-time backstop applied to a node that
 	// sets no explicit TimeoutSeconds. Without it, a node that honors
 	// cancellation but never finishes on its own — a remote gRPC call to a
@@ -285,6 +290,15 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 	// that will retry are counted too — they're real executions.
 	if w.cfg.Metrics != nil {
 		w.cfg.Metrics.ObserveNode(string(status), nodeElapsed.Seconds())
+	}
+	// Usage metering (T3): same scope as the latency metric — every
+	// executed attempt is a billable node execution, retries included
+	// (they consumed compute). Detached from the claim ctx so a
+	// shutdown can't drop the count of work already done.
+	if w.cfg.Usage != nil {
+		if uerr := w.cfg.Usage.AddNodeExecutions(context.WithoutCancel(ctx), rec.Tenant, 1, time.Now()); uerr != nil {
+			w.cfg.Logger.Printf("[%s] usage metering [%s]: count node execution: %v", w.cfg.ID, rec.Tenant, uerr)
+		}
 	}
 
 	// Timeouts are intentional caps, not transient blips — retrying

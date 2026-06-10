@@ -50,6 +50,12 @@ var ErrQuotaExceeded = errors.New("quota exceeded")
 // guard checked before any run state is allocated.
 var ErrGraphTooLarge = errors.New("graph exceeds node limit")
 
+// ErrPlanLimit is returned when a run submission is rejected by the
+// tenant's billing plan (free-tier monthly run cap). Callers match it
+// with errors.Is to surface an upgrade prompt (HTTP 402) instead of a
+// generic bad-request error.
+var ErrPlanLimit = errors.New("plan limit reached")
+
 // QuotaReserver is an optional extension of QuotaProvider for providers
 // that can atomically reserve bytes against a tenant's budget. It closes
 // the TOCTOU race the bare Used() snapshot can't: two concurrent writes

@@ -138,6 +138,16 @@ func main() {
 	slackSigningSecret := envStr("HAZYFLOW_SLACK_SIGNING_SECRET", "")
 	githubWebhookSecret := envStr("HAZYFLOW_GITHUB_WEBHOOK_SECRET", "")
 	approvalHMACSecret := envStr("HAZYFLOW_APPROVAL_HMAC_SECRET", "")
+	// Billing (T3). All off by default: no Stripe key = no checkout/
+	// portal/webhook endpoints; FREE_RUNS_PER_MONTH=0 = no run gate.
+	// A SaaS deployment sets all four; self-hosted installs set none.
+	stripeSecretKey := envStr("HAZYFLOW_STRIPE_SECRET_KEY", "")
+	stripePriceID := envStr("HAZYFLOW_STRIPE_PRICE_ID", "")
+	stripeWebhookSecret := envStr("HAZYFLOW_STRIPE_WEBHOOK_SECRET", "")
+	freeRunsPerMonth := envInt("HAZYFLOW_FREE_RUNS_PER_MONTH", 0)
+	if freeRunsPerMonth > 0 {
+		log.Printf("plan gate enabled: free tier capped at %d runs/month (pro unlimited)", freeRunsPerMonth)
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -259,13 +269,19 @@ func main() {
 	}
 	encryptedSecrets := setupEncryptedSecrets(ctx, masterKeyB64, secrets, pgPool)
 
-	// Bring-your-own secret manager: vault:// resolves against each tenant's own
-	// OpenBao/Vault, with the per-tenant connection config stored (encrypted) in
-	// the built-in store — so it's only available when that store is configured.
+	// Bring-your-own secret managers: vault:// / aws:// / gcp:// resolve
+	// against each tenant's own OpenBao/Vault, AWS Secrets Manager, or GCP
+	// Secret Manager. The per-tenant connection configs are stored
+	// (encrypted) in the built-in store — so they're only available when
+	// that store is configured.
 	if encryptedSecrets != nil {
 		vaultProvider := daemon.NewVaultProviderForStore(encryptedSecrets, 15*time.Second)
 		secrets[vaultProvider.Scheme()] = vaultProvider
-		log.Print("BYO secret manager enabled (scheme: vault://) — tenants configure their own OpenBao/Vault via /api/v1/secret-manager")
+		awsProvider := daemon.NewAwsSecretsProviderForStore(encryptedSecrets, 15*time.Second)
+		secrets[awsProvider.Scheme()] = awsProvider
+		gcpProvider := daemon.NewGcpSecretsProviderForStore(encryptedSecrets, 15*time.Second)
+		secrets[gcpProvider.Scheme()] = gcpProvider
+		log.Print("BYO secret managers enabled (schemes: vault://, aws://, gcp://) — tenants configure their own via /api/v1/secret-manager[/aws|/gcp]")
 	}
 
 	// KEK rotation is an offline operator action: re-wrap every tenant
@@ -363,6 +379,13 @@ func main() {
 		// Default logger threads daemon-side warnings to the same
 		// log writer the gateway uses for HTTP request logs.
 		Logger: log.New(log.Writer(), "service: ", log.LstdFlags),
+		// Usage metering (T3): one counted run per submission; the
+		// worker pool counts node executions through the same store.
+		Usage: stores.usage,
+		// Billing (T3): plan resolution + the free-tier run gate.
+		// FreeRunsPerMonth=0 (the default) disables enforcement.
+		Plans:            stores.plans,
+		FreeRunsPerMonth: freeRunsPerMonth,
 	}
 
 	// Approval-link flow: when HAZYFLOW_APPROVAL_HMAC_SECRET is set,
@@ -404,6 +427,7 @@ func main() {
 		eng:         eng,
 		pgPool:      pgPool,
 		metrics:     appMetrics,
+		usage:       stores.usage,
 		workerCount: workerCount,
 	}, &bgWg)
 
@@ -468,6 +492,9 @@ func main() {
 			wildcardDomain:   wildcardDomain,
 			slackSigning:     slackSigningSecret,
 			githubWebhook:    githubWebhookSecret,
+			stripeSecretKey:  stripeSecretKey,
+			stripePriceID:    stripePriceID,
+			stripeWebhook:    stripeWebhookSecret,
 			enableSignup:     enableSignup,
 			enableMetrics:    enableMetrics,
 			trustProxy:       trustProxyHeaders,
@@ -575,6 +602,8 @@ type coreStores struct {
 	users    auth.UserStore
 	sessions auth.SessionStore
 	jobs     core.JobStore
+	usage    daemon.UsageStore
+	plans    daemon.PlanStore
 }
 
 // openCoreStores connects the shared pgxpool and opens the key / user /
@@ -629,17 +658,27 @@ func openCoreStores(ctx context.Context, dsn string, maxConns, minConns int, ses
 	if err != nil {
 		log.Fatalf("postgres job store: %v", err)
 	}
+	pgUsage, err := daemon.NewPgUsageStore(ctx, pool)
+	if err != nil {
+		log.Fatalf("postgres usage store: %v", err)
+	}
+	pgPlans, err := daemon.NewPgPlanStore(ctx, pool)
+	if err != nil {
+		log.Fatalf("postgres plan store: %v", err)
+	}
 	if sessionCacheTTL > 0 {
 		log.Printf("session lookup cache: ttl=%s", sessionCacheTTL)
 	}
 	seedDefaultUser(ctx, pgUsers, devSeed)
-	log.Print("postgres stores enabled: jobs, api-keys, sessions, users (durable across restart)")
+	log.Print("postgres stores enabled: jobs, api-keys, sessions, users, usage (durable across restart)")
 	return coreStores{
 		pool:     pool,
 		keys:     pgKeys,
 		users:    pgUsers,
 		sessions: auth.NewCachingSessionStore(pgSessions, sessionCacheTTL, 0),
 		jobs:     pgJobs,
+		usage:    pgUsage,
+		plans:    pgPlans,
 	}
 }
 
@@ -651,6 +690,7 @@ type backgroundDeps struct {
 	eng         *engine.Engine
 	pgPool      *pgxpool.Pool
 	metrics     *daemon.Metrics
+	usage       daemon.UsageStore
 	workerCount int
 }
 
@@ -665,6 +705,7 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 		w := daemon.NewWorker(daemon.WorkerConfig{
 			ID:      fmt.Sprintf("hzd-dev-w%d", i),
 			Metrics: d.metrics,
+			Usage:   d.usage,
 		}, d.jobs, d.eng, d.bus)
 		// Enable subgraph execution: the worker hands a parked subgraph
 		// node's child graph to the Service to submit and run. Without this,
@@ -811,6 +852,9 @@ type gatewayDeps struct {
 	wildcardDomain   string
 	slackSigning     string
 	githubWebhook    string
+	stripeSecretKey  string
+	stripePriceID    string
+	stripeWebhook    string
 	enableSignup     bool
 	enableMetrics    bool
 	trustProxy       bool
@@ -889,6 +933,22 @@ func buildGateway(ctx context.Context, d gatewayDeps) {
 	if d.githubWebhook != "" {
 		gw.GitHubEvents = daemon.NewGitHubEventsHandler(d.svc, d.githubWebhook)
 		log.Print("GitHub events endpoint enabled at /api/v1/events/github/<tenant>")
+	}
+	// Billing: the Stripe client needs both the API key and the pro
+	// price; the webhook secret can ride alone (plan sync without
+	// checkout — e.g. plans driven from the Stripe dashboard).
+	if d.stripeSecretKey != "" || d.stripeWebhook != "" {
+		var sc *daemon.StripeClient
+		if d.stripeSecretKey != "" && d.stripePriceID != "" {
+			sc = daemon.NewStripeClient(d.stripeSecretKey, d.stripePriceID)
+			log.Print("Stripe checkout/portal enabled at /api/v1/me/billing/*")
+		} else if d.stripeSecretKey != "" {
+			log.Print("HAZYFLOW_STRIPE_SECRET_KEY set without HAZYFLOW_STRIPE_PRICE_ID — checkout disabled")
+		}
+		gw.Billing = daemon.NewBillingHandler(sc, d.stripeWebhook)
+		if d.stripeWebhook != "" {
+			log.Print("Stripe events endpoint enabled at /api/v1/events/stripe")
+		}
 	}
 	if d.webOrigin != "" {
 		for _, o := range strings.Split(d.webOrigin, ",") {

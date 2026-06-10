@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"git.sr.ht/~klahr/hazyflow/core"
 )
@@ -97,6 +98,17 @@ func (s *Service) SubmitGraphWithSeed(
 		return "", fmt.Errorf("%w: graph has %d nodes, limit is %d",
 			core.ErrGraphTooLarge, len(g.Nodes), s.MaxGraphNodes)
 	}
+	// Plan gate (T3): free-tier tenants get FreeRunsPerMonth runs per
+	// calendar month; over the cap the submission is refused with
+	// core.ErrPlanLimit (HTTP 402 at the gateway) before any state is
+	// written. Applies to every entry point — manual Run, scheduler,
+	// webhook/form triggers — since they all pass through here. Nested
+	// sub-graph runs bypass it (submitGraphWithParent): their parent
+	// was already admitted, and stranding a mid-run graph would be
+	// worse than one over-cap child.
+	if err := s.checkRunQuota(ctx, g.Tenant); err != nil {
+		return "", err
+	}
 	// Validate seed targets exist in the graph before any state writes.
 	for nodeID := range seeds {
 		if _, ok := g.Node(nodeID); !ok {
@@ -126,6 +138,18 @@ func (s *Service) SubmitGraphWithSeed(
 	}
 	if err := s.Jobs.Enqueue(ctx, graphRec); err != nil {
 		return "", fmt.Errorf("enqueue graph: %w", err)
+	}
+
+	// Usage metering (T3): one billable run per accepted submission, from
+	// every entry point (manual Run, scheduler, webhook/form/Slack/GitHub
+	// triggers) since they all funnel through here. Nested sub-graph runs
+	// go through submitGraphWithParent and are deliberately NOT counted —
+	// their nodes still meter as node executions, and counting the child
+	// run too would double-bill one user action. Best-effort by contract.
+	if s.Usage != nil {
+		if uerr := s.Usage.AddRun(ctx, g.Tenant, time.Now()); uerr != nil && s.Logger != nil {
+			s.Logger.Printf("usage metering [%s]: count run: %v", g.Tenant, uerr)
+		}
 	}
 
 	if len(g.Nodes) == 0 {

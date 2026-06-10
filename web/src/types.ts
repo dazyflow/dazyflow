@@ -659,3 +659,52 @@ export type SecretManagerConfig = {
     | { method: "token"; token: string }
     | { method: "approle"; role_id: string; secret_id: string };
 };
+
+// GET /api/v1/me/usage — one bucket per calendar month (UTC), newest
+// first. The current month is always present (zeroed when idle).
+export type UsageCounters = {
+  period: string; // "2026-06"
+  graph_runs: number;
+  node_executions: number;
+};
+
+// GET /api/v1/me/billing — plan state for the Usage page. free_runs_per_month
+// is 0 when the deployment has no run gate; can_upgrade/can_manage reflect
+// whether Stripe is configured (and a customer exists, respectively).
+export type BillingInfo = {
+  plan: "free" | "pro";
+  subscription_status?: string;
+  free_runs_per_month: number;
+  runs_this_month: number;
+  can_upgrade: boolean;
+  can_manage: boolean;
+};
+
+// GET /api/v1/secret-manager/aws — redacted (the secret access key never
+// comes back). PUT body is AwsSecretManagerConfig.
+export type AwsSecretManagerStatus = {
+  configured: boolean;
+  region?: string;
+  access_key_id?: string;
+  endpoint?: string;
+};
+export type AwsSecretManagerConfig = {
+  region: string;
+  access_key_id: string;
+  secret_access_key: string;
+  endpoint?: string;
+};
+
+// GET /api/v1/secret-manager/gcp — redacted (the service-account key never
+// comes back; client_email identifies it). PUT body is GcpSecretManagerConfig.
+export type GcpSecretManagerStatus = {
+  configured: boolean;
+  project_id?: string;
+  client_email?: string;
+  endpoint?: string;
+};
+export type GcpSecretManagerConfig = {
+  project_id: string;
+  service_account_key: string;
+  endpoint?: string;
+};

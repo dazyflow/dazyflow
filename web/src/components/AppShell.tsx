@@ -7,6 +7,7 @@ import {
   Workflow,
   ShieldCheck,
   Activity,
+  Gauge,
   Inbox,
   ChevronDown,
   ChevronLeft,
@@ -414,6 +415,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             <Activity size={18} />
             <span className="nav-label">{t("nav.runs")}</span>
+          </NavLink>
+          <NavLink
+            to="/usage"
+            title={t("nav.usage")}
+          >
+            <Gauge size={18} />
+            <span className="nav-label">{t("nav.usage")}</span>
           </NavLink>
           {/* Approvals lives in the sidebar only when it's actually
               useful: any pending approval right now, a sticky flag

@@ -515,22 +515,119 @@ this no customer can try" to "needed before paid conversion."
 
 ### T3 — Monetization (needed before charging)
 
-- [ ] **Per-tenant metering.** Count graph runs + node executions
-  per tenant per month. Surface a usage page in the UI. Persistence
-  in Postgres (a new `usage_counters` table). Reset on the tenant's
-  billing day. ~4 days.
-- [ ] **Stripe integration + plan gates.** Free tier (e.g. 100
-  runs/month, no polling triggers, no premium connectors), paid
-  tier unlocks polling + premium apps. Stripe Checkout for upgrades,
-  webhook on payment events updates tenant plan. ~3 days.
-- [ ] **Team features.** Multiple users per tenant, shared
-  workflows, basic role split (owner / editor / viewer — the RBAC
-  primitives already exist server-side, this is the UX). ~3 days.
-- [ ] **BYO cloud secret providers** (Vault / AWS Secrets Manager /
-  GCP Secret Manager). Same `core.SecretProvider` interface, new
-  schemes (`vault://`, `aws://`, `gcp://`). Enterprise-tier feature
-  for customers who insist on holding their own keys in their own
-  KMS. ~2-3 days per provider.
+- [~] **Per-tenant metering.** Shipped (2026-06-10): `daemon.UsageStore`
+  (Mem + `PgUsageStore` over a new `usage_counters` table, one row per
+  tenant-month, atomic ON CONFLICT upserts so multi-replica workers
+  never lose counts). Runs counted in `SubmitGraphWithSeed` (the single
+  choke point all entry points funnel through — manual Run, scheduler,
+  webhook/form/Slack/GitHub; nested sub-graph runs deliberately NOT
+  counted as runs to avoid double-billing one user action). Node
+  executions counted in the worker next to the latency metric — every
+  executed attempt meters (retries included), skipped/disabled nodes
+  don't. Best-effort by contract: metering failure logs, never fails a
+  run. Surface: `GET /api/v1/me/usage` (scope-checked, current month
+  always present, `?months=` history) + a Usage page in the sidebar
+  (headline current-month runs/step-executions + monthly history,
+  en+sv). Tests: store contract (mem + pg-gated), e2e through real
+  SubmitGraph/worker, endpoint authz; verified in the browser against
+  a real Postgres. **Open:** billing-day alignment — buckets are UTC
+  calendar months on purpose; layer the tenant's billing anchor at
+  query time when Stripe plans land (the writes don't change). The
+  Usage page shows no plan limit yet (no plans exist).
+- [~] **Stripe integration + plan gates.** Shipped (2026-06-10), the
+  run-limit slice: `daemon.PlanStore` (Mem + `PgPlanStore` over a new
+  `tenant_plans` table; no row = free). Gate: `Service.checkRunQuota`
+  in `SubmitGraphWithSeed` rejects a free tenant over
+  `HAZYFLOW_FREE_RUNS_PER_MONTH` runs/month (read from the metering
+  counters) with `core.ErrPlanLimit` → HTTP 402 + an upgrade-worded
+  message; pro unlimited; limit unset (default) = no enforcement, so
+  self-hosted installs never gate. Fails OPEN on plan/usage store
+  errors (availability over one free run). Sub-graph children bypass
+  (parent already admitted). Stripe: hand-rolled minimal client
+  (`daemon/stripe.go` — Checkout session, billing-portal session,
+  webhook signature verify with replay window + rotation support; no
+  stripe-go dep, same trade as /metrics). Endpoints:
+  `GET /api/v1/me/billing` (plan/cap/used/can_upgrade/can_manage),
+  `POST /me/billing/checkout` + `/portal` (Stripe-hosted URLs;
+  tenant rides as client_reference_id AND subscription metadata so
+  every event maps back without a reverse index),
+  `POST /api/v1/events/stripe` (signature is the auth, mirroring the
+  GitHub events endpoint; checkout.session.completed → pro,
+  subscription deleted/canceled/unpaid → free, past_due stays pro
+  while Stripe retries the charge; store errors 500 so Stripe
+  retries). Env (all default-off, documented in `.env.example`):
+  `HAZYFLOW_STRIPE_SECRET_KEY` / `_PRICE_ID` / `_WEBHOOK_SECRET`,
+  `HAZYFLOW_FREE_RUNS_PER_MONTH`. UI: Usage page gained the plan
+  card — plan badge, used/limit progress bar (red at the cap),
+  Upgrade (Checkout redirect) + Manage billing (portal) buttons,
+  en+sv. Tests: plan-store contract (mem + pg-gated), gate matrix
+  (capped/pro/disabled, via real submissions), Stripe client +
+  signature vectors, webhook handler matrix (upgrade/downgrade/
+  past_due/forged-sig/unconfigured/unknown-event), full
+  capped→webhook-upgrade→uncapped loop; verified end-to-end in the
+  browser (402 with friendly message at the cap, signed webhook
+  flips the page to Pro and the run goes through). **Open:** the
+  other gates — free tier "no polling triggers" and premium
+  connectors — need a product call on where to enforce (save vs
+  fire time); webhook event-ID dedupe (Stripe retries are idempotent
+  upserts today, fine for plan flips); billing-day alignment (see
+  metering entry); usage page shows the cap but plans/pricing copy
+  is not in-product yet.
+- [~] **Team features.** Shipped (2026-06-10), the role-split slice —
+  multi-user-per-tenant + shared workflows already worked (memberships,
+  invitations, switchOrg); what was missing was the viewer role and the
+  role-change UX. Canonical catalog: `core.TeamRoleViewer/Editor/Admin`
+  (+ `TeamRoleByName`) — one source of truth now used by signup's
+  default editor role, the invite default, and the UI presets (the
+  catalog used to be ad-hoc per call site: "viewer" existed for API
+  keys/OIDC but not invites). Viewer = graph:run only; the FlowEditor
+  already renders read-only without graph:edit. New endpoint:
+  `PATCH /api/v1/admin/members/{email}` `{roles:[…]}` — change a
+  member's roles in place (PutMembership is already an upsert, no
+  store change). Guards: organization:admin required, role grants
+  capped to the caller's own permissions via the new shared
+  `capRolesToCaller` (extracted from createInvitation so the two grant
+  paths can't drift), home owner 409s (their roles live on the User
+  record, so the org always keeps its owner-admin), empty roles 400
+  (removal is DELETE's job), audited as `member.roles.update`. UI:
+  invite modal offers Viewer / Editor / Admin with the permission
+  preview; member cards gained a role dropdown (catalog roles +
+  read-only "Custom" for hand-rolled sets) calling the PATCH endpoint;
+  en+sv. Tests: handler matrix (demote/404/400/over-scoped/
+  platform:admin/non-admin) over a fake membership store; verified
+  end-to-end in the browser (invite a viewer → accept → dropdown
+  shows viewer → switch to editor → membership perms really change).
+  **Open:** demoted members keep their current session roles until
+  they switch orgs / sign in again (switchOrg re-stamps from the
+  membership) — forced revocation needs a session sweep; per-workspace
+  roles (one Membership row carries one role set for the whole org);
+  org-ownership transfer (removing/editing the home owner is blocked);
+  invite email delivery still copy-the-link (SMTP story pending).
+- [x] **BYO cloud secret providers** (Vault / AWS Secrets Manager /
+  GCP Secret Manager). Shipped (2026-06-10) — Vault/OpenBao already
+  existed; AWS + GCP added on the same model (per-tenant config in the
+  encrypted store under `cfg:secret-manager-aws`/`-gcp`, tenant-scoped
+  `Get` from `core.TenantFromContext`, 60s TTL cache, verify-on-save,
+  independent slots so all three schemes coexist). `aws://NAME[#field]`
+  → GetSecretValue with a hand-rolled SigV4 signer (pinned against an
+  independently-computed golden vector; no aws-sdk dep — same trade as
+  /metrics and the Stripe client) using static access keys.
+  `gcp://NAME[#field]` → versions/latest:access with service-account
+  RS256 JWT → OAuth token exchange (stdlib crypto; token cached to
+  expiry; the test fake actually verifies the assertion signature).
+  `#field` plucks a key from a JSON secret value. Endpoints:
+  `/api/v1/secret-manager/aws` + `/gcp` (GET redacted / PUT
+  connection-tested / DELETE), same permission gates as the vault one.
+  UI: the Admin secret-manager page is now three sections (Vault form,
+  AWS region+key form, GCP project+pasted-key-file form), en+sv.
+  Verified end-to-end in the browser: configs saved against fake
+  AWS/GCP servers, page shows redacted views (secret key / private key
+  never rendered), and a real flow run resolved `${aws.apikey}` through
+  the engine (the fake recorded the GetSecretValue call). **Open:**
+  AWS IAM-role / STS assume-role and GCP workload-identity auth (V1 is
+  static keys — the universal denominator); Azure Key Vault if a
+  customer asks; per-secret version pinning (always latest/AWSCURRENT
+  today).
 
 ### Out of scope for this push (deliberate)
 

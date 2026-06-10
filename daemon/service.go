@@ -273,6 +273,21 @@ type Service struct {
 	// failures, etc.). Nil disables those logs — handy in tests
 	// that don't want stderr noise.
 	Logger *log.Logger
+
+	// Usage, when set, counts each submitted graph run per tenant per
+	// month (T3 metering). Best-effort: a metering failure is logged,
+	// never surfaced — billing must not break runs.
+	Usage UsageStore
+
+	// Plans, when set, resolves each tenant's billing plan (free/pro)
+	// for the run gate and the billing endpoints. Nil = everyone free.
+	Plans PlanStore
+
+	// FreeRunsPerMonth caps how many runs a free-plan tenant may submit
+	// per calendar month. Zero (the default) disables enforcement
+	// entirely — self-hosted deployments without billing never hit a
+	// gate. Requires Usage + Plans to enforce.
+	FreeRunsPerMonth int
 }
 
 func (s *Service) bus() Bus {
