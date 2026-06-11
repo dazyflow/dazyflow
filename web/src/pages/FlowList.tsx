@@ -8,6 +8,7 @@ import { FlowIcon, isBrandedIcon } from "../icons";
 import { FlowStatusChip } from "../components/FlowStatusChip";
 import { isImageIcon } from "../lib/iconImage";
 import { shouldShowTenantID } from "../lib/visibleTenant";
+import { userScope } from "../recentFlow";
 import type { FlowSummary } from "../types";
 
 // HAS_FLOWS_KEY mirrors the key App.tsx's RootRedirect reads when
@@ -49,8 +50,10 @@ export function FlowList() {
         // in try/catch — localStorage might be blocked in a strict
         // iframe and a thrown error here would blank the page.
         try {
+          // Per-account key — see userScope: the hint must not follow
+          // a different user signing in on the same browser.
           localStorage.setItem(
-            HAS_FLOWS_KEY,
+            `${HAS_FLOWS_KEY}.${userScope(me)}`,
             graphs.length > 0 ? "1" : "0",
           );
         } catch {

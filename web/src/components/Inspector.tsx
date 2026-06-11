@@ -13,7 +13,14 @@ import {
 } from "./SchemaForm";
 import { LiveConsole } from "./LiveConsole";
 import { ForEachEditor } from "./ForEachEditor";
-import { TriggerScheduleField, browserTimeZone, FormTab, WebhookTab } from "./TriggersModal";
+import {
+  TriggerScheduleField,
+  browserTimeZone,
+  FormTab,
+  WebhookTab,
+  WebhookStatusLine,
+} from "./TriggersModal";
+import { Switch } from "./Switch";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import { oauthProviderForIntegration } from "../integrationMeta";
@@ -324,21 +331,17 @@ export function Inspector({
         </span>
         <span className="inspector-head-right">
           {onToggleDisabled && (
-            <label
+            <span
               className="inspector-onoff"
               title={t(nodeDisabled ? "inspector.stepOffHint" : "inspector.stepOnHint")}
               onClick={(e) => e.stopPropagation()}
             >
-              <input
-                type="checkbox"
+              <Switch
                 checked={!nodeDisabled}
                 onChange={() => onToggleDisabled(selected.id)}
-                aria-label={t("inspector.stepOn")}
+                label={t(nodeDisabled ? "inspector.stepOff" : "inspector.stepOn")}
               />
-              <span className="inspector-onoff-label">
-                {t(nodeDisabled ? "inspector.stepOff" : "inspector.stepOn")}
-              </span>
-            </label>
+            </span>
           )}
           {onClose && (
             <button
@@ -495,12 +498,14 @@ export function Inspector({
         )}
 
         {mode === "form" && isWebhookInput && graphMeta && (
-          // The webhook_input node's config, friendliest path first: the
-          // hosted form (toggle/fields/URL/preview/submissions) leads, and
-          // the developer surface (bearer secret, curl recipe, form-tool
-          // bridges) is tucked into a collapsed disclosure — present for
+          // The webhook_input node's config, friendliest path first: a
+          // live "is anything able to reach this?" status line, then the
+          // hosted form (toggle/fields/URL/preview/submissions), and the
+          // developer surface (secret key, curl recipe, form-tool
+          // bridges) tucked into a collapsed disclosure — present for
           // those who need it, invisible noise for everyone else.
           <>
+            <WebhookStatusLine webhook={currentParams as GraphTrigger} />
             <FormTab
               graph={webhookGraph}
               webhook={currentParams as GraphTrigger}

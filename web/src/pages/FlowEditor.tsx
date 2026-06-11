@@ -10,7 +10,7 @@ import {
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useActiveFlow, FLOWS_CHANGED_EVENT } from "../activeFlow";
-import { saveRecentFlow } from "../recentFlow";
+import { saveRecentFlow, userScope } from "../recentFlow";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -528,6 +528,23 @@ function EditorInner() {
   // — Promise.all would reject the whole batch if loadGraph 404s for a
   // never-saved flow, leaving the catalog empty (so Ctrl+K had no
   // drops). Drops should be available even when the graph fetch fails.
+  //
+  // hasPerm is read via a ref and `me` gates on presence (not identity):
+  // both get fresh identities whenever the auth provider re-renders
+  // (whoami → workspaces → tenants all land just after a cold load), and
+  // having them as deps made this effect re-fetch + re-hydrate the graph
+  // — silently wiping any step the user had inserted in that window.
+  const hasPermRef = useRef(hasPerm);
+  hasPermRef.current = hasPerm;
+  const meReady = !!me;
+  // loadedIDRef names the flow the in-memory editor state belongs to.
+  // It scopes two safety checks: the dirty-guard below (don't hydrate
+  // over the user's in-flight edits — but ONLY when those edits are for
+  // this same flow) and the autosave effect (never PUT one flow's nodes
+  // under another flow's id). Without the id check, switching flows in
+  // the sidebar while dirty skipped the hydrate and let autosave write
+  // flow A's state into flow B — silent cross-flow data loss.
+  const loadedIDRef = useRef<string | null>(null);
   useEffect(() => {
     // Wait for activeWorkspace too: it resolves on a separate async path
     // (whoami → workspaces) after `me`, so on a hard refresh it's briefly
@@ -537,6 +554,14 @@ function EditorInner() {
     if (!token || !me || !id || !activeTenant || !activeWorkspace) return;
     let cancelled = false;
     setError(null);
+    // A flow switch makes the current state (and its dirty flag) moot —
+    // it describes the PREVIOUS flow. Drop the flag immediately so
+    // neither the dirty-guard nor a pending autosave can act on it.
+    if (loadedIDRef.current !== null && loadedIDRef.current !== id) {
+      setDirty(false);
+      dirtyRef.current = false;
+    }
+    const requestedID = id;
 
     api
       .listDrops(token)
@@ -552,6 +577,21 @@ function EditorInner() {
       .loadGraph(token, activeTenant, activeWorkspace, id)
       .then((g) => {
         if (cancelled) return;
+        // The user edited THIS flow while the fetch was in flight (e.g.
+        // inserted a step the moment the empty canvas appeared).
+        // Hydrating now would silently wipe that work — keep their
+        // local state. "This flow" = the loaded id matches, or nothing
+        // was loaded yet (a direct open). Edits belonging to a
+        // PREVIOUSLY open flow must never block hydrating the new one —
+        // that skip let autosave write one flow's nodes under another
+        // flow's id.
+        if (
+          dirtyRef.current &&
+          (loadedIDRef.current === requestedID || loadedIDRef.current === null)
+        ) {
+          loadedIDRef.current = requestedID;
+          return;
+        }
         // One-time migrations on open, persisted because Run executes the
         // SAVED graph by id (an in-memory-only fix would never reach the run or
         // the scheduler):
@@ -565,7 +605,8 @@ function EditorInner() {
           ? { ...g, nodes: whM.nodes, triggers: whM.triggers }
           : g;
         hydrateGraph(migrated);
-        if (changed && hasPerm("graph:edit")) {
+        loadedIDRef.current = requestedID;
+        if (changed && hasPermRef.current("graph:edit")) {
           api.saveGraph(token, migrated, true).catch(() => {});
         }
       })
@@ -576,6 +617,16 @@ function EditorInner() {
         // a freshly-created flow — the user opened the editor before
         // dropping any nodes. Treat it as an empty canvas, not an error.
         if (msg.includes("404") || msg.toLowerCase().includes("not found")) {
+          // Same in-flight-edits guard as the success path: a fresh
+          // flow 404s here, and the user may already have inserted a
+          // step while the request was out — don't wipe it.
+          if (
+            dirtyRef.current &&
+            (loadedIDRef.current === requestedID || loadedIDRef.current === null)
+          ) {
+            loadedIDRef.current = requestedID;
+            return;
+          }
           setNodes([]);
           setEdges([]);
           setFrameNodes([]);
@@ -584,6 +635,7 @@ function EditorInner() {
           setParamsByID({});
           setTriggers([]);
           setDirty(false);
+          loadedIDRef.current = requestedID;
           return;
         }
         setError(msg);
@@ -592,7 +644,8 @@ function EditorInner() {
     return () => {
       cancelled = true;
     };
-  }, [token, me, id, activeTenant, activeWorkspace, hydrateGraph, hasPerm]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, meReady, id, activeTenant, activeWorkspace, hydrateGraph]);
 
   // A fresh flow gets a fresh shot at showing the connections banner.
   useEffect(() => {
@@ -710,10 +763,11 @@ function EditorInner() {
 
   // Remember this as the most-recently-opened flow so the start screen
   // can offer a "continue working" link. Falls back to the id until
-  // the display name loads.
+  // the display name loads. Scoped per account so the welcome page
+  // never offers another user's flow on a shared browser.
   useEffect(() => {
-    if (id) saveRecentFlow({ id, name: name || id, icon });
-  }, [id, name, icon]);
+    if (id) saveRecentFlow(userScope(me), { id, name: name || id, icon });
+  }, [id, name, icon, me]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
@@ -1023,9 +1077,8 @@ function EditorInner() {
   // spawnDrop creates a node from a manifest at the supplied screen
   // coordinates. Shared between the drag-from-catalog flow and the
   // Ctrl+K quick palette so both produce identical state.
-  const spawnDrop = useCallback(
-    (m: Manifest, screen: { x: number; y: number }) => {
-      const position = screenToFlowPosition(screen);
+  const spawnDropFlow = useCallback(
+    (m: Manifest, position: { x: number; y: number }) => {
       setNodes((nds) => {
         const newID = nextID(nds, m.id);
         return [
@@ -1047,7 +1100,43 @@ function EditorInner() {
       setParamsByID((p) => ({ ...p, [newID]: {} }));
       setDirty(true);
     },
-    [nodes, screenToFlowPosition],
+    [nodes],
+  );
+
+  const spawnDrop = useCallback(
+    (m: Manifest, screen: { x: number; y: number }) =>
+      spawnDropFlow(m, screenToFlowPosition(screen)),
+    [spawnDropFlow, screenToFlowPosition],
+  );
+
+  // spawnDropAuto places a palette-inserted step predictably: to the
+  // RIGHT of the rightmost existing step (data flows left→right, so the
+  // new step lands where its wires will point), vertically aligned with
+  // it. Dropping at the last pointer position instead scattered steps
+  // above-left of the trigger and under the inspector panel. An empty
+  // canvas gets the viewport centre. Pointer-aimed inserts (drag-drop
+  // from the catalog, drag-off-pin) keep their explicit position.
+  const spawnDropAuto = useCallback(
+    (m: Manifest) => {
+      let rightmost: (typeof nodes)[number] | null = null;
+      for (const n of nodes) {
+        if (!rightmost || n.position.x > rightmost.position.x) rightmost = n;
+      }
+      if (rightmost) {
+        const width = rightmost.measured?.width ?? 280;
+        spawnDropFlow(m, {
+          x: rightmost.position.x + width + 80,
+          y: rightmost.position.y,
+        });
+        return;
+      }
+      const r = wrapperRef.current?.getBoundingClientRect();
+      const screen = r
+        ? { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+        : { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+      spawnDropFlow(m, screenToFlowPosition(screen));
+    },
+    [nodes, spawnDropFlow, screenToFlowPosition],
   );
 
   const onDrop = (e: DragEvent<HTMLDivElement>) => {
@@ -1992,7 +2081,8 @@ function EditorInner() {
   saveRef.current = save;
   // Mirrors for the unload-flush effect below: it registers its listener
   // once, but must read the latest dirty state and graph when the page is
-  // actually being torn down.
+  // actually being torn down. The mount-load effect's resolve guard reads
+  // dirtyRef too (skip hydrating over local edits made mid-fetch).
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
   const buildGraphRef = useRef(buildGraph);
@@ -2001,6 +2091,11 @@ function EditorInner() {
     if (!dirty || saving || !token || !me || !id) return;
     if (!hasPerm("graph:edit") || lockedRunID) return;
     if (previewRef) return; // never autosave a history preview as the HEAD
+    // The in-memory state must belong to the flow in the URL. After a
+    // flow switch there's a beat where `id` is the new flow but the
+    // nodes are still the old one's — autosaving then writes flow A's
+    // graph under flow B's id (real data loss, observed in the wild).
+    if (loadedIDRef.current !== null && loadedIDRef.current !== id) return;
     const handle = window.setTimeout(() => {
       void saveRef.current(true);
     }, AUTOSAVE_DEBOUNCE_MS);
@@ -2545,12 +2640,15 @@ function EditorInner() {
       flowRunStatus(
         disabled,
         triggers,
+        // Node params live in paramsByID, NOT in n.data — reading
+        // n.data.params here kept the chip stuck on "Manual only" even
+        // after the user configured a webhook secret or cron string.
         nodes.map((n) => ({
           module: (n.data as HazyNodeData | undefined)?.moduleID ?? "",
-          params: (n.data as HazyNodeData | undefined)?.params ?? {},
+          params: paramsByID[n.id] ?? {},
         })),
       ),
-    [disabled, triggers, nodes],
+    [disabled, triggers, nodes, paramsByID],
   );
   const persistSettings = async (next: Graph) => {
     setTriggers(next.triggers ?? []);
@@ -3151,11 +3249,11 @@ function EditorInner() {
               </button>
             </div>
             <ul style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 6 }}>
+              {/* Just the sentence — the machine code (issue.code) stays
+                  out of the visible text and rides along as a hover
+                  tooltip for bug reports and grepping. */}
               {lintIssues.map((issue, i) => (
-                <li key={i}>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)" }}>
-                    {issue.code}
-                  </span>{" "}
+                <li key={i} title={issue.code}>
                   {issue.message}
                 </li>
               ))}
@@ -3357,17 +3455,9 @@ function EditorInner() {
               // Drag-off-pin: place at the drop point and auto-wire.
               spawnDropConnected(m, connectFrom);
             } else {
-              // Use the most recent canvas-pointer position if we have
-              // one; otherwise drop into the viewport centre so a Ctrl+K
-              // hit before the mouse touched the canvas still lands
-              // somewhere visible.
-              const fallback = (() => {
-                const w = wrapperRef.current;
-                if (!w) return { x: window.innerWidth / 2, y: window.innerHeight / 2 };
-                const r = w.getBoundingClientRect();
-                return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-              })();
-              spawnDrop(m, lastPointer.current ?? fallback);
+              // Predictable placement: right of the rightmost step (or
+              // viewport centre on an empty canvas) — see spawnDropAuto.
+              spawnDropAuto(m);
             }
             setPaletteOpen(false);
             setConnectFrom(null);

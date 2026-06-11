@@ -6,7 +6,7 @@
     },
     "manual": {
       "label": "Endast manuell",
-      "tip": "Det här flödet körs bara när du trycker på Kör. Lägg till en utlösare och ange dess schema eller intervall för att starta det automatiskt."
+      "tip": "Det här flödet körs bara när du trycker på Run. Lägg till en trigger — ett schema, ett intervall eller en webhook — så startar det automatiskt."
     },
     "paused": {
       "label": "Pausad",
@@ -308,12 +308,12 @@
       "addWebhook": "Lägg till webhook",
       "addCron": "Lägg till cron",
       "removeAria": "ta bort trigger",
-      "bearerSecret": "Bearer-hemlighet",
+      "bearerSecret": "Hemlig nyckel",
       "generateTitle": "Generera en ny slumpmässig hemlighet",
       "generate": "Generera",
-      "bearerSecretDesc": "Anropare måste skicka <0>Authorization: Bearer &lt;denna&gt;</0>. Värdet sparas i klartext i flödesfilen — i produktion bör du rotera den med jämna mellanrum.",
-      "curlLabel": "Trigga via curl",
-      "curlDesc": "Trigger-endpointen kör på den HTTP-adress daemonen startades med via <0>--http</0> (här används <0>:8080</0>). Byt ut host:en mot din publika URL när du anropar utifrån. Request-bodyn landar på <0>webhook_input</0>-stegets <0>body</0>-port: plain-text-bodies kommer in som en sträng (fungerar direkt med steg som tar en sträng, t.ex. Slack send-message), JSON-bodies kommer in som ett parsat objekt (använd ett transform-steg för att plocka ut ett fält, eller byt <0>Content-Type</0> till <0>application/json</0> med en JSON-payload om nedströms förväntar sig struktur).",
+      "bearerSecretDesc": "Anroparen måste skicka <0>Authorization: Bearer &lt;nyckeln&gt;</0> med varje anrop.",
+      "curlLabel": "Exempelanrop (curl)",
+      "curlDesc": "Kommandot fungerar precis som det står. En body i klartext landar som text på stegets Data-utgång; en JSON-body (Content-Type: application/json) kommer in som strukturerad data du kan plocka fält ur.",
       "copy": "Kopiera",
       "copied": "Kopierat",
       "copyTitle": "Kopiera",
@@ -363,7 +363,7 @@
       },
       "form": {
         "enable": "Hosta ett formulär åt mig (ingen webbplats behövs)",
-        "enableDesc": "Slår på ett färdigt webbformulär som vem som helst kan fylla i via en länk — ingen Authorization-header, ingen curl, inget formulärverktyg krävs. Inskickade svar kör det här flödet.",
+        "enableDesc": "Vi hostar en enkel webbsida åt dig — dela länken, så startar varje inskick det här flödet.",
         "urlLabel": "Formulärlänk",
         "fieldsLabel": "Formulärfält",
         "fieldsDesc": "Kommaseparerade fältnamn. Lämna tomt för standard: name, email, message. Ett fält som heter \"message\" blir en stor textruta.",
@@ -420,7 +420,7 @@
       "help": "Samla in svar via en färdig webbsida — ingen webbplats, hemlighet eller kod behövs. Slå på den och dela länken, eller bädda in den på din egen webbplats."
     },
     "webhook": {
-      "help": "Låt andra system starta det här flödet genom att göra en POST till dess adress med bearer-hemligheten nedan.",
+      "help": "Andra system startar det här flödet genom att skicka ett anrop till dess adress med den hemliga nyckeln nedan.",
       "emptyTitle": "Ingen webhook konfigurerad",
       "emptyDesc": "Lägg till en webhook så att verktyg som Zapier, Typeform eller din egen kod kan trigga flödet.",
       "add": "Konfigurera en webhook",
@@ -1029,7 +1029,7 @@
   "nodeCatalog": {
     "title": "Integrationer",
     "search": "Sök integrationer…",
-    "stdLibLabel": "Standardbibliotek",
+    "stdLibLabel": "Inbyggda",
     "aboutTitle": "Om {{name}}",
     "categoryTrigger": "Triggers",
     "categoryFlowControl": "Flödeskontroll",
@@ -1052,7 +1052,8 @@
     "hintNavigate": "navigera",
     "hintInsert": "lägg till",
     "hintClose": "stäng",
-    "enter": "Retur"
+    "enter": "Retur",
+    "builtIn": "Inbyggd"
   },
   "schemaForm": {
     "advancedSection": "Avancerat ({{count}})",
@@ -1165,7 +1166,13 @@
     "about": "Om",
     "deleteNode": "Ta bort steg",
     "deleteConfirm": "Ta bort steg \"{{id}}\" och dess kopplingar?",
-    "webhookDevSummary": "För utvecklare — starta flödet via HTTP-anrop"
+    "webhookDevSummary": "För utvecklare — starta flödet via HTTP-anrop",
+    "webhookStatus": {
+      "off": "Tar inte emot något ännu — slå på formuläret nedan, eller skapa en hemlig nyckel under ”För utvecklare”.",
+      "form": "Tar emot — alla med formulärlänken kan starta det här flödet.",
+      "secret": "Tar emot — system som skickar den hemliga nyckeln kan starta det här flödet.",
+      "both": "Tar emot — via formulärlänken, och via den hemliga nyckeln för andra system."
+    }
   },
   "editor": {
     "back": "Tillbaka",

@@ -6,7 +6,7 @@
     },
     "manual": {
       "label": "Manual only",
-      "tip": "This flow runs only when you press Run. Add a trigger and set its schedule or interval to make it start automatically."
+      "tip": "This flow runs only when you press Run. Add a trigger — a schedule, an interval, or a webhook — to make it start automatically."
     },
     "paused": {
       "label": "Paused",
@@ -311,12 +311,12 @@
       "addWebhook": "Add webhook",
       "addCron": "Add cron",
       "removeAria": "remove trigger",
-      "bearerSecret": "Bearer secret",
+      "bearerSecret": "Secret key",
       "generateTitle": "Generate a new random secret",
       "generate": "Generate",
-      "bearerSecretDesc": "Callers must send <0>Authorization: Bearer &lt;this&gt;</0>. The value is stored plain in the graph file — for production consider rotating periodically.",
-      "curlLabel": "Trigger via curl",
-      "curlDesc": "The trigger endpoint runs on whatever HTTP address the daemon was started with via <0>--http</0> (we use <0>:8080</0> here). Replace the host with your public URL when calling from outside. The request body lands on the <0>webhook_input</0> step's <0>body</0> port: plain-text bodies arrive as a string (works directly with string-consuming steps like Slack send-message), JSON bodies arrive as a parsed object (use a transform step to extract a field, or switch <0>Content-Type</0> to <0>application/json</0> with a JSON payload if downstream expects structure).",
+      "bearerSecretDesc": "Callers must send <0>Authorization: Bearer &lt;this key&gt;</0> with every request.",
+      "curlLabel": "Example request (curl)",
+      "curlDesc": "The command works exactly as shown. A plain-text body arrives on the step's Data output as text; a JSON body (Content-Type: application/json) arrives as structured data you can pick fields from.",
       "copy": "Copy",
       "copied": "Copied",
       "copyTitle": "Copy",
@@ -366,7 +366,7 @@
       },
       "form": {
         "enable": "Host a form for me (no website needed)",
-        "enableDesc": "Turns on a ready-made web form anyone can fill in from a link — no Authorization header, no curl, no form tool required. Submissions run this flow.",
+        "enableDesc": "We host a simple web page for you — share the link, and every submission starts this flow.",
         "urlLabel": "Form link",
         "fieldsLabel": "Form fields",
         "fieldsDesc": "Comma-separated field names. Leave blank for the default: name, email, message. A field called \"message\" becomes a large text box.",
@@ -423,7 +423,7 @@
       "help": "Collect submissions through a ready-made web page — no website, secret, or code required. Turn it on and share the link, or embed it on your own site."
     },
     "webhook": {
-      "help": "Let other systems start this flow by POSTing to its address with the bearer secret below.",
+      "help": "Other systems start this flow by sending a request to its address with the secret key below.",
       "emptyTitle": "No webhook set up",
       "emptyDesc": "Add a webhook so tools like Zapier, Typeform, or your own code can fire this flow.",
       "add": "Set up a webhook",
@@ -1033,7 +1033,7 @@
   "nodeCatalog": {
     "title": "Integrations",
     "search": "Search integrations…",
-    "stdLibLabel": "Standard library",
+    "stdLibLabel": "Built-in",
     "aboutTitle": "About {{name}}",
     "categoryTrigger": "Triggers",
     "categoryFlowControl": "Flow control",
@@ -1056,7 +1056,8 @@
     "hintNavigate": "navigate",
     "hintInsert": "insert",
     "hintClose": "close",
-    "enter": "Enter"
+    "enter": "Enter",
+    "builtIn": "Built-in"
   },
   "schemaForm": {
     "advancedSection": "Advanced ({{count}})",
@@ -1168,7 +1169,13 @@
     "liveOutput": "Console",
     "deleteNode": "Delete step",
     "deleteConfirm": "Delete step \"{{id}}\" and its connections?",
-    "webhookDevSummary": "For developers — trigger this flow by HTTP request"
+    "webhookDevSummary": "For developers — trigger this flow by HTTP request",
+    "webhookStatus": {
+      "off": "Not receiving yet — turn on the form below, or set a secret key under “For developers”.",
+      "form": "Receiving — anyone with the form link can start this flow.",
+      "secret": "Receiving — systems that send the secret key can start this flow.",
+      "both": "Receiving — via the form link, and via the secret key for other systems."
+    }
   },
   "editor": {
     "back": "Back",

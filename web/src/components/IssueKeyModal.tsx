@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
+import { Switch } from "./Switch";
 import type { IssuedAPIKey, Permission, Role } from "../types";
 
 // Role templates — common shapes admins reach for. "Custom" disables
@@ -232,16 +233,17 @@ export function IssueKeyModal({
             </div>
             <div className="perm-grid">
               {ALL_PERMISSIONS.map((p) => (
-                <label key={p} className="sf-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={perms.has(p)}
-                    onChange={() => togglePerm(p)}
-                  />
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>
-                    {p}
-                  </span>
-                </label>
+                <Switch
+                  key={p}
+                  compact
+                  checked={perms.has(p)}
+                  onChange={() => togglePerm(p)}
+                  label={
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>
+                      {p}
+                    </span>
+                  }
+                />
               ))}
             </div>
             <div className="desc">

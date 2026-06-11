@@ -3426,9 +3426,15 @@ button.warning:hover:not(:disabled) {
   cursor: pointer;
   user-select: none;
 }
-.inspector-onoff input {
-  accent-color: var(--accent);
-  cursor: pointer;
+/* The header On/Off is the compact Switch variant: smaller label,
+   muted until you hover. */
+.inspector-onoff .hz-switch {
+  align-items: center;
+}
+.inspector-onoff .hz-switch-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
 }
 
 /* Loop body: a node that runs once per row inside a for_each. The dashed
@@ -4070,20 +4076,88 @@ button.warning:hover:not(:disabled) {
   vertical-align: middle;
   accent-color: var(--accent);
 }
-.sf-checkbox {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-2);
+/* Switch: the app's on/off toggle (components/Switch.tsx). The real
+   checkbox stays in the tree for keyboard/AT; the track + thumb is the
+   visible control. */
+.hz-switch {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
   cursor: pointer;
-  font-size: 13px;
   user-select: none;
 }
-.sf-checkbox:hover {
+.hz-switch input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+.hz-switch-track {
+  flex-shrink: 0;
+  width: 34px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--border);
+  border: 1px solid var(--border-strong);
+  position: relative;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  margin-top: 1px;
+}
+.hz-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s ease;
+}
+.hz-switch input:checked + .hz-switch-track {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.hz-switch input:checked + .hz-switch-track .hz-switch-thumb {
+  transform: translateX(14px);
+  background: #fff;
+}
+.hz-switch input:focus-visible + .hz-switch-track {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.hz-switch:hover .hz-switch-track {
   border-color: var(--border-strong);
+  filter: brightness(1.05);
+}
+.hz-switch.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.hz-switch-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+}
+.hz-switch-label {
+  font-weight: 500;
+}
+.hz-switch-desc {
+  font-size: 12px;
+  color: var(--muted);
+}
+/* Compact variant for dense surfaces (inline pin rows, grids). */
+.hz-switch.compact .hz-switch-track {
+  width: 26px;
+  height: 16px;
+}
+.hz-switch.compact .hz-switch-thumb {
+  width: 10px;
+  height: 10px;
+}
+.hz-switch.compact input:checked + .hz-switch-track .hz-switch-thumb {
+  transform: translateX(10px);
 }
 
 .sf-example {
@@ -4218,6 +4292,31 @@ button.warning:hover:not(:disabled) {
   flex-shrink: 0;
   user-select: none;
 }
+/* Webhook inspector: the at-a-glance "can anything reach this?" line
+   above the config. Grey while unreachable, green once a form link or
+   secret key opens a door. */
+.webhook-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  background: var(--surface-2);
+  margin-bottom: var(--space-3);
+}
+.webhook-status svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.webhook-status.ok {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 35%, var(--border));
+}
+
 /* Webhook node's developer surface: collapsed by default in the inspector
    (the hosted form leads; secret/curl/recipes live behind this). */
 .webhook-dev {

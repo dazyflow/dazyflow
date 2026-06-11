@@ -27,6 +27,29 @@ export function RunList() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<JobStatus | "">("");
   const [hasMore, setHasMore] = useState(false);
+  // graph_id → display name, so the FLOW column reads "Order received
+  // alert" instead of the slug. Best-effort: a missing entry (deleted
+  // flow, fetch error) falls back to the raw id.
+  const [flowNames, setFlowNames] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const tenant = activeTenant || me?.tenant || "";
+    const workspace = activeWorkspace || me?.workspace || "";
+    if (!token || !tenant || !workspace) return;
+    let cancelled = false;
+    api
+      .listGraphs(token, tenant, workspace)
+      .then((r) => {
+        if (cancelled) return;
+        const names: Record<string, string> = {};
+        for (const g of r.graphs) if (g.name) names[g.id] = g.name;
+        setFlowNames(names);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [token, activeTenant, activeWorkspace, me]);
 
   useEffect(() => {
     if (!token) return;
@@ -197,15 +220,18 @@ export function RunList() {
                       }}
                     >
                       <Activity size={12} />
-                      {r.graph_id}
+                      {flowNames[r.graph_id] ?? r.graph_id}
                     </Link>
                   </td>
                   <td style={{ color: "var(--muted)", fontSize: 12 }}>
                     {formatTime(r.enqueued_at)}
                   </td>
                   <td style={{ color: "var(--muted)", fontSize: 12 }}>
-                    {r.started_at && r.finished_at
-                      ? formatDuration(r.started_at, r.finished_at)
+                    {/* Older records (pre started_at-stamping) fall back
+                        to enqueued_at so finished runs still show a
+                        duration instead of "—". */}
+                    {r.finished_at && (r.started_at || r.enqueued_at)
+                      ? formatDuration(r.started_at ?? r.enqueued_at, r.finished_at)
                       : r.status === "running"
                       ? t("runList.inProgress")
                       : "—"}

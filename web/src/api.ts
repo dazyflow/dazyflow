@@ -174,6 +174,7 @@ function runViewToRecord(r: RunView): JobRecord {
     GraphID: r.graph_id ?? "",
     NodeID: "*",
     Status: r.status,
+    EnqueuedAt: r.enqueued_at ?? null,
     StartedAt: r.started_at ?? null,
     FinishedAt: r.finished_at ?? null,
     Result: r.error ? { status: r.status, error: r.error } : undefined,

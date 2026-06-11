@@ -59,6 +59,19 @@ func (m *Memory) Enqueue(_ context.Context, rec core.JobRecord) error {
 	if rec.Status == "" {
 		rec.Status = core.JobStatusQueued
 	}
+	// A record enqueued already-terminal (a seeded webhook/trigger node)
+	// or already-running (a graph-record) never passes through Claim, so
+	// stamp its start — and for terminal seeds the finish — here. Mirrors
+	// the Postgres store, and keeps run durations renderable.
+	if core.IsTerminalStatus(rec.Status) || rec.Status == core.JobStatusRunning {
+		now := m.clock()
+		if rec.StartedAt == nil {
+			rec.StartedAt = &now
+		}
+		if rec.FinishedAt == nil && core.IsTerminalStatus(rec.Status) {
+			rec.FinishedAt = &now
+		}
+	}
 	rec.Attempt = 0
 	copy := rec
 	m.records[rec.ID] = &copy

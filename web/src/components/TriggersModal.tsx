@@ -5,6 +5,7 @@ import {
   Copy,
   Check,
   AlertCircle,
+  Info,
   Trash2,
   Plus,
   FileText,
@@ -15,6 +16,7 @@ import { Trans, useTranslation } from "react-i18next";
 import type { Graph, GraphTrigger } from "../types";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import { Switch } from "./Switch";
 
 // TriggersModal is the per-flow "how does this flow start?" editor,
 // promoted out of the Settings modal into its own toolbar button. It
@@ -263,16 +265,15 @@ export function FormTab({
   const fieldsText = formFields.join(", ");
   return (
     <div>
-      <p className="settings-help">{t("triggers.form.help")}</p>
-      <label className="sf-checkbox">
-        <input
-          type="checkbox"
-          checked={enabled}
-          onChange={(e) => onChange({ public_form: e.target.checked })}
-        />
-        <span>{t("settings.triggers.form.enable")}</span>
-      </label>
-      <div className="desc">{t("settings.triggers.form.enableDesc")}</div>
+      {/* One switch, one helper line. The fuller pitch used to repeat
+          here as two stacked paragraphs — the WebhookStatusLine above
+          (in the Inspector) now carries the context instead. */}
+      <Switch
+        checked={enabled}
+        onChange={(checked) => onChange({ public_form: checked })}
+        label={t("settings.triggers.form.enable")}
+        description={t("settings.triggers.form.enableDesc")}
+      />
       {enabled && (
         <div className="hosted-form-body">
           <div className="webhook-recipe-field">
@@ -382,7 +383,15 @@ export function WebhookTab({
           </button>
         )}
       </div>
-      <div className="sf-field">
+      {/* The address first — it's the one thing every caller needs and
+          used to be buried inside the recipes disclosure. */}
+      <div className="webhook-recipe-field">
+        <span className="webhook-recipe-label">
+          {t("settings.triggers.recipes.urlLabel")}
+        </span>
+        <CopyInline value={buildWebhookURL(graph, baseURL)} />
+      </div>
+      <div className="sf-field" style={{ marginTop: 10 }}>
         <div className="label-row">
           <label>{t("settings.triggers.bearerSecret")}</label>
           <button
@@ -405,17 +414,39 @@ export function WebhookTab({
         <div className="desc">
           <Trans i18nKey="settings.triggers.bearerSecretDesc" components={[<code />]} />
         </div>
-        <div className="sf-field" style={{ marginTop: 12 }}>
-          <div className="label-row">
-            <label>{t("settings.triggers.curlLabel")}</label>
-          </div>
+      </div>
+      {/* The full curl invocation and its body-handling note are detail,
+          not the headline — collapsed like the recipes block below. */}
+      <details className="webhook-recipes">
+        <summary>{t("settings.triggers.curlLabel")}</summary>
+        <div className="webhook-recipes-body">
           <CurlBlock command={buildCurl(graph, webhook.secret ?? "", baseURL)} />
           <div className="desc">
             <Trans i18nKey="settings.triggers.curlDesc" components={[<code />]} />
           </div>
         </div>
-        <WebhookRecipes graph={graph} secret={webhook.secret ?? ""} baseURL={baseURL} />
-      </div>
+      </details>
+      <WebhookRecipes graph={graph} secret={webhook.secret ?? ""} baseURL={baseURL} />
+    </div>
+  );
+}
+
+// WebhookStatusLine is the at-a-glance reachability answer the
+// Inspector shows above the webhook config: can anything start this
+// flow right now, and through which door (form link / secret key)?
+// It restates what the lint warning says — but as a live status that
+// flips to green the moment the user fixes it, instead of a warning
+// they have to re-save to clear.
+export function WebhookStatusLine({ webhook }: { webhook?: GraphTrigger }) {
+  const { t } = useTranslation();
+  const hasSecret = !!(webhook?.secret ?? "").trim();
+  const hasForm = webhook?.public_form === true;
+  const key = hasForm && hasSecret ? "both" : hasForm ? "form" : hasSecret ? "secret" : "off";
+  const ok = hasForm || hasSecret;
+  return (
+    <div className={"webhook-status" + (ok ? " ok" : "")}>
+      {ok ? <Check size={13} aria-hidden="true" /> : <Info size={13} aria-hidden="true" />}
+      <span>{t(`inspector.webhookStatus.${key}`)}</span>
     </div>
   );
 }
@@ -518,10 +549,13 @@ function randomHex(bytes: number): string {
     .join("");
 }
 
-// webhookHostFallback is shown only when the daemon has no
-// --public-base-url configured (dev). Once set, whoami surfaces the
-// real origin and these builders use it instead.
-const webhookHostFallback = "http://localhost:8089";
+// webhookHostFallback is used only when the daemon has no
+// public-base-url configured. The web origin is the best guess then:
+// single-host deploys serve /trigger and /form same-origin from the
+// daemon, and the Vite dev server proxies both paths to it — so the
+// displayed command works copy-pasted in either case.
+const webhookHostFallback =
+  typeof window !== "undefined" ? window.location.origin : "";
 
 // buildCurl assembles a multi-line curl invocation that hits this
 // graph's webhook trigger. We default to a plain-text body so

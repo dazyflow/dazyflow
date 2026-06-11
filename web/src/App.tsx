@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./auth";
+import { userScope } from "./recentFlow";
 import { AppShell } from "./components/AppShell";
 import { SignIn } from "./pages/SignIn";
 import { SignUp } from "./pages/SignUp";
@@ -111,12 +112,18 @@ const HAS_FLOWS_KEY = "hazyflow.hasFlows";
 //     wizard is the right surface for someone with no flows yet.
 function RootRedirect() {
   const loc = useLocation();
+  const { me } = useAuth();
   if (loc.search) {
     return <Navigate to={{ pathname: "/flows", search: loc.search }} replace />;
   }
+  // The flag is per-account (see userScope), so we need `me` before we
+  // can read it. whoami resolves moments after the token gate above —
+  // render nothing for that beat instead of misrouting.
+  if (!me) return <div />;
   let hasFlows = false;
   try {
-    hasFlows = localStorage.getItem(HAS_FLOWS_KEY) === "1";
+    hasFlows =
+      localStorage.getItem(`${HAS_FLOWS_KEY}.${userScope(me)}`) === "1";
   } catch {
     /* private mode / strict iframe — treat as first-time */
   }

@@ -133,8 +133,11 @@ func lintTriggers(g Graph) []LintIssue {
 		secret, _ := n.Params["secret"].(string)
 		publicForm, _ := n.Params["public_form"].(bool)
 		if strings.TrimSpace(secret) == "" && !publicForm {
+			// Worded for people who don't know what a bearer token or an
+			// endpoint is: name the two fixes exactly as the editor's
+			// Webhook inspector labels them.
 			issues = append(issues, nodeTriggerIssue("trigger_webhook_no_secret", n.ID,
-				"Webhook input has no secret and no public form, so nothing can reach it: the /trigger endpoint needs a bearer secret, or turn on the hosted form for a public, secret-less endpoint."))
+				"This Webhook step can't receive anything yet, so the flow will never start on its own. Open the Webhook step and either turn on \"Host a form for me\" (anyone with the link can submit), or press Generate under \"For developers\" to create the secret key other systems must send when they call this flow."))
 		}
 	}
 

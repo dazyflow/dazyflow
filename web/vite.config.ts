@@ -13,6 +13,11 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/api/v1": { target, changeOrigin: true },
+      // The webhook trigger + hosted form live on the daemon too. Proxy
+      // them so the URLs the editor displays (built from the dev
+      // public-base-url, i.e. this origin) work when copy-pasted.
+      "/trigger": { target, changeOrigin: true },
+      "/form": { target, changeOrigin: true },
     },
     // Vite 5.4+ blocks unknown Host headers as a DNS-rebind defense.
     // Allow the reverse-proxy hostnames we expect — comma-separated

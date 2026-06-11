@@ -6,7 +6,7 @@ import type { LucideIcon } from "lucide-react";
 import { FlowIcon } from "../icons";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { loadRecentFlow } from "../recentFlow";
+import { loadRecentFlow, userScope } from "../recentFlow";
 import { shouldShowTenantID } from "../lib/visibleTenant";
 import { orgDisplayName } from "../lib/orgDisplayName";
 import { ConnectMcpClientModal } from "../components/ConnectMcpClientModal";
@@ -63,9 +63,9 @@ export function Welcome() {
   const { t } = useTranslation();
   const { me, tenants, token, activeTenant, activeWorkspace } = useAuth();
   const [connectingMcp, setConnectingMcp] = useState(false);
-  // Resolved once on mount — localStorage only changes when the editor
-  // mounts, which can't happen while this page is showing.
-  const recent = loadRecentFlow();
+  // Scoped to the signed-in account — an unscoped read offered another
+  // user's flow on a shared browser. Recomputed when `me` resolves.
+  const recent = loadRecentFlow(userScope(me));
   // The cached recent flow only carries whatever icon/name was stored
   // when it was last opened. Resolve the current icon + name from the
   // live flow list so a renamed flow / freshly-set icon shows correctly
@@ -101,7 +101,10 @@ export function Welcome() {
   // RootRedirect uses, so the two surfaces stay consistent.
   let isReturning = false;
   try {
-    isReturning = localStorage.getItem(HAS_FLOWS_KEY) === "1";
+    // Per-account key: a brand-new account on a browser where someone
+    // else had flows must read "Welcome", not "Welcome back".
+    isReturning =
+      localStorage.getItem(`${HAS_FLOWS_KEY}.${userScope(me)}`) === "1";
   } catch {
     /* private mode / strict iframe — treat as first-time */
   }

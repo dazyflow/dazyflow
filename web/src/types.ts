@@ -501,6 +501,7 @@ export type JobRecord = {
   NodeID: string;
   Status: JobStatus;
   Result?: JobResult;
+  EnqueuedAt?: string | null;
   StartedAt?: string | null;
   FinishedAt?: string | null;
   Attempt?: number;

@@ -332,6 +332,7 @@ function QuickRow({
   onHover: () => void;
   onPick: () => void;
 }) {
+  const { t } = useTranslation();
   const Icon = iconFor(drop.icon, drop.category);
   const color = drop.color || categoryColor(drop.category) || "#9f83fe";
   const branded = isBrandedIcon(drop.icon);
@@ -385,7 +386,7 @@ function QuickRow({
             </span>
           ) : (
             <span className="quick-palette-row-integration faint">
-              <Box size={10} aria-hidden="true" /> stdlib
+              <Box size={10} aria-hidden="true" /> {t("quickPalette.builtIn")}
             </span>
           )}
         </div>

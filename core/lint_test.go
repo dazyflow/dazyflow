@@ -336,6 +336,46 @@ func TestLintGraph_ShortLiteralUnderSecretKeyNotFlagged(t *testing.T) {
 	}
 }
 
+func TestLintGraph_WebhookTriggerSecretExempt(t *testing.T) {
+	// The webhook bearer secret is stored in the graph by design (the
+	// editor's Generate button writes it; trigger_webhook_no_secret
+	// requires it) — the key-name heuristic must not fire on it.
+	g := Graph{Nodes: []Node{
+		node("a", "webhook_input", map[string]any{
+			"secret": "40067d9c5e798d4bc850a794c1254e85",
+		}),
+	}}
+	if hasIssueCode(LintGraph(g), "hardcoded_secret") != nil {
+		t.Error("generated webhook bearer secret must not be flagged")
+	}
+}
+
+func TestLintGraph_WebhookSecretProviderPatternStillFlagged(t *testing.T) {
+	// The exemption only covers the key-name heuristic: pasting a real
+	// provider credential into the trigger secret still fires.
+	g := Graph{Nodes: []Node{
+		node("a", "webhook_input", map[string]any{
+			"secret": "ghp_abcdefghijklmnopqrstuvwxyz0123456789",
+		}),
+	}}
+	if hasIssueCode(LintGraph(g), "hardcoded_secret") == nil {
+		t.Error("provider-pattern value in exempted field should still be flagged")
+	}
+}
+
+func TestLintGraph_SecretKeyOnOtherModuleStillFlagged(t *testing.T) {
+	// The exemption is scoped to webhook_input: a `secret` param on any
+	// other module keeps the key-name heuristic.
+	g := Graph{Nodes: []Node{
+		node("a", "http_request", map[string]any{
+			"secret": "40067d9c5e798d4bc850a794c1254e85",
+		}),
+	}}
+	if hasIssueCode(LintGraph(g), "hardcoded_secret") == nil {
+		t.Error("secret param on non-exempt module should be flagged")
+	}
+}
+
 func TestLintGraph_HardcodedSecretInEnv(t *testing.T) {
 	n := Node{ID: "a", Module: "http_request", Env: map[string]string{
 		"AWS_ACCESS_KEY_ID": "AKIAIOSFODNN7EXAMPLE",

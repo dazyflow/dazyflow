@@ -312,6 +312,19 @@ func hasSecretRef(v any) bool {
 	return false
 }
 
+// hardcodedSecretExempt lists params (per module) where a literal
+// secret value is the design, not the anti-pattern: trigger bearer
+// secrets live in the graph on purpose — the /trigger endpoint
+// authenticates callers against them, the editor offers a Generate
+// button, and trigger_webhook_no_secret *requires* one. Without this
+// exemption the two lints contradict each other ("set a secret" →
+// "don't hardcode that secret"). Only the key-name heuristic is
+// suppressed: a pasted provider credential (ghp_…, sk_live_…) in an
+// exempted field still fires via knownSecretValue.
+var hardcodedSecretExempt = map[string]map[string]bool{
+	"webhook_input": {"secret": true},
+}
+
 // lintHardcodedSecrets flags literal credentials pasted into a node's
 // params/env instead of referenced via ${secret.name}. Two triggers:
 //   - a value matching a known provider-key/PEM pattern, anywhere; or
@@ -323,7 +336,7 @@ func hasSecretRef(v any) bool {
 func lintHardcodedSecrets(g Graph) []LintIssue {
 	issues := make([]LintIssue, 0)
 	for _, n := range g.Nodes {
-		if field := findHardcodedSecret("", n.Params); field != "" {
+		if field := findHardcodedSecret("", n.Params, hardcodedSecretExempt[n.Module]); field != "" {
 			issues = append(issues, hardcodedIssue(n.ID, n.Module, field))
 			continue
 		}
@@ -361,7 +374,10 @@ func hardcodedIssue(nodeID, module, field string) LintIssue {
 // findHardcodedSecret walks params depth-first and returns the first
 // field path (e.g. "headers.Authorization") that looks like a pasted
 // secret, or "" if none. keyPath is the dotted path to v's container.
-func findHardcodedSecret(keyPath string, v any) string {
+// exempt holds top-level param names where the key-name heuristic is
+// suppressed (see hardcodedSecretExempt); provider-pattern values are
+// flagged regardless.
+func findHardcodedSecret(keyPath string, v any, exempt map[string]bool) string {
 	switch t := v.(type) {
 	case string:
 		if knownSecretValue.MatchString(t) {
@@ -369,7 +385,7 @@ func findHardcodedSecret(keyPath string, v any) string {
 		}
 		// Key-name heuristic only applies when we know the key (keyPath
 		// non-empty) — a bare top-level string param has no key context.
-		if keyPath != "" && secretKeyNameLeaf(keyPath) && isLiteralSecret(t) {
+		if keyPath != "" && !exempt[keyPath] && secretKeyNameLeaf(keyPath) && isLiteralSecret(t) {
 			return keyPath
 		}
 	case map[string]any:
@@ -381,13 +397,13 @@ func findHardcodedSecret(keyPath string, v any) string {
 		sort.Strings(keys)
 		for _, k := range keys {
 			child := join(keyPath, k)
-			if hit := findHardcodedSecret(child, t[k]); hit != "" {
+			if hit := findHardcodedSecret(child, t[k], exempt); hit != "" {
 				return hit
 			}
 		}
 	case []any:
 		for i, child := range t {
-			if hit := findHardcodedSecret(fmt.Sprintf("%s[%d]", keyPath, i), child); hit != "" {
+			if hit := findHardcodedSecret(fmt.Sprintf("%s[%d]", keyPath, i), child, exempt); hit != "" {
 				return hit
 			}
 		}

@@ -1,6 +1,7 @@
 import { Handle, Position, useStore, type NodeProps } from "@xyflow/react";
 import { AlertTriangle, AlertCircle } from "lucide-react";
 import i18n from "../i18n";
+import { Switch } from "./Switch";
 import { iconFor, isBrandedIcon, categoryColor } from "../icons";
 import type { Manifest, Port, JSONSchema, Ref } from "../types";
 import {
@@ -483,7 +484,7 @@ export function HazyNode({ data, selected }: NodeProps) {
 }
 
 // ParamInput renders the editor for one primitive param. The control follows
-// the schema: enum → select, boolean → checkbox, integer/number → number
+// the schema: enum → select, boolean → switch, integer/number → number
 // input, multiline string → textarea, otherwise a text input. Shared by the
 // on-pin inline editors and the param-only section so the two never drift.
 function ParamInput({
@@ -531,7 +532,14 @@ function ParamInput({
     );
   }
   if (s.type === "boolean") {
-    return <input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} />;
+    return (
+      <Switch
+        compact
+        checked={!!value}
+        onChange={(checked) => onChange(checked)}
+        ariaLabel={s.title || s.description}
+      />
+    );
   }
   if (s.type === "integer" || s.type === "number") {
     const text = value === "" || value == null ? "" : String(Number(value));

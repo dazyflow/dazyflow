@@ -6,7 +6,7 @@ import i18n from "../i18n";
 import { api, APIError } from "../api";
 import { useAuth } from "../auth";
 import { explainRunError } from "../lib/explainRunError";
-import type { JobRecord, JobStatus, Ref, RunLogEntry } from "../types";
+import type { Graph, JobRecord, JobStatus, Manifest, Ref, RunLogEntry } from "../types";
 
 // RunDetail is the post-failure "what happened" page — and the
 // post-success "yes, here are the values" page. T2 of the PMF
@@ -32,13 +32,51 @@ import type { JobRecord, JobStatus, Ref, RunLogEntry } from "../types";
 export function RunDetail() {
   const { t } = useTranslation();
   const { runID } = useParams<{ runID: string }>();
-  const { token } = useAuth();
+  const { token, me, activeTenant, activeWorkspace } = useAuth();
   const [run, setRun] = useState<JobRecord | null>(null);
   const [nodes, setNodes] = useState<JobRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [replaying, setReplaying] = useState(false);
+  // Friendly naming: the flow's display name for the heading, and module
+  // labels for timeline rows ("ntfy" instead of "ntfy_1"). Best-effort —
+  // a deleted flow or fetch error falls back to the raw IDs.
+  const [graph, setGraph] = useState<Graph | null>(null);
+  const [manifests, setManifests] = useState<Map<string, Manifest>>(new Map());
+
+  useEffect(() => {
+    const tenant = activeTenant || me?.tenant || "";
+    const workspace = activeWorkspace || me?.workspace || "";
+    if (!token || !run?.GraphID || !tenant || !workspace) return;
+    let cancelled = false;
+    api
+      .loadGraph(token, tenant, workspace, run.GraphID)
+      .then((g) => {
+        if (!cancelled) setGraph(g);
+      })
+      .catch(() => {});
+    api
+      .listDrops(token)
+      .then((r) => {
+        if (cancelled) return;
+        setManifests(new Map(r.drops.map((m) => [m.id, m])));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [token, run?.GraphID, activeTenant, activeWorkspace, me]);
+
+  // nodeLabel resolves a timeline row's display name: the node's module
+  // manifest label when known ("Send notification"), else the raw id.
+  const nodeLabel = (nodeID: string): string => {
+    const moduleID = graph?.nodes?.find((n) => n.id === nodeID)?.module;
+    if (!moduleID) return nodeID;
+    const m = manifests.get(moduleID);
+    if (!m) return moduleID;
+    return m.subtitle ? `${m.label} · ${m.subtitle}` : m.label;
+  };
 
   useEffect(() => {
     if (!token || !runID) return;
@@ -153,7 +191,7 @@ export function RunDetail() {
           </Link>
           <h1 style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span className={"status-dot " + run.Status} />
-            {run.GraphID}
+            {graph?.name || run.GraphID}
           </h1>
           <div className="sub">
             {t("runDetail.runIdLabel")}{" "}
@@ -196,13 +234,18 @@ export function RunDetail() {
       {/* Run-level summary card. */}
       <div className="run-summary card">
         <SummaryRow label={t("runDetail.summaryStatus")} value={<StatusChip status={run.Status} />} />
-        <SummaryRow label={t("runDetail.summaryStarted")} value={formatAbs(run.StartedAt ?? null)} />
+        {/* Older records (pre started_at-stamping on enqueue) fall back
+            to enqueued_at so finished runs still show a start/duration. */}
+        <SummaryRow
+          label={t("runDetail.summaryStarted")}
+          value={formatAbs(run.StartedAt ?? run.EnqueuedAt ?? null)}
+        />
         <SummaryRow label={t("runDetail.summaryFinished")} value={formatAbs(run.FinishedAt ?? null)} />
         <SummaryRow
           label={t("runDetail.summaryDuration")}
           value={
-            run.StartedAt && run.FinishedAt
-              ? formatDuration(run.StartedAt, run.FinishedAt)
+            (run.StartedAt ?? run.EnqueuedAt) && run.FinishedAt
+              ? formatDuration((run.StartedAt ?? run.EnqueuedAt)!, run.FinishedAt)
               : run.Status === "running"
               ? t("runDetail.inProgress")
               : "—"
@@ -262,7 +305,7 @@ export function RunDetail() {
               >
                 {isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                 <span className={"status-dot " + n.Status} />
-                  <span className="node-id">{n.NodeID}</span>
+                  <span className="node-id" title={n.NodeID}>{nodeLabel(n.NodeID)}</span>
                 <span className="node-status">{statusLabel(n.Status, t)}</span>
                 <span className="node-dur">{dur}</span>
                 {n.Result?.error?.code && (

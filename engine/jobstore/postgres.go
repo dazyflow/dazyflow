@@ -123,13 +123,20 @@ func (s *Postgres) Enqueue(ctx context.Context, rec core.JobRecord) error {
 	}
 	// A record enqueued already-terminal (a seed) is finished now; mirror
 	// complete() so run duration and the stuck-run reaper see a finish time.
-	var finished any
+	// Seeds and graph-records (enqueued already-running) never pass through
+	// Claim, so stamp started_at here too — otherwise webhook-triggered
+	// runs render with no start time/duration.
+	var finished, started any
 	if core.IsTerminalStatus(status) {
-		finished = time.Now().UTC()
+		now := time.Now().UTC()
+		finished = now
+		started = now
+	} else if status == core.JobStatusRunning {
+		started = time.Now().UTC()
 	}
 	const q = `
-		INSERT INTO jobs (id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result, enqueued_at, finished_at, parent_node_rec_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, COALESCE($12, now()), $13, $14)
+		INSERT INTO jobs (id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result, enqueued_at, started_at, finished_at, parent_node_rec_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, COALESCE($12, now()), $13, $14, $15)
 	`
 	var enqueued any
 	if !rec.EnqueuedAt.IsZero() {
@@ -137,7 +144,7 @@ func (s *Postgres) Enqueue(ctx context.Context, rec core.JobRecord) error {
 	}
 	_, err = s.pool.Exec(ctx, q,
 		rec.ID, string(kind), rec.GraphRunID, rec.GraphID, rec.NodeID,
-		rec.Tenant, rec.Workspace, string(status), jobJSON, graphPayload, resJSON, enqueued, finished, rec.ParentNodeRecID)
+		rec.Tenant, rec.Workspace, string(status), jobJSON, graphPayload, resJSON, enqueued, started, finished, rec.ParentNodeRecID)
 	if err != nil {
 		return wrapPgErr(err)
 	}
