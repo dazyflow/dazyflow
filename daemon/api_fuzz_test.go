@@ -119,6 +119,28 @@ func (h *fuzzHarness) withGitHubEvents(secret string) *fuzzHarness {
 	return h
 }
 
+// withStripeEvents wires the per-tenant Stripe webhook handler. Unlike
+// Slack/GitHub (one operator secret), Stripe authenticates against a
+// secret saved per-tenant in the encrypted store, so we stand one up and
+// seed tenant "t"'s STRIPE_WEBHOOK_SECRET. now is frozen so a valid-HMAC
+// fuzzer can sign inside the replay-tolerance window deterministically.
+func (h *fuzzHarness) withStripeEvents(f *testing.F, secret string) *fuzzHarness {
+	f.Helper()
+	es, err := NewEncryptedSecrets(make([]byte, 32), NewMemSecretsStore())
+	if err != nil {
+		f.Fatalf("encrypted secrets: %v", err)
+	}
+	if err := es.Put(context.Background(), "t", stripeTriggerSecretName, secret); err != nil {
+		f.Fatalf("put stripe secret: %v", err)
+	}
+	h.svc.EncryptedSecrets = es
+	handler := NewStripeEventsHandler(h.svc)
+	frozen := time.Unix(1700000000, 0).UTC()
+	handler.now = func() time.Time { return frozen }
+	h.gw.StripeEvents = handler
+	return h
+}
+
 // ---------------------------------------------------------------------
 // Auth surface
 // ---------------------------------------------------------------------
@@ -462,9 +484,72 @@ func FuzzGitHubEventsValidHMAC(f *testing.F) {
 	})
 }
 
+// FuzzStripeEventsBadHMAC feeds arbitrary bodies and arbitrary
+// Stripe-Signature header values to the per-tenant Stripe webhook
+// handler. The handler must reject every forged/garbage signature with a
+// 4xx — never a 5xx and never a panic — before it parses or dispatches.
+func FuzzStripeEventsBadHMAC(f *testing.F) {
+	h := newFuzzHarness(f).withStripeEvents(f, "whsec_test_secret")
+	f.Add([]byte(`{}`), "t=1700000000,v1=deadbeef")
+	f.Add([]byte(``), "")
+	f.Add([]byte(`{"type":"payment_intent.succeeded"}`), "garbage")
+	f.Add([]byte(`{"type":"payment_intent.succeeded"}`), "t=,v1=")
+	f.Add([]byte(`not-json`), "t=1700000000")
+	f.Fuzz(func(t *testing.T, body []byte, sig string) {
+		req := httptest.NewRequest("POST", "/api/v1/events/stripe/t", bytes.NewReader(body))
+		if sig != "" {
+			req.Header.Set("Stripe-Signature", sig)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		rw := httptest.NewRecorder()
+		ServeForTest(h.gw, rw, req)
+		assertNo5xx(t, "stripe bad-hmac", rw)
+	})
+}
+
+// FuzzStripeEventsValidHMAC signs each fuzzed body correctly (within the
+// frozen timestamp tolerance) so the input reaches event parsing and the
+// per-type dispatchers — the json.Unmarshal of attacker-shaped event,
+// data.object, payment-intent and subscription payloads. None may panic
+// or 5xx regardless of the envelope shape.
+func FuzzStripeEventsValidHMAC(f *testing.F) {
+	const secret = "whsec_test_secret"
+	h := newFuzzHarness(f).withStripeEvents(f, secret)
+	frozen := time.Unix(1700000000, 0).UTC()
+	f.Add([]byte(`{"type":"payment_intent.succeeded","data":{"object":{"amount_received":4999,"currency":"usd","receipt_email":"a@b.com"}}}`))
+	f.Add([]byte(`{"type":"payment_intent.payment_failed","data":{"object":{"last_payment_error":{"message":"declined"}}}}`))
+	f.Add([]byte(`{"type":"customer.subscription.deleted","data":{"object":{"id":"sub_1","items":{"data":[{"price":{"nickname":"Pro"}}]}}}}`))
+	f.Add([]byte(`{"type":"unknown.event"}`))
+	f.Add([]byte(`{}`))
+	f.Add([]byte(`null`))
+	f.Add([]byte(`not-json`))
+	f.Add([]byte(`{"type":"payment_intent.succeeded","data":{"object":"not-an-object"}}`))
+	f.Add([]byte(`{"type":"payment_intent.succeeded","data":null}`))
+	f.Add([]byte(`{"type":42}`))
+	f.Add([]byte(`{"type":"customer.subscription.deleted","data":{"object":{"ended_at":253402300800}}}`))
+	f.Fuzz(func(t *testing.T, body []byte) {
+		req := httptest.NewRequest("POST", "/api/v1/events/stripe/t", bytes.NewReader(body))
+		req.Header.Set("Stripe-Signature", stripeSig(secret, frozen, body))
+		req.Header.Set("Content-Type", "application/json")
+		rw := httptest.NewRecorder()
+		ServeForTest(h.gw, rw, req)
+		assertNo5xx(t, "stripe valid-hmac", rw)
+	})
+}
+
 // ---------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------
+
+// stripeSig builds a Stripe-Signature header (t=<unix>,v1=<hmac-hex>)
+// over "<ts>.<body>" — the *testing.T-free twin of signStripe, usable
+// from inside an f.Fuzz body.
+func stripeSig(secret string, ts time.Time, body []byte) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	fmt.Fprintf(mac, "%d.", ts.Unix())
+	mac.Write(body)
+	return fmt.Sprintf("t=%d,v1=%s", ts.Unix(), hex.EncodeToString(mac.Sum(nil)))
+}
 
 func makeASCIIRepeat(n int) string {
 	b := make([]byte, n)
