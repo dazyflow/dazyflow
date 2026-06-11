@@ -1048,6 +1048,7 @@
     "no": "Nej",
     "remove": "ta bort",
     "add": "Lägg till",
+    "multiSelectCustom": "Lägg till en till…",
     "keyPlaceholder": "nyckel",
     "uploading": "Laddar upp…",
     "dropOrBrowse": "Släpp en fil här eller klicka för att bläddra",
@@ -1086,7 +1087,11 @@
       "connectHint": "Anslut kontot för att välja {{noun}} från en lista.",
       "needsDependency": "Välj {{dep}} först för att välja {{noun}}.",
       "wired": "Anges av ett anslutet steg.",
-      "wiredNamed": "{{name}} — anges av ett anslutet steg"
+      "wiredNamed": "{{name}} — anges av ett anslutet steg",
+      "useExpression": "Ange ett värde eller en referens",
+      "usePicker": "Välj {{noun}} från listan",
+      "chooseFromList": "Välj från listan",
+      "exprPlaceholder": "Ett värde, eller infoga en referens med { }"
     },
     "refPicker": {
       "insert": "Infoga en referens",

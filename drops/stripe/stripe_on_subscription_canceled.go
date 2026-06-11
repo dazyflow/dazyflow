@@ -37,7 +37,7 @@ func init() {
 			ExecutionModel: core.ExecutionTrigger,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{
-				{Port: "subscription_id", Label: "Subscription id", MIME: []string{"text/plain"}},
+				{Port: "subscription_id", Label: "Subscription ID", MIME: []string{"text/plain"}},
 				{Port: "customer", Label: "Customer", MIME: []string{"text/plain"}},
 				{Port: "plan", Label: "Plan", MIME: []string{"text/plain"}},
 				{Port: "ended_at", Label: "Ended at", MIME: []string{"text/plain"}},

@@ -156,6 +156,118 @@ func ListSubscriptions(ctx context.Context, job core.Job) ([]core.AccountResourc
 	return out, nil
 }
 
+// ListPaymentIntents enumerates the account's refundable (succeeded)
+// payment intents as picker options — the backend for the
+// "stripe-payment-intent" param format, so a user picks "49.99 USD —
+// jane@acme.com (succeeded)" from a dropdown instead of pasting a pi_… id.
+// Called by the daemon's resource-picker endpoint (not by a drop), with the
+// api_key already resolved into the job params.
+func ListPaymentIntents(ctx context.Context, job core.Job) ([]core.AccountResource, error) {
+	q := url.Values{}
+	q.Set("limit", "100")
+	// Expand the customer so the label can name who paid.
+	q.Set("expand[]", "data.customer")
+	status, body, err := stripeDo(ctx, job, http.MethodGet, baseURL(job)+"/payment_intents?"+q.Encode(), "")
+	if err != nil {
+		return nil, err
+	}
+	if status < 200 || status >= 300 {
+		return nil, fmt.Errorf("stripe returned %d: %s", status, extractStripeError(body))
+	}
+	var parsed struct {
+		Data []struct {
+			ID           string          `json:"id"`
+			Status       string          `json:"status"`
+			Amount       int64           `json:"amount"`
+			Currency     string          `json:"currency"`
+			Description  string          `json:"description"`
+			ReceiptEmail string          `json:"receipt_email"`
+			Customer     json.RawMessage `json:"customer"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return nil, fmt.Errorf("parse payment intents: %w", err)
+	}
+	out := make([]core.AccountResource, 0, len(parsed.Data))
+	for _, pi := range parsed.Data {
+		// Only succeeded payments can be refunded — skip the rest so the
+		// dropdown only offers ids the refund step can actually act on.
+		if pi.Status != "succeeded" {
+			continue
+		}
+		// Lead with the amount (the most identifying detail for a refund),
+		// then who it was for: description, customer email, or receipt email.
+		name := formatPriceAmount(pi.Amount, pi.Currency)
+		var cust struct {
+			Email string `json:"email"`
+		}
+		_ = json.Unmarshal(pi.Customer, &cust)
+		who := pi.Description
+		if who == "" {
+			who = cust.Email
+		}
+		if who == "" {
+			who = pi.ReceiptEmail
+		}
+		if who != "" {
+			if name != "" {
+				name += " — "
+			}
+			name += who
+		}
+		if name == "" {
+			name = pi.ID
+		}
+		out = append(out, core.AccountResource{ID: pi.ID, Name: name})
+	}
+	return out, nil
+}
+
+// ListCustomers enumerates the account's customers as picker options — the
+// backend for the "stripe-customer" param format, so a user picks "Jane Doe
+// — jane@acme.com" from a dropdown instead of pasting a cus_… id. Called by
+// the daemon's resource-picker endpoint (not by a drop), with the api_key
+// already resolved into the job params.
+func ListCustomers(ctx context.Context, job core.Job) ([]core.AccountResource, error) {
+	q := url.Values{}
+	q.Set("limit", "100")
+	status, body, err := stripeDo(ctx, job, http.MethodGet, baseURL(job)+"/customers?"+q.Encode(), "")
+	if err != nil {
+		return nil, err
+	}
+	if status < 200 || status >= 300 {
+		return nil, fmt.Errorf("stripe returned %d: %s", status, extractStripeError(body))
+	}
+	var parsed struct {
+		Data []struct {
+			ID    string `json:"id"`
+			Name  string `json:"name"`
+			Email string `json:"email"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return nil, fmt.Errorf("parse customers: %w", err)
+	}
+	out := make([]core.AccountResource, 0, len(parsed.Data))
+	for _, c := range parsed.Data {
+		// Label with whatever identifies the customer: name and email
+		// together, then either alone, falling back to the raw id.
+		name := c.Name
+		if c.Email != "" {
+			if name != "" {
+				name += " — " + c.Email
+			} else {
+				name = c.Email
+			}
+		}
+		if name == "" {
+			name = c.ID
+		}
+		out = append(out, core.AccountResource{ID: c.ID, Name: name})
+	}
+	return out, nil
+}
+
 // priceZeroDecimalCurrencies are the currencies Stripe represents in
 // whole units rather than hundredths — per
 // https://docs.stripe.com/currencies#zero-decimal.

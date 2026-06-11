@@ -180,6 +180,8 @@ const RESOURCE_PICKER_KINDS: Record<string, { provider: string; kind: string }> 
   "google-spreadsheet": { provider: "google", kind: "spreadsheets" },
   "stripe-price": { provider: "stripe", kind: "prices" },
   "stripe-subscription": { provider: "stripe", kind: "subscriptions" },
+  "stripe-payment-intent": { provider: "stripe", kind: "payment_intents" },
+  "stripe-customer": { provider: "stripe", kind: "customers" },
 };
 
 // stampScheduleTimezones fills a missing/blank tz on Schedule (cron_trigger)
@@ -868,6 +870,30 @@ function EditorInner() {
       setDirty(true);
     },
     [],
+  );
+
+  // Gate connections by data type while dragging — React Flow renders the
+  // wire as invalid and refuses to attach it when this returns false. We
+  // mirror the backend rule (core.mimeCompatible): reject only when BOTH
+  // ends declare MIME sets that don't overlap (e.g. text/plain →
+  // application/json). Untyped pins — the passthrough pin, exec pins like
+  // for_each's `body`, the default in/out handles, comment nodes — carry no
+  // MIME and stay universally connectable. This turns a confusing save-time
+  // "MIME mismatch" error into "the wire won't stick", and never blocks
+  // anything the validator would accept on submit.
+  const isValidConnection = useCallback(
+    (c: Connection | FlowEdge): boolean => {
+      const byId = new Map(nodes.map((n) => [n.id, n]));
+      const out = byId
+        .get(c.source)
+        ?.data.manifest?.outputs?.find((p) => p.port === (c.sourceHandle ?? "out"));
+      const inp = byId
+        .get(c.target)
+        ?.data.manifest?.inputs?.find((p) => p.port === (c.targetHandle ?? "in"));
+      if (!out || !inp) return true;
+      return mimeCompatible(out.mime, inp.mime);
+    },
+    [nodes],
   );
 
   // Drag-off-pin creation. Dragging a wire from a port and dropping it on
@@ -3089,6 +3115,7 @@ function EditorInner() {
           onNodeDragStop={onNodeDragStop}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          isValidConnection={isValidConnection}
           onConnectStart={onConnectStart}
           onConnectEnd={onConnectEnd}
           onInit={(inst) => (rfRef.current = inst)}

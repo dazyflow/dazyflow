@@ -40,17 +40,17 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				{Port: "after_id", Label: "After id", MIME: []string{"text/plain"}},
+				{Port: "after_id", Label: "After ID", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
 				{Port: "events", Label: "Events", MIME: []string{"application/json"}},
-				{Port: "last_id", Label: "Last id", MIME: []string{"text/plain"}},
+				{Port: "last_id", Label: "Last ID", MIME: []string{"text/plain"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
 					"api_key":{"type":"string","title":"API key","default":"${secret.STRIPE_API_KEY}","x_advanced":true,"description":"Stripe secret key. The default reads the STRIPE_API_KEY secret."},
-					"types":{"type":"array","title":"Event types","items":{"type":"string"},"description":"Only these event types (e.g. payment_intent.succeeded). Empty = all types."},
+					"types":{"type":"array","title":"Event types","format":"string-multiselect","items":{"type":"string","enum":["payment_intent.succeeded","payment_intent.payment_failed","charge.refunded","charge.dispute.created","invoice.paid","invoice.payment_failed","customer.subscription.created","customer.subscription.updated","customer.subscription.deleted","customer.created","checkout.session.completed","payout.paid"],"enumNames":["Payment succeeded","Payment failed","Charge refunded","Dispute opened","Invoice paid","Invoice payment failed","Subscription created","Subscription updated","Subscription canceled","Customer created","Checkout completed","Payout paid"]},"description":"Pick the events to watch for. Empty = every event. Need one that's not listed? Add it as a custom type (Stripe's dotted name, e.g. payout.failed)."},
 					"limit":{"type":"integer","title":"Limit","default":25,"minimum":1,"maximum":100,"description":"Max events per poll."},
 					"after_id":{"type":"string","title":"After id","description":"Only events newer than this event id (evt_…). Overridden by the 'After id' input — usually a saved cursor secret."},
 					"base_url":{"type":"string","description":"Override the API host (testing)."},

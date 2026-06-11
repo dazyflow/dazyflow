@@ -36,17 +36,11 @@ func init() {
 			},
 			ExecutionModel: core.ExecutionTrigger,
 			ProcessModel:   core.ProcessLongLived,
-			Outputs: []core.Port{
+			// Same payment-event outputs as stripe_on_payment, with a
+			// 'Failure reason' pin prepended (Stripe's decline message).
+			Outputs: append([]core.Port{
 				{Port: "failure_message", Label: "Failure reason", MIME: []string{"text/plain"}},
-				{Port: "amount_display", Label: "Amount (display)", MIME: []string{"text/plain"}},
-				{Port: "amount", Label: "Amount (minor units)", MIME: []string{"text/plain"}},
-				{Port: "currency", Label: "Currency", MIME: []string{"text/plain"}},
-				{Port: "customer_email", Label: "Customer email", MIME: []string{"text/plain"}},
-				{Port: "description", Label: "Description", MIME: []string{"text/plain"}},
-				{Port: "payment_id", Label: "Payment id", MIME: []string{"text/plain"}},
-				{Port: "payment", Label: "Payment intent", MIME: []string{"application/json"}},
-				{Port: "event", Label: "Raw event", MIME: []string{"application/json"}},
-			},
+			}, paymentTriggerOutputs()...),
 			ParamsSchema: json.RawMessage(`{"type":"object"}`),
 			Idempotent:   false,
 		},
@@ -57,13 +51,8 @@ func init() {
 // executeStripeOnPaymentFailed is the standalone-execution path — only
 // called when a graph is run manually. Mirrors stripe_on_payment.
 func executeStripeOnPaymentFailed(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	return core.Result{
-		JobID:  job.ID,
-		Status: core.StatusError,
-		Error: &core.JobError{
-			Code:    "no_trigger_data",
-			Message: "This trigger only fires when a real payment_intent.payment_failed webhook arrives. To test it, use a Stripe test card that declines (e.g. 4000 0000 0000 0002); running the graph manually leaves the trigger with no event to feed downstream.",
-			Details: "stripe_on_payment_failed is pre-completed by the daemon's Stripe events handler when a failed-payment event arrives. Standalone execution has no event payload to emit.",
-		},
-	}, nil
+	return noPaymentTriggerData(job,
+		"This trigger only fires when a real payment_intent.payment_failed webhook arrives. To test it, use a Stripe test card that declines (e.g. 4000 0000 0000 0002); running the graph manually leaves the trigger with no event to feed downstream.",
+		"stripe_on_payment_failed is pre-completed by the daemon's Stripe events handler when a failed-payment event arrives. Standalone execution has no event payload to emit.",
+	)
 }

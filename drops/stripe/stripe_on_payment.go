@@ -36,19 +36,7 @@ func init() {
 			},
 			ExecutionModel: core.ExecutionTrigger,
 			ProcessModel:   core.ProcessLongLived,
-			Outputs: []core.Port{
-				{Port: "amount_display", Label: "Amount (display)", MIME: []string{"text/plain"}},
-				{Port: "amount", Label: "Amount (minor units)", MIME: []string{"text/plain"}},
-				{Port: "currency", Label: "Currency", MIME: []string{"text/plain"}},
-				{Port: "customer_email", Label: "Customer email", MIME: []string{"text/plain"}},
-				{Port: "description", Label: "Description", MIME: []string{"text/plain"}},
-				{Port: "payment_id", Label: "Payment id", MIME: []string{"text/plain"}},
-				{Port: "payment", Label: "Payment intent", MIME: []string{"application/json"}},
-				// The whole webhook event stays a wireable pin so
-				// compositions can template across fields the scalar
-				// pins don't pull out (metadata, charges, …).
-				{Port: "event", Label: "Raw event", MIME: []string{"application/json"}},
-			},
+			Outputs:      paymentTriggerOutputs(),
 			ParamsSchema: json.RawMessage(`{"type":"object"}`),
 			Idempotent:   false,
 		},
@@ -60,13 +48,8 @@ func init() {
 // when a graph is run manually (no webhook event seeded the node).
 // Mirrors github_on_push / webhook_input.
 func executeStripeOnPayment(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	return core.Result{
-		JobID:  job.ID,
-		Status: core.StatusError,
-		Error: &core.JobError{
-			Code:    "no_trigger_data",
-			Message: "This Stripe payment trigger only fires when a real payment_intent.succeeded webhook arrives. To test it, send a test event from the Stripe dashboard's webhook page (or make a test-mode payment); running the graph manually leaves the trigger with no event to feed downstream.",
-			Details: "stripe_on_payment is pre-completed by the daemon's Stripe events handler when a payment event arrives. Standalone execution has no event payload to emit.",
-		},
-	}, nil
+	return noPaymentTriggerData(job,
+		"This Stripe payment trigger only fires when a real payment_intent.succeeded webhook arrives. To test it, send a test event from the Stripe dashboard's webhook page (or make a test-mode payment); running the graph manually leaves the trigger with no event to feed downstream.",
+		"stripe_on_payment is pre-completed by the daemon's Stripe events handler when a payment event arrives. Standalone execution has no event payload to emit.",
+	)
 }

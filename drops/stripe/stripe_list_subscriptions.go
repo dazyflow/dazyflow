@@ -42,15 +42,15 @@ func init() {
 			},
 			Outputs: []core.Port{
 				{Port: "subscriptions", Label: "Subscriptions", MIME: []string{"application/json"}},
-				{Port: "first_id", Label: "First id", MIME: []string{"text/plain"}},
+				{Port: "first_id", Label: "First ID", MIME: []string{"text/plain"}},
 				{Port: "count", Label: "Count", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
 					"api_key":{"type":"string","title":"API key","default":"${secret.STRIPE_API_KEY}","x_advanced":true,"description":"Stripe secret key. The default reads the STRIPE_API_KEY secret."},
-					"customer":{"type":"string","title":"Customer","description":"Only this customer's subscriptions (cus_… id). Empty = the whole account. Overridden by the 'Customer' input."},
-					"status":{"type":"string","title":"Status","default":"active","enum":["active","trialing","past_due","unpaid","paused","canceled","all"],"description":"Which subscription states to list."},
+					"customer":{"type":"string","format":"stripe-customer","title":"Customer","description":"Pick a customer to list only their subscriptions, or leave empty for the whole account (e.g. a past-due sweep). Listed once the STRIPE_API_KEY secret is set. Overridden by the 'Customer' input."},
+					"status":{"type":"string","title":"Status","default":"active","enum":["active","trialing","past_due","unpaid","paused","canceled","all"],"enumNames":["Active","On trial","Past due","Unpaid","Paused","Canceled","All states"],"description":"Which subscription states to list."},
 					"limit":{"type":"integer","title":"Limit","default":25,"minimum":1,"maximum":100},
 					"base_url":{"type":"string","description":"Override the API host (testing)."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1}

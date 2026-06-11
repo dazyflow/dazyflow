@@ -497,6 +497,13 @@ func TestSearchCustomers(t *testing.T) {
 	if res.Output["count"].Inline != 1 {
 		t.Errorf("count = %v", res.Output["count"].Inline)
 	}
+	// first_id/first_email carry the first match for the single-match wire.
+	if res.Output["first_id"].Inline != "cus_7" {
+		t.Errorf("first_id = %v", res.Output["first_id"].Inline)
+	}
+	if res.Output["first_email"].Inline != "a@b.com" {
+		t.Errorf("first_email = %v", res.Output["first_email"].Inline)
+	}
 	if f.lastForm.Get("query") != "email:'a@b.com'" {
 		t.Errorf("query = %v", f.lastForm.Get("query"))
 	}
@@ -504,6 +511,10 @@ func TestSearchCustomers(t *testing.T) {
 	res = run(t, f, "stripe_search_customers", map[string]any{"query": "email:'nobody@x.com'"}, nil)
 	if res.Output["count"].Inline != 0 {
 		t.Errorf("empty search count = %v", res.Output["count"].Inline)
+	}
+	// No matches → empty scalars, not an error.
+	if res.Output["first_id"].Inline != "" || res.Output["first_email"].Inline != "" {
+		t.Errorf("empty search first_id/email = %v / %v", res.Output["first_id"].Inline, res.Output["first_email"].Inline)
 	}
 }
 

@@ -216,6 +216,42 @@ func numberInputOr(job core.Job, port string, fallback int) (int, bool) {
 	return 0, false
 }
 
+// paymentTriggerOutputs is the output-port set shared by the
+// payment_intent.* triggers (stripe_on_payment / stripe_on_payment_failed):
+// the scalar fields pulled out of the event, plus the raw payment intent and
+// the whole webhook event as wireable JSON pins (so compositions can template
+// across fields the scalar pins don't surface). The failed trigger prepends
+// its own 'Failure reason' pin. Returns a fresh slice per call so a caller
+// can safely append to it.
+func paymentTriggerOutputs() []core.Port {
+	return []core.Port{
+		{Port: "amount_display", Label: "Amount (display)", MIME: []string{"text/plain"}},
+		{Port: "amount", Label: "Amount (minor units)", MIME: []string{"text/plain"}},
+		{Port: "currency", Label: "Currency", MIME: []string{"text/plain"}},
+		{Port: "customer_email", Label: "Customer email", MIME: []string{"text/plain"}},
+		{Port: "description", Label: "Description", MIME: []string{"text/plain"}},
+		{Port: "payment_id", Label: "Payment ID", MIME: []string{"text/plain"}},
+		{Port: "payment", Label: "Payment intent", MIME: []string{"application/json"}},
+		{Port: "event", Label: "Raw event", MIME: []string{"application/json"}},
+	}
+}
+
+// noPaymentTriggerData is the standalone-run result shared by the
+// payment_intent.* triggers. They're pre-completed by the daemon's Stripe
+// events handler when a real webhook arrives, so a manual run has no event to
+// emit — `message`/`details` explain the specific trigger and how to test it.
+func noPaymentTriggerData(job core.Job, message, details string) (core.Result, error) {
+	return core.Result{
+		JobID:  job.ID,
+		Status: core.StatusError,
+		Error: &core.JobError{
+			Code:    "no_trigger_data",
+			Message: message,
+			Details: details,
+		},
+	}, nil
+}
+
 // stripeFailure maps a transport error or a non-2xx Stripe response to
 // an error Result. Returns nil when the call succeeded — the shared
 // epilogue of every drop's stripeDo call.

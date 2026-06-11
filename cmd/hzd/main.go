@@ -316,6 +316,24 @@ func main() {
 			}
 			return stripe.ListSubscriptions(ctx, core.Job{Params: map[string]any{"api_key": key}})
 		})
+		// Powers the "stripe-payment-intent" param format so a refund step
+		// picks the payment to refund from a dropdown.
+		daemon.RegisterResourceLister("stripe", "payment_intents", func(ctx context.Context, _ string, _ map[string]string) ([]core.AccountResource, error) {
+			key, err := encryptedSecrets.Get(ctx, "STRIPE_API_KEY")
+			if err != nil {
+				return nil, fmt.Errorf("add a STRIPE_API_KEY secret to list payments: %w", err)
+			}
+			return stripe.ListPaymentIntents(ctx, core.Job{Params: map[string]any{"api_key": key}})
+		})
+		// Powers the "stripe-customer" param format so steps that scope to a
+		// customer (e.g. List subscriptions) pick one from a dropdown.
+		daemon.RegisterResourceLister("stripe", "customers", func(ctx context.Context, _ string, _ map[string]string) ([]core.AccountResource, error) {
+			key, err := encryptedSecrets.Get(ctx, "STRIPE_API_KEY")
+			if err != nil {
+				return nil, fmt.Errorf("add a STRIPE_API_KEY secret to list customers: %w", err)
+			}
+			return stripe.ListCustomers(ctx, core.Job{Params: map[string]any{"api_key": key}})
+		})
 	}
 
 	// Bring-your-own secret managers: vault:// / aws:// / gcp:// resolve

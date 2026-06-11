@@ -49,7 +49,7 @@ func init() {
 				"properties":{
 					"api_key":{"type":"string","title":"API key","default":"${secret.STRIPE_API_KEY}","x_advanced":true,"description":"Stripe secret key. The default reads the STRIPE_API_KEY secret."},
 					"price":{"type":"string","format":"stripe-price","title":"Price","description":"One of your Stripe Prices, listed from your account once the STRIPE_API_KEY secret is set (Products → Pricing in the dashboard). Overridden by the 'Price' input when connected."},
-					"quantity":{"type":"integer","title":"Quantity","default":1,"minimum":1,"description":"Units of the price. Overridden by the 'Quantity' input."},
+					"quantity":{"type":"integer","title":"Quantity","default":1,"minimum":1,"maximum":999999,"description":"Units of the price (1–999999, Stripe's per-line-item limit). Overridden by the 'Quantity' input."},
 					"base_url":{"type":"string","description":"Override the API host (testing)."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
 				},
@@ -74,8 +74,10 @@ func executeCreatePaymentLink(ctx context.Context, job core.Job, _ chan<- core.P
 	if !ok {
 		return params.Err(job, "bad_input", "'Quantity' input must be a whole number"), nil
 	}
-	if quantity < 1 {
-		return params.Err(job, "bad_param", "quantity must be at least 1"), nil
+	// Bound both ends: the UI clamps, but a wired 'Quantity' input bypasses
+	// the form, so the run path enforces Stripe's 1–999999 line-item range.
+	if quantity < 1 || quantity > 999999 {
+		return params.Err(job, "bad_param", "quantity must be between 1 and 999999"), nil
 	}
 
 	form := url.Values{}

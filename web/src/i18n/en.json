@@ -1052,6 +1052,7 @@
     "no": "No",
     "remove": "remove",
     "add": "Add",
+    "multiSelectCustom": "Add another…",
     "keyPlaceholder": "key",
     "uploading": "Uploading…",
     "dropOrBrowse": "Drop a file here or click to browse",
@@ -1090,7 +1091,11 @@
       "connectHint": "Connect the account to pick a {{noun}} from a list.",
       "needsDependency": "Choose a {{dep}} first to pick a {{noun}}.",
       "wired": "Set by a connected step.",
-      "wiredNamed": "{{name}} — set by a connected step"
+      "wiredNamed": "{{name}} — set by a connected step",
+      "useExpression": "Enter a value or reference",
+      "usePicker": "Pick a {{noun}} from the list",
+      "chooseFromList": "Choose from the list",
+      "exprPlaceholder": "A value, or insert a reference with { }"
     },
     "refPicker": {
       "insert": "Insert a reference",

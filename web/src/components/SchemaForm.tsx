@@ -246,6 +246,24 @@ function SchemaField({ name, schema, required, value, onChange, workspace, accou
       </FieldWrap>
     );
   }
+  // format:"suggest" is an OPEN combobox: a free-text box backed by a
+  // datalist of the enum/enumNames suggestions, plus the {} reference menu.
+  // Unlike the closed select below, it accepts ANY value — a currency code
+  // outside the common list, or a ${item.…} reference in a For-each body.
+  // Used by Send invoice's currency.
+  if (schema.format === "suggest" && schema.enum && schema.enum.length > 0) {
+    return (
+      <SuggestField
+        name={name}
+        schema={schema}
+        required={required}
+        value={value}
+        onChange={onChange}
+        references={references}
+        extraReferenceItems={extraReferenceItems}
+      />
+    );
+  }
   // Enums become a select regardless of underlying type — most useful
   // for our string-enum case ("method": GET/POST/...).
   if (schema.enum && schema.enum.length > 0) {
@@ -290,21 +308,21 @@ function SchemaField({ name, schema, required, value, onChange, workspace, accou
           else missingDep = dep;
         }
         return (
-          <FieldWrap name={name} schema={schema} required={required} value={value}>
-            <ResourcePickerField
-              provider={picker.provider}
-              kind={picker.kind}
-              noun={picker.noun}
-              value={value}
-              onChange={onChange}
-              references={references}
-              account={typeof siblings?.account === "string" ? siblings.account : undefined}
-              extra={extra}
-              missingDep={missingDep}
-              disabled={wired}
-              wiredName={resolvedName}
-            />
-          </FieldWrap>
+          <AccountResourceField
+            picker={picker}
+            name={name}
+            schema={schema}
+            required={required}
+            value={value}
+            onChange={onChange}
+            references={references}
+            account={typeof siblings?.account === "string" ? siblings.account : undefined}
+            extra={extra}
+            missingDep={missingDep}
+            wired={wired}
+            resolvedName={resolvedName}
+            extraReferenceItems={extraReferenceItems}
+          />
         );
       }
       if (schema.format === "workspace-path" && workspace) {
@@ -398,9 +416,14 @@ function SchemaField({ name, schema, required, value, onChange, workspace, accou
                 onChange(undefined);
                 return;
               }
-              const n =
+              let n =
                 schema.type === "integer" ? parseInt(raw, 10) : parseFloat(raw);
               if (Number.isNaN(n)) return;
+              // Clamp to the schema's bounds so an out-of-range value (e.g. a
+              // negative quantity) can't be stored — the field never holds
+              // what the backend would only reject at run time.
+              if (typeof schema.minimum === "number") n = Math.max(schema.minimum, n);
+              if (typeof schema.maximum === "number") n = Math.min(schema.maximum, n);
               onChange(n);
             }}
           />
@@ -476,6 +499,26 @@ function SchemaField({ name, schema, required, value, onChange, workspace, accou
               onChange={onChange}
               references={references}
               siblings={siblings}
+            />
+          </FieldWrap>
+        );
+      }
+      // format:"string-multiselect" turns an array-of-string into a
+      // checklist of curated options (items.enum / enumNames) plus a
+      // free-text "add your own" for the long tail — so a non-tech owner
+      // ticks "Payment succeeded" instead of typing payment_intent.succeeded,
+      // while power users can still add anything. Used by stripe_list_events.
+      if (schema.format === "string-multiselect" && schema.items?.enum) {
+        const opts = schema.items.enum.map((v, i) => ({
+          value: String(v),
+          label: schema.items!.enumNames?.[i] ?? String(v),
+        }));
+        return (
+          <FieldWrap name={name} schema={schema} required={required}>
+            <MultiSelectField
+              value={(value as string[]) ?? []}
+              onChange={onChange}
+              options={opts}
             />
           </FieldWrap>
         );
@@ -757,6 +800,8 @@ const RESOURCE_PICKERS: Record<
   // "provider" here is only the lister-registry key.
   "stripe-price": { provider: "stripe", kind: "prices", noun: "price" },
   "stripe-subscription": { provider: "stripe", kind: "subscriptions", noun: "subscription" },
+  "stripe-payment-intent": { provider: "stripe", kind: "payment_intents", noun: "payment" },
+  "stripe-customer": { provider: "stripe", kind: "customers", noun: "customer" },
 };
 
 // resourceNameCache remembers id→name for resources we've resolved this
@@ -767,6 +812,136 @@ const RESOURCE_PICKERS: Record<
 const resourceNameCache = new Map<string, string>();
 const resourceCacheKey = (provider: string, kind: string, id: string) =>
   `${provider}:${kind}:${id}`;
+
+// AccountResourceField pairs the resource dropdown with an escape hatch: a
+// "use a value or reference" mode that swaps the dropdown for a plain text box
+// plus the {} reference menu. The dropdown alone can't express a DYNAMIC value
+// — most importantly ${item.…} inside a For-each body, where the row reaches
+// the step through templated params (not a wire), so the field must hold a
+// reference, not a picked id. Defaults to the text box when the stored value
+// is already a ${…} expression (a loop body, an imported graph) so it's
+// visible and editable; otherwise the dropdown, the everyday path.
+function AccountResourceField({
+  picker,
+  name,
+  schema,
+  required,
+  value,
+  onChange,
+  references,
+  account,
+  extra,
+  missingDep,
+  wired,
+  resolvedName,
+  extraReferenceItems,
+}: {
+  picker: { provider: string; kind: string; noun: string; dependsOn?: string[] };
+  name: string;
+  schema: JSONSchema;
+  required: boolean;
+  value: unknown;
+  onChange: (v: unknown) => void;
+  references: ReferenceCtx;
+  account?: string;
+  extra?: Record<string, string>;
+  missingDep?: string;
+  wired?: boolean;
+  resolvedName?: string;
+  extraReferenceItems?: { label: string; token: string }[];
+}) {
+  const { t } = useTranslation();
+  const isExpr = typeof value === "string" && value.includes("${");
+  const [manual, setManual] = useState(isExpr);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  // A wired input port decides the value — show the picker's read-only note,
+  // no toggle (the wire wins regardless of mode).
+  if (wired) {
+    return (
+      <FieldWrap name={name} schema={schema} required={required} value={value}>
+        <ResourcePickerField
+          provider={picker.provider}
+          kind={picker.kind}
+          noun={picker.noun}
+          value={value}
+          onChange={onChange}
+          references={references}
+          account={account}
+          extra={extra}
+          missingDep={missingDep}
+          disabled
+          wiredName={resolvedName}
+        />
+      </FieldWrap>
+    );
+  }
+
+  // insertRef splices a ${…} token at the cursor (or appends), mirroring
+  // PlainStringField so the {} menu works the same in manual mode.
+  const insertRef = (token: string) => {
+    const el = inputRef.current;
+    const cur = typeof value === "string" ? value : "";
+    if (!el) {
+      onChange(cur + token || undefined);
+      return;
+    }
+    const start = el.selectionStart ?? cur.length;
+    const end = el.selectionEnd ?? cur.length;
+    const next = cur.slice(0, start) + token + cur.slice(end);
+    onChange(next === "" && !required ? undefined : next);
+    requestAnimationFrame(() => {
+      el.focus();
+      const pos = start + token.length;
+      el.setSelectionRange(pos, pos);
+    });
+  };
+
+  return (
+    <FieldWrap name={name} schema={schema} required={required} value={value}>
+      {manual ? (
+        <div className="field-with-ref">
+          <input
+            ref={inputRef}
+            type="text"
+            value={typeof value === "string" ? value : ""}
+            placeholder={t("schemaForm.resourcePicker.exprPlaceholder")}
+            onChange={(e) =>
+              onChange(e.target.value === "" && !required ? undefined : e.target.value)
+            }
+          />
+          <ReferenceMenu
+            ctx={references}
+            onInsert={insertRef}
+            extraItems={extraReferenceItems}
+          />
+        </div>
+      ) : (
+        <ResourcePickerField
+          provider={picker.provider}
+          kind={picker.kind}
+          noun={picker.noun}
+          value={value}
+          onChange={onChange}
+          references={references}
+          account={account}
+          extra={extra}
+          missingDep={missingDep}
+          wiredName={resolvedName}
+        />
+      )}
+      <button
+        type="button"
+        className="link-button sf-picker-mode"
+        onClick={() => setManual((m) => !m)}
+      >
+        {manual
+          ? t("schemaForm.resourcePicker.usePicker", { noun: picker.noun })
+          : t("schemaForm.resourcePicker.useExpression")}
+      </button>
+    </FieldWrap>
+  );
+}
 
 // ResourcePickerField renders a dropdown of a connected account's resources
 // (forms, spreadsheets) and stores the chosen ID. The picker is the ONLY way
@@ -940,6 +1115,107 @@ function ResourcePickerField({
 // Replace affordance for when the user really does want to type
 // something else.
 const SECRET_FULL_REF = /^\$\{secret\.([^}]+)\}$/;
+
+// SuggestField backs format:"suggest" string fields: an obvious dropdown of
+// the schema's enum/enumNames (currency: "USD — US Dollar" → stores "usd")
+// with an escape-hatch toggle to a free-text box + {} reference menu — for a
+// value outside the list (any ISO code) or a ${…} reference (${item.currency}
+// per row in a For-each), neither of which a closed <select> allows. A
+// <datalist> was tried first but reads as a plain text box, so it's a real
+// <select> for the everyday path. Mirrors AccountResourceField's toggle.
+function SuggestField({
+  name,
+  schema,
+  required,
+  value,
+  onChange,
+  references,
+  extraReferenceItems,
+}: {
+  name: string;
+  schema: JSONSchema;
+  required: boolean;
+  value: unknown;
+  onChange: (v: unknown) => void;
+  references?: ReferenceCtx;
+  extraReferenceItems?: { label: string; token: string }[];
+}) {
+  const { t } = useTranslation();
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const opts = (schema.enum ?? []).map((v, i) => ({
+    value: String(v),
+    label: schema.enumNames?.[i] ?? String(v),
+  }));
+  const cur = typeof value === "string" ? value : "";
+  const inList = opts.some((o) => o.value === cur);
+  // Start in the text box when the value is a reference or a custom code that
+  // isn't one of the suggestions, so it stays visible and editable; otherwise
+  // the dropdown is the default, everyday path.
+  const [manual, setManual] = useState(cur.includes("${") || (cur !== "" && !inList));
+
+  const insertRef = (token: string) => {
+    const el = inputRef.current;
+    if (!el) {
+      onChange(cur + token || undefined);
+      return;
+    }
+    const start = el.selectionStart ?? cur.length;
+    const end = el.selectionEnd ?? cur.length;
+    const next = cur.slice(0, start) + token + cur.slice(end);
+    onChange(next === "" && !required ? undefined : next);
+    requestAnimationFrame(() => {
+      el.focus();
+      const pos = start + token.length;
+      el.setSelectionRange(pos, pos);
+    });
+  };
+
+  return (
+    <FieldWrap name={name} schema={schema} required={required} value={value}>
+      {manual ? (
+        <div className="field-with-ref">
+          <input
+            ref={inputRef}
+            type="text"
+            value={cur}
+            placeholder={schema.default ? String(schema.default) : undefined}
+            onChange={(e) =>
+              onChange(e.target.value === "" && !required ? undefined : e.target.value)
+            }
+          />
+          {references && (
+            <ReferenceMenu
+              ctx={references}
+              onInsert={insertRef}
+              extraItems={extraReferenceItems}
+            />
+          )}
+        </div>
+      ) : (
+        <select
+          value={inList ? cur : ((schema.default as string | undefined) ?? "")}
+          onChange={(e) => onChange(e.target.value)}
+        >
+          {!required && schema.default === undefined && <option value="">(unset)</option>}
+          {opts.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      )}
+      <button
+        type="button"
+        className="link-button sf-picker-mode"
+        onClick={() => setManual((m) => !m)}
+      >
+        {manual
+          ? t("schemaForm.resourcePicker.chooseFromList")
+          : t("schemaForm.resourcePicker.useExpression")}
+      </button>
+    </FieldWrap>
+  );
+}
 
 // PlainStringField is the default text input for string-typed schema
 // fields. Wrapped as its own component so it can own the "show chip
@@ -1437,6 +1713,91 @@ function ArrayField({
         <Plus size={12} style={{ marginRight: 4, verticalAlign: -1 }} />
         {t("schemaForm.add")}
       </button>
+    </div>
+  );
+}
+
+// MultiSelectField edits a string[] as a checklist of curated options
+// (label ⇄ stored value) plus a free-text box for values not in the list.
+// Ticking toggles membership; a custom entry becomes a removable chip.
+// Empties out to undefined so an untouched field doesn't bloat saved params.
+function MultiSelectField({
+  value,
+  onChange,
+  options,
+}: {
+  value: string[];
+  onChange: (v: unknown) => void;
+  options: { value: string; label: string }[];
+}) {
+  const { t } = useTranslation();
+  const [custom, setCustom] = useState("");
+  const selected = Array.isArray(value)
+    ? value.filter((v): v is string => typeof v === "string")
+    : [];
+  const chosen = new Set(selected);
+  const known = new Set(options.map((o) => o.value));
+  // Customs are selected values outside the curated list — shown as chips so
+  // a power user's hand-added type stays visible and removable.
+  const customs = selected.filter((v) => !known.has(v));
+
+  const commit = (next: string[]) => onChange(next.length ? next : undefined);
+  const toggle = (val: string) =>
+    commit(chosen.has(val) ? selected.filter((v) => v !== val) : [...selected, val]);
+  const addCustom = () => {
+    const v = custom.trim();
+    setCustom("");
+    if (v && !chosen.has(v)) commit([...selected, v]);
+  };
+
+  return (
+    <div className="sf-multiselect">
+      <div className="sf-multiselect-opts">
+        {options.map((o) => (
+          <label key={o.value} className="sf-multiselect-opt">
+            <input
+              type="checkbox"
+              checked={chosen.has(o.value)}
+              onChange={() => toggle(o.value)}
+            />
+            <span>{o.label}</span>
+          </label>
+        ))}
+      </div>
+      {customs.length > 0 && (
+        <div className="sf-multiselect-chips">
+          {customs.map((c) => (
+            <span key={c} className="sf-multiselect-chip">
+              {c}
+              <button
+                type="button"
+                onClick={() => toggle(c)}
+                aria-label={t("schemaForm.remove")}
+              >
+                <X size={12} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="sf-multiselect-add">
+        <input
+          type="text"
+          value={custom}
+          placeholder={t("schemaForm.multiSelectCustom")}
+          onChange={(e) => setCustom(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              addCustom();
+            }
+          }}
+        />
+        <button type="button" className="sf-add" onClick={addCustom}>
+          <Plus size={12} style={{ marginRight: 4, verticalAlign: -1 }} />
+          {t("schemaForm.add")}
+        </button>
+      </div>
     </div>
   );
 }

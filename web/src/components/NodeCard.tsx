@@ -23,6 +23,8 @@ const PICKER_FORMATS = new Set([
   "google-sheet-tab",
   "stripe-price",
   "stripe-subscription",
+  "stripe-payment-intent",
+  "stripe-customer",
 ]);
 
 // peekValue renders a port's run value as a short, single-line string for
@@ -544,12 +546,31 @@ function ParamInput({
   }
   if (s.type === "integer" || s.type === "number") {
     const text = value === "" || value == null ? "" : String(Number(value));
+    // Clamp to the schema's bounds so an out-of-range value (e.g. a negative
+    // quantity) can't be entered here — mirrors the inspector's number field.
+    const clamp = (n: number) => {
+      if (typeof s.minimum === "number") n = Math.max(s.minimum, n);
+      if (typeof s.maximum === "number") n = Math.min(s.maximum, n);
+      return n;
+    };
     return (
       <input
         type="number"
         size={fitSize(text)}
+        min={s.minimum}
+        max={s.maximum}
+        step={s.type === "integer" ? 1 : "any"}
         value={value === "" || value == null ? "" : Number(value)}
-        onChange={(e) => onChange(e.target.value === "" ? "" : Number(e.target.value))}
+        onChange={(e) => {
+          const raw = e.target.value;
+          if (raw === "") {
+            onChange("");
+            return;
+          }
+          const n = Number(raw);
+          if (Number.isNaN(n)) return;
+          onChange(clamp(n));
+        }}
       />
     );
   }
