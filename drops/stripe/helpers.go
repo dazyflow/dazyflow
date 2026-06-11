@@ -5,11 +5,11 @@
 // ${secret.STRIPE_API_KEY} so a fresh node works as soon as that secret
 // exists (built-in store or a BYO manager via ${vault./aws./gcp.…}).
 //
-// "Fire on new payment / failed invoice / new subscription" is composable
-// via poll_trigger → stripe_list_events (cursor in `after_id`, next cursor
-// out of `last_id`, persisted with secret_set) → for_each — the same
-// pattern the Gmail and Notion connectors document, so no per-event
-// trigger drops are needed.
+// "Fire on new payment" has a real trigger (stripe_on_payment, fed by the
+// daemon's Stripe events webhook). Other event reactions ("failed invoice",
+// "new subscription") compose via poll_trigger → stripe_list_events (cursor
+// in `after_id`, next cursor out of `last_id`, persisted with secret_set) →
+// for_each — the same pattern the Gmail and Notion connectors document.
 package stripe
 
 import (

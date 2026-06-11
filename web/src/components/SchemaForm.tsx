@@ -829,6 +829,9 @@ const RESOURCE_PICKERS: Record<
   "google-form": { provider: "google", kind: "forms", noun: "form" },
   // Tabs are listed from the chosen spreadsheet — a dependent picker.
   "google-sheet-tab": { provider: "google", kind: "tabs", noun: "tab", dependsOn: ["spreadsheet_id"] },
+  // Listed via the tenant's STRIPE_API_KEY secret, not OAuth — the
+  // "provider" here is only the lister-registry key.
+  "stripe-price": { provider: "stripe", kind: "prices", noun: "price" },
 };
 
 // resourceNameCache remembers id→name for resources we've resolved this

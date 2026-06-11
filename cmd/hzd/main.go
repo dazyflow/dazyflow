@@ -49,6 +49,7 @@ import (
 	secretsdrop "git.sr.ht/~klahr/hazyflow/drops/secrets"
 	"git.sr.ht/~klahr/hazyflow/drops/sheets"
 	"git.sr.ht/~klahr/hazyflow/drops/slack"
+	"git.sr.ht/~klahr/hazyflow/drops/stripe"
 	"git.sr.ht/~klahr/hazyflow/drops/trigger/gform"
 	"git.sr.ht/~klahr/hazyflow/engine"
 	"git.sr.ht/~klahr/hazyflow/engine/jobstore"
@@ -293,6 +294,20 @@ func main() {
 		log.Print("env:// secret provider running in tenant-isolated mode — names must be <tenant>.<key>")
 	}
 	encryptedSecrets := setupEncryptedSecrets(ctx, masterKeyB64, secrets, pgPool)
+	// Stripe price picker: lists the tenant's active prices for the
+	// "stripe-price" param format. Stripe has no OAuth app — auth is the
+	// tenant's STRIPE_API_KEY secret (same key the drops resolve), read
+	// here because the picker path skips the engine's ${secret.…}
+	// resolution. The account arg is meaningless without OAuth; ignored.
+	if encryptedSecrets != nil {
+		daemon.RegisterResourceLister("stripe", "prices", func(ctx context.Context, _ string, _ map[string]string) ([]core.AccountResource, error) {
+			key, err := encryptedSecrets.Get(ctx, "STRIPE_API_KEY")
+			if err != nil {
+				return nil, fmt.Errorf("add a STRIPE_API_KEY secret to list prices: %w", err)
+			}
+			return stripe.ListPrices(ctx, core.Job{Params: map[string]any{"api_key": key}})
+		})
+	}
 
 	// Bring-your-own secret managers: vault:// / aws:// / gcp:// resolve
 	// against each tenant's own OpenBao/Vault, AWS Secrets Manager, or GCP

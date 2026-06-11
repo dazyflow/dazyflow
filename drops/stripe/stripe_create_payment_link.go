@@ -48,7 +48,7 @@ func init() {
 				"type":"object",
 				"properties":{
 					"api_key":{"type":"string","title":"API key","default":"${secret.STRIPE_API_KEY}","x_advanced":true,"description":"Stripe secret key. The default reads the STRIPE_API_KEY secret."},
-					"price":{"type":"string","title":"Price ID","description":"The price_… id from your Stripe dashboard (Products → Pricing)."},
+					"price":{"type":"string","format":"stripe-price","title":"Price","description":"One of your Stripe Prices, listed from your account once the STRIPE_API_KEY secret is set (Products → Pricing in the dashboard)."},
 					"quantity":{"type":"integer","title":"Quantity","default":1,"minimum":1,"description":"Units of the price. Overridden by the 'Quantity' input."},
 					"base_url":{"type":"string","description":"Override the API host (testing)."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
