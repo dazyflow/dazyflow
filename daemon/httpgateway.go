@@ -134,6 +134,13 @@ type HTTPGateway struct {
 	// webhook-secret flag/env is set.
 	GitHubEvents *GitHubEventsHandler
 
+	// StripeEvents handles tenant Stripe webhook POSTs (payment
+	// events for stripe_on_payment triggers — distinct from Billing's
+	// platform webhook). Nil = the route returns 501. Wired by hzd
+	// when the encrypted secret store is configured; auth is the
+	// per-tenant STRIPE_WEBHOOK_SECRET signing secret.
+	StripeEvents *StripeEventsHandler
+
 	// Billing holds the Stripe wiring (Checkout/portal client + webhook
 	// secret). Nil = checkout/portal/webhook routes return 501; the
 	// read-only GET /me/billing still works so the UI can render the
@@ -432,6 +439,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/events/slack/{tenant}", h.slackEvents)
 	mux.HandleFunc("POST /api/v1/events/github/{tenant}", h.githubEvents)
 	mux.HandleFunc("POST /api/v1/events/stripe", h.stripeEvents)
+	mux.HandleFunc("POST /api/v1/events/stripe/{tenant}", h.stripeTenantEvents)
 	mux.HandleFunc("GET /api/v1/approvals/pending", h.requireAuth(h.listPendingApprovals))
 	mux.HandleFunc("POST /api/v1/approvals/{runID}/{nodeID}", h.requireAuth(h.approveAuthed))
 	mux.HandleFunc("GET /api/v1/admin/api-keys", h.requireAuth(h.listAPIKeys))
@@ -1695,6 +1703,17 @@ func (h *HTTPGateway) githubEvents(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.GitHubEvents.ServeHTTP(rw, r)
+}
+
+// stripeTenantEvents is the tenant-scoped Stripe webhook (payment
+// triggers) — not to be confused with stripeEvents, the platform
+// billing webhook on the unsuffixed path.
+func (h *HTTPGateway) stripeTenantEvents(rw http.ResponseWriter, r *http.Request) {
+	if h.StripeEvents == nil {
+		http.Error(rw, "Stripe events endpoint not configured (encrypted secret store required)", http.StatusNotImplemented)
+		return
+	}
+	h.StripeEvents.ServeHTTP(rw, r)
 }
 
 func (h *HTTPGateway) sampleNode(rw http.ResponseWriter, r *http.Request, p core.Principal) {

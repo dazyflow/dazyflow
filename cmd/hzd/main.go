@@ -1021,6 +1021,14 @@ func buildGateway(ctx context.Context, d gatewayDeps) {
 		gw.GitHubEvents = daemon.NewGitHubEventsHandler(d.svc, d.githubWebhook)
 		log.Print("GitHub events endpoint enabled at /api/v1/events/github/<tenant>")
 	}
+	// Tenant Stripe triggers need no operator secret — auth is each
+	// tenant's own STRIPE_WEBHOOK_SECRET (Stripe generates a distinct
+	// signing secret per endpoint, so there's no shared value to set).
+	// All it requires is the encrypted store to read those from.
+	if d.encryptedSecrets != nil {
+		gw.StripeEvents = daemon.NewStripeEventsHandler(d.svc)
+		log.Print("Stripe tenant events endpoint enabled at /api/v1/events/stripe/<tenant>")
+	}
 	// Billing: the Stripe client needs both the API key and the pro
 	// price; the webhook secret can ride alone (plan sync without
 	// checkout — e.g. plans driven from the Stripe dashboard).
