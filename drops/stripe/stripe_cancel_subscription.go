@@ -48,12 +48,12 @@ func init() {
 				"type":"object",
 				"properties":{
 					"api_key":{"type":"string","title":"API key","default":"${secret.STRIPE_API_KEY}","x_advanced":true,"description":"Stripe secret key. The default reads the STRIPE_API_KEY secret."},
-					"subscription":{"type":"string","title":"Subscription","description":"The sub_… id to cancel. Overridden by the 'Subscription' input."},
+					"subscription":{"type":"string","format":"stripe-subscription","title":"Subscription","description":"Pick the subscription to cancel — listed from your account once the STRIPE_API_KEY secret is set. Overridden by the 'Subscription' input when connected."},
 					"at_period_end":{"type":"boolean","title":"At period end","default":true,"description":"ON: the subscription runs until the period the customer already paid for ends. OFF: cancel right now."},
 					"base_url":{"type":"string","description":"Override the API host (testing)."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
 				},
-				"required":["api_key"]
+				"required":["api_key","subscription"]
 			}`),
 			Idempotent:  false,
 			RetryPolicy: core.RetryExponentialBackoff,

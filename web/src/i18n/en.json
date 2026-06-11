@@ -1047,7 +1047,6 @@
     "builtIn": "Built-in"
   },
   "schemaForm": {
-    "advancedSection": "Advanced ({{count}})",
     "yes": "Yes",
     "no": "No",
     "remove": "remove",

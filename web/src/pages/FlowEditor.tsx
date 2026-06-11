@@ -171,13 +171,15 @@ function sampleValueFor(field: string): string {
   return `Sample ${field}`;
 }
 
-// RESOURCE_PICKER_KINDS maps a string param's `format` to the account
-// resource kind whose list resolves an opaque id → human name (for the node
-// card). google-sheet-tab is omitted: its stored value is already the tab
-// name, so it needs no lookup. Mirrors RESOURCE_PICKERS in SchemaForm.
-const RESOURCE_PICKER_KINDS: Record<string, string> = {
-  "google-form": "forms",
-  "google-spreadsheet": "spreadsheets",
+// RESOURCE_PICKER_KINDS maps a string param's `format` to the (provider,
+// kind) whose list resolves an opaque id → human name (for the node card).
+// google-sheet-tab is omitted: its stored value is already the tab name, so
+// it needs no lookup. Mirrors RESOURCE_PICKERS in SchemaForm.
+const RESOURCE_PICKER_KINDS: Record<string, { provider: string; kind: string }> = {
+  "google-form": { provider: "google", kind: "forms" },
+  "google-spreadsheet": { provider: "google", kind: "spreadsheets" },
+  "stripe-price": { provider: "stripe", kind: "prices" },
+  "stripe-subscription": { provider: "stripe", kind: "subscriptions" },
 };
 
 // stampScheduleTimezones fills a missing/blank tz on Schedule (cron_trigger)
@@ -1436,17 +1438,21 @@ function EditorInner() {
   // lookup (its value is already the tab name).
   useEffect(() => {
     if (!token) return;
-    const combos = new Map<string, { kind: string; account?: string }>();
+    const combos = new Map<string, { provider: string; kind: string; account?: string }>();
     for (const n of nodes) {
       const props = manifestByID.get((n.data as HazyNodeData).moduleID)
         ?.params_schema?.properties;
       if (!props) continue;
       const p = paramsByID[n.id] ?? {};
       for (const [key, sch] of Object.entries(props)) {
-        const kind = RESOURCE_PICKER_KINDS[(sch as { format?: string }).format ?? ""];
-        if (!kind || typeof p[key] !== "string" || !p[key]) continue;
+        const picker = RESOURCE_PICKER_KINDS[(sch as { format?: string }).format ?? ""];
+        if (!picker || typeof p[key] !== "string" || !p[key]) continue;
         const account = typeof p.account === "string" ? p.account : undefined;
-        combos.set(`${kind}:${account ?? "default"}`, { kind, account });
+        combos.set(`${picker.provider}:${picker.kind}:${account ?? "default"}`, {
+          provider: picker.provider,
+          kind: picker.kind,
+          account,
+        });
       }
     }
     // Fetch each (kind, account) list once and merge id→name. No per-run
@@ -1456,16 +1462,16 @@ function EditorInner() {
     // re-runs before it resolves (the ref then blocks any retry). Applying
     // the result unconditionally is safe — setResourceNames on an unmounted
     // editor is a no-op in React 18.
-    for (const [ck, { kind, account }] of combos) {
+    for (const [ck, { provider, kind, account }] of combos) {
       if (fetchedResourceSets.current.has(ck)) continue;
       fetchedResourceSets.current.add(ck);
       api
-        .listAccountResources(token, "google", kind, account)
+        .listAccountResources(token, provider, kind, account)
         .then((r) => {
           setResourceNames((prev) => {
             const next = new Map(prev);
             for (const o of r.resources)
-              next.set(`${kind}:${account ?? "default"}:${o.id}`, o.name);
+              next.set(`${provider}:${kind}:${account ?? "default"}:${o.id}`, o.name);
             return next;
           });
         })
@@ -1487,11 +1493,13 @@ function EditorInner() {
     // (via the id→name cache), or undefined if unpicked/unresolved.
     const resolveOwn = (id: string, key: string): string | undefined => {
       const sch = propsOf(id)?.[key] as { format?: string } | undefined;
-      const kind = RESOURCE_PICKER_KINDS[sch?.format ?? ""];
+      const picker = RESOURCE_PICKER_KINDS[sch?.format ?? ""];
       const pp = paramsByID[id] ?? {};
-      if (!kind || typeof pp[key] !== "string" || !pp[key]) return undefined;
+      if (!picker || typeof pp[key] !== "string" || !pp[key]) return undefined;
       const account = typeof pp.account === "string" ? pp.account : undefined;
-      return resourceNames.get(`${kind}:${account ?? "default"}:${pp[key] as string}`);
+      return resourceNames.get(
+        `${picker.provider}:${picker.kind}:${account ?? "default"}:${pp[key] as string}`,
+      );
     };
     // Incoming wire per (target, targetHandle) → its source port, so a picker
     // param fed by a wire can borrow the upstream step's resolved name.
@@ -1527,8 +1535,8 @@ function EditorInner() {
       if (!props) continue;
       const labels: Record<string, string> = {};
       for (const [key, sch] of Object.entries(props)) {
-        const kind = RESOURCE_PICKER_KINDS[(sch as { format?: string }).format ?? ""];
-        if (!kind) continue;
+        const picker = RESOURCE_PICKER_KINDS[(sch as { format?: string }).format ?? ""];
+        if (!picker) continue;
         const name = resolveName(n.id, key);
         if (name) labels[key] = name;
       }

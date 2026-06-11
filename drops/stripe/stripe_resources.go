@@ -75,6 +75,87 @@ func ListPrices(ctx context.Context, job core.Job) ([]core.AccountResource, erro
 	return out, nil
 }
 
+// ListSubscriptions enumerates the account's non-canceled subscriptions as
+// picker options — the backend for the "stripe-subscription" param format, so
+// a user picks "jane@acme.com — 4999 USD/month (active)" from a dropdown
+// instead of pasting a sub_… id. Called by the daemon's resource-picker
+// endpoint (not by a drop), with the api_key already resolved into the job
+// params.
+func ListSubscriptions(ctx context.Context, job core.Job) ([]core.AccountResource, error) {
+	q := url.Values{}
+	q.Set("limit", "100")
+	// Omitting `status` returns every subscription that isn't canceled — the
+	// set a cancel step can actually act on (active, trialing, past_due, …).
+	// Expand the customer so the label can lead with who it's for.
+	q.Set("expand[]", "data.customer")
+	status, body, err := stripeDo(ctx, job, http.MethodGet, baseURL(job)+"/subscriptions?"+q.Encode(), "")
+	if err != nil {
+		return nil, err
+	}
+	if status < 200 || status >= 300 {
+		return nil, fmt.Errorf("stripe returned %d: %s", status, extractStripeError(body))
+	}
+	var parsed struct {
+		Data []struct {
+			ID       string          `json:"id"`
+			Status   string          `json:"status"`
+			Customer json.RawMessage `json:"customer"`
+			Items    struct {
+				Data []struct {
+					Price struct {
+						UnitAmount int64  `json:"unit_amount"`
+						Currency   string `json:"currency"`
+						Recurring  *struct {
+							Interval string `json:"interval"`
+						} `json:"recurring"`
+					} `json:"price"`
+				} `json:"data"`
+			} `json:"items"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return nil, fmt.Errorf("parse subscriptions: %w", err)
+	}
+	out := make([]core.AccountResource, 0, len(parsed.Data))
+	for _, s := range parsed.Data {
+		// Lead with whoever the subscription is for — the customer's name,
+		// then their email; the plan and status still identify it if neither
+		// is set. The raw sub_… id is the fallback of last resort.
+		var cust struct {
+			Name  string `json:"name"`
+			Email string `json:"email"`
+		}
+		_ = json.Unmarshal(s.Customer, &cust)
+		name := cust.Name
+		if name == "" {
+			name = cust.Email
+		}
+		if len(s.Items.Data) > 0 {
+			p := s.Items.Data[0].Price
+			if amount := formatPriceAmount(p.UnitAmount, p.Currency); amount != "" {
+				if name != "" {
+					name += " — "
+				}
+				name += amount
+				if p.Recurring != nil && p.Recurring.Interval != "" {
+					name += "/" + p.Recurring.Interval
+				}
+			}
+		}
+		if s.Status != "" {
+			if name != "" {
+				name += " "
+			}
+			name += "(" + s.Status + ")"
+		}
+		if name == "" {
+			name = s.ID
+		}
+		out = append(out, core.AccountResource{ID: s.ID, Name: name})
+	}
+	return out, nil
+}
+
 // priceZeroDecimalCurrencies are the currencies Stripe represents in
 // whole units rather than hundredths — per
 // https://docs.stripe.com/currencies#zero-decimal.

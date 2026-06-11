@@ -307,6 +307,15 @@ func main() {
 			}
 			return stripe.ListPrices(ctx, core.Job{Params: map[string]any{"api_key": key}})
 		})
+		// Same key, same path: powers the "stripe-subscription" param format
+		// so a cancel step picks the subscription from a dropdown.
+		daemon.RegisterResourceLister("stripe", "subscriptions", func(ctx context.Context, _ string, _ map[string]string) ([]core.AccountResource, error) {
+			key, err := encryptedSecrets.Get(ctx, "STRIPE_API_KEY")
+			if err != nil {
+				return nil, fmt.Errorf("add a STRIPE_API_KEY secret to list subscriptions: %w", err)
+			}
+			return stripe.ListSubscriptions(ctx, core.Job{Params: map[string]any{"api_key": key}})
+		})
 	}
 
 	// Bring-your-own secret managers: vault:// / aws:// / gcp:// resolve

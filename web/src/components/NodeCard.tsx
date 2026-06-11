@@ -21,6 +21,8 @@ const PICKER_FORMATS = new Set([
   "google-form",
   "google-spreadsheet",
   "google-sheet-tab",
+  "stripe-price",
+  "stripe-subscription",
 ]);
 
 // peekValue renders a port's run value as a short, single-line string for

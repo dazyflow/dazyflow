@@ -219,6 +219,15 @@ export function Inspector({
   const d = selected.data;
   const schema = d.manifest?.params_schema;
   const canForm = supportsSchemaForm(schema);
+  // A drop whose schema is an object with no properties has nothing to
+  // configure — most triggers, which fire on an external event. Render
+  // nothing for the params area rather than a raw JSON box (meaningless to
+  // the non-technical audience this is for). The JSON fallback below stays
+  // only for the rare drop whose schema the form genuinely can't render.
+  const noSettings =
+    !!schema &&
+    schema.type === "object" &&
+    Object.keys(schema.properties ?? {}).length === 0;
   // Drop identity for the header — the same icon + color the canvas node
   // shows, so the inspector reads as "this drop" at a glance rather than a
   // generic panel. Mirrors NodeCard's icon resolution.
@@ -565,7 +574,7 @@ export function Inspector({
           </>
         )}
 
-        {(mode === "json" || !canForm) && (
+        {(mode === "json" || !canForm) && !noSettings && (
           <div className="sf-field">
             <div className="label-row">
               <label>{t("inspector.paramsJson")}</label>

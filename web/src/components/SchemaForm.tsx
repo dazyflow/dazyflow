@@ -74,14 +74,6 @@ type Props = {
   // tokenLabels maps "nodeId.port" → friendly step·port names so a field
   // whose value is one ${upstream.…} token renders as a readable chip.
   tokenLabels?: TokenLabels;
-  // showAdvanced controls whether developer-flavored fields appear in
-  // the form. Default false — a non-tech owner shouldn't have to
-  // explain to themselves what `timeout_ms` or `page_token` mean. The
-  // Inspector renders a "Show advanced" toggle above the form that
-  // flips this. Fields that hold a non-default value are still shown
-  // even when advanced is off, so a forked template that pre-fills an
-  // advanced param doesn't silently lose it on save.
-  showAdvanced?: boolean;
 };
 
 export function SchemaForm({
@@ -95,7 +87,6 @@ export function SchemaForm({
   resourceLabels,
   extraReferenceItems,
   tokenLabels,
-  showAdvanced,
 }: Props) {
   const { t } = useTranslation();
   const wired = new Set(wiredKeys ?? []);
@@ -132,78 +123,22 @@ export function SchemaForm({
     />
   );
 
-  // Split into a basic group (always visible) and an advanced group
-  // tucked into a collapsible section, so a non-tech owner sees only
-  // the everyday params by default. Classification is unchanged
-  // (isAdvancedField) — this is purely how the two groups are laid out.
+  // Only everyday params render. Advanced/developer-flavored fields
+  // (timeouts, raw overrides, connection plumbing) and hidden knobs are
+  // never shown — this audience shouldn't have to reason about them. A
+  // value set via a template/API is still preserved in params; we just
+  // don't surface a control for it.
   const basic: [string, JSONSchema][] = [];
-  const advanced: [string, JSONSchema][] = [];
   for (const [key, propSchema] of Object.entries(props)) {
-    // Hidden developer knobs never render in the form (the backend still
-    // honours its default). timeout_ms is the request-timeout dial present on
-    // most network drops — pure noise for a non-tech owner, and on a drop
-    // where it's the only advanced field it was dragging in a whole Advanced
-    // section by itself. A value set via a template/API is preserved (we just
-    // don't show it).
     if (HIDDEN_FIELD_KEYS.has(key)) continue;
-    if (isAdvancedField(key, propSchema, props)) advanced.push([key, propSchema]);
-    else basic.push([key, propSchema]);
+    if (isAdvancedField(key, propSchema, props)) continue;
+    basic.push([key, propSchema]);
   }
-
-  // The section starts open when the user prefers advanced fields
-  // visible (the Inspector's Show-advanced preference) OR when any
-  // advanced field already holds a non-default value — so a forked
-  // template that pre-filled an advanced param never hides a set value
-  // behind a collapsed disclosure.
-  const advancedHasValue = advanced.some(([k, s]) => hasNonDefaultValue(value[k], s));
 
   return (
     <div>
       {basic.map(([key, propSchema]) => renderField(key, propSchema))}
-      {advanced.length > 0 && (
-        <AdvancedSection
-          count={advanced.length}
-          defaultOpen={!!showAdvanced || advancedHasValue}
-        >
-          {advanced.map(([key, propSchema]) => renderField(key, propSchema))}
-        </AdvancedSection>
-      )}
     </div>
-  );
-}
-
-// AdvancedSection is the collapsible disclosure holding a drop's
-// developer-flavored params (timeouts, raw overrides, connection
-// plumbing). Basic params render above it, always visible; this keeps
-// the everyday form short while leaving the extras one click away.
-// defaultOpen seeds the initial state — the Inspector's Show-advanced
-// preference, or the presence of a non-default value the user mustn't
-// lose sight of. onToggle mirrors manual open/close into local state so
-// a parent re-render (a keystroke elsewhere in the form) doesn't fight
-// the user's choice. The parent keys SchemaForm by node id, so this
-// state resets correctly when a different node is selected.
-function AdvancedSection({
-  count,
-  defaultOpen,
-  children,
-}: {
-  count: number;
-  defaultOpen: boolean;
-  children: React.ReactNode;
-}) {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <details
-      className="sf-advanced"
-      open={open}
-      onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}
-    >
-      <summary className="sf-advanced-summary">
-        {t("schemaForm.advancedSection", { count })}
-      </summary>
-      <div className="sf-advanced-body">{children}</div>
-    </details>
   );
 }
 
@@ -249,18 +184,6 @@ function isAdvancedField(
   if (ADVANCED_FIELD_NAMES.has(name)) return true;
   if (name === "token" && "account" in siblings) return true;
   return false;
-}
-
-// hasNonDefaultValue checks whether the current value on an
-// advanced field is something the user (or a forked template) has
-// actually set, so we don't silently swallow it by hiding the
-// field. Treats undefined, null, empty string, and the schema's
-// default as "no value." Anything else surfaces the field even
-// when Show-advanced is off.
-function hasNonDefaultValue(v: unknown, schema: JSONSchema): boolean {
-  if (v === undefined || v === null || v === "") return false;
-  if (schema.default !== undefined && v === schema.default) return false;
-  return true;
 }
 
 type FieldProps = {
@@ -832,6 +755,7 @@ const RESOURCE_PICKERS: Record<
   // Listed via the tenant's STRIPE_API_KEY secret, not OAuth — the
   // "provider" here is only the lister-registry key.
   "stripe-price": { provider: "stripe", kind: "prices", noun: "price" },
+  "stripe-subscription": { provider: "stripe", kind: "subscriptions", noun: "subscription" },
 };
 
 // resourceNameCache remembers id→name for resources we've resolved this
