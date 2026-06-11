@@ -20,7 +20,7 @@ func init() {
 			Label:       "Stripe",
 			Subtitle:    "Cancel subscription",
 			Summary:     "Cancel a Stripe subscription — at period end by default, so the customer keeps what they paid for.",
-			Description: "Cancel a subscription by its sub_… id. By default it stays active until the current billing period ends (the customer keeps what they paid for); switch 'At period end' off to cancel immediately. Wire the id in from List subscriptions ('first_id') or a support form, and put an Approval step before this one for the classic 'approve in Slack → cancel' flow. 'Ends at' comes out as a date for the confirmation message.",
+			Description: "Cancel a subscription by its sub_… id. By default it stays active until the current billing period ends (the customer keeps what they paid for); set 'When to cancel' to Immediately to cancel right now. Wire the id in from List subscriptions ('first_id') or a support form, and put an Approval step before this one for the classic 'approve in Slack → cancel' flow. 'Ends at' comes out as a date for the confirmation message.",
 			Integration: "Stripe",
 			Category:    "network",
 			Icon:        "credit-card",
@@ -30,7 +30,7 @@ func init() {
 			Tags:        []string{"stripe", "subscription", "cancel", "billing", "support"},
 			Examples: []core.ParamsExample{
 				{Title: "Cancel at period end (default)", Params: json.RawMessage(`{"subscription":"sub_1MowQVLkdIwHu7ixeRlqHVzs"}`), Notes: "Wire the id into the 'Subscription' input from List subscriptions instead of typing it."},
-				{Title: "Cancel immediately", Params: json.RawMessage(`{"subscription":"sub_1MowQVLkdIwHu7ixeRlqHVzs","at_period_end":false}`)},
+				{Title: "Cancel immediately", Params: json.RawMessage(`{"subscription":"sub_1MowQVLkdIwHu7ixeRlqHVzs","cancel_timing":"immediately"}`)},
 			},
 			RequiresConnections: []core.ConnectionRequirement{
 				{Kind: "secret", Name: "STRIPE_API_KEY", Note: "Stripe secret API key (sk_live_… / sk_test_…)."},
@@ -49,7 +49,7 @@ func init() {
 				"properties":{
 					"api_key":{"type":"string","title":"API key","default":"${secret.STRIPE_API_KEY}","x_advanced":true,"description":"Stripe secret key. The default reads the STRIPE_API_KEY secret."},
 					"subscription":{"type":"string","format":"stripe-subscription","title":"Subscription","description":"Pick the subscription to cancel — listed from your account once the STRIPE_API_KEY secret is set. Overridden by the 'Subscription' input when connected."},
-					"at_period_end":{"type":"boolean","title":"At period end","default":true,"description":"ON: the subscription runs until the period the customer already paid for ends. OFF: cancel right now."},
+					"cancel_timing":{"type":"string","title":"When to cancel","enum":["period_end","immediately"],"enumNames":["At period end","Immediately"],"default":"period_end","description":"At period end: the subscription stays active until the period the customer already paid for ends. Immediately: cancel right now."},
 					"base_url":{"type":"string","description":"Override the API host (testing)."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
 				},
@@ -77,10 +77,23 @@ func executeCancelSubscription(ctx context.Context, job core.Job, _ chan<- core.
 	// idempotency keys on DELETE, but a cancel is idempotent in effect —
 	// the rare retry-after-success surfaces Stripe's "already canceled"
 	// error instead of doing harm.
+	// cancel_timing is the current control ("period_end" / "immediately").
+	// Older saved graphs predate it and carry the boolean at_period_end —
+	// honor that when the enum is absent so their behavior is unchanged.
+	atPeriodEnd := true
+	switch params.StringDefault(job.Params, "cancel_timing", "") {
+	case "immediately":
+		atPeriodEnd = false
+	case "period_end":
+		atPeriodEnd = true
+	default:
+		atPeriodEnd = params.BoolDefault(job.Params, "at_period_end", true)
+	}
+
 	var status int
 	var body []byte
 	var err error
-	if params.BoolDefault(job.Params, "at_period_end", true) {
+	if atPeriodEnd {
 		status, body, err = stripeDo(ctx, job, http.MethodPost,
 			baseURL(job)+"/subscriptions/"+url.PathEscape(sub), "cancel_at_period_end=true")
 	} else {

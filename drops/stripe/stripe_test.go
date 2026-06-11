@@ -292,14 +292,23 @@ func TestCancelSubscription(t *testing.T) {
 		t.Errorf("ends_at = %v", res.Output["ends_at"].Inline)
 	}
 
-	// Immediate: a DELETE; ends_at is the cancellation moment.
+	// Immediate via the cancel_timing enum: a DELETE; ends_at is the
+	// cancellation moment.
 	res = run(t, f, "stripe_cancel_subscription",
-		map[string]any{"subscription": "sub_1", "at_period_end": false}, nil)
+		map[string]any{"subscription": "sub_1", "cancel_timing": "immediately"}, nil)
 	if res.Status != core.StatusOK || res.Output["status"].Inline != "canceled" {
 		t.Fatalf("immediate res = %+v", res)
 	}
 	if res.Output["ends_at"].Inline != "2025-06-15T15:06:40Z" {
 		t.Errorf("immediate ends_at = %v", res.Output["ends_at"].Inline)
+	}
+
+	// Legacy boolean at_period_end:false from a pre-enum saved graph still
+	// cancels immediately (backward compat with the old param).
+	res = run(t, f, "stripe_cancel_subscription",
+		map[string]any{"subscription": "sub_1", "at_period_end": false}, nil)
+	if res.Status != core.StatusOK || res.Output["status"].Inline != "canceled" {
+		t.Fatalf("legacy immediate res = %+v", res)
 	}
 
 	// Stripe's error message reaches the user.
