@@ -219,15 +219,15 @@ function APIKeyRow({
   const expiresLabel = formatExpires(t, k.expires_at);
   return (
     <tr className={confirming ? "row-confirming" : undefined}>
-      <td style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>{k.id}</td>
+      <td style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-sm)" }}>{k.id}</td>
       <td>{k.subject}</td>
-      <td style={{ color: "var(--muted)", fontSize: 12 }}>
+      <td style={{ color: "var(--muted)", fontSize: "var(--text-sm)" }}>
         {k.workspace || t("admin.apiKeys.anyWorkspace")}
       </td>
-      <td style={{ fontSize: 12 }}>
+      <td style={{ fontSize: "var(--text-sm)" }}>
         {k.roles.map((r) => r.name).join(", ")}
       </td>
-      <td style={{ fontSize: 12, color: expiresLabel.tone }}>
+      <td style={{ fontSize: "var(--text-sm)", color: expiresLabel.tone }}>
         {expiresLabel.text}
       </td>
       <td>
@@ -255,7 +255,7 @@ function APIKeyRow({
             </button>
           ))}
         {k.status === "revoked" && (
-          <span style={{ color: "var(--muted)", fontSize: 12 }}>
+          <span style={{ color: "var(--muted)", fontSize: "var(--text-sm)" }}>
             <ShieldOff size={12} style={{ verticalAlign: -1, marginRight: 4 }} />
             {t("admin.apiKeys.revokedAlready")}
           </span>

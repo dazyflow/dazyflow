@@ -322,7 +322,9 @@ func hasSecretRef(v any) bool {
 // suppressed: a pasted provider credential (ghp_…, sk_live_…) in an
 // exempted field still fires via knownSecretValue.
 var hardcodedSecretExempt = map[string]map[string]bool{
-	"webhook_input": {"secret": true},
+	// Both the legacy single `secret` and the multi-key `secrets` list
+	// (zero-downtime rotation) hold generated trigger keys by design.
+	"webhook_input": {"secret": true, "secrets": true},
 }
 
 // lintHardcodedSecrets flags literal credentials pasted into a node's
@@ -385,7 +387,9 @@ func findHardcodedSecret(keyPath string, v any, exempt map[string]bool) string {
 		}
 		// Key-name heuristic only applies when we know the key (keyPath
 		// non-empty) — a bare top-level string param has no key context.
-		if keyPath != "" && !exempt[keyPath] && secretKeyNameLeaf(keyPath) && isLiteralSecret(t) {
+		// Exemption matches the ROOT param so a list like `secrets`
+		// covers its elements (`secrets[0]`, `secrets[1]`, …).
+		if keyPath != "" && !exempt[rootParam(keyPath)] && secretKeyNameLeaf(keyPath) && isLiteralSecret(t) {
 			return keyPath
 		}
 	case map[string]any:
@@ -415,6 +419,20 @@ func findHardcodedSecret(keyPath string, v any, exempt map[string]bool) string {
 // enough to plausibly be a real credential.
 func isLiteralSecret(s string) bool {
 	return len(s) >= minLiteralSecretLen && !templatePattern.MatchString(s)
+}
+
+// rootParam returns the top-level param name of a key path — the part
+// before the first "." or "[". So "secrets[0]" → "secrets" and
+// "headers.Authorization" → "headers". Used to match field-level
+// exemptions against whole params (a `secrets` exemption covers every
+// `secrets[i]` element).
+func rootParam(keyPath string) string {
+	for i := 0; i < len(keyPath); i++ {
+		if keyPath[i] == '.' || keyPath[i] == '[' {
+			return keyPath[:i]
+		}
+	}
+	return keyPath
 }
 
 // secretKeyNameLeaf checks the LAST path segment against the secret-key

@@ -178,7 +178,7 @@ export function FlowList() {
                       <span
                         style={{
                           fontFamily: "var(--font-mono)",
-                          fontSize: 11,
+                          fontSize: "var(--text-xs)",
                           color: "var(--faint)",
                         }}
                       >
@@ -315,7 +315,7 @@ function NewFlowModal({
             />
           </div>
           {err && (
-            <div style={{ color: "var(--danger)", fontSize: 12 }}>{err}</div>
+            <div style={{ color: "var(--danger)", fontSize: "var(--text-sm)" }}>{err}</div>
           )}
         </div>
         <div className="settings-foot">

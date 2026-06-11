@@ -397,7 +397,7 @@ export function Inspector({
             {typeof currentParams.prompt === "string" && currentParams.prompt && (
               <div
                 style={{
-                  fontSize: 13,
+                  fontSize: "var(--text-md)",
                   color: "var(--muted)",
                   marginBottom: 8,
                   whiteSpace: "pre-wrap",
@@ -473,7 +473,7 @@ export function Inspector({
               </button>
             </div>
             {approveError && (
-              <div style={{ color: "var(--danger)", fontSize: 12, marginTop: 6 }}>
+              <div style={{ color: "var(--danger)", fontSize: "var(--text-sm)", marginTop: 6 }}>
                 {approveError}
               </div>
             )}
@@ -591,7 +591,7 @@ export function Inspector({
               style={{ fontFamily: "var(--font-mono)", resize: "vertical" }}
             />
             {jsonError && (
-              <div style={{ color: "var(--danger)", fontSize: 12, marginTop: 4 }}>
+              <div style={{ color: "var(--danger)", fontSize: "var(--text-sm)", marginTop: 4 }}>
                 {jsonError}
               </div>
             )}

@@ -152,12 +152,12 @@ export function RunHistory({
             {currentStatus && (
               <span className={"status-dot " + currentStatus} />
             )}
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-sm)" }}>
               {currentRunID.slice(0, 8)}
             </span>
           </>
         ) : (
-          <span style={{ fontSize: 12, color: "var(--muted)" }}>{t("runHistory.noRun")}</span>
+          <span style={{ fontSize: "var(--text-sm)", color: "var(--muted)" }}>{t("runHistory.noRun")}</span>
         )}
         <ChevronDown size={12} />
       </button>
@@ -205,11 +205,11 @@ export function RunHistory({
                   flex: 1,
                 }}
               >
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-sm)" }}>
                   {r.id.slice(0, 12)}
                 </span>
                 <span
-                  style={{ fontSize: 11, color: "var(--faint)" }}
+                  style={{ fontSize: "var(--text-xs)", color: "var(--faint)" }}
                   title={absoluteTime(r.enqueued_at)}
                 >
                   {formatTime(r.enqueued_at)}

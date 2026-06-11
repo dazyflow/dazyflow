@@ -88,7 +88,7 @@ export function AdminWorkspace() {
 
           <div className="card">
             <h3 style={{ marginTop: 0 }}>{t("admin.workspace.graphLimits")}</h3>
-            <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: "var(--space-2)" }}>
+            <div style={{ fontSize: "var(--text-sm)", color: "var(--muted)", marginBottom: "var(--space-2)" }}>
               {t("admin.workspace.daemonWideNote")}
             </div>
             <Row

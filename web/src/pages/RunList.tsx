@@ -198,7 +198,7 @@ export function RunList() {
                   <td>
                     <span className={"status-dot " + r.status} />
                   </td>
-                  <td style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>
+                  <td style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-sm)" }}>
                     {/* Primary action: open the run-detail page, the
                         "what happened" surface (T2). The graph-name
                         link below still goes to the editor for
@@ -223,10 +223,10 @@ export function RunList() {
                       {flowNames[r.graph_id] ?? r.graph_id}
                     </Link>
                   </td>
-                  <td style={{ color: "var(--muted)", fontSize: 12 }}>
+                  <td style={{ color: "var(--muted)", fontSize: "var(--text-sm)" }}>
                     {formatTime(r.enqueued_at)}
                   </td>
-                  <td style={{ color: "var(--muted)", fontSize: 12 }}>
+                  <td style={{ color: "var(--muted)", fontSize: "var(--text-sm)" }}>
                     {/* Older records (pre started_at-stamping) fall back
                         to enqueued_at so finished runs still show a
                         duration instead of "—". */}

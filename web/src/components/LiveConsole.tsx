@@ -25,6 +25,8 @@ export function LiveConsole({ lines }: Props) {
     if (!containerRef.current) return;
     const term = new Terminal({
       fontFamily: "var(--font-mono), Menlo, monospace",
+      // xterm.js needs a real number — it draws on a canvas and can't
+      // resolve CSS variables. Keep in sync with --text-sm.
       fontSize: 12,
       lineHeight: 1.2,
       convertEol: true,

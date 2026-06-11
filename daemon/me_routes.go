@@ -296,8 +296,9 @@ func (h *HTTPGateway) triggerEndpoints(g core.Graph) []map[string]any {
 				"method": "POST",
 				"url":    base + "/trigger/" + scope,
 			}
-			if s, _ := n.Params["secret"].(string); s != "" {
-				ep["auth"] = "Authorization: Bearer " + s
+			if keys := core.WebhookSecrets(n.Params); len(keys) > 0 {
+				// Any active key authenticates; show the first.
+				ep["auth"] = "Authorization: Bearer " + keys[0]
 			}
 			out = append(out, ep)
 			if pf, _ := n.Params["public_form"].(bool); pf {

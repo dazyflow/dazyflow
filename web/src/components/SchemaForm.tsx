@@ -1840,7 +1840,7 @@ function JSONField({
           onChange(value);
         }
       }}
-      style={{ fontFamily: "var(--font-mono)", fontSize: 12, resize: "vertical" }}
+      style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-sm)", resize: "vertical" }}
     />
   );
 }
@@ -2167,10 +2167,10 @@ function WorkspacePathField({
         value={value}
         placeholder={t("schemaForm.workspacePathPlaceholder")}
         onChange={(e) => onChange(e.target.value)}
-        style={{ marginTop: 6, fontFamily: "var(--font-mono)", fontSize: 12 }}
+        style={{ marginTop: 6, fontFamily: "var(--font-mono)", fontSize: "var(--text-sm)" }}
       />
       {error && (
-        <div style={{ color: "var(--danger)", fontSize: 12, marginTop: 4 }}>
+        <div style={{ color: "var(--danger)", fontSize: "var(--text-sm)", marginTop: 4 }}>
           {error}
         </div>
       )}

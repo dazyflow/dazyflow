@@ -45,6 +45,11 @@
      near-black canvas). Themed so light mode can flip it to dark. */
   --canvas-dot: rgba(255, 255, 255, 0.05);
 
+  /* Copyable code/value family (.hz-code): terminal-style in the dark
+     theme, themed light in light mode so the code stays readable. */
+  --code-bg: #0a0918;
+  --code-fg: #d8d4ec;
+
   /* Shadows + synthwave glow */
   --shadow: 0 1px 2px rgba(8, 2, 30, 0.45);
   --shadow-lg: 0 2px 10px rgba(8, 2, 30, 0.55);
@@ -67,8 +72,25 @@
   --font-mono:
     ui-monospace, SFMono-Regular, "JetBrains Mono", "SF Mono", Menlo, monospace;
 
-  /* Spacing scale */
+  /* Type scale — every font-size in the app comes from here. A raw px
+     font-size in app.css or an inline style is a smell; pick the
+     nearest token instead. */
+  --text-2xs: 10px;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-md: 13px;
+  --text-base: 14px;
+  --text-lg: 16px;
+  --text-xl: 18px;
+  --text-2xl: 24px;
+  --text-3xl: 28px;
+
+  /* Spacing scale — gaps, margins and paddings come from here.
+     --space-0 and --space-1h cover the hairline/chip sizes that sat
+     between the original steps. */
+  --space-0: 2px;
   --space-1: 4px;
+  --space-1h: 6px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
@@ -141,6 +163,11 @@
   /* Faint dark dots for the canvas grid (light-on-dark flips to
      dark-on-light). */
   --canvas-dot: rgba(28, 35, 51, 0.07);
+
+  /* Copyable code blocks: a cool light well with slate ink — the
+     dark terminal box reads as a hole punched in a light page. */
+  --code-bg: #eef0f8;
+  --code-fg: #1b2233;
 
   /* Soft, neutral elevation — light themes want diffuse gray shadows,
      not the heavy near-black drops the dark theme uses. */

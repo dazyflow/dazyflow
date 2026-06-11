@@ -195,7 +195,7 @@ export function RunDetail() {
           </h1>
           <div className="sub">
             {t("runDetail.runIdLabel")}{" "}
-            <code style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>{run.ID}</code>
+            <code style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-sm)" }}>{run.ID}</code>
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
@@ -365,7 +365,7 @@ export function RunDetail() {
                     </div>
                   )}
                   {!n.Result?.error && !n.Result?.output && !(n.Job?.Input && Object.keys(n.Job.Input).length > 0) && (
-                    <div style={{ color: "var(--faint)", fontSize: 12 }}>
+                    <div style={{ color: "var(--faint)", fontSize: "var(--text-sm)" }}>
                       {t("runDetail.noResult")}
                     </div>
                   )}

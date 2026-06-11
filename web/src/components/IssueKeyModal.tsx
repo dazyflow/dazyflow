@@ -239,7 +239,7 @@ export function IssueKeyModal({
                   checked={perms.has(p)}
                   onChange={() => togglePerm(p)}
                   label={
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>
                       {p}
                     </span>
                   }

@@ -350,6 +350,23 @@ func TestLintGraph_WebhookTriggerSecretExempt(t *testing.T) {
 	}
 }
 
+func TestLintGraph_WebhookSecretsListExempt(t *testing.T) {
+	// The multi-key rotation list holds generated keys by design — the
+	// exemption must cover array elements (secrets[0], secrets[1]), not
+	// just the top-level `secret` string.
+	g := Graph{Nodes: []Node{
+		node("a", "webhook_input", map[string]any{
+			"secrets": []any{
+				"40067d9c5e798d4bc850a794c1254e85",
+				"a8b2c1d0e9f8a7b6c5d4e3f2a1b0c9d8",
+			},
+		}),
+	}}
+	if hasIssueCode(LintGraph(g), "hardcoded_secret") != nil {
+		t.Error("generated webhook key list must not be flagged")
+	}
+}
+
 func TestLintGraph_WebhookSecretProviderPatternStillFlagged(t *testing.T) {
 	// The exemption only covers the key-name heuristic: pasting a real
 	// provider credential into the trigger secret still fires.

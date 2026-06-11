@@ -308,10 +308,10 @@
       "addWebhook": "Lägg till webhook",
       "addCron": "Lägg till cron",
       "removeAria": "ta bort trigger",
-      "bearerSecret": "Hemlig nyckel",
-      "generateTitle": "Generera en ny slumpmässig hemlighet",
-      "generate": "Generera",
-      "bearerSecretDesc": "Anroparen måste skicka <0>Authorization: Bearer &lt;nyckeln&gt;</0> med varje anrop.",
+      "bearerSecret": "Hemliga nycklar",
+      "generateTitle": "Lägg till en ny slumpmässig nyckel (befintliga nycklar fortsätter fungera)",
+      "generate": "Skapa en nyckel",
+      "bearerSecretDesc": "Anroparen skickar <0>Authorization: Bearer &lt;en nyckel&gt;</0> med varje anrop. Vilken som helst av nycklarna fungerar — lägg till en ny, byt över dina anropare och återkalla sedan den gamla utan avbrott.",
       "curlLabel": "Exempelanrop (curl)",
       "curlDesc": "Kommandot fungerar precis som det står. En body i klartext landar som text på stegets Data-utgång; en JSON-body (Content-Type: application/json) kommer in som strukturerad data du kan plocka fält ur.",
       "copy": "Kopiera",
@@ -338,44 +338,31 @@
       "dayOfMonthLabel": "dag i månaden",
       "dayOfMonthCaveat": "Obs: månader utan dag {{day}} (t.ex. februari) hoppas över — körningen sker inte den månaden.",
       "recipes": {
-        "title": "Hur kopplar jag mitt webbformulär?",
-        "intro": "Ditt formulär behöver skicka varje svar till adressen nedan, med headern som visar att anropet är tillåtet. De flesta formulärverktyg kan inte lägga till den headern själva, så den enklaste universella vägen är en no-code-brygga som Zapier eller Make.",
-        "urlLabel": "Webhook-adress",
-        "headerLabel": "Header att lägga till",
-        "zapier": {
-          "title": "Zapier eller Make (fungerar med alla formulär — rekommenderas)",
-          "body": "Använd ditt formulär som trigger-steg (t.ex. \"New response in Google Forms\"). Lägg sedan till en action: i Zapier välj \"Webhooks → POST\", i Make välj \"HTTP → Make a request\". Ange URL:en ovan, metod POST, lägg till headern ovan och mappa formulärfälten till request-bodyn."
-        },
-        "typeform": {
-          "title": "Typeform (direkt)",
-          "body": "I formuläret: Connect → Webhooks → Add a webhook, och klistra in adressen ovan. Att lägga till Authorization-headern kräver ett betalt Typeform-konto; på gratisplanen, använd Zapier/Make-vägen istället."
-        },
-        "google": {
-          "title": "Google Forms",
-          "body": "Enklast via Zapier/Make med triggern \"New response\". Om du är bekväm med det: Extensions → Apps Script, och använd UrlFetchApp för att göra en POST till adressen ovan med headern."
-        },
-        "squarespace": {
-          "title": "Squarespace / Wix",
-          "body": "Dessa skickar inga webhooks själva. Koppla dem via Zapier eller Make (ovan) med deras trigger för nytt formulärsvar."
-        },
-        "note": "Obs: adressen fungerar bara så länge daemonen går att nå på den värden. När du går live, byt ut localhost mot din publika URL.",
-        "fullGuide": "Öppna hela guiden ↗"
+        "urlLabel": "Webhook-adress"
       },
       "form": {
         "enable": "Hosta ett formulär åt mig (ingen webbplats behövs)",
         "enableDesc": "Vi hostar en enkel webbsida åt dig — dela länken, så startar varje inskick det här flödet.",
         "urlLabel": "Formulärlänk",
         "fieldsLabel": "Formulärfält",
-        "fieldsDesc": "Kommaseparerade fältnamn. Lämna tomt för standard: name, email, message. Ett fält som heter \"message\" blir en stor textruta.",
+        "fieldsDesc": "Kommaseparerade. Lämna tomt för name, email, message.",
         "titleLabel": "Formulärrubrik",
-        "preview": "Öppna formuläret ↗",
+        "preview": "Öppna",
         "embedSummary": "Bädda in formuläret på min egen webbplats",
         "embedDesc": "Klistra in den här koden i din webbplats HTML där formuläret ska visas. Det ligger fortfarande kvar här — ingen hemlighet exponeras.",
-        "runsEmpty": "Inga inskick än. När folk börjar fylla i formuläret visas räkningen här.",
+        "runsEmpty": "Inga inskick ännu.",
         "runsAllOK": "{{total}} inskick hittills — alla bearbetade utan fel.",
         "runsSomeFailed": "{{ok}} OK · {{failed}} misslyckade. Öppna körningslistan för att se vad som gick fel.",
-        "runsLastFailure": "Senaste fel: {{code}}"
-      }
+        "runsLastFailure": "Senaste fel: {{code}}",
+        "copyLink": "Kopiera länk",
+        "customizeSummary": "Anpassa formuläret"
+      },
+      "generateAnother": "Skapa ytterligare en nyckel",
+      "revoke": "Återkalla",
+      "revokeTitle": "Sluta acceptera den här nyckeln",
+      "revokeConfirm": "Återkalla den här nyckeln? Allt som fortfarande anropar flödet med den slutar fungera direkt. Övriga nycklar fortsätter fungera.",
+      "revokeLastConfirm": "Återkalla den enda nyckeln? Flödet slutar ta emot webhook-anrop tills du lägger till en ny nyckel (eller slår på det hostade formuläret).",
+      "revokeModalTitle": "Återkalla nyckel?"
     },
     "notifications": {
       "help": "Få en notifiering när en körning av det här flödet misslyckas. Daemonen POSTar en JSON-payload till webhook-URL:en — fungerar med Slacks incoming-webhook-URL:er, Discord, Teams, PagerDuty events API eller valfri egen mottagare.",

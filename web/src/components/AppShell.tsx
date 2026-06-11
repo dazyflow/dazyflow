@@ -577,7 +577,7 @@ function WorkspaceSwitcher({
   );
   if (!multi) {
     return (
-      <span style={{ fontSize: 13, color: "var(--muted)" }}>{label}</span>
+      <span style={{ fontSize: "var(--text-md)", color: "var(--muted)" }}>{label}</span>
     );
   }
   return (
@@ -590,7 +590,7 @@ function WorkspaceSwitcher({
           display: "inline-flex",
           alignItems: "center",
           gap: 6,
-          fontSize: 13,
+          fontSize: "var(--text-md)",
           padding: "4px 10px",
         }}
         title={t("nav.switchWorkspace")}
@@ -665,7 +665,7 @@ function TenantSwitcher({
           display: "inline-flex",
           alignItems: "center",
           gap: 6,
-          fontSize: 13,
+          fontSize: "var(--text-md)",
           padding: "4px 10px",
         }}
         title={tr("nav.switchTenant")}

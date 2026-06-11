@@ -311,10 +311,10 @@
       "addWebhook": "Add webhook",
       "addCron": "Add cron",
       "removeAria": "remove trigger",
-      "bearerSecret": "Secret key",
-      "generateTitle": "Generate a new random secret",
-      "generate": "Generate",
-      "bearerSecretDesc": "Callers must send <0>Authorization: Bearer &lt;this key&gt;</0> with every request.",
+      "bearerSecret": "Secret keys",
+      "generateTitle": "Add a new random key (the existing keys keep working)",
+      "generate": "Generate a key",
+      "bearerSecretDesc": "Callers send <0>Authorization: Bearer &lt;a key&gt;</0> with every request. Any listed key works — add a new one, switch your callers over, then revoke the old one without downtime.",
       "curlLabel": "Example request (curl)",
       "curlDesc": "The command works exactly as shown. A plain-text body arrives on the step's Data output as text; a JSON body (Content-Type: application/json) arrives as structured data you can pick fields from.",
       "copy": "Copy",
@@ -341,44 +341,31 @@
       "dayOfMonthLabel": "day of month",
       "dayOfMonthCaveat": "Note: months without day {{day}} (e.g. February) will skip — the run won't fire that month.",
       "recipes": {
-        "title": "How do I connect my website form?",
-        "intro": "Your form needs to send each submission to the address below, with the header that proves it's allowed. Most form tools can't add that header on their own, so the easiest universal route is a no-code bridge like Zapier or Make.",
-        "urlLabel": "Webhook address",
-        "headerLabel": "Header to add",
-        "zapier": {
-          "title": "Zapier or Make (works with any form — recommended)",
-          "body": "Use your form as the trigger step (e.g. \"New response in Google Forms\"). Then add an action: in Zapier pick \"Webhooks → POST\", in Make pick \"HTTP → Make a request\". Set the URL above, method POST, add the header above, and map your form fields into the request body."
-        },
-        "typeform": {
-          "title": "Typeform (direct)",
-          "body": "In your form: Connect → Webhooks → Add a webhook, and paste the address above. Adding the Authorization header needs a paid Typeform plan; on a free plan, use the Zapier/Make route instead."
-        },
-        "google": {
-          "title": "Google Forms",
-          "body": "Easiest via Zapier/Make using the \"New response\" trigger. If you're comfortable: Extensions → Apps Script, and use UrlFetchApp to POST to the address above with the header."
-        },
-        "squarespace": {
-          "title": "Squarespace / Wix",
-          "body": "These don't send webhooks on their own. Connect them through Zapier or Make (above) using their \"new form submission\" trigger."
-        },
-        "note": "Heads up: the address only works while the daemon is reachable at that host. When you go live, replace localhost with your public URL.",
-        "fullGuide": "Open the full guide ↗"
+        "urlLabel": "Webhook address"
       },
       "form": {
         "enable": "Host a form for me (no website needed)",
         "enableDesc": "We host a simple web page for you — share the link, and every submission starts this flow.",
         "urlLabel": "Form link",
         "fieldsLabel": "Form fields",
-        "fieldsDesc": "Comma-separated field names. Leave blank for the default: name, email, message. A field called \"message\" becomes a large text box.",
+        "fieldsDesc": "Comma-separated. Leave blank for name, email, message.",
         "titleLabel": "Form heading",
-        "preview": "Open the form ↗",
+        "preview": "Open",
         "embedSummary": "Put this form on my own website",
         "embedDesc": "Paste this code into your site's HTML where you want the form to appear. It stays hosted here — no secret is exposed.",
-        "runsEmpty": "No submissions yet. Once people start filling in the form, a count appears here.",
+        "runsEmpty": "No submissions yet.",
         "runsAllOK": "{{total}} submissions so far — all processed cleanly.",
         "runsSomeFailed": "{{ok}} OK · {{failed}} failed. Open the run list to see what went wrong.",
-        "runsLastFailure": "Last failure: {{code}}"
-      }
+        "runsLastFailure": "Last failure: {{code}}",
+        "copyLink": "Copy link",
+        "customizeSummary": "Customize the form"
+      },
+      "generateAnother": "Generate another key",
+      "revoke": "Revoke",
+      "revokeTitle": "Stop accepting this key",
+      "revokeConfirm": "Revoke this key? Anything still calling this flow with it will immediately stop working. Other keys keep working.",
+      "revokeLastConfirm": "Revoke the only key? This flow will stop accepting webhook calls until you add a new key (or turn on the hosted form).",
+      "revokeModalTitle": "Revoke key?"
     },
     "notifications": {
       "help": "Get pinged when a run of this flow fails. The daemon POSTs a JSON payload to the webhook URL — works with Slack incoming-webhook URLs, Discord, Teams, PagerDuty events API, or any custom receiver.",

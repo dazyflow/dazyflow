@@ -130,9 +130,8 @@ func lintTriggers(g Graph) []LintIssue {
 		if n.Module != "webhook_input" {
 			continue
 		}
-		secret, _ := n.Params["secret"].(string)
 		publicForm, _ := n.Params["public_form"].(bool)
-		if strings.TrimSpace(secret) == "" && !publicForm {
+		if len(WebhookSecrets(n.Params)) == 0 && !publicForm {
 			// Worded for people who don't know what a bearer token or an
 			// endpoint is: name the two fixes exactly as the editor's
 			// Webhook inspector labels them.

@@ -75,7 +75,7 @@ export function AdminAudit() {
 
       {events.length > 0 && (
         <div className="card" style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "var(--text-md)" }}>
             <thead>
               <tr style={{ textAlign: "left", color: "var(--muted)" }}>
                 <th style={auditCellHead}>{t("admin.audit.colTime")}</th>

@@ -185,13 +185,13 @@ export function Usage() {
             </h2>
             <div style={{ display: "flex", gap: "var(--space-6)", flexWrap: "wrap" }}>
               <div>
-                <div style={{ fontSize: 32, fontWeight: 700 }}>
+                <div style={{ fontSize: "var(--text-3xl)", fontWeight: 700 }}>
                   {fmt.format(current.graph_runs)}
                 </div>
                 <div className="sub">{t("usage.runs")}</div>
               </div>
               <div>
-                <div style={{ fontSize: 32, fontWeight: 700 }}>
+                <div style={{ fontSize: "var(--text-3xl)", fontWeight: 700 }}>
                   {fmt.format(current.node_executions)}
                 </div>
                 <div className="sub">{t("usage.nodeExecutions")}</div>

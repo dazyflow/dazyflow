@@ -29,6 +29,26 @@ function readString(
   return typeof v === "string" ? v : "";
 }
 
+// webhookKeys returns every bearer key configured on a webhook trigger:
+// the multi-key `secrets` list plus the legacy single `secret`, each
+// non-blank, in order (legacy first). Mirrors core.WebhookSecrets (Go).
+// The /trigger endpoint accepts ANY of them, which is what lets the
+// editor add a key, migrate callers, then revoke the old one with zero
+// downtime. The webhook UI and status both read through this so a
+// legacy single-secret graph and a rotated one look identical.
+export function webhookKeys(
+  src: { secret?: unknown; secrets?: unknown } | undefined,
+): string[] {
+  const out: string[] = [];
+  const add = (v: unknown) => {
+    if (typeof v === "string" && v.trim() !== "") out.push(v);
+  };
+  add(src?.secret);
+  const arr = src?.secrets;
+  if (Array.isArray(arr)) arr.forEach(add);
+  return out;
+}
+
 // hasConfiguredAutoTrigger reports whether anything will fire the flow
 // without a manual Run. Rules mirror HasConfiguredAutoTrigger in Go.
 export function hasConfiguredAutoTrigger(
@@ -51,10 +71,7 @@ export function hasConfiguredAutoTrigger(
         break;
       }
       case "webhook_input":
-        if (
-          readString(n.params, "secret").trim() !== "" ||
-          n.params?.public_form === true
-        )
+        if (webhookKeys(n.params).length > 0 || n.params?.public_form === true)
           return true;
         break;
     }

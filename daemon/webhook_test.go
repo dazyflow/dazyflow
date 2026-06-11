@@ -138,6 +138,50 @@ func TestWebhook_RejectsBadSecret(t *testing.T) {
 	}
 }
 
+// Zero-downtime rotation: a webhook_input with a `secrets` list accepts
+// ANY listed key (so an operator can add a new key, migrate callers,
+// then revoke the old one), plus the legacy single `secret` in parallel.
+func TestWebhook_AcceptsAnyOfMultipleKeys(t *testing.T) {
+	_, wh, _, _, wsStore := startWebhookHarness(t)
+	_, _ = wsStore.Save(core.Graph{
+		ID: "wh-rotate", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{
+			{ID: "in", Module: "webhook_input", Params: map[string]any{
+				"secret":  "legacy-key-aaaaaa",         // legacy single
+				"secrets": []any{"new-key-bbbbbb", "new-key-cccccc"}, // rotated set
+			}},
+			{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}},
+		},
+	}, "test")
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/trigger/", func(rw http.ResponseWriter, r *http.Request) {
+		callPrivateHandler(t, wh, rw, r)
+	})
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	post := func(token string) int {
+		req, _ := http.NewRequest("POST", ts.URL+"/trigger/acme/ws1/wh-rotate", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("POST: %v", err)
+		}
+		defer resp.Body.Close()
+		return resp.StatusCode
+	}
+
+	for _, valid := range []string{"legacy-key-aaaaaa", "new-key-bbbbbb", "new-key-cccccc"} {
+		if got := post(valid); got != http.StatusAccepted {
+			t.Errorf("token %q: status=%d, want 202", valid, got)
+		}
+	}
+	if got := post("revoked-or-unknown"); got != http.StatusUnauthorized {
+		t.Errorf("unknown token: status=%d, want 401", got)
+	}
+}
+
 func TestWebhook_UnknownGraph(t *testing.T) {
 	_, wh, _, _, _ := startWebhookHarness(t)
 	mux := http.NewServeMux()

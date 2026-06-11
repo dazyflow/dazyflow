@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   X,
   Sparkles,
@@ -11,12 +11,16 @@ import {
   FileText,
   Webhook as WebhookIcon,
   CalendarClock,
+  Link as LinkIcon,
+  ExternalLink,
 } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import type { Graph, GraphTrigger } from "../types";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Switch } from "./Switch";
+import { ConfirmModal } from "./ConfirmModal";
+import { webhookKeys } from "../flowStatus";
 
 // TriggersModal is the per-flow "how does this flow start?" editor,
 // promoted out of the Settings modal into its own toolbar button. It
@@ -103,7 +107,7 @@ export function TriggersModal({ graph, onClose, onSave, onAddSchedule, hasSchedu
   };
 
   const upsertWebhook = (patch: Partial<GraphTrigger>) =>
-    upsert("webhook", () => ({ type: "webhook", secret: randomHex(16) }), patch);
+    upsert("webhook", () => ({ type: "webhook", secrets: [randomHex(16)] }), patch);
   // Cron triggers always carry the editor's browser timezone, stamped
   // on every edit, so the user reasons purely in their own clock: the
   // daemon interprets the expression in this zone (DST included) and the
@@ -263,6 +267,12 @@ export function FormTab({
     `<iframe src="${formURL}" title="${embedTitle}" ` +
     `width="100%" height="600" loading="lazy" style="border:0;max-width:480px"></iframe>`;
   const fieldsText = formFields.join(", ");
+  // While the fields input has focus, render the user's raw text — the
+  // canonical value round-trips through split(",")/join(", ") on every
+  // keystroke, which silently swallowed the comma the user just typed
+  // ("name," parses to ["name"] and re-renders as "name"). The draft
+  // clears on blur, snapping the display back to the normalized form.
+  const [fieldsDraft, setFieldsDraft] = useState<string | null>(null);
   return (
     <div>
       {/* One switch, one helper line. The fuller pitch used to repeat
@@ -272,57 +282,69 @@ export function FormTab({
         checked={enabled}
         onChange={(checked) => onChange({ public_form: checked })}
         label={t("settings.triggers.form.enable")}
-        description={t("settings.triggers.form.enableDesc")}
+        // The pitch is only needed while the form is OFF — once on,
+        // the link card below says it better than a sentence could.
+        description={enabled ? undefined : t("settings.triggers.form.enableDesc")}
       />
       {enabled && (
         <div className="hosted-form-body">
-          <div className="webhook-recipe-field">
-            <span className="webhook-recipe-label">
-              {t("settings.triggers.form.urlLabel")}
-            </span>
-            <CopyInline value={formURL} />
-          </div>
-          <details className="form-embed">
+          {/* Visible by default: just the link and the submission
+              count. Everything configurable lives behind two collapsed
+              disclosures (customize / embed) — the defaults are fine
+              for most flows, so the open state stays four lines. */}
+          <CodeField
+            label={t("settings.triggers.form.urlLabel")}
+            icon={<LinkIcon size={12} aria-hidden="true" />}
+            value={formURL}
+            action={{ href: formURL, label: t("settings.triggers.form.preview") }}
+          />
+          <details className="webhook-recipes">
+            <summary>{t("settings.triggers.form.customizeSummary")}</summary>
+            <div className="webhook-recipes-body">
+              <div className="sf-field">
+                <div className="label-row">
+                  <label>{t("settings.triggers.form.fieldsLabel")}</label>
+                </div>
+                <input
+                  type="text"
+                  value={fieldsDraft ?? fieldsText}
+                  placeholder="name, email, message"
+                  onChange={(e) => {
+                    setFieldsDraft(e.target.value);
+                    const fields = e.target.value
+                      .split(",")
+                      .map((s) => s.trim())
+                      .filter(Boolean);
+                    onChange({ form_fields: fields.length > 0 ? fields : undefined });
+                  }}
+                  onBlur={() => setFieldsDraft(null)}
+                />
+                <div className="desc">{t("settings.triggers.form.fieldsDesc")}</div>
+              </div>
+              <div className="sf-field">
+                <div className="label-row">
+                  <label>{t("settings.triggers.form.titleLabel")}</label>
+                </div>
+                <input
+                  type="text"
+                  value={formTitle ?? ""}
+                  placeholder={graph.name || graph.id}
+                  onChange={(e) => onChange({ form_title: e.target.value || undefined })}
+                />
+              </div>
+            </div>
+          </details>
+          {/* Same disclosure element as "Example request (curl)" and
+              "How do I connect my website form?" — and the snippet uses
+              the same CodeBlock as every other copyable code, so code
+              looks and copies the same everywhere. */}
+          <details className="webhook-recipes">
             <summary>{t("settings.triggers.form.embedSummary")}</summary>
             <div className="webhook-recipes-body">
               <div className="desc">{t("settings.triggers.form.embedDesc")}</div>
-              <CopyBlock value={embedCode} />
+              <CodeBlock value={embedCode} />
             </div>
           </details>
-          <div className="sf-field" style={{ marginTop: 10 }}>
-            <div className="label-row">
-              <label>{t("settings.triggers.form.fieldsLabel")}</label>
-            </div>
-            <input
-              type="text"
-              value={fieldsText}
-              placeholder="name, email, message"
-              onChange={(e) => {
-                const fields = e.target.value
-                  .split(",")
-                  .map((s) => s.trim())
-                  .filter(Boolean);
-                onChange({ form_fields: fields.length > 0 ? fields : undefined });
-              }}
-            />
-            <div className="desc">{t("settings.triggers.form.fieldsDesc")}</div>
-          </div>
-          <div className="sf-field">
-            <div className="label-row">
-              <label>{t("settings.triggers.form.titleLabel")}</label>
-            </div>
-            <input
-              type="text"
-              value={formTitle ?? ""}
-              placeholder={graph.name || graph.id}
-              onChange={(e) => onChange({ form_title: e.target.value || undefined })}
-            />
-          </div>
-          <p className="desc">
-            <a href={formURL} target="_blank" rel="noreferrer noopener">
-              {t("settings.triggers.form.preview")}
-            </a>
-          </p>
           <RecentSubmissions graph={graph} />
         </div>
       )}
@@ -385,48 +407,22 @@ export function WebhookTab({
       </div>
       {/* The address first — it's the one thing every caller needs and
           used to be buried inside the recipes disclosure. */}
-      <div className="webhook-recipe-field">
-        <span className="webhook-recipe-label">
-          {t("settings.triggers.recipes.urlLabel")}
-        </span>
-        <CopyInline value={buildWebhookURL(graph, baseURL)} />
-      </div>
-      <div className="sf-field" style={{ marginTop: 10 }}>
-        <div className="label-row">
-          <label>{t("settings.triggers.bearerSecret")}</label>
-          <button
-            type="button"
-            className="ghost"
-            style={{ fontSize: 11, padding: "2px 8px" }}
-            onClick={() => onChange({ secret: randomHex(16) })}
-            title={t("settings.triggers.generateTitle")}
-          >
-            <Sparkles size={11} style={{ marginRight: 4, verticalAlign: -1 }} />
-            {t("settings.triggers.generate")}
-          </button>
-        </div>
-        <input
-          type="text"
-          value={webhook.secret ?? ""}
-          onChange={(e) => onChange({ secret: e.target.value })}
-          style={{ fontFamily: "var(--font-mono)" }}
-        />
-        <div className="desc">
-          <Trans i18nKey="settings.triggers.bearerSecretDesc" components={[<code />]} />
-        </div>
-      </div>
+      <CodeField
+        label={t("settings.triggers.recipes.urlLabel")}
+        value={buildWebhookURL(graph, baseURL)}
+      />
+      <WebhookKeys webhook={webhook} onChange={onChange} />
       {/* The full curl invocation and its body-handling note are detail,
           not the headline — collapsed like the recipes block below. */}
       <details className="webhook-recipes">
         <summary>{t("settings.triggers.curlLabel")}</summary>
         <div className="webhook-recipes-body">
-          <CurlBlock command={buildCurl(graph, webhook.secret ?? "", baseURL)} />
+          <CodeBlock value={buildCurl(graph, webhookKeys(webhook)[0] ?? "", baseURL)} />
           <div className="desc">
             <Trans i18nKey="settings.triggers.curlDesc" components={[<code />]} />
           </div>
         </div>
       </details>
-      <WebhookRecipes graph={graph} secret={webhook.secret ?? ""} baseURL={baseURL} />
     </div>
   );
 }
@@ -439,7 +435,7 @@ export function WebhookTab({
 // they have to re-save to clear.
 export function WebhookStatusLine({ webhook }: { webhook?: GraphTrigger }) {
   const { t } = useTranslation();
-  const hasSecret = !!(webhook?.secret ?? "").trim();
+  const hasSecret = webhookKeys(webhook).length > 0;
   const hasForm = webhook?.public_form === true;
   const key = hasForm && hasSecret ? "both" : hasForm ? "form" : hasSecret ? "secret" : "off";
   const ok = hasForm || hasSecret;
@@ -578,59 +574,6 @@ function buildWebhookURL(graph: Graph, baseURL: string): string {
   return `${host}/trigger/${graph.tenant}/${graph.workspace}/${graph.id}`;
 }
 
-// WebhookRecipes is the "I'm not a developer — how do I point my
-// website form at this?" helper. Collapsed by default so it doesn't
-// crowd the curl block developers came for.
-function WebhookRecipes({
-  graph,
-  secret,
-  baseURL,
-}: {
-  graph: Graph;
-  secret: string;
-  baseURL: string;
-}) {
-  const { t } = useTranslation();
-  const url = buildWebhookURL(graph, baseURL);
-  const headerValue = `Bearer ${secret || "<bearer-secret>"}`;
-  const recipes: { key: string; title: string; body: string }[] = [
-    { key: "zapier", title: t("settings.triggers.recipes.zapier.title"), body: t("settings.triggers.recipes.zapier.body") },
-    { key: "typeform", title: t("settings.triggers.recipes.typeform.title"), body: t("settings.triggers.recipes.typeform.body") },
-    { key: "google", title: t("settings.triggers.recipes.google.title"), body: t("settings.triggers.recipes.google.body") },
-    { key: "squarespace", title: t("settings.triggers.recipes.squarespace.title"), body: t("settings.triggers.recipes.squarespace.body") },
-  ];
-  return (
-    <details className="webhook-recipes">
-      <summary>{t("settings.triggers.recipes.title")}</summary>
-      <div className="webhook-recipes-body">
-        <p className="desc">{t("settings.triggers.recipes.intro")}</p>
-        <div className="webhook-recipe-field">
-          <span className="webhook-recipe-label">{t("settings.triggers.recipes.urlLabel")}</span>
-          <CopyInline value={url} />
-        </div>
-        <div className="webhook-recipe-field">
-          <span className="webhook-recipe-label">{t("settings.triggers.recipes.headerLabel")}</span>
-          <CopyInline value={`Authorization: ${headerValue}`} />
-        </div>
-        <ol className="webhook-recipe-list">
-          {recipes.map((r) => (
-            <li key={r.key}>
-              <strong>{r.title}</strong>
-              <div className="desc">{r.body}</div>
-            </li>
-          ))}
-        </ol>
-        <p className="desc webhook-recipe-note">{t("settings.triggers.recipes.note")}</p>
-        <p className="desc">
-          <a href="/docs/connect-your-form.html" target="_blank" rel="noreferrer noopener">
-            {t("settings.triggers.recipes.fullGuide")}
-          </a>
-        </p>
-      </div>
-    </details>
-  );
-}
-
 // RecentSubmissions surfaces the failure count for the per-graph runs
 // list. The hosted form renders "Thanks!" the moment the run is
 // accepted by the scheduler, *not* when downstream nodes finish — so a
@@ -708,89 +651,188 @@ function RecentSubmissions({ graph }: { graph: Graph }) {
   );
 }
 
-// CopyInline is a one-line value + copy button, reused for the webhook
-// URL and header in the recipes block and the form link.
-function CopyInline({ value }: { value: string }) {
-  const { t } = useTranslation();
-  const [copied, setCopied] = useState(false);
-  return (
-    <span className="copy-inline">
-      <code>{value}</code>
-      <button
-        type="button"
-        className="curl-copy"
-        title={t("settings.triggers.copyTitle")}
-        onClick={async () => {
-          try {
-            await navigator.clipboard.writeText(value);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-          } catch {
-            /* clipboard unavailable */
-          }
-        }}
-      >
-        {copied ? <Check size={12} /> : <Copy size={12} />}
-      </button>
-    </span>
-  );
-}
+// ── Unified code/value family ──────────────────────────────────────
+//
+// Every copyable value or code snippet in the inspector shares one
+// visual language: a themed code well (.hz-code, --code-bg/--code-fg),
+// a mono value, and the same copy button (.hz-code-btn). The only
+// variant is single-line (CodeField) vs multi-line (CodeBlock); both
+// carry an optional caption above. This replaced three divergent
+// treatments — a tiny inline chip, a dark <pre> well, and a bordered
+// share card — that all meant "here is a value to copy".
 
-// CopyBlock is the multi-line sibling of CopyInline — a <pre> with a
-// copy button, used for the form-embed iframe snippet.
-function CopyBlock({ value }: { value: string }) {
+// useCopyButton renders the shared icon+label copy button and owns the
+// transient "copied" flip, so CodeField and CodeBlock stay identical.
+function useCopyButton(value: string) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
-  return (
-    <div className="curl-block">
-      <pre>
-        <code>{value}</code>
-      </pre>
-      <button
-        type="button"
-        className="curl-copy"
-        title={t("settings.triggers.copyTitle")}
-        onClick={async () => {
-          try {
-            await navigator.clipboard.writeText(value);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-          } catch {
-            /* clipboard unavailable */
-          }
-        }}
-      >
-        {copied ? <Check size={12} /> : <Copy size={12} />}
-      </button>
-    </div>
-  );
-}
-
-// CurlBlock renders a copyable code block with a "Copy" button.
-function CurlBlock({ command }: { command: string }) {
-  const { t } = useTranslation();
-  const [copied, setCopied] = useState(false);
-  const onCopy = async () => {
+  const copy = async () => {
     try {
-      await navigator.clipboard.writeText(command);
+      await navigator.clipboard.writeText(value);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
       /* clipboard unavailable — user can still select+copy manually */
     }
   };
+  return (extraClass?: string) => (
+    <button
+      type="button"
+      className={"hz-code-btn" + (extraClass ? " " + extraClass : "")}
+      onClick={copy}
+      title={t("settings.triggers.copyTitle")}
+    >
+      {copied ? <Check size={13} /> : <Copy size={13} />}
+      <span>{copied ? t("settings.triggers.copied") : t("settings.triggers.copy")}</span>
+    </button>
+  );
+}
+
+// CodeField is the single-line copyable value: an optional caption,
+// then a code well holding one ellipsized value, the copy button, and
+// an optional trailing action (e.g. "Open" for the form link).
+function CodeField({
+  label,
+  icon,
+  value,
+  action,
+  trailing,
+}: {
+  label?: string;
+  icon?: ReactNode;
+  value: string;
+  action?: { href: string; label: string };
+  // trailing renders an extra control after the copy button (e.g. a
+  // Revoke button on a webhook key row), styled with .hz-code-btn so it
+  // matches the copy/Open buttons.
+  trailing?: ReactNode;
+}) {
+  const copyButton = useCopyButton(value);
   return (
-    <div className="curl-block">
+    <div className="hz-codefield">
+      {label && (
+        <span className="hz-code-label">
+          {icon}
+          {label}
+        </span>
+      )}
+      <div className="hz-code hz-code-row">
+        <code className="hz-code-value" title={value}>
+          {value}
+        </code>
+        {copyButton()}
+        {action && (
+          <a
+            href={action.href}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="hz-code-btn hz-code-link"
+          >
+            <ExternalLink size={13} />
+            <span>{action.label}</span>
+          </a>
+        )}
+        {trailing}
+      </div>
+    </div>
+  );
+}
+
+// WebhookKeys renders the rotation UI: every active bearer key as a
+// CodeField with a Revoke button, plus "Generate another key". Adding
+// a key is non-destructive (no confirm); revoking breaks any caller
+// still using THAT key, so it confirms first — and warns harder when
+// it's the last key (the flow stops accepting webhook calls). This is
+// what makes rotation zero-downtime: add new, migrate callers, revoke
+// old, never dropping a request.
+function WebhookKeys({
+  webhook,
+  onChange,
+}: {
+  webhook: GraphTrigger;
+  onChange: (patch: Partial<GraphTrigger>) => void;
+}) {
+  const { t } = useTranslation();
+  const keys = webhookKeys(webhook);
+  // pendingRevoke is the index of the key awaiting confirmation (null =
+  // no dialog). Drives the themed ConfirmModal below instead of a raw
+  // window.confirm().
+  const [pendingRevoke, setPendingRevoke] = useState<number | null>(null);
+  // Always write the canonical `secrets` list and clear the legacy
+  // single `secret`, folding it in — so a legacy graph migrates the
+  // moment its keys are touched and never carries both shapes.
+  const writeKeys = (next: string[]) =>
+    onChange({ secret: undefined, secrets: next });
+  const addKey = () => writeKeys([...keys, randomHex(16)]);
+  const confirmRevoke = () => {
+    if (pendingRevoke === null) return;
+    writeKeys(keys.filter((_, i) => i !== pendingRevoke));
+    setPendingRevoke(null);
+  };
+  return (
+    <div className="sf-field" style={{ marginTop: 10 }}>
+      <div className="label-row">
+        <label>{t("settings.triggers.bearerSecret")}</label>
+      </div>
+      <div className="webhook-keys">
+        {keys.map((k, i) => (
+          <CodeField
+            key={i}
+            value={k}
+            trailing={
+              <button
+                type="button"
+                className="hz-code-btn hz-code-btn-danger"
+                onClick={() => setPendingRevoke(i)}
+                title={t("settings.triggers.revokeTitle")}
+              >
+                <Trash2 size={13} />
+                <span>{t("settings.triggers.revoke")}</span>
+              </button>
+            }
+          />
+        ))}
+      </div>
       <button
         type="button"
-        className="curl-copy"
-        onClick={onCopy}
-        title={t("settings.triggers.copyTitle")}
+        className="ghost webhook-keys-add"
+        onClick={addKey}
+        title={t("settings.triggers.generateTitle")}
       >
-        {copied ? <Check size={12} /> : <Copy size={12} />}
-        {copied ? " " + t("settings.triggers.copied") : " " + t("settings.triggers.copy")}
+        <Sparkles size={12} style={{ marginRight: 5, verticalAlign: -2 }} />
+        {keys.length === 0
+          ? t("settings.triggers.generate")
+          : t("settings.triggers.generateAnother")}
       </button>
-      <pre>{command}</pre>
+      <div className="desc">
+        <Trans i18nKey="settings.triggers.bearerSecretDesc" components={[<code />]} />
+      </div>
+      {pendingRevoke !== null && (
+        <ConfirmModal
+          title={t("settings.triggers.revokeModalTitle")}
+          message={t(
+            keys.length === 1
+              ? "settings.triggers.revokeLastConfirm"
+              : "settings.triggers.revokeConfirm",
+          )}
+          confirmLabel={t("settings.triggers.revoke")}
+          danger
+          onConfirm={confirmRevoke}
+          onCancel={() => setPendingRevoke(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// CodeBlock is the multi-line sibling: the same well, with the copy
+// button pinned top-right over a wrapping <pre>.
+function CodeBlock({ value }: { value: string }) {
+  const copyButton = useCopyButton(value);
+  return (
+    <div className="hz-code hz-code-block">
+      {copyButton("hz-code-btn-float")}
+      <pre>{value}</pre>
     </div>
   );
 }

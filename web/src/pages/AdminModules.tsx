@@ -93,7 +93,7 @@ export function AdminModules() {
               >
                 <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
                   <strong>{m.label || m.id}</strong>
-                  <code style={{ fontSize: 12, color: "var(--muted)" }}>{m.id}</code>
+                  <code style={{ fontSize: "var(--text-sm)", color: "var(--muted)" }}>{m.id}</code>
                   {m.provider && <span className="perm-chip">{m.provider}</span>}
                   {m.integration && <span className="perm-chip">{m.integration}</span>}
                   {m.idempotent && <span className="perm-chip">{t("admin.modules.idempotent")}</span>}
@@ -101,7 +101,7 @@ export function AdminModules() {
                   {m.submits_child_graph && <span className="perm-chip">{t("admin.modules.submitsChild")}</span>}
                 </div>
                 {m.description && (
-                  <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 4 }}>{m.description}</div>
+                  <div style={{ fontSize: "var(--text-md)", color: "var(--muted)", marginTop: 4 }}>{m.description}</div>
                 )}
               </div>
             ))}

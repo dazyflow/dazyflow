@@ -80,13 +80,22 @@ func (w *WebhookListener) handleTrigger(rw http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	secret := webhookSecret(g)
-	if secret == "" {
+	keys := core.GraphWebhookSecrets(g)
+	if len(keys) == 0 {
 		http.Error(rw, "graph has no webhook trigger", http.StatusNotFound)
 		return
 	}
+	// Accept the request if the bearer token matches ANY active key.
+	// Every candidate is compared (no early break) so the work — and
+	// thus the timing — doesn't depend on which key matched or how many
+	// there are. This multi-key acceptance is what enables zero-downtime
+	// rotation: add a new key, migrate callers, revoke the old one.
 	provided := stripBearer(r.Header.Get("Authorization"))
-	if subtle.ConstantTimeCompare([]byte(secret), []byte(provided)) != 1 {
+	matched := 0
+	for _, k := range keys {
+		matched |= subtle.ConstantTimeCompare([]byte(k), []byte(provided))
+	}
+	if matched != 1 {
 		http.Error(rw, "invalid secret", http.StatusUnauthorized)
 		return
 	}
@@ -237,17 +246,6 @@ func buildWebhookSeed(rawBody []byte, r *http.Request) core.Result {
 // webhookSecret returns the bearer token guarding the graph's /trigger
 // endpoint. Config lives on the webhook_input node now (the Triggers menu is
 // gone); the secret is the node's `secret` param.
-func webhookSecret(g core.Graph) string {
-	for _, n := range g.Nodes {
-		if n.Module == webhookInputModuleID {
-			if s, ok := n.Params["secret"].(string); ok && s != "" {
-				return s
-			}
-		}
-	}
-	return ""
-}
-
 func stripBearer(h string) string {
 	const prefix = "Bearer "
 	if strings.HasPrefix(h, prefix) {

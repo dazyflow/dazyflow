@@ -154,7 +154,7 @@ export function NodeCatalog({ drops }: Props) {
     <>
       <div className="panel-head">
         <span>{t("nodeCatalog.title")}</span>
-        <span style={{ color: "var(--faint)", fontSize: 11 }}>
+        <span style={{ color: "var(--faint)", fontSize: "var(--text-xs)" }}>
           {drops.length}
         </span>
       </div>

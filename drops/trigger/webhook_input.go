@@ -49,7 +49,13 @@ func init() {
 					"secret":{
 						"type":"string",
 						"title":"Secret",
-						"description":"Bearer token callers must send (Authorization: Bearer …) to POST this flow's /trigger endpoint. Leave blank only if you rely solely on a public hosted form."
+						"description":"Legacy single bearer token. Superseded by secrets; still honored for graphs saved before multi-key rotation. The editor folds it into secrets on first edit."
+					},
+					"secrets":{
+						"type":"array",
+						"items":{"type":"string"},
+						"title":"Secret keys",
+						"description":"Bearer tokens callers may send (Authorization: Bearer …) to POST this flow's /trigger endpoint. The endpoint accepts ANY listed key, so you can add a new key, migrate callers, then revoke the old one with zero downtime. Leave empty only if you rely solely on a public hosted form."
 					},
 					"public_form":{
 						"type":"boolean",

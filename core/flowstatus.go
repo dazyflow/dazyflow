@@ -68,9 +68,8 @@ func HasConfiguredAutoTrigger(g Graph) bool {
 				return true
 			}
 		case "webhook_input":
-			secret, _ := n.Params["secret"].(string)
 			publicForm, _ := n.Params["public_form"].(bool)
-			if strings.TrimSpace(secret) != "" || publicForm {
+			if len(WebhookSecrets(n.Params)) > 0 || publicForm {
 				return true
 			}
 		}

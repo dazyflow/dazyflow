@@ -3137,7 +3137,7 @@ function EditorInner() {
             <div style={{ fontWeight: 600, color: "var(--text)" }}>
               {t("editor.emptyEntryTitle")}
             </div>
-            <div style={{ maxWidth: 320, fontSize: 13 }}>
+            <div style={{ maxWidth: 320, fontSize: "var(--text-md)" }}>
               {t("editor.emptyEntryBody")}
             </div>
             <button
@@ -3191,7 +3191,7 @@ function EditorInner() {
               color: "var(--danger)",
               padding: "10px 14px",
               borderRadius: "var(--r-2)",
-              fontSize: 13,
+              fontSize: "var(--text-md)",
               maxWidth: 700,
               zIndex: 10,
               boxShadow: "0 2px 8px color-mix(in srgb, var(--danger) 25%, transparent)",
@@ -3206,7 +3206,7 @@ function EditorInner() {
               type="button"
               className="ghost"
               onClick={() => setError(null)}
-              style={{ fontSize: 11, padding: "2px 8px", color: "var(--danger)" }}
+              style={{ fontSize: "var(--text-xs)", padding: "2px 8px", color: "var(--danger)" }}
               aria-label={t("editor.dismiss")}
             >
               {t("editor.dismiss")}
@@ -3226,7 +3226,7 @@ function EditorInner() {
               border: "1px solid var(--warn, #d4a017)",
               padding: "10px 14px",
               borderRadius: "var(--r-2)",
-              fontSize: 13,
+              fontSize: "var(--text-md)",
               maxWidth: 700,
               color: "var(--ink)",
               zIndex: 10,
@@ -3242,7 +3242,7 @@ function EditorInner() {
                 type="button"
                 className="ghost"
                 onClick={() => setLintIssues([])}
-                style={{ fontSize: 11, padding: "2px 8px" }}
+                style={{ fontSize: "var(--text-xs)", padding: "2px 8px" }}
                 aria-label={t("editor.dismissLint")}
               >
                 {t("editor.dismiss")}
