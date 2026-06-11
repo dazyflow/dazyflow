@@ -4441,20 +4441,30 @@ button.warning:hover:not(:disabled) {
   font-size: var(--text-sm);
   color: var(--muted);
 }
-.ref-pop {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  z-index: 40;
-  min-width: 260px;
-  max-width: 360px;
-  max-height: 320px;
-  overflow-y: auto;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-2);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
-  padding: var(--space-1);
+/* The reference picker is a shared modal (ConfirmModal family): a centred
+   card on desktop, edge-to-edge on phones so its grouped list gets the
+   whole viewport. ref-dialog-body trims the default body padding since the
+   grouped rows carry their own. */
+.ref-dialog {
+  max-width: 480px;
+}
+.ref-dialog-body {
+  padding: var(--space-2);
+}
+@media (max-width: 768px) {
+  .settings-backdrop:has(.ref-dialog) {
+    padding: 0;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .ref-dialog {
+    max-width: none;
+    width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    border: none;
+    border-radius: 0;
+  }
 }
 .ref-pop-msg {
   padding: var(--space-2) var(--space-3);
@@ -4494,11 +4504,6 @@ button.warning:hover:not(:disabled) {
 }
 .ref-pop-desc {
   font-size: var(--text-md);
-}
-.ref-pop-token {
-  font-family: var(--font-mono, monospace);
-  font-size: var(--text-xs);
-  color: var(--muted);
 }
 
 .sf-mode-toggle {

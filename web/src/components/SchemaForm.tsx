@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { Braces, Lock, Plus, Upload, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -1090,7 +1091,6 @@ function ReferenceMenu({
   const [open, setOpen] = useState(false);
   const [groups, setGroups] = useState<ReferenceGroups | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const wrapRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!open || groups || error) return;
@@ -1102,18 +1102,11 @@ function ReferenceMenu({
 
   useEffect(() => {
     if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
-    };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
   const sections: { kind: keyof ReferenceGroups; label: string }[] = [
@@ -1138,77 +1131,95 @@ function ReferenceMenu({
     (groups &&
       sections.some((s) => groups[s.kind] && groups[s.kind].length > 0));
 
+  // Each row shows only the human description — never the raw ${…} token,
+  // which is developer syntax a non-technical owner can't read. Clicking
+  // still inserts the token; we just don't surface it.
+  const renderRow = (key: string, label: string, token: string) => (
+    <button
+      key={key}
+      type="button"
+      role="menuitem"
+      className="ref-pop-row"
+      onClick={() => {
+        onInsert(token);
+        setOpen(false);
+      }}
+    >
+      <span className="ref-pop-desc">{label}</span>
+    </button>
+  );
+
   return (
-    <div className="ref-menu" ref={wrapRef}>
+    <div className="ref-menu">
       <button
         type="button"
         className="ghost ref-insert-btn"
-        onClick={() => setOpen((v) => !v)}
-        aria-haspopup="menu"
+        onClick={() => setOpen(true)}
+        aria-haspopup="dialog"
         aria-expanded={open}
         title={t("schemaForm.refPicker.insert")}
         aria-label={t("schemaForm.refPicker.insert")}
       >
         {"{ }"}
       </button>
-      {open && (
-        <div className="ref-pop" role="menu">
-          {hasExtra && (
-            <div className="ref-pop-group">
-              <div className="ref-pop-group-label">
-                {t("schemaForm.refPicker.itemFields")}
-              </div>
-              {extraItems!.map((it) => (
+      {open &&
+        createPortal(
+          // Portal to <body> so the fixed backdrop escapes the inspector's
+          // transformed/clipped ancestors — same reasoning as ConfirmModal.
+          <div className="settings-backdrop" onClick={() => setOpen(false)}>
+            <div
+              className="settings-dialog ref-dialog"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-label={t("schemaForm.refPicker.title")}
+            >
+              <div className="settings-head">
+                <h2>{t("schemaForm.refPicker.title")}</h2>
                 <button
-                  key={it.token}
                   type="button"
-                  role="menuitem"
-                  className="ref-pop-row"
-                  onClick={() => {
-                    onInsert(it.token);
-                    setOpen(false);
-                  }}
+                  className="ghost icon"
+                  onClick={() => setOpen(false)}
+                  aria-label={t("common.close")}
+                  title={t("common.close")}
                 >
-                  <span className="ref-pop-desc">{it.label}</span>
-                  <span className="ref-pop-token">{it.token}</span>
+                  <X size={16} />
                 </button>
-              ))}
+              </div>
+              <div className="settings-body ref-dialog-body">
+                {error && <div className="ref-pop-msg ref-pop-error">{error}</div>}
+                {!groups && !error && !hasExtra && (
+                  <div className="ref-pop-msg">{t("schemaForm.refPicker.loading")}</div>
+                )}
+                {groups && !hasAny && (
+                  <div className="ref-pop-msg">{t("schemaForm.refPicker.empty")}</div>
+                )}
+                {hasExtra && (
+                  <div className="ref-pop-group">
+                    <div className="ref-pop-group-label">
+                      {t("schemaForm.refPicker.itemFields")}
+                    </div>
+                    {extraItems!.map((it) => renderRow(it.token, it.label, it.token))}
+                  </div>
+                )}
+                {groups &&
+                  sections.map((s) => {
+                    const items = groups[s.kind] ?? [];
+                    if (items.length === 0) return null;
+                    return (
+                      <div key={s.kind} className="ref-pop-group">
+                        <div className="ref-pop-group-label">{s.label}</div>
+                        {items.map((it) =>
+                          renderRow(it.token, describe(s.kind, it), it.token),
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
             </div>
-          )}
-          {error && <div className="ref-pop-msg ref-pop-error">{error}</div>}
-          {!groups && !error && !hasExtra && (
-            <div className="ref-pop-msg">{t("schemaForm.refPicker.loading")}</div>
-          )}
-          {groups && !hasAny && (
-            <div className="ref-pop-msg">{t("schemaForm.refPicker.empty")}</div>
-          )}
-          {groups &&
-            sections.map((s) => {
-              const items = groups[s.kind] ?? [];
-              if (items.length === 0) return null;
-              return (
-                <div key={s.kind} className="ref-pop-group">
-                  <div className="ref-pop-group-label">{s.label}</div>
-                  {items.map((it) => (
-                    <button
-                      key={it.token}
-                      type="button"
-                      role="menuitem"
-                      className="ref-pop-row"
-                      onClick={() => {
-                        onInsert(it.token);
-                        setOpen(false);
-                      }}
-                    >
-                      <span className="ref-pop-desc">{describe(s.kind, it)}</span>
-                      <span className="ref-pop-token">{it.token}</span>
-                    </button>
-                  ))}
-                </div>
-              );
-            })}
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

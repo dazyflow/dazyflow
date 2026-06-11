@@ -48,7 +48,8 @@
     "noneParen": "(ingen)",
     "unknownParen": "(okänd)",
     "dismiss": "Stäng",
-    "secretStored": "(dold)"
+    "secretStored": "(dold)",
+    "close": "Stäng"
   },
   "nav": {
     "workspaceGroup": "Arbetsyta",

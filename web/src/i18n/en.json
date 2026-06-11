@@ -48,7 +48,8 @@
     "noneParen": "(none)",
     "unknownParen": "(unknown)",
     "dismiss": "Dismiss",
-    "secretStored": "(hidden)"
+    "secretStored": "(hidden)",
+    "close": "Close"
   },
   "nav": {
     "workspaceGroup": "Workspace",
@@ -1093,6 +1094,7 @@
     },
     "refPicker": {
       "insert": "Insert a reference",
+      "title": "Insert a value",
       "loading": "Loading…",
       "empty": "Nothing to reference yet",
       "upstream": "From earlier steps",
