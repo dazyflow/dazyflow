@@ -409,6 +409,7 @@ export function WebhookTab({
           used to be buried inside the recipes disclosure. */}
       <CodeField
         label={t("settings.triggers.recipes.urlLabel")}
+        method="POST"
         value={buildWebhookURL(graph, baseURL)}
       />
       <WebhookKeys webhook={webhook} onChange={onChange} />
@@ -695,12 +696,17 @@ function CodeField({
   label,
   icon,
   value,
+  method,
   action,
   trailing,
 }: {
   label?: string;
   icon?: ReactNode;
   value: string;
+  // method renders an HTTP-verb badge before the value (reads as
+  // "POST https://…") but stays out of the copied string — the copy
+  // button must yield a bare URL pasteable into webhook fields.
+  method?: string;
   action?: { href: string; label: string };
   // trailing renders an extra control after the copy button (e.g. a
   // Revoke button on a webhook key row), styled with .hz-code-btn so it
@@ -717,6 +723,7 @@ function CodeField({
         </span>
       )}
       <div className="hz-code hz-code-row">
+        {method && <span className="hz-code-method">{method}</span>}
         <code className="hz-code-value" title={value}>
           {value}
         </code>

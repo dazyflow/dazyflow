@@ -5597,6 +5597,19 @@ button.warning:hover:not(:disabled) {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* HTTP-verb badge before the value ("POST https://…"). Display-only —
+   the copy button still yields the bare URL. */
+.hz-code-method {
+  flex-shrink: 0;
+  padding: var(--space-0) var(--space-1h);
+  border-radius: var(--r-1);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
 /* Multi-line: wrapping <pre>, copy button pinned top-right. */
 .hz-code-block {
   position: relative;
