@@ -2,7 +2,7 @@ import { Handle, Position, useStore, type NodeProps } from "@xyflow/react";
 import { AlertTriangle, AlertCircle } from "lucide-react";
 import i18n from "../i18n";
 import { Switch } from "./Switch";
-import { iconFor, isBrandedIcon, categoryColor } from "../icons";
+import { iconFor, isBrandedIcon, dropColor } from "../icons";
 import type { Manifest, Port, JSONSchema, Ref } from "../types";
 import {
   type HazyNodeData,
@@ -83,8 +83,7 @@ function operatorSymbol(m: Manifest): string {
 export function HazyNode({ data, selected }: NodeProps) {
   const d = data as HazyNodeData;
   const Icon = iconFor(d.manifest?.icon, d.manifest?.category);
-  const color =
-    d.manifest?.color || categoryColor(d.manifest?.category) || "#9f83fe";
+  const color = dropColor(d.manifest?.category, d.manifest?.color);
 
   // Default to "in"/"out" when the manifest didn't ship port lists —
   // matches the engine's fallback ports.

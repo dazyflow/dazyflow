@@ -3,7 +3,7 @@ import type { Node } from "@xyflow/react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { X, Trash2, Info, Play } from "lucide-react";
-import { iconFor, categoryColor } from "../icons";
+import { iconFor, dropColor as resolveDropColor } from "../icons";
 import type { HazyNodeData } from "./nodeCardShared";
 import {
   SchemaForm,
@@ -223,8 +223,7 @@ export function Inspector({
   // shows, so the inspector reads as "this drop" at a glance rather than a
   // generic panel. Mirrors NodeCard's icon resolution.
   const DropIcon = iconFor(d.manifest?.icon, d.manifest?.category);
-  const dropColor =
-    d.manifest?.color || categoryColor(d.manifest?.category) || "#9f83fe";
+  const dropColor = resolveDropColor(d.manifest?.category, d.manifest?.color);
   const brandLogo = d.manifest?.brand_logo;
   // The cron_trigger node owns its schedule (Phase 2). In form mode we
   // render the friendly preset picker (presets + time + "next fires"

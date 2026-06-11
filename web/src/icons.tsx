@@ -114,6 +114,16 @@ export function categoryColor(category?: string): string | undefined {
   return category ? categoryColors[category] : undefined;
 }
 
+// dropColor resolves the accent a drop renders with. Triggers always wear the
+// category purple — they're the graph's entry points and read as one family,
+// so the role tint wins over any brand Color a trigger ships (the brand still
+// shows via its BrandLogo). Every other category lets the drop's own brand
+// Color win, then falls back to the role tint, then the global default.
+export function dropColor(category?: string, brandColor?: string): string {
+  if (category === "trigger") return categoryColors.trigger;
+  return brandColor || categoryColor(category) || "#9f83fe";
+}
+
 // brandedIcons are self-coloured logos (e.g. the official Git mark)
 // that look wrong inside a gradient backdrop. The node card and catalog
 // row skip the coloured box and render them at their native colour.
