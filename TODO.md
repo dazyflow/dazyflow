@@ -905,10 +905,25 @@ platform can demonstrate but not actually power a real workflow.
 
 ## Auth
 
-- [ ] **Real OIDC verifier.** `OIDCAuthenticator` is scaffold —
-  `IDTokenVerifier` interface plus a `stubVerifier` for tests. Wire
-  `github.com/coreos/go-oidc/v3` for real JWKS-backed validation.
-  Microsoft Entra / Okta / Google Workspace are spec-targeted IdPs.
+- [x] **Real OIDC verifier.** Shipped 2026-06-11: `auth.NewOIDCVerifier`
+  (go-oidc/v3 — discovery + JWKS with rotation, issuer/expiry/audience
+  enforced by the library) behind the existing `IDTokenVerifier` seam;
+  claim extraction maps the configured tenant claim ("tenant" default;
+  "tid"/"hd" for Entra/Google) and a roles claim accepted as array,
+  string, or space-separated. Role names resolve through the canonical
+  team catalog (core.TeamRoleByName) — an IdP group named "editor"
+  grants exactly what an invited editor gets, unknown groups grant
+  NOTHING (the old scaffold's ad-hoc map, including its wrong
+  viewer→secret:read, is gone). Wired in hzd via HAZYFLOW_OIDC_ISSUER
+  (+ _CLIENT_ID/_AUDIENCE/_TENANT_CLAIM/_ROLES_CLAIM, documented in
+  .env.example); appended to the auth chain after API keys + sessions;
+  boot fails loud on an unreachable issuer. Tests run against a local
+  fake IdP doing real RSA crypto: valid-token path, expired / wrong-aud
+  / wrong-iss / foreign-key / garbage rejections, Entra-style claim
+  shapes, and end-to-end Chain authentication. **Open:** a browser SSO
+  *flow* per org (authorize redirect → callback → session) on top of
+  this verifier — today's org SSO remains the Google sign-in path;
+  per-tenant issuer config (one global issuer today).
 - [ ] **Cert-CN → Principal mapping.** Service accounts currently
   authenticate twice (mTLS + bearer token). Map the cert's CN/SAN to a
   Principal so cert-only auth works.

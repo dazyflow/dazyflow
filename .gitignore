@@ -9,6 +9,7 @@
 *.xlsx
 /.env
 
-# Signing keys for hz-drops — NEVER commit the private key
-.keys/
 /node_modules/
+# Local key material (legacy hz-drops signing keys) — never commit
+.keys/
+/.claude

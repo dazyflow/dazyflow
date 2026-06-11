@@ -138,6 +138,13 @@ func main() {
 	slackSigningSecret := envStr("HAZYFLOW_SLACK_SIGNING_SECRET", "")
 	githubWebhookSecret := envStr("HAZYFLOW_GITHUB_WEBHOOK_SECRET", "")
 	approvalHMACSecret := envStr("HAZYFLOW_APPROVAL_HMAC_SECRET", "")
+	// OIDC bearer-token auth (optional): accept IdP-issued JWTs on the
+	// API. Issuer set = on; everything else has sane defaults.
+	oidcIssuer := envStr("HAZYFLOW_OIDC_ISSUER", "")
+	oidcClientID := envStr("HAZYFLOW_OIDC_CLIENT_ID", "")
+	oidcAudience := envStr("HAZYFLOW_OIDC_AUDIENCE", "")
+	oidcTenantClaim := envStr("HAZYFLOW_OIDC_TENANT_CLAIM", "")
+	oidcRolesClaim := envStr("HAZYFLOW_OIDC_ROLES_CLAIM", "")
 	// Billing (T3). All off by default: no Stripe key = no checkout/
 	// portal/webhook endpoints; FREE_RUNS_PER_MONTH=0 = no run gate.
 	// A SaaS deployment sets all four; self-hosted installs set none.
@@ -360,11 +367,33 @@ func main() {
 			},
 		}
 	}
+	// Auth chain: API keys, then browser sessions, then (when the
+	// operator configured an issuer) IdP-issued OIDC bearer tokens.
+	authChain := auth.Chain{
+		&auth.APIKeyAuthenticator{Store: ks},
+		&auth.SessionAuthenticator{Store: sessions},
+	}
+	if oidcIssuer != "" {
+		oidcCfg := auth.OIDCConfig{
+			Issuer:      oidcIssuer,
+			ClientID:    oidcClientID,
+			Audience:    oidcAudience,
+			TenantClaim: oidcTenantClaim,
+			RolesClaim:  oidcRolesClaim,
+		}
+		// Discovery + JWKS fetch happen here, against the root ctx so
+		// background key refreshes outlive this call. Fail loud: a
+		// configured-but-unreachable issuer must not boot into a daemon
+		// that silently rejects every SSO token.
+		verifier, err := auth.NewOIDCVerifier(ctx, oidcCfg)
+		if err != nil {
+			log.Fatalf("HAZYFLOW_OIDC_ISSUER: %v", err)
+		}
+		authChain = append(authChain, &auth.OIDCAuthenticator{Config: oidcCfg, Verifier: verifier})
+		log.Printf("OIDC bearer auth enabled (issuer %s) — IdP-issued JWTs authenticate API calls", oidcIssuer)
+	}
 	svc := &daemon.Service{
-		Auth: auth.Chain{
-			&auth.APIKeyAuthenticator{Store: ks},
-			&auth.SessionAuthenticator{Store: sessions},
-		},
+		Auth:       authChain,
 		Workspaces: workspaces,
 		Jobs:       jobs,
 		Engine:     eng,

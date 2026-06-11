@@ -8,7 +8,7 @@ import (
 	"git.sr.ht/~klahr/hazyflow/core"
 )
 
-// OIDCConfig configures the (scaffold) OIDC authenticator.
+// OIDCConfig configures the OIDC bearer-token authenticator.
 type OIDCConfig struct {
 	Issuer   string
 	Audience string
@@ -19,15 +19,15 @@ type OIDCConfig struct {
 	TenantClaim string
 	RolesClaim  string
 }
-//
-// OIDCAuthenticator is a scaffold. Production use requires:
-//
-//   - `github.com/coreos/go-oidc/v3/oidc` for JWKS-backed verifier
-//   - `golang.org/x/oauth2` for the device flow
-//
-// The shape below is what the rest of the system depends on; swap the body
-// of Verify() once the libraries are wired. Tests for the OIDC path
-// belong in a tagged integration suite that points at a real IdP.
+
+// OIDCAuthenticator accepts IdP-issued bearer JWTs on the API: a token
+// minted by Microsoft Entra / Okta / Google Workspace (any OIDC issuer)
+// authenticates a request without a Hazyflow session or API key —
+// machine-to-machine and SSO-backed automation. It slots into the auth
+// Chain after the API-key and session authenticators; non-JWT
+// credentials fall through untouched. The production Verifier comes
+// from NewOIDCVerifier (go-oidc discovery + JWKS, see oidc_verifier.go),
+// wired by hzd when HAZYFLOW_OIDC_ISSUER is set.
 
 type OIDCAuthenticator struct {
 	Config   OIDCConfig
@@ -83,23 +83,14 @@ func looksLikeJWT(s string) bool {
 	return dots == 2
 }
 
-// rolePermissions maps role names to permission sets. Production should
-// load this from configuration so customers can define custom roles.
+// rolePermissions resolves an IdP role/group name through the canonical
+// team catalog (viewer / editor / admin — core.TeamRoleByName), so an
+// Entra group named "editor" grants exactly what an invited editor
+// gets. Unknown names carry no permissions: an unmapped IdP group must
+// never grant access by accident.
 func rolePermissions(role string) []core.Permission {
-	switch role {
-	case "admin":
-		return []core.Permission{
-			core.PermOrganizationAdmin, core.PermGraphRun, core.PermGraphEdit,
-			core.PermGraphAdmin, core.PermModuleRegister,
-			core.PermSecretRead, core.PermSecretWrite,
-		}
-	case "editor":
-		return []core.Permission{core.PermGraphRun, core.PermGraphEdit, core.PermSecretRead}
-	case "operator":
-		return []core.Permission{core.PermGraphRun, core.PermSecretRead}
-	case "viewer":
-		return []core.Permission{core.PermSecretRead}
-	default:
-		return nil
+	if cat, ok := core.TeamRoleByName(role); ok {
+		return cat.Permissions
 	}
+	return nil
 }
