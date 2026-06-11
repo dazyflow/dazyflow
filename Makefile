@@ -63,9 +63,16 @@ pg: ## Start (and wait for) just the bundled Postgres on 127.0.0.1:5432 — `mak
 pg-down: ## Stop the bundled dev Postgres (data persists in the pgdata volume)
 	$(COMPOSE) stop postgres
 
-dev: pg ## Run hzd locally against the bundled Postgres (make pg). Sources .env when present, else a minimal dev set pointed at localhost:5432.
+# .env is shared with the Compose stack, where the DSN host is the
+# `postgres` service name. That hostname only resolves inside the Compose
+# network, so for the native run we rewrite it to localhost (the bundled
+# Postgres publishes 127.0.0.1:5432 exactly for this). The containerized
+# hzd is stopped first — both want :8080. `make restart` brings it back.
+dev: pg ## Run hzd locally against the bundled Postgres (make pg). Sources .env when present (DSN host rewritten to localhost), else a minimal dev set.
+	@$(COMPOSE) stop hzd >/dev/null 2>&1 || true
 	@if [ -f .env ]; then \
 		set -a; . ./.env; set +a; \
+		HAZYFLOW_POSTGRES_DSN=$$(printf '%s' "$$HAZYFLOW_POSTGRES_DSN" | sed 's/@postgres:/@localhost:/') \
 		HAZYFLOW_HTTP=:8080 go run ./cmd/hzd; \
 	else \
 		HAZYFLOW_HTTP=:8080 \
