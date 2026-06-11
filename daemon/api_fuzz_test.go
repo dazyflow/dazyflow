@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"testing"
 	"time"
@@ -534,6 +535,114 @@ func FuzzStripeEventsValidHMAC(f *testing.F) {
 		rw := httptest.NewRecorder()
 		ServeForTest(h.gw, rw, req)
 		assertNo5xx(t, "stripe valid-hmac", rw)
+	})
+}
+
+// ---------------------------------------------------------------------
+// Authenticated JSON-body endpoints
+//
+// These short-circuit to 501/403 when their subsystem is nil, so the
+// generic harness never reaches their decode path. Each fuzzer wires the
+// subsystem and a token with the right permission, then mutates the body
+// — exercising the decode + validation logic the route sweep only proves
+// safe at the surface level. Contract is the same: no panic, no 5xx.
+// ---------------------------------------------------------------------
+
+// platformBearer mints an API key carrying platform-admin (⊇ org-admin),
+// for the routes guarded by requirePlatformAdmin.
+func (h *fuzzHarness) platformBearer(f *testing.F) string {
+	f.Helper()
+	role := core.Role{Name: "platform", Permissions: []core.Permission{
+		core.PermPlatformAdmin, core.PermOrganizationAdmin,
+	}}
+	_, tok, err := auth.IssueAPIKey(h.ks, context.Background(), "k-platform", "t", "ws", "root", []core.Role{role}, nil)
+	if err != nil {
+		f.Fatalf("issue platform key: %v", err)
+	}
+	return tok
+}
+
+// FuzzCreateInvitationBody drives POST /api/v1/admin/invitations — the
+// email + roles decode, validSignupEmail, and capRolesToCaller path —
+// with the org-admin fuzz token and a live in-memory invitation store.
+func FuzzCreateInvitationBody(f *testing.F) {
+	h := newFuzzHarness(f)
+	inv, err := auth.OpenJSONInvitationStore("")
+	if err != nil {
+		f.Fatalf("invitation store: %v", err)
+	}
+	h.gw.Invitations = inv
+	f.Add([]byte(`{"email":"new@example.com","workspace":"main"}`))
+	f.Add([]byte(`{"email":"a@b.com","roles":[{"name":"admin"}]}`))
+	f.Add([]byte(`{"email":""}`))
+	f.Add([]byte(`{"email":"not-an-email","roles":[{"name":"  "}]}`))
+	f.Add([]byte(`{"roles":[{"name":"editor"},{"name":"editor"}],"workspace":"../../etc"}`))
+	f.Add([]byte(`{}`))
+	f.Add([]byte(`null`))
+	f.Add([]byte(`not-json`))
+	f.Fuzz(func(t *testing.T, body []byte) {
+		req := httptest.NewRequest("POST", "/api/v1/admin/invitations", bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+h.token) // org-admin
+		req.Header.Set("Content-Type", "application/json")
+		rw := httptest.NewRecorder()
+		ServeForTest(h.gw, rw, req)
+		assertNo5xx(t, "create invitation", rw)
+	})
+}
+
+// FuzzUpsertOAuthProviderBody drives PUT /api/v1/admin/oauth-providers/{name}
+// — platform-admin only — with a live OAuth registry + encrypted secret
+// store, so the client_id/client_secret decode and provider validation
+// run against attacker-shaped bodies.
+func FuzzUpsertOAuthProviderBody(f *testing.F) {
+	h := newFuzzHarness(f)
+	es, err := NewEncryptedSecrets(make([]byte, 32), NewMemSecretsStore())
+	if err != nil {
+		f.Fatalf("encrypted secrets: %v", err)
+	}
+	h.gw.EncryptedSecrets = es
+	h.gw.OAuth = NewOAuthRegistry("https://example.test", es)
+	tok := h.platformBearer(f)
+	f.Add([]byte(`{"client_id":"abc","client_secret":"shh"}`), "google")
+	f.Add([]byte(`{"client_id":"","client_secret":""}`), "google")
+	f.Add([]byte(`{}`), "github")
+	f.Add([]byte(`null`), "slack")
+	f.Add([]byte(`{"client_id":123}`), "google")
+	f.Add([]byte(`not-json`), "unknown-provider")
+	f.Fuzz(func(t *testing.T, body []byte, provider string) {
+		// Escape the fuzzed segment so it's a valid single path component
+		// (httptest.NewRequest parses the request line and rejects raw
+		// spaces); the router still PathValue-decodes it back, so provider
+		// handling is exercised.
+		req := httptest.NewRequest("PUT", "/api/v1/admin/oauth-providers/"+url.PathEscape(provider), bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+tok)
+		req.Header.Set("Content-Type", "application/json")
+		rw := httptest.NewRecorder()
+		ServeForTest(h.gw, rw, req)
+		assertNo5xx(t, "upsert oauth provider", rw)
+	})
+}
+
+// FuzzPutOrgAuthConfigBody drives PUT /api/v1/admin/org/auth-config — the
+// org SSO (Google) config decode — against a tiny in-memory OrgAuthStore
+// (the real one is Postgres-only). Exercises the "blank secret keeps the
+// existing one" GetOrgAuth fallback too.
+func FuzzPutOrgAuthConfigBody(f *testing.F) {
+	h := newFuzzHarness(f)
+	h.gw.OrgAuth = newMemOrgAuth()
+	f.Add([]byte(`{"google_client_id":"id","google_client_secret":"sec","google_workspace_domain":"x.com"}`))
+	f.Add([]byte(`{"google_client_id":"id"}`)) // blank secret → fallback path
+	f.Add([]byte(`{}`))
+	f.Add([]byte(`null`))
+	f.Add([]byte(`{"google_client_secret":123}`))
+	f.Add([]byte(`not-json`))
+	f.Fuzz(func(t *testing.T, body []byte) {
+		req := httptest.NewRequest("PUT", "/api/v1/admin/org/auth-config", bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+h.token) // org-admin
+		req.Header.Set("Content-Type", "application/json")
+		rw := httptest.NewRecorder()
+		ServeForTest(h.gw, rw, req)
+		assertNo5xx(t, "put org auth config", rw)
 	})
 }
 

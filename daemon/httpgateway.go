@@ -1434,6 +1434,11 @@ func adminError(rw http.ResponseWriter, err error) {
 		writeJSONError(rw, http.StatusNotImplemented, msg)
 	case strings.Contains(msg, "is required"):
 		writeJSONError(rw, http.StatusBadRequest, msg)
+	case errors.Is(err, auth.ErrInvalidCredential):
+		// A malformed / unparseable key id is bad client input, not a
+		// server fault — e.g. DELETE /admin/api-keys/{id} with a junk id.
+		// Map it to 400 instead of letting it fall through to 500.
+		writeJSONError(rw, http.StatusBadRequest, msg)
 	default:
 		writeJSONError(rw, http.StatusInternalServerError, msg)
 	}
