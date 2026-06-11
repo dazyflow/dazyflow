@@ -182,6 +182,148 @@ func TestStripeEvents_PaymentDispatchesToSubscribedGraphs(t *testing.T) {
 	t.Fatal("no graph-record materialized within 2s")
 }
 
+func TestStripeEvents_PaymentFailedDispatches(t *testing.T) {
+	h := newStripeHarness(t)
+	g := core.Graph{
+		ID: "decline-alert", Tenant: "t", Workspace: "ws",
+		Nodes: []core.Node{{ID: "trig", Module: "stripe_on_payment_failed"}},
+	}
+	if _, err := h.ws.Save(g, "test"); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	event := map[string]any{
+		"id":   "evt_f1",
+		"type": "payment_intent.payment_failed",
+		"data": map[string]any{
+			"object": map[string]any{
+				"id":            "pi_fail",
+				"amount":        2500,
+				"currency":      "eur",
+				"receipt_email": "buyer@example.com",
+				"last_payment_error": map[string]any{
+					"message": "Your card was declined.",
+				},
+			},
+		},
+	}
+	body, _ := json.Marshal(event)
+	rw := h.post(t, "/api/v1/events/stripe/t", body)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("code=%d body=%s", rw.Code, rw.Body.String())
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		runs, err := h.store.ListGraphRuns(t.Context(), core.ListGraphRunsOpts{
+			Tenant: "t", Workspace: "ws", GraphID: "decline-alert",
+		})
+		if err == nil && len(runs) > 0 {
+			node, _ := h.store.Get(t.Context(), NodeJobID(runs[0].ID, "trig"))
+			if node.Status != core.JobStatusSucceeded {
+				t.Fatalf("status=%q", node.Status)
+			}
+			if got, _ := node.Result.Output["failure_message"].Inline.(string); got != "Your card was declined." {
+				t.Errorf("failure_message = %q", got)
+			}
+			// A failed intent has amount_received=0 — amount falls back
+			// to the requested amount.
+			if got, _ := node.Result.Output["amount_display"].Inline.(string); got != "25.00 EUR" {
+				t.Errorf("amount_display = %q", got)
+			}
+			if got, _ := node.Result.Output["payment_id"].Inline.(string); got != "pi_fail" {
+				t.Errorf("payment_id = %q", got)
+			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("no graph-record materialized within 2s")
+}
+
+func TestStripeEvents_SubscriptionCanceledDispatches(t *testing.T) {
+	h := newStripeHarness(t)
+	g := core.Graph{
+		ID: "churn-alert", Tenant: "t", Workspace: "ws",
+		Nodes: []core.Node{{ID: "trig", Module: "stripe_on_subscription_canceled"}},
+	}
+	if _, err := h.ws.Save(g, "test"); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	event := map[string]any{
+		"id":   "evt_s1",
+		"type": "customer.subscription.deleted",
+		"data": map[string]any{
+			"object": map[string]any{
+				"id":       "sub_9",
+				"customer": "cus_9",
+				"ended_at": 1767225600,
+				"items": map[string]any{
+					"data": []any{
+						map[string]any{"price": map[string]any{"id": "price_9", "nickname": "Pro monthly"}},
+					},
+				},
+			},
+		},
+	}
+	body, _ := json.Marshal(event)
+	rw := h.post(t, "/api/v1/events/stripe/t", body)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("code=%d body=%s", rw.Code, rw.Body.String())
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		runs, err := h.store.ListGraphRuns(t.Context(), core.ListGraphRunsOpts{
+			Tenant: "t", Workspace: "ws", GraphID: "churn-alert",
+		})
+		if err == nil && len(runs) > 0 {
+			node, _ := h.store.Get(t.Context(), NodeJobID(runs[0].ID, "trig"))
+			if node.Status != core.JobStatusSucceeded {
+				t.Fatalf("status=%q", node.Status)
+			}
+			if got, _ := node.Result.Output["subscription_id"].Inline.(string); got != "sub_9" {
+				t.Errorf("subscription_id = %q", got)
+			}
+			if got, _ := node.Result.Output["customer"].Inline.(string); got != "cus_9" {
+				t.Errorf("customer = %q", got)
+			}
+			if got, _ := node.Result.Output["plan"].Inline.(string); got != "Pro monthly" {
+				t.Errorf("plan = %q", got)
+			}
+			if got, _ := node.Result.Output["ended_at"].Inline.(string); got != "2026-01-01T00:00:00Z" {
+				t.Errorf("ended_at = %q", got)
+			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("no graph-record materialized within 2s")
+}
+
+func TestStripeOnPaymentFailed_StandaloneRunErrors(t *testing.T) {
+	trans, ok := engine.Default.Get("stripe_on_payment_failed")
+	if !ok {
+		t.Fatal("stripe_on_payment_failed not registered")
+	}
+	res, _ := trans.Execute(t.Context(), core.Job{ID: "j"}, nil)
+	if res.Status != core.StatusError || res.Error.Code != "no_trigger_data" {
+		t.Errorf("standalone should error with no_trigger_data, got %+v", res)
+	}
+}
+
+func TestStripeOnSubscriptionCanceled_StandaloneRunErrors(t *testing.T) {
+	trans, ok := engine.Default.Get("stripe_on_subscription_canceled")
+	if !ok {
+		t.Fatal("stripe_on_subscription_canceled not registered")
+	}
+	res, _ := trans.Execute(t.Context(), core.Job{ID: "j"}, nil)
+	if res.Status != core.StatusError || res.Error.Code != "no_trigger_data" {
+		t.Errorf("standalone should error with no_trigger_data, got %+v", res)
+	}
+}
+
 func TestStripeEvents_UnknownEventAcked(t *testing.T) {
 	h := newStripeHarness(t)
 	body := []byte(`{"id":"evt_2","type":"customer.created","data":{"object":{}}}`)

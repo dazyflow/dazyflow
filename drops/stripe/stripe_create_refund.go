@@ -20,7 +20,7 @@ func init() {
 			Label:       "Stripe",
 			Subtitle:    "Create refund",
 			Summary:     "Refund a Stripe payment, fully or partially — pairs naturally with an approval step upstream.",
-			Description: "Refund a payment by its payment_intent id (pi_…). Leave Amount empty for a full refund, or set it in the smallest currency unit (cents/öre) for a partial one. Wire the id in from upstream — e.g. a support form or a Slack approval — and put an Approval step before this one for the classic 'approve in Slack → refund' flow. Retries reuse the same Idempotency-Key, so a flaky run can't refund twice.",
+			Description: "Refund a payment by its payment_intent id (pi_…). Leave Amount empty for a full refund, or set it in the smallest currency unit (cents/öre) for a partial one — the id and the amount can both be wired in from upstream, e.g. a support form's fields. Put an Approval step before this one for the classic 'approve in Slack → refund' flow. Retries reuse the same Idempotency-Key, so a flaky run can't refund twice.",
 			Integration: "Stripe",
 			Category:    "network",
 			Icon:        "credit-card",
@@ -39,6 +39,7 @@ func init() {
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
 				{Port: "payment_intent", Label: "Payment intent", Required: true, MIME: []string{"text/plain"}},
+				{Port: "amount", Label: "Amount", MIME: []string{"text/plain", "application/json"}},
 			},
 			Outputs: []core.Port{
 				{Port: "refund_id", Label: "Refund ID", MIME: []string{"text/plain"}},
@@ -49,7 +50,7 @@ func init() {
 				"properties":{
 					"api_key":{"type":"string","title":"API key","default":"${secret.STRIPE_API_KEY}","x_advanced":true,"description":"Stripe secret key. The default reads the STRIPE_API_KEY secret."},
 					"payment_intent":{"type":"string","title":"Payment intent","description":"The pi_… id to refund. Overridden by the 'Payment intent' input."},
-					"amount":{"type":"integer","title":"Amount","minimum":1,"description":"Partial-refund amount in the smallest currency unit (500 = 5.00). Empty = refund everything."},
+					"amount":{"type":"integer","title":"Amount","minimum":1,"description":"Partial-refund amount in the smallest currency unit (500 = 5.00). Empty = refund everything. Overridden by the 'Amount' input when connected."},
 					"reason":{"type":"string","title":"Reason","enum":["","duplicate","fraudulent","requested_by_customer"],"enumNames":["(none)","Duplicate","Fraudulent","Requested by customer"],"description":"Stripe's refund-reason label, shown in the dashboard."},
 					"base_url":{"type":"string","description":"Override the API host (testing)."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
@@ -72,9 +73,17 @@ func executeCreateRefund(ctx context.Context, job core.Job, _ chan<- core.Progre
 		return params.Err(job, "bad_param", "'payment_intent' is required — set it or wire the 'Payment intent' input"), nil
 	}
 
+	amount, ok := numberInputOr(job, "amount", params.IntDefault(job.Params, "amount", 0))
+	if !ok {
+		return params.Err(job, "bad_input", "'Amount' input must be a whole number (smallest currency unit, e.g. 500 = 5.00)"), nil
+	}
+	if amount < 0 {
+		return params.Err(job, "bad_input", "'Amount' cannot be negative"), nil
+	}
+
 	form := url.Values{}
 	form.Set("payment_intent", pi)
-	if amount := params.IntDefault(job.Params, "amount", 0); amount > 0 {
+	if amount > 0 {
 		form.Set("amount", strconv.Itoa(amount))
 	}
 	if reason := params.StringDefault(job.Params, "reason", ""); reason != "" {

@@ -1,9 +1,12 @@
-// Package stripe hosts the native Stripe connectors (stripe_create_customer,
-// stripe_create_payment_link, stripe_create_refund, stripe_list_events,
-// stripe_search_customers). Auth is an API key — there's no Stripe OAuth
-// app — resolved from the `api_key` param, which defaults to
-// ${secret.STRIPE_API_KEY} so a fresh node works as soon as that secret
-// exists (built-in store or a BYO manager via ${vault./aws./gcp.…}).
+// Package stripe hosts the native Stripe connectors: customers (create,
+// search), payments (payment link, refund, send invoice), subscriptions
+// (list, cancel), webhook triggers (on payment / payment failed /
+// subscription canceled, fed by the daemon's Stripe events handler) and
+// the raw event feed (list events) for polling everything else.
+// Auth is an API key — there's no Stripe OAuth app — resolved from the
+// `api_key` param, which defaults to ${secret.STRIPE_API_KEY} so a fresh
+// node works as soon as that secret exists (built-in store or a BYO
+// manager via ${vault./aws./gcp.…}).
 //
 // "Fire on new payment" has a real trigger (stripe_on_payment, fed by the
 // daemon's Stripe events webhook). Other event reactions ("failed invoice",
@@ -17,7 +20,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -71,6 +76,15 @@ func resolveAPIKey(job core.Job) (string, error) {
 // natively. Returns status + body; the caller maps non-2xx via
 // extractStripeError.
 func stripeDo(ctx context.Context, job core.Job, method, url string, form string) (int, []byte, error) {
+	return stripeDoIdem(ctx, job, method, url, form, job.IdempotencyKey())
+}
+
+// stripeDoIdem is stripeDo with an explicit Idempotency-Key — for drops
+// that make SEVERAL calls per execution (send invoice). Each step gets a
+// distinct key derived from the job's (e.g. key+":finalize"), so a retry
+// after a partial failure replays completed steps as Stripe-side no-ops
+// instead of duplicating them.
+func stripeDoIdem(ctx context.Context, job core.Job, method, url, form, idemKey string) (int, []byte, error) {
 	timeoutMS := params.IntDefault(job.Params, "timeout_ms", 15000)
 	if timeoutMS <= 0 {
 		timeoutMS = 15000
@@ -95,7 +109,7 @@ func stripeDo(ctx context.Context, job core.Job, method, url string, form string
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
 	if method == http.MethodPost {
-		req.Header.Set("Idempotency-Key", job.IdempotencyKey())
+		req.Header.Set("Idempotency-Key", idemKey)
 	}
 	// base_url is a tenant-supplied param, so guard the dial: the SSRF
 	// client blocks loopback/private/link-local targets and the egress
@@ -163,6 +177,43 @@ func textInputOr(job core.Job, port, fallback string) (val string, ok bool) {
 		return fallback, true
 	}
 	return "", false
+}
+
+// numberInputOr returns the whole number wired into input port `port` (a
+// JSON number or numeric text), or `fallback` when the port is unwired or
+// empty. ok is false when the port carries anything else — including a
+// fractional number, which is a wiring mistake (quantities and minor-unit
+// amounts are integers), not something to silently truncate.
+func numberInputOr(job core.Job, port string, fallback int) (int, bool) {
+	in, present := job.Input[port]
+	if !present || in.Inline == nil {
+		return fallback, true
+	}
+	fromText := func(s string) (int, bool) {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			return fallback, true
+		}
+		n, err := strconv.Atoi(s)
+		if err != nil {
+			return 0, false
+		}
+		return n, true
+	}
+	switch v := in.Inline.(type) {
+	case float64:
+		if v != math.Trunc(v) {
+			return 0, false
+		}
+		return int(v), true
+	case int:
+		return v, true
+	case string:
+		return fromText(v)
+	case []byte:
+		return fromText(string(v))
+	}
+	return 0, false
 }
 
 // stripeFailure maps a transport error or a non-2xx Stripe response to

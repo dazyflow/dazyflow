@@ -13,7 +13,11 @@ import (
 	"git.sr.ht/~klahr/hazyflow/core"
 )
 
-const stripeOnPaymentModuleID = "stripe_on_payment"
+const (
+	stripeOnPaymentModuleID              = "stripe_on_payment"
+	stripeOnPaymentFailedModuleID        = "stripe_on_payment_failed"
+	stripeOnSubscriptionCanceledModuleID = "stripe_on_subscription_canceled"
+)
 
 // stripeTriggerSecretName is the tenant secret holding the webhook
 // endpoint's signing secret (whsec_…). Organization scope (bare name),
@@ -45,7 +49,9 @@ const maxStripeTriggerBodyBytes = 1 * 1024 * 1024
 //
 // Event types handled (per the body's `type` field):
 //
-//   - payment_intent.succeeded → fans out to stripe_on_payment nodes
+//   - payment_intent.succeeded      → stripe_on_payment nodes
+//   - payment_intent.payment_failed → stripe_on_payment_failed nodes
+//   - customer.subscription.deleted → stripe_on_subscription_canceled nodes
 //
 // Unknown events ack with 200 so Stripe stops retrying — graphs that
 // subscribed get nothing, which is the correct outcome.
@@ -120,6 +126,10 @@ func (h *StripeEventsHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request)
 	switch ev.Type {
 	case "payment_intent.succeeded":
 		h.dispatchPayment(tenant, ev, body, rw)
+	case "payment_intent.payment_failed":
+		h.dispatchPaymentFailed(tenant, ev, body, rw)
+	case "customer.subscription.deleted":
+		h.dispatchSubscriptionCanceled(tenant, ev, body, rw)
 	default:
 		// Unsubscribed event types — ack so Stripe doesn't retry,
 		// but nothing to dispatch.
@@ -128,14 +138,16 @@ func (h *StripeEventsHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request)
 	}
 }
 
-// stripeTriggerEvent is the decoded envelope of a Stripe event. We
-// extract the named ports up front; the raw event also goes through to
-// the `event` output for graphs that need fields we didn't pull out.
+// stripeTriggerEvent is the decoded envelope of a Stripe event. The
+// object stays raw here — each dispatcher decodes the shape its event
+// type carries (PaymentIntent, Subscription, …). The named ports are
+// extracted up front; the raw event also goes through to the `event`
+// output for graphs that need fields we didn't pull out.
 type stripeTriggerEvent struct {
 	ID   string `json:"id"`
 	Type string `json:"type"`
 	Data struct {
-		Object stripePaymentIntent `json:"object"`
+		Object json.RawMessage `json:"object"`
 	} `json:"data"`
 }
 
@@ -143,45 +155,113 @@ type stripePaymentIntent struct {
 	ID string `json:"id"`
 	// AmountReceived is what was actually captured; Amount is what was
 	// requested. They differ on partial captures, so prefer received.
-	Amount         int64  `json:"amount"`
-	AmountReceived int64  `json:"amount_received"`
-	Currency       string `json:"currency"`
-	ReceiptEmail   string `json:"receipt_email"`
-	Description    string `json:"description"`
+	Amount           int64  `json:"amount"`
+	AmountReceived   int64  `json:"amount_received"`
+	Currency         string `json:"currency"`
+	ReceiptEmail     string `json:"receipt_email"`
+	Description      string `json:"description"`
+	LastPaymentError *struct {
+		Message string `json:"message"`
+	} `json:"last_payment_error"`
 }
 
-func (h *StripeEventsHandler) dispatchPayment(tenant string, ev stripeTriggerEvent, body []byte, rw http.ResponseWriter) {
-	pi := ev.Data.Object
+// paymentPorts builds the output set the two payment triggers share.
+// The `payment` port carries the FULL PaymentIntent object (untyped),
+// not the typed subset; `event` carries the whole webhook envelope.
+func paymentPorts(ev stripeTriggerEvent, body []byte) (stripePaymentIntent, map[string]core.Ref) {
+	var pi stripePaymentIntent
+	_ = json.Unmarshal(ev.Data.Object, &pi)
 	amount := pi.AmountReceived
 	if amount == 0 {
 		amount = pi.Amount
 	}
-	var raw any
+	var payment, raw any
+	_ = json.Unmarshal(ev.Data.Object, &payment)
 	_ = json.Unmarshal(body, &raw)
-	// The `payment` port carries the FULL PaymentIntent object, not the
-	// typed subset above — re-decode it untyped from the envelope.
-	var envelope struct {
-		Data struct {
-			Object any `json:"object"`
-		} `json:"data"`
+	return pi, map[string]core.Ref{
+		"amount_display": {MIME: "text/plain", Inline: formatStripeAmount(amount, pi.Currency)},
+		"amount":         {MIME: "text/plain", Inline: fmt.Sprintf("%d", amount)},
+		"currency":       {MIME: "text/plain", Inline: strings.ToUpper(pi.Currency)},
+		"customer_email": {MIME: "text/plain", Inline: pi.ReceiptEmail},
+		"description":    {MIME: "text/plain", Inline: pi.Description},
+		"payment_id":     {MIME: "text/plain", Inline: pi.ID},
+		"payment":        {MIME: "application/json", Inline: payment},
+		"event":          {MIME: "application/json", Inline: raw},
 	}
-	_ = json.Unmarshal(body, &envelope)
-	payment := envelope.Data.Object
+}
+
+func (h *StripeEventsHandler) dispatchPayment(tenant string, ev stripeTriggerEvent, body []byte, rw http.ResponseWriter) {
+	_, ports := paymentPorts(ev, body)
+	seed := core.Result{Status: core.StatusOK, Output: ports}
+	go h.fanoutSeed(context.Background(), tenant, stripeOnPaymentModuleID, seed)
+
+	rw.WriteHeader(http.StatusOK)
+	_, _ = rw.Write([]byte("ok"))
+}
+
+func (h *StripeEventsHandler) dispatchPaymentFailed(tenant string, ev stripeTriggerEvent, body []byte, rw http.ResponseWriter) {
+	pi, ports := paymentPorts(ev, body)
+	msg := ""
+	if pi.LastPaymentError != nil {
+		msg = pi.LastPaymentError.Message
+	}
+	ports["failure_message"] = core.Ref{MIME: "text/plain", Inline: msg}
+	seed := core.Result{Status: core.StatusOK, Output: ports}
+	go h.fanoutSeed(context.Background(), tenant, stripeOnPaymentFailedModuleID, seed)
+
+	rw.WriteHeader(http.StatusOK)
+	_, _ = rw.Write([]byte("ok"))
+}
+
+func (h *StripeEventsHandler) dispatchSubscriptionCanceled(tenant string, ev stripeTriggerEvent, body []byte, rw http.ResponseWriter) {
+	var sub struct {
+		ID         string `json:"id"`
+		Customer   string `json:"customer"`
+		EndedAt    int64  `json:"ended_at"`
+		CanceledAt int64  `json:"canceled_at"`
+		Items      struct {
+			Data []struct {
+				Price struct {
+					ID       string `json:"id"`
+					Nickname string `json:"nickname"`
+				} `json:"price"`
+			} `json:"data"`
+		} `json:"items"`
+	}
+	_ = json.Unmarshal(ev.Data.Object, &sub)
+	// The friendliest plan label available without an extra API call:
+	// the price nickname when set, the price id otherwise.
+	plan := ""
+	if len(sub.Items.Data) > 0 {
+		plan = sub.Items.Data[0].Price.Nickname
+		if plan == "" {
+			plan = sub.Items.Data[0].Price.ID
+		}
+	}
+	endedUnix := sub.EndedAt
+	if endedUnix == 0 {
+		endedUnix = sub.CanceledAt
+	}
+	endedAt := ""
+	if endedUnix != 0 {
+		endedAt = time.Unix(endedUnix, 0).UTC().Format(time.RFC3339)
+	}
+	var subscription, raw any
+	_ = json.Unmarshal(ev.Data.Object, &subscription)
+	_ = json.Unmarshal(body, &raw)
 
 	seed := core.Result{
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
-			"amount_display": {MIME: "text/plain", Inline: formatStripeAmount(amount, pi.Currency)},
-			"amount":         {MIME: "text/plain", Inline: fmt.Sprintf("%d", amount)},
-			"currency":       {MIME: "text/plain", Inline: strings.ToUpper(pi.Currency)},
-			"customer_email": {MIME: "text/plain", Inline: pi.ReceiptEmail},
-			"description":    {MIME: "text/plain", Inline: pi.Description},
-			"payment_id":     {MIME: "text/plain", Inline: pi.ID},
-			"payment":        {MIME: "application/json", Inline: payment},
-			"event":          {MIME: "application/json", Inline: raw},
+			"subscription_id": {MIME: "text/plain", Inline: sub.ID},
+			"customer":        {MIME: "text/plain", Inline: sub.Customer},
+			"plan":            {MIME: "text/plain", Inline: plan},
+			"ended_at":        {MIME: "text/plain", Inline: endedAt},
+			"subscription":    {MIME: "application/json", Inline: subscription},
+			"event":           {MIME: "application/json", Inline: raw},
 		},
 	}
-	go h.fanoutSeed(context.Background(), tenant, stripeOnPaymentModuleID, seed)
+	go h.fanoutSeed(context.Background(), tenant, stripeOnSubscriptionCanceledModuleID, seed)
 
 	rw.WriteHeader(http.StatusOK)
 	_, _ = rw.Write([]byte("ok"))

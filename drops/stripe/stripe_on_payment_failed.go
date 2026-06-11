@@ -1,0 +1,69 @@
+package stripe
+
+import (
+	"context"
+	"encoding/json"
+
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/engine"
+)
+
+func init() {
+	engine.Register(engine.NativeDrop{
+		Manifest: core.Manifest{
+			ID:          "stripe_on_payment_failed",
+			Version:     "1.0",
+			Label:       "Stripe",
+			Subtitle:    "On payment failed",
+			Summary:     "Trigger that fires when a Stripe payment attempt fails, with the decline reason ready for an alert.",
+			Description: "Starts the flow when a payment attempt fails in your Stripe account (a payment_intent.payment_failed webhook event). Setup is the same endpoint as the payment trigger: point a Stripe webhook at https://<your-hazyflow-host>/api/v1/events/stripe/<tenant>, subscribe it to payment_intent.payment_failed, and save the endpoint's signing secret (whsec_…) as a secret named STRIPE_WEBHOOK_SECRET. The 'Failure reason' output carries Stripe's decline message ('Your card was declined.') — wire it with the amount and payer email into a notify step.",
+			Integration: "Stripe",
+			Category:    "trigger",
+			Icon:        "credit-card",
+			BrandLogo:   "/brands/stripe.svg",
+			Color:       "#635BFF",
+			Provider:    "internal",
+			Tags:        []string{"stripe", "trigger", "payment", "failed", "decline", "webhook", "events", "billing"},
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Default — fire on every failed payment attempt",
+					Params: json.RawMessage(`{}`),
+					Notes:  "Wire 'Failure reason', 'Amount (display)' and 'Customer email' into a notify step for a payment-trouble alert.",
+				},
+			},
+			RequiresConnections: []core.ConnectionRequirement{
+				{Kind: "secret", Name: "STRIPE_WEBHOOK_SECRET", Note: "Signing secret (whsec_…) of the Stripe webhook endpoint that points at /api/v1/events/stripe/<tenant>."},
+			},
+			ExecutionModel: core.ExecutionTrigger,
+			ProcessModel:   core.ProcessLongLived,
+			Outputs: []core.Port{
+				{Port: "failure_message", Label: "Failure reason", MIME: []string{"text/plain"}},
+				{Port: "amount_display", Label: "Amount (display)", MIME: []string{"text/plain"}},
+				{Port: "amount", Label: "Amount (minor units)", MIME: []string{"text/plain"}},
+				{Port: "currency", Label: "Currency", MIME: []string{"text/plain"}},
+				{Port: "customer_email", Label: "Customer email", MIME: []string{"text/plain"}},
+				{Port: "description", Label: "Description", MIME: []string{"text/plain"}},
+				{Port: "payment_id", Label: "Payment id", MIME: []string{"text/plain"}},
+				{Port: "payment", Label: "Payment intent", MIME: []string{"application/json"}},
+				{Port: "event", Label: "Raw event", MIME: []string{"application/json"}},
+			},
+			ParamsSchema: json.RawMessage(`{"type":"object"}`),
+			Idempotent:   false,
+		},
+		Execute: executeStripeOnPaymentFailed,
+	})
+}
+
+// executeStripeOnPaymentFailed is the standalone-execution path — only
+// called when a graph is run manually. Mirrors stripe_on_payment.
+func executeStripeOnPaymentFailed(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
+	return core.Result{
+		JobID:  job.ID,
+		Status: core.StatusError,
+		Error: &core.JobError{
+			Code:    "no_trigger_data",
+			Message: "This trigger only fires when a real payment_intent.payment_failed webhook arrives. To test it, use a Stripe test card that declines (e.g. 4000 0000 0000 0002); running the graph manually leaves the trigger with no event to feed downstream.",
+			Details: "stripe_on_payment_failed is pre-completed by the daemon's Stripe events handler when a failed-payment event arrives. Standalone execution has no event payload to emit.",
+		},
+	}, nil
+}
