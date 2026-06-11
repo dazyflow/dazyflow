@@ -20,6 +20,7 @@ import type {
   JobRecord,
   JobStatus,
   PendingApproval,
+  RunLogEntry,
   RunSummary,
   RunView,
   NodeRunView,
@@ -726,6 +727,24 @@ export const api = {
       "GET",
       `/me/runs/${encodeURIComponent(runID)}/nodes`,
     ).then((r) => ({ nodes: (r.nodes ?? []).map((n) => nodeViewToRecord(runID, n)) })),
+  // listRunLogs returns a page of the run's persisted log. `after` is a
+  // seq cursor (entries with seq > after), so callers append-poll a live
+  // run without refetching history. 501 = the daemon has no log store.
+  listRunLogs: (
+    token: string,
+    runID: string,
+    opts: { after?: number; limit?: number } = {},
+  ): Promise<{ logs: RunLogEntry[] }> => {
+    const qs = new URLSearchParams();
+    if (opts.after) qs.set("after", String(opts.after));
+    if (opts.limit) qs.set("limit", String(opts.limit));
+    const q = qs.toString();
+    return request<{ logs: RunLogEntry[] }>(
+      token,
+      "GET",
+      `/me/runs/${encodeURIComponent(runID)}/logs` + (q ? "?" + q : ""),
+    );
+  },
   // SSE: EventSource doesn't support headers, so we proxy through fetch
   // with ReadableStream parsing instead. Caller cancels via AbortController.
   streamJob(

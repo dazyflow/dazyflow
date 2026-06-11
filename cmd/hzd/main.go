@@ -255,8 +255,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("postgres event bus: %v", err)
 	}
-	var bus daemon.Bus = pgBus
-	log.Print("event bus: postgres LISTEN/NOTIFY (multi-node)")
+	// RecordingBus persists every published run event (progress lines,
+	// node transitions, terminal) as run logs — `hzctl job logs` and the
+	// logs endpoints read them back. Decorating at the bus keeps one
+	// wire point for every publisher; each replica records its own
+	// events exactly once.
+	var bus daemon.Bus = daemon.NewRecordingBus(pgBus, stores.runLogs)
+	log.Print("event bus: postgres LISTEN/NOTIFY (multi-node), run-log recording on")
 	sandbox, err := daemon.NewFSSandbox(sandboxBase)
 	if err != nil {
 		log.Fatalf("sandbox base %s: %v", sandboxBase, err)
@@ -430,6 +435,7 @@ func main() {
 		FreeRunsPerMonth:    freeRunsPerMonth,
 		FreePollingDisabled: freePollingDisabled,
 		Mailer:              mailer,
+		RunLogs:             stores.runLogs,
 	}
 
 	// Approval-link flow: when HAZYFLOW_APPROVAL_HMAC_SECRET is set,
@@ -481,6 +487,7 @@ func main() {
 		pgPool:      pgPool,
 		metrics:     appMetrics,
 		usage:       bufferedUsage,
+		runLogs:     stores.runLogs,
 		workerCount: workerCount,
 	}, &bgWg)
 
@@ -657,6 +664,7 @@ type coreStores struct {
 	jobs     core.JobStore
 	usage    daemon.UsageStore
 	plans    daemon.PlanStore
+	runLogs  daemon.RunLogStore
 }
 
 // openCoreStores connects the shared pgxpool and opens the key / user /
@@ -723,6 +731,10 @@ func openCoreStores(ctx context.Context, dsn string, maxConns, minConns int, ses
 	// change via the Stripe webhook (which writes through this cache);
 	// other replicas converge within the TTL.
 	cachedPlans := daemon.NewCachedPlanStore(pgPlans, 0)
+	pgRunLogs, err := daemon.NewPgRunLogStore(ctx, pool)
+	if err != nil {
+		log.Fatalf("postgres run-log store: %v", err)
+	}
 	if sessionCacheTTL > 0 {
 		log.Printf("session lookup cache: ttl=%s", sessionCacheTTL)
 	}
@@ -736,6 +748,7 @@ func openCoreStores(ctx context.Context, dsn string, maxConns, minConns int, ses
 		jobs:     pgJobs,
 		usage:    pgUsage,
 		plans:    cachedPlans,
+		runLogs:  pgRunLogs,
 	}
 }
 
@@ -748,6 +761,7 @@ type backgroundDeps struct {
 	pgPool      *pgxpool.Pool
 	metrics     *daemon.Metrics
 	usage       daemon.UsageStore
+	runLogs     daemon.RunLogStore
 	workerCount int
 }
 
@@ -828,17 +842,21 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 		}
 	}()
 
-	startRetentionSweeps(ctx, d.jobs, d.pgPool, bgWg)
+	startRetentionSweeps(ctx, d.jobs, d.runLogs, d.pgPool, bgWg)
 }
 
-// startRetentionSweeps prunes the jobs table and audit_events on an hourly
-// interval (after a startup pass), bounded by HAZYFLOW_JOB_RETENTION /
-// HAZYFLOW_AUDIT_RETENTION. A retention <= 0 disables that sweep; when both
-// are off no goroutine is started.
-func startRetentionSweeps(ctx context.Context, jobs core.JobStore, pgPool *pgxpool.Pool, bgWg *sync.WaitGroup) {
+// startRetentionSweeps prunes the jobs table, audit_events, and run_logs
+// on an hourly interval (after a startup pass), bounded by
+// HAZYFLOW_JOB_RETENTION / HAZYFLOW_AUDIT_RETENTION /
+// HAZYFLOW_RUN_LOG_RETENTION. A retention <= 0 disables that sweep; when
+// all are off no goroutine is started.
+func startRetentionSweeps(ctx context.Context, jobs core.JobStore, runLogs daemon.RunLogStore, pgPool *pgxpool.Pool, bgWg *sync.WaitGroup) {
 	jobRetention := envDuration("HAZYFLOW_JOB_RETENTION", 30*24*time.Hour)
 	auditRetention := envDuration("HAZYFLOW_AUDIT_RETENTION", 90*24*time.Hour)
-	if jobRetention <= 0 && auditRetention <= 0 {
+	// Run logs default to the JOB retention: a run's log should outlive
+	// neither the run record it narrates nor the operator's expectations.
+	runLogRetention := envDuration("HAZYFLOW_RUN_LOG_RETENTION", jobRetention)
+	if jobRetention <= 0 && auditRetention <= 0 && runLogRetention <= 0 {
 		return
 	}
 	retentionAudit, err := daemon.NewPgAuditLog(ctx, pgPool)
@@ -847,6 +865,9 @@ func startRetentionSweeps(ctx context.Context, jobs core.JobStore, pgPool *pgxpo
 	}
 	jobPruner, _ := jobs.(interface {
 		PruneTerminal(context.Context, time.Duration, int) (int, error)
+	})
+	logPruner, _ := runLogs.(interface {
+		Prune(context.Context, time.Duration, int) (int, error)
 	})
 	bgWg.Add(1)
 	go func() {
@@ -870,6 +891,15 @@ func startRetentionSweeps(ctx context.Context, jobs core.JobStore, pgPool *pgxpo
 					log.Printf("retention: pruned %d audit row(s)", n)
 				}
 			}
+			if runLogRetention > 0 && logPruner != nil {
+				if n, err := logPruner.Prune(ctx, runLogRetention, 5000); err != nil {
+					if ctx.Err() == nil {
+						log.Printf("retention: prune run logs: %v", err)
+					}
+				} else if n > 0 {
+					log.Printf("retention: pruned %d run-log row(s)", n)
+				}
+			}
 		}
 		sweep() // startup pass
 		t := time.NewTicker(time.Hour)
@@ -883,7 +913,7 @@ func startRetentionSweeps(ctx context.Context, jobs core.JobStore, pgPool *pgxpo
 			}
 		}
 	}()
-	log.Printf("retention sweeps: jobs=%s audit=%s (0 = disabled)", jobRetention, auditRetention)
+	log.Printf("retention sweeps: jobs=%s audit=%s run-logs=%s (0 = disabled)", jobRetention, auditRetention, runLogRetention)
 }
 
 // gatewayDeps groups the stores, services, and operator settings the HTTP

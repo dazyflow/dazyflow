@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -172,8 +173,68 @@ func jobCmd() *cobra.Command {
 	j.AddCommand(jobStatusCmd())
 	j.AddCommand(jobListCmd())
 	j.AddCommand(jobCancelCmd())
-	j.AddCommand(notImplemented("logs", "stream job logs (needs structured-log surface in JobStore)"))
+	j.AddCommand(jobLogsCmd())
 	return j
+}
+
+func jobLogsCmd() *cobra.Command {
+	var follow bool
+	var afterSeq int64
+	cmd := &cobra.Command{
+		Use:   "logs JOB_ID",
+		Short: "Print a run's log (progress lines, node transitions, outcome).",
+		Long: "Replays the run's persisted log. With --follow the stream stays " +
+			"open and tails live events until the run terminates — `hzctl job " +
+			"logs --follow` right after `graph run` watches the whole run. " +
+			"Requires membership of the run's tenant.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			conn, err := daemonConn(serverFlag)
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+			ctx, err := authCtx(cmd.Context())
+			if err != nil {
+				return err
+			}
+			stream, err := controlpb.NewJobServiceClient(conn).StreamJobLogs(ctx, &controlpb.StreamJobLogsRequest{
+				JobId:    args[0],
+				Follow:   follow,
+				AfterSeq: afterSeq,
+			})
+			if err != nil {
+				return err
+			}
+			for {
+				e, err := stream.Recv()
+				if err == io.EOF {
+					return nil
+				}
+				if err != nil {
+					return err
+				}
+				ts := e.Ts
+				if t, perr := time.Parse(time.RFC3339Nano, e.Ts); perr == nil {
+					ts = t.Local().Format("15:04:05.000")
+				}
+				node := e.NodeId
+				if node == "" {
+					node = "run"
+				}
+				// Labelled output lines show their stream (stdout/stderr)
+				// instead of the generic "progress".
+				kind := e.Kind
+				if e.Stream != "" {
+					kind = e.Stream
+				}
+				fmt.Printf("%s  %-10s %-8s %s\n", ts, truncate(node, 10), kind, e.Message)
+			}
+		},
+	}
+	cmd.Flags().BoolVarP(&follow, "follow", "f", false, "keep streaming live events until the run terminates")
+	cmd.Flags().Int64Var(&afterSeq, "after", 0, "resume after this seq cursor (0 = from the beginning)")
+	return cmd
 }
 
 func jobCancelCmd() *cobra.Command {

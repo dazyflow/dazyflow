@@ -73,6 +73,29 @@ func (h *HTTPGateway) readFlowID(rw http.ResponseWriter, r *http.Request, p core
 
 // --- /me/flows --------------------------------------------------------
 
+// listRunLogsMe is GET /api/v1/me/runs/{run_id}/logs — a page of the
+// run's persisted log. ?after= resumes from a seq cursor, ?limit= caps
+// the page. The web run-detail page replays history with this; live
+// tailing stays on the SSE events stream.
+func (h *HTTPGateway) listRunLogsMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	runID := r.PathValue("run_id")
+	after, _ := strconv.ParseInt(r.URL.Query().Get("after"), 10, 64)
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	entries, err := h.svc.RunLogPage(r.Context(), p, runID, after, limit)
+	if err != nil {
+		if strings.Contains(err.Error(), "not enabled") {
+			writeAPIError(rw, http.StatusNotImplemented, "not_configured", err.Error())
+			return
+		}
+		writeAPIError(rw, http.StatusNotFound, "run_not_found", err.Error())
+		return
+	}
+	if entries == nil {
+		entries = []RunLogEntry{}
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{"logs": entries})
+}
+
 func (h *HTTPGateway) listFlowsMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	// /me/flows accepts ?tenant= and ?workspace=, falling back to the
 	// principal's binding. Web clients send them explicitly today; LLM

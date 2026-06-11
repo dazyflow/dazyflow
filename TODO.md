@@ -835,8 +835,44 @@ platform can demonstrate but not actually power a real workflow.
   follow-up: today an HTTP `sleep(60s)` node keeps running until it
   finishes naturally; nothing downstream advances, but the node itself
   isn't interrupted.
-- [ ] **`job logs` streaming.** Stub today. Need a structured log surface
-  on JobStore (or sidecar log store) + streaming gRPC.
+- [x] **`job logs` streaming.** Shipped 2026-06-11. Persistence:
+  `daemon.RunLogStore` (Mem + Pg `run_logs` sidecar table, BIGSERIAL
+  seq cursor) written by `RecordingBus` — a Bus decorator hzd wraps
+  around PgBus, so every published run event (progress lines incl.
+  data.line stream output, node status transitions, terminal) is
+  recorded exactly once on the producing replica; best-effort (the
+  live stream never stalls on the store), pure percent ticks skipped,
+  5000-entries-per-run cap with a truncation marker, 8KB line cap.
+  Read paths: `JobService.StreamJobLogs` (gRPC server-stream —
+  historical replay paged by seq, `follow` subscribes BEFORE replay
+  then catches up from the cursor on every bus event so there's no
+  replay/tail gap, ends on terminal; GetJob-style tenant authz),
+  `hzctl job logs JOB_ID [-f|--follow] [--after SEQ]` replacing the
+  stub, and `GET /api/v1/me/runs/{run_id}/logs?after=&limit=` for the
+  web run-detail page. Tests: store contract (mem + pg-gated),
+  RecordingBus event mapping + cap, gRPC replay/resume/follow/authz
+  via bufconn, HTTP paging/404/cross-tenant/501. Verified live:
+  `hzctl job logs` replayed a finished run and `--follow` tailed a
+  live one to its terminal line against a real daemon. Retention:
+  run_logs is swept by the hourly retention pass (2026-06-11) —
+  `HAZYFLOW_RUN_LOG_RETENTION`, defaulting to the job window so a
+  run's log never outlives its run record; batched deletes like the
+  jobs/audit pruners. Web: the run-detail page renders a Log section
+  below the node timeline (2026-06-11) — history loads via seq-cursor
+  paging, live runs append-poll every 2s with a final catch-up on the
+  live→done edge so the terminal line lands, tail-sticky scroll,
+  failure lines red / success terminal green; a daemon without a log
+  store answers 501 and the section hides. Verified live in Playwright
+  (shell drop streaming stdout: mid-run tail + final replay).
+  Stream labels (2026-06-11): the data.stream channel drops attach to
+  output lines (shell/git's emitLogProgress convention) persists on
+  the entry (run_logs.stream, JSON `stream`, proto field 6) and shows
+  in the hzctl kind column in place of the generic "progress"; the
+  web log view tints stderr lines amber. Note: the shell drop runs
+  commands under a PTY (so build tools line-buffer) which merges
+  stderr into stdout by design — its lines all label "stdout"; git
+  drops label "git". Verified live: hzctl replay showed
+  status/progress/stdout/terminal labels against a real daemon.
 - [ ] **`workspace create/list`.** Stub today. Need a `TenantService`
   RPC, a workspaces table (probably in Postgres) and identity-tied
   ownership.

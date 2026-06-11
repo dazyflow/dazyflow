@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -218,6 +219,86 @@ func (h *grpcHandlers) CancelJob(ctx context.Context, req *controlpb.CancelJobRe
 		return nil, toStatus(err)
 	}
 	return &controlpb.CancelJobResponse{}, nil
+}
+
+// StreamJobLogs replays the run's persisted log and, with follow=true,
+// tails live bus events until the run terminates. The subscribe-then-
+// replay order plus seq-cursor dedupe ensures no gap between the
+// historical page and the live tail: anything the RecordingBus persists
+// while we replay is re-read on the catch-up pass.
+func (h *grpcHandlers) StreamJobLogs(req *controlpb.StreamJobLogsRequest, stream controlpb.JobService_StreamJobLogsServer) error {
+	ctx := stream.Context()
+	p, _ := PrincipalFromContext(ctx)
+	// Authorize + existence + terminal check in one read.
+	rec, err := h.svc.GetJob(ctx, p, req.JobId)
+	if err != nil {
+		return toStatus(err)
+	}
+	if h.svc.RunLogs == nil {
+		return status.Error(codes.Unimplemented, "run logs are not enabled on this deployment")
+	}
+
+	// Follow mode subscribes BEFORE replaying so no event falls between
+	// the historical read and the live tail. We don't forward bus events
+	// directly (they have no seq); they just signal "the store grew".
+	var (
+		events <-chan BusEvent
+		cancel func()
+	)
+	if req.Follow && !core.IsTerminalStatus(rec.Status) {
+		events, cancel = h.svc.bus().Subscribe(req.JobId)
+		defer cancel()
+	}
+
+	after := req.AfterSeq
+	sendPage := func() error {
+		for {
+			page, err := h.svc.RunLogs.ListRunLogs(ctx, req.JobId, after, defaultRunLogPage)
+			if err != nil {
+				return status.Error(codes.Internal, err.Error())
+			}
+			for _, e := range page {
+				if err := stream.Send(&controlpb.JobLogEntry{
+					Seq:     e.Seq,
+					Ts:      e.TS.Format(time.RFC3339Nano),
+					NodeId:  e.NodeID,
+					Kind:    e.Kind,
+					Message: e.Message,
+					Stream:  e.Stream,
+				}); err != nil {
+					return err
+				}
+				after = e.Seq
+			}
+			if len(page) < defaultRunLogPage {
+				return nil
+			}
+		}
+	}
+	if err := sendPage(); err != nil {
+		return err
+	}
+	if events == nil {
+		return nil
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case ev, ok := <-events:
+			if !ok {
+				return sendPage()
+			}
+			// Any event may mean new persisted entries — catch up from
+			// the cursor (cheap when nothing new landed).
+			if err := sendPage(); err != nil {
+				return err
+			}
+			if ev.Terminal != nil {
+				return nil
+			}
+		}
+	}
 }
 
 func (h *grpcHandlers) ListJobsForGraph(ctx context.Context, req *controlpb.ListJobsForGraphRequest) (*controlpb.ListJobsResponse, error) {

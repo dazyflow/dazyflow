@@ -937,7 +937,10 @@
     "inputs": "Inputs",
     "output": "Output",
     "noResult": "No result recorded — step may not have produced output, or is still in flight.",
-    "emptyValue": "(empty)"
+    "emptyValue": "(empty)",
+    "logs": "Log",
+    "logWaiting": "Waiting for output…",
+    "logTruncated": "Log truncated — this run produced more lines than the per-run limit. Later output was not recorded."
   },
   "nodeCard": {
     "statusTooltip": "status: {{status}}",

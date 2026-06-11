@@ -406,6 +406,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/me/runs", h.requireAuth(h.listRunsMe))
 	mux.HandleFunc("GET /api/v1/me/runs/{run_id}", h.requireAuth(h.getRunMe))
 	mux.HandleFunc("GET /api/v1/me/runs/{run_id}/nodes", h.requireAuth(h.listRunNodesMe))
+	mux.HandleFunc("GET /api/v1/me/runs/{run_id}/logs", h.requireAuth(h.listRunLogsMe))
 	mux.HandleFunc("GET /api/v1/me/runs/{run_id}/nodes/{node_id}", h.requireAuth(h.getRunNodeMe))
 	mux.HandleFunc("GET /api/v1/me/runs/{run_id}/events", h.requireAuth(h.runEventsMe))
 	mux.HandleFunc("POST /api/v1/me/runs/{run_id}/cancel",

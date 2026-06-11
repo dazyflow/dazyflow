@@ -479,6 +479,20 @@ export type JobResult = {
   error?: JobError;
 };
 
+// RunLogEntry is one line of a run's persisted log (what the run SAID
+// while executing: progress lines, node status transitions, terminal
+// outcome). Mirrors daemon.RunLogEntry; seq is the resume cursor.
+export type RunLogEntry = {
+  seq: number;
+  run_id: string;
+  ts: string;
+  node_id?: string;
+  kind: "progress" | "status" | "terminal" | "truncated";
+  // stdout | stderr on labelled progress lines (shell/git output).
+  stream?: string;
+  message: string;
+};
+
 export type JobRecord = {
   ID: string;
   Kind: string;

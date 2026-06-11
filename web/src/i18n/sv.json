@@ -933,7 +933,10 @@
     "inputs": "Indata",
     "output": "Output",
     "noResult": "Inget resultat sparat — steget kanske inte producerade någon output, eller pågår fortfarande.",
-    "emptyValue": "(tom)"
+    "emptyValue": "(tom)",
+    "logs": "Logg",
+    "logWaiting": "Väntar på output…",
+    "logTruncated": "Loggen trunkerades — körningen producerade fler rader än gränsen per körning. Senare output sparades inte."
   },
   "nodeCard": {
     "statusTooltip": "status: {{status}}",

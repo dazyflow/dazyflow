@@ -2595,6 +2595,58 @@ button.warning:hover:not(:disabled) {
   overflow: auto;
 }
 
+/* Run log: the persisted line-by-line record below the node timeline
+   (web twin of `hzctl job logs`). Monospace, scrolls, tail-sticky. */
+.run-log {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  max-height: 420px;
+  overflow-y: auto;
+  margin-top: var(--space-2);
+}
+.run-log-line {
+  display: grid;
+  grid-template-columns: 90px minmax(60px, 110px) 1fr;
+  gap: 12px;
+  padding: 1px 0;
+}
+.run-log-ts {
+  color: var(--faint);
+  white-space: nowrap;
+}
+.run-log-node {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.run-log-msg {
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--ink);
+}
+.run-log-line.status .run-log-msg {
+  color: var(--muted);
+  font-style: italic;
+}
+.run-log-line.terminal .run-log-msg {
+  font-weight: 600;
+}
+.run-log-line.failed .run-log-msg {
+  color: var(--danger);
+}
+.run-log-line.succeeded .run-log-msg {
+  color: var(--success);
+}
+.run-log-line.stderr .run-log-msg {
+  color: var(--status-warning);
+}
+.run-log-line.truncated .run-log-msg {
+  color: var(--faint);
+  font-style: italic;
+}
+
 /* Generic secondary button for the "From template" CTA on the
    flow list — pairs visually with the primary "New flow" button. */
 /* Secondary buttons match the default gray button so secondary actions

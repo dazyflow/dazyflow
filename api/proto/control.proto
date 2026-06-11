@@ -178,6 +178,12 @@ service JobService {
     // node transition to JobStatus.Cancelled. Idempotent — cancelling a
     // run that's already terminal returns NotFound or ConflictError.
     rpc CancelJob       (CancelJobRequest)        returns (CancelJobResponse);
+    // StreamJobLogs replays a run's persisted log (progress lines, node
+    // status transitions, the terminal outcome) and, with follow=true,
+    // keeps streaming live events until the run terminates. after_seq
+    // resumes from a cursor (0 = from the start). The caller must belong
+    // to the run's tenant.
+    rpc StreamJobLogs   (StreamJobLogsRequest)    returns (stream JobLogEntry);
 }
 
 message GetJobRequest           { string job_id = 1; }
@@ -188,6 +194,19 @@ message CancelJobRequest  {
     string reason = 2; // free-text, recorded on the run; empty defaults to "cancelled by user"
 }
 message CancelJobResponse {}
+message StreamJobLogsRequest {
+    string job_id    = 1; // the graph-run ID
+    bool   follow    = 2; // keep streaming live events until terminal
+    int64  after_seq = 3; // resume cursor; 0 = from the beginning
+}
+message JobLogEntry {
+    int64  seq     = 1; // resume cursor for the next request
+    string ts      = 2; // RFC3339
+    string node_id = 3; // empty on run-level lines (terminal, truncated)
+    string kind    = 4; // progress | status | terminal | truncated
+    string message = 5;
+    string stream  = 6; // stdout | stderr on labelled progress lines, else empty
+}
 
 // ========================================================= DropService
 

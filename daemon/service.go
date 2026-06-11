@@ -299,6 +299,11 @@ type Service struct {
 	// (invitation links, failure-notification emails). Nil = those
 	// channels are off; everything degrades to its link/webhook form.
 	Mailer *Mailer
+
+	// RunLogs, when set, is the persisted run-log store (written by the
+	// RecordingBus, read by `hzctl job logs` / the logs endpoints). Nil
+	// = logs aren't persisted on this deployment.
+	RunLogs RunLogStore
 }
 
 func (s *Service) bus() Bus {
@@ -843,6 +848,20 @@ func (s *Service) GetJob(ctx context.Context, p core.Principal, jobID string) (c
 		return core.JobRecord{}, err
 	}
 	return rec, nil
+}
+
+// RunLogPage returns a page of a run's persisted log, authorized the
+// same way GetJob is: the run record's tenant must be the caller's.
+// The Get also distinguishes "no such run" (NotFound) from "run exists,
+// log empty" for the callers.
+func (s *Service) RunLogPage(ctx context.Context, p core.Principal, runID string, afterSeq int64, limit int) ([]RunLogEntry, error) {
+	if s.RunLogs == nil {
+		return nil, fmt.Errorf("run logs are not enabled on this deployment")
+	}
+	if _, err := s.GetJob(ctx, p, runID); err != nil {
+		return nil, err
+	}
+	return s.RunLogs.ListRunLogs(ctx, runID, afterSeq, limit)
 }
 
 // ListJobsForGraph returns every job for a graph that the principal can see.

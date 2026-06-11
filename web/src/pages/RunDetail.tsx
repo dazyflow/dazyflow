@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, AlertCircle, ChevronDown, ChevronRight, RotateCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -6,7 +6,7 @@ import i18n from "../i18n";
 import { api, APIError } from "../api";
 import { useAuth } from "../auth";
 import { explainRunError } from "../lib/explainRunError";
-import type { JobRecord, JobStatus, Ref } from "../types";
+import type { JobRecord, JobStatus, Ref, RunLogEntry } from "../types";
 
 // RunDetail is the post-failure "what happened" page — and the
 // post-success "yes, here are the values" page. T2 of the PMF
@@ -65,13 +65,14 @@ export function RunDetail() {
     };
   }, [token, runID]);
 
+  const live =
+    !!run &&
+    (isLiveStatus(run.Status) || nodes.some((n) => isLiveStatus(n.Status)));
+
   // Poll while anything's still live so the timeline updates without
   // a manual reload. Mirrors RunList's polling pattern.
   useEffect(() => {
-    if (!token || !runID || !run) return;
-    const live = run.Status === "queued" || run.Status === "running" || run.Status === "awaiting" ||
-      nodes.some((n) => n.Status === "queued" || n.Status === "running" || n.Status === "awaiting");
-    if (!live) return;
+    if (!token || !runID || !live) return;
     const t = window.setInterval(() => {
       Promise.all([api.getJob(token, runID), api.listRunNodes(token, runID)])
         .then(([r, ns]) => {
@@ -81,7 +82,7 @@ export function RunDetail() {
         .catch(() => {});
     }, 2000);
     return () => window.clearInterval(t);
-  }, [token, runID, run, nodes]);
+  }, [token, runID, live]);
 
   const toggle = (nid: string) =>
     setExpanded((prev) => ({ ...prev, [nid]: !prev[nid] }));
@@ -331,8 +332,163 @@ export function RunDetail() {
           );
         })}
       </div>
+
+      {token && <RunLogs token={token} runID={run.ID} live={live} />}
     </div>
   );
+}
+
+function isLiveStatus(s: JobStatus): boolean {
+  return s === "queued" || s === "running" || s === "awaiting";
+}
+
+// RunLogs renders the run's persisted log (progress lines, node
+// transitions, terminal outcome) below the timeline — the web twin of
+// `hzctl job logs`. History loads once via seq-cursor paging; while the
+// run is live it append-polls from the cursor, so each tick fetches
+// only new lines. A daemon without a log store answers 501 and the
+// section hides entirely (old daemons, or logging disabled).
+function RunLogs({
+  token,
+  runID,
+  live,
+}: {
+  token: string;
+  runID: string;
+  live: boolean;
+}) {
+  const { t } = useTranslation();
+  const [entries, setEntries] = useState<RunLogEntry[]>([]);
+  const [available, setAvailable] = useState(true);
+  const [loaded, setLoaded] = useState(false);
+  const cursor = useRef(0);
+  const scroller = useRef<HTMLDivElement | null>(null);
+  // Stick to the bottom while tailing, unless the user scrolled up.
+  const stick = useRef(true);
+
+  // Page from the cursor until a short page, appending. The append
+  // drops anything at-or-below the last rendered seq, so overlapping
+  // calls (poll racing the initial load, StrictMode's double-invoked
+  // effects) can't duplicate lines.
+  const fetchMore = async () => {
+    for (;;) {
+      const page = await api.listRunLogs(token, runID, {
+        after: cursor.current,
+        limit: 1000,
+      });
+      const logs = page.logs ?? [];
+      if (logs.length > 0) {
+        cursor.current = logs[logs.length - 1].seq;
+        setEntries((prev) => {
+          const last = prev.length > 0 ? prev[prev.length - 1].seq : 0;
+          const fresh = logs.filter((l) => l.seq > last);
+          return fresh.length > 0 ? [...prev, ...fresh] : prev;
+        });
+      }
+      if (logs.length < 1000) return;
+    }
+  };
+
+  useEffect(() => {
+    cursor.current = 0;
+    setEntries([]);
+    setLoaded(false);
+    setAvailable(true);
+    let cancelled = false;
+    fetchMore()
+      .catch((e) => {
+        if (!cancelled && e instanceof APIError && e.status === 501) {
+          setAvailable(false);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, runID]);
+
+  // Tail while live; on the live→done edge do one last catch-up so the
+  // terminal line (written as the status flips) isn't missed.
+  const wasLive = useRef(false);
+  useEffect(() => {
+    if (!available) return;
+    if (!live) {
+      if (wasLive.current) fetchMore().catch(() => {});
+      wasLive.current = false;
+      return;
+    }
+    wasLive.current = true;
+    const id = window.setInterval(() => {
+      fetchMore().catch(() => {});
+    }, 2000);
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live, available, token, runID]);
+
+  useEffect(() => {
+    const el = scroller.current;
+    if (el && stick.current) el.scrollTop = el.scrollHeight;
+  }, [entries]);
+
+  if (!available || (loaded && entries.length === 0 && !live)) {
+    // No store, or an old/quiet run with nothing recorded: no empty
+    // chrome — the timeline above already tells the story.
+    return null;
+  }
+  return (
+    <>
+      <h2 style={{ marginTop: "var(--space-4)" }}>{t("runDetail.logs")}</h2>
+      <div
+        className="run-log card"
+        ref={scroller}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          stick.current =
+            el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+        }}
+      >
+        {entries.map((e) => (
+          <div key={e.seq} className={"run-log-line " + logLineClass(e)}>
+            <span className="run-log-ts">{formatLogTime(e.ts)}</span>
+            <span className="run-log-node">{e.node_id || "run"}</span>
+            <span className="run-log-msg">
+              {e.kind === "truncated"
+                ? t("runDetail.logTruncated")
+                : e.message}
+            </span>
+          </div>
+        ))}
+        {entries.length === 0 && (
+          <div style={{ color: "var(--faint)" }}>{t("runDetail.logWaiting")}</div>
+        )}
+      </div>
+    </>
+  );
+}
+
+// logLineClass colors a line by what it says, not just its kind:
+// node/run failures read red, the success terminal reads green,
+// stderr output reads amber, plain progress stays plain.
+function logLineClass(e: RunLogEntry): string {
+  if (e.kind === "truncated") return "truncated";
+  if (e.kind === "status" || e.kind === "terminal") {
+    if (e.message.startsWith("failed")) return e.kind + " failed";
+    if (e.message.startsWith("succeeded")) return e.kind + " succeeded";
+    return e.kind;
+  }
+  if (e.stream === "stderr") return e.kind + " stderr";
+  return e.kind;
+}
+
+function formatLogTime(iso: string): string {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return iso;
+  const d = new Date(t);
+  const pad = (n: number, w = 2) => String(n).padStart(w, "0");
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
 }
 
 function SummaryRow({ label, value }: { label: string; value: React.ReactNode }) {
