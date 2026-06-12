@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"strings"
+	"sync"
 
 	"git.sr.ht/~klahr/hazyflow/core"
 )
@@ -22,9 +23,15 @@ const redactionMarker = "[redacted:secret]"
 const minRedactableSecretLen = 6
 
 // secretSet collects the plaintext values of the secrets resolved for a
-// single job. Populated synchronously during resolveTemplatesCollecting
-// (one goroutine, before Execute), so no locking is needed.
+// single job. Most entries are added synchronously during
+// resolveTemplatesCollecting (one goroutine, before Execute), but
+// connector OAuth tokens are registered from inside Execute via the
+// ctx sink (see RegisterRuntimeSecret) — possibly from a drop's own
+// goroutine — so add/read are guarded by mu. Reads (redactString) run
+// after Execute returns, but the mutex keeps the race detector honest
+// for any drop that resolves tokens concurrently.
 type secretSet struct {
+	mu     sync.Mutex
 	values map[string]struct{}
 }
 
@@ -37,10 +44,43 @@ func (s *secretSet) add(v string) {
 	if s == nil || len(v) < minRedactableSecretLen {
 		return
 	}
+	s.mu.Lock()
 	s.values[v] = struct{}{}
+	s.mu.Unlock()
 }
 
-func (s *secretSet) empty() bool { return s == nil || len(s.values) == 0 }
+func (s *secretSet) empty() bool {
+	if s == nil {
+		return true
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.values) == 0
+}
+
+// secretSinkCtxKey carries the per-job *secretSet through ctx into
+// Execute so credentials resolved at run time can be registered for
+// redaction. Unexported key type avoids collisions.
+type secretSinkCtxKey struct{}
+
+// withSecretSink exposes set on ctx so credentials resolved *during*
+// Execute — notably connector OAuth tokens fetched via a SetTokenLookup
+// hook, which never pass through the secret-provider path that populated
+// set — can still be scrubbed from the node's persisted Result.
+func withSecretSink(ctx context.Context, set *secretSet) context.Context {
+	return context.WithValue(ctx, secretSinkCtxKey{}, set)
+}
+
+// RegisterRuntimeSecret records a credential resolved inside a drop's
+// Execute (e.g. an OAuth access token returned by a SetTokenLookup hook)
+// so redactResult scrubs it from the node's persisted Result, exactly
+// like a ${secret.}-resolved value. No-op when called outside a node
+// execution (no sink on ctx) or for values too short to redact safely.
+func RegisterRuntimeSecret(ctx context.Context, value string) {
+	if set, ok := ctx.Value(secretSinkCtxKey{}).(*secretSet); ok {
+		set.add(value)
+	}
+}
 
 // recordingSecretSubstituter wraps secretSubstituter so every plaintext
 // it resolves is recorded in set. Upstream-ref substitution is handled
@@ -84,6 +124,8 @@ func redactString(s string, set *secretSet) string {
 	if s == "" {
 		return s
 	}
+	set.mu.Lock()
+	defer set.mu.Unlock()
 	for secret := range set.values {
 		if strings.Contains(s, secret) {
 			s = strings.ReplaceAll(s, secret, redactionMarker)

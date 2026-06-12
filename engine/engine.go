@@ -259,6 +259,10 @@ func (e *Engine) RunNode(
 	// (OAuth GetOAuthToken) can resolve the per-tenant account.
 	ctx = core.WithTenant(ctx, job.Tenant)
 	ctx = WithResolver(ctx, e.Resolver)
+	// Those same connector lookups resolve OAuth tokens *inside* Execute,
+	// outside the secret-provider path that populated `secrets`. Expose a
+	// sink so they register the resolved token for redaction too.
+	ctx = withSecretSink(ctx, secrets)
 
 	result, execErr := transport.Execute(ctx, job, progress)
 	if result.JobID == "" {
@@ -343,6 +347,10 @@ func (e *Engine) runNode(
 	// (OAuth GetOAuthToken) can resolve the per-tenant account.
 	ctx = core.WithTenant(ctx, job.Tenant)
 	ctx = WithResolver(ctx, e.Resolver)
+	// Those same connector lookups resolve OAuth tokens *inside* Execute,
+	// outside the secret-provider path that populated `secrets`. Expose a
+	// sink so they register the resolved token for redaction too.
+	ctx = withSecretSink(ctx, secrets)
 
 	nodeProgress := make(chan core.Progress)
 	forwarderDone := make(chan struct{})

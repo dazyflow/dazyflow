@@ -1444,6 +1444,11 @@ func wireConnectorTokenHooks(reg *daemon.OAuthRegistry) {
 			if err != nil {
 				return "", err
 			}
+			// The OAuth token bypasses the ${secret.} resolver that feeds
+			// redaction, so register it on the per-job sink: if a connector
+			// echoes it into a Result (a reflected API error, a debug field),
+			// the engine scrubs it before the run-detail API serves it.
+			engine.RegisterRuntimeSecret(ctx, tok.AccessToken)
 			return tok.AccessToken, nil
 		}
 	}
