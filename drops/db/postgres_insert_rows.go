@@ -74,9 +74,9 @@ func init() {
 // expect.
 //
 // Credentials never reach this code as plaintext from the graph JSON:
-// the engine resolves ${env.VAR} / ${secret.NAME} placeholders in
+// the engine resolves ${secret.NAME} placeholders in
 // params (see engine/secrets.go) before Execute is invoked, so a DSN
-// like "postgres://app:${env.DB_PROD_PWD}@db/orders" arrives with the
+// like "postgres://app:${secret.DB_PROD_PWD}@db/orders" arrives with the
 // password already substituted. We hold the resolved DSN only for the
 // duration of the call.
 //

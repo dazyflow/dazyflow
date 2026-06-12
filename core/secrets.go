@@ -13,15 +13,15 @@ type ApprovalSigner interface {
 
 // SecretProvider resolves a single secret-reference scheme. The engine
 // keeps a registry keyed by Scheme; when it encounters a string like
-// "env://STRIPE_KEY" or "vault://prod/db-password" inside Job.Params or
+// "secret://STRIPE_KEY" or "vault://prod/db-password" inside Job.Params or
 // Job.Env it routes the path (everything after "scheme://") to the
 // matching provider.
 //
 // Provider implementations live outside core because they touch I/O or
-// vendor SDKs. See daemon/secrets.go for the EnvProvider and
-// BuiltinProvider that ship today.
+// vendor SDKs. See daemon/secrets.go for the encrypted secret store
+// (secret://) and BuiltinProvider that ship today.
 type SecretProvider interface {
-	// Scheme returns the URI scheme this provider handles, e.g. "env"
+	// Scheme returns the URI scheme this provider handles, e.g. "secret"
 	// or "vault". Must be lowercase and not contain "://".
 	Scheme() string
 
@@ -34,7 +34,7 @@ type SecretProvider interface {
 
 // tenantCtxKey carries the principal's tenant through to providers
 // that need it for scoping (the encrypted built-in store reads it to
-// pick the right per-tenant DEK). Global providers like env:// can
+// pick the right per-tenant DEK). Tenant-agnostic providers can
 // ignore the value entirely.
 type tenantCtxKey struct{}
 

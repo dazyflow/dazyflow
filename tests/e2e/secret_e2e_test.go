@@ -11,20 +11,18 @@ import (
 	"git.sr.ht/~klahr/hazyflow/auth"
 	"git.sr.ht/~klahr/hazyflow/core"
 	"git.sr.ht/~klahr/hazyflow/daemon"
+	_ "git.sr.ht/~klahr/hazyflow/drops"
 	"git.sr.ht/~klahr/hazyflow/engine"
 	"git.sr.ht/~klahr/hazyflow/engine/jobstore"
-	_ "git.sr.ht/~klahr/hazyflow/drops"
 	"git.sr.ht/~klahr/hazyflow/workspace"
 )
 
 // TestSecrets_E2E_AuthorizationHeader exercises the full chain:
-//   - graph stores secret reference (env://API_KEY) in params
+//   - graph stores secret reference (builtin://API_KEY) in params
 //   - hzd engine resolves it just before Execute
 //   - http_request sends the resolved value as the Authorization header
 //   - JobStore retains the unresolved reference, never the value
 func TestSecrets_E2E_AuthorizationHeader(t *testing.T) {
-	t.Setenv("API_KEY", "secret-token-12345")
-
 	// Backing server that captures the Authorization header.
 	var captured string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -48,11 +46,11 @@ func TestSecrets_E2E_AuthorizationHeader(t *testing.T) {
 
 	builtin := daemon.NewBuiltinProvider()
 	builtin.Set("backup-token", "from-builtin-store")
+	builtin.Set("API_KEY", "secret-token-12345")
 
 	eng := &engine.Engine{
 		Resolver: &engine.NodeResolver{Native: engine.Default},
 		Secrets: map[string]core.SecretProvider{
-			"env":     daemon.EnvProvider{},
 			"builtin": builtin,
 		},
 	}
@@ -77,7 +75,7 @@ func TestSecrets_E2E_AuthorizationHeader(t *testing.T) {
 			Params: map[string]any{
 				"url": srv.URL,
 				"headers": map[string]any{
-					"Authorization": "env://API_KEY", // unresolved reference
+					"Authorization": "builtin://API_KEY", // unresolved reference
 				},
 				"allow_private_networks": true,
 			},
@@ -100,13 +98,13 @@ func TestSecrets_E2E_AuthorizationHeader(t *testing.T) {
 	// The JobStore's graph-record must still contain the UNRESOLVED
 	// reference — the engine resolves only the in-memory Job, never
 	// the persisted graph payload. This guarantees the audit trail
-	// shows what the user wrote ("env://API_KEY"), not the cleartext.
+	// shows what the user wrote ("builtin://API_KEY"), not the cleartext.
 	graphRec, err := jobs.Get(t.Context(), runID)
 	if err != nil {
 		t.Fatalf("get graph-record: %v", err)
 	}
-	if !strings.Contains(string(graphRec.GraphPayload), "env://API_KEY") {
-		t.Errorf("graph payload should still contain env://API_KEY; got %s",
+	if !strings.Contains(string(graphRec.GraphPayload), "builtin://API_KEY") {
+		t.Errorf("graph payload should still contain builtin://API_KEY; got %s",
 			string(graphRec.GraphPayload))
 	}
 	if strings.Contains(string(graphRec.GraphPayload), "secret-token-12345") {
@@ -115,7 +113,7 @@ func TestSecrets_E2E_AuthorizationHeader(t *testing.T) {
 }
 
 func TestSecrets_E2E_MissingSecretFailsNodeCleanly(t *testing.T) {
-	// Don't set the env var — node should fail with a clear error, not
+	// Don't store the secret — node should fail with a clear error, not
 	// silently send an empty Authorization header.
 	ks := auth.NewMemKeyStore()
 	role := core.Role{Name: "editor", Permissions: []core.Permission{
@@ -130,7 +128,7 @@ func TestSecrets_E2E_MissingSecretFailsNodeCleanly(t *testing.T) {
 	eng := &engine.Engine{
 		Resolver: &engine.NodeResolver{Native: engine.Default},
 		Secrets: map[string]core.SecretProvider{
-			"env": daemon.EnvProvider{},
+			"builtin": daemon.NewBuiltinProvider(), // empty: the key is absent
 		},
 	}
 	svc := &daemon.Service{
@@ -153,7 +151,7 @@ func TestSecrets_E2E_MissingSecretFailsNodeCleanly(t *testing.T) {
 			ID: "call", Module: "http_request",
 			Params: map[string]any{
 				"url":     "http://example.com",
-				"headers": map[string]any{"Authorization": "env://DEFINITELY_NOT_SET_99"},
+				"headers": map[string]any{"Authorization": "builtin://DEFINITELY_NOT_SET_99"},
 			},
 		}},
 	}

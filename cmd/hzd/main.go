@@ -90,7 +90,6 @@ func main() {
 	pgMinConns := envInt("HAZYFLOW_PG_MIN_CONNS", 0)
 	webDist := envStr("HAZYFLOW_WEB_DIST", "")
 	landingDir := envStr("HAZYFLOW_LANDING_DIR", "")
-	isolateSharedSecrets := envBool("HAZYFLOW_ISOLATE_SHARED_SECRETS", false)
 	masterKeyB64 := envStr("HAZYFLOW_MASTER_KEY", "")
 	publicBaseURL := envStr("HAZYFLOW_PUBLIC_BASE_URL", "")
 	supportContact := envStr("HAZYFLOW_SUPPORT_CONTACT", "")
@@ -284,15 +283,9 @@ func main() {
 	if err := registerRemotes(remoteCatalog, remotes); err != nil {
 		log.Fatalf("HAZYFLOW_REMOTE_MODULES: %v", err)
 	}
-	// env:// is always registered; HAZYFLOW_ISOLATE_SHARED_SECRETS gates
-	// per-tenant prefix enforcement (`<tenant>.<key>`) for multi-tenant
-	// deploys. The secret:// encrypted store (per-tenant) is set up below.
+	// Secret schemes. The secret:// encrypted store (per-tenant, write-only
+	// over the API) is set up below in setupEncryptedSecrets.
 	secrets := map[string]core.SecretProvider{}
-	envProvider := daemon.EnvProvider{Namespaced: isolateSharedSecrets}
-	secrets[envProvider.Scheme()] = envProvider
-	if isolateSharedSecrets {
-		log.Print("env:// secret provider running in tenant-isolated mode — names must be <tenant>.<key>")
-	}
 	encryptedSecrets := setupEncryptedSecrets(ctx, masterKeyB64, secrets, pgPool)
 	// Stripe price picker: lists the tenant's active prices for the
 	// "stripe-price" param format. Stripe has no OAuth app — auth is the

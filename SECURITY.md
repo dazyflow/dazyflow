@@ -102,11 +102,10 @@ All these are env vars set via the same `.env` (see `.env.example`):
   HSTS is sent.
 - `HAZYFLOW_DEV_KEY` defaults off; never set it in production — it
   mints an insecure bearer token at every boot.
-- `HAZYFLOW_ISOLATE_SHARED_SECRETS=1` in multi-tenant deployments
-  forces `env://` secret lookups to be of the form `<tenant>.<key>`
-  matching the caller's tenant, so tenant A can't read tenant B's
-  operator-supplied env secrets. The auth rate limiter is fixed at
-  20/min per IP with a burst of 10 (defense against credential
+- Secrets live only in the per-tenant encrypted store and are
+  referenced from flows as `${secret.NAME}`; the daemon's process
+  environment is never reachable from a flow. The auth rate limiter
+  is fixed at 20/min per IP with a burst of 10 (defense against credential
   stuffing on the auth endpoints).
 - `HAZYFLOW_HTTP_EGRESS_ALLOW` pins the `http_request` /
   `webhook_send` drops to an allowlist; the IP-level SSRF guard

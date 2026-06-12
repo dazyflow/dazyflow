@@ -127,7 +127,7 @@ func resolveTemplates(ctx context.Context, providers map[string]core.SecretProvi
 // resolveTemplates walks job.Params and job.Env, replacing two kinds
 // of placeholder:
 //
-//	1. Secret refs: ${env.NAME} / ${secret.NAME} / env://NAME (legacy)
+//	1. Secret refs: ${secret.NAME} / secret://NAME
 //	   resolved against the registered SecretProviders.
 //	2. Upstream refs: ${upstream.nodeID.port.path…} resolved against
 //	   the prior-node results passed in by the engine.
@@ -158,7 +158,7 @@ func resolveTemplatesCollecting(ctx context.Context, providers map[string]core.S
 	rr := newResourceResolver(resources)
 	// Build the substituter chain once per job. The order matters:
 	// upstream first so a node ID that happens to share a name with
-	// a secret provider (e.g. a node called "env") doesn't get
+	// a secret provider (e.g. a node called "vault") doesn't get
 	// shadowed. The resource substituter handles only the inline form.
 	// The secret substituter is wrapped to record every plaintext it
 	// resolves into set.
@@ -265,13 +265,13 @@ func resolveSlice(ctx context.Context, providers map[string]core.SecretProvider,
 
 // resolveString resolves both placeholder forms:
 //
-//  1. Inline:        "Bearer ${env.STRIPE_KEY}"   →  "Bearer sk_live_xyz"
-//  2. Whole-string:  "env://STRIPE_KEY"           →  "sk_live_xyz"
+//  1. Inline:        "Bearer ${secret.STRIPE_KEY}"   →  "Bearer sk_live_xyz"
+//  2. Whole-string:  "secret://STRIPE_KEY"           →  "sk_live_xyz"
 //
 // The inline form runs first so we can compose with surrounding literal
 // text (the original motivation: `Authorization: Bearer <token>` headers
-// where the token alone is the secret). The whole-string form is kept for
-// backwards compatibility with existing graphs.
+// where the token alone is the secret). The whole-string form is the
+// terse alternative when the entire value is the secret.
 //
 // Unknown schemes (e.g. `${item....}` outside for_each, or a literal
 // URL like `http://...`) are left unchanged.
@@ -280,10 +280,10 @@ func resolveString(ctx context.Context, providers map[string]core.SecretProvider
 	if err != nil {
 		return "", err
 	}
-	// The whole-string `env://NAME` fallback is the legacy form,
-	// secret-only by design. Upstream refs don't get this treatment
-	// — they're inline-${...}-only because "upstream://node.field"
-	// reads like a URL and would be ambiguous.
+	// The whole-string `secret://NAME` form is secret-only by design.
+	// Upstream refs don't get this treatment — they're inline-${...}-only
+	// because "upstream://node.field" reads like a URL and would be
+	// ambiguous.
 	scheme, path, ok := splitSecretRef(resolved)
 	if !ok {
 		return resolved, nil

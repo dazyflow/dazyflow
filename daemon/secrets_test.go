@@ -12,34 +12,6 @@ import (
 	"git.sr.ht/~klahr/hazyflow/daemon"
 )
 
-func TestEnvProvider_ResolvesAndRejectsMissing(t *testing.T) {
-	t.Setenv("HZ_TEST_SECRET", "value-from-env")
-	p := daemon.EnvProvider{}
-	got, err := p.Get(t.Context(), "HZ_TEST_SECRET")
-	if err != nil {
-		t.Fatalf("Get: %v", err)
-	}
-	if got != "value-from-env" {
-		t.Errorf("got %q, want value-from-env", got)
-	}
-
-	if _, err := p.Get(t.Context(), "DEFINITELY_NOT_SET_12345"); err == nil {
-		t.Error("expected error for missing env var")
-	}
-
-	t.Setenv("HZ_TEST_EMPTY", "")
-	if _, err := p.Get(t.Context(), "HZ_TEST_EMPTY"); err == nil {
-		t.Error("expected error for empty env var")
-	}
-}
-
-func TestEnvProvider_Scheme(t *testing.T) {
-	p := daemon.EnvProvider{}
-	if s := p.Scheme(); s != "env" {
-		t.Errorf("scheme = %q", s)
-	}
-}
-
 func TestBuiltinProvider_FromFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "secrets.json")
@@ -91,65 +63,23 @@ func TestBuiltinProvider_Set(t *testing.T) {
 // tenant "globex" has the right to read, even if both names are
 // known to the operator.
 
-func TestEnvProvider_Namespaced_RequiresTenantPrefix(t *testing.T) {
-	t.Setenv("acme.token", "shared-but-acme-only")
-	p := daemon.EnvProvider{Namespaced: true}
+func TestBuiltinProvider_Namespaced_UnprefixedRejected(t *testing.T) {
+	p := daemon.NewBuiltinProvider()
+	p.Namespaced = true
+	p.Set("UNPREFIXED", "x")
 	ctx := core.WithTenant(t.Context(), "acme")
-
-	got, err := p.Get(ctx, "acme.token")
-	if err != nil {
-		t.Fatalf("Get with matching prefix: %v", err)
-	}
-	if got != "shared-but-acme-only" {
-		t.Errorf("got %q", got)
-	}
-}
-
-func TestEnvProvider_Namespaced_CrossTenantRejected(t *testing.T) {
-	t.Setenv("acme.token", "acme-secret")
-	p := daemon.EnvProvider{Namespaced: true}
-	// Caller is globex but tries to read acme's secret.
-	ctx := core.WithTenant(t.Context(), "globex")
-	_, err := p.Get(ctx, "acme.token")
-	if err == nil {
-		t.Fatal("cross-tenant read should be rejected")
-	}
-	if !strings.Contains(err.Error(), "does not match") {
-		t.Errorf("error should explain the tenant mismatch, got: %v", err)
-	}
-}
-
-func TestEnvProvider_Namespaced_UnprefixedRejected(t *testing.T) {
-	t.Setenv("UNPREFIXED", "x")
-	p := daemon.EnvProvider{Namespaced: true}
-	ctx := core.WithTenant(t.Context(), "acme")
-	_, err := p.Get(ctx, "UNPREFIXED")
-	if err == nil {
+	if _, err := p.Get(ctx, "UNPREFIXED"); err == nil {
 		t.Fatal("unprefixed read should be rejected in namespaced mode")
 	}
 }
 
-func TestEnvProvider_Namespaced_NoTenantRejected(t *testing.T) {
-	t.Setenv("acme.token", "x")
-	p := daemon.EnvProvider{Namespaced: true}
+func TestBuiltinProvider_Namespaced_NoTenantRejected(t *testing.T) {
+	p := daemon.NewBuiltinProvider()
+	p.Namespaced = true
+	p.Set("acme.token", "x")
 	// No tenant in context.
-	_, err := p.Get(context.Background(), "acme.token")
-	if err == nil {
+	if _, err := p.Get(context.Background(), "acme.token"); err == nil {
 		t.Fatal("missing-tenant read should be rejected")
-	}
-}
-
-func TestEnvProvider_NotNamespaced_PreservesBackcompat(t *testing.T) {
-	// Default mode (Namespaced=false) MUST keep working without a
-	// tenant in context — single-tenant deployments depend on this.
-	t.Setenv("GLOBAL_KEY", "v")
-	p := daemon.EnvProvider{}
-	got, err := p.Get(context.Background(), "GLOBAL_KEY")
-	if err != nil {
-		t.Fatalf("backcompat Get failed: %v", err)
-	}
-	if got != "v" {
-		t.Errorf("got %q", got)
 	}
 }
 

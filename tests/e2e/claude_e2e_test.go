@@ -11,9 +11,9 @@ import (
 	"git.sr.ht/~klahr/hazyflow/auth"
 	"git.sr.ht/~klahr/hazyflow/core"
 	"git.sr.ht/~klahr/hazyflow/daemon"
+	_ "git.sr.ht/~klahr/hazyflow/drops"
 	"git.sr.ht/~klahr/hazyflow/engine"
 	"git.sr.ht/~klahr/hazyflow/engine/jobstore"
-	_ "git.sr.ht/~klahr/hazyflow/drops"
 	"git.sr.ht/~klahr/hazyflow/workspace"
 )
 
@@ -24,9 +24,10 @@ import (
 //
 // The "Anthropic API" is mocked with httptest so the test runs without
 // network access. Secret injection ensures the api_key parameter is a
-// reference (env://) in the saved graph, not the cleartext.
+// reference (builtin://) in the saved graph, not the cleartext.
 func TestClaude_E2E_ClassifyAndRoute(t *testing.T) {
-	t.Setenv("ANTHROPIC_API_KEY", "sk-test-XYZ")
+	apiKeys := daemon.NewBuiltinProvider()
+	apiKeys.Set("ANTHROPIC_API_KEY", "sk-test-XYZ")
 
 	// Mock backend that returns a controlled "classification".
 	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -67,7 +68,7 @@ func TestClaude_E2E_ClassifyAndRoute(t *testing.T) {
 	eng := &engine.Engine{
 		Resolver: &engine.NodeResolver{Native: engine.Default},
 		Secrets: map[string]core.SecretProvider{
-			"env": daemon.EnvProvider{},
+			"builtin": apiKeys,
 		},
 	}
 	svc := &daemon.Service{
@@ -91,7 +92,7 @@ func TestClaude_E2E_ClassifyAndRoute(t *testing.T) {
 				ID:     "classify",
 				Module: "claude",
 				Params: map[string]any{
-					"api_key":    "env://ANTHROPIC_API_KEY",
+					"api_key":    "builtin://ANTHROPIC_API_KEY",
 					"base_url":   mock.URL,
 					"system":     "Classify the message. Reply with one word: urgent, normal, or low.",
 					"prompt":     "Server is down, customers complaining.",
@@ -139,8 +140,8 @@ func TestClaude_E2E_ClassifyAndRoute(t *testing.T) {
 
 	// Audit: graph JSON in the store retains the secret reference.
 	graphRec, _ := jobs.Get(t.Context(), runID)
-	if !contains(graphRec.GraphPayload, "env://ANTHROPIC_API_KEY") {
-		t.Error("graph payload should contain env:// reference, not cleartext API key")
+	if !contains(graphRec.GraphPayload, "builtin://ANTHROPIC_API_KEY") {
+		t.Error("graph payload should contain builtin:// reference, not cleartext API key")
 	}
 	if contains(graphRec.GraphPayload, "sk-test-XYZ") {
 		t.Error("graph payload leaked the resolved API key!")

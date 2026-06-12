@@ -229,11 +229,11 @@ func TestResolveTemplates_UpstreamMixedWithSecrets(t *testing.T) {
 		}},
 	}
 	providers := map[string]core.SecretProvider{
-		"env": stubSecretProvider{vals: map[string]string{"WEBHOOK_TOKEN": "secret-xyz"}},
+		"secret": stubSecretProvider{vals: map[string]string{"WEBHOOK_TOKEN": "secret-xyz"}},
 	}
 	job := &core.Job{
 		Params: map[string]any{
-			"url": "https://hooks.example.com/${upstream.q.meta.id}?token=${env.WEBHOOK_TOKEN}",
+			"url": "https://hooks.example.com/${upstream.q.meta.id}?token=${secret.WEBHOOK_TOKEN}",
 		},
 	}
 	if err := resolveTemplates(t.Context(), providers, prior, job); err != nil {
@@ -333,7 +333,7 @@ type stubSecretProvider struct {
 	vals map[string]string
 }
 
-func (s stubSecretProvider) Scheme() string { return "env" }
+func (s stubSecretProvider) Scheme() string { return "secret" }
 func (s stubSecretProvider) Get(_ context.Context, key string) (string, error) {
 	v, ok := s.vals[key]
 	if !ok {

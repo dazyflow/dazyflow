@@ -78,7 +78,7 @@ func TestLintGraph_TransitivePathReaches(t *testing.T) {
 		Nodes: []Node{
 			node("call", "http_request", map[string]any{
 				"url":     "https://api.example.com",
-				"headers": map[string]any{"Authorization": "Bearer ${env.API_KEY}"},
+				"headers": map[string]any{"Authorization": "Bearer ${secret.API_KEY}"},
 			}),
 			node("xform", "map_rows", map[string]any{"select": []any{"id"}}),
 			node("save", "file_write", map[string]any{"path": "out.txt"}),
@@ -156,7 +156,7 @@ func TestLintGraph_SecretInEnvAlsoCaught(t *testing.T) {
 			{
 				ID:     "call",
 				Module: "shell",
-				Env:    map[string]string{"TOKEN": "${env.GITHUB_TOKEN}"},
+				Env:    map[string]string{"TOKEN": "${secret.GITHUB_TOKEN}"},
 			},
 			node("save", "file_write", map[string]any{"path": "out.txt"}),
 		},
@@ -186,7 +186,7 @@ func TestLintGraph_NonSecretPlaceholdersDontTrigger(t *testing.T) {
 }
 
 func TestLintGraph_AllSecretSchemesDetected(t *testing.T) {
-	for _, scheme := range []string{"secret", "env", "builtin", "vault"} {
+	for _, scheme := range []string{"secret", "builtin", "vault"} {
 		t.Run(scheme, func(t *testing.T) {
 			g := Graph{
 				Nodes: []Node{

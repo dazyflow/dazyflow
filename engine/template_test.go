@@ -15,8 +15,8 @@ func makeSub(values map[string]string) Substituter {
 }
 
 func TestSubstituteString_BasicReplacement(t *testing.T) {
-	sub := makeSub(map[string]string{"env:KEY": "secret"})
-	got, err := SubstituteString(t.Context(), "Bearer ${env.KEY}", sub)
+	sub := makeSub(map[string]string{"secret:KEY": "secret"})
+	got, err := SubstituteString(t.Context(), "Bearer ${secret.KEY}", sub)
 	if err != nil {
 		t.Fatalf("substitute: %v", err)
 	}
@@ -27,10 +27,10 @@ func TestSubstituteString_BasicReplacement(t *testing.T) {
 
 func TestSubstituteString_MultiplePlaceholders(t *testing.T) {
 	sub := makeSub(map[string]string{
-		"env:USER": "alice",
-		"env:PASS": "shh",
+		"secret:USER": "alice",
+		"secret:PASS": "shh",
 	})
-	got, err := SubstituteString(t.Context(), "${env.USER}:${env.PASS}@host", sub)
+	got, err := SubstituteString(t.Context(), "${secret.USER}:${secret.PASS}@host", sub)
 	if err != nil {
 		t.Fatalf("substitute: %v", err)
 	}
@@ -106,7 +106,7 @@ func TestSubstituteString_PropagatesSubstituterError(t *testing.T) {
 	sub := func(_ context.Context, _, _ string) (string, bool, error) {
 		return "", true, errors.New("kaboom")
 	}
-	_, err := SubstituteString(t.Context(), "x=${env.Y}", sub)
+	_, err := SubstituteString(t.Context(), "x=${secret.Y}", sub)
 	if err == nil || !strings.Contains(err.Error(), "kaboom") {
 		t.Fatalf("err = %v", err)
 	}
@@ -114,15 +114,15 @@ func TestSubstituteString_PropagatesSubstituterError(t *testing.T) {
 
 func TestSubstituteValue_RecursesIntoMapsAndSlices(t *testing.T) {
 	sub := makeSub(map[string]string{
-		"env:A": "1",
-		"env:B": "2",
+		"secret:A": "1",
+		"secret:B": "2",
 	})
 	tree := map[string]any{
-		"top": "${env.A}",
+		"top": "${secret.A}",
 		"nested": map[string]any{
-			"x": "${env.B}",
+			"x": "${secret.B}",
 		},
-		"list":   []any{"${env.A}", "literal"},
+		"list":   []any{"${secret.A}", "literal"},
 		"number": 42,
 	}
 	out, err := SubstituteValue(t.Context(), tree, sub)

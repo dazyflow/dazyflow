@@ -11,7 +11,7 @@ self-contained.
 |---|---|
 | **Webhook trigger** with per-graph secret | `POST /trigger/dev/default/process-invoice-{low,high}` |
 | **http_request** with secret-injected `Authorization` | every outbound call |
-| **Secret references** (`env://...`) preserved in graph JSON | audit grep at end of `run.sh` |
+| **Secret references** (`secret://...`) preserved in graph JSON | audit grep at end of `run.sh` |
 | **Branch** with field-path + numeric condition | `classify` node, `amount > 1000` |
 | **Multi-output fan** | `fetch_invoice.response_body` feeds *both* `classify` and `archive` |
 | **Dormant edges** | the not-taken branch (`notify_cfo` or `auto_approve`) records as `skipped` |
@@ -27,7 +27,7 @@ self-contained.
                                   ▼
                           ┌─────────────────┐
                           │  fetch_invoice  │   GET /invoices/{id}
-                          │  http_request   │   Authorization: env://INVOICE_API_KEY
+                          │  http_request   │   Authorization: secret://INVOICE_API_KEY
                           └─────┬───────────┘
                 response_body   │           ↘
                                 ▼              ↘
@@ -57,7 +57,7 @@ Output ends with assertions. All ten should pass:
 - the high-value invoice (\$12,500) ran `notify_cfo`, with `auto_approve` skipped
 - both archive files exist on disk with the original invoice JSON
 - mock backend's Authorization checks all pass — secrets reached it
-- audit grep finds `env://INVOICE_API_KEY` in the saved graph, never the cleartext
+- audit grep finds `secret://INVOICE_API_KEY` in the saved graph, never the cleartext
 
 ## What this would need to be real
 
@@ -81,7 +81,7 @@ real corporate workflows.
 
 ## Friction caught while building this demo
 
-1. **Secrets are whole-string substitutions.** `Authorization: env://KEY` resolves to whatever's in the env var. So the env var must contain `Bearer <token>` if the API expects Bearer auth — not just the token. Future: template-style substitution (`Bearer ${env.KEY}`) for partial-string injection.
+1. **Secrets are whole-string substitutions.** `Authorization: secret://KEY` resolves to whatever's stored under that secret name. So the stored value must contain `Bearer <token>` if the API expects Bearer auth — not just the token. Template-style substitution (`Bearer ${secret.KEY}`) is also supported for partial-string injection.
 
 2. **Webhook bodies are still ignored.** The graph has no access to `POST /trigger/... <body>`. Workflows that need the inbound data (e.g. "process the invoice whose ID is in the webhook payload") must hardcode IDs or fetch a "latest" endpoint. The fix is a `webhook_input` module the engine seeds with the body.
 

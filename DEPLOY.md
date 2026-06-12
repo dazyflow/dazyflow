@@ -250,8 +250,8 @@ you expose the daemon; see `.env.example` for the detail.
   DB/SMTP drop hosts).
 - `HAZYFLOW_ENABLE_SHELL` — **off** by default; on, it's host RCE for anyone
   who can run a flow. Single-tenant / CI box only.
-- `HAZYFLOW_ISOLATE_SHARED_SECRETS` — scope `env://` lookups per tenant on
-  shared multi-tenant deployments.
+- Secrets are referenced as `${secret.NAME}` and live in the per-tenant
+  encrypted store, set via the API / UI.
 
 ## Observability
 

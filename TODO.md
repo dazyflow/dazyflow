@@ -714,19 +714,19 @@ platform can demonstrate but not actually power a real workflow.
   / `engine.SubstituteValue` handle `${scheme.path}` inline anywhere in
   a string, with composition across multiple placeholders in one value.
   Wired into `resolveSecrets` so any string in `Job.Params` / `Job.Env`
-  picks it up; the legacy whole-string `env://KEY` form is preserved.
+  picks it up; the whole-string `secret://KEY` form is also supported.
   `for_each` adds `${item.path}` per-iteration on a deep-copy of
   step_params (dot-separated path traversal over maps and lists; empty
   path = whole item; missing-field errors surface in the `errors`
   output keyed by iteration index). E2E proves
-  `url: "https://api/${item.id}"` + `Authorization: "Bearer ${env.TOKEN}"`
+  `url: "https://api/${item.id}"` + `Authorization: "Bearer ${secret.TOKEN}"`
   routes correctly per item.
 - [x] **Upstream-output templating.** Shipped: `${upstream.nodeID.port.path[idx]…}`
   resolves against prior-node results passed into `Engine.RunNode`.
   Dot-then-bracket path syntax over the port's Inline value (maps and
   slices). `resolveSecrets` renamed to `resolveTemplates` and now
   composes upstream + secret substituters in one pass — mixed strings
-  like `https://hooks/${upstream.q.meta.id}?token=${env.TOKEN}` resolve
+  like `https://hooks/${upstream.q.meta.id}?token=${secret.TOKEN}` resolve
   in a single substitution. Maps/slices stringify as JSON for
   embedding; primitives use `fmt.Sprint`. Unknown nodeID errors out so
   typos don't silently produce empty values landing in DSNs/paths.
@@ -757,26 +757,16 @@ platform can demonstrate but not actually power a real workflow.
   `io.SetQuotaReserver`); see Phase 1. OS-level quotas remain the backstop
   for out-of-process writers.
 - [ ] **Real secret providers (vault, gcp, aws, azure).** Interface +
-  scheme registry + env/builtin providers exist now. The cloud KMS
-  / vault implementations are real integrations we haven't done. Spec
-  lists all four.
-- [~] **Per-tenant ACL on secrets.** Shipped: `Namespaced bool` on
-  `EnvProvider` and `BuiltinProvider`. When set (via
-  `HAZYFLOW_ISOLATE_SHARED_SECRETS=1`, default off for backward
-  compat), every `Get(ctx, name)` requires the name to be of the
-  form `<tenant>.<key>` matching the caller's tenant from
-  `core.TenantFromContext`. Names without a prefix and
-  cross-tenant prefixes are both rejected at the provider before
-  the underlying env/builtin lookup runs — so tenant A's graph
-  can't read `${env.globex.api_key}` even if the env var exists.
-  tenant:// was already isolated (per-tenant DEKs in
-  `EncryptedSecrets`). 7 tests pin the matrix: matching prefix
-  resolves, cross-tenant rejected, unprefixed rejected,
-  missing-tenant rejected, backward-compat mode (Namespaced
-  false) unchanged, builtin same behavior. **Open follow-up:**
-  document the per-tenant env var convention (e.g.
-  `HAZYFLOW_TENANT_<UPPER>_<KEY>`) in the README; today the
-  provider just looks up the full prefixed name verbatim.
+  scheme registry + the encrypted `secret://` store and `BuiltinProvider`
+  exist now. The cloud KMS / vault implementations are real integrations
+  we haven't done. Spec lists all four.
+- [~] **Per-tenant ACL on secrets.** The `secret://` encrypted store is
+  isolated per tenant (separate DEK per tenant in `EncryptedSecrets`), so
+  tenant A's graph can't read tenant B's secrets. `BuiltinProvider`
+  additionally supports a `Namespaced` mode (`<tenant>.<key>` names
+  matching the caller's tenant from `core.TenantFromContext`); names
+  without a prefix and cross-tenant prefixes are rejected before the
+  underlying lookup.
 - [~] **Egress allowlist for `http_request`.** DONE (operator-global)
   2026-05-27: `integrations/net/egress.go` — opt-in allowlist of exact
   hosts, `*.wildcards`, and CIDR/IPs, checked at request time above the

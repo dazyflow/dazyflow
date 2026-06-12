@@ -266,7 +266,7 @@ func TestEngine_RunNode_SandboxError(t *testing.T) {
 // the secret-resolution failure branch in RunNode.
 type failingSecretProvider struct{}
 
-func (failingSecretProvider) Scheme() string { return "env" }
+func (failingSecretProvider) Scheme() string { return "secret" }
 func (failingSecretProvider) Get(_ context.Context, _ string) (string, error) {
 	return "", errors.New("provider down")
 }
@@ -278,9 +278,9 @@ func TestEngine_RunNode_SecretError(t *testing.T) {
 			return core.Result{Status: core.StatusOK}, nil
 		},
 	})
-	e.Secrets = map[string]core.SecretProvider{"env": failingSecretProvider{}}
+	e.Secrets = map[string]core.SecretProvider{"secret": failingSecretProvider{}}
 	g := core.Graph{
-		Nodes: []core.Node{{ID: "a", Module: "noop", Params: map[string]any{"k": "env://X"}}},
+		Nodes: []core.Node{{ID: "a", Module: "noop", Params: map[string]any{"k": "secret://X"}}},
 	}
 	res, err := e.RunNode(t.Context(), g, "run-1", "a", nil, nil)
 	if err == nil || res.Error == nil || res.Error.Code != "secret" {
@@ -760,14 +760,14 @@ func TestSubstituteString_PassThroughWhenNoPlaceholder(t *testing.T) {
 
 func TestSubstituteValue_RecursesIntoSliceAndMap(t *testing.T) {
 	sub := func(_ context.Context, scheme, path string) (string, bool, error) {
-		if scheme == "env" {
+		if scheme == "secret" {
 			return "RESOLVED-" + path, true, nil
 		}
 		return "", false, nil
 	}
 	value := map[string]any{
-		"top":   "${env.TOP}",
-		"inner": []any{"${env.A}", "literal", map[string]any{"deep": "${env.DEEP}"}},
+		"top":   "${secret.TOP}",
+		"inner": []any{"${secret.A}", "literal", map[string]any{"deep": "${secret.DEEP}"}},
 		"num":   42, // non-string scalar passes through default branch
 	}
 	out, err := SubstituteValue(t.Context(), value, sub)
@@ -800,7 +800,7 @@ func TestSubstituteValue_ErrorAtNestedKeyIsAnnotated(t *testing.T) {
 	}
 	value := map[string]any{
 		"outer": map[string]any{
-			"inner": []any{"${env.X}"},
+			"inner": []any{"${secret.X}"},
 		},
 	}
 	_, err := SubstituteValue(t.Context(), value, sub)
@@ -815,15 +815,15 @@ func TestSubstituteValue_ErrorAtNestedKeyIsAnnotated(t *testing.T) {
 
 func TestResolveSecrets_NestedSlice(t *testing.T) {
 	providers := newProviders(stubProvider{
-		scheme: "env",
+		scheme: "secret",
 		values: map[string]string{"TOK": "secret-xyz"},
 	})
 	job := &core.Job{
 		Params: map[string]any{
 			"items": []any{
-				"${env.TOK}",
-				map[string]any{"auth": "${env.TOK}"},
-				[]any{"${env.TOK}", "literal"},
+				"${secret.TOK}",
+				map[string]any{"auth": "${secret.TOK}"},
+				[]any{"${secret.TOK}", "literal"},
 			},
 		},
 	}
@@ -844,9 +844,9 @@ func TestResolveSecrets_NestedSlice(t *testing.T) {
 }
 
 func TestResolveSecrets_NestedSliceError(t *testing.T) {
-	providers := newProviders(stubProvider{scheme: "env", err: errors.New("backend down")})
+	providers := newProviders(stubProvider{scheme: "secret", err: errors.New("backend down")})
 	job := &core.Job{Params: map[string]any{
-		"items": []any{"env://X"},
+		"items": []any{"secret://X"},
 	}}
 	err := resolveSecrets(t.Context(), providers, job)
 	if err == nil {
@@ -921,10 +921,10 @@ func TestEngine_validate_FallsBackToCoreValidateWithoutManifests(t *testing.T) {
 // ----------------------------------------------------------------------
 
 func TestResolveSecrets_NestedMapErrorAnnotated(t *testing.T) {
-	providers := newProviders(stubProvider{scheme: "env", err: errors.New("backend down")})
+	providers := newProviders(stubProvider{scheme: "secret", err: errors.New("backend down")})
 	job := &core.Job{Params: map[string]any{
 		"outer": map[string]any{
-			"inner": "env://X",
+			"inner": "secret://X",
 		},
 	}}
 	err := resolveSecrets(t.Context(), providers, job)
@@ -948,7 +948,7 @@ func TestSubstituteString_FirstErrorSkipsRemainingPlaceholders(t *testing.T) {
 		calls++
 		return "", true, errors.New("boom")
 	}
-	_, err := SubstituteString(t.Context(), "${env.A} and ${env.B}", sub)
+	_, err := SubstituteString(t.Context(), "${secret.A} and ${secret.B}", sub)
 	if err == nil {
 		t.Fatal("expected error")
 	}

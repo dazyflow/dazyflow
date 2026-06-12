@@ -37,11 +37,11 @@ func newProviders(p ...core.SecretProvider) map[string]core.SecretProvider {
 
 func TestResolveSecrets_TopLevelString(t *testing.T) {
 	providers := newProviders(stubProvider{
-		scheme: "env",
+		scheme: "secret",
 		values: map[string]string{"STRIPE_KEY": "sk_live_xyz"},
 	})
 	job := &core.Job{Params: map[string]any{
-		"auth": "env://STRIPE_KEY",
+		"auth": "secret://STRIPE_KEY",
 	}}
 	if err := resolveSecrets(t.Context(), providers, job); err != nil {
 		t.Fatalf("resolve: %v", err)
@@ -76,10 +76,10 @@ func TestResolveSecrets_NestedMap(t *testing.T) {
 
 func TestResolveSecrets_EnvField(t *testing.T) {
 	providers := newProviders(stubProvider{
-		scheme: "env",
+		scheme: "secret",
 		values: map[string]string{"DB_PASS": "shh"},
 	})
-	job := &core.Job{Env: map[string]string{"DATABASE_PASSWORD": "env://DB_PASS"}}
+	job := &core.Job{Env: map[string]string{"DATABASE_PASSWORD": "secret://DB_PASS"}}
 	if err := resolveSecrets(t.Context(), providers, job); err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
@@ -91,7 +91,7 @@ func TestResolveSecrets_EnvField(t *testing.T) {
 func TestResolveSecrets_UnknownSchemePassthrough(t *testing.T) {
 	// http:// is not a registered provider, so the resolver leaves it
 	// alone. Without this, an http_request URL would be misinterpreted.
-	providers := newProviders(stubProvider{scheme: "env"})
+	providers := newProviders(stubProvider{scheme: "secret"})
 	job := &core.Job{Params: map[string]any{
 		"url": "http://example.com/api",
 	}}
@@ -105,10 +105,10 @@ func TestResolveSecrets_UnknownSchemePassthrough(t *testing.T) {
 
 func TestResolveSecrets_MissingSecretFails(t *testing.T) {
 	providers := newProviders(stubProvider{
-		scheme: "env",
+		scheme: "secret",
 		values: map[string]string{}, // empty — STRIPE_KEY not present
 	})
-	job := &core.Job{Params: map[string]any{"key": "env://STRIPE_KEY"}}
+	job := &core.Job{Params: map[string]any{"key": "secret://STRIPE_KEY"}}
 	err := resolveSecrets(t.Context(), providers, job)
 	if err == nil {
 		t.Fatal("expected error for missing secret")
@@ -120,10 +120,10 @@ func TestResolveSecrets_MissingSecretFails(t *testing.T) {
 
 func TestResolveSecrets_ProviderError(t *testing.T) {
 	providers := newProviders(stubProvider{
-		scheme: "env",
+		scheme: "secret",
 		err:    errors.New("connection refused"),
 	})
-	job := &core.Job{Params: map[string]any{"x": "env://anything"}}
+	job := &core.Job{Params: map[string]any{"x": "secret://anything"}}
 	err := resolveSecrets(t.Context(), providers, job)
 	if err == nil {
 		t.Fatal("expected error from provider")
@@ -133,17 +133,17 @@ func TestResolveSecrets_ProviderError(t *testing.T) {
 func TestResolveSecrets_NilProviders(t *testing.T) {
 	// No providers configured → resolver is a no-op, even if Params
 	// contains scheme-like strings.
-	job := &core.Job{Params: map[string]any{"x": "env://NAME"}}
+	job := &core.Job{Params: map[string]any{"x": "secret://NAME"}}
 	if err := resolveSecrets(t.Context(), nil, job); err != nil {
 		t.Errorf("resolve with nil providers: %v", err)
 	}
-	if job.Params["x"] != "env://NAME" {
+	if job.Params["x"] != "secret://NAME" {
 		t.Errorf("string mutated despite nil providers: %v", job.Params["x"])
 	}
 }
 
 func TestResolveSecrets_DoesNotTouchNonString(t *testing.T) {
-	providers := newProviders(stubProvider{scheme: "env"})
+	providers := newProviders(stubProvider{scheme: "secret"})
 	job := &core.Job{Params: map[string]any{
 		"timeout_ms": 5000,
 		"retries":    3,
@@ -159,12 +159,12 @@ func TestResolveSecrets_DoesNotTouchNonString(t *testing.T) {
 
 func TestResolveSecrets_InlinePlaceholder(t *testing.T) {
 	providers := newProviders(stubProvider{
-		scheme: "env",
+		scheme: "secret",
 		values: map[string]string{"STRIPE_KEY": "sk_live_xyz"},
 	})
 	job := &core.Job{Params: map[string]any{
 		"headers": map[string]any{
-			"Authorization": "Bearer ${env.STRIPE_KEY}",
+			"Authorization": "Bearer ${secret.STRIPE_KEY}",
 		},
 	}}
 	if err := resolveSecrets(t.Context(), providers, job); err != nil {
@@ -178,14 +178,14 @@ func TestResolveSecrets_InlinePlaceholder(t *testing.T) {
 
 func TestResolveSecrets_MultiplePlaceholdersInOneString(t *testing.T) {
 	providers := newProviders(stubProvider{
-		scheme: "env",
+		scheme: "secret",
 		values: map[string]string{
 			"USER": "alice",
 			"PASS": "shh",
 		},
 	})
 	job := &core.Job{Params: map[string]any{
-		"dsn": "postgres://${env.USER}:${env.PASS}@db/app",
+		"dsn": "postgres://${secret.USER}:${secret.PASS}@db/app",
 	}}
 	if err := resolveSecrets(t.Context(), providers, job); err != nil {
 		t.Fatalf("resolve: %v", err)
@@ -199,7 +199,7 @@ func TestResolveSecrets_UnknownInlineSchemePassesThrough(t *testing.T) {
 	// ${item.foo} appears in a for_each step's params before iteration.
 	// The engine doesn't know "item" and must leave it untouched so
 	// for_each can substitute later.
-	providers := newProviders(stubProvider{scheme: "env"})
+	providers := newProviders(stubProvider{scheme: "secret"})
 	job := &core.Job{Params: map[string]any{
 		"url": "https://api/${item.id}",
 	}}
@@ -213,11 +213,11 @@ func TestResolveSecrets_UnknownInlineSchemePassesThrough(t *testing.T) {
 
 func TestResolveSecrets_InlineFailureSurfaces(t *testing.T) {
 	providers := newProviders(stubProvider{
-		scheme: "env",
+		scheme: "secret",
 		values: map[string]string{}, // MISSING_KEY isn't there
 	})
 	job := &core.Job{Params: map[string]any{
-		"x": "prefix ${env.MISSING_KEY} suffix",
+		"x": "prefix ${secret.MISSING_KEY} suffix",
 	}}
 	if err := resolveSecrets(t.Context(), providers, job); err == nil {
 		t.Fatal("expected error for missing secret in inline placeholder")
@@ -231,7 +231,7 @@ func TestSplitSecretRef(t *testing.T) {
 		path   string
 		ok     bool
 	}{
-		{"env://NAME", "env", "NAME", true},
+		{"secret://NAME", "secret", "NAME", true},
 		{"vault://prod/db", "vault", "prod/db", true},
 		{"http://example.com", "http", "example.com", true},
 		{"plain string", "", "", false},

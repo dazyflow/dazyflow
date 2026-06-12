@@ -3,14 +3,18 @@
   "version": "1",
   "tenant": "dev",
   "workspace": "default",
-  "triggers": [{"type": "webhook", "secret": "webhook-secret"}],
   "nodes": [
+    {
+      "id": "inbound",
+      "module": "webhook_input",
+      "params": {"secret": "webhook-secret"}
+    },
     {
       "id": "fetch_invoice",
       "module": "http_request",
       "params": {
         "url": "http://127.0.0.1:60500/invoices/42",
-        "headers": {"Authorization": "env://INVOICE_API_KEY"},
+        "headers": {"Authorization": "secret://INVOICE_API_KEY"},
         "allow_private_networks": true
       }
     },
@@ -30,7 +34,7 @@
         "url": "http://127.0.0.1:60500/notifications/cfo",
         "method": "POST",
         "headers": {
-          "Authorization": "env://SLACK_TOKEN",
+          "Authorization": "secret://SLACK_TOKEN",
           "Content-Type": "application/json"
         },
         "allow_private_networks": true
@@ -43,7 +47,7 @@
         "url": "http://127.0.0.1:60500/approvals/auto",
         "method": "POST",
         "headers": {
-          "Authorization": "env://APPROVAL_API_KEY",
+          "Authorization": "secret://APPROVAL_API_KEY",
           "Content-Type": "application/json"
         },
         "allow_private_networks": true

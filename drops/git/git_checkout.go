@@ -62,7 +62,7 @@ func init() {
 				`{
 					"type":"object",
 					"properties":{
-						"url":{"type":"string","title":"Repository URL","description":"Where the repository lives (https or ssh address). Use ${env.NAME} placeholders for tokens embedded in the URL."},
+						"url":{"type":"string","title":"Repository URL","description":"Where the repository lives (https or ssh address). Use ${secret.NAME} placeholders for tokens embedded in the URL."},
 						"ref":{"type":"string","title":"Branch, tag, or commit","description":"What to switch to after fetching. Leave empty for the repo's default branch."},
 						"path":{"type":"string","title":"Folder","description":"Workspace folder to put the files in."},
 						"depth":{"type":"integer","title":"Clone depth","x_advanced":true,"minimum":0,"description":"Shallow-clone depth. 0 (default) clones the full history."}

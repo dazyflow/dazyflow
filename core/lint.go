@@ -31,10 +31,10 @@ type LintIssue struct {
 
 // secretPlaceholderPattern matches the `${scheme.<path>}` schemes that
 // resolve to a secret at execution time: the scoped store (secret/tenant/
-// workspace/flow), env, builtin, and vault. Mirrors engine.placeholderPattern
+// workspace/flow), builtin, and vault. Mirrors engine.placeholderPattern
 // (dot separator) but restricted to the resolvers the lint cares about
 // (upstream/item placeholders are graph-internal, not secrets).
-var secretPlaceholderPattern = regexp.MustCompile(`\$\{(secret|env|builtin|vault)\.[^}]*\}`)
+var secretPlaceholderPattern = regexp.MustCompile(`\$\{(secret|builtin|vault)\.[^}]*\}`)
 
 // templatePattern matches ANY `${scheme.path}` placeholder (secret or
 // upstream/item). A value containing one isn't a hardcoded literal, so

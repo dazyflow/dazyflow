@@ -14,9 +14,9 @@ import (
 	"git.sr.ht/~klahr/hazyflow/auth"
 	"git.sr.ht/~klahr/hazyflow/core"
 	"git.sr.ht/~klahr/hazyflow/daemon"
+	_ "git.sr.ht/~klahr/hazyflow/drops"
 	"git.sr.ht/~klahr/hazyflow/engine"
 	"git.sr.ht/~klahr/hazyflow/engine/jobstore"
-	_ "git.sr.ht/~klahr/hazyflow/drops"
 	"git.sr.ht/~klahr/hazyflow/workspace"
 )
 
@@ -102,14 +102,15 @@ func TestForEach_E2E_WebhookToIteration(t *testing.T) {
 
 // TestForEach_E2E_PerItemHTTPWithTemplatedURL exercises the realistic
 // shape: webhook delivers a list of records, for_each runs http_request
-// once per record with ${item.id} in the URL and ${env.KEY} in the
+// once per record with ${item.id} in the URL and ${builtin.KEY} in the
 // Authorization header. Proves that:
 //   - Secret substitution reaches nested step_params via the engine's
 //     recursive walk on the outer for_each Job.
 //   - Item substitution runs per-iteration on a fresh copy of step_params.
 //   - Both kinds of placeholder compose cleanly.
 func TestForEach_E2E_PerItemHTTPWithTemplatedURL(t *testing.T) {
-	t.Setenv("UPSTREAM_TOKEN", "real-secret-9000")
+	tokens := daemon.NewBuiltinProvider()
+	tokens.Set("UPSTREAM_TOKEN", "real-secret-9000")
 
 	// Mock backend captures (path, auth) per request.
 	type hit struct {
@@ -128,14 +129,14 @@ func TestForEach_E2E_PerItemHTTPWithTemplatedURL(t *testing.T) {
 	defer srv.Close()
 
 	// Build a full hzd-equivalent stack: workspace, job store, engine
-	// configured with the env secret provider, worker.
+	// configured with the builtin secret provider, worker.
 	ks := auth.NewMemKeyStore()
 	wsStore, _ := workspace.OpenFS("")
 	jobs := jobstore.NewMemory()
 	bus := daemon.NewMemoryBus()
 	eng := &engine.Engine{
 		Resolver: &engine.NodeResolver{Native: engine.Default},
-		Secrets:  map[string]core.SecretProvider{"env": daemon.EnvProvider{}},
+		Secrets:  map[string]core.SecretProvider{"builtin": tokens},
 	}
 	svc := &daemon.Service{
 		Auth:       auth.Chain{&auth.APIKeyAuthenticator{Store: ks}},
@@ -163,7 +164,7 @@ func TestForEach_E2E_PerItemHTTPWithTemplatedURL(t *testing.T) {
 					"url":    srv.URL + "/items/${item.id}",
 					"method": "GET",
 					"headers": map[string]any{
-						"Authorization": "Bearer ${env.UPSTREAM_TOKEN}",
+						"Authorization": "Bearer ${builtin.UPSTREAM_TOKEN}",
 					},
 					"allow_private_networks": true,
 				},
