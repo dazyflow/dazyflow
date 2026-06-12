@@ -234,19 +234,39 @@ this no customer can try" to "needed before paid conversion."
 
 ### T1 — The "looks and feels like Zapier" gap
 
-- [~] **Slack launch connector.** Action drops shipped:
-  `integrations/slack/slack_send_message.go` (chat.postMessage —
+- [x] **Slack launch connector.** Action drops shipped:
+  `drops/slack/slack_send_message.go` (chat.postMessage —
   text, thread_ts, Block Kit, body-port-wins-over-params with
   object-input rejection, Slack-envelope error mapping, retry
-  policy) and `slack_list_channels.go` (conversations.list with
-  types/limit/exclude_archived). Token resolution via either an
+  policy) and `drops/slack/slack_list_channels.go` (conversations.list
+  with types/limit/exclude_archived). Token resolution via either an
   explicit `token` param OR a `SetTokenLookup` hook that `hzd`
   wires to `OAuthRegistry.GetOAuthToken("slack", account)`.
-  Brand asset at `/brands/slack.svg`. 17 tests using an
-  httptest fake of the Slack API. **Trigger** (`slack_on_mention`,
-  Events API) deferred — needs a separate signing-secret
-  verification path + multi-tenant event routing by team_id;
-  worth its own T1 entry.
+  Brand asset at `/brands/slack.svg`. Tests use an httptest fake of
+  the Slack API. **Trigger** (`slack_on_mention`, Events API) shipped
+  — see its own `[x]` entry below.
+  **UX polish (2026-06-12):**
+  (1) Channel resource picker — `slack-channel` param `format` on
+  both `slack_send_message` (`channel`) and `slack_on_mention`
+  (`channel_filter`), backed by a `slack.ListChannels` lister +
+  `RegisterResourceLister("slack", "channels", …)` and the three
+  frontend registries (PICKER_FORMATS / RESOURCE_PICKER_KINDS /
+  RESOURCE_PICKERS); the picker stores the channel ID, shows `#name`.
+  Optional filters read "Any channel" when unset, card + inspector
+  aligned (required pickers still prompt "Choose a …").
+  (2) Block Kit input made tolerant — `resolveBlocks`/`normalizeBlocks`
+  accept a bare array, the Block Kit Builder's `{"blocks":[…]}`
+  wrapper, a lone block object, and JSON text of each (10 cases in
+  `helpers_test.go`).
+  (3) New `json` value-source drop (`drops/value/json.go`) — parses a
+  literal into a decoded value, with a dependency-free
+  syntax-highlighted editor (`web/src/components/JsonEditor.tsx`,
+  `--json-*` theme tokens) on card + inspector; built to make wiring
+  Block Kit into Slack painless.
+  (4) Input-less action drops now carry the pass-through pin (core
+  `WithPassthrough` keyed off `Manifest.ValueSource`, which only
+  `text`/`number` set), so `slack_list_channels` sits mid-flow
+  instead of being mis-modelled as a dead flow source.
 - [~] **`secret_set` drop + cursor-based polling.** Piece (a)
   shipped: new `integrations/secrets/` package with a `secret_set`
   drop. Inputs: `value` (string; overrides params.value). Params:
@@ -303,7 +323,10 @@ this no customer can try" to "needed before paid conversion."
   filter doesn't match the event's channel ID. Empty/missing
   filter preserves the old "fire for any channel" behavior.
   2 additional tests pin the filter (mismatched-graph skipped,
-  unfiltered-graph still fires for any channel). **Still
+  unfiltered-graph still fires for any channel). `channel_filter`
+  now uses the `slack-channel` resource picker (2026-06-12), so it's
+  a dropdown of the workspace's channels rather than a raw-ID box;
+  unset reads "Any channel". **Still
   open (needs hosted-app decision):** team_id ↔
   connected-OAuth-account verification — the per-tenant URL +
   signing secret is the V1 auth model; layered team_id
@@ -516,14 +539,17 @@ this no customer can try" to "needed before paid conversion."
   same mailer delivers invitation links (createInvitation emails
   the accept URL when configured + the URL is absolute, response
   carries email_sent). **Open follow-up (needs product
-  decision):** typed Slack-channel picker — the
+  decision):** typed Slack-channel picker for failure alerts — the
   user picks a connected Slack account + channel, the
   daemon dispatches via `slack_send_message` instead of an
-  incoming-webhook URL. Needs a UX call on the picker shape
-  AND a decision on whether failure notification should
-  share token plumbing with the action drops (vs its own
-  config). The webhook-URL V1 covers the realistic ops
-  receiver set today; the picker UI is sugar on top.
+  incoming-webhook URL. **Picker infra now exists (2026-06-12):** the
+  reusable `slack-channel` resource picker (lister +
+  `RegisterResourceLister` + the three frontend registries) shipped
+  for the action drops, so this is reduced to (a) surfacing that
+  picker in the Settings → Notifications tab and (b) the token-plumbing
+  decision — reuse the action drops' OAuth account vs its own config.
+  The webhook-URL V1 covers the realistic ops receiver set today; the
+  picker UI is sugar on top.
 - [~] **Trigger test/preview UX.** Shipped: "Sample this node"
   button in the editor's Inspector that fires a partial run
   ending at the selected node. Backend: new
