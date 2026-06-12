@@ -935,6 +935,7 @@
     "pickerUnset": "Not set",
     "pickerLoading": "…",
     "pickerWired": "From upstream",
+    "channelAny": "Any channel",
     "portRequired": "required",
     "portOptional": "optional",
     "missingValue": "Missing required value: {{name}}",
@@ -1087,6 +1088,7 @@
     "resourcePicker": {
       "loading": "Loading…",
       "choose": "Choose a {{noun}}…",
+      "any": "Any {{noun}}",
       "retry": "Retry",
       "connectHint": "Connect the account to pick a {{noun}} from a list.",
       "needsDependency": "Choose a {{dep}} first to pick a {{noun}}.",

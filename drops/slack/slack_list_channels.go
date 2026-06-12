@@ -3,6 +3,7 @@ package slack
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"strconv"
 
@@ -46,7 +47,9 @@ func init() {
 			Outputs: []core.Port{
 				// The channel list IS the product of this step (one row per
 				// channel), so it stays a pin — it's data to wire onward, not
-				// a debugging blob.
+				// a debugging blob. The universal pass-through pin is added by
+				// core.WithPassthrough (this is an input-less action, not a
+				// flow source), so it isn't declared here.
 				{Port: "channels", Label: "Channels", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
@@ -107,4 +110,59 @@ func executeSlackListChannels(ctx context.Context, job core.Job, _ chan<- core.P
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{"channels": {MIME: "application/json", Inline: channels}},
 	}, nil
+}
+
+// ListChannels powers the "slack-channel" resource picker: the public and
+// private channels the connected bot can see, one AccountResource each (ID =
+// channel id like C0123ABC, Name = "#general"). It mirrors the
+// slack_list_channels conversations.list call but maps to the picker shape —
+// the dropdown stores the ID (which resolves for private channels and DMs
+// too) while showing the friendly #name. job carries the account/token in its
+// Params; the daemon wires the lister so resolveToken can reach the OAuth
+// registry. A nil/empty workspace yields an empty list, not an error.
+func ListChannels(ctx context.Context, job core.Job) ([]core.AccountResource, error) {
+	token, err := resolveToken(ctx, job)
+	if err != nil {
+		return nil, err
+	}
+	q := url.Values{}
+	q.Set("types", "public_channel,private_channel")
+	q.Set("limit", "1000")
+	q.Set("exclude_archived", "true")
+	endpoint := slackBaseURL(job) + "/conversations.list?" + q.Encode()
+	env, raw, err := slackDo(ctx, "GET", endpoint, token, nil, params.IntDefault(job.Params, "timeout_ms", 15000))
+	if err != nil {
+		return nil, err
+	}
+	if !env.OK {
+		msg := env.Error
+		if msg == "" {
+			msg = "unknown error"
+		}
+		return nil, fmt.Errorf("slack rejected channel list: %s", msg)
+	}
+	out := []core.AccountResource{}
+	if raw == nil {
+		return out, nil
+	}
+	chans, ok := raw["channels"].([]any)
+	if !ok {
+		return out, nil
+	}
+	for _, c := range chans {
+		m, ok := c.(map[string]any)
+		if !ok {
+			continue
+		}
+		id, _ := m["id"].(string)
+		if id == "" {
+			continue
+		}
+		label := id
+		if name, _ := m["name"].(string); name != "" {
+			label = "#" + name
+		}
+		out = append(out, core.AccountResource{ID: id, Name: label})
+	}
+	return out, nil
 }

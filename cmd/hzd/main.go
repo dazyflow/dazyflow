@@ -1448,6 +1448,12 @@ func wireConnectorTokenHooks(reg *daemon.OAuthRegistry) {
 	// Every shipped connector is native Go now; each binds to its OAuth
 	// provider. Gmail and Sheets both ride Google OAuth; Notion has its own.
 	slack.SetTokenLookup(bind("slack"))
+	// Slack channel picker: lists the connected workspace's channels for the
+	// "slack-channel" param format (slack_send_message's channel). Resolves
+	// the OAuth token via the lookup bound just above, so register after it.
+	daemon.RegisterResourceLister("slack", "channels", func(ctx context.Context, account string, _ map[string]string) ([]core.AccountResource, error) {
+		return slack.ListChannels(ctx, core.Job{Params: map[string]any{"account": account}})
+	})
 	github.SetTokenLookup(bind("github"))
 	gmail.SetTokenLookup(bind("google"))
 	sheets.SetTokenLookup(bind("google"))

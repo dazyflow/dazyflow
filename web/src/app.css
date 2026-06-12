@@ -7052,3 +7052,65 @@ button.warning:hover:not(:disabled) {
   border-radius: 999px;
   color: var(--text);
 }
+
+/* ── JSON editor (hz-json-editor) ───────────────────────────────────────
+   A transparent <textarea> layered over an aria-hidden highlighted <pre>.
+   Both layers MUST share identical metrics (font, size, line-height,
+   padding, wrapping) so the caret sits exactly over its highlighted glyph;
+   the component syncs scrollTop/Left between them. See JsonEditor.tsx. */
+.hz-json-editor {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--code-bg);
+  resize: vertical;
+}
+.hz-json-editor.invalid {
+  border-color: var(--status-failed);
+}
+.hz-json-editor:focus-within {
+  border-color: var(--accent);
+}
+.hz-json-pre,
+.hz-json-ta {
+  margin: 0;
+  border: 0;
+  padding: 8px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  tab-size: 2;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+.hz-json-pre {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  color: var(--code-fg);
+  background: transparent;
+}
+.hz-json-pre code {
+  font: inherit;
+}
+.hz-json-ta {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--ink);
+  resize: none;
+  outline: none;
+  overflow: auto;
+}
+/* Token colours (themed in theme.css for dark + light). */
+.hz-j-key { color: var(--json-key); }
+.hz-j-string { color: var(--json-string); }
+.hz-j-number { color: var(--json-number); }
+.hz-j-bool { color: var(--json-bool); }
+.hz-j-punct { color: var(--json-punct); }

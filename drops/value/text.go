@@ -15,16 +15,16 @@ import (
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "text",
-			Version:        "1.0",
-			Label:          "Text",
-			Color:          "#888",
-			Icon:           "text",
-			Category:       "transformation",
-			Provider:       "internal",
-			Tags:           []string{"text", "string", "constant", "literal"},
-			Description:    "Emit a literal string value. The 'text' param can be multi-line; downstream consumers see it as text/plain on the 'out' port.",
-			Summary:        "Emit a graph-author-supplied literal string on the 'out' port.",
+			ID:          "text",
+			Version:     "1.0",
+			Label:       "Text",
+			Color:       "#888",
+			Icon:        "text",
+			Category:    "transformation",
+			Provider:    "internal",
+			Tags:        []string{"text", "string", "constant", "literal"},
+			Description: "Emit a literal string value. The 'text' param can be multi-line; downstream consumers see it as text/plain on the 'out' port.",
+			Summary:     "Emit a graph-author-supplied literal string on the 'out' port.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Short constant",
@@ -38,9 +38,13 @@ func init() {
 			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
-			Outputs:        []core.Port{{Port: "out", Label: "Text", MIME: []string{"text/plain"}}},
-			ParamsSchema:   json.RawMessage(`{"type":"object","properties":{"text":{"type":"string","format":"multiline","title":"Text"}},"required":["text"]}`),
-			Idempotent:     true,
+			// A literal value source: its output IS the `text` param, so it
+			// originates data and takes no pass pin (you can't wire into a
+			// literal). See core.WithPassthrough / Manifest.ValueSource.
+			ValueSource:  true,
+			Outputs:      []core.Port{{Port: "out", Label: "Text", MIME: []string{"text/plain"}}},
+			ParamsSchema: json.RawMessage(`{"type":"object","properties":{"text":{"type":"string","format":"multiline","title":"Text"}},"required":["text"]}`),
+			Idempotent:   true,
 		},
 		Execute: executeText,
 	})

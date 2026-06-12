@@ -84,51 +84,71 @@ func resolveToken(ctx context.Context, job core.Job) (string, error) {
 	return tok, nil
 }
 
-// resolveBlocks pulls the Block Kit array off the job in priority
-// order: 'blocks' input port → params.blocks. Returns (nil, nil) when
-// neither is set so the caller can fall through to text-only.
+// resolveBlocks pulls the Block Kit array off the job in priority order:
+// 'blocks' input port → params.blocks. Returns (nil, nil) when neither is set
+// so the caller can fall through to text-only.
 //
-// Accepted port shapes: []any (already-decoded array, the common case
-// from a transform), string / []byte (JSON-encoded array, parsed
-// here). Anything else is a wiring mistake — return a JobError with a
-// friendly Message and a typed Details so the UI can split the two.
+// It normalises the shapes people actually paste/build (see normalizeBlocks):
+// a bare array (the canonical form), the Block Kit Builder's wrapped payload
+// {"blocks":[…]}, or a lone block object — and parses string/[]byte JSON
+// uniformly. Anything else is a wiring mistake — a JobError with a friendly
+// Message and a typed Details so the UI can split the two.
 func resolveBlocks(job core.Job) (any, *core.JobError) {
 	if input, ok := job.Input["blocks"]; ok && input.Inline != nil {
-		switch v := input.Inline.(type) {
-		case []any:
-			return v, nil
-		case string:
-			var arr []any
-			if err := json.Unmarshal([]byte(v), &arr); err != nil {
-				return nil, &core.JobError{
-					Code:    "bad_input",
-					Message: "Slack Block Kit needs an array of block objects. The upstream node is wiring a string, but it isn't valid JSON.",
-					Details: fmt.Sprintf("JSON parse on input port 'blocks' failed: %v", err),
-				}
-			}
-			return arr, nil
-		case []byte:
-			var arr []any
-			if err := json.Unmarshal(v, &arr); err != nil {
-				return nil, &core.JobError{
-					Code:    "bad_input",
-					Message: "Slack Block Kit needs an array of block objects. The upstream node is wiring raw bytes, but they aren't valid JSON.",
-					Details: fmt.Sprintf("JSON parse on input port 'blocks' failed: %v", err),
-				}
-			}
-			return arr, nil
-		default:
-			return nil, &core.JobError{
-				Code:    "bad_input",
-				Message: "Slack Block Kit needs an array of block objects. The upstream node is sending a different shape.",
-				Details: fmt.Sprintf("Received type %T on input port 'blocks'; expected []any, string (JSON), or []byte (JSON).", v),
-			}
-		}
+		return normalizeBlocks(input.Inline)
 	}
 	if v, ok := job.Params["blocks"]; ok && v != nil {
-		return v, nil
+		return normalizeBlocks(v)
 	}
 	return nil, nil
+}
+
+// normalizeBlocks coerces a Block Kit value into the array Slack's
+// chat.postMessage wants. Accepts:
+//   - []any                         — the canonical decoded array, as-is.
+//   - string / []byte               — JSON; parsed, then re-normalised.
+//   - map with a "blocks" array     — the Block Kit Builder export / a full
+//     message payload {"blocks":[…]} — unwrap to the inner array.
+//   - any other map                 — a lone block object; wrap as a 1-element
+//     array so a single section/divider "just works".
+//
+// A malformed string or a non-object scalar (number, bool) is a genuine
+// mistake and returns a friendly JobError.
+func normalizeBlocks(v any) (any, *core.JobError) {
+	switch b := v.(type) {
+	case []any:
+		return b, nil
+	case string:
+		return parseBlocksJSON([]byte(b))
+	case []byte:
+		return parseBlocksJSON(b)
+	case map[string]any:
+		if inner, ok := b["blocks"].([]any); ok {
+			return inner, nil // {"blocks":[…]} — unwrap.
+		}
+		return []any{b}, nil // a single block object — wrap it.
+	default:
+		return nil, &core.JobError{
+			Code:    "bad_input",
+			Message: "Slack Block Kit needs an array of block objects like [ {…}, {…} ]. This step is sending a different shape — wire a JSON array (or a single block) into 'Blocks'.",
+			Details: fmt.Sprintf("Received type %T on 'blocks'; expected an array, a {\"blocks\":[…]} object, a single block object, or JSON text of one of those.", v),
+		}
+	}
+}
+
+// parseBlocksJSON parses JSON text into a value, then re-runs normalizeBlocks
+// so a string carrying any accepted shape (array, {"blocks":[…]}, or a lone
+// object) is handled the same as the already-decoded form.
+func parseBlocksJSON(data []byte) (any, *core.JobError) {
+	var parsed any
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return nil, &core.JobError{
+			Code:    "bad_input",
+			Message: "Slack Block Kit needs valid JSON — an array of block objects like [ {…}, {…} ]. Check for missing quotes, trailing commas, or single quotes.",
+			Details: fmt.Sprintf("JSON parse on 'blocks' failed: %v", err),
+		}
+	}
+	return normalizeBlocks(parsed)
 }
 
 // httpBase is the Slack API root. Tests override via SetHTTPBase to

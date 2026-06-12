@@ -34,9 +34,13 @@ func init() {
 			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
-			Outputs:        []core.Port{{Port: "out", Label: "Number", MIME: []string{"application/json"}}},
-			ParamsSchema:   json.RawMessage(`{"type":"object","properties":{"value":{"type":"number","title":"Number"}},"required":["value"]}`),
-			Idempotent:     true,
+			// A literal value source: its output IS the `value` param, so it
+			// originates data and takes no pass pin (you can't wire into a
+			// literal). See core.WithPassthrough / Manifest.ValueSource.
+			ValueSource:  true,
+			Outputs:      []core.Port{{Port: "out", Label: "Number", MIME: []string{"application/json"}}},
+			ParamsSchema: json.RawMessage(`{"type":"object","properties":{"value":{"type":"number","title":"Number"}},"required":["value"]}`),
+			Idempotent:   true,
 		},
 		Execute: executeNumber,
 	})

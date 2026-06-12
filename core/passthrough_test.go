@@ -21,16 +21,68 @@ func TestWithPassthrough_PrependsPortsOnProcessingDrops(t *testing.T) {
 	}
 }
 
-func TestWithPassthrough_SkipsSources(t *testing.T) {
-	// A source/trigger (no inputs) gets no pass pin — nothing upstream to
-	// thread from.
-	m := Manifest{ID: "trigger", Outputs: []Port{{Port: "out"}}}
+func TestWithPassthrough_SkipsTriggers(t *testing.T) {
+	// A trigger originates a flow from an external event — nothing upstream
+	// to thread from, so no pass pin. Detected by ExecutionTrigger or the
+	// "trigger" category; assert both signals independently.
+	for _, m := range []Manifest{
+		{ID: "t1", ExecutionModel: ExecutionTrigger, Outputs: []Port{{Port: "out"}}},
+		{ID: "t2", Category: "trigger", Outputs: []Port{{Port: "out"}}},
+	} {
+		got := WithPassthrough(m)
+		if _, ok := got.Input(PassPort); ok {
+			t.Errorf("%s: trigger should not gain a pass input", m.ID)
+		}
+		if _, ok := got.Output(PassPort); ok {
+			t.Errorf("%s: trigger should not gain a pass output", m.ID)
+		}
+	}
+}
+
+func TestWithPassthrough_SkipsValueSource(t *testing.T) {
+	// A literal value source (Text, Number) opts out via ValueSource: its
+	// output is authored in a param, not wired in, so no pass pin.
+	m := Manifest{ID: "text", ValueSource: true, Outputs: []Port{{Port: "out"}}}
 	got := WithPassthrough(m)
 	if _, ok := got.Input(PassPort); ok {
-		t.Errorf("source should not gain a pass input")
+		t.Errorf("value source should not gain a pass input")
 	}
 	if _, ok := got.Output(PassPort); ok {
-		t.Errorf("source should not gain a pass output")
+		t.Errorf("value source should not gain a pass output")
+	}
+}
+
+func TestWithPassthrough_AddsToInputlessAction(t *testing.T) {
+	// An action that takes no DATA input but configures from params sits
+	// mid-flow and must thread a value — so it gets the pass pin even with
+	// zero declared inputs. This holds whether it has no params at all (Slack
+	// "list channels") or required config params (a DB query's dsn/sql, a
+	// fetcher's owner/repo): required params alone do NOT make it a value
+	// source — only the explicit ValueSource flag does.
+	for _, m := range []Manifest{
+		{ID: "slack_list_channels", Category: "network", Outputs: []Port{{Port: "channels"}}},
+		{ID: "github_list_issues", Category: "network", Outputs: []Port{{Port: "issues"}}},
+	} {
+		got := WithPassthrough(m)
+		if _, ok := got.Input(PassPort); !ok {
+			t.Errorf("%s: input-less action should gain a pass input, got %v", m.ID, got.Inputs)
+		}
+		if _, ok := got.Output(PassPort); !ok {
+			t.Errorf("%s: input-less action should gain a pass output, got %v", m.ID, got.Outputs)
+		}
+	}
+
+	// And the pass pin is prepended ahead of the real output.
+	m := Manifest{ID: "slack_list_channels", Category: "network", Outputs: []Port{{Port: "channels"}}}
+	got := WithPassthrough(m)
+	if p, ok := got.Input(PassPort); !ok || p.Port != PassPort {
+		t.Errorf("input-less action should gain a pass input, got inputs=%v", got.Inputs)
+	}
+	if _, ok := got.Output(PassPort); !ok {
+		t.Errorf("input-less action should gain a pass output, got outputs=%v", got.Outputs)
+	}
+	if got.Outputs[0].Port != PassPort || got.Outputs[1].Port != "channels" {
+		t.Errorf("pass should be prepended ahead of the real output: %v", got.Outputs)
 	}
 }
 

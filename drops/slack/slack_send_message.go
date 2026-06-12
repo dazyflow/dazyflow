@@ -63,7 +63,7 @@ func init() {
 					"base_url":{"type":"string","description":"Override the API host (proxy / self-hosted / testing)."},
 					"account":{"type":"string","default":"default","description":"Name of the connected Slack workspace."},
 					"token":{"type":"string","description":"Raw bot token (xoxb-…). Overrides 'account'."},
-					"channel":{"type":"string","title":"Channel","description":"Where to send it — a channel name like #general, or a channel ID. The bot must already be a member. Overridden by the 'Channel' input."},
+					"channel":{"type":"string","format":"slack-channel","title":"Channel","description":"Pick a channel from your connected workspace, or type a name like #general / a channel ID. The bot must already be a member. Overridden by the 'Channel' input."},
 					"text":{"type":"string","title":"Message","description":"The text to send. Overridden by the 'Message' input."},
 					"thread_ts":{"type":"string","title":"Reply in thread","x_advanced":true,"description":"Timestamp of a parent message to reply under."},
 					"blocks":{"type":"array","items":{},"title":"Blocks","x_advanced":true,"description":"Slack Block Kit layout for rich messages; replaces the plain text rendering."},

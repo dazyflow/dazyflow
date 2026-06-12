@@ -55,7 +55,7 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"channel_filter": {"type":"string","title":"Only in channel","description":"React only to mentions in this one channel (use the channel ID, e.g. C0123). Mentions elsewhere are ignored. Leave empty to react everywhere the bot is mentioned."}
+					"channel_filter": {"type":"string","format":"slack-channel","title":"Only in channel","description":"React only to mentions in this one channel — pick it from your connected workspace (or type a channel ID like C0123). Mentions elsewhere are ignored. Leave empty to react everywhere the bot is mentioned."}
 				}
 			}`),
 			// Same shape as webhook_input: retry of a trigger is

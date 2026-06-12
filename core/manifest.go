@@ -266,6 +266,18 @@ type Manifest struct {
 	//     of which port the payload took, so a node wired to it fires on
 	//     BOTH branches — punching a hole straight through the routing.
 	NoPassthrough bool `json:"no_passthrough,omitempty"`
+
+	// ValueSource marks a drop as a literal value source (Text, Number): an
+	// input-less node whose output is authored in a required param, not wired
+	// or fetched. It's the one kind of zero-input drop that genuinely
+	// ORIGINATES data, so WithPassthrough gives it no pass pin (you can't wire
+	// into a literal) — and the canvas renders its param as an editable field
+	// that IS the node. Every OTHER input-less drop is treated as an action
+	// (a fetcher / API call that configures from params but sits mid-flow) and
+	// gets the pass pin by default, so authors don't set this. Distinct from a
+	// trigger, which originates a flow from an external event rather than a
+	// literal — triggers opt out via Category/ExecutionTrigger instead.
+	ValueSource bool `json:"value_source,omitempty"`
 }
 
 func (m Manifest) Input(name string) (Port, bool) {
@@ -302,19 +314,39 @@ const PassPort = "pass"
 const MIMEBool = "application/x-bool"
 
 // WithPassthrough returns m with the universal passthrough port prepended to
-// its inputs and outputs. It's a no-op for drops with no inputs (sources /
-// triggers — nothing upstream to thread from) and idempotent if the port is
-// already present. The port is untyped (wildcard MIME, connects to anything)
-// and never required.
+// its inputs and outputs. The port is untyped (wildcard MIME, connects to
+// anything), never required, and idempotent if already present.
+//
+// The pin belongs on every node that sits mid-flow — including actions that
+// take no DATA input and configure entirely from params (a Slack "list
+// channels", an HTTP GET, a DB query): they're sequenced after an upstream
+// node and want to thread a correlation value, exactly like a node with data
+// inputs. So a zero-input drop gets the pin too, with two deliberate
+// exceptions that genuinely ORIGINATE a flow and so have nothing upstream to
+// thread from:
+//
+//   - triggers (Category "trigger" / ExecutionTrigger): fired by external
+//     events, not wired into.
+//   - value sources (ValueSource: Text, Number): a literal you author in a
+//     required param, not an action you wire into. A pass INPUT would also
+//     give them a declared input, flipping the canvas's value-source
+//     rendering (the editable field that IS the node).
+//
+// Adding the pass input is itself the signal the frontend keys off: a drop is
+// a value source on the canvas iff it has no declared inputs, so the two stay
+// in lock-step without a separate frontend rule.
 func WithPassthrough(m Manifest) Manifest {
 	if m.NoPassthrough {
 		return m // predicates/routers opt out — see NoPassthrough.
 	}
-	if len(m.Inputs) == 0 {
-		return m // sources/triggers originate flows; no pin to thread into
-	}
 	if _, ok := m.Input(PassPort); ok {
-		return m
+		return m // already present — idempotent.
+	}
+	if m.ExecutionModel == ExecutionTrigger || m.Category == "trigger" {
+		return m // triggers originate flows; nothing upstream to thread from.
+	}
+	if m.ValueSource {
+		return m // literal value source (Text, Number) — authored, not wired.
 	}
 	pin := Port{Port: PassPort, Label: "Pass-through"}
 	m.Inputs = append([]Port{pin}, m.Inputs...)

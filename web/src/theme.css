@@ -50,6 +50,14 @@
   --code-bg: #0a0918;
   --code-fg: #d8d4ec;
 
+  /* JSON syntax-highlight token colours (hz-json-editor). Tuned for the
+     dark --code-bg well; the light theme overrides them below. */
+  --json-key: #9f83fe;
+  --json-string: #4ec96d;
+  --json-number: #6cb6ff;
+  --json-bool: #e0a93a;
+  --json-punct: #9e9abb;
+
   /* Shadows + synthwave glow */
   --shadow: 0 1px 2px rgba(8, 2, 30, 0.45);
   --shadow-lg: 0 2px 10px rgba(8, 2, 30, 0.55);
@@ -168,6 +176,13 @@
      dark terminal box reads as a hole punched in a light page. */
   --code-bg: #eef0f8;
   --code-fg: #1b2233;
+
+  /* JSON token colours for the light theme well (see dark block). */
+  --json-key: #6d28d9;
+  --json-string: #1a7f37;
+  --json-number: #0969da;
+  --json-bool: #9a6700;
+  --json-punct: #57606a;
 
   /* Soft, neutral elevation — light themes want diffuse gray shadows,
      not the heavy near-black drops the dark theme uses. */

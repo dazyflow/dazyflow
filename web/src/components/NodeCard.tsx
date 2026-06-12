@@ -12,6 +12,7 @@ import {
   cronToWords,
   secondsToWords,
 } from "./nodeCardShared";
+import { JsonEditor, isInvalidJSON } from "./JsonEditor";
 
 // PICKER_FORMATS are the string-param formats whose value is an opaque
 // resource ID chosen from a dropdown. On the card they render read-only as
@@ -25,6 +26,7 @@ const PICKER_FORMATS = new Set([
   "stripe-subscription",
   "stripe-payment-intent",
   "stripe-customer",
+  "slack-channel",
 ]);
 
 // peekValue renders a port's run value as a short, single-line string for
@@ -152,7 +154,11 @@ export function HazyNode({ data, selected }: NodeProps) {
           ...Object.keys(schemaProps).filter(
             (k) =>
               schemaProps[k]?.format === "cron" ||
-              schemaProps[k]?.format === "duration-seconds",
+              schemaProps[k]?.format === "duration-seconds" ||
+              // A channel picker shows even when optional — for a trigger like
+              // On mention, WHICH channel it reacts to is key info to read at
+              // a glance (same reasoning as the Schedule card showing WHEN).
+              schemaProps[k]?.format === "slack-channel",
           ),
         ]),
       ]
@@ -298,15 +304,19 @@ export function HazyNode({ data, selected }: NodeProps) {
               const raw = d.params?.[key];
               const idStr = typeof raw === "string" ? raw : "";
               const name = d.resourceLabels?.[key];
+              // An unset OPTIONAL channel filter (On mention's "everywhere"
+              // default) reads as "Any channel", not the "Not set" prompt a
+              // required picker shows — empty is a valid, meaningful choice.
+              const unsetText =
+                s.format === "slack-channel" && !required.includes(key)
+                  ? i18n.t("nodeCard.channelAny")
+                  : i18n.t("nodeCard.pickerUnset");
               // A wired input port overrides the picker. Prefer the resolved
               // name (traced from the upstream step) so the card shows the
               // real sheet; fall back to "From upstream" only if we can't.
               const text = connectedInputs.includes(key)
                 ? name ?? i18n.t("nodeCard.pickerWired")
-                : name ??
-                  (idStr
-                    ? i18n.t("nodeCard.pickerLoading")
-                    : i18n.t("nodeCard.pickerUnset"));
+                : name ?? (idStr ? i18n.t("nodeCard.pickerLoading") : unsetText);
               return (
                 <label key={key} className="hz-param">
                   <span className="hz-param-label">{label}</span>
@@ -573,6 +583,10 @@ function ParamInput({
         }}
       />
     );
+  }
+  if (s.type === "string" && s.format === "json") {
+    const text = String(value ?? "");
+    return <JsonEditor value={text} onChange={onChange} rows={4} invalid={isInvalidJSON(text)} />;
   }
   if (s.type === "string" && s.format === "multiline") {
     return (

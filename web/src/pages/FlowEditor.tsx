@@ -182,6 +182,7 @@ const RESOURCE_PICKER_KINDS: Record<string, { provider: string; kind: string }> 
   "stripe-subscription": { provider: "stripe", kind: "subscriptions" },
   "stripe-payment-intent": { provider: "stripe", kind: "payment_intents" },
   "stripe-customer": { provider: "stripe", kind: "customers" },
+  "slack-channel": { provider: "slack", kind: "channels" },
 };
 
 // stampScheduleTimezones fills a missing/blank tz on Schedule (cron_trigger)

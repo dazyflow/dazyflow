@@ -5,6 +5,7 @@ import { Braces, Lock, Plus, Upload, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { JSONSchema, ReferenceGroups, ReferenceItem } from "../types";
 import { type TokenLabels, friendlyTokenText } from "./nodeCardShared";
+import { JsonEditor, isInvalidJSON } from "./JsonEditor";
 import { api, APIError } from "../api";
 
 // SchemaForm renders manifest.params_schema as a typed form. The
@@ -346,6 +347,23 @@ function SchemaField({ name, schema, required, value, onChange, workspace, accou
             <RowConditionField
               value={(value as string) ?? ""}
               onChange={(v) => onChange(v === "" && !required ? undefined : v)}
+            />
+          </FieldWrap>
+        );
+      }
+      // format:"json" gets the syntax-highlighted editor (keys/strings/
+      // numbers/bool colours + a soft red border on unparseable input) —
+      // for params that carry a JSON literal, like the JSON value source.
+      if (schema.format === "json") {
+        const text = (value as string) ?? (schema.default as string | undefined) ?? "";
+        return (
+          <FieldWrap name={name} schema={schema} required={required} value={value}>
+            <JsonEditor
+              value={text}
+              onChange={(v) => onChange(v === "" && !required ? undefined : v)}
+              rows={10}
+              placeholder={schema.default ? String(schema.default) : undefined}
+              invalid={isInvalidJSON(text)}
             />
           </FieldWrap>
         );
@@ -802,6 +820,9 @@ const RESOURCE_PICKERS: Record<
   "stripe-subscription": { provider: "stripe", kind: "subscriptions", noun: "subscription" },
   "stripe-payment-intent": { provider: "stripe", kind: "payment_intents", noun: "payment" },
   "stripe-customer": { provider: "stripe", kind: "customers", noun: "customer" },
+  // Listed via the connected workspace's OAuth token (channels:read). The
+  // dropdown stores the channel ID (Cxxx); the card shows the #name.
+  "slack-channel": { provider: "slack", kind: "channels", noun: "channel" },
 };
 
 // resourceNameCache remembers id→name for resources we've resolved this
@@ -870,6 +891,7 @@ function AccountResourceField({
           account={account}
           extra={extra}
           missingDep={missingDep}
+          required={required}
           disabled
           wiredName={resolvedName}
         />
@@ -927,6 +949,7 @@ function AccountResourceField({
           account={account}
           extra={extra}
           missingDep={missingDep}
+          required={required}
           wiredName={resolvedName}
         />
       )}
@@ -963,6 +986,7 @@ function ResourcePickerField({
   missingDep,
   disabled,
   wiredName,
+  required,
 }: {
   provider: string;
   kind: string;
@@ -970,6 +994,10 @@ function ResourcePickerField({
   value: unknown;
   onChange: (v: unknown) => void;
   references: ReferenceCtx;
+  // required gates the empty-option label: a required picker prompts "Choose a
+  // {noun}…", an optional one (e.g. On mention's channel filter, where empty =
+  // every channel) says "Any {noun}" — selecting it clears the value.
+  required?: boolean;
   // account is the sibling `account` param — list resources for the account
   // the node actually uses. Undefined → the connection's default.
   account?: string;
@@ -1090,7 +1118,9 @@ function ResourcePickerField({
         <option value="">
           {opts === null
             ? t("schemaForm.resourcePicker.loading")
-            : t("schemaForm.resourcePicker.choose", { noun })}
+            : required === false
+              ? t("schemaForm.resourcePicker.any", { noun })
+              : t("schemaForm.resourcePicker.choose", { noun })}
         </option>
         {!curKnown && cachedName !== undefined && (
           <option value={cur}>{cachedName}</option>

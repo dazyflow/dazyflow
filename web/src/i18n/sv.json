@@ -931,6 +931,7 @@
     "pickerUnset": "Inte angivet",
     "pickerLoading": "…",
     "pickerWired": "Från uppströms",
+    "channelAny": "Alla kanaler",
     "portRequired": "obligatorisk",
     "portOptional": "valfri",
     "missingValue": "Obligatoriskt värde saknas: {{name}}",
@@ -1083,6 +1084,7 @@
     "resourcePicker": {
       "loading": "Laddar…",
       "choose": "Välj {{noun}}…",
+      "any": "Alla {{noun}}",
       "retry": "Försök igen",
       "connectHint": "Anslut kontot för att välja {{noun}} från en lista.",
       "needsDependency": "Välj {{dep}} först för att välja {{noun}}.",
