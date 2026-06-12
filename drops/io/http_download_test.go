@@ -1,10 +1,12 @@
 package io
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"git.sr.ht/~klahr/hazyflow/core"
@@ -134,4 +136,101 @@ func errCode(r core.Result) string {
 		return r.Error.Code
 	}
 	return ""
+}
+
+// A non-http(s) URL is rejected up front with bad_url, not left to fail later
+// as an opaque transport error.
+func TestHTTPDownload_RejectsNonHTTPScheme(t *testing.T) {
+	for _, url := range []string{"file:///etc/passwd", "ftp://host/x", "example.com/x"} {
+		res, _ := executeHTTPDownload(t.Context(), core.Job{
+			WorkspaceRoot: t.TempDir(),
+			Params:        map[string]any{"url": url, "path": "out.txt"},
+		}, nil)
+		if res.Status != core.StatusError || errCode(res) != "bad_url" {
+			t.Errorf("url %q: status=%q code=%q, want bad_url", url, res.Status, errCode(res))
+		}
+	}
+}
+
+// The 'url' input accepts raw bytes (e.g. from an upstream text step) and
+// trims surrounding whitespace so a trailing newline doesn't break the request.
+func TestHTTPDownload_URLFromBytesInputTrimmed(t *testing.T) {
+	ws := t.TempDir()
+	srv := downloadServer(t, []byte("via input"), 200)
+
+	res, err := executeHTTPDownload(t.Context(), core.Job{
+		WorkspaceRoot: ws,
+		Input:         map[string]core.Ref{"url": {Inline: []byte(srv.URL + "\n")}},
+		Params:        map[string]any{"path": "out.txt", "allow_private_networks": true},
+	}, nil)
+	if err != nil || res.Status != core.StatusOK {
+		t.Fatalf("status=%q err=%v (%+v)", res.Status, err, res.Error)
+	}
+	got, _ := os.ReadFile(filepath.Join(ws, "out.txt"))
+	if string(got) != "via input" {
+		t.Errorf("file = %q, want 'via input'", got)
+	}
+}
+
+// POST sends a body: from the 'body' param, and from the 'request_body' input
+// port (which wins and JSON-marshals a structured value).
+func TestHTTPDownload_POSTSendsBody(t *testing.T) {
+	ws := t.TempDir()
+	var gotMethod, gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	t.Cleanup(srv.Close)
+
+	// (a) body from the param
+	res, err := executeHTTPDownload(t.Context(), core.Job{
+		WorkspaceRoot: ws,
+		Params: map[string]any{
+			"url": srv.URL, "path": "a.bin", "method": "POST",
+			"body": `{"q":1}`, "allow_private_networks": true,
+		},
+	}, nil)
+	if err != nil || res.Status != core.StatusOK {
+		t.Fatalf("param body: status=%q (%+v)", res.Status, res.Error)
+	}
+	if gotMethod != "POST" || gotBody != `{"q":1}` {
+		t.Errorf("param body: method=%q body=%q", gotMethod, gotBody)
+	}
+
+	// (b) request_body input wins over the param and JSON-marshals a struct.
+	res, err = executeHTTPDownload(t.Context(), core.Job{
+		WorkspaceRoot: ws,
+		Input:         map[string]core.Ref{"request_body": {Inline: map[string]any{"k": "v"}}},
+		Params: map[string]any{
+			"url": srv.URL, "path": "b.bin", "method": "POST",
+			"body": "ignored", "allow_private_networks": true,
+		},
+	}, nil)
+	if err != nil || res.Status != core.StatusOK {
+		t.Fatalf("input body: status=%q (%+v)", res.Status, res.Error)
+	}
+	if gotBody != `{"k":"v"}` {
+		t.Errorf("input body should override param and be JSON-marshalled, got %q", gotBody)
+	}
+}
+
+// Saving into a folder that doesn't exist (mkdirs off) gives a friendly
+// message pointing at "Create missing folders", not a raw ENOENT.
+func TestHTTPDownload_MissingFolderFriendlyError(t *testing.T) {
+	srv := downloadServer(t, []byte("x"), 200)
+
+	res, _ := executeHTTPDownload(t.Context(), core.Job{
+		WorkspaceRoot: t.TempDir(),
+		Params:        map[string]any{"url": srv.URL, "path": "nope/out.txt", "allow_private_networks": true},
+	}, nil)
+	if res.Status != core.StatusError || errCode(res) != "io" {
+		t.Fatalf("status=%q code=%q, want io", res.Status, errCode(res))
+	}
+	if !strings.Contains(res.Error.Message, "Create missing folders") {
+		t.Errorf("message should point at the fix, got %q", res.Error.Message)
+	}
 }

@@ -1291,6 +1291,29 @@ blocking, but listed so we don't lose them.
   the principal's workspace. A `tenant:admin` opt-out would let them
   see runs across workspaces in their tenant.
 
+### Files
+The `http_download` "Save to" field exposed a mental-model gap: files written
+to `workspace://` live in **server-side, per-tenant** storage
+(`.hazyflow/workspace/<tenant>/<workspace>/…`), NOT the user's computer — and
+today there's no end-user way to see or retrieve them (`AdminWorkspace` is just
+quota settings; `file_picker` is a flow-input drop, not a browser). A non-techie
+reading "Download file → Save to" expects their own Downloads folder. Relabelling
+the field is the quick fix; these two are the follow-ups.
+
+- [ ] **End-user Files browser.** A workspace file list + per-file download in
+  the sidebar (NOT admin-only), so a file written by `http_download` /
+  `file_write` is actually visible and retrievable. Needs a list/stat/download
+  API over the sandbox (tenant+workspace scoped, traversal-guarded like the
+  drops use) plus a Files page. Without it, downloaded files are invisible to
+  the user unless a later flow step consumes them.
+- [ ] **"Deliver to me" pattern — documented + a template.** A hosted tool has
+  no "my computer" target; a file reaches a human via a follow-on step. Today
+  that's `http_upload` (push to S3/GCS/a signed URL) — document this in the
+  `http_download` description and ship a "fetch a file, then upload it" template
+  so users don't expect a browser download. (Email-as-attachment or a Slack
+  file upload would extend the menu but need attachment support on
+  `gmail_send_email` / a new Slack file-upload drop.)
+
 ### Approvals
 - [ ] **Group + filter the inbox** (by graph, by age). Flat list is
   fine for one workspace's worth; bigger orgs would want it.

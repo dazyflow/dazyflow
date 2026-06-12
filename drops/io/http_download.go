@@ -1,20 +1,23 @@
 package io
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
+	neturl "net/url"
 	"path"
 	"strings"
 	"time"
 
 	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
 	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
+	"git.sr.ht/~klahr/hazyflow/engine"
 )
 
 func init() {
@@ -45,13 +48,20 @@ func init() {
 			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
-			Inputs: []core.Port{{
-				// Named after its param so the card shows an inline editable
-				// box; a wired value overrides the typed one.
-				Port:  "url",
-				Label: "URL",
-				MIME:  []string{"text/plain"},
-			}},
+			Inputs: []core.Port{
+				{
+					// Named after its param so the card shows an inline editable
+					// box; a wired value overrides the typed one.
+					Port:  "url",
+					Label: "URL",
+					MIME:  []string{"text/plain"},
+				},
+				// Optional POST body, pipeable from an upstream node (e.g. a
+				// JSON step's output). Untyped so it accepts text, bytes, or a
+				// structured value (JSON-marshalled); a wired value overrides
+				// the 'body' param. Mirrors http_request's request_body port.
+				{Port: "request_body", Label: "Body"},
+			},
 			Outputs: []core.Port{
 				// Only the file is a pin; the structured result (status, bytes,
 				// content_type) is still EMITTED under "meta" (see the Execute
@@ -65,7 +75,8 @@ func init() {
 					"properties":{
 						"url":{"type":"string","title":"URL","description":"The web address to download. The URL input overrides this when connected."},
 						"path":{"type":"string","title":"Save to","format":"workspace-path","description":"Where to save the file in the workspace. Prefix with scratch:// for an in-between file that's cleaned up after the run."},
-						"method":{"type":"string","title":"Method","default":"GET","enum":["GET","POST"]},
+						"method":{"type":"string","title":"Method","default":"GET","enum":["GET","POST"],"description":"GET fetches the file; POST sends the Body along (for export-style endpoints)."},
+						"body":{"type":"string","title":"Body","description":"Body to send with a POST request. The Body input overrides this when connected. May include ${secret.NAME} placeholders."},
 						"mkdirs":{"type":"boolean","title":"Create missing folders","description":"Create the folders in 'Save to' if they don't exist yet."},
 						"headers":{"type":"object","title":"Headers","additionalProperties":{"type":"string"},"x_advanced":true,"description":"Request headers. Values may include ${secret.NAME} secret placeholders (e.g. an Authorization bearer token)."},
 						"timeout_ms":{"type":"integer","default":300000,"minimum":1,"description":"Hard deadline for the whole download, in milliseconds."},
@@ -87,8 +98,14 @@ const defaultDownloadMaxBytes = 100 * 1024 * 1024 // 100 MiB
 
 func executeHTTPDownload(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	url := downloadURL(job)
-	if strings.TrimSpace(url) == "" {
+	if url == "" {
 		return params.Err(job, "bad_param", "url is required (params.url or the 'url' input)"), nil
+	}
+	// Only http(s) is downloadable here — reject other schemes (file://,
+	// ftp://, scheme-less) with a clear message rather than letting the
+	// transport fail later with an opaque "unsupported protocol scheme".
+	if u, perr := neturl.Parse(url); perr != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return params.Err(job, "bad_url", "url must be an http:// or https:// address"), nil
 	}
 	dest, err := params.String(job.Params, "path")
 	if err != nil {
@@ -116,7 +133,11 @@ func executeHTTPDownload(ctx context.Context, job core.Job, _ chan<- core.Progre
 	}
 	defer root.Close()
 
-	req, err := http.NewRequestWithContext(ctx, method, url, nil)
+	bodyReader, err := downloadRequestBody(job)
+	if err != nil {
+		return params.Err(job, "bad_param", err.Error()), nil
+	}
+	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
 	if err != nil {
 		return params.Err(job, "bad_url", err.Error()), nil
 	}
@@ -152,6 +173,11 @@ func executeHTTPDownload(ctx context.Context, job core.Job, _ chan<- core.Progre
 	if err != nil {
 		if isSandboxEscape(err) {
 			return params.Err(job, "sandbox_escape", fmt.Sprintf("dest %q escapes its sandbox root", dest)), nil
+		}
+		if errors.Is(err, fs.ErrNotExist) {
+			// The parent folder doesn't exist and mkdirs is off — point the
+			// user at the fix instead of surfacing a raw ENOENT.
+			return params.Err(job, "io", fmt.Sprintf("can't save to %q — its folder doesn't exist yet. Turn on 'Create missing folders', or pick an existing folder.", dest)), nil
 		}
 		return params.Err(job, "io", fmt.Sprintf("create %q: %v", dest, err)), nil
 	}
@@ -251,13 +277,52 @@ type sandboxRoot interface {
 	Remove(name string) error
 }
 
+// downloadURL resolves the URL in priority order: the 'url' input port (a
+// string or raw bytes from an upstream node) over params.url. Whitespace is
+// trimmed so a trailing newline from an upstream text step doesn't break the
+// request. A non-text or empty input falls through to the param.
 func downloadURL(job core.Job) string {
 	if in, ok := job.Input["url"]; ok {
-		if s, ok := in.Inline.(string); ok && s != "" {
-			return s
+		switch v := in.Inline.(type) {
+		case string:
+			if s := strings.TrimSpace(v); s != "" {
+				return s
+			}
+		case []byte:
+			if s := strings.TrimSpace(string(v)); s != "" {
+				return s
+			}
 		}
 	}
-	return params.StringDefault(job.Params, "url", "")
+	return strings.TrimSpace(params.StringDefault(job.Params, "url", ""))
+}
+
+// downloadRequestBody builds the optional request body for POST: the
+// 'request_body' input port wins (so a body can be piped from an upstream
+// node — a string, raw bytes, or a structured value JSON-marshalled), else
+// params.body. Returns nil when neither is set (a bodyless GET/POST). Mirrors
+// http_request's buildRequestBody so the two HTTP drops behave identically.
+func downloadRequestBody(job core.Job) (io.Reader, error) {
+	if input, ok := job.Input["request_body"]; ok {
+		switch v := input.Inline.(type) {
+		case string:
+			return strings.NewReader(v), nil
+		case []byte:
+			return bytes.NewReader(v), nil
+		case nil:
+			// fall through to params
+		default:
+			b, err := json.Marshal(v)
+			if err != nil {
+				return nil, fmt.Errorf("marshal request_body: %w", err)
+			}
+			return bytes.NewReader(b), nil
+		}
+	}
+	if s, ok := job.Params["body"].(string); ok && s != "" {
+		return strings.NewReader(s), nil
+	}
+	return nil, nil
 }
 
 func downloadHeaders(p map[string]any) (map[string]string, error) {
