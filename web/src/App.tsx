@@ -8,6 +8,7 @@ import { Welcome } from "./pages/Welcome";
 import { Templates } from "./pages/Templates";
 import { Apps, AppDetail } from "./pages/Apps";
 import { Secrets } from "./pages/Secrets";
+import { Files } from "./pages/Files";
 import { FlowList } from "./pages/FlowList";
 import { FlowEditor } from "./pages/FlowEditor";
 import { RunList } from "./pages/RunList";
@@ -27,6 +28,7 @@ import { AdminOAuthProviders } from "./pages/AdminOAuthProviders";
 import { AdminGoogle } from "./pages/AdminGoogle";
 import { AdminSecretManager } from "./pages/AdminSecretManager";
 import { AcceptInvite } from "./pages/AcceptInvite";
+import { UploadsProvider } from "./uploads";
 
 export function App() {
   const { token, loading } = useAuth();
@@ -49,6 +51,7 @@ export function App() {
     );
   }
   return (
+    <UploadsProvider>
     <AppShell>
       <Routes>
         <Route path="/" element={<RootRedirect />} />
@@ -64,6 +67,7 @@ export function App() {
         />
         <Route path="/templates" element={<Templates />} />
         <Route path="/secrets" element={<Secrets />} />
+        <Route path="/files" element={<Files />} />
         <Route path="/apps" element={<Apps />} />
         <Route path="/apps/:slug" element={<AppDetail />} />
         <Route path="/runs" element={<RunList />} />
@@ -86,6 +90,7 @@ export function App() {
         <Route path="*" element={<Navigate to="/flows" replace />} />
       </Routes>
     </AppShell>
+    </UploadsProvider>
   );
 }
 

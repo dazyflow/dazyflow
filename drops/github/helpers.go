@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -137,6 +138,13 @@ type gitHubErrorEnvelope struct {
 // (Bearer token, vnd.github+json, pinned API version). The caller
 // decides 2xx vs error so it can run extractGitHubError on the body.
 func githubDo(ctx context.Context, method, url, token string, body []byte, timeoutMS int) (int, []byte, error) {
+	status, raw, _, err := githubDoH(ctx, method, url, token, body, timeoutMS)
+	return status, raw, err
+}
+
+// githubDoH is githubDo plus the response headers, for callers that need
+// them (e.g. list pagination follows the Link header's rel="next").
+func githubDoH(ctx context.Context, method, url, token string, body []byte, timeoutMS int) (int, []byte, http.Header, error) {
 	if timeoutMS <= 0 {
 		timeoutMS = 15000
 	}
@@ -149,7 +157,7 @@ func githubDo(ctx context.Context, method, url, token string, body []byte, timeo
 	}
 	req, err := http.NewRequestWithContext(reqCtx, method, url, rdr)
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/vnd.github+json")
@@ -158,26 +166,70 @@ func githubDo(ctx context.Context, method, url, token string, body []byte, timeo
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	// base_url is a tenant-supplied param, so guard the dial: the SSRF
-	// client blocks loopback/private/link-local targets and the egress
-	// allowlist (when set) bounds which public hosts the bearer token
-	// may be sent to.
+	// The request URL is guarded on every call — including pagination's
+	// rel="next" links, which come back from the API response and are
+	// followed verbatim. The SSRF client blocks loopback/private/link-local
+	// targets and the egress allowlist (when set) bounds which public hosts
+	// the bearer token may be sent to.
 	if err := hfnet.EgressAllowed(url); err != nil {
-		return 0, nil, err
+		return 0, nil, nil, err
 	}
 	resp, err := hfnet.SafeHTTPClient(time.Duration(timeoutMS)*time.Millisecond, hfnet.PrivateEgressAllowed()).Do(req)
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, nil, err
 	}
 	defer resp.Body.Close()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
 	if err != nil {
-		return resp.StatusCode, nil, err
+		return resp.StatusCode, nil, resp.Header, err
 	}
 	if int64(len(raw)) > maxResponseBytes {
-		return resp.StatusCode, nil, fmt.Errorf("github response exceeds %d bytes", maxResponseBytes)
+		return resp.StatusCode, nil, resp.Header, fmt.Errorf("github response exceeds %d bytes", maxResponseBytes)
 	}
-	return resp.StatusCode, raw, nil
+	return resp.StatusCode, raw, resp.Header, nil
+}
+
+// parseNextLink extracts the rel="next" URL from a GitHub Link header,
+// returning "" when there is no next page. GitHub's pagination header looks
+// like:
+//
+//	<https://api.github.com/...&page=2>; rel="next", <...&page=9>; rel="last"
+func parseNextLink(header string) string {
+	if header == "" {
+		return ""
+	}
+	for _, part := range strings.Split(header, ",") {
+		segs := strings.Split(part, ";")
+		if len(segs) < 2 {
+			continue
+		}
+		isNext := false
+		for _, s := range segs[1:] {
+			if strings.TrimSpace(s) == `rel="next"` {
+				isNext = true
+				break
+			}
+		}
+		if !isNext {
+			continue
+		}
+		u := strings.TrimSpace(segs[0])
+		u = strings.TrimPrefix(u, "<")
+		u = strings.TrimSuffix(u, ">")
+		return u
+	}
+	return ""
+}
+
+// clampInt bounds v to [lo, hi].
+func clampInt(v, lo, hi int) int {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
 }
 
 // resolveBody figures out the issue/comment body: params.body, overridden

@@ -425,6 +425,13 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Gauge size={18} />
             <span className="nav-label">{t("nav.usage")}</span>
           </NavLink>
+          <NavLink
+            to="/files"
+            title={t("nav.files")}
+          >
+            <FolderTree size={18} />
+            <span className="nav-label">{t("nav.files")}</span>
+          </NavLink>
           {/* Approvals lives in the sidebar only when it's actually
               useful: any pending approval right now, a sticky flag
               from a previous visit, or an admin who needs to know

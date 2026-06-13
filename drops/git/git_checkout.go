@@ -12,10 +12,13 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	gogit "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/storage/memory"
 
 	"git.sr.ht/~klahr/hazyflow/core"
 	"git.sr.ht/~klahr/hazyflow/engine"
@@ -104,25 +107,9 @@ func executeGitCheckout(ctx context.Context, job core.Job, progress chan<- core.
 	}
 	dst := filepath.Join(job.WorkspaceRoot, cleanRel)
 
-	repo, mode, err := openOrClone(ctx, dst, url, depth, progress, job)
+	repo, mode, err := openOrClone(ctx, dst, url, ref, depth, progress, job)
 	if err != nil {
 		return params.Err(job, mode, err.Error()), nil
-	}
-
-	if ref != "" {
-		wt, wErr := repo.Worktree()
-		if wErr != nil {
-			return params.Err(job, "worktree", wErr.Error()), nil
-		}
-		co := &gogit.CheckoutOptions{Force: true}
-		if hash, hErr := repo.ResolveRevision(plumbing.Revision(ref)); hErr == nil {
-			co.Hash = *hash
-		} else {
-			co.Branch = plumbing.NewBranchReferenceName(ref)
-		}
-		if cErr := wt.Checkout(co); cErr != nil {
-			return params.Err(job, "checkout_failed", cErr.Error()), nil
-		}
 	}
 
 	var sha string
@@ -222,17 +209,28 @@ func scpLikeHost(s string) (string, bool) {
 }
 
 // openOrClone returns the repository at dst — opening it when the
-// directory already holds a git repo (and fetching to update refs), or
-// cloning fresh when it does not. mode reports which path was taken, so
-// callers can surface it in metadata and shape error codes accordingly.
+// directory already holds a git repo (and fetching + updating the working
+// tree), or cloning fresh when it does not. mode reports which path was
+// taken, so callers can surface it in metadata and shape error codes
+// accordingly.
+//
+// ref (a branch, tag, or commit SHA; empty for the default branch) is
+// honoured on both paths. On a fresh clone it is pushed into the clone
+// itself via ReferenceName so that (a) a non-default branch is fetched and
+// checked out — go-git's post-clone ResolveRevision never expands a bare
+// branch name to refs/remotes/origin/<name>, so a separate checkout of one
+// would fail — and (b) a shallow clone targets the requested ref instead
+// of the default branch, which is the only thing depth would otherwise
+// fetch. A commit SHA can't be a ReferenceName, so it forces a full clone
+// (depth is meaningless for an arbitrary commit) and a detached checkout.
 //
 // When dst exists but is not a git repo we refuse rather than wipe it —
 // the sandbox holds workspace data the user owns, and silently
 // overwriting it would be hostile.
-func openOrClone(ctx context.Context, dst, url string, depth int, progress chan<- core.Progress, job core.Job) (*gogit.Repository, string, error) {
+func openOrClone(ctx context.Context, dst, url, ref string, depth int, progress chan<- core.Progress, job core.Job) (*gogit.Repository, string, error) {
 	info, statErr := os.Stat(dst)
 	if statErr != nil && !os.IsNotExist(statErr) {
-		return nil, "stat", statErr
+		return nil, "stat_failed", statErr
 	}
 	logSink := newProgressSink(progress, job)
 	defer logSink.flush()
@@ -247,23 +245,173 @@ func openOrClone(ctx context.Context, dst, url string, depth int, progress chan<
 		emitLogProgress(progress, job, "git", "fetch "+url)
 		fetchErr := repo.FetchContext(ctx, &gogit.FetchOptions{
 			Depth:    depth,
+			Tags:     gogit.AllTags, // so a tag ref still resolves on re-runs
 			Progress: logSink,
 		})
 		if fetchErr != nil && fetchErr != gogit.NoErrAlreadyUpToDate {
 			return nil, "fetch_failed", fetchErr
 		}
+		// A fetch only moves remote-tracking refs; bring the working tree up
+		// to date too, or a re-run silently returns the stale checkout.
+		if ref != "" {
+			if err := checkout(repo, ref); err != nil {
+				return nil, "checkout_failed", err
+			}
+		} else if err := updateCurrentBranch(repo); err != nil {
+			return nil, "update_failed", err
+		}
 		return repo, "pulled", nil
 	}
+
+	opts := &gogit.CloneOptions{URL: url, Depth: depth, Progress: logSink}
+	shallow := depth > 0
+	sha := ref != "" && looksLikeSHA(ref)
+
+	// shallowTarget: the one path where the clone lands directly on the ref
+	// (ReferenceName), which fetches *only* that ref. Every other path does a
+	// full all-refs clone and checks the ref out afterwards.
+	shallowTarget := false
+	switch {
+	case ref == "":
+		// Default branch — nothing to target.
+	case sha:
+		// A commit SHA can't be a ReferenceName and may live anywhere in
+		// history, so it always needs a full clone; depth can't help.
+		if shallow {
+			opts.Depth = 0
+			emitLogProgress(progress, job, "git", "ignoring depth: a commit SHA needs full history")
+		}
+	default:
+		// Branch or tag. Validate up front (fast-fail with a clear error
+		// before downloading anything) and classify branch-vs-tag.
+		rn, rErr := remoteRefName(ctx, url, ref)
+		if rErr != nil {
+			return nil, "ref_not_found", rErr
+		}
+		// Only target the ref (single-ref fetch) when shallow, so depth
+		// applies to it. A full clone keeps the default all-refs fetch so
+		// every branch/tag is present and cross-branch git_log/git_diff keep
+		// working; it checks the ref out below.
+		if shallow {
+			opts.ReferenceName = rn
+			opts.SingleBranch = true
+			shallowTarget = true
+		}
+	}
+
 	emitLogProgress(progress, job, "git", "clone "+url)
-	repo, cloneErr := gogit.PlainCloneContext(ctx, dst, false, &gogit.CloneOptions{
-		URL:      url,
-		Depth:    depth,
-		Progress: logSink,
-	})
+	repo, cloneErr := gogit.PlainCloneContext(ctx, dst, false, opts)
 	if cloneErr != nil {
 		return nil, "clone_failed", cloneErr
 	}
+	if ref != "" && !shallowTarget {
+		if err := checkout(repo, ref); err != nil {
+			return nil, "checkout_failed", err
+		}
+	}
 	return repo, "cloned", nil
+}
+
+// shaPattern matches an abbreviated-or-full hex commit id (git's minimum
+// unambiguous abbreviation is 7). A ref this shape is treated as a commit
+// rather than a branch/tag name; a branch literally named in hex is a rare
+// collision we accept against the common case of pasting a SHA.
+var shaPattern = regexp.MustCompile(`^[0-9a-fA-F]{7,40}$`)
+
+func looksLikeSHA(ref string) bool { return shaPattern.MatchString(ref) }
+
+// remoteRefName classifies a short ref against the remote's advertised
+// refs, returning the fully-qualified name to clone (refs/heads/<ref> or
+// refs/tags/<ref>). It prefers a branch over a same-named tag, matching
+// git's precedence, and accepts an already-qualified ref verbatim. Failing
+// fast here keeps a typo'd ref from writing a half-clone into the sandbox.
+func remoteRefName(ctx context.Context, url, ref string) (plumbing.ReferenceName, error) {
+	rem := gogit.NewRemote(memory.NewStorage(), &config.RemoteConfig{
+		Name: "origin",
+		URLs: []string{url},
+	})
+	refs, err := rem.ListContext(ctx, &gogit.ListOptions{})
+	if err != nil {
+		return "", fmt.Errorf("list remote refs: %w", err)
+	}
+	branch := plumbing.NewBranchReferenceName(ref)
+	tag := plumbing.NewTagReferenceName(ref)
+	var hasBranch, hasTag bool
+	for _, r := range refs {
+		switch r.Name() {
+		case plumbing.ReferenceName(ref):
+			return r.Name(), nil // already fully-qualified
+		case branch:
+			hasBranch = true
+		case tag:
+			hasTag = true
+		}
+	}
+	switch {
+	case hasBranch:
+		return branch, nil
+	case hasTag:
+		return tag, nil
+	default:
+		return "", fmt.Errorf("ref %q not found on remote (no such branch or tag)", ref)
+	}
+}
+
+// checkout moves the working tree to ref, handling the case go-git's
+// post-clone resolution misses: a remote-tracking branch with no local
+// branch yet. For such a ref it creates (or fast-forwards) a local branch
+// at the freshly-fetched remote tip; otherwise it resolves the ref as a
+// tag, qualified ref, or commit SHA and checks it out detached.
+func checkout(repo *gogit.Repository, ref string) error {
+	wt, err := repo.Worktree()
+	if err != nil {
+		return err
+	}
+	if rr, err := repo.Reference(plumbing.NewRemoteReferenceName("origin", ref), true); err == nil {
+		local := plumbing.NewBranchReferenceName(ref)
+		if _, existsErr := repo.Reference(local, false); existsErr == nil {
+			// Local branch already exists (a re-run): switch to it, then
+			// fast-forward to the updated remote tip.
+			if err := wt.Checkout(&gogit.CheckoutOptions{Branch: local, Force: true}); err != nil {
+				return err
+			}
+			return wt.Reset(&gogit.ResetOptions{Mode: gogit.HardReset, Commit: rr.Hash()})
+		}
+		return wt.Checkout(&gogit.CheckoutOptions{
+			Branch: local,
+			Hash:   rr.Hash(),
+			Create: true,
+			Force:  true,
+		})
+	}
+	hash, err := repo.ResolveRevision(plumbing.Revision(ref))
+	if err != nil {
+		return fmt.Errorf("ref %q not found (no matching branch, tag, or commit)", ref)
+	}
+	return wt.Checkout(&gogit.CheckoutOptions{Hash: *hash, Force: true})
+}
+
+// updateCurrentBranch fast-forwards the checked-out branch to its
+// remote-tracking tip after a fetch. It is a no-op when HEAD is detached or
+// the branch has no origin counterpart — there is nothing well-defined to
+// advance to in those cases.
+func updateCurrentBranch(repo *gogit.Repository) error {
+	head, err := repo.Head()
+	if err != nil {
+		return err
+	}
+	if !head.Name().IsBranch() {
+		return nil
+	}
+	rr, err := repo.Reference(plumbing.NewRemoteReferenceName("origin", head.Name().Short()), true)
+	if err != nil {
+		return nil
+	}
+	wt, err := repo.Worktree()
+	if err != nil {
+		return err
+	}
+	return wt.Reset(&gogit.ResetOptions{Mode: gogit.HardReset, Commit: rr.Hash()})
 }
 
 // progressSink turns the chatty stream go-git writes during clone/fetch

@@ -3,9 +3,11 @@ package github
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"git.sr.ht/~klahr/hazyflow/core"
@@ -171,8 +173,111 @@ func TestGitHubListIssues_QueryAndResult(t *testing.T) {
 	if srv.lastPath != "/repos/o/r/issues" {
 		t.Errorf("path = %q", srv.lastPath)
 	}
-	issues := res.Output["issues"].Inline.([]any)
+	issues := res.Output["issues"].Inline.([]map[string]any)
 	if len(issues) != 2 {
 		t.Errorf("got %d issues", len(issues))
+	}
+	meta := res.Output["meta"].Inline.(map[string]any)
+	if meta["count"] != 2 || meta["truncated"] != false {
+		t.Errorf("meta = %+v, want count=2 truncated=false", meta)
+	}
+}
+
+// TestGitHubListIssues_FiltersPRs locks in that pull requests (which the
+// issues endpoint returns, marked by a pull_request key) are excluded by
+// default and kept when include_prs is set.
+func TestGitHubListIssues_FiltersPRs(t *testing.T) {
+	mixed := []any{
+		map[string]any{"number": 1, "title": "real issue"},
+		map[string]any{"number": 2, "title": "a PR", "pull_request": map[string]any{"url": "https://gh/pulls/2"}},
+		map[string]any{"number": 3, "title": "another issue"},
+	}
+
+	srv := newGHServer(t, 200, mixed)
+	withGHEnv(t, srv.URL)
+	res, _ := executeGitHubListIssues(context.Background(), core.Job{
+		Params: map[string]any{"owner": "o", "repo": "r"},
+	}, nil)
+	issues := res.Output["issues"].Inline.([]map[string]any)
+	if len(issues) != 2 {
+		t.Fatalf("default got %d, want 2 (PR filtered out)", len(issues))
+	}
+	for _, it := range issues {
+		if _, isPR := it["pull_request"]; isPR {
+			t.Errorf("a pull request leaked through: %+v", it)
+		}
+	}
+
+	srv2 := newGHServer(t, 200, mixed)
+	withGHEnv(t, srv2.URL)
+	res2, _ := executeGitHubListIssues(context.Background(), core.Job{
+		Params: map[string]any{"owner": "o", "repo": "r", "include_prs": true},
+	}, nil)
+	if got := len(res2.Output["issues"].Inline.([]map[string]any)); got != 3 {
+		t.Errorf("include_prs got %d, want 3", got)
+	}
+}
+
+// pagedServer serves the given pages of issues, emitting a Link:
+// rel="next" header pointing back at itself (?page=N) until the last page.
+func pagedServer(t *testing.T, pages [][]any) *httptest.Server {
+	t.Helper()
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		idx := 0
+		if p := r.URL.Query().Get("page"); p != "" {
+			if n, err := strconv.Atoi(p); err == nil {
+				idx = n - 1
+			}
+		}
+		if idx < 0 || idx >= len(pages) {
+			idx = 0
+		}
+		if idx < len(pages)-1 {
+			w.Header().Set("Link", fmt.Sprintf(`<%s/repos/o/r/issues?page=%d>; rel="next"`, srv.URL, idx+2))
+		}
+		w.WriteHeader(200)
+		_ = json.NewEncoder(w).Encode(pages[idx])
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestGitHubListIssues_Paginates(t *testing.T) {
+	srv := pagedServer(t, [][]any{
+		{map[string]any{"number": 1}, map[string]any{"number": 2}},
+		{map[string]any{"number": 3}, map[string]any{"number": 4}},
+		{map[string]any{"number": 5}},
+	})
+	withGHEnv(t, srv.URL)
+	res, _ := executeGitHubListIssues(context.Background(), core.Job{
+		Params: map[string]any{"owner": "o", "repo": "r"},
+	}, nil)
+	issues := res.Output["issues"].Inline.([]map[string]any)
+	if len(issues) != 5 {
+		t.Fatalf("got %d issues across pages, want 5", len(issues))
+	}
+	meta := res.Output["meta"].Inline.(map[string]any)
+	if meta["truncated"] != false {
+		t.Errorf("truncated = %v, want false (all pages fit)", meta["truncated"])
+	}
+}
+
+func TestGitHubListIssues_TruncatesAtMaxResults(t *testing.T) {
+	srv := pagedServer(t, [][]any{
+		{map[string]any{"number": 1}, map[string]any{"number": 2}},
+		{map[string]any{"number": 3}, map[string]any{"number": 4}},
+	})
+	withGHEnv(t, srv.URL)
+	res, _ := executeGitHubListIssues(context.Background(), core.Job{
+		Params: map[string]any{"owner": "o", "repo": "r", "max_results": 3},
+	}, nil)
+	issues := res.Output["issues"].Inline.([]map[string]any)
+	if len(issues) != 3 {
+		t.Fatalf("got %d, want 3 (capped at max_results)", len(issues))
+	}
+	meta := res.Output["meta"].Inline.(map[string]any)
+	if meta["truncated"] != true {
+		t.Errorf("truncated = %v, want true", meta["truncated"])
 	}
 }

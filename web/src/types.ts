@@ -738,3 +738,13 @@ export type GcpSecretManagerConfig = {
   service_account_key: string;
   endpoint?: string;
 };
+
+// FileEntry is one row in a workspace file-manager directory listing
+// (mirrors daemon/httpfiles.go fileEntry).
+export type FileEntry = {
+  name: string;
+  path: string; // workspace-relative path to this entry
+  is_dir: boolean;
+  size: number;
+  mod_time: string; // RFC3339
+};

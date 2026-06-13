@@ -3,11 +3,12 @@ package git
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	gogit "github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
 
 	"git.sr.ht/~klahr/hazyflow/core"
 	"git.sr.ht/~klahr/hazyflow/engine"
@@ -37,7 +38,8 @@ func init() {
 				},
 				{
 					Title:  "Compare a feature branch against main",
-					Params: json.RawMessage(`{"path":"src/widgets","from":"origin/main","to":"feature/new-api"}`),
+					Params: json.RawMessage(`{"path":"src/widgets","from":"origin/main","to":"feature/new-api","merge_base":true}`),
+					Notes:  "merge_base:true shows only what the feature branch changed since it diverged from main — what you'd expect from comparing two branches.",
 				},
 			},
 			ExecutionModel: core.ExecutionBatch,
@@ -61,7 +63,8 @@ func init() {
 					"properties":{
 						"path":{"type":"string","title":"Folder","description":"Workspace folder holding the repository. Overridden by the 'Repository folder' input."},
 						"from":{"type":"string","title":"Compare from","default":"HEAD~1","description":"Starting point — branch, tag, or commit SHA. Defaults to the commit before the latest (HEAD~1)."},
-						"to":{"type":"string","title":"Compare to","default":"HEAD","description":"End point. Defaults to the latest commit (HEAD)."}
+						"to":{"type":"string","title":"Compare to","default":"HEAD","description":"End point. Defaults to the latest commit (HEAD)."},
+						"merge_base":{"type":"boolean","default":false,"title":"Since common ancestor","description":"Compare from where the two refs diverged (git's three-dot A...B) so you see only what changed on the 'to' side. Off compares the two refs directly, which can show unrelated changes from the 'from' side."}
 					}
 				}`,
 			),
@@ -71,7 +74,14 @@ func init() {
 	})
 }
 
-func executeGitDiff(_ context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
+// maxDiffBytes caps the patch text we buffer into the run record, matching
+// the response-size caps the network drops enforce (stripe/gmail/slack). A
+// diff across a large or generated-file change can be huge; we keep the
+// accurate file/line counts (from patch.Stats(), which parses the whole
+// patch regardless) and only truncate the text.
+const maxDiffBytes = 16 << 20 // 16 MiB
+
+func executeGitDiff(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
 	if job.WorkspaceRoot == "" {
 		return params.Err(job, "no_sandbox", "git_diff requires a workspace sandbox"), nil
 	}
@@ -89,37 +99,56 @@ func executeGitDiff(_ context.Context, job core.Job, progress chan<- core.Progre
 	}
 	from := params.StringDefault(job.Params, "from", "HEAD~1")
 	to := params.StringDefault(job.Params, "to", "HEAD")
+	mergeBase := params.BoolDefault(job.Params, "merge_base", false)
 
 	repo, err := gogit.PlainOpen(filepath.Join(job.WorkspaceRoot, cleanRel))
 	if err != nil {
 		return params.Err(job, "open", err.Error()), nil
 	}
 
-	fromHash, err := repo.ResolveRevision(plumbing.Revision(from))
+	fromHash, err := resolveRevision(repo, from)
 	if err != nil {
 		return params.Err(job, "bad_ref", fmt.Sprintf("from %q: %v", from, err)), nil
 	}
-	toHash, err := repo.ResolveRevision(plumbing.Revision(to))
+	toHash, err := resolveRevision(repo, to)
 	if err != nil {
 		return params.Err(job, "bad_ref", fmt.Sprintf("to %q: %v", to, err)), nil
 	}
 
-	fromCommit, err := repo.CommitObject(*fromHash)
+	fromCommit, err := repo.CommitObject(fromHash)
 	if err != nil {
 		return params.Err(job, "no_commit", fmt.Sprintf("from: %v", err)), nil
 	}
-	toCommit, err := repo.CommitObject(*toHash)
+	toCommit, err := repo.CommitObject(toHash)
 	if err != nil {
 		return params.Err(job, "no_commit", fmt.Sprintf("to: %v", err)), nil
 	}
 
-	emitLogProgress(progress, job, "git", fmt.Sprintf("diff %s..%s", fromHash.String()[:8], toHash.String()[:8]))
-	patch, err := fromCommit.Patch(toCommit)
+	// Three-dot mode: diff from where the two refs diverged, so the result
+	// is just what the 'to' side added — not the 'from' side's unrelated
+	// commits (which a direct two-dot comparison would show as deletions).
+	if mergeBase {
+		bases, mErr := fromCommit.MergeBase(toCommit)
+		if mErr != nil {
+			return params.Err(job, "merge_base_failed", mErr.Error()), nil
+		}
+		if len(bases) == 0 {
+			return params.Err(job, "no_merge_base", fmt.Sprintf("%q and %q share no common ancestor", from, to)), nil
+		}
+		fromCommit = bases[0]
+	}
+
+	emitLogProgress(progress, job, "git", fmt.Sprintf("diff %s..%s", fromCommit.Hash.String()[:8], toHash.String()[:8]))
+	patch, err := fromCommit.PatchContext(ctx, toCommit)
 	if err != nil {
+		if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return params.Err(job, "cancelled", err.Error()), nil
+		}
 		return params.Err(job, "diff_failed", err.Error()), nil
 	}
-	diffText := patch.String()
 
+	// Stats reflect the full diff even when the text is truncated, so the
+	// counts stay accurate.
 	stats := patch.Stats()
 	filesChanged := len(stats)
 	added, deleted := 0, 0
@@ -128,12 +157,22 @@ func executeGitDiff(_ context.Context, job core.Job, progress chan<- core.Progre
 		deleted += s.Deletion
 	}
 
+	diffText := patch.String()
+	truncated := false
+	if len(diffText) > maxDiffBytes {
+		diffText = capDiff(diffText, maxDiffBytes)
+		truncated = true
+		emitLogProgress(progress, job, "git", fmt.Sprintf("diff truncated at %d bytes", maxDiffBytes))
+	}
+
 	meta := map[string]any{
-		"from":          fromHash.String(),
+		"from":          fromCommit.Hash.String(),
 		"to":            toHash.String(),
+		"merge_base":    mergeBase,
 		"files_changed": filesChanged,
 		"insertions":    added,
 		"deletions":     deleted,
+		"truncated":     truncated,
 	}
 	return core.Result{
 		JobID:  job.ID,
@@ -143,4 +182,15 @@ func executeGitDiff(_ context.Context, job core.Job, progress chan<- core.Progre
 			"meta": {MIME: "application/json", Inline: meta},
 		},
 	}, nil
+}
+
+// capDiff trims patch text to max bytes at the last whole line so the
+// output stays valid (no mid-line/mid-rune cut) and ends with a marker
+// pointing at the still-accurate stats in meta.
+func capDiff(s string, max int) string {
+	cut := s[:max]
+	if i := strings.LastIndexByte(cut, '\n'); i > 0 {
+		cut = cut[:i+1]
+	}
+	return cut + fmt.Sprintf("… diff truncated at %d bytes — see files_changed / insertions / deletions for full totals …\n", max)
 }

@@ -7114,3 +7114,359 @@ button.warning:hover:not(:disabled) {
 .hz-j-number { color: var(--json-number); }
 .hz-j-bool { color: var(--json-bool); }
 .hz-j-punct { color: var(--json-punct); }
+
+/* ── Files (workspace file manager) ─────────────────────────────────── */
+.files-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3, 12px);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3, 12px);
+}
+.files-breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  font-size: 0.95rem;
+}
+.files-breadcrumb .link:disabled {
+  color: var(--ink);
+  font-weight: 600;
+  cursor: default;
+}
+.files-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.files-crumb-sep {
+  color: var(--muted);
+}
+.files-actions {
+  display: flex;
+  gap: var(--space-2, 8px);
+}
+.files-list {
+  padding: 0;
+  overflow: hidden;
+}
+.files-empty {
+  padding: var(--space-5, 24px);
+  text-align: center;
+  color: var(--muted);
+}
+.files-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.files-table th {
+  text-align: left;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.files-table td {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.files-table tr:last-child td {
+  border-bottom: none;
+}
+.files-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+button.files-name {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--accent);
+  font: inherit;
+}
+button.files-name:hover {
+  text-decoration: underline;
+}
+.files-icon {
+  color: var(--muted);
+  flex: none;
+}
+.files-icon-dir {
+  color: var(--accent);
+}
+.files-col-size {
+  width: 8rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.files-col-actions {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+}
+.files-col-actions .icon.ghost {
+  margin-left: 2px;
+}
+.files-col-actions .icon.ghost.danger:hover {
+  color: var(--danger);
+}
+.files-quota {
+  margin-top: var(--space-4, 16px);
+  max-width: 420px;
+}
+.files-quota-label {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.files-quota-bar {
+  height: 8px;
+  border-radius: var(--r-pill, 999px);
+  background: var(--border);
+  overflow: hidden;
+}
+.files-quota-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+.files-quota-fill[data-danger="true"] {
+  background: var(--danger);
+}
+
+/* ── Files: move picker + drag-and-drop ─────────────────────────────── */
+/* Two-stage drop affordance: while dragging, every valid destination shows
+   a soft dashed outline (data-droppable) so it's clear where the item can
+   go; the one under the cursor lights up solid (data-drop). */
+.files-table tr[data-droppable="true"] {
+  outline: 1.5px dashed color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: -3px;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+.files-table tr[data-droppable="true"] .files-icon-dir {
+  color: var(--accent);
+}
+.files-table tr[data-drop="true"] {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.files-breadcrumb .link[data-droppable="true"] {
+  outline: 1.5px dashed color-mix(in srgb, var(--accent) 55%, transparent);
+  border-radius: var(--r-2, 6px);
+}
+.files-breadcrumb .link[data-drop="true"] {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border-radius: var(--r-2, 6px);
+  outline: none;
+}
+/* The list area itself is a drop target for the current folder, so you can
+   drop onto an opened folder's body (not just a subfolder row). */
+.files-list[data-droppable="true"] {
+  outline: 1.5px dashed color-mix(in srgb, var(--accent) 50%, transparent);
+  outline-offset: -4px;
+}
+.files-list[data-drop="true"] {
+  outline: 2px solid var(--accent);
+  outline-offset: -4px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+/* Spring-loaded folders flash briefly as they open. */
+@keyframes files-spring-pulse {
+  0% {
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+  }
+  45% {
+    background: color-mix(in srgb, var(--accent) 50%, transparent);
+  }
+  100% {
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+  }
+}
+.files-table tr[data-springing="true"] {
+  animation: files-spring-pulse 260ms ease-out;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.files-breadcrumb .link[data-springing="true"] {
+  animation: files-spring-pulse 260ms ease-out;
+  border-radius: var(--r-2, 6px);
+}
+.files-row-dragging {
+  opacity: 0.45;
+}
+.files-table tr[draggable="true"] .files-name-cell {
+  cursor: grab;
+}
+
+/* "Move to…" picker modal */
+.move-dialog {
+  width: min(440px, 92vw);
+}
+.move-breadcrumb {
+  margin-bottom: var(--space-3, 12px);
+}
+.move-folder-list {
+  border: 1px solid var(--border);
+  border-radius: var(--r-2, 8px);
+  max-height: 320px;
+  overflow-y: auto;
+}
+.move-folder-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.move-folder-row:last-child {
+  border-bottom: none;
+}
+.move-folder-row:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.move-folder-row:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.move-folder-name {
+  flex: 1;
+}
+.move-folder-chev {
+  color: var(--muted);
+}
+
+/* ── Background uploads indicator ───────────────────────────────────── */
+.uploads-panel {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  width: 320px;
+  max-width: calc(100vw - 40px);
+  background: var(--bg);
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: var(--r-2, 10px);
+  box-shadow: var(--shadow-pop, var(--shadow-lg));
+  z-index: 1000;
+  overflow: hidden;
+}
+.uploads-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  color: var(--ink);
+}
+.uploads-list {
+  max-height: 260px;
+  overflow-y: auto;
+}
+.upload-row {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.upload-row:last-child {
+  border-bottom: none;
+}
+.upload-row-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.upload-status-icon {
+  display: inline-flex;
+  color: var(--muted);
+  flex: none;
+}
+.upload-row[data-status="done"] .upload-status-icon {
+  color: var(--status-completed, var(--accent));
+}
+.upload-row[data-status="error"] .upload-status-icon {
+  color: var(--danger);
+}
+.upload-name {
+  flex: 1;
+  font-size: 0.88rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.upload-x {
+  flex: none;
+}
+.upload-row-meta {
+  font-size: 0.76rem;
+  color: var(--muted);
+  margin: 4px 0 6px;
+  font-variant-numeric: tabular-nums;
+}
+.upload-row[data-status="error"] .upload-row-meta {
+  color: var(--danger);
+}
+.upload-bar {
+  height: 5px;
+  border-radius: var(--r-pill, 999px);
+  background: var(--border);
+  overflow: hidden;
+}
+.upload-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+.upload-row[data-status="done"] .upload-bar-fill {
+  background: var(--status-completed, var(--accent));
+}
+.upload-row[data-status="error"] .upload-bar-fill,
+.upload-row[data-status="canceled"] .upload-bar-fill {
+  background: var(--muted);
+}
+
+/* ── Files: drag-from-desktop upload dropzone ───────────────────────── */
+/* Fill the available height so the whole visible area accepts a drop —
+   otherwise a file dropped in the empty space below the (often short) file
+   list misses the handler and the browser just opens the file instead. */
+.files-page {
+  position: relative;
+  min-height: 100%;
+}
+.files-page[data-filedrag="true"]::after {
+  /* Subtle accent wash over the whole page while OS files are dragged in. */
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 2px dashed var(--accent);
+  border-radius: var(--r-2, 10px);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  pointer-events: none;
+  z-index: 5;
+}
+.files-dropzone-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--accent);
+  font-weight: 600;
+  pointer-events: none;
+}

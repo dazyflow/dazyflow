@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
@@ -19,8 +20,8 @@ func init() {
 			Version:     "1.0",
 			Label:       "GitHub",
 			Subtitle:    "List issues",
-			Summary:     "List issues on a GitHub repo filtered by state, labels, assignee, and update time.",
-			Description: "Fetch a list of issues from a GitHub repo, filtered by open/closed state, labels or assignee. Pairs with a poll trigger for 'fire on new issue' workflows: filter by 'Updated after' (last-seen timestamp) and process what comes back.",
+			Summary:     "List issues on a GitHub repo filtered by state, labels, assignee, and update time. Pull requests are excluded by default.",
+			Description: "Fetch a list of issues from a GitHub repo, filtered by open/closed state, labels or assignee. Pull requests are left out by default (GitHub's API counts them as issues) — flip 'Include pull requests' to keep them. Results span multiple pages up to 'Max results'. Pairs with a poll trigger for 'fire on new issue' workflows: filter by 'Updated after' (last-seen timestamp) and process what comes back.",
 			Integration: "GitHub",
 			Category:    "network",
 			Icon:        "git-branch",
@@ -50,7 +51,9 @@ func init() {
 					"labels":{"type":"array","title":"Labels","items":{"type":"string"},"description":"Only issues carrying ALL of these labels."},
 					"assignee":{"type":"string","title":"Assignee","description":"Only issues assigned to this username. 'none' = unassigned, '*' = any."},
 					"since":{"type":"string","title":"Updated after","x_advanced":true,"description":"RFC3339 timestamp; only issues updated after this."},
-					"per_page":{"type":"integer","title":"Max results","x_advanced":true,"default":30,"minimum":1,"maximum":100},
+					"include_prs":{"type":"boolean","title":"Include pull requests","x_advanced":true,"default":false,"description":"GitHub's issues API also returns pull requests. Off (default) filters them out so you get only real issues."},
+					"max_results":{"type":"integer","title":"Max results","default":100,"minimum":1,"maximum":1000,"description":"Stop after this many issues, fetching across pages as needed."},
+					"per_page":{"type":"integer","title":"Page size","x_advanced":true,"default":100,"minimum":1,"maximum":100,"description":"How many issues to request per page while paginating."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
 				},
 				"required":["owner","repo"]
@@ -72,9 +75,14 @@ func executeGitHubListIssues(ctx context.Context, job core.Job, _ chan<- core.Pr
 		return params.Err(job, "auth", err.Error()), nil
 	}
 
+	maxResults := clampInt(params.IntDefault(job.Params, "max_results", 100), 1, 1000)
+	perPage := clampInt(params.IntDefault(job.Params, "per_page", 100), 1, 100)
+	includePRs := params.BoolDefault(job.Params, "include_prs", false)
+	timeoutMS := params.IntDefault(job.Params, "timeout_ms", 15000)
+
 	q := url.Values{}
 	q.Set("state", params.StringDefault(job.Params, "state", "open"))
-	q.Set("per_page", strconv.Itoa(params.IntDefault(job.Params, "per_page", 30)))
+	q.Set("per_page", strconv.Itoa(perPage))
 	if labels := paramStringSlice(job.Params, "labels"); len(labels) > 0 {
 		q.Set("labels", strings.Join(labels, ","))
 	}
@@ -85,22 +93,61 @@ func executeGitHubListIssues(ctx context.Context, job core.Job, _ chan<- core.Pr
 		q.Set("since", s)
 	}
 
-	endpoint := currentHTTPBase() + "/repos/" + url.PathEscape(owner) + "/" + url.PathEscape(repo) + "/issues?" + q.Encode()
-	status, respBody, err := githubDo(ctx, "GET", endpoint, token, nil, params.IntDefault(job.Params, "timeout_ms", 15000))
-	if err != nil {
-		return params.Err(job, "github_http_error", err.Error()), nil
+	// Follow the Link: rel="next" header across pages until we have
+	// max_results issues or run out, bounded by maxPages as a safety net.
+	const maxPages = 20
+	next := currentHTTPBase() + "/repos/" + url.PathEscape(owner) + "/" + url.PathEscape(repo) + "/issues?" + q.Encode()
+	issues := make([]map[string]any, 0, maxResults)
+	truncated := false
+	for pages := 0; next != ""; pages++ {
+		if pages >= maxPages {
+			truncated = true
+			break
+		}
+		status, respBody, hdr, hErr := githubDoH(ctx, "GET", next, token, nil, timeoutMS)
+		if hErr != nil {
+			return params.Err(job, "github_http_error", hErr.Error()), nil
+		}
+		if status < 200 || status >= 300 {
+			return params.Err(job, "github_error", extractGitHubError(respBody)), nil
+		}
+		var page []map[string]any
+		if err := json.Unmarshal(respBody, &page); err != nil {
+			// A 2xx with a non-array body is unexpected (e.g. an abuse-rate
+			// interstitial or a truncated body). Surface it rather than
+			// silently skipping the page — a poll workflow must not miss
+			// issues without any signal.
+			return params.Err(job, "bad_response", fmt.Sprintf("unexpected GitHub response on page %d: %v", pages+1, err)), nil
+		}
+		for _, it := range page {
+			// GitHub returns PRs from the issues endpoint; they carry a
+			// "pull_request" key, which is how the API distinguishes them.
+			if !includePRs {
+				if _, isPR := it["pull_request"]; isPR {
+					continue
+				}
+			}
+			issues = append(issues, it)
+		}
+		next = parseNextLink(hdr.Get("Link"))
+		if len(issues) >= maxResults {
+			truncated = len(issues) > maxResults || next != ""
+			break
+		}
 	}
-	if status < 200 || status >= 300 {
-		return params.Err(job, "github_error", extractGitHubError(respBody)), nil
+	if len(issues) > maxResults {
+		issues = issues[:maxResults]
 	}
 
-	var issues []any
-	if err := json.Unmarshal(respBody, &issues); err != nil {
-		issues = []any{}
-	}
 	return core.Result{
 		JobID:  job.ID,
 		Status: core.StatusOK,
-		Output: map[string]core.Ref{"issues": {MIME: "application/json", Inline: issues}},
+		Output: map[string]core.Ref{
+			"issues": {MIME: "application/json", Inline: issues},
+			// Emitted (not a declared pin), like the action drops' meta.
+			"meta": {MIME: "application/json", Inline: map[string]any{
+				"count": len(issues), "truncated": truncated,
+			}},
+		},
 	}, nil
 }

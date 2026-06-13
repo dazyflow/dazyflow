@@ -17,6 +17,7 @@ import type {
   OrgProfile,
   Role,
   TemplateSummary,
+  FileEntry,
   JobRecord,
   JobStatus,
   PendingApproval,
@@ -253,6 +254,151 @@ export const api = {
     }
     return res.json();
   },
+
+  // uploadWorkspaceFileProgress is the upload path used by the background
+  // uploader: XMLHttpRequest (not fetch) because only XHR exposes
+  // upload.onprogress for a real percentage, and it can be aborted via the
+  // passed AbortSignal (cancel button).
+  uploadWorkspaceFileProgress: (
+    token: string,
+    tenant: string,
+    workspace: string,
+    file: File,
+    destPath: string,
+    opts?: { onProgress?: (fraction: number) => void; signal?: AbortSignal },
+  ): Promise<{ path: string; size: number }> =>
+    new Promise((resolve, reject) => {
+      const form = new FormData();
+      form.append("file", file);
+      if (destPath) form.append("path", destPath);
+      const xhr = new XMLHttpRequest();
+      xhr.open(
+        "POST",
+        API_BASE +
+          `/workspaces/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/files`,
+      );
+      xhr.withCredentials = true;
+      xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) opts?.onProgress?.(e.loaded / e.total);
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            resolve(JSON.parse(xhr.responseText));
+          } catch {
+            resolve({ path: destPath, size: file.size });
+          }
+        } else {
+          if (xhr.status === 401) notifyUnauthorized();
+          const { message } = parseAPIErrorBody(xhr.responseText, xhr.statusText);
+          reject(new APIError(xhr.status, message));
+        }
+      };
+      xhr.onerror = () => reject(new APIError(0, "network error"));
+      xhr.onabort = () => reject(new DOMException("aborted", "AbortError"));
+      if (opts?.signal) {
+        if (opts.signal.aborted) {
+          xhr.abort();
+          return;
+        }
+        opts.signal.addEventListener("abort", () => xhr.abort());
+      }
+      xhr.send(form);
+    }),
+
+  // --- Workspace file manager (browse/manage the persistent sandbox) ---
+
+  listWorkspaceFiles: (
+    token: string,
+    tenant: string,
+    workspace: string,
+    path: string,
+  ): Promise<{ path: string; entries: FileEntry[] }> => {
+    const q = path ? "?path=" + encodeURIComponent(path) : "";
+    return request(
+      token,
+      "GET",
+      `/workspaces/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/files/list${q}`,
+    );
+  },
+
+  workspaceFileUsage: (
+    token: string,
+    tenant: string,
+    workspace: string,
+  ): Promise<{ used: number; limit: number }> =>
+    request(
+      token,
+      "GET",
+      `/workspaces/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/files/usage`,
+    ),
+
+  deleteWorkspaceFile: (
+    token: string,
+    tenant: string,
+    workspace: string,
+    path: string,
+  ): Promise<{ path: string; deleted: boolean }> =>
+    request(
+      token,
+      "DELETE",
+      `/workspaces/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/files?path=${encodeURIComponent(path)}`,
+    ),
+
+  mkdirWorkspaceDir: (
+    token: string,
+    tenant: string,
+    workspace: string,
+    path: string,
+  ): Promise<{ path: string; created: boolean }> =>
+    request(
+      token,
+      "POST",
+      `/workspaces/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/files/mkdir`,
+      { path },
+    ),
+
+  renameWorkspaceFile: (
+    token: string,
+    tenant: string,
+    workspace: string,
+    from: string,
+    to: string,
+  ): Promise<{ from: string; to: string }> =>
+    request(
+      token,
+      "POST",
+      `/workspaces/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/files/rename`,
+      { from, to },
+    ),
+
+  // downloadWorkspaceFile fetches one file as a Blob. The endpoint requires
+  // the bearer token, so a plain anchor href can't be used — the caller
+  // turns the Blob into an object URL to trigger the browser save.
+  downloadWorkspaceFile: async (
+    token: string,
+    tenant: string,
+    workspace: string,
+    path: string,
+  ): Promise<Blob> => {
+    const res = await fetch(
+      API_BASE +
+        `/workspaces/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/files/download?path=${encodeURIComponent(path)}`,
+      {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      },
+    );
+    if (!res.ok) {
+      const { message } = parseAPIErrorBody(await res.text(), res.statusText);
+      if (res.status === 401) notifyUnauthorized();
+      throw new APIError(res.status, message);
+    }
+    return res.blob();
+  },
+
   signIn: (email: string, password: string) =>
     request<SignInResponse>(null, "POST", "/auth/signin", { email, password }),
   // signUp returns the same shape as signIn — the server issues a

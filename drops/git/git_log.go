@@ -101,11 +101,16 @@ func executeGitLog(_ context.Context, job core.Job, progress chan<- core.Progres
 	if err != nil {
 		return params.Err(job, "open", err.Error()), nil
 	}
-	startHash, err := repo.ResolveRevision(plumbing.Revision(ref))
+	startHash, err := resolveRevision(repo, ref)
 	if err != nil {
 		return params.Err(job, "bad_ref", err.Error()), nil
 	}
-	iter, err := repo.Log(&gogit.LogOptions{From: *startHash})
+	// LogOrderCommitterTime, not the default DFS pre-order: with merge
+	// commits, DFS walks one parent deep before siblings, so a small limit
+	// can return older commits while skipping more-recent ones on the other
+	// side of a merge. Time order is what "recent commits" means here and is
+	// what `git log` produces (go-git's own docs recommend it for parity).
+	iter, err := repo.Log(&gogit.LogOptions{From: startHash, Order: gogit.LogOrderCommitterTime})
 	if err != nil {
 		return params.Err(job, "log_failed", err.Error()), nil
 	}
