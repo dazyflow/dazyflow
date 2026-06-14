@@ -4,6 +4,7 @@ import { useAuth } from "../auth";
 import { api } from "../api";
 import { Switch } from "./Switch";
 import type { IssuedAPIKey, Permission, Role } from "../types";
+import { formatDate } from "../lib/datetime";
 
 // Role templates — common shapes admins reach for. "Custom" disables
 // the template effect so the checkbox grid is the source of truth.
@@ -271,7 +272,7 @@ export function IssueKeyModal({
               {expiry === "never"
                 ? t("issueKey.expiryNeverDesc")
                 : t("issueKey.expirySetDesc", {
-                    date: new Date(expiryToISO(expiry) ?? "").toLocaleDateString(),
+                    date: formatDate(expiryToISO(expiry)),
                   })}
             </div>
           </div>

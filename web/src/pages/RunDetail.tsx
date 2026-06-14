@@ -7,6 +7,7 @@ import { api, APIError } from "../api";
 import { useAuth } from "../auth";
 import { explainRunError } from "../lib/explainRunError";
 import type { Graph, JobRecord, JobStatus, Manifest, Ref, RunLogEntry } from "../types";
+import { formatDateTime } from "../lib/datetime";
 
 // RunDetail is the post-failure "what happened" page — and the
 // post-success "yes, here are the values" page. T2 of the PMF
@@ -666,9 +667,7 @@ export function statusLabel(
 
 function formatAbs(iso: string | null): string {
   if (!iso) return "—";
-  const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return iso;
-  return new Date(t).toLocaleString();
+  return formatDateTime(iso);
 }
 
 function formatDuration(startedISO: string, finishedISO: string): string {

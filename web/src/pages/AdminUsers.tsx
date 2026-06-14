@@ -21,6 +21,7 @@ import type {
   MemberSummary,
   Role,
 } from "../types";
+import { formatDate } from "../lib/datetime";
 
 // AdminUsers is the People page for an organization: the home owner
 // plus everyone who's accepted an invite, plus the pending invites
@@ -599,11 +600,7 @@ function absoluteInviteURL(acceptURL: string): string {
 // Used in the meta line on member + invitation cards, so the admin can
 // tell at a glance how stale an account or invitation is.
 function shortDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString();
-  } catch {
-    return iso;
-  }
+  return formatDate(iso);
 }
 
 // EMAIL_RE is intentionally permissive — full RFC validation belongs

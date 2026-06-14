@@ -2,9 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { CalendarClock, List, Pause, Play, Workflow } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import i18n from "../i18n";
 import { useAuth } from "../auth";
 import { api } from "../api";
+import { formatClock, formatDate, formatDateTime } from "../lib/datetime";
 import type { ScheduleEntry } from "../types";
 
 export function Schedules() {
@@ -217,17 +217,13 @@ function ScheduleCalendar({
     <div className="schedule-calendar">
       {days.map((d) => (
         <div key={d.key} className="schedule-cal-day">
-          <div className="schedule-cal-head">
-            {d.date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
-          </div>
+          <div className="schedule-cal-head">{formatDate(d.date)}</div>
           {d.fires.length === 0 ? (
             <div className="schedule-cal-empty">{t("schedules.noFires")}</div>
           ) : (
             d.fires.map((f, i) => (
               <div key={i} className="schedule-cal-fire" title={f.label}>
-                <span className="schedule-cal-time">
-                  {f.when.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
-                </span>{" "}
+                <span className="schedule-cal-time">{formatClock(f.when)}</span>{" "}
                 <span className="schedule-cal-flow">{f.label}</span>
               </div>
             ))
@@ -251,21 +247,10 @@ function describeSchedule(
   return t("schedules.everySeconds", { count: secs });
 }
 
-// formatNextRun shows an absolute local time plus a relative hint
-// ("in 3h"). next_fires are RFC3339 UTC; the browser renders them in the
-// viewer's local clock, which for our editor matches the cron timezone.
+// formatNextRun renders the next fire as standard local "YYYY-MM-DD HH:MM".
+// next_fires are UTC instants; the local formatter shows them in the
+// viewer's own clock — so a cron authored in another timezone still
+// displays in local time.
 function formatNextRun(iso: string): string {
-  const ts = Date.parse(iso);
-  if (!Number.isFinite(ts)) return iso;
-  const abs = new Date(ts).toLocaleString();
-  const diffSec = Math.round((ts - Date.now()) / 1000);
-  if (diffSec <= 0) return abs;
-  let rel: string;
-  if (diffSec < 60) rel = i18n.t("schedules.inSeconds", { count: diffSec });
-  else if (diffSec < 3600)
-    rel = i18n.t("schedules.inMinutes", { count: Math.round(diffSec / 60) });
-  else if (diffSec < 86400)
-    rel = i18n.t("schedules.inHours", { count: Math.round(diffSec / 3600) });
-  else rel = i18n.t("schedules.inDays", { count: Math.round(diffSec / 86400) });
-  return `${abs} · ${rel}`;
+  return formatDateTime(iso);
 }

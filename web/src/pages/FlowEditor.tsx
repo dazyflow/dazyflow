@@ -85,6 +85,7 @@ import type {
   Visibility,
 } from "../types";
 import { diffGraphs, diffIsEmpty, type GraphDiff } from "../lib/diffGraphs";
+import { formatDateTime } from "../lib/datetime";
 import { Inspector } from "../components/Inspector";
 import { FlowStatusChip } from "../components/FlowStatusChip";
 import { flowRunStatus } from "../flowStatus";
@@ -110,18 +111,9 @@ const AUTOSAVE_DEBOUNCE_MS = 1500;
 
 // timeAgo renders a locale-aware relative time ("3 minutes ago") for the
 // history panel. Falls back to the raw string if the timestamp is unparseable.
+// Standard local "YYYY-MM-DD HH:MM" everywhere — no relative "ago" strings.
 function timeAgo(iso: string): string {
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return iso;
-  const diffSec = Math.round((then - Date.now()) / 1000);
-  const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
-  const abs = Math.abs(diffSec);
-  if (abs < 60) return rtf.format(diffSec, "second");
-  const diffMin = Math.round(diffSec / 60);
-  if (Math.abs(diffMin) < 60) return rtf.format(diffMin, "minute");
-  const diffHr = Math.round(diffMin / 60);
-  if (Math.abs(diffHr) < 24) return rtf.format(diffHr, "hour");
-  return rtf.format(Math.round(diffHr / 24), "day");
+  return formatDateTime(iso);
 }
 
 // buildTestEventSample produces the JSON object the "Send test event"
@@ -3242,7 +3234,7 @@ function EditorInner() {
                     <button
                       className={`history-row${previewRef === rev.commit ? " active" : ""}`}
                       onClick={() => void previewRevision(rev.commit)}
-                      title={new Date(rev.when).toLocaleString()}
+                      title={formatDateTime(rev.when)}
                     >
                       <span className="history-row-when">
                         {i === 0 ? t("editor.historyLatest") : timeAgo(rev.when)}

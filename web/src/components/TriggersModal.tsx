@@ -21,6 +21,7 @@ import { useAuth } from "../auth";
 import { Switch } from "./Switch";
 import { ConfirmModal } from "./ConfirmModal";
 import { webhookKeys } from "../flowStatus";
+import { formatDateTime } from "../lib/datetime";
 
 // TriggersModal is the per-flow "how does this flow start?" editor,
 // promoted out of the Settings modal into its own toolbar button. It
@@ -1105,7 +1106,7 @@ export function TriggerScheduleField({
           <div className="cron-next-head">{t("settings.triggers.cronNextLocal", { tz })}</div>
           <ul className="cron-next-list">
             {validation.nextFires.map((iso, i) => (
-              <li key={i}>{formatCronTime(iso, locale)}</li>
+              <li key={i}>{formatCronTime(iso)}</li>
             ))}
           </ul>
         </div>
@@ -1346,25 +1347,11 @@ function clamp(n: number, lo: number, hi: number): number {
 
 // formatCronTime renders a daemon-reported ISO timestamp in the user's
 // resolved locale + timezone.
-function formatCronTime(iso: string, locale: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  try {
-    return new Intl.DateTimeFormat(locale, {
-      weekday: "short",
-      day: "numeric",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).format(d);
-  } catch {
-    const pad = (n: number) => String(n).padStart(2, "0");
-    return (
-      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
-      ` ${pad(d.getHours())}:${pad(d.getMinutes())}`
-    );
-  }
+// Standard local "YYYY-MM-DD HH:MM". The cron preview always shows the
+// fire times in the viewer's local clock, even though the cron itself is
+// authored in a chosen timezone.
+function formatCronTime(iso: string): string {
+  return formatDateTime(iso);
 }
 
 // browserTimeZone returns the user's IANA timezone, or "UTC" if the

@@ -11,16 +11,11 @@ import type { BillingInfo, UsageCounters } from "../types";
 // and the Stripe Checkout / billing-portal redirects. Counters are
 // maintained server-side on every run submission / node execution.
 
-// periodLabel renders "2026-06" in the viewer's locale ("June 2026")
-// so the table doesn't read like raw database keys.
-function periodLabel(period: string, locale: string): string {
+// periodLabel renders the month bucket as a standard "YYYY-MM".
+function periodLabel(period: string): string {
   const [y, m] = period.split("-").map(Number);
   if (!y || !m) return period;
-  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString(locale, {
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  });
+  return `${y}-${String(m).padStart(2, "0")}`;
 }
 
 export function Usage() {
@@ -180,7 +175,7 @@ export function Usage() {
           <div className="card" style={{ marginBottom: "var(--space-4)" }}>
             <h2 style={{ marginTop: 0 }}>
               {t("usage.currentMonth", {
-                month: periodLabel(current.period, i18n.language),
+                month: periodLabel(current.period),
               })}
             </h2>
             <div style={{ display: "flex", gap: "var(--space-6)", flexWrap: "wrap" }}>
@@ -213,7 +208,7 @@ export function Usage() {
                 <tbody>
                   {usage.map((u) => (
                     <tr key={u.period}>
-                      <td>{periodLabel(u.period, i18n.language)}</td>
+                      <td>{periodLabel(u.period)}</td>
                       <td style={{ textAlign: "right" }}>{fmt.format(u.graph_runs)}</td>
                       <td style={{ textAlign: "right" }}>{fmt.format(u.node_executions)}</td>
                     </tr>

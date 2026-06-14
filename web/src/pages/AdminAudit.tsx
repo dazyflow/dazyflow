@@ -4,6 +4,7 @@ import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
 import type { AuditEvent } from "../types";
+import { formatDateTime } from "../lib/datetime";
 
 // AdminAudit shows the tenant's administrative trail — graph saves, runs,
 // secret/key changes, approvals, cancels — newest first. Read-only;
@@ -88,7 +89,7 @@ export function AdminAudit() {
             <tbody>
               {events.map((e, i) => (
                 <tr key={i} style={{ borderTop: "1px solid var(--border)" }}>
-                  <td style={auditCell}>{new Date(e.time).toLocaleString()}</td>
+                  <td style={auditCell}>{formatDateTime(e.time)}</td>
                   <td style={auditCell}>{e.actor}</td>
                   <td style={auditCell}>
                     <span className="perm-chip">{e.action}</span>

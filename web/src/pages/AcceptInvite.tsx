@@ -5,6 +5,7 @@ import { AlertCircle, Mail, ShieldCheck } from "lucide-react";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import type { InvitationDetails } from "../types";
+import { formatDateTime } from "../lib/datetime";
 
 // AcceptInvite is the landing page for an invite link. It's reachable
 // without auth so a recipient can read who invited them and to which
@@ -121,7 +122,7 @@ export function AcceptInvite() {
           </li>
           <li>
             {t("acceptInvite.expiresLine", {
-              when: new Date(details.expires_at).toLocaleString(),
+              when: formatDateTime(details.expires_at),
             })}
           </li>
           {details.invited_by && (

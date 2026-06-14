@@ -2,11 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { CheckCircle2, XCircle, Workflow, Inbox } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
-import i18n from "../i18n";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
 import { shouldShowTenantID } from "../lib/visibleTenant";
-import { absoluteTime } from "../lib/datetime";
+import { absoluteTime, formatDateTime } from "../lib/datetime";
 import type { PendingApproval } from "../types";
 
 // Approvals is the inbox for await_approval nodes parked across the
@@ -204,12 +203,7 @@ export function Approvals() {
   );
 }
 
+// Standard local "YYYY-MM-DD HH:MM" everywhere — no relative "ago" strings.
 function formatTime(iso: string): string {
-  const ts = Date.parse(iso);
-  if (!Number.isFinite(ts)) return iso;
-  const diffSec = Math.max(0, Math.round((Date.now() - ts) / 1000));
-  if (diffSec < 60) return i18n.t("runList.secondsAgo", { count: diffSec });
-  if (diffSec < 3600) return i18n.t("runList.minutesAgo", { count: Math.round(diffSec / 60) });
-  if (diffSec < 86400) return i18n.t("runList.hoursAgo", { count: Math.round(diffSec / 3600) });
-  return i18n.t("runList.daysAgo", { count: Math.round(diffSec / 86400) });
+  return formatDateTime(iso);
 }

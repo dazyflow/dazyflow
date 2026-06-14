@@ -6,6 +6,7 @@ import { api, APIError } from "../api";
 import type { APIKeySummary, IssuedAPIKey } from "../types";
 import { IssueKeyModal } from "../components/IssueKeyModal";
 import { RevealSecretModal } from "../components/RevealSecretModal";
+import { formatDate } from "../lib/datetime";
 
 export function AdminAPIKeys() {
   const { t } = useTranslation();
@@ -292,7 +293,7 @@ function formatExpires(
   const when = new Date(iso);
   const now = Date.now();
   const days = Math.round((when.getTime() - now) / (24 * 60 * 60 * 1000));
-  const dateStr = when.toLocaleDateString();
+  const dateStr = formatDate(when);
   if (days < 0) {
     return {
       text: t("admin.apiKeys.expiredOn", { date: dateStr }),
