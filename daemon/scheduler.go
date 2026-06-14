@@ -96,6 +96,17 @@ func paramSeconds(params map[string]any, key string) int {
 	return 0
 }
 
+// triggerNodeDisabled reports whether a trigger node has been
+// individually paused via its `disabled` param. This is finer-grained
+// than the whole-flow graph.Disabled switch: a flow with both a cron
+// and a poll trigger can pause just one. Stored in node Params (a plain
+// JSON bool) so no Node struct / schema change is needed, and the value
+// round-trips through the normal graph save path. Absent/false = active.
+func triggerNodeDisabled(node core.Node) bool {
+	v, _ := node.Params["disabled"].(bool)
+	return v
+}
+
 // nextFireFrom returns the next time this entry should fire, given
 // the current time. Cron entries delegate to the cron parser; poll
 // entries add their interval to now (interval-anchored — see the
@@ -259,6 +270,9 @@ func (s *Scheduler) rescan(ctx context.Context) error {
 				if node.Module != "cron_trigger" {
 					continue
 				}
+				if triggerNodeDisabled(node) {
+					continue // this trigger is individually paused
+				}
 				expr, _ := node.Params["cron"].(string)
 				expr = strings.TrimSpace(expr)
 				if expr == "" {
@@ -300,6 +314,9 @@ func (s *Scheduler) rescan(ctx context.Context) error {
 				for _, node := range g.Nodes {
 					if node.Module != "poll_trigger" && node.Module != "google_form_trigger" {
 						continue
+					}
+					if triggerNodeDisabled(node) {
+						continue // this trigger is individually paused
 					}
 					secs := paramSeconds(node.Params, "interval_seconds")
 					if secs == 0 {
@@ -373,7 +390,14 @@ func (s *Scheduler) fireGraph(ctx context.Context, e *scheduledGraph) {
 		s.logger.Printf("open ws %s/%s: %v", e.tenant, e.workspace, err)
 		return
 	}
-	g, err := store.Load(e.graphID)
+	// Fire the PUBLISHED revision, not the draft at HEAD: an author can
+	// keep editing a flow without a half-finished change firing on the
+	// next cron tick. Falls back to HEAD for never-published flows so
+	// existing schedules keep working. The schedule itself (when to fire,
+	// whether the trigger is paused) is read from HEAD during rescan, so
+	// timing + pause changes still take effect immediately — only the
+	// executed graph content is pinned to the published version.
+	g, err := store.LoadPublishedOrHead(e.graphID)
 	if err != nil {
 		s.logger.Printf("load %s/%s/%s: %v", e.tenant, e.workspace, e.graphID, err)
 		return

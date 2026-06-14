@@ -2446,6 +2446,201 @@ button.warning:hover:not(:disabled) {
   font-size: var(--text-sm);
   text-transform: capitalize;
 }
+/* Schedules page: status pill + row pause/resume action. The "live"
+   variant tints green to read as "running on its own"; "paused" greys
+   out. btn-ghost is a borderless inline action sized for table rows. */
+.status-chip.live {
+  color: var(--success, #3fb950);
+  border-color: var(--success, #3fb950);
+}
+.status-chip.paused {
+  color: var(--muted);
+}
+.btn-ghost {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+  padding: var(--space-1) var(--space-2);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: var(--text-sm);
+}
+.btn-ghost:hover:not(:disabled) {
+  background: var(--surface-2, rgba(255, 255, 255, 0.05));
+  color: var(--text);
+}
+.btn-ghost:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+/* Publish control (FlowEditor toolbar). "publish" is a call-to-action when
+   the draft differs from live; "published" is the calm steady-state pill. */
+.editor-publish {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1h);
+  color: var(--accent, #7c5cff);
+  border: 1px solid var(--accent, #7c5cff);
+  background: transparent;
+  border-radius: var(--r-2, 6px);
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+}
+.editor-publish:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent, #7c5cff) 14%, transparent);
+}
+.editor-publish:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.editor-published {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1h);
+  color: var(--success, #3fb950);
+}
+.history-badge.live {
+  color: var(--success, #3fb950);
+  border-color: var(--success, #3fb950);
+}
+.history-makelive {
+  display: inline-flex;
+  align-items: center;
+  background: transparent;
+  border: none;
+  color: var(--accent, #7c5cff);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  padding: var(--space-0) var(--space-2) var(--space-2);
+}
+.history-makelive:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+/* Generic centered modal (diff-vs-published). Mirrors .settings-backdrop. */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 2, 30, 0.55);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  display: grid;
+  place-items: center;
+  z-index: 200;
+  padding: var(--space-4);
+}
+.modal {
+  width: 100%;
+  max-width: 560px;
+  max-height: calc(100vh - 60px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-3);
+  box-shadow: var(--shadow-pop);
+  overflow: hidden;
+}
+.modal-head,
+.modal-foot {
+  display: flex;
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+}
+.modal-head {
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+}
+.modal-foot {
+  justify-content: flex-end;
+  gap: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+.modal-body {
+  padding: var(--space-3) var(--space-4);
+  overflow: auto;
+}
+.diff-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+.diff-row {
+  padding: var(--space-1) var(--space-2);
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.diff-row.added {
+  color: var(--success, #3fb950);
+  background: color-mix(in srgb, var(--success, #3fb950) 10%, transparent);
+}
+.diff-row.removed {
+  color: var(--danger, #f85149);
+  background: color-mix(in srgb, var(--danger, #f85149) 10%, transparent);
+}
+.diff-row.changed {
+  color: var(--text);
+}
+/* Schedules calendar: a 7-day timeline of upcoming trigger fires. */
+.schedule-calendar {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.schedule-cal-day {
+  border: 1px solid var(--border);
+  border-radius: var(--r-2, 6px);
+  background: var(--surface, transparent);
+  min-height: 120px;
+  padding: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.schedule-cal-head {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: var(--space-1);
+  margin-bottom: var(--space-1);
+}
+.schedule-cal-empty {
+  color: var(--faint);
+  font-size: var(--text-sm);
+}
+.schedule-cal-fire {
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.schedule-cal-time {
+  font-family: var(--font-mono);
+  color: var(--accent, #7c5cff);
+}
+.schedule-cal-flow {
+  color: var(--muted);
+}
+@media (max-width: 900px) {
+  .schedule-calendar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.test-sample-input {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  resize: vertical;
+  background: var(--surface-2, rgba(255, 255, 255, 0.03));
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2, 6px);
+  padding: var(--space-2);
+}
 .node-timeline {
   display: flex;
   flex-direction: column;

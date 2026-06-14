@@ -67,7 +67,10 @@ func (w *WebhookListener) handleTrigger(rw http.ResponseWriter, r *http.Request)
 		http.Error(rw, "unknown workspace", http.StatusNotFound)
 		return
 	}
-	g, err := store.Load(graphID)
+	// Fire the published revision (falls back to HEAD for never-published
+	// flows) so a live webhook runs what was deliberately published, not a
+	// half-finished draft still being edited.
+	g, err := store.LoadPublishedOrHead(graphID)
 	if err != nil {
 		http.Error(rw, "unknown graph", http.StatusNotFound)
 		return

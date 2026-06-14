@@ -13,6 +13,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -685,6 +686,99 @@ func (s *Service) ListFlowSummaries(ctx context.Context, p core.Principal, tenan
 		})
 	}
 	return out, nil
+}
+
+// PublishInfo describes a flow's draft-vs-published state for the editor's
+// publish control. Published is false when the flow has never been
+// published; Dirty means the draft (HEAD) differs from the live published
+// revision (always true when never published — there's nothing live yet).
+type PublishInfo struct {
+	Published       bool   `json:"published"`
+	PublishedCommit string `json:"published_commit,omitempty"`
+	HeadCommit      string `json:"head_commit,omitempty"`
+	Dirty           bool   `json:"dirty"`
+}
+
+// PublishFlow promotes a flow revision to "live": automatic triggers
+// (cron/poll/webhook) run the published revision, while the editor and
+// manual/test runs keep using HEAD (the draft). ref defaults to HEAD
+// ("publish my current draft"); passing an older commit hash performs a
+// rollback to that version. Returns the published commit hash. Gated on
+// graph:admin — the same bar as environment promotion. No active-run lock
+// is needed: publishing moves a tag, it doesn't mutate the draft.
+func (s *Service) PublishFlow(ctx context.Context, p core.Principal, tenant, ws, id, ref string) (string, error) {
+	if err := core.RequireWorkspace(p, tenant, ws); err != nil {
+		return "", err
+	}
+	if err := core.Require(p, core.PermGraphAdmin); err != nil {
+		return "", err
+	}
+	store, err := s.Workspaces.Open(tenant, ws)
+	if err != nil {
+		return "", err
+	}
+	target := ref
+	if target == "" {
+		target = "HEAD"
+	}
+	// Authorize against the target revision's content (mirrors LoadGraph):
+	// publishing a flow you can't view should 404, not leak its existence.
+	g, err := store.LoadAt(target, id)
+	if err != nil {
+		return "", err
+	}
+	if core.AuthorizeGraphView(p, g) != nil {
+		return "", fmt.Errorf("graph %q: %w", id, core.ErrNotFound)
+	}
+	if err := store.PromoteToEnvironment(id, workspace.PublishedEnv, target); err != nil {
+		return "", err
+	}
+	return store.PublishedCommit(id)
+}
+
+// PublishedInfo reports the flow's draft-vs-published state. Gated on the
+// same view permission as LoadGraph so private flows don't leak.
+func (s *Service) PublishedInfo(ctx context.Context, p core.Principal, tenant, ws, id string) (PublishInfo, error) {
+	if err := core.RequireWorkspace(p, tenant, ws); err != nil {
+		return PublishInfo{}, err
+	}
+	store, err := s.Workspaces.Open(tenant, ws)
+	if err != nil {
+		return PublishInfo{}, err
+	}
+	head, err := store.Load(id)
+	if err != nil {
+		return PublishInfo{}, err
+	}
+	if core.AuthorizeGraphView(p, head) != nil {
+		return PublishInfo{}, fmt.Errorf("graph %q: %w", id, core.ErrNotFound)
+	}
+	info := PublishInfo{}
+	if revs, herr := store.History(id, 1); herr == nil && len(revs) > 0 {
+		info.HeadCommit = revs[0].Commit
+	}
+	pub, err := store.PublishedCommit(id)
+	if err != nil {
+		return PublishInfo{}, err
+	}
+	if pub == "" {
+		// Never published: nothing is live, so the draft is "dirty" by
+		// definition — the UI prompts the user to publish.
+		info.Dirty = true
+		return info, nil
+	}
+	info.Published = true
+	info.PublishedCommit = pub
+	pubGraph, err := store.LoadAt(pub, id)
+	if err != nil {
+		return PublishInfo{}, err
+	}
+	// Content compare rather than commit-hash compare: the workspace repo
+	// is shared across flows, so an unrelated flow's edit advances repo
+	// HEAD without changing this flow. DeepEqual on the loaded graphs is
+	// the honest "does the draft differ from what's live" test.
+	info.Dirty = !reflect.DeepEqual(head, pubGraph)
+	return info, nil
 }
 
 // PromoteGraph moves the environment tag (e.g. "production") to commit.

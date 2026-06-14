@@ -188,6 +188,38 @@ func TestScheduler_TracksCronTriggerNode(t *testing.T) {
 	}
 }
 
+// TestScheduler_SkipsDisabledTriggerNode confirms a cron_trigger node with
+// params.disabled=true is individually paused: not tracked, not fired —
+// even though the flow itself is enabled. This is the per-trigger pause
+// the Schedules page toggles, finer-grained than the whole-flow Disabled.
+func TestScheduler_SkipsDisabledTriggerNode(t *testing.T) {
+	ks := auth.NewMemKeyStore()
+	wsStore, _ := workspace.OpenFS("")
+	svc := &daemon.Service{
+		Auth:       auth.Chain{&auth.APIKeyAuthenticator{Store: ks}},
+		Workspaces: daemon.MapWorkspaces{"acme/ws1": wsStore},
+		Jobs:       jobstore.NewMemory(),
+		Engine:     &engine.Engine{Resolver: &engine.NodeResolver{Native: engine.Default}},
+		Bus:        daemon.NewMemoryBus(),
+	}
+	_, _ = wsStore.Save(core.Graph{
+		ID: "node-cron-paused", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{{ID: "sched", Module: "cron_trigger", Params: map[string]any{
+			"cron": "0 9 * * *", "tz": "Europe/Stockholm", "disabled": true,
+		}}},
+	}, "test")
+
+	sched := daemon.NewScheduler(svc)
+	sched.SetInterval(5*time.Millisecond, 30*time.Millisecond)
+	schedCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = sched.Run(schedCtx) }()
+	time.Sleep(100 * time.Millisecond)
+	if got := sched.TrackedCount(); got != 0 {
+		t.Errorf("tracked=%d, want 0 (a disabled trigger node must not fire)", got)
+	}
+}
+
 // TestScheduler_IgnoresCronTriggerNodeWithoutSchedule confirms a blank
 // schedule on the node means "run only on demand" — not tracked, not fired.
 func TestScheduler_IgnoresCronTriggerNodeWithoutSchedule(t *testing.T) {

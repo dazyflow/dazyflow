@@ -37,6 +37,8 @@ import {
   Send,
   History,
   RotateCcw,
+  Rocket,
+  GitCompare,
   X,
   Zap,
   AlignStartVertical,
@@ -78,9 +80,11 @@ import type {
   Ref,
   JobStatus,
   OAuthProviderStatus,
+  PublishInfo,
   Revision,
   Visibility,
 } from "../types";
+import { diffGraphs, diffIsEmpty, type GraphDiff } from "../lib/diffGraphs";
 import { Inspector } from "../components/Inspector";
 import { FlowStatusChip } from "../components/FlowStatusChip";
 import { flowRunStatus } from "../flowStatus";
@@ -367,6 +371,12 @@ function EditorInner() {
   // gateOpen shows the "set up first" modal that a blocked Run attempt
   // raises. The specifics come from the live missing* memos below.
   const [gateOpen, setGateOpen] = useState(false);
+  // Test-run sample editor: lets the user tweak the JSON payload fed to a
+  // webhook flow before firing, so they can exercise edge cases instead of
+  // the one auto-generated shape. Pre-filled from buildTestEventSample.
+  const [testEventOpen, setTestEventOpen] = useState(false);
+  const [testEventJSON, setTestEventJSON] = useState("");
+  const [testEventErr, setTestEventErr] = useState<string | null>(null);
   // connBannerDismissed hides the proactive "needs setup" banner for the
   // current flow once the user dismisses it. Reset per flow.
   const [connBannerDismissed, setConnBannerDismissed] = useState(false);
@@ -384,6 +394,16 @@ function EditorInner() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [previewRef, setPreviewRef] = useState<string | null>(null);
   const [restoring, setRestoring] = useState(false);
+  // Publish state. publishInfo is the draft-vs-live status; null until
+  // loaded. publishedCommit (mirrored from the history fetch) marks which
+  // revision is currently live in the history panel. diffOpen toggles the
+  // "what changed since publish" modal.
+  const [publishInfo, setPublishInfo] = useState<PublishInfo | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [publishedCommit, setPublishedCommit] = useState<string | null>(null);
+  const [diffOpen, setDiffOpen] = useState(false);
+  const [diff, setDiff] = useState<GraphDiff | null>(null);
+  const [diffLoading, setDiffLoading] = useState(false);
   // lockedRunID is set when ANY run of this flow (this tab or another)
   // is still in-flight. Save is gated on it so two editors can't race
   // a save against a live run.
@@ -2092,6 +2112,10 @@ function EditorInner() {
       // Lint findings are advisory — the save already succeeded.
       // Show them; the user can fix-and-resave or dismiss.
       setLintIssues(res.lint ?? []);
+      // The draft moved — the publish pill ("unpublished changes") may
+      // need to flip. Cheap status probe; ignored on autosave bursts is
+      // fine since we refresh on the next explicit interaction too.
+      if (!autosave) void loadPublishInfo();
     } catch (e) {
       const msg = (e as Error).message;
       setError(msg);
@@ -2201,12 +2225,79 @@ function EditorInner() {
     try {
       const res = await api.flowHistory(token, activeTenant, activeWorkspace, id);
       setRevisions(res.revisions ?? []);
+      setPublishedCommit(res.published_commit ?? null);
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setHistoryLoading(false);
     }
   }, [token, id, activeTenant, activeWorkspace]);
+
+  // loadPublishInfo refreshes the draft-vs-live status that drives the
+  // toolbar publish control. Called on load and after every save/publish.
+  const loadPublishInfo = useCallback(async () => {
+    if (!token || !id) return;
+    try {
+      const info = await api.getPublishedInfo(token, activeTenant, activeWorkspace, id);
+      setPublishInfo(info);
+      setPublishedCommit(info.published_commit ?? null);
+    } catch {
+      // Non-fatal: the publish pill just won't render. Don't surface an
+      // error banner for a status probe.
+    }
+  }, [token, id, activeTenant, activeWorkspace]);
+
+  // publishDraft promotes the current draft (HEAD) to live, then refreshes
+  // status + history. rollbackTo publishes an older commit instead — same
+  // endpoint, different ref. Both go live for automatic triggers; the
+  // editor keeps showing the draft.
+  const publishRef = useCallback(
+    async (ref?: string) => {
+      if (!token || !id) return;
+      setPublishing(true);
+      setError(null);
+      try {
+        await api.publishFlow(token, activeTenant, activeWorkspace, id, ref);
+        await loadPublishInfo();
+        if (showHistory) {
+          const res = await api.flowHistory(token, activeTenant, activeWorkspace, id);
+          setRevisions(res.revisions ?? []);
+          setPublishedCommit(res.published_commit ?? null);
+        }
+      } catch (e) {
+        setError((e as Error).message);
+      } finally {
+        setPublishing(false);
+      }
+    },
+    [token, id, activeTenant, activeWorkspace, loadPublishInfo, showHistory],
+  );
+
+  // openDiff fetches the published revision and diffs it against the
+  // current draft (HEAD), then opens the change summary modal.
+  const openDiff = useCallback(async () => {
+    if (!token || !id || !publishInfo?.published || !publishInfo.published_commit) return;
+    setDiffOpen(true);
+    setDiffLoading(true);
+    try {
+      const [published, draft] = await Promise.all([
+        api.loadGraph(token, activeTenant, activeWorkspace, id, publishInfo.published_commit),
+        api.loadGraph(token, activeTenant, activeWorkspace, id),
+      ]);
+      setDiff(diffGraphs(published, draft));
+    } catch (e) {
+      setError((e as Error).message);
+      setDiffOpen(false);
+    } finally {
+      setDiffLoading(false);
+    }
+  }, [token, id, activeTenant, activeWorkspace, publishInfo]);
+
+  // Load the publish status once the flow + scope are ready, so the
+  // toolbar pill reflects draft-vs-live from first paint.
+  useEffect(() => {
+    void loadPublishInfo();
+  }, [loadPublishInfo]);
 
   // previewRevision loads a past revision onto the canvas read-only. It
   // does NOT touch HEAD — autosave/save/run are gated on previewRef.
@@ -2532,21 +2623,43 @@ function EditorInner() {
     triggers.some((tr) => tr.type === "webhook") &&
     nodes.some((n) => n.data.moduleID === "webhook_input");
 
-  const doTestEvent = async () => {
+  // openTestEvent pre-fills the sample editor with a payload shaped to the
+  // trigger's configured form_fields (so a {phone, company} form gets a
+  // matching sample, not the legacy {name, email, message} shape), then
+  // opens the dialog so the user can edit it before firing.
+  const openTestEvent = () => {
+    const webhookTrigger = triggers.find((tr) => tr.type === "webhook");
+    setTestEventJSON(
+      JSON.stringify(buildTestEventSample(webhookTrigger?.form_fields), null, 2),
+    );
+    setTestEventErr(null);
+    setTestEventOpen(true);
+  };
+
+  // submitTestEvent parses the edited JSON and fires it. A parse error
+  // keeps the dialog open with an inline message rather than firing a
+  // malformed payload.
+  const submitTestEvent = async () => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(testEventJSON);
+    } catch (e) {
+      setTestEventErr((e as Error).message);
+      return;
+    }
+    setTestEventOpen(false);
+    await fireTestEvent(parsed);
+  };
+
+  // fireTestEvent runs the (draft / HEAD) flow with the given sample
+  // payload via the test-trigger path — webhook_input nodes light up
+  // exactly as a real /trigger hit would, but it runs under the caller's
+  // token and shows in the run list like any other run.
+  const fireTestEvent = async (sample: unknown) => {
     if (!token || !me || !id) return;
     setRunning(true);
     setError(null);
     try {
-      // Build the sample from the trigger's configured form_fields so
-      // it matches the shape the real hosted form will POST. Without
-      // this, a flow whose form is configured as {phone, company}
-      // would get sent {message, name, email, submitted_at} on test
-      // and fail downstream — the same shape mismatch real callers
-      // would hit. Falls back to the legacy {name, email, message,
-      // submitted_at} sample when no form_fields are configured (a
-      // webhook trigger with no public_form opt-in).
-      const webhookTrigger = triggers.find((tr) => tr.type === "webhook");
-      const sample = buildTestEventSample(webhookTrigger?.form_fields);
       const { job_id } = await api.testTrigger(
         token,
         activeTenant,
@@ -2877,6 +2990,51 @@ function EditorInner() {
                 <span className="toolbar-label">{t("editor.history")}</span>
               </button>
             )}
+            {/* Publish control. Automatic triggers run the published
+                revision, not the draft at HEAD — so a flow with unpublished
+                changes shows a Publish button (+ a Diff peek at what's
+                changed); a fully-published flow shows a calm "Live" pill.
+                Gated on graph:admin, the same bar the server enforces. */}
+            {me && id && hasPerm("graph:admin") && publishInfo && (
+              <>
+                {publishInfo.dirty ? (
+                  <>
+                    <button
+                      className="editor-publish"
+                      onClick={() => void publishRef()}
+                      disabled={publishing || !!previewRef}
+                      title={
+                        previewRef
+                          ? t("editor.publishPreviewBlocked")
+                          : publishInfo.published
+                          ? t("editor.publishChangesTitle")
+                          : t("editor.publishFirstTitle")
+                      }
+                    >
+                      <Rocket size={15} />
+                      <span className="toolbar-label">
+                        {publishing ? t("editor.publishing") : t("editor.publish")}
+                      </span>
+                    </button>
+                    {publishInfo.published && (
+                      <button
+                        className="ghost"
+                        onClick={() => void openDiff()}
+                        title={t("editor.diffTitle")}
+                      >
+                        <GitCompare size={15} />
+                        <span className="toolbar-label">{t("editor.diff")}</span>
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <span className="editor-published" title={t("editor.publishedTitle")}>
+                    <Rocket size={14} />
+                    <span className="toolbar-label">{t("editor.live")}</span>
+                  </span>
+                )}
+              </>
+            )}
             {me && id && (
               <span className="toolbar-run-history">
                 <RunHistory
@@ -2936,7 +3094,7 @@ function EditorInner() {
             ) : hasWebhookTrigger ? (
               <button
                 className="primary"
-                onClick={doTestEvent}
+                onClick={openTestEvent}
                 disabled={dirty || !hasPerm("graph:run")}
                 title={
                   dirty
@@ -3091,15 +3249,176 @@ function EditorInner() {
                       </span>
                       <span className="history-row-meta">
                         <span className="history-row-author">{rev.author}</span>
+                        {publishedCommit === rev.commit && (
+                          <span className="history-badge live" title={t("editor.publishedTitle")}>
+                            <Rocket size={11} style={{ verticalAlign: -1, marginRight: 3 }} />
+                            {t("editor.live")}
+                          </span>
+                        )}
                         <span className={`history-badge ${rev.autosave ? "autosave" : "checkpoint"}`}>
                           {rev.autosave ? t("editor.autosaveBadge") : t("editor.checkpointBadge")}
                         </span>
                       </span>
                     </button>
+                    {/* "Make live" rolls the published tag to this revision
+                        (a rollback). Hidden on the already-live one and for
+                        non-admins. Distinct from "Restore", which makes it
+                        the new editable HEAD. */}
+                    {hasPerm("graph:admin") && publishedCommit !== rev.commit && (
+                      <button
+                        className="history-makelive"
+                        onClick={() => void publishRef(rev.commit)}
+                        disabled={publishing}
+                        title={t("editor.makeLiveTitle")}
+                      >
+                        <Rocket size={12} style={{ verticalAlign: -1, marginRight: 4 }} />
+                        {t("editor.makeLive")}
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>
             )}
+          </div>
+        )}
+        {/* Test-run sample editor: edit the JSON payload before firing a
+            webhook flow, so edge cases can be exercised (not just the one
+            auto-generated shape). Runs the draft via the test-trigger path. */}
+        {testEventOpen && (
+          <div className="modal-backdrop" onClick={() => setTestEventOpen(false)}>
+            <div
+              className="modal"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-label={t("editor.testRunHeading")}
+            >
+              <div className="modal-head">
+                <strong>
+                  <Send size={15} style={{ verticalAlign: -2, marginRight: 6 }} />
+                  {t("editor.testRunHeading")}
+                </strong>
+                <button
+                  className="icon"
+                  onClick={() => setTestEventOpen(false)}
+                  aria-label={t("common.dismiss")}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="modal-body">
+                <p className="sub" style={{ marginTop: 0 }}>
+                  {t("editor.testRunHelp")}
+                </p>
+                <textarea
+                  className="test-sample-input"
+                  value={testEventJSON}
+                  spellCheck={false}
+                  onChange={(e) => setTestEventJSON(e.target.value)}
+                  rows={12}
+                />
+                {testEventErr && (
+                  <div style={{ color: "var(--danger)", fontSize: "var(--text-sm)", marginTop: 6 }}>
+                    {t("editor.testRunBadJSON", { error: testEventErr })}
+                  </div>
+                )}
+              </div>
+              <div className="modal-foot">
+                <button className="ghost" onClick={() => setTestEventOpen(false)}>
+                  {t("common.dismiss")}
+                </button>
+                <button
+                  className="primary"
+                  onClick={() => void submitTestEvent()}
+                  disabled={!hasPerm("graph:run")}
+                >
+                  <Send size={14} style={{ verticalAlign: -2, marginRight: 5 }} />
+                  {t("editor.testRunFire")}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* Diff-vs-published modal: what the draft changes relative to the
+            live revision. Execution-focused (nodes/edges/params/meta) —
+            cosmetic moves are filtered out by diffGraphs. */}
+        {diffOpen && (
+          <div className="modal-backdrop" onClick={() => setDiffOpen(false)}>
+            <div
+              className="modal diff-modal"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-label={t("editor.diffTitle")}
+            >
+              <div className="modal-head">
+                <strong>
+                  <GitCompare size={15} style={{ verticalAlign: -2, marginRight: 6 }} />
+                  {t("editor.diffHeading")}
+                </strong>
+                <button
+                  className="icon"
+                  onClick={() => setDiffOpen(false)}
+                  aria-label={t("common.dismiss")}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="modal-body">
+                {diffLoading ? (
+                  <div className="history-empty">{t("common.loading")}</div>
+                ) : !diff || diffIsEmpty(diff) ? (
+                  <div className="history-empty">{t("editor.diffNone")}</div>
+                ) : (
+                  <ul className="diff-list">
+                    {diff.addedNodes.map((id) => (
+                      <li key={`an-${id}`} className="diff-row added">
+                        + {t("editor.diffNodeAdded", { id })}
+                      </li>
+                    ))}
+                    {diff.removedNodes.map((id) => (
+                      <li key={`rn-${id}`} className="diff-row removed">
+                        − {t("editor.diffNodeRemoved", { id })}
+                      </li>
+                    ))}
+                    {diff.changedNodes.map((c) => (
+                      <li key={`cn-${c.id}`} className="diff-row changed">
+                        ~ {t("editor.diffNodeChanged", { id: c.id, fields: c.fields.join(", ") })}
+                      </li>
+                    ))}
+                    {diff.addedEdges.map((k) => (
+                      <li key={`ae-${k}`} className="diff-row added">
+                        + {t("editor.diffEdgeAdded")}: <code>{k}</code>
+                      </li>
+                    ))}
+                    {diff.removedEdges.map((k) => (
+                      <li key={`re-${k}`} className="diff-row removed">
+                        − {t("editor.diffEdgeRemoved")}: <code>{k}</code>
+                      </li>
+                    ))}
+                    {diff.metaChanged.length > 0 && (
+                      <li className="diff-row changed">
+                        ~ {t("editor.diffMeta", { fields: diff.metaChanged.join(", ") })}
+                      </li>
+                    )}
+                  </ul>
+                )}
+              </div>
+              <div className="modal-foot">
+                <button className="ghost" onClick={() => setDiffOpen(false)}>
+                  {t("common.dismiss")}
+                </button>
+                <button
+                  className="editor-publish"
+                  onClick={() => {
+                    setDiffOpen(false);
+                    void publishRef();
+                  }}
+                  disabled={publishing || !!previewRef}
+                >
+                  <Rocket size={14} style={{ verticalAlign: -2, marginRight: 5 }} />
+                  {t("editor.publish")}
+                </button>
+              </div>
+            </div>
           </div>
         )}
         <ReactFlow

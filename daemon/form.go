@@ -39,7 +39,9 @@ func (w *WebhookListener) handleForm(rw http.ResponseWriter, r *http.Request) {
 		http.NotFound(rw, r)
 		return
 	}
-	g, err := store.Load(graphID)
+	// Hosted form submissions run the published revision (HEAD fallback
+	// for never-published flows), matching the webhook listener.
+	g, err := store.LoadPublishedOrHead(graphID)
 	if err != nil {
 		http.NotFound(rw, r)
 		return

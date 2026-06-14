@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, AlertCircle, ChevronDown, ChevronRight, RotateCw } from "lucide-react";
+import { ArrowLeft, AlertCircle, ChevronDown, ChevronRight, RotateCw, RotateCcw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import { api, APIError } from "../api";
@@ -39,6 +39,7 @@ export function RunDetail() {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [replaying, setReplaying] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   // Friendly naming: the flow's display name for the heading, and module
   // labels for timeline rows ("ntfy" instead of "ntfy_1"). Best-effort —
   // a deleted flow or fetch error falls back to the raw IDs.
@@ -148,6 +149,25 @@ export function RunDetail() {
     }
   };
 
+  // retry resumes this run from where it failed: the daemon reuses the
+  // outputs of nodes that already succeeded and re-runs only the failed
+  // node and its downstream — cheaper and faster than a full replay.
+  const retry = async () => {
+    if (!token || !run) return;
+    setRetrying(true);
+    try {
+      const result = await api.retryRun(token, run.ID);
+      if (result?.job_id) {
+        window.location.href = `/runs/${encodeURIComponent(result.job_id)}`;
+      }
+    } catch (e) {
+      const msg = e instanceof APIError ? `${e.status}: ${e.message}` : (e as Error).message;
+      setError(t("runDetail.retryFailed", { error: msg }));
+    } finally {
+      setRetrying(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="page">
@@ -205,9 +225,23 @@ export function RunDetail() {
           >
             <button type="button" className="secondary">{t("runDetail.openInEditor")}</button>
           </Link>
+          {(run.Status === "failed" || run.Status === "cancelled") && (
+            <button
+              type="button"
+              className="primary"
+              onClick={retry}
+              disabled={retrying}
+              title={t("runDetail.retryTitle")}
+            >
+              <RotateCcw size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+              {retrying ? t("runDetail.retrying") : t("runDetail.retry")}
+            </button>
+          )}
           <button
             type="button"
-            className="primary"
+            className={
+              run.Status === "failed" || run.Status === "cancelled" ? "secondary" : "primary"
+            }
             onClick={replay}
             disabled={replaying}
             title={t("runDetail.replayTitle")}

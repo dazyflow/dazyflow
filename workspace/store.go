@@ -415,6 +415,58 @@ func (s *Store) PromoteToEnvironment(graphID, env, commit string) error {
 	return nil
 }
 
+// PublishedEnv is the environment name for the "live" published version
+// of a flow — the revision automatic triggers (cron/poll/webhook) run.
+// Publishing moves this tag to a commit via PromoteToEnvironment; rollback
+// re-publishes an older commit. HEAD remains the editable draft.
+const PublishedEnv = "published"
+
+// PublishedCommit returns the commit hash the flow's published tag points
+// at, or "" when the flow has never been published. A never-published
+// flow is not an error — the caller falls back to HEAD (today's
+// behaviour) so introducing publish doesn't silently stop existing flows
+// from firing.
+func (s *Store) PublishedCommit(id string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.publishedCommit(id)
+}
+
+func (s *Store) publishedCommit(id string) (string, error) {
+	name := plumbing.NewTagReferenceName(envTag(id, PublishedEnv))
+	ref, err := s.repo.Reference(name, true)
+	if err != nil {
+		if errors.Is(err, plumbing.ErrReferenceNotFound) {
+			return "", nil
+		}
+		return "", err
+	}
+	return ref.Hash().String(), nil
+}
+
+// LoadPublishedOrHead reads the flow at its published tag, falling back to
+// HEAD when the flow has never been published. This is the version
+// automatic triggers run: a published flow fires its last published
+// revision, not whatever half-finished draft is at HEAD. The manual-run,
+// sample, and test-trigger paths deliberately keep using Load (HEAD) so an
+// author can test edits before publishing them live.
+func (s *Store) LoadPublishedOrHead(id string) (core.Graph, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	commit, err := s.publishedCommit(id)
+	if err != nil {
+		return core.Graph{}, err
+	}
+	if commit == "" {
+		head, err := s.repo.Head()
+		if err != nil {
+			return core.Graph{}, fmt.Errorf("head: %w", err)
+		}
+		return s.loadAt(head.Hash(), id)
+	}
+	return s.loadAt(plumbing.NewHash(commit), id)
+}
+
 // ListGraphs returns the IDs of every graph currently committed at HEAD.
 func (s *Store) ListGraphs() ([]string, error) {
 	s.mu.Lock()

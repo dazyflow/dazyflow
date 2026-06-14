@@ -25,6 +25,8 @@ import type {
   RunSummary,
   RunView,
   NodeRunView,
+  ScheduleEntry,
+  PublishInfo,
   ReferenceGroups,
   ResourceDef,
   SecretManagerStatus,
@@ -588,11 +590,31 @@ export const api = {
       }`,
     ),
   // flowHistory returns the flow's commit log, newest first.
+  // published_commit (when present) flags which revision is currently live.
   flowHistory: (token: string, tenant: string, workspace: string, id: string) =>
-    request<{ revisions: Revision[] }>(
+    request<{ revisions: Revision[]; published_commit?: string }>(
       token,
       "GET",
       `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/history`,
+    ),
+  // getPublishedInfo reports the flow's draft-vs-live state for the
+  // editor's publish control: whether anything is published, and whether
+  // the draft (HEAD) differs from the published revision.
+  getPublishedInfo: (token: string, tenant: string, workspace: string, id: string) =>
+    request<PublishInfo>(
+      token,
+      "GET",
+      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/published`,
+    ),
+  // publishFlow promotes a revision to "live" — automatic triggers run it
+  // while manual/test runs keep using the draft. Omit ref to publish the
+  // current draft (HEAD); pass an older commit to roll back to it.
+  publishFlow: (token: string, tenant: string, workspace: string, id: string, ref?: string) =>
+    request<{ flow_id: string; published_commit: string }>(
+      token,
+      "POST",
+      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/publish`,
+      ref ? { ref } : {},
     ),
   // restoreFlow makes a past revision the new HEAD (a fresh commit on top).
   restoreFlow: (token: string, tenant: string, workspace: string, id: string, ref: string) =>
@@ -641,6 +663,37 @@ export const api = {
         enabled ? "enable" : "disable"
       }`,
     ),
+  // listSchedules returns every cron/poll trigger across the workspace's
+  // flows, each with its next-run preview — backs the Schedules page.
+  listSchedules: (token: string, opts: { tenant?: string; workspace?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.tenant) qs.set("tenant", opts.tenant);
+    if (opts.workspace) qs.set("workspace", opts.workspace);
+    const q = qs.toString();
+    return request<{ schedules: ScheduleEntry[] }>(
+      token,
+      "GET",
+      "/me/schedules" + (q ? "?" + q : ""),
+    );
+  },
+  // setTriggerEnabled pauses (enabled=false) or resumes a single trigger
+  // node without touching the rest of the flow — finer-grained than
+  // setFlowEnabled. Commits the flipped state; 409 if the flow is locked.
+  setTriggerEnabled: (
+    token: string,
+    tenant: string,
+    workspace: string,
+    id: string,
+    nodeID: string,
+    enabled: boolean,
+  ) =>
+    request<{ flow_id: string; node_id: string; enabled: boolean; commit: string }>(
+      token,
+      "POST",
+      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/triggers/${encodeURIComponent(
+        nodeID,
+      )}/${enabled ? "enable" : "disable"}`,
+    ),
   // testTrigger fires a webhook flow with a synthetic JSON payload so a
   // user can verify it end-to-end without wiring an external caller.
   // The daemon seeds webhook_input nodes with `sample` exactly as a real
@@ -687,6 +740,16 @@ export const api = {
       token,
       "POST",
       `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/nodes/${encodeURIComponent(nodeID)}/sample`,
+    ),
+  // retryRun resumes a failed (or cancelled) run from where it failed:
+  // the daemon reuses the outputs of the nodes that already succeeded and
+  // re-executes only the failed node and its downstream. Returns the new
+  // run's id. 409 if the run is still in progress.
+  retryRun: (token: string, runID: string) =>
+    request<{ job_id: string }>(
+      token,
+      "POST",
+      `/me/runs/${encodeURIComponent(runID)}/retry`,
     ),
   cancelRun: (token: string, runID: string, reason?: string) =>
     request<{ status: string }>(

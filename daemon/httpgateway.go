@@ -394,6 +394,9 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/me/flows", h.requireAuth(h.listFlowsMe))
 	mux.HandleFunc("GET /api/v1/me/flows/{flow_id}", h.requireAuth(h.loadFlowMe))
 	mux.HandleFunc("GET /api/v1/me/flows/{flow_id}/history", h.requireAuth(h.historyFlowMe))
+	mux.HandleFunc("GET /api/v1/me/flows/{flow_id}/published", h.requireAuth(h.publishedFlowMe))
+	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/publish",
+		h.requireAuth(h.idempotencyMiddleware("/me/flows/{flow_id}/publish", h.publishFlowMe)))
 	mux.HandleFunc("GET /api/v1/me/flows/{flow_id}/references", h.requireAuth(h.listReferences))
 	mux.HandleFunc("GET /api/v1/me/flows/{flow_id}/input-fields", h.requireAuth(h.listInputFields))
 	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/restore",
@@ -415,6 +418,12 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/nodes/{node_id}/sample",
 		h.requireAuth(h.idempotencyMiddleware("/me/flows/{flow_id}/nodes/{node_id}/sample", h.sampleFlowNodeMe)))
 	mux.HandleFunc("GET /api/v1/me/flows/{flow_id}/runs", h.requireAuth(h.listFlowRunsMe))
+	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/triggers/{node_id}/enable",
+		h.requireAuth(h.idempotencyMiddleware("/me/flows/{flow_id}/triggers/{node_id}/enable", h.enableTriggerMe)))
+	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/triggers/{node_id}/disable",
+		h.requireAuth(h.idempotencyMiddleware("/me/flows/{flow_id}/triggers/{node_id}/disable", h.disableTriggerMe)))
+
+	mux.HandleFunc("GET /api/v1/me/schedules", h.requireAuth(h.listSchedulesMe))
 
 	mux.HandleFunc("GET /api/v1/me/runs", h.requireAuth(h.listRunsMe))
 	mux.HandleFunc("GET /api/v1/me/runs/{run_id}", h.requireAuth(h.getRunMe))
@@ -425,6 +434,8 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/me/runs/{run_id}/cancel",
 		h.requireAuth(h.idempotencyMiddleware("/me/runs/{run_id}/cancel", h.cancelRunMe)))
 	mux.HandleFunc("POST /api/v1/me/runs/{run_id}/resume", h.requireAuth(h.resumeRunMe))
+	mux.HandleFunc("POST /api/v1/me/runs/{run_id}/retry",
+		h.requireAuth(h.idempotencyMiddleware("/me/runs/{run_id}/retry", h.retryRunMe)))
 
 	// /me/connections — LLM-friendly OAuth surface. List returns
 	// provider catalog + which accounts the caller has linked. Authorize

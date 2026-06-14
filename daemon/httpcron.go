@@ -73,18 +73,27 @@ func (h *HTTPGateway) validateCron(rw http.ResponseWriter, r *http.Request, _ co
 	// start from. Returned as UTC instants — the UI renders them in the
 	// viewer's local clock, which for our own editor IS the timezone we
 	// evaluated in, so "every day at 09:00" previews as 09:00.
-	now := time.Now()
-	fires := make([]string, 0, nextFiresPreview)
-	t := now
-	for i := 0; i < nextFiresPreview; i++ {
+	writeJSON(rw, http.StatusOK, cronValidateResponse{
+		Valid:     true,
+		NextFires: nextCronFires(sched, time.Now(), nextFiresPreview),
+	})
+}
+
+// nextCronFires returns up to n upcoming fire times for sched starting
+// from `from`, as RFC3339 UTC strings. Shared by the cron-validate
+// endpoint (the pre-save preview) and the schedules listing (the live
+// "next run" column) so the time a user previews and the time the flow
+// actually fires are computed by one code path. Stops early if the
+// schedule gives up (zero time — an impossible date like Feb 30).
+func nextCronFires(sched cron.Schedule, from time.Time, n int) []string {
+	fires := make([]string, 0, n)
+	t := from
+	for i := 0; i < n; i++ {
 		t = sched.Next(t)
 		if t.IsZero() {
 			break
 		}
 		fires = append(fires, t.UTC().Format(time.RFC3339))
 	}
-	writeJSON(rw, http.StatusOK, cronValidateResponse{
-		Valid:     true,
-		NextFires: fires,
-	})
+	return fires
 }

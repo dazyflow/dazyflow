@@ -13,6 +13,7 @@ import { FlowList } from "./pages/FlowList";
 import { FlowEditor } from "./pages/FlowEditor";
 import { RunList } from "./pages/RunList";
 import { RunDetail } from "./pages/RunDetail";
+import { Schedules } from "./pages/Schedules";
 import { Approvals } from "./pages/Approvals";
 import { Usage } from "./pages/Usage";
 import { VerifyEmail } from "./pages/VerifyEmail";
@@ -71,6 +72,7 @@ export function App() {
         <Route path="/apps" element={<Apps />} />
         <Route path="/apps/:slug" element={<AppDetail />} />
         <Route path="/runs" element={<RunList />} />
+        <Route path="/schedules" element={<Schedules />} />
         <Route path="/runs/:runID" element={<RunDetail />} />
         <Route path="/approvals" element={<Approvals />} />
         <Route path="/usage" element={<Usage />} />

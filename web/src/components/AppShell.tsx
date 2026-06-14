@@ -8,6 +8,7 @@ import {
   Workflow,
   ShieldCheck,
   Activity,
+  CalendarClock,
   Gauge,
   Inbox,
   ChevronDown,
@@ -417,6 +418,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             <Activity size={18} />
             <span className="nav-label">{t("nav.runs")}</span>
+          </NavLink>
+          <NavLink
+            to="/schedules"
+            title={t("nav.schedules")}
+          >
+            <CalendarClock size={18} />
+            <span className="nav-label">{t("nav.schedules")}</span>
           </NavLink>
           <NavLink
             to="/usage"

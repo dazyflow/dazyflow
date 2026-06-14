@@ -271,7 +271,10 @@ func (h *GitHubEventsHandler) fanoutSeed(ctx context.Context, tenant, moduleID s
 		}
 		principal.Workspace = ws
 		for _, id := range ids {
-			g, err := store.Load(id)
+			// Match + run the published revision (HEAD fallback for
+			// never-published flows): an external event fires the version
+			// that was deliberately published, not a draft.
+			g, err := store.LoadPublishedOrHead(id)
 			if err != nil {
 				h.logger.Printf("load %s/%s/%s: %v", tenant, ws, id, err)
 				continue

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { Activity, ExternalLink } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { Activity, ExternalLink, RotateCcw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import { useAuth } from "../auth";
@@ -22,11 +22,16 @@ export function RunList() {
     { labelKey: "runList.filterSucceeded", value: "succeeded" },
   ];
   const { token, me, tenants, activeTenant, activeWorkspace } = useAuth();
+  const navigate = useNavigate();
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<JobStatus | "">("");
   const [hasMore, setHasMore] = useState(false);
+  // Failed-runs inbox: ids the user has checked for bulk retry. Only
+  // populated/shown in the Failed filter, where retrying makes sense.
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [retrying, setRetrying] = useState(false);
   // graph_id → display name, so the FLOW column reads "Order received
   // alert" instead of the slug. Best-effort: a missing entry (deleted
   // flow, fetch error) falls back to the raw id.
@@ -56,6 +61,7 @@ export function RunList() {
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setSelected(new Set());
     api
       .listAllRuns(token, {
         limit: PAGE_SIZE,
@@ -108,6 +114,62 @@ export function RunList() {
     }, 3000);
     return () => window.clearInterval(t);
   }, [token, runs, filter, activeWorkspace, activeTenant]);
+
+  // The Failed filter doubles as a retry inbox: checkboxes + a bulk
+  // "Retry selected" that resumes each failed run from where it failed.
+  const showInbox = filter === "failed";
+
+  const toggleSelected = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const toggleSelectAll = () =>
+    setSelected((prev) =>
+      prev.size === runs.length ? new Set() : new Set(runs.map((r) => r.id)),
+    );
+
+  const retryOne = async (id: string) => {
+    if (!token) return;
+    setRetrying(true);
+    setError(null);
+    try {
+      const { job_id } = await api.retryRun(token, id);
+      navigate(`/runs/${encodeURIComponent(job_id)}`);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setRetrying(false);
+    }
+  };
+
+  const bulkRetry = async () => {
+    if (!token || selected.size === 0) return;
+    setRetrying(true);
+    setError(null);
+    const ids = [...selected];
+    try {
+      const results = await Promise.allSettled(ids.map((id) => api.retryRun(token, id)));
+      const failures = results.filter((r) => r.status === "rejected").length;
+      setSelected(new Set());
+      if (failures > 0) {
+        setError(t("runList.bulkRetryPartial", { failed: failures, total: ids.length }));
+      }
+      // Refresh so the new runs appear and the retried ones update.
+      const r = await api.listAllRuns(token, {
+        limit: PAGE_SIZE,
+        status: filter || undefined,
+        workspace: activeWorkspace || undefined,
+        tenant: activeTenant || undefined,
+      });
+      setRuns(r.runs ?? []);
+    } finally {
+      setRetrying(false);
+    }
+  };
 
   const loadMore = async () => {
     if (!token || loading) return;
@@ -163,6 +225,36 @@ export function RunList() {
         ))}
       </div>
 
+      {/* Failed-runs inbox bulk action. Appears in the Failed filter once
+          one or more runs are checked: retry resumes each from where it
+          failed (reusing the work that already succeeded). */}
+      {showInbox && selected.size > 0 && (
+        <div
+          className="card"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--space-3)",
+            marginBottom: "var(--space-4)",
+            padding: "var(--space-2) var(--space-3)",
+          }}
+        >
+          <span>{t("runList.selectedCount", { count: selected.size })}</span>
+          <button
+            className="primary"
+            onClick={() => void bulkRetry()}
+            disabled={retrying}
+            style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
+          >
+            <RotateCcw size={14} />
+            {retrying ? t("runList.retrying") : t("runList.retrySelected")}
+          </button>
+          <button className="ghost" onClick={() => setSelected(new Set())} disabled={retrying}>
+            {t("runList.clearSelection")}
+          </button>
+        </div>
+      )}
+
       {error && (
         <div className="card" style={{ color: "var(--danger)" }}>
           {error}
@@ -184,6 +276,21 @@ export function RunList() {
           <table className="run-table">
             <thead>
               <tr>
+                {showInbox && (
+                  <th style={{ width: 28 }}>
+                    <input
+                      type="checkbox"
+                      aria-label={t("runList.selectAll")}
+                      checked={runs.length > 0 && selected.size === runs.length}
+                      ref={(el) => {
+                        if (el)
+                          el.indeterminate =
+                            selected.size > 0 && selected.size < runs.length;
+                      }}
+                      onChange={toggleSelectAll}
+                    />
+                  </th>
+                )}
                 <th style={{ width: 28 }}></th>
                 <th>{t("runList.colRun")}</th>
                 <th>{t("runList.colFlow")}</th>
@@ -195,6 +302,16 @@ export function RunList() {
             <tbody>
               {runs.map((r) => (
                 <tr key={r.id}>
+                  {showInbox && (
+                    <td>
+                      <input
+                        type="checkbox"
+                        aria-label={t("runList.selectRun", { id: r.id.slice(0, 8) })}
+                        checked={selected.has(r.id)}
+                        onChange={() => toggleSelected(r.id)}
+                      />
+                    </td>
+                  )}
                   <td>
                     <span className={"status-dot " + r.status} />
                   </td>
@@ -242,6 +359,18 @@ export function RunList() {
                     )}
                   </td>
                   <td style={{ textAlign: "right", paddingRight: 12 }}>
+                    {showInbox && (
+                      <button
+                        className="btn-ghost"
+                        onClick={() => void retryOne(r.id)}
+                        disabled={retrying}
+                        title={t("runList.retryRun")}
+                        style={{ display: "inline-flex", alignItems: "center", gap: 4, marginRight: 8 }}
+                      >
+                        <RotateCcw size={13} />
+                        {t("runList.retry")}
+                      </button>
+                    )}
                     <Link
                       to={`/runs/${encodeURIComponent(r.id)}`}
                       style={{ color: "var(--muted)" }}

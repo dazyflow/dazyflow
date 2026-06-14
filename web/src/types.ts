@@ -616,6 +616,35 @@ export type RunSummary = {
   error_code?: string;
 };
 
+// ScheduleEntry is one automatic-trigger schedule from GET /me/schedules:
+// a cron_trigger or poll_trigger node on a flow, plus its next-run
+// preview. `disabled` is the per-trigger pause; `flow_disabled` is the
+// whole-flow pause (which overrides it). next_fires are RFC3339 UTC.
+export type ScheduleEntry = {
+  flow_id: string;
+  graph_id: string;
+  flow_name?: string;
+  icon?: string;
+  node_id: string;
+  kind: "cron" | "poll";
+  cron?: string;
+  tz?: string;
+  interval_seconds?: number;
+  disabled: boolean;
+  flow_disabled: boolean;
+  next_fires?: string[];
+};
+
+// PublishInfo is GET /me/flows/{id}/published: the draft-vs-live state.
+// published=false means nothing is live yet; dirty means the draft (HEAD)
+// differs from the published revision (always true when never published).
+export type PublishInfo = {
+  published: boolean;
+  published_commit?: string;
+  head_commit?: string;
+  dirty: boolean;
+};
+
 // OAuthProviderStatus is one entry from GET /oauth/providers: a
 // registered provider plus the account names the tenant has already
 // connected (empty = not connected yet). stale_accounts lists the

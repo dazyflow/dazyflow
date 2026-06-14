@@ -226,7 +226,15 @@ func (h *HTTPGateway) historyFlowMe(rw http.ResponseWriter, r *http.Request, p c
 		writeAPIError(rw, http.StatusNotFound, "flow_not_found", flowNotFoundMessage(tenant, workspace, id))
 		return
 	}
-	writeJSON(rw, http.StatusOK, map[string]any{"revisions": revs})
+	// Surface which revision is currently published so the history panel
+	// can flag it (and offer "rollback to here" on the others). Best
+	// effort: a lookup error just omits the marker rather than failing
+	// the whole listing.
+	resp := map[string]any{"revisions": revs}
+	if info, perr := h.svc.PublishedInfo(r.Context(), p, tenant, workspace, id); perr == nil && info.Published {
+		resp["published_commit"] = info.PublishedCommit
+	}
+	writeJSON(rw, http.StatusOK, resp)
 }
 
 // restoreFlowMe is POST /me/flows/{flow_id}/restore {ref} — make a past
@@ -260,6 +268,55 @@ func (h *HTTPGateway) restoreFlowMe(rw http.ResponseWriter, r *http.Request, p c
 	}
 	h.audit(r.Context(), p, "graph.restore", id, "from="+body.Ref+" commit="+commit)
 	writeJSON(rw, http.StatusOK, h.flowMutationResponse(commit, g))
+}
+
+// publishFlowMe is POST /me/flows/{flow_id}/publish {ref?} — promote a
+// revision to "live". Automatic triggers run the published revision;
+// manual + test runs keep using the draft (HEAD). ref defaults to HEAD
+// ("publish my draft"); an older commit hash rolls back. Gated on
+// graph:admin inside the service.
+func (h *HTTPGateway) publishFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	tenant, workspace, id, ok := h.readFlowID(rw, r, p)
+	if !ok {
+		return
+	}
+	var body struct {
+		Ref string `json:"ref"`
+	}
+	// Body is optional — an empty POST publishes HEAD.
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+	}
+	commit, err := h.svc.PublishFlow(r.Context(), p, tenant, workspace, id, strings.TrimSpace(body.Ref))
+	if err != nil {
+		if errors.Is(err, core.ErrNotFound) {
+			writeAPIError(rw, http.StatusNotFound, "flow_not_found", flowNotFoundMessage(tenant, workspace, id))
+			return
+		}
+		writeAPIError(rw, http.StatusForbidden, "forbidden", err.Error())
+		return
+	}
+	h.audit(r.Context(), p, "graph.publish", id, "commit="+commit)
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"flow_id":          tenant + "/" + workspace + "/" + id,
+		"published_commit": commit,
+	})
+}
+
+// publishedFlowMe is GET /me/flows/{flow_id}/published — the draft-vs-live
+// state the editor's publish control renders (is there a published
+// version, does the draft differ from it).
+func (h *HTTPGateway) publishedFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	tenant, workspace, id, ok := h.readFlowID(rw, r, p)
+	if !ok {
+		return
+	}
+	info, err := h.svc.PublishedInfo(r.Context(), p, tenant, workspace, id)
+	if err != nil {
+		writeAPIError(rw, http.StatusNotFound, "flow_not_found", flowNotFoundMessage(tenant, workspace, id))
+		return
+	}
+	writeJSON(rw, http.StatusOK, info)
 }
 
 // triggerEndpoints returns the public URLs the user must paste into
@@ -920,4 +977,28 @@ func (h *HTTPGateway) resumeRunMe(rw http.ResponseWriter, r *http.Request, p cor
 	r2 := r.Clone(r.Context())
 	r2.SetPathValue("runID", r.PathValue("run_id"))
 	h.resumeRun(rw, r2, p)
+}
+
+// retryRunMe is POST /api/v1/me/runs/{run_id}/retry — resume a failed run
+// from where it failed, reusing the work that already succeeded. Returns
+// the new run's id (same shape as a fresh submission). 409 when the run is
+// still in progress, 404 when it doesn't exist or isn't a graph run.
+func (h *HTTPGateway) retryRunMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	runID := r.PathValue("run_id")
+	newRunID, err := h.svc.ResumeFailedRun(r.Context(), p, runID)
+	if err != nil {
+		switch {
+		case errors.Is(err, core.ErrNotFound), errors.Is(err, core.ErrUnauthorized):
+			writeAPIError(rw, http.StatusNotFound, "run_not_found", "no run with that id")
+		case errors.Is(err, core.ErrConflict):
+			writeAPIError(rw, http.StatusConflict, "run_not_retryable", err.Error())
+		case errors.Is(err, core.ErrPlanLimit):
+			writeAPIError(rw, http.StatusPaymentRequired, "plan_limit", err.Error())
+		default:
+			writeAPIError(rw, http.StatusBadRequest, "retry_failed", err.Error())
+		}
+		return
+	}
+	h.audit(r.Context(), p, "graph.run", newRunID, "retry-of="+runID)
+	writeJSON(rw, http.StatusAccepted, map[string]string{"job_id": newRunID})
 }
