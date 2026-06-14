@@ -682,6 +682,8 @@
     },
     "cardSecretManagerTitle": "Hemlighetshanterare",
     "cardSecretManagerDesc": "Peka flöden mot er egen OpenBao / Vault.",
+    "cardGitSSHTitle": "Git SSH-uppgifter",
+    "cardGitSSHDesc": "SSH-nycklar för att klona privata repon över ssh://.",
     "secretManager": {
       "needAdmin": "Du behöver <0>organization:admin</0> för att konfigurera hemlighetshanteraren."
     },
@@ -949,6 +951,30 @@
     "hoursAgo": "{{count}}h sedan",
     "daysAgo": "{{count}}d sedan"
   },
+  "gitSSH": {
+    "title": "Git SSH-uppgifter",
+    "subtitle": "Namngivna SSH-nycklar för att klona privata repon över ssh://. Ett git_checkout-steg väljer en via konto — som att välja ett anslutet konto.",
+    "empty": "Inga SSH-uppgifter ännu. Lägg till en nedan för att klona privata repon över SSH.",
+    "colAccount": "Konto",
+    "colFields": "Lagrat",
+    "fieldKey": "privat nyckel",
+    "fieldPassphrase": "lösenfras",
+    "fieldKnownHosts": "known_hosts",
+    "delete": "Ta bort uppgift",
+    "confirmDelete": "Ta bort SSH-uppgiften \"{{account}}\"? Flöden som använder den kan inte klona förrän de konfigureras om.",
+    "addTitle": "Lägg till eller ersätt en uppgift",
+    "accountLabel": "Kontonamn",
+    "accountDesc": "Ett kort namn att välja nyckeln med i ett git_checkout-steg (t.ex. github-deploy, gitlab-internal). Använd \"default\" för den som används när inget konto valts.",
+    "privateKeyLabel": "Privat nyckel (PEM)",
+    "passphraseLabel": "Lösenfras",
+    "passphraseDesc": "Endast om den privata nyckeln är krypterad. Lämna annars tomt.",
+    "knownHostsLabel": "Kända värdar",
+    "knownHostsDesc": "Krävs för andra värdar än github.com / gitlab.com (som är inbyggda). En rad per värd, i known_hosts-format.",
+    "saving": "Sparar…",
+    "saveBtn": "Spara uppgift",
+    "manageLink": "Hantera SSH-uppgifter",
+    "addLink": "Lägg till en SSH-uppgift"
+  },
   "schedules": {
     "title": "Scheman",
     "subtitle": "Alla cron- och pollningsutlösare i den här arbetsytan och när de körs härnäst.",
@@ -1133,6 +1159,7 @@
     "builtIn": "Inbyggd"
   },
   "schemaForm": {
+    "pickFolder": "Välj en mapp…",
     "yes": "Ja",
     "no": "Nej",
     "remove": "ta bort",

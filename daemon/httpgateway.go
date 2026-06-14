@@ -425,6 +425,12 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 
 	mux.HandleFunc("GET /api/v1/me/schedules", h.requireAuth(h.listSchedulesMe))
 
+	// Git SSH credentials: named, per-org key bundles a git_checkout node
+	// picks by `account` (the OAuth-account pattern, for raw SSH keys).
+	mux.HandleFunc("GET /api/v1/git/ssh-credentials", h.requireAuth(h.listGitSSHCredsMe))
+	mux.HandleFunc("PUT /api/v1/git/ssh-credentials/{account}", h.requireAuth(h.putGitSSHCredMe))
+	mux.HandleFunc("DELETE /api/v1/git/ssh-credentials/{account}", h.requireAuth(h.deleteGitSSHCredMe))
+
 	mux.HandleFunc("GET /api/v1/me/runs", h.requireAuth(h.listRunsMe))
 	mux.HandleFunc("GET /api/v1/me/runs/{run_id}", h.requireAuth(h.getRunMe))
 	mux.HandleFunc("GET /api/v1/me/runs/{run_id}/nodes", h.requireAuth(h.listRunNodesMe))

@@ -180,7 +180,7 @@ func TestRemoteRefName(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.ref, func(t *testing.T) {
-			got, err := remoteRefName(t.Context(), src, c.ref)
+			got, err := remoteRefName(t.Context(), src, c.ref, nil)
 			if (err != nil) != c.wantErr {
 				t.Fatalf("err = %v, wantErr = %v", err, c.wantErr)
 			}

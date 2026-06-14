@@ -61,7 +61,7 @@ func init() {
 				`{
 					"type":"object",
 					"properties":{
-						"path":{"type":"string","title":"Folder","description":"Workspace folder holding the repository. Overridden by the 'Repository folder' input."},
+						"path":{"type":"string","title":"Repository folder","format":"workspace-dir","description":"Workspace folder holding the repository — pick a checked-out repo folder. Overridden by the 'Repository folder' input."},
 						"from":{"type":"string","title":"Compare from","default":"HEAD~1","description":"Starting point — branch, tag, or commit SHA. Defaults to the commit before the latest (HEAD~1)."},
 						"to":{"type":"string","title":"Compare to","default":"HEAD","description":"End point. Defaults to the latest commit (HEAD)."},
 						"merge_base":{"type":"boolean","default":false,"title":"Since common ancestor","description":"Compare from where the two refs diverged (git's three-dot A...B) so you see only what changed on the 'to' side. Off compares the two refs directly, which can show unrelated changes from the 'from' side."}

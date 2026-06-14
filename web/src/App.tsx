@@ -28,6 +28,7 @@ import { AdminOrgSSO } from "./pages/AdminOrgSSO";
 import { AdminOAuthProviders } from "./pages/AdminOAuthProviders";
 import { AdminGoogle } from "./pages/AdminGoogle";
 import { AdminSecretManager } from "./pages/AdminSecretManager";
+import { AdminGitSSH } from "./pages/AdminGitSSH";
 import { AcceptInvite } from "./pages/AcceptInvite";
 import { UploadsProvider } from "./uploads";
 
@@ -88,6 +89,7 @@ export function App() {
         <Route path="/admin/oauth" element={<AdminOAuthProviders />} />
         <Route path="/admin/google" element={<AdminGoogle />} />
         <Route path="/admin/secret-manager" element={<AdminSecretManager />} />
+        <Route path="/admin/git-ssh" element={<AdminGitSSH />} />
         <Route path="/invite/:token" element={<AcceptInvite />} />
         <Route path="*" element={<Navigate to="/flows" replace />} />
       </Routes>

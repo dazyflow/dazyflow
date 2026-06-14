@@ -140,6 +140,11 @@ export function HazyNode({ data, selected }: NodeProps) {
       // Picker-format params (spreadsheet/form) keep their read-only name
       // display below — never a raw-id text box on the pin row.
       if (s?.format && PICKER_FORMATS.has(s.format)) continue;
+      // A folder picker (git_log / git_diff repository folder) is edited in
+      // the inspector dropdown; on the card it's a wire-only pin, no inline
+      // box. Skipping it here (without PICKER_FORMATS) also keeps it out of
+      // the read-only literal section, so the card shows just the pin.
+      if (s?.format === "workspace-dir") continue;
       if (inlineEligible(s)) inlineByPort[p.port] = s;
     }
   }

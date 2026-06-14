@@ -27,6 +27,7 @@ import type {
   NodeRunView,
   ScheduleEntry,
   PublishInfo,
+  GitSSHCredential,
   ReferenceGroups,
   ResourceDef,
   SecretManagerStatus,
@@ -694,6 +695,26 @@ export const api = {
         nodeID,
       )}/${enabled ? "enable" : "disable"}`,
     ),
+  // listGitSSHCredentials returns the org's named SSH credentials (names +
+  // which fields are set — never the key). Backs the admin page and the
+  // git_checkout account picker.
+  listGitSSHCredentials: (token: string) =>
+    request<{ credentials: GitSSHCredential[] }>(token, "GET", "/git/ssh-credentials"),
+  // putGitSSHCredential creates or replaces a named SSH credential. The key
+  // is validated server-side before storage.
+  putGitSSHCredential: (
+    token: string,
+    account: string,
+    body: { private_key: string; passphrase?: string; known_hosts?: string },
+  ) =>
+    request<void>(
+      token,
+      "PUT",
+      `/git/ssh-credentials/${encodeURIComponent(account)}`,
+      body,
+    ),
+  deleteGitSSHCredential: (token: string, account: string) =>
+    request<void>(token, "DELETE", `/git/ssh-credentials/${encodeURIComponent(account)}`),
   // testTrigger fires a webhook flow with a synthetic JSON payload so a
   // user can verify it end-to-end without wiring an external caller.
   // The daemon seeds webhook_input nodes with `sample` exactly as a real

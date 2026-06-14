@@ -7,6 +7,7 @@ import type { JSONSchema, ReferenceGroups, ReferenceItem } from "../types";
 import { type TokenLabels, friendlyTokenText } from "./nodeCardShared";
 import { JsonEditor, isInvalidJSON } from "./JsonEditor";
 import { api, APIError } from "../api";
+import { useAuth } from "../auth";
 
 // SchemaForm renders manifest.params_schema as a typed form. The
 // happy path: a top-level object whose properties resolve to one of
@@ -237,6 +238,20 @@ function SchemaField({ name, schema, required, value, onChange, workspace, accou
       </FieldWrap>
     );
   }
+  // format:"git-ssh-account" renders the git_checkout `account` param as a
+  // dropdown of the org's saved SSH credentials (configured on the Git SSH
+  // credentials admin page) — the same "pick a named account" UX as the
+  // OAuth connectors, for raw SSH keys.
+  if (schema.format === "git-ssh-account" && schema.type === "string") {
+    return (
+      <FieldWrap name={name} schema={schema} required={required}>
+        <GitSSHAccountField
+          value={(value as string) ?? (schema.default as string | undefined) ?? "default"}
+          onChange={onChange}
+        />
+      </FieldWrap>
+    );
+  }
   // oneOf takes precedence over `type` — it expresses a typed union
   // (e.g. branch.value: string | number | boolean). Render the
   // segmented picker; the selected branch is itself a SchemaField.
@@ -330,6 +345,21 @@ function SchemaField({ name, schema, required, value, onChange, workspace, accou
         return (
           <FieldWrap name={name} schema={schema} required={required}>
             <WorkspacePathField
+              value={(value as string) ?? ""}
+              onChange={(v) => onChange(v === "" && !required ? undefined : v)}
+              ctx={workspace}
+            />
+          </FieldWrap>
+        );
+      }
+      // format:"workspace-dir" is a folder PICKER: a dropdown of the
+      // workspace's directories (e.g. the gitcache/<flow>/<node> repo
+      // checkouts) instead of a free-text path. Degrades to plain text
+      // without a workspace ctx (tests/standalone).
+      if (schema.format === "workspace-dir" && workspace) {
+        return (
+          <FieldWrap name={name} schema={schema} required={required}>
+            <WorkspaceDirField
               value={(value as string) ?? ""}
               onChange={(v) => onChange(v === "" && !required ? undefined : v)}
               ctx={workspace}
@@ -2417,6 +2447,70 @@ function RowConditionField({
 // events (no library) so it works alongside React Flow's own
 // drag handling — we stopPropagation so a drop on the input doesn't
 // also create a node.
+// WorkspaceDirField is a folder PICKER: a dropdown of the workspace's
+// directories so a path param (e.g. git_log's repository folder) is chosen
+// from real folders rather than typed. It lists directories with a small
+// bounded recursive walk (depth 3, capped fetch count) so the
+// gitcache/<flow>/<node> repo checkouts surface without scanning a huge
+// tree. The current value stays selectable even if the listing is loading
+// or the folder is gone, so a wired/old value is never silently dropped.
+function WorkspaceDirField({
+  value,
+  onChange,
+  ctx,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  ctx: WorkspaceCtx;
+}) {
+  const { t } = useTranslation();
+  const [dirs, setDirs] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const MAX_FETCHES = 25;
+    const MAX_DEPTH = 3;
+    let fetches = 0;
+    const found: string[] = [];
+    const walk = async (path: string, depth: number): Promise<void> => {
+      if (depth > MAX_DEPTH || fetches >= MAX_FETCHES) return;
+      fetches++;
+      let entries;
+      try {
+        ({ entries } = await api.listWorkspaceFiles(ctx.token, ctx.tenant, ctx.workspace, path));
+      } catch {
+        return;
+      }
+      for (const e of entries) {
+        if (!e.is_dir) continue;
+        found.push(e.path);
+        await walk(e.path, depth + 1);
+      }
+    };
+    walk("", 1).then(() => {
+      if (!cancelled) setDirs(found.sort());
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [ctx.token, ctx.tenant, ctx.workspace]);
+
+  const opts = Array.from(new Set([...(value ? [value] : []), ...(dirs ?? [])]));
+
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="">
+        {dirs === null ? t("common.loading") : t("schemaForm.pickFolder")}
+      </option>
+      {opts.map((d) => (
+        <option key={d} value={d}>
+          {d}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 function WorkspacePathField({
   value,
   onChange,
@@ -2585,6 +2679,64 @@ function AccountField({
       <button type="button" className="link-button sf-account-connect" onClick={onConnect}>
         {t("schemaForm.accountConnectAnother")}
       </button>
+    </div>
+  );
+}
+
+// GitSSHAccountField renders the git_checkout `account` param as a dropdown
+// of the org's saved SSH credentials, with a link to manage them. Unlike the
+// OAuth AccountField there's no inline "connect" flow — SSH keys are pasted
+// on the admin page — so an empty list points the user there. The current
+// value is always selectable even if not in the list, so a graph never
+// silently drops an account it references.
+function GitSSHAccountField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: unknown) => void;
+}) {
+  const { t } = useTranslation();
+  const { token } = useAuth();
+  const [accounts, setAccounts] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    api
+      .listGitSSHCredentials(token)
+      .then((r) => {
+        if (!cancelled) setAccounts((r.credentials ?? []).map((c) => c.account));
+      })
+      .catch(() => {
+        if (!cancelled) setAccounts([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  const current = value || "default";
+  // "default" is always offered (the drop's fallback); merge in configured
+  // accounts and the current value so nothing is lost.
+  const opts = Array.from(
+    new Set(["default", ...(accounts ?? []), current]),
+  );
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <select value={current} onChange={(e) => onChange(e.target.value)}>
+        {opts.map((a) => (
+          <option key={a} value={a}>
+            {a}
+          </option>
+        ))}
+      </select>
+      <Link to="/admin/git-ssh" style={{ fontSize: "var(--text-sm)" }}>
+        {accounts && accounts.length === 0
+          ? t("gitSSH.addLink")
+          : t("gitSSH.manageLink")}
+      </Link>
     </div>
   );
 }

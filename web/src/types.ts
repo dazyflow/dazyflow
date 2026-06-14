@@ -645,6 +645,15 @@ export type PublishInfo = {
   dirty: boolean;
 };
 
+// GitSSHCredential is one named per-org SSH credential from
+// GET /git/ssh-credentials: the account name and which optional fields are
+// set. The key material is never returned by the API.
+export type GitSSHCredential = {
+  account: string;
+  has_passphrase: boolean;
+  has_known_hosts: boolean;
+};
+
 // OAuthProviderStatus is one entry from GET /oauth/providers: a
 // registered provider plus the account names the tenant has already
 // connected (empty = not connected yet). stale_accounts lists the

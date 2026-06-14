@@ -62,6 +62,7 @@ export function Admin() {
         <AdminCard to="/admin/sso" icon={<ShieldCheck size={18} />} title={t("admin.cardSSOTitle")} desc={t("admin.cardSSODesc")} />
         <AdminCard to="/admin/google" icon={<img src="/brands/google-g.svg" alt="" width={18} height={18} />} title={t("admin.cardGoogleTitle")} desc={t("admin.cardGoogleDesc")} />
         <AdminCard to="/admin/secret-manager" icon={<Lock size={18} />} title={t("admin.cardSecretManagerTitle")} desc={t("admin.cardSecretManagerDesc")} />
+        <AdminCard to="/admin/git-ssh" icon={<KeyRound size={18} />} title={t("admin.cardGitSSHTitle")} desc={t("admin.cardGitSSHDesc")} />
         <AdminCard to="/admin/workspace" icon={<Building2 size={18} />} title={t("admin.cardWorkspaceTitle")} desc={t("admin.cardWorkspaceDesc")} />
         <AdminCard to="/admin/modules" icon={<Boxes size={18} />} title={t("admin.cardModulesTitle")} desc={t("admin.cardModulesDesc")} />
         <AdminCard to="/admin/audit" icon={<ScrollText size={18} />} title={t("admin.cardAuditTitle")} desc={t("admin.cardAuditDesc")} />

@@ -60,7 +60,7 @@ func init() {
 				`{
 					"type":"object",
 					"properties":{
-						"path":{"type":"string","title":"Folder","description":"Workspace folder holding the repository. Overridden by the 'Repository folder' input."},
+						"path":{"type":"string","title":"Repository folder","format":"workspace-dir","description":"Workspace folder holding the repository — pick a checked-out repo folder. Overridden by the 'Repository folder' input."},
 						"ref":{"type":"string","title":"Start at","default":"HEAD","description":"Where to start walking back from — branch, tag, or commit SHA. Defaults to the latest commit (HEAD)."},
 						"limit":{"type":"integer","title":"Max commits","default":20,"minimum":1,"maximum":1000,"description":"How many commits to return at most."}
 					}

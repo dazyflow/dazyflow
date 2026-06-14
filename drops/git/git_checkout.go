@@ -18,6 +18,7 @@ import (
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	gogittransport "github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/storage/memory"
 
 	"git.sr.ht/~klahr/hazyflow/core"
@@ -44,11 +45,11 @@ func init() {
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Full clone of a public repo",
-					Params: json.RawMessage(`{"url":"https://github.com/example/widgets.git","path":"src/widgets"}`),
+					Params: json.RawMessage(`{"url":"https://github.com/example/widgets.git"}`),
 				},
 				{
 					Title:  "Shallow checkout of a release tag",
-					Params: json.RawMessage(`{"url":"https://github.com/example/widgets.git","path":"src/widgets","ref":"v1.4.2","depth":1}`),
+					Params: json.RawMessage(`{"url":"https://github.com/example/widgets.git","ref":"v1.4.2","depth":1}`),
 					Notes:  "depth:1 keeps the clone small when you only need the tip of a tag or branch.",
 				},
 			},
@@ -58,6 +59,8 @@ func init() {
 				// Only the friendly scalars are pins; the full checkout
 				// metadata (url, ref, mode, …) is still EMITTED under "meta"
 				// so run records keep it for debugging — it's just not a pin.
+				// `path` is the auto-assigned workspace folder the repo landed
+				// in — downstream steps (shell, file_read) read it from here.
 				{Port: "path", Label: "Repository folder", MIME: []string{"text/plain"}},
 				{Port: "sha", Label: "Commit SHA", MIME: []string{"text/plain"}},
 			},
@@ -67,10 +70,10 @@ func init() {
 					"properties":{
 						"url":{"type":"string","title":"Repository URL","description":"Where the repository lives (https or ssh address). Use ${secret.NAME} placeholders for tokens embedded in the URL."},
 						"ref":{"type":"string","title":"Branch, tag, or commit","description":"What to switch to after fetching. Leave empty for the repo's default branch."},
-						"path":{"type":"string","title":"Folder","description":"Workspace folder to put the files in."},
+						"account":{"type":"string","title":"SSH credential","format":"git-ssh-account","default":"default","description":"Which saved SSH credential to authenticate with for ssh:// or git@ URLs. Manage these on the Git SSH credentials page. Ignored for https URLs."},
 						"depth":{"type":"integer","title":"Clone depth","x_advanced":true,"minimum":0,"description":"Shallow-clone depth. 0 (default) clones the full history."}
 					},
-					"required":["url","path"]
+					"required":["url"]
 				}`,
 			),
 			Idempotent:  true,
@@ -88,23 +91,18 @@ func executeGitCheckout(ctx context.Context, job core.Job, progress chan<- core.
 	if err := guardRepoURL(url); err != nil {
 		return params.Err(job, "blocked", err.Error()), nil
 	}
-	relPath, err := params.String(job.Params, "path")
-	if err != nil {
-		return params.Err(job, "bad_param", err.Error()), nil
-	}
 	if job.WorkspaceRoot == "" {
 		return params.Err(job, "no_sandbox", "git_checkout requires a workspace sandbox"), nil
 	}
 	ref := params.StringDefault(job.Params, "ref", "")
 	depth := params.IntDefault(job.Params, "depth", 0)
 
-	cleanRel, err := sandboxRel(relPath)
-	if err != nil {
-		return params.Err(job, "sandbox_escape", err.Error()), nil
-	}
-	if cleanRel == "." {
-		return params.Err(job, "bad_param", "path must be a subdirectory, not the workspace root"), nil
-	}
+	// The checkout folder is auto-assigned per (flow, node) — there's no
+	// folder param. It's stable across runs, so the clone is reused as a
+	// cache (a re-run fetches + resets instead of re-cloning), and it's
+	// removed when the flow is deleted (see Service.DeleteGraph). The
+	// resulting folder is emitted on `path` for downstream steps.
+	cleanRel := core.GitCheckoutRel(job.GraphID, job.NodeID)
 	dst := filepath.Join(job.WorkspaceRoot, cleanRel)
 
 	repo, mode, err := openOrClone(ctx, dst, url, ref, depth, progress, job)
@@ -232,6 +230,14 @@ func openOrClone(ctx context.Context, dst, url, ref string, depth int, progress 
 	if statErr != nil && !os.IsNotExist(statErr) {
 		return nil, "stat_failed", statErr
 	}
+	// Resolve SSH auth once. For ssh:// and git@host: URLs this carries the
+	// org's selected key + a strict host-key callback; for https it's nil
+	// (the guarded https transport handles auth via the URL), leaving the
+	// existing behaviour untouched.
+	auth, authErr := sshAuthForURL(ctx, job, url)
+	if authErr != nil {
+		return nil, "ssh_auth_failed", authErr
+	}
 	logSink := newProgressSink(progress, job)
 	defer logSink.flush()
 	if statErr == nil {
@@ -247,6 +253,7 @@ func openOrClone(ctx context.Context, dst, url, ref string, depth int, progress 
 			Depth:    depth,
 			Tags:     gogit.AllTags, // so a tag ref still resolves on re-runs
 			Progress: logSink,
+			Auth:     auth,
 		})
 		if fetchErr != nil && fetchErr != gogit.NoErrAlreadyUpToDate {
 			return nil, "fetch_failed", fetchErr
@@ -263,7 +270,7 @@ func openOrClone(ctx context.Context, dst, url, ref string, depth int, progress 
 		return repo, "pulled", nil
 	}
 
-	opts := &gogit.CloneOptions{URL: url, Depth: depth, Progress: logSink}
+	opts := &gogit.CloneOptions{URL: url, Depth: depth, Progress: logSink, Auth: auth}
 	shallow := depth > 0
 	sha := ref != "" && looksLikeSHA(ref)
 
@@ -284,7 +291,7 @@ func openOrClone(ctx context.Context, dst, url, ref string, depth int, progress 
 	default:
 		// Branch or tag. Validate up front (fast-fail with a clear error
 		// before downloading anything) and classify branch-vs-tag.
-		rn, rErr := remoteRefName(ctx, url, ref)
+		rn, rErr := remoteRefName(ctx, url, ref, auth)
 		if rErr != nil {
 			return nil, "ref_not_found", rErr
 		}
@@ -325,12 +332,12 @@ func looksLikeSHA(ref string) bool { return shaPattern.MatchString(ref) }
 // refs/tags/<ref>). It prefers a branch over a same-named tag, matching
 // git's precedence, and accepts an already-qualified ref verbatim. Failing
 // fast here keeps a typo'd ref from writing a half-clone into the sandbox.
-func remoteRefName(ctx context.Context, url, ref string) (plumbing.ReferenceName, error) {
+func remoteRefName(ctx context.Context, url, ref string, auth gogittransport.AuthMethod) (plumbing.ReferenceName, error) {
 	rem := gogit.NewRemote(memory.NewStorage(), &config.RemoteConfig{
 		Name: "origin",
 		URLs: []string{url},
 	})
-	refs, err := rem.ListContext(ctx, &gogit.ListOptions{})
+	refs, err := rem.ListContext(ctx, &gogit.ListOptions{Auth: auth})
 	if err != nil {
 		return "", fmt.Errorf("list remote refs: %w", err)
 	}

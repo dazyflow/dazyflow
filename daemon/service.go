@@ -409,7 +409,28 @@ func (s *Service) DeleteGraph(ctx context.Context, p core.Principal, tenant, ws,
 	if _, err := store.Delete(id, p.Subject); err != nil {
 		return err
 	}
+	// Remove the flow's auto-assigned git_checkout cache (gitcache/<flow>)
+	// so clones don't orphan in the workspace after the flow is gone.
+	// Best-effort: a cleanup failure must not fail the delete.
+	s.removeGitCache(tenant, ws, id)
 	return nil
+}
+
+// removeGitCache deletes a flow's git_checkout cache subtree
+// (gitcache/<flow>) from the workspace sandbox. No-op when the sandbox is
+// not filesystem-backed (tests / in-memory).
+func (s *Service) removeGitCache(tenant, ws, id string) {
+	if s.Engine == nil || s.Engine.Sandbox == nil {
+		return
+	}
+	root, err := s.Engine.Sandbox.Root(tenant, ws)
+	if err != nil {
+		return
+	}
+	dir := filepath.Join(root, filepath.FromSlash(core.GitCacheGraphRel(id)))
+	if err := os.RemoveAll(dir); err != nil && s.Logger != nil {
+		s.Logger.Printf("git cache cleanup for %s/%s/%s: %v", tenant, ws, id, err)
+	}
 }
 
 // SaveGraph persists a graph as principal. Tenant/workspace on the graph
