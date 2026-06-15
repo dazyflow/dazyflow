@@ -206,6 +206,11 @@ export function RunHistory({
               >
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-sm)" }}>
                   {r.id.slice(0, 12)}
+                  {/* The one state that needs a human — name it in words,
+                      not just the dot colour, so a parked run is obvious. */}
+                  {r.status === "awaiting" && (
+                    <span className="run-awaiting-tag">{t("runHistory.awaitingApproval")}</span>
+                  )}
                 </span>
                 <span
                   style={{ fontSize: "var(--text-xs)", color: "var(--faint)" }}

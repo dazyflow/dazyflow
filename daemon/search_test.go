@@ -190,6 +190,41 @@ func TestSearch_MatchScore_ExactBeatsPartial(t *testing.T) {
 	}
 }
 
+func TestSearch_SearchBoostBreaksTie(t *testing.T) {
+	// Two drops that match "save" identically by tag; the boosted one
+	// must rank first regardless of the alphabetical tie-break (which
+	// would otherwise put "a_store" ahead of "z_sqlite").
+	cat := map[string]core.Manifest{
+		"a_store": {
+			ID: "a_store", Label: "Built-in store", Category: "io",
+			Provider: "internal", Tags: []string{"save", "store"},
+			Description: "Save rows with no setup.",
+		},
+		"z_sqlite": {
+			ID: "z_sqlite", Label: "SQLite", Category: "io",
+			Provider: "internal", Tags: []string{"save", "database"},
+			Description: "Save rows to a database file.", SearchBoost: 25,
+		},
+	}
+	got := idsOf(searchManifests(cat, DropSearch{Query: "save"}))
+	if len(got) != 2 || got[0] != "z_sqlite" {
+		t.Fatalf("save ranking = %v; want boosted z_sqlite first", got)
+	}
+
+	// A negative boost down-ranks but must NOT drop the match entirely.
+	m := core.Manifest{ID: "x", Description: "save", Tags: []string{"save"}, SearchBoost: -1000}
+	if s := matchScore(m, "save"); s < 1 {
+		t.Errorf("negative boost dropped the match: score=%d, want >=1", s)
+	}
+
+	// Boost never lets a fuzzy match overtake an exact-ID hit.
+	exact := matchScore(core.Manifest{ID: "save"}, "save")
+	boostedFuzzy := matchScore(core.Manifest{ID: "other", Tags: []string{"save"}, SearchBoost: 100}, "save")
+	if boostedFuzzy >= exact {
+		t.Errorf("boosted fuzzy (%d) overtook exact ID (%d)", boostedFuzzy, exact)
+	}
+}
+
 func idsOf(ms []core.Manifest) []string {
 	out := make([]string, len(ms))
 	for i, m := range ms {

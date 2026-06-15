@@ -1104,7 +1104,8 @@
     "noRun": "Ingen körning",
     "head": "Senaste körningar",
     "empty": "Inga körningar än.",
-    "loadMore": "Ladda fler"
+    "loadMore": "Ladda fler",
+    "awaitingApproval": "Väntar på godkännande"
   },
   "issueKey": {
     "title": "Skapa API-nyckel",
@@ -1200,6 +1201,8 @@
     "refTrigger": "{{ref}} — data från det som startade flödet (t.ex. formulärsvaret)",
     "refGeneric": "{{ref}} — fylls i automatiskt när flödet körs",
     "refSecretSetUp": "Lägg till →",
+    "wiredInput": "Kommer från ett anslutet steg.",
+    "wiredInputNamed": "Kommer från {{source}}.",
     "secretChipUses": "Använder hemlighet {{name}}",
     "secretChipSetUp": "Lägg till",
     "secretChipReplace": "Ersätt",

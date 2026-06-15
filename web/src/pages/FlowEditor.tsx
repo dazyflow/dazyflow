@@ -1728,6 +1728,22 @@ function EditorInner() {
     return m;
   }, [nodes, manifestByID]);
 
+  // wiredSourcesByNode: target nodeId → { targetPort → friendly source label }.
+  // Lets a wired, non-picker param say what's flowing in ("New responses ·
+  // Email") instead of rendering a greyed, blank box. Reuses tokenLabels for
+  // the source step·port name; falls back to the raw "node.port" handle.
+  const wiredSourcesByNode = useMemo(() => {
+    const m = new Map<string, Record<string, string>>();
+    for (const e of edges) {
+      if (!e.target || !e.targetHandle || !e.source || !e.sourceHandle) continue;
+      const label = tokenLabels[`${e.source}.${e.sourceHandle}`] ?? `${e.source}.${e.sourceHandle}`;
+      const cur = m.get(e.target) ?? {};
+      cur[e.targetHandle] = label;
+      m.set(e.target, cur);
+    }
+    return m;
+  }, [edges, tokenLabels]);
+
   const displayNodes = useMemo<FlowNode<HazyNodeData>[]>(() => {
     // Inline fields show only for a single selection, so a multi-select
     // (e.g. for align/distribute) keeps every card collapsed.
@@ -3872,6 +3888,9 @@ function EditorInner() {
           }
           resourceLabels={
             inspectorSelected ? resourceLabelsByNode.get(inspectorSelected.id) : undefined
+          }
+          wiredSources={
+            inspectorSelected ? wiredSourcesByNode.get(inspectorSelected.id) : undefined
           }
           loopOwnerNodeId={
             inspectorSelected ? loopOwnerByNode.get(inspectorSelected.id) : undefined

@@ -51,6 +51,9 @@ type Props = {
   // (traced from upstream when wired), so the disabled picker can name the
   // sheet the wire actually points at rather than just "set by a step".
   resourceLabels?: Record<string, string>;
+  // wiredSources maps a wired param key → a friendly label for the step/port
+  // feeding it, so a wired non-picker field can name what's flowing in.
+  wiredSources?: Record<string, string>;
   // loopOwnerNodeId is set when the selected node runs inside a for_each
   // loop body — it's the id of the owning for_each. The form then offers
   // ${item.<column>} reference tokens (the columns of that loop's list) and
@@ -124,6 +127,7 @@ export function Inspector({
   manifests,
   wiredPorts,
   resourceLabels,
+  wiredSources,
   loopOwnerNodeId,
   nodeDisabled,
   onToggleDisabled,
@@ -627,6 +631,7 @@ export function Inspector({
               accountPicker={accountPicker}
               wiredKeys={wiredPorts}
               resourceLabels={resourceLabels}
+              wiredSources={wiredSources}
               references={refCtx}
               extraReferenceItems={loopOwnerNodeId ? loopItemReferenceItems : undefined}
               tokenLabels={tokenLabels}

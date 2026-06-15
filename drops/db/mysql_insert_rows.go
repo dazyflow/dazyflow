@@ -32,16 +32,22 @@ func init() {
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Load Excel rows into a new table",
-					Params: json.RawMessage(`{"dsn":"${secret.MYSQL_DSN}","table":"signups"}`),
-					Notes:  "create_table defaults to true, so the table is built from the upstream headers on first run.",
+					Params: json.RawMessage(`{"table":"signups"}`),
+					Notes:  "create_table defaults to true, so the table is built from the upstream headers on first run. The connection comes from your MySQL connection, set once under Apps.",
 				},
 				{
 					Title:  "Append into a pre-existing schema",
-					Params: json.RawMessage(`{"dsn":"${secret.MYSQL_DSN}","table":"orders","create_table":false,"column_types":{"id":"BIGINT","total":"DECIMAL(10,2)"}}`),
+					Params: json.RawMessage(`{"table":"orders","create_table":false,"column_types":{"id":"BIGINT","total":"DECIMAL(10,2)"}}`),
 				},
 			},
-			RequiresConnections: []core.ConnectionRequirement{
-				{Kind: "secret", Name: "MYSQL_DSN", Note: "MySQL connection string (user:pass@host:3306/db)"},
+			// The connection string is a per-tenant connection, set once under
+			// Apps (the same Connect flow as Postgres/Claude/ntfy) — so the editor
+			// shows a "Connect MySQL" affordance instead of a raw DSN field, and the
+			// secret never lands in the graph. injectConnectionDefaults fills the
+			// unset 'dsn' param from conn.mysql.dsn at run time. No MySQL server?
+			// Use the SQLite step instead (zero setup).
+			ConnectionFields: []core.ConnectionField{
+				{Key: "dsn", Label: "Connection string", Secret: true, Required: true, Placeholder: "user:pass@tcp(host:3306)/db"},
 			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
@@ -55,13 +61,12 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"dsn":          {"type":"string","title":"Connection string"},
 					"table":        {"type":"string"},
 					"create_table": {"type":"boolean","default":true,"description":"Auto-create the table from headers when missing. Defaults true."},
 					"column_types": {"type":"object","additionalProperties":{"type":"string"}},
 					"field_mapping":{"type":"object","additionalProperties":{"type":"string"},"title":"Column mapping","description":"Optional. Choose which incoming fields to write and name their columns — {incoming field: column name}. Only listed fields are written (others dropped); blank a column name to skip a field. Leave empty to write every field. For row filtering or defaults, use a Map rows step first."}
 				},
-				"required":["dsn","table"]
+				"required":["table"]
 			}`),
 		},
 		Execute: executeMySQLInsertRows,

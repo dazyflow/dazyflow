@@ -137,6 +137,17 @@ func matchScore(m core.Manifest, needle string) int {
 			break
 		}
 	}
+	if score == 0 {
+		return 0
+	}
+	// Apply the manifest's own ranking nudge to fuzzy/tag matches only
+	// (exact id/label/prefix hits returned above and must stay dominant).
+	// Floor at 1 so a negative boost down-ranks without turning a real
+	// match into a "no match".
+	score += m.SearchBoost
+	if score < 1 {
+		score = 1
+	}
 	return score
 }
 

@@ -29,16 +29,21 @@ func init() {
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Recent orders for one customer",
-					Params: json.RawMessage(`{"dsn":"${secret.MYSQL_DSN}","sql":"SELECT id, total FROM orders WHERE customer_id = ? ORDER BY id DESC LIMIT 50","params":[42]}`),
+					Params: json.RawMessage(`{"sql":"SELECT id, total FROM orders WHERE customer_id = ? ORDER BY id DESC LIMIT 50","params":[42]}`),
+					Notes:  "The connection comes from your MySQL connection, set once under Apps.",
 				},
 				{
 					Title:  "Aggregate with a row cap",
-					Params: json.RawMessage(`{"dsn":"${secret.MYSQL_DSN}","sql":"SELECT status, count(*) AS n FROM orders GROUP BY status","limit":100}`),
+					Params: json.RawMessage(`{"sql":"SELECT status, count(*) AS n FROM orders GROUP BY status","limit":100}`),
 					Notes:  "Empty params is fine when the SQL has no ? placeholders.",
 				},
 			},
-			RequiresConnections: []core.ConnectionRequirement{
-				{Kind: "secret", Name: "MYSQL_DSN", Note: "MySQL connection string (user:pass@host:3306/db)"},
+			// Per-tenant connection set once under Apps (same Connect flow as
+			// Postgres/Claude/ntfy): the editor shows a "Connect MySQL" affordance,
+			// the secret never lands in the graph, and injectConnectionDefaults
+			// fills the unset 'dsn' param from conn.mysql.dsn at run time.
+			ConnectionFields: []core.ConnectionField{
+				{Key: "dsn", Label: "Connection string", Secret: true, Required: true, Placeholder: "user:pass@tcp(host:3306)/db"},
 			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
@@ -49,12 +54,11 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"dsn":    {"type":"string","title":"Connection string"},
 					"sql":    {"type":"string","title":"SQL"},
 					"params": {"type":"array","items":{},"title":"Query values"},
 					"limit":  {"type":"integer","minimum":1,"title":"Row limit"}
 				},
-				"required":["dsn","sql"]
+				"required":["sql"]
 			}`),
 			Idempotent: true,
 		},

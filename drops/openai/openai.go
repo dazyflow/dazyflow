@@ -9,7 +9,6 @@ package openai
 import (
 	"context"
 	"encoding/json"
-	"strconv"
 	"strings"
 
 	"git.sr.ht/~klahr/hazyflow/core"
@@ -73,11 +72,7 @@ func (provider) Call(ctx context.Context, apiKey string, req llmtask.Request) (l
 		return llmtask.Result{}, jerr
 	}
 	if status < 200 || status >= 300 {
-		code := "openai_api"
-		if status == 429 {
-			code = "openai_rate_limited"
-		}
-		return llmtask.Result{}, &core.JobError{Code: code, Message: strconv.Itoa(status) + " " + openaiError(respBody)}
+		return llmtask.Result{}, llmtask.HTTPError("openai", "ChatGPT", status, openaiError(respBody))
 	}
 
 	var parsed map[string]any

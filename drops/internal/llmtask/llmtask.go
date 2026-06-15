@@ -15,6 +15,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -117,7 +119,12 @@ func PostJSON(ctx context.Context, endpoint string, headers map[string]string, b
 	}
 	resp, err := hfnet.SafeHTTPClient(timeout, hfnet.PrivateEgressAllowed()).Do(req)
 	if err != nil {
-		return 0, nil, &core.JobError{Code: "llm_http_error", Message: err.Error()}
+		// A deadline here is almost always "the model took too long", not a
+		// bug — say so and point at the knob, instead of a raw context error.
+		if errors.Is(err, context.DeadlineExceeded) || reqCtx.Err() == context.DeadlineExceeded {
+			return 0, nil, &core.JobError{Code: "llm_timeout", Message: fmt.Sprintf("the AI request timed out after %ds — try again, raise timeout_ms on the step, or shorten the input", timeoutMS/1000)}
+		}
+		return 0, nil, &core.JobError{Code: "llm_http_error", Message: "could not reach the AI service: " + err.Error()}
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
@@ -125,6 +132,36 @@ func PostJSON(ctx context.Context, endpoint string, headers map[string]string, b
 		return resp.StatusCode, nil, &core.JobError{Code: "llm_http_error", Message: "response exceeds limit"}
 	}
 	return resp.StatusCode, respBody, nil
+}
+
+// HTTPError turns a non-2xx LLM API status into an actionable JobError so
+// the user reads "ChatGPT is rate-limited; try again shortly" instead of
+// an opaque "llm_http_error: 429 …". codePrefix keeps each provider's
+// stable error codes ("claude"/"openai" → claude_rate_limited, …); label
+// is the human integration name woven into the message; detail is the
+// vendor's own extracted error text, appended for debugging. Shared so
+// every provider classifies the common statuses identically.
+func HTTPError(codePrefix, label string, status int, detail string) *core.JobError {
+	detail = strings.TrimSpace(detail)
+	var code, msg string
+	switch {
+	case status == 401 || status == 403:
+		code, msg = codePrefix+"_auth", fmt.Sprintf("%s rejected the API key — check it on the Apps page and re-connect %s.", label, label)
+	case status == 429:
+		code, msg = codePrefix+"_rate_limited", fmt.Sprintf("%s is rate-limited right now — wait a moment and try again, or run this step less often.", label)
+	case status == 400 || status == 422:
+		code, msg = codePrefix+"_bad_request", fmt.Sprintf("%s rejected the request — usually the model name or an over-long prompt. Check the model picker and shorten the input.", label)
+	case status == 404:
+		code, msg = codePrefix+"_not_found", fmt.Sprintf("%s couldn't find that model — pick a different model on the step.", label)
+	case status >= 500:
+		code, msg = codePrefix+"_upstream", fmt.Sprintf("%s is having a temporary problem (server error %d) — try again shortly.", label, status)
+	default:
+		code, msg = codePrefix+"_api", fmt.Sprintf("%s returned an error (HTTP %d).", label, status)
+	}
+	if detail != "" {
+		msg += fmt.Sprintf(" (%s said: %s)", label, detail)
+	}
+	return &core.JobError{Code: code, Message: msg}
 }
 
 // --- shared param + key resolution -----------------------------------------

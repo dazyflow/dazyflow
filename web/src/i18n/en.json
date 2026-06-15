@@ -1108,7 +1108,8 @@
     "noRun": "No run",
     "head": "Recent runs",
     "empty": "No runs yet.",
-    "loadMore": "Load more"
+    "loadMore": "Load more",
+    "awaitingApproval": "Awaiting approval"
   },
   "issueKey": {
     "title": "Issue API key",
@@ -1204,6 +1205,8 @@
     "refTrigger": "{{ref}} — data from whatever started the flow (e.g. the form submission)",
     "refGeneric": "{{ref}} — filled in automatically when the flow runs",
     "refSecretSetUp": "Set up →",
+    "wiredInput": "Comes from a connected step.",
+    "wiredInputNamed": "Comes from {{source}}.",
     "secretChipUses": "Uses secret {{name}}",
     "secretChipSetUp": "Set up",
     "secretChipReplace": "Replace",

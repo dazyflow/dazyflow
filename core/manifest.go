@@ -174,6 +174,15 @@ type Manifest struct {
 	// filters match any tag (OR semantics within the tags slice).
 	Tags []string `json:"tags,omitempty"`
 
+	// SearchBoost nudges this drop's relevance for fuzzy/tag matches
+	// (not exact id/label hits). Default 0. Use it to break ties between
+	// drops that match the same generic verb: e.g. SQLite "Insert rows"
+	// boosts itself for "save"/"database" so the canonical
+	// save-to-a-database default outranks the no-setup KV store, which
+	// matches the same terms. Negative values down-rank without dropping
+	// the match (floored to 1).
+	SearchBoost int `json:"search_boost,omitempty"`
+
 	// Description is a longer human-readable description than Label.
 	// Used for tooltips and as a search target. Label is for chips/
 	// titles (short); Description can be 1–2 sentences.

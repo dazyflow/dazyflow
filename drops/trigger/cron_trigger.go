@@ -51,7 +51,7 @@ func init() {
 						"title": "Runs",
 						"format": "cron",
 						"default": "0 9 * * *",
-						"description": "When the flow runs — picked with the schedule editor. (Stored as a 5-field cron expression; \"0 9 * * *\" = every day at 09:00.) Leave blank to run only when you press Run.",
+						"description": "Set this to run the flow automatically on a schedule — picked with the schedule editor. (Stored as a 5-field cron expression; \"0 9 * * *\" = every day at 09:00.) Leave it empty and the flow never runs on its own; it runs only when you press Run.",
 						"examples": ["0 9 * * *", "*/15 * * * *", "0 8 * * 1"]
 					},
 					"tz": {

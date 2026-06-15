@@ -125,20 +125,22 @@ Google Form (trigger)
       Subject (i) tooltip now carries the full *"…Leave blank and it sends as '(no subject)'…"* copy
       (3 field icons render in the Email inspector). This lights up P0-3 / P1-DB / P2-subject together.
 
-- [ ] **P2 — "save" ranks the KV store above the database.** A persona told to *"save to a database"*
-      who searches **save** in the palette gets, in order: **Built-in store** (a no-setup KV store) →
-      **SQLite** (Insert rows) → File → … So the relational DB the walkthrough targets is the *second*
-      hit; the obvious verb lands on a different no-setup thing first. Not a dead-end (both are
-      zero-config and SQLite is right there), but the P0-3 "SQLite is THE save-to-a-database default"
-      intent is diluted. Also: SQLite's "no setup" reassurance lives in its *summary* (node card), not
-      the inspector, and the inspector's "Database file" field shows blank with a *"N to configure"*
-      gate — so the no-config promise isn't visibly reassured at the point of doubt. *(Cheap fix:
-      bump SQLite's rank for `save`/`database`, or down-rank Built-in store for those terms.)*
+- [x] **P2 — "save" ranks the KV store above the database.** — FIXED. Added a general
+      `Manifest.SearchBoost` ranking nudge (applied to fuzzy/tag matches only, never overtaking an
+      exact id/label hit; floored at 1 so a negative value down-ranks without dropping the match) in
+      `daemon/search.go`. SQLite **Insert rows** gets `SearchBoost: 25` and **Upsert rows** `10`, so the
+      canonical save-to-a-database default now leads "save"/"database" over the no-setup KV store (which
+      tied at score 70 and won only on the alphabetical tiebreak). Chose boosting SQLite over down-ranking
+      Built-in store so the KV store still ranks well for "store"/"kv"/"no-setup". (Tests:
+      `TestSearch_SearchBoostBreaksTie` — tie-break, negative floor, and exact-beats-boosted-fuzzy.)
 
 ## P2 — Polish (confusing but not blocking)
 
-- [ ] **"Leave interval blank to check only when you press Run"** phrasing is confusing — say
-      "Run automatically every N minutes" vs "only when I press Run".
+- [x] **"Leave interval blank to check only when you press Run"** phrasing is confusing. — FIXED.
+      Both the poll (`Interval`) and cron trigger param descriptions now lead with the automatic case and
+      contrast it with manual: *"Set this to run the flow automatically every N minutes/hours/days … Leave
+      it empty and the flow never runs on its own; it runs only when you press Run."*
+      (`drops/trigger/poll_trigger.go`, `drops/trigger/cron_trigger.go`).
 - [x] **Email `subject` silently defaults to "(no subject)"** — FIXED (copy + now surfaced). The
       `subject` param on both `email_send` (SMTP) and `gmail_send_email` carries the text *"The email's
       subject line — e.g. 'Re: your submission'. Leave blank and it sends as '(no subject)'."* PASS 4
@@ -146,14 +148,39 @@ Google Form (trigger)
       `FieldLabel` (i)-tooltip change in the NEW section above). Verified live: the Subject field's (i)
       tooltip now shows the full text. *(Follow-up: a true required-subject prompt/validation if
       blank-sends are undesirable.)*
-- [ ] **ntfy truncates >4 KiB silently** — warn when wiring a long body.
-- [ ] **Reference picker** lazy-loads with a blank list (reads as broken), has no search, and
-      labels form fields under `trigger.body.*`.
-- [ ] **`await_approval` has no visible "awaiting" state** in run history, and the approver is
-      "whoever clicks the link" (no role/email targeting) — set expectations in-UI.
-- [ ] **AI errors are opaque** ("llm_http_error: rate limit") — give actionable text
-      ("ChatGPT is rate-limited; try again shortly").
-- [ ] **A wired input greys out the field** with no visible current value — show what's flowing in.
+- [x] **ntfy truncates >4 KiB silently** — FIXED. The body was already truncated at the ~4 KiB ntfy
+      cap, but silently. Now it warns loudly: a progress message ("message was N bytes; … shortened —
+      wire a summary instead of a full document") and `truncated` / `original_bytes` flags in the result
+      `meta` (`drops/notify/ntfy.go`). (Test: `TestNtfy_TruncatesLongMessage` extended to assert both.)
+- [x] **Reference picker** lazy-loads with a blank list, has no search, labels form fields under
+      `trigger.body.*`. — FIXED. The picker now shows an explicit **Loading…** state while fetching (no
+      more blank-reads-as-broken) and an **empty** message when there's genuinely nothing; it has a
+      **search box** with autofocus + Enter-to-insert-first-match; and trigger/form fields are
+      **humanized** (`email` → "Email", `first_name` → "First Name") instead of raw dotted keys
+      (`SchemaForm.tsx` `ReferenceMenu` / `describe`).
+- [x] **`await_approval` has no visible "awaiting" state** in run history, approver expectations
+      unset. — FIXED. Two parts: (1) the `.status-dot` spans in the run-history list + run header were
+      rendered with NO css at all (invisible), so a parked run looked finished — added per-status colours
+      with the awaiting state getting a pulsing amber ring, plus an explicit **"Awaiting approval"** text
+      tag on awaiting rows (`app.css`, `RunHistory.tsx`, i18n). (2) Approver expectations are now stated
+      in-UI: the `await_approval` description and the `prompt` field's (i)-tooltip both say *"anyone who
+      has the link can approve or reject — no per-person targeting … the flow records who clicked on the
+      Approver output"* (`drops/flow/await_approval.go`).
+- [x] **AI errors are opaque** ("llm_http_error: rate limit") — FIXED. Added a shared
+      `llmtask.HTTPError(codePrefix, label, status, detail)` that maps non-2xx LLM statuses to actionable,
+      named text — 401/403 "check the API key…", 429 "ChatGPT is rate-limited; wait a moment…", 400/422
+      "rejected the request — usually the model name or an over-long prompt", 404 "couldn't find that
+      model", 5xx "temporary problem — try again". Both Claude and ChatGPT route through it (stable codes
+      preserved: `*_rate_limited`, `*_api`). Also: a request timeout now reads "the AI request timed out
+      after Ns — raise timeout_ms or shorten the input" instead of a raw context error
+      (`drops/internal/llmtask/llmtask.go`, `drops/claude`, `drops/openai`). (Test:
+      `TestHTTPError_ActionableByStatus`.)
+- [x] **A wired input greys out the field** with no visible current value — FIXED. A wired non-picker
+      param now renders a read-only `WiredField` note naming the source ("Comes from New responses ·
+      Email") instead of an editable-looking box whose value is silently ignored. The source label is
+      traced from the incoming edge via `wiredSourcesByNode` (reusing `tokenLabels`) and threaded
+      FlowEditor → Inspector → SchemaForm → SchemaField. Resource pickers keep their existing richer
+      disabled note (`SchemaForm.tsx`, `Inspector.tsx`, `FlowEditor.tsx`, i18n `wiredInput`/`wiredInputNamed`).
 
 ## Cross-cutting / wins to keep
 
@@ -171,6 +198,12 @@ Google Form (trigger)
       Re-run once the `FieldLabel` renderer fix lands. *Note: the Google-Form respondent `email`
       field (P0-2) can only be confirmed against a live OAuth'd form — out of reach in the headless
       harness; verify manually.*
+      **PASS 5 (2026-06-15): the PASS-4 blockers are now resolved** — the `FieldLabel` (i)-tooltip
+      renders field descriptions (NEW section), and the whole P2 batch landed (AI-error copy, ntfy
+      truncation warning, interval phrasing, "save"→SQLite ranking via `Manifest.SearchBoost`, wired-input
+      "comes from" note, run-history status dots + "Awaiting approval" tag, humanized reference-picker
+      fields). Stays `[~]` pending a fresh end-to-end persona re-run; full **zero-dead-ends** still can't
+      be *certified* while the Google-Form field-rename gap (item above) needs a live Forms-API decision.
 
 ---
 

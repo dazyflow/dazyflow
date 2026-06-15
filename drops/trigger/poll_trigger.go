@@ -47,7 +47,7 @@ func init() {
 						"minimum":1,
 						"maximum":31622400,
 						"default":300,
-						"description":"How often the flow runs. Leave blank to run only when you press Run."
+						"description":"Set this to run the flow automatically every N minutes/hours/days — e.g. every 5 minutes. Leave it empty and the flow never runs on its own; it runs only when you press Run."
 					}
 				}
 			}`),

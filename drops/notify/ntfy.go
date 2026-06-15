@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -81,7 +82,7 @@ func init() {
 	})
 }
 
-func executeNtfy(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
+func executeNtfy(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
 	topic, _ := params.StringOpt(job.Params, "topic")
 	if topic == "" {
 		return params.Err(job, "bad_param", "'topic' is required"), nil
@@ -107,14 +108,21 @@ func executeNtfy(ctx context.Context, job core.Job, _ chan<- core.Progress) (cor
 	// ntfy treats a body over its message limit (~4 KiB) as a file-attachment
 	// upload, which public servers reject ("attachments not allowed"). A push
 	// notification is a glance, not a document — truncate long input (e.g. a
-	// whole email body wired into Message) instead of failing the run.
+	// whole email body wired into Message) instead of failing the run. We
+	// truncate rather than fail, but say so loudly (progress + result meta)
+	// so a long wired body doesn't silently lose its tail.
 	const ntfyMaxMessage = 4000
-	if len(body) > ntfyMaxMessage {
+	origBytes := len(body)
+	truncated := origBytes > ntfyMaxMessage
+	if truncated {
 		cut := ntfyMaxMessage
 		for cut > 0 && !utf8.RuneStart(body[cut]) {
 			cut-- // don't split a multi-byte character (å, emoji, …)
 		}
 		body = body[:cut] + "…"
+		emitProgress(progress, job, 0.3, fmt.Sprintf(
+			"message was %d bytes; ntfy caps notifications at ~%d, so it was shortened — wire a summary instead of a full document if you need the whole thing.",
+			origBytes, ntfyMaxMessage))
 	}
 
 	url := server + "/" + topic
@@ -170,7 +178,8 @@ func executeNtfy(ctx context.Context, job core.Job, _ chan<- core.Progress) (cor
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{"meta": {MIME: "application/json", Inline: map[string]any{
-			"server": server, "topic": topic, "url": url, "status": resp.StatusCode, "bytes_sent": len(body),
+			"server": server, "topic": topic, "url": url, "status": resp.StatusCode,
+			"bytes_sent": len(body), "truncated": truncated, "original_bytes": origBytes,
 		}}},
 	}, nil
 }

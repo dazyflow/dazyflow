@@ -18,7 +18,7 @@ func init() {
 			Category:    "flow_control",
 			Provider:    "internal",
 			Tags:        []string{"human_in_the_loop", "approval", "pause", "wait"},
-			Description: "Pause the flow until someone approves. Order of wiring: put this step BEFORE the step that notifies a person — it hands you an `Approval link` (the `pending_url` output) to put in that notification (e.g. ntfy's 'Link to open', or an email body). The person taps the link to approve or reject; only then does the rest of the flow continue. On resume, the input `Value` comes out the `Approved` or `Rejected` port matching the decision (wire each to its follow-up — no separate Branch needed), alongside the `Approver` who decided and their `Comment`.",
+			Description: "Pause the flow until someone approves. Order of wiring: put this step BEFORE the step that notifies a person — it hands you an `Approval link` (the `pending_url` output) to put in that notification (e.g. ntfy's 'Link to open', or an email body). Anyone who has the link can approve or reject — there's no per-person targeting, so send it only to the people who should decide; the flow records who clicked on the `Approver` output. The person taps the link to approve or reject; only then does the rest of the flow continue. On resume, the input `Value` comes out the `Approved` or `Rejected` port matching the decision (wire each to its follow-up — no separate Branch needed), alongside the `Approver` who decided and their `Comment`.",
 			Summary:     "Pause until a person approves: hand a link to your notify step, then continue on their decision.",
 			Examples: []core.ParamsExample{
 				{
@@ -70,7 +70,12 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"prompt":{"type":"string"}
+					"prompt":{
+						"type":"string",
+						"title":"Question to ask",
+						"description":"The question shown on the approval page — e.g. 'A reply is ready to send. Approve?'. Note: anyone who opens the Approval link can approve or reject; the link is the only key, so share it only with the people who should decide. The flow records who clicked on the Approver output.",
+						"examples":["A reply is ready to send. Approve?"]
+					}
 				}
 			}`),
 			Idempotent:     true,

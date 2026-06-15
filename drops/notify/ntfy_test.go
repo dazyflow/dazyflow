@@ -63,10 +63,12 @@ func TestNtfy_TruncatesLongMessage(t *testing.T) {
 	// 5000 bytes of "å" (2 bytes each) — over the 4000-byte cap, with the cut
 	// landing mid-rune unless the truncation backs up to a rune boundary.
 	long := strings.Repeat("å", 2500)
+	// Buffered so the non-blocking emitProgress always lands; assert we warned.
+	prog := make(chan core.Progress, 4)
 	res, err := executeNtfy(context.Background(), core.Job{
 		Params: map[string]any{"server": srv.URL, "topic": "alerts"},
 		Input:  map[string]core.Ref{"message": {Inline: long}},
-	}, nil)
+	}, prog)
 	if err != nil || res.Status != core.StatusOK {
 		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
 	}
@@ -78,6 +80,25 @@ func TestNtfy_TruncatesLongMessage(t *testing.T) {
 	}
 	if !strings.HasPrefix(gotBody, "å") || strings.ContainsRune(gotBody, '�') {
 		t.Errorf("multi-byte characters must not be split")
+	}
+	// The truncation must be surfaced, not silent: a progress warning…
+	close(prog)
+	warned := false
+	for p := range prog {
+		if strings.Contains(p.Message, "shortened") {
+			warned = true
+		}
+	}
+	if !warned {
+		t.Error("expected a progress warning about the shortened message")
+	}
+	// …and a flag in the result meta.
+	meta, _ := res.Output["meta"].Inline.(map[string]any)
+	if meta["truncated"] != true {
+		t.Errorf("meta.truncated = %v, want true", meta["truncated"])
+	}
+	if meta["original_bytes"] != 5000 {
+		t.Errorf("meta.original_bytes = %v, want 5000", meta["original_bytes"])
 	}
 }
 

@@ -5128,6 +5128,65 @@ button.warning:hover:not(:disabled) {
   color: var(--faint);
   text-align: center;
 }
+/* Status dot — the at-a-glance run state in history rows and the run
+   header. These spans had no styling at all, so they were invisible: a
+   run parked at an await_approval node looked identical to a finished
+   one. Each engine JobStatus maps to a colour; the "awaiting" state (the
+   only one needing a human) gets a pulsing ring so it stands out in a
+   list of otherwise-finished runs. */
+.status-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: var(--status-pending);
+}
+.status-dot.queued {
+  background: var(--status-pending);
+}
+.status-dot.running {
+  background: var(--status-running);
+  animation: status-dot-pulse 1.2s ease-in-out infinite;
+}
+.status-dot.succeeded {
+  background: var(--status-completed);
+}
+.status-dot.failed,
+.status-dot.rejected {
+  background: var(--status-failed);
+}
+.status-dot.cancelled,
+.status-dot.skipped {
+  background: var(--faint);
+}
+.status-dot.awaiting {
+  background: var(--status-awaiting);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-awaiting) 30%, transparent);
+  animation: status-dot-pulse 1.6s ease-in-out infinite;
+}
+@keyframes status-dot-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* Inline "Awaiting approval" tag in a run-history row — the textual
+   companion to the amber dot for the parked state. */
+.run-awaiting-tag {
+  margin-left: var(--space-2);
+  padding: 1px 6px;
+  border-radius: var(--r-1);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--status-awaiting);
+  background: color-mix(in srgb, var(--status-awaiting) 16%, transparent);
+}
+
 .run-history-row {
   display: flex;
   align-items: center;

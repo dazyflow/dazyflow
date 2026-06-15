@@ -2,6 +2,7 @@ package llmtask
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"git.sr.ht/~klahr/hazyflow/core"
@@ -160,5 +161,41 @@ func TestCoerceText(t *testing.T) {
 	}
 	if coerceText(map[string]any{"value": "wrapped"}) != "wrapped" {
 		t.Error("value-wrapper failed")
+	}
+}
+
+func TestHTTPError_ActionableByStatus(t *testing.T) {
+	cases := []struct {
+		status   int
+		wantCode string
+		wantSub  string // a phrase the user-facing message must contain
+	}{
+		{401, "openai_auth", "API key"},
+		{403, "openai_auth", "API key"},
+		{429, "openai_rate_limited", "rate-limited"},
+		{400, "openai_bad_request", "model name"},
+		{404, "openai_not_found", "model"},
+		{503, "openai_upstream", "try again"},
+		{418, "openai_api", "HTTP 418"},
+	}
+	for _, c := range cases {
+		je := HTTPError("openai", "ChatGPT", c.status, "quota exceeded")
+		if je.Code != c.wantCode {
+			t.Errorf("status %d: code=%q, want %q", c.status, je.Code, c.wantCode)
+		}
+		if !strings.Contains(je.Message, "ChatGPT") {
+			t.Errorf("status %d: message %q missing integration label", c.status, je.Message)
+		}
+		if !strings.Contains(je.Message, c.wantSub) {
+			t.Errorf("status %d: message %q missing %q", c.status, je.Message, c.wantSub)
+		}
+		// The vendor detail is appended for debugging.
+		if !strings.Contains(je.Message, "quota exceeded") {
+			t.Errorf("status %d: message %q dropped vendor detail", c.status, je.Message)
+		}
+	}
+	// 429 keeps the legacy stable code the UI may key on.
+	if HTTPError("claude", "Claude", 429, "").Code != "claude_rate_limited" {
+		t.Error("claude 429 code regressed")
 	}
 }

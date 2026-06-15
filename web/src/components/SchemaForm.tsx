@@ -70,6 +70,11 @@ type Props = {
   // resourceLabels maps a picker key → its resolved resource name (traced
   // from upstream when wired), so a disabled picker can name the resource.
   resourceLabels?: Record<string, string>;
+  // wiredSources maps a wired param key → a friendly label for the step/port
+  // feeding it ("New responses → Email"). Lets a wired NON-picker field show
+  // what's flowing in instead of a greyed, blank box (resource pickers use
+  // resourceLabels for the same purpose).
+  wiredSources?: Record<string, string>;
   // extraReferenceItems are extra insertable tokens offered on every string
   // field's "{}" menu — used by the for_each step editor to expose
   // ${item.<field>} for the iterated list's columns.
@@ -88,6 +93,7 @@ export function SchemaForm({
   references,
   wiredKeys,
   resourceLabels,
+  wiredSources,
   extraReferenceItems,
   tokenLabels,
 }: Props) {
@@ -114,6 +120,7 @@ export function SchemaForm({
       references={references}
       wired={wired.has(key)}
       resolvedName={resourceLabels?.[key]}
+      wiredSource={wiredSources?.[key]}
       extraReferenceItems={extraReferenceItems}
       tokenLabels={tokenLabels}
       siblings={value}
@@ -204,6 +211,9 @@ type FieldProps = {
   // resolvedName is the picker resource's friendly name (traced from upstream
   // when wired), shown in the disabled picker's note.
   resolvedName?: string;
+  // wiredSource is a friendly label for the step/port feeding a wired,
+  // non-picker field — shown so the greyed field still says what's flowing in.
+  wiredSource?: string;
   // extraReferenceItems are extra "{}"-menu tokens (e.g. ${item.<field>}).
   extraReferenceItems?: { label: string; token: string }[];
   // tokenLabels: "nodeId.port" → friendly step·port names for token chips.
@@ -213,8 +223,18 @@ type FieldProps = {
   siblings?: Record<string, unknown>;
 };
 
-function SchemaField({ name, schema, required, value, onChange, workspace, accountPicker, references, wired, resolvedName, extraReferenceItems, tokenLabels, siblings }: FieldProps) {
+function SchemaField({ name, schema, required, value, onChange, workspace, accountPicker, references, wired, resolvedName, wiredSource, extraReferenceItems, tokenLabels, siblings }: FieldProps) {
   const { t } = useTranslation();
+  // A wired param is decided by the incoming wire, so the editor is read-only.
+  // Resource pickers render their own richer disabled note (with the resolved
+  // resource name), so let those fall through; every other field type would
+  // otherwise show a plain, editable-looking box whose value is silently
+  // ignored — replace it with a clear "comes from <step>" note instead.
+  const isResourcePicker =
+    schema.type === "string" && !!schema.format && !!RESOURCE_PICKERS[schema.format] && !!references;
+  if (wired && !isResourcePicker) {
+    return <WiredField name={name} schema={schema} required={required} source={wiredSource ?? resolvedName} />;
+  }
   // The OAuth `account` field becomes a dropdown of connected accounts
   // (plus a Connect affordance) when the editor supplies a picker. Plain
   // string otherwise. Guarded to a bare string field so an enum/oneOf
@@ -797,6 +817,37 @@ function FieldWrap({
         </div>
       )}
     </div>
+  );
+}
+
+// WiredField is the read-only stand-in for a param whose value arrives over a
+// connected input port. The wire decides the value, so an editable box would
+// be misleading (anything typed is ignored). Instead we say so plainly and,
+// when we can trace it, name the step/port that's feeding in — so the field
+// is reassuring ("comes from New responses → Email") rather than a greyed,
+// blank mystery. Mirrors the resource picker's disabled note for consistency.
+function WiredField({
+  name,
+  schema,
+  required,
+  source,
+}: {
+  name: string;
+  schema: JSONSchema;
+  required: boolean;
+  source?: string;
+}) {
+  const { t } = useTranslation();
+  return (
+    <FieldWrap name={name} schema={schema} required={required}>
+      <div className="resource-picker">
+        <div className="resource-picker-hint">
+          {source
+            ? t("schemaForm.wiredInputNamed", { source })
+            : t("schemaForm.wiredInput")}
+        </div>
+      </div>
+    </FieldWrap>
   );
 }
 
@@ -1478,7 +1529,12 @@ function ReferenceMenu({
         : it.node_id || it.token;
     }
     if (kind === "secrets" || kind === "resources") return it.name || it.token;
-    if (kind === "trigger") return it.field || it.token;
+    if (kind === "trigger") {
+      // Trigger/form fields arrive as raw keys ("email", "first_name").
+      // Humanize them ("Email", "First Name") so a non-techie recognises
+      // their form question instead of reading a developer-shaped key.
+      return it.label || humanize(it.field || it.token);
+    }
     return it.label || it.token;
   };
   // Case-insensitive substring filter over the human label of each row.
