@@ -96,6 +96,20 @@ export type FlowSummary = {
   run_status?: "live" | "manual" | "paused";
 };
 
+// DropAdjacency is one directed port-to-port co-occurrence mined from the
+// workspace's own flows: the `from_port` output of module `from` was wired
+// to the `to_port` input of module `to`. `flows` counts distinct graphs
+// containing such an edge (the ranking signal); `edges` is the raw count.
+// Feeds the editor's "Suggested" group when dragging off a port.
+export type DropAdjacency = {
+  from: string;
+  from_port: string;
+  to: string;
+  to_port: string;
+  flows: number;
+  edges: number;
+};
+
 // Frame is an editor-only comment box grouping nodes visually. The engine
 // ignores it; it round-trips so the editor can redraw the same boxes.
 export type Frame = {

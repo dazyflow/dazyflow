@@ -1164,6 +1164,8 @@
     "title": "Snabblägg till ett steg",
     "placeholder": "Sök steg…",
     "placeholderEntry": "Sök ingångspunkter…",
+    "suggested": "Föreslagna",
+    "allDrops": "Alla steg",
     "showAll": "Behöver du ett vanligt steg? Visa alla",
     "count": "{{count}} träffar",
     "count_one": "{{count}} träff",

@@ -1,6 +1,7 @@
 import type {
   APIKeySummary,
   AuditEvent,
+  DropAdjacency,
   FlowSummary,
   Graph,
   IssuedAPIKey,
@@ -576,6 +577,17 @@ export const api = {
       `/me/flows?tenant=${encodeURIComponent(tenant)}&workspace=${encodeURIComponent(workspace)}`,
     );
     return { graphs: r.flows ?? [] };
+  },
+  // dropSuggestions returns directed module co-occurrence mined from the
+  // workspace's own flows, ranked by distinct-flow count. The editor uses
+  // it to surface "drops you usually wire next" when dragging off a port.
+  dropSuggestions: async (token: string, tenant: string, workspace: string) => {
+    const r = await request<{ items?: DropAdjacency[] }>(
+      token,
+      "GET",
+      `/me/flows/suggestions?tenant=${encodeURIComponent(tenant)}&workspace=${encodeURIComponent(workspace)}`,
+    );
+    return r.items ?? [];
   },
   // ref loads a past revision (a commit hash from flowHistory); omit it
   // for the current HEAD. Used by the editor's history-preview.

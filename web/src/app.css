@@ -7255,6 +7255,18 @@ button.warning:hover:not(:disabled) {
   font-size: var(--text-md);
   font-style: italic;
 }
+/* Group subheader separating the "Suggested" rows from the full catalog. */
+.quick-palette-group {
+  padding: var(--space-2) var(--space-2) var(--space-1);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.quick-palette-group:not(:first-child) {
+  margin-top: var(--space-1);
+}
 .quick-palette-row {
   display: flex;
   align-items: center;

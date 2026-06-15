@@ -1168,6 +1168,8 @@
     "title": "Quick add a step",
     "placeholder": "Search steps…",
     "placeholderEntry": "Search entry points…",
+    "suggested": "Suggested",
+    "allDrops": "All steps",
     "showAll": "Need a plain step? Show all",
     "count": "{{count}} results",
     "count_one": "{{count}} result",

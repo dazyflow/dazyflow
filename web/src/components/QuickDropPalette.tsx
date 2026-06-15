@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -14,6 +15,12 @@ type Props = {
   drops: Manifest[];
   onClose: () => void;
   onPick: (drop: Manifest) => void;
+  // suggested, when non-empty, pins a "Suggested" group at the top of the
+  // list (above the full catalog) while the search box is empty — drops the
+  // workspace has historically wired in this position. Ignored once the user
+  // starts typing, when the ranked search takes over. The caller is
+  // responsible for ordering; we render them as given.
+  suggested?: Manifest[];
   // placeholder overrides the search box hint (e.g. "Search entry points" when
   // a fresh flow is being seeded with a trigger).
   placeholder?: string;
@@ -91,7 +98,7 @@ function wordStarts(s: string, tok: string): boolean {
 // is ever mounted, so a single shared handle is safe.
 let pendingHistoryPop: ReturnType<typeof setTimeout> | null = null;
 
-export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAll }: Props) {
+export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAll, suggested }: Props) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -143,7 +150,15 @@ export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAl
   // Build the ranked match list. When the query is empty we still want a
   // useful default ordering — surface drops alphabetically by integration
   // so the list is browsable rather than random.
-  const matches = useMemo<Match[]>(() => {
+  // Returns the flat ranked row list plus how many of its leading entries
+  // are "suggested" — so the render can drop a group subheader before row 0
+  // and before the first non-suggested row. Keeping it one flat array means
+  // arrow-key nav (which indexes into `matches`) crosses the boundary for
+  // free.
+  const { matches, suggestedCount } = useMemo<{
+    matches: Match[];
+    suggestedCount: number;
+  }>(() => {
     const q = query.trim();
     if (!q) {
       // Default ordering leads with the user-facing connectors (Slack, ntfy,
@@ -164,12 +179,32 @@ export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAl
         if (ai !== bi) return ai.localeCompare(bi);
         return a.label.localeCompare(b.label);
       });
-      return sorted.map((d) => ({ drop: d, score: 1 }));
+      // Pin suggestions on top (in caller order) and drop them from the main
+      // list so they don't appear twice. Suggestions are advisory, so only
+      // include ones actually present in `drops` (the MIME-filtered set).
+      const sug = (suggested ?? []).filter((d) =>
+        drops.some((x) => x.id === d.id),
+      );
+      const sugIds = new Set(sug.map((d) => d.id));
+      const rest = sorted.filter((d) => !sugIds.has(d.id));
+      return {
+        matches: [...sug, ...rest].map((d) => ({ drop: d, score: 1 })),
+        suggestedCount: sug.length,
+      };
     }
+    // Once the user types, the dedicated section is gone — but suggested
+    // drops should still surface above equally-relevant ones, so a search
+    // match on a suggested drop gets a flat bonus. Modest enough that a
+    // strong direct hit (exact label, 1000) always outranks a weak suggested
+    // one; large enough to lift it past same-tier non-suggested results.
+    const sugIds = new Set((suggested ?? []).map((d) => d.id));
     const hits: Match[] = [];
     for (const d of drops) {
-      const s = scoreDrop(d, q);
-      if (s > 0) hits.push({ drop: d, score: s });
+      let s = scoreDrop(d, q);
+      if (s > 0) {
+        if (sugIds.has(d.id)) s += 150;
+        hits.push({ drop: d, score: s });
+      }
     }
     hits.sort((a, b) => {
       if (b.score !== a.score) return b.score - a.score;
@@ -178,8 +213,8 @@ export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAl
       if (ai !== bi) return ai.localeCompare(bi);
       return a.drop.label.localeCompare(b.drop.label);
     });
-    return hits;
-  }, [drops, query]);
+    return { matches: hits, suggestedCount: 0 };
+  }, [drops, query, suggested]);
 
   // Reset the highlight whenever the result set changes — otherwise an
   // index that was valid for an earlier query can point past the end of
@@ -285,14 +320,25 @@ export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAl
             </div>
           ) : (
             matches.map((m, i) => (
-              <QuickRow
-                key={m.drop.id}
-                drop={m.drop}
-                active={i === active}
-                index={i}
-                onHover={() => setActive(i)}
-                onPick={() => onPick(m.drop)}
-              />
+              <Fragment key={m.drop.id}>
+                {suggestedCount > 0 && i === 0 && (
+                  <div className="quick-palette-group">
+                    {t("quickPalette.suggested")}
+                  </div>
+                )}
+                {suggestedCount > 0 && i === suggestedCount && (
+                  <div className="quick-palette-group">
+                    {t("quickPalette.allDrops")}
+                  </div>
+                )}
+                <QuickRow
+                  drop={m.drop}
+                  active={i === active}
+                  index={i}
+                  onHover={() => setActive(i)}
+                  onPick={() => onPick(m.drop)}
+                />
+              </Fragment>
             ))
           )}
         </div>

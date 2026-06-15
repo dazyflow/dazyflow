@@ -121,6 +121,35 @@ func (h *HTTPGateway) listFlowsMe(rw http.ResponseWriter, r *http.Request, p cor
 	writeJSON(rw, http.StatusOK, map[string]any{"flows": summaries})
 }
 
+// suggestionsMe is GET /api/v1/me/flows/suggestions — the directed
+// module co-occurrence mined from this workspace's own flows, used by the
+// editor's drag-off-pin palette to surface "drops you usually wire next".
+// Same ?tenant=/?workspace= fallback as listFlowsMe.
+func (h *HTTPGateway) suggestionsMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	tenant := r.URL.Query().Get("tenant")
+	workspace := r.URL.Query().Get("workspace")
+	if tenant == "" {
+		tenant = p.Tenant
+	}
+	if workspace == "" {
+		workspace = p.Workspace
+	}
+	if tenant == "" || workspace == "" {
+		writeAPIError(rw, http.StatusBadRequest, "missing_scope",
+			"tenant and workspace required (no principal binding)")
+		return
+	}
+	items, err := h.svc.DropSuggestions(r.Context(), p, tenant, workspace)
+	if err != nil {
+		writeAPIError(rw, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	if items == nil {
+		items = []DropAdjacency{}
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{"items": items})
+}
+
 func (h *HTTPGateway) loadFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, workspace, id, ok := h.readFlowID(rw, r, p)
 	if !ok {

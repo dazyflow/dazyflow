@@ -75,7 +75,9 @@ import {
   type SetupNeed,
 } from "../lib/requiredConnections";
 import { mimeCompatible, pickPort } from "../lib/ports";
+import { suggestNextDrops, topDropsByUsage } from "../lib/suggest";
 import type {
+  DropAdjacency,
   Graph,
   GraphTrigger,
   LintIssue,
@@ -223,6 +225,10 @@ function EditorInner() {
   const canConnect = hasPerm("secret:write");
   const themeMode = useThemeMode();
   const [manifests, setManifests] = useState<Manifest[]>([]);
+  // Module co-occurrence mined from this workspace's own flows. Best-effort:
+  // empty until it loads (and stays empty on error or for a brand-new org),
+  // which simply means no "Suggested" group — the palette behaves as before.
+  const [adjacency, setAdjacency] = useState<DropAdjacency[]>([]);
   const manifestByID = useMemo(() => {
     const m = new Map<string, Manifest>();
     for (const x of manifests) m.set(x.id, x);
@@ -530,6 +536,19 @@ function EditorInner() {
       .catch((e) => {
         if (!cancelled) setError((e as Error).message);
       });
+
+    // Drop suggestions are advisory — a failure must never block the editor,
+    // so it's a silent best-effort fetch (no setError on the catch).
+    if (activeTenant && activeWorkspace) {
+      api
+        .dropSuggestions(token, activeTenant, activeWorkspace)
+        .then((items) => {
+          if (!cancelled) setAdjacency(items);
+        })
+        .catch(() => {
+          if (!cancelled) setAdjacency([]);
+        });
+    }
 
     api
       .loadGraph(token, activeTenant, activeWorkspace, id)
@@ -931,6 +950,46 @@ function EditorInner() {
   // A fresh flow (no nodes, not a drag-off-pin add) shows only entry points,
   // unless the user has explicitly widened to the full catalog.
   const paletteEntryMode = !connectFrom && nodes.length === 0 && !paletteShowAll;
+
+  // "Suggested" group for the quick palette, drawn from this workspace's own
+  // flow history. Drag-off-pin: drops historically wired in that position —
+  // downstream when dragging an output (this module → X), upstream from an
+  // input (X → this module), keyed by the exact port so multi-output drops
+  // suggest the right next step per pin. Cmd/Ctrl+K (no drag, existing flow):
+  // the most-used drops overall. Fresh-flow entry mode shows none (the seed
+  // is trigger drops). Always intersected with the wireable set, so a
+  // suggestion can always connect.
+  const connectSuggestions = useMemo<Manifest[]>(() => {
+    if (connectFrom) {
+      const srcModule = nodes.find((n) => n.id === connectFrom.nodeId)?.data
+        .moduleID;
+      if (!srcModule) return [];
+      const fromOutput = connectFrom.handleType === "source";
+      const srcPort = connectFrom.handleId ?? (fromOutput ? "out" : "in");
+      return suggestNextDrops(
+        adjacency,
+        srcModule,
+        fromOutput,
+        srcPort,
+        new Set(connectDrops.map((m) => m.id)),
+        manifestByID,
+      );
+    }
+    if (paletteEntryMode) return [];
+    return topDropsByUsage(
+      adjacency,
+      new Set(manifests.map((m) => m.id)),
+      manifestByID,
+    );
+  }, [
+    connectFrom,
+    adjacency,
+    connectDrops,
+    nodes,
+    manifestByID,
+    manifests,
+    paletteEntryMode,
+  ]);
 
   // Spawn a drop and immediately wire it to the port the drag came from.
   const spawnDropConnected = useCallback(
@@ -3906,6 +3965,7 @@ function EditorInner() {
           drops={
             connectFrom ? connectDrops : paletteEntryMode ? entryPointDrops : manifests
           }
+          suggested={connectSuggestions}
           placeholder={paletteEntryMode ? t("quickPalette.placeholderEntry") : undefined}
           onShowAll={paletteEntryMode ? () => setPaletteShowAll(true) : undefined}
           onClose={() => {

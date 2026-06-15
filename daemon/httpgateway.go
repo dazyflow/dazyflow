@@ -392,6 +392,9 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/me/billing/checkout", h.requireAuth(h.billingCheckout))
 	mux.HandleFunc("POST /api/v1/me/billing/portal", h.requireAuth(h.billingPortal))
 	mux.HandleFunc("GET /api/v1/me/flows", h.requireAuth(h.listFlowsMe))
+	// Literal "suggestions" segment outranks the {flow_id} wildcard below
+	// in Go's ServeMux precedence, so this need not be ordered carefully.
+	mux.HandleFunc("GET /api/v1/me/flows/suggestions", h.requireAuth(h.suggestionsMe))
 	mux.HandleFunc("GET /api/v1/me/flows/{flow_id}", h.requireAuth(h.loadFlowMe))
 	mux.HandleFunc("GET /api/v1/me/flows/{flow_id}/history", h.requireAuth(h.historyFlowMe))
 	mux.HandleFunc("GET /api/v1/me/flows/{flow_id}/published", h.requireAuth(h.publishedFlowMe))

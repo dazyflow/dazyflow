@@ -305,6 +305,18 @@ type Service struct {
 	// RecordingBus, read by `hzctl job logs` / the logs endpoints). Nil
 	// = logs aren't persisted on this deployment.
 	RunLogs RunLogStore
+
+	// suggestMu guards suggestCache, the memo backing DropSuggestions.
+	// Keyed by (tenant, workspace, visibility-view); each entry remembers
+	// the workspace HEAD it was computed at, so a save (which moves HEAD)
+	// transparently invalidates it on the next read.
+	suggestMu    sync.Mutex
+	suggestCache map[string]suggestEntry
+}
+
+type suggestEntry struct {
+	head string
+	data []DropAdjacency
 }
 
 func (s *Service) bus() Bus {
@@ -713,6 +725,132 @@ func (s *Service) ListFlowSummaries(ctx context.Context, p core.Principal, tenan
 			RunStatus:   core.FlowRunStatusPublished(g, pub != ""),
 		})
 	}
+	return out, nil
+}
+
+// DropAdjacency is one directed port-to-port co-occurrence mined from a
+// workspace's own graphs: across the flows this principal can see, the
+// `FromPort` output of module `From` was wired to the `ToPort` input of
+// module `To`. Keying on ports (not just modules) lets the editor give
+// precise suggestions for drops with several semantically distinct outputs
+// — e.g. a router's `matched` vs `unmatched` pins lead to different next
+// steps. Flows is the count of distinct graphs containing such an edge (the
+// primary ranking signal, so one busy graph can't dominate); Edges is the
+// raw edge count. Powers the editor's "Suggested next drop" group.
+type DropAdjacency struct {
+	From     string `json:"from"`
+	FromPort string `json:"from_port"`
+	To       string `json:"to"`
+	ToPort   string `json:"to_port"`
+	Flows    int    `json:"flows"`
+	Edges    int    `json:"edges"`
+}
+
+// DropSuggestions mines directed module co-occurrence from the workspace's
+// own graphs — the basis for "drops you usually wire after this one". It
+// iterates exactly like ListFlowSummaries (including the visibility
+// filter), so a non-admin never counts another member's private flow and
+// no flow structure leaks across the view boundary. Sorted by distinct-flow
+// count descending for a stable, ranked payload. Memoized per HEAD.
+func (s *Service) DropSuggestions(ctx context.Context, p core.Principal, tenant, ws string) ([]DropAdjacency, error) {
+	if err := core.RequireWorkspace(p, tenant, ws); err != nil {
+		return nil, err
+	}
+	store, err := s.Workspaces.Open(tenant, ws)
+	if err != nil {
+		return nil, err
+	}
+
+	// The viewable set depends only on admin-ness and (for private flows)
+	// the subject, so those fully determine the cache key alongside HEAD.
+	isAdmin := core.IsFlowAdminPrincipal(p)
+	view := "sub:" + p.Subject
+	if isAdmin {
+		view = "admin"
+	}
+	cacheKey := tenant + "\x00" + ws + "\x00" + view
+
+	head, err := store.Head()
+	if err != nil {
+		return nil, err
+	}
+	s.suggestMu.Lock()
+	if e, ok := s.suggestCache[cacheKey]; ok && e.head == head {
+		s.suggestMu.Unlock()
+		return e.data, nil
+	}
+	s.suggestMu.Unlock()
+
+	ids, err := store.ListGraphs()
+	if err != nil {
+		return nil, err
+	}
+	type counts struct{ flows, edges int }
+	// Key: [from, fromPort, to, toPort].
+	agg := map[[4]string]*counts{}
+	for _, id := range ids {
+		g, err := store.Load(id)
+		if err != nil {
+			continue
+		}
+		if !isAdmin && core.AuthorizeGraphView(p, g) != nil {
+			continue
+		}
+		mod := make(map[string]string, len(g.Nodes))
+		for _, n := range g.Nodes {
+			mod[n.ID] = n.Module
+		}
+		seen := map[[4]string]bool{}
+		for _, e := range g.Edges {
+			from, to := mod[e.From], mod[e.To]
+			if from == "" || to == "" || from == to {
+				continue
+			}
+			k := [4]string{from, e.FromPort, to, e.ToPort}
+			c := agg[k]
+			if c == nil {
+				c = &counts{}
+				agg[k] = c
+			}
+			c.edges++
+			if !seen[k] {
+				c.flows++
+				seen[k] = true
+			}
+		}
+	}
+	out := make([]DropAdjacency, 0, len(agg))
+	for k, c := range agg {
+		out = append(out, DropAdjacency{
+			From: k[0], FromPort: k[1], To: k[2], ToPort: k[3],
+			Flows: c.flows, Edges: c.edges,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Flows != out[j].Flows {
+			return out[i].Flows > out[j].Flows
+		}
+		if out[i].Edges != out[j].Edges {
+			return out[i].Edges > out[j].Edges
+		}
+		if out[i].From != out[j].From {
+			return out[i].From < out[j].From
+		}
+		if out[i].FromPort != out[j].FromPort {
+			return out[i].FromPort < out[j].FromPort
+		}
+		if out[i].To != out[j].To {
+			return out[i].To < out[j].To
+		}
+		return out[i].ToPort < out[j].ToPort
+	})
+
+	s.suggestMu.Lock()
+	if s.suggestCache == nil {
+		s.suggestCache = map[string]suggestEntry{}
+	}
+	s.suggestCache[cacheKey] = suggestEntry{head: head, data: out}
+	s.suggestMu.Unlock()
 	return out, nil
 }
 

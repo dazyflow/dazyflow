@@ -496,6 +496,24 @@ func (s *Store) ListGraphs() ([]string, error) {
 	return ids, err
 }
 
+// Head returns the current HEAD commit hash as a hex string, or "" when
+// the repo has no commits yet. A cheap cache key for callers that
+// memoize views derived from the whole graph set (e.g. the drop-suggestion
+// adjacency) — when HEAD is unchanged, nothing the derived view depends on
+// has changed either.
+func (s *Store) Head() (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	head, err := s.repo.Head()
+	if errors.Is(err, plumbing.ErrReferenceNotFound) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return head.Hash().String(), nil
+}
+
 func (s *Store) resolve(ref string) (plumbing.Hash, error) {
 	if h, err := s.repo.ResolveRevision(plumbing.Revision(ref)); err == nil {
 		return *h, nil
