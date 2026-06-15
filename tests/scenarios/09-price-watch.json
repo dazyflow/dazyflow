@@ -47,10 +47,12 @@
     {
       "id": "alert",
       "module": "for_each",
-      "params": {
-        "step_module": "slack_send_message",
-        "step_params": {"channel": "#price-alerts", "text": "Price change on ${item.sku}: now ${item.price} (was ${item.price_right})"}
-      }
+      "params": {}
+    },
+    {
+      "id": "send_alert",
+      "module": "slack_send_message",
+      "params": {"channel": "#price-alerts", "text": "Price change on ${item.sku}: now ${item.price} (was ${item.price_right})"}
     },
     {
       "id": "record_today",
@@ -66,6 +68,7 @@
     {"from": "compare", "from_port": "rows", "to": "flag_change", "to_port": "rows"},
     {"from": "flag_change", "from_port": "rows", "to": "changed_only", "to_port": "rows"},
     {"from": "changed_only", "from_port": "rows_1", "to": "alert", "to_port": "items"},
+    {"from": "alert", "from_port": "body", "to": "send_alert", "to_port": "pass"},
     {"from": "today_rows", "from_port": "rows", "to": "record_today", "to_port": "rows"}
   ]
 }

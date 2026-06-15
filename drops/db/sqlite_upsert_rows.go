@@ -64,7 +64,8 @@ func init() {
 					"conflict_columns": {"type":"array","items":{"type":"string"}},
 					"update_columns":   {"type":"array","items":{"type":"string"}},
 					"create_table":     {"type":"boolean","default":true,"description":"Auto-create the table (with a UNIQUE on conflict_columns) when missing. Defaults true."},
-					"column_types":     {"type":"object","additionalProperties":{"type":"string"}}
+					"column_types":     {"type":"object","additionalProperties":{"type":"string"}},
+					"field_mapping":    {"type":"object","additionalProperties":{"type":"string"},"title":"Column mapping","description":"Optional. Choose which incoming fields to write and name their columns — {incoming field: column name}. Only listed fields are written (others dropped); blank a column name to skip a field. conflict_columns refer to the mapped (output) names. Leave empty to write every field."}
 				},
 				"required":["path","table","conflict_columns"]
 			}`),

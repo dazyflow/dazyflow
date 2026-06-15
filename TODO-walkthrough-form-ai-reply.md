@@ -49,14 +49,16 @@ Google Form (trigger)
 
 ## P1 — Major friction (doable but painful / error-prone)
 
-- [~] **(from P0-1) "Live" chip can mislead when unpublished.** — INVESTIGATED, premise is wrong;
-      do NOT implement "needs publish". The scheduler enrolls triggers off **HEAD** (`rescan`,
-      `scheduler.go:213-220`, no publish check) and `fireGraph` uses `LoadPublishedOrHead`, which
-      **falls back to HEAD for never-published flows** (`scheduler.go:393-400`). So a never-published
-      flow with a configured trigger *does* fire — "Live" is truthful, and the editor chip (computed
-      from HEAD triggers) already matches what the scheduler enrolls. A "needs publish" state would
-      lie in the opposite direction. *(If the desired product behaviour is actually "don't fire until
-      published", that's a scheduler change, not a chip change — needs a separate decision.)*
+- [x] **(from P0-1) "Live" chip + require-published.** — FIXED (the "require published" path was
+      chosen). The scheduler now only runs PUBLISHED flows: `rescan` skips enrolling never-published
+      flows and `fireGraph` gates on `PublishedCommit` (no more HEAD fallback) — `daemon/scheduler.go`.
+      The status chip gained a **`needs_publish`** state (upload-cloud icon): a flow with a configured
+      SCHEDULER trigger (cron/poll/google-form) that isn't published reads **"Needs publish"** instead
+      of a misleading "Live", in both the editor and the flow list. Webhooks/events are intentionally
+      excluded (they're not "the scheduler"). `core/flowstatus.go` `FlowRunStatusPublished`,
+      `web/src/flowStatus.ts`, `FlowStatusChip.tsx`, server `ListFlowSummaries`. Verified live (chip in
+      list + editor). (Tests: `TestScheduler_UnpublishedFlowIsNotEnrolled`; scheduler firing tests now
+      publish first.)
 - [x] **(from P0-3) Postgres now has a "Connect" affordance.** — FIXED. The three `postgres_*` drops
       dropped `RequiresConnections(PG_DSN)` + the developer-facing `dsn` param in favour of a
       `ConnectionFields` `dsn` (secret, required), mirroring ntfy/Claude. The unified node chip,
@@ -64,10 +66,14 @@ Google Form (trigger)
       automatically (`injectConnectionDefaults` fills the unset `dsn` from `conn.postgres.dsn` at run
       time). Backward-compatible: old flows with a typed `dsn` still work when no connection is set.
       Verified live (8/8 checks: manifest contract + node chip + inspector + Apps card).
-- [ ] **(from P0-4) Approval→notify is guided but not automated.** The wiring is now well
-      explained, but still manual.
-      → A one-click "request approval, notify me on ntfy" that auto-wires
-      `pending_url` → ntfy `click` and the Approved port → the send step.
+- [x] **(from P0-4) Approval→notify one-click auto-wire.** — FIXED. The await_approval inspector now
+      has a **"Notify me on ntfy with the approval link"** button that creates an ntfy step and wires
+      it: edge `pending_url → ntfy.message` (orders execution + shows the link) and param
+      `ntfy.click = ${upstream.<approval>.pending_url}` (the whole notification is tappable; `click` is
+      a param not a port, so it can't be an edge). `web/src/pages/FlowEditor.tsx` `addApprovalNtfy` +
+      `web/src/components/Inspector.tsx`. Verified live (button → ntfy node + persisted click ref +
+      edge). *The remaining wire — Approved port → send step — stays a manual drag (flow-specific, and
+      already explained on await_approval); the button's hint spells it out.*
 
 - [x] **One field out of a response needs developer syntax.** — PASS 2 FIXED.
       The `{}` reference picker already produced field-level tokens (e.g. "New responses → first
@@ -83,17 +89,27 @@ Google Form (trigger)
       *non-list* (one-at-a-time) input, ignoring the pass pin and loop-body nodes. `for_each` also
       ships a worked "once per response" example. Verified live: Form `responses` → Claude `Text`
       shows the badge; `responses` → `for_each.items` does not. (Tests: `MarkListPorts`.)
-- [ ] **ntfy receiving is unexplained pub/sub.** The user invents a topic in the flow, but must
-      separately subscribe to that exact topic in the ntfy app to ever receive anything. No
-      discovery, no "subscribe" link/QR.
-      → Surface the topic + a one-tap subscribe (deep link / QR) and a "send test notification".
-- [ ] **DB row shape is implicit.** `rows` wants `[{col: val}]`. Wiring `responses` dumps *all*
-      questions as columns; there's no "choose which fields → which columns" step, and
-      `create_table` makes everything TEXT.
-      → A simple column mapper for the insert step.
-- [ ] **Renaming a form question silently breaks downstream references** (responses keyed by
-      title, not stable ID).
-      → Warn on unknown/renamed field references; prefer stable keys.
+- [x] **ntfy receiving is unexplained pub/sub.** — FIXED (discovery). The ntfy node inspector now
+      has a **"Receive these on your phone"** section with a **subscribe link** (`https://ntfy.sh/<topic>`,
+      reusing the Triggers `CodeField` copy/Open row) and a how-to hint ("subscribe to this exact
+      topic in the free ntfy app; use Run this step to send a test; custom-server note"). Blank topic
+      prompts you to set one. Verified live (5/5). *(Follow-up: a scannable QR needs a frontend dep —
+      `qrcode.react` — held pending a dep-add decision; the link covers desktop + mobile-browser.)*
+- [x] **DB row shape — column mapper.** — FIXED. Added an optional **`field_mapping`** param
+      ({incoming field: column name}) to all six row-writers (sqlite/postgres/mysql × insert/upsert),
+      applied centrally in `parseRowsInput` (drops/db/rowwrite.go) so it's whitelist+rename in one:
+      only listed fields are written, under the given column names (blank = drop). The table is shaped
+      from the OUTPUT columns and upsert `conflict_columns` refer to the mapped names. Renders as a
+      free key/value editor (SchemaForm DictField). For heavier reshaping the description points at
+      `map_rows`. (Tests: `TestApplyFieldMapping`, `TestParseRowsInput_FieldMapping`.)
+- [~] **Renaming a form question silently breaks references** (responses keyed by title, not stable
+      ID). — PARTIALLY FIXED. New `dangling_reference` lint (core/lint.go) warns at save time when a
+      node references `${upstream.<id>.…}` for an `<id>` that's no longer a step (deleted/renamed
+      NODE) — pure-graph, conservative (never flags a valid ref). (Tests:
+      `TestLintGraph_DanglingReferenceFlagged`, `…_ValidReferenceNotFlagged`.) *Field-level renames
+      (form question "Email" → "Contact email", node still exists) need the trigger's LIVE field list
+      at lint time (Forms API), which the pure pass can't reach — needs a decision on threading
+      live-field fetches into lint vs. surfacing in the reference picker.*
 
 ## P2 — Polish (confusing but not blocking)
 

@@ -30,33 +30,35 @@
     {
       "id": "create_pages",
       "module": "for_each",
+      "params": {}
+    },
+    {
+      "id": "create_page",
+      "module": "notion_create_page",
       "params": {
-        "step_module": "notion_create_page",
-        "step_params": {
-          "account": "default",
-          "parent_database_id": "REPLACE_WITH_NOTION_DB_ID",
-          "properties": {
-            "Name": {
-              "title": [
-                {
-                  "text": {
-                    "content": "${item.name}"
-                  }
+        "account": "default",
+        "parent_database_id": "REPLACE_WITH_NOTION_DB_ID",
+        "properties": {
+          "Name": {
+            "title": [
+              {
+                "text": {
+                  "content": "${item.name}"
                 }
-              ]
-            },
-            "Email": {
-              "email": "${item.email}"
-            },
-            "Source": {
-              "rich_text": [
-                {
-                  "text": {
-                    "content": "${item.source}"
-                  }
+              }
+            ]
+          },
+          "Email": {
+            "email": "${item.email}"
+          },
+          "Source": {
+            "rich_text": [
+              {
+                "text": {
+                  "content": "${item.source}"
                 }
-              ]
-            }
+              }
+            ]
           }
         }
       }
@@ -100,6 +102,12 @@
       "from_port": "rows",
       "to": "create_pages",
       "to_port": "items"
+    },
+    {
+      "from": "create_pages",
+      "from_port": "body",
+      "to": "create_page",
+      "to_port": "pass"
     },
     {
       "from": "dedupe",

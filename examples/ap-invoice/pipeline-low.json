@@ -7,7 +7,7 @@
     {
       "id": "inbound",
       "module": "webhook_input",
-      "params": {"secret": "webhook-secret"}
+      "params": {"secrets": ["webhook-secret"]}
     },
     {
       "id": "fetch_invoice",

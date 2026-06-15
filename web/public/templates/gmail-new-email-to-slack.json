@@ -32,17 +32,23 @@
     {
       "id": "fetch",
       "module": "for_each",
-      "params": {
-        "step_module": "gmail_get_message",
-        "step_params": {
-          "id": "${item.id}",
-          "account": "default",
-          "format": "metadata"
-        }
-      },
+      "params": {},
       "position": {
         "x": 520,
         "y": 200
+      }
+    },
+    {
+      "id": "get",
+      "module": "gmail_get_message",
+      "params": {
+        "id": "${item.id}",
+        "account": "default",
+        "format": "metadata"
+      },
+      "position": {
+        "x": 520,
+        "y": 360
       }
     },
     {
@@ -88,6 +94,13 @@
       "from_port": "messages",
       "to": "fetch",
       "to_port": "items",
+      "on_error": ""
+    },
+    {
+      "from": "fetch",
+      "from_port": "body",
+      "to": "get",
+      "to_port": "pass",
       "on_error": ""
     },
     {

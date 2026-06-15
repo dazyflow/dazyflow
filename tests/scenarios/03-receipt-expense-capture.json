@@ -13,10 +13,12 @@
     {
       "id": "fetch_each",
       "module": "for_each",
-      "params": {
-        "step_module": "gmail_get_message",
-        "step_params": {"account": "default", "id": "${item.id}"}
-      }
+      "params": {}
+    },
+    {
+      "id": "get",
+      "module": "gmail_get_message",
+      "params": {"account": "default", "id": "${item.id}"}
     },
     {
       "id": "extract",
@@ -38,6 +40,7 @@
   ],
   "edges": [
     {"from": "find_receipts", "from_port": "messages", "to": "fetch_each", "to_port": "items"},
+    {"from": "fetch_each", "from_port": "body", "to": "get", "to_port": "pass"},
     {"from": "fetch_each", "from_port": "results", "to": "extract", "to_port": "prompt"},
     {"from": "extract", "from_port": "text", "to": "to_rows", "to_port": "in"},
     {"from": "to_rows", "from_port": "rows", "to": "append_expenses", "to_port": "rows"}

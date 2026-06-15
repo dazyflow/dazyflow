@@ -173,6 +173,10 @@ func TestLintGraph_NonSecretPlaceholdersDontTrigger(t *testing.T) {
 	// The lint must distinguish.
 	g := Graph{
 		Nodes: []Node{
+			// cfg must exist as a node, else the dangling_reference lint
+			// (correctly) flags the upstream ref — this test is about the
+			// SECRET lint not firing on a non-secret placeholder.
+			node("cfg", "value", map[string]any{}),
 			node("call", "http_request", map[string]any{
 				"url": "https://api.example.com/${upstream.cfg.path}",
 			}),
@@ -336,24 +340,11 @@ func TestLintGraph_ShortLiteralUnderSecretKeyNotFlagged(t *testing.T) {
 	}
 }
 
-func TestLintGraph_WebhookTriggerSecretExempt(t *testing.T) {
-	// The webhook bearer secret is stored in the graph by design (the
-	// editor's Generate button writes it; trigger_webhook_no_secret
-	// requires it) — the key-name heuristic must not fire on it.
-	g := Graph{Nodes: []Node{
-		node("a", "webhook_input", map[string]any{
-			"secret": "40067d9c5e798d4bc850a794c1254e85",
-		}),
-	}}
-	if hasIssueCode(LintGraph(g), "hardcoded_secret") != nil {
-		t.Error("generated webhook bearer secret must not be flagged")
-	}
-}
-
 func TestLintGraph_WebhookSecretsListExempt(t *testing.T) {
-	// The multi-key rotation list holds generated keys by design — the
-	// exemption must cover array elements (secrets[0], secrets[1]), not
-	// just the top-level `secret` string.
+	// The webhook bearer keys are stored in the graph by design (the editor's
+	// Generate button writes them; trigger_webhook_no_secret requires one) —
+	// the key-name heuristic must not fire on the secrets array elements
+	// (secrets[0], secrets[1]).
 	g := Graph{Nodes: []Node{
 		node("a", "webhook_input", map[string]any{
 			"secrets": []any{
@@ -369,10 +360,10 @@ func TestLintGraph_WebhookSecretsListExempt(t *testing.T) {
 
 func TestLintGraph_WebhookSecretProviderPatternStillFlagged(t *testing.T) {
 	// The exemption only covers the key-name heuristic: pasting a real
-	// provider credential into the trigger secret still fires.
+	// provider credential into the trigger secrets still fires.
 	g := Graph{Nodes: []Node{
 		node("a", "webhook_input", map[string]any{
-			"secret": "ghp_abcdefghijklmnopqrstuvwxyz0123456789",
+			"secrets": []any{"ghp_abcdefghijklmnopqrstuvwxyz0123456789"},
 		}),
 	}}
 	if hasIssueCode(LintGraph(g), "hardcoded_secret") == nil {
@@ -445,11 +436,10 @@ func TestLintGraph_TemplatePlaceholderInEnvFlagged(t *testing.T) {
 
 func TestLintGraph_TemplatePlaceholderNestedFlagged(t *testing.T) {
 	g := Graph{Nodes: []Node{
-		node("fetch", "for_each", map[string]any{
-			"step": "gmail_get_message",
-			"step_params": map[string]any{
-				"id":      "REPLACE_WITH_MESSAGE_ID",
-				"account": "default",
+		node("call", "http_request", map[string]any{
+			"url": "https://api.example.com",
+			"headers": map[string]any{
+				"X-Trace": "REPLACE_WITH_TRACE_ID",
 			},
 		}),
 	}}
@@ -457,7 +447,7 @@ func TestLintGraph_TemplatePlaceholderNestedFlagged(t *testing.T) {
 	if iss == nil {
 		t.Fatal("nested placeholder should be flagged")
 	}
-	if !strings.Contains(iss.Message, "step_params.id") {
+	if !strings.Contains(iss.Message, "headers.X-Trace") {
 		t.Errorf("message should walk the path: %q", iss.Message)
 	}
 }
@@ -505,5 +495,43 @@ func TestLintGraph_NonSecretConfigNotFlagged(t *testing.T) {
 	}}
 	if hasIssueCode(LintGraph(g), "hardcoded_secret") != nil {
 		t.Error("ordinary config strings must not trip the hardcoded-secret rule")
+	}
+}
+
+func TestLintGraph_DanglingReferenceFlagged(t *testing.T) {
+	g := Graph{Nodes: []Node{
+		node("send", "email_send", map[string]any{
+			"to":   "${upstream.gone.email}",
+			"body": "Hi ${upstream.draft.text}, ref ${upstream.send.x}",
+		}),
+		node("draft", "claude", map[string]any{}),
+	}}
+	iss := hasIssueCode(LintGraph(g), "dangling_reference")
+	if iss == nil {
+		t.Fatalf("expected dangling_reference, got %+v", LintGraph(g))
+	}
+	if len(iss.NodeIDs) != 1 || iss.NodeIDs[0] != "send" {
+		t.Errorf("node ids = %v, want [send]", iss.NodeIDs)
+	}
+	// "gone" is the only missing ref: "draft" exists, and the self-ref
+	// ${upstream.send.x} points at the node itself (which exists).
+	if !strings.Contains(iss.Message, `"gone"`) {
+		t.Errorf("message should name the missing node: %q", iss.Message)
+	}
+	// "draft" is an existing referenced node — it must not appear in the
+	// missing list. (The subject node "send" naturally appears as the
+	// "Node \"send\"" prefix, so we don't assert on it.)
+	if strings.Contains(iss.Message, `of "draft"`) || strings.Contains(iss.Message, `, "draft"`) {
+		t.Errorf("message should not flag the existing node draft: %q", iss.Message)
+	}
+}
+
+func TestLintGraph_ValidReferenceNotFlagged(t *testing.T) {
+	g := Graph{Nodes: []Node{
+		node("a", "claude", map[string]any{}),
+		node("b", "email_send", map[string]any{"body": "${upstream.a.text} and ${item.name}"}),
+	}}
+	if hasIssueCode(LintGraph(g), "dangling_reference") != nil {
+		t.Error("a valid ${upstream.a.…} ref (and ${item.…}) must not be flagged")
 	}
 }

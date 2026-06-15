@@ -17,10 +17,11 @@ func TestForEach_RejectsOversizedItemsList(t *testing.T) {
 		t.Error("normalizeItems accepted 5 items under a 3-item limit")
 	}
 
+	// The cap is enforced in normalizeItems, before for_each looks for a body
+	// runner — so an oversized list fails fast regardless of the body wiring.
 	job := core.Job{
-		ID:     "x",
-		Params: map[string]any{"step_module": "noop"},
-		Input:  map[string]core.Ref{"items": {Inline: []any{1, 2, 3, 4, 5}}},
+		ID:    "x",
+		Input: map[string]core.Ref{"items": {Inline: []any{1, 2, 3, 4, 5}}},
 	}
 	res, err := executeForEach(t.Context(), job, nil)
 	if err != nil {

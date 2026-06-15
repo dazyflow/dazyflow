@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strings"
 )
 
 // LintSeverity classifies a finding. Validate() rejects graphs that
@@ -65,6 +66,14 @@ var knownSecretValue = regexp.MustCompile(
 // ("changeme", "x") under a secret-shaped key — real pasted secrets are
 // long. Content-prefix matches (knownSecretValue) ignore this floor.
 const minLiteralSecretLen = 12
+
+// upstreamRefPattern captures the node-ID segment of an
+// `${upstream.<nodeID>.<port>…}` reference — the first run of characters
+// after `upstream.`, up to the next `.`, `[`, or `}`. Node IDs are slugs,
+// so the captured segment is the whole ID even when it carries `-`/`_`.
+// `${item.…}` (loop body) and secret schemes use different prefixes and
+// are intentionally not matched.
+var upstreamRefPattern = regexp.MustCompile(`\$\{upstream\.([^.}\[]+)`)
 
 // templatePlaceholderPattern matches the `REPLACE_WITH_<TOKEN>` markers
 // that ship inside template graph fixtures (sheet IDs, Notion DB UUIDs,
@@ -129,6 +138,7 @@ func LintGraph(g Graph) []LintIssue {
 	issues = append(issues, lintHardcodedSecrets(g)...)
 	issues = append(issues, lintSecretToPersistence(g, nodesByID)...)
 	issues = append(issues, lintTemplatePlaceholders(g)...)
+	issues = append(issues, lintDanglingReferences(g, nodesByID)...)
 	issues = append(issues, lintTriggers(g)...)
 	if len(issues) == 0 {
 		return nil
@@ -204,6 +214,100 @@ func findTemplatePlaceholder(keyPath string, v any) (string, string) {
 		}
 	}
 	return "", ""
+}
+
+// lintDanglingReferences warns when a node interpolates
+// `${upstream.<id>.…}` for an <id> that isn't a step in the graph — the
+// classic "the step this field pointed at was deleted or renamed" breakage
+// (e.g. a form question renamed so a saved reference now dangles). The
+// reference only fails at run time, when the engine can't find the node;
+// surfacing it at save time turns a silent dead end into an obvious fix.
+//
+// Scope: node existence only. Port- and field-level validation needs the
+// upstream node's manifest or live output shape, which this pure pass
+// doesn't have — so a reference to a real node's wrong/renamed FIELD isn't
+// caught here (that's the reference picker's job, and a future live check).
+// Conservative by construction: it only flags an id that matches no node,
+// so it never warns about a valid reference.
+func lintDanglingReferences(g Graph, nodesByID map[string]Node) []LintIssue {
+	issues := make([]LintIssue, 0)
+	for _, n := range g.Nodes {
+		seen := map[string]bool{}
+		missing := make([]string, 0)
+		add := func(id string) {
+			if _, ok := nodesByID[id]; ok || seen[id] {
+				return
+			}
+			seen[id] = true
+			missing = append(missing, id)
+		}
+		collectUpstreamRefs(n.Params, add)
+		for _, v := range n.Env {
+			for _, id := range upstreamRefIDs(v) {
+				add(id)
+			}
+		}
+		if len(missing) == 0 {
+			continue
+		}
+		sort.Strings(missing)
+		issues = append(issues, LintIssue{
+			Code:     "dangling_reference",
+			Severity: LintWarn,
+			Message: fmt.Sprintf(
+				"Node %q (module %s) references the output of %s, which isn't a step in this flow — it was likely deleted or renamed. Re-point the field with the { } picker, or the run will fail when it tries to read it.",
+				n.ID, n.Module, quotedList(missing),
+			),
+			NodeIDs: []string{n.ID},
+		})
+	}
+	sort.Slice(issues, func(i, j int) bool {
+		return issues[i].NodeIDs[0] < issues[j].NodeIDs[0]
+	})
+	return issues
+}
+
+// collectUpstreamRefs walks a param value (string / map / slice) and calls
+// add for every ${upstream.<id>…} node ID it finds.
+func collectUpstreamRefs(v any, add func(string)) {
+	switch t := v.(type) {
+	case string:
+		for _, id := range upstreamRefIDs(t) {
+			add(id)
+		}
+	case map[string]any:
+		for _, child := range t {
+			collectUpstreamRefs(child, add)
+		}
+	case []any:
+		for _, child := range t {
+			collectUpstreamRefs(child, add)
+		}
+	}
+}
+
+// upstreamRefIDs returns the upstream node IDs referenced in s.
+func upstreamRefIDs(s string) []string {
+	m := upstreamRefPattern.FindAllStringSubmatch(s, -1)
+	if m == nil {
+		return nil
+	}
+	out := make([]string, 0, len(m))
+	for _, grp := range m {
+		if id := strings.TrimSpace(grp[1]); id != "" {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// quotedList renders ["a","b"] as `"a", "b"` for human-readable messages.
+func quotedList(ids []string) string {
+	parts := make([]string, len(ids))
+	for i, id := range ids {
+		parts[i] = fmt.Sprintf("%q", id)
+	}
+	return strings.Join(parts, ", ")
 }
 
 // lintSecretToPersistence is the original rule: a secret-bearing node
@@ -322,9 +426,9 @@ func hasSecretRef(v any) bool {
 // suppressed: a pasted provider credential (ghp_…, sk_live_…) in an
 // exempted field still fires via knownSecretValue.
 var hardcodedSecretExempt = map[string]map[string]bool{
-	// Both the legacy single `secret` and the multi-key `secrets` list
-	// (zero-downtime rotation) hold generated trigger keys by design.
-	"webhook_input": {"secret": true, "secrets": true},
+	// The multi-key `secrets` list (zero-downtime rotation) holds generated
+	// trigger keys by design.
+	"webhook_input": {"secrets": true},
 }
 
 // lintHardcodedSecrets flags literal credentials pasted into a node's

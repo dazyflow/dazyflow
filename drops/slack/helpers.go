@@ -249,27 +249,3 @@ func slackDo(ctx context.Context, method, url, token string, body []byte, timeou
 	}
 	return decodeSlackJSON(raw)
 }
-
-// bodyInputText pulls a string off the optional 'body' input port,
-// returning (text, true, nil) when present. A structured value is a
-// wiring mistake — the caller gets a friendly JobError telling them to
-// render it as a string (e.g. via render_text). Shared by the connectors
-// whose body/text comes from upstream.
-func bodyInputText(job core.Job) (string, bool, *core.JobError) {
-	in, ok := job.Input["body"]
-	if !ok || in.Inline == nil {
-		return "", false, nil
-	}
-	switch v := in.Inline.(type) {
-	case string:
-		return v, true, nil
-	case []byte:
-		return string(v), true, nil
-	default:
-		return "", false, &core.JobError{
-			Code:    "bad_input",
-			Message: "The Slack message needs text on its 'body' input, but the upstream node is sending a structured value. Route it through render_text and wire that text output instead.",
-			Details: fmt.Sprintf("Received type %T on input port 'body'; expected a string.", v),
-		}
-	}
-}

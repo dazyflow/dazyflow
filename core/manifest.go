@@ -250,19 +250,6 @@ type Manifest struct {
 	// terminates. Only subgraph sets it today.
 	SubmitsChildGraph bool `json:"submits_child_graph,omitempty"`
 
-	// Aliases lists former IDs this drop still answers to, so graphs saved
-	// before a rename keep resolving. The engine routes an aliased module ID
-	// to this drop for both validation and execution, but aliases are marked
-	// Hidden in the catalog so the palette shows the drop only once under its
-	// canonical ID. E.g. "delay" carries Aliases ["sleep"].
-	Aliases []string `json:"aliases,omitempty"`
-
-	// Hidden keeps a manifest out of the catalog/palette listing (the
-	// search-backed drop browser) while leaving it valid for graph
-	// validation and execution. Set on the synthetic alias entries the
-	// registry emits for Aliases; authors don't set it directly.
-	Hidden bool `json:"hidden,omitempty"`
-
 	// NoPassthrough opts a drop OUT of the universal value-passthrough pin
 	// (WithPassthrough). The pin makes sense on linear processing drops that
 	// carry a single payload, but is wrong on two roles that set this:

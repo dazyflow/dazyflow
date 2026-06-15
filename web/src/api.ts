@@ -570,15 +570,12 @@ export const api = {
     return { drops: r.drops ?? r.modules ?? [] };
   },
   listGraphs: async (token: string, tenant: string, workspace: string) => {
-    // The server still emits `graphs` alongside `flows` during the
-    // rename transition — accept whichever key is present so we keep
-    // working against both old and freshly-migrated daemons.
-    const r = await request<{ flows?: FlowSummary[]; graphs?: FlowSummary[] }>(
+    const r = await request<{ flows?: FlowSummary[] }>(
       token,
       "GET",
       `/me/flows?tenant=${encodeURIComponent(tenant)}&workspace=${encodeURIComponent(workspace)}`,
     );
-    return { graphs: r.flows ?? r.graphs ?? [] };
+    return { graphs: r.flows ?? [] };
   },
   // ref loads a past revision (a commit hash from flowHistory); omit it
   // for the current HEAD. Used by the editor's history-preview.
@@ -631,7 +628,6 @@ export const api = {
   saveGraph: (token: string, g: Graph, autosave = false) =>
     request<{
       commit: string;
-      graph_id: string;
       lint?: LintIssue[];
     }>(
       token,

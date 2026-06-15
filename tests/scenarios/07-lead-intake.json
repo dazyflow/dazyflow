@@ -8,7 +8,7 @@
       "id": "intake",
       "module": "webhook_input",
       "params": {
-        "secret": "REPLACE_WITH_WEBHOOK_SECRET",
+        "secrets": ["REPLACE_WITH_WEBHOOK_SECRET"],
         "public_form": true
       }
     },

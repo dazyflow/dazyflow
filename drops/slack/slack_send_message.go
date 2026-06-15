@@ -44,8 +44,7 @@ func init() {
 			Inputs: []core.Port{
 				// channel and text are named after their params so the card
 				// shows inline editable boxes (Unreal-style); a wired value
-				// overrides the typed one. The old "body" port name is still
-				// accepted at run time for flows saved before the rename.
+				// overrides the typed one.
 				{Port: "channel", Label: "Channel", MIME: []string{"text/plain"}},
 				{Port: "text", Label: "Message", MIME: []string{"text/plain"}},
 				{Port: "blocks", Label: "Blocks"},
@@ -120,14 +119,7 @@ func executeSlackSendMessage(ctx context.Context, job core.Job, _ chan<- core.Pr
 		return params.Err(job, "bad_param", "'channel' is required — set it or wire the 'Channel' input"), nil
 	}
 
-	text := params.StringDefault(job.Params, "text", "")
-	if t, ok, jerr := bodyInputText(job); jerr != nil {
-		return core.Result{JobID: job.ID, Status: core.StatusError, Error: jerr}, nil
-	} else if ok {
-		text = t
-	}
-	// The declared 'text' port wins over both the param and the legacy port.
-	text, ok = textInputOr(job, "text", text)
+	text, ok := textInputOr(job, "text", params.StringDefault(job.Params, "text", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'Message' input must be text"), nil
 	}

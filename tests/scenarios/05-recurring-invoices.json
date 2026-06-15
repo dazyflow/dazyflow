@@ -13,17 +13,21 @@
     {
       "id": "invoice_each_client",
       "module": "for_each",
+      "params": {}
+    },
+    {
+      "id": "send_invoice",
+      "module": "gmail_send_email",
       "params": {
-        "step_module": "subgraph",
-        "step_params": {
-          "graph_id": "invoice-one-client",
-          "input_map": {"in": "client_in"},
-          "output_map": {"out": {"node": "email", "port": "meta"}}
-        }
+        "account": "default",
+        "to": "${item.email}",
+        "subject": "Your recurring invoice",
+        "body": "Hi ${item.name}, your recurring invoice for ${item.amount} is ready. Thank you for your business."
       }
     }
   ],
   "edges": [
-    {"from": "read_clients", "from_port": "rows", "to": "invoice_each_client", "to_port": "items"}
+    {"from": "read_clients", "from_port": "rows", "to": "invoice_each_client", "to_port": "items"},
+    {"from": "invoice_each_client", "from_port": "body", "to": "send_invoice", "to_port": "pass"}
   ]
 }

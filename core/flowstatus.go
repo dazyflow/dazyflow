@@ -21,6 +21,13 @@ const (
 	// FlowLive: enabled AND carries at least one configured auto-trigger,
 	// so the daemon will start it without anyone pressing Run.
 	FlowLive FlowRunStatus = "live"
+	// FlowNeedsPublish: enabled and carries a configured SCHEDULER trigger
+	// (cron / poll / form interval) that would fire on its own — but the flow
+	// has never been published, and the scheduler only runs published flows.
+	// Publishing flips it to live. Webhook/event triggers fire from an HTTP
+	// endpoint and don't require publishing, so a flow whose only auto-trigger
+	// is a webhook stays live while unpublished.
+	FlowNeedsPublish FlowRunStatus = "needs_publish"
 )
 
 // FlowRunStatusOf classifies a flow. Disabled wins; otherwise a configured
@@ -33,6 +40,45 @@ func FlowRunStatusOf(g Graph) FlowRunStatus {
 		return FlowLive
 	}
 	return FlowManual
+}
+
+// FlowRunStatusPublished is the publish-aware classifier used where the
+// caller knows whether the flow has a published revision (the flow list and
+// the editor both track publish state). It's FlowRunStatusOf plus one rule:
+// a flow that would be live via a SCHEDULER trigger but isn't published is
+// "needs publish", because the scheduler only runs published flows.
+func FlowRunStatusPublished(g Graph, published bool) FlowRunStatus {
+	s := FlowRunStatusOf(g)
+	if s == FlowLive && !published && HasConfiguredSchedulerTrigger(g) {
+		return FlowNeedsPublish
+	}
+	return s
+}
+
+// HasConfiguredSchedulerTrigger reports whether the flow has a configured
+// trigger that fires via the SCHEDULER (cron / poll / google-form interval) —
+// the subset of auto-triggers gated on publish state. Webhook triggers fire
+// from an HTTP endpoint and are intentionally excluded (they don't require
+// publishing). Mirrors the relevant cases of HasConfiguredAutoTrigger.
+func HasConfiguredSchedulerTrigger(g Graph) bool {
+	for _, tr := range g.Triggers {
+		if tr.Type == "cron" && strings.TrimSpace(tr.Cron) != "" {
+			return true
+		}
+	}
+	for _, n := range g.Nodes {
+		switch n.Module {
+		case "cron_trigger":
+			if expr, _ := n.Params["cron"].(string); strings.TrimSpace(expr) != "" {
+				return true
+			}
+		case "poll_trigger", "google_form_trigger":
+			if secs, ok := paramInt(n.Params, "interval_seconds"); ok && secs > 0 && secs <= MaxPollIntervalSeconds {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // HasConfiguredAutoTrigger reports whether the flow has at least one

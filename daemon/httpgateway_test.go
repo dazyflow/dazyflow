@@ -1566,15 +1566,15 @@ func TestHTTPGateway_SaveGraph_IncludesLintInResponse(t *testing.T) {
 		t.Fatalf("code = %d body = %s", rw.Code, rw.Body.String())
 	}
 	var out struct {
-		Commit  string           `json:"commit"`
-		GraphID string           `json:"graph_id"`
-		Lint    []core.LintIssue `json:"lint"`
+		Commit string           `json:"commit"`
+		FlowID string           `json:"flow_id"`
+		Lint   []core.LintIssue `json:"lint"`
 	}
 	if err := json.Unmarshal(rw.Body.Bytes(), &out); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if out.GraphID != "leaky" {
-		t.Errorf("graph_id=%q", out.GraphID)
+	if out.FlowID != "t/ws/leaky" {
+		t.Errorf("flow_id=%q", out.FlowID)
 	}
 	if len(out.Lint) != 1 {
 		t.Fatalf("expected 1 lint issue in response, got %d (%+v)", len(out.Lint), out.Lint)

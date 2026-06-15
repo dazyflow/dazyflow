@@ -3,15 +3,12 @@ package core
 import "strings"
 
 // WebhookSecrets returns every bearer key configured on a webhook_input
-// node's params: the canonical `secrets` list plus the legacy single
-// `secret`, each trimmed and non-empty, in order (legacy first).
+// node's params: the `secrets` list, each trimmed and non-empty, in order.
 //
 // Multiple keys are what make zero-downtime rotation possible — the
 // /trigger endpoint accepts ANY of them, so an operator can add a new
 // key, migrate callers at leisure, then revoke the old one without ever
-// dropping a request. A graph saved before multi-key support still
-// carries a lone `secret`; this folds it into the same list so every
-// reader (trigger auth, reachability lint, flow status) sees one shape.
+// dropping a request.
 func WebhookSecrets(params map[string]any) []string {
 	var out []string
 	add := func(s string) {
@@ -19,11 +16,8 @@ func WebhookSecrets(params map[string]any) []string {
 			out = append(out, s)
 		}
 	}
-	if s, ok := params["secret"].(string); ok {
-		add(s)
-	}
 	// Arrays arrive as []any from JSON-decoded graphs and may be
-	// []string from Go-constructed ones (tests, migrations).
+	// []string from Go-constructed ones (tests).
 	switch raw := params["secrets"].(type) {
 	case []any:
 		for _, v := range raw {

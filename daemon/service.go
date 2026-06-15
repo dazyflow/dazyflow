@@ -664,9 +664,11 @@ type FlowSummary struct {
 	Description string          `json:"description,omitempty"`
 	Owner       string          `json:"owner,omitempty"`
 	Visibility  core.Visibility `json:"visibility,omitempty"`
-	// RunStatus is "live" / "manual" / "paused" — whether the flow fires on
-	// its own. The list already loads each full graph, so classifying it
-	// here is free and saves the UI an N+1 fetch to show the status chip.
+	// RunStatus is "live" / "manual" / "paused" / "needs_publish" — whether
+	// the flow fires on its own. The list already loads each full graph, so
+	// classifying it here is free and saves the UI an N+1 fetch to show the
+	// status chip. "needs_publish" means it has a scheduler trigger but hasn't
+	// been published yet (the scheduler only runs published flows).
 	RunStatus core.FlowRunStatus `json:"run_status,omitempty"`
 }
 
@@ -696,6 +698,11 @@ func (s *Service) ListFlowSummaries(ctx context.Context, p core.Principal, tenan
 		if !isAdmin && core.AuthorizeGraphView(p, g) != nil {
 			continue
 		}
+		// Publish-aware status: a scheduler-triggered flow that's never been
+		// published shows "needs publish" (the scheduler won't run it yet).
+		// PublishedCommit is a cheap tag lookup; on error we fall back to
+		// treating it as unpublished, which is the safe (non-misleading) side.
+		pub, _ := store.PublishedCommit(id)
 		out = append(out, FlowSummary{
 			ID:          id,
 			Name:        g.Name,
@@ -703,7 +710,7 @@ func (s *Service) ListFlowSummaries(ctx context.Context, p core.Principal, tenan
 			Description: g.Description,
 			Owner:       g.Owner,
 			Visibility:  g.EffectiveVisibility(),
-			RunStatus:   core.FlowRunStatusOf(g),
+			RunStatus:   core.FlowRunStatusPublished(g, pub != ""),
 		})
 	}
 	return out, nil

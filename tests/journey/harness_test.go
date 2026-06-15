@@ -463,12 +463,9 @@ func neededModules(g core.Graph) []string {
 		out = append(out, id)
 	}
 	for _, node := range g.Nodes {
+		// A for_each's per-item step is now an ordinary node wired to its
+		// `body` pin, so collecting every node's module already covers it.
 		add(node.Module)
-		if node.Module == "for_each" {
-			if step, _ := node.Params["step_module"].(string); step != "subgraph" {
-				add(step)
-			}
-		}
 	}
 	return out
 }

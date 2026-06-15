@@ -63,7 +63,8 @@ func init() {
 					"schema":       {"type":"string","default":"public"},
 					"table":        {"type":"string"},
 					"create_table": {"type":"boolean","default":true,"description":"Auto-create the table from headers when missing. Defaults true."},
-					"column_types": {"type":"object","additionalProperties":{"type":"string"}}
+					"column_types": {"type":"object","additionalProperties":{"type":"string"}},
+					"field_mapping":{"type":"object","additionalProperties":{"type":"string"},"title":"Column mapping","description":"Optional. Choose which incoming fields to write and name their columns — {incoming field: column name}. Only listed fields are written (others dropped); blank a column name to skip a field. Leave empty to write every field. For row filtering or defaults, use a Map rows step first."}
 				},
 				"required":["table"]
 			}`),

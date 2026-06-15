@@ -115,9 +115,7 @@ func TestScheduler_FiresGraphWithPollTrigger(t *testing.T) {
 			{ID: "tick", Module: "poll_trigger", Params: map[string]any{"interval_seconds": 60}},
 		},
 	}
-	if _, err := h.wsStore.Save(graph, "test"); err != nil {
-		t.Fatalf("save graph: %v", err)
-	}
+	publishGraph(t, h.wsStore, graph)
 	// Wait for rescan to pick it up.
 	time.Sleep(80 * time.Millisecond)
 	if h.sched.TrackedCount() != 1 {
@@ -144,9 +142,7 @@ func TestScheduler_TracksGoogleFormTrigger(t *testing.T) {
 			{ID: "form", Module: "google_form_trigger", Params: map[string]any{"form_id": "F1", "interval_seconds": 300}},
 		},
 	}
-	if _, err := h.wsStore.Save(graph, "test"); err != nil {
-		t.Fatalf("save graph: %v", err)
-	}
+	publishGraph(t, h.wsStore, graph)
 	time.Sleep(80 * time.Millisecond) // let rescan pick it up
 	if h.sched.TrackedCount() != 1 {
 		t.Fatalf("tracked=%d, want 1 (google_form_trigger should schedule like poll)", h.sched.TrackedCount())
@@ -171,7 +167,7 @@ func TestScheduler_PollTriggerFiresRepeatedlyOnInterval(t *testing.T) {
 		ID: "poll-rep", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{{ID: "tick", Module: "poll_trigger", Params: map[string]any{"interval_seconds": 60}}},
 	}
-	_, _ = h.wsStore.Save(graph, "test")
+	publishGraph(t, h.wsStore, graph)
 	time.Sleep(80 * time.Millisecond)
 
 	// Advance 70s → first fire.
@@ -198,7 +194,7 @@ func TestScheduler_PollAndCronCoexistOnSameGraph(t *testing.T) {
 			{ID: "sched", Module: "cron_trigger", Params: map[string]any{"cron": "* * * * *"}},   // every minute
 		},
 	}
-	_, _ = h.wsStore.Save(graph, "test")
+	publishGraph(t, h.wsStore, graph)
 	time.Sleep(80 * time.Millisecond)
 	if h.sched.TrackedCount() != 2 {
 		t.Errorf("tracked=%d, want 2 (one per trigger node)", h.sched.TrackedCount())

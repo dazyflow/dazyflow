@@ -27,13 +27,15 @@
     {
       "id": "send_reminders",
       "module": "for_each",
+      "params": {}
+    },
+    {
+      "id": "send_email",
+      "module": "gmail_send_email",
       "params": {
-        "step_module": "gmail_send_email",
-        "step_params": {
-          "to": "${item.client_email}",
-          "subject": "Reminder: invoice ${item.invoice_no} is overdue",
-          "body": "Hi ${item.client_name}, invoice ${item.invoice_no} for ${item.amount} is now ${item.days_overdue} days past due. Please arrange payment."
-        }
+        "to": "${item.client_email}",
+        "subject": "Reminder: invoice ${item.invoice_no} is overdue",
+        "body": "Hi ${item.client_name}, invoice ${item.invoice_no} for ${item.amount} is now ${item.days_overdue} days past due. Please arrange payment."
       }
     },
     {
@@ -47,6 +49,7 @@
     {"from": "read_invoices", "from_port": "headers", "to": "mark_overdue", "to_port": "headers"},
     {"from": "mark_overdue", "from_port": "rows", "to": "only_overdue", "to_port": "rows"},
     {"from": "only_overdue", "from_port": "rows_1", "to": "send_reminders", "to_port": "items"},
+    {"from": "send_reminders", "from_port": "body", "to": "send_email", "to_port": "pass"},
     {"from": "only_overdue", "from_port": "rows_1", "to": "log_reminded", "to_port": "rows"}
   ]
 }

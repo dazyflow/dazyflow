@@ -11,6 +11,10 @@
     "paused": {
       "label": "Paused",
       "tip": "This flow is disabled, so it never fires automatically. Manual Run still works. Re-enable it to resume its triggers."
+    },
+    "needs_publish": {
+      "label": "Needs publish",
+      "tip": "This flow has a schedule configured, but the scheduler only runs published flows. Click Publish to start it running automatically. (Run still works for testing.)"
     }
   },
   "explain": {
@@ -1260,6 +1264,17 @@
   },
   "loopBody": {
     "runsPerRow": "This step runs once per row. Use “From each row” in a field's { } menu to insert a column."
+  },
+  "approval": {
+    "notifyNtfy": "Notify me on ntfy with the approval link",
+    "notifyNtfyHint": "Adds an ntfy step wired to this approval's link, so the approver gets a tappable notification. Then drag the Approved output to the step that should run once it's approved (e.g. Send email)."
+  },
+  "ntfy": {
+    "subscribeTitle": "Receive these on your phone",
+    "subscribeLabel": "Subscribe link",
+    "subscribeHint": "Open this link, or subscribe to this exact topic in the free ntfy app (App Store / Google Play), to receive these notifications. Use “Run this step” above to send yourself a test. If your team set a custom ntfy server, subscribe on that server instead.",
+    "pickTopic": "Set a topic above to get a one-tap subscribe link.",
+    "open": "Open"
   },
   "tokenChip": {
     "eachRow": "Each row",

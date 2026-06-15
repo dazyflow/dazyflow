@@ -56,7 +56,7 @@ func TestFlowRunStatusOf(t *testing.T) {
 		},
 		{
 			name: "webhook input with secret — live",
-			g:    Graph{Nodes: []Node{{ID: "w", Module: "webhook_input", Params: map[string]any{"secret": "s"}}}},
+			g:    Graph{Nodes: []Node{{ID: "w", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}}}}},
 			want: FlowLive,
 		},
 		{

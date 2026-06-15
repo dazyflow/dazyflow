@@ -23,7 +23,6 @@ func askDrop(cfg Config) engine.NativeDrop {
 	return engine.NativeDrop{
 		Manifest: core.Manifest{
 			ID:          cfg.AskID,
-			Aliases:     cfg.AskAliases,
 			Version:     "1.0",
 			Label:       cfg.Integration,
 			Subtitle:    "Ask",
@@ -103,7 +102,6 @@ func summarizeDrop(cfg Config) engine.NativeDrop {
 	return engine.NativeDrop{
 		Manifest: core.Manifest{
 			ID:          taskID(cfg, "summarize"),
-			Aliases:     aliasFor(cfg, "summarize"),
 			Version:     "1.0",
 			Label:       cfg.Integration,
 			Subtitle:    "Summarize",
@@ -185,7 +183,6 @@ func extractDrop(cfg Config) engine.NativeDrop {
 	return engine.NativeDrop{
 		Manifest: core.Manifest{
 			ID:      taskID(cfg, "extract"),
-			Aliases: aliasFor(cfg, "extract"),
 			Version: "1.0",
 			Label:   cfg.Integration, Subtitle: "Extract fields",
 			Summary:     "Pull structured fields out of messy text into clean JSON.",
@@ -294,7 +291,6 @@ func classifyDrop(cfg Config) engine.NativeDrop {
 	return engine.NativeDrop{
 		Manifest: core.Manifest{
 			ID:      taskID(cfg, "classify"),
-			Aliases: aliasFor(cfg, "classify"),
 			Version: "1.0",
 			Label:   cfg.Integration, Subtitle: "Classify",
 			Summary:     "Sort text into one of your categories so you can route it.",
@@ -401,7 +397,6 @@ func draftReplyDrop(cfg Config) engine.NativeDrop {
 	return engine.NativeDrop{
 		Manifest: core.Manifest{
 			ID:      taskID(cfg, "draft_reply"),
-			Aliases: aliasFor(cfg, "draft_reply"),
 			Version: "1.0",
 			Label:   cfg.Integration, Subtitle: "Draft reply",
 			Summary:     "Write a suggested reply to an incoming message.",

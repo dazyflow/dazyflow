@@ -118,10 +118,7 @@ func (h *HTTPGateway) listFlowsMe(rw http.ResponseWriter, r *http.Request, p cor
 		writeAPIError(rw, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
-	// Emit both `flows` (canonical) and `graphs` (legacy alias) so the
-	// web client can use whichever key it reads first during the
-	// transition. The legacy key disappears with the old route.
-	writeJSON(rw, http.StatusOK, map[string]any{"flows": summaries, "graphs": summaries})
+	writeJSON(rw, http.StatusOK, map[string]any{"flows": summaries})
 }
 
 func (h *HTTPGateway) loadFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
@@ -194,7 +191,6 @@ func (h *HTTPGateway) flowMutationResponse(commit string, g core.Graph) map[stri
 	resp := map[string]any{
 		"commit":                 commit,
 		"flow_id":                scope,
-		"graph_id":               g.ID, // legacy alias
 		"lint":                   core.LintGraph(g),
 		"endpoints":              h.triggerEndpoints(g),
 		"public_base_configured": h.svc.PublicBaseURL != "",

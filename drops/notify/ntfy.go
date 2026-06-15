@@ -46,8 +46,6 @@ func init() {
 			Inputs: []core.Port{
 				// Named after their params so the card shows inline editable
 				// boxes (Unreal-style); a wired value overrides the typed one.
-				// The old "body" port name is still accepted at run time for
-				// flows saved before the rename.
 				{Port: "title", Label: "Title", MIME: []string{"text/plain"}},
 				{Port: "message", Label: "Message", MIME: []string{"text/plain"}},
 			},
@@ -91,12 +89,8 @@ func executeNtfy(ctx context.Context, job core.Job, _ chan<- core.Progress) (cor
 	server := strings.TrimRight(params.StringDefault(job.Params, "server", "https://ntfy.sh"), "/")
 
 	body := params.StringDefault(job.Params, "message", "")
-	// The Message input overrides the param. "message" is the declared port;
-	// "body" is accepted too for flows saved before the rename.
+	// The Message input overrides the param.
 	in, ok := job.Input["message"]
-	if !ok {
-		in, ok = job.Input["body"]
-	}
 	if ok && in.Inline != nil {
 		switch v := in.Inline.(type) {
 		case string:

@@ -11,6 +11,10 @@
     "paused": {
       "label": "Pausad",
       "tip": "Det här flödet är inaktiverat och utlöses därför aldrig automatiskt. Manuell körning fungerar fortfarande. Aktivera det igen för att återuppta utlösarna."
+    },
+    "needs_publish": {
+      "label": "Behöver publiceras",
+      "tip": "Det här flödet har ett schema konfigurerat, men schemaläggaren kör bara publicerade flöden. Klicka på Publicera för att starta det automatiskt. (Run fungerar fortfarande för test.)"
     }
   },
   "explain": {
@@ -1255,6 +1259,17 @@
   },
   "loopBody": {
     "runsPerRow": "Det här steget körs en gång per rad. Använd ”Från varje rad” i fältets { }-meny för att infoga en kolumn."
+  },
+  "approval": {
+    "notifyNtfy": "Avisera mig på ntfy med godkännandelänken",
+    "notifyNtfyHint": "Lägger till ett ntfy-steg kopplat till godkännandets länk, så att godkännaren får en tryckbar avisering. Dra sedan Godkänd-utgången till steget som ska köras när det godkänts (t.ex. Skicka e-post)."
+  },
+  "ntfy": {
+    "subscribeTitle": "Ta emot dessa i telefonen",
+    "subscribeLabel": "Prenumerationslänk",
+    "subscribeHint": "Öppna länken, eller prenumerera på exakt detta ämne i den kostnadsfria ntfy-appen (App Store / Google Play), för att ta emot aviseringarna. Använd ”Kör det här steget” ovan för att skicka ett test. Om ert team valt en egen ntfy-server, prenumerera på den servern i stället.",
+    "pickTopic": "Ange ett ämne ovan för att få en prenumerationslänk.",
+    "open": "Öppna"
   },
   "tokenChip": {
     "eachRow": "Varje rad",

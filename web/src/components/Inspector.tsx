@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { Node } from "@xyflow/react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { X, Trash2, Info, Play, Square } from "lucide-react";
+import { X, Trash2, Info, Play, Square, BellRing } from "lucide-react";
 import { iconFor, dropColor as resolveDropColor } from "../icons";
 import type { HazyNodeData } from "./nodeCardShared";
 import {
@@ -19,6 +19,7 @@ import {
   FormTab,
   WebhookTab,
   WebhookStatusLine,
+  CodeField,
 } from "./TriggersModal";
 import { Switch } from "./Switch";
 import { useAuth } from "../auth";
@@ -35,6 +36,10 @@ type Props = {
   // round-trip through React Flow's internal state.
   paramsByID: Record<string, Record<string, unknown>>;
   onParamsChange: (id: string, params: Record<string, unknown>) => void;
+  // onAddApprovalNtfy is the one-click "notify me on ntfy with the approval
+  // link" action on an await_approval node: it creates a wired ntfy step
+  // (pending_url → message + click). Undefined when the ntfy drop is absent.
+  onAddApprovalNtfy?: (approvalNodeID: string) => void;
   // manifests is the full drop catalog — the for_each editor uses it to
   // populate its "Run step" picker and render the chosen step's form.
   manifests?: Manifest[];
@@ -115,6 +120,7 @@ export function Inspector({
   onChange,
   paramsByID,
   onParamsChange,
+  onAddApprovalNtfy,
   manifests,
   wiredPorts,
   resourceLabels,
@@ -657,6 +663,54 @@ export function Inspector({
               <div style={{ color: "var(--danger)", fontSize: "var(--text-sm)", marginTop: 4 }}>
                 {jsonError}
               </div>
+            )}
+          </div>
+        )}
+
+        {d.moduleID === "await_approval" &&
+          onAddApprovalNtfy &&
+          manifests?.some((m) => m.id === "ntfy") && (
+            // One-click: create an ntfy step wired to this approval's link, so
+            // the approver gets a tappable notification. (The Approved-port →
+            // send-step wire stays a manual drag — it's flow-specific.)
+            <div className="inspector-section">
+              <button
+                type="button"
+                className="primary inspector-run-step"
+                onClick={() => onAddApprovalNtfy(selected.id)}
+              >
+                <BellRing size={15} />
+                {t("approval.notifyNtfy")}
+              </button>
+              <div className="desc">{t("approval.notifyNtfyHint")}</div>
+            </div>
+          )}
+
+        {d.moduleID === "ntfy" && (
+          // Discovery: a topic alone delivers nothing until you subscribe to
+          // that exact topic. Surface the subscribe link + how-to so the user
+          // doesn't silently never receive anything. (Custom ntfy servers are
+          // a per-tenant connection the client can't read, so the link assumes
+          // the public ntfy.sh default; the hint covers the custom-server case.)
+          <div className="inspector-section">
+            <h4>
+              <BellRing size={14} style={{ verticalAlign: "-2px", marginRight: 6 }} />
+              {t("ntfy.subscribeTitle")}
+            </h4>
+            {typeof currentParams.topic === "string" && currentParams.topic.trim() ? (
+              <>
+                <CodeField
+                  label={t("ntfy.subscribeLabel")}
+                  value={`https://ntfy.sh/${encodeURIComponent(currentParams.topic.trim())}`}
+                  action={{
+                    href: `https://ntfy.sh/${encodeURIComponent(currentParams.topic.trim())}`,
+                    label: t("ntfy.open"),
+                  }}
+                />
+                <div className="desc">{t("ntfy.subscribeHint")}</div>
+              </>
+            ) : (
+              <div className="desc">{t("ntfy.pickTopic")}</div>
             )}
           </div>
         )}

@@ -220,6 +220,15 @@ func (s *Scheduler) rescan(ctx context.Context) error {
 			if g.Disabled {
 				continue
 			}
+			// Require published: a scheduled flow fires only once it's been
+			// published. A never-published draft with a configured schedule
+			// is not enrolled, so it doesn't tick (and the editor shows a
+			// "needs publish" chip). The schedule timing itself is still read
+			// from HEAD below, so editing the interval after publishing takes
+			// effect immediately — only enrollment gates on publish state.
+			if pub, err := store.PublishedCommit(gid); err != nil || pub == "" {
+				continue
+			}
 			for triggerIdx, t := range g.Triggers {
 				var entry *scheduledGraph
 				switch t.Type {
@@ -390,13 +399,24 @@ func (s *Scheduler) fireGraph(ctx context.Context, e *scheduledGraph) {
 		s.logger.Printf("open ws %s/%s: %v", e.tenant, e.workspace, err)
 		return
 	}
+	// Require published: never auto-fire a flow that hasn't been published.
+	// rescan already skips enrolling unpublished flows; this is the
+	// belt-and-braces gate in case publish state changed between the last
+	// rescan and this tick (e.g. the flow was unpublished/rolled back).
+	if pub, err := store.PublishedCommit(e.graphID); err != nil || pub == "" {
+		if err != nil {
+			s.logger.Printf("skip %s/%s/%s: published lookup: %v", e.tenant, e.workspace, e.graphID, err)
+		} else {
+			s.logger.Printf("skip %s/%s/%s: not published (publish to enable its schedule)", e.tenant, e.workspace, e.graphID)
+		}
+		return
+	}
 	// Fire the PUBLISHED revision, not the draft at HEAD: an author can
 	// keep editing a flow without a half-finished change firing on the
-	// next cron tick. Falls back to HEAD for never-published flows so
-	// existing schedules keep working. The schedule itself (when to fire,
-	// whether the trigger is paused) is read from HEAD during rescan, so
-	// timing + pause changes still take effect immediately — only the
-	// executed graph content is pinned to the published version.
+	// next cron tick. The schedule itself (when to fire, whether the
+	// trigger is paused) is read from HEAD during rescan, so timing + pause
+	// changes still take effect immediately — only the executed graph
+	// content is pinned to the published version.
 	g, err := store.LoadPublishedOrHead(e.graphID)
 	if err != nil {
 		s.logger.Printf("load %s/%s/%s: %v", e.tenant, e.workspace, e.graphID, err)

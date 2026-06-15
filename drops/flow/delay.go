@@ -17,7 +17,6 @@ func init() {
 			ID:          "delay",
 			Version:     "1.0",
 			Label:       "Delay",
-			Aliases:     []string{"sleep"}, // renamed from Sleep; old graphs still resolve
 			Icon:        "timer",
 			Category:    "flow_control",
 			Provider:    "internal",

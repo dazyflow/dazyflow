@@ -1,4 +1,4 @@
-import { Zap, MousePointerClick, PauseCircle } from "lucide-react";
+import { Zap, MousePointerClick, PauseCircle, UploadCloud } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { FlowRunStatus } from "../flowStatus";
 
@@ -11,6 +11,7 @@ const ICONS: Record<FlowRunStatus, typeof Zap> = {
   live: Zap,
   manual: MousePointerClick,
   paused: PauseCircle,
+  needs_publish: UploadCloud,
 };
 
 export function FlowStatusChip({

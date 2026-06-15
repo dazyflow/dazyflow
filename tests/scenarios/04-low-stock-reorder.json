@@ -25,19 +25,22 @@
     {
       "id": "send_po",
       "module": "for_each",
+      "params": {}
+    },
+    {
+      "id": "send_email",
+      "module": "gmail_send_email",
       "params": {
-        "step_module": "gmail_send_email",
-        "step_params": {
-          "to": "${item.supplier_email}",
-          "subject": "Purchase order: ${item.sku}",
-          "body": "Please supply ${item.reorder_qty} units of ${item.sku} (${item.name})."
-        }
+        "to": "${item.supplier_email}",
+        "subject": "Purchase order: ${item.sku}",
+        "body": "Please supply ${item.reorder_qty} units of ${item.sku} (${item.name})."
       }
     }
   ],
   "edges": [
     {"from": "read_stock", "from_port": "rows", "to": "below_threshold", "to_port": "rows"},
     {"from": "below_threshold", "from_port": "rows_1", "to": "approval", "to_port": "context"},
-    {"from": "approval", "from_port": "approved", "to": "send_po", "to_port": "items"}
+    {"from": "approval", "from_port": "approved", "to": "send_po", "to_port": "items"},
+    {"from": "send_po", "from_port": "body", "to": "send_email", "to_port": "pass"}
   ]
 }

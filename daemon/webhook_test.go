@@ -49,7 +49,7 @@ func TestWebhook_FiresWithValidSecret(t *testing.T) {
 	g := core.Graph{
 		ID: "wh-ok", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{
-			{ID: "in", Module: "webhook_input", Params: map[string]any{"secret": "s3cr3t"}},
+			{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s3cr3t"}}},
 			{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}},
 		},
 	}
@@ -114,7 +114,7 @@ func TestWebhook_RejectsBadSecret(t *testing.T) {
 	_, _ = wsStore.Save(core.Graph{
 		ID: "wh-secret", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{
-			{ID: "in", Module: "webhook_input", Params: map[string]any{"secret": "correct"}},
+			{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"correct"}}},
 			{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}},
 		},
 	}, "test")
@@ -140,14 +140,13 @@ func TestWebhook_RejectsBadSecret(t *testing.T) {
 
 // Zero-downtime rotation: a webhook_input with a `secrets` list accepts
 // ANY listed key (so an operator can add a new key, migrate callers,
-// then revoke the old one), plus the legacy single `secret` in parallel.
+// then revoke the old one).
 func TestWebhook_AcceptsAnyOfMultipleKeys(t *testing.T) {
 	_, wh, _, _, wsStore := startWebhookHarness(t)
 	_, _ = wsStore.Save(core.Graph{
 		ID: "wh-rotate", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{
 			{ID: "in", Module: "webhook_input", Params: map[string]any{
-				"secret":  "legacy-key-aaaaaa",         // legacy single
 				"secrets": []any{"new-key-bbbbbb", "new-key-cccccc"}, // rotated set
 			}},
 			{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}},
@@ -172,7 +171,7 @@ func TestWebhook_AcceptsAnyOfMultipleKeys(t *testing.T) {
 		return resp.StatusCode
 	}
 
-	for _, valid := range []string{"legacy-key-aaaaaa", "new-key-bbbbbb", "new-key-cccccc"} {
+	for _, valid := range []string{"new-key-bbbbbb", "new-key-cccccc"} {
 		if got := post(valid); got != http.StatusAccepted {
 			t.Errorf("token %q: status=%d, want 202", valid, got)
 		}
@@ -472,7 +471,7 @@ func TestWebhook_BodyLimit(t *testing.T) {
 	_, _ = wsStore.Save(core.Graph{
 		ID: "lim", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{
-			{ID: "in", Module: "webhook_input", Params: map[string]any{"secret": "s"}},
+			{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}}},
 			{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}},
 		},
 	}, "test")
@@ -509,7 +508,7 @@ func TestWebhook_DisabledGraphRejected(t *testing.T) {
 	_, wh, _, _, wsStore := startWebhookHarness(t)
 	_, _ = wsStore.Save(core.Graph{
 		ID: "off", Tenant: "acme", Workspace: "ws1", Disabled: true,
-		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secret": "s"}}},
+		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}}}},
 	}, "test")
 	mux := http.NewServeMux()
 	mux.HandleFunc("/trigger/", func(rw http.ResponseWriter, r *http.Request) {
@@ -536,7 +535,7 @@ func TestWebhook_MissingAuthRejected(t *testing.T) {
 	_, wh, _, _, wsStore := startWebhookHarness(t)
 	_, _ = wsStore.Save(core.Graph{
 		ID: "needauth", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secret": "s"}}},
+		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}}}},
 	}, "test")
 	mux := http.NewServeMux()
 	mux.HandleFunc("/trigger/", func(rw http.ResponseWriter, r *http.Request) {

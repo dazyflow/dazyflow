@@ -77,34 +77,14 @@ func TestSlackSendMessage_PostsTextAndChannel(t *testing.T) {
 	}
 }
 
-func TestSlackSendMessage_BodyInputOverridesText(t *testing.T) {
+func TestSlackSendMessage_TextInputOverridesParam(t *testing.T) {
 	srv := newSlackTestServer(t, map[string]any{"ok": true, "channel": "C1", "ts": "1"})
 	withSlackEnv(t, srv.URL)
 
+	// A wired 'text' input wins over the typed param.
 	res, _ := executeSlackSendMessage(context.Background(), core.Job{
 		Params: map[string]any{"channel": "#c", "text": "from-param"},
-		Input:  map[string]core.Ref{"body": {Inline: "from-body"}},
-	}, nil)
-	if res.Status != core.StatusOK {
-		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
-	}
-	if srv.lastBody["text"] != "from-body" {
-		t.Errorf("text = %v, want body input to win", srv.lastBody["text"])
-	}
-}
-
-func TestSlackSendMessage_TextInputOverridesParamAndBody(t *testing.T) {
-	srv := newSlackTestServer(t, map[string]any{"ok": true, "channel": "C1", "ts": "1"})
-	withSlackEnv(t, srv.URL)
-
-	// The declared 'text' port wins over both the param and the legacy
-	// 'body' port (kept for flows saved before the rename).
-	res, _ := executeSlackSendMessage(context.Background(), core.Job{
-		Params: map[string]any{"channel": "#c", "text": "from-param"},
-		Input: map[string]core.Ref{
-			"body": {Inline: "from-body"},
-			"text": {Inline: "from-text"},
-		},
+		Input:  map[string]core.Ref{"text": {Inline: "from-text"}},
 	}, nil)
 	if res.Status != core.StatusOK {
 		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
@@ -141,11 +121,11 @@ func TestSlackSendMessage_StructuredChannelIsError(t *testing.T) {
 	}
 }
 
-func TestSlackSendMessage_StructuredBodyIsError(t *testing.T) {
+func TestSlackSendMessage_StructuredTextIsError(t *testing.T) {
 	withSlackEnv(t, "http://unused")
 	res, _ := executeSlackSendMessage(context.Background(), core.Job{
 		Params: map[string]any{"channel": "#c"},
-		Input:  map[string]core.Ref{"body": {Inline: []any{map[string]any{"line": "x"}}}},
+		Input:  map[string]core.Ref{"text": {Inline: []any{map[string]any{"line": "x"}}}},
 	}, nil)
 	if res.Status != core.StatusError || res.Error.Code != "bad_input" {
 		t.Errorf("status=%q code=%v, want bad_input", res.Status, res.Error)

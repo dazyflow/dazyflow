@@ -45,7 +45,8 @@ func TestJourney_OverdueInvoice_RunsWithConnectedAccounts(t *testing.T) {
 	mock := map[string]any{"token": "mock-token", "base_url": google.srv.URL}
 	patchParams(&g, "read_invoices", mock)
 	patchParams(&g, "log_reminded", mock)
-	patchStepParams(&g, "send_reminders", mock)
+	// send_email is the for_each loop body (one gmail send per overdue row).
+	patchParams(&g, "send_email", mock)
 	raw := fillBlanks(mustJSON(t, g))
 
 	const flowID = "overdue-invoice-chaser"
@@ -285,20 +286,6 @@ func patchParams(g *core.Graph, nodeID string, set map[string]any) {
 			g.Nodes[i].Params = map[string]any{}
 		}
 		maps.Copy(g.Nodes[i].Params, set)
-	}
-}
-
-func patchStepParams(g *core.Graph, forEachNodeID string, set map[string]any) {
-	for i := range g.Nodes {
-		if g.Nodes[i].ID != forEachNodeID {
-			continue
-		}
-		sp, _ := g.Nodes[i].Params["step_params"].(map[string]any)
-		if sp == nil {
-			sp = map[string]any{}
-		}
-		maps.Copy(sp, set)
-		g.Nodes[i].Params["step_params"] = sp
 	}
 }
 

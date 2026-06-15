@@ -29,16 +29,14 @@ func TestForEach_E2E_WebhookToIteration(t *testing.T) {
 	g := core.Graph{
 		ID: "fe-iter", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{
-			{ID: "inbound", Module: "webhook_input", Params: map[string]any{"secret": "s"}},
-			{ID: "iter", Module: "for_each", Params: map[string]any{
-				"step_module": "delay",
-				"step_params": map[string]any{"ms": 1},
-				"item_port":   "in",
-				"concurrency": 3,
-			}},
+			{ID: "inbound", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}}},
+			{ID: "iter", Module: "for_each", Params: map[string]any{"concurrency": 3}},
+			// The loop body: one delay step per item, wired to the body pin.
+			{ID: "step", Module: "delay", Params: map[string]any{"ms": 1}},
 		},
 		Edges: []core.Edge{
 			{From: "inbound", FromPort: "body", To: "iter", ToPort: "items"},
+			{From: "iter", FromPort: "body", To: "step", ToPort: "pass"},
 		},
 	}
 	if _, err := wsStore.Save(g, "test"); err != nil {
@@ -103,10 +101,9 @@ func TestForEach_E2E_WebhookToIteration(t *testing.T) {
 // TestForEach_E2E_PerItemHTTPWithTemplatedURL exercises the realistic
 // shape: webhook delivers a list of records, for_each runs http_request
 // once per record with ${item.id} in the URL and ${builtin.KEY} in the
-// Authorization header. Proves that:
-//   - Secret substitution reaches nested step_params via the engine's
-//     recursive walk on the outer for_each Job.
-//   - Item substitution runs per-iteration on a fresh copy of step_params.
+// Authorization header on the wired body node. Proves that:
+//   - Secret substitution reaches the body node's params.
+//   - Item substitution runs per-iteration against the current row.
 //   - Both kinds of placeholder compose cleanly.
 func TestForEach_E2E_PerItemHTTPWithTemplatedURL(t *testing.T) {
 	tokens := daemon.NewBuiltinProvider()
@@ -157,22 +154,22 @@ func TestForEach_E2E_PerItemHTTPWithTemplatedURL(t *testing.T) {
 	g := core.Graph{
 		ID: "fe-http", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{
-			{ID: "inbound", Module: "webhook_input", Params: map[string]any{"secret": "s"}},
-			{ID: "fan", Module: "for_each", Params: map[string]any{
-				"step_module": "http_request",
-				"step_params": map[string]any{
-					"url":    srv.URL + "/items/${item.id}",
-					"method": "GET",
-					"headers": map[string]any{
-						"Authorization": "Bearer ${builtin.UPSTREAM_TOKEN}",
-					},
-					"allow_private_networks": true,
+			{ID: "inbound", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}}},
+			{ID: "fan", Module: "for_each", Params: map[string]any{"concurrency": 2}},
+			// The loop body: one http_request per item. ${item.id} is resolved
+			// per iteration by the engine; ${builtin.…} by the secret provider.
+			{ID: "call", Module: "http_request", Params: map[string]any{
+				"url":    srv.URL + "/items/${item.id}",
+				"method": "GET",
+				"headers": map[string]any{
+					"Authorization": "Bearer ${builtin.UPSTREAM_TOKEN}",
 				},
-				"concurrency": 2,
+				"allow_private_networks": true,
 			}},
 		},
 		Edges: []core.Edge{
 			{From: "inbound", FromPort: "body", To: "fan", ToPort: "items"},
+			{From: "fan", FromPort: "body", To: "call", ToPort: "pass"},
 		},
 	}
 	if _, err := wsStore.Save(g, "test"); err != nil {

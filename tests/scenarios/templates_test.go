@@ -52,7 +52,7 @@ func normalizeVariadicPorts(g *core.Graph, manifests map[string]core.Manifest) {
 // entry point: a newcomer forks one and runs it. So they deserve the
 // same composition guard as the scenario graphs — every module/port
 // exists, wiring is type-compatible, required inputs are connected, and
-// each for_each names a real step module. A failure here means a user
+// each for_each has its `body` pin wired. A failure here means a user
 // who forks that template hits a runtime error they can't diagnose.
 func TestShippedTemplatesCompose(t *testing.T) {
 	manifests := combinedManifests(t)
@@ -85,26 +85,18 @@ func TestShippedTemplatesCompose(t *testing.T) {
 				t.Errorf("template does not compose against the catalog:\n%v", err)
 			}
 
+			// Every for_each must have its `body` pin wired to a loop body —
+			// an unwired for_each has nothing to run. The body nodes' modules
+			// and ports are already validated by ValidateWithManifests above.
+			bodyWired := map[string]bool{}
+			for _, e := range g.Edges {
+				if e.FromPort == "body" {
+					bodyWired[e.From] = true
+				}
+			}
 			for _, n := range g.Nodes {
-				if n.Module != "for_each" {
-					continue
-				}
-				step, _ := n.Params["step_module"].(string)
-				if step == "" {
-					// Surface the likely cause: a stale `step` key.
-					if _, hasStep := n.Params["step"]; hasStep {
-						t.Errorf("for_each node %q uses the stale param %q; the engine reads %q, so this node fails at runtime",
-							n.ID, "step", "step_module")
-					} else {
-						t.Errorf("for_each node %q has no step_module", n.ID)
-					}
-					continue
-				}
-				if step == "subgraph" {
-					continue
-				}
-				if _, ok := manifests[step]; !ok {
-					t.Errorf("for_each node %q references unknown step_module %q", n.ID, step)
+				if n.Module == "for_each" && !bodyWired[n.ID] {
+					t.Errorf("for_each node %q has no wired `body` pin (loop body)", n.ID)
 				}
 			}
 

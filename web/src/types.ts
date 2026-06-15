@@ -35,11 +35,8 @@ export type GraphTrigger = {
   // "every day at 09:00" fires at 09:00 on the user's own clock (and
   // survives DST), independent of where the daemon runs. Empty = UTC.
   tz?: string;
-  // secret is the legacy single bearer key; secrets is the multi-key
-  // list that supersedes it (zero-downtime rotation — the /trigger
-  // endpoint accepts any listed key). The editor reads the union and
-  // writes back to secrets, folding the legacy field in on first edit.
-  secret?: string;
+  // secrets is the multi-key bearer list (zero-downtime rotation — the
+  // /trigger endpoint accepts any listed key).
   secrets?: string[];
   // public_form opts a webhook trigger into a hosted intake form at
   // /form/<tenant>/<workspace>/<id> that visitors submit without any

@@ -113,7 +113,7 @@ func TestLintTriggers_FlagsBadConfigs(t *testing.T) {
 		{
 			name: "webhook node with secret — no warning",
 			graph: Graph{
-				Nodes: []Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secret": "s3cr3t"}}},
+				Nodes: []Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s3cr3t"}}}},
 			},
 		},
 		{
@@ -132,7 +132,7 @@ func TestLintTriggers_FlagsBadConfigs(t *testing.T) {
 		{
 			name: "legacy graph-level webhook is deprecated",
 			graph: Graph{
-				Nodes:    []Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secret": "s"}}},
+				Nodes:    []Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}}}},
 				Triggers: []GraphTrigger{{Type: "webhook", Secret: "s"}},
 			},
 			wantCode: "trigger_webhook_deprecated",

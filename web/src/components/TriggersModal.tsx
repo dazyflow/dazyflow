@@ -693,7 +693,9 @@ function useCopyButton(value: string) {
 // CodeField is the single-line copyable value: an optional caption,
 // then a code well holding one ellipsized value, the copy button, and
 // an optional trailing action (e.g. "Open" for the form link).
-function CodeField({
+// Exported so other inspectors (e.g. the ntfy subscribe panel) can reuse the
+// same copyable URL row + "Open" action without duplicating the markup/styles.
+export function CodeField({
   label,
   icon,
   value,
@@ -766,11 +768,7 @@ function WebhookKeys({
   // no dialog). Drives the themed ConfirmModal below instead of a raw
   // window.confirm().
   const [pendingRevoke, setPendingRevoke] = useState<number | null>(null);
-  // Always write the canonical `secrets` list and clear the legacy
-  // single `secret`, folding it in — so a legacy graph migrates the
-  // moment its keys are touched and never carries both shapes.
-  const writeKeys = (next: string[]) =>
-    onChange({ secret: undefined, secrets: next });
+  const writeKeys = (next: string[]) => onChange({ secrets: next });
   const addKey = () => writeKeys([...keys, randomHex(16)]);
   const confirmRevoke = () => {
     if (pendingRevoke === null) return;

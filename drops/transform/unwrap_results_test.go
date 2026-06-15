@@ -6,11 +6,17 @@ import (
 	"git.sr.ht/~klahr/hazyflow/core"
 )
 
-// wrap builds a for_each-style result wrapper: {status:ok, output:{port:value}}.
+// wrap builds a for_each body-pin result wrapper for a single-node body:
+// {status:ok, nodes:{"body":{status:ok, output:{port:value}}}}.
 func wrap(port string, value any) core.Ref {
 	return core.Ref{Inline: map[string]any{
 		"status": core.StatusOK,
-		"output": map[string]core.Ref{port: {Inline: value}},
+		"nodes": map[string]any{
+			"body": map[string]any{
+				"status": core.StatusOK,
+				"output": map[string]core.Ref{port: {Inline: value}},
+			},
+		},
 	}}
 }
 
@@ -36,7 +42,7 @@ func unwrappedRows(t *testing.T, params map[string]any, results any) []map[strin
 }
 
 func TestUnwrapResults_NamedPort(t *testing.T) {
-	// The Gmail shape: each result's `message` output is a message object.
+	// The Gmail shape: each result's single body node has a `message` output.
 	rows := unwrappedRows(t,
 		map[string]any{"port": "message"},
 		[]core.Ref{
@@ -52,12 +58,42 @@ func TestUnwrapResults_NamedPort(t *testing.T) {
 	}
 }
 
-func TestUnwrapResults_InfersSingleOutputPort(t *testing.T) {
+func TestUnwrapResults_InfersSingleNodeAndPort(t *testing.T) {
 	rows := unwrappedRows(t,
-		map[string]any{}, // no port: only one output, inferred
+		map[string]any{}, // no node, no port: one body node, one output — both inferred
 		[]core.Ref{wrap("message", map[string]any{"id": "1"})})
 	if len(rows) != 1 || rows[0]["id"] != "1" {
 		t.Errorf("rows = %+v", rows)
+	}
+}
+
+func TestUnwrapResults_NamedNode(t *testing.T) {
+	// A multi-node body: name which node (and port) to flatten.
+	results := []core.Ref{{Inline: map[string]any{
+		"status": core.StatusOK,
+		"nodes": map[string]any{
+			"a": map[string]any{"status": core.StatusOK, "output": map[string]core.Ref{"out": {Inline: map[string]any{"id": "from-a"}}}},
+			"b": map[string]any{"status": core.StatusOK, "output": map[string]core.Ref{"out": {Inline: map[string]any{"id": "from-b"}}}},
+		},
+	}}}
+	rows := unwrappedRows(t, map[string]any{"node": "b", "port": "out"}, results)
+	if len(rows) != 1 || rows[0]["id"] != "from-b" {
+		t.Errorf("rows = %+v, want the chosen node's output", rows)
+	}
+}
+
+func TestUnwrapResults_AmbiguousNode(t *testing.T) {
+	// Two body nodes, none named → can't infer which to unwrap.
+	results := []core.Ref{{Inline: map[string]any{
+		"status": core.StatusOK,
+		"nodes": map[string]any{
+			"a": map[string]any{"status": core.StatusOK, "output": map[string]core.Ref{"out": {Inline: map[string]any{"id": "1"}}}},
+			"b": map[string]any{"status": core.StatusOK, "output": map[string]core.Ref{"out": {Inline: map[string]any{"id": "2"}}}},
+		},
+	}}}
+	res := runUnwrap(t, map[string]any{"port": "out"}, results)
+	if res.Status != core.StatusError || res.Error.Code != "bad_param" {
+		t.Errorf("status=%q code=%q, want bad_param", res.Status, res.Error.Code)
 	}
 }
 
@@ -91,7 +127,7 @@ func TestUnwrapResults_IncludeErrorsAsRows(t *testing.T) {
 }
 
 func TestUnwrapResults_FlattensListValuedPort(t *testing.T) {
-	// A step whose output port carries a rows list contributes many rows.
+	// A body node whose output port carries a rows list contributes many rows.
 	rows := unwrappedRows(t,
 		map[string]any{"port": "rows"},
 		[]core.Ref{
@@ -114,12 +150,17 @@ func TestUnwrapResults_ScalarWrappedAsValue(t *testing.T) {
 
 func TestUnwrapResults_SerializedRefShape(t *testing.T) {
 	// After a JSON round-trip the output port is a serialized Ref
-	// {"mime":…,"data":…} inside a []any results list.
+	// {"mime":…,"data":…} nested under nodes.<id>.output inside a []any list.
 	results := []any{
 		map[string]any{
 			"status": "ok",
-			"output": map[string]any{
-				"message": map[string]any{"mime": "application/json", "data": map[string]any{"id": "z"}},
+			"nodes": map[string]any{
+				"get": map[string]any{
+					"status": "ok",
+					"output": map[string]any{
+						"message": map[string]any{"mime": "application/json", "data": map[string]any{"id": "z"}},
+					},
+				},
 			},
 		},
 	}
@@ -154,12 +195,17 @@ func TestUnwrapResults_UnknownPort(t *testing.T) {
 }
 
 func TestUnwrapResults_AmbiguousPort(t *testing.T) {
-	// Two output ports, none named → can't infer.
+	// One body node with two output ports, none named → can't infer.
 	results := []core.Ref{{Inline: map[string]any{
 		"status": core.StatusOK,
-		"output": map[string]core.Ref{
-			"a": {Inline: map[string]any{"x": "1"}},
-			"b": {Inline: map[string]any{"y": "2"}},
+		"nodes": map[string]any{
+			"body": map[string]any{
+				"status": core.StatusOK,
+				"output": map[string]core.Ref{
+					"a": {Inline: map[string]any{"x": "1"}},
+					"b": {Inline: map[string]any{"y": "2"}},
+				},
+			},
 		},
 	}}}
 	res := runUnwrap(t, map[string]any{}, results)

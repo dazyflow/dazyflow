@@ -72,18 +72,16 @@ type ModelOption struct {
 
 // Config is a provider's branding + model set, supplied to RegisterAll.
 type Config struct {
-	Provider        Provider
-	Integration     string // "Claude" / "ChatGPT" — drives grouping + conn.<slug>.api_key
-	Icon            string
-	Color           string
-	BrandLogo       string
-	DefaultModel    string
-	Models          []ModelOption
-	KeyPlaceholder  string
-	AskID           string   // "claude" / "chatgpt"
-	AskAliases      []string // former ids the Ask drop still answers to
-	TaskIDPrefix    string   // "claude" / "gpt" → <prefix>_summarize
-	TaskAliasPrefix string   // "ai" → ai_summarize alias; "" = no alias
+	Provider       Provider
+	Integration    string // "Claude" / "ChatGPT" — drives grouping + conn.<slug>.api_key
+	Icon           string
+	Color          string
+	BrandLogo      string
+	DefaultModel   string
+	Models         []ModelOption
+	KeyPlaceholder string
+	AskID          string // "claude" / "chatgpt"
+	TaskIDPrefix   string // "claude" / "gpt" → <prefix>_summarize
 }
 
 // RegisterAll registers all five task drops for a provider.
@@ -210,13 +208,6 @@ func connFields(cfg Config) []core.ConnectionField {
 	return []core.ConnectionField{
 		{Key: "api_key", Label: "API key", Secret: true, Required: true, Placeholder: cfg.KeyPlaceholder},
 	}
-}
-
-func aliasFor(cfg Config, task string) []string {
-	if cfg.TaskAliasPrefix == "" {
-		return nil
-	}
-	return []string{cfg.TaskAliasPrefix + "_" + task}
 }
 
 func taskID(cfg Config, task string) string { return cfg.TaskIDPrefix + "_" + task }

@@ -2,7 +2,7 @@
 // scenarios.md against the real native catalog. Each NN-*.json is a graph
 // that implements one scenario; the test asserts every graph composes from
 // modules and ports that actually exist (ValidateWithManifests), and that
-// every for_each step_module is a registered module too. A failure here
+// every for_each has its `body` pin wired to a loop body. A failure here
 // means a scenario references a capability we do not yet support — that is
 // the gap to close.
 package scenarios
@@ -60,23 +60,19 @@ func TestScenarioGraphsValidate(t *testing.T) {
 				t.Fatalf("graph does not compose against the catalog:\n%v", err)
 			}
 
-			// for_each references its per-item step by module name, so the
-			// edge-level check above can't see it. Assert it resolves to a
-			// real module (subgraph is referenced by graph_id, not a drop).
+			// for_each runs a body subgraph wired to its `body` pin.
+			// ValidateWithManifests already verified the body nodes' modules
+			// and ports; assert each for_each actually has the pin wired (an
+			// unwired for_each has nothing to run).
+			bodyWired := map[string]bool{}
+			for _, e := range g.Edges {
+				if e.FromPort == "body" {
+					bodyWired[e.From] = true
+				}
+			}
 			for _, n := range g.Nodes {
-				if n.Module != "for_each" {
-					continue
-				}
-				step, _ := n.Params["step_module"].(string)
-				if step == "" {
-					t.Errorf("for_each node %q has no step_module", n.ID)
-					continue
-				}
-				if step == "subgraph" {
-					continue
-				}
-				if _, ok := manifests[step]; !ok {
-					t.Errorf("for_each node %q references unknown step_module %q", n.ID, step)
+				if n.Module == "for_each" && !bodyWired[n.ID] {
+					t.Errorf("for_each node %q has no wired `body` pin (loop body)", n.ID)
 				}
 			}
 		})

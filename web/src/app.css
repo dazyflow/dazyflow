@@ -7431,6 +7431,9 @@ button.warning:hover:not(:disabled) {
 .flow-status-paused {
   --c: #d99a2b;
 }
+.flow-status-needs_publish {
+  --c: var(--accent);
+}
 
 /* for_each editor: the chosen step's param form sits in a subtly inset block
    under the "Run step" picker, so it reads as "the step this loop runs". */

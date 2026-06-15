@@ -99,10 +99,9 @@ func init() {
 			{ID: "claude-sonnet-4-6", Label: "Claude Sonnet 4.6"},
 			{ID: "claude-haiku-4-5-20251001", Label: "Claude Haiku 4.5"},
 		},
-		KeyPlaceholder:  "sk-ant-…",
-		AskID:           "claude",
-		TaskIDPrefix:    "claude",
-		TaskAliasPrefix: "ai", // ai_summarize → claude_summarize, etc.
+		KeyPlaceholder: "sk-ant-…",
+		AskID:          "claude",
+		TaskIDPrefix:   "claude",
 	})
 }
 

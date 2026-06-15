@@ -92,7 +92,7 @@ import { diffGraphs, diffIsEmpty, type GraphDiff } from "../lib/diffGraphs";
 import { formatDateTime } from "../lib/datetime";
 import { Inspector } from "../components/Inspector";
 import { FlowStatusChip } from "../components/FlowStatusChip";
-import { flowRunStatus } from "../flowStatus";
+import { flowRunStatusPublished } from "../flowStatus";
 import { HazyNode } from "../components/NodeCard";
 import { portColor, type HazyNodeData } from "../components/nodeCardShared";
 import { CommentNode } from "../components/CommentNode";
@@ -204,73 +204,6 @@ function stampScheduleTimezones(
     return n;
   });
   return { nodes: out, changed };
-}
-
-// migrateGraphLevelPoll moves a legacy graph-level poll trigger onto a
-// poll_trigger node — poll is configured on the node now (like cron), and the
-// scheduler no longer reads graph-level poll. It sets the interval on an
-// existing poll_trigger node, or adds one if the flow has none (older poll
-// flows were pure pipelines fired by the graph-level trigger), then drops the
-// graph-level poll trigger. Returns the new nodes/triggers and whether anything
-// changed, so the caller can persist the migration.
-function migrateGraphLevelPoll(
-  nodes: Graph["nodes"],
-  triggers: Graph["triggers"],
-): { nodes: Graph["nodes"]; triggers: Graph["triggers"]; changed: boolean } {
-  const polls = (triggers ?? []).filter((t) => t.type === "poll");
-  if (polls.length === 0) return { nodes, triggers, changed: false };
-  const secs = polls
-    .map((t) => (t as { interval_seconds?: number }).interval_seconds)
-    .find((n): n is number => typeof n === "number" && n > 0);
-  let out = nodes ?? [];
-  const existing = out.find((n) => n.module === "poll_trigger");
-  if (existing) {
-    const intv = (existing.params as { interval_seconds?: unknown } | undefined)?.interval_seconds;
-    if (typeof secs === "number" && !(typeof intv === "number" && intv > 0)) {
-      out = out.map((n) =>
-        n === existing
-          ? { ...n, params: { ...(n.params ?? {}), interval_seconds: secs } }
-          : n,
-      );
-    }
-  } else if (typeof secs === "number") {
-    const used = new Set(out.map((n) => n.id));
-    let pid = "poll";
-    for (let i = 1; used.has(pid); i++) pid = `poll_${i}`;
-    out = [
-      { id: pid, module: "poll_trigger", params: { interval_seconds: secs }, position: { x: -120, y: 120 } },
-      ...out,
-    ];
-  }
-  const rest = (triggers ?? []).filter((t) => t.type !== "poll");
-  return { nodes: out, triggers: rest.length ? rest : undefined, changed: true };
-}
-
-// migrateGraphLevelWebhook moves a legacy graph-level webhook trigger's config
-// (secret + hosted-form options) onto the webhook_input node — config lives on
-// the node now and the daemon ignores graph-level webhook triggers. Drops the
-// graph-level trigger. (If the flow has no webhook_input node the trigger was
-// already dead, so it's just removed.)
-function migrateGraphLevelWebhook(
-  nodes: Graph["nodes"],
-  triggers: Graph["triggers"],
-): { nodes: Graph["nodes"]; triggers: Graph["triggers"]; changed: boolean } {
-  const wh = (triggers ?? []).find((t) => t.type === "webhook");
-  if (!wh) return { nodes, triggers, changed: false };
-  const cfg: Record<string, unknown> = {};
-  if (wh.secret) cfg.secret = wh.secret;
-  if (wh.public_form) cfg.public_form = true;
-  if (wh.form_fields?.length) cfg.form_fields = wh.form_fields;
-  if (wh.form_title) cfg.form_title = wh.form_title;
-  let out = nodes ?? [];
-  const node = out.find((n) => n.module === "webhook_input");
-  if (node) {
-    out = out.map((n) =>
-      n === node ? { ...n, params: { ...(n.params ?? {}), ...cfg } } : n,
-    );
-  }
-  const rest = (triggers ?? []).filter((t) => t.type !== "webhook");
-  return { nodes: out, triggers: rest.length ? rest : undefined, changed: true };
 }
 
 function EditorInner() {
@@ -617,18 +550,12 @@ function EditorInner() {
           loadedIDRef.current = requestedID;
           return;
         }
-        // One-time migrations on open, persisted because Run executes the
-        // SAVED graph by id (an in-memory-only fix would never reach the run or
-        // the scheduler):
-        //   1. stamp the viewer's zone on a Schedule node that lacks a tz.
-        //   2. move a legacy graph-level poll trigger onto a poll_trigger node.
+        // One-time fix on open, persisted because Run executes the SAVED
+        // graph by id (an in-memory-only fix would never reach the run or the
+        // scheduler): stamp the viewer's zone on a Schedule node that lacks a tz.
         const tzM = stampScheduleTimezones(g.nodes);
-        const pollM = migrateGraphLevelPoll(tzM.nodes, g.triggers);
-        const whM = migrateGraphLevelWebhook(pollM.nodes, pollM.triggers);
-        const changed = tzM.changed || pollM.changed || whM.changed;
-        const migrated = changed
-          ? { ...g, nodes: whM.nodes, triggers: whM.triggers }
-          : g;
+        const changed = tzM.changed;
+        const migrated = changed ? { ...g, nodes: tzM.nodes } : g;
         hydrateGraph(migrated);
         loadedIDRef.current = requestedID;
         if (changed && hasPermRef.current("graph:edit")) {
@@ -1156,6 +1083,64 @@ function EditorInner() {
     (m: Manifest, screen: { x: number; y: number }) =>
       spawnDropFlow(m, screenToFlowPosition(screen)),
     [spawnDropFlow, screenToFlowPosition],
+  );
+
+  // addApprovalNtfy is the one-click "notify me on ntfy with the approval
+  // link" from an await_approval node's inspector. It creates an ntfy step to
+  // the right of the approval step and wires it up so the approver gets a
+  // tappable link:
+  //   - edge  await_approval.pending_url → ntfy.message  (orders execution so
+  //     ntfy fires once the link exists, and shows the link in the body)
+  //   - param ntfy.click = ${upstream.<approval>.pending_url}  (the whole
+  //     notification opens the approval page when tapped — ntfy's `click` is a
+  //     param, not a port, so it can't be an edge)
+  // The remaining wire (the approval's Approved port → your send step) stays a
+  // manual drag — it's flow-specific and already explained on await_approval.
+  const addApprovalNtfy = useCallback(
+    (approvalNodeID: string) => {
+      const m = manifestByID.get("ntfy");
+      if (!m) return;
+      const src = nodes.find((n) => n.id === approvalNodeID);
+      const width = src?.measured?.width ?? 280;
+      const position = src
+        ? { x: src.position.x + width + 80, y: src.position.y }
+        : screenToFlowPosition({
+            x: window.innerWidth / 2,
+            y: window.innerHeight / 2,
+          });
+      const newID = nextID(nodes, "ntfy");
+      setNodes((nds) => [
+        ...nds,
+        {
+          id: newID,
+          type: "hazy",
+          position,
+          data: { label: m.label, moduleID: "ntfy", manifest: m },
+        },
+      ]);
+      setParamsByID((p) => ({
+        ...p,
+        [newID]: {
+          title: "Approval needed",
+          click: `\${upstream.${approvalNodeID}.pending_url}`,
+        },
+      }));
+      setEdges((eds) =>
+        addEdge(
+          {
+            id: `${approvalNodeID}.pending_url->${newID}.message`,
+            source: approvalNodeID,
+            target: newID,
+            sourceHandle: "pending_url",
+            targetHandle: "message",
+            style: { stroke: "var(--accent)", strokeWidth: 1.5 },
+          },
+          eds,
+        ),
+      );
+      setDirty(true);
+    },
+    [manifestByID, nodes, screenToFlowPosition],
   );
 
   // spawnDropAuto places a palette-inserted step predictably: to the
@@ -2859,7 +2844,7 @@ function EditorInner() {
   // with a blank interval reads "Manual only", not a false "Live".
   const runStatus = useMemo(
     () =>
-      flowRunStatus(
+      flowRunStatusPublished(
         disabled,
         triggers,
         // Node params live in paramsByID, NOT in n.data — reading
@@ -2869,8 +2854,13 @@ function EditorInner() {
           module: (n.data as HazyNodeData | undefined)?.moduleID ?? "",
           params: paramsByID[n.id] ?? {},
         })),
+        // A scheduler-triggered flow that hasn't been published yet reads
+        // "Needs publish" — the scheduler only runs published flows. While
+        // publishInfo is still loading (null) we pass undefined, which the
+        // classifier treats as published so the chip doesn't flicker.
+        publishInfo === null ? undefined : publishInfo.published,
       ),
-    [disabled, triggers, nodes, paramsByID],
+    [disabled, triggers, nodes, paramsByID, publishInfo],
   );
   const persistSettings = async (next: Graph) => {
     setTriggers(next.triggers ?? []);
@@ -3816,6 +3806,7 @@ function EditorInner() {
           onChange={onInspectorChange}
           paramsByID={paramsByID}
           onParamsChange={onParamsChange}
+          onAddApprovalNtfy={addApprovalNtfy}
           manifests={manifests}
           wiredPorts={
             inspectorSelected ? connectedInputsByNode.get(inspectorSelected.id) ?? [] : []

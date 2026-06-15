@@ -41,14 +41,11 @@ type registeredDrop struct {
 	transport core.Transport
 }
 
-// allDrops returns every non-alias drop registered in the default engine.
+// allDrops returns every drop registered in the default engine.
 func allDrops(t testing.TB) []registeredDrop {
 	t.Helper()
 	out := make([]registeredDrop, 0, 128)
 	for id, m := range engine.Default.Manifests() {
-		if m.Hidden {
-			continue // alias shim for a renamed module — same Execute as its canonical ID
-		}
 		tr, ok := engine.Default.Get(id)
 		if !ok {
 			t.Fatalf("manifest %q has no transport", id)

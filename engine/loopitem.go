@@ -16,8 +16,7 @@ import (
 // here:
 //
 //   - WithLoopItem / itemSubstituter — make ${item.path} resolve to the
-//     current row inside every body node's params, exactly like the legacy
-//     step_module path substitutes ${item.path} into step_params.
+//     current row inside every body node's params.
 //   - WithBodyRunner — the daemon hands the for_each drop a closure that
 //     runs the (already-extracted) body subgraph in-process via Engine.Run.
 //     The drop owns iteration semantics (concurrency, fail_fast, results);
@@ -154,7 +153,7 @@ type bodyRunnerCtxKey struct{}
 
 // WithBodyRunner carries the loop-body runner to the for_each drop. Present
 // only when the for_each's `body` pin is wired (the daemon sets it); absent
-// means legacy step_module mode.
+// means the for_each has nothing to run.
 func WithBodyRunner(ctx context.Context, r BodyRunner) context.Context {
 	if r == nil {
 		return ctx

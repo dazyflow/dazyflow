@@ -41,16 +41,11 @@ func init() {
 			},
 			// Webhook + hosted-form config lives on the node now (like the
 			// Schedule/Poll nodes), read by the daemon's /trigger and /form
-			// handlers. secret guards the POST endpoint; public_form opts into a
+			// handlers. secrets guard the POST endpoint; public_form opts into a
 			// token-less hosted form whose fields/title are set here too.
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"secret":{
-						"type":"string",
-						"title":"Secret",
-						"description":"Legacy single bearer token. Superseded by secrets; still honored for graphs saved before multi-key rotation. The editor folds it into secrets on first edit."
-					},
 					"secrets":{
 						"type":"array",
 						"items":{"type":"string"},

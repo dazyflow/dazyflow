@@ -27,22 +27,22 @@ func init() {
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"transform", "for_each", "results", "flatten", "unwrap", "rows"},
-			Description: "Flatten a for_each `results` list back into plain rows. Each for_each result is a wrapper ({status, output, error}); the tabular drops downstream want the step's actual output, not the wrapper. unwrap_results pulls one output port out of every result and emits them as rows — so `gmail_search_messages → for_each(gmail_get_message) → unwrap_results → compute_rows` finally lets compute see `row.headers.From` instead of `row.output.message…`. Failed items are skipped by default (the for_each `errors` port still carries them). When the step has one output port, you can leave `port` blank.",
-			Summary:     "Pull one output port out of each for_each result and emit them as a flat rows list.",
+			Description: "Flatten a for_each `results` list back into plain rows. for_each runs a body subgraph per item, so each result wraps the body's per-node outputs ({status, nodes:{<id>:{output:{port:val}}}}); the tabular drops downstream want a step's actual output, not the wrapper. unwrap_results pulls one output port of one body node out of every result and emits them as rows — so `gmail_search_messages → for_each(body: gmail_get_message) → unwrap_results → compute_rows` finally lets compute see `row.headers.From`. With a single-node body and a single-output step you can leave both `node` and `port` blank. Failed items are skipped by default (the for_each `errors` port still carries them).",
+			Summary:     "Pull one body node's output port out of each for_each result and emit them as a flat rows list.",
 			Examples: []core.ParamsExample{
 				{
-					Title:  "Unwrap gmail_get_message results",
-					Params: json.RawMessage(`{"port":"message"}`),
-					Notes:  "for_each ran gmail_get_message per ID; each result's `message` output becomes one row.",
+					Title:  "Unwrap a single-step loop body (node + port inferred)",
+					Params: json.RawMessage(`{}`),
+					Notes:  "for_each's body is one node (e.g. gmail_get_message) with one output (message); unwrap_results uses them without naming either.",
 				},
 				{
-					Title:  "Single-output step (port inferred)",
-					Params: json.RawMessage(`{}`),
-					Notes:  "When the step emits exactly one output port, unwrap_results uses it without naming it.",
+					Title:  "Pick a node and port from a multi-step body",
+					Params: json.RawMessage(`{"node":"get","port":"message"}`),
+					Notes:  "When the body has several nodes, name which one (and which of its output ports) to flatten.",
 				},
 				{
 					Title:  "Include failed items as error rows",
-					Params: json.RawMessage(`{"port":"message","skip_errors":false}`),
+					Params: json.RawMessage(`{"skip_errors":false}`),
 				},
 			},
 			ExecutionModel: core.ExecutionBatch,
@@ -57,9 +57,13 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
+					"node": {
+						"type":"string",
+						"description":"Which body node to extract from each result. Optional when the for_each body is a single node."
+					},
 					"port": {
 						"type":"string",
-						"description":"Which output port of the step to extract from each result. Optional when the step has exactly one output port."
+						"description":"Which output port of the body node to extract from each result. Optional when that node has exactly one output port."
 					},
 					"skip_errors": {
 						"type":"boolean",
@@ -76,20 +80,20 @@ func init() {
 
 // executeUnwrapResults turns for_each's wrapped results into flat rows.
 //
-// for_each emits `results` as a list of Result wrappers — each item is
-// {status, output:{port: value}, error} — because it can't know what
-// downstream wants from a heterogeneous fan-out. Every tabular drop,
-// though, expects rows: bare objects whose keys are columns. Without a
-// bridge, `for_each(gmail_get_message) → compute_rows` reads
-// row.headers.From against the wrapper, not the message, and silently
+// for_each runs a body subgraph per item and emits `results` as a list of
+// wrappers — each item is {status, nodes:{<id>:{status, output:{port:value}}}} —
+// because it can't know what downstream wants from a heterogeneous fan-out.
+// Every tabular drop, though, expects rows: bare objects whose keys are
+// columns. Without a bridge, `for_each(body: gmail_get_message) → compute_rows`
+// reads row.headers.From against the wrapper, not the message, and silently
 // produces garbage (the defect that grounded both Gmail templates).
 //
-// unwrap_results is that bridge. For each result it selects one output
-// port (named, or inferred when the step has exactly one) and unwraps
-// its Ref to the underlying value. A value that is itself a list of
-// objects is flattened (so a step that returns rows contributes many);
-// a single object contributes one row; a scalar is wrapped as
-// {"value": x} so it still lands as a row.
+// unwrap_results is that bridge. For each result it selects one body node
+// (named, or inferred when the body is one node) and one of its output ports
+// (named, or inferred when there's exactly one), and unwraps its Ref to the
+// underlying value. A value that is itself a list of objects is flattened (so
+// a step that returns rows contributes many); a single object contributes one
+// row; a scalar is wrapped as {"value": x} so it still lands as a row.
 //
 // Failed items are skipped by default — they already surface on the
 // for_each `errors` port, and a half-broken row would poison the table.
@@ -104,6 +108,7 @@ func executeUnwrapResults(_ context.Context, job core.Job, _ chan<- core.Progres
 		return errResult(job, "bad_input", err.Error()), nil
 	}
 
+	node := paramStringOr(job.Params, "node", "")
 	port := paramStringOr(job.Params, "port", "")
 	skipErrors := true
 	if v, ok := job.Params["skip_errors"].(bool); ok {
@@ -115,7 +120,7 @@ func executeUnwrapResults(_ context.Context, job core.Job, _ chan<- core.Progres
 		payload, ok := asAnyMap(w)
 		if !ok {
 			return errResult(job, "bad_input",
-				fmt.Sprintf("result %d is not a Result wrapper (got %T)", i, w)), nil
+				fmt.Sprintf("result %d is not a for_each result wrapper (got %T)", i, w)), nil
 		}
 
 		status := fmt.Sprintf("%v", payload["status"])
@@ -127,10 +132,28 @@ func executeUnwrapResults(_ context.Context, job core.Job, _ chan<- core.Progres
 			continue
 		}
 
-		outputs, ok := asAnyMap(payload["output"])
+		// for_each runs a body SUBGRAPH per item, so each result wraps the
+		// body's per-node outputs under `nodes`: {status, nodes:{<id>:{output:{port:val}}}}.
+		// Pick the body node (named, or inferred when the body is one node),
+		// then one of its output ports.
+		nodes, ok := asAnyMap(payload["nodes"])
 		if !ok {
 			return errResult(job, "bad_input",
-				fmt.Sprintf("result %d has no output map", i)), nil
+				fmt.Sprintf("result %d has no nodes map — is the for_each `body` pin wired?", i)), nil
+		}
+		nodeEntry, err := selectNode(nodes, node)
+		if err != nil {
+			return errResult(job, "bad_param", fmt.Sprintf("result %d: %v", i, err)), nil
+		}
+		nodeMap, ok := asAnyMap(nodeEntry)
+		if !ok {
+			return errResult(job, "bad_input",
+				fmt.Sprintf("result %d: body node is not a result map (got %T)", i, nodeEntry)), nil
+		}
+		outputs, ok := asAnyMap(nodeMap["output"])
+		if !ok {
+			return errResult(job, "bad_input",
+				fmt.Sprintf("result %d: body node has no output map", i)), nil
 		}
 
 		chosen, err := selectPort(outputs, port)
@@ -150,6 +173,28 @@ func executeUnwrapResults(_ context.Context, job core.Job, _ chan<- core.Progres
 			"headers": {MIME: "application/json", Inline: deriveHeaders(out)},
 		},
 	}, nil
+}
+
+// selectNode returns the chosen body node's result entry. When node is named
+// it must exist; when blank, the body must have exactly one node so the choice
+// is unambiguous (the common case — a single-step loop body).
+func selectNode(nodes map[string]any, node string) (any, error) {
+	if node != "" {
+		v, ok := nodes[node]
+		if !ok {
+			return nil, fmt.Errorf("body node %q not found (available: %s)", node, strings.Join(sortedKeys(nodes), ", "))
+		}
+		return v, nil
+	}
+	switch len(nodes) {
+	case 0:
+		return nil, fmt.Errorf("the for_each body produced no nodes")
+	case 1:
+		for _, v := range nodes {
+			return v, nil
+		}
+	}
+	return nil, fmt.Errorf("the for_each body has %d nodes (%s); set 'node' to pick one", len(nodes), strings.Join(sortedKeys(nodes), ", "))
 }
 
 // selectPort returns the chosen output port's Ref. When port is named it

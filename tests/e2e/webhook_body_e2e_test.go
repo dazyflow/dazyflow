@@ -28,7 +28,7 @@ func TestWebhookBody_E2E_JSONPropagation(t *testing.T) {
 	g := core.Graph{
 		ID: "wh-body-flow", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{
-			{ID: "inbound", Module: "webhook_input", Params: map[string]any{"secret": "wh-secret"}},
+			{ID: "inbound", Module: "webhook_input", Params: map[string]any{"secrets": []any{"wh-secret"}}},
 			// Compare reads the priority field out of A (the JSON body) and
 			// tests it against "high" (B), emitting 1/0; Branch routes on it.
 			{ID: "check", Module: "compare", Params: map[string]any{
@@ -131,7 +131,7 @@ func TestWebhookBody_E2E_TextBody(t *testing.T) {
 	g := core.Graph{
 		ID: "wh-text", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{
-			{ID: "inbound", Module: "webhook_input", Params: map[string]any{"secret": "s"}},
+			{ID: "inbound", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}}},
 		},
 	}
 	_, _ = wsStore.Save(g, "test")
@@ -181,7 +181,7 @@ func TestWebhookBody_E2E_ManualRunFails(t *testing.T) {
 	g := core.Graph{
 		ID: "wh-manual", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{
-			{ID: "inbound", Module: "webhook_input", Params: map[string]any{"secret": "x"}},
+			{ID: "inbound", Module: "webhook_input", Params: map[string]any{"secrets": []any{"x"}}},
 		},
 	}
 	_, _ = wsStore.Save(g, "test")

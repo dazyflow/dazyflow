@@ -15,6 +15,20 @@ import (
 	"git.sr.ht/~klahr/hazyflow/workspace"
 )
 
+// publishGraph saves a graph and promotes it to the published environment.
+// The scheduler only enrolls and fires PUBLISHED flows (require-published), so
+// every test that expects an auto-trigger to fire must publish first.
+func publishGraph(t *testing.T, store *workspace.Store, g core.Graph) {
+	t.Helper()
+	commit, err := store.Save(g, "test")
+	if err != nil {
+		t.Fatalf("save graph: %v", err)
+	}
+	if err := store.PromoteToEnvironment(g.ID, workspace.PublishedEnv, commit); err != nil {
+		t.Fatalf("publish graph: %v", err)
+	}
+}
+
 func TestScheduler_FiresGraphWithCronTrigger(t *testing.T) {
 	// Build a Service + worker, save a graph with a cron trigger that
 	// fires every minute, then advance a synthetic clock past the
@@ -51,9 +65,7 @@ func TestScheduler_FiresGraphWithCronTrigger(t *testing.T) {
 			{Type: "cron", Cron: "* * * * *"}, // every minute
 		},
 	}
-	if _, err := wsStore.Save(graph, "test"); err != nil {
-		t.Fatalf("save graph: %v", err)
-	}
+	publishGraph(t, wsStore, graph)
 
 	sched := daemon.NewScheduler(svc)
 	// Fast tick + rescan so the test doesn't have to wait real time.
@@ -103,6 +115,38 @@ func TestScheduler_FiresGraphWithCronTrigger(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatal("scheduler did not fire the cron-triggered graph within 3s")
+}
+
+func TestScheduler_UnpublishedFlowIsNotEnrolled(t *testing.T) {
+	// Require-published: a saved-but-never-published flow with a configured
+	// cron trigger must NOT be enrolled by the scheduler, so it never fires on
+	// its own until the author publishes it. (The editor shows "needs publish"
+	// for exactly this state.)
+	ks := auth.NewMemKeyStore()
+	wsStore, _ := workspace.OpenFS("")
+	svc := &daemon.Service{
+		Auth:       auth.Chain{&auth.APIKeyAuthenticator{Store: ks}},
+		Workspaces: daemon.MapWorkspaces{"acme/ws1": wsStore},
+		Jobs:       jobstore.NewMemory(),
+		Engine:     &engine.Engine{Resolver: &engine.NodeResolver{Native: engine.Default}},
+		Bus:        daemon.NewMemoryBus(),
+	}
+	// Saved to HEAD but deliberately NOT published.
+	_, _ = wsStore.Save(core.Graph{
+		ID: "draft-cron", Tenant: "acme", Workspace: "ws1",
+		Nodes:    []core.Node{{ID: "tick", Module: "delay", Params: map[string]any{"ms": 1}}},
+		Triggers: []core.GraphTrigger{{Type: "cron", Cron: "* * * * *"}},
+	}, "test")
+
+	sched := daemon.NewScheduler(svc)
+	sched.SetInterval(5*time.Millisecond, 30*time.Millisecond)
+	schedCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = sched.Run(schedCtx) }()
+	time.Sleep(100 * time.Millisecond)
+	if got := sched.TrackedCount(); got != 0 {
+		t.Errorf("tracked=%d, want 0 (unpublished flow must not be enrolled)", got)
+	}
 }
 
 func TestScheduler_IgnoresGraphWithoutTrigger(t *testing.T) {
@@ -172,10 +216,10 @@ func TestScheduler_TracksCronTriggerNode(t *testing.T) {
 		Engine:     &engine.Engine{Resolver: &engine.NodeResolver{Native: engine.Default}},
 		Bus:        daemon.NewMemoryBus(),
 	}
-	_, _ = wsStore.Save(core.Graph{
+	publishGraph(t, wsStore, core.Graph{
 		ID: "node-cron", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{{ID: "sched", Module: "cron_trigger", Params: map[string]any{"cron": "0 9 * * *", "tz": "Europe/Stockholm"}}},
-	}, "test")
+	})
 
 	sched := daemon.NewScheduler(svc)
 	sched.SetInterval(5*time.Millisecond, 30*time.Millisecond)

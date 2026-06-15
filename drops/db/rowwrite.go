@@ -2,6 +2,7 @@ package db
 
 import (
 	"fmt"
+	"strings"
 
 	"git.sr.ht/~klahr/hazyflow/core"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
@@ -41,6 +42,15 @@ func parseRowsInput(job core.Job) (rowsInput, *core.Result) {
 		return rowsInput{}, errResult(job, "bad_input", err.Error())
 	}
 
+	// Optional column mapper: pick which incoming fields to write and what
+	// to call them. Applied before headers are derived/validated so the
+	// table is shaped from the OUTPUT columns (and an upsert's
+	// conflict_columns refer to the output names too). No mapping → rows
+	// pass through unchanged.
+	if mapping, ok := paramStringMap(job.Params, "field_mapping"); ok && len(mapping) > 0 {
+		rows = applyFieldMapping(rows, mapping)
+	}
+
 	var headers []string
 	if h, ok := job.Input["headers"]; ok && h.Inline != nil {
 		headers, err = normalizeHeaders(h.Inline)
@@ -57,6 +67,35 @@ func parseRowsInput(job core.Job) (rowsInput, *core.Result) {
 		}
 	}
 	return rowsInput{rows: rows, headers: headers}, nil
+}
+
+// applyFieldMapping rewrites each row's keys per the field_mapping param,
+// a {incomingField: columnName} whitelist-plus-rename in one: only fields
+// named in the mapping are kept, each written under the mapped column name.
+// A blank column name explicitly skips that field. This is the "choose which
+// fields → which columns" step for the insert/upsert family, so wiring a
+// whole form response no longer dumps every question as a column. For
+// heavier reshaping (filtering rows, defaults) use the map_rows drop upstream.
+//
+// Headers are intentionally NOT computed here — the caller re-derives them
+// from the rewritten rows so the universal identifier validation still runs
+// on the final column names.
+func applyFieldMapping(rows []map[string]any, mapping map[string]string) []map[string]any {
+	out := make([]map[string]any, len(rows))
+	for i, row := range rows {
+		nr := make(map[string]any, len(mapping))
+		for inField, outCol := range mapping {
+			outCol = strings.TrimSpace(outCol)
+			if outCol == "" {
+				continue // blank target = drop this field
+			}
+			if v, ok := row[inField]; ok {
+				nr[outCol] = v
+			}
+		}
+		out[i] = nr
+	}
+	return out
 }
 
 // parseConflictUpdateCols validates the conflict_columns / update_columns

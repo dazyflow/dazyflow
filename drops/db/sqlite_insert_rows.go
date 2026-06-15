@@ -61,7 +61,8 @@ func init() {
 					"path":         {"type":"string","format":"workspace-path","title":"Database file","default":"data/app.db","description":"Database file kept in your workspace. Created automatically on first save."},
 					"table":        {"type":"string","title":"Table","default":"rows","description":"Which table to save into. Created from the row columns when create_table=true (the default)."},
 					"create_table": {"type":"boolean","default":true,"description":"Auto-create the table from the supplied headers if it doesn't exist. Set false to fail loudly when the table is missing."},
-					"column_types": {"type":"object","additionalProperties":{"type":"string"},"description":"Override per-column type (e.g. {\"age\":\"INTEGER\",\"created_at\":\"DATETIME\"}). Defaults to TEXT for every header."}
+					"column_types": {"type":"object","additionalProperties":{"type":"string"},"description":"Override per-column type (e.g. {\"age\":\"INTEGER\",\"created_at\":\"DATETIME\"}). Defaults to TEXT for every header."},
+					"field_mapping":{"type":"object","additionalProperties":{"type":"string"},"title":"Column mapping","description":"Optional. Choose which incoming fields to write and name their columns — {incoming field: column name}. Only listed fields are written (others dropped); blank a column name to skip a field. Leave empty to write every field. For row filtering or defaults, use a Map rows step first."}
 				},
 				"required":["path","table"]
 			}`),

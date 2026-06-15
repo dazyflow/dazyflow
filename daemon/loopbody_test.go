@@ -84,8 +84,8 @@ func TestValidateLoopBodies_AllowsSingleAndNone(t *testing.T) {
 	}
 }
 
-// No body pin → no owners (legacy step_module for_each, and ordinary graphs,
-// are unaffected — the dispatcher excludes nothing).
+// No body pin → no owners (an unwired for_each, and ordinary graphs, are
+// unaffected — the dispatcher excludes nothing).
 func TestLoopBodyOwners_NoBodyPin(t *testing.T) {
 	g := core.Graph{
 		Nodes: []core.Node{

@@ -25,15 +25,18 @@
     {
       "id": "notify",
       "module": "for_each",
-      "params": {
-        "step_module": "slack_send_message",
-        "step_params": {
-          "channel": "#payments",
-          "account": "default",
-          "text": "💰 New Stripe payment — ${item.id} (${item.type})"
-        }
-      },
+      "params": {},
       "position": { "x": 520, "y": 120 }
+    },
+    {
+      "id": "send",
+      "module": "slack_send_message",
+      "params": {
+        "channel": "#payments",
+        "account": "default",
+        "text": "💰 New Stripe payment — ${item.id} (${item.type})"
+      },
+      "position": { "x": 840, "y": 120 }
     },
     {
       "id": "save",
@@ -48,6 +51,13 @@
       "from_port": "events",
       "to": "notify",
       "to_port": "items",
+      "on_error": ""
+    },
+    {
+      "from": "notify",
+      "from_port": "body",
+      "to": "send",
+      "to_port": "pass",
       "on_error": ""
     },
     {

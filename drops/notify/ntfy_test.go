@@ -31,7 +31,7 @@ func TestNtfy_PostsBodyAndHeaders(t *testing.T) {
 
 	res, err := executeNtfy(context.Background(), core.Job{
 		Params: map[string]any{"server": srv.URL, "topic": "alerts", "title": "Hi", "tags": []any{"tada", "rocket"}},
-		Input:  map[string]core.Ref{"body": {Inline: "deploy done"}},
+		Input:  map[string]core.Ref{"message": {Inline: "deploy done"}},
 	}, nil)
 	if err != nil || res.Status != core.StatusOK {
 		t.Fatalf("status=%q err=%+v", res.Status, res.Error)

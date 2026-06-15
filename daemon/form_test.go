@@ -30,7 +30,7 @@ func TestForm_GETRendersOptedInForm(t *testing.T) {
 	_, wh, _, _, wsStore := startWebhookHarness(t)
 	g := core.Graph{
 		ID: "contact", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secret": "s", "public_form": true, "form_title": "Contact us"}}},
+		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}, "public_form": true, "form_title": "Contact us"}}},
 	}
 	if _, err := wsStore.Save(g, "test"); err != nil {
 		t.Fatalf("save: %v", err)
@@ -64,7 +64,7 @@ func TestForm_NotOptedInIs404(t *testing.T) {
 	_, wh, _, _, wsStore := startWebhookHarness(t)
 	g := core.Graph{
 		ID: "private-wh", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secret": "s"}}}, // no public_form
+		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}}}}, // no public_form
 	}
 	if _, err := wsStore.Save(g, "test"); err != nil {
 		t.Fatalf("save: %v", err)
@@ -159,7 +159,7 @@ func TestForm_POSTSubmitsRun(t *testing.T) {
 	_, wh, jobs, _, wsStore := startWebhookHarness(t)
 	g := core.Graph{
 		ID: "contact2", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secret": "s", "public_form": true}}},
+		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}, "public_form": true}}},
 	}
 	if _, err := wsStore.Save(g, "test"); err != nil {
 		t.Fatalf("save: %v", err)
@@ -196,7 +196,7 @@ func TestForm_DisabledGraphIs404(t *testing.T) {
 	_, wh, _, _, wsStore := startWebhookHarness(t)
 	g := core.Graph{
 		ID: "paused", Tenant: "acme", Workspace: "ws1", Disabled: true,
-		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secret": "s", "public_form": true}}},
+		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}, "public_form": true}}},
 	}
 	if _, err := wsStore.Save(g, "test"); err != nil {
 		t.Fatalf("save: %v", err)
@@ -248,7 +248,7 @@ func TestForm_CustomFieldsRendered(t *testing.T) {
 	_, wh, _, _, wsStore := startWebhookHarness(t)
 	g := core.Graph{
 		ID: "custom", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secret": "s", "public_form": true, "form_fields": []string{"phone", "company"}}}},
+		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}, "public_form": true, "form_fields": []string{"phone", "company"}}}},
 	}
 	if _, err := wsStore.Save(g, "test"); err != nil {
 		t.Fatalf("save: %v", err)
@@ -278,7 +278,7 @@ func TestForm_FieldNameAndTitleEscaped(t *testing.T) {
 	g := core.Graph{
 		ID: "xss", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{
-			"secret":      "s",
+			"secrets":     []any{"s"},
 			"public_form": true,
 			"form_title":  "<script>alert(1)</script>",
 			"form_fields": []string{"<img src=x onerror=alert(2)>"},
