@@ -3,17 +3,18 @@ import { KeyRound, Plus, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
-import type { GitSSHCredential } from "../types";
+import type { GitCredential } from "../types";
 
-// AdminGitSSH manages the org's named SSH credentials — the keys a
-// git_checkout node picks by `account` to clone over ssh://. Mirrors the
-// OAuth-account model, but the key material is pasted here (it can't come
-// from a redirect). Keys are write-only: we show that an account exists and
-// which fields are set, never the key itself.
-export function AdminGitSSH() {
+// AdminGitCredentials manages the org's named Git credentials — what a
+// git_checkout node picks by `account` to clone private repos. Each
+// credential can carry an SSH key (for git@/ssh:// URLs) and/or an HTTPS
+// access token / PAT (for https:// URLs), so one "github" credential works
+// whichever way the repo is cloned. Secrets are write-only: we show that a
+// credential exists and which parts are set, never the material itself.
+export function AdminGitCredentials() {
   const { t } = useTranslation();
   const { token } = useAuth();
-  const [creds, setCreds] = useState<GitSSHCredential[]>([]);
+  const [creds, setCreds] = useState<GitCredential[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,13 +23,15 @@ export function AdminGitSSH() {
   const [privateKey, setPrivateKey] = useState("");
   const [passphrase, setPassphrase] = useState("");
   const [knownHosts, setKnownHosts] = useState("");
+  const [pat, setPat] = useState("");
+  const [username, setUsername] = useState("");
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(() => {
     if (!token) return;
     setLoading(true);
     api
-      .listGitSSHCredentials(token)
+      .listGitCredentials(token)
       .then((r) => setCreds(r.credentials ?? []))
       .catch((e) => setError((e as Error).message))
       .finally(() => setLoading(false));
@@ -43,15 +46,19 @@ export function AdminGitSSH() {
     setSaving(true);
     setError(null);
     try {
-      await api.putGitSSHCredential(token, account.trim(), {
-        private_key: privateKey,
+      await api.putGitCredential(token, account.trim(), {
+        private_key: privateKey || undefined,
         passphrase: passphrase || undefined,
         known_hosts: knownHosts || undefined,
+        token: pat || undefined,
+        username: username || undefined,
       });
       setAccount("");
       setPrivateKey("");
       setPassphrase("");
       setKnownHosts("");
+      setPat("");
+      setUsername("");
       load();
     } catch (e) {
       setError((e as Error).message);
@@ -62,24 +69,26 @@ export function AdminGitSSH() {
 
   const remove = async (acct: string) => {
     if (!token) return;
-    if (!window.confirm(t("gitSSH.confirmDelete", { account: acct }))) return;
+    if (!window.confirm(t("gitCreds.confirmDelete", { account: acct }))) return;
     setError(null);
     try {
-      await api.deleteGitSSHCredential(token, acct);
+      await api.deleteGitCredential(token, acct);
       load();
     } catch (e) {
       setError((e as Error).message);
     }
   };
 
-  const canSave = account.trim() !== "" && privateKey.trim() !== "" && !saving;
+  // At least one of SSH key / access token must be present.
+  const canSave =
+    account.trim() !== "" && (privateKey.trim() !== "" || pat.trim() !== "") && !saving;
 
   return (
     <div>
       <div className="page-title">
         <div>
-          <h1>{t("gitSSH.title")}</h1>
-          <div className="sub">{t("gitSSH.subtitle")}</div>
+          <h1>{t("gitCreds.title")}</h1>
+          <div className="sub">{t("gitCreds.subtitle")}</div>
         </div>
       </div>
 
@@ -89,18 +98,17 @@ export function AdminGitSSH() {
         </div>
       )}
 
-      {/* Existing credentials */}
       {loading ? (
         <div className="card" style={{ color: "var(--muted)" }}>{t("common.loading")}</div>
       ) : creds.length === 0 ? (
-        <div className="card" style={{ color: "var(--muted)" }}>{t("gitSSH.empty")}</div>
+        <div className="card" style={{ color: "var(--muted)" }}>{t("gitCreds.empty")}</div>
       ) : (
         <div className="card" style={{ padding: 0, overflow: "hidden" }}>
           <table className="run-table">
             <thead>
               <tr>
-                <th>{t("gitSSH.colAccount")}</th>
-                <th>{t("gitSSH.colFields")}</th>
+                <th>{t("gitCreds.colAccount")}</th>
+                <th>{t("gitCreds.colParts")}</th>
                 <th></th>
               </tr>
             </thead>
@@ -111,15 +119,20 @@ export function AdminGitSSH() {
                     <KeyRound size={13} /> {c.account}
                   </td>
                   <td style={{ color: "var(--muted)", fontSize: "var(--text-sm)" }}>
-                    {t("gitSSH.fieldKey")}
-                    {c.has_passphrase && " · " + t("gitSSH.fieldPassphrase")}
-                    {c.has_known_hosts && " · " + t("gitSSH.fieldKnownHosts")}
+                    {[
+                      c.has_ssh_key && t("gitCreds.partSSH"),
+                      c.has_token &&
+                        t("gitCreds.partToken") +
+                          (c.username ? ` (${c.username})` : ""),
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </td>
                   <td style={{ textAlign: "right", paddingRight: 12 }}>
                     <button
                       className="btn-ghost"
                       onClick={() => void remove(c.account)}
-                      title={t("gitSSH.delete")}
+                      title={t("gitCreds.delete")}
                       style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
                     >
                       <Trash2 size={14} />
@@ -132,24 +145,48 @@ export function AdminGitSSH() {
         </div>
       )}
 
-      {/* Add / replace */}
       <div className="card" style={{ marginTop: "var(--space-4)" }}>
-        <h2 style={{ marginTop: 0 }}>{t("gitSSH.addTitle")}</h2>
+        <h2 style={{ marginTop: 0 }}>{t("gitCreds.addTitle")}</h2>
         <div className="sf-field">
-          <label>{t("gitSSH.accountLabel")}</label>
+          <label>{t("gitCreds.accountLabel")}</label>
           <input
             type="text"
             value={account}
-            placeholder="github-deploy"
+            placeholder="github"
             onChange={(e) => setAccount(e.target.value)}
           />
-          <div className="desc">{t("gitSSH.accountDesc")}</div>
+          <div className="desc">{t("gitCreds.accountDesc")}</div>
+        </div>
+
+        <h3 style={{ marginBottom: 4 }}>{t("gitCreds.tokenSection")}</h3>
+        <div className="sf-field">
+          <label>{t("gitCreds.tokenLabel")}</label>
+          <input
+            type="password"
+            value={pat}
+            autoComplete="new-password"
+            placeholder="ghp_…"
+            onChange={(e) => setPat(e.target.value)}
+          />
+          <div className="desc">{t("gitCreds.tokenDesc")}</div>
         </div>
         <div className="sf-field">
-          <label>{t("gitSSH.privateKeyLabel")}</label>
+          <label>{t("gitCreds.usernameLabel")}</label>
+          <input
+            type="text"
+            value={username}
+            placeholder="git"
+            onChange={(e) => setUsername(e.target.value)}
+          />
+          <div className="desc">{t("gitCreds.usernameDesc")}</div>
+        </div>
+
+        <h3 style={{ marginBottom: 4 }}>{t("gitCreds.sshSection")}</h3>
+        <div className="sf-field">
+          <label>{t("gitCreds.privateKeyLabel")}</label>
           <textarea
             className="test-sample-input"
-            rows={8}
+            rows={7}
             spellCheck={false}
             value={privateKey}
             placeholder={"-----BEGIN OPENSSH PRIVATE KEY-----\n…"}
@@ -157,17 +194,17 @@ export function AdminGitSSH() {
           />
         </div>
         <div className="sf-field">
-          <label>{t("gitSSH.passphraseLabel")}</label>
+          <label>{t("gitCreds.passphraseLabel")}</label>
           <input
             type="password"
             value={passphrase}
             autoComplete="new-password"
             onChange={(e) => setPassphrase(e.target.value)}
           />
-          <div className="desc">{t("gitSSH.passphraseDesc")}</div>
+          <div className="desc">{t("gitCreds.passphraseDesc")}</div>
         </div>
         <div className="sf-field">
-          <label>{t("gitSSH.knownHostsLabel")}</label>
+          <label>{t("gitCreds.knownHostsLabel")}</label>
           <textarea
             className="test-sample-input"
             rows={3}
@@ -176,12 +213,14 @@ export function AdminGitSSH() {
             placeholder={"git.internal.example.com ssh-ed25519 AAAA…"}
             onChange={(e) => setKnownHosts(e.target.value)}
           />
-          <div className="desc">{t("gitSSH.knownHostsDesc")}</div>
+          <div className="desc">{t("gitCreds.knownHostsDesc")}</div>
         </div>
+
         <button className="primary" disabled={!canSave} onClick={() => void save()}>
           <Plus size={15} style={{ verticalAlign: -2, marginRight: 4 }} />
-          {saving ? t("gitSSH.saving") : t("gitSSH.saveBtn")}
+          {saving ? t("gitCreds.saving") : t("gitCreds.saveBtn")}
         </button>
+        <div className="desc" style={{ marginTop: 6 }}>{t("gitCreds.atLeastOne")}</div>
       </div>
     </div>
   );

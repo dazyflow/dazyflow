@@ -27,7 +27,7 @@ import type {
   NodeRunView,
   ScheduleEntry,
   PublishInfo,
-  GitSSHCredential,
+  GitCredential,
   ReferenceGroups,
   ResourceDef,
   SecretManagerStatus,
@@ -695,26 +695,32 @@ export const api = {
         nodeID,
       )}/${enabled ? "enable" : "disable"}`,
     ),
-  // listGitSSHCredentials returns the org's named SSH credentials (names +
-  // which fields are set — never the key). Backs the admin page and the
-  // git_checkout account picker.
-  listGitSSHCredentials: (token: string) =>
-    request<{ credentials: GitSSHCredential[] }>(token, "GET", "/git/ssh-credentials"),
-  // putGitSSHCredential creates or replaces a named SSH credential. The key
-  // is validated server-side before storage.
-  putGitSSHCredential: (
+  // listGitCredentials returns the org's named git credentials (names +
+  // which parts are set — never the secret material). Backs the admin page
+  // and the git_checkout account picker.
+  listGitCredentials: (token: string) =>
+    request<{ credentials: GitCredential[] }>(token, "GET", "/git/credentials"),
+  // putGitCredential creates or replaces a named git credential — an SSH key
+  // and/or an HTTPS access token (PAT). Validated server-side before storage.
+  putGitCredential: (
     token: string,
     account: string,
-    body: { private_key: string; passphrase?: string; known_hosts?: string },
+    body: {
+      private_key?: string;
+      passphrase?: string;
+      known_hosts?: string;
+      token?: string;
+      username?: string;
+    },
   ) =>
     request<void>(
       token,
       "PUT",
-      `/git/ssh-credentials/${encodeURIComponent(account)}`,
+      `/git/credentials/${encodeURIComponent(account)}`,
       body,
     ),
-  deleteGitSSHCredential: (token: string, account: string) =>
-    request<void>(token, "DELETE", `/git/ssh-credentials/${encodeURIComponent(account)}`),
+  deleteGitCredential: (token: string, account: string) =>
+    request<void>(token, "DELETE", `/git/credentials/${encodeURIComponent(account)}`),
   // testTrigger fires a webhook flow with a synthetic JSON payload so a
   // user can verify it end-to-end without wiring an external caller.
   // The daemon seeds webhook_input nodes with `sample` exactly as a real

@@ -70,7 +70,7 @@ func init() {
 					"properties":{
 						"url":{"type":"string","title":"Repository URL","description":"Where the repository lives (https or ssh address). Use ${secret.NAME} placeholders for tokens embedded in the URL."},
 						"ref":{"type":"string","title":"Branch, tag, or commit","description":"What to switch to after fetching. Leave empty for the repo's default branch."},
-						"account":{"type":"string","title":"SSH credential","format":"git-ssh-account","default":"default","description":"Which saved SSH credential to authenticate with for ssh:// or git@ URLs. Manage these on the Git SSH credentials page. Ignored for https URLs."},
+						"account":{"type":"string","title":"Git credential","format":"git-account","default":"default","description":"Which saved Git credential to authenticate with — an SSH key for git@/ssh:// URLs, or an access token (PAT) for https:// URLs. Manage these on the Git credentials page. Public repos need none."},
 						"depth":{"type":"integer","title":"Clone depth","x_advanced":true,"minimum":0,"description":"Shallow-clone depth. 0 (default) clones the full history."}
 					},
 					"required":["url"]
@@ -230,13 +230,13 @@ func openOrClone(ctx context.Context, dst, url, ref string, depth int, progress 
 	if statErr != nil && !os.IsNotExist(statErr) {
 		return nil, "stat_failed", statErr
 	}
-	// Resolve SSH auth once. For ssh:// and git@host: URLs this carries the
-	// org's selected key + a strict host-key callback; for https it's nil
-	// (the guarded https transport handles auth via the URL), leaving the
-	// existing behaviour untouched.
-	auth, authErr := sshAuthForURL(ctx, job, url)
+	// Resolve auth once from the selected git credential. For ssh:// and
+	// git@host: URLs this is the SSH key + a strict host-key callback; for
+	// https:// it's basic auth from the access token (PAT), or nil for a
+	// public repo (unchanged behaviour).
+	auth, authErr := authForURL(ctx, job, url)
 	if authErr != nil {
-		return nil, "ssh_auth_failed", authErr
+		return nil, "git_auth_failed", authErr
 	}
 	logSink := newProgressSink(progress, job)
 	defer logSink.flush()

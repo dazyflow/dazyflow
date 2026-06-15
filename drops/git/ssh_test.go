@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	gossh "golang.org/x/crypto/ssh"
 
 	"git.sr.ht/~klahr/hazyflow/core"
@@ -125,21 +126,41 @@ func base64Key(k gossh.PublicKey) string {
 	return strings.TrimPrefix(strings.TrimSpace(string(gossh.MarshalAuthorizedKey(k))), k.Type()+" ")
 }
 
-func TestSSHAuthForURL_InlineAndNonSSH(t *testing.T) {
+func TestAuthForURL_SSHAndHTTPSAndPublic(t *testing.T) {
+	SetGitCredLookup(nil) // tests use inline params, not the org store
 	keyPEM := genKeyPEM(t)
 
-	// https URL → no SSH auth (nil), https path untouched.
-	auth, err := sshAuthForURL(t.Context(), core.Job{Params: map[string]any{}}, "https://github.com/x/y.git")
+	// Public https URL, no token → no auth (public clone path unchanged).
+	auth, err := authForURL(t.Context(), core.Job{Params: map[string]any{}}, "https://github.com/x/y.git")
 	if err != nil {
-		t.Fatalf("https: %v", err)
+		t.Fatalf("public https: %v", err)
 	}
 	if auth != nil {
-		t.Errorf("https URL must yield nil ssh auth")
+		t.Errorf("public https URL must yield nil auth")
 	}
 
-	// ssh URL with an inline private key → non-nil auth, no lookup needed.
-	job := core.Job{Params: map[string]any{"ssh_private_key": keyPEM}}
-	auth, err = sshAuthForURL(t.Context(), job, "git@github.com:x/y.git")
+	// https URL + inline PAT → HTTP basic auth.
+	job := core.Job{Params: map[string]any{"token": "ghp_abc", "username": "octocat"}}
+	auth, err = authForURL(t.Context(), job, "https://github.com/x/y.git")
+	if err != nil {
+		t.Fatalf("https pat: %v", err)
+	}
+	ba, ok := auth.(*githttp.BasicAuth)
+	if !ok {
+		t.Fatalf("https+token auth = %T, want *http.BasicAuth", auth)
+	}
+	if ba.Username != "octocat" || ba.Password != "ghp_abc" {
+		t.Errorf("basic auth = %q/%q, want octocat/ghp_abc", ba.Username, ba.Password)
+	}
+
+	// https URL + token, no username → defaults username to "git".
+	auth, _ = authForURL(t.Context(), core.Job{Params: map[string]any{"token": "ghp_def"}}, "https://gitlab.com/x/y.git")
+	if ba, ok := auth.(*githttp.BasicAuth); !ok || ba.Username != "git" {
+		t.Errorf("default username not applied: %#v", auth)
+	}
+
+	// ssh URL with an inline private key → public-key auth.
+	auth, err = authForURL(t.Context(), core.Job{Params: map[string]any{"ssh_private_key": keyPEM}}, "git@github.com:x/y.git")
 	if err != nil {
 		t.Fatalf("inline ssh: %v", err)
 	}
@@ -147,10 +168,9 @@ func TestSSHAuthForURL_InlineAndNonSSH(t *testing.T) {
 		t.Errorf("ssh URL with inline key must yield a non-nil auth method")
 	}
 
-	// ssh URL, no inline key, no lookup hook configured → clear error.
-	SetSSHCredLookup(nil)
-	if _, err := sshAuthForURL(t.Context(), core.Job{Params: map[string]any{}}, "git@github.com:x/y.git"); err == nil {
-		t.Errorf("ssh URL without a credential must error")
+	// ssh URL, no key available → clear error.
+	if _, err := authForURL(t.Context(), core.Job{Params: map[string]any{}}, "git@github.com:x/y.git"); err == nil {
+		t.Errorf("ssh URL without an SSH key must error")
 	}
 }
 

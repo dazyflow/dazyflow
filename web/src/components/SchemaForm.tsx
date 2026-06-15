@@ -238,14 +238,14 @@ function SchemaField({ name, schema, required, value, onChange, workspace, accou
       </FieldWrap>
     );
   }
-  // format:"git-ssh-account" renders the git_checkout `account` param as a
-  // dropdown of the org's saved SSH credentials (configured on the Git SSH
+  // format:"git-account" renders the git_checkout `account` param as a
+  // dropdown of the org's saved Git credentials (configured on the Git
   // credentials admin page) — the same "pick a named account" UX as the
-  // OAuth connectors, for raw SSH keys.
-  if (schema.format === "git-ssh-account" && schema.type === "string") {
+  // OAuth connectors, for SSH keys / access tokens.
+  if (schema.format === "git-account" && schema.type === "string") {
     return (
       <FieldWrap name={name} schema={schema} required={required}>
-        <GitSSHAccountField
+        <GitCredAccountField
           value={(value as string) ?? (schema.default as string | undefined) ?? "default"}
           onChange={onChange}
         />
@@ -2683,13 +2683,13 @@ function AccountField({
   );
 }
 
-// GitSSHAccountField renders the git_checkout `account` param as a dropdown
-// of the org's saved SSH credentials, with a link to manage them. Unlike the
-// OAuth AccountField there's no inline "connect" flow — SSH keys are pasted
-// on the admin page — so an empty list points the user there. The current
-// value is always selectable even if not in the list, so a graph never
-// silently drops an account it references.
-function GitSSHAccountField({
+// GitCredAccountField renders the git_checkout `account` param as a dropdown
+// of the org's saved Git credentials, with a link to manage them. Unlike the
+// OAuth AccountField there's no inline "connect" flow — keys/tokens are
+// pasted on the admin page — so an empty list points the user there. The
+// current value is always selectable even if not in the list, so a graph
+// never silently drops an account it references.
+function GitCredAccountField({
   value,
   onChange,
 }: {
@@ -2704,7 +2704,7 @@ function GitSSHAccountField({
     if (!token) return;
     let cancelled = false;
     api
-      .listGitSSHCredentials(token)
+      .listGitCredentials(token)
       .then((r) => {
         if (!cancelled) setAccounts((r.credentials ?? []).map((c) => c.account));
       })
@@ -2732,10 +2732,10 @@ function GitSSHAccountField({
           </option>
         ))}
       </select>
-      <Link to="/admin/git-ssh" style={{ fontSize: "var(--text-sm)" }}>
+      <Link to="/admin/git-credentials" style={{ fontSize: "var(--text-sm)" }}>
         {accounts && accounts.length === 0
-          ? t("gitSSH.addLink")
-          : t("gitSSH.manageLink")}
+          ? t("gitCreds.addLink")
+          : t("gitCreds.manageLink")}
       </Link>
     </div>
   );

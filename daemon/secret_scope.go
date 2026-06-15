@@ -59,7 +59,7 @@ func isReservedSecretName(name string) bool {
 		strings.HasPrefix(name, secretConnPrefix) ||
 		strings.HasPrefix(name, "oauth.") ||
 		strings.HasPrefix(name, "cursor.") ||
-		strings.HasPrefix(name, secretGitSSHPrefix) ||
+		strings.HasPrefix(name, secretGitCredPrefix) ||
 		strings.HasPrefix(name, secretResourcePrefix) ||
 		strings.HasPrefix(name, "cfg:")
 }

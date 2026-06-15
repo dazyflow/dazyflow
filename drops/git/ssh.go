@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	gogittransport "github.com/go-git/go-git/v5/plumbing/transport"
+	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	gitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"github.com/skeema/knownhosts"
 	gossh "golang.org/x/crypto/ssh"
@@ -17,25 +18,36 @@ import (
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
 )
 
-// SSHCredLookup resolves one of the org's named SSH credentials to its key
-// material. The daemon wires this at boot (mirroring SetTokenLookup for
-// OAuth), reading from the per-tenant encrypted store; the tenant rides on
-// ctx. Returns empty strings (no error) when the account isn't configured,
-// so the caller can give a clear "not connected" message.
-type SSHCredLookup func(ctx context.Context, account string) (privateKeyPEM, passphrase, knownHosts string, err error)
+// GitCred is the material for one named, per-org git credential. It may carry
+// an SSH key (for git@/ssh:// URLs), an HTTPS access token / PAT (for
+// https:// URLs), or both — git_checkout uses whichever the repo URL needs.
+type GitCred struct {
+	PrivateKey string
+	Passphrase string
+	KnownHosts string
+	Token      string
+	Username   string
+}
+
+// GitCredLookup resolves one of the org's named credentials to its material.
+// The daemon wires this at boot (mirroring SetTokenLookup for OAuth), reading
+// from the per-tenant encrypted store; the tenant rides on ctx. Returns a
+// zero GitCred (no error) when the account isn't configured, so the caller
+// can give a clear "not connected" message.
+type GitCredLookup func(ctx context.Context, account string) (GitCred, error)
 
 var (
-	sshLookupMu sync.RWMutex
-	sshLookup   SSHCredLookup
+	credLookupMu sync.RWMutex
+	credLookup   GitCredLookup
 )
 
-// SetSSHCredLookup installs the credential resolver. Called once at daemon
+// SetGitCredLookup installs the credential resolver. Called once at daemon
 // startup; nil in unit tests that don't exercise the org credential store
-// (they pass an inline ssh_private_key param instead).
-func SetSSHCredLookup(fn SSHCredLookup) {
-	sshLookupMu.Lock()
-	defer sshLookupMu.Unlock()
-	sshLookup = fn
+// (they pass inline ssh_private_key / token params instead).
+func SetGitCredLookup(fn GitCredLookup) {
+	credLookupMu.Lock()
+	defer credLookupMu.Unlock()
+	credLookup = fn
 }
 
 // bundledKnownHosts seeds host-key verification for the most common public
@@ -52,8 +64,7 @@ git.sr.ht ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMZvRd4EtM7R+IHVMWmDkVU3VLQTSwQDSA
 
 // sshURLParts reports whether rawURL is an SSH remote and, if so, its user
 // and host. It recognizes both the ssh:// scheme and scp-like syntax
-// (git@host:path). user defaults to "git" when the URL omits it — the near-
-// universal convention for forge SSH access.
+// (git@host:path). user defaults to "git" when the URL omits it.
 func sshURLParts(rawURL string) (user, host string, isSSH bool) {
 	raw := strings.TrimSpace(rawURL)
 	if strings.HasPrefix(raw, "ssh://") {
@@ -79,63 +90,84 @@ func sshURLParts(rawURL string) (user, host string, isSSH bool) {
 	return "", "", false
 }
 
-// sshAuthForURL builds the go-git auth method for an SSH-scheme repo URL:
-// the public-key signer from the resolved credential plus a host-key
-// callback seeded from the bundled known-hosts and the credential's own.
-// Returns (nil, nil) for non-SSH URLs so the HTTPS path is untouched.
+// resolveCred picks the credential for this clone: inline params (used by
+// tests / programmatic callers) win; otherwise the named `account` (default
+// "default") is looked up in the org's credential store via the wired hook.
+func resolveCred(ctx context.Context, job core.Job) (GitCred, error) {
+	c := GitCred{
+		PrivateKey: paramOpt(job, "ssh_private_key"),
+		Passphrase: paramOpt(job, "ssh_passphrase"),
+		KnownHosts: paramOpt(job, "ssh_known_hosts"),
+		Token:      paramOpt(job, "token"),
+		Username:   paramOpt(job, "username"),
+	}
+	if c.PrivateKey != "" || c.Token != "" {
+		return c, nil
+	}
+	account := params.StringDefault(job.Params, "account", "default")
+	credLookupMu.RLock()
+	fn := credLookup
+	credLookupMu.RUnlock()
+	if fn == nil {
+		return GitCred{}, nil
+	}
+	return fn(ctx, account)
+}
+
+func paramOpt(job core.Job, key string) string {
+	v, _ := params.StringOpt(job.Params, key)
+	return v
+}
+
+// authForURL builds the go-git auth method for a repo URL:
+//   - ssh:// or git@host: → public-key auth from the credential's SSH key
+//     plus a strict host-key callback.
+//   - https:// → HTTP basic auth from the credential's access token (PAT) —
+//     or nil when there's no token (a public repo clones unauthenticated).
 //
-// Credential resolution mirrors the OAuth connectors' account model: an
-// inline `ssh_private_key` param (used by tests / programmatic callers)
-// wins; otherwise the named `account` (default "default") is looked up in
-// the org's credential store via the wired hook.
-func sshAuthForURL(ctx context.Context, job core.Job, rawURL string) (gogittransport.AuthMethod, error) {
-	user, host, isSSH := sshURLParts(rawURL)
-	if !isSSH {
-		return nil, nil
-	}
-
-	privateKey, _ := params.StringOpt(job.Params, "ssh_private_key")
-	passphrase, _ := params.StringOpt(job.Params, "ssh_passphrase")
-	knownHosts, _ := params.StringOpt(job.Params, "ssh_known_hosts")
-
-	if privateKey == "" {
+// Credential resolution mirrors the OAuth connectors' account model (see
+// resolveCred). Returns (nil, nil) for an https URL with no token so the
+// existing public-clone path is unchanged.
+func authForURL(ctx context.Context, job core.Job, rawURL string) (gogittransport.AuthMethod, error) {
+	cred, err := resolveCred(ctx, job)
+	if err != nil {
 		account := params.StringDefault(job.Params, "account", "default")
-		sshLookupMu.RLock()
-		fn := sshLookup
-		sshLookupMu.RUnlock()
-		if fn == nil {
-			return nil, fmt.Errorf("ssh clone needs an SSH credential, but none is configured (add one under Git SSH credentials, or use an https URL)")
-		}
-		var err error
-		privateKey, passphrase, knownHosts, err = fn(ctx, account)
-		if err != nil {
-			return nil, fmt.Errorf("look up SSH credential %q: %w", account, err)
-		}
-		if privateKey == "" {
-			return nil, fmt.Errorf("SSH credential %q is not configured for this organization", account)
-		}
+		return nil, fmt.Errorf("look up git credential %q: %w", account, err)
 	}
 
-	auth, err := gitssh.NewPublicKeys(user, []byte(privateKey), passphrase)
-	if err != nil {
-		return nil, fmt.Errorf("parse SSH private key: %w (a passphrase-protected key needs its passphrase set on the credential)", err)
+	user, host, isSSH := sshURLParts(rawURL)
+	if isSSH {
+		if cred.PrivateKey == "" {
+			return nil, fmt.Errorf("ssh clone needs an SSH key, but the selected git credential has none (add one under Git credentials, or use an https URL with an access token)")
+		}
+		auth, err := gitssh.NewPublicKeys(user, []byte(cred.PrivateKey), cred.Passphrase)
+		if err != nil {
+			return nil, fmt.Errorf("parse SSH private key: %w (a passphrase-protected key needs its passphrase set on the credential)", err)
+		}
+		db, err := hostKeyDB(cred.KnownHosts)
+		if err != nil {
+			return nil, fmt.Errorf("host-key verification setup for %q: %w", host, err)
+		}
+		auth.HostKeyCallback = db.HostKeyCallback()
+		hostPort := host + ":22"
+		if u, perr := url.Parse(rawURL); perr == nil && u.Port() != "" {
+			hostPort = host + ":" + u.Port()
+		}
+		auth.HostKeyAlgorithms = db.HostKeyAlgorithms(hostPort)
+		return auth, nil
 	}
-	db, err := hostKeyDB(knownHosts)
-	if err != nil {
-		return nil, fmt.Errorf("host-key verification setup for %q: %w", host, err)
+
+	// https — authenticate with the access token (PAT) when present. GitHub,
+	// GitLab, Bitbucket et al. accept the token as the basic-auth password
+	// with any non-empty username; default to "git" when none is set.
+	if cred.Token != "" {
+		username := cred.Username
+		if username == "" {
+			username = "git"
+		}
+		return &githttp.BasicAuth{Username: username, Password: cred.Token}, nil
 	}
-	auth.HostKeyCallback = db.HostKeyCallback()
-	// Constrain the negotiated host-key algorithm to the ones we have an
-	// entry for. Without this the client accepts whatever type the server
-	// prefers (often RSA/ECDSA), which then fails our ed25519-only entry as
-	// a "key mismatch" even though the host IS known. HostKeyAlgorithms is
-	// empty for an unknown host — the callback still rejects it.
-	hostPort := host + ":22"
-	if u, perr := url.Parse(rawURL); perr == nil && u.Port() != "" {
-		hostPort = host + ":" + u.Port()
-	}
-	auth.HostKeyAlgorithms = db.HostKeyAlgorithms(hostPort)
-	return auth, nil
+	return nil, nil
 }
 
 // hostKeyDB builds a strict known-hosts database from the bundled defaults

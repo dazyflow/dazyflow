@@ -287,14 +287,25 @@ func main() {
 	// over the API) is set up below in setupEncryptedSecrets.
 	secrets := map[string]core.SecretProvider{}
 	encryptedSecrets := setupEncryptedSecrets(ctx, masterKeyB64, secrets, pgPool)
-	// Resolve a git_checkout node's selected SSH credential (by account) to
-	// its key material from the per-tenant encrypted store at clone time.
-	// Mirrors the OAuth connectors' SetTokenLookup wiring; no-op without an
-	// encrypted store (then ssh:// clones report "no credential configured").
+	// Resolve a git_checkout node's selected git credential (by account) to
+	// its material (SSH key and/or HTTPS PAT) from the per-tenant encrypted
+	// store at clone time. Mirrors the OAuth connectors' SetTokenLookup
+	// wiring; no-op without an encrypted store (then private clones report
+	// "no credential configured").
 	if encryptedSecrets != nil {
 		es := encryptedSecrets
-		gitdrop.SetSSHCredLookup(func(ctx context.Context, account string) (string, string, string, error) {
-			return es.LookupGitSSHCredential(ctx, account)
+		gitdrop.SetGitCredLookup(func(ctx context.Context, account string) (gitdrop.GitCred, error) {
+			rc, err := es.LookupGitCredential(ctx, account)
+			if err != nil {
+				return gitdrop.GitCred{}, err
+			}
+			return gitdrop.GitCred{
+				PrivateKey: rc.PrivateKey,
+				Passphrase: rc.Passphrase,
+				KnownHosts: rc.KnownHosts,
+				Token:      rc.Token,
+				Username:   rc.Username,
+			}, nil
 		})
 	}
 	// Stripe price picker: lists the tenant's active prices for the

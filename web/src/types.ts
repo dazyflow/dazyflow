@@ -645,13 +645,17 @@ export type PublishInfo = {
   dirty: boolean;
 };
 
-// GitSSHCredential is one named per-org SSH credential from
-// GET /git/ssh-credentials: the account name and which optional fields are
-// set. The key material is never returned by the API.
-export type GitSSHCredential = {
+// GitCredential is one named per-org git credential from
+// GET /git/credentials: the account name and which parts are set (an SSH key
+// and/or an HTTPS access token). Secret material is never returned by the API;
+// the non-secret username is.
+export type GitCredential = {
   account: string;
+  has_ssh_key: boolean;
   has_passphrase: boolean;
   has_known_hosts: boolean;
+  has_token: boolean;
+  username?: string;
 };
 
 // OAuthProviderStatus is one entry from GET /oauth/providers: a
