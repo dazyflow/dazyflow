@@ -23,9 +23,9 @@ import (
 //
 // Routes (registered in httpgateway.go):
 //
-//	GET    …/files/list?path=        list one directory          (graph:run)
-//	GET    …/files/download?path=    download one file           (graph:run)
-//	GET    …/files/usage             tenant byte usage vs limit  (graph:run)
+//	GET    …/files/list?path=        list one directory          (graph:edit)
+//	GET    …/files/download?path=    download one file           (graph:edit)
+//	GET    …/files/usage             tenant byte usage vs limit  (graph:edit)
 //	DELETE …/files?path=             delete a file or directory  (graph:edit)
 //	POST   …/files/mkdir   {path}    create a directory          (graph:edit)
 //	POST   …/files/rename  {from,to} move/rename                 (graph:edit)
@@ -98,7 +98,7 @@ func isScratch(rel string) bool {
 }
 
 func (h *HTTPGateway) listWorkspaceFiles(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	rootFS, ok := h.openWorkspaceFS(rw, r, p, core.PermGraphRun)
+	rootFS, ok := h.openWorkspaceFS(rw, r, p, core.PermGraphEdit)
 	if !ok {
 		return
 	}
@@ -160,7 +160,7 @@ func (h *HTTPGateway) listWorkspaceFiles(rw http.ResponseWriter, r *http.Request
 }
 
 func (h *HTTPGateway) downloadWorkspaceFile(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	rootFS, ok := h.openWorkspaceFS(rw, r, p, core.PermGraphRun)
+	rootFS, ok := h.openWorkspaceFS(rw, r, p, core.PermGraphEdit)
 	if !ok {
 		return
 	}
@@ -334,7 +334,7 @@ func (h *HTTPGateway) workspaceFileUsage(rw http.ResponseWriter, r *http.Request
 		writeJSONError(rw, http.StatusForbidden, err.Error())
 		return
 	}
-	if err := core.Require(p, core.PermGraphRun); err != nil {
+	if err := core.Require(p, core.PermGraphEdit); err != nil {
 		writeJSONError(rw, http.StatusForbidden, err.Error())
 		return
 	}

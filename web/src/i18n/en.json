@@ -93,6 +93,7 @@
   },
   "files": {
     "title": "Files",
+    "noAccess": "Workspace files are managed by editors and admins. Ask an admin if you need access.",
     "root": "Workspace",
     "breadcrumbLabel": "Folder path",
     "newFolder": "New folder",

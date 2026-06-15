@@ -93,6 +93,7 @@
   },
   "files": {
     "title": "Filer",
+    "noAccess": "Arbetsytans filer hanteras av redaktörer och administratörer. Fråga en administratör om du behöver åtkomst.",
     "root": "Arbetsyta",
     "breadcrumbLabel": "Sökväg",
     "newFolder": "Ny mapp",

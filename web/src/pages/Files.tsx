@@ -21,8 +21,9 @@ import type { FileEntry } from "../types";
 
 // Files is the workspace file manager: a browsable view of the persistent
 // sandbox that flows read from and write to (git_checkout clones, file_write
-// outputs, uploads). Read is open to anyone who can run flows; mutation
-// (upload / new folder / rename / delete) needs graph:edit.
+// outputs, uploads). It's an authoring surface — both viewing and mutating
+// require graph:edit, so it's gated to editors/admins (viewers, who can only
+// run flows, don't see it). Mutations are additionally enforced server-side.
 
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -75,7 +76,9 @@ export function Files() {
   const ready = !!token && !!activeTenant && !!activeWorkspace;
 
   const refresh = useCallback(() => {
-    if (!ready) return;
+    // Files is editor-gated; viewers can't read it, so skip the (403-bound)
+    // fetch entirely — the page renders a no-access notice instead.
+    if (!ready || !canWrite) return;
     setError(null);
     setEntries(null);
     api
@@ -88,7 +91,7 @@ export function Files() {
       .workspaceFileUsage(token!, activeTenant, activeWorkspace)
       .then(setUsage)
       .catch(() => setUsage(null));
-  }, [ready, token, activeTenant, activeWorkspace, cwd]);
+  }, [ready, canWrite, token, activeTenant, activeWorkspace, cwd]);
 
   useEffect(refresh, [refresh]);
 
@@ -277,6 +280,17 @@ export function Files() {
   // type check failed, so we never preventDefault'd and Firefox ignored the
   // drop. An internal move always sets dragSrc, so the two never collide.
   const externalDrag = () => canWrite && dragSrc === null;
+
+  // Editor-gated surface: a viewer (graph:run only) who navigates here directly
+  // gets a notice rather than an empty/403 manager.
+  if (!canWrite) {
+    return (
+      <div className="page files-page">
+        <h1>{t("files.title")}</h1>
+        <p className="desc">{t("files.noAccess")}</p>
+      </div>
+    );
+  }
 
   return (
     <div
