@@ -1061,6 +1061,7 @@
     "portRequired": "required",
     "portOptional": "optional",
     "missingValue": "Missing required value: {{name}}",
+    "loopHint": "This step runs once on the whole list of items. To handle them one at a time, add a 'For each' loop between them.",
     "needsSetup": "Connect {{name}} to use this step",
     "connect": "Connect {{name}}",
     "askAdmin": "Ask an admin to connect {{name}}",
@@ -1228,6 +1229,7 @@
     "refPicker": {
       "insert": "Insert a reference",
       "title": "Insert a value",
+      "search": "Search fields… (e.g. email)",
       "loading": "Loading…",
       "empty": "Nothing to reference yet",
       "upstream": "From earlier steps",
@@ -1394,6 +1396,7 @@
     "readOnly": "Read-only — missing graph:edit",
     "lockedRun": "Locked — run {{runID}} is in progress",
     "run": "Run",
+    "runTestTrigger": "Runs once now, to test. To run automatically on new responses, click Publish.",
     "running": "Running…",
     "testEvent": "Send test event",
     "sending": "Sending…",

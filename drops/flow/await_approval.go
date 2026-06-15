@@ -18,9 +18,14 @@ func init() {
 			Category:    "flow_control",
 			Provider:    "internal",
 			Tags:        []string{"human_in_the_loop", "approval", "pause", "wait"},
-			Description: "Pause the graph until an external HTTP approval arrives. Emits the approval URL on `pending_url` so downstream nodes (email, Slack) can notify a human. On resume, routes the input `Value` out the `Approved` or `Rejected` port matching the decision (wire each to its follow-up — Branch-style, no separate Branch node needed), alongside the `Approver` who decided and their `Comment`.",
-			Summary:     "Park the flow until a human hits the approve or reject link, then route downstream by decision.",
+			Description: "Pause the flow until someone approves. Order of wiring: put this step BEFORE the step that notifies a person — it hands you an `Approval link` (the `pending_url` output) to put in that notification (e.g. ntfy's 'Link to open', or an email body). The person taps the link to approve or reject; only then does the rest of the flow continue. On resume, the input `Value` comes out the `Approved` or `Rejected` port matching the decision (wire each to its follow-up — no separate Branch needed), alongside the `Approver` who decided and their `Comment`.",
+			Summary:     "Pause until a person approves: hand a link to your notify step, then continue on their decision.",
 			Examples: []core.ParamsExample{
+				{
+					Title:  "Notify on ntfy, then approve before sending",
+					Params: json.RawMessage(`{"prompt":"A reply is ready to send. Approve?"}`),
+					Notes:  "Wire the draft into Value; wire pending_url (Approval link) into the ntfy step's 'Link to open'; wire the Approved port into your send step.",
+				},
 				{
 					Title:  "Ask a manager to approve a refund",
 					Params: json.RawMessage(`{"prompt":"Refund $230 to customer #4821 — order shipped damaged. Approve?"}`),
@@ -50,7 +55,7 @@ func init() {
 				Label: "Value",
 			}},
 			Outputs: []core.Port{
-				{Port: "pending_url", Label: "Approval URL", MIME: []string{"text/plain"}},
+				{Port: "pending_url", Label: "Approval link", MIME: []string{"text/plain"}},
 				// Branch-style decision ports: the input Value rides out exactly
 				// one of these — `approved` on approve, `rejected` on reject — so
 				// downstream edges fork on the decision by port presence, the

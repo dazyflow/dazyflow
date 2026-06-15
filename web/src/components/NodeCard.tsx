@@ -1,5 +1,5 @@
 import { Handle, Position, useStore, type NodeProps } from "@xyflow/react";
-import { AlertTriangle, AlertCircle, ChevronRight } from "lucide-react";
+import { AlertTriangle, AlertCircle, ChevronRight, Repeat } from "lucide-react";
 import i18n from "../i18n";
 import { Switch } from "./Switch";
 import { iconFor, isBrandedIcon, dropColor } from "../icons";
@@ -489,6 +489,11 @@ export function HazyNode({ data, selected }: NodeProps) {
           <AlertTriangle size={13} />
         </div>
       )}
+      {d.loopHint && (
+        <div className="hz-node-loop" title={d.loopHint} aria-label="runs once on the whole list">
+          <Repeat size={13} />
+        </div>
+      )}
       {d.configErrors && d.configErrors.length > 0 && (
         <div
           className="hz-node-config"
@@ -743,6 +748,11 @@ function OperatorChip({
       {d.lintMessage && (
         <div className="hz-node-lint" title={d.lintMessage} aria-label="lint warning">
           <AlertTriangle size={13} />
+        </div>
+      )}
+      {d.loopHint && (
+        <div className="hz-node-loop" title={d.loopHint} aria-label="runs once on the whole list">
+          <Repeat size={13} />
         </div>
       )}
       {d.configErrors && d.configErrors.length > 0 && (

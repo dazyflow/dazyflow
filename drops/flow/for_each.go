@@ -29,6 +29,11 @@ func init() {
 			Summary:     "Fan out a list and run the same step module on every item, optionally in parallel, collecting results in order.",
 			Examples: []core.ParamsExample{
 				{
+					Title:  "Handle each new form response one at a time",
+					Params: json.RawMessage(`{}`),
+					Notes:  "A trigger like Google Forms emits a LIST of new responses. Wire that list into 'List' here, then wire the steps that handle one response (AI reply → save → notify → send) to the 'Loop body' pin. Inside the body, refer to the current response as ${item.email}, ${item.Message}, etc. Without this, the next step would run once on the whole batch.",
+				},
+				{
 					Title:  "POST each row to a webhook, 5 at a time",
 					Params: json.RawMessage(`{"step_module":"http","step_params":{"method":"POST","url":"https://api.example.com/orders","body":"${item.}"},"concurrency":5}`),
 					Notes:  "${item.} splices the whole item as JSON into the body. Use ${item.field.subfield} for a nested value.",

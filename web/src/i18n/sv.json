@@ -1057,6 +1057,7 @@
     "portRequired": "obligatorisk",
     "portOptional": "valfri",
     "missingValue": "Obligatoriskt värde saknas: {{name}}",
+    "loopHint": "Det här steget körs en gång på hela listan. Lägg till en 'För varje'-loop emellan för att hantera ett objekt i taget.",
     "needsSetup": "Anslut {{name}} för att använda det här steget",
     "connect": "Anslut {{name}}",
     "askAdmin": "Be en administratör att ansluta {{name}}",
@@ -1223,6 +1224,7 @@
     },
     "refPicker": {
       "insert": "Infoga en referens",
+      "search": "Sök fält… (t.ex. email)",
       "loading": "Laddar…",
       "empty": "Inget att referera till än",
       "upstream": "Från tidigare steg",
@@ -1381,6 +1383,7 @@
     "readOnly": "Skrivskyddad — saknar graph:edit",
     "lockedRun": "Låst — körning {{runID}} pågår",
     "run": "Kör",
+    "runTestTrigger": "Kör en gång nu, för att testa. Klicka på Publicera för att köra automatiskt på nya svar.",
     "running": "Kör…",
     "testEvent": "Skicka testhändelse",
     "sending": "Skickar…",

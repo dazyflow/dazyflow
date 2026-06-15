@@ -14,27 +14,27 @@ import (
 	"strings"
 
 	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/hazyflow/engine"
 	_ "modernc.org/sqlite"
 )
 
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "sqlite_insert_rows",
-			Version:        "1.0",
-			Label:          "SQLite",
-			Subtitle:       "Insert rows",
-			Color:          "#0a6abf",
-			Icon:           "database",
-			BrandLogo:      "/brands/sqlite.svg",
-			Category:       "io",
-			Provider:       "internal",
-			Integration:    "SQLite",
-			Tags:           []string{"sqlite", "sql", "database", "insert", "etl"},
-			Description:    "Insert rows into a SQLite table in your workspace. The table is auto-created from the row shape by default — flip create_table off if you've already set up the schema with indexes or constraints you don't want overwritten.",
-			Summary:        "Batch-insert rows into a workspace-sandboxed SQLite file inside one transaction; auto-creates the table from headers.",
+			ID:          "sqlite_insert_rows",
+			Version:     "1.0",
+			Label:       "SQLite",
+			Subtitle:    "Insert rows",
+			Color:       "#0a6abf",
+			Icon:        "database",
+			BrandLogo:   "/brands/sqlite.svg",
+			Category:    "io",
+			Provider:    "internal",
+			Integration: "SQLite",
+			Tags:        []string{"sqlite", "sql", "database", "insert", "save", "store", "etl"},
+			Description: "Save rows into a database file kept in your workspace — no server, connection string, or setup needed (this is the easy database; use Postgres/MySQL only if you already have one). The table is auto-created from the row shape by default; flip create_table off if you've already set up a schema you don't want overwritten.",
+			Summary:     "Save rows into a workspace database file — no setup; the table is auto-created from the row shape.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Save Excel rows to a local database",
@@ -58,8 +58,8 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"path":         {"type":"string","format":"workspace-path","title":"Database file","description":"SQLite file path inside the workspace sandbox. Created on first insert."},
-					"table":        {"type":"string","description":"Target table. Created from headers when create_table=true (the default)."},
+					"path":         {"type":"string","format":"workspace-path","title":"Database file","default":"data/app.db","description":"Database file kept in your workspace. Created automatically on first save."},
+					"table":        {"type":"string","title":"Table","default":"rows","description":"Which table to save into. Created from the row columns when create_table=true (the default)."},
 					"create_table": {"type":"boolean","default":true,"description":"Auto-create the table from the supplied headers if it doesn't exist. Set false to fail loudly when the table is missing."},
 					"column_types": {"type":"object","additionalProperties":{"type":"string"},"description":"Override per-column type (e.g. {\"age\":\"INTEGER\",\"created_at\":\"DATETIME\"}). Defaults to TEXT for every header."}
 				},

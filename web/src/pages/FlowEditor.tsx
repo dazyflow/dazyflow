@@ -1495,6 +1495,38 @@ function EditorInner() {
     return out;
   }, [nodes, paramsByID, providers, secrets, disabledNodes]);
 
+  // loopHintByNode flags a node that has a LIST wired into a one-at-a-time
+  // input — e.g. a Google Form's "responses" list straight into an AI/email
+  // step. That step would run once on the whole batch; the fix is a For each
+  // loop. Detected from port cardinality (Port.list): a list output → a
+  // non-list input (ignoring the pass pin). Nodes inside a loop body already
+  // run per-item, and for_each itself is the fix, so both are skipped.
+  const loopHintByNode = useMemo(() => {
+    const out = new Map<string, string>();
+    const byId = new Map(nodes.map((n) => [n.id, n]));
+    const portIsList = (
+      mod: string | undefined,
+      portID: string | null | undefined,
+      kind: "inputs" | "outputs",
+    ) => {
+      const m = mod ? manifestByID.get(mod) : undefined;
+      if (!m || !portID) return false;
+      return !!(m[kind] ?? []).find((p) => p.port === portID)?.list;
+    };
+    for (const e of edges) {
+      if (!e.sourceHandle || !e.targetHandle || e.targetHandle === "pass") continue;
+      const tgt = byId.get(e.target);
+      const tgtMod = (tgt?.data as HazyNodeData | undefined)?.moduleID;
+      if (!tgtMod || tgtMod === "for_each") continue;
+      if (disabledNodes.has(e.target) || loopOwnerByNode.has(e.target)) continue;
+      const srcMod = (byId.get(e.source)?.data as HazyNodeData | undefined)?.moduleID;
+      if (portIsList(srcMod, e.sourceHandle, "outputs") && !portIsList(tgtMod, e.targetHandle, "inputs")) {
+        out.set(e.target, t("nodeCard.loopHint"));
+      }
+    }
+    return out;
+  }, [edges, nodes, manifestByID, disabledNodes, loopOwnerByNode, t]);
+
   // Resolve resource-picker IDs (spreadsheet_id/form_id) to their human
   // names so the card shows the name, not the opaque id. We fetch each
   // (kind, account) list once and cache id→name; google-sheet-tab needs no
@@ -1669,6 +1701,7 @@ function EditorInner() {
         outputs: runOutputs[n.id],
         configErrors: configErrorsByNode.get(n.id),
         setupNeeded: setupNeededByNode.get(n.id),
+        loopHint: loopHintByNode.get(n.id),
         canConnect,
         resourceLabels: resourceLabelsByNode.get(n.id),
         loopOwned: loopOwnerByNode.has(n.id),
@@ -1688,6 +1721,7 @@ function EditorInner() {
     runOutputs,
     configErrorsByNode,
     setupNeededByNode,
+    loopHintByNode,
     canConnect,
     resourceLabelsByNode,
     loopOwnerByNode,
@@ -3155,9 +3189,11 @@ function EditorInner() {
                 title={
                   dirty
                     ? t("editor.saveFirst")
-                    : hasPerm("graph:run")
-                    ? t("editor.run")
-                    : t("editor.missingRunPerm")
+                    : !hasPerm("graph:run")
+                    ? t("editor.missingRunPerm")
+                    : hasAnyTrigger
+                    ? t("editor.runTestTrigger")
+                    : t("editor.run")
                 }
               >
                 <Play size={15} />

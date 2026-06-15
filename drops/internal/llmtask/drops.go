@@ -43,10 +43,12 @@ func askDrop(cfg Config) engine.NativeDrop {
 			ExecutionModel:   core.ExecutionBatch,
 			ProcessModel:     core.ProcessLongLived,
 			Inputs:           []core.Port{{Port: "prompt", Label: "Prompt"}},
-			Outputs:          []core.Port{{Port: "text", Label: "Text", MIME: []string{"text/plain"}}},
-			ParamsSchema:     schemaJSON(props, nil),
-			Idempotent:       true,
-			RetryPolicy:      core.RetryExponentialBackoff,
+			// Port id stays "text" (existing wires reference it); the label is
+			// the role, "Response", matching the task drops' Summary/Reply.
+			Outputs:      []core.Port{{Port: "text", Label: "Response", MIME: []string{"text/plain"}}},
+			ParamsSchema: schemaJSON(props, nil),
+			Idempotent:   true,
+			RetryPolicy:  core.RetryExponentialBackoff,
 		},
 		Execute: func(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 			apiKey, jerr := resolveKey(job, cfg)

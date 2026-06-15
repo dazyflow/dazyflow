@@ -21,7 +21,7 @@ func init() {
 			Label:       "Google Forms",
 			Subtitle:    "New responses",
 			Summary:     "Fires when a Google Form gets new responses, emitting each answer keyed by its question title.",
-			Description: "Watches a Google Form and fires when new responses arrive (each response exactly once). `responses` is a list of objects keyed by question title — wire it straight into a Sheets append. When a check finds nothing new, the rest of the flow is skipped. Leave the interval blank to check only when you press Run.",
+			Description: "Watches a Google Form and fires when new responses arrive (each response exactly once). `responses` is a list of objects keyed by question title — wire it straight into a Sheets append. Each response also carries `email` (the respondent's address) when the form collects email addresses, so you can reply to them. When a check finds nothing new, the rest of the flow is skipped. Publish the flow so it runs automatically on the schedule below — pressing Run only checks once, for testing.",
 			Integration: "Google Forms",
 			Category:    "trigger",
 			Icon:        "clipboard-list",
@@ -58,7 +58,7 @@ func init() {
 						"minimum":1,
 						"maximum":31622400,
 						"default":300,
-						"description":"How often to look for new responses. Leave blank to check only when you press Run."
+						"description":"How often to check for new responses once the flow is published. Leave blank to only check when you press Run (for testing)."
 					},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
 				},
@@ -183,7 +183,9 @@ func FieldNames(ctx context.Context, job core.Job) ([]string, error) {
 	}
 	sort.Strings(out)
 	// Structural keys every response carries, appended after the titles.
-	return append(out, "responseId", "submittedTime"), nil
+	// `email` is only populated when the form collects email addresses, but we
+	// always surface it as a hint so a reply/email step can map it.
+	return append(out, "email", "responseId", "submittedTime"), nil
 }
 
 // fetchTitles returns questionId → title for a form, served from a short

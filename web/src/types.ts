@@ -147,6 +147,11 @@ export type Port = {
   variadic?: boolean;
   mime?: string[];
   required?: boolean;
+  // list marks a port that carries a LIST of records (set centrally on
+  // conventionally-named ports). A list output wired into a non-list input is
+  // the "you fed a whole list into a one-at-a-time step" tell — see the loop
+  // hint in FlowEditor.
+  list?: boolean;
 };
 
 // ConnectionRequirement is one credential a drop needs to run, surfaced

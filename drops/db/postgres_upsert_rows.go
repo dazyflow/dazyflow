@@ -7,27 +7,27 @@ import (
 	"strings"
 
 	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/hazyflow/engine"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "postgres_upsert_rows",
-			Version:        "1.0",
-			Label:          "Postgres",
-			Subtitle:       "Upsert rows",
-			Color:          "#336791",
-			Icon:           "database",
-			BrandLogo:      "/brands/postgres.svg",
-			Category:       "io",
-			Provider:       "internal",
-			Integration:    "Postgres",
-			Tags:           []string{"postgres", "postgresql", "sql", "database", "upsert", "merge", "etl"},
-			Description:    "Upsert (insert-or-update) rows into a Postgres table. Set the conflict columns — Postgres matches existing rows on those, updating them in place, while new rows get inserted. Pick which columns get updated on a match if you want to preserve some existing values.",
-			Summary:        "Insert-or-update rows in Postgres via INSERT ... ON CONFLICT, matching existing rows on the conflict columns.",
+			ID:          "postgres_upsert_rows",
+			Version:     "1.0",
+			Label:       "Postgres",
+			Subtitle:    "Upsert rows",
+			Color:       "#336791",
+			Icon:        "database",
+			BrandLogo:   "/brands/postgres.svg",
+			Category:    "io",
+			Provider:    "internal",
+			Integration: "Postgres",
+			Tags:        []string{"postgres", "postgresql", "sql", "database", "upsert", "merge", "etl"},
+			Description: "Upsert (insert-or-update) rows into a Postgres table. Set the conflict columns — Postgres matches existing rows on those, updating them in place, while new rows get inserted. Pick which columns get updated on a match if you want to preserve some existing values.",
+			Summary:     "Insert-or-update rows in Postgres via INSERT ... ON CONFLICT, matching existing rows on the conflict columns.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Sync customers by email",

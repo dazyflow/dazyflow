@@ -100,6 +100,13 @@ type Port struct {
 	Variadic bool     `json:"variadic"`
 	Min      *int     `json:"min,omitempty"`
 	Max      *int     `json:"max,omitempty"`
+	// List marks a port that carries a LIST of records (an array of
+	// {column: value} objects) rather than a single value. Set on both
+	// outputs that emit a list (a trigger's new responses, a DB query's rows)
+	// and inputs that consume a list (for_each's items, an insert's rows).
+	// Drives the "you wired a list into a one-at-a-time step — wrap it in a
+	// For each loop" hint: a List output into a non-List input is the tell.
+	List bool `json:"list,omitempty"`
 }
 
 type Manifest struct {
@@ -351,6 +358,50 @@ func WithPassthrough(m Manifest) Manifest {
 	pin := Port{Port: PassPort, Label: "Pass-through"}
 	m.Inputs = append([]Port{pin}, m.Inputs...)
 	m.Outputs = append([]Port{pin}, m.Outputs...)
+	return m
+}
+
+// listPortNames are the conventional port ids that carry a LIST — a set of
+// records (rows/responses/…) or, for headers, a list of column names. The
+// codebase names list ports consistently, so marking by name (centrally, next
+// to WithPassthrough) gives every drop accurate cardinality without annotating
+// each port literal. Scalar/per-item inputs (text, message, to, body, prompt,
+// …) are deliberately absent, so a List output wired into one of them is the
+// detectable "you fed a whole list into a one-at-a-time step" mistake.
+var listPortNames = map[string]bool{
+	"rows":          true,
+	"headers":       true,
+	"responses":     true,
+	"messages":      true,
+	"issues":        true,
+	"events":        true,
+	"subscriptions": true,
+	"customers":     true,
+	"items":         true,
+	"results":       true,
+	"records":       true,
+}
+
+// MarkListPorts returns m with List=true on every input/output port whose id is
+// a conventional list-carrying name (see listPortNames). It copies the port
+// slices so the registry's stored manifest is never mutated, and only ever sets
+// List true — a drop that needs a different answer can set Port.List itself.
+func MarkListPorts(m Manifest) Manifest {
+	mark := func(ports []Port) []Port {
+		if len(ports) == 0 {
+			return ports
+		}
+		out := make([]Port, len(ports))
+		copy(out, ports)
+		for i := range out {
+			if !out[i].List && listPortNames[out[i].Port] {
+				out[i].List = true
+			}
+		}
+		return out
+	}
+	m.Inputs = mark(m.Inputs)
+	m.Outputs = mark(m.Outputs)
 	return m
 }
 

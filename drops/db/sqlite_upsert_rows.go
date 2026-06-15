@@ -10,27 +10,27 @@ import (
 	"strings"
 
 	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/hazyflow/engine"
 	_ "modernc.org/sqlite"
 )
 
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "sqlite_upsert_rows",
-			Version:        "1.0",
-			Label:          "SQLite",
-			Subtitle:       "Upsert rows",
-			Color:          "#0a6abf",
-			Icon:           "database",
-			BrandLogo:      "/brands/sqlite.svg",
-			Category:       "io",
-			Provider:       "internal",
-			Integration:    "SQLite",
-			Tags:           []string{"sqlite", "sql", "database", "upsert", "merge", "etl"},
-			Description:    "Upsert (insert-or-update) rows into a SQLite table in your workspace. Set the conflict columns — SQLite matches existing rows on those, updating them in place, while new rows get inserted. Pick which columns get updated on a match if you want to preserve some existing values.",
-			Summary:        "Insert-or-update rows in a workspace-sandboxed SQLite file via INSERT ... ON CONFLICT, matching on the conflict columns.",
+			ID:          "sqlite_upsert_rows",
+			Version:     "1.0",
+			Label:       "SQLite",
+			Subtitle:    "Upsert rows",
+			Color:       "#0a6abf",
+			Icon:        "database",
+			BrandLogo:   "/brands/sqlite.svg",
+			Category:    "io",
+			Provider:    "internal",
+			Integration: "SQLite",
+			Tags:        []string{"sqlite", "sql", "database", "upsert", "merge", "etl"},
+			Description: "Upsert (insert-or-update) rows into a SQLite table in your workspace. Set the conflict columns — SQLite matches existing rows on those, updating them in place, while new rows get inserted. Pick which columns get updated on a match if you want to preserve some existing values.",
+			Summary:     "Insert-or-update rows in a workspace-sandboxed SQLite file via INSERT ... ON CONFLICT, matching on the conflict columns.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Sync customers by email",

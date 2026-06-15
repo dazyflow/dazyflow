@@ -1427,6 +1427,10 @@ function ReferenceMenu({
   const [open, setOpen] = useState(false);
   const [groups, setGroups] = useState<ReferenceGroups | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Filter text: the reference list can be long (every upstream field, every
+  // secret), so a non-techie types "email" to find the field instead of
+  // scrolling. Reset each time the menu opens.
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     if (!open || groups || error) return;
@@ -1461,11 +1465,23 @@ function ReferenceMenu({
     if (kind === "trigger") return it.field || it.token;
     return it.label || it.token;
   };
-  const hasExtra = !!extraItems && extraItems.length > 0;
+  // Case-insensitive substring filter over the human label of each row.
+  const q = query.trim().toLowerCase();
+  const matches = (label: string) => q === "" || label.toLowerCase().includes(q);
+  const filteredExtra = (extraItems ?? []).filter((it) => matches(it.label));
+  const filteredSection = (kind: keyof ReferenceGroups) =>
+    (groups?.[kind] ?? []).filter((it) => matches(describe(kind, it)));
+  // First visible row (extra group first, then sections in order) — Enter
+  // inserts it, so a non-techie can type "email" + Enter.
+  const firstToken =
+    filteredExtra[0]?.token ??
+    sections.map((s) => filteredSection(s.kind)[0]?.token).find(Boolean) ??
+    null;
+
+  const hasExtra = filteredExtra.length > 0;
   const hasAny =
     hasExtra ||
-    (groups &&
-      sections.some((s) => groups[s.kind] && groups[s.kind].length > 0));
+    (groups && sections.some((s) => filteredSection(s.kind).length > 0));
 
   // Each row shows only the human description — never the raw ${…} token,
   // which is developer syntax a non-technical owner can't read. Clicking
@@ -1490,7 +1506,10 @@ function ReferenceMenu({
       <button
         type="button"
         className="ghost ref-insert-btn"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setQuery("");
+          setOpen(true);
+        }}
         aria-haspopup="dialog"
         aria-expanded={open}
         title={t("schemaForm.refPicker.insert")}
@@ -1522,6 +1541,23 @@ function ReferenceMenu({
                   <X size={16} />
                 </button>
               </div>
+              <div className="ref-dialog-search">
+                <input
+                  type="text"
+                  className="ref-search-input"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder={t("schemaForm.refPicker.search")}
+                  aria-label={t("schemaForm.refPicker.search")}
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && firstToken) {
+                      onInsert(firstToken);
+                      setOpen(false);
+                    }
+                  }}
+                />
+              </div>
               <div className="settings-body ref-dialog-body">
                 {error && <div className="ref-pop-msg ref-pop-error">{error}</div>}
                 {!groups && !error && !hasExtra && (
@@ -1535,12 +1571,12 @@ function ReferenceMenu({
                     <div className="ref-pop-group-label">
                       {t("schemaForm.refPicker.itemFields")}
                     </div>
-                    {extraItems!.map((it) => renderRow(it.token, it.label, it.token))}
+                    {filteredExtra.map((it) => renderRow(it.token, it.label, it.token))}
                   </div>
                 )}
                 {groups &&
                   sections.map((s) => {
-                    const items = groups[s.kind] ?? [];
+                    const items = filteredSection(s.kind);
                     if (items.length === 0) return null;
                     return (
                       <div key={s.kind} className="ref-pop-group">

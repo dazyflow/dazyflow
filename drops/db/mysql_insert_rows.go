@@ -8,27 +8,27 @@ import (
 	"strings"
 
 	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/hazyflow/engine"
 	_ "github.com/go-sql-driver/mysql"
 )
 
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "mysql_insert_rows",
-			Version:        "1.0",
-			Label:          "MySQL",
-			Subtitle:       "Insert rows",
-			Color:          "#00758f",
-			Icon:           "database",
-			BrandLogo:      "/brands/mysql.svg",
-			Category:       "io",
-			Provider:       "internal",
-			Integration:    "MySQL",
-			Tags:           []string{"mysql", "mariadb", "sql", "database", "insert", "etl"},
-			Description:    "Insert rows into a MySQL or MariaDB table. Drops in rows from Sheets, Excel, or any transform node — the shape is interchangeable across the family.",
-			Summary:        "Batch-insert rows into a MySQL/MariaDB table inside one transaction; auto-creates the table from headers when missing.",
+			ID:          "mysql_insert_rows",
+			Version:     "1.0",
+			Label:       "MySQL",
+			Subtitle:    "Insert rows",
+			Color:       "#00758f",
+			Icon:        "database",
+			BrandLogo:   "/brands/mysql.svg",
+			Category:    "io",
+			Provider:    "internal",
+			Integration: "MySQL",
+			Tags:        []string{"mysql", "mariadb", "sql", "database", "insert", "etl"},
+			Description: "Insert rows into a MySQL or MariaDB table. Drops in rows from Sheets, Excel, or any transform node — the shape is interchangeable across the family.",
+			Summary:     "Batch-insert rows into a MySQL/MariaDB table inside one transaction; auto-creates the table from headers when missing.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Load Excel rows into a new table",

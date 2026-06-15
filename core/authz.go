@@ -9,10 +9,10 @@ import (
 // Users come from OIDC; service accounts come from API keys; both end up as a
 // Principal once authenticated, so authorization logic doesn't need to care.
 type Principal struct {
-	Subject   string       `json:"sub"`
-	Tenant    string       `json:"tenant"`
-	Workspace string       `json:"workspace,omitempty"`
-	Roles     []Role       `json:"roles,omitempty"`
+	Subject   string         `json:"sub"`
+	Tenant    string         `json:"tenant"`
+	Workspace string         `json:"workspace,omitempty"`
+	Roles     []Role         `json:"roles,omitempty"`
 	Extras    map[string]any `json:"extras,omitempty"`
 }
 

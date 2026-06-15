@@ -9,27 +9,27 @@ import (
 	"path/filepath"
 
 	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/hazyflow/engine"
 	_ "modernc.org/sqlite"
 )
 
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "sqlite_query",
-			Version:        "1.0",
-			Label:          "SQLite",
-			Subtitle:       "Query",
-			Color:          "#0a6abf",
-			Icon:           "database",
-			BrandLogo:      "/brands/sqlite.svg",
-			Category:       "io",
-			Provider:       "internal",
-			Integration:    "SQLite",
-			Tags:           []string{"sqlite", "sql", "database", "query", "select"},
-			Description:    "Run a SELECT against a SQLite file in your workspace and get rows back. Use ? placeholders in the SQL and pass values through the params array so user-supplied data is safely escaped.",
-			Summary:        "Run a parameterized SELECT against a workspace-sandboxed SQLite file and emit rows plus column names.",
+			ID:          "sqlite_query",
+			Version:     "1.0",
+			Label:       "SQLite",
+			Subtitle:    "Query",
+			Color:       "#0a6abf",
+			Icon:        "database",
+			BrandLogo:   "/brands/sqlite.svg",
+			Category:    "io",
+			Provider:    "internal",
+			Integration: "SQLite",
+			Tags:        []string{"sqlite", "sql", "database", "query", "select"},
+			Description: "Run a SELECT against a SQLite file in your workspace and get rows back. Use ? placeholders in the SQL and pass values through the params array so user-supplied data is safely escaped.",
+			Summary:     "Run a parameterized SELECT against a workspace-sandboxed SQLite file and emit rows plus column names.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Latest signups",

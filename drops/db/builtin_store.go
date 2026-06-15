@@ -11,8 +11,8 @@ import (
 	"path/filepath"
 
 	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/hazyflow/engine"
 	_ "modernc.org/sqlite"
 )
 
@@ -28,18 +28,18 @@ const builtinStorePath = ".hazyflow-store/data.db"
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "builtin_store_append",
-			Version:        "1.0",
-			Label:          "Built-in store",
-			Subtitle:       "Save",
-			Color:          "#0a6abf",
-			Icon:           "database",
-			Category:       "io",
-			Provider:       "internal",
-			Integration:    "Built-in store",
-			Tags:           []string{"store", "database", "save", "append", "no-setup"},
-			Description:    "Save rows to a built-in table — no database to set up and no connection string to paste. Pick a table name and the rows land there; the table is created automatically the first time. Each workspace has its own private store.",
-			Summary:        "Append rows to a workspace-local table with zero setup; auto-creates the table and evolves columns on the fly.",
+			ID:          "builtin_store_append",
+			Version:     "1.0",
+			Label:       "Built-in store",
+			Subtitle:    "Save",
+			Color:       "#0a6abf",
+			Icon:        "database",
+			Category:    "io",
+			Provider:    "internal",
+			Integration: "Built-in store",
+			Tags:        []string{"store", "database", "save", "append", "no-setup"},
+			Description: "Save rows to a built-in table — no database to set up and no connection string to paste. Pick a table name and the rows land there; the table is created automatically the first time. Each workspace has its own private store.",
+			Summary:     "Append rows to a workspace-local table with zero setup; auto-creates the table and evolves columns on the fly.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Capture form submissions",
@@ -74,18 +74,18 @@ func init() {
 
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "builtin_store_query",
-			Version:        "1.0",
-			Label:          "Built-in store",
-			Subtitle:       "Read",
-			Color:          "#0a6abf",
-			Icon:           "database",
-			Category:       "io",
-			Provider:       "internal",
-			Integration:    "Built-in store",
-			Tags:           []string{"store", "database", "read", "query", "select", "no-setup"},
-			Description:    "Read rows back out of the built-in store with a SELECT — handy for building a report from data you saved earlier. Use ? placeholders and the params list for any user-supplied values.",
-			Summary:        "Run a SELECT against the workspace's built-in store and emit rows plus column names; empty store returns an empty result.",
+			ID:          "builtin_store_query",
+			Version:     "1.0",
+			Label:       "Built-in store",
+			Subtitle:    "Read",
+			Color:       "#0a6abf",
+			Icon:        "database",
+			Category:    "io",
+			Provider:    "internal",
+			Integration: "Built-in store",
+			Tags:        []string{"store", "database", "read", "query", "select", "no-setup"},
+			Description: "Read rows back out of the built-in store with a SELECT — handy for building a report from data you saved earlier. Use ? placeholders and the params list for any user-supplied values.",
+			Summary:     "Run a SELECT against the workspace's built-in store and emit rows plus column names; empty store returns an empty result.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Latest 50 leads",

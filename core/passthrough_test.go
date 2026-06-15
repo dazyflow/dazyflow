@@ -130,3 +130,34 @@ func TestApplyPassthrough_DoesNotOverrideNodesOwnPass(t *testing.T) {
 		t.Errorf("should not override a node's own pass output: %+v", res.Output[PassPort])
 	}
 }
+
+func TestMarkListPorts_TagsListNamedPortsOnly(t *testing.T) {
+	m := Manifest{
+		ID: "x",
+		Inputs: []Port{
+			{Port: "text"}, // scalar/per-item — must stay unmarked
+			{Port: "rows"}, // list input
+		},
+		Outputs: []Port{
+			{Port: "responses"}, // list output
+			{Port: "summary"},   // scalar output
+		},
+	}
+	got := MarkListPorts(m)
+	if got.Inputs[0].List {
+		t.Error("text input should not be marked List")
+	}
+	if !got.Inputs[1].List {
+		t.Error("rows input should be marked List")
+	}
+	if !got.Outputs[0].List {
+		t.Error("responses output should be marked List")
+	}
+	if got.Outputs[1].List {
+		t.Error("summary output should not be marked List")
+	}
+	// Must not mutate the caller's slices (registry safety).
+	if m.Outputs[0].List {
+		t.Error("MarkListPorts mutated the input manifest's ports")
+	}
+}

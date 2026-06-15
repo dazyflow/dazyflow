@@ -6,26 +6,26 @@ import (
 	"fmt"
 
 	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/hazyflow/engine"
 )
 
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "postgres_query",
-			Version:        "1.0",
-			Label:          "Postgres",
-			Subtitle:       "Query",
-			Color:          "#336791",
-			Icon:           "database",
-			BrandLogo:      "/brands/postgres.svg",
-			Category:       "io",
-			Provider:       "internal",
-			Integration:    "Postgres",
-			Tags:           []string{"postgres", "postgresql", "sql", "database", "query", "select"},
-			Description:    "Run a SELECT against your Postgres database and get rows back. Use $1, $2 placeholders in the SQL and pass values through the params array so user-supplied data is safely escaped. Set a row limit to keep large result sets bounded.",
-			Summary:        "Run a parameterized SELECT against Postgres and stream rows back as a result set with typed values.",
+			ID:          "postgres_query",
+			Version:     "1.0",
+			Label:       "Postgres",
+			Subtitle:    "Query",
+			Color:       "#336791",
+			Icon:        "database",
+			BrandLogo:   "/brands/postgres.svg",
+			Category:    "io",
+			Provider:    "internal",
+			Integration: "Postgres",
+			Tags:        []string{"postgres", "postgresql", "sql", "database", "query", "select"},
+			Description: "Run a SELECT against your Postgres database and get rows back. Use $1, $2 placeholders in the SQL and pass values through the params array so user-supplied data is safely escaped. Set a row limit to keep large result sets bounded.",
+			Summary:     "Run a parameterized SELECT against Postgres and stream rows back as a result set with typed values.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Recent orders for one customer",

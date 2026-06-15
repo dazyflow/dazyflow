@@ -6,26 +6,26 @@ import (
 	"fmt"
 
 	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/hazyflow/engine"
 )
 
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "mysql_query",
-			Version:        "1.0",
-			Label:          "MySQL",
-			Subtitle:       "Query",
-			Color:          "#00758f",
-			Icon:           "database",
-			BrandLogo:      "/brands/mysql.svg",
-			Category:       "io",
-			Provider:       "internal",
-			Integration:    "MySQL",
-			Tags:           []string{"mysql", "mariadb", "sql", "database", "query", "select"},
-			Description:    "Run a SELECT against your MySQL or MariaDB database and get rows back. Use ? placeholders in the SQL and pass values through the params array so user-supplied data is safely escaped. Set a row limit to keep large result sets bounded.",
-			Summary:        "Run a parameterized SELECT against MySQL/MariaDB and emit rows plus column names as a result set.",
+			ID:          "mysql_query",
+			Version:     "1.0",
+			Label:       "MySQL",
+			Subtitle:    "Query",
+			Color:       "#00758f",
+			Icon:        "database",
+			BrandLogo:   "/brands/mysql.svg",
+			Category:    "io",
+			Provider:    "internal",
+			Integration: "MySQL",
+			Tags:        []string{"mysql", "mariadb", "sql", "database", "query", "select"},
+			Description: "Run a SELECT against your MySQL or MariaDB database and get rows back. Use ? placeholders in the SQL and pass values through the params array so user-supplied data is safely escaped. Set a row limit to keep large result sets bounded.",
+			Summary:     "Run a parameterized SELECT against MySQL/MariaDB and emit rows plus column names as a result set.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Recent orders for one customer",

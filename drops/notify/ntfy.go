@@ -71,7 +71,7 @@ func init() {
 					"title":{"type":"string","title":"Title","description":"Notification title."},
 					"priority":{"type":"string","title":"Priority","enum":["1","2","3","4","5"],"enumNames":["1 — Min","2 — Low","3 — Default","4 — High","5 — Max"],"description":"How urgently it buzzes. Leave unset for the normal level."},
 					"tags":{"type":"array","title":"Tags","items":{"type":"string"},"description":"Emoji/tag shortcodes."},
-					"click":{"type":"string","title":"Link to open","description":"Web address opened when the notification is tapped."},
+					"click":{"type":"string","title":"Link to open","description":"Web address opened when the notification is tapped. Tip: wire an Await approval step's 'Approval link' here so the recipient can approve straight from the notification."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
 				},
 				"required":["topic"]

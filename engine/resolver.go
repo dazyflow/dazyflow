@@ -94,8 +94,10 @@ func (r *NodeResolver) ManifestsForTenant(_ string) map[string]core.Manifest {
 		for id, m := range src {
 			// Every processing drop carries the universal passthrough pin,
 			// surfaced here once so the palette, validation, and input
-			// assembly all see it without per-drop wiring.
-			out[id] = core.WithPassthrough(m)
+			// assembly all see it without per-drop wiring. MarkListPorts then
+			// tags list-carrying ports (rows/responses/…) so the editor can
+			// flag a list wired into a one-at-a-time step.
+			out[id] = core.MarkListPorts(core.WithPassthrough(m))
 		}
 	}
 	if r.Native != nil {

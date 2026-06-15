@@ -91,19 +91,19 @@ func TestRunNode_AdversarialUpstreamTemplates(t *testing.T) {
 	}
 
 	templates := []string{
-		"${upstream.}",                         // empty path
-		"${upstream.src}",                      // node only, no port
-		"${upstream.nope.out}",                 // unknown node
-		"${upstream.src.missing}",              // unknown port
-		"${upstream.src.out.name}",             // valid nested
-		"${upstream.src.out.list[0]}",          // valid index
-		"${upstream.src.out.list[999999999]}",  // out of range
-		"${upstream.src.out.list[-1]}",         // negative
-		"${upstream.src.out.list[abc]}",        // non-numeric index
-		"${upstream.src.out.list[[[}",          // unclosed bracket
-		"${upstream.src.out.name.deeper.more}", // descend into a string
-		"${upstream.src.deep}",                 // huge JSON stringify
-		"${upstream.src.wide}",                 // 100k-element stringify
+		"${upstream.}",                                           // empty path
+		"${upstream.src}",                                        // node only, no port
+		"${upstream.nope.out}",                                   // unknown node
+		"${upstream.src.missing}",                                // unknown port
+		"${upstream.src.out.name}",                               // valid nested
+		"${upstream.src.out.list[0]}",                            // valid index
+		"${upstream.src.out.list[999999999]}",                    // out of range
+		"${upstream.src.out.list[-1]}",                           // negative
+		"${upstream.src.out.list[abc]}",                          // non-numeric index
+		"${upstream.src.out.list[[[}",                            // unclosed bracket
+		"${upstream.src.out.name.deeper.more}",                   // descend into a string
+		"${upstream.src.deep}",                                   // huge JSON stringify
+		"${upstream.src.wide}",                                   // 100k-element stringify
 		"${upstream.src.out" + strings.Repeat(".x", 10000) + "}", // 10k-segment path
 		"prefix ${upstream.src.out.name} and ${upstream.src.out.list[0]} suffix",
 	}

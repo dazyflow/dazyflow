@@ -127,10 +127,10 @@ func resolveTemplates(ctx context.Context, providers map[string]core.SecretProvi
 // resolveTemplates walks job.Params and job.Env, replacing two kinds
 // of placeholder:
 //
-//	1. Secret refs: ${secret.NAME} / secret://NAME
-//	   resolved against the registered SecretProviders.
-//	2. Upstream refs: ${upstream.nodeID.port.path…} resolved against
-//	   the prior-node results passed in by the engine.
+//  1. Secret refs: ${secret.NAME} / secret://NAME
+//     resolved against the registered SecretProviders.
+//  2. Upstream refs: ${upstream.nodeID.port.path…} resolved against
+//     the prior-node results passed in by the engine.
 //
 // Either or both can be nil/empty — the substituter chain skips
 // schemes it doesn't recognize. Strings whose scheme isn't matched

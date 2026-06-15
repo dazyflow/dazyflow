@@ -2874,6 +2874,10 @@ button.warning:hover:not(:disabled) {
   height: 100%;
   background: var(--bg);
   position: relative;
+  /* The inspector is an absolute panel parked off the right edge
+     (translateX(100%)) when hidden. Clip it so that off-screen panel doesn't
+     extend the page's scroll width and add a horizontal scrollbar. */
+  overflow: hidden;
 }
 /* Mobile / narrow tablet: the inspector opens on demand as a FULLSCREEN
    overlay via the floating "Inspect" button; the canvas keeps full width. */
@@ -3633,6 +3637,23 @@ button.warning:hover:not(:disabled) {
   position: absolute;
   top: -7px;
   right: -7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--status-warning);
+  color: #1b1300;
+  border: 1px solid var(--surface);
+  z-index: 2;
+}
+/* "List into a one-at-a-time step" hint — amber like a lint, but on the
+   top-left so it never collides with the lint/config badges on the right. */
+.hz-node-loop {
+  position: absolute;
+  top: -7px;
+  left: -7px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -4893,6 +4914,25 @@ button.warning:hover:not(:disabled) {
    grouped rows carry their own. */
 .ref-dialog {
   max-width: 480px;
+}
+/* Search box pinned under the dialog head; the list below scrolls. */
+.ref-dialog-search {
+  padding: var(--space-2) var(--space-2) 0;
+}
+.ref-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--space-1h) var(--space-2);
+  font: inherit;
+  font-size: var(--text-md);
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+}
+.ref-search-input:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 .ref-dialog-body {
   padding: var(--space-2);

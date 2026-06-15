@@ -8,26 +8,26 @@ import (
 	"strings"
 
 	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/hazyflow/engine"
 )
 
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "mysql_upsert_rows",
-			Version:        "1.0",
-			Label:          "MySQL",
-			Subtitle:       "Upsert rows",
-			Color:          "#00758f",
-			Icon:           "database",
-			BrandLogo:      "/brands/mysql.svg",
-			Category:       "io",
-			Provider:       "internal",
-			Integration:    "MySQL",
-			Tags:           []string{"mysql", "mariadb", "sql", "database", "upsert", "merge", "etl"},
-			Description:    "Upsert (insert-or-update) rows into a MySQL or MariaDB table. Set the conflict columns — MySQL matches existing rows on those, updating them in place, while new rows get inserted. Reports separate insert vs update counts so downstream notifications can say 'X new + Y updated'.",
-			Summary:        "Insert-or-update rows in MySQL/MariaDB via INSERT ... ON DUPLICATE KEY UPDATE, matching existing rows on the conflict columns.",
+			ID:          "mysql_upsert_rows",
+			Version:     "1.0",
+			Label:       "MySQL",
+			Subtitle:    "Upsert rows",
+			Color:       "#00758f",
+			Icon:        "database",
+			BrandLogo:   "/brands/mysql.svg",
+			Category:    "io",
+			Provider:    "internal",
+			Integration: "MySQL",
+			Tags:        []string{"mysql", "mariadb", "sql", "database", "upsert", "merge", "etl"},
+			Description: "Upsert (insert-or-update) rows into a MySQL or MariaDB table. Set the conflict columns — MySQL matches existing rows on those, updating them in place, while new rows get inserted. Reports separate insert vs update counts so downstream notifications can say 'X new + Y updated'.",
+			Summary:     "Insert-or-update rows in MySQL/MariaDB via INSERT ... ON DUPLICATE KEY UPDATE, matching existing rows on the conflict columns.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Sync customers by email",

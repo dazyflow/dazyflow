@@ -246,7 +246,12 @@ type formResponse struct {
 	ResponseID        string `json:"responseId"`
 	CreateTime        string `json:"createTime"`
 	LastSubmittedTime string `json:"lastSubmittedTime"`
-	Answers           map[string]struct {
+	// RespondentEmail is populated by the Forms API only when the form has
+	// "Collect email addresses" enabled — the common way to know who to reply
+	// to. Surfaced as the `email` output field so a reply/email step can wire
+	// it directly instead of the author hand-adding an email question.
+	RespondentEmail string `json:"respondentEmail"`
+	Answers         map[string]struct {
 		QuestionID  string `json:"questionId"`
 		TextAnswers struct {
 			Answers []struct {
@@ -278,9 +283,14 @@ func sanitizeTitle(s string) string {
 // Multi-value answers (checkboxes, grids) are joined into one cell-friendly
 // string.
 func mapAnswers(r formResponse, titles map[string]string) map[string]any {
-	out := make(map[string]any, len(r.Answers)+2)
+	out := make(map[string]any, len(r.Answers)+3)
 	out["responseId"] = r.ResponseID
 	out["submittedTime"] = r.LastSubmittedTime
+	// Only present when the form collects email addresses; omitted otherwise so
+	// downstream "is the email set?" checks behave.
+	if r.RespondentEmail != "" {
+		out["email"] = r.RespondentEmail
+	}
 	used := map[string]string{} // key → questionId that claimed it
 	for qid, a := range r.Answers {
 		key := titles[qid]

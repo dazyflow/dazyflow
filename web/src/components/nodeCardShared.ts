@@ -69,6 +69,10 @@ export type HazyNodeData = {
   // lintMessage is set when the last save flagged this node in a lint
   // issue (e.g. hardcoded secret). NodeCard shows a warning badge.
   lintMessage?: string;
+  // loopHint is set when a LIST is wired into this node's one-at-a-time input
+  // (e.g. a form's responses list → an AI step) — it would run once on the
+  // whole batch. Shows an amber "wrap in For each" badge, like a lint warning.
+  loopHint?: string;
   // Inline param editing (#7): the node's live params and a per-key
   // setter, injected by FlowEditor so the selected card can edit defaults
   // directly on the canvas instead of only via the Inspector.

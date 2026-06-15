@@ -7,27 +7,27 @@ import (
 	"strings"
 
 	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/hazyflow/engine"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "postgres_insert_rows",
-			Version:        "1.0",
-			Label:          "Postgres",
-			Subtitle:       "Insert rows",
-			Color:          "#336791",
-			Icon:           "database",
-			BrandLogo:      "/brands/postgres.svg",
-			Category:       "io",
-			Provider:       "internal",
-			Integration:    "Postgres",
-			Tags:           []string{"postgres", "postgresql", "sql", "database", "insert", "etl"},
-			Description:    "Insert rows into a Postgres table. Drops in rows from Sheets, Excel, or any transform node — the shape is interchangeable across the family, so no extra mapping needed.",
-			Summary:        "Batch-insert rows into a Postgres table inside one transaction; auto-creates the table from headers when missing.",
+			ID:          "postgres_insert_rows",
+			Version:     "1.0",
+			Label:       "Postgres",
+			Subtitle:    "Insert rows",
+			Color:       "#336791",
+			Icon:        "database",
+			BrandLogo:   "/brands/postgres.svg",
+			Category:    "io",
+			Provider:    "internal",
+			Integration: "Postgres",
+			Tags:        []string{"postgres", "postgresql", "sql", "database", "insert", "etl"},
+			Description: "Insert rows into a Postgres table. Drops in rows from Sheets, Excel, or any transform node — the shape is interchangeable across the family, so no extra mapping needed.",
+			Summary:     "Batch-insert rows into a Postgres table inside one transaction; auto-creates the table from headers when missing.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Load Excel rows into a new table",
@@ -54,7 +54,7 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"dsn":          {"type":"string","title":"Connection string"},
+					"dsn":          {"type":"string","title":"Connection string","description":"postgres://user:pass@host:5432/db — best stored as a secret and referenced as ${secret.NAME}. No Postgres server? Use the SQLite step instead (no setup)."},
 					"schema":       {"type":"string","default":"public"},
 					"table":        {"type":"string"},
 					"create_table": {"type":"boolean","default":true,"description":"Auto-create the table from headers when missing. Defaults true."},

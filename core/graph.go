@@ -176,8 +176,8 @@ func (g Graph) EffectiveVisibility() Visibility {
 // Multiple triggers can coexist on the same graph (e.g. a graph
 // that runs hourly AND can be manually triggered via webhook).
 type GraphTrigger struct {
-	Type            string `json:"type"`                       // "cron", "webhook", or "poll"
-	Cron            string `json:"cron,omitempty"`             // for type=cron
+	Type string `json:"type"`           // "cron", "webhook", or "poll"
+	Cron string `json:"cron,omitempty"` // for type=cron
 	// TZ is the IANA timezone (e.g. "Europe/Stockholm") the cron
 	// expression is interpreted in, for type=cron. It anchors the
 	// wall-clock fields to a real zone so "0 9 * * *" means 09:00 in
@@ -186,7 +186,7 @@ type GraphTrigger struct {
 	// timezone here on every schedule edit, so a user only ever reasons
 	// about their own clock. Empty falls back to UTC (deterministic and
 	// host-independent), which is also what pre-tz graphs get.
-	TZ string `json:"tz,omitempty"`
+	TZ              string `json:"tz,omitempty"`
 	Secret          string `json:"secret,omitempty"`           // for type=webhook (compared against Authorization header)
 	IntervalSeconds int    `json:"interval_seconds,omitempty"` // for type=poll; must be > 0
 	// PublicForm, on a webhook trigger, opts the graph into a hosted

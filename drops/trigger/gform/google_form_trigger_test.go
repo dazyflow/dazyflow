@@ -245,6 +245,46 @@ func TestMultiValueAnswer_Joined(t *testing.T) {
 	}
 }
 
+func TestRespondentEmail_SurfacedWhenPresent(t *testing.T) {
+	fs := formServer{titles: map[string]string{"q1": "Message"}}
+	fs.pages = [][]map[string]any{{
+		map[string]any{
+			"responseId":        "r1",
+			"lastSubmittedTime": "2026-06-01T10:00:00Z",
+			"respondentEmail":   "alice@example.com",
+			"answers": map[string]any{
+				"q1": map[string]any{
+					"questionId":  "q1",
+					"textAnswers": map[string]any{"answers": []map[string]any{{"value": "hi"}}},
+				},
+			},
+		},
+	}}
+	srv := httptest.NewServer(fs.handler(t))
+	defer srv.Close()
+	withEnv(t, srv.URL)
+
+	out := responsesOf(t, runTrigger(t, "acme"))
+	if out[0]["email"] != "alice@example.com" {
+		t.Errorf("email = %v", out[0]["email"])
+	}
+}
+
+func TestRespondentEmail_OmittedWhenAbsent(t *testing.T) {
+	fs := formServer{
+		titles: map[string]string{"q1": "Message"},
+		pages:  [][]map[string]any{{resp("r1", "2026-06-01T10:00:00Z", map[string]string{"q1": "hi"})}},
+	}
+	srv := httptest.NewServer(fs.handler(t))
+	defer srv.Close()
+	withEnv(t, srv.URL)
+
+	out := responsesOf(t, runTrigger(t, "acme"))
+	if _, present := out[0]["email"]; present {
+		t.Errorf("email key should be absent when the form doesn't collect it, got %+v", out[0])
+	}
+}
+
 func TestUnknownQuestionFallsBackToID(t *testing.T) {
 	fs := formServer{
 		titles: map[string]string{}, // no titles known

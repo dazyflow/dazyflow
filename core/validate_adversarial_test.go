@@ -49,7 +49,7 @@ func TestValidate_HugeCycleDetectedNotHung(t *testing.T) {
 		g.Nodes[i] = Node{ID: "n" + itoa(i), Module: "noop"}
 		g.Edges[i] = Edge{
 			From: "n" + itoa(i), FromPort: "out",
-			To:   "n" + itoa((i+1)%n), ToPort: "in",
+			To: "n" + itoa((i+1)%n), ToPort: "in",
 		}
 	}
 	withinDeadline(t, 10*time.Second, func() {
@@ -67,10 +67,10 @@ func TestValidate_HugeCycleDetectedNotHung(t *testing.T) {
 // panic.
 func TestValidate_MalformedGraphsNeverPanic(t *testing.T) {
 	cases := map[string]Graph{
-		"empty node ID":   {Nodes: []Node{{ID: "", Module: "x"}}},
-		"duplicate IDs":   {Nodes: []Node{{ID: "a", Module: "x"}, {ID: "a", Module: "y"}}},
-		"empty module":    {Nodes: []Node{{ID: "a", Module: ""}}},
-		"self loop":       {Nodes: []Node{{ID: "a", Module: "x"}}, Edges: []Edge{{From: "a", To: "a", FromPort: "out", ToPort: "in"}}},
+		"empty node ID":    {Nodes: []Node{{ID: "", Module: "x"}}},
+		"duplicate IDs":    {Nodes: []Node{{ID: "a", Module: "x"}, {ID: "a", Module: "y"}}},
+		"empty module":     {Nodes: []Node{{ID: "a", Module: ""}}},
+		"self loop":        {Nodes: []Node{{ID: "a", Module: "x"}}, Edges: []Edge{{From: "a", To: "a", FromPort: "out", ToPort: "in"}}},
 		"edge unknown src": {Nodes: []Node{{ID: "a", Module: "x"}}, Edges: []Edge{{From: "ghost", To: "a", FromPort: "out", ToPort: "in"}}},
 		"edge empty ports": {Nodes: []Node{{ID: "a", Module: "x"}, {ID: "b", Module: "y"}}, Edges: []Edge{{From: "a", To: "b"}}},
 	}
