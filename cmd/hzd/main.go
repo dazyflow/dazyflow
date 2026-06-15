@@ -14,6 +14,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -1265,10 +1266,38 @@ func productionConfigProblems(postgresDSN, masterKeyB64 string) []string {
 			problems = append(problems, "HAZYFLOW_POSTGRES_DSN uses the default database password "+strconv.Quote(defaultInsecurePassword)+" — change POSTGRES_PASSWORD and the DSN to a strong secret")
 		}
 	}
+	// Require TLS to Postgres. Only require/verify-ca/verify-full guarantee an
+	// encrypted connection with no silent plaintext fallback; disable/allow/
+	// prefer (and an unset sslmode, which libpq treats as prefer) can transmit
+	// data — including personal data and the rows holding wrapped DEKs — in the
+	// clear. (An empty DSN is handled by the separate fatal check at startup.)
+	if postgresDSN != "" {
+		switch dsnSSLMode(postgresDSN) {
+		case "require", "verify-ca", "verify-full":
+			// Encrypted, no fallback — good.
+		default:
+			problems = append(problems, "HAZYFLOW_POSTGRES_DSN does not enforce TLS — add sslmode=require (or verify-full with a CA) so the connection to Postgres can't fall back to plaintext")
+		}
+	}
 	if masterKeyB64 == "" {
 		problems = append(problems, "HAZYFLOW_MASTER_KEY is empty — stored-secret encryption is DISABLED; set a stable 32-byte base64 key (`openssl rand -base64 32`)")
 	}
 	return problems
+}
+
+// dsnSSLMode extracts the sslmode from a Postgres DSN in either URL form
+// (postgres://…?sslmode=require) or libpq keyword form (host=… sslmode=require),
+// lowercased. Returns "" when sslmode is unset.
+func dsnSSLMode(dsn string) string {
+	if u, err := url.Parse(dsn); err == nil && (u.Scheme == "postgres" || u.Scheme == "postgresql") {
+		return strings.ToLower(strings.TrimSpace(u.Query().Get("sslmode")))
+	}
+	for _, field := range strings.Fields(dsn) {
+		if k, v, ok := strings.Cut(field, "="); ok && strings.EqualFold(strings.TrimSpace(k), "sslmode") {
+			return strings.ToLower(strings.TrimSpace(v))
+		}
+	}
+	return ""
 }
 
 // Config knobs come from HAZYFLOW_* env vars. The helpers below give a

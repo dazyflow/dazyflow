@@ -9,7 +9,8 @@ import (
 
 func TestProductionConfigProblems(t *testing.T) {
 	const strongKey = "c3Ryb25nLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9rIQ=="
-	const safeDSN = "postgres://hazyflow:s3cret@db:5432/hazyflow"
+	const safeDSN = "postgres://hazyflow:s3cret@db:5432/hazyflow?sslmode=require"
+	const noTLSDSN = "postgres://hazyflow:s3cret@db:5432/hazyflow"               // strong password, sslmode unset
 	const defaultDSN = "postgres://hazyflow:hazyflow@db:5432/hazyflow?sslmode=disable"
 
 	cases := []struct {
@@ -18,11 +19,15 @@ func TestProductionConfigProblems(t *testing.T) {
 		masterKey string
 		wantCount int
 	}{
-		{"unparseable dsn skips password check", "", strongKey, 0},
+		{"empty dsn skips dsn checks", "", strongKey, 0},
 		{"safe dsn + key is clean", safeDSN, strongKey, 0},
-		{"default password flagged", defaultDSN, strongKey, 1},
+		{"verify-full is clean", "postgres://hazyflow:s3cret@db/hazyflow?sslmode=verify-full", strongKey, 0},
+		{"keyword-form sslmode is clean", "host=db user=hazyflow password=s3cret sslmode=require", strongKey, 0},
+		{"missing sslmode flagged", noTLSDSN, strongKey, 1},
+		{"sslmode=disable flagged", "postgres://hazyflow:s3cret@db/hazyflow?sslmode=disable", strongKey, 1},
+		{"default password + disable flagged", defaultDSN, strongKey, 2},
 		{"missing master key flagged", safeDSN, "", 1},
-		{"both insecure flagged", defaultDSN, "", 2},
+		{"all three insecure flagged", defaultDSN, "", 3},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
