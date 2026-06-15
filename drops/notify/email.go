@@ -80,7 +80,7 @@ func init() {
 						"password":{"type":"string","title":"Password","x_advanced":true,"description":"Mail server password or app password. ${secret.NAME} keeps it out of the flow."},
 						"from":{"type":"string","title":"From address","x_advanced":true,"description":"The sender address. Defaults to the username — most providers require them to match anyway."},
 						"to":{"type":"array","title":"To","items":{"type":"string"},"description":"Recipient addresses. Overridden by the 'To' input (comma-separated)."},
-						"subject":{"type":"string","title":"Subject","description":"Subject line. Overridden by the 'Subject' input."},
+						"subject":{"type":"string","title":"Subject","description":"The email's subject line — e.g. \"Re: your submission\". Leave blank and it sends as \"(no subject)\". Overridden by the 'Subject' input."},
 						"body":{"type":"string","title":"Body","description":"Email body text. Overridden by the 'Body' input."}
 					},
 					"required":["host","to"]

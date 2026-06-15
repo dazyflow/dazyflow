@@ -31,21 +31,25 @@ func init() {
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Sync customers by email",
-					Params: json.RawMessage(`{"dsn":"${secret.PG_DSN}","table":"customers","conflict_columns":["email"]}`),
-					Notes:  "When update_columns is omitted, every non-conflict column is overwritten from the incoming row.",
+					Params: json.RawMessage(`{"table":"customers","conflict_columns":["email"]}`),
+					Notes:  "When update_columns is omitted, every non-conflict column is overwritten from the incoming row. The connection comes from your Postgres connection, set once under Apps.",
 				},
 				{
 					Title:  "Refresh just a few fields on match",
-					Params: json.RawMessage(`{"dsn":"${secret.PG_DSN}","schema":"crm","table":"customers","conflict_columns":["email"],"update_columns":["last_seen","plan"]}`),
+					Params: json.RawMessage(`{"schema":"crm","table":"customers","conflict_columns":["email"],"update_columns":["last_seen","plan"]}`),
 				},
 				{
 					Title:  "Insert-if-absent (DO NOTHING)",
-					Params: json.RawMessage(`{"dsn":"${secret.PG_DSN}","table":"events","conflict_columns":["event_id"],"update_columns":[]}`),
+					Params: json.RawMessage(`{"table":"events","conflict_columns":["event_id"],"update_columns":[]}`),
 					Notes:  "An empty update_columns becomes ON CONFLICT DO NOTHING — handy for idempotent event ingestion.",
 				},
 			},
-			RequiresConnections: []core.ConnectionRequirement{
-				{Kind: "secret", Name: "PG_DSN", Note: "Postgres connection string (postgres://user:pass@host:5432/db)"},
+			// Per-tenant connection (same Connect flow as Claude/ntfy): the editor
+			// shows "Connect Postgres" rather than a raw DSN field, and
+			// injectConnectionDefaults fills the unset 'dsn' from conn.postgres.dsn
+			// at run time. No Postgres server? Use the SQLite step instead.
+			ConnectionFields: []core.ConnectionField{
+				{Key: "dsn", Label: "Connection string", Secret: true, Required: true, Placeholder: "postgres://user:pass@host:5432/db"},
 			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
@@ -59,7 +63,6 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"dsn":              {"type":"string","title":"Connection string"},
 					"schema":           {"type":"string","default":"public"},
 					"table":            {"type":"string"},
 					"conflict_columns": {"type":"array","items":{"type":"string"}},
@@ -67,7 +70,7 @@ func init() {
 					"create_table":     {"type":"boolean","default":true,"description":"Auto-create the table (with a UNIQUE on conflict_columns) when missing. Defaults true."},
 					"column_types":     {"type":"object","additionalProperties":{"type":"string"}}
 				},
-				"required":["dsn","table","conflict_columns"]
+				"required":["table","conflict_columns"]
 			}`),
 		},
 		Execute: executePostgresUpsertRows,

@@ -65,7 +65,7 @@ func init() {
 					"to":{"type":"string","description":"Recipient(s), comma-separated. Overridden by the 'To' input."},
 					"cc":{"type":"string"},
 					"bcc":{"type":"string"},
-					"subject":{"type":"string","description":"Overridden by the 'Subject' input."},
+					"subject":{"type":"string","title":"Subject","description":"The email's subject line — e.g. \"Re: your submission\". Leave blank and it sends as \"(no subject)\". Overridden by the 'Subject' input."},
 					"body":{"type":"string","description":"Body text. Overridden by the 'Body' input."},
 					"format":{"type":"string","enum":["text","html"],"enumNames":["Text","HTML"],"default":"html"},
 					"reply_to":{"type":"string"},

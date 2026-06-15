@@ -31,16 +31,22 @@ func init() {
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Load Excel rows into a new table",
-					Params: json.RawMessage(`{"dsn":"${secret.PG_DSN}","table":"signups"}`),
-					Notes:  "schema defaults to public and create_table defaults to true.",
+					Params: json.RawMessage(`{"table":"signups"}`),
+					Notes:  "schema defaults to public and create_table defaults to true. The connection comes from your Postgres connection, set once under Apps.",
 				},
 				{
 					Title:  "Append into a typed schema",
-					Params: json.RawMessage(`{"dsn":"${secret.PG_DSN}","schema":"sales","table":"orders","create_table":false,"column_types":{"id":"bigint","created_at":"timestamptz"}}`),
+					Params: json.RawMessage(`{"schema":"sales","table":"orders","create_table":false,"column_types":{"id":"bigint","created_at":"timestamptz"}}`),
 				},
 			},
-			RequiresConnections: []core.ConnectionRequirement{
-				{Kind: "secret", Name: "PG_DSN", Note: "Postgres connection string (postgres://user:pass@host:5432/db)"},
+			// The connection string is a per-tenant connection, set once under
+			// Apps (the same Connect flow as Claude/ntfy) — so the editor shows a
+			// "Connect Postgres" affordance instead of a raw DSN field, and the
+			// secret never lands in the graph. injectConnectionDefaults fills the
+			// unset 'dsn' param from conn.postgres.dsn at run time. No Postgres
+			// server? Use the SQLite step instead (zero setup).
+			ConnectionFields: []core.ConnectionField{
+				{Key: "dsn", Label: "Connection string", Secret: true, Required: true, Placeholder: "postgres://user:pass@host:5432/db"},
 			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
@@ -54,13 +60,12 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"dsn":          {"type":"string","title":"Connection string","description":"postgres://user:pass@host:5432/db — best stored as a secret and referenced as ${secret.NAME}. No Postgres server? Use the SQLite step instead (no setup)."},
 					"schema":       {"type":"string","default":"public"},
 					"table":        {"type":"string"},
 					"create_table": {"type":"boolean","default":true,"description":"Auto-create the table from headers when missing. Defaults true."},
 					"column_types": {"type":"object","additionalProperties":{"type":"string"}}
 				},
-				"required":["dsn","table"]
+				"required":["table"]
 			}`),
 		},
 		Execute: executePostgresInsertRows,

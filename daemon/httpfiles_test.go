@@ -189,7 +189,11 @@ func TestFiles_TraversalRejected(t *testing.T) {
 	}
 }
 
-func TestFiles_MutationRequiresEdit(t *testing.T) {
+// TestFiles_RequireEdit pins the editor-gated file-manager model: the whole
+// surface — reads included — needs graph:edit. A viewer (graph:run only) is
+// forbidden across the board; the UI hides Files from them and the server
+// enforces it (mutations doubly so). See httpfiles.go's endpoint table.
+func TestFiles_RequireEdit(t *testing.T) {
 	h, root := newUploadHarness(t)
 	seedFile(t, root, "t", "ws", "a.txt", "x")
 	role := core.Role{Name: "runner", Permissions: []core.Permission{core.PermGraphRun}}
@@ -198,19 +202,19 @@ func TestFiles_MutationRequiresEdit(t *testing.T) {
 		t.Fatalf("issue: %v", err)
 	}
 
-	// graph:run CAN read.
-	if rw := fileReq(t, h, runnerTok, "GET", "/api/v1/workspaces/t/ws/files/list", ""); rw.Code != http.StatusOK {
-		t.Errorf("runner list status=%d, want 200", rw.Code)
+	// graph:run alone is forbidden from every file endpoint — read and mutate.
+	cases := []struct {
+		name, method, path, body string
+	}{
+		{"list", "GET", "/api/v1/workspaces/t/ws/files/list", ""},
+		{"download", "GET", "/api/v1/workspaces/t/ws/files/download?path=a.txt", ""},
+		{"delete", "DELETE", "/api/v1/workspaces/t/ws/files?path=a.txt", ""},
+		{"mkdir", "POST", "/api/v1/workspaces/t/ws/files/mkdir", `{"path":"d"}`},
 	}
-	if rw := fileReq(t, h, runnerTok, "GET", "/api/v1/workspaces/t/ws/files/download?path=a.txt", ""); rw.Code != http.StatusOK {
-		t.Errorf("runner download status=%d, want 200", rw.Code)
-	}
-	// graph:run CANNOT mutate.
-	if rw := fileReq(t, h, runnerTok, "DELETE", "/api/v1/workspaces/t/ws/files?path=a.txt", ""); rw.Code != http.StatusForbidden {
-		t.Errorf("runner delete status=%d, want 403", rw.Code)
-	}
-	if rw := fileReq(t, h, runnerTok, "POST", "/api/v1/workspaces/t/ws/files/mkdir", `{"path":"d"}`); rw.Code != http.StatusForbidden {
-		t.Errorf("runner mkdir status=%d, want 403", rw.Code)
+	for _, c := range cases {
+		if rw := fileReq(t, h, runnerTok, c.method, c.path, c.body); rw.Code != http.StatusForbidden {
+			t.Errorf("runner %s status=%d, want 403", c.name, rw.Code)
+		}
 	}
 }
 

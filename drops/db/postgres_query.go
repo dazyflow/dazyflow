@@ -29,16 +29,20 @@ func init() {
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Recent orders for one customer",
-					Params: json.RawMessage(`{"dsn":"${secret.PG_DSN}","sql":"SELECT id, total FROM orders WHERE customer_id = $1 ORDER BY id DESC LIMIT 50","params":[42]}`),
+					Params: json.RawMessage(`{"sql":"SELECT id, total FROM orders WHERE customer_id = $1 ORDER BY id DESC LIMIT 50","params":[42]}`),
 				},
 				{
 					Title:  "Count by status",
-					Params: json.RawMessage(`{"dsn":"${secret.PG_DSN}","sql":"SELECT status, count(*) FROM orders GROUP BY status"}`),
-					Notes:  "Empty params is fine when the SQL has no $N placeholders.",
+					Params: json.RawMessage(`{"sql":"SELECT status, count(*) FROM orders GROUP BY status"}`),
+					Notes:  "Empty params is fine when the SQL has no $N placeholders. The connection comes from your Postgres connection, set once under Apps.",
 				},
 			},
-			RequiresConnections: []core.ConnectionRequirement{
-				{Kind: "secret", Name: "PG_DSN", Note: "Postgres connection string (postgres://user:pass@host:5432/db)"},
+			// Per-tenant connection (same Connect flow as Claude/ntfy): the editor
+			// shows "Connect Postgres" rather than a raw DSN field, and
+			// injectConnectionDefaults fills the unset 'dsn' from conn.postgres.dsn
+			// at run time. No Postgres server? Use the SQLite step instead.
+			ConnectionFields: []core.ConnectionField{
+				{Key: "dsn", Label: "Connection string", Secret: true, Required: true, Placeholder: "postgres://user:pass@host:5432/db"},
 			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
@@ -49,12 +53,11 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"dsn":    {"type":"string","title":"Connection string"},
 					"sql":    {"type":"string","title":"SQL"},
 					"params": {"type":"array","items":{},"title":"Query values"},
 					"limit":  {"type":"integer","minimum":1,"title":"Row limit"}
 				},
-				"required":["dsn","sql"]
+				"required":["sql"]
 			}`),
 			Idempotent: true,
 		},

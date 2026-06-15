@@ -49,13 +49,21 @@ Google Form (trigger)
 
 ## P1 — Major friction (doable but painful / error-prone)
 
-- [ ] **(from P0-1) "Live" chip can mislead when unpublished.** A trigger flow with a configured
-      interval shows "Live" before it's published; the scheduler only runs *published* flows.
-      → Have the status reflect published state, or add a "needs publish" sub-state.
-- [ ] **(from P0-3) Postgres still has no "Connect" affordance.** SQLite is now the easy default,
-      but for users who *do* have Postgres, the raw `dsn` field is still developer-facing.
-      → Give Postgres a connection (conn.postgres.dsn via ConnectionFields) so it joins the
-      Apps "Connect" flow + needs-setup chip we built.
+- [~] **(from P0-1) "Live" chip can mislead when unpublished.** — INVESTIGATED, premise is wrong;
+      do NOT implement "needs publish". The scheduler enrolls triggers off **HEAD** (`rescan`,
+      `scheduler.go:213-220`, no publish check) and `fireGraph` uses `LoadPublishedOrHead`, which
+      **falls back to HEAD for never-published flows** (`scheduler.go:393-400`). So a never-published
+      flow with a configured trigger *does* fire — "Live" is truthful, and the editor chip (computed
+      from HEAD triggers) already matches what the scheduler enrolls. A "needs publish" state would
+      lie in the opposite direction. *(If the desired product behaviour is actually "don't fire until
+      published", that's a scheduler change, not a chip change — needs a separate decision.)*
+- [x] **(from P0-3) Postgres now has a "Connect" affordance.** — FIXED. The three `postgres_*` drops
+      dropped `RequiresConnections(PG_DSN)` + the developer-facing `dsn` param in favour of a
+      `ConnectionFields` `dsn` (secret, required), mirroring ntfy/Claude. The unified node chip,
+      inspector "Connect Postgres" banner, pre-run gate, and Apps connection card now all light up
+      automatically (`injectConnectionDefaults` fills the unset `dsn` from `conn.postgres.dsn` at run
+      time). Backward-compatible: old flows with a typed `dsn` still work when no connection is set.
+      Verified live (8/8 checks: manifest contract + node chip + inspector + Apps card).
 - [ ] **(from P0-4) Approval→notify is guided but not automated.** The wiring is now well
       explained, but still manual.
       → A one-click "request approval, notify me on ntfy" that auto-wires
@@ -91,8 +99,10 @@ Google Form (trigger)
 
 - [ ] **"Leave interval blank to check only when you press Run"** phrasing is confusing — say
       "Run automatically every N minutes" vs "only when I press Run".
-- [ ] **Email `subject` silently defaults to "(no subject)"** — prompt for it (it's the reply's
-      subject, e.g., "Re: your submission").
+- [x] **Email `subject` silently defaults to "(no subject)"** — FIXED (copy). The `subject` param on
+      both `email_send` (SMTP) and `gmail_send_email` now reads *"The email's subject line — e.g.
+      'Re: your submission'. Leave blank and it sends as '(no subject)'."* so the silent default is
+      surfaced. *(Follow-up: a true required-subject prompt/validation if blank-sends are undesirable.)*
 - [ ] **ntfy truncates >4 KiB silently** — warn when wiring a long body.
 - [ ] **Reference picker** lazy-loads with a blank list (reads as broken), has no search, and
       labels form fields under `trigger.body.*`.
@@ -104,8 +114,8 @@ Google Form (trigger)
 
 ## Cross-cutting / wins to keep
 
-- [x] AI steps (Claude/ChatGPT) now have a one-click **Connect** affordance (node chip,
-      inspector, banner, gate) — replicate that connection pattern for **Postgres** and unify ntfy.
+- [x] AI steps (Claude/ChatGPT) have a one-click **Connect** affordance (node chip, inspector,
+      banner, gate). **Postgres now replicates it** (see P1 above); ntfy still to unify.
 - [ ] After all P0/P1: re-run the persona walkthrough end-to-end and confirm **zero** `${…}`
       typing and **zero** dead-ends.
 
