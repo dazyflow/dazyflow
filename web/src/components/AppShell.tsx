@@ -8,6 +8,7 @@ import {
   Workflow,
   ShieldCheck,
   Activity,
+  Table2,
   CalendarClock,
   Gauge,
   Inbox,
@@ -418,6 +419,15 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             <Activity size={18} />
             <span className="nav-label">{t("nav.runs")}</span>
+          </NavLink>
+          {/* Results — the in-app view of data flows saved to the Built-in
+              store. A zero-config "see what my flow produced" surface. */}
+          <NavLink
+            to="/results"
+            title={t("nav.results")}
+          >
+            <Table2 size={18} />
+            <span className="nav-label">{t("nav.results")}</span>
           </NavLink>
           <NavLink
             to="/schedules"

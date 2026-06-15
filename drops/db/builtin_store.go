@@ -37,9 +37,14 @@ func init() {
 			Category:    "io",
 			Provider:    "internal",
 			Integration: "Built-in store",
-			Tags:        []string{"store", "database", "save", "append", "no-setup"},
-			Description: "Save rows to a built-in table — no database to set up and no connection string to paste. Pick a table name and the rows land there; the table is created automatically the first time. Each workspace has its own private store.",
-			Summary:     "Append rows to a workspace-local table with zero setup; auto-creates the table and evolves columns on the fly.",
+			// "results"/"dashboard"/"report" tag this as the writer behind
+			// the in-app Results page (web /results). Tags (not SearchBoost)
+			// because a blanket boost would also lift it for "save"/"database",
+			// disturbing the deliberate ranking below SQLite Insert rows for
+			// those generic verbs (see SearchBoost note there).
+			Tags:        []string{"store", "database", "save", "append", "no-setup", "results", "dashboard", "report"},
+			Description: "Save rows to a built-in table — no database to set up and no connection string to paste. Pick a table name and the rows land there; the table is created automatically the first time. Each workspace has its own private store, and the saved rows show up on the Results page so you can browse them in-app.",
+			Summary:     "Append rows to a workspace-local table with zero setup; auto-creates the table, evolves columns on the fly, and surfaces the rows on the Results page.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Capture form submissions",

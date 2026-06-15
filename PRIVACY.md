@@ -133,6 +133,14 @@ documented justification. Set each to the shortest period that meets your
 operational and legal needs. Note: user accounts, memberships, API keys and
 graphs are **not** swept — they persist until explicitly deleted (see Erasure).
 
+**Results boards (built-in store)** are likewise **not** swept by retention.
+Rows a flow saves via the *Built-in store · Save* drop accumulate in the
+workspace's store until cleared — by the per-board **Clear** action on the
+Results page or by deleting the workspace/account (the store lives under the
+sandbox subtree, so it rides the erasure cascade; see Erasure). Boards are
+user-curated output, not machine exhaust, so treat them as data you keep until
+you decide otherwise.
+
 ## Security of processing (Art. 32)
 
 Implemented by the product; see [SECURITY.md](SECURITY.md) and

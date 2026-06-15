@@ -62,6 +62,7 @@
     "templates": "Mallar",
     "flows": "Flöden",
     "runs": "Körningar",
+    "results": "Resultat",
     "schedules": "Scheman",
     "usage": "Förbrukning",
     "files": "Filer",
@@ -929,6 +930,22 @@
       "profileNotConfigured": "Organisationsprofiler är inte aktiverade på den här hzd-instansen.",
       "orgIconLabel": "Logotyp"
     }
+  },
+  "results": {
+    "title": "Resultat",
+    "subtitle": "Data som dina flöden sparat i det inbyggda lagret.",
+    "refresh": "Uppdatera",
+    "emptyTitle": "Inga resultat än",
+    "emptyBody": "Lägg till ett ”Inbyggt lager · Spara”-steg i ett flöde så dyker raderna det sparar upp här som en tabell du kan återkomma till.",
+    "searchPlaceholder": "Sök rader…",
+    "downloadCsv": "Ladda ner CSV",
+    "clear": "Töm",
+    "clearing": "Tömmer…",
+    "clearConfirm": "Töm alla rader i ”{{name}}”? Detta kan inte ångras.",
+    "boardEmpty": "Den här tavlan har inga rader än.",
+    "noMatches": "Inga rader matchar din sökning.",
+    "rowCount": "Visar {{shown}} av {{total}} rader",
+    "truncatedNote": "(första {{limit}} laddade)"
   },
   "runList": {
     "title": "Körningar",

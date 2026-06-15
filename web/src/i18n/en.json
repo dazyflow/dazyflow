@@ -62,6 +62,7 @@
     "templates": "Templates",
     "flows": "Flows",
     "runs": "Runs",
+    "results": "Results",
     "schedules": "Schedules",
     "usage": "Usage",
     "files": "Files",
@@ -933,6 +934,22 @@
       "profileNotConfigured": "Organization profiles aren't enabled on this hzd instance.",
       "orgIconLabel": "Logo"
     }
+  },
+  "results": {
+    "title": "Results",
+    "subtitle": "Data your flows saved to the built-in store.",
+    "refresh": "Refresh",
+    "emptyTitle": "No results yet",
+    "emptyBody": "Add a “Built-in store · Save” step to a flow and the rows it saves show up here as a table you can revisit.",
+    "searchPlaceholder": "Search rows…",
+    "downloadCsv": "Download CSV",
+    "clear": "Clear",
+    "clearing": "Clearing…",
+    "clearConfirm": "Clear all rows in “{{name}}”? This can't be undone.",
+    "boardEmpty": "This board has no rows yet.",
+    "noMatches": "No rows match your search.",
+    "rowCount": "Showing {{shown}} of {{total}} rows",
+    "truncatedNote": "(first {{limit}} loaded)"
   },
   "runList": {
     "title": "Runs",

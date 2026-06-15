@@ -167,6 +167,17 @@ export type TOTPSetup = {
   qr_png_data_url?: string;
 };
 
+// BoardSummary / BoardPage mirror the /me/boards wire shapes — a board is
+// a table in the workspace's built-in store (the Results surface).
+export type BoardSummary = { name: string; rows: number };
+export type BoardPage = {
+  name: string;
+  columns: string[];
+  rows: Record<string, unknown>[];
+  total: number;
+  truncated: boolean;
+};
+
 // runViewToRecord / nodeViewToRecord adapt the public API's clean run/node
 // wire shapes (RunView / NodeRunView, snake_case) into the JobRecord shape
 // the run-detail components already consume. Keeping the translation here
@@ -846,6 +857,49 @@ export const api = {
     request<RunView>(token, "GET", `/me/runs/${encodeURIComponent(jobID)}`).then(
       runViewToRecord,
     ),
+  // Results boards — the in-app view of the Built-in store. A board is a
+  // table in the workspace's built-in store; these read it back and clear
+  // it. tenant/workspace fall back to the principal's binding when omitted,
+  // mirroring the runs surface.
+  listBoards: (token: string, tenant?: string, workspace?: string) => {
+    const qs = new URLSearchParams();
+    if (tenant) qs.set("tenant", tenant);
+    if (workspace) qs.set("workspace", workspace);
+    const s = qs.toString();
+    return request<{ boards: BoardSummary[] }>(
+      token,
+      "GET",
+      "/me/boards" + (s ? `?${s}` : ""),
+    );
+  },
+  getBoard: (
+    token: string,
+    name: string,
+    opts: { limit?: number; offset?: number; tenant?: string; workspace?: string } = {},
+  ) => {
+    const qs = new URLSearchParams();
+    if (opts.limit) qs.set("limit", String(opts.limit));
+    if (opts.offset) qs.set("offset", String(opts.offset));
+    if (opts.tenant) qs.set("tenant", opts.tenant);
+    if (opts.workspace) qs.set("workspace", opts.workspace);
+    const s = qs.toString();
+    return request<BoardPage>(
+      token,
+      "GET",
+      `/me/boards/${encodeURIComponent(name)}` + (s ? `?${s}` : ""),
+    );
+  },
+  clearBoard: (token: string, name: string, tenant?: string, workspace?: string) => {
+    const qs = new URLSearchParams();
+    if (tenant) qs.set("tenant", tenant);
+    if (workspace) qs.set("workspace", workspace);
+    const s = qs.toString();
+    return request<void>(
+      token,
+      "DELETE",
+      `/me/boards/${encodeURIComponent(name)}` + (s ? `?${s}` : ""),
+    );
+  },
   // Billing: plan state for the Usage page, and the two Stripe
   // redirects (Checkout to upgrade, billing portal to manage/cancel).
   getBilling: (token: string, tenant?: string) => {

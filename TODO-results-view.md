@@ -1,6 +1,7 @@
 # Results view — an in-app place to see flow output
 
-**Status:** planned, not started. This file is self-contained so it can be
+**Status:** Phase 1 (MVP `/results` page) implemented. Phases 2–3 still
+planned. This file is self-contained so the remaining phases can be
 implemented from a fresh session with no prior context.
 
 ---
@@ -140,15 +141,16 @@ is rejected. Reuse the FSSandbox temp-dir pattern from
   `daemon/search.go`) so it ranks for `results`/`dashboard`/`report`.
 
 **Phase 1 checklist**
-- [ ] Daemon read-only built-in-store access (path + sandbox root resolution)
-- [ ] `ListBoards` / `BoardRows` / `ClearBoard` service methods (tenant-scoped, name-validated)
-- [ ] `GET/DELETE /api/v1/me/boards[...]` endpoints + audit
-- [ ] Backend tests incl. table-name injection rejection
-- [ ] `/results` route + nav link + icon + i18n (en + sv)
-- [ ] `Results.tsx` page: board list, table, search, CSV, clear, empty state
-- [ ] api.ts client methods
-- [ ] Built-in store drop copy/tags updated for discovery
-- [ ] `go build ./... && go vet ./... && go test ./...` green; `tsc -b` green
+- [x] Daemon read-only built-in-store access (path + sandbox root resolution) — `daemon/results.go` `openBoardStore`
+- [x] `ListBoards` / `BoardRows` / `ClearBoard` service methods (tenant-scoped, name-validated) — `daemon/results.go`
+- [x] `GET/DELETE /api/v1/me/boards[...]` endpoints + audit (`board.clear`) — `daemon/results.go`, routes in `httpgateway.go`
+- [x] Backend tests incl. table-name injection rejection — `daemon/results_test.go`
+- [x] `/results` route + nav link + icon (Table2) + i18n (en + sv)
+- [x] `Results.tsx` page: board list, table, search, CSV, clear, empty state
+- [x] api.ts client methods (`listBoards` / `getBoard` / `clearBoard`)
+- [x] Built-in store drop copy/tags updated for discovery (results/dashboard/report tags; Results-page mention)
+- [x] `go build ./... && go vet ./... && go test ./...` green; `tsc -b` green
+- [x] PRIVACY.md § Retention note: boards persist until cleared
 
 ---
 
