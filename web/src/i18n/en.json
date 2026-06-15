@@ -604,7 +604,8 @@
     "adminBlockedHead": "Your administrator needs to enable",
     "adminBlockedBody": "These aren't switched on in your Hazyflow workspace yet. You can't enable them yourself — ask whoever set this up for you.",
     "runAnyway": "Run anyway",
-    "connect": "Go to Connections"
+    "connect": "Go to Connections",
+    "noPermNote": "You don't have permission to connect apps — ask an org admin to set these up."
   },
   "approvals": {
     "title": "Approvals",
@@ -1061,6 +1062,7 @@
     "missingValue": "Missing required value: {{name}}",
     "needsSetup": "Connect {{name}} to use this step",
     "connect": "Connect {{name}}",
+    "askAdmin": "Ask an admin to connect {{name}}",
     "unwiredRequired": "Required input not wired: {{name}}",
     "loopBodyUnwired": "Wire the Loop body pin to the step you want to run for each row.",
     "loopNested": "A loop can't run inside another loop yet — move this step out of the outer loop's body.",
@@ -1276,6 +1278,7 @@
     "sampleTitle": "Run this step and its upstream chain — skip everything downstream. Useful when wiring fields against real upstream data.",
     "sample": "Run this step",
     "connectHint": "This step won't run until the app is connected.",
+    "connectAdminHint": "{{name}} isn't connected. Ask an org admin to connect it — you don't have permission to add app connections.",
     "sampling": "Running…",
     "stop": "Stop",
     "stopping": "Stopping…",
@@ -1406,6 +1409,7 @@
     "connNeeded": "This flow needs setup first: {{items}}.",
     "connNeededLead": "Connect to run this flow:",
     "connNeededCta": "Connect",
+    "connNeededAskAdmin": "Ask an org admin to connect these.",
     "adminBlockedOnly": "Setup isn't finished on this server: your administrator needs to enable {{items}} before this flow can run.",
     "adminBlockedAppend": "Your administrator also needs to enable: {{items}}.",
     "adminBlockedCta": "View setup status",

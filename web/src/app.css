@@ -2866,23 +2866,18 @@ button.warning:hover:not(:disabled) {
    button, so this is a two-column grid now. */
 .editor {
   display: grid;
-  grid-template-columns: 1fr var(--inspector-w);
+  /* Single column: the canvas — including the full-width toolbar — spans the
+     whole editor, so opening the inspector never narrows (and collapses) the
+     toolbar. The inspector is an absolute panel anchored BELOW the toolbar
+     (see the desktop rules) rather than a grid column that would compress it. */
+  grid-template-columns: 1fr;
   height: 100%;
   background: var(--bg);
-  /* Containing block for the mobile inspector bottom-sheet's
-     position:absolute. Doesn't affect desktop where the inspector lives
-     in the grid. */
   position: relative;
 }
-/* Mobile / narrow tablet: a bottom sheet is cramped, so the inspector is
-   hidden and opened on demand as a FULLSCREEN overlay via the floating
-   "Inspect" button (top-right of the canvas). It slides in from the right
-   and covers the editor area; its head's X closes it. The canvas keeps the
-   full width underneath. */
+/* Mobile / narrow tablet: the inspector opens on demand as a FULLSCREEN
+   overlay via the floating "Inspect" button; the canvas keeps full width. */
 @media (max-width: 1100px) {
-  .editor {
-    grid-template-columns: 1fr;
-  }
   .editor .inspector {
     position: absolute;
     inset: 0;
@@ -2895,23 +2890,38 @@ button.warning:hover:not(:disabled) {
     z-index: 30;
     pointer-events: none;
   }
-  /* Opened: slide the full overlay in. */
   .editor[data-inspector-expanded="true"] .inspector {
     transform: translateX(0);
     pointer-events: auto;
   }
 }
-/* On medium-width screens (e.g. laptops, narrow split-screens) the
-   inspector still steals ~320px from the canvas even when there's
-   nothing selected to inspect. Hide the pane until the user actually
-   selects a node — clicking a node restores it. Above 1400px there's
-   plenty of room, so the empty-state hint stays visible. */
-@media (min-width: 1101px) and (max-width: 1400px) {
-  .editor[data-has-selection="false"] {
-    grid-template-columns: 1fr;
+/* Desktop: the inspector is an absolute panel pinned below the 52px toolbar on
+   the right edge. It slides in when a node is selected; the canvas reserves
+   room by narrowing React Flow, while the (full-width) toolbar is untouched. */
+@media (min-width: 1101px) {
+  .editor .inspector {
+    position: absolute;
+    top: 52px;
+    right: 0;
+    bottom: 0;
+    width: var(--inspector-w);
+    z-index: 6;
+    transform: translateX(100%);
+    transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+    pointer-events: none;
   }
-  .editor[data-has-selection="false"] .inspector {
-    display: none;
+  .editor[data-has-selection="true"] .inspector {
+    transform: translateX(0);
+    pointer-events: auto;
+  }
+  /* React Flow sets an inline width:100%, so !important is needed to reserve
+     room for the inspector panel rather than let the canvas slide under it. */
+  .editor[data-has-selection="true"] .canvas > .react-flow {
+    width: calc(100% - var(--inspector-w)) !important;
+  }
+  /* Keep the run banner clear of the inspector panel. */
+  .editor[data-has-selection="true"] .editor-conn-banner {
+    right: calc(var(--inspector-w) + 12px);
   }
 }
 .editor .inspector {
@@ -2920,6 +2930,83 @@ button.warning:hover:not(:disabled) {
   background: var(--surface);
   border-left: 1px solid var(--border);
   min-height: 0;
+}
+/* Animate the canvas resize in step with the inspector slide. */
+.editor .canvas > .react-flow {
+  transition: width 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ===== Motion: professional micro-animations ==============================
+   Subtle, fast, ease-out entrances on transient surfaces, plus a gentle node
+   hover lift. The easing (a soft overshoot-free ease-out) is shared with the
+   inspector slide so the editor feels coherent. All disabled under
+   prefers-reduced-motion. */
+@keyframes hz-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes hz-slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes hz-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+/* The run / needs-setup banner drops in from the top. */
+.editor-conn-banner {
+  animation: hz-slide-down 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* Modal backdrop fades in; the dialog pops in. */
+.settings-backdrop {
+  animation: hz-fade-in 140ms ease-out;
+}
+.settings-dialog {
+  animation: hz-pop-in 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* Quick-drop palette: backdrop fades, panel pops in. */
+.quick-palette-backdrop {
+  animation: hz-fade-in 120ms ease-out;
+}
+.quick-palette {
+  animation: hz-pop-in 150ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* Node cards lift gently on hover — selection keeps its own accent glow, so
+   only unselected nodes get the hover shadow (no transform, to keep wired
+   edges perfectly aligned). */
+.hz-node:not(.selected):hover {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .editor-conn-banner,
+  .settings-backdrop,
+  .settings-dialog,
+  .quick-palette-backdrop,
+  .quick-palette {
+    animation: none;
+  }
+  .editor .inspector,
+  .editor .canvas > .react-flow,
+  .hz-node {
+    transition: none;
+  }
 }
 /* Toolbar "Add drop" button — surfaces the Ctrl+K palette now that the
    catalog panel is gone. The kbd hint stays on the right so the button
@@ -3787,6 +3874,16 @@ button.warning:hover:not(:disabled) {
 .hz-node-setup:hover {
   background: var(--btn-hover);
   text-decoration: none;
+}
+/* Locked variant: the user can't connect apps (no secret:write). Non-actionable
+   "ask an admin" note — muted, no link affordance, default cursor. */
+.hz-node-setup-locked {
+  background: var(--surface-2, rgba(255, 255, 255, 0.08));
+  color: var(--muted);
+  cursor: default;
+}
+.hz-node-setup-locked:hover {
+  background: var(--surface-2, rgba(255, 255, 255, 0.08));
 }
 .hz-node-setup-label {
   flex: 1;

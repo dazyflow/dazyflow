@@ -1,4 +1,4 @@
-package claude
+package openai
 
 import (
 	"context"
@@ -24,17 +24,17 @@ func TestCall_TextResponse(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
 		_ = json.Unmarshal(b, &gotBody)
-		if r.Header.Get("x-api-key") != "sk-ant-test" || r.Header.Get("anthropic-version") != apiVersion {
-			t.Errorf("bad headers: %v", r.Header)
+		if r.Header.Get("authorization") != "Bearer sk-test" {
+			t.Errorf("bad auth header: %q", r.Header.Get("authorization"))
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"content": []any{map[string]any{"type": "text", "text": "Hello!"}},
+			"choices": []any{map[string]any{"message": map[string]any{"content": "Hello!"}}},
 		})
 	}))
 	defer srv.Close()
 
-	res, jerr := provider{}.Call(context.Background(), "sk-ant-test", llmtask.Request{
-		UserText: "Say hi", BaseURL: srv.URL,
+	res, jerr := provider{}.Call(context.Background(), "sk-test", llmtask.Request{
+		System: "be brief", UserText: "Say hi", BaseURL: srv.URL,
 	})
 	if jerr != nil {
 		t.Fatalf("err: %+v", jerr)
@@ -42,16 +42,21 @@ func TestCall_TextResponse(t *testing.T) {
 	if res.Text != "Hello!" {
 		t.Errorf("text = %q", res.Text)
 	}
+	// System becomes the first chat message; user second.
 	msgs := gotBody["messages"].([]any)
-	if msgs[0].(map[string]any)["content"] != "Say hi" {
+	if msgs[0].(map[string]any)["role"] != "system" || msgs[1].(map[string]any)["content"] != "Say hi" {
 		t.Errorf("messages = %+v", msgs)
 	}
 }
 
-func TestCall_ForcedTool(t *testing.T) {
+func TestCall_ToolCallArgs(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"content": []any{map[string]any{"type": "tool_use", "name": "extract", "input": map[string]any{"vendor": "Acme"}}},
+			"choices": []any{map[string]any{"message": map[string]any{
+				"tool_calls": []any{map[string]any{
+					"function": map[string]any{"name": "extract", "arguments": `{"vendor":"Acme","amount":42}`},
+				}},
+			}}},
 		})
 	}))
 	defer srv.Close()
@@ -63,7 +68,7 @@ func TestCall_ForcedTool(t *testing.T) {
 	if jerr != nil {
 		t.Fatalf("err: %+v", jerr)
 	}
-	if res.Tool["vendor"] != "Acme" {
+	if res.Tool["vendor"] != "Acme" || res.Tool["amount"] != 42.0 {
 		t.Errorf("tool = %+v", res.Tool)
 	}
 }
@@ -71,11 +76,11 @@ func TestCall_ForcedTool(t *testing.T) {
 func TestCall_RateLimited(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(429)
-		_ = json.NewEncoder(w).Encode(map[string]any{"error": map[string]any{"type": "rate_limit_error", "message": "slow down"}})
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": map[string]any{"type": "rate_limit", "message": "slow"}})
 	}))
 	defer srv.Close()
 	_, jerr := provider{}.Call(context.Background(), "k", llmtask.Request{UserText: "x", BaseURL: srv.URL})
-	if jerr == nil || jerr.Code != "claude_rate_limited" {
+	if jerr == nil || jerr.Code != "openai_rate_limited" {
 		t.Fatalf("jerr = %+v", jerr)
 	}
 }

@@ -498,30 +498,41 @@ export function HazyNode({ data, selected }: NodeProps) {
           <AlertCircle size={13} />
         </div>
       )}
-      {d.setupNeeded && (
-        <a
-          className="hz-node-setup nodrag"
-          href={`/apps/${d.setupNeeded.slug}`}
-          title={i18n.t("nodeCard.needsSetup", { name: d.setupNeeded.integration })}
-          aria-label="needs setup"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {d.manifest?.brand_logo ? (
-            <img
-              src={d.manifest.brand_logo}
-              alt=""
-              className="hz-node-setup-logo"
-              draggable={false}
-            />
+      {d.setupNeeded &&
+        (() => {
+          const name = d.setupNeeded.integration;
+          // A user without secret:write can't connect apps (the Apps card is
+          // hidden for them) — show a non-actionable "ask an admin" note
+          // instead of a Connect link that would dead-end.
+          const locked = d.canConnect === false;
+          const icon = d.manifest?.brand_logo ? (
+            <img src={d.manifest.brand_logo} alt="" className="hz-node-setup-logo" draggable={false} />
           ) : (
             <Icon size={14} className="hz-node-setup-logo" />
-          )}
-          <span className="hz-node-setup-label">
-            {i18n.t("nodeCard.connect", { name: d.setupNeeded.integration })}
-          </span>
-          <ChevronRight size={14} className="hz-node-setup-arrow" />
-        </a>
-      )}
+          );
+          if (locked) {
+            const label = i18n.t("nodeCard.askAdmin", { name });
+            return (
+              <div className="hz-node-setup hz-node-setup-locked" title={label} aria-label="needs setup">
+                {icon}
+                <span className="hz-node-setup-label">{label}</span>
+              </div>
+            );
+          }
+          return (
+            <a
+              className="hz-node-setup nodrag"
+              href={`/apps/${d.setupNeeded.slug}`}
+              title={i18n.t("nodeCard.needsSetup", { name })}
+              aria-label="needs setup"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {icon}
+              <span className="hz-node-setup-label">{i18n.t("nodeCard.connect", { name })}</span>
+              <ChevronRight size={14} className="hz-node-setup-arrow" />
+            </a>
+          );
+        })()}
     </div>
   );
 }

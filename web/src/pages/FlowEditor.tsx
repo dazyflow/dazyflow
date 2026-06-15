@@ -284,6 +284,10 @@ function EditorInner() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { token, me, hasPerm, activeTenant, activeWorkspace } = useAuth();
+  // Connecting an app writes conn.<slug>.api_key — needs secret:write. Viewers
+  // (graph:run only) can't, and the Apps connection card is hidden for them, so
+  // the "Connect" CTAs become a non-actionable "ask an admin" note instead.
+  const canConnect = hasPerm("secret:write");
   const themeMode = useThemeMode();
   const [manifests, setManifests] = useState<Manifest[]>([]);
   const manifestByID = useMemo(() => {
@@ -1665,6 +1669,7 @@ function EditorInner() {
         outputs: runOutputs[n.id],
         configErrors: configErrorsByNode.get(n.id),
         setupNeeded: setupNeededByNode.get(n.id),
+        canConnect,
         resourceLabels: resourceLabelsByNode.get(n.id),
         loopOwned: loopOwnerByNode.has(n.id),
         disabled: disabledNodes.has(n.id),
@@ -1683,6 +1688,7 @@ function EditorInner() {
     runOutputs,
     configErrorsByNode,
     setupNeededByNode,
+    canConnect,
     resourceLabelsByNode,
     loopOwnerByNode,
     disabledNodes,
@@ -3473,13 +3479,20 @@ function EditorInner() {
           onConnectStart={onConnectStart}
           onConnectEnd={onConnectEnd}
           onInit={(inst) => (rfRef.current = inst)}
+          // Open the inspector only on a click WITHOUT a drag. Grabbing a node
+          // to move it also selects it, so opening on selection (below) would
+          // pop the inspector open every time you reposition a card. onNodeClick
+          // fires on mouse-release only when there was no drag — exactly the
+          // gesture we want.
+          onNodeClick={(_e, node) => setSelectedID(node.id)}
+          onPaneClick={() => setSelectedID(null)}
           onSelectionChange={(s) => {
-            // React Flow re-fires this on every node-array update, not just
-            // when the user picks a different node — so we must NOT collapse
-            // the inspector here (it would instantly undo the Inspect FAB's
-            // open). Collapsing on a genuine selection change is handled by
-            // the effect keyed on selectedID below.
-            setSelectedID(s.nodes[0]?.id ?? null);
+            // Only collapse on a MULTI-select (no single node to inspect).
+            // Don't clear on the empty selection: React Flow fires a transient
+            // empty onSelectionChange during a node click, which would undo the
+            // selectedID that onNodeClick just set (the "needs two clicks" bug).
+            // Closing on an empty-canvas click is handled by onPaneClick.
+            if (s.nodes.length > 1) setSelectedID(null);
           }}
           fitView
           fitViewOptions={{ padding: 0.3 }}
@@ -3733,16 +3746,22 @@ function EditorInner() {
                   connected (OAuth) or keyed. When the blockage is
                   admin-side, the same page surfaces the per-app "ask your
                   admin" note; we just relabel the CTA as a status-check
-                  rather than a fixable action. */}
-              <button
-                type="button"
-                className="primary"
-                onClick={() => navigate(setupTarget)}
-              >
-                {userFixableSetup
-                  ? t("editor.connNeededCta")
-                  : t("editor.adminBlockedCta")}
-              </button>
+                  rather than a fixable action. A user without secret:write
+                  can't connect anything, so we drop the button for an
+                  "ask an admin" note rather than send them to a dead-end. */}
+              {canConnect ? (
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => navigate(setupTarget)}
+                >
+                  {userFixableSetup
+                    ? t("editor.connNeededCta")
+                    : t("editor.adminBlockedCta")}
+                </button>
+              ) : (
+                <span className="editor-conn-banner-admin">{t("editor.connNeededAskAdmin")}</span>
+              )}
               <button
                 type="button"
                 className="ghost"
@@ -3896,6 +3915,7 @@ function EditorInner() {
           adminBlockedProviders={adminBlockedProviders}
           adminBlockedSecretRefs={adminBlockedSecretRefs}
           slackChannels={slackTargets}
+          canConnect={canConnect}
           onConnect={() => navigate(setupTarget)}
           onRunAnyway={() => void doRun()}
           onCancel={() => setGateOpen(false)}
@@ -3917,12 +3937,16 @@ function ConnectionGate({
   adminBlockedProviders,
   adminBlockedSecretRefs,
   slackChannels,
+  canConnect,
   onConnect,
   onRunAnyway,
   onCancel,
 }: {
   missing: MissingConnection[];
   missingSecrets: string[];
+  // canConnect = hasPerm("secret:write"); when false the user can't connect
+  // apps, so the Connect button is replaced with an "ask an admin" note.
+  canConnect: boolean;
   // missingSetups names apps with a service connection (API key / endpoint)
   // that isn't configured — the ConnectionFields shape (Claude, ntfy, SMTP).
   missingSetups: SetupNeed[];
@@ -4019,13 +4043,18 @@ function ConnectionGate({
             </div>
           )}
         </div>
+        {!canConnect && hasUserFixable && (
+          <p className="desc conn-gate-noperm">{t("connGate.noPermNote")}</p>
+        )}
         <div className="settings-foot">
           <button type="button" onClick={onRunAnyway}>
             {t("connGate.runAnyway")}
           </button>
-          <button type="button" className="primary" onClick={onConnect}>
-            {t("connGate.connect")}
-          </button>
+          {canConnect && (
+            <button type="button" className="primary" onClick={onConnect}>
+              {t("connGate.connect")}
+            </button>
+          )}
         </div>
       </div>
     </div>

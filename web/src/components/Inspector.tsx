@@ -150,7 +150,7 @@ export function Inspector({
   const [approveComment, setApproveComment] = useState("");
   const [approving, setApproving] = useState<"approve" | "reject" | null>(null);
   const [approveError, setApproveError] = useState<string | null>(null);
-  const { token } = useAuth();
+  const { token, hasPerm } = useAuth();
 
   // Loop-body reference tokens: when the selected node runs inside a for_each
   // (loopOwnerNodeId set), fetch the columns of that loop's list and offer
@@ -385,19 +385,29 @@ export function Inspector({
       <div className="inspector-body">
         {setupNeeded && (
           <div className="sf-field inspector-connect">
-            <button
-              type="button"
-              className="primary inspector-connect-cta"
-              onClick={() => navigate(`/apps/${setupNeeded.slug}`)}
-            >
-              {brandLogo ? (
-                <img src={brandLogo} alt="" draggable={false} />
-              ) : (
-                <DropIcon size={15} strokeWidth={2.2} />
-              )}
-              {t("nodeCard.connect", { name: setupNeeded.integration })}
-            </button>
-            <div className="desc">{t("inspector.connectHint")}</div>
+            {hasPerm("secret:write") ? (
+              <>
+                <button
+                  type="button"
+                  className="primary inspector-connect-cta"
+                  onClick={() => navigate(`/apps/${setupNeeded.slug}`)}
+                >
+                  {brandLogo ? (
+                    <img src={brandLogo} alt="" draggable={false} />
+                  ) : (
+                    <DropIcon size={15} strokeWidth={2.2} />
+                  )}
+                  {t("nodeCard.connect", { name: setupNeeded.integration })}
+                </button>
+                <div className="desc">{t("inspector.connectHint")}</div>
+              </>
+            ) : (
+              // No secret:write → can't connect apps; the Apps card is hidden
+              // for them, so point at the admin instead of a dead-end button.
+              <div className="desc">
+                {t("inspector.connectAdminHint", { name: setupNeeded.integration })}
+              </div>
+            )}
           </div>
         )}
         {onSample && (

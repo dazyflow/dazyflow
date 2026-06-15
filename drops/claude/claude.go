@@ -1,187 +1,109 @@
-// Package claude hosts the native Claude (Anthropic Messages API)
-// connector, migrated from the scripted TS drop. It authenticates with an
-// api_key param supplied by the per-tenant Claude app connection — the
-// engine injects conn.claude.api_key into the param when the node leaves
-// it unset (see ConnectionFields below); there's no OAuth.
+// Package claude is the Claude (Anthropic Messages API) provider for the
+// shared llmtask core. It implements one Provider — the vendor API call +
+// response parsing — and registers the five task-shaped drops (Ask,
+// Summarize, Extract, Classify, Draft reply) under the "Claude" integration
+// via llmtask.RegisterAll. The task UX + manifests live in llmtask; only the
+// Anthropic-specific bits live here. ChatGPT is the sibling package
+// drops/openai, sharing the same core.
 package claude
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"io"
-	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
-	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/hazyflow/drops/internal/llmtask"
 )
 
 const (
-	apiVersion  = "2023-06-01"
-	defaultBase = "https://api.anthropic.com"
-	// maxResponseBytes caps how much of the API response we buffer, so a
-	// hostile or buggy upstream (reachable via the base_url override) can't
-	// OOM the daemon by streaming an unbounded body.
-	maxResponseBytes = 64 << 20 // 64 MiB
+	apiVersion   = "2023-06-01"
+	defaultBase  = "https://api.anthropic.com"
+	defaultModel = "claude-sonnet-4-6"
 )
 
-func init() {
-	engine.Register(engine.NativeDrop{
-		Manifest: core.Manifest{
-			ID:          "claude",
-			Version:     "1.0",
-			Label:       "Claude",
-			Subtitle:    "Ask",
-			Summary:     "Send a prompt to Claude and get a single-turn text response back.",
-			Description: "Send a prompt to Claude and get a response back — summarise upstream text, classify inputs, or generate responses. The graph itself is your agent loop.",
-			Integration: "Claude",
-			Category:    "ai",
-			Icon:        "claude",
-			Color:       "#cc7755",
-			Provider:    "internal",
-			Tags:        []string{"claude", "anthropic", "ai", "llm", "prompt"},
-			Examples: []core.ParamsExample{
-				{Title: "One-shot summary", Params: json.RawMessage(`{"model":"claude-sonnet-4-6","prompt":"Summarize the upstream text in one sentence.","max_tokens":256}`), Notes: "Wire the text to summarise into the 'prompt' input; params.prompt or params.system is the instruction. The API key comes from the Claude app connection — leave api_key unset."},
-				{Title: "System-prompted classifier", Params: json.RawMessage(`{"model":"claude-sonnet-4-6","system":"Reply with exactly 'spam' or 'ham'.","prompt":"Your bank account has been compromised","max_tokens":4,"temperature":0}`)},
-			},
-			// The Anthropic API key is a per-tenant connection set once on
-			// the Claude app page; the engine injects it into the api_key
-			// param so a flow author never pastes the key on a node.
-			ConnectionFields: []core.ConnectionField{
-				{Key: "api_key", Label: "API key", Secret: true, Required: true, Placeholder: "sk-ant-…"},
-			},
-			ExecutionModel: core.ExecutionBatch,
-			ProcessModel:   core.ProcessLongLived,
-			Inputs: []core.Port{
-				{Port: "prompt", Label: "Prompt"},
-			},
-			Outputs: []core.Port{
-				// Only the text answer is declared as a port; the raw Messages
-				// API response (stop_reason, usage, content blocks) is still
-				// EMITTED under "response" (see executeClaude) so run records
-				// keep it for debugging, but it's not a pin — re-expose it as a
-				// named port if a feature ever needs to wire usage/stop_reason.
-				{Port: "text", Label: "Text", MIME: []string{"text/plain"}},
-			},
-			ParamsSchema: json.RawMessage(`{
-				"type":"object",
-				"properties":{
-					"model":{"type":"string","description":"Model id, e.g. claude-sonnet-4-6."},
-					"prompt":{"type":"string","format":"multiline","description":"Single user message (used when no 'prompt' input and no params.messages)."},
-					"system":{"type":"string","format":"multiline","description":"Optional system prompt."},
-					"messages":{"type":"array","items":{},"x_advanced":true,"description":"Full conversation history ({role, content}); overrides params.prompt."},
-					"max_tokens":{"type":"integer","default":1024,"minimum":1},
-					"temperature":{"type":"number"},
-					"stop_sequences":{"type":"array","items":{"type":"string"},"x_advanced":true},
-					"api_key":{"type":"string","x_advanced":true,"description":"Anthropic API key. Configured once on the Claude app connection and injected automatically — leave unset on the node."},
-					"base_url":{"type":"string","x_advanced":true,"description":"Override the API host."},
-					"timeout_ms":{"type":"integer","default":60000,"minimum":1}
-				}
-			}`),
-			Idempotent:  true,
-			RetryPolicy: core.RetryExponentialBackoff,
-		},
-		Execute: executeClaude,
-	})
-}
+type provider struct{}
 
-func executeClaude(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	apiKey, _ := params.StringOpt(job.Params, "api_key")
-	if apiKey == "" {
-		return params.Err(job, "bad_param", "no API key — connect Claude on the Apps page to set it"), nil
+// Call sends one single-turn Anthropic Messages request and normalizes the
+// response into an llmtask.Result. Forced tools map to Anthropic's
+// tools + tool_choice; the response's tool_use block carries the input.
+func (provider) Call(ctx context.Context, apiKey string, req llmtask.Request) (llmtask.Result, *core.JobError) {
+	model := req.Model
+	if model == "" {
+		model = defaultModel
+	}
+	maxTokens := req.MaxTokens
+	if maxTokens <= 0 {
+		maxTokens = 1024
 	}
 
-	// Message precedence: prompt input → params.messages → params.prompt.
 	var messages []any
-	if in, ok := job.Input["prompt"]; ok && in.Inline != nil {
-		if text := coercePromptText(in.Inline); text != "" {
-			messages = []any{map[string]any{"role": "user", "content": text}}
-		}
-	}
-	if messages == nil {
-		if m, ok := job.Params["messages"].([]any); ok && len(m) > 0 {
-			messages = m
-		}
-	}
-	if messages == nil {
-		if pr, _ := params.StringOpt(job.Params, "prompt"); pr != "" {
-			messages = []any{map[string]any{"role": "user", "content": pr}}
-		}
-	}
-	if len(messages) == 0 {
-		return params.Err(job, "bad_input", "no messages — provide params.messages or the prompt input port"), nil
+	if len(req.Messages) > 0 {
+		messages = req.Messages
+	} else {
+		messages = []any{map[string]any{"role": "user", "content": req.UserText}}
 	}
 
-	body := map[string]any{
-		"model":      params.StringDefault(job.Params, "model", "claude-sonnet-4-6"),
-		"messages":   messages,
-		"max_tokens": params.IntDefault(job.Params, "max_tokens", 1024),
+	body := map[string]any{"model": model, "max_tokens": maxTokens, "messages": messages}
+	if req.System != "" {
+		body["system"] = req.System
 	}
-	if s, _ := params.StringOpt(job.Params, "system"); s != "" {
-		body["system"] = s
+	if req.Temperature != nil {
+		body["temperature"] = *req.Temperature
 	}
-	if t, ok := job.Params["temperature"].(float64); ok {
-		body["temperature"] = t
-	}
-	if ss, ok := job.Params["stop_sequences"].([]any); ok && len(ss) > 0 {
-		body["stop_sequences"] = ss
+	if req.Tool != nil {
+		body["tools"] = []any{map[string]any{
+			"name": req.Tool.Name, "description": req.Tool.Description, "input_schema": req.Tool.Schema,
+		}}
+		body["tool_choice"] = map[string]any{"type": "tool", "name": req.Tool.Name}
 	}
 	raw, _ := json.Marshal(body)
 
-	base := strings.TrimRight(params.StringDefault(job.Params, "base_url", defaultBase), "/")
-	endpoint := base + "/v1/messages"
-
-	timeout := time.Duration(params.IntDefault(job.Params, "timeout_ms", 60000)) * time.Millisecond
-	reqCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	req, err := http.NewRequestWithContext(reqCtx, "POST", endpoint, bytes.NewReader(raw))
-	if err != nil {
-		return params.Err(job, "bad_param", err.Error()), nil
+	base := strings.TrimRight(req.BaseURL, "/")
+	if base == "" {
+		base = defaultBase
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", apiKey)
-	req.Header.Set("anthropic-version", apiVersion)
-
-	// base_url is a tenant-overridable param (x_advanced), so the endpoint
-	// is NOT fixed — guard the dial like every other connector: the SSRF
-	// client blocks loopback/private/link-local targets (cloud metadata,
-	// internal services) and the egress allowlist (when the operator sets
-	// one) bounds which public hosts the x-api-key may be sent to.
-	if err := hfnet.EgressAllowed(endpoint); err != nil {
-		return params.Err(job, "egress_blocked", err.Error()), nil
+	status, respBody, jerr := llmtask.PostJSON(ctx, base+"/v1/messages", map[string]string{
+		"content-type": "application/json", "x-api-key": apiKey, "anthropic-version": apiVersion,
+	}, raw, req.TimeoutMS)
+	if jerr != nil {
+		return llmtask.Result{}, jerr
 	}
-	resp, err := hfnet.SafeHTTPClient(timeout, hfnet.PrivateEgressAllowed()).Do(req)
-	if err != nil {
-		return params.Err(job, "claude_http_error", err.Error()), nil
-	}
-	defer resp.Body.Close()
-	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
-	if int64(len(respBody)) > maxResponseBytes {
-		return params.Err(job, "claude_http_error", "response exceeds "+strconv.Itoa(maxResponseBytes)+" bytes"), nil
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	if status < 200 || status >= 300 {
 		code := "claude_api"
-		if resp.StatusCode == 429 {
+		if status == 429 {
 			code = "claude_rate_limited"
 		}
-		return params.Err(job, code, strconv.Itoa(resp.StatusCode)+" "+claudeError(respBody)), nil
+		return llmtask.Result{}, &core.JobError{Code: code, Message: strconv.Itoa(status) + " " + claudeError(respBody)}
 	}
 
 	var parsed map[string]any
 	_ = json.Unmarshal(respBody, &parsed)
-	return core.Result{
-		JobID:  job.ID,
-		Status: core.StatusOK,
-		Output: map[string]core.Ref{
-			"text":     {MIME: "text/plain", Inline: extractText(parsed)},
-			"response": {MIME: "application/json", Inline: parsed},
+	res := llmtask.Result{Raw: parsed, Text: extractText(parsed)}
+	if req.Tool != nil {
+		res.Tool = extractToolInput(parsed, req.Tool.Name)
+	}
+	return res, nil
+}
+
+func init() {
+	llmtask.RegisterAll(llmtask.Config{
+		Provider:     provider{},
+		Integration:  "Claude",
+		Icon:         "claude",
+		Color:        "#cc7755",
+		DefaultModel: defaultModel,
+		Models: []llmtask.ModelOption{
+			{ID: "claude-opus-4-8", Label: "Claude Opus 4.8"},
+			{ID: "claude-sonnet-4-6", Label: "Claude Sonnet 4.6"},
+			{ID: "claude-haiku-4-5-20251001", Label: "Claude Haiku 4.5"},
 		},
-	}, nil
+		KeyPlaceholder:  "sk-ant-…",
+		AskID:           "claude",
+		TaskIDPrefix:    "claude",
+		TaskAliasPrefix: "ai", // ai_summarize → claude_summarize, etc.
+	})
 }
 
 // extractText concatenates the text blocks of a Messages API response.
@@ -203,6 +125,28 @@ func extractText(parsed map[string]any) string {
 	return b.String()
 }
 
+// extractToolInput returns the input map of the first tool_use block matching
+// name (the forced tool), or nil if the model didn't call it.
+func extractToolInput(parsed map[string]any, name string) map[string]any {
+	content, ok := parsed["content"].([]any)
+	if !ok {
+		return nil
+	}
+	for _, blk := range content {
+		m, ok := blk.(map[string]any)
+		if !ok || m["type"] != "tool_use" {
+			continue
+		}
+		if name != "" && m["name"] != name {
+			continue
+		}
+		if in, ok := m["input"].(map[string]any); ok {
+			return in
+		}
+	}
+	return nil
+}
+
 func claudeError(body []byte) string {
 	var e struct {
 		Error struct {
@@ -214,35 +158,4 @@ func claudeError(body []byte) string {
 		return e.Error.Type + ": " + e.Error.Message
 	}
 	return string(body)
-}
-
-// coercePromptText flattens whatever arrived on the prompt input into one
-// string: a string passes through; a list joins with blank lines; a
-// {value:…} wrapper recurses; any other object is JSON-encoded.
-func coercePromptText(v any) string {
-	switch t := v.(type) {
-	case nil:
-		return ""
-	case string:
-		return t
-	case []byte:
-		return string(t)
-	case []any:
-		var parts []string
-		for _, it := range t {
-			if s := coercePromptText(it); s != "" {
-				parts = append(parts, s)
-			}
-		}
-		return strings.Join(parts, "\n\n")
-	case map[string]any:
-		if inner, ok := t["value"]; ok {
-			return coercePromptText(inner)
-		}
-		b, _ := json.Marshal(t)
-		return string(b)
-	default:
-		b, _ := json.Marshal(t)
-		return string(b)
-	}
 }

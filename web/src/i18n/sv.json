@@ -600,7 +600,8 @@
     "adminBlockedHead": "Administratören behöver aktivera",
     "adminBlockedBody": "Dessa är inte påslagna i ditt Hazyflow-konto ännu. Du kan inte aktivera dem själv — fråga personen som satte upp det åt dig.",
     "runAnyway": "Kör ändå",
-    "connect": "Gå till Anslutningar"
+    "connect": "Gå till Anslutningar",
+    "noPermNote": "Du har inte behörighet att ansluta appar — be en org-administratör att konfigurera dessa."
   },
   "approvals": {
     "title": "Godkännanden",
@@ -1057,6 +1058,7 @@
     "missingValue": "Obligatoriskt värde saknas: {{name}}",
     "needsSetup": "Anslut {{name}} för att använda det här steget",
     "connect": "Anslut {{name}}",
+    "askAdmin": "Be en administratör att ansluta {{name}}",
     "unwiredRequired": "Obligatorisk ingång ej kopplad: {{name}}",
     "loopBodyUnwired": "Koppla Loop body-stiftet till steget du vill köra för varje rad.",
     "loopNested": "En loop kan inte köras inuti en annan loop ännu — flytta ut det här steget ur den yttre loopens body.",
@@ -1271,6 +1273,7 @@
     "sampleTitle": "Kör det här steget och dess upstream-kedja — hoppa över allt nedströms. Användbart när du kopplar fält mot verklig upstream-data.",
     "sample": "Kör det här steget",
     "connectHint": "Det här steget körs inte förrän appen är ansluten.",
+    "connectAdminHint": "{{name}} är inte ansluten. Be en org-administratör att ansluta den — du har inte behörighet att lägga till appanslutningar.",
     "sampling": "Kör…",
     "stop": "Stoppa",
     "stopping": "Stoppar…",
@@ -1394,6 +1397,7 @@
     "connNeeded": "Det här flödet behöver konfigureras först: {{items}}.",
     "connNeededLead": "Anslut för att köra det här flödet:",
     "connNeededCta": "Anslut",
+    "connNeededAskAdmin": "Be en org-administratör att ansluta dessa.",
     "adminBlockedOnly": "Servern är inte färdigkonfigurerad: administratören behöver aktivera {{items}} innan flödet kan köras.",
     "adminBlockedAppend": "Administratören behöver också aktivera: {{items}}.",
     "adminBlockedCta": "Visa konfigurationsstatus",

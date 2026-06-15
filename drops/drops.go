@@ -9,7 +9,6 @@
 package drops
 
 import (
-	_ "git.sr.ht/~klahr/hazyflow/drops/ai"
 	_ "git.sr.ht/~klahr/hazyflow/drops/claude"
 	_ "git.sr.ht/~klahr/hazyflow/drops/db"
 	_ "git.sr.ht/~klahr/hazyflow/drops/excel"
@@ -21,6 +20,7 @@ import (
 	_ "git.sr.ht/~klahr/hazyflow/drops/net"
 	_ "git.sr.ht/~klahr/hazyflow/drops/notify"
 	_ "git.sr.ht/~klahr/hazyflow/drops/notion"
+	_ "git.sr.ht/~klahr/hazyflow/drops/openai"
 	_ "git.sr.ht/~klahr/hazyflow/drops/secrets"
 	_ "git.sr.ht/~klahr/hazyflow/drops/sheets"
 	_ "git.sr.ht/~klahr/hazyflow/drops/shell"

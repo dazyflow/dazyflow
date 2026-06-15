@@ -260,6 +260,14 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
       "Authenticated with the API key set on this connection — flows pick it up automatically, no key on the node. For local development without a key, the hzd --claude-cli flag routes through a local `claude -p` CLI plus an MCP server so flows can exercise the chat path against your already-logged-in CLI.",
     docs_url: "https://docs.anthropic.com/",
   },
+  chatgpt: {
+    name: "ChatGPT",
+    description:
+      "Run prompts through ChatGPT, OpenAI's AI assistant. Use it the same way as Claude — summarise text, classify inputs, extract fields, or draft replies — wherever you'd rather use an OpenAI model.",
+    technical_notes:
+      "OpenAI Chat Completions API, authenticated with the API key set on this connection — flows pick it up automatically, no key on the node. Structured steps (Extract fields, Classify) use OpenAI function tool-calls.",
+    docs_url: "https://platform.openai.com/docs",
+  },
   git: {
     name: "Git",
     description:

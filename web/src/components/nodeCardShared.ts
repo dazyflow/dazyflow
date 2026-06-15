@@ -96,6 +96,11 @@ export type HazyNodeData = {
   // configErrors (missing params) and lintMessage. Carries the integration's
   // display name and /apps slug for the deep link.
   setupNeeded?: { integration: string; slug: string };
+  // canConnect mirrors hasPerm("secret:write"): whether the current user can
+  // actually connect an app. When false (e.g. a viewer), the setup chip shows
+  // a non-actionable "ask an admin" note instead of a Connect link — the Apps
+  // connection card is hidden for them, so the link would dead-end.
+  canConnect?: boolean;
   // True when this node runs inside a for_each loop body (reachable from a
   // for_each's `body` pin). Drives the dashed "runs once per row" card style
   // and the ${item.…} reference menu in its form.
