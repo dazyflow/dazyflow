@@ -12,4 +12,7 @@
 /node_modules/
 # Local key material (legacy hz-drops signing keys) — never commit
 .keys/
-/.claude
+# Local Claude Code state stays out of git, but the shared skills under
+# .claude/skills/ are committed so the team gets them.
+/.claude/*
+!/.claude/skills/
