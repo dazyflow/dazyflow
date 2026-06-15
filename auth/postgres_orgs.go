@@ -150,6 +150,25 @@ func (s *PgMembershipStore) DeleteMembership(ctx context.Context, email, tenant 
 	return err
 }
 
+// DeleteByEmail removes every membership for a user (erasure, Art. 17).
+func (s *PgMembershipStore) DeleteByEmail(ctx context.Context, email string) (int, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	tag, err := s.pool.Exec(ctx, `DELETE FROM memberships WHERE user_email=$1`, email)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
+// DeleteByTenant removes every membership in an org (org deletion).
+func (s *PgMembershipStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM memberships WHERE tenant=$1`, tenant)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
 func (s *PgMembershipStore) GetMembership(ctx context.Context, email, tenant string) (Membership, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 	row := s.pool.QueryRow(ctx,
@@ -283,6 +302,47 @@ func (s *PgInvitationStore) ListByTenant(ctx context.Context, tenant string) ([]
 		out = append(out, inv)
 	}
 	return out, rows.Err()
+}
+
+// ListByEmail returns every invitation addressed to an email (export).
+func (s *PgInvitationStore) ListByEmail(ctx context.Context, email string) ([]Invitation, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	rows, err := s.pool.Query(ctx,
+		`SELECT token, email, tenant, workspace, roles, invited_by, created_at, expires_at, accepted_at, revoked_at
+         FROM invitations WHERE email=$1
+         ORDER BY created_at DESC`, email)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Invitation{}
+	for rows.Next() {
+		inv, err := scanInvitation(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, inv)
+	}
+	return out, rows.Err()
+}
+
+// DeleteByEmail hard-deletes every invitation to an email (erasure).
+func (s *PgInvitationStore) DeleteByEmail(ctx context.Context, email string) (int, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	tag, err := s.pool.Exec(ctx, `DELETE FROM invitations WHERE email=$1`, email)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
+// DeleteByTenant hard-deletes every invitation in an org (org deletion).
+func (s *PgInvitationStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM invitations WHERE tenant=$1`, tenant)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
 }
 
 func (s *PgInvitationStore) MarkAccepted(ctx context.Context, token string, at time.Time) error {
@@ -441,6 +501,12 @@ func (s *PgOrgProfileStore) ListOrgProfiles(ctx context.Context, tenants []strin
 		out[p.Tenant] = p
 	}
 	return out, rows.Err()
+}
+
+// DeleteOrgProfile removes an org's display profile (org deletion).
+func (s *PgOrgProfileStore) DeleteOrgProfile(ctx context.Context, tenant string) error {
+	_, err := s.pool.Exec(ctx, `DELETE FROM org_profiles WHERE tenant=$1`, tenant)
+	return err
 }
 
 // ---- shared ---------------------------------------------------------

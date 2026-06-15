@@ -84,15 +84,34 @@ type Config struct {
 	KeyPlaceholder string
 	AskID          string // "claude" / "chatgpt"
 	TaskIDPrefix   string // "claude" / "gpt" → <prefix>_summarize
+	// VerifyKey, when set, checks that an API key is usable WITHOUT a
+	// token-costing generation — typically a GET to the provider's models
+	// endpoint (see GetStatus). RegisterAll wires it into the connection
+	// verifier for cfg.Integration so the Apps page can test the key before
+	// saving it. baseURL is "" for the provider default.
+	VerifyKey func(ctx context.Context, apiKey, baseURL string) error
 }
 
-// RegisterAll registers all five task drops for a provider.
+// RegisterAll registers all five task drops for a provider, plus (when the
+// provider supplies cfg.VerifyKey) the connection verifier that backs the
+// Apps page's "Test connection" / verify-before-save for this integration.
 func RegisterAll(cfg Config) {
 	engine.Register(askDrop(cfg))
 	engine.Register(summarizeDrop(cfg))
 	engine.Register(extractDrop(cfg))
 	engine.Register(classifyDrop(cfg))
 	engine.Register(draftReplyDrop(cfg))
+	if cfg.VerifyKey != nil {
+		verify := cfg.VerifyKey
+		integration := cfg.Integration
+		engine.RegisterConnectionVerifier(integration, func(ctx context.Context, conn map[string]string) error {
+			key := strings.TrimSpace(conn["api_key"])
+			if key == "" {
+				return fmt.Errorf("no API key — paste your %s API key to connect", integration)
+			}
+			return verify(ctx, key, "")
+		})
+	}
 }
 
 // PostJSON runs one guarded JSON POST: SSRF dial guard + egress allowlist
@@ -132,6 +151,35 @@ func PostJSON(ctx context.Context, endpoint string, headers map[string]string, b
 		return resp.StatusCode, nil, &core.JobError{Code: "llm_http_error", Message: "response exceeds limit"}
 	}
 	return resp.StatusCode, respBody, nil
+}
+
+// GetStatus runs one guarded GET (SSRF dial guard + egress allowlist +
+// timeout) and returns the HTTP status and a capped body. It's the read-only
+// sibling of PostJSON, used by a provider's VerifyKey to validate an API key
+// against a cheap read endpoint (e.g. GET /v1/models) — no token-costing
+// generation, no mutation. Endpoints are tenant-overridable, so the same
+// egress guard applies: the key must not be exfiltrable to an internal host.
+func GetStatus(ctx context.Context, endpoint string, headers map[string]string) (int, []byte, error) {
+	timeout := 10 * time.Second
+	reqCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(reqCtx, "GET", endpoint, nil)
+	if err != nil {
+		return 0, nil, err
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	if err := hfnet.EgressAllowed(endpoint); err != nil {
+		return 0, nil, err
+	}
+	resp, err := hfnet.SafeHTTPClient(timeout, hfnet.PrivateEgressAllowed()).Do(req)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	return resp.StatusCode, body, nil
 }
 
 // HTTPError turns a non-2xx LLM API status into an actionable JobError so

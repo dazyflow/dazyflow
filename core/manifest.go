@@ -216,6 +216,13 @@ type Manifest struct {
 	// carry only per-use params. See ConnectionField.
 	ConnectionFields []ConnectionField `json:"connection_fields,omitempty"`
 
+	// ConnectionVerifiable reports whether the integration this drop belongs
+	// to has a registered live connection check (engine.ConnectionVerifier).
+	// It is NOT set at registration — the daemon computes it on the way out
+	// (see Service.ListDrops) so the Apps page knows whether to offer a "Test
+	// connection" affordance and to verify credentials before saving them.
+	ConnectionVerifiable bool `json:"connection_verifiable,omitempty"`
+
 	// Egress is the allowlist of external hosts a sandboxed (out-of-process)
 	// drop may reach via the broker's guarded fetch — the drop's *declared*
 	// network surface, enforced on top of the global SSRF guard + egress policy.

@@ -141,6 +141,49 @@ func (s *JSONInvitationStore) ListByTenant(_ context.Context, tenant string) ([]
 	return out, nil
 }
 
+// ListByEmail returns every invitation addressed to an email (export).
+func (s *JSONInvitationStore) ListByEmail(_ context.Context, email string) ([]Invitation, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := []Invitation{}
+	for _, i := range s.items {
+		if strings.ToLower(i.Email) == email {
+			out = append(out, i)
+		}
+	}
+	return out, nil
+}
+
+// DeleteByEmail hard-deletes every invitation to an email (erasure).
+func (s *JSONInvitationStore) DeleteByEmail(_ context.Context, email string) (int, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for token, i := range s.items {
+		if strings.ToLower(i.Email) == email {
+			delete(s.items, token)
+			n++
+		}
+	}
+	return n, s.flushLocked()
+}
+
+// DeleteByTenant hard-deletes every invitation in a tenant (org deletion).
+func (s *JSONInvitationStore) DeleteByTenant(_ context.Context, tenant string) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for token, i := range s.items {
+		if i.Tenant == tenant {
+			delete(s.items, token)
+			n++
+		}
+	}
+	return n, s.flushLocked()
+}
+
 func (s *JSONInvitationStore) MarkAccepted(_ context.Context, token string, at time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

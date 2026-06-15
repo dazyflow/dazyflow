@@ -238,3 +238,45 @@ func (m *MemKeyStore) ListByTenant(_ context.Context, tenant string) ([]APIKey, 
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out, nil
 }
+
+// ListBySubject returns every key issued to a subject (GDPR export).
+func (m *MemKeyStore) ListBySubject(_ context.Context, subject string) ([]APIKey, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make([]APIKey, 0)
+	for _, k := range m.keys {
+		if k.Subject == subject {
+			out = append(out, k)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, nil
+}
+
+// DeleteBySubject hard-deletes every key for a subject (erasure).
+func (m *MemKeyStore) DeleteBySubject(_ context.Context, subject string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := 0
+	for id, k := range m.keys {
+		if k.Subject == subject {
+			delete(m.keys, id)
+			n++
+		}
+	}
+	return n, nil
+}
+
+// DeleteByTenant hard-deletes every key in a tenant (org deletion).
+func (m *MemKeyStore) DeleteByTenant(_ context.Context, tenant string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := 0
+	for id, k := range m.keys {
+		if k.Tenant == tenant {
+			delete(m.keys, id)
+			n++
+		}
+	}
+	return n, nil
+}

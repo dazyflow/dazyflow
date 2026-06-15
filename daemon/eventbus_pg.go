@@ -242,6 +242,18 @@ func (b *PgBus) drainNew(ctx context.Context) {
 	}
 }
 
+// DeleteByTenant removes every spooled event belonging to a tenant's runs.
+// bus_events has no tenant column, so it scopes via the jobs table (same
+// database). Part of the org/account erasure cascade (Art. 17).
+func (b *PgBus) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
+	tag, err := b.pool.Exec(ctx,
+		`DELETE FROM bus_events WHERE job_id IN (SELECT id FROM jobs WHERE tenant = $1)`, tenant)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
 // sweep deletes spooled events past the retention window so the table
 // stays small (events are only useful while a run is live + briefly
 // after).

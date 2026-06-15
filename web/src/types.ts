@@ -222,6 +222,10 @@ export type Manifest = {
   // + credentials) configured once per tenant — drives the multi-field
   // connection card.
   connection_fields?: ConnectionField[];
+  // connection_verifiable is set by the daemon when this drop's integration
+  // has a live connection check — the Apps page then verifies credentials
+  // before saving them and offers a "Test connection" button.
+  connection_verifiable?: boolean;
 };
 
 // JSONSchema is a relaxed subset of the JSON Schema spec — enough to

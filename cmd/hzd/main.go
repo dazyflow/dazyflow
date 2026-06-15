@@ -189,7 +189,7 @@ func main() {
 		}()
 	}
 
-	applyNetworkPolicy(httpEgressAllow)
+	applyNetworkPolicy(httpEgressAllow, devMode)
 
 	// hzd runs on Postgres — there is no in-memory mode. Fail fast and
 	// clearly when the DSN is missing, before the insecure-defaults guard
@@ -261,8 +261,14 @@ func main() {
 	// logs endpoints read them back. Decorating at the bus keeps one
 	// wire point for every publisher; each replica records its own
 	// events exactly once.
-	var bus daemon.Bus = daemon.NewRecordingBus(pgBus, stores.runLogs)
-	log.Print("event bus: postgres LISTEN/NOTIFY (multi-node), run-log recording on")
+	recBus := daemon.NewRecordingBus(pgBus, stores.runLogs)
+	// HAZYFLOW_LOG_RUN_PAYLOADS=false keeps run logs free of payload PII
+	// (GDPR P2.1): only node status + terminal lines are persisted, not the
+	// streamed content that can echo personal data from a flow.
+	logPayloads := envBool("HAZYFLOW_LOG_RUN_PAYLOADS", true)
+	recBus.SetLogPayloads(logPayloads)
+	var bus daemon.Bus = recBus
+	log.Printf("event bus: postgres LISTEN/NOTIFY (multi-node), run-log recording on (payload content logging=%t)", logPayloads)
 	sandbox, err := daemon.NewFSSandbox(sandboxBase)
 	if err != nil {
 		log.Fatalf("sandbox base %s: %v", sandboxBase, err)
@@ -690,12 +696,18 @@ func main() {
 // http_request egress allowlist, the optional private-egress opt-in (which
 // turns the SSRF guard into opt-out), and the SSRF-guarded HTTP transport for
 // git-over-https clones. All three are process-global side effects.
-func applyNetworkPolicy(httpEgressAllow string) {
+func applyNetworkPolicy(httpEgressAllow string, devMode bool) {
 	if httpEgressAllow != "" {
 		if err := hfnet.SetEgressAllowlist(strings.Split(httpEgressAllow, ",")); err != nil {
 			log.Fatalf("HAZYFLOW_HTTP_EGRESS_ALLOW: %v", err)
 		}
 		log.Printf("http_request egress allowlist active: %s", httpEgressAllow)
+	} else if !devMode {
+		// Non-fatal advisory: allow-all egress is valid, but for a GDPR/EU
+		// deployment outbound connector traffic should be pinned to approved
+		// (ideally EU) endpoints so a flow can't exfiltrate to an arbitrary
+		// host. See PRIVACY.md § International transfers.
+		log.Print("ADVISORY: HAZYFLOW_HTTP_EGRESS_ALLOW is unset — outbound connector egress is unrestricted; pin it to approved endpoints for EU/GDPR deployments (PRIVACY.md § Transfers)")
 	}
 	// The http_* drops expose an `allow_private_networks` param that disables
 	// the SSRF guard (reaching loopback/private/link-local incl. cloud

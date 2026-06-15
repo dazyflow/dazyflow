@@ -9,6 +9,8 @@ package openai
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"strings"
 
 	"git.sr.ht/~klahr/hazyflow/core"
@@ -98,8 +100,32 @@ func init() {
 		KeyPlaceholder: "sk-…",
 		AskID:          "chatgpt",
 		TaskIDPrefix:   "gpt",
+		VerifyKey:      verifyKey,
 		// New provider — no legacy ids to alias.
 	})
+}
+
+// verifyKey checks an OpenAI API key by listing models — a free, read-only
+// GET (no tokens spent). 200 means valid; 401/403 means rejected. Backs the
+// Apps page's connection test / verify-before-save for ChatGPT.
+func verifyKey(ctx context.Context, apiKey, base string) error {
+	base = strings.TrimRight(base, "/")
+	if base == "" {
+		base = defaultBase
+	}
+	status, body, err := llmtask.GetStatus(ctx, base+"/v1/models", map[string]string{
+		"authorization": "Bearer " + apiKey,
+	})
+	if err != nil {
+		return fmt.Errorf("could not reach ChatGPT: %w", err)
+	}
+	switch {
+	case status == 401 || status == 403:
+		return errors.New("ChatGPT rejected the API key")
+	case status < 200 || status >= 300:
+		return fmt.Errorf("ChatGPT returned HTTP %d: %s", status, openaiError(body))
+	}
+	return nil
 }
 
 // message returns choices[0].message, or nil.

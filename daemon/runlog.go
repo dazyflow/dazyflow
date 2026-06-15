@@ -80,6 +80,16 @@ func (m *MemRunLogStore) AppendRunLog(_ context.Context, e RunLogEntry) error {
 	return nil
 }
 
+// DeleteRun drops a run's log lines (GDPR P2.1). Mirrors the Pg store so
+// the per-run deletion endpoint works in dev/tests too.
+func (m *MemRunLogStore) DeleteRun(_ context.Context, runID string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := len(m.byRun[runID])
+	delete(m.byRun, runID)
+	return n, nil
+}
+
 func (m *MemRunLogStore) ListRunLogs(_ context.Context, runID string, afterSeq int64, limit int) ([]RunLogEntry, error) {
 	if limit <= 0 {
 		limit = defaultRunLogPage
@@ -108,18 +118,31 @@ type RecordingBus struct {
 	store RunLogStore
 	log   *log.Logger
 
+	// logPayloads gates persistence of content lines (streamed
+	// stdout/stderr / progress messages, which can carry arbitrary
+	// personal data from a flow). When false, only the structural trail —
+	// node status transitions and the terminal line — is kept, so a run's
+	// history stays auditable without retaining payload PII. Default true.
+	logPayloads bool
+
 	mu     sync.Mutex
 	counts map[string]int // runID → persisted entries (cap enforcement)
 }
 
 func NewRecordingBus(inner Bus, store RunLogStore) *RecordingBus {
 	return &RecordingBus{
-		inner:  inner,
-		store:  store,
-		log:    log.New(log.Writer(), "runlog: ", log.LstdFlags),
-		counts: map[string]int{},
+		inner:       inner,
+		store:       store,
+		log:         log.New(log.Writer(), "runlog: ", log.LstdFlags),
+		logPayloads: true,
+		counts:      map[string]int{},
 	}
 }
+
+// SetLogPayloads toggles persistence of content (progress) log lines. Wire
+// it from HAZYFLOW_LOG_RUN_PAYLOADS to let an operator keep run logs free
+// of payload PII (GDPR P2.1) while preserving the status/terminal trail.
+func (b *RecordingBus) SetLogPayloads(v bool) { b.logPayloads = v }
 
 func (b *RecordingBus) Subscribe(jobID string) (<-chan BusEvent, func()) {
 	return b.inner.Subscribe(jobID)
@@ -133,6 +156,12 @@ func (b *RecordingBus) Publish(jobID string, ev BusEvent) {
 }
 
 func (b *RecordingBus) record(runID string, e RunLogEntry, terminal bool) {
+	// Payload opt-out: drop content (progress) lines, keep the
+	// status/terminal trail. Terminal is never a "progress" kind, so the
+	// grep-for line always survives.
+	if !b.logPayloads && e.Kind == "progress" {
+		return
+	}
 	b.mu.Lock()
 	n := b.counts[runID]
 	switch {

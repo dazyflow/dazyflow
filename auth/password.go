@@ -159,6 +159,15 @@ func (s *JSONUserStore) ListUsers(_ context.Context) ([]User, error) {
 	return out, nil
 }
 
+// DeleteUser removes the user (erasure, Art. 17). Idempotent.
+func (s *JSONUserStore) DeleteUser(_ context.Context, email string) error {
+	email = strings.ToLower(strings.TrimSpace(email))
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.users, email)
+	return s.flushLocked()
+}
+
 func (s *JSONUserStore) flushLocked() error {
 	if s.path == "" {
 		return nil

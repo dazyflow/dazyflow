@@ -264,6 +264,19 @@ func (s *Postgres) PruneTerminal(ctx context.Context, olderThan time.Duration, b
 	}
 }
 
+// DeleteByTenant hard-deletes every job record (graph + node, terminal or
+// in-flight) owned by a tenant. Unlike PruneTerminal this ignores status,
+// because it backs the GDPR erasure cascade (Art. 17): the tenant is being
+// removed, so any in-flight run goes with it. Callers should cancel active
+// runs first. Returns the number of rows removed.
+func (s *Postgres) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM jobs WHERE tenant = $1`, tenant)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
 // OldestQueuedEnqueuedAt returns the enqueue time of the oldest
 // claimable (queued, available) node job, so metrics can expose queue
 // latency — the age of this row is how long the most-delayed work has

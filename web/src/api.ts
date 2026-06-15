@@ -1175,6 +1175,30 @@ export const api = {
   deleteSecret: (token: string, name: string, scope?: SecretScope, flow?: string) =>
     request<void>(token, "DELETE", `/secrets/${encodeURIComponent(name)}` + secretQuery(scope, flow)),
 
+  // connectIntegration stores a service connection's field values, verifying
+  // them against the live service first when the integration supports it
+  // (connection_verifiable on its drops). The daemon rejects bad credentials
+  // BEFORE saving, so a thrown APIError with code "verification_failed" means
+  // the credentials didn't work — surface its message. Only the fields passed
+  // in `values` are written; omit a secret field to keep its stored value.
+  // 204 on success.
+  connectIntegration: (token: string, slug: string, values: Record<string, string>) =>
+    request<void>(token, "PUT", `/catalog/integrations/${encodeURIComponent(slug)}/connection`, {
+      values,
+    }),
+
+  // verifyIntegration re-tests the connection already stored for an
+  // integration — the "Test connection" button. Resolves to {ok, error?}
+  // (200) when a verifier exists; throws APIError with code "not_verifiable"
+  // (501) when the integration can't be tested, or "not_connected" (409) when
+  // nothing is stored yet.
+  verifyIntegration: (token: string, slug: string) =>
+    request<{ ok: boolean; error?: string }>(
+      token,
+      "POST",
+      `/catalog/integrations/${encodeURIComponent(slug)}/verify`,
+    ),
+
   // Flow resources (${resource.NAME}) — named pointers at external content
   // (e.g. a Google Sheet) the engine fetches live. CRUD mirrors secrets'
   // scope/flow query; config is returned by list (it isn't sensitive).

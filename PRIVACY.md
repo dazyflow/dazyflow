@@ -106,16 +106,15 @@ any prompt that may carry personal data.
 
 ## Data-subject rights
 
-Honest current state — some rights need manual steps until the gaps in
-[§ Known gaps](#known-gaps) are closed.
+Each right now has a supported endpoint (built 2026-06-15); see
+[GDPR_FIXES.md](GDPR_FIXES.md) for the implementation detail.
 
-| Right (Article) | Product support | How to service it today |
+| Right (Article) | Product support | How to service it |
 |---|---|---|
-| **Access (15)** | Partial — `GET /api/v1/me`, `…/me/api-keys`, `…/me/runs`, `…/me/flows`; admins read `…/admin/audit`. No single export. | Compose from the read APIs, or query Postgres directly. |
-| **Rectification (16)** | Limited — no self-service email/profile/password change; email is immutable (PK). | Update Postgres directly, or re-invite under a new email. |
-| **Erasure (17)** | **Not built in** — member removal (`DELETE /api/v1/admin/members/{email}`) revokes sessions and deletes the membership, but the `users` row, audit rows, run logs and graphs persist. | Documented manual deletion across `users`, `memberships`, `sessions`, `api_keys`, `audit_events`, `run_logs`, and the tenant's `/data`. Track this as a runbook until an endpoint exists. |
+| **Access (15) / Portability (20)** | **Built in** — `GET /api/v1/me/export` returns a single machine-readable JSON document (profile, memberships, invitations, redacted API keys, flows, run history), served as a download. | Call the export endpoint as the subject. |
+| **Rectification (16)** | **Built in** — `POST /api/v1/me/password` (change password) and `POST /api/v1/me/email` (supervised email re-key: re-points memberships + API keys, revokes sessions). Org display-name via `PUT /api/v1/admin/org/profile`. | Use the self-service endpoints. |
+| **Erasure (17)** | **Built in** — `DELETE /api/v1/me/account` (self-serve, `?confirm=<email>`), `DELETE /api/v1/admin/users/{email}` (platform admin), `DELETE /api/v1/admin/orgs/{tenant}`. Cascades across users, sessions, api_keys, memberships, invitations, jobs, run_logs, bus_events, org config/profile, and the tenant's `/data`; audit is pseudonymised (user) or deleted (org). | Call the deletion endpoint; member removal (`DELETE …/admin/members/{email}`) still exists for the lighter "remove from org" case. |
 | **Restriction (18) / Objection (21)** | Disable the account's sessions/keys to halt processing. | Revoke sessions + API keys; pause the org's flows. |
-| **Portability (20)** | No bulk export. | Same as Access. |
 | **Automated decisions (22)** | hzd runs operator-authored flows; any profiling is in your flow logic, not the platform. | Assess per flow. |
 
 ## Retention (Art. 5(1)(e))
@@ -188,16 +187,26 @@ else is the flows you build.
 3. Set **retention** values for your legal/operational needs.
 4. Keep all infrastructure (Postgres + backups, registry, tracing) in an **EU region**; use `sslmode=require` (now enforced) and back up `HAZYFLOW_MASTER_KEY` separately.
 5. Constrain egress with `HAZYFLOW_HTTP_EGRESS_ALLOW`.
-6. Define a **data-subject-request runbook** covering the manual erasure/export steps until those endpoints ship.
+6. Point support staff at the **data-subject-rights endpoints** (export / rectification / erasure, below) — they're now built in, not a manual runbook.
 
 ## Known gaps
 
 Tracked here and in [COMPLIANCE.md § Known gaps](COMPLIANCE.md):
 
-- **No account/org deletion endpoint** with cascade (Art. 17) — manual today.
-- **No data-export endpoint** (Art. 15/20) — read APIs only.
-- **No self-service rectification** of email/profile/password (Art. 16).
-- **Personal data in run logs/payloads is not redacted** — only secrets are
-  (`engine/redact.go`). Mitigate with short `HAZYFLOW_RUN_LOG_RETENTION` and by
-  not logging payloads that carry personal data; per-run log deletion is not
-  yet available.
+- **International transfers** still need the *organisational* mechanism per
+  connector (DPA + DPF/SCCs + TIA) and LLM zero-retention enabled — see
+  [GDPR_FIXES.md](GDPR_FIXES.md) P0.2. The product side (egress allowlist +
+  startup advisory, configurable LLM base URLs) is in place.
+- **EU residency** of Postgres/backups/registry/tracing is an operator
+  verification task (GDPR_FIXES.md P1.4) — `sslmode=require` is enforced and an
+  advisory fires on unconstrained egress, but residency itself can't be proven
+  in code.
+- **Personal data in run logs/payloads is not redacted by default** — only
+  secrets are (`engine/redact.go`). Mitigate with a short
+  `HAZYFLOW_RUN_LOG_RETENTION`, `HAZYFLOW_LOG_RUN_PAYLOADS=false` (drops content
+  lines, keeps the status trail), and per-run deletion via
+  `DELETE /api/v1/me/runs/{run_id}/logs`.
+
+> **Resolved 2026-06-15:** account/org **erasure** (Art. 17), **data export**
+> (Art. 15/20), and **self-service rectification** (Art. 16) are now built-in
+> endpoints — see the Data-subject rights table above.

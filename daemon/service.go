@@ -161,6 +161,29 @@ func (a *AutoFSWorkspaces) List(tenant string) ([]string, error) {
 	return out, nil
 }
 
+// RemoveTenant deletes a tenant's entire workspace subtree (every
+// workspace and its git history) and evicts any cached open stores — the
+// workspace half of the GDPR erasure cascade (Art. 17). Idempotent. In
+// memory mode (empty base) it just drops the cached stores.
+func (a *AutoFSWorkspaces) RemoveTenant(tenant string) error {
+	st, _, err := safeWorkspaceSegment(tenant, "default")
+	if err != nil {
+		return err
+	}
+	a.mu.Lock()
+	prefix := st + "/"
+	for k := range a.open {
+		if k == st || strings.HasPrefix(k, prefix) {
+			delete(a.open, k)
+		}
+	}
+	a.mu.Unlock()
+	if a.base == "" {
+		return nil
+	}
+	return os.RemoveAll(filepath.Join(a.base, st))
+}
+
 // All enumerates every (tenant, workspace) store on disk under base,
 // opening (and caching) each. Used by the scheduler's periodic rescan
 // to discover cron/poll triggers across all tenants. In memory mode
@@ -1124,6 +1147,28 @@ func (s *Service) RunLogPage(ctx context.Context, p core.Principal, runID string
 	return s.RunLogs.ListRunLogs(ctx, runID, afterSeq, limit)
 }
 
+// DeleteRunLog erases one run's persisted log lines (GDPR P2.1 —
+// per-run deletion of potentially personal data). Authorized exactly like
+// reading the log: the run must be visible to the principal (GetJob scopes
+// to the tenant), so a caller can only delete logs for their own runs.
+// Returns the number of lines removed. No-op (0) when the store doesn't
+// support deletion.
+func (s *Service) DeleteRunLog(ctx context.Context, p core.Principal, runID string) (int, error) {
+	if s.RunLogs == nil {
+		return 0, fmt.Errorf("run logs are not enabled on this deployment")
+	}
+	if _, err := s.GetJob(ctx, p, runID); err != nil {
+		return 0, err
+	}
+	deleter, ok := s.RunLogs.(interface {
+		DeleteRun(ctx context.Context, runID string) (int, error)
+	})
+	if !ok {
+		return 0, fmt.Errorf("this run-log store does not support deletion")
+	}
+	return deleter.DeleteRun(ctx, runID)
+}
+
 // ListJobsForGraph returns every job for a graph that the principal can see.
 func (s *Service) ListJobsForGraph(ctx context.Context, p core.Principal, graphID string) ([]core.JobRecord, error) {
 	all, err := s.Jobs.ListByGraph(ctx, graphID)
@@ -1238,12 +1283,26 @@ func (s *Service) ListPendingApprovals(ctx context.Context, p core.Principal, na
 // Module visibility is not currently filtered per tenant; that's a future
 // improvement once tenant-scoped module catalogs land.
 func (s *Service) ListDrops(ctx context.Context, p core.Principal) (map[string]core.Manifest, error) {
-	if mp, ok := s.Engine.Resolver.(interface {
+	mp, ok := s.Engine.Resolver.(interface {
 		Manifests() map[string]core.Manifest
-	}); ok {
-		return mp.Manifests(), nil
+	})
+	if !ok {
+		return map[string]core.Manifest{}, nil
 	}
-	return map[string]core.Manifest{}, nil
+	// Manifests() hands back a fresh map of value copies, so it's safe to
+	// stamp the computed ConnectionVerifiable flag without mutating the
+	// registry. The flag tells the Apps page which connections it can test
+	// (and verify before saving) vs which just store.
+	out := mp.Manifests()
+	for id, m := range out {
+		if len(m.ConnectionFields) > 0 && m.Integration != "" {
+			if _, verifiable := engine.ConnectionVerifierFor(core.ConnectionSlug(m.Integration)); verifiable {
+				m.ConnectionVerifiable = true
+				out[id] = m
+			}
+		}
+	}
+	return out, nil
 }
 
 // SearchDrops applies the supplied filters and free-text query to the

@@ -29,6 +29,21 @@ func NewMemory() *Memory {
 	}
 }
 
+// DeleteByTenant hard-deletes every job record owned by a tenant (GDPR
+// erasure cascade, Art. 17). Mirrors the Postgres store. Returns the count.
+func (m *Memory) DeleteByTenant(_ context.Context, tenant string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := 0
+	for id, r := range m.records {
+		if r.Tenant == tenant {
+			delete(m.records, id)
+			n++
+		}
+	}
+	return n, nil
+}
+
 // SetMaxConcurrentPerTenant caps how many node jobs a single tenant may
 // have running at once. Claim won't hand out new (queued) work to a
 // tenant already at the cap; reclaiming a node whose lease expired is

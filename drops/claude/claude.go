@@ -10,6 +10,8 @@ package claude
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"strings"
 
 	"git.sr.ht/~klahr/hazyflow/core"
@@ -97,7 +99,32 @@ func init() {
 		KeyPlaceholder: "sk-ant-…",
 		AskID:          "claude",
 		TaskIDPrefix:   "claude",
+		VerifyKey:      verifyKey,
 	})
+}
+
+// verifyKey checks an Anthropic API key by listing models — a free,
+// read-only GET (no tokens spent, nothing generated). 200 means the key is
+// valid; 401/403 means it was rejected. Used by the Apps page to test the
+// connection before saving it.
+func verifyKey(ctx context.Context, apiKey, base string) error {
+	base = strings.TrimRight(base, "/")
+	if base == "" {
+		base = defaultBase
+	}
+	status, body, err := llmtask.GetStatus(ctx, base+"/v1/models", map[string]string{
+		"x-api-key": apiKey, "anthropic-version": apiVersion,
+	})
+	if err != nil {
+		return fmt.Errorf("could not reach Claude: %w", err)
+	}
+	switch {
+	case status == 401 || status == 403:
+		return errors.New("Claude rejected the API key")
+	case status < 200 || status >= 300:
+		return fmt.Errorf("Claude returned HTTP %d: %s", status, claudeError(body))
+	}
+	return nil
 }
 
 // extractText concatenates the text blocks of a Messages API response.

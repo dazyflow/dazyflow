@@ -360,6 +360,10 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/catalog", h.requireAuth(h.catalogSummary))
 	mux.HandleFunc("GET /api/v1/catalog/integrations", h.requireAuth(h.listIntegrationsHandler))
 	mux.HandleFunc("GET /api/v1/catalog/integrations/{id}", h.requireAuth(h.getIntegrationHandler))
+	// Connection verify-before-save (PUT) + re-test of a stored connection
+	// (POST verify). secret:write-gated inside the handlers.
+	mux.HandleFunc("PUT /api/v1/catalog/integrations/{id}/connection", h.requireAuth(h.putIntegrationConnection))
+	mux.HandleFunc("POST /api/v1/catalog/integrations/{id}/verify", h.requireAuth(h.verifyIntegrationConnection))
 	mux.HandleFunc("GET /api/v1/catalog/drops", h.requireAuth(h.listDropsHandler))
 	mux.HandleFunc("GET /api/v1/catalog/drops/{id}", h.requireAuth(h.getDropHandler))
 	mux.HandleFunc("GET /api/v1/catalog/trigger-kinds", h.requireAuth(h.triggerKindsHandler))
@@ -381,6 +385,16 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/me/api-keys",
 		h.requireAuth(h.idempotencyMiddleware("/me/api-keys", h.issueMyAPIKeyHandler)))
 	mux.HandleFunc("DELETE /api/v1/me/api-keys/{id}", h.requireAuth(h.revokeMyAPIKeyHandler))
+
+	// GDPR data-subject rights. Export (Art. 15/20) downloads a complete
+	// machine-readable copy; account deletion (Art. 17) erases the caller's
+	// own account (confirmation-guarded). Handlers in gdpr_export.go /
+	// gdpr_http.go.
+	mux.HandleFunc("GET /api/v1/me/export", h.requireAuth(h.exportHandler))
+	mux.HandleFunc("DELETE /api/v1/me/account", h.requireAuth(h.deleteMyAccountHandler))
+	// Self-service rectification (Art. 16): change own password / email.
+	mux.HandleFunc("POST /api/v1/me/password", h.requireAuth(h.changePasswordHandler))
+	mux.HandleFunc("POST /api/v1/me/email", h.requireAuth(h.changeEmailHandler))
 
 	// /me/flows and /me/runs — the new spec-aligned routes. flow_id is
 	// a percent-encoded composite of tenant/workspace/id; run_id is
@@ -439,6 +453,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/me/runs/{run_id}", h.requireAuth(h.getRunMe))
 	mux.HandleFunc("GET /api/v1/me/runs/{run_id}/nodes", h.requireAuth(h.listRunNodesMe))
 	mux.HandleFunc("GET /api/v1/me/runs/{run_id}/logs", h.requireAuth(h.listRunLogsMe))
+	mux.HandleFunc("DELETE /api/v1/me/runs/{run_id}/logs", h.requireAuth(h.deleteRunLogsMe))
 	mux.HandleFunc("GET /api/v1/me/runs/{run_id}/nodes/{node_id}", h.requireAuth(h.getRunNodeMe))
 	mux.HandleFunc("GET /api/v1/me/runs/{run_id}/events", h.requireAuth(h.runEventsMe))
 	mux.HandleFunc("POST /api/v1/me/runs/{run_id}/cancel",
@@ -505,6 +520,11 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/admin/members", h.requireAuth(h.listMembers))
 	mux.HandleFunc("PATCH /api/v1/admin/members/{email}", h.requireAuth(h.updateMemberRoles))
 	mux.HandleFunc("DELETE /api/v1/admin/members/{email}", h.requireAuth(h.removeMember))
+	// GDPR erasure (Art. 17): erase a whole account (platform admin) or
+	// delete an entire org/tenant (platform admin, or org admin of that
+	// tenant). Both confirmation-guarded; see gdpr_http.go.
+	mux.HandleFunc("DELETE /api/v1/admin/users/{email}", h.requireAuth(h.adminDeleteUserHandler))
+	mux.HandleFunc("DELETE /api/v1/admin/orgs/{tenant}", h.requireAuth(h.adminDeleteOrgHandler))
 	mux.HandleFunc("GET /api/v1/invitations/{token}", h.viewInvitation)
 	mux.HandleFunc("POST /api/v1/invitations/{token}/accept", h.requireAuth(h.acceptInvitation))
 

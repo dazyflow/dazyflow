@@ -69,6 +69,28 @@ func (s *PgRunLogStore) ListRunLogs(ctx context.Context, runID string, afterSeq 
 	return out, rows.Err()
 }
 
+// DeleteRun removes every log line for one run — backs the per-run
+// log-deletion endpoint (GDPR P2.1) and the erasure cascade.
+func (s *PgRunLogStore) DeleteRun(ctx context.Context, runID string) (int, error) {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM run_logs WHERE run_id = $1`, runID)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
+// DeleteByTenant removes the logs of every run owned by a tenant. run_logs
+// has no tenant column, so it joins the jobs table (same database) to scope
+// by run ownership. Part of the org/account erasure cascade (Art. 17).
+func (s *PgRunLogStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
+	tag, err := s.pool.Exec(ctx,
+		`DELETE FROM run_logs WHERE run_id IN (SELECT id FROM jobs WHERE tenant = $1)`, tenant)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
 // Prune deletes entries older than the cutoff in batches, returning the
 // total removed. Same shape as the jobs/audit retention pruners; wired
 // into hzd's hourly retention sweep behind HAZYFLOW_RUN_LOG_RETENTION.

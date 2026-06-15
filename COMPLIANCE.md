@@ -86,7 +86,7 @@ turn "supports the controls" into "certified."
 | **A.8.7 Protection against malware** | Org | Host/container malware protection is operator-owned. The product reduces attack surface: no plugin/marketplace install path — the drop catalog is fixed at build time. |
 | **A.8.8 Management of technical vulnerabilities** | Met | CI runs `govulncheck` against the full module graph on every build, failing on any vulnerability reachable from called code (`.build.yml`, `vuln` task). Dependencies are standard Go modules pinned in `go.mod`/`go.sum`. A documented remediation SLA is the operator's to set — see [§3](#3-known-gaps-and-remediation). |
 | **A.8.9 Configuration management** | Met | All configuration is documented `HAZYFLOW_*` env (`.env.example`). A fail-closed boot guard refuses to start on insecure defaults (default DB password, empty master key) and names the offending value (`DEPLOY.md` §Fail-closed config guard). `HAZYFLOW_DEV=1` downgrades the guard for local trials only. |
-| **A.8.10 Information deletion** | Configurable | Retention sweeps for jobs and audit events are configurable via `HAZYFLOW_JOB_RETENTION` / `HAZYFLOW_AUDIT_RETENTION`. **Default is unset (retain indefinitely)** — operators must set a value to meet a defined retention period. `.env.example`. |
+| **A.8.10 Information deletion** | Configurable | Retention sweeps run by default: jobs **30 days** (`HAZYFLOW_JOB_RETENTION`), audit events **90 days** (`HAZYFLOW_AUDIT_RETENTION`), and run logs **30 days** (`HAZYFLOW_RUN_LOG_RETENTION`, defaults to the job window). Set a value ≤ 0 to disable a sweep (retain indefinitely). Tune to your policy; cross-reference [PRIVACY.md § Retention](PRIVACY.md). `.env.example`. |
 | **A.8.11 Data masking** | Met | The secret store UI is write-only (values never read back); engine output is redacted to keep secret values out of logs and run records. `engine/redact.go`, [`DEPLOY.md` §Secrets](DEPLOY.md). |
 | **A.8.12 Data leakage prevention** | Met | Secrets are never returned in plaintext after write; the secret-manager `GET` returns a redacted view; metrics that reveal tenant names are off by default (`HAZYFLOW_ENABLE_METRICS`). `engine/redact.go`, `daemon/httpsecretmanager.go`. |
 | **A.8.13 Information backup** | Shared | Product makes all durable state recoverable from one Postgres DB; `DEPLOY.md` documents logical backup and PITR. The master key must be backed up separately. Backup schedule, off-site storage, and restore testing are operator process. [`DEPLOY.md` §Backup & restore](DEPLOY.md). |
@@ -123,16 +123,17 @@ turn "supports the controls" into "certified."
 | **A.5.18 Access rights (provisioning/revocation)** | Met | API keys and sessions support expiry and immediate server-side revocation; sign-out and key revoke take effect at once. `auth/apikey.go`, `auth/session.go`, `daemon/admin.go`. |
 | **A.5.23 Cloud services security** | Shared | Product runs on managed Postgres and behind a managed ingress; the cloud provider's own attestations cover the underlying platform. Master-key sourcing from AWS/GCP/Vault secret managers is documented. `SECURITY.md`. |
 | **A.5.30 ICT readiness for continuity** | Shared | HA mechanics and graceful shutdown are built in (A.8.14); tested BCDR with RTO/RPO is organisational. |
-| **A.5.33 Protection of records** | Configurable | Append-only audit trail; retention configurable but unset by default (A.8.10/§3). |
+| **A.5.33 Protection of records** | Configurable | Append-only audit trail; retention configurable, defaulting to 90 days (A.8.10). |
 
 ## 3. Known gaps and remediation
 
 | # | Control | Gap | Remediation |
 |---|---|---|---|
-| 1 | **A.8.10 / A.5.33** | `HAZYFLOW_JOB_RETENTION` and `HAZYFLOW_AUDIT_RETENTION` default to unset (retain indefinitely). ISO expects a defined retention period. | Operator: set both to your policy value. Product: ship a recommended default and document the deletion guarantee. |
+| 1 | **A.8.10 / A.5.33** | Retention sweeps default to jobs 30 d / audit 90 d / run logs 30 d — defined, but tune to your policy (and a value ≤ 0 disables a sweep, retaining indefinitely). | Operator: confirm the windows match your policy. See [PRIVACY.md § Retention](PRIVACY.md). |
 | 2 | **A.8.8** | Detection (scanning) is in CI, but no documented **remediation SLA** defines how fast a reachable vulnerability must be fixed. | Operator: adopt a policy (e.g. reachable high/critical fixed within N days, others within M). Process, not code. |
 | 3 | **A.8.24** | Master-key rotation is fully supported but operator-triggered; no defined cryptoperiod. | Operator: define and document a rotation schedule. The `--rotate-master-key` mechanism already supports it (`SECURITY.md`). |
 | 4 | **A.8.25 / A.8.29 (supply chain)** | `govulncheck` covers known-vuln detection; no SBOM is produced and no automated dependency-update bot is wired up. | Optional hardening: generate an SBOM (e.g. `syft`) in CI and adopt a dependency-update bot. |
+| 5 | **A.5.34 (privacy / GDPR)** | EU/GDPR data-subject-rights and international-transfer items are tracked separately. | See [GDPR_FIXES.md](GDPR_FIXES.md) and [PRIVACY.md](PRIVACY.md): erasure + data export + rectification are implemented; connector transfer mechanisms (DPA/DPF/SCC) and EU-residency verification remain operator/legal tasks. |
 
 > **Resolved 2026-06-04:** authentication-event logging (formerly gap #1, A.8.15/A.8.16) — sign-in success/failure, sign-out, signup, and the MFA challenge leg now emit audit events via `daemon/audit.go`'s `auditAuth`, covered by `daemon/audit_auth_test.go`.
 

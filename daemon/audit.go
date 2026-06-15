@@ -124,6 +124,32 @@ func (p *PgAuditLog) Prune(ctx context.Context, olderThan time.Duration, batch i
 	}
 }
 
+// AnonymizeActor pseudonymises a data subject in the audit trail: it
+// replaces their actor identifier with a fixed marker and blanks the
+// free-text detail (which can carry the client IP on auth events). The
+// action/target/tenant/timestamp survive, so the security trail stays
+// intact without retaining personal data — the GDPR-preferred treatment
+// for logs kept under a legal-obligation/legitimate-interest basis
+// (Art. 17(3), Recital 26). Returns the number of rows affected.
+func (p *PgAuditLog) AnonymizeActor(ctx context.Context, actor string) (int, error) {
+	tag, err := p.pool.Exec(ctx,
+		`UPDATE audit_events SET actor = '[erased]', detail = '' WHERE actor = $1`, actor)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
+// DeleteByTenant hard-deletes a tenant's whole audit trail — used when an
+// entire org is deleted (no security trail to preserve for a gone tenant).
+func (p *PgAuditLog) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
+	tag, err := p.pool.Exec(ctx, `DELETE FROM audit_events WHERE tenant = $1`, tenant)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
 func (p *PgAuditLog) Append(ctx context.Context, e core.AuditEvent) error {
 	_, err := p.pool.Exec(ctx,
 		`INSERT INTO audit_events (ts, tenant, actor, action, target, detail) VALUES ($1,$2,$3,$4,$5,$6)`,

@@ -77,6 +77,25 @@ func (h *HTTPGateway) readFlowID(rw http.ResponseWriter, r *http.Request, p core
 // run's persisted log. ?after= resumes from a seq cursor, ?limit= caps
 // the page. The web run-detail page replays history with this; live
 // tailing stays on the SSE events stream.
+// deleteRunLogsMe erases one run's persisted logs (GDPR P2.1). Run logs
+// can carry arbitrary personal data from a flow's payloads, so a user can
+// delete them per-run without waiting for the retention sweep. Authorized
+// like reading them: only the owning tenant's caller can.
+func (h *HTTPGateway) deleteRunLogsMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	runID := r.PathValue("run_id")
+	n, err := h.svc.DeleteRunLog(r.Context(), p, runID)
+	if err != nil {
+		if strings.Contains(err.Error(), "not enabled") || strings.Contains(err.Error(), "does not support") {
+			writeAPIError(rw, http.StatusNotImplemented, "not_configured", err.Error())
+			return
+		}
+		writeAPIError(rw, http.StatusNotFound, "run_not_found", err.Error())
+		return
+	}
+	h.audit(r.Context(), p, "run.logs_delete", runID, "deleted run logs (GDPR P2.1)")
+	writeJSON(rw, http.StatusOK, map[string]any{"deleted": n})
+}
+
 func (h *HTTPGateway) listRunLogsMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	runID := r.PathValue("run_id")
 	after, _ := strconv.ParseInt(r.URL.Query().Get("after"), 10, 64)

@@ -122,6 +122,24 @@ func (s *FSSandbox) RemoveScratch(tenant, workspace, runID string) error {
 	return os.RemoveAll(filepath.Join(s.base, tenant, workspace, scratchDirName, runID))
 }
 
+// RemoveTenant deletes a tenant's entire subtree (every workspace and all
+// scratch beneath it) — the sandbox half of the GDPR erasure cascade
+// (Art. 17). Idempotent. Drops any cached roots for the tenant so a later
+// recreate re-resolves cleanly.
+func (s *FSSandbox) RemoveTenant(tenant string) error {
+	if !isSafeIdent(tenant) {
+		return fmt.Errorf("unsafe tenant identifier %q", tenant)
+	}
+	s.mu.Lock()
+	for key := range s.roots {
+		if key == tenant || strings.HasPrefix(key, tenant+"/") {
+			delete(s.roots, key)
+		}
+	}
+	s.mu.Unlock()
+	return os.RemoveAll(filepath.Join(s.base, tenant))
+}
+
 // isSafeIdent permits the same identifier shape as DNS labels plus
 // underscores: tight enough to be safe in any path layer.
 func isSafeIdent(s string) bool {

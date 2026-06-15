@@ -156,6 +156,34 @@ func TestRecordingBus(t *testing.T) {
 	}
 }
 
+func TestRecordingBus_PayloadOptOut(t *testing.T) {
+	store := NewMemRunLogStore()
+	bus := NewRecordingBus(NewMemoryBus(), store)
+	bus.SetLogPayloads(false) // GDPR P2.1: drop content lines
+	ctx := context.Background()
+
+	bus.Publish("run-1", BusEvent{Progress: &engine.GraphProgress{
+		JobID: "j1", NodeID: "sh",
+		Progress: core.Progress{Data: map[string]any{"line": "alice@example.com signed up", "stream": "stdout"}},
+	}})
+	bus.Publish("run-1", BusEvent{NodeStatus: &NodeStatusEvent{NodeID: "sh", Status: core.JobStatusSucceeded}})
+	bus.Publish("run-1", BusEvent{Terminal: &TerminalEvent{JobID: "run-1", Status: core.JobStatusSucceeded}})
+
+	logs, err := store.ListRunLogs(ctx, "run-1", 0, 0)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	// Only the status + terminal trail survives; the payload line is dropped.
+	for _, e := range logs {
+		if e.Kind == "progress" {
+			t.Errorf("payload progress line was persisted despite opt-out: %q", e.Message)
+		}
+	}
+	if len(logs) != 2 {
+		t.Fatalf("kept %d entries, want 2 (status+terminal): %+v", len(logs), logs)
+	}
+}
+
 func TestRecordingBus_CapsPerRun(t *testing.T) {
 	store := NewMemRunLogStore()
 	bus := NewRecordingBus(NewMemoryBus(), store)

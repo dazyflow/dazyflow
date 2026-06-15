@@ -180,6 +180,35 @@ func (s *PgKeyStore) ListAll(ctx context.Context) ([]APIKey, error) {
 	return s.queryKeys(ctx, q)
 }
 
+// ListBySubject returns every key issued to a principal subject, across
+// tenants — used by the data-export path (GDPR Art. 15/20).
+func (s *PgKeyStore) ListBySubject(ctx context.Context, subject string) ([]APIKey, error) {
+	const q = `
+		SELECT id, tenant, workspace, subject, roles, salt, hash, expires_at, revoked_at
+		FROM api_keys WHERE subject=$1 ORDER BY id
+	`
+	return s.queryKeys(ctx, q, subject)
+}
+
+// DeleteBySubject hard-deletes every key for a subject (erasure, Art. 17).
+// Returns the number removed.
+func (s *PgKeyStore) DeleteBySubject(ctx context.Context, subject string) (int, error) {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM api_keys WHERE subject=$1`, subject)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
+// DeleteByTenant hard-deletes every key in a tenant — for org deletion.
+func (s *PgKeyStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM api_keys WHERE tenant=$1`, tenant)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
 func (s *PgKeyStore) queryKeys(ctx context.Context, q string, args ...any) ([]APIKey, error) {
 	rows, err := s.pool.Query(ctx, q, args...)
 	if err != nil {
@@ -424,4 +453,12 @@ func (s *PgUserStore) ListUsers(ctx context.Context) ([]User, error) {
 		out = append(out, u)
 	}
 	return out, rows.Err()
+}
+
+// DeleteUser hard-deletes the user row (erasure, Art. 17). Idempotent:
+// a missing row is not an error, so the cascade can run repeatedly.
+func (s *PgUserStore) DeleteUser(ctx context.Context, email string) error {
+	email = strings.ToLower(strings.TrimSpace(email))
+	_, err := s.pool.Exec(ctx, `DELETE FROM users WHERE email=$1`, email)
+	return err
 }
