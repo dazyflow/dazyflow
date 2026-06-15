@@ -114,6 +114,52 @@ func TestListIntegrations_AndFilter(t *testing.T) {
 	}
 }
 
+// TestListIntegrations_SummaryWired proves IntegrationSummary.Summary is
+// populated from integrationSummaries (it used to be hardcoded ""): Stripe
+// carries a non-empty summary, and the ?q= filter — which searches
+// label+summary — matches a word that appears only in that summary.
+func TestListIntegrations_SummaryWired(t *testing.T) {
+	h := newGatewayHarness(t)
+	rw := h.do(t, "GET", "/api/v1/catalog/integrations", nil)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("code = %d body = %s", rw.Code, rw.Body.String())
+	}
+	var list struct {
+		Items []map[string]any `json:"items"`
+	}
+	decodeJSON(t, rw, &list)
+	var stripe map[string]any
+	for _, it := range list.Items {
+		if it["id"] == "Stripe" {
+			stripe = it
+			break
+		}
+	}
+	if stripe == nil {
+		t.Fatal("Stripe integration not listed")
+	}
+	if s, _ := stripe["summary"].(string); s == "" {
+		t.Error("Stripe integration summary is empty — daemon Summary field not wired")
+	}
+
+	// "refunds" appears only in Stripe's summary, never in a label, so a hit
+	// proves the filter sees the wired-through summary text.
+	rw = h.do(t, "GET", "/api/v1/catalog/integrations?q=refunds", nil)
+	var filtered struct {
+		Items []map[string]any `json:"items"`
+	}
+	decodeJSON(t, rw, &filtered)
+	found := false
+	for _, it := range filtered.Items {
+		if it["id"] == "Stripe" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("q=refunds did not match Stripe via its summary — filter isn't seeing Summary")
+	}
+}
+
 func TestGetIntegration_FoundAndNotFound(t *testing.T) {
 	h := newGatewayHarness(t)
 	rw := h.do(t, "GET", "/api/v1/catalog/integrations", nil)

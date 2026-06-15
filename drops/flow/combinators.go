@@ -1,0 +1,169 @@
+package flow
+
+import (
+	"context"
+	"encoding/json"
+
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/hazyflow/engine"
+)
+
+// Boolean combinators — AND / OR / NOT — the missing third of the Unreal
+// Blueprint "logic" set. The comparison operators in operators.go PRODUCE
+// booleans (A > B); these COMBINE them, so "A > 10 AND B < 5" no longer needs
+// nested Branches — wire both Compare results into an AND and feed its Result
+// into a single Branch.condition.
+//
+// Like the comparison primitives they sit in the "logic" category, emit a
+// boolean on Result, and are pure predicates (NoPassthrough). Every input is
+// coerced through asBool (branch.go), the same coercion Branch.condition uses,
+// so a combinator reads a Compare result, a raw bool, or the truthy
+// strings/numbers asBool accepts — one coercion for the whole package, no
+// drift.
+//
+// AND/OR are variadic (wire two or more boolean pins, like Merge's fan-in);
+// NOT is unary. None take literal params: a combinator's whole job is to fold
+// upstream booleans, so there's nothing to type on the node.
+
+func init() {
+	registerCombinator(combinatorSpec{
+		id: "and", label: "A AND B", icon: "ampersand", all: true,
+		summary: "Emit true on Result only when every wired input is true.",
+		desc:    "Emit true on Result when ALL wired boolean inputs are true, otherwise false (logical AND). Variadic — wire two or more Compare results (or any boolean-emitting nodes) and feed Result into a single Branch.condition. With a single input it just passes that input through; an empty set errors.",
+		example: core.ParamsExample{Title: "Over threshold AND in stock", Notes: "Wire one Compare (amount > 1000) and another (stock > 0) into the inputs pin. Result is true only when both are true."},
+	})
+	registerCombinator(combinatorSpec{
+		id: "or", label: "A OR B", icon: "slash", all: false,
+		summary: "Emit true on Result when any wired input is true.",
+		desc:    "Emit true on Result when ANY wired boolean input is true, otherwise false (logical OR). Variadic — wire two or more Compare results (or any boolean-emitting nodes) and feed Result into a single Branch.condition. With a single input it just passes that input through; an empty set errors.",
+		example: core.ParamsExample{Title: "VIP OR high value", Notes: "Wire one Compare (tier == 'vip') and another (amount > 1000) into the inputs pin. Result is true when either is true."},
+	})
+
+	// NOT — the unary member. One boolean input, negated onto Result.
+	engine.Register(engine.NativeDrop{
+		Manifest: core.Manifest{
+			ID:          "not",
+			Version:     "1.0",
+			Label:       "NOT",
+			Icon:        "ban",
+			Category:    "logic",
+			Provider:    "internal",
+			Tags:        []string{"condition", "predicate", "boolean", "logic", "combinator", "not", "negate", "invert"},
+			Description: "Emit the logical negation of the wired boolean input on Result — true becomes false, false becomes true. Wire a Compare result (or any boolean-emitting node) into the input; feed Result into a Branch.condition to flip which port a payload takes without rewiring the branch.",
+			Summary:     "Negate the boolean input: emit true when the input is false, and false when it is true.",
+			Examples: []core.ParamsExample{{
+				Title: "Branch when NOT approved",
+				Notes: "Wire a Compare (status == 'approved') into the input; Result is true for every status that isn't 'approved'.",
+			}},
+			ExecutionModel: core.ExecutionBatch,
+			ProcessModel:   core.ProcessLongLived,
+			Inputs:         []core.Port{{Port: "in", Required: true, Label: "Input", MIME: []string{core.MIMEBool}}},
+			Outputs:        []core.Port{{Port: "result", Label: "Result", MIME: []string{core.MIMEBool}}},
+			ParamsSchema:   json.RawMessage(`{"type":"object"}`),
+			Idempotent:     true,
+			NoPassthrough:  true, // pure predicate — see operators.go.
+		},
+		Execute: executeNot,
+	})
+}
+
+// combinatorSpec is the per-drop variation for the variadic AND/OR pair;
+// everything else is supplied by registerCombinator. `all` selects the fold:
+// true ANDs the inputs, false ORs them.
+type combinatorSpec struct {
+	id      string
+	label   string
+	icon    string
+	all     bool
+	summary string
+	desc    string
+	example core.ParamsExample
+}
+
+func registerCombinator(c combinatorSpec) {
+	min := 1
+	engine.Register(engine.NativeDrop{
+		Manifest: core.Manifest{
+			ID:       c.id,
+			Version:  "1.0",
+			Label:    c.label,
+			Icon:     c.icon,
+			Category: "logic",
+			Provider: "internal",
+			// Color unset: the UI tints "logic" drops from the category palette,
+			// the way Blueprint colors pure nodes (see operators.go).
+			Tags:           []string{"condition", "predicate", "boolean", "logic", "combinator", c.id},
+			Description:    c.desc,
+			Summary:        c.summary,
+			Examples:       []core.ParamsExample{c.example},
+			ExecutionModel: core.ExecutionBatch,
+			ProcessModel:   core.ProcessLongLived,
+			// Variadic boolean fan-in, modelled on Merge's items pin: wire two or
+			// more boolean pins. Min 1 keeps a single-input node valid (it folds
+			// to that input) rather than erroring mid-build.
+			Inputs: []core.Port{{
+				Port:     "in",
+				Label:    "Inputs",
+				Variadic: true,
+				Min:      &min,
+				MIME:     []string{core.MIMEBool},
+			}},
+			Outputs:       []core.Port{{Port: "result", Label: "Result", MIME: []string{core.MIMEBool}}},
+			ParamsSchema:  json.RawMessage(`{"type":"object"}`),
+			Idempotent:    true,
+			NoPassthrough: true, // pure predicate — see operators.go.
+		},
+		Execute: func(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
+			return combine(job, c.all)
+		},
+	})
+}
+
+// combine folds the variadic boolean inputs into a single verdict. `all`=true
+// is AND (seed true, every input must hold); `all`=false is OR (seed false,
+// any input flips it). Every input is coerced through asBool so the fold reads
+// the same boolean shapes Branch.condition accepts. An empty input set is a
+// wiring error rather than a silent true/false.
+func combine(job core.Job, all bool) (core.Result, error) {
+	refs := core.VariadicInputs(job.Input, "in")
+	if len(refs) == 0 {
+		return params.Err(job, "missing_input", "wire at least one boolean into the inputs pin"), nil
+	}
+	result := all
+	for _, ref := range refs {
+		b, err := asBool(ref)
+		if err != nil {
+			return params.Err(job, "bad_input", err.Error()), nil
+		}
+		if all {
+			result = result && b
+		} else {
+			result = result || b
+		}
+	}
+	return boolResult(job, result), nil
+}
+
+func executeNot(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
+	ref, ok := job.Input["in"]
+	if !ok {
+		return params.Err(job, "missing_input", "input port 'in' is required — wire a boolean into it"), nil
+	}
+	b, err := asBool(ref)
+	if err != nil {
+		return params.Err(job, "bad_input", err.Error()), nil
+	}
+	return boolResult(job, !b), nil
+}
+
+// boolResult builds the single-port boolean Result every logic drop emits.
+func boolResult(job core.Job, v bool) core.Result {
+	return core.Result{
+		JobID:  job.ID,
+		Status: core.StatusOK,
+		Output: map[string]core.Ref{
+			"result": {MIME: core.MIMEBool, Inline: v},
+		},
+	}
+}

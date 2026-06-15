@@ -56,11 +56,11 @@ func init() {
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
 				{Port: "rows", Label: "Rows", Required: true, MIME: []string{"application/json"}},
-				{Port: "headers", Label: "Headers (optional; derived from rows when omitted)", MIME: []string{"application/json"}},
+				{Port: "headers", Label: "Headers", MIME: []string{"application/json"}},
 			},
 			Outputs: []core.Port{
-				{Port: "rows", Label: "One row per group", MIME: []string{"application/json"}},
-				{Port: "headers", Label: "Headers (group-by columns then aggregation output names in alphabetical order)", MIME: []string{"application/json"}},
+				{Port: "rows", Label: "Rows", MIME: []string{"application/json"}},
+				{Port: "headers", Label: "Headers", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

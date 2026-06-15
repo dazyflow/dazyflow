@@ -37,12 +37,12 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				{Port: "in", Label: "JSON text (or an already-parsed value)", Required: true},
+				{Port: "in", Label: "JSON", Required: true},
 			},
 			Outputs: []core.Port{
 				{Port: "rows", Label: "Rows", MIME: []string{"application/json"}},
 				{Port: "headers", Label: "Headers", MIME: []string{"application/json"}},
-				{Port: "value", Label: "The parsed JSON value, untouched", MIME: []string{"application/json"}},
+				{Port: "value", Label: "Value", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

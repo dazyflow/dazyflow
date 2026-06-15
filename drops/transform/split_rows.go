@@ -39,9 +39,9 @@ func init() {
 				{Port: "headers", Label: "Headers", Required: false, MIME: []string{"application/json"}},
 			},
 			Outputs: []core.Port{
-				{Port: "matched", Label: "Rows where filter is true", MIME: []string{"application/json"}},
-				{Port: "unmatched", Label: "Rows where filter is false", MIME: []string{"application/json"}},
-				{Port: "headers", Label: "Headers (shared)", MIME: []string{"application/json"}},
+				{Port: "matched", Label: "Matched", MIME: []string{"application/json"}},
+				{Port: "unmatched", Label: "Unmatched", MIME: []string{"application/json"}},
+				{Port: "headers", Label: "Headers", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

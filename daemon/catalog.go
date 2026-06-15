@@ -357,6 +357,38 @@ type integrationGroup struct {
 	dropCategories []string
 }
 
+// integrationSummaries gives each integration a one-line blurb for the
+// catalog list and the per-integration page (IntegrationSummary.Summary),
+// which the LLM-facing API surfaces. Keyed by the exact Manifest.Integration
+// label the drops set (the same string collectCatalog groups on); the
+// synthetic "standard-library" key covers drops with no Integration.
+//
+// This is the Go/API counterpart to the web's integrationMeta.ts (the richer
+// prose the Apps UI renders). The two are deliberately separate — different
+// consumers, different surfaces — and kept short here so they don't drift far;
+// a missing key just yields an empty Summary, which the API omits.
+var integrationSummaries = map[string]string{
+	"Stripe":           "Take payments and react to them — create customers, send invoices and payment links, issue refunds, and trigger flows on succeeded or failed charges and canceled subscriptions.",
+	"Slack":            "Post messages to your workspace, and trigger flows when your bot is @-mentioned.",
+	"GitHub":           "Create and comment on issues, and trigger flows on pushes or new pull requests.",
+	"Gmail":            "Send email, search the inbox, and read message bodies — often paired with a polling trigger to react to new mail.",
+	"Notion":           "Create pages and query databases.",
+	"Google Sheets":    "Read rows from a spreadsheet, and append rows to it.",
+	"Google Forms":     "Trigger flows when a Google Form receives new responses.",
+	"Postgres":         "Insert, upsert, and query rows against a Postgres database.",
+	"MySQL":            "Insert, upsert, and query rows against MySQL or MariaDB.",
+	"SQLite":           "Insert, upsert, and query rows against a SQLite file in your workspace.",
+	"Excel":            "Read .xlsx workbooks into rows, and write rows back out as a new workbook.",
+	"Email":            "Send email through an SMTP server you configure.",
+	"ntfy":             "Push notifications to your phone via ntfy.sh or a self-hosted server.",
+	"HTTP":             "Make HTTP requests to any API that doesn't have a dedicated connector yet.",
+	"Claude":           "Run prompts through Claude to summarize, classify, or generate text inside a flow.",
+	"Git":              "Clone repositories and check out branches inside your workspace.",
+	"Webhook":          "Send a fire-and-forget notification to any URL.",
+	"Built-in store":   "Store and reference encrypted secrets that other steps read via ${secret.…}.",
+	"standard-library": "Built-in flow primitives — routing, looping, waiting, file I/O, the transform family, and schedule and webhook triggers.",
+}
+
 // collectCatalog walks the registry once, groups manifests by
 // Manifest.Integration, and returns:
 //   - groups sorted by label
@@ -394,7 +426,7 @@ func (h *HTTPGateway) collectCatalog(ctx context.Context, p core.Principal) (
 					Provider:  m.Provider,
 					BrandLogo: m.BrandLogo,
 					Icon:      m.Icon,
-					Summary:   "",
+					Summary:   integrationSummaries[integID],
 				},
 			}
 			byInteg[integID] = g

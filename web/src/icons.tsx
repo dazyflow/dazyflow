@@ -27,7 +27,10 @@ import {
   ChevronLeft,
   ChevronsRight,
   ChevronsLeft,
-  Brackets,
+  Ampersand,
+  Slash,
+  Ban,
+  Split,
   type LucideIcon,
 } from "lucide-react";
 import { GitIcon } from "./components/GitIcon";
@@ -70,7 +73,10 @@ const iconRegistry: Record<string, LucideIcon> = {
   "chevron-left": ChevronLeft,
   "chevrons-right": ChevronsRight,
   "chevrons-left": ChevronsLeft,
-  brackets: Brackets,
+  ampersand: Ampersand,
+  slash: Slash,
+  ban: Ban,
+  split: Split,
 };
 
 // categoryFallback picks a sensible default icon when a manifest didn't

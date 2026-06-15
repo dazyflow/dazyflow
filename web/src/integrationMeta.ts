@@ -185,6 +185,15 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     docs_url: "https://developers.notion.com/reference/intro",
     brand_logo: "/brands/notion.svg",
   },
+  stripe: {
+    name: "Stripe",
+    description:
+      "React to payments the moment they happen — succeeded, failed, or a subscription canceled — and act on them: create a customer, email an invoice, hand out a payment link, or issue a refund. Build a dunning flow that chases a failed charge, a welcome sequence on a customer's first payment, or an instant alert when someone churns.",
+    technical_notes:
+      "Actions authenticate with your Stripe secret key, read from the encrypted secret store as STRIPE_API_KEY (${vault./aws./gcp.…} references work too) — no key on the node. The payment, payment-failed, and subscription-canceled triggers are Stripe webhooks: point an endpoint at /api/v1/events/stripe/<tenant>, subscribe it to the matching events (payment_intent.succeeded, payment_intent.payment_failed, customer.subscription.deleted), and save that endpoint's signing secret (whsec_…) as STRIPE_WEBHOOK_SECRET — every delivery's Stripe-Signature is verified against it. Prefer polling to webhooks? Compose Schedule → List events instead.",
+    docs_url: "https://docs.stripe.com/api",
+    brand_logo: "/brands/stripe.svg",
+  },
   webhook: {
     name: "Outgoing webhooks",
     description:

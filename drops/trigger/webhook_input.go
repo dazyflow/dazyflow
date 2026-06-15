@@ -36,7 +36,7 @@ func init() {
 			ProcessModel:   core.ProcessLongLived,
 			// No inputs — webhook is the data source.
 			Outputs: []core.Port{
-				{Port: "body", Label: "Data"},
+				{Port: "body", Label: "Body"},
 				{Port: "headers", Label: "Headers", MIME: []string{"application/json"}},
 			},
 			// Webhook + hosted-form config lives on the node now (like the

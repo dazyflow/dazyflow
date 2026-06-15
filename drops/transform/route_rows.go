@@ -43,8 +43,8 @@ func init() {
 		})
 	}
 	outputs = append(outputs,
-		core.Port{Port: routeDefaultSlot, Label: "Unmatched rows (catch-all)", MIME: []string{"application/json"}},
-		core.Port{Port: "headers", Label: "Headers (shared across slots)", MIME: []string{"application/json"}},
+		core.Port{Port: routeDefaultSlot, Label: "Default", MIME: []string{"application/json"}},
+		core.Port{Port: "headers", Label: "Headers", MIME: []string{"application/json"}},
 	)
 
 	engine.Register(engine.NativeDrop{

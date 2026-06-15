@@ -59,14 +59,14 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				{Port: "left_rows", Label: "Left-side rows", Required: true, MIME: []string{"application/json"}},
-				{Port: "left_headers", Label: "Left-side headers (optional; derived from rows when omitted)", MIME: []string{"application/json"}},
-				{Port: "right_rows", Label: "Right-side rows", Required: true, MIME: []string{"application/json"}},
-				{Port: "right_headers", Label: "Right-side headers (optional; derived from rows when omitted)", MIME: []string{"application/json"}},
+				{Port: "left_rows", Label: "Left rows", Required: true, MIME: []string{"application/json"}},
+				{Port: "left_headers", Label: "Left headers", MIME: []string{"application/json"}},
+				{Port: "right_rows", Label: "Right rows", Required: true, MIME: []string{"application/json"}},
+				{Port: "right_headers", Label: "Right headers", MIME: []string{"application/json"}},
 			},
 			Outputs: []core.Port{
-				{Port: "rows", Label: "Joined rows", MIME: []string{"application/json"}},
-				{Port: "headers", Label: "Headers (union: left ∪ right, right key cols dropped, collisions suffixed)", MIME: []string{"application/json"}},
+				{Port: "rows", Label: "Rows", MIME: []string{"application/json"}},
+				{Port: "headers", Label: "Headers", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

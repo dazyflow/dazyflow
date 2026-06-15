@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 
 	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
 	"git.sr.ht/~klahr/hazyflow/engine"
 )
 
@@ -20,13 +19,8 @@ import (
 // literal default), and a Result port emitting a boolean to feed Branch. The win is
 // reading speed: an "A > B" node says what it does at a glance, no need to
 // open it and read the dropdown. The full Compare stays the power node for
-// the long tail (contains, one_of, exists).
-//
-// In Range is the one ternary member, modelled on Unreal's InRange node:
-// three value pins (Value, Min, Max) plus advanced InclusiveMin/InclusiveMax
-// toggles. It can't ride registerOperator's binary mold, so it has its own
-// schema and a thin executor that packs [Min, Max] into the list B that
-// evaluate's in_range op expects — still one evaluator, no drift.
+// the long tail (contains, one_of, in_range, exists) — the primitives are
+// deliberately only the binary comparisons that earn their glance-value.
 //
 // Category "logic" (distinct from flow_control) buckets these pure
 // predicates; the UI tints the whole category one color, Blueprint-style.
@@ -138,77 +132,4 @@ func init() {
 		desc:    "Emit true on Result when numeric A is less than or equal to B, otherwise false. Pair Result with Branch to route.",
 		example: core.ParamsExample{Title: "No more than N", Params: json.RawMessage(`{"B":5}`), Notes: "Result is true when A <= 5."},
 	})
-
-	// In Range — the ternary primitive (see file header). Value/Min/Max pins,
-	// inclusive bounds by default, delegating to the same evaluate() as Compare.
-	engine.Register(engine.NativeDrop{
-		Manifest: core.Manifest{
-			ID:          "in_range",
-			Version:     "1.0",
-			Label:       "In Range",
-			Icon:        "brackets",
-			Category:    "logic",
-			Provider:    "internal",
-			Tags:        []string{"condition", "predicate", "boolean", "compare", "logic", "in_range", "range", "between"},
-			Description: "Emit true on Result when numeric Value falls between Min and Max, otherwise false. Both bounds are inclusive by default (so Min=200, Max=299 matches every 2xx status); toggle InclusiveMin/InclusiveMax to make either end exclusive. Modelled on Unreal Blueprint's InRange node. Wire Value/Min/Max from upstream or type literal defaults; pair Result with Branch to route.",
-			Summary:     "Emit true when Min ≤ Value ≤ Max (bounds inclusive by default), else false.",
-			Examples: []core.ParamsExample{{
-				Title:  "Was it a 2xx success?",
-				Params: json.RawMessage(`{"min":200,"max":299}`),
-				Notes:  "Wire the status into Value; Min and Max are the literals 200 and 299. Result is true for 200–299 inclusive.",
-			}},
-			ExecutionModel: core.ExecutionBatch,
-			ProcessModel:   core.ProcessLongLived,
-			// Numeric operands: typed application/json (the number type here —
-			// the Number drop and HTTP's status code both emit it) so the pins
-			// read blue and wire cleanly from those sources.
-			Inputs: []core.Port{
-				{Port: "value", Label: "Value", MIME: []string{"application/json"}},
-				{Port: "min", Label: "Min", MIME: []string{"application/json"}},
-				{Port: "max", Label: "Max", MIME: []string{"application/json"}},
-			},
-			Outputs:       []core.Port{{Port: "result", Label: "Result", MIME: []string{core.MIMEBool}}},
-			ParamsSchema:  inRangeSchema,
-			Idempotent:    true,
-			NoPassthrough: true, // pure predicate — see the binary operators above.
-		},
-		Execute: executeInRange,
-	})
-}
-
-// inRangeSchema backs In Range's three literal defaults (for unwired
-// Value/Min/Max pins) plus the two inclusive-bound toggles, which stay
-// advanced because they default to true — the common case needs neither.
-var inRangeSchema = json.RawMessage(`{
-	"type":"object",
-	"properties":{
-		"value":{"type":"string","title":"Value","description":"Literal Value when the Value input isn't wired. Parsed as JSON when possible (e.g. 200)."},
-		"min":{"type":"string","title":"Min","description":"Literal lower bound when the Min input isn't wired. Parsed as JSON (e.g. 200)."},
-		"max":{"type":"string","title":"Max","description":"Literal upper bound when the Max input isn't wired. Parsed as JSON (e.g. 299)."},
-		"inclusive_min":{"type":"boolean","default":true,"title":"Inclusive Min","description":"Include the lower bound. Defaults to true (like Unreal's InRange).","x_advanced":true},
-		"inclusive_max":{"type":"boolean","default":true,"title":"Inclusive Max","description":"Include the upper bound. Defaults to true (like Unreal's InRange).","x_advanced":true}
-	}
-}`)
-
-// executeInRange resolves the three operands (wired pin, else literal param),
-// packs Min/Max into the [min, max] list the in_range op expects, and reuses
-// Compare's evaluate so range semantics live in exactly one place.
-func executeInRange(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	value := operand(job, "value")
-	b := []any{operand(job, "min"), operand(job, "max")}
-
-	matched, err := evaluate(value, b, "in_range",
-		inclusiveFlag(job.Params, "inclusive_min"),
-		inclusiveFlag(job.Params, "inclusive_max"))
-	if err != nil {
-		return params.Err(job, "bad_param", err.Error()), nil
-	}
-
-	return core.Result{
-		JobID:  job.ID,
-		Status: core.StatusOK,
-		Output: map[string]core.Ref{
-			"result": {MIME: core.MIMEBool, Inline: matched},
-		},
-	}, nil
 }

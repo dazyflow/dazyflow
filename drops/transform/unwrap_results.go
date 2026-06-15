@@ -48,7 +48,7 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				{Port: "results", Label: "for_each results", Required: true, MIME: []string{forEachListMIME}},
+				{Port: "results", Label: "Results", Required: true, MIME: []string{forEachListMIME}},
 			},
 			Outputs: []core.Port{
 				{Port: "rows", Label: "Rows", MIME: []string{"application/json"}},

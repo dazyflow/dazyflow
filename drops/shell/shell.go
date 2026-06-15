@@ -70,7 +70,7 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				{Port: "path", Label: "Working directory (overrides params.path)"},
+				{Port: "path", Label: "Working directory"},
 			},
 			Outputs: []core.Port{
 				// Only the friendly scalars are declared as ports; the full

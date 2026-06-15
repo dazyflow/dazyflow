@@ -31,8 +31,8 @@ func init() {
 			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
-			Inputs:         []core.Port{{Port: "in", Label: "Variadic — every input port (any name) is forwarded via input_map"}},
-			Outputs:        []core.Port{{Port: "out", Label: "Variadic — every output port (any name) is filled from output_map"}},
+			Inputs:         []core.Port{{Port: "in", Label: "Inputs"}},
+			Outputs:        []core.Port{{Port: "out", Label: "Outputs"}},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
