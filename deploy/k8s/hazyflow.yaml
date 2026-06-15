@@ -1,14 +1,22 @@
-# Kubernetes manifests for the Hazyflow daemon.
+# Kubernetes manifest for a SINGLE-POD Hazyflow deployment — the simplest
+# possible start: one replica, no load balancer, no ingress. Reach the UI with
 #
-# Assumes an EXTERNAL/managed Postgres (RDS, Cloud SQL, a pg operator) —
-# reference it via the secret below. Apply with:
+#   kubectl port-forward deploy/hazyflow 8080:8080
 #
-#   kubectl apply -f deploy/k8s/hazyflow.yaml
+# then open http://localhost:8080.
 #
-# Liveness uses /healthz (process up); readiness uses /readyz (pings
-# Postgres) so a pod is pulled from the Service when the DB is
-# unreachable. The standard gRPC health service is also registered on
-# :50050 if you prefer a grpc_health_probe sidecar.
+# Assumes an EXTERNAL/managed Postgres (e.g. DigitalOcean Managed Postgres)
+# referenced via the Secret below. Apply with:
+#
+#   kubectl apply -k deploy/k8s/      (or: kubectl apply -f deploy/k8s/hazyflow.yaml)
+#
+# Liveness uses /healthz (process up); readiness uses /readyz (pings Postgres)
+# so the pod is marked NotReady when the DB is unreachable.
+#
+# When you outgrow one pod, deploy/k8s/ingress.yaml adds a public ingress +
+# TLS, and you can scale the Deployment up — the app coordinates across
+# replicas via Postgres (event bus + advisory-lock scheduler leader). See
+# DEPLOY.md for the scale-up path and the extra resources (PDB/HPA/NetworkPolicy).
 ---
 apiVersion: v1
 kind: Secret
@@ -16,9 +24,26 @@ metadata:
   name: hazyflow-secrets
 type: Opaque
 stringData:
-  # REPLACE both. master-key: openssl rand -base64 32 (keep a sealed backup).
+  # REPLACE both. master-key: openssl rand -base64 32 (keep a sealed backup —
+  # losing it makes every stored secret undecryptable).
   HAZYFLOW_MASTER_KEY: "REPLACE_WITH_BASE64_32_BYTE_KEY"
   HAZYFLOW_POSTGRES_DSN: "postgres://USER:PASS@your-postgres-host:5432/hazyflow?sslmode=require"
+---
+# Flow graphs live in git repos on disk under /data (HAZYFLOW_DATA_DIR), NOT
+# in Postgres — so /data MUST persist or a pod restart loses every flow. A
+# ReadWriteOnce PVC is exactly right for a single pod; on DOKS the default
+# do-block-storage StorageClass is RWO. 10Gi is plenty to start.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: hazyflow-data
+  labels: { app: hazyflow }
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 10Gi
+  # storageClassName: do-block-storage  # omit to use the cluster default (DOKS: do-block-storage)
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -26,33 +51,56 @@ metadata:
   name: hazyflow
   labels: { app: hazyflow }
 spec:
-  replicas: 2 # safe: Postgres event bus + advisory-lock scheduler leader make multi-node correct
+  replicas: 1
+  # The /data PVC is ReadWriteOnce, so a replacement pod can't attach the
+  # volume while the old pod still holds it. Recreate terminates the old pod
+  # first (a few seconds of downtime on each rollout) instead of deadlocking
+  # on a multi-attach error, which the default RollingUpdate would.
+  strategy:
+    type: Recreate
   selector:
     matchLabels: { app: hazyflow }
   template:
     metadata:
       labels: { app: hazyflow }
     spec:
+      # Keep above HAZYFLOW_SHUTDOWN_GRACE (25s, below) so SIGTERM drains
+      # in-flight nodes and finalizes their runs before the kubelet SIGKILLs.
+      terminationGracePeriodSeconds: 35
       securityContext:
         runAsNonRoot: true
-        runAsUser: 65532
+        # Matches the image's `hazyflow` user (Dockerfile: adduser -u 1000),
+        # which owns /data. fsGroup makes the mounted /data PVC and /tmp
+        # volume group-writable by the process.
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: hzd
           image: hazyflow/hzd:latest # build + push from the repo Dockerfile
-          # Container layout defaults (HAZYFLOW_HTTP / _WEB_DIST /
-          # _WORKSPACE_DIR / _SANDBOX_BASE) come from the image's ENV.
-          # Everything else is operator policy, set here.
+          # Container layout defaults (HAZYFLOW_HTTP / _WEB_DIST / _DATA_DIR)
+          # come from the image's ENV. Everything else is operator policy.
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true # only the /data + /tmp volumes are writable
+            capabilities:
+              drop: [ALL]
           env:
-            - { name: HAZYFLOW_ENABLE_METRICS,       value: "1" }
-            # Behind a TLS-terminating ingress (see DEPLOY.md):
-            - { name: HAZYFLOW_TRUST_PROXY_HEADERS,  value: "1" }
-            - { name: HAZYFLOW_WEB_ORIGIN,           value: "https://app.example.com" }
-            - { name: HAZYFLOW_PUBLIC_BASE_URL,      value: "https://app.example.com" }
+            # Reached directly via port-forward (no TLS-terminating proxy), so
+            # do NOT set HAZYFLOW_TRUST_PROXY_HEADERS — a client could spoof
+            # X-Forwarded-Proto otherwise. The origins are the port-forward
+            # URL; change all three (add TRUST_PROXY_HEADERS=1) once you front
+            # it with a real hostname + TLS via ingress.yaml.
+            - { name: HAZYFLOW_WEB_ORIGIN,      value: "http://localhost:8080" }
+            - { name: HAZYFLOW_PUBLIC_BASE_URL, value: "http://localhost:8080" }
+            # Drain in-flight work on SIGTERM; keep < terminationGracePeriodSeconds.
+            - { name: HAZYFLOW_SHUTDOWN_GRACE,  value: "25s" }
           envFrom:
             - secretRef: { name: hazyflow-secrets }
           ports:
             - { name: http, containerPort: 8080 }
-            - { name: grpc, containerPort: 50050 }
           livenessProbe:
             httpGet: { path: /healthz, port: http }
             initialDelaySeconds: 3
@@ -66,11 +114,14 @@ spec:
             limits: { cpu: "1", memory: 512Mi }
           volumeMounts:
             - { name: data, mountPath: /data }
+            - { name: tmp, mountPath: /tmp }
       volumes:
-        # emptyDir is fine when HAZYFLOW_POSTGRES_DSN holds the durable
-        # control plane; switch to a PVC if your flows treat file_write
-        # outputs in the sandbox as durable artifacts.
         - name: data
+          persistentVolumeClaim:
+            claimName: hazyflow-data
+        # readOnlyRootFilesystem needs a writable /tmp for transient scratch
+        # (go-git, TLS, etc.).
+        - name: tmp
           emptyDir: {}
 ---
 apiVersion: v1
@@ -79,7 +130,8 @@ metadata:
   name: hazyflow
   labels: { app: hazyflow }
 spec:
+  # ClusterIP is enough — reach it with `kubectl port-forward`. Switch to an
+  # ingress (deploy/k8s/ingress.yaml) when you want public access + TLS.
   selector: { app: hazyflow }
   ports:
     - { name: http, port: 8080, targetPort: http }
-    - { name: grpc, port: 50050, targetPort: grpc }

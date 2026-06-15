@@ -1,0 +1,43 @@
+# Kustomize entrypoint tying the Hazyflow manifests together.
+#
+#   kubectl apply -k deploy/k8s/        # both files, one command
+#   kubectl kustomize deploy/k8s/       # render to stdout without applying
+#
+# This is a thin base: it just composes the two manifests. Override the
+# image, target namespace, and secrets per-environment with the commented
+# blocks below or (preferably) a separate overlay that points its own
+# `resources: [../base]` at this directory.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - hazyflow.yaml
+  # Single-pod start has no public ingress. When you front it with a hostname
+  # + TLS, uncomment this (see ingress.yaml and DEPLOY.md "Scaling up").
+  # - ingress.yaml
+
+# Pin the image here instead of editing hazyflow.yaml, so the same base
+# serves every environment. Set newName to your DO Container Registry path
+# and newTag to the build you're rolling out.
+#
+# images:
+#   - name: hazyflow/hzd
+#     newName: registry.digitalocean.com/<you>/hzd
+#     newTag: "v1.2.3"
+
+# Deploy into a dedicated namespace (create it separately, or add a
+# Namespace resource above). Leaving this unset uses the apply-time context.
+#
+# namespace: hazyflow
+
+# Prefer generating the Secret from a real source over the inline template in
+# hazyflow.yaml. Drop the Secret block from hazyflow.yaml and uncomment this,
+# or wire in Sealed Secrets / External Secrets / SOPS for production.
+#
+# secretGenerator:
+#   - name: hazyflow-secrets
+#     behavior: replace          # supersede the inline Secret
+#     envs:
+#       - hazyflow.env           # KEY=VALUE lines, git-ignored
+# generatorOptions:
+#   disableNameSuffixHash: true  # keep the name `hazyflow-secrets` stable

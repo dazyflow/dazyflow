@@ -80,29 +80,121 @@ Container deployments don't have to set `HAZYFLOW_HTTP` /
 `HAZYFLOW_WEB_DIST` — the supplied Dockerfile bakes those in via
 `ENV` (see `Dockerfile`).
 
-## Kubernetes (multi-node)
+## Kubernetes — single pod (simplest start)
 
-`deploy/k8s/hazyflow.yaml` is a 2-replica Deployment, a Service, and a
-Secret template. Multi-replica works out of the box: the Postgres event
-bus lets any pod stream a run's events (`PgBus`), and a Postgres
-advisory-lock leader ensures only one pod fires each schedule
-(`PgLeader`). Everything is configured by `HAZYFLOW_*` env vars on the
-container — there are no daemon flags to set.
+`deploy/k8s/hazyflow.yaml` is a one-replica Deployment + a PersistentVolumeClaim
++ a Service + a Secret template — no load balancer, no ingress. You reach the
+UI through `kubectl port-forward`. `deploy/k8s/kustomization.yaml` ties it
+together so the whole thing applies with `kubectl apply -k deploy/k8s/`.
+Everything is configured by `HAZYFLOW_*` env vars on the container — there
+are no daemon flags to set.
 
-1. Edit the `hazyflow-secrets` Secret: a fresh `HAZYFLOW_MASTER_KEY`
-   (`openssl rand -base64 32`) and your managed-Postgres
-   `HAZYFLOW_POSTGRES_DSN`.
-2. Build and push the image from the repo Dockerfile
-   (`docker build -t hazyflow/hzd:latest .`) and set it in the Deployment.
-3. Update `HAZYFLOW_WEB_ORIGIN` / `HAZYFLOW_PUBLIC_BASE_URL` in the
-   Deployment env to your real hostnames (`HAZYFLOW_TRUST_PROXY_HEADERS=1`
-   is already set), then `kubectl apply -f deploy/k8s/hazyflow.yaml`.
-4. Front it with an ingress that terminates TLS and forwards `Host` /
-   `Origin` unchanged (the same reverse-proxy contract as above).
+1. **Postgres** — create a managed Postgres (on DO: a DigitalOcean Managed
+   PostgreSQL database; it's external to the cluster). DO requires SSL, so the
+   DSN ends in `?sslmode=require`. Add the cluster (or its VPC) to the
+   database's trusted sources. No in-cluster DB and no migration Job — `hzd`
+   applies its schema on boot.
+2. **Secret** — edit `hazyflow-secrets`: a fresh `HAZYFLOW_MASTER_KEY`
+   (`openssl rand -base64 32`, keep a sealed off-cluster backup) and the
+   `HAZYFLOW_POSTGRES_DSN` from step 1. (For where secrets come from on DO —
+   which has no managed secret store — see "Getting secrets into the cluster"
+   below.)
+3. **Image** — build and push from the repo Dockerfile. On DO: push to
+   DigitalOcean Container Registry (`doctl registry login`, then
+   `docker push registry.digitalocean.com/<you>/hzd:<tag>`) and integrate it
+   with the cluster (`doctl kubernetes cluster registry add <cluster>`) so
+   pulls are authenticated without a manual `imagePullSecret`. Set the image
+   in the Deployment (or via the `images:` stub in `kustomization.yaml`).
+4. **Apply** — `kubectl apply -k deploy/k8s/`.
+5. **Reach it** — `kubectl port-forward deploy/hazyflow 8080:8080`, then open
+   <http://localhost:8080>. `HAZYFLOW_WEB_ORIGIN` / `HAZYFLOW_PUBLIC_BASE_URL`
+   are preset to `http://localhost:8080` to match.
 
-Probes: liveness `/healthz`, readiness `/readyz` (pulls a pod from the
-Service when Postgres is unreachable). The `grpc.health.v1.Health` service
-on :50050 is available for a `grpc_health_probe` sidecar if preferred.
+Why a PVC and not `emptyDir`: **flow graphs are stored as git repos on disk
+under `/data`, not in Postgres.** An `emptyDir` would lose every flow on a
+pod restart. A `ReadWriteOnce` PVC is correct for a single pod (DOKS'
+`do-block-storage` is RWO) and persists across restarts. Because the volume
+is RWO, the Deployment uses the `Recreate` strategy — a replacement pod can't
+attach the volume while the old one holds it, so the old pod is torn down
+first (a few seconds' downtime per rollout). Postgres still holds the rest of
+the durable state (jobs, users, sessions, encrypted secrets); back up both
+the database **and** the `/data` PVC (or `git push` your workspaces
+elsewhere). See "Backup & restore".
+
+Probes: liveness `/healthz`, readiness `/readyz` (marks the pod NotReady when
+Postgres is unreachable). The `grpc.health.v1.Health` service on :50050 is
+also registered if you prefer a `grpc_health_probe` sidecar.
+
+The pod runs as the image's unprivileged `hazyflow` user (uid 1000, which
+owns `/data`) with a hardened security context: `runAsNonRoot`,
+`readOnlyRootFilesystem` (only the `/data` PVC and a `/tmp` emptyDir are
+writable), all capabilities dropped, no privilege escalation, and the
+`RuntimeDefault` seccomp profile. `terminationGracePeriodSeconds: 35` sits
+above `HAZYFLOW_SHUTDOWN_GRACE` (25s) so a rollout drains in-flight nodes
+rather than killing them mid-write.
+
+`HAZYFLOW_TRUST_PROXY_HEADERS` is intentionally **unset**: the pod is reached
+directly via port-forward with no TLS-terminating proxy, and setting it there
+would let a client spoof `X-Forwarded-Proto`. Turn it on only once a real
+TLS proxy sits in front (next section).
+
+### Getting secrets into the cluster
+
+DigitalOcean has **no managed secret manager** (and no KMS) for DOKS — App
+Platform's encrypted env vars don't extend to Kubernetes. The inline
+`Secret` in `hazyflow.yaml` is a convenience for a first apply; don't commit
+real values in it. Options, simplest first:
+
+- **`kubectl` out of band** — apply the Secret by hand (or `kubectl create
+  secret`) and keep it out of git. DO encrypts etcd at rest on the managed
+  control plane. Fine for a single-pod start.
+- **Sealed Secrets** — encrypt locally with `kubeseal`, commit the
+  `SealedSecret`, an in-cluster controller decrypts it. No external service;
+  the GitOps-friendly default. The `secretGenerator` stub in
+  `kustomization.yaml` is the on-ramp.
+- **SOPS + age**, or **External Secrets Operator** pointed at Vault/OpenBao,
+  Doppler, Infisical, 1Password, etc. — heavier; reach for these when you
+  already run one of those stores.
+
+Either way the `HAZYFLOW_MASTER_KEY` needs a sealed backup *outside* whichever
+mechanism you choose — losing it makes every stored flow secret undecryptable.
+
+## Scaling up — load balancer, TLS, multi-replica
+
+When one pod isn't enough, the app scales out without code changes: the
+Postgres event bus lets any pod stream a run's events (`PgBus`) and a Postgres
+advisory-lock leader ensures only one pod fires each schedule (`PgLeader`).
+The steps:
+
+1. **Front it with an ingress + TLS.** `deploy/k8s/ingress.yaml` is an
+   ingress-nginx + cert-manager setup (WebSocket/SSE-friendly timeouts,
+   `force-ssl-redirect`, and a snippet that 403s `/metrics` at the edge). On
+   DOKS: install ingress-nginx (DO 1-Click "NGINX Ingress Controller", or Helm
+   into the `ingress-nginx` namespace) — it provisions a DO Load Balancer
+   automatically; point a DNS A record at the LB IP. Install cert-manager and
+   create a `letsencrypt-prod` ClusterIssuer (stub at the bottom of
+   `ingress.yaml`). Edit `app.example.com` in `ingress.yaml`, set
+   `HAZYFLOW_WEB_ORIGIN` / `HAZYFLOW_PUBLIC_BASE_URL` to the same https origin,
+   add `HAZYFLOW_TRUST_PROXY_HEADERS=1`, uncomment `ingress.yaml` in
+   `kustomization.yaml`, and re-apply.
+2. **Raise `replicas`** on the Deployment. Switch the `/data` volume from the
+   RWO PVC to a `ReadWriteMany` volume (block storage can't be shared across
+   pods — on DO that means storing workspace/`file_write` artifacts in object
+   storage / DO Spaces instead) and drop the `Recreate` strategy back to a
+   rolling update. Set the same `HAZYFLOW_APPROVAL_HMAC_SECRET` on every pod
+   if you use unauthenticated approval links.
+3. **Add the operational resources** as needed: a `PodDisruptionBudget`
+   (`minAvailable: 1`), a CPU `HorizontalPodAutoscaler` (DOKS ships
+   metrics-server; for backlog-aware scaling use the Prometheus metric
+   `hazyflow_jobs_oldest_queued_seconds` via prometheus-adapter), and a
+   default-deny `NetworkPolicy` (DOKS enforces it via Cilium). Note a
+   `PodDisruptionBudget` is *not* useful at one replica — `minAvailable: 1`
+   there blocks node drains entirely.
+
+`/metrics` is off by default. If you enable it (`HAZYFLOW_ENABLE_METRICS=1`)
+note it shares port 8080 with the API, so it can't be isolated by
+NetworkPolicy — block it at the ingress (as `ingress.yaml` does) and let
+Prometheus scrape the in-cluster Service directly.
 
 ## Per-org subdomains (optional)
 
@@ -213,10 +305,17 @@ overwritten), so re-running is safe.
 
 ### Backup & restore
 
-Everything durable lives in the one Postgres database, so a standard
-Postgres backup is a complete backup — **plus** the
-`HAZYFLOW_MASTER_KEY`, which lives outside the DB and is required to
-decrypt the `encrypted_secrets` rows.
+Most durable state lives in the one Postgres database, so a standard
+Postgres backup covers jobs, users, sessions, encrypted secrets,
+memberships, and the rest of the control plane. Two things live **outside**
+the DB and must be backed up alongside it:
+
+- the **`HAZYFLOW_MASTER_KEY`**, required to decrypt the `encrypted_secrets`
+  rows (a DB backup without it is undecryptable);
+- the **`HAZYFLOW_DATA_DIR` (`/data`) volume** — your flow graphs are stored
+  as git repos there, not in Postgres, so a DB-only backup does not capture
+  them. Back up the PVC (snapshot it, or `git push` each workspace to a
+  remote).
 
 - **Logical backup (simplest):**
   `pg_dump "$HAZYFLOW_POSTGRES_DSN" | gzip > hazyflow-$(date +%F).sql.gz`.
@@ -228,11 +327,12 @@ decrypt the `encrypted_secrets` rows.
 - **Back up the master key separately** (the break-glass copy from the
   "If it's lost" section of `SECURITY.md`). A DB backup without the key
   leaves every tenant secret undecryptable.
-- **What's safe to lose:** the `bus_events` spool is ephemeral
+- **What's safe to lose under `/data`:** the `bus_events` spool is ephemeral
   (auto-swept, ~1h retention) and the per-tenant sandbox/scratch dirs are
-  derived working data — neither needs backing up. `file_write` outputs
-  in the workspace sandbox are the exception if your flows treat them as
-  durable artifacts; back up the sandbox base dir too in that case.
+  derived working data. But the workspace git repos (your flow graphs) and —
+  if your flows treat them as durable — `file_write` outputs are **not**
+  derived; they're only on disk. That's why the whole `/data` volume is on
+  the back-up list above.
 
 ## Security knobs worth setting
 

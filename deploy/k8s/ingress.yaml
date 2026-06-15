@@ -1,0 +1,86 @@
+# Public ingress for the Hazyflow daemon on DigitalOcean Kubernetes (DOKS).
+#
+# Prerequisites (install once per cluster):
+#   1. ingress-nginx — DOKS ships no ingress controller. Install the
+#      community controller (DO 1-Click "Kubernetes — NGINX Ingress
+#      Controller", or `helm install ingress-nginx ingress-nginx/ingress-nginx
+#      -n ingress-nginx --create-namespace`). It provisions a DO Load
+#      Balancer automatically and lands in the `ingress-nginx` namespace
+#      (matched by the NetworkPolicy in hazyflow.yaml).
+#   2. cert-manager — for Let's Encrypt TLS. Install it and create a
+#      ClusterIssuer named `letsencrypt-prod` (see the commented stub at the
+#      bottom of this file). Point your domain's DNS A record at the DO Load
+#      Balancer's external IP first, or HTTP-01 validation will fail.
+#
+# Then:  kubectl apply -f deploy/k8s/ingress.yaml
+#
+# Replace app.example.com with your real hostname, and make sure the
+# Deployment env (hazyflow.yaml) has HAZYFLOW_WEB_ORIGIN /
+# HAZYFLOW_PUBLIC_BASE_URL set to the same https origin.
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hazyflow
+  labels: { app: hazyflow }
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    # --- WebSocket / SSE: hzd streams run events (SSE) and chat (WS) over
+    # long-lived connections. The default 60s proxy read/send timeout would
+    # cut them; raise it well past any idle gap.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # SSE must not be buffered or the client sees events in bursts at flush
+    # time instead of as they happen.
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    # --- Reverse-proxy contract hzd requires (see DEPLOY.md): X-Forwarded-Proto
+    # so it marks cookies Secure + sends HSTS, and Host/Origin passed through
+    # for the CSRF origin check + CORS allowlist. ingress-nginx forwards
+    # Host and Origin unchanged by default; it sets X-Forwarded-Proto from
+    # the TLS listener, so HAZYFLOW_TRUST_PROXY_HEADERS=1 works as-is.
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # Allow reasonably large request bodies (file uploads into flows). Tune
+    # to your needs; 0 disables the limit entirely.
+    nginx.ingress.kubernetes.io/proxy-body-size: "32m"
+    # --- Keep /metrics off the public internet. It shares port 8080 with the
+    # API, so it can't be split by NetworkPolicy; block it at the edge here.
+    # Prometheus scrapes the in-cluster Service directly (bypassing this
+    # ingress), so this does not affect metrics collection.
+    nginx.ingress.kubernetes.io/server-snippet: |
+      location = /metrics {
+        return 403;
+      }
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [app.example.com]
+      secretName: hazyflow-tls # cert-manager creates/fills this
+  rules:
+    - host: app.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: hazyflow
+                port:
+                  name: http
+# ---------------------------------------------------------------------------
+# cert-manager ClusterIssuer (uncomment + set your email, apply once). Needs
+# cert-manager installed in the cluster first.
+# ---
+# apiVersion: cert-manager.io/v1
+# kind: ClusterIssuer
+# metadata:
+#   name: letsencrypt-prod
+# spec:
+#   acme:
+#     server: https://acme-v02.api.letsencrypt.org/directory
+#     email: you@example.com
+#     privateKeySecretRef:
+#       name: letsencrypt-prod-account-key
+#     solvers:
+#       - http01:
+#           ingress:
+#             ingressClassName: nginx
