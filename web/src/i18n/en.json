@@ -528,7 +528,12 @@
       "edit": "Edit",
       "fieldSet": "Set",
       "fieldUnset": "Not set",
-      "disconnectFieldsConfirm": "Disconnect {{name}} and remove its stored connection details?"
+      "disconnectFieldsConfirm": "Disconnect {{name}} and remove its stored connection details?",
+      "verifying": "Verifying…",
+      "test": "Test connection",
+      "testing": "Testing…",
+      "testOk": "Connection works.",
+      "testFailed": "Couldn't connect: {{error}}"
     }
   },
   "connections": {

@@ -1786,6 +1786,17 @@
   gap: var(--space-2);
   margin-top: var(--space-4);
 }
+/* Result of a "Test connection" check on an established connection. */
+.connection-test-result {
+  margin-top: var(--space-3);
+  font-size: var(--text-sm);
+}
+.connection-test-result.ok {
+  color: var(--color-success, #15803d);
+}
+.connection-test-result.fail {
+  color: var(--color-danger, #b91c1c);
+}
 /* Multi-field connection: stack the field inputs, and the connected-state
    summary rows (label + set/unset). */
 .connection-card form .connection-field + .connection-field {

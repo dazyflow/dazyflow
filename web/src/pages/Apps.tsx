@@ -378,6 +378,12 @@ function IntegrationConnections({
     () => drops.find((d) => d.connection_fields?.length)?.connection_fields ?? [],
     [drops],
   );
+  // The integration is testable when any of its drops reports a live
+  // connection check (the daemon computes connection_verifiable).
+  const connectionVerifiable = useMemo(
+    () => drops.some((d) => d.connection_verifiable),
+    [drops],
+  );
   const needsSecret = reqs.some((r) => r.kind === "secret") || connectionFields.length > 0;
   const needsOAuth = reqs.some((r) => r.kind === "oauth");
 
@@ -458,6 +464,7 @@ function IntegrationConnections({
           loading={secrets === null && !secretsOff}
           off={secretsOff}
           canWrite={canWrite}
+          verifiable={connectionVerifiable}
           onChanged={refresh}
         />
       )}
@@ -726,6 +733,7 @@ function ConnectionFieldsCard({
   loading,
   off,
   canWrite,
+  verifiable,
   onChanged,
 }: {
   fields: ConnectionField[];
@@ -735,6 +743,7 @@ function ConnectionFieldsCard({
   loading: boolean;
   off: boolean;
   canWrite: boolean;
+  verifiable: boolean;
   onChanged: () => void;
 }) {
   const { t } = useTranslation();
@@ -743,6 +752,12 @@ function ConnectionFieldsCard({
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // testState tracks the "Test connection" button: idle, in-flight, or a
+  // resolved result with a human message. Separate from `err` (the save
+  // form's error) so testing an existing connection doesn't disturb the form.
+  const [testState, setTestState] = useState<
+    { kind: "idle" } | { kind: "testing" } | { kind: "ok" } | { kind: "fail"; message: string }
+  >({ kind: "idle" });
 
   const keyFor = (f: ConnectionField) => `conn.${slug}.${f.key}`;
   const isSet = (f: ConnectionField) => secrets?.includes(keyFor(f)) ?? false;
@@ -756,10 +771,15 @@ function ConnectionFieldsCard({
     if (pending.length === 0) return;
     setBusy(true);
     setErr(null);
+    setTestState({ kind: "idle" });
     try {
-      for (const f of pending) {
-        await api.putSecret(token, keyFor(f), values[f.key]);
-      }
+      // Verify-before-save: the daemon tests the credentials (when the
+      // integration supports it) and stores them only if they work, so a bad
+      // value is rejected here with the real reason instead of being saved
+      // and shown as "Connected".
+      const entered: Record<string, string> = {};
+      for (const f of pending) entered[f.key] = values[f.key];
+      await api.connectIntegration(token, slug, entered);
       setValues({});
       setEditing(false);
       onChanged();
@@ -767,6 +787,17 @@ function ConnectionFieldsCard({
       setErr(e instanceof APIError ? e.message : (e as Error).message);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const test = async () => {
+    if (!token) return;
+    setTestState({ kind: "testing" });
+    try {
+      const r = await api.verifyIntegration(token, slug);
+      setTestState(r.ok ? { kind: "ok" } : { kind: "fail", message: r.error ?? "" });
+    } catch (e) {
+      setTestState({ kind: "fail", message: e instanceof APIError ? e.message : (e as Error).message });
     }
   };
 
@@ -816,8 +847,30 @@ function ConnectionFieldsCard({
             ))}
           </ul>
           {err && <div className="card error">{err}</div>}
+          {verifiable && testState.kind === "ok" && (
+            <p className="connection-test-result ok">{t("integrations.connection.testOk")}</p>
+          )}
+          {verifiable && testState.kind === "fail" && (
+            <p className="connection-test-result fail">
+              {t("integrations.connection.testFailed", {
+                error: testState.message || t("connections.unknownError"),
+              })}
+            </p>
+          )}
           {canWrite && (
             <div className="connection-card-footer">
+              {verifiable && (
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={() => void test()}
+                  disabled={testState.kind === "testing"}
+                >
+                  {testState.kind === "testing"
+                    ? t("integrations.connection.testing")
+                    : t("integrations.connection.test")}
+                </button>
+              )}
               <button type="button" className="ghost" onClick={() => setEditing(true)}>
                 {t("integrations.connection.edit")}
               </button>
@@ -854,7 +907,11 @@ function ConnectionFieldsCard({
           {err && <div className="card error">{err}</div>}
           <div className="connection-card-footer">
             <button type="submit" className="primary" disabled={busy}>
-              {busy ? t("connections.saving") : t("connections.connect")}
+              {busy
+                ? verifiable
+                  ? t("integrations.connection.verifying")
+                  : t("connections.saving")
+                : t("connections.connect")}
             </button>
             {connected && (
               <button

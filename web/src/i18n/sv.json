@@ -524,7 +524,12 @@
       "edit": "Redigera",
       "fieldSet": "Angivet",
       "fieldUnset": "Inte angivet",
-      "disconnectFieldsConfirm": "Koppla från {{name}} och ta bort dess lagrade anslutningsuppgifter?"
+      "disconnectFieldsConfirm": "Koppla från {{name}} och ta bort dess lagrade anslutningsuppgifter?",
+      "verifying": "Verifierar…",
+      "test": "Testa anslutning",
+      "testing": "Testar…",
+      "testOk": "Anslutningen fungerar.",
+      "testFailed": "Kunde inte ansluta: {{error}}"
     }
   },
   "connections": {
