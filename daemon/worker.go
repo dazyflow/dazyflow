@@ -291,11 +291,19 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 	if w.cfg.Metrics != nil {
 		w.cfg.Metrics.ObserveNode(string(status), nodeElapsed.Seconds())
 	}
-	// Usage metering (T3): same scope as the latency metric — every
-	// executed attempt is a billable node execution, retries included
-	// (they consumed compute). Detached from the claim ctx so a
+	// Usage metering (T3): every executed attempt is a billable node
+	// execution, retries included (they consumed compute). It is gated
+	// on committing our outcome under our own lease — see the call sites
+	// below, after a successful Requeue and after a non-fenced complete.
+	// If our complete is fenced (ErrConflict: lease lost, reclaimed
+	// elsewhere) we must NOT count: the worker that owns the job now
+	// runs and meters its own attempt, so metering unconditionally here
+	// would double-bill on lease churn. Detached from the claim ctx so a
 	// shutdown can't drop the count of work already done.
-	if w.cfg.Usage != nil {
+	meterExecution := func() {
+		if w.cfg.Usage == nil {
+			return
+		}
 		if uerr := w.cfg.Usage.AddNodeExecutions(context.WithoutCancel(ctx), rec.Tenant, 1, time.Now()); uerr != nil {
 			w.cfg.Logger.Printf("[%s] usage metering [%s]: count node execution: %v", w.cfg.ID, rec.Tenant, uerr)
 		}
@@ -309,6 +317,7 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 	if status == core.JobStatusFailed && !skipRetry {
 		if when, reason := w.maybeScheduleRetry(graph, rec); !when.IsZero() {
 			if err := w.store.Requeue(context.Background(), rec.ID, when); err == nil {
+				meterExecution() // this attempt ran under our lease and is being retried
 				w.cfg.Logger.Printf("[%s] retrying %s (attempt %d → next at %v)", w.cfg.ID, rec.ID, rec.Attempt, when.Format(time.RFC3339Nano))
 				return
 			} else {
@@ -327,6 +336,9 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 		w.cfg.Logger.Printf("[%s] %s: complete fenced (lease lost or already terminal); abandoning", w.cfg.ID, rec.ID)
 		return
 	}
+	// Past the ownership fence: we committed this terminal outcome, so the
+	// attempt is ours to bill (even if the write hit a non-conflict error).
+	meterExecution()
 	if cerr != nil {
 		w.cfg.Logger.Printf("[%s] complete %s: %v", w.cfg.ID, rec.ID, cerr)
 	}
@@ -503,7 +515,14 @@ func (w *Worker) bodyRunner(body core.Graph, graphRunID string) engine.BodyRunne
 
 // fetchGraph loads the graph payload from the graph-record.
 func (w *Worker) fetchGraph(ctx context.Context, graphRunID string) (core.Graph, error) {
-	graphRec, err := w.store.Get(ctx, graphRunID)
+	return loadGraphFromRun(ctx, w.store, graphRunID)
+}
+
+// loadGraphFromRun reads a graph-run record from the store and unmarshals
+// its embedded graph payload. Shared by Worker and Dispatcher so the
+// "get record → check payload → unmarshal" sequence lives in one place.
+func loadGraphFromRun(ctx context.Context, store core.JobStore, graphRunID string) (core.Graph, error) {
+	graphRec, err := store.Get(ctx, graphRunID)
 	if err != nil {
 		return core.Graph{}, fmt.Errorf("get graph-record %s: %w", graphRunID, err)
 	}

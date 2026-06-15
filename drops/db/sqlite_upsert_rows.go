@@ -152,7 +152,10 @@ func executeSQLiteUpsertRows(_ context.Context, job core.Job, _ chan<- core.Prog
 		createTable = v
 	}
 	if createTable && len(headers) > 0 {
-		colTypes, _ := paramStringMap(job.Params, "column_types")
+		colTypes, err := parseColumnTypes(job.Params)
+		if err != nil {
+			return params.Err(job, "db", err.Error()), nil
+		}
 		if err := sqliteEnsureTableWithUnique(db, table, headers, colTypes, conflictCols); err != nil {
 			return params.Err(job, "db", err.Error()), nil
 		}

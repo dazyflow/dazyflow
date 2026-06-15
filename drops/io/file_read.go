@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"strings"
 
 	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/hazyflow/drops/internal/mimetype"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/hazyflow/engine"
 )
 
 func init() {
@@ -106,7 +106,7 @@ func executeFileRead(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 			return params.Err(job, "io", fmt.Sprintf("read %q: %v", path, err)), nil
 		}
 		out.Ref = "" // inline mode does not also publish a path
-		if isTextMIME(mime) {
+		if mimetype.IsText(mime) {
 			out.Inline = string(data)
 		} else {
 			out.Inline = data
@@ -119,12 +119,3 @@ func executeFileRead(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 	}, nil
 }
 
-func isTextMIME(mime string) bool {
-	switch {
-	case strings.HasPrefix(mime, "text/"):
-		return true
-	case mime == "application/json", mime == "application/xml", mime == "application/csv":
-		return true
-	}
-	return false
-}

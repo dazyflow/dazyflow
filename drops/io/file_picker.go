@@ -8,8 +8,9 @@ import (
 	"strings"
 
 	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/hazyflow/drops/internal/mimetype"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/hazyflow/engine"
 )
 
 func init() {
@@ -122,7 +123,7 @@ func executeFilePicker(_ context.Context, job core.Job, _ chan<- core.Progress) 
 		// the value survives gRPC's JSON wrapping; binary MIMEs go
 		// across as []byte (base64 over the wire).
 		fileRef.Ref = ""
-		if isTextMIME(mime) {
+		if mimetype.IsText(mime) {
 			fileRef.Inline = string(buf)
 		} else {
 			fileRef.Inline = buf

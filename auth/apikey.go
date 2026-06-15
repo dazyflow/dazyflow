@@ -112,8 +112,8 @@ func (a *APIKeyAuthenticator) now() time.Time {
 // expires (operator-issued, long-lived); a non-nil value stamps the
 // record so the authenticator rejects the key after that time.
 func IssueAPIKey(store interface{ PutKey(context.Context, APIKey) error }, ctx context.Context, id, tenant, workspace, subject string, roles []core.Role, expiresAt *time.Time) (APIKey, string, error) {
-	if id == "" {
-		return APIKey{}, "", fmt.Errorf("id required")
+	if err := validateKeyID(id); err != nil {
+		return APIKey{}, "", err
 	}
 	salt := make([]byte, 16)
 	if _, err := rand.Read(salt); err != nil {
@@ -138,6 +138,29 @@ func IssueAPIKey(store interface{ PutKey(context.Context, APIKey) error }, ctx c
 	}
 	cleartext := fmt.Sprintf("%s%s_%s", apiKeyPrefix, id, hex.EncodeToString(secret))
 	return key, cleartext, nil
+}
+
+// validateKeyID guards a caller-supplied key ID. The cleartext wire
+// format is hzk_<id>_<secret>, and Authenticate recovers the id with
+// strings.SplitN(rest, "_", 2) — so an id containing "_" would parse
+// back as a different (id, secret) split and the key could never
+// authenticate. Constrain to a charset that round-trips cleanly rather
+// than mint a silently-broken key. Server-generated IDs ("k"+hex) pass.
+func validateKeyID(id string) error {
+	if id == "" {
+		return fmt.Errorf("id required")
+	}
+	if len(id) > 64 {
+		return fmt.Errorf("id %q too long (max 64)", id)
+	}
+	for _, r := range id {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-':
+		default:
+			return fmt.Errorf("id %q has invalid character %q (allowed: letters, digits, '-')", id, string(r))
+		}
+	}
+	return nil
 }
 
 func sha256Salted(salt, secret []byte) []byte {

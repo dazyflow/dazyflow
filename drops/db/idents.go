@@ -69,3 +69,38 @@ func quoteIdent(name string) string {
 func quoteIdentBacktick(name string) string {
 	return "`" + strings.ReplaceAll(name, "`", "``") + "`"
 }
+
+// maxColumnTypeLen caps a single column_types value. Real type
+// expressions are short ("DECIMAL(10,2)", "timestamp with time zone");
+// the cap stops a pasted blob from reaching the DB parser.
+const maxColumnTypeLen = 64
+
+// validateColumnType guards the column_types parameter. Unlike
+// identifiers (which we quote) and row values (which we bind), a
+// column's SQL type cannot be quoted or parameterized — it is spliced
+// verbatim into CREATE TABLE / ALTER TABLE DDL. Without this check a
+// value like `TEXT); DROP TABLE users; --` would be executed.
+//
+// A legitimate type is a name optionally carrying a size/precision in
+// parentheses, optionally with modifier words ("DOUBLE PRECISION",
+// "INT UNSIGNED", "TIMESTAMP WITH TIME ZONE"). We allow only letters,
+// digits, spaces, commas, parentheses and underscores; everything else
+// — quotes, semicolons, comment markers — is rejected so a value can
+// never break out of the type position.
+func validateColumnType(t string) error {
+	if t == "" {
+		return nil
+	}
+	if len(t) > maxColumnTypeLen {
+		return fmt.Errorf("column type %q exceeds %d bytes", t, maxColumnTypeLen)
+	}
+	for _, r := range t {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case r == ' ', r == ',', r == '(', r == ')', r == '_':
+		default:
+			return fmt.Errorf("column type %q contains unsupported character %q", t, string(r))
+		}
+	}
+	return nil
+}

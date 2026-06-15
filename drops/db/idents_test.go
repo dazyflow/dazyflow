@@ -5,6 +5,67 @@ import (
 	"testing"
 )
 
+func TestValidateColumnType_AcceptsRealTypes(t *testing.T) {
+	for _, typ := range []string{
+		"TEXT",
+		"integer",
+		"BIGINT",
+		"timestamptz",
+		"VARCHAR(255)",
+		"DECIMAL(10,2)",
+		"NUMERIC(10, 2)",
+		"DOUBLE PRECISION",
+		"INT UNSIGNED",
+		"TIMESTAMP WITH TIME ZONE",
+		"", // absent override defaults to TEXT — allowed
+	} {
+		t.Run(typ, func(t *testing.T) {
+			if err := validateColumnType(typ); err != nil {
+				t.Errorf("validateColumnType(%q) = %v, want nil", typ, err)
+			}
+		})
+	}
+}
+
+func TestValidateColumnType_RejectsInjection(t *testing.T) {
+	for _, typ := range []string{
+		"TEXT); DROP TABLE users; --",
+		"TEXT DEFAULT 'x'",
+		"TEXT; SELECT 1",
+		`TEXT" `,
+		"int/*comment*/",
+		strings.Repeat("A", maxColumnTypeLen+1),
+	} {
+		t.Run(typ, func(t *testing.T) {
+			if err := validateColumnType(typ); err == nil {
+				t.Errorf("validateColumnType(%q) = nil, want error", typ)
+			}
+		})
+	}
+}
+
+func TestParseColumnTypes(t *testing.T) {
+	// Absent parameter → nil map, no error.
+	m, err := parseColumnTypes(map[string]any{})
+	if err != nil || m != nil {
+		t.Fatalf("absent: got (%v, %v), want (nil, nil)", m, err)
+	}
+	// A malicious value is rejected and names the offending column.
+	_, err = parseColumnTypes(map[string]any{
+		"column_types": map[string]any{"age": "INT); DROP TABLE t; --"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "age") {
+		t.Fatalf("malicious: got err %v, want error naming column \"age\"", err)
+	}
+	// A valid map round-trips.
+	m, err = parseColumnTypes(map[string]any{
+		"column_types": map[string]any{"age": "integer"},
+	})
+	if err != nil || m["age"] != "integer" {
+		t.Fatalf("valid: got (%v, %v)", m, err)
+	}
+}
+
 func TestValidateIdent_AcceptsRealisticHeaders(t *testing.T) {
 	// Every one of these used to be rejected by the old
 	// [A-Za-z0-9_] check — they're the kinds of names that turn up

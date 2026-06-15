@@ -595,16 +595,5 @@ func (d *Dispatcher) projectChildOutputs(
 }
 
 func (d *Dispatcher) fetchGraph(ctx context.Context, graphRunID string) (core.Graph, error) {
-	graphRec, err := d.store.Get(ctx, graphRunID)
-	if err != nil {
-		return core.Graph{}, err
-	}
-	if len(graphRec.GraphPayload) == 0 {
-		return core.Graph{}, fmt.Errorf("graph-record %s has no payload", graphRunID)
-	}
-	var g core.Graph
-	if err := json.Unmarshal(graphRec.GraphPayload, &g); err != nil {
-		return core.Graph{}, err
-	}
-	return g, nil
+	return loadGraphFromRun(ctx, d.store, graphRunID)
 }

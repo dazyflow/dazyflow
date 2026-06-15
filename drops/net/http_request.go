@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/drops/internal/mimetype"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
 	"git.sr.ht/~klahr/hazyflow/engine"
 )
@@ -151,6 +152,9 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 		if isSSRFError(err) {
 			return params.Err(job, "ssrf_blocked", err.Error()), nil
 		}
+		if strings.Contains(err.Error(), "egress_blocked") {
+			return params.Err(job, "egress_blocked", err.Error()), nil
+		}
 		if ctx.Err() != nil {
 			return params.Err(job, "cancelled", ctx.Err().Error()), ctx.Err()
 		}
@@ -183,7 +187,7 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 	}
 
 	var bodyInline any
-	if isTextMIME(contentType) {
+	if mimetype.IsText(contentType) {
 		bodyInline = string(raw)
 	} else {
 		bodyInline = raw
@@ -325,7 +329,19 @@ func buildClient(timeout time.Duration, allowPrivate bool) *http.Client {
 			MaxIdleConns:          10,
 			IdleConnTimeout:       30 * time.Second,
 		},
-		// Default redirect policy follows up to 10; that's fine.
+		// The operator egress allowlist is enforced on the initial URL by
+		// the caller, but the Go default redirect policy would happily
+		// follow a 30x to any other host — bypassing the allowlist. Re-run
+		// the host check on every hop so a redirect can't be used to reach
+		// a host the operator didn't permit. (egressAllowed is a no-op when
+		// no allowlist is configured, so this changes nothing by default.
+		// Private/loopback IPs are independently blocked by the dial guard.)
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 10 {
+				return fmt.Errorf("stopped after 10 redirects")
+			}
+			return egressAllowed(req.URL.String())
+		},
 	}
 }
 
@@ -408,20 +424,3 @@ func isSSRFError(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "ssrf_blocked")
 }
 
-func isTextMIME(mime string) bool {
-	// Trim parameters: "text/plain; charset=utf-8" → "text/plain"
-	if i := strings.IndexByte(mime, ';'); i >= 0 {
-		mime = mime[:i]
-	}
-	mime = strings.TrimSpace(mime)
-	if strings.HasPrefix(mime, "text/") {
-		return true
-	}
-	switch mime {
-	case "application/json", "application/xml",
-		"application/csv", "application/javascript",
-		"application/x-yaml", "application/yaml":
-		return true
-	}
-	return false
-}

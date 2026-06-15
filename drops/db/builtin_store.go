@@ -227,7 +227,10 @@ func executeBuiltinStoreAppend(_ context.Context, job core.Job, _ chan<- core.Pr
 	defer db.Close()
 
 	if len(headers) > 0 {
-		colTypes, _ := paramStringMap(job.Params, "column_types")
+		colTypes, err := parseColumnTypes(job.Params)
+		if err != nil {
+			return params.Err(job, "db", err.Error()), nil
+		}
 		if err := ensureTable(db, table, headers, colTypes); err != nil {
 			return params.Err(job, "db", err.Error()), nil
 		}

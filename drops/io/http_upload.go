@@ -12,9 +12,10 @@ import (
 	"time"
 
 	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/hazyflow/drops/internal/mimetype"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
 	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
+	"git.sr.ht/~klahr/hazyflow/engine"
 )
 
 func init() {
@@ -87,6 +88,9 @@ func executeHTTPUpload(ctx context.Context, job core.Job, _ chan<- core.Progress
 	url, err := params.String(job.Params, "url")
 	if err != nil {
 		return params.Err(job, "bad_param", err.Error()), nil
+	}
+	if err := requireHTTPScheme(url); err != nil {
+		return params.Err(job, "bad_url", err.Error()), nil
 	}
 	if err := hfnet.EgressAllowed(url); err != nil {
 		return params.Err(job, "egress_blocked", err.Error()), nil
@@ -188,7 +192,7 @@ func executeHTTPUpload(ctx context.Context, job core.Job, _ chan<- core.Progress
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20)) // upload responses are small
 	respCT := resp.Header.Get("Content-Type")
 	var inline any = respBody
-	if isTextMIME(respCT) {
+	if mimetype.IsText(respCT) {
 		inline = string(respBody)
 	}
 	return core.Result{

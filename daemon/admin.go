@@ -116,13 +116,9 @@ func (s *Service) IssueAPIKey(ctx context.Context, p core.Principal, params Issu
 	if err := s.reserveKeyID(ctx, params.ID, tenant); err != nil {
 		return IssuedAPIKey{}, err
 	}
-	id := params.ID
-	if id == "" {
-		generated, err := newID()
-		if err != nil {
-			return IssuedAPIKey{}, fmt.Errorf("generate key id: %w", err)
-		}
-		id = "k" + generated[:12]
+	id, err := resolveKeyID(params.ID)
+	if err != nil {
+		return IssuedAPIKey{}, err
 	}
 	workspace := params.Workspace
 	if workspace == "" {
@@ -205,13 +201,9 @@ func (s *Service) IssueOwnAPIKey(ctx context.Context, p core.Principal, params S
 	if err := s.reserveKeyID(ctx, params.ID, p.Tenant); err != nil {
 		return IssuedAPIKey{}, err
 	}
-	id := params.ID
-	if id == "" {
-		generated, err := newID()
-		if err != nil {
-			return IssuedAPIKey{}, fmt.Errorf("generate key id: %w", err)
-		}
-		id = "k" + generated[:12]
+	id, err := resolveKeyID(params.ID)
+	if err != nil {
+		return IssuedAPIKey{}, err
 	}
 
 	key, secret, err := auth.IssueAPIKey(s.AdminKeys, ctx, id, p.Tenant, p.Workspace, p.Subject, roles, params.ExpiresAt)
@@ -230,6 +222,21 @@ func (s *Service) IssueOwnAPIKey(ctx context.Context, p core.Principal, params S
 // issuing would silently hijack or revoke that tenant's key (key IDs are
 // not secret; they travel in the hzk_<id>_... wire format). An empty ID is
 // always server-generated, so it's free by construction.
+// resolveKeyID returns the caller's requested key ID, or a freshly
+// generated "k"-prefixed one when none was supplied. Key IDs are not
+// secret (they travel in the hzk_<id>_... wire format), so a random
+// 12-char suffix is enough to avoid collisions.
+func resolveKeyID(requested string) (string, error) {
+	if requested != "" {
+		return requested, nil
+	}
+	generated, err := newID()
+	if err != nil {
+		return "", fmt.Errorf("generate key id: %w", err)
+	}
+	return "k" + generated[:12], nil
+}
+
 func (s *Service) reserveKeyID(ctx context.Context, id, tenant string) error {
 	if id == "" {
 		return nil

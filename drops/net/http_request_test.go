@@ -297,6 +297,36 @@ func TestHTTP_SSRFOptInAllowsLoopback(t *testing.T) {
 	}
 }
 
+// TestHTTP_RedirectCannotBypassEgressAllowlist guards the redirect
+// CheckRedirect hook: a 30x to a host outside the egress allowlist
+// must be refused, not silently followed. The initial host is allowed,
+// so the request gets as far as the redirect before being stopped.
+func TestHTTP_RedirectCannotBypassEgressAllowlist(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://blocked.example.com/secret", http.StatusFound)
+	}))
+	defer srv.Close()
+
+	// Allow only loopback (where httptest binds); the redirect target is not listed.
+	if err := SetEgressAllowlist([]string{"127.0.0.1"}); err != nil {
+		t.Fatalf("set allowlist: %v", err)
+	}
+	t.Cleanup(func() { _ = SetEgressAllowlist(nil) })
+
+	res, _ := executeHTTPRequest(t.Context(), core.Job{
+		Params: map[string]any{
+			"url":                    srv.URL,
+			"allow_private_networks": true, // httptest binds 127.0.0.1
+		},
+	}, nil)
+	if res.Status != core.StatusError {
+		t.Fatalf("status=%q, want error (redirect to disallowed host must be blocked)", res.Status)
+	}
+	if res.Error.Code != "egress_blocked" {
+		t.Errorf("code = %q, want egress_blocked", res.Error.Code)
+	}
+}
+
 func TestHTTP_BadURLRejected(t *testing.T) {
 	res, _ := executeHTTPRequest(t.Context(), core.Job{
 		Params: map[string]any{

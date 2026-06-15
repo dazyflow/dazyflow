@@ -26,19 +26,8 @@ func TestGuessMIMEByExt(t *testing.T) {
 	}
 }
 
-func TestIsTextMIME(t *testing.T) {
-	text := []string{"text/plain", "text/csv", "application/json", "application/xml", "application/csv"}
-	for _, m := range text {
-		if !isTextMIME(m) {
-			t.Errorf("isTextMIME(%q) = false, want true", m)
-		}
-	}
-	for _, m := range []string{"application/octet-stream", "image/png", ""} {
-		if isTextMIME(m) {
-			t.Errorf("isTextMIME(%q) = true, want false", m)
-		}
-	}
-}
+// isTextMIME classification now lives in drops/internal/mimetype and is
+// tested there (TestIsText).
 
 func TestInlineToBytes(t *testing.T) {
 	if b, err := inlineToBytes([]byte("raw")); err != nil || string(b) != "raw" {

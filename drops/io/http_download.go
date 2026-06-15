@@ -101,11 +101,8 @@ func executeHTTPDownload(ctx context.Context, job core.Job, _ chan<- core.Progre
 	if url == "" {
 		return params.Err(job, "bad_param", "url is required (params.url or the 'url' input)"), nil
 	}
-	// Only http(s) is downloadable here — reject other schemes (file://,
-	// ftp://, scheme-less) with a clear message rather than letting the
-	// transport fail later with an opaque "unsupported protocol scheme".
-	if u, perr := neturl.Parse(url); perr != nil || (u.Scheme != "http" && u.Scheme != "https") {
-		return params.Err(job, "bad_url", "url must be an http:// or https:// address"), nil
+	if err := requireHTTPScheme(url); err != nil {
+		return params.Err(job, "bad_url", err.Error()), nil
 	}
 	dest, err := params.String(job.Params, "path")
 	if err != nil {
@@ -323,6 +320,19 @@ func downloadRequestBody(job core.Job) (io.Reader, error) {
 		return strings.NewReader(s), nil
 	}
 	return nil, nil
+}
+
+// requireHTTPScheme rejects anything that isn't an http:// or https://
+// URL (file://, ftp://, scheme-less, unparseable) with a clear message
+// rather than letting the transport fail later with an opaque
+// "unsupported protocol scheme". Shared by http_download and
+// http_upload so both gate the scheme the same way.
+func requireHTTPScheme(rawURL string) error {
+	u, err := neturl.Parse(rawURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return fmt.Errorf("url must be an http:// or https:// address")
+	}
+	return nil
 }
 
 func downloadHeaders(p map[string]any) (map[string]string, error) {

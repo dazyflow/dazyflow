@@ -74,6 +74,25 @@ func TestAPIKey_RoundTrip(t *testing.T) {
 	}
 }
 
+func TestIssueAPIKey_RejectsUnsafeID(t *testing.T) {
+	store := NewMemKeyStore()
+	// An "_" in the id would split wrong in the hzk_<id>_<secret> wire
+	// format and mint a key that can never authenticate — reject at issue.
+	for _, id := range []string{"", "team_key", "has space", "emoji😀"} {
+		if _, _, err := IssueAPIKey(store, t.Context(), id, "t", "", "u", nil, nil); err == nil {
+			t.Errorf("IssueAPIKey(id=%q) = nil error, want rejection", id)
+		}
+	}
+	// A clean id with a hyphen round-trips and authenticates.
+	_, cleartext, err := IssueAPIKey(store, t.Context(), "ci-bot-1", "t", "", "u", nil, nil)
+	if err != nil {
+		t.Fatalf("IssueAPIKey(clean id): %v", err)
+	}
+	if _, err := (&APIKeyAuthenticator{Store: store}).Authenticate(t.Context(), cleartext); err != nil {
+		t.Fatalf("Authenticate clean id: %v", err)
+	}
+}
+
 func TestAPIKey_RejectsTampered(t *testing.T) {
 	store := NewMemKeyStore()
 	_, cleartext, _ := IssueAPIKey(store, t.Context(), "k1", "t", "", "u", nil, nil)

@@ -77,6 +77,24 @@ func paramStringMap(params map[string]any, key string) (map[string]string, bool)
 	return out, true
 }
 
+// parseColumnTypes reads the optional column_types parameter and
+// validates every value, since these strings are spliced directly
+// into DDL (see validateColumnType). It is the single boundary all
+// db drops go through, so no ensure/evolve function can splice an
+// unvalidated type. Returns a nil map when the parameter is absent.
+func parseColumnTypes(params map[string]any) (map[string]string, error) {
+	m, ok := paramStringMap(params, "column_types")
+	if !ok {
+		return nil, nil
+	}
+	for col, t := range m {
+		if err := validateColumnType(t); err != nil {
+			return nil, fmt.Errorf("column_types[%q]: %w", col, err)
+		}
+	}
+	return m, nil
+}
+
 // isSandboxEscape mirrors the io package's check — kept local so this
 // package doesn't import a sibling integration.
 func isSandboxEscape(err error) bool {
