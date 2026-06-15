@@ -111,14 +111,41 @@ Google Form (trigger)
       at lint time (Forms API), which the pure pass can't reach — needs a decision on threading
       live-field fetches into lint vs. surfacing in the reference picker.*
 
+## NEW — found re-running the walkthrough (PASS 4, 2026-06-15)
+
+- [x] **P1 — Per-field `description` copy never reaches the UI (cross-cutting).** — FIXED. `SchemaForm`'s
+      `FieldLabel` (`web/src/components/SchemaForm.tsx`) rendered only `schema.title` + the first
+      `schema.examples` entry — it referenced `schema.description` nowhere, so **every
+      "fixed by field-description copy" item was invisible** (P2 email `subject`; P0-3 Postgres `dsn`
+      self-explanation; P1 DB `field_mapping`→`map_rows`). Fix: each field whose schema has a
+      `description` now gets a small hover/focus **(i) tooltip next to its label** — reusing the
+      `inspector-info` affordance already on the drop header (`.sf-label-group` keeps it tight to the
+      label; the `{ }` ref button stays pinned right). Chosen over an inline `.desc` line specifically
+      to keep the panel low-clutter — no permanent text under any input. Verified live: the Email
+      Subject (i) tooltip now carries the full *"…Leave blank and it sends as '(no subject)'…"* copy
+      (3 field icons render in the Email inspector). This lights up P0-3 / P1-DB / P2-subject together.
+
+- [ ] **P2 — "save" ranks the KV store above the database.** A persona told to *"save to a database"*
+      who searches **save** in the palette gets, in order: **Built-in store** (a no-setup KV store) →
+      **SQLite** (Insert rows) → File → … So the relational DB the walkthrough targets is the *second*
+      hit; the obvious verb lands on a different no-setup thing first. Not a dead-end (both are
+      zero-config and SQLite is right there), but the P0-3 "SQLite is THE save-to-a-database default"
+      intent is diluted. Also: SQLite's "no setup" reassurance lives in its *summary* (node card), not
+      the inspector, and the inspector's "Database file" field shows blank with a *"N to configure"*
+      gate — so the no-config promise isn't visibly reassured at the point of doubt. *(Cheap fix:
+      bump SQLite's rank for `save`/`database`, or down-rank Built-in store for those terms.)*
+
 ## P2 — Polish (confusing but not blocking)
 
 - [ ] **"Leave interval blank to check only when you press Run"** phrasing is confusing — say
       "Run automatically every N minutes" vs "only when I press Run".
-- [x] **Email `subject` silently defaults to "(no subject)"** — FIXED (copy). The `subject` param on
-      both `email_send` (SMTP) and `gmail_send_email` now reads *"The email's subject line — e.g.
-      'Re: your submission'. Leave blank and it sends as '(no subject)'."* so the silent default is
-      surfaced. *(Follow-up: a true required-subject prompt/validation if blank-sends are undesirable.)*
+- [x] **Email `subject` silently defaults to "(no subject)"** — FIXED (copy + now surfaced). The
+      `subject` param on both `email_send` (SMTP) and `gmail_send_email` carries the text *"The email's
+      subject line — e.g. 'Re: your submission'. Leave blank and it sends as '(no subject)'."* PASS 4
+      found the copy was written but **never rendered** (re-opened, then fixed by the cross-cutting
+      `FieldLabel` (i)-tooltip change in the NEW section above). Verified live: the Subject field's (i)
+      tooltip now shows the full text. *(Follow-up: a true required-subject prompt/validation if
+      blank-sends are undesirable.)*
 - [ ] **ntfy truncates >4 KiB silently** — warn when wiring a long body.
 - [ ] **Reference picker** lazy-loads with a blank list (reads as broken), has no search, and
       labels form fields under `trigger.body.*`.
@@ -132,8 +159,18 @@ Google Form (trigger)
 
 - [x] AI steps (Claude/ChatGPT) have a one-click **Connect** affordance (node chip, inspector,
       banner, gate). **Postgres now replicates it** (see P1 above); ntfy still to unify.
-- [ ] After all P0/P1: re-run the persona walkthrough end-to-end and confirm **zero** `${…}`
-      typing and **zero** dead-ends.
+- [~] After all P0/P1: re-run the persona walkthrough end-to-end and confirm **zero** `${…}`
+      typing and **zero** dead-ends. — **RE-RUN PASS 4 (2026-06-15, live, headless):** built the
+      full graph (Form → Draft reply → SQLite → Await approval → ntfy → Email) entirely through UI
+      affordances, **typing zero `${…}` tokens and zero DSNs**, 6 nodes on canvas. All P0/P1
+      affordances confirmed present and working live: palette add-by-search, AI Connect chip,
+      `await_approval` "Approval link" label, the one-click **"Notify me on ntfy"** auto-wire
+      (4→5 nodes), ntfy "Receive these on your phone" subscribe section, SQLite no-config defaults +
+      Column mapping `+Add`. **Not yet zero-friction** — two findings folded in above (NEW section):
+      field-`description` copy never renders (P1), and "save" ranks the KV store above SQLite (P2).
+      Re-run once the `FieldLabel` renderer fix lands. *Note: the Google-Form respondent `email`
+      field (P0-2) can only be confirmed against a live OAuth'd form — out of reach in the headless
+      harness; verify manually.*
 
 ---
 

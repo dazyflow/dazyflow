@@ -4465,6 +4465,14 @@ button.warning:hover:not(:disabled) {
   color: var(--muted);
   margin: 0;
 }
+/* Label + its (i) help icon sit together on the left of the label-row;
+   the row's space-between keeps any trailing action pinned right. */
+.sf-field .sf-label-group {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
 .sf-field .desc {
   font-size: var(--text-xs);
   color: var(--faint);

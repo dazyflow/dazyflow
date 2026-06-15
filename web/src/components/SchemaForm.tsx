@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
-import { Braces, Lock, Plus, Upload, X } from "lucide-react";
+import { Braces, Info, Lock, Plus, Upload, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { JSONSchema, ReferenceGroups, ReferenceItem } from "../types";
 import { type TokenLabels, friendlyTokenText } from "./nodeCardShared";
@@ -742,9 +742,25 @@ function FieldWrap({
   return (
     <div className="sf-field">
       <div className="label-row">
-        <label htmlFor={name}>
-          {schema.title || humanize(name)}
-        </label>
+        <span className="sf-label-group">
+          <label htmlFor={name}>
+            {schema.title || humanize(name)}
+          </label>
+          {/* Per-field help lives in schema.description. Surfaced as a
+              hover/focus (i) tooltip — same affordance as the drop-level
+              info icon on the inspector header — so guidance is one click
+              away without an inline wall of text under every input. */}
+          {schema.description && (
+            <span
+              className="inspector-info"
+              tabIndex={0}
+              title={schema.description}
+              aria-label={schema.description}
+            >
+              <Info size={13} aria-hidden="true" />
+            </span>
+          )}
+        </span>
       </div>
       {stack ? <div>{children}</div> : children}
       {example !== undefined && (
