@@ -3035,7 +3035,45 @@ button.warning:hover:not(:disabled) {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
+  /* Buttons inherit font-size, and the inspector panel runs at --text-lg, so
+     without this the CTA would render larger than every other button (Run,
+     Save, …) which sit at --text-md. */
+  font-size: var(--text-md);
   font-weight: 600;
+}
+/* Stop state of the run-step button while a run is live — danger-tinted so it
+   reads as "halt", matching the toolbar's stop affordance. */
+.inspector-stop-step {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 50%, transparent);
+}
+.inspector-stop-step:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 26%, transparent);
+}
+/* Connect CTA at the top of the inspector when the node's app isn't set up.
+   Amber to match the node card's footer and the run banner, full-width so it
+   reads as the panel's primary next action. */
+.inspector-connect-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  font-size: var(--text-md);
+  font-weight: 600;
+  background: var(--warning, #d9822b);
+  border-color: var(--warning, #d9822b);
+  color: #1a1206;
+}
+.inspector-connect-cta:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+.inspector-connect-cta img,
+.inspector-connect-cta svg {
+  width: 15px;
+  height: 15px;
+  object-fit: contain;
 }
 .editor-add-drop-kbd {
   font-family: var(--font-mono);
@@ -3484,7 +3522,7 @@ button.warning:hover:not(:disabled) {
   border-radius: var(--r-1);
 }
 .hz-port-inline textarea {
-  resize: vertical;
+  resize: both;
   min-height: 26px;
 }
 .hz-port-inline input[type="checkbox"] {
@@ -3716,6 +3754,56 @@ button.warning:hover:not(:disabled) {
   border: 1px solid var(--surface);
   z-index: 2;
 }
+/* Needs-setup: a drop whose connection (OAuth account / API key / service
+   connection) isn't configured yet. Distinct from config-err (missing params,
+   red) and lint-warn (amber icon) — an amber dashed border plus a clickable
+   chip that deep-links to the app's connection card. */
+.hz-node.needs-setup {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--btn) 70%, transparent);
+}
+/* Needs-setup footer: a CTA bar built into the bottom of the card rather than
+   a floating pill. Negative side/bottom margins cancel the card's padding so
+   it spans flush edge-to-edge; the bottom corners are rounded to nest inside
+   the card's border radius. The whole bar is the link target. */
+.hz-node-setup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1h);
+  margin: var(--space-2) calc(-1 * var(--space-3)) calc(-1 * var(--space-3));
+  padding: var(--space-1h) var(--space-3);
+  border-top: 1px solid rgba(0, 0, 0, 0.2);
+  border-bottom-left-radius: calc(var(--r-3) - 2px);
+  border-bottom-right-radius: calc(var(--r-3) - 2px);
+  /* Purple accent, matching the Inspector's primary "Connect" button. */
+  background: var(--btn);
+  color: #fff;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.hz-node-setup:hover {
+  background: var(--btn-hover);
+  text-decoration: none;
+}
+.hz-node-setup-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hz-node-setup-arrow {
+  flex-shrink: 0;
+  opacity: 0.65;
+}
+.hz-node-setup-logo {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
 /* Toolbar heads-up: how many drops still need configuration. */
 .editor-config-warn {
   display: inline-flex;
@@ -3891,7 +3979,7 @@ button.warning:hover:not(:disabled) {
   border-radius: var(--r-1);
 }
 .hz-node-params textarea {
-  resize: vertical;
+  resize: both;
   min-height: 34px;
 }
 .hz-param input[type="checkbox"] {

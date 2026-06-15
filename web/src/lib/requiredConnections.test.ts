@@ -4,8 +4,27 @@ import {
   requiredSecrets,
   unavailableProviders,
   unavailableSecretRefs,
+  nodeSetupNeeded,
+  missingConnectionApps,
 } from "./requiredConnections";
-import type { Manifest, OAuthProviderStatus } from "../types";
+import type { ConnectionField, Manifest, OAuthProviderStatus } from "../types";
+
+// claudeManifest mirrors the ConnectionFields shape (Claude / ntfy / SMTP):
+// no OAuth, no ${secret} ref — credentials live at conn.<slug>.<key>.
+function fieldsManifest(
+  id: string,
+  integration: string,
+  fields: ConnectionField[],
+): Manifest {
+  return {
+    id,
+    version: "1",
+    label: id,
+    integration,
+    params_schema: { type: "object", properties: { api_key: { type: "string" } } },
+    connection_fields: fields,
+  };
+}
 
 // Minimal manifest factory — only the fields requiredConnections reads.
 function manifest(
@@ -266,5 +285,72 @@ describe("unavailableSecretRefs", () => {
     const nodes = [node("n1", "compute_rows")];
     const params = { n1: { compute: { x: "1+1" } } };
     expect(unavailableSecretRefs(nodes, params, null)).toEqual([]);
+  });
+});
+
+describe("nodeSetupNeeded", () => {
+  const apiKeyField: ConnectionField = { key: "api_key", label: "API key", required: true };
+
+  it("flags a ConnectionFields drop when the connection isn't configured", () => {
+    const m = fieldsManifest("ai_summarize", "Claude", [apiKeyField]);
+    expect(nodeSetupNeeded(m, {}, [], [])).toEqual({
+      integration: "Claude",
+      slug: "claude",
+    });
+  });
+
+  it("does NOT flag an app whose fields are all optional (e.g. ntfy)", () => {
+    // ntfy: server + token, neither required → runs out of the box.
+    const m = fieldsManifest("ntfy", "ntfy", [
+      { key: "server", label: "Server URL" },
+      { key: "token", label: "Access token", secret: true },
+    ]);
+    expect(nodeSetupNeeded(m, {}, [], [])).toBeNull();
+  });
+
+  it("is satisfied when conn.<slug>.<key> secret exists", () => {
+    const m = fieldsManifest("ai_summarize", "Claude", [apiKeyField]);
+    expect(nodeSetupNeeded(m, {}, [], ["conn.claude.api_key"])).toBeNull();
+  });
+
+  it("is satisfied when the key is pasted inline on the node", () => {
+    const m = fieldsManifest("ai_summarize", "Claude", [apiKeyField]);
+    expect(nodeSetupNeeded(m, { api_key: "sk-ant-x" }, [], [])).toBeNull();
+  });
+
+  it("returns null when secrets is null (store off / unknown — don't nag)", () => {
+    const m = fieldsManifest("ai_summarize", "Claude", [apiKeyField]);
+    expect(nodeSetupNeeded(m, {}, [], null)).toBeNull();
+  });
+
+  it("flags an OAuth drop whose account isn't connected", () => {
+    const m = manifest("slack_send_message", "Slack", true);
+    expect(nodeSetupNeeded(m, {}, [{ name: "slack", accounts: [] }], [])).toEqual({
+      integration: "Slack",
+      slug: "slack",
+    });
+  });
+});
+
+describe("missingConnectionApps", () => {
+  const apiKeyField: ConnectionField = { key: "api_key", label: "API key", required: true };
+
+  it("dedupes apps across nodes and ignores configured ones", () => {
+    const nodes = [
+      node("n1", "ai_summarize"),
+      node("n2", "ai_classify"),
+      node("n3", "ai_extract"),
+    ];
+    const mm = manifestMap(
+      fieldsManifest("ai_summarize", "Claude", [apiKeyField]),
+      fieldsManifest("ai_classify", "Claude", [apiKeyField]),
+      fieldsManifest("ai_extract", "Claude", [apiKeyField]),
+    );
+    // None configured → one deduped Claude entry.
+    expect(missingConnectionApps(nodes, mm, {}, [])).toEqual([
+      { integration: "Claude", slug: "claude" },
+    ]);
+    // Connection present → nothing missing.
+    expect(missingConnectionApps(nodes, mm, {}, ["conn.claude.api_key"])).toEqual([]);
   });
 });

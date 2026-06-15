@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { Node } from "@xyflow/react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { X, Trash2, Info, Play } from "lucide-react";
+import { X, Trash2, Info, Play, Square } from "lucide-react";
 import { iconFor, dropColor as resolveDropColor } from "../icons";
 import type { HazyNodeData } from "./nodeCardShared";
 import {
@@ -24,6 +24,7 @@ import { Switch } from "./Switch";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import { oauthProviderForIntegration } from "../integrationMeta";
+import type { SetupNeed } from "../lib/requiredConnections";
 import type { OAuthProviderStatus, Graph, GraphTrigger, Manifest } from "../types";
 
 type Props = {
@@ -90,6 +91,16 @@ type Props = {
   // of a free-text box. Omitted/null = plain text (OAuth disabled).
   providers?: OAuthProviderStatus[] | null;
   onConnect?: () => void;
+  // setupNeeded is set when the selected node's app isn't connected yet —
+  // drives a "Connect <app>" CTA at the top of the panel, matching the node
+  // card's footer and the run banner. Carries the integration name + /apps slug.
+  setupNeeded?: SetupNeed;
+  // running + onStopRun let the "Run this step" button reflect the live run:
+  // while a run (incl. this step's sample) is active it becomes a Stop button.
+  // cancelling shows the in-flight "Stopping…" state.
+  running?: boolean;
+  cancelling?: boolean;
+  onStopRun?: () => void;
   // graphMeta gives the webhook_input config UI (FormTab/WebhookTab) the
   // tenant/workspace/id/name it needs to build the /trigger + /form URLs and
   // the curl/embed recipes. The Triggers menu is gone — this config lives on
@@ -119,6 +130,10 @@ export function Inspector({
   onDelete,
   providers,
   onConnect,
+  setupNeeded,
+  running,
+  cancelling,
+  onStopRun,
   graphMeta,
 }: Props) {
   const { t } = useTranslation();
@@ -368,29 +383,59 @@ export function Inspector({
         </span>
       </div>
       <div className="inspector-body">
-        {onSample && (
-          <div className="sf-field">
+        {setupNeeded && (
+          <div className="sf-field inspector-connect">
             <button
               type="button"
-              className="primary inspector-run-step"
-              disabled={sampling}
-              onClick={async () => {
-                if (!onSample) return;
-                setSampling(true);
-                setSampleError(null);
-                try {
-                  await onSample(selected.id);
-                } catch (e) {
-                  setSampleError((e as Error).message);
-                } finally {
-                  setSampling(false);
-                }
-              }}
-              title={t("inspector.sampleTitle")}
+              className="primary inspector-connect-cta"
+              onClick={() => navigate(`/apps/${setupNeeded.slug}`)}
             >
-              <Play size={15} />
-              {sampling ? t("inspector.sampling") : t("inspector.sample")}
+              {brandLogo ? (
+                <img src={brandLogo} alt="" draggable={false} />
+              ) : (
+                <DropIcon size={15} strokeWidth={2.2} />
+              )}
+              {t("nodeCard.connect", { name: setupNeeded.integration })}
             </button>
+            <div className="desc">{t("inspector.connectHint")}</div>
+          </div>
+        )}
+        {onSample && (
+          <div className="sf-field">
+            {running ? (
+              <button
+                type="button"
+                className="inspector-run-step inspector-stop-step"
+                disabled={cancelling || !onStopRun}
+                onClick={() => onStopRun?.()}
+                title={t("inspector.stopTitle")}
+              >
+                <Square size={14} />
+                {cancelling ? t("inspector.stopping") : t("inspector.stop")}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="primary inspector-run-step"
+                disabled={sampling}
+                onClick={async () => {
+                  if (!onSample) return;
+                  setSampling(true);
+                  setSampleError(null);
+                  try {
+                    await onSample(selected.id);
+                  } catch (e) {
+                    setSampleError((e as Error).message);
+                  } finally {
+                    setSampling(false);
+                  }
+                }}
+                title={t("inspector.sampleTitle")}
+              >
+                <Play size={15} />
+                {sampling ? t("inspector.sampling") : t("inspector.sample")}
+              </button>
+            )}
             {sampleError && (
               <div className="desc" style={{ color: "var(--danger)" }}>
                 {sampleError}

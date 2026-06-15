@@ -90,6 +90,12 @@ export type HazyNodeData = {
   // Required values this drop is still missing (#13) — drives a red
   // "needs configuration" badge, distinct from the amber lint warning.
   configErrors?: string[];
+  // setupNeeded is set when this drop requires a connection (OAuth account,
+  // API key, or service connection) that the tenant hasn't configured yet.
+  // Drives a distinct "Needs setup" chip with a Connect link — separate from
+  // configErrors (missing params) and lintMessage. Carries the integration's
+  // display name and /apps slug for the deep link.
+  setupNeeded?: { integration: string; slug: string };
   // True when this node runs inside a for_each loop body (reachable from a
   // for_each's `body` pin). Drives the dashed "runs once per row" card style
   // and the ${item.…} reference menu in its form.

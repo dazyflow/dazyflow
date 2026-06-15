@@ -1,5 +1,9 @@
-import { oauthProviderForIntegration } from "../integrationMeta";
-import type { Manifest, OAuthProviderStatus } from "../types";
+import {
+  oauthProviderForIntegration,
+  integrationSlug,
+  displayNameForIntegrationSlug,
+} from "../integrationMeta";
+import type { ConnectionField, Manifest, OAuthProviderStatus } from "../types";
 
 // MissingConnection is one (provider, account) pair a graph needs but
 // the tenant hasn't connected — surfaced in the pre-run gate.
@@ -118,6 +122,111 @@ export function requiredSecrets(
   return [...referenced]
     .filter((nm) => !known.has(nm) && !written.has(nm))
     .sort();
+}
+
+// SetupNeed names a drop's unconfigured connection: the integration's
+// display name plus its /apps slug (for the deep link) and its icon (brand
+// logo or manifest icon) so a "Needs setup" indicator can show the app's mark
+// next to its name, the way the node card does.
+export type SetupNeed = {
+  integration: string;
+  slug: string;
+  brandLogo?: string;
+  icon?: string;
+};
+
+function setupFor(manifest: Manifest): SetupNeed {
+  const slug = integrationSlug(manifest.integration ?? "");
+  return {
+    integration: displayNameForIntegrationSlug(slug),
+    slug,
+    brandLogo: manifest.brand_logo,
+    icon: manifest.icon,
+  };
+}
+
+// nodeSetupNeeded returns the connection a single node's drop is missing, or
+// null when it's ready (or we can't tell). It unifies the three credential
+// shapes a drop can declare so ONE check drives the "Needs setup" indicator
+// regardless of how the drop authenticates:
+//
+//   1. OAuth account     — integration maps to a provider + an `account` param
+//   2. ConnectionFields  — conn.<slug>.<key>, the "connect once per tenant"
+//                          shape (Claude, ntfy, SMTP) that previously only
+//                          surfaced at run time
+//   3. RequiresConnections kind=oauth — the provider has no connected account
+//
+// A node that pastes a raw token/key inline (the field's own param) counts as
+// configured. Returns null when providers/secrets are null (feature off /
+// unknown) so the editor never nags on incomplete information — the
+// admin-disabled case is surfaced separately (unavailableProviders).
+export function nodeSetupNeeded(
+  manifest: Manifest,
+  params: Record<string, unknown>,
+  providers: OAuthProviderStatus[] | null,
+  secrets: string[] | null,
+): SetupNeed | null {
+  const filled = (k: string) =>
+    typeof params[k] === "string" && (params[k] as string).trim() !== "";
+
+  // 1. OAuth-backed integration that takes an `account` param.
+  const provider = oauthProviderForIntegration(manifest.integration);
+  if (provider && providers) {
+    const props = manifest.params_schema?.properties;
+    if (props && "account" in props && !filled("token")) {
+      const acctRaw = params.account;
+      const account =
+        typeof acctRaw === "string" && acctRaw.trim() !== "" ? acctRaw : "default";
+      const accounts = providers.find((p) => p.name === provider)?.accounts ?? [];
+      if (!accounts.includes(account)) return setupFor(manifest);
+    }
+  }
+
+  // 2. ConnectionFields (the "connect once" service-connection shape). Only an
+  //    unset REQUIRED field blocks the node. An app whose fields are all
+  //    optional (e.g. ntfy: server defaults to ntfy.sh, token is only needed
+  //    for protected topics) runs out of the box, so it is never "needs setup"
+  //    — flagging it was the false positive.
+  const requiredFields = (manifest.connection_fields ?? []).filter((f) => f.required);
+  if (requiredFields.length > 0 && secrets) {
+    const slug = integrationSlug(manifest.integration ?? "");
+    const isSet = (f: ConnectionField) =>
+      secrets.includes(`conn.${slug}.${f.key}`) || filled(f.key);
+    if (!requiredFields.every(isSet)) return setupFor(manifest);
+  }
+
+  // 3. RequiresConnections kind=oauth — provider must have ≥1 account.
+  for (const req of manifest.requires_connections ?? []) {
+    if (req.kind !== "oauth" || !providers) continue;
+    const accounts = providers.find((p) => p.name === req.name)?.accounts ?? [];
+    if (accounts.length === 0) return setupFor(manifest);
+  }
+
+  return null;
+}
+
+// missingConnectionApps returns the distinct apps whose ConnectionFields-style
+// connection isn't configured for any node on the canvas. This is the gap the
+// pre-run gate previously missed (OAuth and ${secret.…} were already covered,
+// but the conn.<slug>.<key> shape — Claude, ntfy, SMTP — was not). Deduped by
+// slug. Returns [] when secrets is null (store off / unknown).
+export function missingConnectionApps(
+  nodes: GraphNodeLike[],
+  manifestByID: Map<string, Manifest>,
+  paramsByID: Record<string, Record<string, unknown>>,
+  secrets: string[] | null,
+): SetupNeed[] {
+  if (secrets === null) return [];
+  const out = new Map<string, SetupNeed>();
+  for (const n of nodes) {
+    const manifest = manifestByID.get(n.data.moduleID);
+    if (!manifest?.connection_fields?.length) continue;
+    // Reuse the per-node check but ignore providers — ConnectionFields drops
+    // don't use OAuth, so passing null keeps this to the fields shape.
+    const need = nodeSetupNeeded(manifest, paramsByID[n.id] ?? {}, null, secrets);
+    if (need) out.set(need.slug, need);
+  }
+  return [...out.values()];
 }
 
 // unavailableProviders is the partner of requiredConnections for the

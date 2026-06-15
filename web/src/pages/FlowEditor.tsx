@@ -62,13 +62,17 @@ import { useThemeMode } from "../theme";
 import i18n from "../i18n";
 import { api, APIError } from "../api";
 import { oauthProviderDisplay } from "../integrationMeta";
+import { iconFor } from "../icons";
 import {
   requiredConnections,
   requiredSecrets,
   unavailableProviders,
   unavailableSecretRefs,
   slackChannels,
+  nodeSetupNeeded,
+  missingConnectionApps,
   type MissingConnection,
+  type SetupNeed,
 } from "../lib/requiredConnections";
 import { mimeCompatible, pickPort } from "../lib/ports";
 import type {
@@ -1471,6 +1475,22 @@ function EditorInner() {
     return errs;
   }, [nodes, paramsByID, connectedInputsByNode, edges, loopOwnerByNode]);
 
+  // setupNeededByNode flags nodes whose drop needs a connection (OAuth
+  // account, API key, or service connection) that isn't configured yet —
+  // driving the per-node "Needs setup" chip. This is the edit-time surface
+  // for the gap where a drop like Claude previously only failed at run time.
+  // A switched-off step never runs, so it's never nagged.
+  const setupNeededByNode = useMemo(() => {
+    const out = new Map<string, SetupNeed>();
+    for (const n of nodes) {
+      const man = n.data.manifest;
+      if (!man || disabledNodes.has(n.id)) continue;
+      const need = nodeSetupNeeded(man, paramsByID[n.id] ?? {}, providers, secrets);
+      if (need) out.set(n.id, need);
+    }
+    return out;
+  }, [nodes, paramsByID, providers, secrets, disabledNodes]);
+
   // Resolve resource-picker IDs (spreadsheet_id/form_id) to their human
   // names so the card shows the name, not the opaque id. We fetch each
   // (kind, account) list once and cache id→name; google-sheet-tab needs no
@@ -1644,6 +1664,7 @@ function EditorInner() {
         inlineEditable: n.id === soleId,
         outputs: runOutputs[n.id],
         configErrors: configErrorsByNode.get(n.id),
+        setupNeeded: setupNeededByNode.get(n.id),
         resourceLabels: resourceLabelsByNode.get(n.id),
         loopOwned: loopOwnerByNode.has(n.id),
         disabled: disabledNodes.has(n.id),
@@ -1661,6 +1682,7 @@ function EditorInner() {
     connectedOutputsByNode,
     runOutputs,
     configErrorsByNode,
+    setupNeededByNode,
     resourceLabelsByNode,
     loopOwnerByNode,
     disabledNodes,
@@ -2554,11 +2576,31 @@ function EditorInner() {
     () => slackChannels(nodes, paramsByID),
     [nodes, paramsByID],
   );
+  // missingSetups: apps with a "connect once" service connection (Claude,
+  // ntfy, SMTP) that isn't configured. OAuth and ${secret.…} are covered by
+  // the two checks above; this closes the ConnectionFields gap so the gate
+  // catches them too instead of letting the run fail mid-flight.
+  const missingSetups = useMemo(
+    () => missingConnectionApps(nodes, manifestByID, paramsByID, secrets),
+    [nodes, manifestByID, paramsByID, secrets],
+  );
   const userFixableSetup =
-    missingConnections.length > 0 || missingSecrets.length > 0;
+    missingConnections.length > 0 ||
+    missingSecrets.length > 0 ||
+    missingSetups.length > 0;
   const adminBlockedSetup =
     adminBlockedProviders.length > 0 || adminBlockedSecretRefs.length > 0;
   const needsSetup = userFixableSetup || adminBlockedSetup;
+  // setupTarget deep-links the banner's "Set up" button straight to the one
+  // app that needs connecting when there's exactly one (each node's SetupNeed
+  // carries its integration slug). With several apps, or any ${secret} ref
+  // that has no app page, fall back to the Apps list.
+  const setupTarget = useMemo(() => {
+    const slugs = new Set([...setupNeededByNode.values()].map((s) => s.slug));
+    return userFixableSetup && missingSecrets.length === 0 && slugs.size === 1
+      ? `/apps/${[...slugs][0]}`
+      : "/apps";
+  }, [setupNeededByNode, userFixableSetup, missingSecrets]);
 
   // doRun submits the graph and wires up live status. Separated from
   // the gate check so "Run anyway" in the setup modal can bypass the
@@ -3643,6 +3685,24 @@ function EditorInner() {
                       </span>
                     );
                   })}
+                  {missingSetups.map((s) => {
+                    const SetupIcon = iconFor(s.icon);
+                    return (
+                      <span key={s.slug} className="editor-conn-chip">
+                        {s.brandLogo ? (
+                          <img
+                            src={s.brandLogo}
+                            alt=""
+                            className="editor-conn-chip-logo"
+                            draggable={false}
+                          />
+                        ) : (
+                          <SetupIcon size={14} className="editor-conn-chip-logo" />
+                        )}
+                        {s.integration}
+                      </span>
+                    );
+                  })}
                   {missingSecrets.map((s) => (
                     <span key={s} className="editor-conn-chip">
                       {s}
@@ -3677,7 +3737,7 @@ function EditorInner() {
               <button
                 type="button"
                 className="primary"
-                onClick={() => navigate("/apps")}
+                onClick={() => navigate(setupTarget)}
               >
                 {userFixableSetup
                   ? t("editor.connNeededCta")
@@ -3776,13 +3836,23 @@ function EditorInner() {
                   setCurrentRunID(job_id);
                   setLockedRunID(job_id);
                   localStorage.setItem(`hazyflow.lastRun.${id}`, job_id);
+                  // Mark the editor as running so the "Run this step" button
+                  // flips to a Stop affordance for the life of the partial run
+                  // — subscribeToRun's terminal handler clears it on completion.
+                  setRunning(true);
                   subscribeToRun(job_id);
                   return job_id;
                 }
               : undefined
           }
           providers={providers}
-          onConnect={() => navigate("/apps")}
+          onConnect={() => navigate(setupTarget)}
+          setupNeeded={
+            inspectorSelected ? setupNeededByNode.get(inspectorSelected.id) : undefined
+          }
+          running={running || !!lockedRunID}
+          cancelling={cancelling}
+          onStopRun={stopRun}
         />
       </div>
       {paletteOpen && (
@@ -3822,10 +3892,11 @@ function EditorInner() {
         <ConnectionGate
           missing={missingConnections}
           missingSecrets={missingSecrets}
+          missingSetups={missingSetups}
           adminBlockedProviders={adminBlockedProviders}
           adminBlockedSecretRefs={adminBlockedSecretRefs}
           slackChannels={slackTargets}
-          onConnect={() => navigate("/apps")}
+          onConnect={() => navigate(setupTarget)}
           onRunAnyway={() => void doRun()}
           onCancel={() => setGateOpen(false)}
         />
@@ -3842,6 +3913,7 @@ function EditorInner() {
 function ConnectionGate({
   missing,
   missingSecrets,
+  missingSetups,
   adminBlockedProviders,
   adminBlockedSecretRefs,
   slackChannels,
@@ -3851,6 +3923,9 @@ function ConnectionGate({
 }: {
   missing: MissingConnection[];
   missingSecrets: string[];
+  // missingSetups names apps with a service connection (API key / endpoint)
+  // that isn't configured — the ConnectionFields shape (Claude, ntfy, SMTP).
+  missingSetups: SetupNeed[];
   // adminBlockedProviders / adminBlockedSecretRefs name the OAuth
   // providers and ${secret.NAME} refs the graph would need but the
   // operator hasn't enabled on this install. Rendered as a separate,
@@ -3864,7 +3939,8 @@ function ConnectionGate({
   onCancel: () => void;
 }) {
   const { t } = useTranslation();
-  const hasUserFixable = missing.length > 0 || missingSecrets.length > 0;
+  const hasUserFixable =
+    missing.length > 0 || missingSecrets.length > 0 || missingSetups.length > 0;
   const hasAdminBlocked =
     adminBlockedProviders.length > 0 || adminBlockedSecretRefs.length > 0;
   return (
@@ -3884,7 +3960,7 @@ function ConnectionGate({
           {!hasUserFixable && hasAdminBlocked && (
             <p className="conn-gate-lede">{t("connGate.adminLede")}</p>
           )}
-          {missing.length > 0 && (
+          {(missing.length > 0 || missingSetups.length > 0) && (
             <>
               <div className="conn-gate-section-head">{t("connGate.appsHead")}</div>
               <ul className="conn-gate-list">
@@ -3892,6 +3968,11 @@ function ConnectionGate({
                   <li key={`${m.provider}::${m.account}`}>
                     <strong>{oauthProviderDisplay(m.provider).name}</strong>
                     <span className="conn-gate-account">{m.account}</span>
+                  </li>
+                ))}
+                {missingSetups.map((s) => (
+                  <li key={s.slug}>
+                    <strong>{s.integration}</strong>
                   </li>
                 ))}
               </ul>

@@ -1,5 +1,5 @@
 import { Handle, Position, useStore, type NodeProps } from "@xyflow/react";
-import { AlertTriangle, AlertCircle } from "lucide-react";
+import { AlertTriangle, AlertCircle, ChevronRight } from "lucide-react";
 import i18n from "../i18n";
 import { Switch } from "./Switch";
 import { iconFor, isBrandedIcon, dropColor } from "../icons";
@@ -240,6 +240,7 @@ export function HazyNode({ data, selected }: NodeProps) {
         (!d.disabled && d.offByCascade ? " hz-node-off-cascade" : "") +
         (d.lintMessage ? " lint-warn" : "") +
         (d.configErrors?.length ? " config-err" : "") +
+        (d.setupNeeded ? " needs-setup" : "") +
         (d.paused ? " paused" : "")
       }
       style={isTrigger ? ({ "--node-accent": color } as React.CSSProperties) : undefined}
@@ -496,6 +497,30 @@ export function HazyNode({ data, selected }: NodeProps) {
         >
           <AlertCircle size={13} />
         </div>
+      )}
+      {d.setupNeeded && (
+        <a
+          className="hz-node-setup nodrag"
+          href={`/apps/${d.setupNeeded.slug}`}
+          title={i18n.t("nodeCard.needsSetup", { name: d.setupNeeded.integration })}
+          aria-label="needs setup"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {d.manifest?.brand_logo ? (
+            <img
+              src={d.manifest.brand_logo}
+              alt=""
+              className="hz-node-setup-logo"
+              draggable={false}
+            />
+          ) : (
+            <Icon size={14} className="hz-node-setup-logo" />
+          )}
+          <span className="hz-node-setup-label">
+            {i18n.t("nodeCard.connect", { name: d.setupNeeded.integration })}
+          </span>
+          <ChevronRight size={14} className="hz-node-setup-arrow" />
+        </a>
       )}
     </div>
   );

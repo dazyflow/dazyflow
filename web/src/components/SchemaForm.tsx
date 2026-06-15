@@ -412,7 +412,7 @@ function SchemaField({ name, schema, required, value, onChange, workspace, accou
                 const v = e.target.value;
                 onChange(v === "" && !required ? undefined : v);
               }}
-              style={{ resize: "vertical" }}
+              style={{ resize: "both" }}
             />
           </FieldWrap>
         );
