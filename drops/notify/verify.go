@@ -37,7 +37,7 @@ func verifyNtfy(ctx context.Context, conn map[string]string) error {
 		path = "/v1/account"
 	}
 	url := server + path
-	if err := hfnet.EgressAllowed(url); err != nil {
+	if err := hfnet.EgressAllowedFor(ctx, url); err != nil {
 		return err
 	}
 

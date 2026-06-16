@@ -6,7 +6,10 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
+	"time"
 
 	"git.sr.ht/~klahr/hazyflow/core"
 )
@@ -93,6 +96,48 @@ func TestHTTPUpload_Multipart(t *testing.T) {
 	}
 	if gotFilename != "report.txt" || gotContent != "payload" {
 		t.Errorf("multipart got filename=%q content=%q, want report.txt/payload", gotFilename, gotContent)
+	}
+}
+
+// TestHTTPUpload_MultipartServerRespondsEarly exercises the streaming
+// multipart path when the server responds before draining the request body:
+// the writer goroutine is mid-stream copying a large file into the pipe. The
+// call must not deadlock, and the writer goroutine must clean up (the deferred
+// pr.Close() guarantees it exits on every return, independent of transport
+// internals).
+func TestHTTPUpload_MultipartServerRespondsEarly(t *testing.T) {
+	ws := t.TempDir()
+	seedUploadFile(t, ws, "big.bin", strings.Repeat("x", 2<<20)) // 2 MiB
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK) // respond immediately, don't drain the body
+	}))
+	t.Cleanup(srv.Close)
+
+	before := runtime.NumGoroutine()
+	done := make(chan struct{})
+	go func() {
+		executeHTTPUpload(t.Context(), core.Job{
+			WorkspaceRoot: ws,
+			Params: map[string]any{
+				"url": srv.URL, "path": "big.bin", "multipart": true,
+				"allow_private_networks": true, "timeout_ms": 5000,
+			},
+		}, nil)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("multipart upload hung (writer goroutine deadlocked on the pipe)")
+	}
+	// Writer goroutine should have exited.
+	deadline := time.Now().Add(3 * time.Second)
+	for runtime.NumGoroutine() > before && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if got := runtime.NumGoroutine(); got > before {
+		t.Fatalf("goroutine leak after early server response: before=%d after=%d", before, got)
 	}
 }
 

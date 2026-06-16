@@ -110,7 +110,7 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 	}
 	// Operator egress allowlist (above the IP-level SSRF guard). No-op
 	// when no allowlist is configured.
-	if err := egressAllowed(url); err != nil {
+	if err := EgressAllowedFor(ctx, url); err != nil {
 		return params.Err(job, "egress_blocked", err.Error()), nil
 	}
 
@@ -134,7 +134,7 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 		return params.Err(job, "bad_input", err.Error()), nil
 	}
 
-	expectStatus := paramIntSlice(job.Params, "expect_status")
+	expectStatus := params.IntSlice(job.Params, "expect_status")
 
 	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
 	if err != nil {
@@ -333,14 +333,14 @@ func buildClient(timeout time.Duration, allowPrivate bool) *http.Client {
 		// the caller, but the Go default redirect policy would happily
 		// follow a 30x to any other host — bypassing the allowlist. Re-run
 		// the host check on every hop so a redirect can't be used to reach
-		// a host the operator didn't permit. (egressAllowed is a no-op when
+		// a host the operator didn't permit. (EgressAllowed is a no-op when
 		// no allowlist is configured, so this changes nothing by default.
 		// Private/loopback IPs are independently blocked by the dial guard.)
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 10 {
 				return fmt.Errorf("stopped after 10 redirects")
 			}
-			return egressAllowed(req.URL.String())
+			return EgressAllowedFor(req.Context(), req.URL.String())
 		},
 	}
 }

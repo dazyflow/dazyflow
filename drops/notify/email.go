@@ -149,7 +149,7 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 	// when one is wired, otherwise from the param (the "input overrides param"
 	// pattern). A non-text value wired into To or Subject is a mistake we
 	// reject.
-	to := paramStringSlice(job.Params, "to")
+	to := params.StringSlice(job.Params, "to")
 	if wired, ok := emailTextInputOr(job, "to", ""); !ok {
 		return params.Err(job, "bad_input", "'To' input must be text"), nil
 	} else if wired != "" {

@@ -55,7 +55,7 @@ func init() {
 					"repo":{"type":"string","title":"Repo name","description":"The repo's name, without the owner part."},
 					"issue_number":{"type":"integer","title":"Issue or PR number","description":"The number from the issue/PR link — issues and PRs share one number space."},
 					"body":{"type":"string","title":"Comment","description":"What to say (Markdown works). Overridden by the 'Comment' input."},
-					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
+					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
 				"required":["owner","repo","issue_number"]
 			}`),

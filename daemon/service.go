@@ -248,6 +248,12 @@ func safeWorkspaceSegment(tenant, ws string) (string, string, error) {
 // Worker (running in the same process or another hzd instance) picks it up
 // and runs it. The Bus stitches the two together so streaming RPCs can
 // follow a job's progress regardless of which worker handled it.
+//
+// Cohesive concerns are factored into focused services rather than living as
+// Service methods: OAuth into OAuthRegistry, the encrypted secret store into
+// EncryptedSecrets, and the free-tier billing gates into BillingService
+// (reached via s.billing()). Service holds their dependencies and acts as the
+// facade that wires them to the request path.
 type Service struct {
 	Auth       auth.Authenticator
 	Workspaces WorkspaceLookup
@@ -333,6 +339,11 @@ type Service struct {
 	// Keyed by (tenant, workspace, visibility-view); each entry remembers
 	// the workspace HEAD it was computed at, so a save (which moves HEAD)
 	// transparently invalidates it on the next read.
+	//
+	// Service has no constructor (it's built as a struct literal in cmd/hzd
+	// and in tests), so suggestCache is created lazily on first write — but
+	// always under suggestMu, and the nil-map read in DropSuggestions is also
+	// taken under suggestMu, so the lazy init is race-free.
 	suggestMu    sync.Mutex
 	suggestCache map[string]suggestEntry
 }

@@ -54,7 +54,7 @@ func init() {
 					"description":{"type":"string","title":"Description","description":"Overridden by the 'Description' input."},
 					"metadata":{"type":"object","title":"Metadata","description":"Your own key/value labels on the customer (e.g. a CRM id).","x_advanced":true},
 					"base_url":{"type":"string","description":"Override the API host (testing)."},
-					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
+					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
 				"required":["api_key","email"]
 			}`),

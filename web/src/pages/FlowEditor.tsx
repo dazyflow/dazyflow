@@ -60,7 +60,7 @@ import {
 import { useAuth } from "../auth";
 import { useThemeMode } from "../theme";
 import i18n from "../i18n";
-import { api, APIError } from "../api";
+import { api, APIError, isErrorCode, isHTTPStatus } from "../api";
 import { oauthProviderDisplay } from "../integrationMeta";
 import { iconFor } from "../icons";
 import {
@@ -74,7 +74,7 @@ import {
   type MissingConnection,
   type SetupNeed,
 } from "../lib/requiredConnections";
-import { mimeCompatible, pickPort } from "../lib/ports";
+import { mimeCompatible, pickPort, portsConnectable } from "../lib/ports";
 import { suggestNextDrops, topDropsByUsage } from "../lib/suggest";
 import type {
   DropAdjacency,
@@ -103,6 +103,7 @@ import { RerouteEdge } from "../components/RerouteEdge";
 import { SettingsModal } from "../components/SettingsModal";
 import { browserTimeZone } from "../components/TriggersModal";
 import { QuickDropPalette } from "../components/QuickDropPalette";
+import { useResourceResolver } from "./useResourceResolver";
 
 // Custom node-types registry. React Flow caches by reference, so this
 // is declared at module scope rather than inline in the component to
@@ -173,19 +174,13 @@ function sampleValueFor(field: string): string {
   return `Sample ${field}`;
 }
 
-// RESOURCE_PICKER_KINDS maps a string param's `format` to the (provider,
-// kind) whose list resolves an opaque id → human name (for the node card).
-// google-sheet-tab is omitted: its stored value is already the tab name, so
-// it needs no lookup. Mirrors RESOURCE_PICKERS in SchemaForm.
-const RESOURCE_PICKER_KINDS: Record<string, { provider: string; kind: string }> = {
-  "google-form": { provider: "google", kind: "forms" },
-  "google-spreadsheet": { provider: "google", kind: "spreadsheets" },
-  "stripe-price": { provider: "stripe", kind: "prices" },
-  "stripe-subscription": { provider: "stripe", kind: "subscriptions" },
-  "stripe-payment-intent": { provider: "stripe", kind: "payment_intents" },
-  "stripe-customer": { provider: "stripe", kind: "customers" },
-  "slack-channel": { provider: "slack", kind: "channels" },
-};
+// Resource-picker id→name resolution lives in useResourceResolver (extracted
+// from this file); RESOURCE_PICKER_KINDS / pickerFormat moved there with it.
+
+// Shared empty array for the "no connected ports" fallback, so the per-node
+// data memo in displayNodes compares it by reference (a fresh `[]` would never
+// be equal and would defeat the cache).
+const EMPTY_PORTS: string[] = [];
 
 // stampScheduleTimezones fills a missing/blank tz on Schedule (cron_trigger)
 // nodes with the viewer's browser zone, returning the node list and whether
@@ -286,15 +281,12 @@ function EditorInner() {
   // can mutate them without forcing canvas re-layout. They're merged
   // back into the graph payload on save.
   const [paramsByID, setParamsByID] = useState<Record<string, Record<string, unknown>>>({});
-  // Resolved resource-picker names (spreadsheet_id/form_id → human name), so
-  // the node card can show "My Intake Form" instead of the opaque id. Keyed
-  // `${kind}:${account}:${id}`. Populated lazily by resolveResourceNamesEffect.
-  const [resourceNames, setResourceNames] = useState<Map<string, string>>(
-    () => new Map(),
-  );
-  // (kind:account) sets we've already fetched, so we don't refetch every
-  // render. A failed fetch is removed so it can retry.
-  const fetchedResourceSets = useRef<Set<string>>(new Set());
+  // Per-node memo cache backing displayNodes: id → (deps snapshot, built node).
+  // Lets an unchanged node reuse its previous data object so only edited cards
+  // re-render. Pruned of deleted nodes on each rebuild.
+  const nodeDataCacheRef = useRef<
+    Map<string, { deps: unknown[]; node: FlowNode<HazyNodeData> }>
+  >(new Map());
   const [selectedID, setSelectedID] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -587,7 +579,11 @@ function EditorInner() {
         // 404 is the normal "this graph hasn't been saved yet" state for
         // a freshly-created flow — the user opened the editor before
         // dropping any nodes. Treat it as an empty canvas, not an error.
-        if (msg.includes("404") || msg.toLowerCase().includes("not found")) {
+        if (
+          isHTTPStatus(e, 404) ||
+          isErrorCode(e, "not_found") ||
+          msg.toLowerCase().includes("not found")
+        ) {
           // Same in-flight-edits guard as the success path: a fresh
           // flow 404s here, and the user may already have inserted a
           // step while the request was out — don't wipe it.
@@ -851,14 +847,12 @@ function EditorInner() {
   const isValidConnection = useCallback(
     (c: Connection | FlowEdge): boolean => {
       const byId = new Map(nodes.map((n) => [n.id, n]));
-      const out = byId
-        .get(c.source)
-        ?.data.manifest?.outputs?.find((p) => p.port === (c.sourceHandle ?? "out"));
-      const inp = byId
-        .get(c.target)
-        ?.data.manifest?.inputs?.find((p) => p.port === (c.targetHandle ?? "in"));
-      if (!out || !inp) return true;
-      return mimeCompatible(out.mime, inp.mime);
+      return portsConnectable(
+        byId.get(c.source)?.data.manifest?.outputs,
+        c.sourceHandle,
+        byId.get(c.target)?.data.manifest?.inputs,
+        c.targetHandle,
+      );
     },
     [nodes],
   );
@@ -1571,118 +1565,15 @@ function EditorInner() {
     return out;
   }, [edges, nodes, manifestByID, disabledNodes, loopOwnerByNode, t]);
 
-  // Resolve resource-picker IDs (spreadsheet_id/form_id) to their human
-  // names so the card shows the name, not the opaque id. We fetch each
-  // (kind, account) list once and cache id→name; google-sheet-tab needs no
-  // lookup (its value is already the tab name).
-  useEffect(() => {
-    if (!token) return;
-    const combos = new Map<string, { provider: string; kind: string; account?: string }>();
-    for (const n of nodes) {
-      const props = manifestByID.get((n.data as HazyNodeData).moduleID)
-        ?.params_schema?.properties;
-      if (!props) continue;
-      const p = paramsByID[n.id] ?? {};
-      for (const [key, sch] of Object.entries(props)) {
-        const picker = RESOURCE_PICKER_KINDS[(sch as { format?: string }).format ?? ""];
-        if (!picker || typeof p[key] !== "string" || !p[key]) continue;
-        const account = typeof p.account === "string" ? p.account : undefined;
-        combos.set(`${picker.provider}:${picker.kind}:${account ?? "default"}`, {
-          provider: picker.provider,
-          kind: picker.kind,
-          account,
-        });
-      }
-    }
-    // Fetch each (kind, account) list once and merge id→name. No per-run
-    // "live" guard: the fetchedResourceSets ref already dedups across the
-    // effect's several settling re-runs, and gating the single in-flight
-    // fetch on a per-run flag would discard its result when the effect
-    // re-runs before it resolves (the ref then blocks any retry). Applying
-    // the result unconditionally is safe — setResourceNames on an unmounted
-    // editor is a no-op in React 18.
-    for (const [ck, { provider, kind, account }] of combos) {
-      if (fetchedResourceSets.current.has(ck)) continue;
-      fetchedResourceSets.current.add(ck);
-      api
-        .listAccountResources(token, provider, kind, account)
-        .then((r) => {
-          setResourceNames((prev) => {
-            const next = new Map(prev);
-            for (const o of r.resources)
-              next.set(`${provider}:${kind}:${account ?? "default"}:${o.id}`, o.name);
-            return next;
-          });
-        })
-        .catch(() => {
-          // Allow a retry on the next change (e.g. once the account connects).
-          fetchedResourceSets.current.delete(ck);
-        });
-    }
-  }, [nodes, paramsByID, manifestByID, token]);
-
-  // Per-node {paramKey → resolved name} for the picker params, derived from
-  // the resolved-names cache. Absent entries fall back to the id on the card.
-  const resourceLabelsByNode = useMemo(() => {
-    const byId = new Map(nodes.map((n) => [n.id, n]));
-    const propsOf = (id: string) =>
-      manifestByID.get((byId.get(id)?.data as HazyNodeData | undefined)?.moduleID ?? "")
-        ?.params_schema?.properties;
-    // resolveOwn turns a node's OWN picker param value into a friendly name
-    // (via the id→name cache), or undefined if unpicked/unresolved.
-    const resolveOwn = (id: string, key: string): string | undefined => {
-      const sch = propsOf(id)?.[key] as { format?: string } | undefined;
-      const picker = RESOURCE_PICKER_KINDS[sch?.format ?? ""];
-      const pp = paramsByID[id] ?? {};
-      if (!picker || typeof pp[key] !== "string" || !pp[key]) return undefined;
-      const account = typeof pp.account === "string" ? pp.account : undefined;
-      return resourceNames.get(
-        `${picker.provider}:${picker.kind}:${account ?? "default"}:${pp[key] as string}`,
-      );
-    };
-    // Incoming wire per (target, targetHandle) → its source port, so a picker
-    // param fed by a wire can borrow the upstream step's resolved name.
-    const incoming = new Map<string, { source: string; sourceHandle?: string }>();
-    for (const e of edges) {
-      if (e.target && e.targetHandle) {
-        incoming.set(`${e.target}:${e.targetHandle}`, {
-          source: e.source,
-          sourceHandle: e.sourceHandle ?? undefined,
-        });
-      }
-    }
-    // resolveName follows wires: a WIRED picker takes its name from whatever
-    // it's connected to (recursively up the chain), so switching the sheet
-    // upstream propagates downstream — the node's own (now-overridden) value
-    // is ignored. Unwired → the node's own picked value. The seen-guard stops
-    // a cyclic graph from looping.
-    const resolveName = (
-      id: string,
-      key: string,
-      seen = new Set<string>(),
-    ): string | undefined => {
-      const guard = `${id}:${key}`;
-      if (seen.has(guard)) return undefined;
-      seen.add(guard);
-      const up = incoming.get(guard);
-      if (up?.source && up.sourceHandle) return resolveName(up.source, up.sourceHandle, seen);
-      return resolveOwn(id, key);
-    };
-    const m = new Map<string, Record<string, string>>();
-    for (const n of nodes) {
-      const props = propsOf(n.id);
-      if (!props) continue;
-      const labels: Record<string, string> = {};
-      for (const [key, sch] of Object.entries(props)) {
-        const picker = RESOURCE_PICKER_KINDS[(sch as { format?: string }).format ?? ""];
-        if (!picker) continue;
-        const name = resolveName(n.id, key);
-        if (name) labels[key] = name;
-      }
-      if (Object.keys(labels).length) m.set(n.id, labels);
-    }
-    return m;
-  }, [nodes, paramsByID, manifestByID, resourceNames, edges]);
+  // Resource-picker id→name resolution (the ResourceResolver concern) lives
+  // in useResourceResolver, extracted from this file.
+  const resourceLabelsByNode = useResourceResolver({
+    nodes,
+    edges,
+    paramsByID,
+    manifestByID,
+    token,
+  });
 
   // offByCascade: nodes that WILL be skipped at run time because a step
   // upstream of them is switched off (the engine's skip cascade) — shown
@@ -1749,29 +1640,84 @@ function EditorInner() {
     // (e.g. for align/distribute) keeps every card collapsed.
     const sel = nodes.filter((n) => n.selected);
     const soleId = sel.length === 1 ? sel[0].id : null;
-    return nodes.map((n) => ({
-      ...n,
-      data: {
-        ...n.data,
-        params: paramsByID[n.id],
-        setParam: (key: string, value: unknown) => setNodeParam(n.id, key, value),
-        connectedInputs: connectedInputsByNode.get(n.id) ?? [],
-        connectedOutputs: connectedOutputsByNode.get(n.id) ?? [],
-        inlineEditable: n.id === soleId,
-        outputs: runOutputs[n.id],
-        configErrors: configErrorsByNode.get(n.id),
-        setupNeeded: setupNeededByNode.get(n.id),
-        loopHint: loopHintByNode.get(n.id),
+    // Granular per-node memoisation: rebuild a node's `data` object only when
+    // one of its own inputs changed. Editing a field updates paramsByID for a
+    // single node, so without this every card would get a fresh data object
+    // (and re-render) on each keystroke. The deps array below is the exact set
+    // the data object reads, so reuse is correctness-preserving — any change
+    // rebuilds. Cached node objects keep a stable reference, so the memoised
+    // HazyNode (and React Flow) skips unchanged cards.
+    const cache = nodeDataCacheRef.current;
+    const seen = new Set<string>();
+    const result = nodes.map((n) => {
+      seen.add(n.id);
+      const params = paramsByID[n.id];
+      const connectedInputs = connectedInputsByNode.get(n.id) ?? EMPTY_PORTS;
+      const connectedOutputs = connectedOutputsByNode.get(n.id) ?? EMPTY_PORTS;
+      const inlineEditable = n.id === soleId;
+      const outputs = runOutputs[n.id];
+      const configErrors = configErrorsByNode.get(n.id);
+      const setupNeeded = setupNeededByNode.get(n.id);
+      const loopHint = loopHintByNode.get(n.id);
+      const resourceLabels = resourceLabelsByNode.get(n.id);
+      const loopOwned = loopOwnerByNode.has(n.id);
+      const disabled = disabledNodes.has(n.id);
+      const off = offByCascade.has(n.id);
+      const breakpoint = breakpoints.has(n.id);
+      const paused = pausedAt === n.id;
+      const deps: unknown[] = [
+        n,
+        params,
+        connectedInputs,
+        connectedOutputs,
+        inlineEditable,
+        outputs,
+        configErrors,
+        setupNeeded,
+        loopHint,
+        resourceLabels,
+        loopOwned,
+        disabled,
+        off,
+        breakpoint,
+        paused,
         canConnect,
-        resourceLabels: resourceLabelsByNode.get(n.id),
-        loopOwned: loopOwnerByNode.has(n.id),
-        disabled: disabledNodes.has(n.id),
-        offByCascade: offByCascade.has(n.id),
         tokenLabels,
-        breakpoint: breakpoints.has(n.id),
-        paused: pausedAt === n.id,
-      },
-    }));
+        setNodeParam,
+      ];
+      const hit = cache.get(n.id);
+      if (hit && hit.deps.length === deps.length && hit.deps.every((v, i) => v === deps[i])) {
+        return hit.node;
+      }
+      const node: FlowNode<HazyNodeData> = {
+        ...n,
+        data: {
+          ...n.data,
+          params,
+          setParam: (key: string, value: unknown) => setNodeParam(n.id, key, value),
+          connectedInputs,
+          connectedOutputs,
+          inlineEditable,
+          outputs,
+          configErrors,
+          setupNeeded,
+          loopHint,
+          canConnect,
+          resourceLabels,
+          loopOwned,
+          disabled,
+          offByCascade: off,
+          tokenLabels,
+          breakpoint,
+          paused,
+        },
+      };
+      cache.set(n.id, { deps, node });
+      return node;
+    });
+    // Drop cache entries for nodes that no longer exist.
+    for (const id of cache.keys()) if (!seen.has(id)) cache.delete(id);
+    return result;
   }, [
     nodes,
     paramsByID,
@@ -2235,7 +2181,11 @@ function EditorInner() {
       setError(msg);
       // A 409 from the gateway means another run started between the
       // last lock check and this save. Re-pull so the UI catches up.
-      if (msg.toLowerCase().includes("active run") || msg.includes("409")) {
+      if (
+        isHTTPStatus(e, 409) ||
+        isErrorCode(e, "conflict") ||
+        msg.toLowerCase().includes("active run")
+      ) {
         void refreshLock();
       }
     } finally {
@@ -2462,7 +2412,11 @@ function EditorInner() {
       } catch (e) {
         const msg = (e as Error).message;
         setError(msg);
-        if (msg.toLowerCase().includes("locked") || msg.includes("409")) {
+        if (
+          isHTTPStatus(e, 409) ||
+          isErrorCode(e, "conflict") ||
+          msg.toLowerCase().includes("locked")
+        ) {
           void refreshLock();
         }
       } finally {

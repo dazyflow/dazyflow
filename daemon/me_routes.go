@@ -327,9 +327,14 @@ func (h *HTTPGateway) publishFlowMe(rw http.ResponseWriter, r *http.Request, p c
 	var body struct {
 		Ref string `json:"ref"`
 	}
-	// Body is optional — an empty POST publishes HEAD.
+	// Body is optional — an empty POST publishes HEAD. An empty body decodes
+	// to io.EOF, which we ignore; a *malformed* body is logged (we still fall
+	// back to publishing HEAD) so a client sending a bad ref isn't silently
+	// treated as "no ref".
 	if r.Body != nil {
-		_ = json.NewDecoder(r.Body).Decode(&body)
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
+			h.logger.Printf("publishFlowMe: ignoring malformed optional body for %s/%s/%s: %v", tenant, workspace, id, err)
+		}
 	}
 	commit, err := h.svc.PublishFlow(r.Context(), p, tenant, workspace, id, strings.TrimSpace(body.Ref))
 	if err != nil {

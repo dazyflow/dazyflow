@@ -104,6 +104,77 @@ func BoolDefault(params map[string]any, key string, def bool) bool {
 	return def
 }
 
+// IntSlice returns the param at key as []int, accepting a []any of
+// int/int64/float64 items (JSON arrays decode to []any of float64) or a
+// native []int / []int64. Missing or wrong-typed items are skipped; a
+// missing or non-array param returns nil. Supersedes the per-package
+// paramIntSlice / paramIntSliceLocal copies.
+func IntSlice(params map[string]any, key string) []int {
+	v, ok := params[key]
+	if !ok {
+		return nil
+	}
+	switch arr := v.(type) {
+	case []int:
+		return arr
+	case []int64:
+		out := make([]int, len(arr))
+		for i, n := range arr {
+			out[i] = int(n)
+		}
+		return out
+	case []any:
+		out := make([]int, 0, len(arr))
+		for _, item := range arr {
+			switch n := item.(type) {
+			case int:
+				out = append(out, n)
+			case int64:
+				out = append(out, int(n))
+			case float64:
+				out = append(out, int(n))
+			}
+		}
+		return out
+	}
+	return nil
+}
+
+// StringSlice returns the param at key as []string, accepting a native
+// []string or a []any whose string items are kept (non-strings skipped). A
+// missing or non-array param returns nil. Supersedes the per-package
+// paramStringSlice copies.
+func StringSlice(params map[string]any, key string) []string {
+	v, ok := params[key]
+	if !ok {
+		return nil
+	}
+	switch arr := v.(type) {
+	case []string:
+		return arr
+	case []any:
+		out := make([]string, 0, len(arr))
+		for _, item := range arr {
+			if s, ok := item.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+	return nil
+}
+
+// ClampInt constrains v to the inclusive [lo, hi] range.
+func ClampInt(v, lo, hi int) int {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
+}
+
 // Err builds a status=error Result with the given code + message.
 // The shape every integration uses to bail out of Execute when a
 // param is wrong, an HTTP call failed, or an upstream port had bad

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 
 	"git.sr.ht/~klahr/hazyflow/core"
@@ -279,5 +280,85 @@ func TestGitHubListIssues_TruncatesAtMaxResults(t *testing.T) {
 	meta := res.Output["meta"].Inline.(map[string]any)
 	if meta["truncated"] != true {
 		t.Errorf("truncated = %v, want true", meta["truncated"])
+	}
+}
+
+// TestParseNextLink covers the Link-header pagination parser's edge cases —
+// the heart of multi-page fetches. Only rel="next" should be followed.
+func TestParseNextLink(t *testing.T) {
+	cases := []struct {
+		name, header, want string
+	}{
+		{"empty", "", ""},
+		{"only next", `<https://api.github.com/x?page=2>; rel="next"`, "https://api.github.com/x?page=2"},
+		{"next among prev/next/last",
+			`<https://api.github.com/x?page=1>; rel="prev", <https://api.github.com/x?page=3>; rel="next", <https://api.github.com/x?page=9>; rel="last"`,
+			"https://api.github.com/x?page=3"},
+		{"last page has no next (only prev/first)",
+			`<https://api.github.com/x?page=8>; rel="prev", <https://api.github.com/x?page=1>; rel="first"`, ""},
+		{"segment without a rel is skipped", `<https://api.github.com/x?page=2>`, ""},
+		{"whitespace around rel tolerated",
+			`<https://api.github.com/x?page=2>;   rel="next"`, "https://api.github.com/x?page=2"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := parseNextLink(c.header); got != c.want {
+				t.Errorf("parseNextLink(%q) = %q, want %q", c.header, got, c.want)
+			}
+		})
+	}
+}
+
+// TestGitHubListIssues_RateLimited covers the rate-limit response path: a 403
+// with GitHub's rate-limit body (and X-RateLimit headers) surfaces a clear
+// github_error carrying GitHub's message, not a silent empty result.
+func TestGitHubListIssues_RateLimited(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-RateLimit-Limit", "60")
+		w.Header().Set("X-RateLimit-Remaining", "0")
+		w.Header().Set("X-RateLimit-Reset", "1700000000")
+		w.WriteHeader(403)
+		_, _ = w.Write([]byte(`{"message":"API rate limit exceeded for 1.2.3.4.","documentation_url":"https://docs.github.com/rest/overview/rate-limits"}`))
+	}))
+	t.Cleanup(srv.Close)
+	withGHEnv(t, srv.URL)
+
+	res, err := executeGitHubListIssues(context.Background(), core.Job{
+		Params: map[string]any{"owner": "o", "repo": "r"},
+	}, nil)
+	if err != nil {
+		t.Fatalf("execute err: %v", err)
+	}
+	if res.Status != core.StatusError || res.Error.Code != "github_error" {
+		t.Fatalf("res = %+v, want github_error", res)
+	}
+	if !strings.Contains(res.Error.Message, "rate limit exceeded") {
+		t.Errorf("message = %q, want GitHub's rate-limit text", res.Error.Message)
+	}
+}
+
+// TestGitHubListIssues_PaginationCap covers the maxPages safety net: a server
+// that always advertises a next page must not loop forever — the drop stops
+// and marks the result truncated.
+func TestGitHubListIssues_PaginationCap(t *testing.T) {
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Always point at a further page → unbounded without the cap.
+		w.Header().Set("Link", fmt.Sprintf(`<%s/repos/o/r/issues?page=999>; rel="next"`, srv.URL))
+		w.WriteHeader(200)
+		_ = json.NewEncoder(w).Encode([]any{map[string]any{"number": 1}})
+	}))
+	t.Cleanup(srv.Close)
+	withGHEnv(t, srv.URL)
+
+	res, _ := executeGitHubListIssues(context.Background(), core.Job{
+		Params: map[string]any{"owner": "o", "repo": "r", "max_results": 100000},
+	}, nil)
+	if res.Status != core.StatusOK {
+		t.Fatalf("res = %+v", res)
+	}
+	meta := res.Output["meta"].Inline.(map[string]any)
+	if meta["truncated"] != true {
+		t.Errorf("truncated = %v, want true (hit the maxPages cap)", meta["truncated"])
 	}
 }

@@ -447,17 +447,17 @@ func TestSQLDBRegistry_BadDSNDoesNotPoison(t *testing.T) {
 func TestSQLDBRegistry_SweepEvictsIdle(t *testing.T) {
 	r := newSQLDBRegistry("mysql", 100*time.Millisecond, 0)
 	now := time.Now()
-	r.dbs[pgPoolKey{"t", "fresh"}] = &sqlDBEntry{db: nil, lastUse: now}
-	r.dbs[pgPoolKey{"t", "stale"}] = &sqlDBEntry{db: nil, lastUse: now.Add(-200 * time.Millisecond)}
+	r.dbs[dbConnKey{"t", "fresh"}] = &sqlDBEntry{db: nil, lastUse: now}
+	r.dbs[dbConnKey{"t", "stale"}] = &sqlDBEntry{db: nil, lastUse: now.Add(-200 * time.Millisecond)}
 
 	r.mu.Lock()
 	r.sweepLocked(now)
 	r.mu.Unlock()
 
-	if _, ok := r.dbs[pgPoolKey{"t", "fresh"}]; !ok {
+	if _, ok := r.dbs[dbConnKey{"t", "fresh"}]; !ok {
 		t.Error("fresh entry evicted")
 	}
-	if _, ok := r.dbs[pgPoolKey{"t", "stale"}]; ok {
+	if _, ok := r.dbs[dbConnKey{"t", "stale"}]; ok {
 		t.Error("stale entry not evicted")
 	}
 }

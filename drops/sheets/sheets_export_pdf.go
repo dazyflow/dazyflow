@@ -55,7 +55,7 @@ func init() {
 					"account":{"type":"string","default":"default"},
 					"spreadsheet_id":{"type":"string","format":"google-spreadsheet","title":"Spreadsheet","description":"The spreadsheet to export."},
 					"path":{"type":"string","title":"File name","examples":["Survey results.pdf"],"description":"What to call the PDF — also the attachment name when emailed. '.pdf' is added for you; leave blank for an automatic name."},
-					"timeout_ms":{"type":"integer","default":30000,"minimum":1}
+					"timeout_ms":{"type":"integer","default":30000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
 				"required":["spreadsheet_id"]
 			}`),

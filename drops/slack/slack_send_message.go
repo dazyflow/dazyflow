@@ -66,7 +66,7 @@ func init() {
 					"text":{"type":"string","title":"Message","description":"The text to send. Overridden by the 'Message' input."},
 					"thread_ts":{"type":"string","title":"Reply in thread","x_advanced":true,"description":"Timestamp of a parent message to reply under."},
 					"blocks":{"type":"array","items":{},"title":"Blocks","x_advanced":true,"description":"Slack Block Kit layout for rich messages; replaces the plain text rendering."},
-					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
+					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
 				"required":["channel"]
 			}`),

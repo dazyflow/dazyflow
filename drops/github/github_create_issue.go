@@ -62,7 +62,7 @@ func init() {
 					"labels":{"type":"array","title":"Labels","items":{"type":"string"},"description":"Labels to attach — they must already exist on the repo."},
 					"assignees":{"type":"array","title":"Assignees","items":{"type":"string"},"description":"GitHub usernames to assign."},
 					"milestone":{"type":"integer","title":"Milestone number","x_advanced":true,"description":"Milestone number (not name)."},
-					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
+					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
 				"required":["owner","repo","title"]
 			}`),
@@ -121,10 +121,10 @@ func executeGitHubCreateIssue(ctx context.Context, job core.Job, _ chan<- core.P
 	if body := resolveBody(job); body != "" {
 		payload["body"] = body
 	}
-	if labels := paramStringSlice(job.Params, "labels"); len(labels) > 0 {
+	if labels := params.StringSlice(job.Params, "labels"); len(labels) > 0 {
 		payload["labels"] = labels
 	}
-	if assignees := paramStringSlice(job.Params, "assignees"); len(assignees) > 0 {
+	if assignees := params.StringSlice(job.Params, "assignees"); len(assignees) > 0 {
 		payload["assignees"] = assignees
 	}
 	if ms := params.IntDefault(job.Params, "milestone", 0); ms > 0 {

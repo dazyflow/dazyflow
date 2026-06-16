@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Port } from "../types";
-import { mimeCompatible, pickPort } from "./ports";
+import { mimeCompatible, pickPort, portsConnectable } from "./ports";
 
 describe("mimeCompatible", () => {
   it("treats an untyped side as anything", () => {
@@ -56,5 +56,36 @@ describe("pickPort", () => {
   it("returns the fallback handle id when the drop has no ports", () => {
     expect(pickPort([], ["text/plain"], "in")).toBe("in");
     expect(pickPort(undefined, ["text/plain"], "out")).toBe("out");
+  });
+});
+
+describe("portsConnectable", () => {
+  const out: Port[] = [
+    { port: "out", mime: ["text/plain"] },
+    { port: "json", mime: ["application/json"] },
+    { port: "pass" }, // untyped exec pin
+  ];
+  const inp: Port[] = [
+    { port: "in", mime: ["text/plain"] },
+    { port: "body", mime: ["application/json"] },
+  ];
+
+  it("allows a MIME-compatible source→target pair", () => {
+    expect(portsConnectable(out, "out", inp, "in")).toBe(true);
+    expect(portsConnectable(out, "json", inp, "body")).toBe(true);
+  });
+
+  it("rejects a MIME-incompatible pair", () => {
+    expect(portsConnectable(out, "out", inp, "body")).toBe(false); // text → json
+  });
+
+  it("defaults handles to out/in", () => {
+    expect(portsConnectable(out, null, inp, null)).toBe(true); // out→in, both text
+  });
+
+  it("treats a missing/untyped pin as connectable", () => {
+    expect(portsConnectable(out, "pass", inp, "in")).toBe(true); // untyped source
+    expect(portsConnectable(out, "out", inp, "nope")).toBe(true); // unknown target port
+    expect(portsConnectable(undefined, "out", inp, "in")).toBe(true); // comment node, no manifest
   });
 });

@@ -88,7 +88,7 @@ func executeGitCheckout(ctx context.Context, job core.Job, progress chan<- core.
 	if err != nil {
 		return params.Err(job, "bad_param", err.Error()), nil
 	}
-	if err := guardRepoURL(url); err != nil {
+	if err := guardRepoURL(ctx, url); err != nil {
 		return params.Err(job, "blocked", err.Error()), nil
 	}
 	if job.WorkspaceRoot == "" {
@@ -150,7 +150,7 @@ func executeGitCheckout(ctx context.Context, job core.Job, progress chan<- core.
 // "point me at an internal host or a local file" case. When the operator
 // has opted into private egress, the net helpers no-op, matching the
 // http drops.
-func guardRepoURL(rawURL string) error {
+func guardRepoURL(ctx context.Context, rawURL string) error {
 	raw := strings.TrimSpace(rawURL)
 	if raw == "" {
 		return fmt.Errorf("url is required")
@@ -172,7 +172,7 @@ func guardRepoURL(rawURL string) error {
 	}
 	switch u.Scheme {
 	case "https":
-		if err := hfnet.EgressAllowed(raw); err != nil {
+		if err := hfnet.EgressAllowedFor(ctx, raw); err != nil {
 			return err
 		}
 		return hfnet.CheckDialHost(u.Host)

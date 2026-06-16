@@ -97,18 +97,6 @@ func TestExecuteEmail_FromDefaultsToUsername(t *testing.T) {
 	}
 }
 
-func TestParamStringSlice(t *testing.T) {
-	if got := paramStringSlice(map[string]any{}, "to"); got != nil {
-		t.Errorf("absent: got %v, want nil", got)
-	}
-	if got := paramStringSlice(map[string]any{"to": "single"}, "to"); got != nil {
-		t.Errorf("wrong type: got %v, want nil", got)
-	}
-	got := paramStringSlice(map[string]any{"to": []any{"a@x", 7, "b@x"}}, "to")
-	if len(got) != 2 || got[0] != "a@x" || got[1] != "b@x" {
-		t.Errorf("got %v, want [a@x b@x] (non-strings skipped)", got)
-	}
-}
 
 func TestExecuteEmail_Validation(t *testing.T) {
 	base := func() map[string]any {

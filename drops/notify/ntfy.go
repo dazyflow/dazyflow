@@ -71,7 +71,7 @@ func init() {
 					"priority":{"type":"string","title":"Priority","enum":["1","2","3","4","5"],"enumNames":["1 — Min","2 — Low","3 — Default","4 — High","5 — Max"],"description":"How urgently it buzzes. Leave unset for the normal level."},
 					"tags":{"type":"array","title":"Tags","items":{"type":"string"},"description":"Emoji/tag shortcodes."},
 					"click":{"type":"string","title":"Link to open","description":"Web address opened when the notification is tapped. Tip: wire an Await approval step's 'Approval link' here so the recipient can approve straight from the notification."},
-					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
+					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
 				"required":["topic"]
 			}`),
@@ -126,7 +126,7 @@ func executeNtfy(ctx context.Context, job core.Job, progress chan<- core.Progres
 	}
 
 	url := server + "/" + topic
-	if err := hfnet.EgressAllowed(url); err != nil {
+	if err := hfnet.EgressAllowedFor(ctx, url); err != nil {
 		return params.Err(job, "egress_blocked", err.Error()), nil
 	}
 

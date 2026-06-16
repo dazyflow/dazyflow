@@ -53,7 +53,7 @@ func init() {
 					"status":{"type":"string","title":"Status","default":"active","enum":["active","trialing","past_due","unpaid","paused","canceled","all"],"enumNames":["Active","On trial","Past due","Unpaid","Paused","Canceled","All states"],"description":"Which subscription states to list."},
 					"limit":{"type":"integer","title":"Limit","default":25,"minimum":1,"maximum":100},
 					"base_url":{"type":"string","description":"Override the API host (testing)."},
-					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
+					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
 				"required":["api_key"]
 			}`),

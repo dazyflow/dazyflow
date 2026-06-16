@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { Braces, Info, Lock, Plus, Upload, X } from "lucide-react";
@@ -84,6 +84,22 @@ type Props = {
   tokenLabels?: TokenLabels;
 };
 
+// FormCtx carries the form-wide context that every field needs but none of
+// them vary: the workspace handle, the account picker, the reference
+// catalogue, the extra "{}" tokens, and the token-chip labels. Provided once
+// by SchemaForm and read via useFormCtx() so these don't have to be
+// prop-drilled through SchemaField into each per-field-type component.
+type FormCtx = {
+  workspace?: WorkspaceCtx;
+  accountPicker?: AccountPicker;
+  references?: ReferenceCtx;
+  extraReferenceItems?: { label: string; token: string }[];
+  tokenLabels?: TokenLabels;
+};
+
+const FormContext = createContext<FormCtx>({});
+const useFormCtx = () => useContext(FormContext);
+
 export function SchemaForm({
   schema,
   value,
@@ -99,6 +115,7 @@ export function SchemaForm({
 }: Props) {
   const { t } = useTranslation();
   const wired = new Set(wiredKeys ?? []);
+  const formCtx: FormCtx = { workspace, accountPicker, references, extraReferenceItems, tokenLabels };
   if (schema.type !== "object" || !schema.properties) {
     return (
       <div className="sf-fallback-hint">
@@ -115,14 +132,9 @@ export function SchemaForm({
       schema={propSchema}
       required={required.has(key)}
       value={value[key]}
-      workspace={workspace}
-      accountPicker={accountPicker}
-      references={references}
       wired={wired.has(key)}
       resolvedName={resourceLabels?.[key]}
       wiredSource={wiredSources?.[key]}
-      extraReferenceItems={extraReferenceItems}
-      tokenLabels={tokenLabels}
       siblings={value}
       onChange={(v) => {
         const next = { ...value };
@@ -146,9 +158,11 @@ export function SchemaForm({
   }
 
   return (
-    <div>
-      {basic.map(([key, propSchema]) => renderField(key, propSchema))}
-    </div>
+    <FormContext.Provider value={formCtx}>
+      <div>
+        {basic.map(([key, propSchema]) => renderField(key, propSchema))}
+      </div>
+    </FormContext.Provider>
   );
 }
 
@@ -202,9 +216,6 @@ type FieldProps = {
   required: boolean;
   value: unknown;
   onChange: (v: unknown) => void;
-  workspace?: WorkspaceCtx;
-  accountPicker?: AccountPicker;
-  references?: ReferenceCtx;
   // wired is true when this param is fed by a connected input port; the
   // resource picker then renders disabled (the wire overrides the value).
   wired?: boolean;
@@ -214,16 +225,15 @@ type FieldProps = {
   // wiredSource is a friendly label for the step/port feeding a wired,
   // non-picker field — shown so the greyed field still says what's flowing in.
   wiredSource?: string;
-  // extraReferenceItems are extra "{}"-menu tokens (e.g. ${item.<field>}).
-  extraReferenceItems?: { label: string; token: string }[];
-  // tokenLabels: "nodeId.port" → friendly step·port names for token chips.
-  tokenLabels?: TokenLabels;
   // siblings is the other params on the same node — lets a field react to a
   // peer's value (e.g. the resource picker lists for the chosen `account`).
   siblings?: Record<string, unknown>;
+  // workspace, accountPicker, references, extraReferenceItems, tokenLabels now
+  // come from FormContext (useFormCtx) rather than per-field props.
 };
 
-function SchemaField({ name, schema, required, value, onChange, workspace, accountPicker, references, wired, resolvedName, wiredSource, extraReferenceItems, tokenLabels, siblings }: FieldProps) {
+function SchemaField({ name, schema, required, value, onChange, wired, resolvedName, wiredSource, siblings }: FieldProps) {
+  const { workspace, accountPicker, references, extraReferenceItems, tokenLabels } = useFormCtx();
   const { t } = useTranslation();
   // A wired param is decided by the incoming wire, so the editor is read-only.
   // Resource pickers render their own richer disabled note (with the resolved

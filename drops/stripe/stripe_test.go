@@ -37,6 +37,11 @@ func newFakeStripe(t *testing.T) *fakeStripe {
 		f.lastForm = r.Form
 		switch {
 		case r.Method == "POST" && r.URL.Path == "/customers":
+			if r.PostForm.Get("email") == "reject@stripe.test" {
+				rw.WriteHeader(400)
+				fmt.Fprint(rw, `{"error":{"message":"Invalid email address: reject@stripe.test","code":"email_invalid","type":"invalid_request_error"}}`)
+				return
+			}
 			fmt.Fprintf(rw, `{"id":"cus_1","email":%q,"name":%q}`, r.PostForm.Get("email"), r.PostForm.Get("name"))
 		case r.Method == "POST" && r.URL.Path == "/payment_links":
 			if r.PostForm.Get("line_items[0][price]") == "price_bad" {
@@ -149,6 +154,13 @@ func TestCreateCustomer(t *testing.T) {
 	res = run(t, f, "stripe_create_customer", map[string]any{}, nil)
 	if res.Status != core.StatusError || res.Error.Code != "bad_param" {
 		t.Errorf("missing email res = %+v", res)
+	}
+
+	// A Stripe API error response (400) surfaces Stripe's own message rather
+	// than a generic failure — the per-action error path for create_customer.
+	res = run(t, f, "stripe_create_customer", map[string]any{"email": "reject@stripe.test"}, nil)
+	if res.Status != core.StatusError || !strings.Contains(res.Error.Message, "Invalid email address") {
+		t.Errorf("API-error res = %+v", res)
 	}
 }
 

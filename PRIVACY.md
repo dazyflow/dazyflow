@@ -214,6 +214,17 @@ Tracked here and in [COMPLIANCE.md § Known gaps](COMPLIANCE.md):
   `HAZYFLOW_RUN_LOG_RETENTION`, `HAZYFLOW_LOG_RUN_PAYLOADS=false` (drops content
   lines, keeps the status trail), and per-run deletion via
   `DELETE /api/v1/me/runs/{run_id}/logs`.
+- **Very short secret values are not redacted** — secret redaction
+  (`engine/redact.go`) ignores plaintext shorter than `minRedactableSecretLen`
+  (6 chars), because redacting a value like `"1"` or `"true"` would mangle
+  every unrelated output containing that substring. A vendor token shorter
+  than 6 characters would therefore pass through run logs/outputs unredacted.
+  Two mitigations already cover this: the **save-time linter** flags a flow
+  that wires a secret straight into a persistence sink (the
+  `secret_to_persistence` rule), and resolved secrets only land in node
+  *params*, never auto-copied into a `Result` unless a module deliberately
+  echoes them. Operators handling sub-6-char credentials should still prefer
+  `HAZYFLOW_LOG_RUN_PAYLOADS=false`.
 
 > **Resolved 2026-06-15:** account/org **erasure** (Art. 17), **data export**
 > (Art. 15/20), and **self-service rectification** (Art. 16) are now built-in

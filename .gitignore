@@ -10,8 +10,13 @@
 /.env
 
 /node_modules/
+# Generated SBOM artifacts (produced by the CI `sbom` task; attached to releases)
+/sbom.spdx.json
+/sbom.cdx.json
 # Local key material (legacy hz-drops signing keys) — never commit
 .keys/
+# Hazy personal API key used by the complete-hazyflow-tasks skill — never commit
+hazy-key
 # Local Claude Code state stays out of git, but the shared skills under
 # .claude/skills/ are committed so the team gets them.
 /.claude/*

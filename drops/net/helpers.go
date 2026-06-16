@@ -6,28 +6,6 @@ import (
 	"git.sr.ht/~klahr/hazyflow/core"
 )
 
-func paramIntSlice(params map[string]any, key string) []int {
-	v, ok := params[key]
-	if !ok {
-		return nil
-	}
-	arr, ok := v.([]any)
-	if !ok {
-		return nil
-	}
-	out := make([]int, 0, len(arr))
-	for _, item := range arr {
-		switch x := item.(type) {
-		case int:
-			out = append(out, x)
-		case int64:
-			out = append(out, int(x))
-		case float64:
-			out = append(out, int(x))
-		}
-	}
-	return out
-}
 
 func paramHeaders(params map[string]any, key string) (map[string]string, error) {
 	v, ok := params[key]

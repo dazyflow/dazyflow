@@ -97,25 +97,6 @@ func currentHTTPBase() string {
 	return httpBase
 }
 
-func paramStringSlice(params map[string]any, key string) []string {
-	v, ok := params[key]
-	if !ok {
-		return nil
-	}
-	switch arr := v.(type) {
-	case []string:
-		return arr
-	case []any:
-		out := make([]string, 0, len(arr))
-		for _, item := range arr {
-			if s, ok := item.(string); ok {
-				out = append(out, s)
-			}
-		}
-		return out
-	}
-	return nil
-}
 
 // gitHubErrorEnvelope mirrors GitHub's REST v3 error shape. Most
 // errors include a message + documentation_url; some include a
@@ -171,7 +152,7 @@ func githubDoH(ctx context.Context, method, url, token string, body []byte, time
 	// followed verbatim. The SSRF client blocks loopback/private/link-local
 	// targets and the egress allowlist (when set) bounds which public hosts
 	// the bearer token may be sent to.
-	if err := hfnet.EgressAllowed(url); err != nil {
+	if err := hfnet.EgressAllowedFor(ctx, url); err != nil {
 		return 0, nil, nil, err
 	}
 	resp, err := hfnet.SafeHTTPClient(time.Duration(timeoutMS)*time.Millisecond, hfnet.PrivateEgressAllowed()).Do(req)
@@ -221,16 +202,6 @@ func parseNextLink(header string) string {
 	return ""
 }
 
-// clampInt bounds v to [lo, hi].
-func clampInt(v, lo, hi int) int {
-	if v < lo {
-		return lo
-	}
-	if v > hi {
-		return hi
-	}
-	return v
-}
 
 // resolveBody figures out the issue/comment body: params.body, overridden
 // by the 'body' input port. A string passes through; a structured value

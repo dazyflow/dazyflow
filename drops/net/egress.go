@@ -1,12 +1,15 @@
 package net
 
 import (
+	"context"
 	"fmt"
 	stdnet "net"
 	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	"git.sr.ht/~klahr/hazyflow/core"
 )
 
 // Egress allowlist for http_request. The SSRF guard (ssrfGuard) blocks
@@ -48,6 +51,21 @@ var (
 // an error if any entry is malformed so misconfiguration fails loudly at
 // startup rather than silently allowing/denying.
 func SetEgressAllowlist(entries []string) error {
+	p, err := compileEgress(entries)
+	if err != nil {
+		return err
+	}
+	egressMu.Lock()
+	egressActive = p // nil when entries were all-empty → allow all public hosts
+	egressMu.Unlock()
+	return nil
+}
+
+// compileEgress parses allowlist entries into a matcher. Returns (nil, nil)
+// when the cleaned list is empty (meaning "no restriction"), or an error on a
+// malformed entry. Shared by the global SetEgressAllowlist and the per-tenant
+// EgressPolicy path so both compile and match identically.
+func compileEgress(entries []string) (*egressPolicy, error) {
 	cleaned := make([]string, 0, len(entries))
 	for _, e := range entries {
 		if s := strings.TrimSpace(e); s != "" {
@@ -55,10 +73,7 @@ func SetEgressAllowlist(entries []string) error {
 		}
 	}
 	if len(cleaned) == 0 {
-		egressMu.Lock()
-		egressActive = nil
-		egressMu.Unlock()
-		return nil
+		return nil, nil
 	}
 	p := &egressPolicy{exact: make(map[string]struct{})}
 	for _, e := range cleaned {
@@ -66,7 +81,7 @@ func SetEgressAllowlist(entries []string) error {
 		case strings.Contains(e, "/"):
 			_, ipnet, err := stdnet.ParseCIDR(e)
 			if err != nil {
-				return fmt.Errorf("egress allowlist: bad CIDR %q: %w", e, err)
+				return nil, fmt.Errorf("egress allowlist: bad CIDR %q: %w", e, err)
 			}
 			p.nets = append(p.nets, ipnet)
 		case strings.HasPrefix(e, "*."):
@@ -75,7 +90,7 @@ func SetEgressAllowlist(entries []string) error {
 			// can't be a whole TLD (*.com) — i.e. ".slack.com" is OK,
 			// ".com" is not.
 			if strings.Count(suffix, ".") < 2 {
-				return fmt.Errorf("egress allowlist: wildcard %q too broad (need *.domain.tld)", e)
+				return nil, fmt.Errorf("egress allowlist: wildcard %q too broad (need *.domain.tld)", e)
 			}
 			p.suffixes = append(p.suffixes, suffix)
 		default:
@@ -86,10 +101,7 @@ func SetEgressAllowlist(entries []string) error {
 			}
 		}
 	}
-	egressMu.Lock()
-	egressActive = p
-	egressMu.Unlock()
-	return nil
+	return p, nil
 }
 
 // allowPrivateEgress gates the per-request `allow_private_networks` flow
@@ -109,17 +121,22 @@ func SetAllowPrivateEgress(v bool) { allowPrivateEgress.Store(v) }
 // allow_private_networks param. A drop must AND its own param with this.
 func PrivateEgressAllowed() bool { return allowPrivateEgress.Load() }
 
-// EgressAllowed is the exported form of egressAllowed, so other
-// integration drops that make user-influenced outbound requests
-// (e.g. notify/webhook_send) share the one operator egress policy.
-func EgressAllowed(rawURL string) error { return egressAllowed(rawURL) }
-
-// egressAllowed reports nil if rawURL's host is permitted by the active
-// allowlist, or an error describing the block. No active list = allowed.
-func egressAllowed(rawURL string) error {
+// EgressAllowed reports nil if rawURL's host is permitted by the active
+// operator allowlist, or an error describing the block. No active list =
+// allowed. This is the single, exported entry point for the egress/SSRF
+// policy: every caller — in this package and in the integration drops
+// (gmail, stripe, sheets, git, notify/webhook_send, …) — funnels through it
+// so the policy is single-sourced.
+func EgressAllowed(rawURL string) error {
 	egressMu.RLock()
 	p := egressActive
 	egressMu.RUnlock()
+	return p.allow(rawURL)
+}
+
+// allow reports nil if rawURL's host is permitted by this compiled policy. A
+// nil policy means "no restriction" → allowed.
+func (p *egressPolicy) allow(rawURL string) error {
 	if p == nil {
 		return nil
 	}
@@ -153,4 +170,58 @@ func egressAllowed(rawURL string) error {
 		}
 	}
 	return fmt.Errorf("egress_blocked: host %q not in egress allowlist", host)
+}
+
+// EgressPolicy resolves the per-tenant egress allowlist. A multi-tenant
+// deployment implements it (e.g. backed by per-tenant config) and registers it
+// with SetEgressPolicy — wired by the daemon just like SetEgressAllowlist wires
+// the operator-global list. AllowlistFor returns a tenant's allowed entries and
+// whether a per-tenant policy exists; when it returns (_, false) or an empty
+// list, egress falls back to the global list. This lets one operator host
+// many tenants with independent egress isolation instead of a single shared
+// allowlist.
+//
+// (Defined here, alongside the enforcement, rather than in core: core is the
+// lower layer and must not depend on the net package's matcher. The daemon
+// registers a concrete policy the same way it registers the global allowlist.)
+type EgressPolicy interface {
+	AllowlistFor(tenant string) (entries []string, ok bool)
+}
+
+var (
+	egressPolicyMu sync.RWMutex
+	egressPolicy_  EgressPolicy
+)
+
+// SetEgressPolicy installs (or clears, with nil) the per-tenant egress policy
+// resolver. Off by default — egress uses only the global allowlist until a
+// policy is registered.
+func SetEgressPolicy(p EgressPolicy) {
+	egressPolicyMu.Lock()
+	egressPolicy_ = p
+	egressPolicyMu.Unlock()
+}
+
+// EgressAllowedFor is the tenant-aware egress check. It resolves the tenant
+// from ctx and, when a per-tenant policy supplies a non-empty allowlist for
+// that tenant, enforces it; otherwise it falls back to the operator-global
+// allowlist (EgressAllowed). A per-tenant policy that fails to compile fails
+// closed (blocked) rather than silently allowing. Callers that have a request
+// context should prefer this over EgressAllowed so multi-tenant isolation
+// applies.
+func EgressAllowedFor(ctx context.Context, rawURL string) error {
+	egressPolicyMu.RLock()
+	resolver := egressPolicy_
+	egressPolicyMu.RUnlock()
+	if resolver != nil {
+		tenant, _ := core.TenantFromContext(ctx)
+		if entries, ok := resolver.AllowlistFor(tenant); ok && len(entries) > 0 {
+			p, err := compileEgress(entries)
+			if err != nil {
+				return fmt.Errorf("egress_blocked: tenant egress policy is invalid: %v", err)
+			}
+			return p.allow(rawURL)
+		}
+	}
+	return EgressAllowed(rawURL)
 }

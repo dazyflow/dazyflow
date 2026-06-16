@@ -223,10 +223,14 @@ export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAl
     setActive(0);
   }, [query]);
 
-  // Focus the input on mount. The palette is a transient overlay so this
-  // runs once per open.
+  // Focus the search input on open and restore focus to whatever was focused
+  // before (the canvas, a toolbar button) when the palette closes — so a
+  // keyboard user isn't dumped back at the top of the document. The palette is
+  // a transient overlay, mounted only while open, so this runs once per open.
   useEffect(() => {
+    const prevFocused = document.activeElement as HTMLElement | null;
     inputRef.current?.focus();
+    return () => prevFocused?.focus?.();
   }, []);
 
   // Keyboard navigation. We listen on the window so the arrow keys work
@@ -295,6 +299,7 @@ export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAl
       <div
         className="quick-palette"
         role="dialog"
+        aria-modal="true"
         aria-label={t("quickPalette.title")}
       >
         <div className="quick-palette-search">

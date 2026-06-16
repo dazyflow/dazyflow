@@ -158,3 +158,60 @@ func TestErrDetails(t *testing.T) {
 		t.Errorf("Details = %q", res.Error.Details)
 	}
 }
+
+func TestIntSlice(t *testing.T) {
+	if got := IntSlice(map[string]any{}, "k"); got != nil {
+		t.Errorf("absent: got %v, want nil", got)
+	}
+	if got := IntSlice(map[string]any{"k": "nope"}, "k"); got != nil {
+		t.Errorf("wrong type: got %v, want nil", got)
+	}
+	// JSON arrays decode to []any of float64; mixed numerics coerce, others skip.
+	got := IntSlice(map[string]any{"k": []any{200.0, 404, int64(500), "x", 301.0}}, "k")
+	want := []int{200, 404, 500, 301}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got %v, want %v", got, want)
+		}
+	}
+	// native []int / []int64 pass through.
+	if got := IntSlice(map[string]any{"k": []int{1, 2}}, "k"); len(got) != 2 || got[0] != 1 {
+		t.Errorf("[]int: got %v", got)
+	}
+	if got := IntSlice(map[string]any{"k": []int64{7}}, "k"); len(got) != 1 || got[0] != 7 {
+		t.Errorf("[]int64: got %v", got)
+	}
+}
+
+func TestStringSlice(t *testing.T) {
+	if got := StringSlice(map[string]any{}, "k"); got != nil {
+		t.Errorf("absent: got %v, want nil", got)
+	}
+	if got := StringSlice(map[string]any{"k": "single"}, "k"); got != nil {
+		t.Errorf("plain string is not a slice: got %v, want nil", got)
+	}
+	got := StringSlice(map[string]any{"k": []any{"a", 7, "b"}}, "k")
+	if len(got) != 2 || got[0] != "a" || got[1] != "b" {
+		t.Errorf("got %v, want [a b] (non-strings skipped)", got)
+	}
+	if got := StringSlice(map[string]any{"k": []string{"x", "y"}}, "k"); len(got) != 2 || got[1] != "y" {
+		t.Errorf("[]string: got %v", got)
+	}
+}
+
+func TestClampInt(t *testing.T) {
+	cases := []struct{ v, lo, hi, want int }{
+		{5, 1, 10, 5},
+		{0, 1, 10, 1},
+		{99, 1, 10, 10},
+		{1, 1, 1, 1},
+	}
+	for _, c := range cases {
+		if got := ClampInt(c.v, c.lo, c.hi); got != c.want {
+			t.Errorf("ClampInt(%d,%d,%d) = %d, want %d", c.v, c.lo, c.hi, got, c.want)
+		}
+	}
+}

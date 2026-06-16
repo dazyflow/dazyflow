@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -23,21 +24,21 @@ func TestElevatePlatformAdmin(t *testing.T) {
 	gw := &HTTPGateway{PlatformAdmins: []string{"boss@example.com"}}
 
 	t.Run("listed email gets the role", func(t *testing.T) {
-		got := gw.elevatePlatformAdmin(auth.User{Email: "boss@example.com"})
+		got := gw.elevatePlatformAdmin(context.Background(), auth.User{Email: "boss@example.com"})
 		if !hasPlatformAdmin(got.Roles) {
 			t.Fatalf("expected platform:admin, got roles %+v", got.Roles)
 		}
 	})
 
 	t.Run("match is case-insensitive and trims", func(t *testing.T) {
-		got := gw.elevatePlatformAdmin(auth.User{Email: "  BOSS@Example.com "})
+		got := gw.elevatePlatformAdmin(context.Background(), auth.User{Email: "  BOSS@Example.com "})
 		if !hasPlatformAdmin(got.Roles) {
 			t.Fatalf("expected platform:admin for normalized email, got %+v", got.Roles)
 		}
 	})
 
 	t.Run("unlisted email is untouched", func(t *testing.T) {
-		got := gw.elevatePlatformAdmin(auth.User{Email: "rando@example.com"})
+		got := gw.elevatePlatformAdmin(context.Background(), auth.User{Email: "rando@example.com"})
 		if hasPlatformAdmin(got.Roles) {
 			t.Fatal("unlisted email must not get platform:admin")
 		}
@@ -45,7 +46,7 @@ func TestElevatePlatformAdmin(t *testing.T) {
 
 	t.Run("empty allowlist grants nothing", func(t *testing.T) {
 		bare := &HTTPGateway{}
-		got := bare.elevatePlatformAdmin(auth.User{Email: "boss@example.com"})
+		got := bare.elevatePlatformAdmin(context.Background(), auth.User{Email: "boss@example.com"})
 		if hasPlatformAdmin(got.Roles) {
 			t.Fatal("no allowlist must mean no platform admins")
 		}
@@ -53,7 +54,7 @@ func TestElevatePlatformAdmin(t *testing.T) {
 
 	t.Run("does not duplicate or mutate the caller's slice", func(t *testing.T) {
 		orig := []core.Role{{Name: "editor", Permissions: []core.Permission{core.PermGraphRun}}}
-		got := gw.elevatePlatformAdmin(auth.User{Email: "boss@example.com", Roles: orig})
+		got := gw.elevatePlatformAdmin(context.Background(), auth.User{Email: "boss@example.com", Roles: orig})
 		if len(orig) != 1 {
 			t.Fatalf("caller's slice was mutated: len=%d", len(orig))
 		}
@@ -66,11 +67,38 @@ func TestElevatePlatformAdmin(t *testing.T) {
 		in := auth.User{Email: "boss@example.com", Roles: []core.Role{
 			{Name: "x", Permissions: []core.Permission{core.PermPlatformAdmin}},
 		}}
-		got := gw.elevatePlatformAdmin(in)
+		got := gw.elevatePlatformAdmin(context.Background(), in)
 		if len(got.Roles) != 1 {
 			t.Fatalf("should not append a second platform-admin role, got %+v", got.Roles)
 		}
 	})
+}
+
+// TestElevatePlatformAdmin_AuditsOnFirstApply verifies the escalation emits a
+// single platform_admin.granted audit event on first apply (per email, per
+// process), not one per session issue, and not for unlisted users.
+func TestElevatePlatformAdmin_AuditsOnFirstApply(t *testing.T) {
+	audit := NewMemAuditLog()
+	gw := &HTTPGateway{PlatformAdmins: []string{"boss@example.com"}, Audit: audit}
+
+	u := auth.User{Email: "boss@example.com", Tenant: "acme", Subject: "boss"}
+	gw.elevatePlatformAdmin(context.Background(), u)
+	gw.elevatePlatformAdmin(context.Background(), u) // second sign-in: no new event
+	gw.elevatePlatformAdmin(context.Background(), auth.User{Email: "rando@example.com"})
+
+	events, _ := audit.List(context.Background(), core.AuditQuery{Tenant: "acme", Limit: 10})
+	granted := 0
+	for _, e := range events {
+		if e.Action == "platform_admin.granted" {
+			granted++
+			if e.Target != "boss@example.com" {
+				t.Errorf("target = %q, want boss@example.com", e.Target)
+			}
+		}
+	}
+	if granted != 1 {
+		t.Fatalf("platform_admin.granted events = %d, want exactly 1 (first apply only)", granted)
+	}
 }
 
 // TestSignup_ElevatesPlatformAdmin proves the allowlist is actually wired

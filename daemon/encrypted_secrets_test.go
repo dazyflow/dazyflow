@@ -465,6 +465,89 @@ func TestEncryptedSecrets_RewrapDEKs_RotatesKEK(t *testing.T) {
 	}
 }
 
+// TestEncryptedSecrets_ReadAudit covers the opt-in secret.read audit: off by
+// default (no events), and when enabled it records the secret NAME + tenant
+// but never the value.
+func TestEncryptedSecrets_ReadAudit(t *testing.T) {
+	store := NewMemSecretsStore()
+	es, err := NewEncryptedSecrets(randomKey(t), store)
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	ctx := core.WithTenant(context.Background(), "acme")
+	const secretVal = "xoxb-super-secret-value"
+	if err := es.Put(ctx, "acme", "slack_token", secretVal); err != nil {
+		t.Fatalf("put: %v", err)
+	}
+
+	// Default: no auditing.
+	audit := NewMemAuditLog()
+	if _, err := es.Get(ctx, "slack_token"); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got, _ := audit.List(context.Background(), core.AuditQuery{Tenant: "acme", Limit: 10}); len(got) != 0 {
+		t.Fatalf("audit recorded %d events with auditing off, want 0", len(got))
+	}
+
+	// Enabled: one secret.read event per Get, no value leak.
+	es.EnableReadAudit(audit)
+	if _, err := es.Get(ctx, "slack_token"); err != nil {
+		t.Fatalf("get (audited): %v", err)
+	}
+	events, _ := audit.List(context.Background(), core.AuditQuery{Tenant: "acme", Limit: 10})
+	if len(events) != 1 {
+		t.Fatalf("got %d audit events, want 1", len(events))
+	}
+	ev := events[0]
+	if ev.Action != "secret.read" || ev.Target != "slack_token" || ev.Tenant != "acme" {
+		t.Errorf("event = %+v, want action=secret.read target=slack_token tenant=acme", ev)
+	}
+	if ev.Detail == secretVal || ev.Target == secretVal {
+		t.Error("audit event leaked the secret value")
+	}
+}
+
+// failingRandReader always errors — stands in for an exhausted/broken entropy
+// source so the must-halt-on-rand-failure paths are exercisable.
+type failingRandReader struct{}
+
+func (failingRandReader) Read([]byte) (int, error) {
+	return 0, errors.New("entropy source unavailable")
+}
+
+// TestEncryptedSecrets_RewrapDEKs_HaltsOnRandFailure verifies rotation aborts
+// (rather than re-wrapping a DEK with a zero/partial nonce — catastrophic
+// AES-GCM nonce reuse) when the entropy source fails, and leaves the existing
+// DEK intact and readable under the original key.
+func TestEncryptedSecrets_RewrapDEKs_HaltsOnRandFailure(t *testing.T) {
+	store := NewMemSecretsStore()
+	oldKey, newKey := randomKey(t), randomKey(t)
+	es, err := NewEncryptedSecrets(oldKey, store)
+	if err != nil {
+		t.Fatalf("NewEncryptedSecrets: %v", err)
+	}
+	ctx := core.WithTenant(context.Background(), "acme")
+	if err := es.Put(ctx, "acme", "tok", "value-long-enough"); err != nil {
+		t.Fatalf("put: %v", err)
+	}
+
+	// Entropy now fails: the new-nonce read inside RewrapDEKs must error out.
+	es.randReader = failingRandReader{}
+	rotated, _, err := es.RewrapDEKs(context.Background(), newKey)
+	if err == nil {
+		t.Fatal("RewrapDEKs returned nil error on rand failure; rotation must halt")
+	}
+	if rotated != 0 {
+		t.Fatalf("rotated=%d on rand failure; want 0 (no DEK may be re-wrapped)", rotated)
+	}
+
+	// The DEK was never touched: a fresh view under the OLD key still decrypts.
+	es2, _ := NewEncryptedSecrets(oldKey, store)
+	if got, err := es2.Get(ctx, "tok"); err != nil || got != "value-long-enough" {
+		t.Fatalf("secret unreadable under old key after halted rotation: got=%q err=%v", got, err)
+	}
+}
+
 func TestEncryptedSecrets_RewrapDEKs_ReRunIsIdempotent(t *testing.T) {
 	store := NewMemSecretsStore()
 	oldKey, newKey := randomKey(t), randomKey(t)

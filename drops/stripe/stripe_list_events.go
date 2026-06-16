@@ -54,7 +54,7 @@ func init() {
 					"limit":{"type":"integer","title":"Limit","default":25,"minimum":1,"maximum":100,"description":"Max events per poll."},
 					"after_id":{"type":"string","title":"After id","description":"Only events newer than this event id (evt_…). Overridden by the 'After id' input — usually a saved cursor secret."},
 					"base_url":{"type":"string","description":"Override the API host (testing)."},
-					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
+					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
 				"required":["api_key"]
 			}`),

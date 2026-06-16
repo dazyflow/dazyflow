@@ -112,10 +112,11 @@ type OAuthRegistry struct {
 // non-nil — that's where exchanged tokens land.
 func NewOAuthRegistry(baseURL string, secrets *EncryptedSecrets) *OAuthRegistry {
 	return &OAuthRegistry{
-		providers: map[string]OAuthProvider{},
-		state:     newOAuthStateStore(10 * time.Minute),
-		secrets:   secrets,
-		BaseURL:   strings.TrimRight(baseURL, "/"),
+		providers:    map[string]OAuthProvider{},
+		state:        newOAuthStateStore(10 * time.Minute),
+		secrets:      secrets,
+		BaseURL:      strings.TrimRight(baseURL, "/"),
+		refreshLocks: map[string]*sync.Mutex{},
 	}
 }
 
@@ -519,9 +520,6 @@ func (r *OAuthRegistry) refreshAccessToken(ctx context.Context, tenant, provider
 func (r *OAuthRegistry) refreshLock(name string) *sync.Mutex {
 	r.refreshMu.Lock()
 	defer r.refreshMu.Unlock()
-	if r.refreshLocks == nil {
-		r.refreshLocks = make(map[string]*sync.Mutex)
-	}
 	m, ok := r.refreshLocks[name]
 	if !ok {
 		m = &sync.Mutex{}

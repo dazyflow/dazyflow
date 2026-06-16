@@ -17,19 +17,19 @@ func TestPGRegistry_CachesPerKey(t *testing.T) {
 
 	// Inject fake entries — we never call New, so no real connections.
 	// pool=nil keeps closeAll defensive but never reached here.
-	r.pools[pgPoolKey{"acmeA", "dsn1"}] = &pgEntry{pool: nil, lastUse: time.Now()}
-	r.pools[pgPoolKey{"acmeA", "dsn2"}] = &pgEntry{pool: nil, lastUse: time.Now()}
-	r.pools[pgPoolKey{"acmeB", "dsn1"}] = &pgEntry{pool: nil, lastUse: time.Now()}
+	r.pools[dbConnKey{"acmeA", "dsn1"}] = &pgEntry{pool: nil, lastUse: time.Now()}
+	r.pools[dbConnKey{"acmeA", "dsn2"}] = &pgEntry{pool: nil, lastUse: time.Now()}
+	r.pools[dbConnKey{"acmeB", "dsn1"}] = &pgEntry{pool: nil, lastUse: time.Now()}
 
 	if len(r.pools) != 3 {
 		t.Fatalf("expected 3 distinct keys, got %d", len(r.pools))
 	}
 	// Confirm key semantics: tenant is part of the key, so (acmeA,
 	// dsn1) and (acmeB, dsn1) must be different.
-	if _, ok := r.pools[pgPoolKey{"acmeA", "dsn1"}]; !ok {
+	if _, ok := r.pools[dbConnKey{"acmeA", "dsn1"}]; !ok {
 		t.Error("acmeA/dsn1 missing")
 	}
-	if _, ok := r.pools[pgPoolKey{"acmeB", "dsn1"}]; !ok {
+	if _, ok := r.pools[dbConnKey{"acmeB", "dsn1"}]; !ok {
 		t.Error("acmeB/dsn1 missing")
 	}
 }
@@ -38,17 +38,17 @@ func TestPGRegistry_SweepEvictsIdle(t *testing.T) {
 	// Idle = 100ms; entry with lastUse=now-200ms should be evicted.
 	r := newPGPoolRegistry(100*time.Millisecond, 0)
 	now := time.Now()
-	r.pools[pgPoolKey{"t", "fresh"}] = &pgEntry{pool: nil, lastUse: now}
-	r.pools[pgPoolKey{"t", "stale"}] = &pgEntry{pool: nil, lastUse: now.Add(-200 * time.Millisecond)}
+	r.pools[dbConnKey{"t", "fresh"}] = &pgEntry{pool: nil, lastUse: now}
+	r.pools[dbConnKey{"t", "stale"}] = &pgEntry{pool: nil, lastUse: now.Add(-200 * time.Millisecond)}
 
 	r.mu.Lock()
 	r.sweepLocked(now)
 	r.mu.Unlock()
 
-	if _, ok := r.pools[pgPoolKey{"t", "fresh"}]; !ok {
+	if _, ok := r.pools[dbConnKey{"t", "fresh"}]; !ok {
 		t.Error("fresh entry evicted")
 	}
-	if _, ok := r.pools[pgPoolKey{"t", "stale"}]; ok {
+	if _, ok := r.pools[dbConnKey{"t", "stale"}]; ok {
 		t.Error("stale entry not evicted")
 	}
 }
@@ -58,17 +58,17 @@ func TestPGRegistry_SweepRespectsBoundary(t *testing.T) {
 	// strictly greater-than). One ns over → evicted.
 	r := newPGPoolRegistry(time.Second, 0)
 	now := time.Now()
-	r.pools[pgPoolKey{"t", "boundary"}] = &pgEntry{pool: nil, lastUse: now.Add(-time.Second)}
-	r.pools[pgPoolKey{"t", "past"}] = &pgEntry{pool: nil, lastUse: now.Add(-time.Second - time.Nanosecond)}
+	r.pools[dbConnKey{"t", "boundary"}] = &pgEntry{pool: nil, lastUse: now.Add(-time.Second)}
+	r.pools[dbConnKey{"t", "past"}] = &pgEntry{pool: nil, lastUse: now.Add(-time.Second - time.Nanosecond)}
 
 	r.mu.Lock()
 	r.sweepLocked(now)
 	r.mu.Unlock()
 
-	if _, ok := r.pools[pgPoolKey{"t", "boundary"}]; !ok {
+	if _, ok := r.pools[dbConnKey{"t", "boundary"}]; !ok {
 		t.Error("at-boundary entry should survive")
 	}
-	if _, ok := r.pools[pgPoolKey{"t", "past"}]; ok {
+	if _, ok := r.pools[dbConnKey{"t", "past"}]; ok {
 		t.Error("past-boundary entry should be evicted")
 	}
 }

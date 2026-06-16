@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -101,14 +102,56 @@ func (m *MemPlanStore) SetPlan(_ context.Context, p TenantPlan) error {
 	return nil
 }
 
+// BillingService owns the free-tier plan gates — the cohesive billing
+// concern extracted off the Service god object. It holds only the deps the
+// gates need (plans, usage metering, the free-tier limits, a logger), so the
+// logic is independently testable and Service is left a thin facade that
+// delegates to it via Service.billing(). OAuth and secrets are likewise their
+// own services (OAuthRegistry, EncryptedSecrets); this carves out the last
+// in-Service cluster.
+type BillingService struct {
+	plans               PlanStore
+	usage               UsageStore
+	freeRunsPerMonth    int
+	freePollingDisabled bool
+	logger              *log.Logger
+}
+
+// billing builds the BillingService view over the Service's billing fields.
+// Cheap (a struct copy), so callers construct one per use rather than caching.
+func (s *Service) billing() *BillingService {
+	return &BillingService{
+		plans:               s.Plans,
+		usage:               s.Usage,
+		freeRunsPerMonth:    s.FreeRunsPerMonth,
+		freePollingDisabled: s.FreePollingDisabled,
+		logger:              s.Logger,
+	}
+}
+
+// Service-level delegations keep every existing caller (and test) working
+// while the logic lives on BillingService.
+func (s *Service) tenantIsFree(ctx context.Context, tenant, gate string) bool {
+	return s.billing().tenantIsFree(ctx, tenant, gate)
+}
+func (s *Service) runsThisMonth(ctx context.Context, tenant string) (int64, error) {
+	return s.billing().runsThisMonth(ctx, tenant)
+}
+func (s *Service) checkTriggerQuota(ctx context.Context, tenant string) error {
+	return s.billing().checkTriggerQuota(ctx, tenant)
+}
+func (s *Service) checkRunQuota(ctx context.Context, tenant string) error {
+	return s.billing().checkRunQuota(ctx, tenant)
+}
+
 // tenantIsFree resolves whether the plan gates apply to tenant. Fails
 // OPEN (reports pro) on plan-store errors: a billing-infrastructure
 // hiccup must degrade to "no gate" rather than "product down".
-func (s *Service) tenantIsFree(ctx context.Context, tenant, gate string) bool {
-	plan, err := s.Plans.GetPlan(ctx, tenant)
+func (b *BillingService) tenantIsFree(ctx context.Context, tenant, gate string) bool {
+	plan, err := b.plans.GetPlan(ctx, tenant)
 	if err != nil {
-		if s.Logger != nil {
-			s.Logger.Printf("%s [%s]: read plan (failing open): %v", gate, tenant, err)
+		if b.logger != nil {
+			b.logger.Printf("%s [%s]: read plan (failing open): %v", gate, tenant, err)
 		}
 		return false
 	}
@@ -119,8 +162,8 @@ func (s *Service) tenantIsFree(ctx context.Context, tenant, gate string) bool {
 // metering buckets. One home for the "current bucket" semantics, shared
 // by the run gate and the billing view — when billing-day anchoring
 // lands, both change together.
-func (s *Service) runsThisMonth(ctx context.Context, tenant string) (int64, error) {
-	buckets, err := s.Usage.Usage(ctx, tenant, 1)
+func (b *BillingService) runsThisMonth(ctx context.Context, tenant string) (int64, error) {
+	buckets, err := b.usage.Usage(ctx, tenant, 1)
 	if err != nil {
 		return 0, err
 	}
@@ -134,11 +177,11 @@ func (s *Service) runsThisMonth(ctx context.Context, tenant string) (int64, erro
 // scheduler before firing a cron/poll trigger. Same fail-open policy as
 // checkRunQuota: a billing-store hiccup must not silence everyone's
 // schedules.
-func (s *Service) checkTriggerQuota(ctx context.Context, tenant string) error {
-	if !s.FreePollingDisabled || s.Plans == nil {
+func (b *BillingService) checkTriggerQuota(ctx context.Context, tenant string) error {
+	if !b.freePollingDisabled || b.plans == nil {
 		return nil
 	}
-	if !s.tenantIsFree(ctx, tenant, "trigger gate") {
+	if !b.tenantIsFree(ctx, tenant, "trigger gate") {
 		return nil
 	}
 	return fmt.Errorf("%w: schedules and polling triggers are a Pro feature — manual runs still work", core.ErrPlanLimit)
@@ -147,23 +190,23 @@ func (s *Service) checkTriggerQuota(ctx context.Context, tenant string) error {
 // checkRunQuota is the free-tier run gate, called by SubmitGraphWithSeed
 // before any run state is written. Pro tenants and deployments without
 // enforcement configured pass through; usage-store errors fail open too.
-func (s *Service) checkRunQuota(ctx context.Context, tenant string) error {
-	if s.FreeRunsPerMonth <= 0 || s.Plans == nil || s.Usage == nil {
+func (b *BillingService) checkRunQuota(ctx context.Context, tenant string) error {
+	if b.freeRunsPerMonth <= 0 || b.plans == nil || b.usage == nil {
 		return nil
 	}
-	if !s.tenantIsFree(ctx, tenant, "plan gate") {
+	if !b.tenantIsFree(ctx, tenant, "plan gate") {
 		return nil
 	}
-	used, err := s.runsThisMonth(ctx, tenant)
+	used, err := b.runsThisMonth(ctx, tenant)
 	if err != nil {
-		if s.Logger != nil {
-			s.Logger.Printf("plan gate [%s]: read usage (failing open): %v", tenant, err)
+		if b.logger != nil {
+			b.logger.Printf("plan gate [%s]: read usage (failing open): %v", tenant, err)
 		}
 		return nil
 	}
-	if used >= int64(s.FreeRunsPerMonth) {
+	if used >= int64(b.freeRunsPerMonth) {
 		return fmt.Errorf("%w: %d of %d free runs used this month — upgrade to keep your flows running",
-			core.ErrPlanLimit, used, s.FreeRunsPerMonth)
+			core.ErrPlanLimit, used, b.freeRunsPerMonth)
 	}
 	return nil
 }

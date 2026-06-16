@@ -8,7 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"sync"
+	"time"
 
 	"git.sr.ht/~klahr/hazyflow/core"
 )
@@ -52,13 +54,72 @@ import (
 //     under the new key. RewrapDEKs does this (hzd's
 //     --rotate-master-key); the DEK plaintexts — and so every stored
 //     ciphertext — are untouched, so no secret is re-entered.
-//   - Audit-logged: secret reads aren't logged today. Add when
-//     compliance asks.
+//   - Audit-logged by default: secret reads aren't logged unless
+//     HAZYFLOW_AUDIT_SECRET_READS is set (high-volume — resolution runs on
+//     every node execution). When on, Get emits a "secret.read" audit event
+//     (name + actor, never the value). See EnableReadAudit.
 type EncryptedSecrets struct {
 	mu    sync.Mutex
 	kek   cipher.AEAD
 	store secretsStore
 	deks  map[string]cipher.AEAD // tenant → AEAD; cached after first unwrap
+
+	// randReader sources the GCM nonces and freshly-generated DEKs. nil
+	// means crypto/rand.Reader (the only production value); tests inject a
+	// failing reader to exercise the must-halt-on-rand-failure paths —
+	// proceeding with a zero/partial nonce would risk catastrophic AES-GCM
+	// nonce reuse, so every read of it is checked.
+	randReader io.Reader
+
+	// readAudit, when non-nil, makes Get emit a best-effort "secret.read"
+	// audit event (name + actor, never the value). Disabled by default —
+	// secret resolution runs on every node execution, so it's high-volume —
+	// and turned on via HAZYFLOW_AUDIT_SECRET_READS (see EnableReadAudit).
+	readAudit core.AuditLog
+}
+
+// EnableReadAudit turns on best-effort auditing of secret reads, writing a
+// "secret.read" event for every successful Get. Off by default; cmd/hzd calls
+// this only when HAZYFLOW_AUDIT_SECRET_READS is set.
+func (e *EncryptedSecrets) EnableReadAudit(a core.AuditLog) {
+	e.readAudit = a
+}
+
+// auditRead records a best-effort "secret.read" event when read-auditing is
+// enabled. It logs the tenant, actor, and secret NAME only — never the value
+// (per the core.AuditEvent contract). A failed append is logged, never
+// surfaced to the caller: auditing must not break secret resolution.
+func (e *EncryptedSecrets) auditRead(ctx context.Context, tenant, name string) {
+	if e.readAudit == nil {
+		return
+	}
+	actor := "system"
+	if p, ok := PrincipalFromContext(ctx); ok && p.Subject != "" {
+		actor = p.Subject
+	}
+	var detail string
+	if flow, ok := core.FlowFromContext(ctx); ok && flow != "" {
+		detail = "flow=" + flow
+	}
+	if err := e.readAudit.Append(ctx, core.AuditEvent{
+		Time:   time.Now(),
+		Tenant: tenant,
+		Actor:  actor,
+		Action: "secret.read",
+		Target: name,
+		Detail: detail,
+	}); err != nil {
+		log.Printf("audit secret.read (%s/%s): %v", tenant, name, err)
+	}
+}
+
+// rng returns the entropy source for nonces and DEK material, defaulting to
+// crypto/rand.Reader when unset so struct-literal construction stays valid.
+func (e *EncryptedSecrets) rng() io.Reader {
+	if e.randReader != nil {
+		return e.randReader
+	}
+	return rand.Reader
 }
 
 // SecretsBackend is the exported alias for the persistence boundary so
@@ -189,6 +250,7 @@ func (e *EncryptedSecrets) Get(ctx context.Context, name string) (string, error)
 	for _, key := range candidates {
 		v, err := e.getRaw(ctx, tenant, key)
 		if err == nil {
+			e.auditRead(ctx, tenant, name)
 			return v, nil
 		}
 		if errors.Is(err, ErrSecretNotFound) {
@@ -249,7 +311,7 @@ func (e *EncryptedSecrets) Put(ctx context.Context, tenant, name, value string) 
 		return err
 	}
 	nonce := make([]byte, dek.NonceSize())
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+	if _, err := io.ReadFull(e.rng(), nonce); err != nil {
 		return fmt.Errorf("nonce: %w", err)
 	}
 	ct := dek.Seal(nil, nonce, []byte(value), nil)
@@ -311,7 +373,7 @@ func (e *EncryptedSecrets) RewrapDEKs(ctx context.Context, newMasterKey []byte) 
 		}
 
 		newNonce := make([]byte, newKEK.NonceSize())
-		if _, err := io.ReadFull(rand.Reader, newNonce); err != nil {
+		if _, err := io.ReadFull(e.rng(), newNonce); err != nil {
 			return rotated, skipped, fmt.Errorf("new wrap nonce for %q: %w", tenant, err)
 		}
 		newWrapped := newKEK.Seal(nil, newNonce, dekBytes, nil)
@@ -365,11 +427,11 @@ func (e *EncryptedSecrets) dekFor(ctx context.Context, tenant string) (cipher.AE
 	case errors.Is(err, ErrSecretNotFound):
 		// First-write path: provision a new DEK.
 		dekBytes := make([]byte, 32)
-		if _, err := io.ReadFull(rand.Reader, dekBytes); err != nil {
+		if _, err := io.ReadFull(e.rng(), dekBytes); err != nil {
 			return nil, fmt.Errorf("generate DEK: %w", err)
 		}
 		wrapNonce := make([]byte, e.kek.NonceSize())
-		if _, err := io.ReadFull(rand.Reader, wrapNonce); err != nil {
+		if _, err := io.ReadFull(e.rng(), wrapNonce); err != nil {
 			return nil, fmt.Errorf("dek nonce: %w", err)
 		}
 		wrappedDEK := e.kek.Seal(nil, wrapNonce, dekBytes, nil)

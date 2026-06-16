@@ -63,6 +63,22 @@ export class APIError extends Error {
   }
 }
 
+// isErrorCode reports whether err is an APIError carrying the given structured
+// ErrorEnvelope code (e.g. "not_found", "conflict"). Prefer this over
+// substring-matching err.message — the code is the stable, machine-readable
+// discriminator. Returns false for non-APIError values and for legacy routes
+// that still emit {"error":"<string>"} (empty code).
+export function isErrorCode(err: unknown, code: string): boolean {
+  return err instanceof APIError && err.code === code;
+}
+
+// isHTTPStatus reports whether err is an APIError with the given HTTP status.
+// Useful where the structured code isn't populated yet (legacy routes) but the
+// status still discriminates — prefer isErrorCode where a code exists.
+export function isHTTPStatus(err: unknown, status: number): boolean {
+  return err instanceof APIError && err.status === status;
+}
+
 // onUnauthorized is a process-wide hook fired whenever an *authenticated*
 // request (one that carried a credential) comes back 401 — i.e. the
 // daemon no longer accepts the token, so the session has expired or been

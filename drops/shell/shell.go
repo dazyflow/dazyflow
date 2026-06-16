@@ -162,7 +162,7 @@ func executeShell(ctx context.Context, job core.Job, progress chan<- core.Progre
 	}
 	workdir := filepath.Join(job.WorkspaceRoot, cleanRel)
 
-	args := paramStringSlice(job.Params, "args")
+	args := params.StringSlice(job.Params, "args")
 	timeoutMs := params.IntDefault(job.Params, "timeout_ms", defaultTimeoutMs)
 	maxBytes := params.IntDefault(job.Params, "max_output_bytes", defaultMaxOutputBytes)
 

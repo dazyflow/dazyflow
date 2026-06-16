@@ -1,4 +1,5 @@
-import { defineConfig } from "vite";
+/// <reference types="vitest/config" />
+import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
 // The dev server proxies /api/v1 to the daemon so the browser sees a
@@ -29,5 +30,13 @@ export default defineConfig({
   build: {
     outDir: "dist",
     sourcemap: true,
+  },
+  test: {
+    // jsdom so component tests can render React + query the DOM. Pure-function
+    // lib tests are unaffected (jsdom is a superset of the node globals they use).
+    environment: "jsdom",
+    globals: true,
+    setupFiles: ["./src/test/setup.ts"],
+    css: false,
   },
 });

@@ -62,7 +62,7 @@ func init() {
 					"token":{"type":"string","description":"Raw access token; overrides 'account'."},
 					"id":{"type":"string","title":"Message ID","description":"Which email to read. Overridden by the Message ID input when wired."},
 					"format":{"type":"string","title":"Fetch detail","x_advanced":true,"enum":["full","metadata","minimal"],"default":"full","description":"How much of the message to fetch (advanced)."},
-					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
+					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
 				"required":["id"]
 			}`),

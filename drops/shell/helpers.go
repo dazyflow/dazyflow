@@ -8,23 +8,6 @@ import (
 	"git.sr.ht/~klahr/hazyflow/core"
 )
 
-func paramStringSlice(params map[string]any, key string) []string {
-	v, ok := params[key]
-	if !ok {
-		return nil
-	}
-	arr, ok := v.([]any)
-	if !ok {
-		return nil
-	}
-	out := make([]string, 0, len(arr))
-	for _, item := range arr {
-		if s, ok := item.(string); ok {
-			out = append(out, s)
-		}
-	}
-	return out
-}
 
 // sandboxRel cleans rel and rejects absolute paths or "../" escapes so
 // callers can safely join it against job.WorkspaceRoot.

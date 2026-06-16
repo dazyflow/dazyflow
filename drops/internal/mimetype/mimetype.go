@@ -7,7 +7,51 @@
 // on which drop produced it. One definition keeps that consistent.
 package mimetype
 
-import "strings"
+import (
+	"path/filepath"
+	"strings"
+)
+
+// GuessByExt maps a filename's extension to a MIME type, covering the file
+// types the workspace catalogue actually deals with — spreadsheets, CSVs,
+// JSON, common text and images. It deliberately avoids the stdlib mime
+// package, whose mapping is OS-dependent (it reads /etc/mime.types on Linux)
+// — reproducibility noise we don't need. Unknown extensions fall back to
+// application/octet-stream, matching what file_read settles on when no MIME
+// is supplied.
+func GuessByExt(path string) string {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".xlsx", ".xlsm":
+		return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+	case ".xls":
+		return "application/vnd.ms-excel"
+	case ".csv":
+		return "text/csv"
+	case ".json":
+		return "application/json"
+	case ".jsonl", ".ndjson":
+		return "application/x-ndjson"
+	case ".txt", ".log":
+		return "text/plain"
+	case ".md":
+		return "text/markdown"
+	case ".html", ".htm":
+		return "text/html"
+	case ".xml":
+		return "application/xml"
+	case ".yaml", ".yml":
+		return "application/yaml"
+	case ".pdf":
+		return "application/pdf"
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".sqlite", ".db":
+		return "application/vnd.sqlite3"
+	}
+	return "application/octet-stream"
+}
 
 // IsText reports whether a MIME type denotes textual content. It strips
 // any parameters ("text/plain; charset=utf-8" → "text/plain"), treats

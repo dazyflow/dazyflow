@@ -62,6 +62,8 @@ function distToSeg(p: WP, a: WP, b: WP): number {
 
 export function RerouteEdge({
   id,
+  source,
+  target,
   sourceX,
   sourceY,
   targetX,
@@ -144,7 +146,8 @@ export function RerouteEdge({
   };
 
   return (
-    <>
+    // Label the connection for assistive tech: which two steps it wires.
+    <g role="img" aria-label={`connection from ${source} to ${target}`}>
       <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />
       {/* Data-flow animation (#9): dots travel source→target along the path
           while the downstream node is running. Two staggered dots read as
@@ -177,6 +180,6 @@ export function RerouteEdge({
           onDoubleClick={onKnotRemove(i)}
         />
       ))}
-    </>
+    </g>
   );
 }

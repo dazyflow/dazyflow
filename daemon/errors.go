@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 )
@@ -58,7 +59,12 @@ func writeAPIError(rw http.ResponseWriter, status int, code, message string, det
 		Message: message,
 		Details: details,
 	}}
-	_ = json.NewEncoder(rw).Encode(env)
+	// Encode failures here mean the client connection broke mid-write, so the
+	// caller already got a partial/empty body. Log it so a truncated error
+	// response leaves a trace instead of vanishing silently.
+	if err := json.NewEncoder(rw).Encode(env); err != nil {
+		log.Printf("writeAPIError: encode envelope (status=%d code=%s): %v", status, code, err)
+	}
 }
 
 // codeForStatus maps an HTTP status to the stable snake_case error code
@@ -124,10 +130,12 @@ func (w *jsonErrorWriter) WriteHeader(status int) {
 		w.swallow = true
 		w.Header().Set("Content-Type", "application/json")
 		w.ResponseWriter.WriteHeader(status)
-		_ = json.NewEncoder(w.ResponseWriter).Encode(ErrorEnvelope{Error: ErrorBody{
+		if err := json.NewEncoder(w.ResponseWriter).Encode(ErrorEnvelope{Error: ErrorBody{
 			Code:    codeForStatus(status),
 			Message: http.StatusText(status),
-		}})
+		}}); err != nil {
+			log.Printf("jsonErrors: encode default %d envelope: %v", status, err)
+		}
 		return
 	}
 	w.ResponseWriter.WriteHeader(status)

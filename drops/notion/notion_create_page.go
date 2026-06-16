@@ -63,7 +63,7 @@ func init() {
 					"parent_page_id":{"type":"string","title":"Add under page","description":"The page the new page goes under (as a subpage) — paste its ID. Set this or 'Add to database', not both."},
 					"properties":{"type":"object","title":"Properties (Notion JSON)","x_advanced":true,"description":"Raw Notion properties object for extra database columns, passed through verbatim and merged with Title (advanced)."},
 					"children":{"type":"array","items":{},"title":"Body blocks (Notion JSON)","x_advanced":true,"description":"Raw Notion block objects for the page body (advanced)."},
-					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
+					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				}
 			}`),
 			Idempotent:  false,

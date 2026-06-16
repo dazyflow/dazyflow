@@ -61,7 +61,7 @@ func init() {
 					"types":{"type":"string","title":"Which channels","default":"public_channel,private_channel","enum":["public_channel","public_channel,private_channel","im,mpim","public_channel,private_channel,im,mpim"],"enumNames":["Public channels","Public + private channels","Direct messages","Everything the bot can see"]},
 					"limit":{"type":"integer","title":"Max channels","x_advanced":true,"default":200,"minimum":1,"maximum":1000},
 					"exclude_archived":{"type":"boolean","title":"Skip archived channels","default":true},
-					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
+					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				}
 			}`),
 			Idempotent: true,

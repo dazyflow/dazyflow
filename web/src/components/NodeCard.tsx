@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Handle, Position, useStore, type NodeProps } from "@xyflow/react";
 import { AlertTriangle, AlertCircle, ChevronRight, Repeat } from "lucide-react";
 import i18n from "../i18n";
@@ -86,7 +87,11 @@ function operatorSymbol(m: Manifest): string {
   return m.label ?? "?";
 }
 
-export function HazyNode({ data, selected }: NodeProps) {
+// HazyNodeImpl is wrapped in React.memo (exported as HazyNode below) so a node
+// only re-renders when its own props change. This pairs with FlowEditor's
+// granular per-node memoisation of `data`: unchanged nodes keep a stable data
+// reference, so editing one field redraws only that card, not every node.
+function HazyNodeImpl({ data, selected }: NodeProps) {
   const d = data as HazyNodeData;
   const Icon = iconFor(d.manifest?.icon, d.manifest?.category);
   const color = dropColor(d.manifest?.category, d.manifest?.color);
@@ -243,6 +248,11 @@ export function HazyNode({ data, selected }: NodeProps) {
         (d.setupNeeded ? " needs-setup" : "") +
         (d.paused ? " paused" : "")
       }
+      // Identify the card to assistive tech: a labelled group naming the step,
+      // its module, and (via aria-selected) whether it's the current selection.
+      role="group"
+      aria-label={`${d.label || d.moduleID} (${d.moduleID})${d.disabled ? ", disabled" : ""} flow step`}
+      aria-selected={selected}
       style={isTrigger ? ({ "--node-accent": color } as React.CSSProperties) : undefined}
     >
       {d.breakpoint && (
@@ -541,6 +551,11 @@ export function HazyNode({ data, selected }: NodeProps) {
     </div>
   );
 }
+
+// HazyNode is the memoised node renderer registered with React Flow. With
+// FlowEditor handing each node a referentially-stable `data` object, memo lets
+// an unedited card skip re-rendering when another node's field changes.
+export const HazyNode = memo(HazyNodeImpl);
 
 // ParamInput renders the editor for one primitive param. The control follows
 // the schema: enum → select, boolean → switch, integer/number → number

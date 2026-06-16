@@ -350,6 +350,10 @@ you expose the daemon; see `.env.example` for the detail.
   DB/SMTP drop hosts).
 - `HAZYFLOW_ENABLE_SHELL` — **off** by default; on, it's host RCE for anyone
   who can run a flow. Single-tenant / CI box only.
+- `HAZYFLOW_AUDIT_SECRET_READS` — **off** by default; on, every successful
+  secret resolution emits a `secret.read` audit event (secret name + actor,
+  never the value). High-volume (resolution runs on every node execution) —
+  enable only when a compliance regime requires a read trail.
 - Secrets are referenced as `${secret.NAME}` and live in the per-tenant
   encrypted store, set via the API / UI.
 

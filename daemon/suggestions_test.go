@@ -168,3 +168,48 @@ func TestDropSuggestions_EmptyWorkspace(t *testing.T) {
 		t.Errorf("empty workspace should yield no suggestions, got %v", items)
 	}
 }
+
+// TestDropSuggestions_CacheInvalidatesOnSave pins the memo's invalidation
+// contract: the result is cached keyed on the workspace HEAD, so a save (which
+// moves HEAD) must transparently surface in the next call rather than serving
+// a stale cached answer.
+func TestDropSuggestions_CacheInvalidatesOnSave(t *testing.T) {
+	h := newVisibilityHarness(t)
+	ctx := context.Background()
+
+	if _, err := h.svc.SaveGraph(ctx, h.alice, core.Graph{
+		ID: "f1", Tenant: "t", Workspace: "ws",
+		Nodes: []core.Node{{ID: "a", Module: "http_fetch"}, {ID: "b", Module: "parse_json"}},
+		Edges: []core.Edge{edge("a", "b")},
+	}); err != nil {
+		t.Fatalf("save f1: %v", err)
+	}
+	// Prime the cache.
+	first, err := h.svc.DropSuggestions(ctx, h.alice, "t", "ws")
+	if err != nil {
+		t.Fatalf("first suggestions: %v", err)
+	}
+	if findAdj(first, "http_fetch", "parse_json") == nil {
+		t.Fatal("expected http_fetch→parse_json after first save")
+	}
+	if findAdj(first, "http_fetch", "shell") != nil {
+		t.Fatal("did not expect http_fetch→shell yet")
+	}
+
+	// A second save moves HEAD; the memo must invalidate, not serve the
+	// primed result.
+	if _, err := h.svc.SaveGraph(ctx, h.alice, core.Graph{
+		ID: "f2", Tenant: "t", Workspace: "ws",
+		Nodes: []core.Node{{ID: "a", Module: "http_fetch"}, {ID: "c", Module: "shell"}},
+		Edges: []core.Edge{edge("a", "c")},
+	}); err != nil {
+		t.Fatalf("save f2: %v", err)
+	}
+	second, err := h.svc.DropSuggestions(ctx, h.alice, "t", "ws")
+	if err != nil {
+		t.Fatalf("second suggestions: %v", err)
+	}
+	if findAdj(second, "http_fetch", "shell") == nil {
+		t.Error("cache was not invalidated on save: new http_fetch→shell edge missing")
+	}
+}

@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
-	"strings"
 
 	"git.sr.ht/~klahr/hazyflow/core"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/mimetype"
@@ -103,7 +101,7 @@ func executeFilePicker(_ context.Context, job core.Job, _ chan<- core.Progress) 
 
 	mime, _ := params.StringOpt(job.Params, "mime")
 	if mime == "" {
-		mime = guessMIMEByExt(path)
+		mime = mimetype.GuessByExt(path)
 	}
 
 	fileRef := core.Ref{MIME: mime, Ref: path}
@@ -139,42 +137,3 @@ func executeFilePicker(_ context.Context, job core.Job, _ chan<- core.Progress) 
 	}, nil
 }
 
-// guessMIMEByExt covers the file types the workspace catalogue
-// actually deals with — spreadsheets, CSVs, JSON, common text. We
-// don't pull in the stdlib mime package because its mapping is OS-
-// dependent (reads /etc/mime.types on Linux) and that's reproducibility
-// noise we don't need. Fallback is application/octet-stream, which is
-// what file_read already settles on when no MIME is supplied.
-func guessMIMEByExt(path string) string {
-	switch strings.ToLower(filepath.Ext(path)) {
-	case ".xlsx", ".xlsm":
-		return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-	case ".xls":
-		return "application/vnd.ms-excel"
-	case ".csv":
-		return "text/csv"
-	case ".json":
-		return "application/json"
-	case ".jsonl", ".ndjson":
-		return "application/x-ndjson"
-	case ".txt", ".log":
-		return "text/plain"
-	case ".md":
-		return "text/markdown"
-	case ".html", ".htm":
-		return "text/html"
-	case ".xml":
-		return "application/xml"
-	case ".yaml", ".yml":
-		return "application/yaml"
-	case ".pdf":
-		return "application/pdf"
-	case ".png":
-		return "image/png"
-	case ".jpg", ".jpeg":
-		return "image/jpeg"
-	case ".sqlite", ".db":
-		return "application/vnd.sqlite3"
-	}
-	return "application/octet-stream"
-}

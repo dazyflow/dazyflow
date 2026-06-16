@@ -1,0 +1,160 @@
+package daemon
+
+import (
+	"context"
+	"log"
+	"testing"
+
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/hazyflow/engine/jobstore"
+)
+
+// succeededWith builds a succeeded predecessor record whose Result exposes the
+// given output ports.
+func succeededWith(ports ...string) core.JobRecord {
+	out := map[string]core.Ref{}
+	for _, p := range ports {
+		out[p] = core.Ref{Inline: "x"}
+	}
+	return core.JobRecord{Status: core.JobStatusSucceeded, Result: &core.Result{Output: out}}
+}
+
+// TestClassifyEdge exhaustively covers the pure edge-outcome decision that
+// drives skip/wait/enqueue: (predecessor status, edge OnError, FromPort,
+// whether the FromPort produced output) → active / dormant / blocking.
+func TestClassifyEdge(t *testing.T) {
+	cases := []struct {
+		name string
+		pred core.JobRecord
+		edge core.Edge
+		want edgeOutcome
+	}{
+		// --- predecessor SUCCEEDED ---
+		{"succeeded, output present → active",
+			succeededWith("out"), core.Edge{FromPort: "out"}, edgeActive},
+		{"succeeded, FromPort had no output → dormant",
+			succeededWith("other"), core.Edge{FromPort: "out"}, edgeDormant},
+		{"succeeded, nil result → dormant",
+			core.JobRecord{Status: core.JobStatusSucceeded}, core.Edge{FromPort: "out"}, edgeDormant},
+		{"succeeded, fallback edge → dormant (primary lived)",
+			succeededWith("out"), core.Edge{FromPort: "out", OnError: core.OnErrorFallback}, edgeDormant},
+		{"succeeded, pass control pin → active even with no data",
+			core.JobRecord{Status: core.JobStatusSucceeded}, core.Edge{FromPort: core.PassPort}, edgeActive},
+
+		// --- predecessor FAILED ---
+		{"failed, skip edge → active",
+			core.JobRecord{Status: core.JobStatusFailed}, core.Edge{FromPort: "out", OnError: core.OnErrorSkip}, edgeActive},
+		{"failed, fallback edge → active",
+			core.JobRecord{Status: core.JobStatusFailed}, core.Edge{FromPort: "out", OnError: core.OnErrorFallback}, edgeActive},
+		{"failed, abort (default) → blocking",
+			core.JobRecord{Status: core.JobStatusFailed}, core.Edge{FromPort: "out", OnError: core.OnErrorAbort}, edgeBlocking},
+		{"failed, retry → blocking",
+			core.JobRecord{Status: core.JobStatusFailed}, core.Edge{FromPort: "out", OnError: core.OnErrorRetry}, edgeBlocking},
+
+		// --- predecessor SKIPPED ---
+		{"skipped, skip edge → active (skip cascades)",
+			core.JobRecord{Status: core.JobStatusSkipped}, core.Edge{FromPort: "out", OnError: core.OnErrorSkip}, edgeActive},
+		{"skipped, fallback edge → dormant",
+			core.JobRecord{Status: core.JobStatusSkipped}, core.Edge{FromPort: "out", OnError: core.OnErrorFallback}, edgeDormant},
+		{"skipped, abort → blocking",
+			core.JobRecord{Status: core.JobStatusSkipped}, core.Edge{FromPort: "out", OnError: core.OnErrorAbort}, edgeBlocking},
+
+		// --- other statuses ---
+		{"cancelled → blocking",
+			core.JobRecord{Status: core.JobStatusCancelled}, core.Edge{FromPort: "out", OnError: core.OnErrorSkip}, edgeBlocking},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := classifyEdge(c.pred, c.edge); got != c.want {
+				t.Errorf("classifyEdge = %d, want %d", got, c.want)
+			}
+		})
+	}
+}
+
+// TestAnalyzeDependent covers how analyzeDependent aggregates a dependent's
+// incoming edges into the waiting / skipped / enqueue decision, including the
+// "predecessor not recorded" and "predecessor still running" waiting paths.
+func TestAnalyzeDependent(t *testing.T) {
+	const runID = "run1"
+	// Build a graph: preds A, B feed dependent D over the given edges.
+	mkGraph := func(edges ...core.Edge) core.Graph {
+		return core.Graph{ID: "g", Nodes: []core.Node{{ID: "A"}, {ID: "B"}, {ID: "D"}}, Edges: edges}
+	}
+	// seed writes a terminal/own-status predecessor record into the store.
+	seed := func(store core.JobStore, nodeID string, status core.JobStatus, ports ...string) {
+		out := map[string]core.Ref{}
+		for _, p := range ports {
+			out[p] = core.Ref{Inline: "x"}
+		}
+		_ = store.Enqueue(context.Background(), core.JobRecord{
+			ID: NodeJobID(runID, nodeID), GraphRunID: runID, NodeID: nodeID, Status: status,
+			Result: &core.Result{Output: out},
+		})
+	}
+
+	cases := []struct {
+		name       string
+		edges      []core.Edge
+		seed       func(core.JobStore)
+		wantDecide dependentDecision
+	}{
+		{
+			name:  "predecessor not recorded → waiting",
+			edges: []core.Edge{{From: "A", To: "D", FromPort: "out"}},
+			seed:  func(core.JobStore) {},
+			wantDecide: depWaiting,
+		},
+		{
+			name:  "predecessor still running → waiting",
+			edges: []core.Edge{{From: "A", To: "D", FromPort: "out"}},
+			seed: func(s core.JobStore) {
+				_ = s.Enqueue(context.Background(), core.JobRecord{
+					ID: NodeJobID(runID, "A"), GraphRunID: runID, NodeID: "A", Status: core.JobStatusRunning,
+				})
+			},
+			wantDecide: depWaiting,
+		},
+		{
+			name:  "one active edge → enqueue",
+			edges: []core.Edge{{From: "A", To: "D", FromPort: "out"}},
+			seed: func(s core.JobStore) {
+				seed(s, "A", core.JobStatusSucceeded, "out")
+			},
+			wantDecide: depEnqueue,
+		},
+		{
+			name:  "all dormant → skipped",
+			edges: []core.Edge{{From: "A", To: "D", FromPort: "out"}},
+			seed: func(s core.JobStore) {
+				seed(s, "A", core.JobStatusSucceeded) // succeeded but FromPort had no output
+			},
+			wantDecide: depSkipped,
+		},
+		{
+			name: "one blocking edge → skipped (even with an active sibling)",
+			edges: []core.Edge{
+				{From: "A", To: "D", FromPort: "out"},
+				{From: "B", To: "D", FromPort: "out", OnError: core.OnErrorAbort},
+			},
+			seed: func(s core.JobStore) {
+				seed(s, "A", core.JobStatusSucceeded, "out") // active
+				seed(s, "B", core.JobStatusFailed)           // abort → blocking
+			},
+			wantDecide: depSkipped,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			store := jobstore.NewMemory()
+			c.seed(store)
+			d := NewDispatcher(store, NewMemoryBus(), &engine.Engine{}, log.New(log.Writer(), "", 0))
+			got, _ := d.analyzeDependent(context.Background(), mkGraph(c.edges...), runID, "D")
+			if got != c.wantDecide {
+				t.Errorf("analyzeDependent = %d, want %d", got, c.wantDecide)
+			}
+		})
+	}
+}

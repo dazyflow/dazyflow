@@ -31,10 +31,11 @@ import (
 // the key is hashed for any internal telemetry. (Not done in v1, but
 // the design supports it.)
 
-// pgPoolKey uniquely identifies a pool. Two jobs with the same key
-// share a pool; different tenants are isolated even when they happen
-// to point at the same DSN.
-type pgPoolKey struct {
+// dbConnKey uniquely identifies a pooled connection — a pgx pool or a
+// database/sql handle. Two jobs with the same key share the connection;
+// different tenants are isolated even when they happen to point at the same
+// DSN. The shape is SQL-agnostic, so both registries below key on it.
+type dbConnKey struct {
 	tenant string
 	dsn    string
 }
@@ -52,7 +53,7 @@ type pgEntry struct {
 // detect) and from short-lived CLI invocations.
 type pgPoolRegistry struct {
 	mu        sync.Mutex
-	pools     map[pgPoolKey]*pgEntry
+	pools     map[dbConnKey]*pgEntry
 	idle      time.Duration // pools unused for this long get closed
 	sweepGap  time.Duration // minimum interval between sweeps
 	lastSweep time.Time
@@ -60,7 +61,7 @@ type pgPoolRegistry struct {
 
 func newPGPoolRegistry(idle, sweepGap time.Duration) *pgPoolRegistry {
 	return &pgPoolRegistry{
-		pools:    map[pgPoolKey]*pgEntry{},
+		pools:    map[dbConnKey]*pgEntry{},
 		idle:     idle,
 		sweepGap: sweepGap,
 	}
@@ -88,7 +89,7 @@ func (r *pgPoolRegistry) pgPool(ctx context.Context, tenant, dsn string) (*pgxpo
 		r.sweepLocked(time.Now())
 	}
 
-	key := pgPoolKey{tenant: tenant, dsn: dsn}
+	key := dbConnKey{tenant: tenant, dsn: dsn}
 	if e, ok := r.pools[key]; ok {
 		e.lastUse = time.Now()
 		return e.pool, nil
@@ -124,7 +125,7 @@ func (r *pgPoolRegistry) pgPool(ctx context.Context, tenant, dsn string) (*pgxpo
 // is unspecified, which I'd rather not rely on.
 func (r *pgPoolRegistry) sweepLocked(now time.Time) {
 	r.lastSweep = now
-	var victims []pgPoolKey
+	var victims []dbConnKey
 	for k, e := range r.pools {
 		if now.Sub(e.lastUse) > r.idle {
 			victims = append(victims, k)
@@ -167,7 +168,7 @@ type sqlDBEntry struct {
 
 type sqlDBRegistry struct {
 	mu        sync.Mutex
-	dbs       map[pgPoolKey]*sqlDBEntry // reuses the {tenant, dsn} key shape
+	dbs       map[dbConnKey]*sqlDBEntry
 	idle      time.Duration
 	sweepGap  time.Duration
 	lastSweep time.Time
@@ -179,7 +180,7 @@ type sqlDBRegistry struct {
 
 func newSQLDBRegistry(driverName string, idle, sweepGap time.Duration) *sqlDBRegistry {
 	return &sqlDBRegistry{
-		dbs:        map[pgPoolKey]*sqlDBEntry{},
+		dbs:        map[dbConnKey]*sqlDBEntry{},
 		idle:       idle,
 		sweepGap:   sweepGap,
 		driverName: driverName,
@@ -204,7 +205,7 @@ func (r *sqlDBRegistry) sqlDB(ctx context.Context, tenant, dsn string) (*sql.DB,
 		r.sweepLocked(time.Now())
 	}
 
-	key := pgPoolKey{tenant: tenant, dsn: dsn}
+	key := dbConnKey{tenant: tenant, dsn: dsn}
 	if e, ok := r.dbs[key]; ok {
 		e.lastUse = time.Now()
 		return e.db, nil
@@ -236,7 +237,7 @@ func (r *sqlDBRegistry) sqlDB(ctx context.Context, tenant, dsn string) (*sql.DB,
 
 func (r *sqlDBRegistry) sweepLocked(now time.Time) {
 	r.lastSweep = now
-	var victims []pgPoolKey
+	var victims []dbConnKey
 	for k, e := range r.dbs {
 		if now.Sub(e.lastUse) > r.idle {
 			victims = append(victims, k)

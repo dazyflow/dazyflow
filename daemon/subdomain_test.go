@@ -55,6 +55,36 @@ func TestOriginAllowed(t *testing.T) {
 	if off.originAllowed("https://acme.hazyflow.app") {
 		t.Error("subdomain should not be allowed when WildcardDomain is empty")
 	}
+
+	// An overly-broad wildcard ("com") must trust nobody, not every ".com".
+	broad := &HTTPGateway{WildcardDomain: "com"}
+	for _, o := range []string{"https://evil.com", "https://anything.com"} {
+		if broad.originAllowed(o) {
+			t.Errorf("originAllowed(%q) = true with WildcardDomain=\"com\"; a single-label wildcard must match nothing", o)
+		}
+	}
+}
+
+func TestIsValidWildcardDomain(t *testing.T) {
+	cases := []struct {
+		domain string
+		want   bool
+	}{
+		{"hazyflow.app", true},
+		{"a.b.example.com", true},
+		{"HazyFlow.App", true},   // case-insensitive
+		{".hazyflow.app.", true}, // surrounding dots trimmed
+		{"", false},              // disabled
+		{"com", false},           // single label (public suffix)
+		{"localhost", false},     // single label
+		{"hazyflow..app", false}, // empty inner label
+		{".", false},
+	}
+	for _, c := range cases {
+		if got := IsValidWildcardDomain(c.domain); got != c.want {
+			t.Errorf("IsValidWildcardDomain(%q) = %v, want %v", c.domain, got, c.want)
+		}
+	}
 }
 
 func TestSafeReturnPath(t *testing.T) {

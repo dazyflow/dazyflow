@@ -54,7 +54,7 @@ func init() {
 					"include_prs":{"type":"boolean","title":"Include pull requests","x_advanced":true,"default":false,"description":"GitHub's issues API also returns pull requests. Off (default) filters them out so you get only real issues."},
 					"max_results":{"type":"integer","title":"Max results","default":100,"minimum":1,"maximum":1000,"description":"Stop after this many issues, fetching across pages as needed."},
 					"per_page":{"type":"integer","title":"Page size","x_advanced":true,"default":100,"minimum":1,"maximum":100,"description":"How many issues to request per page while paginating."},
-					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
+					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
 				"required":["owner","repo"]
 			}`),
@@ -75,15 +75,15 @@ func executeGitHubListIssues(ctx context.Context, job core.Job, _ chan<- core.Pr
 		return params.Err(job, "auth", err.Error()), nil
 	}
 
-	maxResults := clampInt(params.IntDefault(job.Params, "max_results", 100), 1, 1000)
-	perPage := clampInt(params.IntDefault(job.Params, "per_page", 100), 1, 100)
+	maxResults := params.ClampInt(params.IntDefault(job.Params, "max_results", 100), 1, 1000)
+	perPage := params.ClampInt(params.IntDefault(job.Params, "per_page", 100), 1, 100)
 	includePRs := params.BoolDefault(job.Params, "include_prs", false)
 	timeoutMS := params.IntDefault(job.Params, "timeout_ms", 15000)
 
 	q := url.Values{}
 	q.Set("state", params.StringDefault(job.Params, "state", "open"))
 	q.Set("per_page", strconv.Itoa(perPage))
-	if labels := paramStringSlice(job.Params, "labels"); len(labels) > 0 {
+	if labels := params.StringSlice(job.Params, "labels"); len(labels) > 0 {
 		q.Set("labels", strings.Join(labels, ","))
 	}
 	if a, _ := params.StringOpt(job.Params, "assignee"); a != "" {

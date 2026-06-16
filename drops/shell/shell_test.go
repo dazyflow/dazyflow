@@ -245,24 +245,6 @@ func TestSandboxRel(t *testing.T) {
 	}
 }
 
-func TestParamStringSlice(t *testing.T) {
-	if got := paramStringSlice(map[string]any{}, "args"); got != nil {
-		t.Errorf("absent: got %v, want nil", got)
-	}
-	if got := paramStringSlice(map[string]any{"args": "not-a-slice"}, "args"); got != nil {
-		t.Errorf("wrong type: got %v, want nil", got)
-	}
-	got := paramStringSlice(map[string]any{"args": []any{"-c", "echo", 42, "hi"}}, "args")
-	want := []string{"-c", "echo", "hi"} // non-strings are skipped
-	if len(got) != len(want) {
-		t.Fatalf("got %v, want %v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("got %v, want %v", got, want)
-		}
-	}
-}
 
 func TestBoundedBuffer(t *testing.T) {
 	t.Run("truncates at limit", func(t *testing.T) {

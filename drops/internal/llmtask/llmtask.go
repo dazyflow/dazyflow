@@ -133,7 +133,7 @@ func PostJSON(ctx context.Context, endpoint string, headers map[string]string, b
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	if err := hfnet.EgressAllowed(endpoint); err != nil {
+	if err := hfnet.EgressAllowedFor(ctx, endpoint); err != nil {
 		return 0, nil, &core.JobError{Code: "egress_blocked", Message: err.Error()}
 	}
 	resp, err := hfnet.SafeHTTPClient(timeout, hfnet.PrivateEgressAllowed()).Do(req)
@@ -170,7 +170,7 @@ func GetStatus(ctx context.Context, endpoint string, headers map[string]string) 
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	if err := hfnet.EgressAllowed(endpoint); err != nil {
+	if err := hfnet.EgressAllowedFor(ctx, endpoint); err != nil {
 		return 0, nil, err
 	}
 	resp, err := hfnet.SafeHTTPClient(timeout, hfnet.PrivateEgressAllowed()).Do(req)
@@ -310,7 +310,7 @@ func baseProps(cfg Config) map[string]any {
 		"model":      map[string]any{"type": "string", "title": "Model", "x_advanced": true, "enum": enum, "enumNames": names, "default": cfg.DefaultModel},
 		"api_key":    map[string]any{"type": "string", "x_advanced": true, "description": "Injected from the " + cfg.Integration + " connection — leave unset."},
 		"base_url":   map[string]any{"type": "string", "x_advanced": true, "description": "Override the API host."},
-		"timeout_ms": map[string]any{"type": "integer", "default": 60000, "minimum": 1},
+		"timeout_ms": map[string]any{"type": "integer", "default": 60000, "minimum": 1, "description": "Hard deadline for the AI request, in milliseconds."},
 	}
 }
 

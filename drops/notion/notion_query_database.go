@@ -63,7 +63,7 @@ func init() {
 					"filter":{"type":"object","title":"Filter (Notion JSON)","x_advanced":true,"description":"Raw Notion filter object, passed through verbatim (advanced)."},
 					"sorts":{"type":"array","items":{},"title":"Sort (Notion JSON)","x_advanced":true,"description":"Raw Notion sorts array, passed through verbatim (advanced)."},
 					"start_cursor":{"type":"string","title":"Start cursor","x_advanced":true,"description":"Pagination cursor from a prior run's next_cursor output (advanced)."},
-					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
+					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
 				"required":["database_id"]
 			}`),

@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -54,6 +55,11 @@ type HTTPGateway struct {
 	// authHandoff). Empty disables all per-org-subdomain behaviour, so
 	// single-host deployments are unaffected. Wired from
 	// $HAZYFLOW_WILDCARD_DOMAIN.
+	//
+	// Must have at least two labels (e.g. "hazyflow.app"). A single-label
+	// value like "com" would suffix-match every ".com" origin and is
+	// rejected: cmd/hzd refuses to boot on one, and originAllowed ignores it
+	// (trusts nobody) as a defense-in-depth backstop. See IsValidWildcardDomain.
 	WildcardDomain string
 
 	// Sessions and Users power the email+password sign-in flow. Both
@@ -104,6 +110,13 @@ type HTTPGateway struct {
 	// so removing an email + re-login revokes it. Wired from
 	// $HAZYFLOW_PLATFORM_ADMINS.
 	PlatformAdmins []string
+
+	// platformAdminGranted remembers which allowlisted emails have already
+	// had a "platform_admin.granted" audit event emitted this process, so the
+	// escalation is recorded on first apply rather than on every session
+	// issue (elevatePlatformAdmin runs at each sign-in/SSO). Keyed by
+	// lowercased email → struct{}.
+	platformAdminGranted sync.Map
 
 	// UpdateURL is the canonical deployment's public service descriptor
 	// (GET /api/v1), whose build.version the admin System section reads as
@@ -252,7 +265,7 @@ func (h *HTTPGateway) ServeListener(ctx context.Context, ln net.Listener) error 
 	mux := http.NewServeMux()
 	h.mountRoutes(mux)
 	srv := &http.Server{
-		Handler:           h.withCORSAndLogging(h.verifyCookieOrigin(jsonErrors(mux))),
+		Handler:           h.withCORSAndLogging(h.verifyCookieOrigin(h.limitRequestBody(jsonErrors(mux)))),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		// No WriteTimeout — SSE responses are long-lived. Per-request
@@ -278,7 +291,9 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// Liveness: the process is up and serving. Never touches deps.
 	mux.HandleFunc("GET /healthz", func(rw http.ResponseWriter, _ *http.Request) {
 		rw.WriteHeader(http.StatusOK)
-		_, _ = rw.Write([]byte("ok"))
+		if _, err := rw.Write([]byte("ok")); err != nil {
+			h.logger.Printf("healthz: write response: %v", err)
+		}
 	})
 	// Readiness: can the process actually serve requests (deps reachable)?
 	// ReadyCheck is nil for the dev/in-memory deployment — then ready ==
@@ -294,7 +309,9 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 			}
 		}
 		rw.WriteHeader(http.StatusOK)
-		_, _ = rw.Write([]byte("ready"))
+		if _, err := rw.Write([]byte("ready")); err != nil {
+			h.logger.Printf("readyz: write response: %v", err)
+		}
 	})
 	// Prometheus scrape endpoint, opt-in (exposes tenant names + usage).
 	if h.EnableMetrics {
@@ -303,7 +320,10 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/auth/signin", h.rateLimitAuth(h.signIn))
 	mux.HandleFunc("POST /api/v1/auth/signup", h.rateLimitAuth(h.signUp))
 	mux.HandleFunc("POST /api/v1/auth/verify-email", h.rateLimitAuth(h.verifyEmail))
-	mux.HandleFunc("POST /api/v1/me/verification/resend", h.requireAuth(h.resendVerification))
+	// Rate-limited like the other auth routes: resend mints+sends a fresh
+	// token, so an authenticated client must not be able to hammer it to spam
+	// email or churn tokens. IP limiter wraps the auth check.
+	mux.HandleFunc("POST /api/v1/me/verification/resend", h.rateLimitAuth(h.requireAuth(h.resendVerification)))
 	mux.HandleFunc("POST /api/v1/auth/signout", h.signOut)
 	// Leg 2 of sign-in for TOTP-enrolled users. Unauthenticated (the
 	// challenge token is the principal) and rate-limited like the rest
@@ -718,7 +738,7 @@ func webDistHandler(root string) http.Handler {
 func ServeForTest(h *HTTPGateway, rw http.ResponseWriter, r *http.Request) {
 	mux := http.NewServeMux()
 	h.mountRoutes(mux)
-	h.withCORSAndLogging(h.verifyCookieOrigin(jsonErrors(mux))).ServeHTTP(rw, r)
+	h.withCORSAndLogging(h.verifyCookieOrigin(h.limitRequestBody(jsonErrors(mux)))).ServeHTTP(rw, r)
 }
 
 // verifyCookieOrigin is the CSRF defense layer for cookie-authenticated
@@ -889,7 +909,12 @@ func (h *HTTPGateway) originAllowed(origin string) bool {
 			return true
 		}
 	}
-	if h.WildcardDomain != "" {
+	// Only honour the wildcard if it's specific enough to be safe. A
+	// single-label value like "com" would suffix-match every ".com" origin —
+	// catastrophic — so a misconfigured domain trusts nobody rather than
+	// everybody. cmd/hzd also rejects such a value at boot (fail-loud); this
+	// is the defense-in-depth backstop on the request path.
+	if IsValidWildcardDomain(h.WildcardDomain) {
 		if u, err := url.Parse(origin); err == nil {
 			if hostIsSubdomainOf(u.Hostname(), h.WildcardDomain) {
 				return true
@@ -906,6 +931,30 @@ func hostIsSubdomainOf(host, domain string) bool {
 	host = strings.ToLower(strings.TrimSuffix(host, "."))
 	domain = strings.ToLower(domain)
 	return domain != "" && strings.HasSuffix(host, "."+domain)
+}
+
+// IsValidWildcardDomain reports whether d is specific enough to use as a
+// CORS/CSRF subdomain-suffix match. It requires at least two non-empty labels
+// (one dot), so "hazyflow.app" is accepted but a bare public suffix like "com"
+// — which would trust every ".com" origin — is rejected. This is a coarse
+// label-count guard, not a public-suffix-list check: a value like "co.uk"
+// passes the count but is still a registry suffix, so operators must not set
+// one. Empty d (wildcard disabled) returns false.
+func IsValidWildcardDomain(d string) bool {
+	d = strings.Trim(strings.TrimSpace(strings.ToLower(d)), ".")
+	if d == "" {
+		return false
+	}
+	labels := strings.Split(d, ".")
+	if len(labels) < 2 {
+		return false
+	}
+	for _, l := range labels {
+		if l == "" {
+			return false
+		}
+	}
+	return true
 }
 
 // --- Handlers ---------------------------------------------------------
@@ -958,7 +1007,7 @@ func (h *HTTPGateway) signIn(rw http.ResponseWriter, r *http.Request) {
 	if ttl <= 0 {
 		ttl = 24 * time.Hour
 	}
-	sess, token, err := auth.IssueSession(r.Context(), h.Sessions, h.elevatePlatformAdmin(user), ttl)
+	sess, token, err := auth.IssueSession(r.Context(), h.Sessions, h.elevatePlatformAdmin(r.Context(), user), ttl)
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("issue session: %v", err))
 		return
@@ -988,7 +1037,7 @@ func (h *HTTPGateway) signIn(rw http.ResponseWriter, r *http.Request) {
 // truth — roles are baked into the session at issue time, so an existing
 // session must re-authenticate to pick up an allowlist change. No-op when
 // the email isn't listed or the role is already present.
-func (h *HTTPGateway) elevatePlatformAdmin(u auth.User) auth.User {
+func (h *HTTPGateway) elevatePlatformAdmin(ctx context.Context, u auth.User) auth.User {
 	if !h.isPlatformAdminEmail(u.Email) {
 		return u
 	}
@@ -1003,6 +1052,16 @@ func (h *HTTPGateway) elevatePlatformAdmin(u auth.User) auth.User {
 		Name:        "platform_admin",
 		Permissions: []core.Permission{core.PermPlatformAdmin},
 	})
+	// Record the escalation on first apply (per email, per process): a
+	// platform-admin grant from the env allowlist is a privileged-access
+	// event worth a durable audit record (ISO 27001 A.5.16/A.8.2). Emitting
+	// only once avoids a per-sign-in flood, since elevation runs at every
+	// session issue.
+	key := strings.ToLower(strings.TrimSpace(u.Email))
+	if _, seen := h.platformAdminGranted.LoadOrStore(key, struct{}{}); !seen {
+		h.audit(ctx, core.Principal{Tenant: u.Tenant, Subject: u.Email},
+			"platform_admin.granted", u.Email, "source=HAZYFLOW_PLATFORM_ADMINS")
+	}
 	return u
 }
 

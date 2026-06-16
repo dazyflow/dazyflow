@@ -15,8 +15,8 @@ import (
 )
 
 // ----------------------------------------------------------------------
-// http_download helpers: downloadURL, downloadHeaders, downloadStatusOK,
-// paramIntSliceLocal.
+// http_download helpers: downloadURL, downloadHeaders, downloadStatusOK.
+// (int-slice parsing now lives in drops/internal/params.IntSlice.)
 // ----------------------------------------------------------------------
 
 func TestDownloadURL_InputOverridesParam(t *testing.T) {
@@ -87,23 +87,6 @@ func TestDownloadStatusOK(t *testing.T) {
 	}
 	if !downloadStatusOK(204, []int{200, 204}) {
 		t.Error("204 in expect=[200,204]: want OK")
-	}
-}
-
-func TestParamIntSliceLocal(t *testing.T) {
-	// Missing key → nil.
-	if got := paramIntSliceLocal(map[string]any{}, "x"); got != nil {
-		t.Errorf("missing → %v, want nil", got)
-	}
-	// Non-slice → nil.
-	if got := paramIntSliceLocal(map[string]any{"x": "string"}, "x"); got != nil {
-		t.Errorf("non-slice → %v, want nil", got)
-	}
-	// Happy path: JSON-decoded ints arrive as float64.
-	in := map[string]any{"x": []any{float64(200), float64(204), "skip-non-number"}}
-	got := paramIntSliceLocal(in, "x")
-	if len(got) != 2 || got[0] != 200 || got[1] != 204 {
-		t.Errorf("got %v, want [200 204]", got)
 	}
 }
 
@@ -263,41 +246,6 @@ func TestStreamToFile_WriteFailure(t *testing.T) {
 	}
 	if written != 0 {
 		t.Errorf("written = %d, want 0 on failure", written)
-	}
-}
-
-// ----------------------------------------------------------------------
-// file_picker: guessMIMEByExt for less-common extensions
-// ----------------------------------------------------------------------
-
-func TestGuessMIMEByExt_Extensions(t *testing.T) {
-	cases := map[string]string{
-		"a.xlsx":   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-		"a.xlsm":   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-		"a.xls":    "application/vnd.ms-excel",
-		"a.jsonl":  "application/x-ndjson",
-		"a.ndjson": "application/x-ndjson",
-		"a.txt":    "text/plain",
-		"a.log":    "text/plain",
-		"a.md":     "text/markdown",
-		"a.html":   "text/html",
-		"a.htm":    "text/html",
-		"a.xml":    "application/xml",
-		"a.yaml":   "application/yaml",
-		"a.yml":    "application/yaml",
-		"a.pdf":    "application/pdf",
-		"a.png":    "image/png",
-		"a.jpg":    "image/jpeg",
-		"a.jpeg":   "image/jpeg",
-		"a.sqlite": "application/vnd.sqlite3",
-		"a.db":     "application/vnd.sqlite3",
-		"a.dat":    "application/octet-stream",
-		"":         "application/octet-stream",
-	}
-	for path, want := range cases {
-		if got := guessMIMEByExt(path); got != want {
-			t.Errorf("guessMIMEByExt(%q) = %q, want %q", path, got, want)
-		}
 	}
 }
 

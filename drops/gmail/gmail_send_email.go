@@ -70,7 +70,7 @@ func init() {
 					"format":{"type":"string","enum":["text","html"],"enumNames":["Text","HTML"],"default":"html"},
 					"reply_to":{"type":"string"},
 					"thread_id":{"type":"string","description":"Gmail thread ID to reply within."},
-					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
+					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
 				"required":["to"]
 			}`),

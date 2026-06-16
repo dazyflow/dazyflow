@@ -1,6 +1,7 @@
 package git
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -227,7 +228,7 @@ func TestGuardRepoURL_BlocksSSRFAndLocalSchemes(t *testing.T) {
 		"",                                   // empty
 	}
 	for _, u := range blocked {
-		if err := guardRepoURL(u); err == nil {
+		if err := guardRepoURL(context.Background(), u); err == nil {
 			t.Errorf("guardRepoURL(%q) = nil, want blocked", u)
 		}
 	}
@@ -241,7 +242,7 @@ func TestGuardRepoURL_BlocksSSRFAndLocalSchemes(t *testing.T) {
 		"git@93.184.216.34:example/widgets.git", // scp-like to public host
 	}
 	for _, u := range allowed {
-		if err := guardRepoURL(u); err != nil {
+		if err := guardRepoURL(context.Background(), u); err != nil {
 			t.Errorf("guardRepoURL(%q) = %v, want allowed", u, err)
 		}
 	}

@@ -12,6 +12,7 @@ import {
   type AccountPicker,
 } from "./SchemaForm";
 import { LiveConsole } from "./LiveConsole";
+import { ApprovalPanel } from "./ApprovalPanel";
 import { ForEachEditor } from "./ForEachEditor";
 import {
   TriggerScheduleField,
@@ -153,14 +154,10 @@ export function Inspector({
   const [mode, setMode] = useState<Mode>("form");
   const [jsonText, setJsonText] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
-  // Inline approval state. Lives at the Inspector level (not per-node)
-  // because the panel only ever shows one node at a time; if you click
-  // away mid-typing your comment is discarded — same shape as the
-  // Approvals inbox.
-  const [approveComment, setApproveComment] = useState("");
-  const [approving, setApproving] = useState<"approve" | "reject" | null>(null);
-  const [approveError, setApproveError] = useState<string | null>(null);
-  const { token, hasPerm } = useAuth();
+  // Approve/reject UI lives in ApprovalPanel (mounted below for an awaiting
+  // await_approval node); it owns its own comment/in-flight state, discarded
+  // when the user clicks away and it unmounts.
+  const { hasPerm } = useAuth();
 
   // Loop-body reference tokens: when the selected node runs inside a for_each
   // (loopOwnerNodeId set), fetch the columns of that loop's list and offer
@@ -214,10 +211,6 @@ export function Inspector({
     // Default to form mode for schemas we can render; JSON otherwise.
     const schema = selected.data.manifest?.params_schema;
     setMode(supportsSchemaForm(schema) ? "form" : "json");
-    // Drop any half-typed approval state when the user clicks away.
-    setApproveComment("");
-    setApproveError(null);
-    setApproving(null);
   }, [selected?.id]);
 
   if (!selected) {
@@ -465,92 +458,11 @@ export function Inspector({
         )}
 
         {d.moduleID === "await_approval" && d.status === "awaiting" && currentRunID && (
-          <div className="inspector-section approve-inline">
-            <h4>{t("inspector.awaitingApproval")}</h4>
-            {typeof currentParams.prompt === "string" && currentParams.prompt && (
-              <div
-                style={{
-                  fontSize: "var(--text-md)",
-                  color: "var(--muted)",
-                  marginBottom: 8,
-                  whiteSpace: "pre-wrap",
-                }}
-              >
-                {currentParams.prompt as string}
-              </div>
-            )}
-            <div className="sf-field">
-              <div className="label-row">
-                <label>{t("inspector.commentOptional")}</label>
-              </div>
-              <textarea
-                rows={2}
-                value={approveComment}
-                onChange={(e) => setApproveComment(e.target.value)}
-                disabled={!!approving}
-                style={{ resize: "vertical" }}
-              />
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                className="primary"
-                disabled={!!approving || !token}
-                onClick={async () => {
-                  if (!token) return;
-                  setApproving("approve");
-                  setApproveError(null);
-                  try {
-                    await api.approveNode(
-                      token,
-                      currentRunID,
-                      selected.id,
-                      "approve",
-                      approveComment || undefined,
-                    );
-                    setApproveComment("");
-                    // SSE will deliver the status flip + dispatch any
-                    // downstream nodes; no local refresh needed.
-                  } catch (e) {
-                    setApproveError((e as Error).message);
-                  } finally {
-                    setApproving(null);
-                  }
-                }}
-              >
-                {approving === "approve" ? t("inspector.approving") : t("inspector.approve")}
-              </button>
-              <button
-                className="ghost"
-                disabled={!!approving || !token}
-                onClick={async () => {
-                  if (!token) return;
-                  setApproving("reject");
-                  setApproveError(null);
-                  try {
-                    await api.approveNode(
-                      token,
-                      currentRunID,
-                      selected.id,
-                      "reject",
-                      approveComment || undefined,
-                    );
-                    setApproveComment("");
-                  } catch (e) {
-                    setApproveError((e as Error).message);
-                  } finally {
-                    setApproving(null);
-                  }
-                }}
-              >
-                {approving === "reject" ? t("inspector.rejecting") : t("inspector.reject")}
-              </button>
-            </div>
-            {approveError && (
-              <div style={{ color: "var(--danger)", fontSize: "var(--text-sm)", marginTop: 6 }}>
-                {approveError}
-              </div>
-            )}
-          </div>
+          <ApprovalPanel
+            runID={currentRunID}
+            nodeID={selected.id}
+            prompt={typeof currentParams.prompt === "string" ? currentParams.prompt : undefined}
+          />
         )}
 
         {mode === "form" && canForm && schema && isCronTrigger && (

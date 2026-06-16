@@ -57,7 +57,7 @@ func init() {
 					"query":{"type":"string","title":"Query","description":"Stripe search syntax, e.g. email:'a@b.com'. Overridden by the 'Query' input."},
 					"limit":{"type":"integer","title":"Limit","default":10,"minimum":1,"maximum":100},
 					"base_url":{"type":"string","description":"Override the API host (testing)."},
-					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
+					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
 				"required":["api_key","query"]
 			}`),

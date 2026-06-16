@@ -124,6 +124,29 @@ func TestCheckTriggerQuota(t *testing.T) {
 	}
 }
 
+// TestBillingService_Standalone exercises the extracted BillingService
+// directly (no Service), proving the gate logic is self-contained — the point
+// of carving it off the god object. It also confirms Service.billing() wires
+// the same fields, so the delegation preserves behaviour.
+func TestBillingService_Standalone(t *testing.T) {
+	plans := NewMemPlanStore()
+	b := &BillingService{plans: plans, freePollingDisabled: true}
+
+	if err := b.checkTriggerQuota(context.Background(), "t"); !errors.Is(err, core.ErrPlanLimit) {
+		t.Errorf("free tenant should be gated: %v", err)
+	}
+	_ = plans.SetPlan(context.Background(), TenantPlan{Tenant: "t", Plan: PlanPro})
+	if err := b.checkTriggerQuota(context.Background(), "t"); err != nil {
+		t.Errorf("pro tenant should pass: %v", err)
+	}
+
+	// Service.billing() carries the same config through to the gate.
+	svc := &Service{Plans: NewMemPlanStore(), FreePollingDisabled: true}
+	if err := svc.billing().checkTriggerQuota(context.Background(), "t"); !errors.Is(err, core.ErrPlanLimit) {
+		t.Errorf("Service.billing() should gate a free tenant: %v", err)
+	}
+}
+
 // Stripe event-id dedupe: first marking wins, replays report seen.
 func TestMemPlanStore_MarkStripeEvent(t *testing.T) {
 	store := NewMemPlanStore()

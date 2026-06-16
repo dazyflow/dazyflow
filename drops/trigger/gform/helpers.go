@@ -167,7 +167,7 @@ func googleGet(ctx context.Context, url, token string, timeoutMS int) (int, []by
 	// loopback/private/link-local targets and the egress allowlist (when
 	// set) bounds which public hosts the bearer token may
 	// reach.
-	if err := hfnet.EgressAllowed(url); err != nil {
+	if err := hfnet.EgressAllowedFor(ctx, url); err != nil {
 		return 0, nil, err
 	}
 	resp, err := hfnet.SafeHTTPClient(time.Duration(timeoutMS)*time.Millisecond, hfnet.PrivateEgressAllowed()).Do(req)

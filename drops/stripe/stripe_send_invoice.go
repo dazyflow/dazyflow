@@ -101,7 +101,7 @@ func buildSendInvoiceParamsSchema() json.RawMessage {
 			"description":{"type":"string","title":"Description","description":"The invoice's single line item, shown to the customer. Overridden by the 'Description' input."},
 			"days_until_due":{"type":"integer","title":"Days until due","default":30,"minimum":1,"description":"Payment terms — when the invoice falls due."},
 			"base_url":{"type":"string","description":"Override the API host (testing)."},
-			"timeout_ms":{"type":"integer","default":15000,"minimum":1}
+			"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 		},
 		"required":["api_key","customer","amount"]
 	}`, enum, names))

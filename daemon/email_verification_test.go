@@ -272,3 +272,32 @@ func TestEmailVerification_Resend(t *testing.T) {
 		t.Errorf("verified resend: %s", rec.Body.String())
 	}
 }
+
+// TestEmailVerification_ResendRateLimited proves the resend route is behind
+// the auth IP rate limiter (defense against token-churn / email spam): with a
+// 1-request burst, the second resend in the window returns 429.
+func TestEmailVerification_ResendRateLimited(t *testing.T) {
+	h, users, srv := verificationHarness(t)
+	signupAndExtractLink(t, h, srv, "rl@example.com")
+	u, _ := users.GetByEmail(t.Context(), "rl@example.com")
+	_, tok, err := auth.IssueSession(t.Context(), h.gw.Sessions, u, time.Hour)
+	if err != nil {
+		t.Fatalf("issue session: %v", err)
+	}
+	// Enable the limiter only now, so setup's signup (also rate-limited) didn't
+	// consume the burst. 1/min, burst 1 → second resend in the window is 429.
+	h.gw.AuthRateLimit = NewAuthRateLimiter(1, 1)
+	resend := func() int {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("POST", "/api/v1/me/verification/resend", nil)
+		req.Header.Set("Authorization", "Bearer "+tok)
+		ServeForTest(h.gw, rec, req)
+		return rec.Code
+	}
+	if got := resend(); got != http.StatusOK {
+		t.Fatalf("first resend = %d, want 200", got)
+	}
+	if got := resend(); got != http.StatusTooManyRequests {
+		t.Fatalf("second resend = %d, want 429 (rate limited)", got)
+	}
+}

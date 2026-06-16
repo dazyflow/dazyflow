@@ -51,7 +51,7 @@ func init() {
 					"subscription":{"type":"string","format":"stripe-subscription","title":"Subscription","description":"Pick the subscription to cancel — listed from your account once the STRIPE_API_KEY secret is set. Overridden by the 'Subscription' input when connected."},
 					"cancel_timing":{"type":"string","title":"When to cancel","enum":["period_end","immediately"],"enumNames":["At period end","Immediately"],"default":"period_end","description":"At period end: the subscription stays active until the period the customer already paid for ends. Immediately: cancel right now."},
 					"base_url":{"type":"string","description":"Override the API host (testing)."},
-					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
+					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
 				"required":["api_key","subscription"]
 			}`),

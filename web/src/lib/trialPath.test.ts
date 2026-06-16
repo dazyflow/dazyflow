@@ -21,10 +21,10 @@ import {
 //
 //   2. An OAuth-needing template — Gmail → Slack alert — must
 //      surface a clear "your administrator needs to enable Google
-//      / Slack / gmail_cursor" signal when the install has neither
-//      OAuth nor the secret store. The editor's pre-run gate relies
-//      on this, so the run never silently dispatches into a doomed
-//      setup.
+//      / Slack" signal when the install has no OAuth. The editor's
+//      pre-run gate relies on this, so the run never silently
+//      dispatches into a doomed setup. (This template references no
+//      tenant secret — the cursor dedupe rides for_each/unwrap_results.)
 //
 // The fixtures are the actual JSON shipped under web/public — load
 // them straight from disk so the test pins behaviour against what
@@ -175,15 +175,14 @@ describe("gmail-new-email-to-slack template — admin-blocked path", () => {
     ).toEqual(["google", "slack"]);
   });
 
-  it("surfaces gmail_cursor as admin-blocked when the secret store is off", () => {
+  it("references no tenant secret, so nothing is admin-blocked on the secret axis", () => {
     const { nodes, paramsByID } = frame();
-    // The template seeds gmail_cursor itself on first fire via the
-    // cursor-dedupe pattern, BUT this graph version doesn't ship a
-    // secret_set node — it just references ${secret.gmail_cursor}.
-    // So with the store off, the reference is admin-blocked.
-    expect(unavailableSecretRefs(nodes, paramsByID, null)).toEqual([
-      "gmail_cursor",
-    ]);
+    // The template used to dedupe via a ${secret.gmail_cursor} reference, but
+    // the cursor pattern now rides the for_each + unwrap_results flow (no
+    // tenant secret involved), so the graph references no ${secret.…} at all.
+    // With the store off there is therefore nothing to surface here — only the
+    // OAuth providers (google/slack) are admin-blocked (asserted above).
+    expect(unavailableSecretRefs(nodes, paramsByID, null)).toEqual([]);
   });
 
   it("when OAuth is on but no accounts are connected, both providers come back as missing", () => {

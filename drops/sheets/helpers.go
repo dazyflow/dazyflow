@@ -133,7 +133,7 @@ func googleDo(ctx context.Context, method, url, token, contentType string, body 
 	// the SSRF client blocks loopback/private/link-local targets and the
 	// egress allowlist (when set) bounds which public hosts the bearer token
 	// may be sent to.
-	if err := hfnet.EgressAllowed(url); err != nil {
+	if err := hfnet.EgressAllowedFor(ctx, url); err != nil {
 		return 0, nil, err
 	}
 	resp, err := hfnet.SafeHTTPClient(time.Duration(timeoutMS)*time.Millisecond, hfnet.PrivateEgressAllowed()).Do(req)

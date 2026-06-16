@@ -58,7 +58,7 @@ func init() {
 						"cells":{"type":"string","title":"Cells","examples":["A1:D5"],"description":"Optional cell range within the tab (A1 notation). Leave blank to read the whole tab."},
 					"headers":{"type":"boolean","title":"First row is headers","default":true,"description":"Treat the first row as column headers."},
 					"value_render_option":{"type":"string","title":"Value format","enum":["FORMATTED_VALUE","UNFORMATTED_VALUE","FORMULA"],"enumNames":["As displayed","Raw values","Formulas"],"default":"FORMATTED_VALUE"},
-					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
+					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
 				"required":["spreadsheet_id"]
 			}`),

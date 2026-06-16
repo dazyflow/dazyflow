@@ -1069,6 +1069,13 @@ func buildGateway(ctx context.Context, d gatewayDeps) {
 		log.Fatalf("postgres audit log: %v", err)
 	}
 	gw.Audit = auditLog
+	// Opt-in (compliance) auditing of secret *reads*. Off by default because
+	// secret resolution runs on every node execution — high volume. When on,
+	// each successful Get emits a "secret.read" event (name + actor, no value).
+	if envBool("HAZYFLOW_AUDIT_SECRET_READS", false) && d.encryptedSecrets != nil {
+		d.encryptedSecrets.EnableReadAudit(auditLog)
+		log.Print("secret-read auditing enabled (HAZYFLOW_AUDIT_SECRET_READS)")
+	}
 	// Readiness gates on the DB being reachable.
 	pool := d.pgPool
 	gw.ReadyCheck = func(ctx context.Context) error { return pool.Ping(ctx) }
@@ -1124,6 +1131,12 @@ func buildGateway(ctx context.Context, d gatewayDeps) {
 	}
 	gw.WildcardDomain = d.wildcardDomain
 	if d.wildcardDomain != "" {
+		// Refuse to boot on an overly-broad wildcard: a single-label value
+		// (e.g. "com") would make the CORS/CSRF suffix match trust every
+		// origin under that public suffix. Require at least two labels.
+		if !daemon.IsValidWildcardDomain(d.wildcardDomain) {
+			log.Fatalf("invalid wildcard domain %q: must have at least two labels (e.g. \"hazyflow.app\"); a bare public suffix would trust every subdomain", d.wildcardDomain)
+		}
 		log.Printf("per-org subdomains enabled for *.%s (CORS/CSRF allow subdomains; sign-in derives org from host)", d.wildcardDomain)
 	}
 	// Bootstrap the platform:admin super-admin role from an email allowlist

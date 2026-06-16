@@ -33,6 +33,19 @@ tasks:
       cd hazyflow
       go install golang.org/x/vuln/cmd/govulncheck@latest
       "$(go env GOPATH)/bin/govulncheck" ./...
+  # Software Bill of Materials (A.8.25 / A.8.29 supply-chain). syft scans the
+  # Go module graph and emits SPDX + CycloneDX JSON. CI guarantees the SBOM
+  # always generates; releases (tagged + pushed by hand) attach
+  # sbom.spdx.json / sbom.cdx.json to the artifact set. Not committed —
+  # see .gitignore.
+  - sbom: |
+      cd hazyflow
+      curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
+        | sh -s -- -b "$(go env GOPATH)/bin"
+      "$(go env GOPATH)/bin/syft" dir:. \
+        -o spdx-json=sbom.spdx.json \
+        -o cyclonedx-json=sbom.cdx.json
+      echo "generated sbom.spdx.json + sbom.cdx.json"
   - hzctl-e2e: |
       cd hazyflow
       bash examples/csv-pipeline/run.sh

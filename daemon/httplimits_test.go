@@ -1,10 +1,38 @@
 package daemon
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 )
+
+// TestLimitRequestBody_RejectsOversizedContentLength verifies the global body
+// guard rejects a POST whose declared Content-Length exceeds the ceiling
+// before the (tiny) body is ever read — the early-allocation guard. It fires
+// pre-routing/pre-auth, so any POST path exercises it.
+func TestLimitRequestBody_RejectsOversizedContentLength(t *testing.T) {
+	h := newGatewayHarness(t)
+	req := httptest.NewRequest("POST", "/api/v1/flows", bytes.NewBufferString("{}"))
+	req.Header.Set("Authorization", "Bearer "+h.token)
+	req.Header.Set("Content-Type", "application/json")
+	req.ContentLength = maxRequestBody + 1 // claim more than the ceiling allows
+	rw := httptest.NewRecorder()
+	ServeForTest(h.gw, rw, req)
+	if rw.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want 413 for oversized Content-Length", rw.Code)
+	}
+}
+
+// A normal-sized POST is unaffected by the guard (reaches routing/auth).
+func TestLimitRequestBody_AllowsNormalBody(t *testing.T) {
+	h := newGatewayHarness(t)
+	rw := h.do(t, "POST", "/api/v1/flows", map[string]any{"id": "x"})
+	if rw.Code == http.StatusRequestEntityTooLarge {
+		t.Fatalf("normal body got 413; guard is too aggressive")
+	}
+}
 
 func TestWorkspaceLimits_AdminOnly(t *testing.T) {
 	h := newGatewayHarness(t)

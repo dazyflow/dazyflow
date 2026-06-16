@@ -51,7 +51,7 @@ func init() {
 					"price":{"type":"string","format":"stripe-price","title":"Price","description":"One of your Stripe Prices, listed from your account once the STRIPE_API_KEY secret is set (Products → Pricing in the dashboard). Overridden by the 'Price' input when connected."},
 					"quantity":{"type":"integer","title":"Quantity","default":1,"minimum":1,"maximum":999999,"description":"Units of the price (1–999999, Stripe's per-line-item limit). Overridden by the 'Quantity' input."},
 					"base_url":{"type":"string","description":"Override the API host (testing)."},
-					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
+					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
 				"required":["api_key","price"]
 			}`),

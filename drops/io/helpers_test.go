@@ -5,27 +5,6 @@ import (
 	"testing"
 )
 
-func TestGuessMIMEByExt(t *testing.T) {
-	cases := map[string]string{
-		"a.xlsx":       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-		"a.csv":        "text/csv",
-		"a.JSON":       "application/json", // case-insensitive
-		"x.ndjson":     "application/x-ndjson",
-		"notes.md":     "text/markdown",
-		"page.html":    "text/html",
-		"data.yaml":    "application/yaml",
-		"img.JPG":      "image/jpeg",
-		"store.sqlite": "application/vnd.sqlite3",
-		"unknown.bin":  "application/octet-stream",
-		"noext":        "application/octet-stream",
-	}
-	for in, want := range cases {
-		if got := guessMIMEByExt(in); got != want {
-			t.Errorf("guessMIMEByExt(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
 // isTextMIME classification now lives in drops/internal/mimetype and is
 // tested there (TestIsText).
 

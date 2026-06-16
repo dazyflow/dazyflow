@@ -75,7 +75,7 @@ func init() {
 							}
 						}
 					},
-					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
+					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
 				"required":["spreadsheet_id"]
 			}`),

@@ -54,7 +54,7 @@ func init() {
 					"body":{"type":"string","title":"Body","description":"Text to send. The Body input overrides this when connected."},
 					"content_type":{"type":"string","title":"Content type","default":"application/json","x_advanced":true,"description":"Content-Type sent with a text body."},
 					"headers":{"type":"object","title":"Headers","x_advanced":true,"description":"Extra request headers."},
-					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
+					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
 				"required":["url"]
 			}`),
@@ -92,7 +92,7 @@ func executeWebhookSend(ctx context.Context, job core.Job, _ chan<- core.Progres
 		rawBody = encodeWebhookBody(pb, headers, params.StringDefault(job.Params, "content_type", "application/json"))
 	}
 
-	if err := egressAllowed(url); err != nil {
+	if err := EgressAllowedFor(ctx, url); err != nil {
 		return params.Err(job, "egress_blocked", err.Error()), nil
 	}
 

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 
 // JsonEditor is a dependency-free, syntax-highlighted JSON editor. It layers a
 // transparent <textarea> (the real input + caret) over an aria-hidden <pre>
@@ -6,7 +6,7 @@ import { useLayoutEffect, useRef } from "react";
 // identical metrics (font, padding, line-height, wrapping) so the visible
 // highlight sits exactly under the caret; the textarea drives the <pre>'s
 // scroll so they stay aligned. No editor library — the stack has none and JSON
-// is simple enough to tokenise with one regex (see highlightJSON).
+// is simple enough to tokenise with one regex (see tokenizeJSON).
 //
 // Tolerant by design: it highlights whatever currently looks like JSON, so
 // partial/mid-typing input still colours. Validity is a separate, soft signal
@@ -49,9 +49,14 @@ export function JsonEditor({
       style={{ minHeight: `calc(${rows} * 1.5em + 16px)` }}
     >
       <pre ref={preRef} className="hz-json-pre" aria-hidden="true">
-        {/* Trailing newline keeps the last line visible when the value ends
+        {/* Tokens are React span elements (not an HTML string), so React
+            escapes every value — no dangerouslySetInnerHTML, no XSS surface.
+            Trailing newline keeps the last line visible when the value ends
             with \n (a textarea shows it; a <pre> would otherwise collapse it). */}
-        <code dangerouslySetInnerHTML={{ __html: highlightJSON(value) + "\n" }} />
+        <code>
+          {tokenizeJSON(value)}
+          {"\n"}
+        </code>
       </pre>
       <textarea
         ref={taRef}
@@ -66,10 +71,10 @@ export function JsonEditor({
   );
 }
 
-const ESC: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;" };
-const escapeHTML = (s: string) => s.replace(/[&<>]/g, (c) => ESC[c]);
-
-// highlightJSON turns JSON text into HTML with one <span> per token. Groups:
+// tokenizeJSON turns JSON text into an array of React nodes — one <span> per
+// coloured token, plain strings for the gaps. React escapes every value as it
+// renders, so unlike the old HTML-string approach this needs no manual
+// escaping and exposes no innerHTML surface. Token groups:
 //   1 = a string immediately followed by a colon → an object KEY
 //   2 = the "<ws>:" that follows that key (ws kept plain, ":" punctuated)
 //   3 = a string value
@@ -78,34 +83,58 @@ const escapeHTML = (s: string) => s.replace(/[&<>]/g, (c) => ESC[c]);
 //   6 = structural punctuation { } [ ] , :
 // Strings are matched before numbers/literals, so digits/words inside a string
 // are part of the string, not separately coloured. Untokenised text (whitespace,
-// stray characters in mid-typing input) is escaped and emitted verbatim.
-function highlightJSON(src: string): string {
-  if (!src) return "";
+// stray characters in mid-typing input) is emitted verbatim.
+function tokenizeJSON(src: string): ReactNode[] {
+  if (!src) return [];
   const re =
     /("(?:\\.|[^"\\])*")(\s*:)|("(?:\\.|[^"\\])*")|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|\b(true|false|null)\b|([{}[\],:])/g;
-  let out = "";
+  const out: ReactNode[] = [];
   let last = 0;
+  let key = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(src)) !== null) {
-    out += escapeHTML(src.slice(last, m.index));
+    if (m.index > last) out.push(src.slice(last, m.index));
     if (m[1] !== undefined) {
       const colon = m[2]; // e.g. "  :" — keep the whitespace plain, colour ":"
-      out +=
-        `<span class="hz-j-key">${escapeHTML(m[1])}</span>` +
-        escapeHTML(colon.slice(0, -1)) +
-        `<span class="hz-j-punct">:</span>`;
+      out.push(
+        <span key={key++} className="hz-j-key">
+          {m[1]}
+        </span>,
+      );
+      if (colon.length > 1) out.push(colon.slice(0, -1));
+      out.push(
+        <span key={key++} className="hz-j-punct">
+          :
+        </span>,
+      );
     } else if (m[3] !== undefined) {
-      out += `<span class="hz-j-string">${escapeHTML(m[3])}</span>`;
+      out.push(
+        <span key={key++} className="hz-j-string">
+          {m[3]}
+        </span>,
+      );
     } else if (m[4] !== undefined) {
-      out += `<span class="hz-j-number">${escapeHTML(m[4])}</span>`;
+      out.push(
+        <span key={key++} className="hz-j-number">
+          {m[4]}
+        </span>,
+      );
     } else if (m[5] !== undefined) {
-      out += `<span class="hz-j-bool">${escapeHTML(m[5])}</span>`;
+      out.push(
+        <span key={key++} className="hz-j-bool">
+          {m[5]}
+        </span>,
+      );
     } else {
-      out += `<span class="hz-j-punct">${escapeHTML(m[6])}</span>`;
+      out.push(
+        <span key={key++} className="hz-j-punct">
+          {m[6]}
+        </span>,
+      );
     }
     last = re.lastIndex;
   }
-  out += escapeHTML(src.slice(last));
+  if (last < src.length) out.push(src.slice(last));
   return out;
 }
 

@@ -22,6 +22,25 @@ export function mimeCompatible(a?: string[], b?: string[]): boolean {
   return a.some((x) => b.some((y) => x === y));
 }
 
+// portsConnectable is the ConnectionValidator decision: may a wire run from
+// the source node's `sourceHandle` output to the target node's `targetHandle`
+// input? It looks up each declared port and applies mimeCompatible. Either pin
+// being absent (an untyped/default/exec handle, or a comment node) means
+// "connectable" — the same permissive rule the editor uses so it never blocks
+// a wire the backend validator would accept. Pure + node-shape-agnostic: the
+// caller passes the two manifests' port lists.
+export function portsConnectable(
+  sourceOutputs: Port[] | undefined,
+  sourceHandle: string | null | undefined,
+  targetInputs: Port[] | undefined,
+  targetHandle: string | null | undefined,
+): boolean {
+  const out = sourceOutputs?.find((p) => p.port === (sourceHandle ?? "out"));
+  const inp = targetInputs?.find((p) => p.port === (targetHandle ?? "in"));
+  if (!out || !inp) return true;
+  return mimeCompatible(out.mime, inp.mime);
+}
+
 // pickPort chooses which port on the spawned drop to auto-wire to. The
 // passthrough pin is untyped and sits first, so a naive "first compatible
 // port" would always land on it — but when you drag a Text output onto a

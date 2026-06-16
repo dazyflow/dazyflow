@@ -108,7 +108,7 @@ func executeHTTPDownload(ctx context.Context, job core.Job, _ chan<- core.Progre
 	if err != nil {
 		return params.Err(job, "bad_param", err.Error()), nil
 	}
-	if err := hfnet.EgressAllowed(url); err != nil {
+	if err := hfnet.EgressAllowedFor(ctx, url); err != nil {
 		return params.Err(job, "egress_blocked", err.Error()), nil
 	}
 
@@ -154,7 +154,7 @@ func executeHTTPDownload(ctx context.Context, job core.Job, _ chan<- core.Progre
 	}
 	defer resp.Body.Close()
 
-	if !downloadStatusOK(resp.StatusCode, paramIntSliceLocal(job.Params, "expect_status")) {
+	if !downloadStatusOK(resp.StatusCode, params.IntSlice(job.Params, "expect_status")) {
 		return params.Err(job, "unexpected_status", fmt.Sprintf("got %d", resp.StatusCode)), nil
 	}
 
@@ -355,19 +355,6 @@ func downloadHeaders(p map[string]any) (map[string]string, error) {
 	return out, nil
 }
 
-func paramIntSliceLocal(p map[string]any, key string) []int {
-	raw, ok := p[key].([]any)
-	if !ok {
-		return nil
-	}
-	out := make([]int, 0, len(raw))
-	for _, v := range raw {
-		if f, ok := v.(float64); ok {
-			out = append(out, int(f))
-		}
-	}
-	return out
-}
 
 func downloadStatusOK(got int, expect []int) bool {
 	if len(expect) == 0 {

@@ -260,7 +260,7 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 	// resume call (Service.Approve, or — for subgraph nodes — the
 	// dispatcher when the child terminates) is what advances those.
 	if runErr == nil && result.Status == core.StatusAwaiting {
-		cerr := w.completeNode(context.Background(), rec.ID, core.JobStatusAwaiting, &result)
+		cerr := w.completeNode(context.WithoutCancel(ctx), rec.ID, core.JobStatusAwaiting, &result)
 		if errors.Is(cerr, core.ErrConflict) {
 			w.cfg.Logger.Printf("[%s] %s: park fenced (lease lost or already terminal); abandoning", w.cfg.ID, rec.ID)
 			return
@@ -316,7 +316,7 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 
 	if status == core.JobStatusFailed && !skipRetry {
 		if when, reason := w.maybeScheduleRetry(graph, rec); !when.IsZero() {
-			if err := w.store.Requeue(context.Background(), rec.ID, when); err == nil {
+			if err := w.store.Requeue(context.WithoutCancel(ctx), rec.ID, when); err == nil {
 				meterExecution() // this attempt ran under our lease and is being retried
 				w.cfg.Logger.Printf("[%s] retrying %s (attempt %d → next at %v)", w.cfg.ID, rec.ID, rec.Attempt, when.Format(time.RFC3339Nano))
 				return
@@ -328,7 +328,7 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 		}
 	}
 
-	cerr := w.completeNode(context.Background(), rec.ID, status, &result)
+	cerr := w.completeNode(context.WithoutCancel(ctx), rec.ID, status, &result)
 	if errors.Is(cerr, core.ErrConflict) {
 		// Fenced: we lost the lease (reclaimed elsewhere) or the record is
 		// already terminal. Abandon — don't advance dependents off our
@@ -431,6 +431,14 @@ func (w *Worker) runNode(ctx context.Context, graph core.Graph, rec core.JobReco
 			}})
 		}
 	}()
+	// Close the progress channel and wait for the forwarder to drain on every
+	// exit path — including a panic in RunNode below. A forwarding goroutine
+	// blocked on a never-closed channel would otherwise leak for the life of
+	// the process.
+	defer func() {
+		close(nodeProgress)
+		<-forwardDone
+	}()
 	// Per-node wall-time cap. The context deadline reaches every
 	// well-behaved Execute (engine.RunNode passes it through to the
 	// transport, which passes it through to http.NewRequestWithContext,
@@ -464,8 +472,6 @@ func (w *Worker) runNode(ctx context.Context, graph core.Graph, rec core.JobReco
 		}
 	}
 	result, err := w.engine.RunNode(execCtx, graph, rec.GraphRunID, rec.NodeID, prior, nodeProgress)
-	close(nodeProgress)
-	<-forwardDone
 
 	// Translate a deadline expiry into a structured failure. Without
 	// this, ctx.Err() bubbling up as a generic error makes per-node
@@ -613,9 +619,9 @@ func (w *Worker) maybeSubmitChild(ctx context.Context, rec core.JobRecord, resul
 		// Force-complete the parent: the awaiting record is still
 		// resumable via Complete because we excluded awaiting from the
 		// terminal guard.
-		_ = w.store.Complete(context.Background(), rec.ID, core.JobStatusFailed, fail)
-		if g, gerr := w.fetchGraph(context.Background(), rec.GraphRunID); gerr == nil {
-			w.dispatcher.AdvanceAfterCompletion(ctx, g, rec.GraphRunID, rec.NodeID, core.JobStatusFailed, jerr)
+		_ = w.store.Complete(context.WithoutCancel(ctx), rec.ID, core.JobStatusFailed, fail)
+		if g, gerr := w.fetchGraph(context.WithoutCancel(ctx), rec.GraphRunID); gerr == nil {
+			w.dispatcher.AdvanceAfterCompletion(context.WithoutCancel(ctx), g, rec.GraphRunID, rec.NodeID, core.JobStatusFailed, jerr)
 		}
 		return
 	}
@@ -636,7 +642,7 @@ func (w *Worker) lookupNode(rec core.JobRecord) (core.Node, bool) {
 func (w *Worker) failNode(ctx context.Context, rec core.JobRecord, code, msg string, graph *core.Graph) {
 	jerr := &core.JobError{Code: code, Message: msg}
 	result := &core.Result{Status: core.StatusError, Error: jerr}
-	if cerr := w.store.Complete(context.Background(), rec.ID, core.JobStatusFailed, result); cerr != nil {
+	if cerr := w.store.Complete(context.WithoutCancel(ctx), rec.ID, core.JobStatusFailed, result); cerr != nil {
 		w.cfg.Logger.Printf("[%s] complete-failure %s: %v", w.cfg.ID, rec.ID, cerr)
 	}
 	if graph != nil {
@@ -647,7 +653,7 @@ func (w *Worker) failNode(ctx context.Context, rec core.JobRecord, code, msg str
 	// Publish a node-status anyway so the UI still sees the failure;
 	// mark the graph-record as failed best-effort.
 	w.dispatcher.PublishNodeStatus(rec.GraphRunID, rec.NodeID, core.JobStatusFailed, jerr)
-	if cerr := w.store.Complete(context.Background(), rec.GraphRunID, core.JobStatusFailed, result); cerr == nil {
+	if cerr := w.store.Complete(context.WithoutCancel(ctx), rec.GraphRunID, core.JobStatusFailed, result); cerr == nil {
 		w.bus.Publish(rec.GraphRunID, BusEvent{Terminal: &TerminalEvent{
 			JobID:  rec.GraphRunID,
 			Status: core.JobStatusFailed,

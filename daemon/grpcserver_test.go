@@ -423,6 +423,41 @@ func TestGRPC_ListModules(t *testing.T) {
 	}
 }
 
+// TestRunGraph_ClosesProgressOnSubmitError pins the contract the gRPC
+// RunGraph handler depends on: Service.RunGraph closes the progress channel
+// on *every* return path, including an early submit error before the engine
+// runs. The handler's forwarding goroutine ranges over that channel and the
+// handler blocks on <-sendDone until the range ends — if RunGraph could
+// return without closing, the forwarder would leak and the RPC would
+// deadlock. A cross-tenant graph fails authz in SubmitGraph, exercising the
+// pre-engine error path.
+func TestRunGraph_ClosesProgressOnSubmitError(t *testing.T) {
+	h := newHarnessOpts(t, false)
+	defer h.stop()
+
+	progress := make(chan engine.GraphProgress, 4)
+	// principal.Tenant == "acme"; graph in a different tenant must be rejected
+	// before the run starts.
+	g := core.Graph{ID: "x", Tenant: "other", Workspace: "ws1", Nodes: []core.Node{
+		{ID: "a", Module: "delay"},
+	}}
+	_, _, err := h.svc.RunGraph(t.Context(), h.principal, g, progress)
+	if err == nil {
+		t.Fatal("expected submit error for cross-tenant graph, got nil")
+	}
+
+	select {
+	case _, ok := <-progress:
+		if ok {
+			// Drained an event but channel still open: keep reading until close.
+			for range progress {
+			}
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("progress channel was not closed on the submit-error path (forwarder would deadlock)")
+	}
+}
+
 // sanity: the error mapping uses the wrapped err's Is chain
 func TestGRPC_ToStatus_WrapsUnauthorized(t *testing.T) {
 	// Direct check that ErrUnauthorized round-trips through PermissionDenied.

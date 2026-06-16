@@ -2,7 +2,8 @@
 
 ## The master key (`$HAZYFLOW_MASTER_KEY`)
 
-hzd's built-in secret store uses **envelope encryption**:
+hzd's built-in secret store (`EncryptedSecrets`, `daemon/encrypted_secrets.go`)
+uses **envelope encryption**:
 
 - **KEK** (Key-Encryption-Key) = the master key. A 32-byte AES-256 key
   you provide. Held only in process memory; hzd never writes it to disk.
@@ -58,6 +59,8 @@ secret ciphertexts (sealed under the per-tenant DEKs) are untouched —
 only the wrapped-DEK rows change — so rotation is fast, low-risk, and
 requires **no secret re-entry**. `hzd --rotate-master-key` does the
 re-wrap; the DEK plaintexts never leave the process.
+(Implementation: `EncryptedSecrets.RewrapDEKs` in
+`daemon/encrypted_secrets.go`.)
 
 ### Procedure
 
@@ -106,8 +109,9 @@ All these are env vars set via the same `.env` (see `.env.example`):
   referenced from flows as `${secret.NAME}`; the daemon's process
   environment is never reachable from a flow. The auth rate limiter
   is fixed at 20/min per IP with a burst of 10 (defense against credential
-  stuffing on the auth endpoints).
+  stuffing on the auth endpoints) — `ipRateLimiter` in `daemon/ratelimit.go`.
 - `HAZYFLOW_HTTP_EGRESS_ALLOW` pins the `http_request` /
   `webhook_send` drops to an allowlist; the IP-level SSRF guard
-  (blocks private/loopback/cloud metadata) is always on.
+  (blocks private/loopback/cloud metadata) is always on. Both flow through
+  `EgressAllowed` in `drops/net/egress.go`.
 - `HAZYFLOW_POSTGRES_DSN` for durable, restart-surviving stores.

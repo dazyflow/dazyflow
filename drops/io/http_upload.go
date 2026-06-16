@@ -92,7 +92,7 @@ func executeHTTPUpload(ctx context.Context, job core.Job, _ chan<- core.Progress
 	if err := requireHTTPScheme(url); err != nil {
 		return params.Err(job, "bad_url", err.Error()), nil
 	}
-	if err := hfnet.EgressAllowed(url); err != nil {
+	if err := hfnet.EgressAllowedFor(ctx, url); err != nil {
 		return params.Err(job, "egress_blocked", err.Error()), nil
 	}
 	srcPath := uploadSrcPath(job)
@@ -141,6 +141,13 @@ func executeHTTPUpload(ctx context.Context, job core.Job, _ chan<- core.Progress
 		// Stream the multipart body through a pipe so a large file never
 		// sits in memory; the writer goroutine copies the file then closes.
 		pr, pw := io.Pipe()
+		// Guarantee the writer goroutine can always exit. It blocks on
+		// pw.Write / mw.Close until something reads pr — normally the HTTP
+		// transport. But if we return before Do reads it (NewRequestWithContext
+		// error below) or the request is cancelled mid-write, nothing drains
+		// pr and the goroutine would leak. Closing the read end on return makes
+		// any pending write return ErrClosedPipe, unblocking it.
+		defer pr.Close()
 		mw := multipart.NewWriter(pw)
 		contentType = mw.FormDataContentType()
 		go func() {
@@ -156,7 +163,7 @@ func executeHTTPUpload(ctx context.Context, job core.Job, _ chan<- core.Progress
 		body = pr
 	} else {
 		method = strings.ToUpper(params.StringDefault(job.Params, "method", "PUT"))
-		contentType = params.StringDefault(job.Params, "content_type", guessMIMEByExt(rel))
+		contentType = params.StringDefault(job.Params, "content_type", mimetype.GuessByExt(rel))
 		contentLength = info.Size() // known for raw — lets the server size the upload
 		body = f
 	}
@@ -185,7 +192,7 @@ func executeHTTPUpload(ctx context.Context, job core.Job, _ chan<- core.Progress
 	}
 	defer resp.Body.Close()
 
-	if !downloadStatusOK(resp.StatusCode, paramIntSliceLocal(job.Params, "expect_status")) {
+	if !downloadStatusOK(resp.StatusCode, params.IntSlice(job.Params, "expect_status")) {
 		return params.Err(job, "unexpected_status", fmt.Sprintf("got %d", resp.StatusCode)), nil
 	}
 

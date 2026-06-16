@@ -60,7 +60,7 @@ func init() {
 						"default":300,
 						"description":"How often to check for new responses once the flow is published. Leave blank to only check when you press Run (for testing)."
 					},
-					"timeout_ms":{"type":"integer","default":15000,"minimum":1}
+					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
 				"required":["form_id"]
 			}`),
