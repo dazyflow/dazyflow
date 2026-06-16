@@ -21,6 +21,7 @@ import (
 	_ "git.sr.ht/~klahr/hazyflow/drops/gmail"
 	_ "git.sr.ht/~klahr/hazyflow/drops/homeassistant"
 	_ "git.sr.ht/~klahr/hazyflow/drops/io"
+	_ "git.sr.ht/~klahr/hazyflow/drops/mqtt"
 	_ "git.sr.ht/~klahr/hazyflow/drops/net"
 	_ "git.sr.ht/~klahr/hazyflow/drops/notify"
 	_ "git.sr.ht/~klahr/hazyflow/drops/notion"
