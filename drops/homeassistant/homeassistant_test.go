@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 
@@ -349,5 +350,104 @@ func TestResolveConn_RequiresBoth(t *testing.T) {
 	}
 	if _, _, err := resolveConn(core.Job{Params: map[string]any{"token": "t"}}); err == nil {
 		t.Errorf("missing base_url should error")
+	}
+}
+
+func TestExtractError(t *testing.T) {
+	// A Home Assistant error body carries the human message under "message".
+	if got := extractError([]byte(`{"message":"Entity not found."}`)); got != "Entity not found." {
+		t.Errorf("message body = %q, want 'Entity not found.'", got)
+	}
+	// Non-JSON (or JSON without a message) falls back to the trimmed raw body.
+	if got := extractError([]byte("  not json  ")); got != "not json" {
+		t.Errorf("raw fallback = %q, want 'not json'", got)
+	}
+	// JSON with an empty message also falls back to the raw body.
+	if got := extractError([]byte(`{"message":""}`)); got != `{"message":""}` {
+		t.Errorf("empty-message fallback = %q", got)
+	}
+	// An over-long body is truncated to 300 bytes so it can't flood the result.
+	long := strings.Repeat("x", 500)
+	if got := extractError([]byte(long)); len(got) != 300 {
+		t.Errorf("truncated len = %d, want 300", len(got))
+	}
+}
+
+func TestGetState_GenericErrorSurfacesMessage(t *testing.T) {
+	// A non-2xx that isn't 401/404 maps to ha_error, and the body's message is
+	// surfaced through extractError so the user sees what went wrong.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(500)
+		_, _ = io.WriteString(w, `{"message":"template error"}`)
+	}))
+	defer srv.Close()
+
+	job := core.Job{ID: "j", Params: connParams(srv.URL, map[string]any{"entity_id": "sensor.x"})}
+	res, _ := executeGetState(context.Background(), job, nil)
+	if res.Status != core.StatusError || res.Error.Code != "ha_error" {
+		t.Fatalf("want ha_error, got %v %+v", res.Status, res.Error)
+	}
+	if !strings.Contains(res.Error.Message, "template error") {
+		t.Errorf("message %q should include the HA error detail", res.Error.Message)
+	}
+}
+
+func TestGetState_EgressBlockedIsFriendly(t *testing.T) {
+	// With private egress off, a LAN base_url trips the SSRF guard; httpFailure
+	// turns that into the operator-facing egress_blocked code.
+	hfnet.SetAllowPrivateEgress(false)
+	defer hfnet.SetAllowPrivateEgress(true)
+
+	job := core.Job{ID: "j", Params: connParams("http://127.0.0.1:9", map[string]any{"entity_id": "sensor.x"})}
+	res, _ := executeGetState(context.Background(), job, nil)
+	if res.Status != core.StatusError || res.Error.Code != "egress_blocked" {
+		t.Fatalf("want egress_blocked, got %v %+v", res.Status, res.Error)
+	}
+}
+
+func TestCallService_NonTextInputRejected(t *testing.T) {
+	// A wired 'Service' port carrying a non-text value is a wiring mistake, not
+	// a service name — textInputOr returns ok=false and the call is rejected.
+	job := core.Job{
+		ID:     "j",
+		Params: connParams("http://x", map[string]any{"service": "light.turn_on"}),
+		Input:  map[string]core.Ref{"service": {Inline: 42}},
+	}
+	res, _ := executeCallService(context.Background(), job, nil)
+	if res.Status != core.StatusError || res.Error.Code != "bad_input" {
+		t.Fatalf("want bad_input, got %v %+v", res.Status, res.Error)
+	}
+}
+
+func TestCallService_BadDataParam(t *testing.T) {
+	// 'data' must be an object of service options; a scalar is rejected before
+	// any request goes out.
+	job := core.Job{
+		ID:     "j",
+		Params: connParams("http://x", map[string]any{"service": "light.turn_on", "data": "nope"}),
+	}
+	res, _ := executeCallService(context.Background(), job, nil)
+	if res.Status != core.StatusError || res.Error.Code != "bad_param" {
+		t.Fatalf("want bad_param, got %v %+v", res.Status, res.Error)
+	}
+}
+
+func TestHaDo_RejectsOversizedBody(t *testing.T) {
+	// A hostile/buggy instance streaming an unbounded body is capped: haDo
+	// errors past maxResponseBytes rather than buffering it all.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		chunk := make([]byte, 1<<20) // 1 MiB of zeros per write
+		for written := 0; written <= maxResponseBytes; written += len(chunk) {
+			if _, err := w.Write(chunk); err != nil {
+				return
+			}
+		}
+	}))
+	defer srv.Close()
+
+	job := core.Job{ID: "j", Params: connParams(srv.URL, nil)}
+	_, _, err := haDo(context.Background(), job, "GET", "/api/states", nil)
+	if err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("oversized body should be rejected, got %v", err)
 	}
 }

@@ -21,3 +21,4 @@ hazy-key
 # .claude/skills/ are committed so the team gets them.
 /.claude/*
 !/.claude/skills/
+/.mcp.json
