@@ -56,3 +56,45 @@ func TestNumber_RejectsNonNumber(t *testing.T) {
 		t.Fatalf("status=%q, want error for non-numeric value", res.Status)
 	}
 }
+
+func TestToNumber(t *testing.T) {
+	ok := []struct {
+		name string
+		in   any
+		want float64
+	}{
+		{"float64", float64(3.5), 3.5},
+		{"float32", float32(2.5), 2.5},
+		{"int", 7, 7},
+		{"int64", int64(-9), -9},
+		{"json.Number", json.Number("12.25"), 12.25},
+	}
+	for _, tc := range ok {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := toNumber(tc.in)
+			if !ok {
+				t.Fatalf("toNumber(%v) ok=false, want true", tc.in)
+			}
+			if got != tc.want {
+				t.Errorf("toNumber(%v) = %v, want %v", tc.in, got, tc.want)
+			}
+		})
+	}
+
+	reject := []struct {
+		name string
+		in   any
+	}{
+		{"string", "10"},
+		{"bool", true},
+		{"nil", nil},
+		{"bad json.Number", json.Number("not-a-number")},
+	}
+	for _, tc := range reject {
+		t.Run("reject/"+tc.name, func(t *testing.T) {
+			if _, ok := toNumber(tc.in); ok {
+				t.Errorf("toNumber(%v) ok=true, want false", tc.in)
+			}
+		})
+	}
+}
