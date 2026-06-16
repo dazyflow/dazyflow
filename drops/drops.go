@@ -11,6 +11,7 @@ package drops
 import (
 	_ "git.sr.ht/~klahr/hazyflow/drops/claude"
 	_ "git.sr.ht/~klahr/hazyflow/drops/db"
+	_ "git.sr.ht/~klahr/hazyflow/drops/discord"
 	_ "git.sr.ht/~klahr/hazyflow/drops/drive"
 	_ "git.sr.ht/~klahr/hazyflow/drops/excel"
 	_ "git.sr.ht/~klahr/hazyflow/drops/flow"

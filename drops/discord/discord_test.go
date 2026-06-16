@@ -1,0 +1,136 @@
+package discord
+
+import (
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"git.sr.ht/~klahr/hazyflow/core"
+)
+
+type fakeDiscord struct {
+	srv      *httptest.Server
+	lastBody map[string]any
+	lastWait string
+	lastThr  string
+	reject   bool
+}
+
+func newFakeDiscord(t *testing.T) *fakeDiscord {
+	t.Helper()
+	f := &fakeDiscord{}
+	f.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f.lastWait = r.URL.Query().Get("wait")
+		f.lastThr = r.URL.Query().Get("thread_id")
+		raw, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(raw, &f.lastBody)
+		if f.reject {
+			w.WriteHeader(http.StatusUnauthorized)
+			_ = json.NewEncoder(w).Encode(map[string]any{"code": 50027, "message": "Invalid Webhook Token"})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": "msg1", "channel_id": "chan1"})
+	}))
+	t.Cleanup(f.srv.Close)
+	return f
+}
+
+func (f *fakeDiscord) run(t *testing.T, params map[string]any, input map[string]core.Ref) core.Result {
+	t.Helper()
+	p := map[string]any{"webhook_url": f.srv.URL}
+	for k, v := range params {
+		p[k] = v
+	}
+	res, err := executeSendMessage(context.Background(), core.Job{ID: "j1", Params: p, Input: input}, nil)
+	if err != nil {
+		t.Fatalf("execute err: %v", err)
+	}
+	return res
+}
+
+func TestSend_Success(t *testing.T) {
+	f := newFakeDiscord(t)
+	res := f.run(t, map[string]any{"content": "hello", "username": "CI Bot"}, nil)
+	if res.Status != core.StatusOK {
+		t.Fatalf("res = %+v", res)
+	}
+	if f.lastWait != "true" {
+		t.Errorf("wait = %q, want true (so Discord returns the message id)", f.lastWait)
+	}
+	if f.lastBody["content"] != "hello" || f.lastBody["username"] != "CI Bot" {
+		t.Errorf("body = %v", f.lastBody)
+	}
+	if res.Output["message_id"].Inline != "msg1" {
+		t.Errorf("message_id = %v", res.Output["message_id"].Inline)
+	}
+}
+
+func TestSend_OmitsBlankOptionalFields(t *testing.T) {
+	f := newFakeDiscord(t)
+	f.run(t, map[string]any{"content": "hi"}, nil)
+	if _, has := f.lastBody["username"]; has {
+		t.Errorf("blank username must be omitted: %v", f.lastBody)
+	}
+	if _, has := f.lastBody["avatar_url"]; has {
+		t.Errorf("blank avatar_url must be omitted: %v", f.lastBody)
+	}
+}
+
+func TestSend_ContentInputOverridesParam(t *testing.T) {
+	f := newFakeDiscord(t)
+	f.run(t, map[string]any{"content": "typed"}, map[string]core.Ref{"content": {Inline: "wired"}})
+	if f.lastBody["content"] != "wired" {
+		t.Errorf("content = %v, want wired", f.lastBody["content"])
+	}
+}
+
+func TestSend_ThreadID(t *testing.T) {
+	f := newFakeDiscord(t)
+	f.run(t, map[string]any{"content": "hi", "thread_id": "t99"}, nil)
+	if f.lastThr != "t99" {
+		t.Errorf("thread_id = %q", f.lastThr)
+	}
+}
+
+func TestSend_Validation(t *testing.T) {
+	f := newFakeDiscord(t)
+	// Missing content.
+	res := f.run(t, map[string]any{}, nil)
+	if res.Status != core.StatusError || res.Error.Code != "bad_param" {
+		t.Errorf("missing content res = %+v", res)
+	}
+	// Over the 2000-char limit.
+	res = f.run(t, map[string]any{"content": strings.Repeat("x", maxContentLen+1)}, nil)
+	if res.Status != core.StatusError || res.Error.Code != "bad_param" {
+		t.Errorf("too-long res = %+v", res)
+	}
+}
+
+func TestSend_MissingWebhookIsFriendly(t *testing.T) {
+	res, err := executeSendMessage(context.Background(), core.Job{
+		ID:     "j1",
+		Params: map[string]any{"content": "hi"}, // no webhook_url
+	}, nil)
+	if err != nil {
+		t.Fatalf("execute err: %v", err)
+	}
+	if res.Status != core.StatusError || res.Error.Code != "bad_param" {
+		t.Errorf("res = %+v", res)
+	}
+}
+
+func TestSend_APIErrorSurfacesMessage(t *testing.T) {
+	f := newFakeDiscord(t)
+	f.reject = true
+	res := f.run(t, map[string]any{"content": "hi"}, nil)
+	if res.Status != core.StatusError || res.Error.Code != "discord_error" {
+		t.Fatalf("res = %+v", res)
+	}
+	if !strings.Contains(res.Error.Message, "Invalid Webhook Token") || !strings.Contains(res.Error.Message, "50027") {
+		t.Errorf("error message = %q", res.Error.Message)
+	}
+}
