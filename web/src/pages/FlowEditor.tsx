@@ -634,10 +634,14 @@ function EditorInner() {
       .catch(() => {
         if (!cancelled) setProviders(null);
       });
-    // Secret NAMES drive the ${secret.NAME} credential check. Same
-    // can't-tell-so-don't-block semantics on error (disabled / 403).
+    // Secret NAMES drive the ${secret.NAME} credential check AND the per-node
+    // connection check (nodeSetupNeeded case 2 / missingConnectionApps), which
+    // look for conn.<slug>.<field> keys — so include the conn. namespace here,
+    // the way the Apps page does. Without it a connected ConnectionFields app
+    // with required fields (e.g. Home Assistant) always reads as "needs setup".
+    // Same can't-tell-so-don't-block semantics on error (disabled / 403).
     api
-      .listSecrets(token)
+      .listSecrets(token, undefined, undefined, true)
       .then((r) => {
         if (!cancelled) setSecrets(r.secrets);
       })

@@ -28,6 +28,8 @@ const PICKER_FORMATS = new Set([
   "stripe-payment-intent",
   "stripe-customer",
   "slack-channel",
+  "homeassistant-entity",
+  "homeassistant-service",
 ]);
 
 // peekValue renders a port's run value as a short, single-line string for

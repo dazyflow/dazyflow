@@ -930,6 +930,11 @@ const RESOURCE_PICKERS: Record<
   // Listed via the connected workspace's OAuth token (channels:read). The
   // dropdown stores the channel ID (Cxxx); the card shows the #name.
   "slack-channel": { provider: "slack", kind: "channels", noun: "channel" },
+  // Listed via the tenant's Home Assistant connection (base_url + token), not
+  // OAuth — the "provider" here is only the lister-registry key. Entity stores
+  // the entity_id (light.living_room); service stores domain.service.
+  "homeassistant-entity": { provider: "homeassistant", kind: "entities", noun: "entity" },
+  "homeassistant-service": { provider: "homeassistant", kind: "services", noun: "service" },
 };
 
 // resourceNameCache remembers id→name for resources we've resolved this

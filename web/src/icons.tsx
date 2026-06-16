@@ -31,6 +31,7 @@ import {
   Slash,
   Ban,
   Split,
+  House,
   type LucideIcon,
 } from "lucide-react";
 import { GitIcon } from "./components/GitIcon";
@@ -79,6 +80,7 @@ const iconRegistry: Record<string, LucideIcon> = {
   slash: Slash,
   ban: Ban,
   split: Split,
+  house: House,
 };
 
 // categoryFallback picks a sensible default icon when a manifest didn't

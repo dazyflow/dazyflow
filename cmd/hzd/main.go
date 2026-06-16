@@ -44,6 +44,7 @@ import (
 	gitdrop "git.sr.ht/~klahr/hazyflow/drops/git"
 	"git.sr.ht/~klahr/hazyflow/drops/github"
 	"git.sr.ht/~klahr/hazyflow/drops/gmail"
+	"git.sr.ht/~klahr/hazyflow/drops/homeassistant"
 	"git.sr.ht/~klahr/hazyflow/drops/io"
 	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
 	"git.sr.ht/~klahr/hazyflow/drops/notion"
@@ -354,6 +355,32 @@ func main() {
 				return nil, fmt.Errorf("add a STRIPE_API_KEY secret to list customers: %w", err)
 			}
 			return stripe.ListCustomers(ctx, core.Job{Params: map[string]any{"api_key": key}})
+		})
+		// Home Assistant entity + service pickers. Auth is the tenant's
+		// ConnectionFields connection (base_url + token), not OAuth — read the
+		// conn.<slug>.* secrets here because the picker path skips the engine's
+		// connection injection. The account arg is meaningless (no OAuth); ignored.
+		haConn := func(ctx context.Context) (core.Job, error) {
+			base, _ := encryptedSecrets.Get(ctx, core.ConnectionSecretKey("Home Assistant", "base_url"))
+			token, _ := encryptedSecrets.Get(ctx, core.ConnectionSecretKey("Home Assistant", "token"))
+			if strings.TrimSpace(base) == "" || strings.TrimSpace(token) == "" {
+				return core.Job{}, fmt.Errorf("connect Home Assistant first (add your instance URL and access token on the Home Assistant integration page)")
+			}
+			return core.Job{Params: map[string]any{"base_url": base, "token": token}}, nil
+		}
+		daemon.RegisterResourceLister("homeassistant", "entities", func(ctx context.Context, _ string, _ map[string]string) ([]core.AccountResource, error) {
+			job, err := haConn(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return homeassistant.ListEntities(ctx, job)
+		})
+		daemon.RegisterResourceLister("homeassistant", "services", func(ctx context.Context, _ string, _ map[string]string) ([]core.AccountResource, error) {
+			job, err := haConn(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return homeassistant.ListServices(ctx, job)
 		})
 	}
 
@@ -1454,6 +1481,20 @@ func setupEncryptedSecrets(ctx context.Context, masterKeyB64 string, secrets map
 	// Credentials UI). GetExact reads by exact name with no flow cascade;
 	// ErrSecretNotFound (first fire) surfaces as the empty string.
 	gform.SetCursorStore(
+		func(ctx context.Context, tenant, name string) (string, error) {
+			v, err := es.GetExact(ctx, tenant, name)
+			if errors.Is(err, daemon.ErrSecretNotFound) {
+				return "", nil
+			}
+			return v, err
+		},
+		func(ctx context.Context, tenant, name, value string) error {
+			return es.Put(ctx, tenant, name, value)
+		},
+	)
+	// homeassistant_state_changed's poll watermark — same read/write pair on
+	// the same store, keyed by the reserved "cursor." prefix.
+	homeassistant.SetCursorStore(
 		func(ctx context.Context, tenant, name string) (string, error) {
 			v, err := es.GetExact(ctx, tenant, name)
 			if errors.Is(err, daemon.ErrSecretNotFound) {

@@ -16,6 +16,7 @@ import (
 	_ "git.sr.ht/~klahr/hazyflow/drops/git"
 	_ "git.sr.ht/~klahr/hazyflow/drops/github"
 	_ "git.sr.ht/~klahr/hazyflow/drops/gmail"
+	_ "git.sr.ht/~klahr/hazyflow/drops/homeassistant"
 	_ "git.sr.ht/~klahr/hazyflow/drops/io"
 	_ "git.sr.ht/~klahr/hazyflow/drops/net"
 	_ "git.sr.ht/~klahr/hazyflow/drops/notify"
