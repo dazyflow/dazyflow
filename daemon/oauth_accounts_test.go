@@ -62,7 +62,7 @@ func TestOAuthListAccounts_CoverageAndGate(t *testing.T) {
 		t.Errorf("provider = %q, want google", resp.Provider)
 	}
 	// Services are the sorted scope-group keys.
-	wantServices := []string{"Gmail", "Google Forms", "Google Sheets"}
+	wantServices := []string{"Gmail", "Google Calendar", "Google Drive", "Google Forms", "Google Sheets"}
 	if len(resp.Services) != len(wantServices) {
 		t.Fatalf("services = %v, want %v", resp.Services, wantServices)
 	}

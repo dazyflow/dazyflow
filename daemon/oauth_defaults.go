@@ -53,13 +53,17 @@ var KnownOAuthProviderDefaults = []OAuthProviderDefault{
 	},
 	{
 		Name:         "google",
-		DisplayName:  "Google (Gmail / Sheets / Drive)",
+		DisplayName:  "Google (Gmail / Sheets / Drive / Calendar)",
 		AuthorizeURL: "https://accounts.google.com/o/oauth2/v2/auth",
 		TokenURL:     "https://oauth2.googleapis.com/token",
 		Scopes: []string{
-			// Sensitive scopes: send mail + read/write Sheets.
+			// Sensitive scopes: send mail + read/write Sheets + Calendar
+			// events (calendar.events reads/writes events; calendar.readonly
+			// lists calendars and reads events).
 			"https://www.googleapis.com/auth/gmail.send",
 			"https://www.googleapis.com/auth/spreadsheets",
+			"https://www.googleapis.com/auth/calendar.events",
+			"https://www.googleapis.com/auth/calendar.readonly",
 			// Restricted scopes: gmail.readonly powers gmail_search /
 			// gmail_get; drive.readonly powers sheets_export_pdf;
 			// forms.responses.readonly + forms.body.readonly power the
@@ -73,6 +77,10 @@ var KnownOAuthProviderDefaults = []OAuthProviderDefault{
 			// (or drop these) before outside companies can connect.
 			"https://www.googleapis.com/auth/gmail.readonly",
 			"https://www.googleapis.com/auth/drive.readonly",
+			// drive.file grants write access to files the app creates/opens —
+			// least privilege for drive_upload (no access to the user's other
+			// files). drive.readonly above powers drive_list / drive_download.
+			"https://www.googleapis.com/auth/drive.file",
 			"https://www.googleapis.com/auth/forms.responses.readonly",
 			"https://www.googleapis.com/auth/forms.body.readonly",
 		},
@@ -120,6 +128,16 @@ var googleScopeGroups = map[string][]string{
 	"Google Sheets": {
 		"https://www.googleapis.com/auth/spreadsheets",
 		"https://www.googleapis.com/auth/drive.readonly",
+	},
+	"Google Calendar": {
+		"https://www.googleapis.com/auth/calendar.events",
+		"https://www.googleapis.com/auth/calendar.readonly",
+	},
+	"Google Drive": {
+		// list + download read with drive.readonly; upload writes with the
+		// least-privilege drive.file (app-created files only).
+		"https://www.googleapis.com/auth/drive.readonly",
+		"https://www.googleapis.com/auth/drive.file",
 	},
 	"Google Forms": {
 		"https://www.googleapis.com/auth/forms.responses.readonly",

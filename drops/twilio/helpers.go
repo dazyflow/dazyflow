@@ -1,0 +1,153 @@
+// Package twilio hosts the native Twilio connector (twilio_send_sms). Auth is
+// Twilio's HTTP Basic scheme — Account SID as the username, Auth Token as the
+// password — resolved from the `account_sid` / `auth_token` params, which
+// default to ${secret.TWILIO_ACCOUNT_SID} / ${secret.TWILIO_AUTH_TOKEN} so a
+// fresh node works as soon as those secrets exist. It calls the Twilio REST API
+// directly (form-encoded POST), mirroring the stripe/google connectors rather
+// than vendoring the twilio-go SDK — the SMS send is a single endpoint.
+package twilio
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"sync"
+	"time"
+
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
+	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
+)
+
+// maxResponseBytes caps how much of an API response we buffer, so a hostile or
+// buggy upstream (reachable via the base_url override) can't OOM the daemon.
+const maxResponseBytes = 4 << 20 // 4 MiB — Messages responses are small
+
+var (
+	httpBaseMu sync.RWMutex
+	httpBase   = "https://api.twilio.com/2010-04-01"
+)
+
+// SetHTTPBase swaps the Twilio API root (tests point it at httptest).
+func SetHTTPBase(base string) {
+	httpBaseMu.Lock()
+	defer httpBaseMu.Unlock()
+	httpBase = base
+}
+
+func baseURL(job core.Job) string {
+	if b, _ := params.StringOpt(job.Params, "base_url"); b != "" {
+		return strings.TrimRight(b, "/")
+	}
+	httpBaseMu.RLock()
+	defer httpBaseMu.RUnlock()
+	return httpBase
+}
+
+// resolveCreds reads the account_sid + auth_token params. The schema defaults
+// them to the TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN secrets, which the engine
+// resolves before Execute — so an empty value here means the secret isn't set
+// (or the author blanked the param), and the error says exactly that.
+func resolveCreds(job core.Job) (sid, token string, err error) {
+	sid, _ = params.StringOpt(job.Params, "account_sid")
+	token, _ = params.StringOpt(job.Params, "auth_token")
+	if sid == "" || token == "" {
+		return "", "", fmt.Errorf("no Twilio credentials: add TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN secrets (the account_sid/auth_token params resolve them by default) or set them on the step")
+	}
+	return sid, token, nil
+}
+
+// twilioDo runs one authenticated, form-encoded Twilio API call (HTTP Basic
+// with the Account SID + Auth Token). Returns status + body; the caller maps
+// non-2xx via extractTwilioError.
+func twilioDo(ctx context.Context, job core.Job, method, url, form string) (int, []byte, error) {
+	timeoutMS := params.IntDefault(job.Params, "timeout_ms", 15000)
+	if timeoutMS <= 0 {
+		timeoutMS = 15000
+	}
+	reqCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMS)*time.Millisecond)
+	defer cancel()
+
+	sid, token, err := resolveCreds(job)
+	if err != nil {
+		return 0, nil, err
+	}
+	var rdr io.Reader
+	if form != "" {
+		rdr = strings.NewReader(form)
+	}
+	req, err := http.NewRequestWithContext(reqCtx, method, url, rdr)
+	if err != nil {
+		return 0, nil, err
+	}
+	req.SetBasicAuth(sid, token)
+	if form != "" {
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	}
+	// base_url is a tenant-supplied param, so guard the dial: the SSRF client
+	// blocks loopback/private/link-local targets and the egress allowlist (when
+	// set) bounds which public hosts the credentials may be sent to.
+	if err := hfnet.EgressAllowedFor(ctx, url); err != nil {
+		return 0, nil, err
+	}
+	resp, err := hfnet.SafeHTTPClient(time.Duration(timeoutMS)*time.Millisecond, hfnet.PrivateEgressAllowed()).Do(req)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
+	if err != nil {
+		return resp.StatusCode, nil, err
+	}
+	if int64(len(raw)) > maxResponseBytes {
+		return resp.StatusCode, nil, fmt.Errorf("twilio response exceeds %d bytes", maxResponseBytes)
+	}
+	return resp.StatusCode, raw, nil
+}
+
+// extractTwilioError pulls the message (plus code) out of a Twilio error body,
+// so "The 'To' number is not a valid phone number" reaches the user instead of
+// a bare HTTP status.
+func extractTwilioError(body []byte) string {
+	var e struct {
+		Message string `json:"message"`
+		Code    int    `json:"code"`
+	}
+	if err := json.Unmarshal(body, &e); err == nil && e.Message != "" {
+		if e.Code != 0 {
+			return fmt.Sprintf("%d: %s", e.Code, e.Message)
+		}
+		return e.Message
+	}
+	if len(body) > 200 {
+		return string(body[:200])
+	}
+	return string(body)
+}
+
+// textInputOr returns the text wired into input port `port` (string or raw
+// bytes), or `fallback` when the port is unwired/empty. ok is false only when
+// the port carries a NON-text value — a wiring mistake the caller rejects.
+// Same pattern as the stripe / gmail connectors.
+func textInputOr(job core.Job, port, fallback string) (val string, ok bool) {
+	in, present := job.Input[port]
+	if !present || in.Inline == nil {
+		return fallback, true
+	}
+	switch v := in.Inline.(type) {
+	case string:
+		if v != "" {
+			return v, true
+		}
+		return fallback, true
+	case []byte:
+		if len(v) > 0 {
+			return string(v), true
+		}
+		return fallback, true
+	}
+	return "", false
+}

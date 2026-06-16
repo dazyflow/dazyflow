@@ -1,0 +1,177 @@
+package gcal
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/url"
+	"strings"
+
+	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/hazyflow/engine"
+)
+
+func init() {
+	engine.Register(engine.NativeDrop{
+		Manifest: core.Manifest{
+			ID:          "gcal_create_event",
+			Version:     "1.0",
+			Label:       "Google Calendar",
+			Subtitle:    "Create event",
+			Summary:     "Create an event on a Google Calendar.",
+			Description: "Create an event on a Google Calendar. Provide a summary plus start and end times. Use RFC3339 timestamps (2026-06-16T15:00:00Z) for a timed event, or plain dates (2026-06-16) for an all-day event. Attendees is an optional comma-separated list of email addresses.",
+			Integration: "Google Calendar",
+			Category:    "network",
+			Icon:        "calendar-plus",
+			BrandLogo:   "/brands/google-calendar.svg",
+			Color:       "#4285F4",
+			Provider:    "internal",
+			Tags:        []string{"calendar", "google", "events", "create"},
+			Examples: []core.ParamsExample{
+				{Title: "One-hour meeting", Params: json.RawMessage(`{"account":"default","calendar_id":"primary","summary":"Sync","start":"2026-06-16T15:00:00Z","end":"2026-06-16T16:00:00Z"}`)},
+			},
+			RequiresConnections: []core.ConnectionRequirement{
+				{Kind: "oauth", Name: "google", Note: "Google OAuth — calendar.events scope."},
+			},
+			ExecutionModel: core.ExecutionBatch,
+			ProcessModel:   core.ProcessLongLived,
+			Inputs: []core.Port{
+				// Optional: wire a summary in from an upstream step.
+				{Port: "summary", Label: "Summary", MIME: []string{"text/plain"}},
+			},
+			Outputs: []core.Port{
+				{Port: "event_id", Label: "Event ID", MIME: []string{"text/plain"}},
+				{Port: "html_link", Label: "Link", MIME: []string{"text/plain"}},
+				{Port: "event", Label: "Event", MIME: []string{"application/json"}},
+			},
+			ParamsSchema: json.RawMessage(`{
+				"type":"object",
+				"properties":{
+					"account":{"type":"string","default":"default"},
+					"calendar_id":{"type":"string","title":"Calendar","default":"primary","description":"Calendar id, or 'primary' for the connected account's own calendar."},
+					"summary":{"type":"string","title":"Title","description":"Event title."},
+					"description":{"type":"string","title":"Description","description":"Optional event details."},
+					"location":{"type":"string","title":"Location","description":"Optional location text."},
+					"start":{"type":"string","title":"Start","examples":["2026-06-16T15:00:00Z","2026-06-16"],"description":"RFC3339 timestamp for a timed event, or a plain date for an all-day event."},
+					"end":{"type":"string","title":"End","examples":["2026-06-16T16:00:00Z","2026-06-17"],"description":"RFC3339 timestamp, or a plain date (exclusive) for an all-day event."},
+					"time_zone":{"type":"string","title":"Time zone","examples":["America/New_York","UTC"],"description":"IANA time zone for timed events. Optional when the timestamp carries an offset."},
+					"attendees":{"type":"string","title":"Attendees","description":"Comma-separated attendee email addresses."},
+					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
+				},
+				"required":["summary","start","end"]
+			}`),
+			Idempotent: false,
+		},
+		Execute: executeCreateEvent,
+	})
+}
+
+func executeCreateEvent(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
+	summary := resolveSummary(job)
+	if summary == "" {
+		return params.Err(job, "bad_param", "'summary' is required"), nil
+	}
+	start := strings.TrimSpace(params.StringDefault(job.Params, "start", ""))
+	end := strings.TrimSpace(params.StringDefault(job.Params, "end", ""))
+	if start == "" || end == "" {
+		return params.Err(job, "bad_param", "'start' and 'end' are required"), nil
+	}
+
+	token, err := resolveToken(ctx, job)
+	if err != nil {
+		return params.Err(job, "gcal_error", err.Error()), nil
+	}
+
+	tz := strings.TrimSpace(params.StringDefault(job.Params, "time_zone", ""))
+	event := map[string]any{
+		"summary": summary,
+		"start":   eventTimeField(start, tz),
+		"end":     eventTimeField(end, tz),
+	}
+	if d := strings.TrimSpace(params.StringDefault(job.Params, "description", "")); d != "" {
+		event["description"] = d
+	}
+	if loc := strings.TrimSpace(params.StringDefault(job.Params, "location", "")); loc != "" {
+		event["location"] = loc
+	}
+	if att := parseAttendees(params.StringDefault(job.Params, "attendees", "")); len(att) > 0 {
+		event["attendees"] = att
+	}
+
+	body, err := json.Marshal(event)
+	if err != nil {
+		return params.Err(job, "gcal_error", err.Error()), nil
+	}
+	endpoint := calBaseURL(job) + "/calendars/" + url.PathEscape(calendarID(job)) + "/events"
+	status, respBody, err := googleDo(ctx, "POST", endpoint, token, "application/json", body, params.IntDefault(job.Params, "timeout_ms", 15000))
+	if err != nil {
+		return params.Err(job, "gcal_error", err.Error()), nil
+	}
+	if status < 200 || status >= 300 {
+		return params.Err(job, "gcal_error", calErr(respBody)), nil
+	}
+
+	var created rawEvent
+	if err := json.Unmarshal(respBody, &created); err != nil {
+		return params.Err(job, "gcal_error", fmt.Sprintf("events.insert decode: %v", err)), nil
+	}
+	return core.Result{
+		JobID:  job.ID,
+		Status: core.StatusOK,
+		Output: map[string]core.Ref{
+			"event_id":  {MIME: "text/plain", Inline: created.ID},
+			"html_link": {MIME: "text/plain", Inline: created.HTMLLink},
+			"event":     {MIME: "application/json", Inline: created.normalize()},
+		},
+	}, nil
+}
+
+// resolveSummary prefers a wired 'summary' input port over the param.
+func resolveSummary(job core.Job) string {
+	if in, ok := job.Input["summary"]; ok && in.Inline != nil {
+		switch v := in.Inline.(type) {
+		case string:
+			if s := strings.TrimSpace(v); s != "" {
+				return s
+			}
+		case []byte:
+			if s := strings.TrimSpace(string(v)); s != "" {
+				return s
+			}
+		}
+	}
+	return strings.TrimSpace(params.StringDefault(job.Params, "summary", ""))
+}
+
+// eventTimeField builds the Calendar API start/end object. A value containing
+// "T" is treated as a timed instant ({dateTime[, timeZone]}); otherwise it's an
+// all-day date ({date}). timeZone is attached only to timed events, and only
+// when supplied.
+func eventTimeField(value, tz string) map[string]any {
+	if strings.Contains(value, "T") {
+		f := map[string]any{"dateTime": value}
+		if tz != "" {
+			f["timeZone"] = tz
+		}
+		return f
+	}
+	return map[string]any{"date": value}
+}
+
+// parseAttendees splits a comma-separated address list into the API's
+// [{email}] form, trimming whitespace and dropping blanks.
+func parseAttendees(raw string) []map[string]any {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	var out []map[string]any
+	for _, part := range strings.Split(raw, ",") {
+		email := strings.TrimSpace(part)
+		if email == "" {
+			continue
+		}
+		out = append(out, map[string]any{"email": email})
+	}
+	return out
+}

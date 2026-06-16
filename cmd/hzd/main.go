@@ -41,6 +41,8 @@ import (
 	"git.sr.ht/~klahr/hazyflow/core/buildinfo"
 	"git.sr.ht/~klahr/hazyflow/daemon"
 	_ "git.sr.ht/~klahr/hazyflow/drops"
+	"git.sr.ht/~klahr/hazyflow/drops/drive"
+	"git.sr.ht/~klahr/hazyflow/drops/gcal"
 	gitdrop "git.sr.ht/~klahr/hazyflow/drops/git"
 	"git.sr.ht/~klahr/hazyflow/drops/github"
 	"git.sr.ht/~klahr/hazyflow/drops/gmail"
@@ -1573,6 +1575,8 @@ func wireConnectorTokenHooks(reg *daemon.OAuthRegistry) {
 	github.SetTokenLookup(bind("github"))
 	gmail.SetTokenLookup(bind("google"))
 	sheets.SetTokenLookup(bind("google"))
+	gcal.SetTokenLookup(bind("google"))
+	drive.SetTokenLookup(bind("google"))
 	gform.SetTokenLookup(bind("google"))
 	notion.SetTokenLookup(bind("notion"))
 	// Live Sheets-mapping field hints for the Google Form source: resolve a

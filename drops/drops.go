@@ -11,8 +11,10 @@ package drops
 import (
 	_ "git.sr.ht/~klahr/hazyflow/drops/claude"
 	_ "git.sr.ht/~klahr/hazyflow/drops/db"
+	_ "git.sr.ht/~klahr/hazyflow/drops/drive"
 	_ "git.sr.ht/~klahr/hazyflow/drops/excel"
 	_ "git.sr.ht/~klahr/hazyflow/drops/flow"
+	_ "git.sr.ht/~klahr/hazyflow/drops/gcal"
 	_ "git.sr.ht/~klahr/hazyflow/drops/git"
 	_ "git.sr.ht/~klahr/hazyflow/drops/github"
 	_ "git.sr.ht/~klahr/hazyflow/drops/gmail"
@@ -30,5 +32,6 @@ import (
 	_ "git.sr.ht/~klahr/hazyflow/drops/transform"
 	_ "git.sr.ht/~klahr/hazyflow/drops/trigger"
 	_ "git.sr.ht/~klahr/hazyflow/drops/trigger/gform"
+	_ "git.sr.ht/~klahr/hazyflow/drops/twilio"
 	_ "git.sr.ht/~klahr/hazyflow/drops/value"
 )
