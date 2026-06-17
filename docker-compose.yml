@@ -29,6 +29,22 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    # Serve TLS so hzd can connect with sslmode=require. hzd refuses to boot
+    # in production against a DSN that doesn't enforce TLS (the DB link carries
+    # personal data + wrapped DEKs). A self-signed cert is enough: `require`
+    # demands an encrypted channel but does not verify the cert, so no CA is
+    # needed for this same-host sibling. Generate ./certs once (see DEPLOY.md):
+    #   openssl req -new -x509 -days 3650 -nodes -subj /CN=postgres \
+    #     -out certs/server.crt -keyout certs/server.key
+    #   chown 70:70 certs/server.key && chmod 600 certs/server.key
+    # (postgres:16-alpine runs as uid 70 and refuses a group/world-readable key.)
+    command:
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/certs/server.crt
+      - -c
+      - ssl_key_file=/certs/server.key
     environment:
       POSTGRES_USER:     ${POSTGRES_USER:-hazyflow}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hazyflow}
@@ -40,6 +56,9 @@ services:
       - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      # Read-only TLS material for `ssl=on` above. Key must be 0600 and owned
+      # by uid 70 on the host (postgres refuses a loosely-permissioned key).
+      - ./certs:/certs:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hazyflow} -d ${POSTGRES_DB:-hazyflow}"]
       interval: 5s

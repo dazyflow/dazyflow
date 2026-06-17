@@ -277,14 +277,83 @@ toggle involved at all.)
 
 `hzd` **refuses to start** if it would run with a bundled insecure
 default — a missing `HAZYFLOW_POSTGRES_DSN`, a DSN still using the shipped
-default DB password, or an empty `HAZYFLOW_MASTER_KEY`. The boot log
-prints a `FATAL` line naming each offending value. Fix them (set a strong
-`POSTGRES_PASSWORD` and a real master key) and restart.
+default DB password, a DSN that does not enforce TLS (`sslmode` is
+anything other than `require`/`verify-ca`/`verify-full`), or an empty
+`HAZYFLOW_MASTER_KEY`. The boot log prints a `FATAL` line naming each
+offending value. Fix them (set a strong `POSTGRES_PASSWORD`, a TLS
+`sslmode`, and a real master key) and restart.
+
+The TLS check has no loopback exemption: even when Postgres is a sibling
+container on the same host, the DSN must enforce TLS — the DB link carries
+personal data and the rows holding wrapped DEKs, and the guard can't tell
+on-host from remote. If you use the bundled `postgres` service, see
+[Postgres TLS for the bundled service](#postgres-tls-for-the-bundled-service)
+below; for a managed/remote DB the provider already terminates TLS and you
+just append `?sslmode=require` to the DSN.
 
 `HAZYFLOW_DEV=1` downgrades the guard from fatal to warnings so the
 bundled defaults boot for a local trial. **Never set it in production** —
 it exists only so `docker compose up -d` works for a throwaway smoke
 test.
+
+### Postgres TLS for the bundled service
+
+The bundled `postgres:16-alpine` ships with **SSL off**, so the fail-closed
+guard above will reject the default `sslmode=disable` DSN and `hzd` will
+restart-loop (nginx then returns `502`). This is a different TLS hop from
+your reverse proxy: the proxy terminates browser↔`hzd` TLS, while this guard
+is about the `hzd`↔Postgres link. The proxy can't satisfy it — you have to
+give Postgres its own cert.
+
+A **self-signed cert is enough**: `sslmode=require` demands an encrypted
+channel but does not verify the certificate, so no CA is needed for a
+same-host sibling. (Use `verify-full` with a CA only if you want to pin a
+remote DB's identity.)
+
+1. Generate the cert. `postgres:16-alpine` runs as uid 70 and refuses a
+   group/world-readable key, so set ownership and mode explicitly:
+
+   ```sh
+   cd <your compose dir>
+   mkdir -p certs
+   openssl req -new -x509 -days 3650 -nodes -subj /CN=postgres \
+       -out certs/server.crt -keyout certs/server.key
+   chown 70:70 certs/server.crt certs/server.key
+   chmod 600 certs/server.key
+   chmod 644 certs/server.crt
+   ```
+
+2. Serve TLS from the `postgres` service (already wired in the shipped
+   `docker-compose.yml`): a `command:` enabling `ssl=on` with the cert/key
+   paths, and a read-only `./certs:/certs:ro` mount.
+
+   ```yaml
+   postgres:
+     image: postgres:16-alpine
+     command:
+       - -c
+       - ssl=on
+       - -c
+       - ssl_cert_file=/certs/server.crt
+       - -c
+       - ssl_key_file=/certs/server.key
+     volumes:
+       - pgdata:/var/lib/postgresql/data
+       - ./certs:/certs:ro
+   ```
+
+3. Point the DSN at TLS — change `sslmode=disable` to `sslmode=require` in
+   `HAZYFLOW_POSTGRES_DSN` (in `.env`), then recreate:
+
+   ```sh
+   docker compose up -d
+   docker compose logs -f hzd   # the FATAL TLS line should be gone
+   docker compose ps            # hzd "Up (healthy)", not Restarting
+   ```
+
+`ssl=on` only *offers* TLS; it still accepts plaintext clients, so this
+change is backward-compatible with a `HAZYFLOW_DEV=1` local stack that
+connects with `sslmode=disable`.
 
 ### Migrating an existing JSON user file to Postgres
 
