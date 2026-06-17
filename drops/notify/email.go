@@ -10,6 +10,7 @@ import (
 	"mime"
 	"net"
 	"net/smtp"
+	"strconv"
 	"strings"
 
 	"git.sr.ht/~klahr/hazyflow/core"
@@ -34,20 +35,34 @@ func init() {
 			Integration: "Email",
 			Tags:        []string{"email", "smtp", "notify", "report"},
 			Summary:     "Send an email through any mail server (SMTP) — daily summaries, alerts, or a build's output straight into someone's inbox.",
-			Description: "Send an email through your own mail server (SMTP). To, Subject and Body can be typed on the step or wired in from upstream (the matching input port overrides the param) — handy for per-recipient sends or mailing another step's output. Attach files by wiring file-producing nodes (e.g. sheets_export_pdf) into the variadic 'attachments' input. The server connection (host, login, sender) lives under Advanced.",
+			Description: "Send an email through your own mail server (SMTP). To, Subject and Body can be typed on the step or wired in from upstream (the matching input port overrides the param) — handy for per-recipient sends or mailing another step's output. Attach files by wiring file-producing nodes (e.g. sheets_export_pdf) into the variadic 'attachments' input. Configure the mail server (host, security, login, sender) once on the Email integration page.",
 			Examples: []core.ParamsExample{
 				{
-					Title:  "Daily report via STARTTLS on port 587",
-					Params: json.RawMessage(`{"host":"smtp.example.com","port":587,"tls":"starttls","username":"${secret.SMTP_USER}","password":"${secret.SMTP_PASS}","from":"reports@example.com","to":"team@example.com","subject":"Daily sales report","body":"See attached."}`),
+					Title:  "Daily report",
+					Params: json.RawMessage(`{"to":"team@example.com","subject":"Daily sales report","body":"See attached."}`),
+					Notes:  "The mail server and sender are configured once on the Email integration page, not on the step.",
 				},
 				{
-					Title:  "Implicit TLS (port 465) to multiple recipients",
-					Params: json.RawMessage(`{"host":"smtp.example.com","port":465,"tls":"implicit","username":"${secret.SMTP_USER}","password":"${secret.SMTP_PASS}","from":"alerts@example.com","to":"oncall@example.com,cto@example.com","subject":"Alert: error rate above threshold"}`),
+					Title:  "Alert to multiple recipients",
+					Params: json.RawMessage(`{"to":"oncall@example.com,cto@example.com","subject":"Alert: error rate above threshold"}`),
 					Notes:  "Body left empty here so it can be wired in from an upstream node.",
 				},
 			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
+			// The mail server (host/port/security/login/sender) is a per-tenant
+			// ConnectionFields bundle configured once on the integration page,
+			// not typed on every node — the engine injects it into each node's
+			// params at run time (injectConnectionDefaults), exactly like Home
+			// Assistant's URL+token. So flows carry only the per-message fields.
+			ConnectionFields: []core.ConnectionField{
+				{Key: "host", Label: "Mail server", Required: true, Placeholder: "smtp.example.com"},
+				{Key: "port", Label: "Port", Placeholder: "587 (STARTTLS) or 465 (SSL/TLS)"},
+				{Key: "tls", Label: "Connection security", Placeholder: "starttls, implicit, or none"},
+				{Key: "username", Label: "Username", Placeholder: "usually your email address"},
+				{Key: "password", Label: "Password", Secret: true, Placeholder: "mail server password or app password"},
+				{Key: "from", Label: "From address", Required: true, Placeholder: "reports@example.com"},
+			},
 			Inputs: []core.Port{
 				// Named after their params so the card shows inline editable
 				// boxes (Unreal-style); a wired value overrides the typed one.
@@ -65,20 +80,12 @@ func init() {
 			// (see the Execute result) so run records keep them for debugging;
 			// they're just not a pin (same as gmail send / ntfy).
 			Outputs: []core.Port{},
-			// The server connection (host/port/tls/login/from) is x_advanced:
-			// it's set once per provider, so it stays out of the node card and
-			// the Inspector's main form — the visible surface matches Gmail
-			// send (To / Subject / Body / Attachments).
+			// Only the per-message fields are params now; the server connection
+			// lives in ConnectionFields above and is injected at run time.
 			ParamsSchema: json.RawMessage(
 				`{
 					"type":"object",
 					"properties":{
-						"host":{"type":"string","title":"Mail server","x_advanced":true,"description":"Your SMTP server's address, e.g. smtp.example.com. Your email provider lists this in its settings."},
-						"port":{"type":"integer","title":"Port","default":587,"minimum":1,"x_advanced":true,"description":"Mail server port — usually 587 (STARTTLS) or 465 (SSL/TLS)."},
-						"tls":{"type":"string","title":"Connection security","enum":["starttls","implicit","none"],"enumNames":["STARTTLS (port 587)","SSL/TLS (port 465)","None — insecure"],"default":"starttls","x_advanced":true,"description":"How the connection is encrypted. Match what your provider says for the port you chose; None is for local testing only."},
-						"username":{"type":"string","title":"Username","x_advanced":true,"description":"Mail server login, usually your email address. ${secret.NAME} keeps it out of the flow."},
-						"password":{"type":"string","title":"Password","x_advanced":true,"description":"Mail server password or app password. ${secret.NAME} keeps it out of the flow."},
-						"from":{"type":"string","title":"From address","x_advanced":true,"description":"The sender address. Defaults to the username — most providers require them to match anyway."},
 						"to":{"type":"string","title":"To","description":"Recipient(s), comma-separated. Overridden by the 'To' input."},
 						"cc":{"type":"string","title":"CC","description":"Carbon-copy recipient(s), comma-separated. Everyone on the email sees who's CC'd."},
 						"bcc":{"type":"string","title":"BCC","description":"Blind-copy recipient(s), comma-separated. Hidden from the other recipients."},
@@ -86,7 +93,7 @@ func init() {
 						"body":{"type":"string","title":"Body","format":"multiline","description":"Email body text. Overridden by the 'Body' input."},
 						"format":{"type":"string","title":"Body format","enum":["text","html"],"enumNames":["Text","HTML"],"default":"html","description":"How the body is sent. HTML renders formatting and links; Text sends it exactly as typed."}
 					},
-					"required":["host","to"]
+					"required":["to"]
 				}`,
 			),
 			Idempotent:  false,
@@ -133,10 +140,25 @@ func splitRecipients(s string) []string {
 	return out
 }
 
+// smtpPort resolves the mail-server port. ConnectionFields inject it as a
+// string ("587"); older flows may carry it as a JSON number. Try the string
+// form first, fall back to the numeric form, then to 587 (STARTTLS default).
+func smtpPort(job core.Job) int {
+	if s := strings.TrimSpace(params.StringDefault(job.Params, "port", "")); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n > 0 {
+			return n
+		}
+	}
+	return params.IntDefault(job.Params, "port", 587)
+}
+
 func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
-	host, err := params.String(job.Params, "host")
-	if err != nil {
-		return params.Err(job, "bad_param", err.Error()), nil
+	// host/port/security/login/sender come from the per-tenant connection the
+	// engine injected into params (ConnectionFields). An empty host means the
+	// tenant hasn't connected Email yet — say so, pointing at the right page.
+	host := strings.TrimSpace(params.StringDefault(job.Params, "host", ""))
+	if host == "" {
+		return params.Err(job, "not_connected", "Email isn't connected — set up your mail server on the Email integration page"), nil
 	}
 	// From defaults to the username — the SMTP login is usually the sender
 	// address, and most providers require the two to match anyway.
@@ -145,7 +167,7 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 		from = params.StringDefault(job.Params, "username", "")
 	}
 	if from == "" {
-		return params.Err(job, "bad_param", "'from' is required — set From address (or Username) under Advanced"), nil
+		return params.Err(job, "not_connected", "no sender address — set the From address on the Email integration page"), nil
 	}
 
 	// to / subject / body each take their value from the matching input port
@@ -180,7 +202,7 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 		return params.Err(job, "bad_input", "'Subject' input must be text"), nil
 	}
 
-	port := params.IntDefault(job.Params, "port", 587)
+	port := smtpPort(job)
 	tlsMode := params.StringDefault(job.Params, "tls", "starttls")
 	username := params.StringDefault(job.Params, "username", "")
 	password := params.StringDefault(job.Params, "password", "")

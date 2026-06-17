@@ -288,6 +288,20 @@ function EditorInner() {
     Map<string, { deps: unknown[]; node: FlowNode<HazyNodeData> }>
   >(new Map());
   const [selectedID, setSelectedID] = useState<string | null>(null);
+  // Toggles the "N to configure" popover — a click-to-jump list of every node
+  // still missing required values, closed on outside-click (effect below).
+  const [showConfigList, setShowConfigList] = useState(false);
+  const configWarnRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!showConfigList) return;
+    const onDown = (e: MouseEvent) => {
+      if (configWarnRef.current && !configWarnRef.current.contains(e.target as Node)) {
+        setShowConfigList(false);
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [showConfigList]);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
@@ -417,7 +431,7 @@ function EditorInner() {
   // Ctrl+K can spawn the chosen drop where the user is looking. Falls
   // back to viewport centre when nothing has moved yet.
   const lastPointer = useRef<{ x: number; y: number } | null>(null);
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, fitView } = useReactFlow();
 
   // hydrateGraph loads a Graph payload into editor state. Shared by the
   // mount load, the history preview (a past ref), and the post-restore
@@ -1470,7 +1484,7 @@ function EditorInner() {
   }, [nodes, edges]);
 
   const configErrorsByNode = useMemo(() => {
-    const errs = new Map<string, string[]>();
+    const errs = new Map<string, { key: string; message: string }[]>();
     for (const n of nodes) {
       const man = n.data.manifest;
       if (!man) continue;
@@ -1516,7 +1530,12 @@ function EditorInner() {
           missing.set("__nested", i18n.t("nodeCard.loopNested"));
         }
       }
-      if (missing.size > 0) errs.set(n.id, [...missing.values()]);
+      if (missing.size > 0) {
+        errs.set(
+          n.id,
+          [...missing.entries()].map(([key, message]) => ({ key, message })),
+        );
+      }
     }
     return errs;
   }, [nodes, paramsByID, connectedInputsByNode, edges, loopOwnerByNode]);
@@ -2781,7 +2800,7 @@ function EditorInner() {
       const node = nodes.find((n) => n.id === nodeID);
       const label = node?.data.label || node?.data.moduleID || nodeID;
       setSelectedID(nodeID);
-      setError(t("editor.configBlock", { label, detail: msgs[0] }));
+      setError(t("editor.configBlock", { label, detail: msgs[0].message }));
       return;
     }
     // Warn before a run that's missing a connected account or a
@@ -3154,15 +3173,48 @@ function EditorInner() {
           {/* Config verification (#13): how many drops are still missing
               required values. Sits next to Run as a non-blocking heads-up. */}
           {configErrorsByNode.size > 0 && (
-            <span
-              className="editor-config-warn"
-              title={t("editor.configWarnTitle")}
-            >
-              <AlertCircle size={14} />
-              <span className="toolbar-label">
-                {t("editor.configWarn", { count: configErrorsByNode.size })}
-              </span>
-            </span>
+            <div className="editor-config-warn-wrap" ref={configWarnRef}>
+              <button
+                type="button"
+                className="editor-config-warn"
+                title={t("editor.configWarnTitle")}
+                onClick={() => setShowConfigList((v) => !v)}
+                aria-expanded={showConfigList}
+              >
+                <AlertCircle size={14} />
+                <span className="toolbar-label">
+                  {t("editor.configWarn", { count: configErrorsByNode.size })}
+                </span>
+              </button>
+              {showConfigList && (
+                <div className="editor-config-list" role="menu">
+                  {[...configErrorsByNode.entries()].map(([nodeID, errs]) => {
+                    const node = nodes.find((n) => n.id === nodeID);
+                    const label = node?.data.label || node?.data.moduleID || nodeID;
+                    return (
+                      <button
+                        key={nodeID}
+                        type="button"
+                        className="editor-config-list-row"
+                        role="menuitem"
+                        onClick={() => {
+                          setSelectedID(nodeID);
+                          fitView({ nodes: [{ id: nodeID }], duration: 400, maxZoom: 1.2, padding: 0.5 });
+                          setShowConfigList(false);
+                        }}
+                      >
+                        <span className="editor-config-list-node">{label}</span>
+                        <ul className="editor-config-list-msgs">
+                          {errs.map((e) => (
+                            <li key={e.key}>{e.message}</li>
+                          ))}
+                        </ul>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           )}
 
           {/* Primary action — pinned to the right edge as the focal point.

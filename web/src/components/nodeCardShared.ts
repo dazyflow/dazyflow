@@ -91,9 +91,11 @@ export type HazyNodeData = {
   // This node's output values from the latest run (#10), keyed by port —
   // shown as a hover-peek on each output port.
   outputs?: Record<string, Ref>;
-  // Required values this drop is still missing (#13) — drives a red
-  // "needs configuration" badge, distinct from the amber lint warning.
-  configErrors?: string[];
+  // Required values this drop is still missing (#13), each keyed by the
+  // param/port it concerns. An error whose `key` is an input port marks that
+  // pin red on the card; the rest (pure-literal params with no pin, a loop's
+  // unwired body) fall back to the red "needs configuration" badge.
+  configErrors?: { key: string; message: string }[];
   // setupNeeded is set when this drop requires a connection (OAuth account,
   // API key, or service connection) that the tenant hasn't configured yet.
   // Drives a distinct "Needs setup" chip with a Connect link — separate from

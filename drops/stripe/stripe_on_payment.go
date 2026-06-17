@@ -32,7 +32,7 @@ func init() {
 				},
 			},
 			RequiresConnections: []core.ConnectionRequirement{
-				{Kind: "secret", Name: "STRIPE_WEBHOOK_SECRET", Note: "Signing secret (whsec_…) of the Stripe webhook endpoint that points at /api/v1/events/stripe/<tenant>."},
+				{Kind: "secret", Name: "STRIPE_WEBHOOK_SECRET", Note: "Webhook signing secret (whsec_…)."},
 			},
 			ExecutionModel: core.ExecutionTrigger,
 			ProcessModel:   core.ProcessLongLived,

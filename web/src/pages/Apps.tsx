@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { api, APIError } from "../api";
 import { useAuth } from "../auth";
 import { iconFor, isBrandedIcon, dropColor } from "../icons";
+import { ConfirmModal } from "../components/ConfirmModal";
 import {
   integrationMeta,
   integrationNameFromSlug,
@@ -543,6 +544,7 @@ function SecretCard({
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
 
   // Split the manifest note into a field label and a placeholder hint:
   // "Anthropic API key (sk-ant-…)." → label "Anthropic API key",
@@ -571,7 +573,6 @@ function SecretCard({
 
   const remove = async () => {
     if (!token) return;
-    if (!window.confirm(t("integrations.connection.removeConfirm", { name: req.name }))) return;
     try {
       await api.deleteSecret(token, req.name);
       onChanged();
@@ -606,7 +607,11 @@ function SecretCard({
               <button type="button" className="ghost" onClick={() => setEditing(true)}>
                 {t("integrations.connection.edit")}
               </button>
-              <button type="button" className="danger-outline" onClick={() => void remove()}>
+              <button
+                type="button"
+                className="danger-outline"
+                onClick={() => setConfirming(true)}
+              >
                 {t("integrations.connection.disconnect")}
               </button>
             </div>
@@ -650,6 +655,19 @@ function SecretCard({
         </form>
       ) : (
         <p className="connection-note">{t("integrations.connection.notConfigured")}</p>
+      )}
+      {confirming && (
+        <ConfirmModal
+          title={t("integrations.connection.disconnect")}
+          message={t("integrations.connection.removeConfirm", { name: req.name })}
+          confirmLabel={t("integrations.connection.disconnect")}
+          danger
+          onConfirm={() => {
+            setConfirming(false);
+            void remove();
+          }}
+          onCancel={() => setConfirming(false)}
+        />
       )}
     </div>
   );
@@ -752,6 +770,7 @@ function ConnectionFieldsCard({
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
   // testState tracks the "Test connection" button: idle, in-flight, or a
   // resolved result with a human message. Separate from `err` (the save
   // form's error) so testing an existing connection doesn't disturb the form.
@@ -803,7 +822,6 @@ function ConnectionFieldsCard({
 
   const disconnect = async () => {
     if (!token) return;
-    if (!window.confirm(t("integrations.connection.disconnectFieldsConfirm", { name }))) return;
     try {
       for (const f of fields) {
         if (isSet(f)) await api.deleteSecret(token, keyFor(f));
@@ -874,7 +892,11 @@ function ConnectionFieldsCard({
               <button type="button" className="ghost" onClick={() => setEditing(true)}>
                 {t("integrations.connection.edit")}
               </button>
-              <button type="button" className="danger-outline" onClick={() => void disconnect()}>
+              <button
+                type="button"
+                className="danger-outline"
+                onClick={() => setConfirming(true)}
+              >
                 {t("integrations.connection.disconnect")}
               </button>
             </div>
@@ -929,6 +951,19 @@ function ConnectionFieldsCard({
         </form>
       ) : (
         <p className="connection-note">{t("integrations.connection.notConfigured")}</p>
+      )}
+      {confirming && (
+        <ConfirmModal
+          title={t("integrations.connection.disconnect")}
+          message={t("integrations.connection.disconnectFieldsConfirm", { name })}
+          confirmLabel={t("integrations.connection.disconnect")}
+          danger
+          onConfirm={() => {
+            setConfirming(false);
+            void disconnect();
+          }}
+          onCancel={() => setConfirming(false)}
+        />
       )}
     </div>
   );

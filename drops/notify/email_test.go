@@ -148,6 +148,34 @@ func TestExecuteEmail_ToAcceptsCommaSeparatedString(t *testing.T) {
 	}
 }
 
+func TestSMTPPort(t *testing.T) {
+	// ConnectionFields inject the port as a string; older flows carry a number.
+	// Both must resolve, and an unset/garbage value falls back to 587.
+	cases := []struct {
+		name string
+		port any
+		want int
+	}{
+		{"connection string", "465", 465},
+		{"legacy int", 587, 587},
+		{"legacy float", float64(2525), 2525},
+		{"blank string", "", 587},
+		{"garbage string", "smtp", 587},
+		{"unset", nil, 587},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			p := map[string]any{}
+			if c.port != nil {
+				p["port"] = c.port
+			}
+			if got := smtpPort(core.Job{Params: p}); got != c.want {
+				t.Errorf("smtpPort(%v) = %d, want %d", c.port, got, c.want)
+			}
+		})
+	}
+}
+
 func TestExecuteEmail_Validation(t *testing.T) {
 	base := func() map[string]any {
 		return map[string]any{
@@ -162,8 +190,10 @@ func TestExecuteEmail_Validation(t *testing.T) {
 		mutate   func(map[string]any)
 		wantCode string
 	}{
-		{"missing host", func(p map[string]any) { delete(p, "host") }, "bad_param"},
-		{"missing from", func(p map[string]any) { delete(p, "from") }, "bad_param"},
+		// host + from come from the connection now, so their absence reads as
+		// "not connected" rather than a per-node bad param.
+		{"missing host", func(p map[string]any) { delete(p, "host") }, "not_connected"},
+		{"missing from", func(p map[string]any) { delete(p, "from") }, "not_connected"},
 		{"no recipients", func(p map[string]any) { delete(p, "to") }, "bad_param"},
 		{"empty recipient list", func(p map[string]any) { p["to"] = []any{} }, "bad_param"},
 	}

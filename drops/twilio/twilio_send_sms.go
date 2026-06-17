@@ -33,8 +33,8 @@ func init() {
 				{Title: "Send via a Messaging Service", Params: json.RawMessage(`{"to":"+15558675309","messaging_service_sid":"MGxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx","body":"Your order has shipped."}`)},
 			},
 			RequiresConnections: []core.ConnectionRequirement{
-				{Kind: "secret", Name: "TWILIO_ACCOUNT_SID", Note: "Twilio Account SID (ACxxxx…), from the Twilio Console dashboard."},
-				{Kind: "secret", Name: "TWILIO_AUTH_TOKEN", Note: "Twilio Auth Token, from the Twilio Console dashboard."},
+				{Kind: "secret", Name: "TWILIO_ACCOUNT_SID", Note: "Twilio Account SID (ACxxxx…)."},
+				{Kind: "secret", Name: "TWILIO_AUTH_TOKEN", Note: "Twilio Auth Token (32-character token)."},
 			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,

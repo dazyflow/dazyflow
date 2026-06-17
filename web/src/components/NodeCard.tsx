@@ -1,6 +1,6 @@
 import { memo } from "react";
 import { Handle, Position, useStore, type NodeProps } from "@xyflow/react";
-import { AlertTriangle, AlertCircle, ChevronRight, Repeat } from "lucide-react";
+import { AlertTriangle, ChevronRight, Repeat } from "lucide-react";
 import i18n from "../i18n";
 import { Switch } from "./Switch";
 import { iconFor, isBrandedIcon, dropColor } from "../icons";
@@ -130,6 +130,14 @@ function HazyNodeImpl({ data, selected }: NodeProps) {
   const connectedInputs = d.connectedInputs ?? [];
   const connectedOutputs = d.connectedOutputs ?? [];
   const inputPortIds = new Set((d.manifest?.inputs ?? []).map((p) => p.port));
+  // A required input that's unset/unwired recolours its pin red (#13) — keyed
+  // by port so the problem reads on the pin itself. The card also keeps a red
+  // border (config-err) while any config error stands.
+  const missingByPort = new Map(
+    (d.configErrors ?? [])
+      .filter((e) => inputPortIds.has(e.key))
+      .map((e) => [e.key, e.message]),
+  );
   const required = d.manifest?.params_schema?.required ?? [];
   const inlineEligible = (s?: JSONSchema): s is JSONSchema =>
     !!s && !isAdvanced(s) && isPrimitive(s);
@@ -429,9 +437,13 @@ function HazyNodeImpl({ data, selected }: NodeProps) {
                       style={
                         isPass
                           ? passPinStyle("in")
-                          : dotStyle(c, connectedInputs.includes(p.port), "in")
+                          : dotStyle(c, connectedInputs.includes(p.port), "in", missingByPort.has(p.port))
                       }
-                      title={isPass ? i18n.t("nodeCard.passThrough") : portTooltip(p)}
+                      title={
+                        isPass
+                          ? i18n.t("nodeCard.passThrough")
+                          : (missingByPort.get(p.port) ?? portTooltip(p))
+                      }
                     >
                       {isPass && <PassPinIcon />}
                     </Handle>
@@ -507,15 +519,6 @@ function HazyNodeImpl({ data, selected }: NodeProps) {
       {d.loopHint && (
         <div className="hz-node-loop" title={d.loopHint} aria-label="runs once on the whole list">
           <Repeat size={13} />
-        </div>
-      )}
-      {d.configErrors && d.configErrors.length > 0 && (
-        <div
-          className="hz-node-config"
-          title={d.configErrors.join("\n")}
-          aria-label="needs configuration"
-        >
-          <AlertCircle size={13} />
         </div>
       )}
       {d.setupNeeded &&
@@ -724,6 +727,13 @@ function OperatorChip({
     OP_MAX_FONT,
     Math.max(OP_BASE_FONT, OP_MIN_PX / (zoom || 1)),
   );
+  // Missing required operands recolour their pin red (#13), same as the full card.
+  const inputPortIds = new Set(inputs.map((p) => p.port));
+  const missingByPort = new Map(
+    (d.configErrors ?? [])
+      .filter((e) => inputPortIds.has(e.key))
+      .map((e) => [e.key, e.message]),
+  );
   return (
     <div
       className={
@@ -745,15 +755,15 @@ function OperatorChip({
         type="target"
         position={Position.Left}
         id={inputs[0].port}
-        style={{ ...dotStyle(portColor(inputs[0].mime), connectedInputs.includes(inputs[0].port)), top: "32%" }}
-        title={portTooltip(inputs[0])}
+        style={{ ...dotStyle(portColor(inputs[0].mime), connectedInputs.includes(inputs[0].port), undefined, missingByPort.has(inputs[0].port)), top: "32%" }}
+        title={missingByPort.get(inputs[0].port) ?? portTooltip(inputs[0])}
       />
       <Handle
         type="target"
         position={Position.Left}
         id={inputs[1].port}
-        style={{ ...dotStyle(portColor(inputs[1].mime), connectedInputs.includes(inputs[1].port)), top: "68%" }}
-        title={portTooltip(inputs[1])}
+        style={{ ...dotStyle(portColor(inputs[1].mime), connectedInputs.includes(inputs[1].port), undefined, missingByPort.has(inputs[1].port)), top: "68%" }}
+        title={missingByPort.get(inputs[1].port) ?? portTooltip(inputs[1])}
       />
       <span className="hz-op-symbol" style={{ fontSize }}>
         {sym}
@@ -773,11 +783,6 @@ function OperatorChip({
       {d.loopHint && (
         <div className="hz-node-loop" title={d.loopHint} aria-label="runs once on the whole list">
           <Repeat size={13} />
-        </div>
-      )}
-      {d.configErrors && d.configErrors.length > 0 && (
-        <div className="hz-node-config" title={d.configErrors.join("\n")} aria-label="needs configuration">
-          <AlertCircle size={13} />
         </div>
       )}
     </div>
@@ -802,14 +807,19 @@ function OperatorChip({
 //   - fill  → CONNECTION STATE (#11): a wired port is a solid, full-strength
 //             dot; an unwired port is a faint, thinner hollow ring. (Required
 //             vs optional is shown by an asterisk on the label, not the fill.)
-function dotStyle(color: string, filled: boolean, place?: "in" | "out") {
+function dotStyle(color: string, filled: boolean, place?: "in" | "out", missing?: boolean) {
+  // A required input that's neither wired nor filled in is painted with the
+  // danger colour instead of its MIME colour (#13), so the problem reads on
+  // the pin itself rather than only a node-level badge. Missing pins are
+  // always unwired, so they render as a strong red ring.
+  const c = missing ? "var(--danger)" : color;
   const base = {
     // Empty pins were a faint 1px, half-transparent outline that washed
     // out on the card surface. Give them a tinted fill plus a thicker,
     // higher-contrast ring so an unconnected port is easy to spot and aim
     // at; connected pins stay solid-colour.
-    background: filled ? color : `color-mix(in srgb, ${color} 22%, var(--surface))`,
-    border: filled ? `2px solid ${color}` : `2px solid color-mix(in srgb, ${color} 80%, transparent)`,
+    background: filled ? c : `color-mix(in srgb, ${c} 22%, var(--surface))`,
+    border: filled ? `2px solid ${c}` : `2px solid ${missing ? c : `color-mix(in srgb, ${c} 80%, transparent)`}`,
     width: 12,
     height: 12,
   } as const;

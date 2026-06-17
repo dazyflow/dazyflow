@@ -428,6 +428,24 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
           </FieldWrap>
         );
       }
+      // format:"datetime" gets a native date+time picker. The stored value
+      // stays an RFC3339/ISO instant (what the Calendar API wants); the picker
+      // shows and edits it in the browser's local time. Leaving it empty clears
+      // the param (e.g. an unbounded calendar-window edge).
+      if (schema.format === "datetime") {
+        return (
+          <FieldWrap name={name} schema={schema} required={required} value={value}>
+            <input
+              type="datetime-local"
+              value={isoToLocalInput((value as string) ?? "")}
+              onChange={(e) => {
+                const iso = localInputToISO(e.target.value);
+                onChange(iso === "" && !required ? undefined : iso);
+              }}
+            />
+          </FieldWrap>
+        );
+      }
       // format:"multiline" gets a textarea — for things like LLM
       // user prompts and system prompts where a single-line input
       // hides anything past the right edge.
@@ -2871,6 +2889,27 @@ function GitCredAccountField({
 // fall back to JSON?". Today: a JSON Schema is form-renderable iff its
 // top level is an object with at least one property (or the parent
 // passes a non-object value through ScalarValue).
+// isoToLocalInput converts a stored RFC3339/ISO instant to the
+// "YYYY-MM-DDTHH:mm" value an <input type="datetime-local"> expects, in the
+// browser's local time. Blank or unparseable input yields "" (empty picker).
+function isoToLocalInput(iso: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// localInputToISO converts the picker's local "YYYY-MM-DDTHH:mm" back to a UTC
+// RFC3339 instant ("…Z") for storage — the form the Calendar API wants. Blank
+// or unparseable input yields "".
+function localInputToISO(local: string): string {
+  if (!local) return "";
+  const d = new Date(local); // a bare datetime-local string parses as local time
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toISOString();
+}
+
 export function supportsSchemaForm(schema: JSONSchema | undefined): boolean {
   if (!schema) return false;
   if (schema.type !== "object") return false;

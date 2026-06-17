@@ -5,20 +5,75 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/smtp"
+	"strconv"
 	"strings"
 	"time"
 
 	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
 	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/hazyflow/internal/smtputil"
 )
 
-// ntfy connection verification, registered so the Apps page can test the
-// server URL + access token before storing them. Email is intentionally not
-// here: its SMTP settings are advanced node params, not a ConnectionFields
-// connection, so it has no integration connection card to verify.
+// Connection verification for this package's integrations, registered so the
+// Apps page can test credentials before storing them: ntfy (server + token)
+// and Email (SMTP server + login). Each label matches its drop's
+// Manifest.Integration.
 func init() {
 	engine.RegisterConnectionVerifier("ntfy", verifyNtfy)
+	engine.RegisterConnectionVerifier("Email", verifyEmail)
+}
+
+// verifyEmail dials the configured mail server and runs the SMTP handshake —
+// STARTTLS/implicit TLS as configured, plus AUTH when a username is set — then
+// QUITs without sending anything (smtputil.Verify). It surfaces the common
+// failures in plain language: a bad port/security value, an unreachable or
+// private host (the operator must opt into private egress), or rejected
+// credentials.
+func verifyEmail(ctx context.Context, conn map[string]string) error {
+	host := strings.TrimSpace(conn["host"])
+	if host == "" {
+		return errors.New("enter your mail server")
+	}
+	if strings.TrimSpace(conn["from"]) == "" {
+		return errors.New("enter a From address")
+	}
+
+	port := 587
+	if s := strings.TrimSpace(conn["port"]); s != "" {
+		n, err := strconv.Atoi(s)
+		if err != nil || n <= 0 {
+			return errors.New("port must be a number, e.g. 587 or 465")
+		}
+		port = n
+	}
+
+	mode := strings.TrimSpace(conn["tls"])
+	if mode == "" {
+		mode = "starttls"
+	}
+	switch mode {
+	case "starttls", "implicit", "none":
+	default:
+		return errors.New(`connection security must be "starttls", "implicit", or "none"`)
+	}
+
+	addr := net.JoinHostPort(host, strconv.Itoa(port))
+	if err := hfnet.CheckDialHost(addr); err != nil {
+		return errors.New("that looks like a local/private address — the operator must enable private-network access (HAZYFLOW_ALLOW_PRIVATE_EGRESS) to reach it")
+	}
+
+	var auth smtp.Auth
+	if u := strings.TrimSpace(conn["username"]); u != "" {
+		auth = smtp.PlainAuth("", u, conn["password"], host)
+	}
+
+	if err := smtputil.Verify(ctx, addr, host, mode, auth); err != nil {
+		return fmt.Errorf("couldn't connect to the mail server: %w", err)
+	}
+	return nil
 }
 
 // verifyNtfy confirms the configured ntfy server is reachable and, when an

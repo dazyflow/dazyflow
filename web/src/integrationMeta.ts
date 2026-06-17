@@ -97,14 +97,17 @@ export const oauthProviderMeta: Record<string, OAuthProviderMeta> = {
 };
 
 // integrationToProvider maps an integration slug (Manifest.integration,
-// slugified) to the OAuth provider that authorizes it. Gmail and Sheets
-// both ride the single "google" consent. Integrations absent here don't
-// use an OAuth account token (databases, http, webhooks, etc.).
+// slugified) to the OAuth provider that authorizes it. The Google
+// integrations (Gmail, Sheets, Forms, Drive, Calendar) all ride the single
+// "google" consent. Integrations absent here don't use an OAuth account
+// token (databases, http, webhooks, etc.).
 const integrationToProvider: Record<string, string> = {
   slack: "slack",
   gmail: "google",
   "google-sheets": "google",
   "google-forms": "google",
+  "google-drive": "google",
+  "google-calendar": "google",
   github: "github",
   notion: "notion",
 };
@@ -167,6 +170,24 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     docs_url: "https://developers.google.com/forms/api",
     brand_logo: "/brands/forms.svg",
   },
+  "google-calendar": {
+    name: "Google Calendar",
+    description:
+      "Create calendar events, and list what's coming up. Drop a meeting onto a calendar when a flow fires, turn an incoming booking into an event, or pull the day's schedule into a morning summary.",
+    technical_notes:
+      "Shares the 'google' OAuth client with Gmail, Sheets and Forms — one consent covers them all, and connecting Calendar only adds the calendar scopes. Times are RFC3339 for timed events or plain dates for all-day; recurring events are expanded into individual instances in start-time order.",
+    docs_url: "https://developers.google.com/calendar/api",
+    brand_logo: "/brands/google-calendar.svg",
+  },
+  "google-drive": {
+    name: "Google Drive",
+    description:
+      "List, download, and upload files in Google Drive. Fetch a file to email as an attachment, archive an incoming document, pull a Doc or Sheet out as a PDF, or drop generated files back into a folder for your team.",
+    technical_notes:
+      "Shares the 'google' OAuth client with Gmail, Sheets and Forms — one consent covers them all, and connecting Drive only adds the drive scopes. Google-editor docs (Docs/Sheets/Slides) have no raw bytes, so the Download step exports them to a concrete format (PDF by default). Downloads land in the run's scratch space.",
+    docs_url: "https://developers.google.com/drive/api",
+    brand_logo: "/brands/google-drive.svg",
+  },
   github: {
     name: "GitHub",
     description:
@@ -211,9 +232,9 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   mysql: {
     name: "MySQL",
     description:
-      "Insert, upsert, and query rows against MySQL or MariaDB. Steps in here speak the same rows-and-headers shape as the Postgres and Sheets steps, so the same ETL flow can target a MySQL endpoint with one node change.",
+      "Insert, upsert, and query rows against MySQL or MariaDB. Works the same way as Postgres — keep a database in sync with a spreadsheet, load a cleaned-up file into it, or pull a reference table into your flows.",
     technical_notes:
-      "*sql.DB connection pool, lazy idle eviction. The upsert step reports separate insert vs update counts via ROW_COUNT() semantics, so downstream notifications can say 'X new + Y updated' instead of a single total.",
+      "Shares the rows + headers contract with the Sheets, Excel and Postgres steps, so the same ETL flow can target MySQL with one node change. *sql.DB connection pool, lazy idle eviction. The upsert step reports separate insert vs update counts via ROW_COUNT() semantics, so downstream notifications can say 'X new + Y updated' instead of a single total.",
     docs_url: "https://dev.mysql.com/doc/",
     brand_logo: "/brands/mysql.svg",
   },
@@ -238,12 +259,50 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     name: "Email (SMTP)",
     description:
       "Send email through an SMTP server you configure. Pick this when you've got a shared mailbox or a transactional provider with SMTP relay (SendGrid, SES, Postmark), and you'd rather configure a server than walk through OAuth.",
+    technical_notes:
+      "The mail server — host, port, security (STARTTLS on 587 / implicit TLS on 465 / none), username, password and From address — is configured once here and injected into every Email step at run time; the password is held in the encrypted secret store. Use 'Test connection' to confirm the server and login before saving.",
   },
   ntfy: {
     name: "ntfy",
     description:
       "Push notifications to your phone via ntfy.sh or a self-hosted ntfy server. Quick to wire up — no app to install, just subscribe to a topic — so it's a great fit for ops alerts that need to reach someone fast.",
     docs_url: "https://docs.ntfy.sh/",
+  },
+  twilio: {
+    name: "Twilio",
+    description:
+      "Send SMS text messages to any phone, straight from a flow. Reach for it when an alert needs to land in someone's pocket — an order-shipped or appointment reminder to a customer, a verification code, an on-call page, or a heads-up the moment a trigger fires.",
+    technical_notes:
+      "Authenticated with your Twilio Account SID and Auth Token, read from the encrypted secret store as TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN — no credentials on the node. Sends via Twilio's Messages API; the 'From' must be one of your Twilio numbers in E.164 (+15551234567), or set a Messaging Service SID (MG…) instead.",
+    docs_url: "https://www.twilio.com/docs/sms",
+    brand_logo: "/brands/twilio.svg",
+  },
+  discord: {
+    name: "Discord",
+    description:
+      "Post messages into a Discord channel from a flow — a deploy-finished ping, a build-broke alert, a daily summary, or a heads-up to your team the moment something happens. Set the sender name and avatar per message if you like.",
+    technical_notes:
+      "Posts through a Discord channel webhook URL, read from the encrypted secret store as DISCORD_WEBHOOK_URL — no bot or OAuth app needed. Create it under Server Settings → Integrations → Webhooks. Optional per-message username and avatar overrides.",
+    docs_url: "https://discord.com/developers/docs/resources/webhook",
+    brand_logo: "/brands/discord.svg",
+  },
+  mqtt: {
+    name: "MQTT",
+    description:
+      "Publish messages to an MQTT broker — the lightweight backbone of most home-automation and IoT setups. Flip a smart light, push a command to a device, or broadcast a status update that anything subscribed to the topic picks up.",
+    technical_notes:
+      "Connects to a tcp:// or ssl:// broker (a bare host:port defaults to tcp://…:1883). Optional username/password read from the encrypted secret store as MQTT_USERNAME / MQTT_PASSWORD. Supports QoS levels and the retain flag. Private-network brokers are blocked unless the operator enables private egress (HAZYFLOW_ALLOW_PRIVATE_EGRESS).",
+    docs_url: "https://mqtt.org/",
+    brand_logo: "/brands/mqtt.svg",
+  },
+  "home-assistant": {
+    name: "Home Assistant",
+    description:
+      "Control your smart home and react to what it's doing. Turn on lights, lock a door, set the thermostat, or run a scene — and start a flow automatically the moment a device's state changes, like a door opening or a sensor tripping.",
+    technical_notes:
+      "Talks to your Home Assistant instance over its REST API, using the instance URL and a long-lived access token (create one under Profile → Long-Lived Access Tokens) configured once on this page. A LAN address (homeassistant.local, 192.168.x.x) needs the daemon's private egress enabled (HAZYFLOW_ALLOW_PRIVATE_EGRESS).",
+    docs_url: "https://developers.home-assistant.io/docs/api/rest/",
+    brand_logo: "/brands/homeassistant.svg",
   },
   http: {
     name: "HTTP",
@@ -274,6 +333,11 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
       "Clone repositories and check out branches inside your workspace. Reach for it when a flow needs to inspect source code, pull templates from a known repo, or stage files before another step works on them.",
     technical_notes:
       "All operations stay confined to the workspace sandbox via path normalization — clones write into the sandbox root, never above. Read-only today; remote write operations aren't supported.",
+  },
+  "built-in-store": {
+    name: "Built-in store",
+    description:
+      "Save rows to a built-in database with no setup, then query them back — it's the store behind the in-app Results page. Reach for it to collect a flow's output for review, build a lightweight dashboard, or keep running totals without provisioning a real database.",
   },
   "standard-library": {
     name: "Standard library",

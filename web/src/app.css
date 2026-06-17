@@ -3940,12 +3940,72 @@ button.warning:hover:not(:disabled) {
   gap: var(--space-1h);
   height: 34px;
   padding: 0 10px;
+  border: none;
   border-radius: var(--r-2);
   font-size: var(--text-md);
   font-weight: 500;
   white-space: nowrap;
   color: var(--danger);
   background: color-mix(in srgb, var(--danger) 12%, transparent);
+  cursor: pointer;
+}
+.editor-config-warn:hover {
+  background: color-mix(in srgb, var(--danger) 20%, transparent);
+}
+/* Popover anchored under the "N to configure" button: a click-to-jump list of
+   every node still missing required values, so the count is actionable rather
+   than a dead heads-up. */
+.editor-config-warn-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.editor-config-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  min-width: 240px;
+  max-width: 340px;
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-1);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  box-shadow: var(--shadow-pop);
+}
+.editor-config-list-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  width: 100%;
+  text-align: left;
+  padding: var(--space-1h) var(--space-2);
+  border: none;
+  border-radius: var(--r-1);
+  background: transparent;
+  cursor: pointer;
+}
+.editor-config-list-row:hover {
+  background: var(--btn-hover);
+}
+.editor-config-list-node {
+  font-weight: 600;
+  font-size: var(--text-md);
+  color: var(--text);
+}
+.editor-config-list-msgs {
+  margin: 0;
+  padding-left: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+.editor-config-list-msgs li {
+  list-style: disc;
 }
 /* Per-status border/glow on the whole node. Running pulses so it's
    unmistakable mid-canvas; terminal states stay static. Selected wins
