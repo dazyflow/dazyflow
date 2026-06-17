@@ -115,6 +115,10 @@ type Props = {
   // the curl/embed recipes. The Triggers menu is gone — this config lives on
   // the node now.
   graphMeta?: { id: string; tenant: string; workspace: string; name?: string };
+  // missingKeys lists the selected node's param/port keys still needing a
+  // value (from the config check). The form marks those fields red so a jump
+  // from the "N to configure" modal points straight at what to fill in.
+  missingKeys?: string[];
 };
 
 type Mode = "form" | "json";
@@ -146,6 +150,7 @@ export function Inspector({
   cancelling,
   onStopRun,
   graphMeta,
+  missingKeys,
 }: Props) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -520,6 +525,7 @@ export function Inspector({
             manifests={manifests ?? []}
             references={refCtx}
             workspace={workspace}
+            missingKeys={missingKeys}
           />
         )}
 
@@ -547,6 +553,7 @@ export function Inspector({
               references={refCtx}
               extraReferenceItems={loopOwnerNodeId ? loopItemReferenceItems : undefined}
               tokenLabels={tokenLabels}
+              missingKeys={missingKeys}
               onChange={(v) => onParamsChange(selected.id, v)}
             />
           </>

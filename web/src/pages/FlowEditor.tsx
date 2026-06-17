@@ -39,6 +39,7 @@ import {
   RotateCcw,
   Rocket,
   GitCompare,
+  UploadCloud,
   X,
   Zap,
   AlignStartVertical,
@@ -101,6 +102,9 @@ import { CommentNode } from "../components/CommentNode";
 import { RunHistory } from "../components/RunHistory";
 import { RerouteEdge } from "../components/RerouteEdge";
 import { SettingsModal } from "../components/SettingsModal";
+import { ConfigChecklistModal } from "../components/ConfigChecklistModal";
+import { ConfirmModal } from "../components/ConfirmModal";
+import { PublishCelebration } from "../components/PublishCelebration";
 import { browserTimeZone } from "../components/TriggersModal";
 import { QuickDropPalette } from "../components/QuickDropPalette";
 import { useResourceResolver } from "./useResourceResolver";
@@ -275,7 +279,6 @@ function EditorInner() {
   // state so a full save preserves it (buildGraph includes it), and toggled
   // instantly via the dedicated enable/disable endpoint.
   const [disabled, setDisabled] = useState(false);
-  const [togglingEnabled, setTogglingEnabled] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Per-node params kept outside React Flow's node-data so the inspector
   // can mutate them without forcing canvas re-layout. They're merged
@@ -288,20 +291,10 @@ function EditorInner() {
     Map<string, { deps: unknown[]; node: FlowNode<HazyNodeData> }>
   >(new Map());
   const [selectedID, setSelectedID] = useState<string | null>(null);
-  // Toggles the "N to configure" popover — a click-to-jump list of every node
-  // still missing required values, closed on outside-click (effect below).
+  // Opens the "N to configure" modal — a click-to-jump checklist of every
+  // node still missing required values (ConfigChecklistModal handles its own
+  // ESC/backdrop dismissal).
   const [showConfigList, setShowConfigList] = useState(false);
-  const configWarnRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!showConfigList) return;
-    const onDown = (e: MouseEvent) => {
-      if (configWarnRef.current && !configWarnRef.current.contains(e.target as Node)) {
-        setShowConfigList(false);
-      }
-    };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [showConfigList]);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
@@ -345,6 +338,15 @@ function EditorInner() {
   // "what changed since publish" modal.
   const [publishInfo, setPublishInfo] = useState<PublishInfo | null>(null);
   const [publishing, setPublishing] = useState(false);
+  // publishConfirm gates the Live switch behind a confirm dialog (going live
+  // is "a thing" — automatic triggers run it; pausing stops them all).
+  // justPublished drives the one-shot launch animation on going live.
+  //   "live"   — flip on (publish if needed + enable)
+  //   "pause"  — flip off (disable: the universal kill switch)
+  //   "update" — push the current draft to the live version
+  const [publishConfirm, setPublishConfirm] =
+    useState<"live" | "pause" | "update" | null>(null);
+  const [justPublished, setJustPublished] = useState(false);
   const [publishedCommit, setPublishedCommit] = useState<string | null>(null);
   const [diffOpen, setDiffOpen] = useState(false);
   const [diff, setDiff] = useState<GraphDiff | null>(null);
@@ -2351,6 +2353,10 @@ function EditorInner() {
           setRevisions(res.revisions ?? []);
           setPublishedCommit(res.published_commit ?? null);
         }
+        // Celebrate — publishing took the flow live, make it land. The
+        // animation self-dismisses after its ~1.6s run.
+        setJustPublished(true);
+        window.setTimeout(() => setJustPublished(false), 1600);
       } catch (e) {
         setError((e as Error).message);
       } finally {
@@ -2358,6 +2364,53 @@ function EditorInner() {
       }
     },
     [token, id, activeTenant, activeWorkspace, loadPublishInfo, showHistory],
+  );
+
+  // setLive is the single Live/Paused switch. "Live" means enabled AND
+  // published — the only state where automatic triggers actually run, for
+  // every trigger type. Going live publishes the draft when nothing is live
+  // yet (first go-live) and enables the flow; a resume of an already-published
+  // flow only re-enables, so edits made while paused stay a draft (draft
+  // safety). Going off disables — the universal kill switch that stops cron,
+  // poll, webhook, and form triggers alike. Animates on going live.
+  const setLive = useCallback(
+    async (on: boolean) => {
+      if (!token || !id) return;
+      setPublishing(true);
+      setError(null);
+      try {
+        if (on) {
+          // Publish only when there's no live version to preserve — first
+          // go-live, or after an explicit unpublish. A paused-but-published
+          // flow resumes its existing live version untouched. Publishing needs
+          // graph:admin; a graph:edit-only user can still resume (re-enable).
+          if (!publishInfo?.published && hasPerm("graph:admin")) {
+            await api.publishFlow(token, activeTenant, activeWorkspace, id);
+          }
+          if (disabled) {
+            await api.setFlowEnabled(token, activeTenant, activeWorkspace, id, true);
+            setDisabled(false);
+          }
+          setJustPublished(true);
+          window.setTimeout(() => setJustPublished(false), 1600);
+        } else {
+          await api.setFlowEnabled(token, activeTenant, activeWorkspace, id, false);
+          setDisabled(true);
+        }
+        await loadPublishInfo();
+        if (showHistory) {
+          const res = await api.flowHistory(token, activeTenant, activeWorkspace, id);
+          setRevisions(res.revisions ?? []);
+          setPublishedCommit(res.published_commit ?? null);
+        }
+      } catch (e) {
+        const msg = e instanceof APIError ? e.message : (e as Error).message;
+        setError(e instanceof APIError && e.status === 404 ? t("editor.pauseSaveFirst") : msg);
+      } finally {
+        setPublishing(false);
+      }
+    },
+    [token, id, activeTenant, activeWorkspace, publishInfo, disabled, loadPublishInfo, showHistory, hasPerm, t],
   );
 
   // openDiff fetches the published revision and diffs it against the
@@ -2682,26 +2735,6 @@ function EditorInner() {
   // doRun submits the graph and wires up live status. Separated from
   // the gate check so "Run anyway" in the setup modal can bypass the
   // warning and run directly.
-  // toggleEnabled pauses/resumes the flow via the dedicated endpoint — an
-  // instant, single-purpose commit (no need to save other in-flight edits).
-  // Pausing stops the scheduler and webhook/form endpoints; manual Run still
-  // works. Mainly the dev "off switch" for scheduled/interval triggers.
-  const toggleEnabled = async () => {
-    if (!token || !id || togglingEnabled) return;
-    const enable = disabled; // currently paused → enable; else pause
-    setTogglingEnabled(true);
-    setError(null);
-    try {
-      await api.setFlowEnabled(token, activeTenant, activeWorkspace, id, enable);
-      setDisabled(!enable);
-    } catch (e) {
-      const msg = e instanceof APIError ? e.message : (e as Error).message;
-      // A never-saved flow has nothing to pause yet.
-      setError(e instanceof APIError && e.status === 404 ? t("editor.pauseSaveFirst") : msg);
-    } finally {
-      setTogglingEnabled(false);
-    }
-  };
 
   const doRun = async () => {
     if (!token || !me || !id) return;
@@ -3106,50 +3139,81 @@ function EditorInner() {
                 <span className="toolbar-label">{t("editor.history")}</span>
               </button>
             )}
-            {/* Publish control. Automatic triggers run the published
-                revision, not the draft at HEAD — so a flow with unpublished
-                changes shows a Publish button (+ a Diff peek at what's
-                changed); a fully-published flow shows a calm "Live" pill.
+            {/* Single Live switch: ON = enabled AND published (automatic
+                triggers run — cron, poll, webhook, form); OFF = paused, which
+                stops them all. Flipping it goes through a confirm (going live
+                is "a thing"); going live plays the launch animation. When live
+                but the draft has drifted, "Update live" pushes the changes.
                 Gated on graph:admin, the same bar the server enforces. */}
             {me && id && hasPerm("graph:admin") && publishInfo && (
-              <>
-                {publishInfo.dirty ? (
-                  <>
+              <div className="editor-publish-group">
+                {(() => {
+                  const isLive = !disabled && publishInfo.published;
+                  return (
                     <button
-                      className="editor-publish"
-                      onClick={() => void publishRef()}
+                      type="button"
+                      role="switch"
+                      aria-checked={isLive}
+                      className={
+                        "editor-publish-toggle" +
+                        (isLive ? " on" : "") +
+                        (justPublished ? " celebrate" : "")
+                      }
+                      onClick={() => setPublishConfirm(isLive ? "pause" : "live")}
                       disabled={publishing || !!previewRef}
                       title={
                         previewRef
                           ? t("editor.publishPreviewBlocked")
-                          : publishInfo.published
-                          ? t("editor.publishChangesTitle")
+                          : isLive
+                          ? t("editor.pauseTitle")
                           : t("editor.publishFirstTitle")
                       }
                     >
-                      <Rocket size={15} />
+                      <span className="editor-publish-track" aria-hidden="true">
+                        <span className="editor-publish-knob">
+                          <Rocket size={11} strokeWidth={2.4} />
+                        </span>
+                      </span>
                       <span className="toolbar-label">
-                        {publishing ? t("editor.publishing") : t("editor.publish")}
+                        {publishing
+                          ? t("editor.publishing")
+                          : isLive
+                          ? t("editor.live")
+                          : t("editor.goLive")}
                       </span>
                     </button>
-                    {publishInfo.published && (
-                      <button
-                        className="ghost"
-                        onClick={() => void openDiff()}
-                        title={t("editor.diffTitle")}
-                      >
-                        <GitCompare size={15} />
-                        <span className="toolbar-label">{t("editor.diff")}</span>
-                      </button>
-                    )}
+                  );
+                })()}
+                {/* Live but the draft has moved on: push the changes live
+                    (confirmed + animated) and peek at the diff. */}
+                {!disabled && publishInfo.published && publishInfo.dirty && (
+                  <>
+                    <button
+                      className="editor-publish"
+                      onClick={() => setPublishConfirm("update")}
+                      disabled={publishing || !!previewRef}
+                      title={
+                        previewRef
+                          ? t("editor.publishPreviewBlocked")
+                          : t("editor.publishChangesTitle")
+                      }
+                    >
+                      <UploadCloud size={15} />
+                      <span className="toolbar-label">
+                        {publishing ? t("editor.publishing") : t("editor.publishChanges")}
+                      </span>
+                    </button>
+                    <button
+                      className="ghost"
+                      onClick={() => void openDiff()}
+                      title={t("editor.diffTitle")}
+                    >
+                      <GitCompare size={15} />
+                      <span className="toolbar-label">{t("editor.diff")}</span>
+                    </button>
                   </>
-                ) : (
-                  <span className="editor-published" title={t("editor.publishedTitle")}>
-                    <Rocket size={14} />
-                    <span className="toolbar-label">{t("editor.live")}</span>
-                  </span>
                 )}
-              </>
+              </div>
             )}
             {me && id && (
               <span className="toolbar-run-history">
@@ -3173,48 +3237,44 @@ function EditorInner() {
           {/* Config verification (#13): how many drops are still missing
               required values. Sits next to Run as a non-blocking heads-up. */}
           {configErrorsByNode.size > 0 && (
-            <div className="editor-config-warn-wrap" ref={configWarnRef}>
-              <button
-                type="button"
-                className="editor-config-warn"
-                title={t("editor.configWarnTitle")}
-                onClick={() => setShowConfigList((v) => !v)}
-                aria-expanded={showConfigList}
-              >
-                <AlertCircle size={14} />
-                <span className="toolbar-label">
-                  {t("editor.configWarn", { count: configErrorsByNode.size })}
-                </span>
-              </button>
-              {showConfigList && (
-                <div className="editor-config-list" role="menu">
-                  {[...configErrorsByNode.entries()].map(([nodeID, errs]) => {
-                    const node = nodes.find((n) => n.id === nodeID);
-                    const label = node?.data.label || node?.data.moduleID || nodeID;
-                    return (
-                      <button
-                        key={nodeID}
-                        type="button"
-                        className="editor-config-list-row"
-                        role="menuitem"
-                        onClick={() => {
-                          setSelectedID(nodeID);
-                          fitView({ nodes: [{ id: nodeID }], duration: 400, maxZoom: 1.2, padding: 0.5 });
-                          setShowConfigList(false);
-                        }}
-                      >
-                        <span className="editor-config-list-node">{label}</span>
-                        <ul className="editor-config-list-msgs">
-                          {errs.map((e) => (
-                            <li key={e.key}>{e.message}</li>
-                          ))}
-                        </ul>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+            <button
+              type="button"
+              className="editor-config-warn"
+              title={t("editor.configWarnTitle")}
+              onClick={() => setShowConfigList(true)}
+              aria-haspopup="dialog"
+              aria-expanded={showConfigList}
+            >
+              <AlertCircle size={14} />
+              <span className="toolbar-label">
+                {t("editor.configWarn", { count: configErrorsByNode.size })}
+              </span>
+            </button>
+          )}
+          {showConfigList && (
+            <ConfigChecklistModal
+              entries={[...configErrorsByNode.entries()].map(([nodeID, errs]) => {
+                const node = nodes.find((n) => n.id === nodeID);
+                const m = node?.data.manifest;
+                return {
+                  nodeID,
+                  label: node?.data.label || node?.data.moduleID || nodeID,
+                  messages: errs,
+                  icon: m && {
+                    name: m.icon,
+                    category: m.category,
+                    color: m.color,
+                    brandLogo: m.brand_logo,
+                  },
+                };
+              })}
+              onJump={(nodeID) => {
+                setSelectedID(nodeID);
+                fitView({ nodes: [{ id: nodeID }], duration: 400, maxZoom: 1.2, padding: 0.5 });
+                setShowConfigList(false);
+              }}
+              onClose={() => setShowConfigList(false)}
+            />
           )}
 
           {/* Primary action — pinned to the right edge as the focal point.
@@ -3276,16 +3336,16 @@ function EditorInner() {
               </button>
             )}
           </div>
-          {/* Enable/disable toggle — the dev "off switch". Pausing stops the
-              scheduler and webhook/form endpoints; manual Run still works.
-              Shown for any saved flow the user can edit; the paused state is
-              styled prominently so it's never a silent surprise. */}
-          {id && hasPerm("graph:edit") && (
+          {/* The enable/disable "off switch" is now folded into the Live
+              toggle above (graph:admin) — paused = the toggle's OFF state.
+              graph:edit-only users (who can't publish) keep a plain pause
+              control so they can still take a live flow offline. */}
+          {id && hasPerm("graph:edit") && !hasPerm("graph:admin") && (
             <div className="toolbar-group">
               <button
                 className={disabled ? "warning" : "ghost"}
-                onClick={() => void toggleEnabled()}
-                disabled={togglingEnabled}
+                onClick={() => setPublishConfirm(disabled ? "live" : "pause")}
+                disabled={publishing}
                 title={disabled ? t("editor.resumeTitle") : t("editor.pauseTitle")}
               >
                 {disabled ? <Play size={15} /> : <Pause size={15} />}
@@ -3908,6 +3968,11 @@ function EditorInner() {
           nodeDisabled={inspectorSelected ? disabledNodes.has(inspectorSelected.id) : false}
           onToggleDisabled={toggleNodeDisabled}
           tokenLabels={tokenLabels}
+          missingKeys={
+            inspectorSelected
+              ? configErrorsByNode.get(inspectorSelected.id)?.map((e) => e.key)
+              : undefined
+          }
           graphMeta={
             id ? { id, tenant: activeTenant, workspace: activeWorkspace, name } : undefined
           }
@@ -4023,6 +4088,43 @@ function EditorInner() {
           onSave={persistSettings}
         />
       )}
+      {/* Live-switch confirm — going live is "a thing" (automatic triggers
+          run it); pausing stops them all; "update" pushes the draft live. */}
+      {publishConfirm && (
+        <ConfirmModal
+          title={
+            publishConfirm === "pause"
+              ? t("editor.confirmPauseTitle")
+              : publishConfirm === "update"
+              ? t("editor.confirmUpdateTitle")
+              : t("editor.confirmPublishTitle")
+          }
+          message={
+            publishConfirm === "pause"
+              ? t("editor.confirmPauseBody")
+              : publishConfirm === "update"
+              ? t("editor.confirmUpdateBody")
+              : t("editor.confirmPublishBody")
+          }
+          confirmLabel={
+            publishConfirm === "pause"
+              ? t("editor.pause")
+              : publishConfirm === "update"
+              ? t("editor.publishChanges")
+              : t("editor.goLive")
+          }
+          danger={publishConfirm === "pause"}
+          onConfirm={() => {
+            const action = publishConfirm;
+            setPublishConfirm(null);
+            if (action === "pause") void setLive(false);
+            else if (action === "update") void publishRef();
+            else void setLive(true);
+          }}
+          onCancel={() => setPublishConfirm(null)}
+        />
+      )}
+      {justPublished && <PublishCelebration />}
       {gateOpen && (
         <ConnectionGate
           missing={missingConnections}

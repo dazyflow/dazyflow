@@ -82,6 +82,11 @@ type Props = {
   // tokenLabels maps "nodeId.port" → friendly step·port names so a field
   // whose value is one ${upstream.…} token renders as a readable chip.
   tokenLabels?: TokenLabels;
+  // missingKeys lists param keys flagged as "still needs a value" by the
+  // config check (the "N to configure" modal). Their field renders with a
+  // red marker + border so jumping from an error lands the eye on what to
+  // fill in.
+  missingKeys?: Iterable<string>;
 };
 
 // FormCtx carries the form-wide context that every field needs but none of
@@ -95,6 +100,10 @@ type FormCtx = {
   references?: ReferenceCtx;
   extraReferenceItems?: { label: string; token: string }[];
   tokenLabels?: TokenLabels;
+  // missingKeys, when set, marks the named fields as unfilled-but-required
+  // (read by FieldWrap). Carried in context so it doesn't prop-drill through
+  // SchemaField into every per-type component.
+  missingKeys?: Set<string>;
 };
 
 const FormContext = createContext<FormCtx>({});
@@ -112,10 +121,12 @@ export function SchemaForm({
   wiredSources,
   extraReferenceItems,
   tokenLabels,
+  missingKeys,
 }: Props) {
   const { t } = useTranslation();
   const wired = new Set(wiredKeys ?? []);
-  const formCtx: FormCtx = { workspace, accountPicker, references, extraReferenceItems, tokenLabels };
+  const missing = new Set(missingKeys ?? []);
+  const formCtx: FormCtx = { workspace, accountPicker, references, extraReferenceItems, tokenLabels, missingKeys: missing };
   if (schema.type !== "object" || !schema.properties) {
     return (
       <div className="sf-fallback-hint">
@@ -782,18 +793,28 @@ function FieldWrap({
   children: React.ReactNode;
 }) {
   const { t } = useTranslation();
+  const { missingKeys } = useFormCtx();
+  const missing = missingKeys?.has(name) ?? false;
   const example =
     schema.examples && schema.examples.length > 0
       ? String(schema.examples[0])
       : undefined;
   const refs = typeof value === "string" ? parseFieldRefs(value) : [];
   return (
-    <div className="sf-field">
+    <div className={missing ? "sf-field sf-field-missing" : "sf-field"}>
       <div className="label-row">
         <span className="sf-label-group">
           <label htmlFor={name}>
             {schema.title || humanize(name)}
           </label>
+          {/* Red "needs a value" marker — set when this field is flagged by
+              the config check, so jumping from the "N to configure" modal
+              lands the eye on exactly what to fill in. */}
+          {missing && (
+            <span className="sf-required-flag" title={t("schemaForm.required")}>
+              {t("schemaForm.required")}
+            </span>
+          )}
           {/* Per-field help lives in schema.description. Surfaced as a
               hover/focus (i) tooltip — same affordance as the drop-level
               info icon on the inspector header — so guidance is one click

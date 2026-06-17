@@ -653,6 +653,15 @@ export const api = {
       `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/publish`,
       ref ? { ref } : {},
     ),
+  // unpublishFlow clears the published pointer (the inverse of publishFlow).
+  // Scheduler-triggered flows stop firing; webhook flows fall back to HEAD —
+  // use disable/pause to take those fully offline. The draft is untouched.
+  unpublishFlow: (token: string, tenant: string, workspace: string, id: string) =>
+    request<{ flow_id: string; published: boolean }>(
+      token,
+      "POST",
+      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/unpublish`,
+    ),
   // restoreFlow makes a past revision the new HEAD (a fresh commit on top).
   restoreFlow: (token: string, tenant: string, workspace: string, id: string, ref: string) =>
     request<{ commit: string }>(

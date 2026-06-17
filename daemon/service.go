@@ -936,6 +936,39 @@ func (s *Service) PublishFlow(ctx context.Context, p core.Principal, tenant, ws,
 	return store.PublishedCommit(id)
 }
 
+// UnpublishFlow clears a flow's published pointer, the inverse of PublishFlow.
+// Scheduler-triggered flows (cron/poll/form-interval) stop firing — the
+// scheduler only enrolls flows with a published commit, so they revert to
+// "needs publish". Webhook/event-triggered flows are NOT taken offline by
+// this: their HTTP endpoints fall back to HEAD when unpublished (the draft
+// becomes what fires), matching the existing "webhook flows stay live while
+// unpublished" rule — use Disable (SetFlowEnabled false) to stop those.
+// The draft (HEAD) is untouched, so manual/test runs still work and
+// re-publishing promotes HEAD again. Gated on graph:admin, the same bar as
+// PublishFlow. Idempotent — unpublishing a never-published flow succeeds.
+func (s *Service) UnpublishFlow(ctx context.Context, p core.Principal, tenant, ws, id string) error {
+	if err := core.RequireWorkspace(p, tenant, ws); err != nil {
+		return err
+	}
+	if err := core.Require(p, core.PermGraphAdmin); err != nil {
+		return err
+	}
+	store, err := s.Workspaces.Open(tenant, ws)
+	if err != nil {
+		return err
+	}
+	// Authorize against the flow content (mirrors PublishFlow): unpublishing a
+	// flow you can't view should 404, not leak its existence.
+	g, err := store.Load(id)
+	if err != nil {
+		return err
+	}
+	if core.AuthorizeGraphView(p, g) != nil {
+		return fmt.Errorf("graph %q: %w", id, core.ErrNotFound)
+	}
+	return store.ClearEnvironment(id, workspace.PublishedEnv)
+}
+
 // PublishedInfo reports the flow's draft-vs-published state. Gated on the
 // same view permission as LoadGraph so private flows don't leak.
 func (s *Service) PublishedInfo(ctx context.Context, p core.Principal, tenant, ws, id string) (PublishInfo, error) {

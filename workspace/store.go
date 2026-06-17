@@ -415,6 +415,26 @@ func (s *Store) PromoteToEnvironment(graphID, env, commit string) error {
 	return nil
 }
 
+// ClearEnvironment removes the environment tag (refs/tags/graphs/<id>/<env>),
+// reverting the flow to having no revision pinned for that env. Unpublishing a
+// flow clears the PublishedEnv tag: the scheduler then treats the flow as
+// "not live" (PublishedCommit returns ""), while webhook/event endpoints fall
+// back to HEAD via LoadPublishedOrHead. Idempotent — clearing an env that was
+// never set is a no-op, not an error.
+func (s *Store) ClearEnvironment(graphID, env string) error {
+	if env == "" {
+		return errors.New("env required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	name := plumbing.NewTagReferenceName(envTag(graphID, env))
+	if err := s.repo.Storer.RemoveReference(name); err != nil &&
+		!errors.Is(err, plumbing.ErrReferenceNotFound) {
+		return fmt.Errorf("remove tag: %w", err)
+	}
+	return nil
+}
+
 // PublishedEnv is the environment name for the "live" published version
 // of a flow — the revision automatic triggers (cron/poll/webhook) run.
 // Publishing moves this tag to a commit via PromoteToEnvironment; rollback

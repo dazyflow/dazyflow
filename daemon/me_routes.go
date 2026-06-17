@@ -352,6 +352,30 @@ func (h *HTTPGateway) publishFlowMe(rw http.ResponseWriter, r *http.Request, p c
 	})
 }
 
+// unpublishFlowMe is POST /me/flows/{flow_id}/unpublish — clear the published
+// pointer (the inverse of publish). Scheduler-triggered flows stop firing;
+// webhook flows fall back to HEAD (use disable to take those offline). The
+// draft is untouched. Gated on graph:admin inside the service; idempotent.
+func (h *HTTPGateway) unpublishFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	tenant, workspace, id, ok := h.readFlowID(rw, r, p)
+	if !ok {
+		return
+	}
+	if err := h.svc.UnpublishFlow(r.Context(), p, tenant, workspace, id); err != nil {
+		if errors.Is(err, core.ErrNotFound) {
+			writeAPIError(rw, http.StatusNotFound, "flow_not_found", flowNotFoundMessage(tenant, workspace, id))
+			return
+		}
+		writeAPIError(rw, http.StatusForbidden, "forbidden", err.Error())
+		return
+	}
+	h.audit(r.Context(), p, "graph.unpublish", id, "")
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"flow_id":   tenant + "/" + workspace + "/" + id,
+		"published": false,
+	})
+}
+
 // publishedFlowMe is GET /me/flows/{flow_id}/published — the draft-vs-live
 // state the editor's publish control renders (is there a published
 // version, does the draft differ from it).

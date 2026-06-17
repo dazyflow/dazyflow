@@ -18,10 +18,18 @@ type Props = {
   manifests: Manifest[];
   references?: ReferenceCtx;
   workspace?: WorkspaceCtx;
+  // missingKeys are the loop's config-check flags: "__body" when the body
+  // pin is unwired, "__nested" for an unsupported loop-in-loop. When set
+  // (a jump from the "N to configure" modal), the matching banner renders
+  // red so the cue matches the highlighted fields elsewhere.
+  missingKeys?: string[];
 };
 
-export function ForEachEditor({ params, onChange, references }: Props) {
+export function ForEachEditor({ params, onChange, references, missingKeys }: Props) {
   const { t } = useTranslation();
+  const missing = new Set(missingKeys ?? []);
+  const bodyMissing = missing.has("__body");
+  const nested = missing.has("__nested");
 
   // Columns of the list feeding `items`, shown so the user knows what they
   // can reference as ${column} inside the body steps. Deps are the context's
@@ -56,7 +64,12 @@ export function ForEachEditor({ params, onChange, references }: Props) {
 
   return (
     <div className="for-each-editor">
-      <div className="hz-loop-banner">{t("forEach.bodyHint")}</div>
+      <div className={bodyMissing ? "hz-loop-banner error" : "hz-loop-banner"}>
+        {t("forEach.bodyHint")}
+      </div>
+      {nested && (
+        <div className="hz-loop-banner error">{t("nodeCard.loopNested")}</div>
+      )}
 
       <div className="sf-field">
         <div className="label-row">

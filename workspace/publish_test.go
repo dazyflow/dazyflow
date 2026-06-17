@@ -92,3 +92,62 @@ func TestStore_PublishAndLoadPublished(t *testing.T) {
 		t.Fatalf("after rollback, live node %q, want \"a\"", rolled.Nodes[0].ID)
 	}
 }
+
+// TestStore_ClearEnvironment covers unpublishing: clearing the published tag
+// drops PublishedCommit back to "" (so the scheduler treats the flow as not
+// live) while LoadPublishedOrHead falls back to the current HEAD draft. It's
+// idempotent — clearing a never-published env is a no-op, not an error.
+func TestStore_ClearEnvironment(t *testing.T) {
+	s, err := OpenFS("")
+	if err != nil {
+		t.Fatalf("OpenFS: %v", err)
+	}
+	mk := func(node string) core.Graph {
+		return core.Graph{ID: "flow1", Nodes: []core.Node{{ID: node, Module: "noop"}}}
+	}
+
+	// Clearing before anything is published is a no-op success.
+	if err := s.ClearEnvironment("flow1", PublishedEnv); err != nil {
+		t.Fatalf("ClearEnvironment (never published) = %v, want nil", err)
+	}
+
+	v1, err := s.Save(mk("a"), "anna@acme.com")
+	if err != nil {
+		t.Fatalf("save v1: %v", err)
+	}
+	if err := s.PromoteToEnvironment("flow1", PublishedEnv, v1); err != nil {
+		t.Fatalf("publish v1: %v", err)
+	}
+	if _, err := s.Save(mk("b"), "anna@acme.com"); err != nil {
+		t.Fatalf("save v2 (draft): %v", err)
+	}
+	if pc, err := s.PublishedCommit("flow1"); err != nil || pc != v1 {
+		t.Fatalf("PublishedCommit after publish = (%q, %v), want (%q, nil)", pc, err, v1)
+	}
+
+	// Unpublish: the tag is gone, PublishedCommit is empty again.
+	if err := s.ClearEnvironment("flow1", PublishedEnv); err != nil {
+		t.Fatalf("ClearEnvironment: %v", err)
+	}
+	if pc, err := s.PublishedCommit("flow1"); err != nil || pc != "" {
+		t.Fatalf("PublishedCommit after unpublish = (%q, %v), want (\"\", nil)", pc, err)
+	}
+	// With nothing published, LoadPublishedOrHead falls back to HEAD (node "b").
+	g, err := s.LoadPublishedOrHead("flow1")
+	if err != nil {
+		t.Fatalf("LoadPublishedOrHead after unpublish: %v", err)
+	}
+	if g.Nodes[0].ID != "b" {
+		t.Fatalf("after unpublish, fallback node %q, want HEAD \"b\"", g.Nodes[0].ID)
+	}
+
+	// Idempotent: clearing again still succeeds.
+	if err := s.ClearEnvironment("flow1", PublishedEnv); err != nil {
+		t.Fatalf("ClearEnvironment (second clear) = %v, want nil", err)
+	}
+
+	// An empty env name is rejected (mirrors PromoteToEnvironment).
+	if err := s.ClearEnvironment("flow1", ""); err == nil {
+		t.Fatal("ClearEnvironment with empty env = nil, want error")
+	}
+}

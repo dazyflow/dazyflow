@@ -434,6 +434,8 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/me/flows/{flow_id}/published", h.requireAuth(h.publishedFlowMe))
 	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/publish",
 		h.requireAuth(h.idempotencyMiddleware("/me/flows/{flow_id}/publish", h.publishFlowMe)))
+	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/unpublish",
+		h.requireAuth(h.idempotencyMiddleware("/me/flows/{flow_id}/unpublish", h.unpublishFlowMe)))
 	mux.HandleFunc("GET /api/v1/me/flows/{flow_id}/references", h.requireAuth(h.listReferences))
 	mux.HandleFunc("GET /api/v1/me/flows/{flow_id}/input-fields", h.requireAuth(h.listInputFields))
 	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/restore",
