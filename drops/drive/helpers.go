@@ -191,6 +191,50 @@ func isGoogleNative(mimeType string) bool {
 	return strings.HasPrefix(mimeType, "application/vnd.google-apps")
 }
 
+// exportFormat is a concrete target a Google-editor doc can be exported to.
+type exportFormat struct {
+	mime string
+	ext  string
+}
+
+// exportFormats maps the user-facing 'format' keyword (the Download drop's
+// "Export as" choice) to its Drive export MIME type and file extension.
+var exportFormats = map[string]exportFormat{
+	"pdf":  {"application/pdf", ".pdf"},
+	"docx": {"application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".docx"},
+	"xlsx": {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ".xlsx"},
+	"pptx": {"application/vnd.openxmlformats-officedocument.presentationml.presentation", ".pptx"},
+	"csv":  {"text/csv", ".csv"},
+	"txt":  {"text/plain", ".txt"},
+	"html": {"text/html", ".html"},
+}
+
+// nativeExportable maps each Google-editor type to the formats it can export
+// to, in preference order — the first is the default when 'format' is blank.
+// Types absent from this map (folders, Forms, Sites…) can't be exported at all.
+var nativeExportable = map[string][]string{
+	"application/vnd.google-apps.document":     {"pdf", "docx", "txt", "html"},
+	"application/vnd.google-apps.spreadsheet":  {"pdf", "xlsx", "csv"},
+	"application/vnd.google-apps.presentation": {"pdf", "pptx", "txt"},
+	"application/vnd.google-apps.drawing":      {"pdf"},
+}
+
+// friendlyNative names a Google-editor type for error messages.
+func friendlyNative(mime string) string {
+	switch mime {
+	case "application/vnd.google-apps.folder":
+		return "Drive folder"
+	case "application/vnd.google-apps.form":
+		return "Google Form"
+	case "application/vnd.google-apps.site":
+		return "Google Site"
+	case "application/vnd.google-apps.shortcut":
+		return "Drive shortcut"
+	default:
+		return "Google-editor file (" + mime + ")"
+	}
+}
+
 // quoteDriveValue escapes a value for interpolation into a Drive query string
 // (q=), per the API grammar: backslashes and single quotes are backslash-escaped.
 func quoteDriveValue(v string) string {

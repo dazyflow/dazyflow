@@ -120,22 +120,97 @@ func TestDownload_WritesToScratchAndReportsMeta(t *testing.T) {
 	}
 }
 
-func TestDownload_RejectsGoogleNativeDoc(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"id": "g1", "name": "Plan", "mimeType": "application/vnd.google-apps.document",
-		})
+// nativeDocServer answers metadata for a Google-editor doc of the given mime
+// and serves any /export request with the body, recording the mimeType asked.
+func nativeDocServer(t *testing.T, name, mime, exportBody string, gotExportMIME *string) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/export") {
+			if gotExportMIME != nil {
+				*gotExportMIME = r.URL.Query().Get("mimeType")
+			}
+			_, _ = w.Write([]byte(exportBody))
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": "g1", "name": name, "mimeType": mime})
 	}))
-	defer srv.Close()
-	withDriveEnv(t, srv.URL)
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
 
+func TestDownload_ExportsGoogleDocAsPDFByDefault(t *testing.T) {
+	const body = "%PDF-1.4 exported"
+	var gotMIME string
+	srv := nativeDocServer(t, "Plan", "application/vnd.google-apps.document", body, &gotMIME)
+	withDriveEnv(t, srv)
+
+	scratch := t.TempDir()
 	res, err := executeDownload(context.Background(), core.Job{
+		ScratchRoot: scratch,
+		Params:      map[string]any{"file_id": "g1"},
+	}, nil)
+	if err != nil || res.Status != core.StatusOK {
+		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
+	}
+	if gotMIME != "application/pdf" {
+		t.Errorf("export mimeType = %q, want application/pdf", gotMIME)
+	}
+	out := res.Output["out"]
+	if out.MIME != "application/pdf" || out.Ref != "scratch://Plan.pdf" {
+		t.Errorf("out = %+v", out)
+	}
+	data, err := os.ReadFile(filepath.Join(scratch, "Plan.pdf"))
+	if err != nil || string(data) != body {
+		t.Fatalf("read back: data=%q err=%v", data, err)
+	}
+	meta := res.Output["meta"].Inline.(map[string]any)
+	if meta["format"] != "pdf" || meta["exported_from"] != "application/vnd.google-apps.document" {
+		t.Errorf("meta = %+v", meta)
+	}
+}
+
+func TestDownload_ExportsWithChosenFormat(t *testing.T) {
+	var gotMIME string
+	srv := nativeDocServer(t, "Plan", "application/vnd.google-apps.document", "DOCXBYTES", &gotMIME)
+	withDriveEnv(t, srv)
+
+	scratch := t.TempDir()
+	res, err := executeDownload(context.Background(), core.Job{
+		ScratchRoot: scratch,
+		Params:      map[string]any{"file_id": "g1", "format": "docx"},
+	}, nil)
+	if err != nil || res.Status != core.StatusOK {
+		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
+	}
+	if gotMIME != exportFormats["docx"].mime {
+		t.Errorf("export mimeType = %q, want %q", gotMIME, exportFormats["docx"].mime)
+	}
+	if out := res.Output["out"]; out.Ref != "scratch://Plan.docx" {
+		t.Errorf("out = %+v", out)
+	}
+}
+
+func TestDownload_RejectsUnsupportedFormatForType(t *testing.T) {
+	srv := nativeDocServer(t, "Plan", "application/vnd.google-apps.document", "x", nil)
+	withDriveEnv(t, srv)
+
+	res, _ := executeDownload(context.Background(), core.Job{
+		ScratchRoot: t.TempDir(),
+		Params:      map[string]any{"file_id": "g1", "format": "csv"}, // csv is Sheets-only
+	}, nil)
+	if res.Status != core.StatusError || res.Error == nil || res.Error.Code != "bad_param" {
+		t.Fatalf("want bad_param error, got status=%q err=%+v", res.Status, res.Error)
+	}
+}
+
+func TestDownload_RejectsNonExportableType(t *testing.T) {
+	srv := nativeDocServer(t, "My Folder", "application/vnd.google-apps.folder", "x", nil)
+	withDriveEnv(t, srv)
+
+	res, _ := executeDownload(context.Background(), core.Job{
 		ScratchRoot: t.TempDir(),
 		Params:      map[string]any{"file_id": "g1"},
 	}, nil)
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
 	if res.Status != core.StatusError || res.Error == nil || res.Error.Code != "not_downloadable" {
 		t.Fatalf("want not_downloadable error, got status=%q err=%+v", res.Status, res.Error)
 	}
