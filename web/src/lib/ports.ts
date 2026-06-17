@@ -47,12 +47,18 @@ export function portsConnectable(
 // new ntfy node you want its "Message" input, not Pass-through. So we
 // prefer a real (non-pass) input:
 //
-//  1. a real port whose declared MIME explicitly matches the dragged port;
-//  2. else any compatible real port (covers untyped pins like ntfy's
-//     "Message", which has no MIME but is still the right target);
-//  3. else fall back to the old behaviour — first compatible port (which
-//     may be the passthrough pin), then the first declared port, then the
-//     engine's default handle id.
+//  1. typed source — a real port whose declared MIME explicitly matches the
+//     dragged port (so a json output lands on a json input, not a sibling);
+//  2. untyped source (a file/blob/"any" output, e.g. a downloaded file) — a
+//     real port that is ALSO untyped. An exact-MIME match is meaningless here
+//     because an empty MIME set matches everything, so tier 1 would otherwise
+//     grab the first *typed* field — landing a file on Gmail's "To" instead of
+//     its untyped "Attachments". A blob belongs in the untyped sink;
+//  3. else any compatible real port (covers a typed source → an untyped target
+//     like ntfy's "Message", which has no MIME but is still the right one);
+//  4. else fall back to the old behaviour — first compatible port (which may
+//     be the passthrough pin), then the first declared port, then the engine's
+//     default handle id.
 export function pickPort(
   ports: Port[] | undefined,
   otherMime: string[] | undefined,
@@ -60,8 +66,13 @@ export function pickPort(
 ): string {
   if (!ports?.length) return fallback;
   const real = ports.filter((p) => p.port !== PASS_PORT);
-  const strict = real.find((p) => p.mime?.length && mimeCompatible(p.mime, otherMime));
-  if (strict) return strict.port;
+  if (otherMime?.length) {
+    const strict = real.find((p) => p.mime?.length && mimeCompatible(p.mime, otherMime));
+    if (strict) return strict.port;
+  } else {
+    const untyped = real.find((p) => !p.mime?.length);
+    if (untyped) return untyped.port;
+  }
   const loose = real.find((p) => mimeCompatible(p.mime, otherMime));
   if (loose) return loose.port;
   return (ports.find((p) => mimeCompatible(p.mime, otherMime)) ?? ports[0]).port;

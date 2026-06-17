@@ -38,11 +38,11 @@ func init() {
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Daily report via STARTTLS on port 587",
-					Params: json.RawMessage(`{"host":"smtp.example.com","port":587,"tls":"starttls","username":"${secret.SMTP_USER}","password":"${secret.SMTP_PASS}","from":"reports@example.com","to":["team@example.com"],"subject":"Daily sales report","body":"See attached."}`),
+					Params: json.RawMessage(`{"host":"smtp.example.com","port":587,"tls":"starttls","username":"${secret.SMTP_USER}","password":"${secret.SMTP_PASS}","from":"reports@example.com","to":"team@example.com","subject":"Daily sales report","body":"See attached."}`),
 				},
 				{
 					Title:  "Implicit TLS (port 465) to multiple recipients",
-					Params: json.RawMessage(`{"host":"smtp.example.com","port":465,"tls":"implicit","username":"${secret.SMTP_USER}","password":"${secret.SMTP_PASS}","from":"alerts@example.com","to":["oncall@example.com","cto@example.com"],"subject":"Alert: error rate above threshold"}`),
+					Params: json.RawMessage(`{"host":"smtp.example.com","port":465,"tls":"implicit","username":"${secret.SMTP_USER}","password":"${secret.SMTP_PASS}","from":"alerts@example.com","to":"oncall@example.com,cto@example.com","subject":"Alert: error rate above threshold"}`),
 					Notes:  "Body left empty here so it can be wired in from an upstream node.",
 				},
 			},
@@ -79,9 +79,12 @@ func init() {
 						"username":{"type":"string","title":"Username","x_advanced":true,"description":"Mail server login, usually your email address. ${secret.NAME} keeps it out of the flow."},
 						"password":{"type":"string","title":"Password","x_advanced":true,"description":"Mail server password or app password. ${secret.NAME} keeps it out of the flow."},
 						"from":{"type":"string","title":"From address","x_advanced":true,"description":"The sender address. Defaults to the username — most providers require them to match anyway."},
-						"to":{"type":"array","title":"To","items":{"type":"string"},"description":"Recipient addresses. Overridden by the 'To' input (comma-separated)."},
+						"to":{"type":"string","title":"To","description":"Recipient(s), comma-separated. Overridden by the 'To' input."},
+						"cc":{"type":"string","title":"CC","description":"Carbon-copy recipient(s), comma-separated. Everyone on the email sees who's CC'd."},
+						"bcc":{"type":"string","title":"BCC","description":"Blind-copy recipient(s), comma-separated. Hidden from the other recipients."},
 						"subject":{"type":"string","title":"Subject","description":"The email's subject line — e.g. \"Re: your submission\". Leave blank and it sends as \"(no subject)\". Overridden by the 'Subject' input."},
-						"body":{"type":"string","title":"Body","description":"Email body text. Overridden by the 'Body' input."}
+						"body":{"type":"string","title":"Body","format":"multiline","description":"Email body text. Overridden by the 'Body' input."},
+						"format":{"type":"string","title":"Body format","enum":["text","html"],"enumNames":["Text","HTML"],"default":"html","description":"How the body is sent. HTML renders formatting and links; Text sends it exactly as typed."}
 					},
 					"required":["host","to"]
 				}`,
@@ -149,7 +152,12 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 	// when one is wired, otherwise from the param (the "input overrides param"
 	// pattern). A non-text value wired into To or Subject is a mistake we
 	// reject.
-	to := params.StringSlice(job.Params, "to")
+	// To is a comma-separated string param; older flows may have stored it as a
+	// JSON array, so fall back to StringSlice when the string form is empty.
+	to := splitRecipients(params.StringDefault(job.Params, "to", ""))
+	if len(to) == 0 {
+		to = params.StringSlice(job.Params, "to")
+	}
 	if wired, ok := emailTextInputOr(job, "to", ""); !ok {
 		return params.Err(job, "bad_input", "'To' input must be text"), nil
 	} else if wired != "" {
@@ -158,6 +166,12 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 	if len(to) == 0 {
 		return params.Err(job, "bad_param", "'to' is required — set it or wire the 'To' input"), nil
 	}
+
+	// CC and BCC are param-only (comma-separated). CC rides a visible header;
+	// BCC must NOT appear in any header (or it isn't blind) — it's added to the
+	// SMTP envelope recipients only, below.
+	cc := splitRecipients(params.StringDefault(job.Params, "cc", ""))
+	bcc := splitRecipients(params.StringDefault(job.Params, "bcc", ""))
 
 	// Subject is optional — minimal friction for non-tech authors; To is the
 	// only per-send hard requirement (same as gmail send).
@@ -193,6 +207,13 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 		}
 	}
 
+	// Body format: HTML by default (matches the schema and gmail send), so an
+	// unset format renders markup; "text" sends the body verbatim as plain text.
+	bodyContentType := `text/html; charset="utf-8"`
+	if params.StringDefault(job.Params, "format", "html") == "text" {
+		bodyContentType = `text/plain; charset="utf-8"`
+	}
+
 	atts, jerr := mailmsg.LoadAttachments(job)
 	if jerr != nil {
 		return core.Result{JobID: job.ID, Status: core.StatusError, Error: jerr}, nil
@@ -205,15 +226,23 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 	if err := hfnet.CheckDialHost(addr); err != nil {
 		return params.Err(job, "ssrf_blocked", err.Error()), nil
 	}
-	msg := buildMessage(from, to, subject, body, atts)
+	msg := buildMessage(from, to, cc, subject, body, bodyContentType, atts)
 
 	var auth smtp.Auth
 	if username != "" {
 		auth = smtp.PlainAuth("", username, password, host)
 	}
 
+	// Every recipient — To, CC and BCC — must be in the SMTP envelope (RCPT
+	// TO), since that, not the headers, decides who the server delivers to.
+	// BCC is here but absent from the headers, which is what keeps it blind.
+	rcpts := make([]string, 0, len(to)+len(cc)+len(bcc))
+	rcpts = append(rcpts, to...)
+	rcpts = append(rcpts, cc...)
+	rcpts = append(rcpts, bcc...)
+
 	emitProgress(progress, job, 0.3, "dial "+addr)
-	if err := smtputil.Send(ctx, addr, host, tlsMode, auth, from, to, msg); err != nil {
+	if err := smtputil.Send(ctx, addr, host, tlsMode, auth, from, rcpts, msg); err != nil {
 		return params.Err(job, "send_failed", err.Error()), nil
 	}
 	emitProgress(progress, job, 1.0, "delivered")
@@ -223,6 +252,8 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 		"port":       port,
 		"from":       from,
 		"to":         to,
+		"cc":         cc,
+		"bcc":        bcc,
 		"subject":    subject,
 		"bytes_sent": len(msg),
 	}
@@ -238,18 +269,22 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 // buildMessage assembles the RFC 822 message. Address headers are stripped
 // of CR/LF to defeat header injection; the subject is MIME-word encoded;
 // multipart/mixed is used only when attachments exist (same shape as
-// gmail send's buildRFC822).
-func buildMessage(from string, to []string, subject, body string, atts []mailmsg.Attachment) []byte {
+// gmail send's buildRFC822). BCC is deliberately NOT a header — blind copies
+// ride the SMTP envelope only (see executeEmail), so they stay hidden.
+func buildMessage(from string, to, cc []string, subject, body, bodyContentType string, atts []mailmsg.Attachment) []byte {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "From: %s\r\n", mailmsg.StripCRLF(from))
 	fmt.Fprintf(&sb, "To: %s\r\n", mailmsg.StripCRLF(strings.Join(to, ", ")))
+	if len(cc) > 0 {
+		fmt.Fprintf(&sb, "Cc: %s\r\n", mailmsg.StripCRLF(strings.Join(cc, ", ")))
+	}
 	// RFC 2047 encoded-word — non-ASCII subjects must not ride as raw
 	// UTF-8 bytes in a header, or receiving clients mojibake them.
 	fmt.Fprintf(&sb, "Subject: %s\r\n", mime.QEncoding.Encode("utf-8", subject))
 	sb.WriteString("MIME-Version: 1.0\r\n")
 
 	if len(atts) == 0 {
-		sb.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
+		sb.WriteString("Content-Type: " + bodyContentType + "\r\n")
 		sb.WriteString("\r\n")
 		sb.WriteString(body)
 		return []byte(sb.String())
@@ -258,7 +293,7 @@ func buildMessage(from string, to []string, subject, body string, atts []mailmsg
 	boundary := "hazyflow-" + mailmsg.RandomHex(16)
 	sb.WriteString(`Content-Type: multipart/mixed; boundary="` + boundary + `"` + "\r\n\r\n")
 	sb.WriteString("--" + boundary + "\r\n")
-	sb.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
+	sb.WriteString("Content-Type: " + bodyContentType + "\r\n")
 	sb.WriteString("Content-Transfer-Encoding: 8bit\r\n\r\n")
 	sb.WriteString(body + "\r\n")
 	mailmsg.WriteAttachmentParts(&sb, boundary, atts)

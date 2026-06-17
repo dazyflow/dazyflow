@@ -35,6 +35,20 @@ describe("pickPort", () => {
     expect(pickPort(ntfyInputs, undefined, "in")).toBe("body");
   });
 
+  it("wires an untyped (file) source to an untyped input, not a typed text field", () => {
+    // Gmail as the engine surfaces it: a leading passthrough pin, three
+    // text/plain fields, then the untyped variadic "attachments". Dragging a
+    // file output (no MIME) must land on attachments, not "To".
+    const gmailInputs: Port[] = [
+      { port: "pass", label: "Pass-through" },
+      { port: "to", label: "To", mime: ["text/plain"] },
+      { port: "subject", label: "Subject", mime: ["text/plain"] },
+      { port: "body", label: "Body", mime: ["text/plain"] },
+      { port: "attachments", label: "Attachments" },
+    ];
+    expect(pickPort(gmailInputs, undefined, "in")).toBe("attachments");
+  });
+
   it("prefers a strict MIME match over an untyped real input", () => {
     const inputs: Port[] = [
       { port: "pass" },

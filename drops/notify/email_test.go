@@ -10,7 +10,7 @@ import (
 )
 
 func TestBuildMessage(t *testing.T) {
-	msg := string(buildMessage("me@x.test", []string{"a@x.test", "b@x.test"}, "Hello", "the body", nil))
+	msg := string(buildMessage("me@x.test", []string{"a@x.test", "b@x.test"}, nil, "Hello", "the body", "text/plain; charset=UTF-8", nil))
 
 	// Headers are CRLF-terminated and separated from the body by a blank line.
 	wantHeaders := []string{
@@ -34,10 +34,40 @@ func TestBuildMessage(t *testing.T) {
 	}
 }
 
+func TestBuildMessage_CCHeaderButNoBCC(t *testing.T) {
+	// CC rides a visible header; BCC must never appear in any header (it's
+	// added to the SMTP envelope only, in executeEmail). buildMessage takes no
+	// bcc argument by design, so a Bcc header can't leak from here.
+	msg := string(buildMessage("me@x.test", []string{"a@x.test"}, []string{"c1@x.test", "c2@x.test"}, "Hi", "body", "text/plain; charset=UTF-8", nil))
+	if !strings.Contains(msg, "Cc: c1@x.test, c2@x.test\r\n") {
+		t.Errorf("missing Cc header:\n%s", msg)
+	}
+	if strings.Contains(msg, "Bcc:") {
+		t.Errorf("Bcc header leaked into the message:\n%s", msg)
+	}
+}
+
+func TestBuildMessage_HonorsBodyContentType(t *testing.T) {
+	// The body's Content-Type is driven by the caller (text vs HTML), so an
+	// HTML send carries text/html on the (single) body part.
+	msg := string(buildMessage("me@x.test", []string{"a@x.test"}, nil, "Hi", "<b>hi</b>", `text/html; charset="utf-8"`, nil))
+	if !strings.Contains(msg, `Content-Type: text/html; charset="utf-8"`) {
+		t.Errorf("body not sent as text/html:\n%s", msg)
+	}
+}
+
+func TestBuildMessage_NoCCHeaderWhenEmpty(t *testing.T) {
+	// No CC recipients → no Cc header at all (not an empty one).
+	msg := string(buildMessage("me@x.test", []string{"a@x.test"}, nil, "Hi", "body", "text/plain; charset=UTF-8", nil))
+	if strings.Contains(msg, "Cc:") {
+		t.Errorf("unexpected Cc header:\n%s", msg)
+	}
+}
+
 func TestBuildMessage_EncodesNonASCIISubject(t *testing.T) {
 	// A non-ASCII subject must not ride as raw UTF-8 in the header — it
 	// has to be an RFC 2047 encoded-word, or clients mojibake it.
-	msg := string(buildMessage("me@x.test", []string{"a@x.test"}, "Café ☕", "body", nil))
+	msg := string(buildMessage("me@x.test", []string{"a@x.test"}, nil, "Café ☕", "body", "text/plain; charset=UTF-8", nil))
 	if strings.Contains(msg, "Subject: Café ☕") {
 		t.Error("subject was emitted as raw UTF-8, want RFC 2047 encoded-word")
 	}
@@ -50,7 +80,7 @@ func TestBuildMessage_Attachments(t *testing.T) {
 	// With attachments the message switches to multipart/mixed: a text body
 	// part followed by one base64 part per attachment (same shape as gmail
 	// send). Without them it stays a bare text/plain message (tested above).
-	msg := string(buildMessage("me@x.test", []string{"a@x.test"}, "Report", "see attached", []mailmsg.Attachment{
+	msg := string(buildMessage("me@x.test", []string{"a@x.test"}, nil, "Report", "see attached", "text/plain; charset=UTF-8", []mailmsg.Attachment{
 		{Filename: "report.pdf", MIME: "application/pdf", Data: []byte("%PDF-fake")},
 	}))
 	for _, want := range []string{
@@ -70,7 +100,7 @@ func TestBuildMessage_StripsHeaderCRLF(t *testing.T) {
 	// CR/LF in address values must not split headers (header injection):
 	// the smuggled text may survive inline in the From value, but it must
 	// never start a header line of its own.
-	msg := string(buildMessage("me@x.test\r\nBcc: evil@x.test", []string{"a@x.test"}, "hi", "body", nil))
+	msg := string(buildMessage("me@x.test\r\nBcc: evil@x.test", []string{"a@x.test"}, nil, "hi", "body", "text/plain; charset=UTF-8", nil))
 	if strings.Contains(msg, "\r\nBcc:") {
 		t.Errorf("injected header line survived:\n%s", msg)
 	}
@@ -97,6 +127,26 @@ func TestExecuteEmail_FromDefaultsToUsername(t *testing.T) {
 	}
 }
 
+
+func TestExecuteEmail_ToAcceptsCommaSeparatedString(t *testing.T) {
+	// 'to' is now a comma-separated string param (matching gmail send), so it
+	// gets an inline card editor. Reaching the SSRF guard (host 127.0.0.1)
+	// proves recipient parsing accepted the string and got past validation.
+	res, err := executeEmail(t.Context(), core.Job{
+		ID: "j",
+		Params: map[string]any{
+			"host": "127.0.0.1",
+			"from": "me@x.test",
+			"to":   "a@x.test, b@x.test",
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if res.Error == nil || res.Error.Code != "ssrf_blocked" {
+		t.Fatalf("res = %+v, want ssrf_blocked (string recipients accepted)", res)
+	}
+}
 
 func TestExecuteEmail_Validation(t *testing.T) {
 	base := func() map[string]any {
