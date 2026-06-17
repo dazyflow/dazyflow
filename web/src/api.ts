@@ -1334,6 +1334,39 @@ export const api = {
       { tenant },
     ),
 
+  // createOrg self-serves a new organization (the caller becomes its admin).
+  // Returns the new tenant id; reload tenants + switchOrg to land in it.
+  createOrg: (token: string, displayName: string) =>
+    request<{ tenant: string; display_name: string; workspace: string }>(
+      token,
+      "POST",
+      "/me/orgs",
+      { display_name: displayName },
+    ),
+
+  // exportOrg downloads a portable copy of the org's data (profile, members,
+  // every flow's full graph) — the export-first step before deleting. Same
+  // authorization as deleteOrg.
+  exportOrg: (token: string, tenant: string) =>
+    request<Record<string, unknown>>(
+      token,
+      "GET",
+      `/admin/orgs/${encodeURIComponent(tenant)}/export`,
+    ),
+
+  // deleteOrg permanently erases an org and all its data (flows, runs,
+  // members, secrets). The ?confirm=<tenant> guard must echo the tenant id,
+  // and the caller must re-enter their password (step-up auth). Allowed for a
+  // platform admin (any org) or an org admin of the *active* org (the daemon
+  // requires p.Tenant == tenant for non-platform callers).
+  deleteOrg: (token: string, tenant: string, password: string) =>
+    request<Record<string, unknown>>(
+      token,
+      "DELETE",
+      `/admin/orgs/${encodeURIComponent(tenant)}?confirm=${encodeURIComponent(tenant)}`,
+      { password },
+    ),
+
   listMembers: (token: string, tenant?: string) => {
     const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
     return request<{ members: MemberSummary[] }>(token, "GET", `/admin/members${qs}`);

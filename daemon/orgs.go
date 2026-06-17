@@ -107,6 +107,75 @@ func (h *HTTPGateway) switchOrg(rw http.ResponseWriter, r *http.Request, p core.
 	})
 }
 
+// createOrg lets a signed-in user self-serve a new organization. Body:
+// {display_name}. It mints a fresh org_<hex> tenant, makes the caller its
+// admin (a Membership with the admin role), and seeds the org profile with
+// the chosen name. The new org then shows up in the caller's whoami
+// memberships and is reachable via switch-org — no platform-admin step. The
+// tenant's workspace is provisioned lazily on first use (AutoFSWorkspaces).
+func (h *HTTPGateway) createOrg(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	if h.Memberships == nil || h.Profiles == nil {
+		writeJSONError(rw, http.StatusNotImplemented, "organizations not configured")
+		return
+	}
+	// Anti-abuse: on verification-active deployments an unverified signup
+	// can't spin up extra tenants. Mirrors invitation creation.
+	if !h.requireVerifiedInviter(rw, r, p) {
+		return
+	}
+	var body struct {
+		DisplayName string `json:"display_name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
+		return
+	}
+	name := strings.TrimSpace(body.DisplayName)
+	if name == "" {
+		writeJSONError(rw, http.StatusBadRequest, "display_name is required")
+		return
+	}
+	if len([]rune(name)) > 80 {
+		writeJSONError(rw, http.StatusBadRequest, "display_name must be 80 characters or fewer")
+		return
+	}
+	tenant, err := mintOrgTenantID()
+	if err != nil {
+		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("mint tenant: %v", err))
+		return
+	}
+	now := time.Now().UTC()
+	// The creator is the org's first admin (full org administration). This is
+	// a trusted server-side grant — they own the tenant they just made.
+	if err := h.Memberships.PutMembership(r.Context(), auth.Membership{
+		UserEmail: p.Subject,
+		Tenant:    tenant,
+		Workspace: "main",
+		Roles:     []core.Role{core.TeamRoleAdmin()},
+		InvitedBy: p.Subject,
+		CreatedAt: now,
+	}); err != nil {
+		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("create membership: %v", err))
+		return
+	}
+	if err := h.Profiles.PutOrgProfile(r.Context(), auth.OrgProfile{
+		Tenant:      tenant,
+		DisplayName: name,
+		UpdatedAt:   now,
+	}); err != nil {
+		// The membership already exists; a missing profile just means the
+		// switcher would show the raw id. Surface it but don't unwind.
+		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("save org profile: %v", err))
+		return
+	}
+	h.audit(r.Context(), p, "org.create", tenant, "name="+name)
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"tenant":       tenant,
+		"display_name": name,
+		"workspace":    "main",
+	})
+}
+
 // listMembers returns one row per person with access to the principal's
 // org: the home user (the org owner) plus each Membership. Used by the
 // admin Members page. Tenant scope is the principal's own; platform

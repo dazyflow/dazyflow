@@ -59,6 +59,11 @@ type AuthCtx = {
   // so chrome bound to it — the top bar's org name/logo, the tenant
   // switcher — reflects a just-saved org profile without a full reload.
   refreshMe: () => Promise<void>;
+
+  // reloadTenants re-runs the identity bootstrap (whoami + tenant catalogue),
+  // so a newly created org shows up in `tenants` and `me.memberships` without
+  // a page refresh. refreshMe only updates `me`; this also rebuilds the list.
+  reloadTenants: () => void;
 };
 
 const Ctx = createContext<AuthCtx | null>(null);
@@ -68,6 +73,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.getItem(STORAGE_KEY),
   );
   const [me, setMe] = useState<WhoAmI | null>(null);
+  // Bumped by reloadTenants() to re-run the bootstrap effect on demand (e.g.
+  // after creating an org) without changing the token.
+  const [reloadKey, setReloadKey] = useState(0);
   const [loading, setLoading] = useState<boolean>(!!token);
   const [error, setError] = useState<string | null>(null);
   const [workspaces, setWorkspaces] = useState<string[]>([]);
@@ -175,7 +183,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, reloadKey]);
 
   // Workspace loader — rerun whenever the active tenant changes so
   // platform admins flipping the tenant switcher see the right list
@@ -261,6 +269,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       /* best-effort; a later whoami reconciles */
     }
   }, [token]);
+
+  // reloadTenants re-runs the bootstrap effect (whoami + tenant catalogue) so
+  // a newly created org appears in the switcher without a page reload.
+  const reloadTenants = useCallback(() => setReloadKey((k) => k + 1), []);
 
   // applySession mirrors a freshly-issued session token into localStorage
   // (so the app keeps using its bearer-header path) and resolves identity.
@@ -384,6 +396,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         activeTenant,
         setActiveTenant,
         refreshMe,
+        reloadTenants,
       }}
     >
       {children}

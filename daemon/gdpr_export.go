@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"git.sr.ht/~klahr/hazyflow/auth"
@@ -71,6 +72,117 @@ type exportRun struct {
 }
 
 const exportRunCap = 1000
+
+// OrgExport is a portable copy of one organization's restorable data — its
+// profile, members, and every flow's full graph definition across all its
+// workspaces. Offered as the "export first" step before deleting an org so
+// the data isn't gone for good.
+type OrgExport struct {
+	GeneratedAt string            `json:"generated_at"`
+	Tenant      string            `json:"tenant"`
+	DisplayName string            `json:"display_name,omitempty"`
+	Members     []exportOrgMember `json:"members"`
+	Flows       []exportOrgFlow   `json:"flows"`
+	Note        string            `json:"note,omitempty"`
+}
+
+type exportOrgMember struct {
+	Email string      `json:"email"`
+	Roles []core.Role `json:"roles"`
+}
+
+type exportOrgFlow struct {
+	Workspace string     `json:"workspace"`
+	ID        string     `json:"id"`
+	Graph     core.Graph `json:"graph"`
+}
+
+// canManageOrg gates the org-scoped admin actions (export, delete): a platform
+// admin may act on any org; everyone else only on the org they're an admin of
+// AND currently active in (the daemon scopes non-platform principals to one
+// tenant, so p.Tenant must equal the target).
+func canManageOrg(p core.Principal, tenant string) bool {
+	if isPlatformAdmin(p) {
+		return true
+	}
+	return core.CanAdminOrg(p) && p.Tenant == tenant
+}
+
+// exportOrgHandler serves an org's full export (GET /admin/orgs/{tenant}/export).
+// Read-only; same authorization bar as deleting the org. Offered as the
+// export-first step so an admin can keep a copy before the irreversible wipe.
+func (h *HTTPGateway) exportOrgHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	tenant := strings.TrimSpace(r.PathValue("tenant"))
+	if tenant == "" {
+		writeAPIError(rw, http.StatusBadRequest, "bad_request", "tenant required")
+		return
+	}
+	if !canManageOrg(p, tenant) {
+		writeAPIError(rw, http.StatusForbidden, "forbidden",
+			"organization:admin on this tenant (or platform:admin) required")
+		return
+	}
+	exp := h.assembleOrgExport(r.Context(), tenant)
+	h.audit(r.Context(), p, "org.export", tenant, "organization data export")
+	rw.Header().Set("Content-Disposition",
+		`attachment; filename="hazyflow-org-`+tenant+`-export.json"`)
+	writeJSON(rw, http.StatusOK, exp)
+}
+
+// assembleOrgExport gathers the org's profile, members, and every flow's full
+// graph across all its workspaces. Each section is best-effort: an
+// unconfigured/erroring store yields an empty section rather than failing the
+// whole export. Reads stores directly (the handler already authorized) so it
+// works for a platform admin exporting an org they aren't a member of.
+func (h *HTTPGateway) assembleOrgExport(ctx context.Context, tenant string) OrgExport {
+	exp := OrgExport{
+		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
+		Tenant:      tenant,
+		Members:     []exportOrgMember{},
+		Flows:       []exportOrgFlow{},
+	}
+	if h.Profiles != nil {
+		if pr, err := h.Profiles.GetOrgProfile(ctx, tenant); err == nil {
+			exp.DisplayName = pr.DisplayName
+		}
+	}
+	if h.Memberships != nil {
+		if rows, err := h.Memberships.ListByTenant(ctx, tenant); err == nil {
+			for _, m := range rows {
+				exp.Members = append(exp.Members, exportOrgMember{
+					Email: m.UserEmail, Roles: m.Roles,
+				})
+			}
+		}
+	}
+	if h.svc != nil && h.svc.Workspaces != nil {
+		wss, err := h.svc.Workspaces.List(tenant)
+		if err != nil {
+			exp.Note = "could not list workspaces: " + err.Error()
+			return exp
+		}
+		for _, ws := range wss {
+			store, err := h.svc.Workspaces.Open(tenant, ws)
+			if err != nil {
+				continue
+			}
+			ids, err := store.ListGraphs()
+			if err != nil {
+				continue
+			}
+			for _, id := range ids {
+				g, err := store.Load(id)
+				if err != nil {
+					continue
+				}
+				exp.Flows = append(exp.Flows, exportOrgFlow{
+					Workspace: ws, ID: id, Graph: g,
+				})
+			}
+		}
+	}
+	return exp
+}
 
 // exportHandler serves the current subject's data export. Read-only and
 // scoped to the caller: a user can only export their own data (the

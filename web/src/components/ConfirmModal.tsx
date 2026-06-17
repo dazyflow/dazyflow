@@ -17,6 +17,7 @@ export function ConfirmModal({
   confirmLabel,
   cancelLabel,
   danger,
+  confirmDisabled,
   onConfirm,
   onCancel,
 }: {
@@ -25,6 +26,9 @@ export function ConfirmModal({
   confirmLabel: string;
   cancelLabel?: string;
   danger?: boolean;
+  // confirmDisabled blocks the confirm action (e.g. until a required field is
+  // filled). The dialog can still be cancelled.
+  confirmDisabled?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -65,6 +69,7 @@ export function ConfirmModal({
             type="button"
             className={danger ? "danger" : "primary"}
             onClick={onConfirm}
+            disabled={confirmDisabled}
           >
             {confirmLabel}
           </button>

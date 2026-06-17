@@ -234,6 +234,19 @@ func mintTenantID() (string, error) {
 	return "usr_" + hex.EncodeToString(b), nil
 }
 
+// mintOrgTenantID returns "org_" + 8 hex chars — the id for a self-serve
+// organization a user creates. The "org_" prefix (vs "usr_") keeps it out of
+// the personal-tenant heuristics: a user-created org is a real shared tenant,
+// not the auto-deletable personal tenant minted at signup (see
+// looksPersonalTenant in gdpr.go).
+func mintOrgTenantID() (string, error) {
+	b := make([]byte, 4)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return "org_" + hex.EncodeToString(b), nil
+}
+
 // defaultSignupRoles wires the new user with enough permissions to
 // drive their own tenant — they can edit and run graphs, manage
 // secrets (so OAuth works), and admin their own tenant (issue API

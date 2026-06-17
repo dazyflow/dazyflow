@@ -1,10 +1,12 @@
 package daemon
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 
+	"git.sr.ht/~klahr/hazyflow/auth"
 	"git.sr.ht/~klahr/hazyflow/core"
 )
 
@@ -103,15 +105,43 @@ func (h *HTTPGateway) adminDeleteOrgHandler(rw http.ResponseWriter, r *http.Requ
 		writeAPIError(rw, http.StatusBadRequest, "bad_request", "tenant required")
 		return
 	}
-	if !isPlatformAdmin(p) {
-		if !core.CanAdminOrg(p) || p.Tenant != tenant {
-			writeAPIError(rw, http.StatusForbidden, "forbidden", "organization:admin on this tenant (or platform:admin) required")
-			return
-		}
+	if !canManageOrg(p, tenant) {
+		writeAPIError(rw, http.StatusForbidden, "forbidden", "organization:admin on this tenant (or platform:admin) required")
+		return
+	}
+	// Org deletion must go through an interactive session with password
+	// step-up — an API key, even one carrying organization:admin, cannot
+	// perform this irreversible wipe. Session tokens carry the hzs_ prefix
+	// (header or cookie); anything else is an API key.
+	if !strings.HasPrefix(credentialFromRequest(r), auth.SessionTokenPrefix) {
+		writeAPIError(rw, http.StatusForbidden, "session_required",
+			"deleting an organization requires an interactive session, not an API key")
+		return
 	}
 	if !confirmMatches(r, tenant) {
 		writeAPIError(rw, http.StatusBadRequest, "confirmation_required",
 			"permanent deletion — re-send with ?confirm=<tenant> to confirm")
+		return
+	}
+	// Step-up auth: re-enter the password. Guaranteed reachable only by a
+	// session principal (whose subject is the user's email) by the check above.
+	if h.Users == nil {
+		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "user store not configured")
+		return
+	}
+	var body struct {
+		Password string `json:"password"`
+	}
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+	}
+	if strings.TrimSpace(body.Password) == "" {
+		writeAPIError(rw, http.StatusBadRequest, "password_required",
+			"re-enter your password to confirm deletion")
+		return
+	}
+	if _, err := auth.VerifyPassword(r.Context(), h.Users, p.Subject, body.Password); err != nil {
+		writeAPIError(rw, http.StatusForbidden, "password_incorrect", "incorrect password")
 		return
 	}
 	rep, err := h.deleteOrgData(r.Context(), tenant)

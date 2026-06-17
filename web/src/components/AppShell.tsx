@@ -29,7 +29,8 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { ActiveFlowContext, FLOWS_CHANGED_EVENT } from "../activeFlow";
 import { shouldShowTenantID } from "../lib/visibleTenant";
-import { orgDisplayName } from "../lib/orgDisplayName";
+import { tenantDisplayName } from "../lib/orgDisplayName";
+import { OrgSwitcherModal } from "./OrgSwitcherModal";
 import { FlowIcon } from "../icons";
 import { isImageIcon } from "../lib/iconImage";
 import type { FlowSummary } from "../types";
@@ -37,6 +38,23 @@ import type { FlowSummary } from "../types";
 // orgGlyph renders an org's icon: an uploaded image (data: URL) as an
 // <img>, otherwise the generic Building2 mark. Shared by the tenant
 // switcher trigger + rows.
+// downloadJson saves an object as a pretty-printed .json file via a transient
+// blob URL — used for the org export (the fetch carries the auth token, so a
+// plain <a href> to the endpoint wouldn't work).
+function downloadJson(data: unknown, filename: string) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], {
+    type: "application/json",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 function orgGlyph(icon: string | undefined, size: number) {
   return isImageIcon(icon) ? (
     <img
@@ -102,7 +120,9 @@ export function AppShell({ children }: { children: ReactNode }) {
     tenants,
     activeTenant,
     setActiveTenant,
+    reloadTenants,
   } = useAuth();
+  const [orgModalOpen, setOrgModalOpen] = useState(false);
   // Daemon version for the account-menu footer. Public GET /api/v1, so
   // no token needed; fetched once on mount. Stays null (footer hidden)
   // if the request fails — it's purely informational.
@@ -344,30 +364,36 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="spacer" />
         {me && (
           <div className="user">
-            {tenants.length > 1 && (
-              <TenantSwitcher
-                tenants={tenants}
-                activeTenant={activeTenant || me.tenant}
-                onPick={setActiveTenant}
-                nameOf={(tid) => orgDisplayName(me, tid)}
-                iconOf={(tid) =>
-                  me.memberships?.find((m) => m.tenant === tid)?.icon
-                }
-              />
-            )}
+            {/* Org switcher: opens a modal listing the orgs you can act in,
+                with an inline "Create organization" form. Always available so
+                even a single-tenant user can spin up a new org. */}
+            <button
+              type="button"
+              className="ghost org-switcher-trigger"
+              onClick={() => setOrgModalOpen(true)}
+              title={t("nav.switchTenant")}
+            >
+              {orgGlyph(
+                me.memberships?.find((m) => m.tenant === (activeTenant || me.tenant))
+                  ?.icon,
+                14,
+              )}
+              <strong>
+                {tenantDisplayName(
+                  me,
+                  activeTenant || me.tenant,
+                  t("nav.personalWorkspace"),
+                )}
+              </strong>
+              <ChevronDown size={12} />
+            </button>
             <span className="topbar-workspace">
+              {/* Only renders when there's more than one workspace — a lone
+                  "main" next to the org name is noise. */}
               <WorkspaceSwitcher
-                tenant={activeTenant || me.tenant}
                 activeWorkspace={activeWorkspace || me.workspace}
                 workspaces={workspaces}
                 onPick={setActiveWorkspace}
-                // The tenant prefix is only meaningful chrome for
-                // principals who actually navigate between tenants —
-                // platform admins or anyone with >1 tenant on their
-                // token. For ordinary single-tenant users, the
-                // identifier `usr_…` is internal jargon that adds
-                // noise without surfacing an actionable choice.
-                hideTenantPrefix={!shouldShowTenantID(me, tenants.length)}
               />
             </span>
             {inEditor && openSettings && (
@@ -375,6 +401,65 @@ export function AppShell({ children }: { children: ReactNode }) {
             )}
           </div>
         )}
+        {me && orgModalOpen && (() => {
+          const active = activeTenant || me.tenant;
+          const homeTenant =
+            me.memberships?.find((m) => m.home)?.tenant ?? me.tenant;
+          const isPlatformAdmin = me.permissions.includes("platform:admin");
+          const isOrgAdmin = (tid: string) =>
+            me.memberships
+              ?.find((m) => m.tenant === tid)
+              ?.roles.some((r) => r.permissions.includes("organization:admin")) ??
+            false;
+          // Deletable when it isn't your home org AND you're either a platform
+          // admin (any org) or an org admin of the org you're currently in
+          // (the daemon requires p.Tenant == tenant for non-platform deletes).
+          const deletable = (tid: string) =>
+            tid !== homeTenant &&
+            (isPlatformAdmin || (tid === active && isOrgAdmin(tid)));
+          return (
+            <OrgSwitcherModal
+              orgs={tenants.map((tid) => ({
+                tenant: tid,
+                name: tenantDisplayName(me, tid, t("nav.personalWorkspace")),
+                glyph: orgGlyph(
+                  me.memberships?.find((m) => m.tenant === tid)?.icon,
+                  18,
+                ),
+                deletable: deletable(tid),
+              }))}
+              activeTenant={active}
+              showId={shouldShowTenantID(me, tenants.length)}
+              onPick={(tid) => {
+                setActiveTenant(tid);
+                setOrgModalOpen(false);
+              }}
+              onCreate={async (displayName) => {
+                if (!token) return;
+                const res = await api.createOrg(token, displayName);
+                // Rebuild the tenant catalogue (so it appears) and switch into
+                // the new org, then close.
+                reloadTenants();
+                setActiveTenant(res.tenant);
+                setOrgModalOpen(false);
+              }}
+              onExport={async (tid) => {
+                if (!token) return;
+                const data = await api.exportOrg(token, tid);
+                downloadJson(data, `hazyflow-org-${tid}-export.json`);
+              }}
+              onDelete={async (tid, password) => {
+                if (!token) return;
+                await api.deleteOrg(token, tid, password);
+                // Leave the org if it was the active one, then refresh.
+                if (tid === active) setActiveTenant(homeTenant);
+                reloadTenants();
+                setOrgModalOpen(false);
+              }}
+              onClose={() => setOrgModalOpen(false)}
+            />
+          );
+        })()}
       </header>
       <div className="body">
         <aside
@@ -565,26 +650,20 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 }
 
-// WorkspaceSwitcher renders the tenant/workspace chip. When the
-// principal can access more than one workspace, the chip becomes a
-// dropdown that lets them pick the active one. Single-workspace
-// principals see a flat label.
-//
-// hideTenantPrefix drops the "tenant/" prefix when a separate tenant
-// switcher is already visible — avoids the redundant repetition that
-// would otherwise show up for platform admins.
+// WorkspaceSwitcher renders the workspace picker — a dropdown to choose the
+// active workspace. It only appears when the principal has MORE THAN ONE
+// workspace: with a single workspace (the common case, "main") there's
+// nothing to switch, so showing a lone "main" next to the org is just noise.
+// Org/tenant identity lives in the separate org switcher, so this chip shows
+// only the workspace name.
 function WorkspaceSwitcher({
-  tenant,
   activeWorkspace,
   workspaces,
   onPick,
-  hideTenantPrefix,
 }: {
-  tenant: string;
   activeWorkspace: string;
   workspaces: string[];
   onPick: (ws: string) => void;
-  hideTenantPrefix?: boolean;
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -598,18 +677,8 @@ function WorkspaceSwitcher({
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
   }, [open]);
-  const label = hideTenantPrefix ? (
-    <strong>{activeWorkspace || t("common.noneParen")}</strong>
-  ) : (
-    <>
-      {tenant}/<strong>{activeWorkspace || t("common.noneParen")}</strong>
-    </>
-  );
-  if (!multi) {
-    return (
-      <span style={{ fontSize: "var(--text-md)", color: "var(--muted)" }}>{label}</span>
-    );
-  }
+  if (!multi) return null;
+  const label = <strong>{activeWorkspace || t("common.noneParen")}</strong>;
   return (
     <div className="workspace-switcher" style={{ position: "relative" }}>
       <button
@@ -631,7 +700,7 @@ function WorkspaceSwitcher({
       </button>
       {open && (
         <div className="workspace-pop">
-          <div className="workspace-pop-head">{tenant}</div>
+          <div className="workspace-pop-head">{t("nav.workspaceGroup")}</div>
           {workspaces.map((ws) => (
             <button
               key={ws}
@@ -653,90 +722,6 @@ function WorkspaceSwitcher({
   );
 }
 
-// TenantSwitcher is the cross-tenant picker shown to platform admins.
-// Picking a tenant clears the workspace selection (workspaces are
-// tenant-scoped; the post-update whoami pass repopulates).
-function TenantSwitcher({
-  tenants,
-  activeTenant,
-  onPick,
-  nameOf,
-  iconOf,
-}: {
-  tenants: string[];
-  activeTenant: string;
-  onPick: (t: string) => void;
-  // nameOf resolves a tenant ID to its display name (falls back to the
-  // ID itself when no profile is set). Keeps the switcher decoupled
-  // from the WhoAmI shape so the same control could be reused
-  // elsewhere with a different source.
-  nameOf: (tenant: string) => string;
-  // iconOf resolves a tenant ID to its org icon (data: URL / name), if any.
-  iconOf: (tenant: string) => string | undefined;
-}) {
-  const { t: tr } = useTranslation();
-  const [open, setOpen] = useState(false);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target.closest(".tenant-switcher")) setOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [open]);
-  return (
-    <div className="tenant-switcher" style={{ position: "relative" }}>
-      <button
-        type="button"
-        className="ghost"
-        onClick={() => setOpen((v) => !v)}
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 6,
-          fontSize: "var(--text-md)",
-          padding: "4px 10px",
-        }}
-        title={tr("nav.switchTenant")}
-      >
-        {orgGlyph(iconOf(activeTenant), 14)}
-        <strong>
-          {activeTenant ? nameOf(activeTenant) : tr("nav.pickTenant")}
-        </strong>
-        <ChevronDown size={12} />
-      </button>
-      {open && (
-        <div className="workspace-pop">
-          <div className="workspace-pop-head">{tr("nav.tenants")}</div>
-          {tenants.map((tid) => {
-            const label = nameOf(tid);
-            return (
-              <button
-                key={tid}
-                type="button"
-                className={
-                  "workspace-pop-row" + (tid === activeTenant ? " active" : "")
-                }
-                onClick={() => {
-                  onPick(tid);
-                  setOpen(false);
-                }}
-                title={tid}
-              >
-                <span className="tenant-pop-glyph">{orgGlyph(iconOf(tid), 14)}</span>
-                <span>{label}</span>
-                {label !== tid && (
-                  <span className="workspace-pop-id">{tid}</span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
 
 // AccountMenu is the lower-left sidebar account control — the entry
 // point to per-user actions (Settings, Sign out). Modelled on the

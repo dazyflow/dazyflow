@@ -4151,6 +4151,187 @@ button.warning:hover:not(:disabled) {
 .editor-config-warn:hover {
   background: color-mix(in srgb, var(--danger) 20%, transparent);
 }
+/* Org switcher dialog (OrgSwitcherModal): a centered list of the orgs you can
+   act in + an inline create form. Shares the .settings-dialog modal shell and
+   mirrors the config checklist's row styling. */
+.org-switcher-modal {
+  max-width: 460px;
+}
+.org-switcher-body {
+  padding: var(--space-3) var(--space-4) var(--space-4);
+}
+.org-switcher-list {
+  list-style: none;
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1h);
+}
+/* Row = the selectable org button + an optional trash action beside it. */
+.org-switcher-row {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-1h);
+}
+.org-switcher-delete {
+  flex-shrink: 0;
+  align-self: center;
+  color: var(--muted);
+}
+.org-switcher-delete:hover:not(:disabled) {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+.org-switcher-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  background: var(--surface-2);
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease;
+}
+.org-switcher-item:hover:not(:disabled) {
+  background: var(--surface);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+.org-switcher-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.org-switcher-item.active {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface-2));
+}
+.org-switcher-glyph {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-2);
+  color: var(--muted);
+}
+.org-switcher-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0);
+  flex: 1;
+  min-width: 0;
+}
+.org-switcher-name {
+  font-weight: 600;
+  font-size: var(--text-md);
+  color: var(--text);
+}
+.org-switcher-id {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--faint);
+}
+.org-switcher-check {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+.org-switcher-add {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1h);
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed var(--border);
+  border-radius: var(--r-2);
+  background: transparent;
+  color: var(--accent);
+  font-size: var(--text-md);
+  font-weight: 500;
+  cursor: pointer;
+}
+.org-switcher-add:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+.org-switcher-create {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  background: var(--surface-2);
+}
+.org-switcher-create label {
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+.org-switcher-create-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+.org-switcher-error {
+  display: block;
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--danger);
+}
+/* Export-first step inside the delete confirm dialog. */
+.org-switcher-export {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.org-switcher-export-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1h);
+  padding: var(--space-1h) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+}
+.org-switcher-export-btn:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: var(--surface);
+}
+.org-switcher-export-done {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-sm);
+  color: var(--success);
+}
+/* Password step-up field inside the delete confirm dialog. */
+.org-switcher-pw {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: var(--space-3);
+}
+.org-switcher-pw label {
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+.org-switcher-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-md);
+  padding: 4px 10px;
+}
+
 /* "N to configure" dialog (ConfigChecklistModal): a click-to-jump checklist of
    every node still missing required values, so the count is actionable rather
    than a dead heads-up. Builds on the shared .settings-dialog modal shell. */

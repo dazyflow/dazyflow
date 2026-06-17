@@ -536,6 +536,10 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// caller has membership in. Memberships listing falls out of
 	// whoami; no separate GET is needed.
 	mux.HandleFunc("POST /api/v1/auth/switch-org", h.requireAuth(h.switchOrg))
+	// Self-serve organization creation: any verified user can mint a new org
+	// (they become its admin). Distinct from invitations, which add people to
+	// an existing org.
+	mux.HandleFunc("POST /api/v1/me/orgs", h.requireAuth(h.createOrg))
 
 	// Invitations: admin creates / lists / revokes pending invites.
 	// The accept side is split: GET /api/v1/invitations/{token} is
@@ -553,6 +557,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// delete an entire org/tenant (platform admin, or org admin of that
 	// tenant). Both confirmation-guarded; see gdpr_http.go.
 	mux.HandleFunc("DELETE /api/v1/admin/users/{email}", h.requireAuth(h.adminDeleteUserHandler))
+	mux.HandleFunc("GET /api/v1/admin/orgs/{tenant}/export", h.requireAuth(h.exportOrgHandler))
 	mux.HandleFunc("DELETE /api/v1/admin/orgs/{tenant}", h.requireAuth(h.adminDeleteOrgHandler))
 	mux.HandleFunc("GET /api/v1/invitations/{token}", h.viewInvitation)
 	mux.HandleFunc("POST /api/v1/invitations/{token}/accept", h.requireAuth(h.acceptInvitation))
@@ -1205,10 +1210,21 @@ type orgMembershipDTO struct {
 }
 
 func (h *HTTPGateway) collectMemberships(ctx context.Context, p core.Principal) []orgMembershipDTO {
+	// The home entry is the user's OWN tenant (from the user record), not the
+	// session's current tenant — otherwise switching into another org would
+	// make the home org follow p.Tenant and drop out of the list (it isn't a
+	// membership row). Fall back to p.Tenant for API-key principals, which
+	// have no user record and are bound to one tenant.
+	homeTenant, homeWorkspace, homeRoles := p.Tenant, p.Workspace, p.Roles
+	if h.Users != nil && strings.Contains(p.Subject, "@") {
+		if u, err := h.Users.GetByEmail(ctx, p.Subject); err == nil {
+			homeTenant, homeWorkspace, homeRoles = u.Tenant, u.Workspace, u.Roles
+		}
+	}
 	out := []orgMembershipDTO{{
-		Tenant:    p.Tenant,
-		Workspace: p.Workspace,
-		Roles:     p.Roles,
+		Tenant:    homeTenant,
+		Workspace: homeWorkspace,
+		Roles:     homeRoles,
 		Home:      true,
 	}}
 	if h.Memberships != nil && p.Subject != "" && strings.Contains(p.Subject, "@") {
@@ -1219,7 +1235,7 @@ func (h *HTTPGateway) collectMemberships(ctx context.Context, p core.Principal) 
 		rows, err := h.Memberships.ListByEmail(ctx, p.Subject)
 		if err == nil {
 			for _, m := range rows {
-				if m.Tenant == p.Tenant {
+				if m.Tenant == homeTenant {
 					// Already in `out` as the home entry — skip the duplicate.
 					continue
 				}
