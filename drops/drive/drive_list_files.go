@@ -46,7 +46,7 @@ func init() {
 				"properties":{
 					"account":{"type":"string","default":"default"},
 					"name_contains":{"type":"string","title":"Name contains","description":"Match files whose name contains this text. Leave blank to match any name."},
-					"folder_id":{"type":"string","title":"In folder","description":"Restrict to files inside this folder id. Leave blank to search all of Drive."},
+					"folder_id":{"type":"string","format":"google-drive-folder","title":"In folder","description":"Restrict to files inside this folder — pick from your account's folders. Leave blank to search all of Drive."},
 					"mime_type":{"type":"string","title":"Type","examples":["application/pdf","image/png","application/vnd.google-apps.folder"],"description":"Restrict to files of this MIME type. Leave blank for any type."},
 					"query":{"type":"string","title":"Advanced query","x_advanced":true,"description":"Raw Drive query expression ANDed with the other filters (e.g. \"starred = true\")."},
 					"include_trashed":{"type":"boolean","title":"Include trashed","default":false,"description":"Include files in the trash."},

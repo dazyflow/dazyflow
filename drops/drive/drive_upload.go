@@ -59,7 +59,7 @@ func init() {
 					"account":{"type":"string","default":"default"},
 					"path":{"type":"string","title":"File to upload","format":"workspace-path","description":"The workspace file to send (or wire the File input). scratch:// supported."},
 					"name":{"type":"string","title":"Name in Drive","description":"What to call the file in Drive. Defaults to the source file's own name."},
-					"folder_id":{"type":"string","title":"Into folder","description":"Folder id to upload into. Leave blank for the account's My Drive root."},
+					"folder_id":{"type":"string","format":"google-drive-folder","title":"Into folder","description":"Folder to upload into — pick from your account's folders. Leave blank for the account's My Drive root."},
 					"mime_type":{"type":"string","title":"Content type","x_advanced":true,"description":"Content type to store. Defaults to a guess from the file extension."},
 					"timeout_ms":{"type":"integer","default":120000,"minimum":1,"description":"Hard deadline for the upload, in milliseconds."}
 				}

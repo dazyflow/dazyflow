@@ -9,6 +9,9 @@ import { type HazyNodeData } from "../components/nodeCardShared";
 const RESOURCE_PICKER_KINDS: Record<string, { provider: string; kind: string }> = {
   "google-form": { provider: "google", kind: "forms" },
   "google-spreadsheet": { provider: "google", kind: "spreadsheets" },
+  "google-drive-file": { provider: "google", kind: "drive-files" },
+  "google-drive-folder": { provider: "google", kind: "drive-folders" },
+  "google-calendar": { provider: "google", kind: "calendars" },
   "stripe-price": { provider: "stripe", kind: "prices" },
   "stripe-subscription": { provider: "stripe", kind: "subscriptions" },
   "stripe-payment-intent": { provider: "stripe", kind: "payment_intents" },

@@ -919,6 +919,9 @@ const RESOURCE_PICKERS: Record<
 > = {
   "google-spreadsheet": { provider: "google", kind: "spreadsheets", noun: "spreadsheet" },
   "google-form": { provider: "google", kind: "forms", noun: "form" },
+  "google-drive-file": { provider: "google", kind: "drive-files", noun: "file" },
+  "google-drive-folder": { provider: "google", kind: "drive-folders", noun: "folder" },
+  "google-calendar": { provider: "google", kind: "calendars", noun: "calendar" },
   // Tabs are listed from the chosen spreadsheet — a dependent picker.
   "google-sheet-tab": { provider: "google", kind: "tabs", noun: "tab", dependsOn: ["spreadsheet_id"] },
   // Listed via the tenant's STRIPE_API_KEY secret, not OAuth — the

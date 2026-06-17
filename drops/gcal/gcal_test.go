@@ -235,6 +235,43 @@ func TestCreateEvent_RequiresSummaryAndTimes(t *testing.T) {
 	}
 }
 
+func TestListCalendars_PrependsPrimaryAndSkipsDuplicate(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"items": []map[string]any{
+				{"id": "me@x", "summary": "Me", "primary": true},
+				{"id": "team@x", "summary": "Team"},
+				{"id": "proj@x", "summary": "Project", "summaryOverride": "My Project"},
+			},
+		})
+	}))
+	defer srv.Close()
+	withCalEnv(t, srv.URL)
+
+	got, err := ListCalendars(context.Background(), core.Job{Params: map[string]any{}})
+	if err != nil {
+		t.Fatalf("ListCalendars: %v", err)
+	}
+	// Synthetic "primary" first; the primary item (me@x) is skipped; override wins.
+	if len(got) != 3 {
+		t.Fatalf("options = %+v", got)
+	}
+	if got[0].ID != "primary" || got[0].Name != "Primary calendar" {
+		t.Errorf("first = %+v, want synthetic primary", got[0])
+	}
+	if got[1].ID != "team@x" || got[1].Name != "Team" {
+		t.Errorf("got[1] = %+v", got[1])
+	}
+	if got[2].ID != "proj@x" || got[2].Name != "My Project" {
+		t.Errorf("summaryOverride should win: %+v", got[2])
+	}
+	for _, o := range got {
+		if o.ID == "me@x" {
+			t.Errorf("primary calendar must not appear twice: %+v", got)
+		}
+	}
+}
+
 func TestResolveCalendarID_InputWinsThenParamThenPrimary(t *testing.T) {
 	// Wired input port wins.
 	job := core.Job{

@@ -49,7 +49,7 @@ func init() {
 				"type":"object",
 				"properties":{
 					"account":{"type":"string","default":"default"},
-					"calendar_id":{"type":"string","title":"Calendar","default":"primary","description":"Calendar id, or 'primary' for the connected account's own calendar."},
+					"calendar_id":{"type":"string","format":"google-calendar","title":"Calendar","default":"primary","description":"The calendar to add the event to — pick from your account's calendars, or 'primary' for your own."},
 					"summary":{"type":"string","title":"Title","description":"Event title."},
 					"description":{"type":"string","title":"Description","description":"Optional event details."},
 					"location":{"type":"string","title":"Location","description":"Optional location text."},

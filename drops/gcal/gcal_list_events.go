@@ -50,7 +50,7 @@ func init() {
 				"type":"object",
 				"properties":{
 					"account":{"type":"string","default":"default"},
-					"calendar_id":{"type":"string","title":"Calendar","default":"primary","description":"Calendar id, or 'primary' for the connected account's own calendar."},
+					"calendar_id":{"type":"string","format":"google-calendar","title":"Calendar","default":"primary","description":"The calendar to read — pick from your account's calendars, or 'primary' for your own."},
 					"time_min":{"type":"string","title":"Start of window","examples":["2026-06-16T00:00:00Z"],"description":"Only events ending at or after this time (RFC3339). Leave blank for no lower bound."},
 					"time_max":{"type":"string","title":"End of window","examples":["2026-06-23T00:00:00Z"],"description":"Only events starting before this time (RFC3339). Leave blank for no upper bound."},
 					"q":{"type":"string","title":"Search text","description":"Free-text search over event fields. Leave blank to match all."},

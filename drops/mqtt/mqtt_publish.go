@@ -24,6 +24,7 @@ func init() {
 			Integration: "MQTT",
 			Category:    "network",
 			Icon:        "radio",
+			BrandLogo:   "/brands/mqtt.svg",
 			Color:       "#660066",
 			Provider:    "internal",
 			Tags:        []string{"mqtt", "publish", "iot", "message", "pubsub"},

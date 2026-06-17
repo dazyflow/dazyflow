@@ -1603,6 +1603,20 @@ func wireConnectorTokenHooks(reg *daemon.OAuthRegistry) {
 	}
 	daemon.RegisterResourceLister("google", "spreadsheets", driveLister("application/vnd.google-apps.spreadsheet"))
 	daemon.RegisterResourceLister("google", "forms", driveLister("application/vnd.google-apps.form"))
+	// Drive pickers: folders (drive_list_files / drive_upload) and files
+	// (drive_download). Reuse the drive package's Google client; account rides
+	// through from the picker.
+	daemon.RegisterResourceLister("google", "drive-folders", func(ctx context.Context, account string, _ map[string]string) ([]core.AccountResource, error) {
+		return drive.ListFolders(ctx, core.Job{Params: map[string]any{"account": account}})
+	})
+	daemon.RegisterResourceLister("google", "drive-files", func(ctx context.Context, account string, _ map[string]string) ([]core.AccountResource, error) {
+		return drive.ListFilesForPicker(ctx, core.Job{Params: map[string]any{"account": account}})
+	})
+	// Calendar picker: the connected account's calendars (gcal_list_events /
+	// gcal_create_event calendar_id).
+	daemon.RegisterResourceLister("google", "calendars", func(ctx context.Context, account string, _ map[string]string) ([]core.AccountResource, error) {
+		return gcal.ListCalendars(ctx, core.Job{Params: map[string]any{"account": account}})
+	})
 	// Tabs depend on the chosen spreadsheet (passed through as ?spreadsheet_id=).
 	daemon.RegisterResourceLister("google", "tabs", func(ctx context.Context, account string, extra map[string]string) ([]core.AccountResource, error) {
 		return sheets.ListSheetTabs(ctx, core.Job{Params: map[string]any{

@@ -49,7 +49,7 @@ func init() {
 				"type":"object",
 				"properties":{
 					"account":{"type":"string","default":"default"},
-					"file_id":{"type":"string","title":"File","description":"The Drive file id to download. The File ID input overrides this when connected."},
+					"file_id":{"type":"string","format":"google-drive-file","title":"File","description":"The Drive file to download — pick from your account's files. The File ID input overrides this when connected."},
 					"path":{"type":"string","title":"Save as","description":"What to call the downloaded file. Leave blank to use the file's own name in the run's scratch space."},
 					"timeout_ms":{"type":"integer","default":60000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},

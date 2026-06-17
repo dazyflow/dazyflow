@@ -242,6 +242,50 @@ func TestUpload_FromWiredFileRef(t *testing.T) {
 	}
 }
 
+func TestListFolders_QueryAndProjection(t *testing.T) {
+	var gotQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query().Get("q")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"files": []map[string]any{{"id": "fold1", "name": "Reports"}},
+		})
+	}))
+	defer srv.Close()
+	withDriveEnv(t, srv.URL)
+
+	got, err := ListFolders(context.Background(), core.Job{Params: map[string]any{}})
+	if err != nil {
+		t.Fatalf("ListFolders: %v", err)
+	}
+	if !strings.Contains(gotQuery, "mimeType = 'application/vnd.google-apps.folder'") || !strings.Contains(gotQuery, "trashed = false") {
+		t.Errorf("query = %q", gotQuery)
+	}
+	if len(got) != 1 || got[0].ID != "fold1" || got[0].Name != "Reports" {
+		t.Errorf("options = %+v", got)
+	}
+}
+
+func TestListFilesForPicker_ExcludesFolders(t *testing.T) {
+	var gotQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query().Get("q")
+		_, _ = w.Write([]byte(`{"files":[{"id":"f1","name":"a.pdf"}]}`))
+	}))
+	defer srv.Close()
+	withDriveEnv(t, srv.URL)
+
+	got, err := ListFilesForPicker(context.Background(), core.Job{Params: map[string]any{}})
+	if err != nil {
+		t.Fatalf("ListFilesForPicker: %v", err)
+	}
+	if !strings.Contains(gotQuery, "mimeType != 'application/vnd.google-apps.folder'") {
+		t.Errorf("file picker must exclude folders: %q", gotQuery)
+	}
+	if len(got) != 1 || got[0].ID != "f1" {
+		t.Errorf("options = %+v", got)
+	}
+}
+
 func TestUpload_RequiresPath(t *testing.T) {
 	withDriveEnv(t, "http://unused.invalid")
 	res, err := executeUpload(context.Background(), core.Job{Params: map[string]any{}}, nil)
