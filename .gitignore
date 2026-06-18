@@ -6,6 +6,7 @@
 /dz-drophost
 /ha_loadtest
 /.dazyflow/
+/.hazyflow/
 *.xlsx
 /.env
 
