@@ -2681,6 +2681,11 @@ function EditorInner() {
     setStepping(false);
     const abort = new AbortController();
     streamAbortRef.current = abort;
+    // Tracks whether a per-node failure already raised the banner, so the
+    // terminal handler doesn't double-report. Set synchronously the moment a
+    // node reports "failed" (not after the async getNodeRecord), because the
+    // terminal frame can arrive before that fetch resolves.
+    let nodeFailureSeen = false;
     api
       .streamJob(
         token,
@@ -2689,6 +2694,7 @@ function EditorInner() {
           if (kind === "node") {
             const ev = data as { node_id?: string; status?: JobStatus };
             if (!ev.node_id || !ev.status) return;
+            if (ev.status === "failed") nodeFailureSeen = true;
             setNodes((nds) =>
               nds.map((n) =>
                 n.id === ev.node_id
@@ -2774,6 +2780,24 @@ function EditorInner() {
           if (kind === "terminal") {
             setPausedAt(null);
             setStepping(false);
+            // A run can fail at the graph level (build/validation error,
+            // global timeout, a skip-cascade or leaf-only failure) without
+            // ever emitting a per-node `failed` frame. The terminal frame
+            // carries the final status + structured error, so surface it as
+            // a banner when no node-level banner already covered it —
+            // otherwise the canvas just goes quiet and the user assumes the
+            // run worked.
+            const term = data as {
+              status?: JobStatus;
+              error?: { code?: string; message?: string };
+            };
+            if (term.status === "failed" && !nodeFailureSeen) {
+              const detail =
+                term.error?.message ||
+                term.error?.code ||
+                t("editor.runFailedGeneric");
+              setError(t("editor.runFailedGraph", { detail }));
+            }
             abort.abort();
             // The run that just held the lock might be the only active
             // one; ask the server before clearing the editor lock so

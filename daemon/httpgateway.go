@@ -199,6 +199,14 @@ type HTTPGateway struct {
 	// endpoints per client IP. Nil disables throttling (dev default).
 	AuthRateLimit *ipRateLimiter
 
+	// WebhookRateLimit throttles the unauthenticated inbound surfaces
+	// (/trigger and the Slack/GitHub/Stripe event endpoints) per client
+	// IP. These take a credential/HMAC check, but the check runs work
+	// (workspace + graph loads, large-body HMAC) before it can reject —
+	// so without a throttle they invite secret brute-forcing and CPU-burn
+	// floods. Lazily defaulted in mountRoutes when left nil.
+	WebhookRateLimit *ipRateLimiter
+
 	// TrustProxyHeaders makes the gateway honor X-Forwarded-Proto when
 	// deciding whether a request arrived over HTTPS (for the Secure
 	// cookie flag + HSTS). Enable ONLY when hzd sits behind a trusted
@@ -288,6 +296,14 @@ func (h *HTTPGateway) ServeListener(ctx context.Context, ln net.Listener) error 
 }
 
 func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
+	// Default the unauthenticated-surface limiter when the operator hasn't
+	// set one. These endpoints (trigger + provider events) are reachable by
+	// strangers, so they must always be throttled — a generous per-IP
+	// allowance that legitimate webhook senders won't hit but that caps a
+	// brute-force/flood.
+	if h.WebhookRateLimit == nil {
+		h.WebhookRateLimit = newIPRateLimiter(defaultWebhookRatePerMin, defaultWebhookRateBurst)
+	}
 	// Liveness: the process is up and serving. Never touches deps.
 	mux.HandleFunc("GET /healthz", func(rw http.ResponseWriter, _ *http.Request) {
 		rw.WriteHeader(http.StatusOK)
@@ -509,10 +525,10 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/validate/graph", h.requireAuth(h.validateGraphLiteral))
 	// Slack Events API endpoint. NOT under requireAuth — Slack POSTs
 	// as a stranger; the HMAC signature is the auth.
-	mux.HandleFunc("POST /api/v1/events/slack/{tenant}", h.slackEvents)
-	mux.HandleFunc("POST /api/v1/events/github/{tenant}", h.githubEvents)
-	mux.HandleFunc("POST /api/v1/events/stripe", h.stripeEvents)
-	mux.HandleFunc("POST /api/v1/events/stripe/{tenant}", h.stripeTenantEvents)
+	mux.HandleFunc("POST /api/v1/events/slack/{tenant}", h.rateLimitWebhook(h.slackEvents))
+	mux.HandleFunc("POST /api/v1/events/github/{tenant}", h.rateLimitWebhook(h.githubEvents))
+	mux.HandleFunc("POST /api/v1/events/stripe", h.rateLimitWebhook(h.stripeEvents))
+	mux.HandleFunc("POST /api/v1/events/stripe/{tenant}", h.rateLimitWebhook(h.stripeTenantEvents))
 	mux.HandleFunc("GET /api/v1/approvals/pending", h.requireAuth(h.listPendingApprovals))
 	mux.HandleFunc("POST /api/v1/approvals/{runID}/{nodeID}", h.requireAuth(h.approveAuthed))
 	mux.HandleFunc("GET /api/v1/admin/api-keys", h.requireAuth(h.listAPIKeys))
@@ -597,7 +613,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	if h.Webhook == nil {
 		h.Webhook = NewWebhookListener(h.svc)
 	}
-	mux.HandleFunc("POST /trigger/", h.Webhook.handleTrigger)
+	mux.HandleFunc("POST /trigger/", h.rateLimitWebhook(h.Webhook.handleTrigger))
 	mux.HandleFunc("GET /form/", h.Webhook.handleForm)
 	mux.HandleFunc("POST /form/", h.Webhook.handleForm)
 

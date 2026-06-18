@@ -62,9 +62,20 @@ func (w *WebhookListener) handleTrigger(rw http.ResponseWriter, r *http.Request)
 	}
 	tenant, workspace, graphID := parts[0], parts[1], parts[2]
 
+	// Every pre-authentication failure below returns the SAME generic 401.
+	// Distinct codes/bodies (unknown workspace vs unknown graph vs no
+	// webhook trigger vs bad secret) would let an unauthenticated caller
+	// enumerate which tenants/workspaces/graphs exist and are webhook-enabled
+	// — a discovery oracle. The webhook secret is per-graph, so we must load
+	// the graph before we can check it; we just refuse to reveal *why* a
+	// pre-auth request failed. (A residual timing difference between
+	// existing/missing resources remains, far weaker than the status/body
+	// signal this closes.)
+	const unauthorized = "unknown endpoint or invalid secret"
+
 	store, err := w.svc.Workspaces.Open(tenant, workspace)
 	if err != nil {
-		http.Error(rw, "unknown workspace", http.StatusNotFound)
+		http.Error(rw, unauthorized, http.StatusUnauthorized)
 		return
 	}
 	// Fire the published revision (falls back to HEAD for never-published
@@ -72,20 +83,13 @@ func (w *WebhookListener) handleTrigger(rw http.ResponseWriter, r *http.Request)
 	// half-finished draft still being edited.
 	g, err := store.LoadPublishedOrHead(graphID)
 	if err != nil {
-		http.Error(rw, "unknown graph", http.StatusNotFound)
-		return
-	}
-	if g.Disabled {
-		// Paused flows reject inbound webhooks. 403 rather than 404 so
-		// the caller (e.g. Stripe's webhook UI) sees this as "we know
-		// the endpoint but it's off" instead of an unknown-URL retry.
-		http.Error(rw, `{"error":{"code":"flow_disabled","message":"flow is currently disabled — re-enable via enable_flow"}}`, http.StatusForbidden)
+		http.Error(rw, unauthorized, http.StatusUnauthorized)
 		return
 	}
 
 	keys := core.GraphWebhookSecrets(g)
 	if len(keys) == 0 {
-		http.Error(rw, "graph has no webhook trigger", http.StatusNotFound)
+		http.Error(rw, unauthorized, http.StatusUnauthorized)
 		return
 	}
 	// Accept the request if the bearer token matches ANY active key.
@@ -99,7 +103,16 @@ func (w *WebhookListener) handleTrigger(rw http.ResponseWriter, r *http.Request)
 		matched |= subtle.ConstantTimeCompare([]byte(k), []byte(provided))
 	}
 	if matched != 1 {
-		http.Error(rw, "invalid secret", http.StatusUnauthorized)
+		http.Error(rw, unauthorized, http.StatusUnauthorized)
+		return
+	}
+
+	// Only AFTER proving possession of the secret do we reveal the flow's
+	// disabled state — the caller (e.g. Stripe's webhook UI) holds the
+	// secret, so a distinct 403 here is safe and more useful than a retry
+	// loop. Paused flows reject inbound webhooks.
+	if g.Disabled {
+		http.Error(rw, `{"error":{"code":"flow_disabled","message":"flow is currently disabled — re-enable via enable_flow"}}`, http.StatusForbidden)
 		return
 	}
 

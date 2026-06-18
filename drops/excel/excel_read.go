@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"strconv"
 
 	"github.com/xuri/excelize/v2"
 
 	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/drops/internal/limits"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
 	"git.sr.ht/~klahr/hazyflow/engine"
 )
@@ -78,7 +80,13 @@ func executeExcelRead(_ context.Context, job core.Job, _ chan<- core.Progress) (
 	if err != nil {
 		return params.Err(job, "bad_input", err.Error()), nil
 	}
-	f, err := excelize.OpenReader(bytes.NewReader(data))
+	// Bound decompression so a crafted .xlsx (a zip-bomb: tiny on disk,
+	// gigabytes inflated) can't exhaust the daemon's memory. excelize
+	// otherwise defaults to a ~16 GB unzip ceiling.
+	f, err := excelize.OpenReader(bytes.NewReader(data), excelize.Options{
+		UnzipSizeLimit:    maxSandboxFileBytes,
+		UnzipXMLSizeLimit: maxSandboxFileBytes,
+	})
 	if err != nil {
 		return params.Err(job, "bad_input", "could not read .xlsx: "+err.Error()), nil
 	}
@@ -98,6 +106,10 @@ func executeExcelRead(_ context.Context, job core.Job, _ chan<- core.Progress) (
 	grid, err := f.GetRows(sheet)
 	if err != nil {
 		return params.Err(job, "bad_input", err.Error()), nil
+	}
+	if len(grid) > limits.MaxRows() {
+		return params.Err(job, "too_many_rows",
+			fmt.Sprintf("sheet has %d rows, over the %d-row limit (raise HAZYFLOW_MAX_ROWS or use 'range'/'skip' to narrow it)", len(grid), limits.MaxRows())), nil
 	}
 	grid, err = applyRange(grid, params.StringDefault(job.Params, "range", ""), params.IntDefault(job.Params, "skip", 0))
 	if err != nil {

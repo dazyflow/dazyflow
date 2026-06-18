@@ -403,6 +403,18 @@ func (w *Worker) maybeScheduleRetry(graph core.Graph, rec core.JobRecord) (time.
 		return time.Time{}, "no outgoing edge requests retry"
 	}
 
+	// A non-idempotent module must never be retried on the manifest alone:
+	// the worker retries any StatusError uniformly and there is no
+	// "this error is safe to retry" signal, so an automatic retry of a
+	// write (POST a charge, send a message) can duplicate the side effect
+	// when the request actually succeeded but the response was lost. Honor
+	// the retry only when the flow author explicitly accepted that risk by
+	// wiring an on_error=retry edge. Idempotent modules retry freely
+	// (including leaf nodes, which have no outgoing edges to ask).
+	if !manifest.Idempotent && !hasRetryEdge {
+		return time.Time{}, "non-idempotent module retries only via an explicit on_error=retry edge"
+	}
+
 	// A module may override the worker-global attempt cap via its
 	// manifest (e.g. a flaky network module tolerating more retries, or a
 	// costly module limiting itself to one shot). Zero = use the default.

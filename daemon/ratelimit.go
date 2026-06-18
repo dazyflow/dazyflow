@@ -26,6 +26,12 @@ import (
 const (
 	defaultAuthRatePerMin = 30
 	defaultAuthRateBurst  = 10
+	// Webhook/event surfaces are hit by automated senders (Stripe retries,
+	// Slack event bursts, a flow's own webhook callers), so the steady rate
+	// is higher than auth — but still bounded so a stranger can't brute-force
+	// a per-graph secret or flood the HMAC path. Per source IP.
+	defaultWebhookRatePerMin = 120
+	defaultWebhookRateBurst  = 40
 	// maxRateLimiterBuckets bounds the per-IP bucket map. Without a cap a
 	// flood of distinct source IPs (or IP rotation) grows the map without
 	// bound between GC sweeps. When full we evict the oldest-seen bucket.
@@ -245,6 +251,21 @@ func clientIP(r *http.Request) string {
 func (h *HTTPGateway) rateLimitAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
 		if h.AuthRateLimit != nil && !h.AuthRateLimit.Allow(clientIP(r)) {
+			rw.Header().Set("Retry-After", "60")
+			writeJSONError(rw, http.StatusTooManyRequests, "rate limit exceeded — slow down")
+			return
+		}
+		next(rw, r)
+	}
+}
+
+// rateLimitWebhook wraps the unauthenticated inbound surfaces (/trigger and
+// the provider event endpoints) with the per-IP webhook limiter, so a
+// stranger can't brute-force a per-graph secret or flood the HMAC path. The
+// throttle runs BEFORE the handler reads the body or loads any resource.
+func (h *HTTPGateway) rateLimitWebhook(next http.HandlerFunc) http.HandlerFunc {
+	return func(rw http.ResponseWriter, r *http.Request) {
+		if h.WebhookRateLimit != nil && !h.WebhookRateLimit.Allow(clientIP(r)) {
 			rw.Header().Set("Retry-After", "60")
 			writeJSONError(rw, http.StatusTooManyRequests, "rate limit exceeded — slow down")
 			return

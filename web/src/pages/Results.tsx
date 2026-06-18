@@ -3,6 +3,7 @@ import { Table2, Download, Search, Trash2, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, type BoardSummary, type BoardPage } from "../api";
+import { ConfirmModal } from "../components/ConfirmModal";
 
 // Results — the in-app view of the Built-in store. Left: the workspace's
 // boards (tables) with row counts. Right: the selected board as a friendly
@@ -19,6 +20,7 @@ export function Results() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [clearing, setClearing] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
 
   const tenant = activeTenant || me?.tenant || undefined;
   const workspace = activeWorkspace || me?.workspace || undefined;
@@ -100,9 +102,12 @@ export function Results() {
     URL.revokeObjectURL(url);
   };
 
-  const clearBoard = async () => {
+  // doClearBoard performs the (irreversible) clear once the user has
+  // confirmed via the themed ConfirmModal — replacing the old blocking,
+  // untranslatable window.confirm().
+  const doClearBoard = async () => {
+    setConfirmClear(false);
     if (!token || !selected) return;
-    if (!window.confirm(t("results.clearConfirm", { name: selected }))) return;
     setClearing(true);
     setError(null);
     try {
@@ -259,7 +264,7 @@ export function Results() {
               </button>
               <button
                 className="ghost"
-                onClick={() => void clearBoard()}
+                onClick={() => setConfirmClear(true)}
                 disabled={clearing || !selected}
                 style={{
                   display: "inline-flex",
@@ -326,6 +331,16 @@ export function Results() {
             )}
           </div>
         </div>
+      )}
+      {confirmClear && selected && (
+        <ConfirmModal
+          danger
+          title={t("results.clearTitle")}
+          message={t("results.clearConfirm", { name: selected })}
+          confirmLabel={t("results.clear")}
+          onConfirm={() => void doClearBoard()}
+          onCancel={() => setConfirmClear(false)}
+        />
       )}
     </div>
   );

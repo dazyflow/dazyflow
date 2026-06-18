@@ -110,6 +110,12 @@ func executeForEach(ctx context.Context, job core.Job, progress chan<- core.Prog
 		}), nil
 }
 
+// defaultForEachConcurrency bounds parallelism when the author leaves
+// concurrency unset. Small enough to keep memory/goroutine pressure sane on
+// the shared daemon, large enough that independent I/O-bound iterations still
+// overlap. Authors who want more set the concurrency param explicitly.
+const defaultForEachConcurrency = 8
+
 // itemFunc runs one iteration. It returns the Ref to record at results[idx]
 // and, when the iteration failed, a JSON-serializable error entry to record
 // under errors[idx] (nil on success).
@@ -151,8 +157,17 @@ func runForEachItems(
 	var failures []failure
 	var errsMu sync.Mutex
 
+	// When the author doesn't set concurrency, cap parallelism at a modest
+	// default rather than fanning out one goroutine per item: each iteration
+	// runs a full in-process body subgraph, so an unset concurrency on a
+	// large items list (items is itself capped at limits.MaxRows) would
+	// otherwise spawn up to that many concurrent subgraph runs and exhaust
+	// the daemon. An explicit concurrency is honored as-is.
 	gate := concurrency
-	if gate == 0 || gate > len(items) {
+	if gate == 0 {
+		gate = defaultForEachConcurrency
+	}
+	if gate > len(items) {
 		gate = len(items)
 	}
 	sem := make(chan struct{}, gate)

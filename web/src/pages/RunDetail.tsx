@@ -31,6 +31,20 @@ import { formatDateTime } from "../lib/datetime";
 // row expands inline to show its result JSON; no extra round trips.
 // "Replay" re-fires the graph from scratch and navigates to the
 // new run's detail page.
+// actionErrorMessage turns a failed replay/retry/cancel request into a
+// plain-language string. A raw "503: Service Unavailable" or "0: network
+// error" means nothing to a non-technical user, so map transport/server
+// failures to friendly guidance and otherwise surface the server's own
+// human message (without the leaked numeric status prefix).
+function actionErrorMessage(e: unknown, t: (key: string) => string): string {
+  if (e instanceof APIError) {
+    if (e.status === 0) return t("runDetail.errNetwork");
+    if (e.status >= 500) return t("runDetail.errServer");
+    return e.message;
+  }
+  return (e as Error).message;
+}
+
 export function RunDetail() {
   const { t } = useTranslation();
   const { runID } = useParams<{ runID: string }>();
@@ -161,8 +175,7 @@ export function RunDetail() {
         navigate(`/runs/${encodeURIComponent(result.job_id)}`);
       }
     } catch (e) {
-      const msg = e instanceof APIError ? `${e.status}: ${e.message}` : (e as Error).message;
-      setError(t("runDetail.replayFailed", { error: msg }));
+      setError(t("runDetail.replayFailed", { error: actionErrorMessage(e, t) }));
     } finally {
       setReplaying(false);
     }
@@ -180,8 +193,7 @@ export function RunDetail() {
         navigate(`/runs/${encodeURIComponent(result.job_id)}`);
       }
     } catch (e) {
-      const msg = e instanceof APIError ? `${e.status}: ${e.message}` : (e as Error).message;
-      setError(t("runDetail.retryFailed", { error: msg }));
+      setError(t("runDetail.retryFailed", { error: actionErrorMessage(e, t) }));
     } finally {
       setRetrying(false);
     }
@@ -199,8 +211,7 @@ export function RunDetail() {
       const fresh = await api.getJob(token, run.ID).catch(() => null);
       if (fresh) setRun(fresh);
     } catch (e) {
-      const msg = e instanceof APIError ? `${e.status}: ${e.message}` : (e as Error).message;
-      setError(t("runDetail.cancelFailed", { error: msg }));
+      setError(t("runDetail.cancelFailed", { error: actionErrorMessage(e, t) }));
     } finally {
       setCancelling(false);
     }

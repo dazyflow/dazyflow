@@ -21,6 +21,12 @@ func wsPath(p string) string {
 	return strings.TrimPrefix(s, "workspace://")
 }
 
+// maxSandboxFileBytes caps how large a workspace file we'll pull fully into
+// memory. An .xlsx is a zip, so the compressed file is normally far smaller
+// than this; the cap stops a single oversized file from OOMing the shared
+// daemon before excelize's own decompression limits even apply.
+const maxSandboxFileBytes = 100 * 1024 * 1024 // 100 MiB
+
 func readSandboxFile(job core.Job, p string) ([]byte, error) {
 	root, rel, err := sandbox.OpenRoot(job, p)
 	if err != nil {
@@ -32,7 +38,16 @@ func readSandboxFile(job core.Job, p string) ([]byte, error) {
 		return nil, err
 	}
 	defer f.Close()
-	return io.ReadAll(f)
+	// Read one byte past the cap so we can distinguish "exactly at the limit"
+	// from "over it" and fail fast rather than truncating into a corrupt zip.
+	data, err := io.ReadAll(io.LimitReader(f, maxSandboxFileBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > maxSandboxFileBytes {
+		return nil, fmt.Errorf("file exceeds %d bytes", maxSandboxFileBytes)
+	}
+	return data, nil
 }
 
 func writeSandboxFile(job core.Job, p string, data []byte) error {

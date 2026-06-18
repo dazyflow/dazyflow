@@ -60,8 +60,11 @@ func init() {
 				},
 				"required":["broker","topic","payload"]
 			}`),
+			// A publish is a side effect with no dedup key, and each retry
+			// reconnects (a fresh session), so MQTT QoS can't suppress a
+			// duplicate. Never auto-retry — matches the other send-drops.
 			Idempotent:  false,
-			RetryPolicy: core.RetryExponentialBackoff,
+			RetryPolicy: core.RetryNever,
 		},
 		Execute: executePublish,
 	})

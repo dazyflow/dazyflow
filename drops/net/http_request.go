@@ -88,9 +88,13 @@ func init() {
 					"required":["url"]
 				}`,
 			),
-			// idempotent=true so retry edges validate; users are
-			// responsible for restricting the method to one that is
-			// actually safe to replay (GET/HEAD/OPTIONS/PUT/DELETE).
+			// idempotent=true so retry edges validate. GET/HEAD/OPTIONS/
+			// PUT/DELETE are safe to replay; POST/PATCH are not idempotent
+			// under HTTP, so for those we attach a stable Idempotency-Key
+			// (see executeHTTPRequest) to let compliant services dedupe a
+			// retried-but-already-applied write. Note the worker only
+			// auto-retries (without an explicit on_error=retry edge) on
+			// idempotent leaf nodes — so a leaf POST relies on that key.
 			Idempotent:  true,
 			RetryPolicy: core.RetryExponentialBackoff,
 		},
@@ -142,6 +146,18 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
+	}
+
+	// For verbs that are not idempotent under HTTP semantics (POST/PATCH),
+	// attach a stable Idempotency-Key so that a retry of a request whose
+	// response was lost dedupes on any service that honors the convention
+	// (Stripe, GitHub, most modern REST APIs). The key is constant across
+	// retries of the same node record; services that ignore the header are
+	// unaffected. Mirrors webhook_send. Don't override a user-set key.
+	if method == http.MethodPost || method == http.MethodPatch {
+		if req.Header.Get("Idempotency-Key") == "" {
+			req.Header.Set("Idempotency-Key", job.IdempotencyKey())
+		}
 	}
 
 	emitProgress(progress, job, 0.1, fmt.Sprintf("%s %s", method, url))

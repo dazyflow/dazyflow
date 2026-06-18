@@ -216,12 +216,21 @@ func redactGraphSecrets(g core.Graph) core.Graph {
 		}
 		g.Nodes = nodes
 	}
+	// The FailureNotify webhook URL is itself the bearer secret (a Slack /
+	// Discord / PagerDuty incoming-webhook URL), so it must be blanked too.
+	// Keep the Email — it's PII the subject is entitled to, not a credential.
+	if g.FailureNotify != nil && g.FailureNotify.Webhook != "" {
+		fn := *g.FailureNotify
+		fn.Webhook = redactedValue
+		g.FailureNotify = &fn
+	}
 	return g
 }
 
-// redactParams copies params, blanking values whose key looks secret. Only
-// string values are masked in place; non-string secret-keyed values are
-// replaced with the redaction marker too.
+// redactParams copies params, blanking values whose key looks secret. It
+// recurses into nested maps and slices so a secret tucked under a
+// non-secret-named key (e.g. headers.Authorization, body.api_key) is masked
+// too — a flat top-level scan would leak those in cleartext.
 func redactParams(in map[string]any) map[string]any {
 	if len(in) == 0 {
 		return in
@@ -232,9 +241,27 @@ func redactParams(in map[string]any) map[string]any {
 			out[k] = redactedValue
 			continue
 		}
-		out[k] = v
+		out[k] = redactValueDeep(v)
 	}
 	return out
+}
+
+// redactValueDeep walks nested maps/slices applying the secret-key heuristic
+// at every level. Scalars pass through unchanged (their parent key already
+// decided they weren't secret-named).
+func redactValueDeep(v any) any {
+	switch t := v.(type) {
+	case map[string]any:
+		return redactParams(t)
+	case []any:
+		out := make([]any, len(t))
+		for i, el := range t {
+			out[i] = redactValueDeep(el)
+		}
+		return out
+	default:
+		return v
+	}
 }
 
 func redactEnv(in map[string]string) map[string]string {
@@ -262,7 +289,8 @@ func looksSecretKey(key string) bool {
 	for _, needle := range []string{
 		"secret", "token", "password", "passwd", "apikey", "api_key",
 		"access_key", "private_key", "client_secret", "credential", "auth",
-		"bearer",
+		"bearer", "webhook", "cookie", "session", "dsn", "connection_string",
+		"signature",
 	} {
 		if strings.Contains(k, needle) {
 			return true
@@ -271,13 +299,22 @@ func looksSecretKey(key string) bool {
 	return false
 }
 
-// exportHandler serves the current subject's data export. Read-only and
-// scoped to the caller: a user can only export their own data (the
-// principal binds the email/subject/tenant), so authentication is the only
-// gate needed.
+// exportHandler serves the current subject's data export. The export is
+// keyed on p.Subject — which is the verified email ONLY for a session
+// principal. For an API key, Subject is operator-chosen at issue time and not
+// bound to the holder, so an org admin could mint a key with another user's
+// email as the Subject and dump that victim's profile + cross-org
+// memberships. Require a session credential here so Subject is always the
+// authenticated human's own verified identity. (Mirrors the org-delete
+// step-up in gdpr_http.go.)
 func (h *HTTPGateway) exportHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Users == nil {
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "user store not configured")
+		return
+	}
+	if !strings.HasPrefix(credentialFromRequest(r), auth.SessionTokenPrefix) {
+		writeAPIError(rw, http.StatusForbidden, "session_required",
+			"data export requires a signed-in session, not an API key")
 		return
 	}
 	exp, err := h.assembleExport(r.Context(), p)

@@ -197,8 +197,11 @@ func TestWebhook_UnknownGraph(t *testing.T) {
 		t.Fatalf("do: %v", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Errorf("status=%d, want 404", resp.StatusCode)
+	// An unknown graph returns the same generic 401 as a bad secret, so an
+	// unauthenticated caller can't tell "graph doesn't exist" from "wrong
+	// key" — no enumeration oracle.
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("status=%d, want 401", resp.StatusCode)
 	}
 }
 
@@ -224,8 +227,10 @@ func TestWebhook_GraphWithoutWebhookTriggerRejected(t *testing.T) {
 		t.Fatalf("do: %v", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Errorf("status=%d, want 404", resp.StatusCode)
+	// A graph with no webhook trigger is indistinguishable from a bad secret
+	// to an unauthenticated caller: generic 401, not a revealing 404.
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("status=%d, want 401", resp.StatusCode)
 	}
 }
 

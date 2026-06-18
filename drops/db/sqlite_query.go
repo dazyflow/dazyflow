@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/hazyflow/drops/internal/limits"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
 	"git.sr.ht/~klahr/hazyflow/engine"
 	_ "modernc.org/sqlite"
@@ -166,6 +167,13 @@ func executeSQLiteQuery(ctx context.Context, job core.Job, _ chan<- core.Progres
 		out = append(out, rec)
 		if limit > 0 && len(out) >= limit {
 			break
+		}
+		// limit=0 means "no user-imposed cap" — but the whole result set is
+		// buffered in memory, so an unbounded SELECT would OOM the daemon.
+		// Fail fast at the shared row ceiling rather than letting it grow.
+		if len(out) > limits.MaxRows() {
+			return params.Err(job, "too_many_rows",
+				fmt.Sprintf("query returned more than the %d-row limit; add a LIMIT clause, set the 'limit' param, or raise HAZYFLOW_MAX_ROWS", limits.MaxRows())), nil
 		}
 	}
 	if err := rows.Err(); err != nil {

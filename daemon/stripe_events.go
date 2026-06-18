@@ -325,6 +325,11 @@ func (h *StripeEventsHandler) fanoutSeed(ctx context.Context, tenant, moduleID s
 				h.logger.Printf("load %s/%s/%s: %v", tenant, ws, id, err)
 				continue
 			}
+			// A paused flow must not fire on inbound events — same rule the
+			// /trigger webhook enforces. Skip disabled graphs entirely.
+			if g.Disabled {
+				continue
+			}
 			seeds := map[string]core.Result{}
 			for _, n := range g.Nodes {
 				if n.Module == moduleID {

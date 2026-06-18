@@ -107,6 +107,12 @@ func executeUnwrapResults(_ context.Context, job core.Job, _ chan<- core.Progres
 	if err != nil {
 		return errResult(job, "bad_input", err.Error()), nil
 	}
+	// normalizeResultList doesn't cap (unlike normalizeRows), so bound the
+	// input here — and the output is amplified (each wrapper's chosen port
+	// can expand into many rows), so it's re-checked as it grows below.
+	if err := capRows(len(wrappers)); err != nil {
+		return errResult(job, "too_many_rows", err.Error()), nil
+	}
 
 	node := paramStringOr(job.Params, "node", "")
 	port := paramStringOr(job.Params, "port", "")
@@ -163,6 +169,11 @@ func executeUnwrapResults(_ context.Context, job core.Job, _ chan<- core.Progres
 
 		value := refInline(chosen)
 		out = append(out, valueToRows(value)...)
+		// The flatten can amplify N wrappers into many more rows; cap the
+		// running total so a loop body returning big lists can't OOM us.
+		if err := capRows(len(out)); err != nil {
+			return errResult(job, "too_many_rows", err.Error()), nil
+		}
 	}
 
 	return core.Result{
