@@ -13,12 +13,12 @@ import (
 	"flag"
 	"log"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/daemon"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon"
 )
 
 func main() {
-	base := flag.String("base", "", "workspace base dir (matches hzd --workspace-dir)")
+	base := flag.String("base", "", "workspace base dir (matches dzd --workspace-dir)")
 	tenant := flag.String("tenant", "loadtest", "tenant")
 	ws := flag.String("workspace", "default", "workspace")
 	graphID := flag.String("graph", "ha-poll", "graph id")

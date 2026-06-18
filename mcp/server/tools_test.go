@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/mcp/server"
+	"git.sr.ht/~klahr/dazyflow/mcp/server"
 )
 
 // fakeHzd stands in for the daemon's /api/v1 surface. Tests register
@@ -91,7 +91,7 @@ func fullStack(t *testing.T) (*server.Server, *fakeHzd, *httptest.Server) {
 	t.Helper()
 	fake, srv := newFakeHzd()
 	t.Cleanup(srv.Close)
-	c := server.NewHazydClient(srv.URL, "test-token")
+	c := server.NewDazydClient(srv.URL, "test-token")
 	s := &server.Server{Name: "test", Version: "1.0"}
 	for _, tool := range server.BuildTools(c, server.Defaults{Tenant: "t", Workspace: "ws"}) {
 		s.Register(tool)

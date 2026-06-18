@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // fakeIdP is a minimal OIDC issuer: a discovery document, a JWKS with
@@ -66,7 +66,7 @@ func (f *fakeIdP) mint(t *testing.T, extra map[string]any) string {
 	claims := map[string]any{
 		"iss": f.srv.URL,
 		"sub": "user@corp.example",
-		"aud": "hazyflow-api",
+		"aud": "dazyflow-api",
 		"iat": time.Now().Add(-time.Minute).Unix(),
 		"exp": time.Now().Add(time.Hour).Unix(),
 	}
@@ -93,7 +93,7 @@ func newTestOIDCVerifier(t *testing.T, idp *fakeIdP, cfg OIDCConfig) IDTokenVeri
 	t.Helper()
 	cfg.Issuer = idp.srv.URL
 	if cfg.ClientID == "" && cfg.Audience == "" {
-		cfg.ClientID = "hazyflow-api"
+		cfg.ClientID = "dazyflow-api"
 	}
 	v, err := NewOIDCVerifier(context.Background(), cfg)
 	if err != nil {
@@ -209,7 +209,7 @@ func TestOIDCAuthenticator_ThroughChain(t *testing.T) {
 
 	// Non-JWT credentials fall through the OIDC authenticator to the
 	// chain's normal invalid-credential error (not an OIDC error).
-	if _, err := chain.Authenticate(context.Background(), "hzs_not_a_jwt"); err == nil {
+	if _, err := chain.Authenticate(context.Background(), "dzs_not_a_jwt"); err == nil {
 		t.Error("non-JWT credential authenticated")
 	}
 }

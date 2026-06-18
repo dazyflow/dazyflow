@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 // Home Assistant connection verification, registered so the Apps page can
@@ -53,7 +53,7 @@ func verifyHomeAssistant(ctx context.Context, conn map[string]string) error {
 	resp, err := hfnet.SafeHTTPClient(timeout, hfnet.PrivateEgressAllowed()).Do(req)
 	if err != nil {
 		if hfnet.IsSSRFError(err) {
-			return errors.New("that looks like a local/private address — the operator must enable private-network access (HAZYFLOW_ALLOW_PRIVATE_EGRESS) for hazyflow to reach a LAN instance")
+			return errors.New("that looks like a local/private address — the operator must enable private-network access (DAZYFLOW_ALLOW_PRIVATE_EGRESS) for dazyflow to reach a LAN instance")
 		}
 		return fmt.Errorf("could not reach Home Assistant: %w", err)
 	}

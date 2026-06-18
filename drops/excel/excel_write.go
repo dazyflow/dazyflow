@@ -7,9 +7,9 @@ import (
 
 	"github.com/xuri/excelize/v2"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 const xlsxMIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

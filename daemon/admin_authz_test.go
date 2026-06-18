@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/auth"
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/auth"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // A tenant admin must not be able to reuse a key id that already belongs

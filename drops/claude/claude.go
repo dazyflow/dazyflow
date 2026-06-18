@@ -14,8 +14,8 @@ import (
 	"fmt"
 	"strings"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/llmtask"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/llmtask"
 )
 
 const (

@@ -3,7 +3,7 @@ package transform
 import (
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 func runRenderText(t *testing.T, params map[string]any, rows any) core.Result {

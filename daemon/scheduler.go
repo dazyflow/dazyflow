@@ -10,14 +10,14 @@ import (
 
 	"github.com/robfig/cron/v3"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // Scheduler reads graphs from the configured workspaces, finds those with
 // cron triggers, and fires SubmitGraph internally when each schedule is
-// due. One Scheduler runs per hzd instance. In a multi-node deployment
+// due. One Scheduler runs per dzd instance. In a multi-node deployment
 // every instance runs a Scheduler, but only the one holding the Postgres
-// advisory lock (see PgLeader, wired via SetLeader in cmd/hzd) actually
+// advisory lock (see PgLeader, wired via SetLeader in cmd/dzd) actually
 // fires triggers; the rest stay warm via rescan and take over on failover.
 
 type Scheduler struct {
@@ -32,7 +32,7 @@ type Scheduler struct {
 	rescanEvery time.Duration
 
 	// leader reports whether THIS instance may fire triggers. Default
-	// always-true (single node). In a multi-node cluster, cmd/hzd wires
+	// always-true (single node). In a multi-node cluster, cmd/dzd wires
 	// this to a Postgres advisory-lock leader so exactly one instance
 	// fires crons — otherwise every node fires every schedule N times.
 	// Rescan still runs on followers so a new leader can fire instantly.
@@ -121,7 +121,7 @@ func (e *scheduledGraph) nextFireFrom(now time.Time) time.Time {
 // NewScheduler wires a scheduler around the daemon Service. interval is
 // how often the scheduler checks for due triggers; rescanEvery is how
 // often it refreshes the list of tracked graphs (so workspace edits
-// take effect without restarting hzd).
+// take effect without restarting dzd).
 func NewScheduler(svc *Service) *Scheduler {
 	return &Scheduler{
 		svc:         svc,
@@ -138,7 +138,7 @@ func NewScheduler(svc *Service) *Scheduler {
 			// flow shouldn't have that schedule break because they're
 			// not the active subject at fire time.
 			return core.Principal{
-				Subject:   "hazyflow-scheduler",
+				Subject:   "dazyflow-scheduler",
 				Tenant:    tenant,
 				Workspace: workspace,
 				Roles: []core.Role{{
@@ -151,7 +151,7 @@ func NewScheduler(svc *Service) *Scheduler {
 }
 
 // SetLeader installs the leadership predicate. When fn returns false
-// this instance rescans but doesn't fire — used by cmd/hzd to gate the
+// this instance rescans but doesn't fire — used by cmd/dzd to gate the
 // scheduler on a Postgres advisory-lock leader in multi-node clusters.
 func (s *Scheduler) SetLeader(fn func() bool) {
 	if fn != nil {

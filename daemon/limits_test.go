@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 func TestSubmitGraph_RejectsTooManyNodes(t *testing.T) {

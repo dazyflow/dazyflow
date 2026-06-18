@@ -19,17 +19,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"math"
 	"net/http"
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
-	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 )
 
 // maxResponseBytes caps how much of an API response we buffer, so a
@@ -89,48 +87,26 @@ func stripeDoIdem(ctx context.Context, job core.Job, method, url, form, idemKey 
 	if timeoutMS <= 0 {
 		timeoutMS = 15000
 	}
-	reqCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMS)*time.Millisecond)
-	defer cancel()
-
-	var rdr io.Reader
-	if form != "" {
-		rdr = strings.NewReader(form)
-	}
 	apiKey, err := resolveAPIKey(job)
 	if err != nil {
 		return 0, nil, err
 	}
-	req, err := http.NewRequestWithContext(reqCtx, method, url, rdr)
-	if err != nil {
-		return 0, nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+apiKey)
+	var b []byte
 	if form != "" {
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		b = []byte(form)
+	}
+	headers := map[string]string{"Authorization": "Bearer " + apiKey}
+	if form != "" {
+		headers["Content-Type"] = "application/x-www-form-urlencoded"
 	}
 	if method == http.MethodPost {
-		req.Header.Set("Idempotency-Key", idemKey)
+		headers["Idempotency-Key"] = idemKey
 	}
-	// base_url is a tenant-supplied param, so guard the dial: the SSRF
+	// base_url is a tenant-supplied param, so net.Do guards the dial: the SSRF
 	// client blocks loopback/private/link-local targets and the egress
-	// allowlist (when set) bounds which public hosts the API key may be
-	// sent to.
-	if err := hfnet.EgressAllowedFor(ctx, url); err != nil {
-		return 0, nil, err
-	}
-	resp, err := hfnet.SafeHTTPClient(time.Duration(timeoutMS)*time.Millisecond, hfnet.PrivateEgressAllowed()).Do(req)
-	if err != nil {
-		return 0, nil, err
-	}
-	defer resp.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
-	if err != nil {
-		return resp.StatusCode, nil, err
-	}
-	if int64(len(raw)) > maxResponseBytes {
-		return resp.StatusCode, nil, fmt.Errorf("stripe response exceeds %d bytes", maxResponseBytes)
-	}
-	return resp.StatusCode, raw, nil
+	// allowlist (when set) bounds which public hosts the API key may be sent to.
+	status, raw, _, err := hfnet.Do(ctx, method, url, headers, b, timeoutMS, maxResponseBytes)
+	return status, raw, err
 }
 
 // extractStripeError pulls error.message (plus code when set) out of a

@@ -22,10 +22,10 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
-	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 // maxResponseBytes caps how much of a response we buffer, so a hostile or

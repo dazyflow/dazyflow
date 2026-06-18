@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/auth"
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/auth"
+	"git.sr.ht/~klahr/dazyflow/core"
 	"golang.org/x/crypto/bcrypt"
 )
 

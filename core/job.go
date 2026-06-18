@@ -70,11 +70,11 @@ type Job struct {
 // ID stays the same, so the receiving service can dedupe by storing
 // the key and rejecting repeat requests.
 //
-// Format: "hazyflow:<job_id>". Slack, Stripe, GitHub, and most modern
+// Format: "dazyflow:<job_id>". Slack, Stripe, GitHub, and most modern
 // REST APIs honor this header convention; APIs that don't recognize
 // it ignore the header without erroring.
 func (j Job) IdempotencyKey() string {
-	return "hazyflow:" + j.ID
+	return "dazyflow:" + j.ID
 }
 
 type JobError struct {

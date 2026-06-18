@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/core/buildinfo"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core/buildinfo"
 )
 
 // resetReleaseCache clears the process-wide memo so a test fetches fresh.
@@ -36,7 +36,7 @@ func versionServer(t *testing.T, status int, version string) *httptest.Server {
 			w.WriteHeader(status)
 			return
 		}
-		io.WriteString(w, `{"service":"hazyflow","build":{"version":"`+version+`"}}`)
+		io.WriteString(w, `{"service":"dazyflow","build":{"version":"`+version+`"}}`)
 	}))
 	t.Cleanup(srv.Close)
 	return srv
@@ -103,10 +103,10 @@ func TestFetchLatestVersion(t *testing.T) {
 		want    string
 		wantErr bool
 	}{
-		{"normal", `{"service":"hazyflow","build":{"version":"0.2.0","commit":"abc"}}`, 200, "0.2.0", false},
+		{"normal", `{"service":"dazyflow","build":{"version":"0.2.0","commit":"abc"}}`, 200, "0.2.0", false},
 		{"v-prefixed", `{"build":{"version":"v1.4.0"}}`, 200, "v1.4.0", false},
 		{"unstamped upstream", `{"build":{"version":"dev"}}`, 200, "", true},
-		{"missing build", `{"service":"hazyflow"}`, 200, "", true},
+		{"missing build", `{"service":"dazyflow"}`, 200, "", true},
 		{"non-200", `nope`, 502, "", true},
 		{"garbage", `not json`, 200, "", true},
 	}

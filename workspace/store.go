@@ -27,7 +27,7 @@ import (
 	"github.com/go-git/go-git/v5/storage/filesystem"
 	"github.com/go-git/go-git/v5/storage/memory"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // Store wraps a Git working tree. Graphs live under graphs/<id>.json;
@@ -118,8 +118,8 @@ func openOrInit(storer storage.Storer, wt billy.Filesystem) (*git.Repository, er
 	}
 	if _, err := tree.Commit("init", &git.CommitOptions{
 		Author: &object.Signature{
-			Name:  "hazyflow",
-			Email: "hazyflow@local",
+			Name:  "dazyflow",
+			Email: "dazyflow@local",
 			When:  time.Now(),
 		},
 	}); err != nil {
@@ -602,8 +602,8 @@ func (s *Store) SetRevisionLabel(graphID, commit, label string) error {
 	_, err = s.repo.CreateTag(labelTag(graphID, hash.String()), hash, &git.CreateTagOptions{
 		Message: label,
 		Tagger: &object.Signature{
-			Name:  "hazyflow",
-			Email: "hazyflow@local",
+			Name:  "dazyflow",
+			Email: "dazyflow@local",
 			When:  time.Now(),
 		},
 	})

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"runtime/debug"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // NativeDrop is a module implemented as Go code, executed by direct function
@@ -36,7 +36,7 @@ func (t *nativeTransport) Execute(ctx context.Context, job core.Job, progress ch
 	defer func() {
 		if r := recover(); r != nil {
 			stack := debug.Stack()
-			fmt.Printf("hazyflow: drop %q panicked on job %s: %v\n%s\n", t.node.Manifest.ID, job.ID, r, stack)
+			fmt.Printf("dazyflow: drop %q panicked on job %s: %v\n%s\n", t.node.Manifest.ID, job.ID, r, stack)
 			res = core.Result{
 				JobID:  job.ID,
 				Status: core.StatusError,

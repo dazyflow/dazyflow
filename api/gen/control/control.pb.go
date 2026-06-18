@@ -2049,12 +2049,12 @@ var File_control_proto protoreflect.FileDescriptor
 
 const file_control_proto_rawDesc = "" +
 	"\n" +
-	"\rcontrol.proto\x12\x13hazyflow.control.v1\"\xb4\x01\n" +
+	"\rcontrol.proto\x12\x13dazyflow.control.v1\"\xb4\x01\n" +
 	"\x04Node\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06module\x18\x02 \x01(\tR\x06module\x12\x16\n" +
 	"\x06params\x18\x03 \x01(\fR\x06params\x124\n" +
-	"\x03env\x18\x04 \x03(\v2\".hazyflow.control.v1.Node.EnvEntryR\x03env\x1a6\n" +
+	"\x03env\x18\x04 \x03(\v2\".dazyflow.control.v1.Node.EnvEntryR\x03env\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"{\n" +
@@ -2069,9 +2069,9 @@ const file_control_proto_rawDesc = "" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12\x16\n" +
 	"\x06tenant\x18\x03 \x01(\tR\x06tenant\x12\x1c\n" +
 	"\tworkspace\x18\x04 \x01(\tR\tworkspace\x12/\n" +
-	"\x05nodes\x18\x05 \x03(\v2\x19.hazyflow.control.v1.NodeR\x05nodes\x12/\n" +
-	"\x05edges\x18\x06 \x03(\v2\x19.hazyflow.control.v1.EdgeR\x05edges\x12=\n" +
-	"\btriggers\x18\a \x03(\v2!.hazyflow.control.v1.GraphTriggerR\btriggers\"y\n" +
+	"\x05nodes\x18\x05 \x03(\v2\x19.dazyflow.control.v1.NodeR\x05nodes\x12/\n" +
+	"\x05edges\x18\x06 \x03(\v2\x19.dazyflow.control.v1.EdgeR\x05edges\x12=\n" +
+	"\btriggers\x18\a \x03(\v2!.dazyflow.control.v1.GraphTriggerR\btriggers\"y\n" +
 	"\fGraphTrigger\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x12\n" +
 	"\x04cron\x18\x02 \x01(\tR\x04cron\x12\x16\n" +
@@ -2089,12 +2089,12 @@ const file_control_proto_rawDesc = "" +
 	"NodeResult\x12\x17\n" +
 	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x16\n" +
 	"\x06status\x18\x02 \x01(\tR\x06status\x123\n" +
-	"\x05error\x18\x03 \x01(\v2\x1d.hazyflow.control.v1.JobErrorR\x05error\"\xac\x01\n" +
+	"\x05error\x18\x03 \x01(\v2\x1d.dazyflow.control.v1.JobErrorR\x05error\"\xac\x01\n" +
 	"\vGraphResult\x12\x19\n" +
 	"\bgraph_id\x18\x01 \x01(\tR\agraphId\x12\x16\n" +
 	"\x06status\x18\x02 \x01(\tR\x06status\x125\n" +
-	"\x05nodes\x18\x03 \x03(\v2\x1f.hazyflow.control.v1.NodeResultR\x05nodes\x123\n" +
-	"\x05error\x18\x04 \x01(\v2\x1d.hazyflow.control.v1.JobErrorR\x05error\"\x9c\x01\n" +
+	"\x05nodes\x18\x03 \x03(\v2\x1f.dazyflow.control.v1.NodeResultR\x05nodes\x123\n" +
+	"\x05error\x18\x04 \x01(\v2\x1d.dazyflow.control.v1.JobErrorR\x05error\"\x9c\x01\n" +
 	"\x04Port\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04mime\x18\x02 \x03(\tR\x04mime\x12\x14\n" +
@@ -2110,8 +2110,8 @@ const file_control_proto_rawDesc = "" +
 	"\x05color\x18\x04 \x01(\tR\x05color\x12'\n" +
 	"\x0fexecution_model\x18\x05 \x01(\tR\x0eexecutionModel\x12#\n" +
 	"\rprocess_model\x18\x06 \x01(\tR\fprocessModel\x121\n" +
-	"\x06inputs\x18\a \x03(\v2\x19.hazyflow.control.v1.PortR\x06inputs\x123\n" +
-	"\aoutputs\x18\b \x03(\v2\x19.hazyflow.control.v1.PortR\aoutputs\x12\x1e\n" +
+	"\x06inputs\x18\a \x03(\v2\x19.dazyflow.control.v1.PortR\x06inputs\x123\n" +
+	"\aoutputs\x18\b \x03(\v2\x19.dazyflow.control.v1.PortR\aoutputs\x12\x1e\n" +
 	"\n" +
 	"idempotent\x18\t \x01(\bR\n" +
 	"idempotent\x12!\n" +
@@ -2137,9 +2137,9 @@ const file_control_proto_rawDesc = "" +
 	"\aattempt\x18\n" +
 	" \x01(\x05R\aattempt\x12\x1b\n" +
 	"\tworker_id\x18\v \x01(\tR\bworkerId\x123\n" +
-	"\x05error\x18\f \x01(\v2\x1d.hazyflow.control.v1.JobErrorR\x05error\"D\n" +
+	"\x05error\x18\f \x01(\v2\x1d.dazyflow.control.v1.JobErrorR\x05error\"D\n" +
 	"\x10SaveGraphRequest\x120\n" +
-	"\x05graph\x18\x01 \x01(\v2\x1a.hazyflow.control.v1.GraphR\x05graph\"+\n" +
+	"\x05graph\x18\x01 \x01(\v2\x1a.dazyflow.control.v1.GraphR\x05graph\"+\n" +
 	"\x11SaveGraphResponse\x12\x16\n" +
 	"\x06commit\x18\x01 \x01(\tR\x06commit\"u\n" +
 	"\x10LoadGraphRequest\x12\x16\n" +
@@ -2148,7 +2148,7 @@ const file_control_proto_rawDesc = "" +
 	"\bgraph_id\x18\x03 \x01(\tR\agraphId\x12\x10\n" +
 	"\x03ref\x18\x04 \x01(\tR\x03ref\"E\n" +
 	"\x11LoadGraphResponse\x120\n" +
-	"\x05graph\x18\x01 \x01(\v2\x1a.hazyflow.control.v1.GraphR\x05graph\"I\n" +
+	"\x05graph\x18\x01 \x01(\v2\x1a.dazyflow.control.v1.GraphR\x05graph\"I\n" +
 	"\x11ListGraphsRequest\x12\x16\n" +
 	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x12\x1c\n" +
 	"\tworkspace\x18\x02 \x01(\tR\tworkspace\"1\n" +
@@ -2162,24 +2162,24 @@ const file_control_proto_rawDesc = "" +
 	"\x06commit\x18\x05 \x01(\tR\x06commit\"\x16\n" +
 	"\x14PromoteGraphResponse\"\xa6\x01\n" +
 	"\x0fRunGraphRequest\x120\n" +
-	"\x05graph\x18\x01 \x01(\v2\x1a.hazyflow.control.v1.GraphR\x05graph\x12\x16\n" +
+	"\x05graph\x18\x01 \x01(\v2\x1a.dazyflow.control.v1.GraphR\x05graph\x12\x16\n" +
 	"\x06tenant\x18\x02 \x01(\tR\x06tenant\x12\x1c\n" +
 	"\tworkspace\x18\x03 \x01(\tR\tworkspace\x12\x19\n" +
 	"\bgraph_id\x18\x04 \x01(\tR\agraphId\x12\x10\n" +
 	"\x03ref\x18\x05 \x01(\tR\x03ref\"\xa4\x01\n" +
 	"\rRunGraphEvent\x12@\n" +
-	"\bprogress\x18\x01 \x01(\v2\".hazyflow.control.v1.GraphProgressH\x00R\bprogress\x12F\n" +
-	"\tcompleted\x18\x02 \x01(\v2&.hazyflow.control.v1.RunGraphCompletedH\x00R\tcompletedB\t\n" +
+	"\bprogress\x18\x01 \x01(\v2\".dazyflow.control.v1.GraphProgressH\x00R\bprogress\x12F\n" +
+	"\tcompleted\x18\x02 \x01(\v2&.dazyflow.control.v1.RunGraphCompletedH\x00R\tcompletedB\t\n" +
 	"\apayload\"d\n" +
 	"\x11RunGraphCompleted\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x128\n" +
-	"\x06result\x18\x02 \x01(\v2 .hazyflow.control.v1.GraphResultR\x06result\"&\n" +
+	"\x06result\x18\x02 \x01(\v2 .dazyflow.control.v1.GraphResultR\x06result\"&\n" +
 	"\rGetJobRequest\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\"4\n" +
 	"\x17ListJobsForGraphRequest\x12\x19\n" +
 	"\bgraph_id\x18\x01 \x01(\tR\agraphId\"F\n" +
 	"\x10ListJobsResponse\x122\n" +
-	"\x04jobs\x18\x01 \x03(\v2\x1e.hazyflow.control.v1.JobRecordR\x04jobs\"A\n" +
+	"\x04jobs\x18\x01 \x03(\v2\x1e.dazyflow.control.v1.JobRecordR\x04jobs\"A\n" +
 	"\x10CancelJobRequest\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\"\x13\n" +
@@ -2203,22 +2203,22 @@ const file_control_proto_rawDesc = "" +
 	"\tproviders\x18\x03 \x03(\tR\tproviders\x12\x12\n" +
 	"\x04tags\x18\x04 \x03(\tR\x04tags\"H\n" +
 	"\x11ListDropsResponse\x123\n" +
-	"\x05drops\x18\x01 \x03(\v2\x1d.hazyflow.control.v1.ManifestR\x05drops2\xe2\x03\n" +
+	"\x05drops\x18\x01 \x03(\v2\x1d.dazyflow.control.v1.ManifestR\x05drops2\xe2\x03\n" +
 	"\fGraphService\x12Z\n" +
-	"\tSaveGraph\x12%.hazyflow.control.v1.SaveGraphRequest\x1a&.hazyflow.control.v1.SaveGraphResponse\x12Z\n" +
-	"\tLoadGraph\x12%.hazyflow.control.v1.LoadGraphRequest\x1a&.hazyflow.control.v1.LoadGraphResponse\x12]\n" +
+	"\tSaveGraph\x12%.dazyflow.control.v1.SaveGraphRequest\x1a&.dazyflow.control.v1.SaveGraphResponse\x12Z\n" +
+	"\tLoadGraph\x12%.dazyflow.control.v1.LoadGraphRequest\x1a&.dazyflow.control.v1.LoadGraphResponse\x12]\n" +
 	"\n" +
-	"ListGraphs\x12&.hazyflow.control.v1.ListGraphsRequest\x1a'.hazyflow.control.v1.ListGraphsResponse\x12c\n" +
-	"\fPromoteGraph\x12(.hazyflow.control.v1.PromoteGraphRequest\x1a).hazyflow.control.v1.PromoteGraphResponse\x12V\n" +
-	"\bRunGraph\x12$.hazyflow.control.v1.RunGraphRequest\x1a\".hazyflow.control.v1.RunGraphEvent0\x012\xff\x02\n" +
+	"ListGraphs\x12&.dazyflow.control.v1.ListGraphsRequest\x1a'.dazyflow.control.v1.ListGraphsResponse\x12c\n" +
+	"\fPromoteGraph\x12(.dazyflow.control.v1.PromoteGraphRequest\x1a).dazyflow.control.v1.PromoteGraphResponse\x12V\n" +
+	"\bRunGraph\x12$.dazyflow.control.v1.RunGraphRequest\x1a\".dazyflow.control.v1.RunGraphEvent0\x012\xff\x02\n" +
 	"\n" +
 	"JobService\x12L\n" +
-	"\x06GetJob\x12\".hazyflow.control.v1.GetJobRequest\x1a\x1e.hazyflow.control.v1.JobRecord\x12g\n" +
-	"\x10ListJobsForGraph\x12,.hazyflow.control.v1.ListJobsForGraphRequest\x1a%.hazyflow.control.v1.ListJobsResponse\x12Z\n" +
-	"\tCancelJob\x12%.hazyflow.control.v1.CancelJobRequest\x1a&.hazyflow.control.v1.CancelJobResponse\x12^\n" +
-	"\rStreamJobLogs\x12).hazyflow.control.v1.StreamJobLogsRequest\x1a .hazyflow.control.v1.JobLogEntry0\x012i\n" +
+	"\x06GetJob\x12\".dazyflow.control.v1.GetJobRequest\x1a\x1e.dazyflow.control.v1.JobRecord\x12g\n" +
+	"\x10ListJobsForGraph\x12,.dazyflow.control.v1.ListJobsForGraphRequest\x1a%.dazyflow.control.v1.ListJobsResponse\x12Z\n" +
+	"\tCancelJob\x12%.dazyflow.control.v1.CancelJobRequest\x1a&.dazyflow.control.v1.CancelJobResponse\x12^\n" +
+	"\rStreamJobLogs\x12).dazyflow.control.v1.StreamJobLogsRequest\x1a .dazyflow.control.v1.JobLogEntry0\x012i\n" +
 	"\vDropService\x12Z\n" +
-	"\tListDrops\x12%.hazyflow.control.v1.ListDropsRequest\x1a&.hazyflow.control.v1.ListDropsResponseB5Z3git.sr.ht/~klahr/hazyflow/api/gen/control;controlpbb\x06proto3"
+	"\tListDrops\x12%.dazyflow.control.v1.ListDropsRequest\x1a&.dazyflow.control.v1.ListDropsResponseB5Z3git.sr.ht/~klahr/dazyflow/api/gen/control;controlpbb\x06proto3"
 
 var (
 	file_control_proto_rawDescOnce sync.Once
@@ -2234,78 +2234,78 @@ func file_control_proto_rawDescGZIP() []byte {
 
 var file_control_proto_msgTypes = make([]protoimpl.MessageInfo, 32)
 var file_control_proto_goTypes = []any{
-	(*Node)(nil),                    // 0: hazyflow.control.v1.Node
-	(*Edge)(nil),                    // 1: hazyflow.control.v1.Edge
-	(*Graph)(nil),                   // 2: hazyflow.control.v1.Graph
-	(*GraphTrigger)(nil),            // 3: hazyflow.control.v1.GraphTrigger
-	(*GraphProgress)(nil),           // 4: hazyflow.control.v1.GraphProgress
-	(*JobError)(nil),                // 5: hazyflow.control.v1.JobError
-	(*NodeResult)(nil),              // 6: hazyflow.control.v1.NodeResult
-	(*GraphResult)(nil),             // 7: hazyflow.control.v1.GraphResult
-	(*Port)(nil),                    // 8: hazyflow.control.v1.Port
-	(*Manifest)(nil),                // 9: hazyflow.control.v1.Manifest
-	(*JobRecord)(nil),               // 10: hazyflow.control.v1.JobRecord
-	(*SaveGraphRequest)(nil),        // 11: hazyflow.control.v1.SaveGraphRequest
-	(*SaveGraphResponse)(nil),       // 12: hazyflow.control.v1.SaveGraphResponse
-	(*LoadGraphRequest)(nil),        // 13: hazyflow.control.v1.LoadGraphRequest
-	(*LoadGraphResponse)(nil),       // 14: hazyflow.control.v1.LoadGraphResponse
-	(*ListGraphsRequest)(nil),       // 15: hazyflow.control.v1.ListGraphsRequest
-	(*ListGraphsResponse)(nil),      // 16: hazyflow.control.v1.ListGraphsResponse
-	(*PromoteGraphRequest)(nil),     // 17: hazyflow.control.v1.PromoteGraphRequest
-	(*PromoteGraphResponse)(nil),    // 18: hazyflow.control.v1.PromoteGraphResponse
-	(*RunGraphRequest)(nil),         // 19: hazyflow.control.v1.RunGraphRequest
-	(*RunGraphEvent)(nil),           // 20: hazyflow.control.v1.RunGraphEvent
-	(*RunGraphCompleted)(nil),       // 21: hazyflow.control.v1.RunGraphCompleted
-	(*GetJobRequest)(nil),           // 22: hazyflow.control.v1.GetJobRequest
-	(*ListJobsForGraphRequest)(nil), // 23: hazyflow.control.v1.ListJobsForGraphRequest
-	(*ListJobsResponse)(nil),        // 24: hazyflow.control.v1.ListJobsResponse
-	(*CancelJobRequest)(nil),        // 25: hazyflow.control.v1.CancelJobRequest
-	(*CancelJobResponse)(nil),       // 26: hazyflow.control.v1.CancelJobResponse
-	(*StreamJobLogsRequest)(nil),    // 27: hazyflow.control.v1.StreamJobLogsRequest
-	(*JobLogEntry)(nil),             // 28: hazyflow.control.v1.JobLogEntry
-	(*ListDropsRequest)(nil),        // 29: hazyflow.control.v1.ListDropsRequest
-	(*ListDropsResponse)(nil),       // 30: hazyflow.control.v1.ListDropsResponse
-	nil,                             // 31: hazyflow.control.v1.Node.EnvEntry
+	(*Node)(nil),                    // 0: dazyflow.control.v1.Node
+	(*Edge)(nil),                    // 1: dazyflow.control.v1.Edge
+	(*Graph)(nil),                   // 2: dazyflow.control.v1.Graph
+	(*GraphTrigger)(nil),            // 3: dazyflow.control.v1.GraphTrigger
+	(*GraphProgress)(nil),           // 4: dazyflow.control.v1.GraphProgress
+	(*JobError)(nil),                // 5: dazyflow.control.v1.JobError
+	(*NodeResult)(nil),              // 6: dazyflow.control.v1.NodeResult
+	(*GraphResult)(nil),             // 7: dazyflow.control.v1.GraphResult
+	(*Port)(nil),                    // 8: dazyflow.control.v1.Port
+	(*Manifest)(nil),                // 9: dazyflow.control.v1.Manifest
+	(*JobRecord)(nil),               // 10: dazyflow.control.v1.JobRecord
+	(*SaveGraphRequest)(nil),        // 11: dazyflow.control.v1.SaveGraphRequest
+	(*SaveGraphResponse)(nil),       // 12: dazyflow.control.v1.SaveGraphResponse
+	(*LoadGraphRequest)(nil),        // 13: dazyflow.control.v1.LoadGraphRequest
+	(*LoadGraphResponse)(nil),       // 14: dazyflow.control.v1.LoadGraphResponse
+	(*ListGraphsRequest)(nil),       // 15: dazyflow.control.v1.ListGraphsRequest
+	(*ListGraphsResponse)(nil),      // 16: dazyflow.control.v1.ListGraphsResponse
+	(*PromoteGraphRequest)(nil),     // 17: dazyflow.control.v1.PromoteGraphRequest
+	(*PromoteGraphResponse)(nil),    // 18: dazyflow.control.v1.PromoteGraphResponse
+	(*RunGraphRequest)(nil),         // 19: dazyflow.control.v1.RunGraphRequest
+	(*RunGraphEvent)(nil),           // 20: dazyflow.control.v1.RunGraphEvent
+	(*RunGraphCompleted)(nil),       // 21: dazyflow.control.v1.RunGraphCompleted
+	(*GetJobRequest)(nil),           // 22: dazyflow.control.v1.GetJobRequest
+	(*ListJobsForGraphRequest)(nil), // 23: dazyflow.control.v1.ListJobsForGraphRequest
+	(*ListJobsResponse)(nil),        // 24: dazyflow.control.v1.ListJobsResponse
+	(*CancelJobRequest)(nil),        // 25: dazyflow.control.v1.CancelJobRequest
+	(*CancelJobResponse)(nil),       // 26: dazyflow.control.v1.CancelJobResponse
+	(*StreamJobLogsRequest)(nil),    // 27: dazyflow.control.v1.StreamJobLogsRequest
+	(*JobLogEntry)(nil),             // 28: dazyflow.control.v1.JobLogEntry
+	(*ListDropsRequest)(nil),        // 29: dazyflow.control.v1.ListDropsRequest
+	(*ListDropsResponse)(nil),       // 30: dazyflow.control.v1.ListDropsResponse
+	nil,                             // 31: dazyflow.control.v1.Node.EnvEntry
 }
 var file_control_proto_depIdxs = []int32{
-	31, // 0: hazyflow.control.v1.Node.env:type_name -> hazyflow.control.v1.Node.EnvEntry
-	0,  // 1: hazyflow.control.v1.Graph.nodes:type_name -> hazyflow.control.v1.Node
-	1,  // 2: hazyflow.control.v1.Graph.edges:type_name -> hazyflow.control.v1.Edge
-	3,  // 3: hazyflow.control.v1.Graph.triggers:type_name -> hazyflow.control.v1.GraphTrigger
-	5,  // 4: hazyflow.control.v1.NodeResult.error:type_name -> hazyflow.control.v1.JobError
-	6,  // 5: hazyflow.control.v1.GraphResult.nodes:type_name -> hazyflow.control.v1.NodeResult
-	5,  // 6: hazyflow.control.v1.GraphResult.error:type_name -> hazyflow.control.v1.JobError
-	8,  // 7: hazyflow.control.v1.Manifest.inputs:type_name -> hazyflow.control.v1.Port
-	8,  // 8: hazyflow.control.v1.Manifest.outputs:type_name -> hazyflow.control.v1.Port
-	5,  // 9: hazyflow.control.v1.JobRecord.error:type_name -> hazyflow.control.v1.JobError
-	2,  // 10: hazyflow.control.v1.SaveGraphRequest.graph:type_name -> hazyflow.control.v1.Graph
-	2,  // 11: hazyflow.control.v1.LoadGraphResponse.graph:type_name -> hazyflow.control.v1.Graph
-	2,  // 12: hazyflow.control.v1.RunGraphRequest.graph:type_name -> hazyflow.control.v1.Graph
-	4,  // 13: hazyflow.control.v1.RunGraphEvent.progress:type_name -> hazyflow.control.v1.GraphProgress
-	21, // 14: hazyflow.control.v1.RunGraphEvent.completed:type_name -> hazyflow.control.v1.RunGraphCompleted
-	7,  // 15: hazyflow.control.v1.RunGraphCompleted.result:type_name -> hazyflow.control.v1.GraphResult
-	10, // 16: hazyflow.control.v1.ListJobsResponse.jobs:type_name -> hazyflow.control.v1.JobRecord
-	9,  // 17: hazyflow.control.v1.ListDropsResponse.drops:type_name -> hazyflow.control.v1.Manifest
-	11, // 18: hazyflow.control.v1.GraphService.SaveGraph:input_type -> hazyflow.control.v1.SaveGraphRequest
-	13, // 19: hazyflow.control.v1.GraphService.LoadGraph:input_type -> hazyflow.control.v1.LoadGraphRequest
-	15, // 20: hazyflow.control.v1.GraphService.ListGraphs:input_type -> hazyflow.control.v1.ListGraphsRequest
-	17, // 21: hazyflow.control.v1.GraphService.PromoteGraph:input_type -> hazyflow.control.v1.PromoteGraphRequest
-	19, // 22: hazyflow.control.v1.GraphService.RunGraph:input_type -> hazyflow.control.v1.RunGraphRequest
-	22, // 23: hazyflow.control.v1.JobService.GetJob:input_type -> hazyflow.control.v1.GetJobRequest
-	23, // 24: hazyflow.control.v1.JobService.ListJobsForGraph:input_type -> hazyflow.control.v1.ListJobsForGraphRequest
-	25, // 25: hazyflow.control.v1.JobService.CancelJob:input_type -> hazyflow.control.v1.CancelJobRequest
-	27, // 26: hazyflow.control.v1.JobService.StreamJobLogs:input_type -> hazyflow.control.v1.StreamJobLogsRequest
-	29, // 27: hazyflow.control.v1.DropService.ListDrops:input_type -> hazyflow.control.v1.ListDropsRequest
-	12, // 28: hazyflow.control.v1.GraphService.SaveGraph:output_type -> hazyflow.control.v1.SaveGraphResponse
-	14, // 29: hazyflow.control.v1.GraphService.LoadGraph:output_type -> hazyflow.control.v1.LoadGraphResponse
-	16, // 30: hazyflow.control.v1.GraphService.ListGraphs:output_type -> hazyflow.control.v1.ListGraphsResponse
-	18, // 31: hazyflow.control.v1.GraphService.PromoteGraph:output_type -> hazyflow.control.v1.PromoteGraphResponse
-	20, // 32: hazyflow.control.v1.GraphService.RunGraph:output_type -> hazyflow.control.v1.RunGraphEvent
-	10, // 33: hazyflow.control.v1.JobService.GetJob:output_type -> hazyflow.control.v1.JobRecord
-	24, // 34: hazyflow.control.v1.JobService.ListJobsForGraph:output_type -> hazyflow.control.v1.ListJobsResponse
-	26, // 35: hazyflow.control.v1.JobService.CancelJob:output_type -> hazyflow.control.v1.CancelJobResponse
-	28, // 36: hazyflow.control.v1.JobService.StreamJobLogs:output_type -> hazyflow.control.v1.JobLogEntry
-	30, // 37: hazyflow.control.v1.DropService.ListDrops:output_type -> hazyflow.control.v1.ListDropsResponse
+	31, // 0: dazyflow.control.v1.Node.env:type_name -> dazyflow.control.v1.Node.EnvEntry
+	0,  // 1: dazyflow.control.v1.Graph.nodes:type_name -> dazyflow.control.v1.Node
+	1,  // 2: dazyflow.control.v1.Graph.edges:type_name -> dazyflow.control.v1.Edge
+	3,  // 3: dazyflow.control.v1.Graph.triggers:type_name -> dazyflow.control.v1.GraphTrigger
+	5,  // 4: dazyflow.control.v1.NodeResult.error:type_name -> dazyflow.control.v1.JobError
+	6,  // 5: dazyflow.control.v1.GraphResult.nodes:type_name -> dazyflow.control.v1.NodeResult
+	5,  // 6: dazyflow.control.v1.GraphResult.error:type_name -> dazyflow.control.v1.JobError
+	8,  // 7: dazyflow.control.v1.Manifest.inputs:type_name -> dazyflow.control.v1.Port
+	8,  // 8: dazyflow.control.v1.Manifest.outputs:type_name -> dazyflow.control.v1.Port
+	5,  // 9: dazyflow.control.v1.JobRecord.error:type_name -> dazyflow.control.v1.JobError
+	2,  // 10: dazyflow.control.v1.SaveGraphRequest.graph:type_name -> dazyflow.control.v1.Graph
+	2,  // 11: dazyflow.control.v1.LoadGraphResponse.graph:type_name -> dazyflow.control.v1.Graph
+	2,  // 12: dazyflow.control.v1.RunGraphRequest.graph:type_name -> dazyflow.control.v1.Graph
+	4,  // 13: dazyflow.control.v1.RunGraphEvent.progress:type_name -> dazyflow.control.v1.GraphProgress
+	21, // 14: dazyflow.control.v1.RunGraphEvent.completed:type_name -> dazyflow.control.v1.RunGraphCompleted
+	7,  // 15: dazyflow.control.v1.RunGraphCompleted.result:type_name -> dazyflow.control.v1.GraphResult
+	10, // 16: dazyflow.control.v1.ListJobsResponse.jobs:type_name -> dazyflow.control.v1.JobRecord
+	9,  // 17: dazyflow.control.v1.ListDropsResponse.drops:type_name -> dazyflow.control.v1.Manifest
+	11, // 18: dazyflow.control.v1.GraphService.SaveGraph:input_type -> dazyflow.control.v1.SaveGraphRequest
+	13, // 19: dazyflow.control.v1.GraphService.LoadGraph:input_type -> dazyflow.control.v1.LoadGraphRequest
+	15, // 20: dazyflow.control.v1.GraphService.ListGraphs:input_type -> dazyflow.control.v1.ListGraphsRequest
+	17, // 21: dazyflow.control.v1.GraphService.PromoteGraph:input_type -> dazyflow.control.v1.PromoteGraphRequest
+	19, // 22: dazyflow.control.v1.GraphService.RunGraph:input_type -> dazyflow.control.v1.RunGraphRequest
+	22, // 23: dazyflow.control.v1.JobService.GetJob:input_type -> dazyflow.control.v1.GetJobRequest
+	23, // 24: dazyflow.control.v1.JobService.ListJobsForGraph:input_type -> dazyflow.control.v1.ListJobsForGraphRequest
+	25, // 25: dazyflow.control.v1.JobService.CancelJob:input_type -> dazyflow.control.v1.CancelJobRequest
+	27, // 26: dazyflow.control.v1.JobService.StreamJobLogs:input_type -> dazyflow.control.v1.StreamJobLogsRequest
+	29, // 27: dazyflow.control.v1.DropService.ListDrops:input_type -> dazyflow.control.v1.ListDropsRequest
+	12, // 28: dazyflow.control.v1.GraphService.SaveGraph:output_type -> dazyflow.control.v1.SaveGraphResponse
+	14, // 29: dazyflow.control.v1.GraphService.LoadGraph:output_type -> dazyflow.control.v1.LoadGraphResponse
+	16, // 30: dazyflow.control.v1.GraphService.ListGraphs:output_type -> dazyflow.control.v1.ListGraphsResponse
+	18, // 31: dazyflow.control.v1.GraphService.PromoteGraph:output_type -> dazyflow.control.v1.PromoteGraphResponse
+	20, // 32: dazyflow.control.v1.GraphService.RunGraph:output_type -> dazyflow.control.v1.RunGraphEvent
+	10, // 33: dazyflow.control.v1.JobService.GetJob:output_type -> dazyflow.control.v1.JobRecord
+	24, // 34: dazyflow.control.v1.JobService.ListJobsForGraph:output_type -> dazyflow.control.v1.ListJobsResponse
+	26, // 35: dazyflow.control.v1.JobService.CancelJob:output_type -> dazyflow.control.v1.CancelJobResponse
+	28, // 36: dazyflow.control.v1.JobService.StreamJobLogs:output_type -> dazyflow.control.v1.JobLogEntry
+	30, // 37: dazyflow.control.v1.DropService.ListDrops:output_type -> dazyflow.control.v1.ListDropsResponse
 	28, // [28:38] is the sub-list for method output_type
 	18, // [18:28] is the sub-list for method input_type
 	18, // [18:18] is the sub-list for extension type_name

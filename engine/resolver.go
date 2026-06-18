@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine/mcp"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/engine/mcp"
 )
 
 // Resolver looks up the Transport responsible for executing a given module
@@ -55,7 +55,7 @@ func ResolverFromContext(ctx context.Context) (Resolver, bool) {
 // NodeResolver is the default Resolver. It consults catalogs in order:
 // native registry → remote (gRPC) modules → MCP tools. (A subprocess
 // "local descriptor" catalog existed in the plugin era; it was never
-// wired into hzd and was removed once every drop went native.)
+// wired into dzd and was removed once every drop went native.)
 type NodeResolver struct {
 	Native *Registry
 	Remote *RemoteCatalog

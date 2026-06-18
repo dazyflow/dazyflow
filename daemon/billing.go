@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // Billing (T3 / Phase 3): tenant plans + the free-tier run gate.
@@ -131,9 +131,6 @@ func (s *Service) billing() *BillingService {
 
 // Service-level delegations keep every existing caller (and test) working
 // while the logic lives on BillingService.
-func (s *Service) tenantIsFree(ctx context.Context, tenant, gate string) bool {
-	return s.billing().tenantIsFree(ctx, tenant, gate)
-}
 func (s *Service) runsThisMonth(ctx context.Context, tenant string) (int64, error) {
 	return s.billing().runsThisMonth(ctx, tenant)
 }

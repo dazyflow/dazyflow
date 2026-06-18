@@ -10,8 +10,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 func runLogStoreContract(t *testing.T, store RunLogStore) {
@@ -74,11 +74,11 @@ func TestMemRunLogStore(t *testing.T) {
 	runLogStoreContract(t, NewMemRunLogStore())
 }
 
-// Gated on HAZYFLOW_TEST_DB, like the other Pg store tests.
+// Gated on DAZYFLOW_TEST_DB, like the other Pg store tests.
 func TestPgRunLogStore(t *testing.T) {
-	url := os.Getenv("HAZYFLOW_TEST_DB")
+	url := os.Getenv("DAZYFLOW_TEST_DB")
 	if url == "" {
-		t.Skip("set HAZYFLOW_TEST_DB to run Postgres run-log tests")
+		t.Skip("set DAZYFLOW_TEST_DB to run Postgres run-log tests")
 	}
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, url)
@@ -278,9 +278,9 @@ func TestRunLogPrune(t *testing.T) {
 }
 
 func TestPgRunLogPrune(t *testing.T) {
-	url := os.Getenv("HAZYFLOW_TEST_DB")
+	url := os.Getenv("DAZYFLOW_TEST_DB")
 	if url == "" {
-		t.Skip("set HAZYFLOW_TEST_DB to run Postgres run-log tests")
+		t.Skip("set DAZYFLOW_TEST_DB to run Postgres run-log tests")
 	}
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, url)

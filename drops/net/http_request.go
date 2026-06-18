@@ -16,10 +16,10 @@ import (
 	"syscall"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/mimetype"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/mimetype"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 func init() {
@@ -123,7 +123,7 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 	timeoutMs := params.IntDefault(job.Params, "timeout_ms", defaultTimeoutMs)
 	maxBodyBytes := int64(params.IntDefault(job.Params, "max_body_bytes", defaultMaxBodyBytes))
 	// allow_private_networks disables the SSRF guard; only honor it when the
-	// operator has opted in (HAZYFLOW_ALLOW_PRIVATE_EGRESS). Otherwise it's a
+	// operator has opted in (DAZYFLOW_ALLOW_PRIVATE_EGRESS). Otherwise it's a
 	// tenant-controllable SSRF bypass to metadata/localhost/internal hosts.
 	reqAllowPrivate, _ := params.Bool(job.Params, "allow_private_networks")
 	allowPrivate := reqAllowPrivate && PrivateEgressAllowed()

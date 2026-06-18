@@ -123,7 +123,7 @@ type Graph struct {
 	// elapsed, the daemon auto-cancels the run via the same path as a
 	// manual cancel — already-running nodes finish naturally, but no
 	// further downstream work is dispatched. Zero / unset = no cap.
-	// The hzd `-default-graph-timeout` flag is applied at SubmitGraph
+	// The dzd `-default-graph-timeout` flag is applied at SubmitGraph
 	// time when this field is unset.
 	TimeoutSeconds int `json:"timeout_seconds,omitempty"`
 
@@ -228,7 +228,7 @@ type FailureNotify struct {
 	// "no notification" — same as not setting FailureNotify at all.
 	Webhook string `json:"webhook,omitempty"`
 	// Email, when set, receives a plain-text failure summary through
-	// the operator's transactional mailer (HAZYFLOW_SMTP_URL). Ignored
+	// the operator's transactional mailer (DAZYFLOW_SMTP_URL). Ignored
 	// (logged) on deployments without a mailer.
 	Email string `json:"email,omitempty"`
 }

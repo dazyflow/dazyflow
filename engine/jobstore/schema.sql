@@ -1,4 +1,4 @@
--- Hazyflow JobStore schema.
+-- Dazyflow JobStore schema.
 --
 -- The store backs both the workqueue (via SELECT ... FOR UPDATE SKIP LOCKED)
 -- and the scheduler's leader election (via pg_try_advisory_lock).
@@ -43,5 +43,5 @@ CREATE INDEX IF NOT EXISTS jobs_queue_idx
 -- records when dispatching downstream nodes.
 CREATE INDEX IF NOT EXISTS jobs_graph_run_idx ON jobs (graph_run_id);
 
--- Per-graph history index for the timeline view in hzctl.
+-- Per-graph history index for the timeline view in dzctl.
 CREATE INDEX IF NOT EXISTS jobs_graph_idx ON jobs (graph_id, enqueued_at DESC);

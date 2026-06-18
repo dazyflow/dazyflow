@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/drops/internal/llmtask"
-	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/llmtask"
+	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 )
 
 func TestMain(m *testing.M) {

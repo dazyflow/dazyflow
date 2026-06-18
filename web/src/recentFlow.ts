@@ -1,8 +1,8 @@
 // Tracks the most-recently-opened flow so the start/welcome screen can
 // offer a "continue where you left off" link — same idea as the sibling
-// `hazy` app's last-active-project. Stored client-side only (one
+// `dazy` app's last-active-project. Stored client-side only (one
 // browser); the editor writes it on load, the welcome page reads it.
-const KEY = "hazyflow.lastFlow";
+const KEY = "dazyflow.lastFlow";
 
 // userScope builds the per-account suffix for client-side recall keys
 // (last flow, has-flows hint). localStorage is shared by every account

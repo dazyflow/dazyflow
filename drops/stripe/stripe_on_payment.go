@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 func init() {
@@ -16,7 +16,7 @@ func init() {
 			Label:       "Stripe",
 			Subtitle:    "On payment",
 			Summary:     "Trigger that fires the moment a Stripe payment succeeds, with amount, currency and payer email.",
-			Description: "Starts the flow when a payment succeeds in your Stripe account (a payment_intent.succeeded webhook event). Setup: in the Stripe dashboard add a webhook endpoint pointing at https://<your-hazyflow-host>/api/v1/events/stripe/<tenant>, subscribe it to payment_intent.succeeded, then save that endpoint's signing secret (whsec_…) as a secret named STRIPE_WEBHOOK_SECRET — each delivery's Stripe-Signature is verified against it. Outputs the amount (minor units and a display form like '49.99 USD'), currency, payer email, description, and the raw event. For polling instead of webhooks, compose Schedule → 'List events' instead.",
+			Description: "Starts the flow when a payment succeeds in your Stripe account (a payment_intent.succeeded webhook event). Setup: in the Stripe dashboard add a webhook endpoint pointing at https://<your-dazyflow-host>/api/v1/events/stripe/<tenant>, subscribe it to payment_intent.succeeded, then save that endpoint's signing secret (whsec_…) as a secret named STRIPE_WEBHOOK_SECRET — each delivery's Stripe-Signature is verified against it. Outputs the amount (minor units and a display form like '49.99 USD'), currency, payer email, description, and the raw event. For polling instead of webhooks, compose Schedule → 'List events' instead.",
 			Integration: "Stripe",
 			Category:    "trigger",
 			Icon:        "credit-card",

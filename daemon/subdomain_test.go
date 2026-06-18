@@ -11,14 +11,14 @@ func TestHostIsSubdomainOf(t *testing.T) {
 		host, domain string
 		want         bool
 	}{
-		{"acme.hazyflow.app", "hazyflow.app", true},
-		{"a.b.hazyflow.app", "hazyflow.app", true}, // multi-level still a subdomain
-		{"hazyflow.app", "hazyflow.app", false},    // apex is not a subdomain
-		{"evilhazyflow.app", "hazyflow.app", false},
-		{"acme.hazyflow.app.evil.com", "hazyflow.app", false},
-		{"ACME.HazyFlow.App", "hazyflow.app", true}, // case-insensitive
-		{"", "hazyflow.app", false},
-		{"acme.hazyflow.app", "", false},
+		{"acme.dazyflow.app", "dazyflow.app", true},
+		{"a.b.dazyflow.app", "dazyflow.app", true}, // multi-level still a subdomain
+		{"dazyflow.app", "dazyflow.app", false},    // apex is not a subdomain
+		{"evildazyflow.app", "dazyflow.app", false},
+		{"acme.dazyflow.app.evil.com", "dazyflow.app", false},
+		{"ACME.DazyFlow.App", "dazyflow.app", true}, // case-insensitive
+		{"", "dazyflow.app", false},
+		{"acme.dazyflow.app", "", false},
 	}
 	for _, c := range cases {
 		if got := hostIsSubdomainOf(c.host, c.domain); got != c.want {
@@ -29,20 +29,20 @@ func TestHostIsSubdomainOf(t *testing.T) {
 
 func TestOriginAllowed(t *testing.T) {
 	h := &HTTPGateway{
-		AllowedOrigins: []string{"https://hazyflow.app"},
-		WildcardDomain: "hazyflow.app",
+		AllowedOrigins: []string{"https://dazyflow.app"},
+		WildcardDomain: "dazyflow.app",
 	}
 	cases := []struct {
 		origin string
 		want   bool
 	}{
-		{"https://hazyflow.app", true},      // exact apex
-		{"https://acme.hazyflow.app", true}, // wildcard subdomain
-		{"https://a.b.hazyflow.app", true},  // nested subdomain
+		{"https://dazyflow.app", true},      // exact apex
+		{"https://acme.dazyflow.app", true}, // wildcard subdomain
+		{"https://a.b.dazyflow.app", true},  // nested subdomain
 		{"https://evil.com", false},         // unrelated
-		{"https://evilhazyflow.app", false}, // suffix-but-not-subdomain
-		{"http://acme.hazyflow.app", true},  // scheme not pinned for subdomains (Origin is browser-set)
-		{"https://hazyflow.app.evil.com", false},
+		{"https://evildazyflow.app", false}, // suffix-but-not-subdomain
+		{"http://acme.dazyflow.app", true},  // scheme not pinned for subdomains (Origin is browser-set)
+		{"https://dazyflow.app.evil.com", false},
 	}
 	for _, c := range cases {
 		if got := h.originAllowed(c.origin); got != c.want {
@@ -51,8 +51,8 @@ func TestOriginAllowed(t *testing.T) {
 	}
 
 	// With the feature off, only the exact list matches.
-	off := &HTTPGateway{AllowedOrigins: []string{"https://hazyflow.app"}}
-	if off.originAllowed("https://acme.hazyflow.app") {
+	off := &HTTPGateway{AllowedOrigins: []string{"https://dazyflow.app"}}
+	if off.originAllowed("https://acme.dazyflow.app") {
 		t.Error("subdomain should not be allowed when WildcardDomain is empty")
 	}
 
@@ -70,14 +70,14 @@ func TestIsValidWildcardDomain(t *testing.T) {
 		domain string
 		want   bool
 	}{
-		{"hazyflow.app", true},
+		{"dazyflow.app", true},
 		{"a.b.example.com", true},
-		{"HazyFlow.App", true},   // case-insensitive
-		{".hazyflow.app.", true}, // surrounding dots trimmed
+		{"DazyFlow.App", true},   // case-insensitive
+		{".dazyflow.app.", true}, // surrounding dots trimmed
 		{"", false},              // disabled
 		{"com", false},           // single label (public suffix)
 		{"localhost", false},     // single label
-		{"hazyflow..app", false}, // empty inner label
+		{"dazyflow..app", false}, // empty inner label
 		{".", false},
 	}
 	for _, c := range cases {
@@ -103,17 +103,17 @@ func TestSafeReturnPath(t *testing.T) {
 }
 
 func TestSignInStartHost(t *testing.T) {
-	h := &HTTPGateway{WildcardDomain: "hazyflow.app"}
+	h := &HTTPGateway{WildcardDomain: "dazyflow.app"}
 	mk := func(host string) string {
 		r := httptest.NewRequest("GET", "/api/v1/auth/google/start", nil)
 		r.Host = host
 		return h.signInStartHost(r)
 	}
-	if got := mk("acme.hazyflow.app"); got != "acme.hazyflow.app" {
-		t.Errorf("subdomain host = %q, want acme.hazyflow.app", got)
+	if got := mk("acme.dazyflow.app"); got != "acme.dazyflow.app" {
+		t.Errorf("subdomain host = %q, want acme.dazyflow.app", got)
 	}
-	if got := mk("hazyflow.app"); got != "hazyflow.app" {
-		t.Errorf("apex host = %q, want hazyflow.app", got)
+	if got := mk("dazyflow.app"); got != "dazyflow.app" {
+		t.Errorf("apex host = %q, want dazyflow.app", got)
 	}
 	if got := mk("someone-else.com"); got != "" {
 		t.Errorf("foreign host = %q, want empty", got)
@@ -122,7 +122,7 @@ func TestSignInStartHost(t *testing.T) {
 	// Feature off: never track a host.
 	off := &HTTPGateway{}
 	r := httptest.NewRequest("GET", "/", nil)
-	r.Host = "acme.hazyflow.app"
+	r.Host = "acme.dazyflow.app"
 	if got := off.signInStartHost(r); got != "" {
 		t.Errorf("host tracked with feature off = %q, want empty", got)
 	}

@@ -4,11 +4,11 @@ import (
 	"reflect"
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // TestGraphPBRoundTrip pins the core.Graph ↔ controlpb.Graph conversion
-// the gRPC control path (hzctl) relies on. Uses only the fields the
+// the gRPC control path (dzctl) relies on. Uses only the fields the
 // conversion carries, with string params (JSON-stable), so a clean
 // round-trip must reproduce the graph exactly. Notably guards the poll
 // trigger's IntervalSeconds, which used to be dropped over the wire.

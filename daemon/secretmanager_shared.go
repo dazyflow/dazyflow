@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // Shared scaffolding for the BYO secret-manager providers (vault://,

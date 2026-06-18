@@ -14,8 +14,8 @@ import (
 	"github.com/skeema/knownhosts"
 	gossh "golang.org/x/crypto/ssh"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 )
 
 // GitCred is the material for one named, per-org git credential. It may carry
@@ -184,7 +184,7 @@ func hostKeyDB(userKnownHosts string) (*knownhosts.HostKeyDB, error) {
 	if s := strings.TrimSpace(userKnownHosts); s != "" {
 		combined += s + "\n"
 	}
-	f, err := os.CreateTemp("", "hazyflow-known-hosts-*")
+	f, err := os.CreateTemp("", "dazyflow-known-hosts-*")
 	if err != nil {
 		return nil, err
 	}

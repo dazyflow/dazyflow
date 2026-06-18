@@ -7,15 +7,15 @@ import (
 	"sort"
 	"strings"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 // forEachListMIME mirrors the (unexported) flow.MIMEList constant — the
 // wire MIME for_each stamps on its `results` output. Duplicated rather
 // than imported to avoid a transform→flow package dependency; it's a
 // stable wire constant, asserted by flow's own tests.
-const forEachListMIME = "application/x-hazyflow-list+json"
+const forEachListMIME = "application/x-dazyflow-list+json"
 
 func init() {
 	engine.Register(engine.NativeDrop{

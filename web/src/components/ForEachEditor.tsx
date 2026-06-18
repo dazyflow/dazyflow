@@ -64,11 +64,11 @@ export function ForEachEditor({ params, onChange, references, missingKeys }: Pro
 
   return (
     <div className="for-each-editor">
-      <div className={bodyMissing ? "hz-loop-banner error" : "hz-loop-banner"}>
+      <div className={bodyMissing ? "dz-loop-banner error" : "dz-loop-banner"}>
         {t("forEach.bodyHint")}
       </div>
       {nested && (
-        <div className="hz-loop-banner error">{t("nodeCard.loopNested")}</div>
+        <div className="dz-loop-banner error">{t("nodeCard.loopNested")}</div>
       )}
 
       <div className="sf-field">

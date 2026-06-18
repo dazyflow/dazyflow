@@ -8,25 +8,25 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // tracer is resolved lazily from the global TracerProvider; tests can swap
 // it via otel.SetTracerProvider before invoking the engine. With the noop
 // default this is effectively zero-cost.
 func tracer() trace.Tracer {
-	return otel.GetTracerProvider().Tracer("git.sr.ht/~klahr/hazyflow/engine")
+	return otel.GetTracerProvider().Tracer("git.sr.ht/~klahr/dazyflow/engine")
 }
 
 func startGraphSpan(ctx context.Context, graph core.Graph) (context.Context, trace.Span) {
 	return tracer().Start(ctx, "graph.run",
 		trace.WithSpanKind(trace.SpanKindInternal),
 		trace.WithAttributes(
-			attribute.String("hazyflow.graph.id", graph.ID),
-			attribute.String("hazyflow.graph.version", graph.Version),
-			attribute.String("hazyflow.tenant", graph.Tenant),
-			attribute.String("hazyflow.workspace", graph.Workspace),
-			attribute.Int("hazyflow.graph.nodes", len(graph.Nodes)),
+			attribute.String("dazyflow.graph.id", graph.ID),
+			attribute.String("dazyflow.graph.version", graph.Version),
+			attribute.String("dazyflow.tenant", graph.Tenant),
+			attribute.String("dazyflow.workspace", graph.Workspace),
+			attribute.Int("dazyflow.graph.nodes", len(graph.Nodes)),
 		))
 }
 
@@ -34,9 +34,9 @@ func startNodeSpan(ctx context.Context, graph core.Graph, node core.Node) (conte
 	return tracer().Start(ctx, "node.run",
 		trace.WithSpanKind(trace.SpanKindInternal),
 		trace.WithAttributes(
-			attribute.String("hazyflow.graph.id", graph.ID),
-			attribute.String("hazyflow.node.id", node.ID),
-			attribute.String("hazyflow.node.module", node.Module),
+			attribute.String("dazyflow.graph.id", graph.ID),
+			attribute.String("dazyflow.node.id", node.ID),
+			attribute.String("dazyflow.node.module", node.Module),
 		))
 }
 

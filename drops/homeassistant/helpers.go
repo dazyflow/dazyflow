@@ -14,7 +14,7 @@
 // 192.168.x.x). The connection's base_url is tenant-supplied, so every dial
 // goes through the shared SSRF guard (net.SafeHTTPClient) — which refuses
 // loopback/private/link-local targets UNLESS the operator opted in via
-// HAZYFLOW_ALLOW_PRIVATE_EGRESS. That's the same posture the Postgres/MySQL
+// DAZYFLOW_ALLOW_PRIVATE_EGRESS. That's the same posture the Postgres/MySQL
 // drops take for private DB hosts: reaching a public Nabu Casa URL works out
 // of the box; reaching a LAN instance needs the operator flag. The egress
 // error message says exactly that.
@@ -25,19 +25,15 @@
 package homeassistant
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 	"sync"
-	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
-	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 )
 
 // maxResponseBytes caps how much of an API response we buffer, so a hostile
@@ -76,39 +72,12 @@ func haDo(ctx context.Context, job core.Job, method, path string, body []byte) (
 	if timeoutMS <= 0 {
 		timeoutMS = 15000
 	}
-	timeout := time.Duration(timeoutMS) * time.Millisecond
-	reqCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	var rdr io.Reader
+	headers := map[string]string{"Authorization": "Bearer " + token}
 	if body != nil {
-		rdr = bytes.NewReader(body)
+		headers["Content-Type"] = "application/json"
 	}
-	req, err := http.NewRequestWithContext(reqCtx, method, url, rdr)
-	if err != nil {
-		return 0, nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-
-	if err := hfnet.EgressAllowedFor(ctx, url); err != nil {
-		return 0, nil, err
-	}
-	resp, err := hfnet.SafeHTTPClient(timeout, hfnet.PrivateEgressAllowed()).Do(req)
-	if err != nil {
-		return 0, nil, err
-	}
-	defer resp.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
-	if err != nil {
-		return resp.StatusCode, nil, err
-	}
-	if int64(len(raw)) > maxResponseBytes {
-		return resp.StatusCode, nil, fmt.Errorf("home assistant response exceeds %d bytes", maxResponseBytes)
-	}
-	return resp.StatusCode, raw, nil
+	status, raw, _, err := hfnet.Do(ctx, method, url, headers, body, timeoutMS, maxResponseBytes)
+	return status, raw, err
 }
 
 // extractError pulls a human message out of a Home Assistant error body
@@ -136,7 +105,7 @@ func httpFailure(job core.Job, status int, body []byte, err error) *core.Result 
 	if err != nil {
 		if hfnet.IsSSRFError(err) {
 			r := params.ErrDetails(job, "egress_blocked",
-				"Couldn't reach your Home Assistant instance. It looks like a local/private address — the operator must enable private-network access (HAZYFLOW_ALLOW_PRIVATE_EGRESS) for hazyflow to reach it.",
+				"Couldn't reach your Home Assistant instance. It looks like a local/private address — the operator must enable private-network access (DAZYFLOW_ALLOW_PRIVATE_EGRESS) for dazyflow to reach it.",
 				err.Error())
 			return &r
 		}

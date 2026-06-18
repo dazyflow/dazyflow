@@ -4,13 +4,13 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 func TestAwaitApproval_ReturnsAwaitingSentinel(t *testing.T) {
 	job := core.Job{
 		ID:          "j1",
-		ApprovalURL: "https://hzd.example/approve/run-1/node-A?token=tok",
+		ApprovalURL: "https://dzd.example/approve/run-1/node-A?token=tok",
 	}
 	res, err := executeAwaitApproval(t.Context(), job, nil)
 	if err != nil {

@@ -3,8 +3,8 @@ package flow
 import (
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 // runOp fetches a primitive operator drop from the registry by ID and runs it

@@ -8,7 +8,7 @@
 // Cross-cutting hook: the secret-store implementation lives in
 // daemon/encrypted_secrets.go; importing it here would invert the
 // dependency direction (integrations is meant to be importable by
-// daemon, not the other way around). Instead, hzd calls
+// daemon, not the other way around). Instead, dzd calls
 // SetSecretWriter at startup with a closure that calls
 // EncryptedSecrets.Put — mirroring the Slack/Gmail SetTokenLookup
 // pattern.
@@ -31,7 +31,7 @@ var (
 	writer   SecretWriter
 )
 
-// SetSecretWriter wires hzd's encrypted secret store into this
+// SetSecretWriter wires dzd's encrypted secret store into this
 // package. Called once at daemon startup. nil clears the writer
 // (drops then fail with a clear "secrets not configured" message
 // instead of crashing or silently no-op'ing).

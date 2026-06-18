@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
+	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 )
 
 func TestMain(m *testing.M) {

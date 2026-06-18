@@ -1,13 +1,13 @@
 // orgFromHost derives the org slug encoded in a per-org subdomain host.
-// When the deployment sets a wildcard domain (e.g. "hazyflow.app"), a
-// visit to "acme.hazyflow.app" should preselect org=acme on the sign-in
+// When the deployment sets a wildcard domain (e.g. "dazyflow.app"), a
+// visit to "acme.dazyflow.app" should preselect org=acme on the sign-in
 // page. This maps the browser hostname to that slug, or "" when the host
 // isn't a usable org subdomain.
 //
 // Returns "" (no org) when:
 //   - no wildcard domain is configured,
-//   - the host is the apex itself ("hazyflow.app"),
-//   - the label is multi-level ("a.b.hazyflow.app") — only single-label
+//   - the host is the apex itself ("dazyflow.app"),
+//   - the label is multi-level ("a.b.dazyflow.app") — only single-label
 //     subdomains map to an org,
 //   - the label isn't a valid DNS-ish slug, or
 //   - the label is a reserved name we never hand out to an org.

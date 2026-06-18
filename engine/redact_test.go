@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 func TestRedactResult_ScrubsOutputAndError(t *testing.T) {

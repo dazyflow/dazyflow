@@ -1,8 +1,8 @@
 # ISO/IEC 27001:2022 control mapping
 
-This document maps **hazyflow's product-level technical controls** to the
+This document maps **dazyflow's product-level technical controls** to the
 relevant Annex A controls of ISO/IEC 27001:2022. It is a reference for
-operators running `hzd` inside an ISO 27001-certified organisation, and
+operators running `dzd` inside an ISO 27001-certified organisation, and
 for auditors assessing the product as a component of an Information
 Security Management System (ISMS).
 
@@ -17,7 +17,7 @@ review, internal audit, continual improvement). **Software cannot be
 "ISO 27001 certified" on its own** — certification is awarded to the
 operating organisation's processes, not to a binary.
 
-What hazyflow does is **implement the technical controls an ISMS relies
+What dazyflow does is **implement the technical controls an ISMS relies
 on**. This mapping covers the Annex A controls that are realisable in the
 product (primarily the Technological controls, A.8.x, plus the
 technically-enforced Organizational controls). Controls that are purely
@@ -34,13 +34,13 @@ Statement of Applicability (SoA).
 
 ISO 27001 compliance is a property of an **organisation's certified ISMS**,
 not of software. There is no configuration, dependency, or amount of code
-in this repository that makes hazyflow "ISO 27001 compliant" — a binary has
+in this repository that makes dazyflow "ISO 27001 compliant" — a binary has
 no risk register, management review, or internal audit, which are the
 things the standard certifies. Certification is awarded to the operating
 organisation by an **accredited certification body** after a Stage 1 + Stage
 2 audit of its ISMS (clauses 4–10) and applicable Annex A controls.
 
-What hazyflow does is **implement the technical Annex A controls, and produce
+What dazyflow does is **implement the technical Annex A controls, and produce
 the evidence**, that let an organisation place the product inside an
 ISO 27001-certified ISMS. That is a necessary input to certification — not
 certification itself.
@@ -48,12 +48,12 @@ certification itself.
 **Use this phrasing externally** (customer security questionnaires, RFPs,
 trust-centre pages):
 
-- ✅ "hazyflow is **built to support ISO/IEC 27001 control objectives**;
+- ✅ "dazyflow is **built to support ISO/IEC 27001 control objectives**;
   see its control mapping." — accurate whether or not a certificate exists.
 - ✅ "Deployed within our **ISO 27001-certified ISMS** (certificate no. …,
   scope …)." — only when your *organisation* holds a current certificate
   and this deployment is in its scope.
-- ❌ "hazyflow is **ISO 27001 compliant / certified**." — a binary cannot be
+- ❌ "dazyflow is **ISO 27001 compliant / certified**." — a binary cannot be
   either. Asserting it without an in-scope organisational certificate is
   itself an audit finding (and a misrepresentation risk in a contract).
 
@@ -85,28 +85,28 @@ turn "supports the controls" into "certified."
 | **A.8.6 Capacity management** | Met | Prometheus metrics expose queue depth, worker backlog (`oldest_queued_seconds`), and Postgres pool saturation; per-tenant disk quotas. `daemon/metrics.go`, `core/quota.go`, [`DEPLOY.md` §Observability](DEPLOY.md). |
 | **A.8.7 Protection against malware** | Org | Host/container malware protection is operator-owned. The product reduces attack surface: no plugin/marketplace install path — the drop catalog is fixed at build time. |
 | **A.8.8 Management of technical vulnerabilities** | Met | CI runs `govulncheck` against the full module graph on every build, failing on any vulnerability reachable from called code (`.builds/archlinux.yml`, `vuln` task). Dependencies are standard Go modules pinned in `go.mod`/`go.sum`. A default remediation SLA is documented in [SECURITY-SLA.md](SECURITY-SLA.md) — see also [§3](#3-known-gaps-and-remediation). |
-| **A.8.9 Configuration management** | Met | All configuration is documented `HAZYFLOW_*` env (`.env.example`). A fail-closed boot guard refuses to start on insecure defaults (default DB password, empty master key) and names the offending value (`DEPLOY.md` §Fail-closed config guard). `HAZYFLOW_DEV=1` downgrades the guard for local trials only. |
-| **A.8.10 Information deletion** | Configurable | Retention sweeps run by default: jobs **30 days** (`HAZYFLOW_JOB_RETENTION`), audit events **90 days** (`HAZYFLOW_AUDIT_RETENTION`), and run logs **30 days** (`HAZYFLOW_RUN_LOG_RETENTION`, defaults to the job window). Set a value ≤ 0 to disable a sweep (retain indefinitely). Tune to your policy; cross-reference [PRIVACY.md § Retention](PRIVACY.md). `.env.example`. |
+| **A.8.9 Configuration management** | Met | All configuration is documented `DAZYFLOW_*` env (`.env.example`). A fail-closed boot guard refuses to start on insecure defaults (default DB password, empty master key) and names the offending value (`DEPLOY.md` §Fail-closed config guard). `DAZYFLOW_DEV=1` downgrades the guard for local trials only. |
+| **A.8.10 Information deletion** | Configurable | Retention sweeps run by default: jobs **30 days** (`DAZYFLOW_JOB_RETENTION`), audit events **90 days** (`DAZYFLOW_AUDIT_RETENTION`), and run logs **30 days** (`DAZYFLOW_RUN_LOG_RETENTION`, defaults to the job window). Set a value ≤ 0 to disable a sweep (retain indefinitely). Tune to your policy; cross-reference [PRIVACY.md § Retention](PRIVACY.md). `.env.example`. |
 | **A.8.11 Data masking** | Met | The secret store UI is write-only (values never read back); engine output is redacted to keep secret values out of logs and run records. `engine/redact.go`, [`DEPLOY.md` §Secrets](DEPLOY.md). |
-| **A.8.12 Data leakage prevention** | Met | Secrets are never returned in plaintext after write; the secret-manager `GET` returns a redacted view; metrics that reveal tenant names are off by default (`HAZYFLOW_ENABLE_METRICS`). `engine/redact.go`, `daemon/httpsecretmanager.go`. |
+| **A.8.12 Data leakage prevention** | Met | Secrets are never returned in plaintext after write; the secret-manager `GET` returns a redacted view; metrics that reveal tenant names are off by default (`DAZYFLOW_ENABLE_METRICS`). `engine/redact.go`, `daemon/httpsecretmanager.go`. |
 | **A.8.13 Information backup** | Shared | Product makes all durable state recoverable from one Postgres DB; `DEPLOY.md` documents logical backup and PITR. The master key must be backed up separately. Backup schedule, off-site storage, and restore testing are operator process. [`DEPLOY.md` §Backup & restore](DEPLOY.md). |
 | **A.8.14 Redundancy of facilities** | Met | Multi-replica deployment works out of the box (Postgres event bus + advisory-lock leader); graceful drain and a crash reaper prevent stranded runs; health/readiness probes. `daemon/leader.go`, `daemon/reaper_test.go`, `daemon/health.go`. |
 | **A.8.15 Logging** | Met | Append-only, per-tenant audit trail records administrative actions (`graph.save/run/delete`, `secret.put/delete`, `secret_manager.put/delete`, `apikey.issue/revoke`, `invitation.create/revoke`, `org_auth.update/delete`, `org_profile.update`) **and authentication-lifecycle events** (`auth.signin`, `auth.signin_failed`, `auth.signout`, `auth.signup`, `auth.mfa_challenge`, with the sign-in method and source IP in detail). Failed sign-ins record under the platform-level tenant so credential-stuffing is visible without revealing account existence. `core/audit.go`, `daemon/audit.go` (`auditAuth`), `daemon/audit_auth_test.go`. |
 | **A.8.16 Monitoring activities** | Met | Prometheus RED metrics (HTTP + per-node), OTLP tracing via standard `OTEL_*` env, health probes, and the audit trail give detection signal. Suggested alert thresholds are documented. [`DEPLOY.md` §Observability](DEPLOY.md), `daemon/tracing.go`. |
 | **A.8.17 Clock synchronisation** | Org | Host/container NTP is operator-owned. Audit and job timestamps use the host clock. |
-| **A.8.18 Use of privileged utility programs** | Configurable | The `shell` drop is host RCE and is **off by default** (`HAZYFLOW_ENABLE_SHELL`); enable only on single-tenant/CI deployments. `DEPLOY.md` §Security knobs. |
+| **A.8.18 Use of privileged utility programs** | Configurable | The `shell` drop is host RCE and is **off by default** (`DAZYFLOW_ENABLE_SHELL`); enable only on single-tenant/CI deployments. `DEPLOY.md` §Security knobs. |
 | **A.8.20 Networks security** | Met | TLS terminated at a documented reverse-proxy contract; HSTS and `X-Content-Type-Options: nosniff` on forwarded-HTTPS; CORS allowlist + CSRF origin check. `daemon/httpgateway.go`, [`DEPLOY.md` §TLS](DEPLOY.md). |
 | **A.8.21 Security of network services** | Met | `sslmode=require` for Postgres; gRPC control plane on a separate port with health service; per-org subdomain isolation keeps session cookies host-only. `daemon/tls.go`, `DEPLOY.md`. |
-| **A.8.22 Segregation of networks** | Configurable | An always-on SSRF guard blocks outbound flow traffic to private/loopback/cloud-metadata addresses; `HAZYFLOW_HTTP_EGRESS_ALLOW` pins outbound drops to an allowlist; `HAZYFLOW_ALLOW_PRIVATE_EGRESS` (keep off on multi-tenant) scopes tenant reach. `SECURITY.md`, `daemon/httplimits.go`. |
-| **A.8.23 Web filtering** | Configurable | Outbound HTTP egress allowlist (`HAZYFLOW_HTTP_EGRESS_ALLOW`) plus the SSRF guard constrain where flows may reach. |
-| **A.8.24 Use of cryptography** | Met | Envelope encryption: a 32-byte AES-256 master key (KEK), held only in process memory, wraps a per-tenant data key (DEK); each secret is sealed AES-256-GCM under its tenant's DEK. Tokens use CSPRNG. Documented, re-runnable key rotation via re-wrap (`hzd --rotate-master-key`). Rotation *cadence* is operator policy. [`SECURITY.md`](SECURITY.md), `daemon/encrypted_secrets_store.go`. |
+| **A.8.22 Segregation of networks** | Configurable | An always-on SSRF guard blocks outbound flow traffic to private/loopback/cloud-metadata addresses; `DAZYFLOW_HTTP_EGRESS_ALLOW` pins outbound drops to an allowlist; `DAZYFLOW_ALLOW_PRIVATE_EGRESS` (keep off on multi-tenant) scopes tenant reach. `SECURITY.md`, `daemon/httplimits.go`. |
+| **A.8.23 Web filtering** | Configurable | Outbound HTTP egress allowlist (`DAZYFLOW_HTTP_EGRESS_ALLOW`) plus the SSRF guard constrain where flows may reach. |
+| **A.8.24 Use of cryptography** | Met | Envelope encryption: a 32-byte AES-256 master key (KEK), held only in process memory, wraps a per-tenant data key (DEK); each secret is sealed AES-256-GCM under its tenant's DEK. Tokens use CSPRNG. Documented, re-runnable key rotation via re-wrap (`dzd --rotate-master-key`). Rotation *cadence* is operator policy. [`SECURITY.md`](SECURITY.md), `daemon/encrypted_secrets_store.go`. |
 | **A.8.25 Secure development life cycle** | Shared | `-race` tests, fuzz tests, `go vet`, and `govulncheck` gate every build; Postgres-backed integration tests run in CI. SDLC governance (review policy, threat modelling) is organisational. `.build.yml`, `daemon/api_fuzz_test.go`. |
 | **A.8.26 Application security requirements** | Met | Input validation and graph linting reject malformed/unsafe definitions before execution; idempotency keys; HMAC-verified approval links. `core/validate.go`, `core/lint.go`, `daemon/idempotency.go`, `daemon/approval.go`. |
 | **A.8.27 Secure system architecture** | Met | Defence-in-depth: fail-closed config, hashed-at-rest credentials, memory-only KEK, default-off dangerous features, SSRF guard always on. Documented in `SECURITY.md` / `DEPLOY.md`. |
 | **A.8.28 Secure coding** | Met | Constant-time credential comparison, no account enumeration, atomic writes, CSPRNG tokens, bounded metric cardinality. Race + fuzz + vet + vuln in CI. `auth/*.go`, `.build.yml`. |
 | **A.8.29 Security testing in development** | Shared | Fuzz and integration tests plus `govulncheck` run in CI. Independent penetration testing is an operator/organisational activity. |
 | **A.8.30 Outsourced development** | Org | Not applicable to the product itself. |
-| **A.8.31 Separation of environments** | Shared | `HAZYFLOW_DEV` cleanly separates a throwaway local trial from production behaviour; deployment separation (dev/stage/prod instances) is operator-owned. |
+| **A.8.31 Separation of environments** | Shared | `DAZYFLOW_DEV` cleanly separates a throwaway local trial from production behaviour; deployment separation (dev/stage/prod instances) is operator-owned. |
 | **A.8.32 Change management** | Shared | Graph workspaces are git/filesystem-backed (versioned); audit trail records `graph.save`. Change-approval process around deploys is organisational. |
 | **A.8.33 Test information** | Shared | Tests use synthetic data and a throwaway Postgres; no production data in the suite. `.build.yml`. |
 | **A.8.34 Protection during audit testing** | Org | Audit scheduling/scoping is organisational. |
@@ -118,7 +118,7 @@ turn "supports the controls" into "certified."
 | **A.5.10 Acceptable use of information** | Shared | Default-off dangerous features (`shell`, private egress, dev key) make the secure configuration the default; acceptable-use policy is organisational. |
 | **A.5.14 Information transfer** | Met | TLS in transit (reverse proxy), `sslmode=require` to Postgres, HMAC-signed unauthenticated approval links, single-use short-lived (2 min) subdomain handoff tokens. `DEPLOY.md`. |
 | **A.5.15 Access control** | Met | See A.8.2/A.8.3 — RBAC with explicit permissions, per-tenant and platform scopes. `core/rbac.go`. |
-| **A.5.16 Identity management** | Met | Email identities, invitations, per-org SSO, platform-admin bootstrap via `HAZYFLOW_PLATFORM_ADMINS`. `auth/invitation.go`, `auth/orgauthconfig.go`. |
+| **A.5.16 Identity management** | Met | Email identities, invitations, per-org SSO, platform-admin bootstrap via `DAZYFLOW_PLATFORM_ADMINS`. `auth/invitation.go`, `auth/orgauthconfig.go`. |
 | **A.5.17 Authentication information** | Met | bcrypt passwords; API-key secrets stored SHA-256 + per-key salt; session tokens stored as SHA-256 of a 256-bit CSPRNG value (store leak yields hashes, not live credentials); cleartext credentials shown exactly once. `auth/apikey.go`, `auth/session.go`. |
 | **A.5.18 Access rights (provisioning/revocation)** | Met | API keys and sessions support expiry and immediate server-side revocation; sign-out and key revoke take effect at once. `auth/apikey.go`, `auth/session.go`, `daemon/admin.go`. |
 | **A.5.23 Cloud services security** | Shared | Product runs on managed Postgres and behind a managed ingress; the cloud provider's own attestations cover the underlying platform. Master-key sourcing from AWS/GCP/Vault secret managers is documented. `SECURITY.md`. |
@@ -140,7 +140,7 @@ turn "supports the controls" into "certified."
 ## 4. Organisational controls (out of product scope)
 
 These Annex A controls are satisfied by the operating organisation's ISMS,
-not by `hzd`. They are listed so a reader does not assume the product
+not by `dzd`. They are listed so a reader does not assume the product
 covers them. The product *supports* several (noted), but the policy,
 process, and records are organisational deliverables.
 

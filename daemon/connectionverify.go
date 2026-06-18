@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 // connectionVerifyTimeout bounds a live connection check. A connect/test is

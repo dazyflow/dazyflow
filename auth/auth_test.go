@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // TestSession_StoredKeyIsHashedNotToken locks in that a session is stored
@@ -76,7 +76,7 @@ func TestAPIKey_RoundTrip(t *testing.T) {
 
 func TestIssueAPIKey_RejectsUnsafeID(t *testing.T) {
 	store := NewMemKeyStore()
-	// An "_" in the id would split wrong in the hzk_<id>_<secret> wire
+	// An "_" in the id would split wrong in the dzk_<id>_<secret> wire
 	// format and mint a key that can never authenticate — reject at issue.
 	for _, id := range []string{"", "team_key", "has space", "emoji😀"} {
 		if _, _, err := IssueAPIKey(store, t.Context(), id, "t", "", "u", nil, nil); err == nil {

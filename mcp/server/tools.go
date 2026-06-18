@@ -40,7 +40,7 @@ type Defaults struct {
 	Workspace string
 }
 
-// BuildTools wires the full set of MCP tools against an HazydClient.
+// BuildTools wires the full set of MCP tools against an DazydClient.
 // Returned in a stable order; the framing layer registers them via
 // Server.Register in the order they appear here.
 //
@@ -52,7 +52,7 @@ type Defaults struct {
 // schema + worked examples for the specific node before composing a
 // flow. We expose them as separate tools (rather than one giant
 // "search") so the LLM picks the right level of detail per turn.
-func BuildTools(c *HazydClient, d Defaults) []Tool {
+func BuildTools(c *DazydClient, d Defaults) []Tool {
 	return []Tool{
 		listIntegrations(c),
 		describeIntegration(c),
@@ -149,7 +149,7 @@ func decodeArgs(raw json.RawMessage) (map[string]any, error) {
 
 // errorResultOrErr maps an HTTP failure into the right MCP shape. The
 // spec separates "tool couldn't be invoked" (RPC error) from "tool
-// ran but the operation failed" (ToolCallResult.IsError). Most hzd
+// ran but the operation failed" (ToolCallResult.IsError). Most dzd
 // 4xx responses are the latter — the LLM asked for something the
 // user can fix (bad ID, locked flow). 5xx and network failures are
 // the former.
@@ -199,7 +199,7 @@ func errorResultOrErr(err error) (ToolCallResult, error) {
 
 // ─────────────────────────── tool definitions ───────────────────────────
 
-func listIntegrations(c *HazydClient) Tool {
+func listIntegrations(c *DazydClient) Tool {
 	return Tool{
 		Name:        "list_integrations",
 		Description: "List every integration the daemon offers, grouped by vendor (Slack, Gmail, GitHub, ...). Each entry includes a one-sentence summary and how many drops it exposes. Use this FIRST when composing a new flow — narrow by integration before drilling into individual drops.",
@@ -232,7 +232,7 @@ func listIntegrations(c *HazydClient) Tool {
 	}
 }
 
-func describeIntegration(c *HazydClient) Tool {
+func describeIntegration(c *DazydClient) Tool {
 	return Tool{
 		Name:        "describe_integration",
 		Description: "Return one integration's detail page: its auth shape, every drop it exposes with their role (trigger / action / transformation), and example flows. Read this BEFORE describing individual drops — it tells you which drop within the integration to look at.",
@@ -257,7 +257,7 @@ func describeIntegration(c *HazydClient) Tool {
 	}
 }
 
-func listDrops(c *HazydClient) Tool {
+func listDrops(c *DazydClient) Tool {
 	return Tool{
 		Name:        "list_drops",
 		Description: "Search the flat drop catalog. Returns lean per-drop entries (id, label, summary, category, integration). Use the optional filters to narrow — full per-drop detail (params schema, examples) comes from describe_drop.",
@@ -296,7 +296,7 @@ func listDrops(c *HazydClient) Tool {
 	}
 }
 
-func describeDrop(c *HazydClient) Tool {
+func describeDrop(c *DazydClient) Tool {
 	return Tool{
 		Name:        "describe_drop",
 		Description: "Get the full manifest of one drop — params JSON Schema, worked params examples, I/O ports, execution model, retry policy. THIS is the source of truth when composing the node's params; the examples field gives you concrete shapes to crib from.",
@@ -325,7 +325,7 @@ func describeDrop(c *HazydClient) Tool {
 // trigger kind (cron, webhook, poll) plus worked examples. Use this
 // BEFORE composing a flow with a trigger — esp. webhook+public_form,
 // which isn't obvious from any single drop's description.
-func describeTriggerKinds(c *HazydClient) Tool {
+func describeTriggerKinds(c *DazydClient) Tool {
 	return Tool{
 		Name:        "describe_trigger_kinds",
 		Description: "Return the schema for every supported GraphTrigger kind (cron, webhook, poll), with per-field descriptions and worked examples. Consult this when composing a flow that needs to fire on a schedule, accept a webhook, or show a hosted intake form (webhook + public_form:true).",
@@ -345,7 +345,7 @@ func describeTriggerKinds(c *HazydClient) Tool {
 // this BEFORE composing a flow whose drops have non-empty
 // requires_connections — if a provider isn't connected, hand the
 // authorize URL from start_connection to the user before continuing.
-func listConnections(c *HazydClient) Tool {
+func listConnections(c *DazydClient) Tool {
 	return Tool{
 		Name:        "list_connections",
 		Description: "List OAuth providers the daemon offers and which accounts the caller has linked. Each entry: {name, accounts:[...]}. Empty `accounts` = not connected. Pair with start_connection to begin the auth dance for a not-connected provider.",
@@ -365,7 +365,7 @@ func listConnections(c *HazydClient) Tool {
 // dance, and the callback finalizes server-side — no further MCP
 // interaction is needed. Re-running list_connections after the user
 // reports success confirms the link.
-func startConnection(c *HazydClient) Tool {
+func startConnection(c *DazydClient) Tool {
 	return Tool{
 		Name:        "start_connection",
 		Description: "Begin the OAuth flow for a provider. Returns {authorize_url:\"https://...\"} — hand this URL to the user, ask them to open it and complete the consent screen. After they're back, call list_connections to confirm the account now appears under the provider.",
@@ -408,7 +408,7 @@ func startConnection(c *HazydClient) Tool {
 // tenant (values never leave the daemon — write-only). LLM use:
 // confirm a secret exists by name before building a flow that
 // references it via ${secret.NAME}.
-func listSecrets(c *HazydClient) Tool {
+func listSecrets(c *DazydClient) Tool {
 	return Tool{
 		Name:        "list_secrets",
 		Description: "List secret names in the caller's tenant. Returns {secrets:[name,...]}. Values are write-only — there is no read API; the only way to inspect a secret is to use it in a node. Pair with set_secret to add one.",
@@ -427,7 +427,7 @@ func listSecrets(c *HazydClient) Tool {
 // the user pastes an API key in chat ("here's my Stripe key") — the
 // LLM stores it under a stable name and then references it via
 // ${secret.NAME} in any flow node that needs it.
-func setSecret(c *HazydClient) Tool {
+func setSecret(c *DazydClient) Tool {
 	return Tool{
 		Name:        "set_secret",
 		Description: "Store a secret value under the given name in the caller's tenant. Overwrites if the name exists. After calling, reference the secret from a flow node's params as `${secret.NAME}` (the daemon resolves it at run time). Names must be A-Z 0-9 _ . / - .",
@@ -458,7 +458,7 @@ func setSecret(c *HazydClient) Tool {
 // deleteSecret removes a secret. Use when the user explicitly asks
 // to remove a key, or when rotating to a new one ("delete the old
 // then set the new"). Idempotent: deleting a missing name is a 204.
-func deleteSecret(c *HazydClient) Tool {
+func deleteSecret(c *DazydClient) Tool {
 	return Tool{
 		Name:        "delete_secret",
 		Description: "Permanently remove a secret. Idempotent: missing names succeed silently. Flows that still reference the deleted secret via ${secret.NAME} will fail at run time — pair with list_flows / get_flow before deleting if you're unsure.",
@@ -487,7 +487,7 @@ func deleteSecret(c *HazydClient) Tool {
 // the scheduler uses. Useful so the LLM can confirm "0 9 * * 1" is
 // valid (and means what it thinks) BEFORE saving a flow with a cron
 // trigger — catches mistakes in chat instead of via a 422 from save.
-func validateCron(c *HazydClient) Tool {
+func validateCron(c *DazydClient) Tool {
 	return Tool{
 		Name:        "validate_cron",
 		Description: "Validate a cron expression. Returns {ok:true} on parse success, or {ok:false, error:\"...\"} when the scheduler would reject it. Call this BEFORE create_flow when wiring a cron trigger so a bad expression surfaces in chat instead of at save time.",
@@ -520,17 +520,17 @@ func validateCron(c *HazydClient) Tool {
 // Use to "pause" a flow without losing the definition: e.g. user
 // says "stop the Monday digest for a few weeks" — call disable_flow
 // now, then enable_flow when they're ready.
-func enableFlow(c *HazydClient, d Defaults) Tool {
+func enableFlow(c *DazydClient, d Defaults) Tool {
 	return enableOrDisable(c, d, "enable_flow",
 		"Re-enable a previously-disabled flow. Idempotent: enabling an enabled flow is a no-op.",
 		"/enable")
 }
-func disableFlow(c *HazydClient, d Defaults) Tool {
+func disableFlow(c *DazydClient, d Defaults) Tool {
 	return enableOrDisable(c, d, "disable_flow",
 		"Pause a flow without deleting it. Scheduled firings (cron/poll) and inbound webhooks are suppressed; explicit run_flow / test_trigger_flow calls still work. Idempotent.",
 		"/disable")
 }
-func enableOrDisable(c *HazydClient, d Defaults, name, desc, suffix string) Tool {
+func enableOrDisable(c *DazydClient, d Defaults, name, desc, suffix string) Tool {
 	return Tool{
 		Name:        name,
 		Description: desc,
@@ -565,7 +565,7 @@ func enableOrDisable(c *HazydClient, d Defaults, name, desc, suffix string) Tool
 // deleteFlow removes a flow from the workspace. Refuses with 409 if
 // a run is currently in flight on this flow (same lock as save/patch).
 // Idempotent on the wire: a missing flow returns 204.
-func deleteFlow(c *HazydClient, d Defaults) Tool {
+func deleteFlow(c *DazydClient, d Defaults) Tool {
 	return Tool{
 		Name:        "delete_flow",
 		Description: "Permanently remove a flow. Use this when the user wants to undo a creation or retire a flow. Refuses (HTTP 409) if a run is currently active on the flow. Idempotent: deleting a missing flow is a no-op.",
@@ -596,7 +596,7 @@ func deleteFlow(c *HazydClient, d Defaults) Tool {
 	}
 }
 
-func listFlows(c *HazydClient, d Defaults) Tool {
+func listFlows(c *DazydClient, d Defaults) Tool {
 	return Tool{
 		Name:        "list_flows",
 		Description: "List flow IDs in a workspace. Use to discover what already exists before creating a new flow.",
@@ -623,7 +623,7 @@ func listFlows(c *HazydClient, d Defaults) Tool {
 	}
 }
 
-func getFlow(c *HazydClient, d Defaults) Tool {
+func getFlow(c *DazydClient, d Defaults) Tool {
 	return Tool{
 		Name:        "get_flow",
 		Description: "Fetch a flow's full graph payload (nodes, edges, triggers, settings) so you can show the user what's there or build an updated version off it.",
@@ -658,7 +658,7 @@ func getFlow(c *HazydClient, d Defaults) Tool {
 // identical — PUT /graphs/{t}/{w}/{id} is idempotent on the server —
 // but exposing two distinct tool names lets the LLM (and the user
 // watching it) signal intent.
-func saveFlow(c *HazydClient, d Defaults, name, description string) Tool {
+func saveFlow(c *DazydClient, d Defaults, name, description string) Tool {
 	return Tool{
 		Name:        name,
 		Description: description,
@@ -761,7 +761,7 @@ func saveFlow(c *HazydClient, d Defaults, name, description string) Tool {
 // wholesale. To change a single node's params, send
 // `{"nodes":[<full new nodes list>]}` — there is no per-index array
 // merge in RFC 7396.
-func patchFlow(c *HazydClient, d Defaults) Tool {
+func patchFlow(c *DazydClient, d Defaults) Tool {
 	return Tool{
 		Name: "patch_flow",
 		Description: "Apply a JSON Merge Patch (RFC 7396) to an existing flow. " +
@@ -805,7 +805,7 @@ func patchFlow(c *HazydClient, d Defaults) Tool {
 // sanity-check a graph it just authored before running it — catches
 // schema mismatches, orphaned nodes, hardcoded secrets, etc. Returns
 // the same lint shape SaveFlow appends after a write.
-func validateFlow(c *HazydClient, d Defaults) Tool {
+func validateFlow(c *DazydClient, d Defaults) Tool {
 	return Tool{
 		Name:        "validate_flow",
 		Description: "Lint a flow (currently saved version) without running it. Returns {ok, issues:[{severity,node,field,message}]}. Use after create_flow / update_flow / patch_flow to verify the saved shape lints clean before triggering a run.",
@@ -843,7 +843,7 @@ func validateFlow(c *HazydClient, d Defaults) Tool {
 // graph, see if it lints clean, then call create_flow only when
 // satisfied. Avoids the create-fix-update churn of authoring against
 // HEAD-only validate_flow.
-func validateGraph(c *HazydClient) Tool {
+func validateGraph(c *DazydClient) Tool {
 	return Tool{
 		Name:        "validate_graph",
 		Description: "Lint a Graph JSON document without saving. Returns {ok, issues}. Use this DURING authoring to catch problems (unknown modules, orphan nodes, hardcoded secrets, port mismatches) before calling create_flow. The body is the same shape create_flow accepts.",
@@ -873,7 +873,7 @@ func validateGraph(c *HazydClient) Tool {
 // wiring up an external caller. Seeds the trigger node with the
 // supplied JSON payload — exactly as a real /trigger or /form POST
 // would — and returns the run ID to observe.
-func testTriggerFlow(c *HazydClient, d Defaults) Tool {
+func testTriggerFlow(c *DazydClient, d Defaults) Tool {
 	return Tool{
 		Name:        "test_trigger_flow",
 		Description: "Fire a flow as if a webhook/form trigger had received the supplied JSON payload. Returns the run ID. Use this to verify a trigger-driven flow without exposing it to real traffic.",
@@ -911,7 +911,7 @@ func testTriggerFlow(c *HazydClient, d Defaults) Tool {
 // can answer "what does this node actually emit, given X?" without
 // running the whole flow. Useful for debugging during authoring or
 // for the LLM to reason about a transformation node's behavior.
-func sampleNode(c *HazydClient, d Defaults) Tool {
+func sampleNode(c *DazydClient, d Defaults) Tool {
 	return Tool{
 		Name:        "sample_node",
 		Description: "Run a single node in isolation with the supplied input map and return its output. Inputs are keyed by port name. Used for debugging a node mid-flow without running the upstream chain.",
@@ -952,7 +952,7 @@ func sampleNode(c *HazydClient, d Defaults) Tool {
 	}
 }
 
-func runFlow(c *HazydClient, d Defaults) Tool {
+func runFlow(c *DazydClient, d Defaults) Tool {
 	return Tool{
 		Name:        "run_flow",
 		Description: "Submit a run of an existing flow. Returns the run ID; pair with wait_for_run or get_run to observe outcome.",
@@ -984,7 +984,7 @@ func runFlow(c *HazydClient, d Defaults) Tool {
 	}
 }
 
-func cancelRun(c *HazydClient) Tool {
+func cancelRun(c *DazydClient) Tool {
 	return Tool{
 		Name:        "cancel_run",
 		Description: "Abort an in-flight run. Graceful: already-running nodes finish, but no further downstream work dispatches.",
@@ -1016,7 +1016,7 @@ func cancelRun(c *HazydClient) Tool {
 	}
 }
 
-func getRun(c *HazydClient) Tool {
+func getRun(c *DazydClient) Tool {
 	return Tool{
 		Name:        "get_run",
 		Description: "Fetch the current state of a run — status (queued / running / awaiting / succeeded / failed / cancelled), error (if any), timing.",
@@ -1041,7 +1041,7 @@ func getRun(c *HazydClient) Tool {
 	}
 }
 
-func listRuns(c *HazydClient, d Defaults) Tool {
+func listRuns(c *DazydClient, d Defaults) Tool {
 	return Tool{
 		Name:        "list_runs",
 		Description: "List recent runs. Pass flow_id to scope to one flow, status to filter (e.g. only 'failed'), limit to cap the result count.",
@@ -1089,7 +1089,7 @@ func listRuns(c *HazydClient, d Defaults) Tool {
 // arbitrary durations, so a polling tool is the right shape — the
 // LLM calls it and the server holds the line until something
 // concrete is reportable.
-func waitForRun(c *HazydClient) Tool {
+func waitForRun(c *DazydClient) Tool {
 	return Tool{
 		Name:        "wait_for_run",
 		Description: "Block until a run reaches a terminal state (succeeded/failed/cancelled/skipped) or timeout_seconds elapses, then return the final record. Polls every second under the hood. Useful right after run_flow.",
@@ -1162,7 +1162,7 @@ func isTerminal(rec map[string]any) bool {
 	return false
 }
 
-func listPendingApprovals(c *HazydClient, d Defaults) Tool {
+func listPendingApprovals(c *DazydClient, d Defaults) Tool {
 	return Tool{
 		Name:        "list_pending_approvals",
 		Description: "List await_approval nodes parked across the workspace. Pair with approve_node to resume them.",
@@ -1195,7 +1195,7 @@ func listPendingApprovals(c *HazydClient, d Defaults) Tool {
 	}
 }
 
-func approveNode(c *HazydClient) Tool {
+func approveNode(c *DazydClient) Tool {
 	return Tool{
 		Name:        "approve_node",
 		Description: "Resume an await_approval node. decision must be 'approve' or 'reject'; approver and comment are recorded in the resume Result and visible to downstream nodes.",

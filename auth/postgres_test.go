@@ -8,21 +8,21 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // Integration tests against a real Postgres. Skipped unless
-// HAZYFLOW_TEST_DB is set, e.g.
+// DAZYFLOW_TEST_DB is set, e.g.
 //
-//	HAZYFLOW_TEST_DB=postgres://localhost/hazyflow_test go test ./auth/
+//	DAZYFLOW_TEST_DB=postgres://localhost/dazyflow_test go test ./auth/
 //
 // Mirrors the jobstore Postgres gate so CI exercises one DB for both.
 
 func testPool(t *testing.T) (*pgxpool.Pool, context.Context) {
 	t.Helper()
-	url := os.Getenv("HAZYFLOW_TEST_DB")
+	url := os.Getenv("DAZYFLOW_TEST_DB")
 	if url == "" {
-		t.Skip("set HAZYFLOW_TEST_DB to run Postgres integration tests")
+		t.Skip("set DAZYFLOW_TEST_DB to run Postgres integration tests")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	t.Cleanup(cancel)
@@ -94,7 +94,7 @@ func TestPgSessionStore_RoundTrip(t *testing.T) {
 	}
 
 	sess := Session{
-		ID:        "hzs_abc",
+		ID:        "dzs_abc",
 		Subject:   "bob",
 		Tenant:    "acme",
 		Workspace: "default",
@@ -105,17 +105,17 @@ func TestPgSessionStore_RoundTrip(t *testing.T) {
 	if err := store.PutSession(ctx, sess); err != nil {
 		t.Fatalf("PutSession: %v", err)
 	}
-	got, err := store.GetSession(ctx, "hzs_abc")
+	got, err := store.GetSession(ctx, "dzs_abc")
 	if err != nil {
 		t.Fatalf("GetSession: %v", err)
 	}
 	if got.Subject != "bob" || len(got.Roles) != 1 || got.Roles[0].Name != "editor" {
 		t.Errorf("round-trip mismatch: %+v", got)
 	}
-	if err := store.DeleteSession(ctx, "hzs_abc"); err != nil {
+	if err := store.DeleteSession(ctx, "dzs_abc"); err != nil {
 		t.Fatalf("DeleteSession: %v", err)
 	}
-	if _, err := store.GetSession(ctx, "hzs_abc"); err != ErrInvalidCredential {
+	if _, err := store.GetSession(ctx, "dzs_abc"); err != ErrInvalidCredential {
 		t.Errorf("GetSession(deleted) err = %v, want ErrInvalidCredential", err)
 	}
 }

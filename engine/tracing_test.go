@@ -8,7 +8,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 func TestEngine_EmitsSpans(t *testing.T) {
@@ -46,12 +46,12 @@ func TestEngine_EmitsSpans(t *testing.T) {
 		switch s.Name() {
 		case "graph.run":
 			graphSpan = true
-			if attrValue(s, "hazyflow.tenant") != "acme" {
+			if attrValue(s, "dazyflow.tenant") != "acme" {
 				t.Errorf("graph span missing tenant attr")
 			}
 		case "node.run":
 			nodeSpan = true
-			if attrValue(s, "hazyflow.node.module") != "noop" {
+			if attrValue(s, "dazyflow.node.module") != "noop" {
 				t.Errorf("node span missing module attr")
 			}
 		}

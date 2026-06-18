@@ -5,9 +5,9 @@ import { pickActive } from "./lib/pickActive";
 import i18n from "./i18n";
 import type { Permission, WhoAmI } from "./types";
 
-const STORAGE_KEY = "hazyflow.token";
-const WS_STORAGE_KEY = "hazyflow.activeWorkspace";
-const TENANT_STORAGE_KEY = "hazyflow.activeTenant";
+const STORAGE_KEY = "dazyflow.token";
+const WS_STORAGE_KEY = "dazyflow.activeWorkspace";
+const TENANT_STORAGE_KEY = "dazyflow.activeTenant";
 
 type AuthCtx = {
   token: string | null;
@@ -52,7 +52,7 @@ type AuthCtx = {
   setActiveWorkspace: (ws: string) => void;
 
   // Tenant state. For platform admins (no tenant binding), `tenants`
-  // lists every tenant on the hzd instance and `activeTenant` is
+  // lists every tenant on the dzd instance and `activeTenant` is
   // their current selection. For everyone else, `tenants` is the
   // singleton of their own tenant and the switcher hides.
   tenants: string[];

@@ -3,7 +3,7 @@ package db
 import (
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 	_ "modernc.org/sqlite"
 )
 

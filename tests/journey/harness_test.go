@@ -25,15 +25,15 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/auth"
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/daemon"
-	"git.sr.ht/~klahr/hazyflow/engine"
-	"git.sr.ht/~klahr/hazyflow/engine/jobstore"
-	_ "git.sr.ht/~klahr/hazyflow/drops" // register every native drop
+	"git.sr.ht/~klahr/dazyflow/auth"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon"
+	"git.sr.ht/~klahr/dazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/engine/jobstore"
+	_ "git.sr.ht/~klahr/dazyflow/drops" // register every native drop
 )
 
-// stack is a self-contained Hazyflow install: the HTTP API the web UI
+// stack is a self-contained Dazyflow install: the HTTP API the web UI
 // talks to, backed by an in-memory control plane and a real worker so
 // saved flows actually run.
 type stack struct {
@@ -159,7 +159,7 @@ func (s *stack) call(t *testing.T, method, path, token string, body any) resp {
 
 // --- the newcomer ----------------------------------------------------
 
-// newcomer is a person who just found Hazyflow. They hold a session
+// newcomer is a person who just found Dazyflow. They hold a session
 // token and are bound to the tenant/workspace signup minted for them.
 type newcomer struct {
 	t         *testing.T

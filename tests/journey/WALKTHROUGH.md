@@ -2,10 +2,10 @@
 
 This is the browser half of the experience test. I drove the real web app
 as a brand-new, non-technical user (call her Nina, who runs a bakery and
-has never seen Hazyflow) and recorded where the journey was smooth and
+has never seen Dazyflow) and recorded where the journey was smooth and
 where she would get stuck. Screenshots are in `screenshots/`.
 
-Setup for the run: a freshly built `hzd` serving the freshly built
+Setup for the run: a freshly built `dzd` serving the freshly built
 `web/dist`, signup enabled, on `http://localhost:8087`. The durable,
 repeatable version of this journey lives in `journey_test.go`; this file
 is the narrated, screenshot-backed pass a non-technical person actually
@@ -48,18 +48,18 @@ was a stale local build. Worth knowing so we don't mis-file them.
   enables …" and a disabled button. On a fresh self-host with no OAuth
   apps configured, that is 8 of our 10 scenarios. The Connections page
   says so honestly: "Setup isn't finished on this server yet … Contact
-  whoever set up this Hazyflow workspace." So the product communicates
+  whoever set up this Dazyflow workspace." So the product communicates
   the wall well, but the wall is real: a non-technical user cannot connect
   Google/Slack/Notion until an admin registers OAuth client credentials
   and a secret store. The scenarios that need no accounts (contact form ->
   saved list, Excel -> built-in DB) work immediately; everything else
   waits on that one-time admin step.
 
-- **CSRF origin must be set for self-host.** Running `hzd` without
-  `HAZYFLOW_WEB_ORIGIN` made signup fail once a session cookie was present
+- **CSRF origin must be set for self-host.** Running `dzd` without
+  `DAZYFLOW_WEB_ORIGIN` made signup fail once a session cookie was present
   with "cookie-authenticated request from disallowed origin … (CSRF
   defense)". This is by design and documented in DEPLOY.md; the fix is to
-  set `HAZYFLOW_WEB_ORIGIN` to the public origin. The app surfaces the
+  set `DAZYFLOW_WEB_ORIGIN` to the public origin. The app surfaces the
   error inline rather than failing silently, which is good, but the
   message is operator-speak a non-technical user can't act on alone.
 

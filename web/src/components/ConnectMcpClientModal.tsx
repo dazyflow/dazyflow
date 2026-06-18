@@ -84,7 +84,7 @@ const CLIENTS: ClientDef[] = [
       // uses `^`, PowerShell uses a backtick) and POSIX single-quoting
       // (cmd.exe doesn't treat `'` as a quote). The trailing `--`
       // separates `claude mcp add` flags from the command it spawns.
-      `claude mcp add hazyflow --env "HAZYFLOW_URL=${url}" --env "HAZYFLOW_API_KEY=${secret}" -- hz-mcp`,
+      `claude mcp add dazyflow --env "DAZYFLOW_URL=${url}" --env "DAZYFLOW_API_KEY=${secret}" -- dz-mcp`,
   },
 ];
 
@@ -357,11 +357,11 @@ function CopyButton({ text, labelKey }: { text: string; labelKey: string }) {
 function mcpServersJSON({ url, secret }: SnippetEnv): string {
   const config = {
     mcpServers: {
-      "hazyflow": {
-        command: "hz-mcp",
+      "dazyflow": {
+        command: "dz-mcp",
         env: {
-          HAZYFLOW_URL: url,
-          HAZYFLOW_API_KEY: secret,
+          DAZYFLOW_URL: url,
+          DAZYFLOW_API_KEY: secret,
         },
       },
     },

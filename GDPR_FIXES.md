@@ -1,6 +1,6 @@
 # GDPR / EU compliance — prioritized fixes
 
-Tracking list from the data-protection review (2026-06-15) of `hzd` for an
+Tracking list from the data-protection review (2026-06-15) of `dzd` for an
 EU (Amsterdam) deployment. Grounded in a code audit; see [PRIVACY.md](PRIVACY.md)
 for the full assessment and [COMPLIANCE.md](COMPLIANCE.md) for the ISO 27001
 mapping. Priorities: **P0** compliance-blocking, **P1** important, **P2** good
@@ -43,9 +43,9 @@ above (see PRIVACY.md § Data-subject rights).
 a supported path, and a test asserts no residual rows/files remain.
 
 ### [~] P0.2 — International-transfer story for connectors (Chapter V) — *Org + product*
-**Product/doc: DONE.** Egress allowlist (`HAZYFLOW_HTTP_EGRESS_ALLOW`) is documented + encouraged in
-PRIVACY.md § Transfers; hzd now logs a startup **advisory** when it's unset in production
-(`cmd/hzd/main.go applyNetworkPolicy`). Configurable LLM base URLs (`drops/claude/claude.go`,
+**Product/doc: DONE.** Egress allowlist (`DAZYFLOW_HTTP_EGRESS_ALLOW`) is documented + encouraged in
+PRIVACY.md § Transfers; dzd now logs a startup **advisory** when it's unset in production
+(`cmd/dzd/main.go applyNetworkPolicy`). Configurable LLM base URLs (`drops/claude/claude.go`,
 `drops/openai/openai.go`) for EU/self-hosted routing are documented. **Org/legal: REMAINS** — the
 Record of Processing, sub-processor DPAs, DPF-certification checks / SCCs + TIAs, and enabling LLM
 zero-retention are operator deliverables (no code can satisfy them).
@@ -62,7 +62,7 @@ URLs (`drops/claude/claude.go`, `drops/openai/openai.go`) for EU/self-hosted
 routing.
 **Where:** `drops/net/egress.go` (allowlist), DEPLOY.md, PRIVACY.md.
 **Done when:** every enabled connector has a documented transfer mechanism and
-egress is constrained by `HAZYFLOW_HTTP_EGRESS_ALLOW`.
+egress is constrained by `DAZYFLOW_HTTP_EGRESS_ALLOW`.
 
 ---
 
@@ -105,14 +105,14 @@ without DB surgery.
 to plaintext (Art. 32, encryption in transit).
 **Done:** `productionConfigProblems` now rejects any DSN without
 `require`/`verify-ca`/`verify-full` (fatal in prod, warning under
-`HAZYFLOW_DEV=1`); added `dsnSSLMode()` helper + tests.
-**Where:** `cmd/hzd/main.go`, `cmd/hzd/main_test.go`.
+`DAZYFLOW_DEV=1`); added `dsnSSLMode()` helper + tests.
+**Where:** `cmd/dzd/main.go`, `cmd/dzd/main_test.go`.
 
 ### [ ] P1.4 — Confirm EU data residency of all infrastructure — *Org/ops* (cannot be code-completed)
 **Note:** purely an operations/verification task — confirm DO Managed Postgres + backups, the
 container registry, and any OTLP/tracing endpoint are EU-region (Amsterdam), and that the `/data`
 PVC + any object storage are EU. No code change can satisfy this; the operator checklist in
-[PRIVACY.md](PRIVACY.md) item 4 tracks it. (hzd now enforces `sslmode=require` — P1.3 — and warns on
+[PRIVACY.md](PRIVACY.md) item 4 tracks it. (dzd now enforces `sslmode=require` — P1.3 — and warns on
 unconstrained egress — P0.2 — which support, but don't prove, residency.)
 
 **Why:** Server location supports residency only if every dependency is in-EU.
@@ -128,14 +128,14 @@ PVC and any object storage are EU.
 ### [x] P2.1 — Personal data in run logs / payloads — **DONE**
 **Done:** per-run log deletion endpoint `DELETE /api/v1/me/runs/{run_id}/logs` (authorized like
 reading them; `daemon/me_routes.go` + `Service.DeleteRunLog`), and an opt-out of payload/content
-logging via `HAZYFLOW_LOG_RUN_PAYLOADS=false` — drops streamed `progress` content lines while
+logging via `DAZYFLOW_LOG_RUN_PAYLOADS=false` — drops streamed `progress` content lines while
 keeping the status/terminal trail (`daemon/runlog.go RecordingBus.SetLogPayloads`, wired in
-`cmd/hzd/main.go`). Store methods `DeleteRun`/`DeleteByTenant` on both Pg and in-memory run-log
+`cmd/dzd/main.go`). Store methods `DeleteRun`/`DeleteByTenant` on both Pg and in-memory run-log
 stores. Residual risk is documented in PRIVACY.md. Tests: `TestRecordingBus_PayloadOptOut`.
 
 **Why:** Run logs, job payloads, and bus events may carry arbitrary personal
 data from flows; only secrets are redacted (`engine/redact.go`), not PII.
-Retained 30 days (`HAZYFLOW_RUN_LOG_RETENTION`).
+Retained 30 days (`DAZYFLOW_RUN_LOG_RETENTION`).
 **What:** per-run log deletion endpoint; an opt-out of payload/output logging;
 document the residual risk (done in PRIVACY.md). Optionally extend redaction to
 configurable PII patterns.
@@ -149,7 +149,7 @@ AI Act/NIS2 notes, operator checklist, known gaps).
 ### [ ] P2.3 — Fix stale retention claim in COMPLIANCE.md
 **Why:** COMPLIANCE.md states retention "Default is unset (retain
 indefinitely)", but the code defaults to 30 d jobs / 90 d audit / 30 d run logs
-(`cmd/hzd/main.go` `startRetentionSweeps`).
+(`cmd/dzd/main.go` `startRetentionSweeps`).
 **What:** correct the line; cross-reference PRIVACY.md § Retention. Add the new
 GDPR items to COMPLIANCE.md § Known gaps.
 **Where:** `COMPLIANCE.md`.

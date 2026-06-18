@@ -6,7 +6,7 @@ import "sync"
 // to give the in-process filesystem drops an atomic reserve-and-hold
 // against per-tenant disk quotas. It mirrors the SetTokenLookup /
 // SetSecretWriter / SetEgressAllowlist wiring used elsewhere: the
-// integrations layer stays free of a daemon import, and hzd injects a
+// integrations layer stays free of a daemon import, and dzd injects a
 // closure over FSQuota.Reserve. When no reserver is installed (no quota
 // provider, or in unit tests), reserveQuota is a no-op that always
 // succeeds — the drops fall back to the per-job snapshot check.

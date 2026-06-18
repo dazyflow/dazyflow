@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // One submitted run with two executed nodes meters exactly one graph run

@@ -139,7 +139,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Send messages from your flows, and trigger flows when someone @-mentions your bot. Connect a workspace once and your bot can post to any channel it's a member of — useful for alerts, daily reports, or simple back-and-forth bots that turn chat messages into action.",
     technical_notes:
-      "OAuth 2.0 with chat:write, channels:read, and channels:history scopes. The slack_on_mention trigger uses Slack's Events API — configure your Slack app's Event Subscription URL to /api/v1/events/slack/<tenant> and set HAZYFLOW_SLACK_SIGNING_SECRET on the daemon (HMAC-SHA256 signature verification + 5-minute replay window).",
+      "OAuth 2.0 with chat:write, channels:read, and channels:history scopes. The slack_on_mention trigger uses Slack's Events API — configure your Slack app's Event Subscription URL to /api/v1/events/slack/<tenant> and set DAZYFLOW_SLACK_SIGNING_SECRET on the daemon (HMAC-SHA256 signature verification + 5-minute replay window).",
     docs_url: "https://api.slack.com/web",
     brand_logo: "/brands/slack.svg",
   },
@@ -193,7 +193,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Create issues, comment on existing ones, and trigger flows on push or new-PR events. Common patterns: route an incoming alert into a tracked issue, post a deploy notification when commits land on main, kick off a triage flow when a contributor opens a PR.",
     technical_notes:
-      "Personal access tokens or OAuth user tokens via Authorization: Bearer. Webhook triggers use GitHub's X-Hub-Signature-256 HMAC scheme — point your repo webhook URL at /api/v1/events/github/<tenant>, with the webhook Secret matching HAZYFLOW_GITHUB_WEBHOOK_SECRET. API version pinned to 2022-11-28.",
+      "Personal access tokens or OAuth user tokens via Authorization: Bearer. Webhook triggers use GitHub's X-Hub-Signature-256 HMAC scheme — point your repo webhook URL at /api/v1/events/github/<tenant>, with the webhook Secret matching DAZYFLOW_GITHUB_WEBHOOK_SECRET. API version pinned to 2022-11-28.",
     docs_url: "https://docs.github.com/en/rest",
     brand_logo: "/brands/github.svg",
   },
@@ -291,7 +291,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Publish messages to an MQTT broker — the lightweight backbone of most home-automation and IoT setups. Flip a smart light, push a command to a device, or broadcast a status update that anything subscribed to the topic picks up.",
     technical_notes:
-      "Connects to a tcp:// or ssl:// broker (a bare host:port defaults to tcp://…:1883). Optional username/password read from the encrypted secret store as MQTT_USERNAME / MQTT_PASSWORD. Supports QoS levels and the retain flag. Private-network brokers are blocked unless the operator enables private egress (HAZYFLOW_ALLOW_PRIVATE_EGRESS).",
+      "Connects to a tcp:// or ssl:// broker (a bare host:port defaults to tcp://…:1883). Optional username/password read from the encrypted secret store as MQTT_USERNAME / MQTT_PASSWORD. Supports QoS levels and the retain flag. Private-network brokers are blocked unless the operator enables private egress (DAZYFLOW_ALLOW_PRIVATE_EGRESS).",
     docs_url: "https://mqtt.org/",
     brand_logo: "/brands/mqtt.svg",
   },
@@ -300,7 +300,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Control your smart home and react to what it's doing. Turn on lights, lock a door, set the thermostat, or run a scene — and start a flow automatically the moment a device's state changes, like a door opening or a sensor tripping.",
     technical_notes:
-      "Talks to your Home Assistant instance over its REST API, using the instance URL and a long-lived access token (create one under Profile → Long-Lived Access Tokens) configured once on this page. A LAN address (homeassistant.local, 192.168.x.x) needs the daemon's private egress enabled (HAZYFLOW_ALLOW_PRIVATE_EGRESS).",
+      "Talks to your Home Assistant instance over its REST API, using the instance URL and a long-lived access token (create one under Profile → Long-Lived Access Tokens) configured once on this page. A LAN address (homeassistant.local, 192.168.x.x) needs the daemon's private egress enabled (DAZYFLOW_ALLOW_PRIVATE_EGRESS).",
     docs_url: "https://developers.home-assistant.io/docs/api/rest/",
     brand_logo: "/brands/homeassistant.svg",
   },
@@ -316,7 +316,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Run prompts through Claude, Anthropic's AI assistant. Useful for summarising upstream text, classifying inputs, generating responses, or any spot in your flow where you want a language model in the loop.",
     technical_notes:
-      "Authenticated with the API key set on this connection — flows pick it up automatically, no key on the node. For local development without a key, the hzd --claude-cli flag routes through a local `claude -p` CLI plus an MCP server so flows can exercise the chat path against your already-logged-in CLI.",
+      "Authenticated with the API key set on this connection — flows pick it up automatically, no key on the node. For local development without a key, the dzd --claude-cli flag routes through a local `claude -p` CLI plus an MCP server so flows can exercise the chat path against your already-logged-in CLI.",
     docs_url: "https://docs.anthropic.com/",
   },
   chatgpt: {

@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/auth"
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/auth"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // recordingOrgProfiles captures the last PutOrgProfile so the create-org

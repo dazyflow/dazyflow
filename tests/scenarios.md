@@ -1,7 +1,7 @@
 # Scheduled automation scenarios
 
 A reference set of recurring jobs that a small to mid sized company, staffed by
-non-technical people, runs every day or week by hand today. Hazyflow should be
+non-technical people, runs every day or week by hand today. Dazyflow should be
 able to automate each one end to end without the operator writing code.
 
 We keep this list so we can test against it: every scenario names the building
@@ -48,7 +48,7 @@ There are three layers, from cheapest to most lifelike.
    narrated, screenshot-backed pass driving the actual web UI as a clueless
    user, recording real friction. Headline: the app is genuinely
    non-technical-friendly; the friction is self-host *setup* (register OAuth apps
-   for Gmail/Slack/Notion, set `HAZYFLOW_WEB_ORIGIN`), not the product. The
+   for Gmail/Slack/Notion, set `DAZYFLOW_WEB_ORIGIN`), not the product. The
    fastest path to first success is a no-setup template (contact form -> stored
    list), which works with zero configuration.
 

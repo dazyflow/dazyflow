@@ -16,7 +16,7 @@ import type { FlowSummary } from "../types";
 // Kept as a string-literal here rather than imported across the
 // page boundary so both halves can run independently if the other
 // fails to mount (e.g. lazy-route splitting).
-const HAS_FLOWS_KEY = "hazyflow.hasFlows";
+const HAS_FLOWS_KEY = "dazyflow.hasFlows";
 
 export function FlowList() {
   const { t } = useTranslation();

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/engine/mcp"
-	"git.sr.ht/~klahr/hazyflow/engine/mcp/mcptest"
+	"git.sr.ht/~klahr/dazyflow/engine/mcp"
+	"git.sr.ht/~klahr/dazyflow/engine/mcp/mcptest"
 )
 
 // inProcessPair wires a FakeServer to a Client via two io.Pipes,
@@ -33,7 +33,7 @@ func TestClient_InitializeRoundTrip(t *testing.T) {
 	client, close := inProcessPair(t, srv)
 	defer close()
 
-	info, err := client.Initialize(t.Context(), "hazyflow", "1.0")
+	info, err := client.Initialize(t.Context(), "dazyflow", "1.0")
 	if err != nil {
 		t.Fatalf("Initialize: %v", err)
 	}

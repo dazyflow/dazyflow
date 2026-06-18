@@ -1,5 +1,5 @@
 // Command server is a tiny MCP stdio server that exposes a couple of
-// tools — enough to demonstrate the Hazyflow ↔ MCP integration without
+// tools — enough to demonstrate the Dazyflow ↔ MCP integration without
 // pulling in a real ecosystem server (the npm-published filesystem
 // server, for instance, would require Node in the test environment).
 //
@@ -17,8 +17,8 @@ import (
 	"os"
 	"strings"
 
-	"git.sr.ht/~klahr/hazyflow/engine/mcp"
-	"git.sr.ht/~klahr/hazyflow/engine/mcp/mcptest"
+	"git.sr.ht/~klahr/dazyflow/engine/mcp"
+	"git.sr.ht/~klahr/dazyflow/engine/mcp/mcptest"
 )
 
 func main() {

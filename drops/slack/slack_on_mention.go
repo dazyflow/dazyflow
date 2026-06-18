@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 func init() {
@@ -72,7 +72,7 @@ func init() {
 // Slack event having pre-completed this node. The events handler
 // pre-completes the node's record with status=succeeded directly,
 // bypassing the worker, so Execute never runs in the trigger flow.
-// Standalone-run (e.g. `hzctl graph run` or the editor's Run button
+// Standalone-run (e.g. `dzctl graph run` or the editor's Run button
 // against a slack_on_mention graph) hits this path and gets the same
 // "no trigger data" sentinel webhook_input uses — a clear "you need
 // a real fire" signal instead of silent zero-value behaviour.

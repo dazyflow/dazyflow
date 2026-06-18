@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/mailmsg"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/mailmsg"
 )
 
 func TestBuildMessage(t *testing.T) {
@@ -84,7 +84,7 @@ func TestBuildMessage_Attachments(t *testing.T) {
 		{Filename: "report.pdf", MIME: "application/pdf", Data: []byte("%PDF-fake")},
 	}))
 	for _, want := range []string{
-		`Content-Type: multipart/mixed; boundary="hazyflow-`,
+		`Content-Type: multipart/mixed; boundary="dazyflow-`,
 		"Content-Type: text/plain; charset=UTF-8\r\n",
 		`Content-Disposition: attachment; filename="report.pdf"`,
 		"Content-Type: application/pdf\r\n",

@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // GET /api/v1/me/usage — the caller's tenant usage, newest month first.

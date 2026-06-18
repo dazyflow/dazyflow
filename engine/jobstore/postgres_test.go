@@ -7,17 +7,17 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
-// Integration test against a real Postgres. Skipped unless HAZYFLOW_TEST_DB
+// Integration test against a real Postgres. Skipped unless DAZYFLOW_TEST_DB
 // is set, e.g.
 //
-//	HAZYFLOW_TEST_DB=postgres://localhost/hazyflow_test go test ./...
+//	DAZYFLOW_TEST_DB=postgres://localhost/dazyflow_test go test ./...
 func TestPostgres_RoundTrip(t *testing.T) {
-	url := os.Getenv("HAZYFLOW_TEST_DB")
+	url := os.Getenv("DAZYFLOW_TEST_DB")
 	if url == "" {
-		t.Skip("set HAZYFLOW_TEST_DB to run Postgres integration tests")
+		t.Skip("set DAZYFLOW_TEST_DB to run Postgres integration tests")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -57,11 +57,11 @@ func TestPostgres_RoundTrip(t *testing.T) {
 }
 
 // TestPostgres_MaxConcurrentPerTenant exercises the per-tenant soft cap
-// against a real Postgres. Skipped unless HAZYFLOW_TEST_DB is set.
+// against a real Postgres. Skipped unless DAZYFLOW_TEST_DB is set.
 func TestPostgres_MaxConcurrentPerTenant(t *testing.T) {
-	url := os.Getenv("HAZYFLOW_TEST_DB")
+	url := os.Getenv("DAZYFLOW_TEST_DB")
 	if url == "" {
-		t.Skip("set HAZYFLOW_TEST_DB to run Postgres integration tests")
+		t.Skip("set DAZYFLOW_TEST_DB to run Postgres integration tests")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -103,9 +103,9 @@ func TestPostgres_MaxConcurrentPerTenant(t *testing.T) {
 // against real Postgres. Each subtest truncates jobs first so they don't
 // interfere with each other.
 func TestPostgres_Conformance(t *testing.T) {
-	url := os.Getenv("HAZYFLOW_TEST_DB")
+	url := os.Getenv("DAZYFLOW_TEST_DB")
 	if url == "" {
-		t.Skip("set HAZYFLOW_TEST_DB to run Postgres integration tests")
+		t.Skip("set DAZYFLOW_TEST_DB to run Postgres integration tests")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -143,11 +143,11 @@ func TestPostgres_NewPostgresFromPool_NilPool(t *testing.T) {
 }
 
 // TestPostgres_CompleteOwned_FencesNonOwner mirrors the memory test
-// against real Postgres. Skipped unless HAZYFLOW_TEST_DB is set.
+// against real Postgres. Skipped unless DAZYFLOW_TEST_DB is set.
 func TestPostgres_CompleteOwned_FencesNonOwner(t *testing.T) {
-	url := os.Getenv("HAZYFLOW_TEST_DB")
+	url := os.Getenv("DAZYFLOW_TEST_DB")
 	if url == "" {
-		t.Skip("set HAZYFLOW_TEST_DB to run Postgres integration tests")
+		t.Skip("set DAZYFLOW_TEST_DB to run Postgres integration tests")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

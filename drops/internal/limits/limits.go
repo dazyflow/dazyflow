@@ -17,19 +17,19 @@ import (
 	"sync"
 )
 
-// DefaultMaxRows is the row/item ceiling when HAZYFLOW_MAX_ROWS is unset. It's
+// DefaultMaxRows is the row/item ceiling when DAZYFLOW_MAX_ROWS is unset. It's
 // generous for genuine batch work (a million rows) while still bounding memory
 // to something a daemon can hold.
 const DefaultMaxRows = 1_000_000
 
 var (
 	mu      sync.RWMutex
-	maxRows = envInt("HAZYFLOW_MAX_ROWS", DefaultMaxRows)
+	maxRows = envInt("DAZYFLOW_MAX_ROWS", DefaultMaxRows)
 )
 
 // MaxRows is the most rows (or list items, or joined output rows) a single
 // drop will accept before failing fast. Operators with genuinely larger
-// batches raise it via the HAZYFLOW_MAX_ROWS environment variable; a value
+// batches raise it via the DAZYFLOW_MAX_ROWS environment variable; a value
 // that isn't a positive integer is ignored.
 func MaxRows() int {
 	mu.RLock()

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // TestGraphTimeout_AutoCancels submits a run with a very short
@@ -85,7 +85,7 @@ func TestGraphTimeout_NoTimeoutLeftAlone(t *testing.T) {
 }
 
 // TestGraphTimeout_CeilingApplies verifies the operator ceiling
-// (HAZYFLOW_MAX_GRAPH_TIMEOUT) becomes the de-facto cap when a graph
+// (DAZYFLOW_MAX_GRAPH_TIMEOUT) becomes the de-facto cap when a graph
 // declares no TimeoutSeconds of its own.
 func TestGraphTimeout_CeilingApplies(t *testing.T) {
 	h := newVisibilityHarness(t)

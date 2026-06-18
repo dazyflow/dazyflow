@@ -9,13 +9,13 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
-	"git.sr.ht/~klahr/hazyflow/engine/jobstore"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/engine/jobstore"
 )
 
 func TestHMACApprovalSigner_DeterministicAndVerifies(t *testing.T) {
-	s := &HMACApprovalSigner{BaseURL: "https://hzd", Secret: []byte("topsecret")}
+	s := &HMACApprovalSigner{BaseURL: "https://dzd", Secret: []byte("topsecret")}
 	url1 := s.SignApprovalURL("run-1", "node-A")
 	if !strings.Contains(url1, "/approve/run-1/node-A?exp=") ||
 		!strings.Contains(url1, "&token=") {
@@ -48,8 +48,8 @@ func TestHMACApprovalSigner_DeterministicAndVerifies(t *testing.T) {
 }
 
 func TestHMACApprovalSigner_DifferentSecretsProduceDifferentTokens(t *testing.T) {
-	s1 := &HMACApprovalSigner{BaseURL: "https://hzd", Secret: []byte("aaa")}
-	s2 := &HMACApprovalSigner{BaseURL: "https://hzd", Secret: []byte("bbb")}
+	s1 := &HMACApprovalSigner{BaseURL: "https://dzd", Secret: []byte("aaa")}
+	s2 := &HMACApprovalSigner{BaseURL: "https://dzd", Secret: []byte("bbb")}
 	exp := time.Now().Add(time.Hour).Unix()
 	if s1.computeToken("r", "n", exp) == s2.computeToken("r", "n", exp) {
 		t.Error("two different secrets produced the same token")

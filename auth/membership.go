@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // Membership is one (user, tenant) pair: a person's access to an

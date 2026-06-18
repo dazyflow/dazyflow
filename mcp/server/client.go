@@ -12,23 +12,23 @@ import (
 	"time"
 )
 
-// HazydClient is a thin HTTP client over the hzd /api/v1 gateway. It
+// DazydClient is a thin HTTP client over the dzd /api/v1 gateway. It
 // is intentionally minimal — the MCP tools that wrap it do all the
 // shape massaging; the client just signs requests and parses
 // responses.
 //
-// Auth is bearer-token, supplied via $HAZYFLOW_API_KEY in the MCP
+// Auth is bearer-token, supplied via $DAZYFLOW_API_KEY in the MCP
 // client config. The token is never logged.
-type HazydClient struct {
+type DazydClient struct {
 	BaseURL string
 	Token   string
 	HTTP    *http.Client
 }
 
-// NewHazydClient builds a client against baseURL with token, using a
+// NewDazydClient builds a client against baseURL with token, using a
 // 30s default HTTP timeout. Callers can override .HTTP for tests.
-func NewHazydClient(baseURL, token string) *HazydClient {
-	return &HazydClient{
+func NewDazydClient(baseURL, token string) *DazydClient {
+	return &DazydClient{
 		BaseURL: strings.TrimRight(baseURL, "/"),
 		Token:   token,
 		HTTP:    &http.Client{Timeout: 30 * time.Second},
@@ -46,7 +46,7 @@ type Whoami struct {
 	Perms     []string `json:"permissions"`
 }
 
-func (c *HazydClient) Whoami(ctx context.Context) (Whoami, error) {
+func (c *DazydClient) Whoami(ctx context.Context) (Whoami, error) {
 	var w Whoami
 	if err := c.do(ctx, http.MethodGet, "/me", nil, &w); err != nil {
 		return Whoami{}, err
@@ -58,7 +58,7 @@ func (c *HazydClient) Whoami(ctx context.Context) (Whoami, error) {
 // header, encodes JSON bodies, surfaces non-2xx as an httpError so
 // tools can map them to ToolCallResult.IsError without re-parsing
 // the message.
-func (c *HazydClient) do(ctx context.Context, method, path string, body, out any) error {
+func (c *DazydClient) do(ctx context.Context, method, path string, body, out any) error {
 	var rdr io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
@@ -82,7 +82,7 @@ func (c *HazydClient) do(ctx context.Context, method, path string, body, out any
 	}
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
-		return fmt.Errorf("hazyflow %s %s: %w", method, path, err)
+		return fmt.Errorf("dazyflow %s %s: %w", method, path, err)
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4*1024*1024))
@@ -209,19 +209,19 @@ func composeFlowID(tenant, workspace, id string) string {
 
 // Get reads a JSON resource at path. The path is appended to /api/v1
 // so callers pass "/graphs", not the full URL.
-func (c *HazydClient) Get(ctx context.Context, path string, out any) error {
+func (c *DazydClient) Get(ctx context.Context, path string, out any) error {
 	return c.do(ctx, http.MethodGet, path, nil, out)
 }
 
 // Post sends body and decodes into out (nil out skips decoding). If
 // the context carries an idempotency key (set via withIdempotencyKey),
 // it ships as `Idempotency-Key` so the gateway can dedupe LLM retries.
-func (c *HazydClient) Post(ctx context.Context, path string, body, out any) error {
+func (c *DazydClient) Post(ctx context.Context, path string, body, out any) error {
 	return c.do(ctx, http.MethodPost, path, body, out)
 }
 
 // Put replaces a resource (graph saves use this).
-func (c *HazydClient) Put(ctx context.Context, path string, body, out any) error {
+func (c *DazydClient) Put(ctx context.Context, path string, body, out any) error {
 	return c.do(ctx, http.MethodPut, path, body, out)
 }
 
@@ -229,14 +229,14 @@ func (c *HazydClient) Put(ctx context.Context, path string, body, out any) error
 // is generic `application/json`; servers that need the merge-patch
 // MIME type to differentiate behaviour should not rely on it. The
 // daemon's PATCH /me/flows/{id} handler accepts either.
-func (c *HazydClient) Patch(ctx context.Context, path string, body, out any) error {
+func (c *DazydClient) Patch(ctx context.Context, path string, body, out any) error {
 	return c.do(ctx, http.MethodPatch, path, body, out)
 }
 
 // Delete removes a resource. The daemon's DELETE endpoints today
 // return 204 with no body; passing nil for `out` is the expected
 // shape. Honors Idempotency-Key from context like the other writers.
-func (c *HazydClient) Delete(ctx context.Context, path string) error {
+func (c *DazydClient) Delete(ctx context.Context, path string) error {
 	return c.do(ctx, http.MethodDelete, path, nil, nil)
 }
 

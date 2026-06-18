@@ -1,4 +1,4 @@
-// Package mcp implements the Model Context Protocol client and the Hazy
+// Package mcp implements the Model Context Protocol client and the Dazy
 // Flow transport built on it. MCP is Anthropic's open protocol for
 // connecting LLM tools and resources; spec at
 // https://spec.modelcontextprotocol.io/.

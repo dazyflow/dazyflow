@@ -8,8 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	controlpb "git.sr.ht/~klahr/hazyflow/api/gen/control"
-	"git.sr.ht/~klahr/hazyflow/core"
+	controlpb "git.sr.ht/~klahr/dazyflow/api/gen/control"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 func graphCmd() *cobra.Command {
@@ -232,7 +232,7 @@ func graphRunCmd() *cobra.Command {
 	return cmd
 }
 
-// graphToPB / graphFromPB live here rather than in daemon so hzctl doesn't
+// graphToPB / graphFromPB live here rather than in daemon so dzctl doesn't
 // drag the whole server package into its binary.
 
 func graphToPB(g core.Graph) (*controlpb.Graph, error) {

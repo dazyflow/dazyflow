@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // scheduleEntry is one automatic-trigger schedule, as the Schedules page

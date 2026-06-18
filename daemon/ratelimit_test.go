@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// reloadTrustedProxiesForTest re-parses HAZYFLOW_TRUSTED_PROXIES into the
+// reloadTrustedProxiesForTest re-parses DAZYFLOW_TRUSTED_PROXIES into the
 // package-level allowlist, bypassing the production sync.Once so a test
 // can exercise clientIP with a specific config.
 func reloadTrustedProxiesForTest() {
@@ -16,7 +16,7 @@ func reloadTrustedProxiesForTest() {
 }
 
 func TestClientIP_NoTrustedProxiesUsesRemoteAddr(t *testing.T) {
-	t.Setenv("HAZYFLOW_TRUSTED_PROXIES", "")
+	t.Setenv("DAZYFLOW_TRUSTED_PROXIES", "")
 	reloadTrustedProxiesForTest()
 	r := &http.Request{RemoteAddr: "203.0.113.7:5555", Header: http.Header{}}
 	r.Header.Set("X-Forwarded-For", "1.1.1.1")
@@ -26,7 +26,7 @@ func TestClientIP_NoTrustedProxiesUsesRemoteAddr(t *testing.T) {
 }
 
 func TestClientIP_UntrustedPeerIgnoresXFF(t *testing.T) {
-	t.Setenv("HAZYFLOW_TRUSTED_PROXIES", "10.0.0.0/8")
+	t.Setenv("DAZYFLOW_TRUSTED_PROXIES", "10.0.0.0/8")
 	reloadTrustedProxiesForTest()
 	// Peer is NOT in the trusted range, so its XFF can't be believed.
 	r := &http.Request{RemoteAddr: "203.0.113.7:5555", Header: http.Header{}}
@@ -37,7 +37,7 @@ func TestClientIP_UntrustedPeerIgnoresXFF(t *testing.T) {
 }
 
 func TestClientIP_TrustedPeerHonorsXFF(t *testing.T) {
-	t.Setenv("HAZYFLOW_TRUSTED_PROXIES", "10.0.0.0/8")
+	t.Setenv("DAZYFLOW_TRUSTED_PROXIES", "10.0.0.0/8")
 	reloadTrustedProxiesForTest()
 	r := &http.Request{RemoteAddr: "10.1.2.3:443", Header: http.Header{}}
 	r.Header.Set("X-Forwarded-For", "198.51.100.9")
@@ -47,7 +47,7 @@ func TestClientIP_TrustedPeerHonorsXFF(t *testing.T) {
 }
 
 func TestClientIP_TrustedPeerSkipsTrustedHops(t *testing.T) {
-	t.Setenv("HAZYFLOW_TRUSTED_PROXIES", "10.0.0.0/8")
+	t.Setenv("DAZYFLOW_TRUSTED_PROXIES", "10.0.0.0/8")
 	reloadTrustedProxiesForTest()
 	// Chain: real client, then two of our own proxies. The rightmost
 	// non-trusted entry is the real client; client-injected prefixes

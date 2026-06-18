@@ -11,13 +11,13 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/auth"
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/daemon"
-	_ "git.sr.ht/~klahr/hazyflow/drops"
-	"git.sr.ht/~klahr/hazyflow/engine"
-	"git.sr.ht/~klahr/hazyflow/engine/jobstore"
-	"git.sr.ht/~klahr/hazyflow/workspace"
+	"git.sr.ht/~klahr/dazyflow/auth"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon"
+	_ "git.sr.ht/~klahr/dazyflow/drops"
+	"git.sr.ht/~klahr/dazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/engine/jobstore"
+	"git.sr.ht/~klahr/dazyflow/workspace"
 )
 
 // TestForEach_E2E_WebhookToIteration drives the full unlock end-to-end:
@@ -125,7 +125,7 @@ func TestForEach_E2E_PerItemHTTPWithTemplatedURL(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	// Build a full hzd-equivalent stack: workspace, job store, engine
+	// Build a full dzd-equivalent stack: workspace, job store, engine
 	// configured with the builtin secret provider, worker.
 	ks := auth.NewMemKeyStore()
 	wsStore, _ := workspace.OpenFS("")

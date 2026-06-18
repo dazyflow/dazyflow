@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // mkdirSub creates a subdirectory under root.
@@ -145,7 +145,7 @@ func TestExecuteShell_StartError(t *testing.T) {
 	res, _ := executeShell(t.Context(), core.Job{
 		ID:            "j7",
 		WorkspaceRoot: t.TempDir(),
-		Params:        map[string]any{"command": "hazyflow_no_such_binary_xyz"},
+		Params:        map[string]any{"command": "dazyflow_no_such_binary_xyz"},
 	}, nil)
 	if res.Status != core.StatusError || res.Error.Code != "start" {
 		t.Fatalf("res = %+v, want error/start", res)
@@ -198,17 +198,17 @@ func TestExecuteShell_PathInputOverridesParam(t *testing.T) {
 	}
 }
 
-func TestExecuteShell_ScrubsHazyflowEnv(t *testing.T) {
-	// The daemon's HAZYFLOW_* secrets must never reach the spawned command.
-	t.Setenv("HAZYFLOW_TEST_SECRET", "leak-me-please")
+func TestExecuteShell_ScrubsDazyflowEnv(t *testing.T) {
+	// The daemon's DAZYFLOW_* secrets must never reach the spawned command.
+	t.Setenv("DAZYFLOW_TEST_SECRET", "leak-me-please")
 	res, _ := executeShell(t.Context(), core.Job{
 		ID:            "j10",
 		WorkspaceRoot: t.TempDir(),
 		Params:        map[string]any{"command": "sh", "args": []any{"-c", "env"}},
 	}, nil)
 	out := stdoutOf(t, res)
-	if strings.Contains(out, "HAZYFLOW_TEST_SECRET") || strings.Contains(out, "leak-me-please") {
-		t.Errorf("HAZYFLOW_* secret leaked into command env:\n%s", out)
+	if strings.Contains(out, "DAZYFLOW_TEST_SECRET") || strings.Contains(out, "leak-me-please") {
+		t.Errorf("DAZYFLOW_* secret leaked into command env:\n%s", out)
 	}
 	// Sanity check: ordinary CI vars still pass through.
 	if !strings.Contains(out, "PATH=") {
@@ -280,23 +280,23 @@ func TestBoundedBuffer(t *testing.T) {
 }
 
 func TestScrubbedEnv(t *testing.T) {
-	t.Setenv("HAZYFLOW_MASTER_KEY", "topsecret")
-	t.Setenv("HAZYFLOW_PG_DSN", "postgres://...")
-	t.Setenv("NOT_HAZYFLOW", "keep-me")
+	t.Setenv("DAZYFLOW_MASTER_KEY", "topsecret")
+	t.Setenv("DAZYFLOW_PG_DSN", "postgres://...")
+	t.Setenv("NOT_DAZYFLOW", "keep-me")
 	env := scrubbedEnv()
 	for _, kv := range env {
-		if strings.HasPrefix(kv, "HAZYFLOW_") {
+		if strings.HasPrefix(kv, "DAZYFLOW_") {
 			t.Errorf("scrubbedEnv leaked %q", kv)
 		}
 	}
 	var keptNonSecret bool
 	for _, kv := range env {
-		if kv == "NOT_HAZYFLOW=keep-me" {
+		if kv == "NOT_DAZYFLOW=keep-me" {
 			keptNonSecret = true
 		}
 	}
 	if !keptNonSecret {
-		t.Error("scrubbedEnv dropped a non-HAZYFLOW var")
+		t.Error("scrubbedEnv dropped a non-DAZYFLOW var")
 	}
 }
 
@@ -318,7 +318,7 @@ func TestShellEnabled(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.val, func(t *testing.T) {
-			t.Setenv("HAZYFLOW_ENABLE_SHELL", c.val)
+			t.Setenv("DAZYFLOW_ENABLE_SHELL", c.val)
 			if got := shellEnabled(); got != c.want {
 				t.Errorf("shellEnabled() with %q = %v, want %v", c.val, got, c.want)
 			}

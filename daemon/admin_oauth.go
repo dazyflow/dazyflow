@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // Admin OAuth provider configuration — paste-client-credentials-in-
@@ -84,7 +84,7 @@ func (h *HTTPGateway) listAdminOAuthProviders(rw http.ResponseWriter, r *http.Re
 			}
 		}
 		// HasEnv is "configured but no persisted creds" — i.e. the live
-		// values came from HAZYFLOW_OAUTH_<NAME>_CLIENT_ID env vars at
+		// values came from DAZYFLOW_OAUTH_<NAME>_CLIENT_ID env vars at
 		// boot. Useful so the admin UI can say "currently from env;
 		// saving here will override".
 		row.HasEnv = row.Configured && !row.HasPersisted

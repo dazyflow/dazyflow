@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Multi-node HA load test: run TWO real hzd processes against ONE Postgres
+# Multi-node HA load test: run TWO real dzd processes against ONE Postgres
 # and assert the Phase-2 invariants end-to-end:
 #
 #   1. No double-fires. A poll trigger scheduled every 1s is fired ~once
@@ -21,21 +21,21 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 PG_PORT="${PG_PORT:-55432}"
-PG_CONTAINER="hzd-ha-loadtest-pg"
-PG_DB="hazyflow_test"
+PG_CONTAINER="dzd-ha-loadtest-pg"
+PG_DB="dazyflow_test"
 DSN="postgres://postgres:test@localhost:${PG_PORT}/${PG_DB}"
 GRAPH_ID="ha-poll"
 TENANT="loadtest"
 
-WORKDIR="$(mktemp -d /tmp/hzd-ha-XXXXXX)"
-# Both nodes share HAZYFLOW_DATA_DIR so the workspace (graphs the
+WORKDIR="$(mktemp -d /tmp/dzd-ha-XXXXXX)"
+# Both nodes share DAZYFLOW_DATA_DIR so the workspace (graphs the
 # scheduler reads from) is visible to whichever one wins leadership.
 # Sandboxes overlap by design — this mirrors HA production where a
 # shared filesystem (NFS / EFS) lives behind every replica.
 DATA_DIR="${WORKDIR}/data"
 WS_DIR="${DATA_DIR}/workspace"
-LOG_A="${WORKDIR}/hzd-a.log"
-LOG_B="${WORKDIR}/hzd-b.log"
+LOG_A="${WORKDIR}/dzd-a.log"
+LOG_B="${WORKDIR}/dzd-b.log"
 PID_A=""
 PID_B=""
 
@@ -82,8 +82,8 @@ done
 docker exec "$PG_CONTAINER" pg_isready -U postgres >/dev/null 2>&1 || fail "postgres never came up"
 
 # --- 2. Build --------------------------------------------------------------
-say "building hzd + seed helper"
-go build -o "${WORKDIR}/hzd" ./cmd/hzd
+say "building dzd + seed helper"
+go build -o "${WORKDIR}/dzd" ./cmd/dzd
 go build -o "${WORKDIR}/seed" ./scripts/ha_loadtest
 
 # --- 3. Seed the poll graph ------------------------------------------------
@@ -91,10 +91,10 @@ say "seeding node-less poll graph (every 1s) into shared workspace"
 "${WORKDIR}/seed" --base "$WS_DIR" --tenant "$TENANT" --graph "$GRAPH_ID" --interval 1
 
 start_hzd() { # args: name logfile grpc-port
-	HAZYFLOW_POSTGRES_DSN="$DSN" \
-	HAZYFLOW_DATA_DIR="$DATA_DIR" \
-	HAZYFLOW_LISTEN="127.0.0.1:$3" \
-	"${WORKDIR}/hzd" >"$2" 2>&1 &
+	DAZYFLOW_POSTGRES_DSN="$DSN" \
+	DAZYFLOW_DATA_DIR="$DATA_DIR" \
+	DAZYFLOW_LISTEN="127.0.0.1:$3" \
+	"${WORKDIR}/dzd" >"$2" 2>&1 &
 }
 
 # --- 4. Start both nodes ----------------------------------------------------

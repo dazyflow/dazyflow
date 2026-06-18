@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // AWS / GCP variants of the BYO secret-manager config endpoints

@@ -1,10 +1,10 @@
 syntax = "proto3";
 
-package hazyflow.control.v1;
+package dazyflow.control.v1;
 
-option go_package = "git.sr.ht/~klahr/hazyflow/api/gen/control;controlpb";
+option go_package = "git.sr.ht/~klahr/dazyflow/api/gen/control;controlpb";
 
-// The control plane is what hzctl (and any future web UI) speaks to hzd
+// The control plane is what dzctl (and any future web UI) speaks to dzd
 // for graph/job/module/workspace management. Authentication is per-RPC
 // via "authorization: Bearer <token>" gRPC metadata, validated by the
 // daemon's auth.Authenticator.

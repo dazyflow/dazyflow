@@ -36,4 +36,4 @@ export const useActiveFlow = () => useContext(ActiveFlowContext);
 // FLOWS_CHANGED_EVENT fires on window after a flow's name/icon/visibility
 // is persisted, so the sidebar flow list refetches and reflects the
 // change without needing a navigation.
-export const FLOWS_CHANGED_EVENT = "hazyflow:flows-changed";
+export const FLOWS_CHANGED_EVENT = "dazyflow:flows-changed";

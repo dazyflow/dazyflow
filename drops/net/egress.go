@@ -9,7 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // Egress allowlist for http_request. The SSRF guard (ssrfGuard) blocks
@@ -109,7 +109,7 @@ func compileEgress(entries []string) (*egressPolicy, error) {
 // disables the SSRF guard, so honoring it from an untrusted flow lets any
 // tenant reach cloud metadata (169.254.169.254), localhost, and internal
 // services. It is therefore ignored unless the operator opts in via
-// SetAllowPrivateEgress (wired from HAZYFLOW_ALLOW_PRIVATE_EGRESS). Default
+// SetAllowPrivateEgress (wired from DAZYFLOW_ALLOW_PRIVATE_EGRESS). Default
 // off: the param has no effect and the SSRF guard always applies.
 var allowPrivateEgress atomic.Bool
 

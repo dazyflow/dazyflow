@@ -7,15 +7,15 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/daemon"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon"
+	"git.sr.ht/~klahr/dazyflow/engine"
 
-	controlpb "git.sr.ht/~klahr/hazyflow/api/gen/control"
+	controlpb "git.sr.ht/~klahr/dazyflow/api/gen/control"
 )
 
 // seedLoggedRun stores a graph-run record and swaps the harness onto a
-// RecordingBus + log store, mirroring hzd's production wiring.
+// RecordingBus + log store, mirroring dzd's production wiring.
 func seedLoggedRun(t *testing.T, h *harness, runID, tenant string) *daemon.MemRunLogStore {
 	t.Helper()
 	store := daemon.NewMemRunLogStore()

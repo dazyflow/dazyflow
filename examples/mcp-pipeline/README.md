@@ -1,18 +1,18 @@
-# mcp-pipeline — Hazyflow ↔ MCP integration demo
+# mcp-pipeline — Dazyflow ↔ MCP integration demo
 
-Hazyflow speaks the [Model Context Protocol](https://spec.modelcontextprotocol.io/)
+Dazyflow speaks the [Model Context Protocol](https://spec.modelcontextprotocol.io/)
 as a client. Any MCP stdio server — the npm-published
 `@modelcontextprotocol/server-*` packages, custom Python servers built
 with `mcp.server.fastmcp`, your in-house Go binaries — can be registered
-at hzd startup. Its tools then appear as Hazyflow modules named
+at dzd startup. Its tools then appear as Dazyflow modules named
 `mcp:<server>:<tool>` and slot into graphs alongside the native modules.
 
 ## What this demo proves
 
 | Capability | Where |
 |---|---|
-| **Subprocess MCP server lifecycle** | hzd spawns `./server`, runs the JSON-RPC handshake, lists tools, keeps the connection alive across graph runs |
-| **Tool → manifest synthesis** | The server's `lookup_user` and `categorize` tools appear in `hzctl module list` |
+| **Subprocess MCP server lifecycle** | dzd spawns `./server`, runs the JSON-RPC handshake, lists tools, keeps the connection alive across graph runs |
+| **Tool → manifest synthesis** | The server's `lookup_user` and `categorize` tools appear in `dzctl module list` |
 | **Per-tool node** | The graph references `mcp:ap-demo:lookup_user` like any other module |
 | **Tool result → downstream nodes** | `lookup_user` returns JSON; `branch` parses it and routes on `tier == "premium"` |
 | **Mixed native + MCP graph** | The same graph uses `mcp:*` for the tool call and `file_write` (native) for archival |
@@ -21,7 +21,7 @@ at hzd startup. Its tools then appear as Hazyflow modules named
 ## Topology
 
 ```
-   ┌────────────────────────────────── hzd ────────────────────────────────┐
+   ┌────────────────────────────────── dzd ────────────────────────────────┐
    │                                                                       │
    │   ┌──────────────────────────┐                                       │
    │   │  mcp:ap-demo:lookup_user │ ──→ ┌────────┐ → ┌──────────────────┐│
@@ -63,7 +63,7 @@ Drop in any stdio MCP server you have on PATH. Filesystem example:
 For a real one:
 
 ```
-hzd \
+dzd \
   --mcp="fs=npx -y @modelcontextprotocol/server-filesystem /tmp"
 ```
 
@@ -74,7 +74,7 @@ tools depend on which MCP server you wire up.
 Multiple servers (semicolon-separated, since args contain spaces):
 
 ```
-hzd --mcp="fs=npx -y @modelcontextprotocol/server-filesystem /tmp;\
+dzd --mcp="fs=npx -y @modelcontextprotocol/server-filesystem /tmp;\
           gh=npx -y @modelcontextprotocol/server-github;\
           slack=python -m mcp_server_slack"
 ```
@@ -83,7 +83,7 @@ hzd --mcp="fs=npx -y @modelcontextprotocol/server-filesystem /tmp;\
 
 The reason MCP belongs in a workflow engine is the same reason a Zapier
 clone needs lots of integrations: workflows derive their value from
-*what they can touch*. With MCP support, Hazyflow doesn't need a
+*what they can touch*. With MCP support, Dazyflow doesn't need a
 hand-written module per SaaS. Every MCP server published — there are
 hundreds now and the number grows weekly — becomes a usable module.
 
@@ -91,7 +91,7 @@ Compared to the alternative ("AI agent node that wraps an LLM with tool
 use baked in"), MCP keeps the *graph* as the locus of agent-shape
 logic:
 
-- Every tool call is a separate node, visible in `hzctl job list`
+- Every tool call is a separate node, visible in `dzctl job list`
 - Retry / skip / fallback / branch policies apply per tool call
 - The audit trail records exactly which tools fired with which args
 - Cost / budget control can be applied per node, not per opaque agent
@@ -106,7 +106,7 @@ logic:
   Connectors, Cloudflare Workers MCP) become common.
 - **Notifications + progress.** MCP supports server-initiated progress
   notifications; we drop them on the floor today. Worth wiring into
-  Hazyflow's progress channel.
+  Dazyflow's progress channel.
 - **Resource and prompt access.** Only `tools/*` is implemented. MCP
   also exposes `resources/list`, `resources/read`, `prompts/get` — all
   useful but lower-priority than tools.

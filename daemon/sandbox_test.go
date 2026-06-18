@@ -8,13 +8,13 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/auth"
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/daemon"
-	"git.sr.ht/~klahr/hazyflow/engine"
-	"git.sr.ht/~klahr/hazyflow/engine/jobstore"
-	_ "git.sr.ht/~klahr/hazyflow/drops"
-	"git.sr.ht/~klahr/hazyflow/workspace"
+	"git.sr.ht/~klahr/dazyflow/auth"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon"
+	"git.sr.ht/~klahr/dazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/engine/jobstore"
+	_ "git.sr.ht/~klahr/dazyflow/drops"
+	"git.sr.ht/~klahr/dazyflow/workspace"
 )
 
 func TestFSSandbox_PerWorkspaceIsolation(t *testing.T) {
@@ -65,7 +65,7 @@ func TestFSSandbox_RejectsUnsafeIdentifiers(t *testing.T) {
 	}
 }
 
-// TestSandbox_E2E_FileReadWrite drives the whole stack: hzd-style service +
+// TestSandbox_E2E_FileReadWrite drives the whole stack: dzd-style service +
 // worker + FSSandbox + file_read + file_write. Proves the wiring works.
 func TestSandbox_E2E_FileReadWrite(t *testing.T) {
 	base := t.TempDir()

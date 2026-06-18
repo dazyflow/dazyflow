@@ -79,7 +79,7 @@ func validateTOTPStep(code, secret string, now time.Time) (int64, bool) {
 //	disable:  DisableTOTP
 //
 // The secret is encrypted at rest with AES-256-GCM using a key from the
-// HAZYFLOW_TOTP_KEY env var. Losing the key forces every enrolled user
+// DAZYFLOW_TOTP_KEY env var. Losing the key forces every enrolled user
 // to re-enrol — operators should treat it like a database credential.
 
 // TOTPChallengeTTL bounds the bridge token between the password step and
@@ -91,7 +91,7 @@ const TOTPChallengeTTL = 5 * time.Minute
 // TOTPIssuer is the label the authenticator app shows next to the
 // account row. Matches the product name; authenticator apps merge
 // entries by (issuer, account) anyway, so it isn't configurable.
-const TOTPIssuer = "Hazyflow"
+const TOTPIssuer = "Dazyflow"
 
 // totpRecoveryCodeCount is how many single-use recovery codes are minted
 // per enrolment. Ten balances "enough for a few lockouts" against "few
@@ -103,13 +103,13 @@ const totpRecoveryCodeCount = 10
 const totpRecoveryCodeAlphabet = "abcdefghijkmnpqrstuvwxyz23456789"
 
 // totpEnvKey is the env var holding the base64-encoded 32-byte AES key.
-const totpEnvKey = "HAZYFLOW_TOTP_KEY"
+const totpEnvKey = "DAZYFLOW_TOTP_KEY"
 
 // Errors returned by the TOTP layer. Handlers map these to HTTP statuses
 // + machine-readable error codes.
 var (
-	ErrTOTPKeyMissing      = errors.New("HAZYFLOW_TOTP_KEY is not configured")
-	ErrTOTPKeyMalformed    = errors.New("HAZYFLOW_TOTP_KEY is malformed (need 32 bytes base64)")
+	ErrTOTPKeyMissing      = errors.New("DAZYFLOW_TOTP_KEY is not configured")
+	ErrTOTPKeyMalformed    = errors.New("DAZYFLOW_TOTP_KEY is malformed (need 32 bytes base64)")
 	ErrTOTPNotEnrolled     = errors.New("totp not enrolled")
 	ErrTOTPAlreadyEnrolled = errors.New("totp already enrolled")
 	ErrTOTPInvalid         = errors.New("invalid totp code")
@@ -119,7 +119,7 @@ var (
 	ErrTOTPSecretCorrupt   = errors.New("totp secret could not be decrypted")
 )
 
-// LoadTOTPKey decodes HAZYFLOW_TOTP_KEY into a 32-byte AES key. Called
+// LoadTOTPKey decodes DAZYFLOW_TOTP_KEY into a 32-byte AES key. Called
 // once at server boot — any misconfiguration fails fast with a clear
 // error rather than ambushing the first user trying to enrol. Returns
 // ErrTOTPKeyMissing when the env var is unset; the daemon treats that as

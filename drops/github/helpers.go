@@ -17,19 +17,17 @@
 package github
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"sync"
-	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
-	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/oauthtok"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 )
 
 // maxResponseBytes caps how much of an API response we buffer, so a
@@ -37,43 +35,15 @@ import (
 // OOM the daemon by streaming an unbounded body.
 const maxResponseBytes = 64 << 20 // 64 MiB
 
-// TokenLookup matches the per-connector pattern. GitHub's OAuth
-// app is registered as "github" in hzd's OAuth provider registry.
-type TokenLookup func(ctx context.Context, account string) (string, error)
+// tokenHook holds the daemon's per-account GitHub OAuth lookup ("github" in
+// dzd's provider registry) plus the resolve sequence shared with the other
+// OAuth connectors (drops/internal/oauthtok).
+var tokenHook = oauthtok.New("GitHub", "github", "GitHub")
 
-var (
-	tokenLookupMu sync.RWMutex
-	tokenLookup   TokenLookup
-)
-
-func SetTokenLookup(fn TokenLookup) {
-	tokenLookupMu.Lock()
-	defer tokenLookupMu.Unlock()
-	tokenLookup = fn
-}
+func SetTokenLookup(fn oauthtok.Lookup) { tokenHook.Set(fn) }
 
 func resolveToken(ctx context.Context, job core.Job) (string, error) {
-	if t, _ := params.StringOpt(job.Params, "token"); t != "" {
-		return t, nil
-	}
-	account, _ := params.StringOpt(job.Params, "account")
-	if account == "" {
-		account = "default"
-	}
-	tokenLookupMu.RLock()
-	fn := tokenLookup
-	tokenLookupMu.RUnlock()
-	if fn == nil {
-		return "", fmt.Errorf("no GitHub token: pass `token` directly or connect a GitHub account via /api/v1/oauth/github/authorize")
-	}
-	tok, err := fn(ctx, account)
-	if err != nil {
-		return "", fmt.Errorf("lookup token for account %q: %w", account, err)
-	}
-	if tok == "" {
-		return "", fmt.Errorf("GitHub account %q is not connected", account)
-	}
-	return tok, nil
+	return tokenHook.Resolve(ctx, job)
 }
 
 var (
@@ -96,7 +66,6 @@ func currentHTTPBase() string {
 	defer httpBaseMu.RUnlock()
 	return httpBase
 }
-
 
 // gitHubErrorEnvelope mirrors GitHub's REST v3 error shape. Most
 // errors include a message + documentation_url; some include a
@@ -147,48 +116,24 @@ func githubDoIdemH(ctx context.Context, method, url, token string, body []byte, 
 	if timeoutMS <= 0 {
 		timeoutMS = 15000
 	}
-	reqCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMS)*time.Millisecond)
-	defer cancel()
-
-	var rdr io.Reader
-	if body != nil {
-		rdr = bytes.NewReader(body)
+	headers := map[string]string{
+		"Authorization":        "Bearer " + token,
+		"Accept":               "application/vnd.github+json",
+		"X-GitHub-Api-Version": "2022-11-28",
 	}
-	req, err := http.NewRequestWithContext(reqCtx, method, url, rdr)
-	if err != nil {
-		return 0, nil, nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	if idemKey != "" {
-		req.Header.Set("Idempotency-Key", idemKey)
+		headers["Idempotency-Key"] = idemKey
 	}
 	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
+		headers["Content-Type"] = "application/json"
 	}
 
 	// The request URL is guarded on every call — including pagination's
-	// rel="next" links, which come back from the API response and are
-	// followed verbatim. The SSRF client blocks loopback/private/link-local
-	// targets and the egress allowlist (when set) bounds which public hosts
-	// the bearer token may be sent to.
-	if err := hfnet.EgressAllowedFor(ctx, url); err != nil {
-		return 0, nil, nil, err
-	}
-	resp, err := hfnet.SafeHTTPClient(time.Duration(timeoutMS)*time.Millisecond, hfnet.PrivateEgressAllowed()).Do(req)
-	if err != nil {
-		return 0, nil, nil, err
-	}
-	defer resp.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
-	if err != nil {
-		return resp.StatusCode, nil, resp.Header, err
-	}
-	if int64(len(raw)) > maxResponseBytes {
-		return resp.StatusCode, nil, resp.Header, fmt.Errorf("github response exceeds %d bytes", maxResponseBytes)
-	}
-	return resp.StatusCode, raw, resp.Header, nil
+	// rel="next" links, which come back from the API response and are followed
+	// verbatim. net.Do's SSRF client blocks loopback/private/link-local targets
+	// and the egress allowlist (when set) bounds which public hosts the bearer
+	// token may be sent to.
+	return hfnet.Do(ctx, method, url, headers, body, timeoutMS, maxResponseBytes)
 }
 
 // parseNextLink extracts the rel="next" URL from a GitHub Link header,
@@ -222,7 +167,6 @@ func parseNextLink(header string) string {
 	}
 	return ""
 }
-
 
 // resolveBody figures out the issue/comment body: params.body, overridden
 // by the 'body' input port. A string passes through; a structured value

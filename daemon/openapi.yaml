@@ -1,6 +1,6 @@
 openapi: 3.1.0
 
-# Hazyflow REST API — single source of truth for the gateway.
+# Dazyflow REST API — single source of truth for the gateway.
 #
 # This spec is intentionally LLM-friendly: every resource has a one-
 # sentence summary, every error response uses the same envelope, every
@@ -8,11 +8,11 @@ openapi: 3.1.0
 # See API_DESIGN.md for the design rationale.
 
 info:
-  title: Hazyflow
+  title: Dazyflow
   version: "1.0.0"
   description: |
-    The Hazyflow gateway. One surface for humans, scripts, and LLM
-    agents — the web UI, the `hz-mcp` MCP server, and any third-party
+    The Dazyflow gateway. One surface for humans, scripts, and LLM
+    agents — the web UI, the `dz-mcp` MCP server, and any third-party
     integrations all talk to these endpoints.
 
     Auth is bearer-token. Session cookies are also accepted for
@@ -25,14 +25,14 @@ info:
         integrations and drops, sized to fit in one LLM context.
 
   contact:
-    name: Hazyflow
-    url: https://hazy.flow
+    name: Dazyflow
+    url: https://dazy.flow
   license:
     name: Proprietary
     identifier: LicenseRef-Proprietary
 
 servers:
-  - url: https://api.hazy.flow
+  - url: https://api.dazy.flow
     description: Production
   - url: /
     description: Same-origin (e.g. local dev gateway, self-hosted deployments)
@@ -1026,7 +1026,7 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
-      bearerFormat: hzk_*
+      bearerFormat: dzk_*
 
   # ---------- Common parameters --------------------------------------
 
@@ -1160,7 +1160,7 @@ components:
       type: object
       required: [service, version, links]
       properties:
-        service: { type: string, example: hazyflow }
+        service: { type: string, example: dazyflow }
         version: { type: string, example: 1.0.0 }
         auth:
           type: object

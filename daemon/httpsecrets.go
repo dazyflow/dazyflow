@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // CRUD endpoints for the built-in encrypted secret store. The shape

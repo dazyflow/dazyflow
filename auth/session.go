@@ -10,13 +10,13 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // SessionTokenPrefix marks credentials as session tokens (vs API keys,
 // which use apiKeyPrefix). Cookies and bearer headers carry the prefix
 // + opaque secret format so a single Authenticate path covers both.
-const SessionTokenPrefix = "hzs_"
+const SessionTokenPrefix = "dzs_"
 
 // SessionLookupKey maps a session token to the key its record is stored
 // under. Sessions are stored keyed by the SHA-256 of the token, never the

@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import type { IssuedAPIKey } from "../types";
 
 // RevealSecretModal renders the one-time view of a freshly-minted API
-// key's secret. Once closed, the secret is gone — Hazyflow keeps only
+// key's secret. Once closed, the secret is gone — Dazyflow keeps only
 // a salted hash. Used by both the API keys page and the Users page.
 export function RevealSecretModal({
   issued,

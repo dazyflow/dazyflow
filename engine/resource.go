@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // templateErrCode classifies a resolveTemplatesCollecting failure for the

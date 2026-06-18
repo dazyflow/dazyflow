@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 func resolveCtx(tenant, flow string) context.Context {

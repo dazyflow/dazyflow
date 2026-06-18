@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/mcp/server"
+	"git.sr.ht/~klahr/dazyflow/mcp/server"
 )
 
 // runServer wires Server.Serve over an in-memory pipe pair so tests

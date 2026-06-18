@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // CancelGraphRun aborts an in-flight graph run gracefully. Every

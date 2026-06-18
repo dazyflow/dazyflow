@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 const (
@@ -297,7 +297,7 @@ func (h *StripeEventsHandler) fanoutSeed(ctx context.Context, tenant, moduleID s
 		return
 	}
 	principal := core.Principal{
-		Subject: "hazyflow-stripe-events",
+		Subject: "dazyflow-stripe-events",
 		Tenant:  tenant,
 		Roles: []core.Role{{
 			Name:        "stripe-events",

@@ -7,13 +7,13 @@ import (
 	"sort"
 	"strings"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // This file powers the resource pickers — the dropdowns that let a user pick
 // an entity ("Living Room Light") or a service ("Light: Turn on") instead of
 // typing an opaque id. The daemon registers these as ResourceListers
-// (homeassistant:entities / homeassistant:services); cmd/hzd resolves the
+// (homeassistant:entities / homeassistant:services); cmd/dzd resolves the
 // tenant's connection (base_url + token) into the job params, the same way
 // the Stripe pickers resolve STRIPE_API_KEY. See [[stripe-resource-picker-recipe]].
 

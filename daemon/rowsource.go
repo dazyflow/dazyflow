@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // A "row source" is a node that emits an array of record objects — the
@@ -41,7 +41,7 @@ func RegisterRowSource(module, listPort string, fn RowFieldFunc) {
 	rowSources[module] = rowSource{listPort: listPort, fields: fn}
 }
 
-// googleFormFieldFetcher, when set by cmd/hzd (which can reach the gform
+// googleFormFieldFetcher, when set by cmd/dzd (which can reach the gform
 // drop), fetches a Google Form's live question-title fields. It's injected
 // rather than imported so the daemon package stays free of connector
 // dependencies — the same looseness the OAuth token + resource hooks use.
@@ -59,7 +59,7 @@ func SetGoogleFormFieldFetcher(fn func(ctx context.Context, node core.Node) ([]s
 // isn't wired or fails.
 var googleFormStructuralKeys = []string{"responseId", "submittedTime"}
 
-// sheetsFieldFetcher, when set by cmd/hzd, fetches a Google Sheet's live
+// sheetsFieldFetcher, when set by cmd/dzd, fetches a Google Sheet's live
 // header row so sheets_read_range can act as a row source. Injected for the
 // same reason as the Forms fetcher: daemon stays free of connector imports.
 var sheetsFieldFetcher func(ctx context.Context, node core.Node) ([]string, error)

@@ -13,9 +13,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
-	_ "git.sr.ht/~klahr/hazyflow/drops" // register every native drop
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/engine"
+	_ "git.sr.ht/~klahr/dazyflow/drops" // register every native drop
 )
 
 // combinedManifests is the full shipped catalog the app exposes. Every drop —

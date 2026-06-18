@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 func TestNumber_EmitsParam(t *testing.T) {

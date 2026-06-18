@@ -9,13 +9,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Gated on HAZYFLOW_TEST_DB. Uses a unique key per run so concurrent
+// Gated on DAZYFLOW_TEST_DB. Uses a unique key per run so concurrent
 // test packages don't fight over the same advisory lock.
 func leaderPool(t *testing.T) (*pgxpool.Pool, context.Context) {
 	t.Helper()
-	url := os.Getenv("HAZYFLOW_TEST_DB")
+	url := os.Getenv("DAZYFLOW_TEST_DB")
 	if url == "" {
-		t.Skip("set HAZYFLOW_TEST_DB to run leader-election tests")
+		t.Skip("set DAZYFLOW_TEST_DB to run leader-election tests")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	pool, err := pgxpool.New(ctx, url)

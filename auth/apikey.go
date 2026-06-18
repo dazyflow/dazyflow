@@ -12,12 +12,12 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
-// API key wire format: "hzk_<key-id>_<secret-hex>".
+// API key wire format: "dzk_<key-id>_<secret-hex>".
 // We hash the secret with SHA-256 + per-key salt before storing.
-const apiKeyPrefix = "hzk_"
+const apiKeyPrefix = "dzk_"
 
 // APIKey is the on-disk record. Hashed secret only — the cleartext is
 // returned exactly once at issue time and never persisted.
@@ -141,7 +141,7 @@ func IssueAPIKey(store interface{ PutKey(context.Context, APIKey) error }, ctx c
 }
 
 // validateKeyID guards a caller-supplied key ID. The cleartext wire
-// format is hzk_<id>_<secret>, and Authenticate recovers the id with
+// format is dzk_<id>_<secret>, and Authenticate recovers the id with
 // strings.SplitN(rest, "_", 2) — so an id containing "_" would parse
 // back as a different (id, secret) split and the key could never
 // authenticate. Constrain to a charset that round-trips cleanly rather

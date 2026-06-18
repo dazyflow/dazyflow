@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 func init() {
@@ -16,7 +16,7 @@ func init() {
 			Label:       "Stripe",
 			Subtitle:    "On subscription canceled",
 			Summary:     "Trigger that fires when a Stripe subscription ends — churn alerts, offboarding, win-back flows.",
-			Description: "Starts the flow when a subscription is canceled in your Stripe account (a customer.subscription.deleted webhook event — fires when the subscription actually ends, so a scheduled at-period-end cancel triggers at the period's end). Setup is the same endpoint as the payment trigger: point a Stripe webhook at https://<your-hazyflow-host>/api/v1/events/stripe/<tenant>, subscribe it to customer.subscription.deleted, and save the endpoint's signing secret (whsec_…) as a secret named STRIPE_WEBHOOK_SECRET. Outputs the subscription and customer ids, the plan label and when it ended — wire the customer id into Search customers for the email.",
+			Description: "Starts the flow when a subscription is canceled in your Stripe account (a customer.subscription.deleted webhook event — fires when the subscription actually ends, so a scheduled at-period-end cancel triggers at the period's end). Setup is the same endpoint as the payment trigger: point a Stripe webhook at https://<your-dazyflow-host>/api/v1/events/stripe/<tenant>, subscribe it to customer.subscription.deleted, and save the endpoint's signing secret (whsec_…) as a secret named STRIPE_WEBHOOK_SECRET. Outputs the subscription and customer ids, the plan label and when it ended — wire the customer id into Search customers for the email.",
 			Integration: "Stripe",
 			Category:    "trigger",
 			Icon:        "credit-card",

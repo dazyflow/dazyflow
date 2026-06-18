@@ -13,12 +13,12 @@ import (
 	"strconv"
 	"strings"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/mailmsg"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
-	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
-	"git.sr.ht/~klahr/hazyflow/engine"
-	"git.sr.ht/~klahr/hazyflow/internal/smtputil"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/mailmsg"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	"git.sr.ht/~klahr/dazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/internal/smtputil"
 )
 
 func init() {
@@ -318,7 +318,7 @@ func buildMessage(from string, to, cc []string, subject, body, bodyContentType s
 		return []byte(sb.String())
 	}
 
-	boundary := "hazyflow-" + mailmsg.RandomHex(16)
+	boundary := "dazyflow-" + mailmsg.RandomHex(16)
 	sb.WriteString(`Content-Type: multipart/mixed; boundary="` + boundary + `"` + "\r\n\r\n")
 	sb.WriteString("--" + boundary + "\r\n")
 	sb.WriteString("Content-Type: " + bodyContentType + "\r\n")

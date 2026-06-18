@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 
-	_ "git.sr.ht/~klahr/hazyflow/drops" // register real manifests (sheets_*, webhook_input)
+	_ "git.sr.ht/~klahr/dazyflow/drops" // register real manifests (sheets_*, webhook_input)
 )
 
 // refTokens flattens a references response into a kind→set-of-tokens map

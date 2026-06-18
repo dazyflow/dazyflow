@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 // Primitive comparison drops — the "super basic" split of the Compare node,

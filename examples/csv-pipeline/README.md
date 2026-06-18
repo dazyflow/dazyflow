@@ -1,9 +1,9 @@
 # csv-pipeline — end-to-end demo
 
-A 3-node Hazyflow graph that runs across **two processes**:
+A 3-node Dazyflow graph that runs across **two processes**:
 
 ```
-   ┌──────────────────────────────── hzd (native modules) ───────────┐
+   ┌──────────────────────────────── dzd (native modules) ───────────┐
    │                                                                 │
    │   file_read ──────────────────────────────→ file_write          │
    │   (workspace sandbox)                       (workspace sandbox) │
@@ -27,7 +27,7 @@ within the same sandbox.
 ./run.sh
 ```
 
-That script builds three binaries (`hzd`, `hzctl`, `transformer`), boots
+That script builds three binaries (`dzd`, `dzctl`, `transformer`), boots
 both servers, submits `pipeline.json` over the mTLS-disabled-for-dev
 control API, and asserts the output matches.
 
@@ -35,11 +35,11 @@ control API, and asserts the output matches.
 
 | Capability | Where it's exercised |
 |---|---|
-| Distributed worker pool | hzd spins 2 workers; node `transform` lands on whichever claims first |
+| Distributed worker pool | dzd spins 2 workers; node `transform` lands on whichever claims first |
 | Native ↔ remote interop | file_read (Go, native) → csv_uppercase (Go, gRPC) → file_write (Go, native) |
-| Inline data over gRPC | file_read in `inline:true` mode embeds the file content into the Ref, hzd serializes it through the engine's protobuf adapter |
+| Inline data over gRPC | file_read in `inline:true` mode embeds the file content into the Ref, dzd serializes it through the engine's protobuf adapter |
 | Sandbox containment | `file_read` and `file_write` both operate on `$SANDBOX_BASE/dev/default/`; absolute paths or `..` would be rejected |
-| Progress streaming | The `[transform] 50% uppercasing 52 bytes` line travels remote → engine → gRPC stream → hzctl |
+| Progress streaming | The `[transform] 50% uppercasing 52 bytes` line travels remote → engine → gRPC stream → dzctl |
 | Audit | The graph + each node have JobRecords with worker IDs, timestamps, attempts |
 
 ## What broke (the friction this demo was built to find)
@@ -48,8 +48,8 @@ control API, and asserts the output matches.
    module has no way to read a file it doesn't share a filesystem with.
    Added an `inline: true` param and MIME-aware string/byte handling.
 
-2. **`hzd` had no way to register remote modules.** `engine.RemoteCatalog`
-   existed but was never instantiated. Added `HAZYFLOW_REMOTE_MODULES=id=host:port`.
+2. **`dzd` had no way to register remote modules.** `engine.RemoteCatalog`
+   existed but was never instantiated. Added `DAZYFLOW_REMOTE_MODULES=id=host:port`.
 
 3. **Binary inline data is wonky.** The engine wraps `Ref.Inline` with
    `json.Marshal` for gRPC transport. Text round-trips fine if you put
@@ -59,14 +59,14 @@ control API, and asserts the output matches.
 
 ## What the demo does *not* prove
 
-- **External triggering.** Submission still happens via `hzctl`. There's
+- **External triggering.** Submission still happens via `dzctl`. There's
   no `webhook_trigger` or `schedule` module; nothing fires this graph
   on its own.
 - **Conditional routing.** No `branch` module — the graph is a fixed
   chain. Real workflows need "if amount > X route here else there".
 - **HTTP integration.** No `http_request`. The transformer is a stub
   that does string manipulation, not a real integration with anything.
-- **mTLS on the remote.** `HAZYFLOW_REMOTE_MODULES` dials insecure (the
+- **mTLS on the remote.** `DAZYFLOW_REMOTE_MODULES` dials insecure (the
   RemoteDescriptor sets `Insecure: true`). Production should pass TLS
   config; the engine refuses unencrypted by default but this entry
   point opts in.

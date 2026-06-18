@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // httpfiles exposes the persistent workspace sandbox (<base>/<tenant>/

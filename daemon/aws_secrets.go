@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // AwsSecretsProvider is the AWS flavour of the BYO secret manager (see
@@ -269,7 +269,7 @@ func (c *awsAPIClient) getSecretValue(ctx context.Context, cfg AwsSecretsConfig,
 // accepted; signature/identity errors mean the credentials are wrong.
 func (c *awsAPIClient) verify(ctx context.Context, cfg AwsSecretsConfig) error {
 	_, apiErr, err := c.call(ctx, cfg, "secretsmanager.GetSecretValue",
-		map[string]string{"SecretId": "hazyflow-connection-test"})
+		map[string]string{"SecretId": "dazyflow-connection-test"})
 	if err != nil {
 		return err
 	}

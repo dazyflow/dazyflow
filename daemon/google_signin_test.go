@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/auth"
+	"git.sr.ht/~klahr/dazyflow/auth"
 )
 
 func TestValidateGoogleClaims(t *testing.T) {

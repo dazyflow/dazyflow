@@ -12,11 +12,11 @@ import (
 // executed — progress lines (a shell drop's stdout, an HTTP drop's "dial
 // …"), node status transitions, and the terminal outcome. The live SSE
 // stream already carries these to a watching browser; this store is for
-// everyone who wasn't watching: `hzctl job logs`, the run-detail page,
+// everyone who wasn't watching: `dzctl job logs`, the run-detail page,
 // and post-mortems after a 3am scheduled failure.
 //
 // Capture happens in RecordingBus — a Bus decorator every publisher
-// already flows through — so one wire point in hzd records every event
+// already flows through — so one wire point in dzd records every event
 // exactly once (on the replica that produced it; PgBus distribution
 // happens beneath the decorator).
 
@@ -140,7 +140,7 @@ func NewRecordingBus(inner Bus, store RunLogStore) *RecordingBus {
 }
 
 // SetLogPayloads toggles persistence of content (progress) log lines. Wire
-// it from HAZYFLOW_LOG_RUN_PAYLOADS to let an operator keep run logs free
+// it from DAZYFLOW_LOG_RUN_PAYLOADS to let an operator keep run logs free
 // of payload PII (GDPR P2.1) while preserving the status/terminal trail.
 func (b *RecordingBus) SetLogPayloads(v bool) { b.logPayloads = v }
 

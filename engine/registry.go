@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // Registry holds the set of native modules available to the engine. It is

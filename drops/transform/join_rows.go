@@ -7,9 +7,9 @@ import (
 	"sort"
 	"strings"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/limits"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/limits"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 // joinKindInner et al. are the named JOIN flavors. Matches SQL
@@ -232,7 +232,7 @@ func executeJoinRows(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 // an unbounded result.
 func joinTooLarge(job core.Job, max int) core.Result {
 	return errResult(job, "too_large",
-		fmt.Sprintf("join output exceeds the %d-row limit (a many-to-many key multiplies the inputs); raise HAZYFLOW_MAX_ROWS or join on a more selective key", max))
+		fmt.Sprintf("join output exceeds the %d-row limit (a many-to-many key multiplies the inputs); raise DAZYFLOW_MAX_ROWS or join on a more selective key", max))
 }
 
 // parseJoinParams pulls (on, kind, right_suffix) off Job.Params with

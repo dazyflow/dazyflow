@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // maxRequestBody is the global ceiling on any request body. It equals the

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 func TestResolve(t *testing.T) {

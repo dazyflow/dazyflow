@@ -1,4 +1,4 @@
-# Hazyflow web UI
+# Dazyflow web UI
 
 React + React Flow + Vite, talking to the daemon's HTTP gateway
 (`/api/v1/...`) over bearer-token auth.
@@ -8,11 +8,11 @@ React + React Flow + Vite, talking to the daemon's HTTP gateway
 ```sh
 cd web
 npm install
-HAZYFLOW_API=http://localhost:8080 npm run dev
+DAZYFLOW_API=http://localhost:8080 npm run dev
 ```
 
 The Vite dev server runs on `http://localhost:5173` and proxies
-`/api/v1/*` to the daemon set in `HAZYFLOW_API`.
+`/api/v1/*` to the daemon set in `DAZYFLOW_API`.
 
 You'll need an API key. The daemon's existing `auth.IssueAPIKey` is the
 canonical path; a CLI helper or admin UI for it is on the TODO.
@@ -24,7 +24,7 @@ src/
   api.ts          — typed fetch wrapper over /api/v1
   auth.tsx        — token + principal context, persisted to localStorage
   icons.tsx       — Manifest.Icon → lucide-react component map
-  theme.css       — synthwave dark palette ported from ../hazy
+  theme.css       — synthwave dark palette ported from ../dazy
   app.css         — shell layout, editor grid, node card styles
   types.ts        — TypeScript mirrors of core.Graph / Manifest / etc.
   App.tsx         — router + auth gate

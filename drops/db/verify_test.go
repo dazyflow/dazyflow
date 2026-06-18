@@ -44,12 +44,12 @@ func TestVerifyMySQLRejectsGarbage(t *testing.T) {
 }
 
 // TestVerifyPostgresLive confirms a real, reachable DSN verifies. Skipped
-// unless HZ_TEST_PG_DSN points at a live Postgres (the bundled dev one works:
-// postgres://hazyflow:hazyflow@localhost:5432/hazyflow?sslmode=disable).
+// unless DZ_TEST_PG_DSN points at a live Postgres (the bundled dev one works:
+// postgres://dazyflow:dazyflow@localhost:5432/dazyflow?sslmode=disable).
 func TestVerifyPostgresLive(t *testing.T) {
-	dsn := strings.TrimSpace(os.Getenv("HZ_TEST_PG_DSN"))
+	dsn := strings.TrimSpace(os.Getenv("DZ_TEST_PG_DSN"))
 	if dsn == "" {
-		t.Skip("set HZ_TEST_PG_DSN to a live Postgres DSN to run the live check")
+		t.Skip("set DZ_TEST_PG_DSN to a live Postgres DSN to run the live check")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()

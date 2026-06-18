@@ -148,7 +148,7 @@ export type Graph = {
 // when a run of this graph terminates with status=failed.
 export type FailureNotify = {
   webhook?: string;
-  // Failure summary by email — needs the operator mailer (HAZYFLOW_SMTP_URL).
+  // Failure summary by email — needs the operator mailer (DAZYFLOW_SMTP_URL).
   email?: string;
 };
 

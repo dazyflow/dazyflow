@@ -1,13 +1,13 @@
 # Changelog
 
-All notable changes to Hazyflow are documented in this file.
+All notable changes to Dazyflow are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-The repository, Go module, and daemon binary are named `hazyflow` / `hzd`.
+The repository, Go module, and daemon binary are named `dazyflow` / `dzd`.
 Versions here correspond to git tags `X.Y.Z` on
-[git.sr.ht/~klahr/hazyflow](https://git.sr.ht/~klahr/hazyflow). The running
+[git.sr.ht/~klahr/dazyflow](https://git.sr.ht/~klahr/dazyflow). The running
 version is stamped into the binary at build time and surfaced on
 `GET /api/v1` (the `build` block) and in the web UI's account menu.
 
@@ -37,7 +37,7 @@ Initial release.
   themes.
 - **MCP server.** Exposes the connector catalog so an LLM agent can
   discover, compose, and run flows.
-- **Control plane.** gRPC API with the `hzctl` CLI, plus a REST surface
+- **Control plane.** gRPC API with the `dzctl` CLI, plus a REST surface
   documented by an OpenAPI spec under `/api/v1`.
 - **Auth & multi-tenancy.** Organizations, role-based access control, TOTP
   two-factor auth, invitations, and a platform super-admin role.

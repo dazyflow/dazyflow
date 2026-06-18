@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strings"
 
-	"git.sr.ht/~klahr/hazyflow/auth"
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/auth"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // HTTP surface for the GDPR data-subject rights: erasure (Art. 17) of an
@@ -111,7 +111,7 @@ func (h *HTTPGateway) adminDeleteOrgHandler(rw http.ResponseWriter, r *http.Requ
 	}
 	// Org deletion must go through an interactive session with password
 	// step-up — an API key, even one carrying organization:admin, cannot
-	// perform this irreversible wipe. Session tokens carry the hzs_ prefix
+	// perform this irreversible wipe. Session tokens carry the dzs_ prefix
 	// (header or cookie); anything else is an API key.
 	if !strings.HasPrefix(credentialFromRequest(r), auth.SessionTokenPrefix) {
 		writeAPIError(rw, http.StatusForbidden, "session_required",

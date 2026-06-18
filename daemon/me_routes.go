@@ -11,7 +11,7 @@
 // Errors on this surface use the structured envelope from errors.go.
 // Legacy /api/v1/graphs and /api/v1/jobs routes stay alongside these
 // for the transition; they will be removed once the web client and
-// hz-mcp have both migrated.
+// dz-mcp have both migrated.
 
 package daemon
 
@@ -25,7 +25,7 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // splitFlowID parses the {flow_id} path parameter back into

@@ -7,18 +7,14 @@
 package notion
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"sync"
-	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
-	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/oauthtok"
+	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 )
 
 // maxResponseBytes caps how much of an API response we buffer, so a
@@ -31,41 +27,14 @@ const notionVersion = "2022-06-28"
 // richTextLimit is Notion's per-rich-text-object content cap.
 const richTextLimit = 2000
 
-type TokenLookup func(ctx context.Context, account string) (string, error)
+// tokenHook holds the daemon's per-account Notion OAuth lookup plus the resolve
+// sequence shared with the other OAuth connectors (drops/internal/oauthtok).
+var tokenHook = oauthtok.New("Notion", "notion", "notion")
 
-var (
-	tokenLookupMu sync.RWMutex
-	tokenLookup   TokenLookup
-)
-
-func SetTokenLookup(fn TokenLookup) {
-	tokenLookupMu.Lock()
-	defer tokenLookupMu.Unlock()
-	tokenLookup = fn
-}
+func SetTokenLookup(fn oauthtok.Lookup) { tokenHook.Set(fn) }
 
 func resolveToken(ctx context.Context, job core.Job) (string, error) {
-	if t, _ := params.StringOpt(job.Params, "token"); t != "" {
-		return t, nil
-	}
-	account, _ := params.StringOpt(job.Params, "account")
-	if account == "" {
-		account = "default"
-	}
-	tokenLookupMu.RLock()
-	fn := tokenLookup
-	tokenLookupMu.RUnlock()
-	if fn == nil {
-		return "", fmt.Errorf("no Notion token: pass `token` directly or connect a Notion account via /api/v1/oauth/notion/authorize")
-	}
-	tok, err := fn(ctx, account)
-	if err != nil {
-		return "", fmt.Errorf("lookup token for account %q: %w", account, err)
-	}
-	if tok == "" {
-		return "", fmt.Errorf("notion account %q is not connected", account)
-	}
-	return tok, nil
+	return tokenHook.Resolve(ctx, job)
 }
 
 var (
@@ -92,42 +61,18 @@ func notionDo(ctx context.Context, method, url, token string, body []byte, timeo
 	if timeoutMS <= 0 {
 		timeoutMS = 15000
 	}
-	reqCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMS)*time.Millisecond)
-	defer cancel()
-
-	var rdr io.Reader
+	headers := map[string]string{
+		"Authorization":  "Bearer " + token,
+		"Notion-Version": notionVersion,
+	}
 	if body != nil {
-		rdr = bytes.NewReader(body)
+		headers["Content-Type"] = "application/json"
 	}
-	req, err := http.NewRequestWithContext(reqCtx, method, url, rdr)
-	if err != nil {
-		return 0, nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Notion-Version", notionVersion)
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	// base_url is a tenant-supplied param, so guard the dial: the SSRF
-	// client blocks loopback/private/link-local targets and the egress
-	// allowlist (when set) bounds which public hosts the bearer token
-	// may be sent to.
-	if err := hfnet.EgressAllowedFor(ctx, url); err != nil {
-		return 0, nil, err
-	}
-	resp, err := hfnet.SafeHTTPClient(time.Duration(timeoutMS)*time.Millisecond, hfnet.PrivateEgressAllowed()).Do(req)
-	if err != nil {
-		return 0, nil, err
-	}
-	defer resp.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
-	if err != nil {
-		return resp.StatusCode, nil, err
-	}
-	if int64(len(raw)) > maxResponseBytes {
-		return resp.StatusCode, nil, fmt.Errorf("notion response exceeds %d bytes", maxResponseBytes)
-	}
-	return resp.StatusCode, raw, nil
+	// base_url is a tenant-supplied param, so net.Do guards the dial: the SSRF
+	// client blocks loopback/private/link-local targets and the egress allowlist
+	// (when set) bounds which public hosts the bearer token may be sent to.
+	status, raw, _, err := hfnet.Do(ctx, method, url, headers, body, timeoutMS, maxResponseBytes)
+	return status, raw, err
 }
 
 // notionError pulls the {code,message} out of a Notion error body.

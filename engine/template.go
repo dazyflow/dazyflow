@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // placeholderPattern matches ${scheme.path}. The scheme is the run of

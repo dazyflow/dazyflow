@@ -13,18 +13,14 @@ package gform
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
-	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/google"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 )
 
 // maxResponseBytes caps how much of an API response we buffer so a hostile
@@ -36,46 +32,13 @@ const formsAPIBase = "https://forms.googleapis.com/v1"
 
 // --- OAuth token lookup (mirrors drops/sheets/helpers.go) -------------------
 
-type TokenLookup func(ctx context.Context, account string) (string, error)
-
-var (
-	tokenLookupMu sync.RWMutex
-	tokenLookup   TokenLookup
-)
-
-// SetTokenLookup installs the daemon's OAuth-token resolver. cmd/hzd wires
-// this to the "google" provider at startup.
-func SetTokenLookup(fn TokenLookup) {
-	tokenLookupMu.Lock()
-	defer tokenLookupMu.Unlock()
-	tokenLookup = fn
-}
+// SetTokenLookup wires the shared Google OAuth token resolver (one provider
+// serves every Google connector — see drops/internal/google). Retained as a
+// package entry point for tests. cmd/dzd wires the "google" provider once.
+func SetTokenLookup(fn google.TokenLookup) { google.SetTokenLookup(fn) }
 
 func resolveToken(ctx context.Context, job core.Job) (string, error) {
-	// `token` is no longer a user-facing param (removed from the schema), but
-	// the engine still honors it when present — the integration-test seam for
-	// standing in for a connected account. The UI path uses the account lookup.
-	if t, _ := params.StringOpt(job.Params, "token"); t != "" {
-		return t, nil
-	}
-	account, _ := params.StringOpt(job.Params, "account")
-	if account == "" {
-		account = "default"
-	}
-	tokenLookupMu.RLock()
-	fn := tokenLookup
-	tokenLookupMu.RUnlock()
-	if fn == nil {
-		return "", fmt.Errorf("no Google token: connect a Google account via /api/v1/oauth/google/authorize")
-	}
-	tok, err := fn(ctx, account)
-	if err != nil {
-		return "", fmt.Errorf("lookup token for account %q: %w", account, err)
-	}
-	if tok == "" {
-		return "", fmt.Errorf("google account %q is not connected", account)
-	}
-	return tok, nil
+	return google.ResolveToken(ctx, job)
 }
 
 // --- cursor (watermark) store -----------------------------------------------
@@ -153,52 +116,10 @@ func formsBaseURL(job core.Job) string {
 }
 
 func googleGet(ctx context.Context, url, token string, timeoutMS int) (int, []byte, error) {
-	if timeoutMS <= 0 {
-		timeoutMS = 15000
-	}
-	reqCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMS)*time.Millisecond)
-	defer cancel()
-	req, err := http.NewRequestWithContext(reqCtx, "GET", url, nil)
-	if err != nil {
-		return 0, nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	// Guard the dial as defence in depth: the SSRF client blocks
-	// loopback/private/link-local targets and the egress allowlist (when
-	// set) bounds which public hosts the bearer token may
-	// reach.
-	if err := hfnet.EgressAllowedFor(ctx, url); err != nil {
-		return 0, nil, err
-	}
-	resp, err := hfnet.SafeHTTPClient(time.Duration(timeoutMS)*time.Millisecond, hfnet.PrivateEgressAllowed()).Do(req)
-	if err != nil {
-		return 0, nil, err
-	}
-	defer resp.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
-	if err != nil {
-		return resp.StatusCode, nil, err
-	}
-	if int64(len(raw)) > maxResponseBytes {
-		return resp.StatusCode, nil, fmt.Errorf("google response exceeds %d bytes", maxResponseBytes)
-	}
-	return resp.StatusCode, raw, nil
+	return google.Do(ctx, "GET", url, token, "", nil, timeoutMS, maxResponseBytes)
 }
 
-func formsErr(body []byte) string {
-	var e struct {
-		Error struct {
-			Message string `json:"message"`
-		} `json:"error"`
-	}
-	if err := json.Unmarshal(body, &e); err == nil && e.Error.Message != "" {
-		return e.Error.Message
-	}
-	if len(body) > 512 {
-		return string(body[:512])
-	}
-	return string(body)
-}
+func formsErr(body []byte) string { return google.ErrMessage(body, 512) }
 
 // --- form ID extraction -----------------------------------------------------
 

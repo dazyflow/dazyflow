@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/auth"
+	"git.sr.ht/~klahr/dazyflow/auth"
 )
 
 // verificationHarness: gateway + in-memory users/sessions + fake SMTP +
@@ -31,7 +31,7 @@ func verificationHarness(t *testing.T) (*gatewayHarness, *auth.JSONUserStore, *f
 	h.gw.Sessions = sessions
 	h.gw.EnableSignup = true
 	// The harness's chain only knows API keys; verification flows issue
-	// sessions, so add the session authenticator like hzd does.
+	// sessions, so add the session authenticator like dzd does.
 	h.svc.Auth = auth.Chain{
 		&auth.APIKeyAuthenticator{Store: h.ks},
 		&auth.SessionAuthenticator{Store: sessions},

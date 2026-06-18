@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // HTTP surface for the OAuth flow. Two endpoints:
@@ -66,7 +66,7 @@ func (h *HTTPGateway) oauthAuthorize(rw http.ResponseWriter, r *http.Request, p 
 
 // oauthStateCookie is the name of the browser-binding cookie for the OAuth
 // redirect flow. Scoped to the OAuth path so it isn't sent on every request.
-const oauthStateCookie = "hz_oauth_state"
+const oauthStateCookie = "dz_oauth_state"
 
 // newOAuthBinding returns 32 bytes of entropy hex-encoded — the value shared
 // between the pending state and the browser cookie.
@@ -120,7 +120,7 @@ func (h *HTTPGateway) clearOAuthStateCookie(rw http.ResponseWriter) {
 // for incremental authorization (request only one integration's scopes).
 // nil/empty falls back to the provider's complete Scopes.
 // binding, when non-empty, ties the flow to the caller's browser via the
-// hz_oauth_state cookie (the browser-redirect path sets it). Pass "" for the
+// dz_oauth_state cookie (the browser-redirect path sets it). Pass "" for the
 // JSON/manual path, where the authorize link is opened by a different agent.
 func (h *HTTPGateway) buildAuthorizeURL(p core.Principal, providerName, account, returnTo string, scopes []string, binding string) (string, int, string) {
 	if h.OAuth == nil {
@@ -235,7 +235,7 @@ func (h *HTTPGateway) oauthCallback(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Browser-binding check: a flow started via the redirect path carries a
-	// binding nonce that must match the hz_oauth_state cookie in THIS browser.
+	// binding nonce that must match the dz_oauth_state cookie in THIS browser.
 	// This stops an attacker from completing a flow they started and injecting
 	// their provider account into the victim's org. Flows started via the
 	// JSON/manual path have no binding (the link is opened elsewhere) and skip

@@ -3041,7 +3041,7 @@ button.warning:hover:not(:disabled) {
 }
 
 /* Run log: the persisted line-by-line record below the node timeline
-   (web twin of `hzctl job logs`). Monospace, scrolls, tail-sticky. */
+   (web twin of `dzctl job logs`). Monospace, scrolls, tail-sticky. */
 .run-log {
   font-family: var(--font-mono);
   font-size: var(--text-sm);
@@ -3195,7 +3195,7 @@ button.warning:hover:not(:disabled) {
    hover lift. The easing (a soft overshoot-free ease-out) is shared with the
    inspector slide so the editor feels coherent. All disabled under
    prefers-reduced-motion. */
-@keyframes hz-fade-in {
+@keyframes dz-fade-in {
   from {
     opacity: 0;
   }
@@ -3203,7 +3203,7 @@ button.warning:hover:not(:disabled) {
     opacity: 1;
   }
 }
-@keyframes hz-slide-down {
+@keyframes dz-slide-down {
   from {
     opacity: 0;
     transform: translateY(-8px);
@@ -3213,7 +3213,7 @@ button.warning:hover:not(:disabled) {
     transform: translateY(0);
   }
 }
-@keyframes hz-pop-in {
+@keyframes dz-pop-in {
   from {
     opacity: 0;
     transform: scale(0.97);
@@ -3225,26 +3225,26 @@ button.warning:hover:not(:disabled) {
 }
 /* The run / needs-setup banner drops in from the top. */
 .editor-conn-banner {
-  animation: hz-slide-down 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: dz-slide-down 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 /* Modal backdrop fades in; the dialog pops in. */
 .settings-backdrop {
-  animation: hz-fade-in 140ms ease-out;
+  animation: dz-fade-in 140ms ease-out;
 }
 .settings-dialog {
-  animation: hz-pop-in 160ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: dz-pop-in 160ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 /* Quick-drop palette: backdrop fades, panel pops in. */
 .quick-palette-backdrop {
-  animation: hz-fade-in 120ms ease-out;
+  animation: dz-fade-in 120ms ease-out;
 }
 .quick-palette {
-  animation: hz-pop-in 150ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: dz-pop-in 150ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 /* Node cards lift gently on hover — selection keeps its own accent glow, so
    only unselected nodes get the hover shadow (no transform, to keep wired
    edges perfectly aligned). */
-.hz-node:not(.selected):hover {
+.dz-node:not(.selected):hover {
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
 }
 
@@ -3258,7 +3258,7 @@ button.warning:hover:not(:disabled) {
   }
   .editor .inspector,
   .editor .canvas > .react-flow,
-  .hz-node {
+  .dz-node {
     transition: none;
   }
 }
@@ -3647,7 +3647,7 @@ button.warning:hover:not(:disabled) {
 }
 
 /* React Flow node card */
-.hz-node {
+.dz-node {
   background: var(--surface);
   border: 1.5px solid var(--border);
   border-radius: var(--r-3);
@@ -3663,7 +3663,7 @@ button.warning:hover:not(:disabled) {
    service events). Invert the usual dark-surface card into an accent-filled
    one so the eye lands on "where this flow starts" at a glance. --node-accent
    is the category tint passed inline by NodeCard (purple for triggers). */
-.hz-node.hz-node-trigger {
+.dz-node.dz-node-trigger {
   background: linear-gradient(
     160deg,
     color-mix(in srgb, var(--node-accent, #aa66dd) 34%, var(--surface)),
@@ -3674,16 +3674,16 @@ button.warning:hover:not(:disabled) {
     0 0 0 1px color-mix(in srgb, var(--node-accent, #aa66dd) 45%, transparent),
     var(--shadow);
 }
-.hz-node.hz-node-trigger:hover {
+.dz-node.dz-node-trigger:hover {
   border-color: color-mix(in srgb, var(--node-accent, #aa66dd) 80%, #fff);
 }
-.hz-node.hz-node-trigger.selected {
+.dz-node.dz-node-trigger.selected {
   border-color: var(--node-accent, #aa66dd);
   box-shadow:
     0 0 0 2px color-mix(in srgb, var(--node-accent, #aa66dd) 60%, transparent),
     var(--shadow);
 }
-.hz-node.hz-node-trigger .label {
+.dz-node.dz-node-trigger .label {
   /* Theme-aware ink, not hardcoded white: the card surface mixes the accent
      with --surface, so it's dark purple in dark mode (near-white ink reads)
      but pale purple in light mode (near-black ink reads). #fff was invisible
@@ -3695,7 +3695,7 @@ button.warning:hover:not(:disabled) {
    square that shows just the operator glyph, Unreal-Blueprint style. No
    icon box or title — A/B pins on the left edge, Result on the right.
    --op-color is the category tint (green) passed inline by NodeCard. */
-.hz-node.hz-op {
+.dz-node.dz-op {
   min-width: 0;
   width: 60px;
   height: 60px;
@@ -3705,11 +3705,11 @@ button.warning:hover:not(:disabled) {
   border-radius: 14px;
   border-color: color-mix(in srgb, var(--op-color, #46c46e) 55%, var(--border));
 }
-.hz-node.hz-op.selected {
+.dz-node.dz-op.selected {
   border-color: var(--op-color, #46c46e);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--op-color, #46c46e) 30%, transparent);
 }
-.hz-op-symbol {
+.dz-op-symbol {
   font-size: var(--text-3xl);
   font-weight: 700;
   line-height: 1;
@@ -3720,20 +3720,20 @@ button.warning:hover:not(:disabled) {
 /* Header row: icon next to the title block. The ports section sits
    below it spanning the full card width so its left/right columns line
    up with the card edges (not indented under the icon). */
-.hz-node-main {
+.dz-node-main {
   display: flex;
   /* Title is a single line now (no sub-text), so center it against the
      icon rather than top-aligning. */
   align-items: center;
   gap: var(--space-3);
 }
-.hz-node-body {
+.dz-node-body {
   flex: 1;
   min-width: 0;
 }
 /* Optional action line under the node title (e.g. "Google Sheets" /
    "Append rows"). Muted + smaller so the product name reads first. */
-.hz-node-subtitle {
+.dz-node-subtitle {
   font-size: var(--text-xs);
   color: var(--muted);
   margin-top: 1px;
@@ -3746,14 +3746,14 @@ button.warning:hover:not(:disabled) {
    dot — rendered inside the row — centers on the label vertically and is
    then pushed onto the card edge via transform (see dotStyle in
    NodeCard.tsx). The dot therefore always tracks its description. */
-.hz-ports {
+.dz-ports {
   display: flex;
   gap: var(--space-3);
   margin-top: var(--space-2);
   padding-top: var(--space-2);
   border-top: 1px dashed var(--border);
 }
-.hz-port-col {
+.dz-port-col {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
@@ -3762,11 +3762,11 @@ button.warning:hover:not(:disabled) {
 /* margin-left:auto keeps the output column flush right even when a node
    has outputs but a single (label-less) input, so no left column exists
    to push it over. */
-.hz-port-col.right {
+.dz-port-col.right {
   align-items: flex-end;
   margin-left: auto;
 }
-.hz-port-label {
+.dz-port-label {
   position: relative;
   font-family: var(--font-mono);
   font-size: var(--text-xs);
@@ -3786,7 +3786,7 @@ button.warning:hover:not(:disabled) {
    arrow's colour comes from `color` (inherited as currentColor by the SVG),
    so hover + connected are pure colour/fill swaps. z-index keeps it above
    the card border. */
-.react-flow__handle.hz-pass-pin {
+.react-flow__handle.dz-pass-pin {
   width: 14px;
   height: 14px;
   background: transparent;
@@ -3803,7 +3803,7 @@ button.warning:hover:not(:disabled) {
   justify-content: center;
   transition: color 0.12s ease;
 }
-.react-flow__handle.hz-pass-pin svg {
+.react-flow__handle.dz-pass-pin svg {
   width: 100%;
   height: 100%;
   display: block;
@@ -3811,7 +3811,7 @@ button.warning:hover:not(:disabled) {
 }
 /* Idle: hollow white outline with rounded corners (linejoin) — the soft,
    un-sharp arrow. */
-.react-flow__handle.hz-pass-pin svg path {
+.react-flow__handle.dz-pass-pin svg path {
   fill: none;
   stroke: currentColor;
   stroke-width: 2;
@@ -3819,30 +3819,30 @@ button.warning:hover:not(:disabled) {
   stroke-linecap: round;
 }
 /* Connected: fill the arrow solid white. */
-.react-flow__handle.hz-pass-pin.connected svg path {
+.react-flow__handle.dz-pass-pin.connected svg path {
   fill: currentColor;
 }
-.react-flow__handle.hz-pass-pin:hover {
+.react-flow__handle.dz-pass-pin:hover {
   color: var(--accent);
   background: transparent;
 }
 /* The pass row carries no label text (the exec arrow speaks for itself),
    but the pin is positioned relative to this row — so hold its height to a
    normal row line so the arrow centres correctly instead of collapsing. */
-.hz-port-label.hz-pass-row {
+.dz-port-label.dz-pass-row {
   min-height: 16px;
 }
 /* Input pin row: the pin name and its inline value editor share one line,
    the editor sitting right after the name (Unreal-style). The name stays
    nowrap so the dot/label keep their place. Rows with no inline editor
    collapse to just the label. */
-.hz-port-in-row {
+.dz-port-in-row {
   display: flex;
   align-items: center;
   gap: var(--space-1h);
   min-width: 0;
 }
-.hz-port-inline {
+.dz-port-inline {
   flex: 0 1 auto;
   min-width: 0;
 }
@@ -3850,9 +3850,9 @@ button.warning:hover:not(:disabled) {
    stays as small as the text it holds (Unreal-style). min-width keeps an
    empty box clickable; max-width stops a long value from blowing out the
    node — past it the field scrolls internally. */
-.hz-port-inline input,
-.hz-port-inline select,
-.hz-port-inline textarea {
+.dz-port-inline input,
+.dz-port-inline select,
+.dz-port-inline textarea {
   field-sizing: content;
   width: auto;
   min-width: 3ch;
@@ -3862,28 +3862,28 @@ button.warning:hover:not(:disabled) {
   padding: var(--space-0) 5px;
   border-radius: var(--r-1);
 }
-.hz-port-inline textarea {
+.dz-port-inline textarea {
   resize: both;
   min-height: 26px;
 }
-.hz-port-inline input[type="checkbox"] {
+.dz-port-inline input[type="checkbox"] {
   min-width: 0;
   width: auto;
 }
-.hz-node:hover {
+.dz-node:hover {
   border-color: var(--accent);
 }
-.hz-node.selected {
+.dz-node.selected {
   border-color: var(--accent);
   box-shadow: var(--glow-accent-hover);
 }
 /* Lint warning: amber border + a triangle badge in the top-right.
    Selected/status borders still win (more specific or later), so a
    flagged node the user is editing reads as selected, not just warned. */
-.hz-node.lint-warn {
+.dz-node.lint-warn {
   border-color: var(--status-warning);
 }
-.hz-node-lint {
+.dz-node-lint {
   position: absolute;
   top: -7px;
   right: -7px;
@@ -3900,7 +3900,7 @@ button.warning:hover:not(:disabled) {
 }
 /* "List into a one-at-a-time step" hint — amber like a lint, but on the
    top-left so it never collides with the lint/config badges on the right. */
-.hz-node-loop {
+.dz-node-loop {
   position: absolute;
   top: -7px;
   left: -7px;
@@ -3918,7 +3918,7 @@ button.warning:hover:not(:disabled) {
 /* Breakpoints (#12): a red dot in the node's top-left corner; the node the
    run is currently paused after gets an amber ring + soft glow so it stands
    out from the green "succeeded" status. */
-.hz-node-bp {
+.dz-node-bp {
   position: absolute;
   top: -6px;
   left: -6px;
@@ -3929,33 +3929,33 @@ button.warning:hover:not(:disabled) {
   border: 2px solid var(--surface);
   z-index: 3;
 }
-.hz-node.paused {
+.dz-node.paused {
   border-color: var(--status-on-hold);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-on-hold) 35%, transparent);
 }
 /* Step switched off: dimmed + desaturated so it reads "not part of the run"
    at a glance; the chip names the state. Hover restores most of the
    opacity so the card stays inspectable. */
-.hz-node.hz-node-off {
+.dz-node.dz-node-off {
   opacity: 0.45;
   filter: grayscale(0.7);
 }
-.hz-node.hz-node-off:hover,
-.hz-node.hz-node-off.selected {
+.dz-node.dz-node-off:hover,
+.dz-node.dz-node-off.selected {
   opacity: 0.8;
 }
 /* Downstream of a switched-off step: the run-time skip cascade will skip
    these too, so grey them as a preview — softer than the off node itself
    (no chip, less dimming), and hover still restores readability. */
-.hz-node.hz-node-off-cascade {
+.dz-node.dz-node-off-cascade {
   opacity: 0.55;
   filter: grayscale(0.6);
 }
-.hz-node.hz-node-off-cascade:hover,
-.hz-node.hz-node-off-cascade.selected {
+.dz-node.dz-node-off-cascade:hover,
+.dz-node.dz-node-off-cascade.selected {
   opacity: 0.85;
 }
-.hz-node-offchip {
+.dz-node-offchip {
   position: absolute;
   top: -9px;
   right: 10px;
@@ -3973,7 +3973,7 @@ button.warning:hover:not(:disabled) {
 /* Token chip on the canvas card's inline editor — a whole-value ${…}
    reference rendered as readable words ("Gmail · Matching emails → first →
    id"). Click switches to the raw editable token. */
-.hz-token-chip {
+.dz-token-chip {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
@@ -3986,12 +3986,12 @@ button.warning:hover:not(:disabled) {
   border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
   border-radius: 999px;
 }
-.hz-token-chip-text {
+.dz-token-chip-text {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.hz-token-chip-x {
+.dz-token-chip-x {
   flex: none;
   padding: 0 3px;
   font-size: var(--text-xs);
@@ -4002,7 +4002,7 @@ button.warning:hover:not(:disabled) {
   border-radius: 999px;
   cursor: pointer;
 }
-.hz-token-chip-x:hover {
+.dz-token-chip-x:hover {
   color: var(--text);
   background: color-mix(in srgb, var(--accent) 20%, var(--surface));
 }
@@ -4019,10 +4019,10 @@ button.warning:hover:not(:disabled) {
 }
 /* The header On/Off is the compact Switch variant: smaller label,
    muted until you hover. */
-.inspector-onoff .hz-switch {
+.inspector-onoff .dz-switch {
   align-items: center;
 }
-.inspector-onoff .hz-switch-label {
+.inspector-onoff .dz-switch-label {
   font-size: var(--text-sm);
   font-weight: 500;
   color: var(--muted);
@@ -4031,12 +4031,12 @@ button.warning:hover:not(:disabled) {
 /* Loop body: a node that runs once per row inside a for_each. The dashed
    border (matching the for_each `body` pin's exec convention) signals "this
    doesn't run on its own — the loop drives it" without adding chrome. */
-.hz-node.hz-loop-owned {
+.dz-node.dz-loop-owned {
   border-style: dashed;
   border-color: color-mix(in srgb, var(--accent) 55%, var(--border-strong));
   background: color-mix(in srgb, var(--accent) 5%, var(--surface));
 }
-.hz-node.hz-loop-owned.selected {
+.dz-node.dz-loop-owned.selected {
   border-style: solid;
 }
 /* Toolbar breakpoint toggle reads as "armed" when active. */
@@ -4094,10 +4094,10 @@ button.warning:hover:not(:disabled) {
 /* Config verification (#13): a red border + red badge for a drop that's
    missing required values. More severe than lint, so it sits left of the
    lint badge and uses the danger color. */
-.hz-node.config-err {
+.dz-node.config-err {
   border-color: var(--danger);
 }
-.hz-node-config {
+.dz-node-config {
   position: absolute;
   top: -7px;
   right: 15px;
@@ -4116,7 +4116,7 @@ button.warning:hover:not(:disabled) {
    connection) isn't configured yet. Distinct from config-err (missing params,
    red) and lint-warn (amber icon) — an amber dashed border plus a clickable
    chip that deep-links to the app's connection card. */
-.hz-node.needs-setup {
+.dz-node.needs-setup {
   border-style: dashed;
   border-color: color-mix(in srgb, var(--btn) 70%, transparent);
 }
@@ -4124,7 +4124,7 @@ button.warning:hover:not(:disabled) {
    a floating pill. Negative side/bottom margins cancel the card's padding so
    it spans flush edge-to-edge; the bottom corners are rounded to nest inside
    the card's border radius. The whole bar is the link target. */
-.hz-node-setup {
+.dz-node-setup {
   display: flex;
   align-items: center;
   gap: var(--space-1h);
@@ -4142,31 +4142,31 @@ button.warning:hover:not(:disabled) {
   cursor: pointer;
   transition: background 0.12s ease;
 }
-.hz-node-setup:hover {
+.dz-node-setup:hover {
   background: var(--btn-hover);
   text-decoration: none;
 }
 /* Locked variant: the user can't connect apps (no secret:write). Non-actionable
    "ask an admin" note — muted, no link affordance, default cursor. */
-.hz-node-setup-locked {
+.dz-node-setup-locked {
   background: var(--surface-2, rgba(255, 255, 255, 0.08));
   color: var(--muted);
   cursor: default;
 }
-.hz-node-setup-locked:hover {
+.dz-node-setup-locked:hover {
   background: var(--surface-2, rgba(255, 255, 255, 0.08));
 }
-.hz-node-setup-label {
+.dz-node-setup-label {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.hz-node-setup-arrow {
+.dz-node-setup-arrow {
   flex-shrink: 0;
   opacity: 0.65;
 }
-.hz-node-setup-logo {
+.dz-node-setup-logo {
   width: 14px;
   height: 14px;
   object-fit: contain;
@@ -4438,7 +4438,7 @@ button.warning:hover:not(:disabled) {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
-/* The step's icon tile, mirroring the node on the canvas (.hz-node .icon).
+/* The step's icon tile, mirroring the node on the canvas (.dz-node .icon).
    The .branded / .brand-logo modifiers reuse the shared rules below. */
 .config-checklist-item .icon {
   width: 30px;
@@ -4497,15 +4497,15 @@ button.warning:hover:not(:disabled) {
    unmistakable mid-canvas; terminal states stay static. Selected wins
    over status for border color so the user can still tell what's
    focused, but the glow stays. */
-.hz-node.status-running {
+.dz-node.status-running {
   border-color: var(--status-running);
   border-width: 2.5px;
   box-shadow:
     0 0 0 4px color-mix(in srgb, var(--status-running) 25%, transparent),
     var(--shadow);
-  animation: hz-running-pulse 1.4s ease-in-out infinite;
+  animation: dz-running-pulse 1.4s ease-in-out infinite;
 }
-@keyframes hz-running-pulse {
+@keyframes dz-running-pulse {
   0%,
   100% {
     box-shadow:
@@ -4518,22 +4518,22 @@ button.warning:hover:not(:disabled) {
       var(--shadow);
   }
 }
-.hz-node.status-succeeded {
+.dz-node.status-succeeded {
   border-color: var(--status-completed);
 }
-.hz-node.status-failed {
+.dz-node.status-failed {
   border-color: var(--status-failed);
   box-shadow:
     0 0 0 3px color-mix(in srgb, var(--status-failed) 20%, transparent),
     var(--shadow);
 }
-.hz-node.status-awaiting {
+.dz-node.status-awaiting {
   border-color: var(--status-awaiting);
   box-shadow:
     0 0 0 3px color-mix(in srgb, var(--status-awaiting) 25%, transparent),
     var(--shadow);
 }
-.hz-node .icon {
+.dz-node .icon {
   width: 28px;
   height: 28px;
   display: grid;
@@ -4544,7 +4544,7 @@ button.warning:hover:not(:disabled) {
 }
 /* Branded icons (e.g. Git's official orange mark) carry their own
    colour and need no gradient backdrop — render them flush. */
-.hz-node .icon.branded,
+.dz-node .icon.branded,
 .module-row .icon.branded,
 .config-checklist-item .icon.branded {
   background: transparent !important;
@@ -4554,13 +4554,13 @@ button.warning:hover:not(:disabled) {
    fill the icon box edge-to-edge, no backdrop. The image is
    constrained to 100% × 100% so a 32×32 source looks right inside
    the 28px node icon box and the 32px module-row box. */
-.hz-node .icon.brand-logo,
+.dz-node .icon.brand-logo,
 .module-row .icon.brand-logo,
 .config-checklist-item .icon.brand-logo {
   background: transparent !important;
   padding: 0;
 }
-.hz-node .icon.brand-logo img,
+.dz-node .icon.brand-logo img,
 .module-row .icon.brand-logo img,
 .config-checklist-item .icon.brand-logo img {
   width: 100%;
@@ -4576,7 +4576,7 @@ button.warning:hover:not(:disabled) {
   height: 100%;
   object-fit: contain;
 }
-.hz-node .label {
+.dz-node .label {
   font-weight: 500;
   color: var(--ink);
   line-height: 1.2;
@@ -4584,12 +4584,12 @@ button.warning:hover:not(:disabled) {
 /* Watch port values (#10): an output port that emitted a value on the last
    run gets a dotted underline hint; hovering reveals a peek popover with
    the value. */
-.hz-port-out.has-value {
+.dz-port-out.has-value {
   cursor: help;
   text-decoration: underline dotted color-mix(in srgb, var(--ink-soft) 50%, transparent);
   text-underline-offset: 3px;
 }
-.hz-port-peek {
+.dz-port-peek {
   display: none;
   position: absolute;
   right: 0;
@@ -4612,12 +4612,12 @@ button.warning:hover:not(:disabled) {
   z-index: 20;
   pointer-events: none;
 }
-.hz-port-out.has-value:hover .hz-port-peek {
+.dz-port-out.has-value:hover .dz-port-peek {
   display: block;
 }
 /* Inline param editing (#7): a compact form revealed on the selected card.
    Sits between the title and the port rows. Quiet labels, small inputs. */
-.hz-node-params {
+.dz-node-params {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -4625,12 +4625,12 @@ button.warning:hover:not(:disabled) {
   padding-top: var(--space-2);
   border-top: 1px dashed var(--border);
 }
-.hz-param {
+.dz-param {
   display: flex;
   flex-direction: column;
   gap: var(--space-0);
 }
-.hz-param-label {
+.dz-param-label {
   font-size: var(--text-2xs);
   letter-spacing: 0.04em;
   color: var(--muted);
@@ -4638,7 +4638,7 @@ button.warning:hover:not(:disabled) {
 /* Read-only display for resource-picker params (the resolved form/sheet
    name). Looks like a value, not an editable field — editing is in the
    inspector picker. */
-.hz-param-readonly {
+.dz-param-readonly {
   font-size: var(--text-sm);
   padding: var(--space-1) var(--space-1h);
   border-radius: var(--r-1);
@@ -4649,18 +4649,18 @@ button.warning:hover:not(:disabled) {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.hz-node-params input,
-.hz-node-params textarea,
-.hz-node-params select {
+.dz-node-params input,
+.dz-node-params textarea,
+.dz-node-params select {
   font-size: var(--text-sm);
   padding: var(--space-1) var(--space-1h);
   border-radius: var(--r-1);
 }
-.hz-node-params textarea {
+.dz-node-params textarea {
   resize: both;
   min-height: 34px;
 }
-.hz-param input[type="checkbox"] {
+.dz-param input[type="checkbox"] {
   width: auto;
   align-self: flex-start;
 }
@@ -5106,20 +5106,20 @@ button.warning:hover:not(:disabled) {
 /* Switch: the app's on/off toggle (components/Switch.tsx). The real
    checkbox stays in the tree for keyboard/AT; the track + thumb is the
    visible control. */
-.hz-switch {
+.dz-switch {
   display: flex;
   align-items: flex-start;
   gap: var(--space-3);
   cursor: pointer;
   user-select: none;
 }
-.hz-switch input {
+.dz-switch input {
   position: absolute;
   opacity: 0;
   width: 1px;
   height: 1px;
 }
-.hz-switch-track {
+.dz-switch-track {
   flex-shrink: 0;
   width: 34px;
   height: 20px;
@@ -5130,7 +5130,7 @@ button.warning:hover:not(:disabled) {
   transition: background 0.15s ease, border-color 0.15s ease;
   margin-top: 1px;
 }
-.hz-switch-thumb {
+.dz-switch-thumb {
   position: absolute;
   top: 2px;
   left: 2px;
@@ -5141,49 +5141,49 @@ button.warning:hover:not(:disabled) {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
   transition: transform 0.15s ease;
 }
-.hz-switch input:checked + .hz-switch-track {
+.dz-switch input:checked + .dz-switch-track {
   background: var(--accent);
   border-color: var(--accent);
 }
-.hz-switch input:checked + .hz-switch-track .hz-switch-thumb {
+.dz-switch input:checked + .dz-switch-track .dz-switch-thumb {
   transform: translateX(14px);
   background: #fff;
 }
-.hz-switch input:focus-visible + .hz-switch-track {
+.dz-switch input:focus-visible + .dz-switch-track {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-.hz-switch:hover .hz-switch-track {
+.dz-switch:hover .dz-switch-track {
   border-color: var(--border-strong);
   filter: brightness(1.05);
 }
-.hz-switch.disabled {
+.dz-switch.disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
-.hz-switch-text {
+.dz-switch-text {
   display: flex;
   flex-direction: column;
   gap: var(--space-0);
   font-size: var(--text-md);
 }
-.hz-switch-label {
+.dz-switch-label {
   font-weight: 500;
 }
-.hz-switch-desc {
+.dz-switch-desc {
   font-size: var(--text-sm);
   color: var(--muted);
 }
 /* Compact variant for dense surfaces (inline pin rows, grids). */
-.hz-switch.compact .hz-switch-track {
+.dz-switch.compact .dz-switch-track {
   width: 26px;
   height: 16px;
 }
-.hz-switch.compact .hz-switch-thumb {
+.dz-switch.compact .dz-switch-thumb {
   width: 10px;
   height: 10px;
 }
-.hz-switch.compact input:checked + .hz-switch-track .hz-switch-thumb {
+.dz-switch.compact input:checked + .dz-switch-track .dz-switch-thumb {
   transform: translateX(10px);
 }
 
@@ -6715,16 +6715,16 @@ button.warning:hover:not(:disabled) {
 /* ── Unified code/value family (TriggersModal CodeField/CodeBlock) ──
    One themed well (--code-bg/--code-fg: terminal-dark in dark mode, a
    light well in light mode) and one copy button skin, shared by every
-   copyable value and snippet in the inspector. Single-line (.hz-code-row)
-   and multi-line (.hz-code-block) are the only variants. */
-.hz-code {
+   copyable value and snippet in the inspector. Single-line (.dz-code-row)
+   and multi-line (.dz-code-block) are the only variants. */
+.dz-code {
   background: var(--code-bg);
   color: var(--code-fg);
   border: 1px solid var(--border);
   border-radius: var(--r-2);
   min-width: 0;
 }
-.hz-code-label {
+.dz-code-label {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
@@ -6736,13 +6736,13 @@ button.warning:hover:not(:disabled) {
   color: var(--muted);
 }
 /* Single-line: value ellipsizes, button(s) hug the right edge. */
-.hz-code-row {
+.dz-code-row {
   display: flex;
   align-items: center;
   gap: var(--space-1h);
   padding: var(--space-1h) var(--space-1h) var(--space-1h) var(--space-3);
 }
-.hz-code-value {
+.dz-code-value {
   flex: 1;
   min-width: 0;
   font-family: var(--font-mono);
@@ -6753,7 +6753,7 @@ button.warning:hover:not(:disabled) {
 }
 /* HTTP-verb badge before the value ("POST https://…"). Display-only —
    the copy button still yields the bare URL. */
-.hz-code-method {
+.dz-code-method {
   flex-shrink: 0;
   padding: var(--space-0) var(--space-1h);
   border-radius: var(--r-1);
@@ -6765,11 +6765,11 @@ button.warning:hover:not(:disabled) {
   letter-spacing: 0.04em;
 }
 /* Multi-line: wrapping <pre>, copy button pinned top-right. */
-.hz-code-block {
+.dz-code-block {
   position: relative;
   padding: var(--space-2) var(--space-3);
 }
-.hz-code-block pre {
+.dz-code-block pre {
   margin: 0;
   font-family: var(--font-mono);
   font-size: var(--text-sm);
@@ -6781,7 +6781,7 @@ button.warning:hover:not(:disabled) {
 /* The shared copy/action button — same skin in both layouts, so it
    reads as one control wherever it appears. Sits on --surface so it
    stands clear of the code well in both themes. */
-.hz-code-btn {
+.dz-code-btn {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
@@ -6797,19 +6797,19 @@ button.warning:hover:not(:disabled) {
   text-decoration: none;
   white-space: nowrap;
 }
-.hz-code-btn:hover {
+.dz-code-btn:hover {
   background: var(--surface-2);
   border-color: var(--border-strong);
 }
-.hz-code-btn-float {
+.dz-code-btn-float {
   position: absolute;
   top: var(--space-1h);
   right: var(--space-1h);
 }
-.hz-code-btn-danger {
+.dz-code-btn-danger {
   color: var(--danger);
 }
-.hz-code-btn-danger:hover {
+.dz-code-btn-danger:hover {
   background: color-mix(in srgb, var(--danger) 12%, var(--surface));
   border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
 }
@@ -7523,7 +7523,7 @@ button.warning:hover:not(:disabled) {
 /* Comment frame (#3): a resizable, titled box behind the nodes. The box
    fills its React Flow node wrapper; background/border tints are set
    inline from the frame's color. */
-.hz-frame {
+.dz-frame {
   position: relative;
   width: 100%;
   height: 100%;
@@ -7534,7 +7534,7 @@ button.warning:hover:not(:disabled) {
 /* Delete affordance, shown only while the frame is selected — the touch
    path to remove a comment (frames aren't in the Inspector, and a phone has
    no Delete key). Sized as a comfortable tap target. */
-.hz-frame-delete {
+.dz-frame-delete {
   position: absolute;
   top: 6px;
   right: 6px;
@@ -7551,11 +7551,11 @@ button.warning:hover:not(:disabled) {
   color: var(--muted);
   cursor: pointer;
 }
-.hz-frame-delete:hover {
+.dz-frame-delete:hover {
   color: var(--danger);
   border-color: var(--danger);
 }
-.hz-frame-title {
+.dz-frame-title {
   width: auto;
   max-width: calc(100% - 42px);
   margin: var(--space-1h) var(--space-2);
@@ -7566,12 +7566,12 @@ button.warning:hover:not(:disabled) {
   font-weight: 600;
   letter-spacing: 0.01em;
 }
-.hz-frame-title:focus {
+.dz-frame-title:focus {
   outline: none;
   background: color-mix(in srgb, var(--surface) 70%, transparent);
   border-radius: var(--r-1);
 }
-.hz-frame-title::placeholder {
+.dz-frame-title::placeholder {
   color: var(--faint);
   font-weight: 500;
 }
@@ -8138,7 +8138,7 @@ button.warning:hover:not(:disabled) {
 }
 /* "Runs once per row" banner — shown atop the for_each editor and atop a
    loop-body node's form so the per-row behaviour is explicit. */
-.hz-loop-banner {
+.dz-loop-banner {
   margin-bottom: var(--space-3);
   padding: var(--space-2) var(--space-3);
   font-size: var(--text-sm);
@@ -8152,7 +8152,7 @@ button.warning:hover:not(:disabled) {
 /* Error variant: the body pin is unwired (or the loop is illegally nested) and
    was jumped to from the "N to configure" modal. Red echoes the missing-field
    highlight in the rest of the inspector + the node card's red port dots. */
-.hz-loop-banner.error {
+.dz-loop-banner.error {
   color: var(--danger);
   background: color-mix(in srgb, var(--danger) 10%, var(--surface));
   border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
@@ -8174,12 +8174,12 @@ button.warning:hover:not(:disabled) {
   color: var(--text);
 }
 
-/* ── JSON editor (hz-json-editor) ───────────────────────────────────────
+/* ── JSON editor (dz-json-editor) ───────────────────────────────────────
    A transparent <textarea> layered over an aria-hidden highlighted <pre>.
    Both layers MUST share identical metrics (font, size, line-height,
    padding, wrapping) so the caret sits exactly over its highlighted glyph;
    the component syncs scrollTop/Left between them. See JsonEditor.tsx. */
-.hz-json-editor {
+.dz-json-editor {
   position: relative;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -8187,14 +8187,14 @@ button.warning:hover:not(:disabled) {
   background: var(--code-bg);
   resize: vertical;
 }
-.hz-json-editor.invalid {
+.dz-json-editor.invalid {
   border-color: var(--status-failed);
 }
-.hz-json-editor:focus-within {
+.dz-json-editor:focus-within {
   border-color: var(--accent);
 }
-.hz-json-pre,
-.hz-json-ta {
+.dz-json-pre,
+.dz-json-ta {
   margin: 0;
   border: 0;
   padding: 8px;
@@ -8206,7 +8206,7 @@ button.warning:hover:not(:disabled) {
   word-break: break-word;
   overflow-wrap: break-word;
 }
-.hz-json-pre {
+.dz-json-pre {
   position: absolute;
   inset: 0;
   overflow: hidden;
@@ -8214,10 +8214,10 @@ button.warning:hover:not(:disabled) {
   color: var(--code-fg);
   background: transparent;
 }
-.hz-json-pre code {
+.dz-json-pre code {
   font: inherit;
 }
-.hz-json-ta {
+.dz-json-ta {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -8230,11 +8230,11 @@ button.warning:hover:not(:disabled) {
   overflow: auto;
 }
 /* Token colours (themed in theme.css for dark + light). */
-.hz-j-key { color: var(--json-key); }
-.hz-j-string { color: var(--json-string); }
-.hz-j-number { color: var(--json-number); }
-.hz-j-bool { color: var(--json-bool); }
-.hz-j-punct { color: var(--json-punct); }
+.dz-j-key { color: var(--json-key); }
+.dz-j-string { color: var(--json-string); }
+.dz-j-number { color: var(--json-number); }
+.dz-j-bool { color: var(--json-bool); }
+.dz-j-punct { color: var(--json-punct); }
 
 /* ── Files (workspace file manager) ─────────────────────────────────── */
 .files-toolbar {

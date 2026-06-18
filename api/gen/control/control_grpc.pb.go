@@ -19,11 +19,11 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	GraphService_SaveGraph_FullMethodName    = "/hazyflow.control.v1.GraphService/SaveGraph"
-	GraphService_LoadGraph_FullMethodName    = "/hazyflow.control.v1.GraphService/LoadGraph"
-	GraphService_ListGraphs_FullMethodName   = "/hazyflow.control.v1.GraphService/ListGraphs"
-	GraphService_PromoteGraph_FullMethodName = "/hazyflow.control.v1.GraphService/PromoteGraph"
-	GraphService_RunGraph_FullMethodName     = "/hazyflow.control.v1.GraphService/RunGraph"
+	GraphService_SaveGraph_FullMethodName    = "/dazyflow.control.v1.GraphService/SaveGraph"
+	GraphService_LoadGraph_FullMethodName    = "/dazyflow.control.v1.GraphService/LoadGraph"
+	GraphService_ListGraphs_FullMethodName   = "/dazyflow.control.v1.GraphService/ListGraphs"
+	GraphService_PromoteGraph_FullMethodName = "/dazyflow.control.v1.GraphService/PromoteGraph"
+	GraphService_RunGraph_FullMethodName     = "/dazyflow.control.v1.GraphService/RunGraph"
 )
 
 // GraphServiceClient is the client API for GraphService service.
@@ -246,7 +246,7 @@ type GraphService_RunGraphServer = grpc.ServerStreamingServer[RunGraphEvent]
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var GraphService_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "hazyflow.control.v1.GraphService",
+	ServiceName: "dazyflow.control.v1.GraphService",
 	HandlerType: (*GraphServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
@@ -277,10 +277,10 @@ var GraphService_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	JobService_GetJob_FullMethodName           = "/hazyflow.control.v1.JobService/GetJob"
-	JobService_ListJobsForGraph_FullMethodName = "/hazyflow.control.v1.JobService/ListJobsForGraph"
-	JobService_CancelJob_FullMethodName        = "/hazyflow.control.v1.JobService/CancelJob"
-	JobService_StreamJobLogs_FullMethodName    = "/hazyflow.control.v1.JobService/StreamJobLogs"
+	JobService_GetJob_FullMethodName           = "/dazyflow.control.v1.JobService/GetJob"
+	JobService_ListJobsForGraph_FullMethodName = "/dazyflow.control.v1.JobService/ListJobsForGraph"
+	JobService_CancelJob_FullMethodName        = "/dazyflow.control.v1.JobService/CancelJob"
+	JobService_StreamJobLogs_FullMethodName    = "/dazyflow.control.v1.JobService/StreamJobLogs"
 )
 
 // JobServiceClient is the client API for JobService service.
@@ -488,7 +488,7 @@ type JobService_StreamJobLogsServer = grpc.ServerStreamingServer[JobLogEntry]
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var JobService_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "hazyflow.control.v1.JobService",
+	ServiceName: "dazyflow.control.v1.JobService",
 	HandlerType: (*JobServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
@@ -515,7 +515,7 @@ var JobService_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	DropService_ListDrops_FullMethodName = "/hazyflow.control.v1.DropService/ListDrops"
+	DropService_ListDrops_FullMethodName = "/dazyflow.control.v1.DropService/ListDrops"
 )
 
 // DropServiceClient is the client API for DropService service.
@@ -604,7 +604,7 @@ func _DropService_ListDrops_Handler(srv interface{}, ctx context.Context, dec fu
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var DropService_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "hazyflow.control.v1.DropService",
+	ServiceName: "dazyflow.control.v1.DropService",
 	HandlerType: (*DropServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{

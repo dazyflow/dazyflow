@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // approvalTokenTTL bounds how long a signed approval link stays valid.
@@ -40,7 +40,7 @@ type ApprovalDecision struct {
 // don't have to be re-notified.
 //
 // BaseURL should be the externally-visible address of the approval
-// listener, e.g. "https://hzd.acme.com". Token validation lives in
+// listener, e.g. "https://dzd.acme.com". Token validation lives in
 // ApprovalListener.
 type HMACApprovalSigner struct {
 	BaseURL string

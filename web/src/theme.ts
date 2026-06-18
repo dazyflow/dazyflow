@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 
 export type ThemeMode = "dark" | "light";
 
-const KEY = "hazyflow.theme";
+const KEY = "dazyflow.theme";
 
 export function getTheme(): ThemeMode {
   try {

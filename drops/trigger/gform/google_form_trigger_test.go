@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
+	"git.sr.ht/~klahr/dazyflow/core"
+	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 )
 
 // TestMain enables the operator private-egress opt-in so httptest servers

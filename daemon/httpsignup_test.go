@@ -9,12 +9,12 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/auth"
+	"git.sr.ht/~klahr/dazyflow/auth"
 )
 
 // newSignupHarness extends the default gateway harness with the
 // Users + Sessions stores wired up and signup enabled, mirroring
-// what hzd does when --signup is set.
+// what dzd does when --signup is set.
 func newSignupHarness(t *testing.T) *gatewayHarness {
 	t.Helper()
 	h := newGatewayHarness(t)
@@ -24,7 +24,7 @@ func newSignupHarness(t *testing.T) *gatewayHarness {
 	// The default harness's Auth chain is API-key-only; extend it
 	// with the session authenticator so the token returned from
 	// signup actually validates on subsequent requests (like real
-	// hzd, which always wires both authenticators).
+	// dzd, which always wires both authenticators).
 	h.svc.Auth = auth.Chain{
 		&auth.APIKeyAuthenticator{Store: h.ks},
 		&auth.SessionAuthenticator{Store: h.gw.Sessions},

@@ -2,9 +2,9 @@ package daemon
 
 // OAuthProviderDefault is the URLs+scopes side of an OAuthProvider —
 // everything except the per-deployment ClientID/ClientSecret. The
-// defaults table below is the canonical "what services can a Hazy
+// defaults table below is the canonical "what services can a Dazy
 // Flow install talk to OAuth-wise", used both at boot (env-var
-// hydration in cmd/hzd) and at admin runtime (so the UI can list
+// hydration in cmd/dzd) and at admin runtime (so the UI can list
 // every connectable service even before its credentials are pasted
 // in).
 //
@@ -27,7 +27,7 @@ type OAuthProviderDefault struct {
 }
 
 // KnownOAuthProviderDefaults is the deployment-invariant catalogue of
-// OAuth providers Hazyflow's drops can use. Order matters: it's the
+// OAuth providers Dazyflow's drops can use. Order matters: it's the
 // order admin UI rows render in.
 //
 // The Google entry requests only non-restricted scopes by default
@@ -184,7 +184,7 @@ func providerUsesIncrementalScopes(provider string) bool {
 }
 
 // providerDefault returns the defaults entry for name, or nil if the
-// provider isn't in Hazyflow's known catalogue.
+// provider isn't in Dazyflow's known catalogue.
 func providerDefault(name string) *OAuthProviderDefault {
 	for i := range KnownOAuthProviderDefaults {
 		if KnownOAuthProviderDefaults[i].Name == name {

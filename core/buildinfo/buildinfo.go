@@ -1,11 +1,11 @@
 // Package buildinfo holds the version metadata stamped into the binary
 // at build time. The three vars are set via the linker
-// (-ldflags "-X git.sr.ht/~klahr/hazyflow/core/buildinfo.Version=...")
+// (-ldflags "-X git.sr.ht/~klahr/dazyflow/core/buildinfo.Version=...")
 // by `make build` and the Dockerfile; see the Makefile's build/_bump
 // targets and CHANGELOG.md for the release flow.
 //
 // They live in their own leaf package, not in main, so any package can
-// read them without importing cmd/hzd — the daemon's HTTP gateway
+// read them without importing cmd/dzd — the daemon's HTTP gateway
 // surfaces them on GET /api/v1, and the web UI shows the version in its
 // account-menu footer. A plain `go build`/`go run` with no -ldflags
 // (local dev) leaves the placeholder defaults below, so the values are

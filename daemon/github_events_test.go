@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
-	_ "git.sr.ht/~klahr/hazyflow/drops/github"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/engine"
+	_ "git.sr.ht/~klahr/dazyflow/drops/github"
 )
 
 // signGitHub produces the X-Hub-Signature-256 header value GitHub
@@ -111,7 +111,7 @@ func TestGitHubEvents_PushDispatchesToSubscribedGraphs(t *testing.T) {
 		"commits": []any{
 			map[string]any{"id": "def456", "message": "Add feature"},
 		},
-		"repository": map[string]any{"full_name": "klahr/hazyflow"},
+		"repository": map[string]any{"full_name": "klahr/dazyflow"},
 		"pusher":     map[string]any{"name": "alice"},
 	}
 	body, _ := json.Marshal(event)
@@ -164,12 +164,12 @@ func TestGitHubEvents_PullRequestOpenedDispatches(t *testing.T) {
 			"number":   42,
 			"title":    "Add fizzbuzz",
 			"body":     "Fixes #1",
-			"html_url": "https://github.com/klahr/hazyflow/pull/42",
+			"html_url": "https://github.com/klahr/dazyflow/pull/42",
 			"user":     map[string]any{"login": "alice"},
 			"head":     map[string]any{"ref": "feature/fizzbuzz"},
 			"base":     map[string]any{"ref": "main"},
 		},
-		"repository": map[string]any{"full_name": "klahr/hazyflow"},
+		"repository": map[string]any{"full_name": "klahr/dazyflow"},
 	}
 	body, _ := json.Marshal(event)
 	rw := h.post(t, "/api/v1/events/github/t", "pull_request", body)

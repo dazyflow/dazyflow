@@ -8,17 +8,14 @@
 package discord
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
-	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 )
 
 // maxResponseBytes caps how much of an API response we buffer.
@@ -35,33 +32,12 @@ func discordDo(ctx context.Context, job core.Job, url string, body []byte) (int,
 	if timeoutMS <= 0 {
 		timeoutMS = 15000
 	}
-	reqCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMS)*time.Millisecond)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		return 0, nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	// The webhook URL is tenant-supplied (from a secret), so guard the dial:
-	// the SSRF client blocks loopback/private/link-local targets and the egress
-	// allowlist (when set) bounds which public hosts the token may be sent to.
-	if err := hfnet.EgressAllowedFor(ctx, url); err != nil {
-		return 0, nil, err
-	}
-	resp, err := hfnet.SafeHTTPClient(time.Duration(timeoutMS)*time.Millisecond, hfnet.PrivateEgressAllowed()).Do(req)
-	if err != nil {
-		return 0, nil, err
-	}
-	defer resp.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
-	if err != nil {
-		return resp.StatusCode, nil, err
-	}
-	if int64(len(raw)) > maxResponseBytes {
-		return resp.StatusCode, nil, fmt.Errorf("discord response exceeds %d bytes", maxResponseBytes)
-	}
-	return resp.StatusCode, raw, nil
+	headers := map[string]string{"Content-Type": "application/json"}
+	// The webhook URL is tenant-supplied (from a secret), so net.Do guards the
+	// dial: the SSRF client blocks loopback/private/link-local targets and the
+	// egress allowlist (when set) bounds which public hosts the token may reach.
+	status, raw, _, err := hfnet.Do(ctx, http.MethodPost, url, headers, body, timeoutMS, maxResponseBytes)
+	return status, raw, err
 }
 
 // extractDiscordError pulls the message (plus code) out of a Discord error

@@ -13,7 +13,7 @@ import (
 
 // Postgres-backed implementations of the four org-level stores that
 // were previously JSON-file only: memberships, invitations, per-org
-// auth config, per-org profile. Selecting these (via HAZYFLOW_POSTGRES_DSN)
+// auth config, per-org profile. Selecting these (via DAZYFLOW_POSTGRES_DSN)
 // is what lets a deploy fully drop the on-disk state/ directory.
 
 const pgOrgsSchema = `

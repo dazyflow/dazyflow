@@ -9,7 +9,7 @@
 // dedupe.
 //
 // Scope today: 24h TTL, in-memory map keyed by (principal subject,
-// route, idempotency key). Survives a single hzd process; lost on
+// route, idempotency key). Survives a single dzd process; lost on
 // restart. The spec doesn't require persistence — Stripe and others
 // document the same "best-effort within a window" semantics.
 //
@@ -30,7 +30,7 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 const (

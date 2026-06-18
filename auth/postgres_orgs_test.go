@@ -9,18 +9,18 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // Real-DB tests for the four org-level Pg stores. Gated on
-// HAZYFLOW_TEST_DB so `go test ./auth/...` stays green without a
+// DAZYFLOW_TEST_DB so `go test ./auth/...` stays green without a
 // running Postgres, but CI (.build.yml) wires one up and these run.
 
 func orgsPool(t *testing.T) (*pgxpool.Pool, context.Context) {
 	t.Helper()
-	url := os.Getenv("HAZYFLOW_TEST_DB")
+	url := os.Getenv("DAZYFLOW_TEST_DB")
 	if url == "" {
-		t.Skip("set HAZYFLOW_TEST_DB to run Postgres integration tests")
+		t.Skip("set DAZYFLOW_TEST_DB to run Postgres integration tests")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	t.Cleanup(cancel)

@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/limits"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/limits"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 func init() {
@@ -159,7 +159,7 @@ func executePostgresQuery(ctx context.Context, job core.Job, _ chan<- core.Progr
 		// Fail fast at the shared row ceiling rather than letting it grow.
 		if len(out) > limits.MaxRows() {
 			return params.Err(job, "too_many_rows",
-				fmt.Sprintf("query returned more than the %d-row limit; add a LIMIT clause, set the 'limit' param, or raise HAZYFLOW_MAX_ROWS", limits.MaxRows())), nil
+				fmt.Sprintf("query returned more than the %d-row limit; add a LIMIT clause, set the 'limit' param, or raise DAZYFLOW_MAX_ROWS", limits.MaxRows())), nil
 		}
 	}
 	if err := rows.Err(); err != nil {

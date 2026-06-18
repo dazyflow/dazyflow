@@ -6,13 +6,13 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/auth"
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/daemon"
-	_ "git.sr.ht/~klahr/hazyflow/drops" // register sleep/merge
-	"git.sr.ht/~klahr/hazyflow/engine"
-	"git.sr.ht/~klahr/hazyflow/engine/jobstore"
-	"git.sr.ht/~klahr/hazyflow/workspace"
+	"git.sr.ht/~klahr/dazyflow/auth"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon"
+	_ "git.sr.ht/~klahr/dazyflow/drops" // register sleep/merge
+	"git.sr.ht/~klahr/dazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/engine/jobstore"
+	"git.sr.ht/~klahr/dazyflow/workspace"
 )
 
 // alwaysFailManifest is non-idempotent + no retry so a failure is terminal

@@ -1,12 +1,12 @@
 # Security operations
 
-## The master key (`$HAZYFLOW_MASTER_KEY`)
+## The master key (`$DAZYFLOW_MASTER_KEY`)
 
-hzd's built-in secret store (`EncryptedSecrets`, `daemon/encrypted_secrets.go`)
+dzd's built-in secret store (`EncryptedSecrets`, `daemon/encrypted_secrets.go`)
 uses **envelope encryption**:
 
 - **KEK** (Key-Encryption-Key) = the master key. A 32-byte AES-256 key
-  you provide. Held only in process memory; hzd never writes it to disk.
+  you provide. Held only in process memory; dzd never writes it to disk.
 - **DEK** (Data-Encryption-Key) = one per tenant, generated on that
   tenant's first secret write, then **wrapped (encrypted) by the KEK**
   and stored. Each secret is sealed with AES-256-GCM under its tenant's
@@ -18,15 +18,15 @@ secret. It is the single most sensitive piece of configuration.
 ### Generating it
 
 ```sh
-openssl rand -base64 32        # 32 bytes, base64-encoded — what hzd expects
+openssl rand -base64 32        # 32 bytes, base64-encoded — what dzd expects
 ```
 
-hzd validates it decodes to exactly 32 bytes and exits otherwise.
+dzd validates it decodes to exactly 32 bytes and exits otherwise.
 
 ### Storing it
 
 - **Never** commit it, bake it into an image, or put it in the graph
-  store. Inject it at runtime via `$HAZYFLOW_MASTER_KEY`.
+  store. Inject it at runtime via `$DAZYFLOW_MASTER_KEY`.
 - Source it from a real secret manager and export into the daemon's
   environment at boot:
   - **AWS**: `aws secretsmanager get-secret-value` / SSM Parameter Store
@@ -57,7 +57,7 @@ already leaked.
 Rotating the KEK re-wraps every tenant's DEK under the new key. The
 secret ciphertexts (sealed under the per-tenant DEKs) are untouched —
 only the wrapped-DEK rows change — so rotation is fast, low-risk, and
-requires **no secret re-entry**. `hzd --rotate-master-key` does the
+requires **no secret re-entry**. `dzd --rotate-master-key` does the
 re-wrap; the DEK plaintexts never leave the process.
 (Implementation: `EncryptedSecrets.RewrapDEKs` in
 `daemon/encrypted_secrets.go`.)
@@ -66,29 +66,29 @@ re-wrap; the DEK plaintexts never leave the process.
 
 1. Generate `NEW_KEY` (`openssl rand -base64 32`).
 2. Run the re-wrap against the same store the daemon uses. The
-   **current** key comes from `$HAZYFLOW_MASTER_KEY`; the new one is
+   **current** key comes from `$DAZYFLOW_MASTER_KEY`; the new one is
    passed as the `--rotate-master-key` flag (one of only two flags
-   `hzd` still accepts, both one-shot operator commands that exit
+   `dzd` still accepts, both one-shot operator commands that exit
    after running):
 
    ```sh
-   HAZYFLOW_POSTGRES_DSN="$DSN" \
-   HAZYFLOW_MASTER_KEY="$OLD_KEY" \
-       hzd --rotate-master-key "$NEW_KEY"
+   DAZYFLOW_POSTGRES_DSN="$DSN" \
+   DAZYFLOW_MASTER_KEY="$OLD_KEY" \
+       dzd --rotate-master-key "$NEW_KEY"
    # logs: "master-key rotation complete: N DEK(s) re-wrapped, …"
    ```
 
    The command is **re-runnable**: a DEK already on the new key (from
    a prior interrupted run) is detected and skipped, not double-
    wrapped. It fails loudly — leaving the store untouched — if
-   `HAZYFLOW_MASTER_KEY` isn't the key that wrapped the existing DEKs.
-3. Swap `$HAZYFLOW_MASTER_KEY` to `NEW_KEY` in your `.env` (or whatever
+   `DAZYFLOW_MASTER_KEY` isn't the key that wrapped the existing DEKs.
+3. Swap `$DAZYFLOW_MASTER_KEY` to `NEW_KEY` in your `.env` (or whatever
    delivers it) and restart the daemon.
 4. Verify reads succeed, then destroy the old key.
 
 > ⚠️ Keep the old key until step 4 verifies. If rotation is interrupted
 > partway, re-run step 2 with the same keys before restarting — the
-> daemon's running `HAZYFLOW_MASTER_KEY` must match whatever wrapped
+> daemon's running `DAZYFLOW_MASTER_KEY` must match whatever wrapped
 > the DEKs on disk.
 
 If the master key was **compromised** (not just being rotated on
@@ -101,17 +101,17 @@ may already have leaked.
 All these are env vars set via the same `.env` (see `.env.example`):
 
 - Run behind a TLS-terminating reverse proxy; set
-  `HAZYFLOW_TRUST_PROXY_HEADERS=1` so session cookies are `Secure` and
+  `DAZYFLOW_TRUST_PROXY_HEADERS=1` so session cookies are `Secure` and
   HSTS is sent.
-- `HAZYFLOW_DEV_KEY` defaults off; never set it in production — it
+- `DAZYFLOW_DEV_KEY` defaults off; never set it in production — it
   mints an insecure bearer token at every boot.
 - Secrets live only in the per-tenant encrypted store and are
   referenced from flows as `${secret.NAME}`; the daemon's process
   environment is never reachable from a flow. The auth rate limiter
   is fixed at 20/min per IP with a burst of 10 (defense against credential
   stuffing on the auth endpoints) — `ipRateLimiter` in `daemon/ratelimit.go`.
-- `HAZYFLOW_HTTP_EGRESS_ALLOW` pins the `http_request` /
+- `DAZYFLOW_HTTP_EGRESS_ALLOW` pins the `http_request` /
   `webhook_send` drops to an allowlist; the IP-level SSRF guard
   (blocks private/loopback/cloud metadata) is always on. Both flow through
   `EgressAllowed` in `drops/net/egress.go`.
-- `HAZYFLOW_POSTGRES_DSN` for durable, restart-surviving stores.
+- `DAZYFLOW_POSTGRES_DSN` for durable, restart-surviving stores.

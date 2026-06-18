@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // slackOnMentionModuleID identifies the trigger drop graph authors
@@ -276,7 +276,7 @@ func (h *SlackEventsHandler) fanoutSeed(ctx context.Context, tenant, eventChanne
 	// webhook listener uses (graph:admin lets the principal fire
 	// private flows without owning them).
 	principal := core.Principal{
-		Subject: "hazyflow-slack-events",
+		Subject: "dazyflow-slack-events",
 		Tenant:  tenant,
 		Roles: []core.Role{{
 			Name:        "slack-events",

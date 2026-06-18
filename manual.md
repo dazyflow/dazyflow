@@ -1,4 +1,4 @@
-# Proposal: a Hazyflow user manual
+# Proposal: a Dazyflow user manual
 
 **Status:** proposal / RFC · **Scope:** end-user + author documentation ·
 **Decision asked:** (1) do we build a manual, (2) what toolchain, (3) what goes in it.
@@ -8,9 +8,8 @@
 Today's docs are **operator-facing**: `README.md` (quick start, prod, dev),
 `DEPLOY.md`, `SECURITY.md`, `PRIVACY.md`, `COMPLIANCE.md`. There is **nothing
 for the people who actually use the product** — the person building a flow in
-the web editor. The review in `IMPROVEMENTS.md` (§6) flagged this: no reference
-for what each node does, how to compose a flow, or how to troubleshoot a failed
-run ("why did my flow pause?").
+the web editor: no reference for what each node does, how to compose a flow, or
+how to troubleshoot a failed run ("why did my flow pause?").
 
 A manual closes that gap and doubles as: onboarding for new users, a target the
 in-app "?" links can point at, and a search surface for "how do I do X".
@@ -43,7 +42,7 @@ Live under `docs/` (new), built to static HTML, deployed to `/docs`.
 
 ```
 docs/
-  index.md                 Landing: what Hazyflow is, 60-second tour
+  index.md                 Landing: what Dazyflow is, 60-second tour
   getting-started/
     first-flow.md           Build + run your first flow (trigger → action)
     concepts.md             Flows, nodes, ports, edges, runs, drafts vs published

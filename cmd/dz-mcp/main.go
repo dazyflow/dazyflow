@@ -1,7 +1,7 @@
-// hz-mcp is the Hazyflow MCP (Model Context Protocol) server. It
+// dz-mcp is the Dazyflow MCP (Model Context Protocol) server. It
 // runs as a stdio subprocess of an MCP client (Claude Desktop /
 // Claude Code) and exposes pipeline-management operations as tools.
-// Internally it just forwards to the running hzd daemon's /api/v1
+// Internally it just forwards to the running dzd daemon's /api/v1
 // gateway, so it works with any deployment that exposes the gateway
 // over HTTP.
 //
@@ -9,13 +9,13 @@
 //
 //	{
 //	  "mcpServers": {
-//	    "hazyflow": {
-//	      "command": "/path/to/hz-mcp",
+//	    "dazyflow": {
+//	      "command": "/path/to/dz-mcp",
 //	      "env": {
-//	        "HAZYFLOW_URL":     "http://localhost:8080",
-//	        "HAZYFLOW_API_KEY": "<bearer token>",
-//	        "HAZYFLOW_TENANT":    "dev",        // optional
-//	        "HAZYFLOW_WORKSPACE": "default"     // optional
+//	        "DAZYFLOW_URL":     "http://localhost:8080",
+//	        "DAZYFLOW_API_KEY": "<bearer token>",
+//	        "DAZYFLOW_TENANT":    "dev",        // optional
+//	        "DAZYFLOW_WORKSPACE": "default"     // optional
 //	      }
 //	    }
 //	  }
@@ -35,26 +35,26 @@ import (
 	"syscall"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/mcp/server"
+	"git.sr.ht/~klahr/dazyflow/mcp/server"
 )
 
 func main() {
-	url := flag.String("url", envDefault("HAZYFLOW_URL", "http://localhost:8080"),
-		"base URL of the hzd HTTP gateway (default $HAZYFLOW_URL)")
-	token := flag.String("token", os.Getenv("HAZYFLOW_API_KEY"),
-		"bearer token for the gateway (default $HAZYFLOW_API_KEY)")
-	tenant := flag.String("tenant", os.Getenv("HAZYFLOW_TENANT"),
-		"default tenant for scoped operations (default $HAZYFLOW_TENANT, then derived from /whoami)")
-	workspace := flag.String("workspace", os.Getenv("HAZYFLOW_WORKSPACE"),
-		"default workspace for scoped operations (default $HAZYFLOW_WORKSPACE, then derived from /whoami)")
+	url := flag.String("url", envDefault("DAZYFLOW_URL", "http://localhost:8080"),
+		"base URL of the dzd HTTP gateway (default $DAZYFLOW_URL)")
+	token := flag.String("token", os.Getenv("DAZYFLOW_API_KEY"),
+		"bearer token for the gateway (default $DAZYFLOW_API_KEY)")
+	tenant := flag.String("tenant", os.Getenv("DAZYFLOW_TENANT"),
+		"default tenant for scoped operations (default $DAZYFLOW_TENANT, then derived from /whoami)")
+	workspace := flag.String("workspace", os.Getenv("DAZYFLOW_WORKSPACE"),
+		"default workspace for scoped operations (default $DAZYFLOW_WORKSPACE, then derived from /whoami)")
 	flag.Parse()
 
-	logger := log.New(os.Stderr, "hz-mcp: ", log.LstdFlags)
+	logger := log.New(os.Stderr, "dz-mcp: ", log.LstdFlags)
 	if *token == "" {
-		logger.Print("warning: no API token; set HAZYFLOW_API_KEY or pass -token")
+		logger.Print("warning: no API token; set DAZYFLOW_API_KEY or pass -token")
 	}
 
-	client := server.NewHazydClient(*url, *token)
+	client := server.NewDazydClient(*url, *token)
 
 	// Resolve defaults from /whoami when the user didn't pin them
 	// explicitly. Run this in a short-budget context so a broken
@@ -80,7 +80,7 @@ func main() {
 	}
 
 	srv := &server.Server{
-		Name:    "hazyflow",
+		Name:    "dazyflow",
 		Version: "0.1.0",
 		Logger:  logger,
 	}
@@ -95,7 +95,7 @@ func main() {
 	defer cancel()
 
 	if err := srv.Serve(ctx, os.Stdin, os.Stdout); err != nil {
-		fmt.Fprintln(os.Stderr, "hz-mcp:", err)
+		fmt.Fprintln(os.Stderr, "dz-mcp:", err)
 		os.Exit(1)
 	}
 }

@@ -8,7 +8,7 @@ import (
 
 	gossh "golang.org/x/crypto/ssh"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 func testEncryptedSecrets(t *testing.T) *EncryptedSecrets {

@@ -10,7 +10,7 @@ import (
 )
 
 // PgLeader is single-leader election over a Postgres session-level
-// advisory lock. Exactly one hzd in a cluster holds the lock at a time;
+// advisory lock. Exactly one dzd in a cluster holds the lock at a time;
 // that node is "the leader" and is the only one allowed to fire the cron
 // /poll scheduler. If the leader dies, its connection drops, Postgres
 // releases the lock, and a follower takes it over on its next attempt.
@@ -28,9 +28,9 @@ type PgLeader struct {
 }
 
 // SchedulerLockKey is the advisory-lock key the scheduler leader uses.
-// Any constant works as long as every hzd in the cluster agrees on it;
+// Any constant works as long as every dzd in the cluster agrees on it;
 // pick something unlikely to collide with app-level advisory locks.
-const SchedulerLockKey int64 = 0x4841_5A59_5F53_4348 // "HAZY_SCH"
+const SchedulerLockKey int64 = 0x4841_5A59_5F53_4348 // "DAZY_SCH"
 
 func NewPgLeader(pool *pgxpool.Pool, key int64) *PgLeader {
 	return &PgLeader{

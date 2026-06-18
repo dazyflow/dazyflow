@@ -1,9 +1,9 @@
-// Command hzctl is the Hazyflow CLI. Commands fall into two groups:
+// Command dzctl is the Dazyflow CLI. Commands fall into two groups:
 //
 //   - "offline" — work against a local workspace Git repo (lint).
-//   - "remote"  — talk to hzd over gRPC via the control API. Configure
+//   - "remote"  — talk to dzd over gRPC via the control API. Configure
 //                  the server URL with --server and the bearer token with
-//                  the HZCTL_TOKEN environment variable.
+//                  the DZCTL_TOKEN environment variable.
 package main
 
 import (
@@ -17,12 +17,12 @@ var serverFlag string
 
 func main() {
 	root := &cobra.Command{
-		Use:           "hzctl",
-		Short:         "Hazyflow CLI",
+		Use:           "dzctl",
+		Short:         "Dazyflow CLI",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
-	root.PersistentFlags().StringVar(&serverFlag, "server", "localhost:50050", "hzd gRPC address")
+	root.PersistentFlags().StringVar(&serverFlag, "server", "localhost:50050", "dzd gRPC address")
 
 	root.AddCommand(graphCmd())
 	root.AddCommand(moduleCmd())

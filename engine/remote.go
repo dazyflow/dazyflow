@@ -13,8 +13,8 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
-	nodepb "git.sr.ht/~klahr/hazyflow/api/gen/node"
-	"git.sr.ht/~klahr/hazyflow/core"
+	nodepb "git.sr.ht/~klahr/dazyflow/api/gen/node"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // RemoteDescriptor matches the on-disk descriptor for runtime="remote".

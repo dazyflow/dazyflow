@@ -14,10 +14,10 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
-	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 func init() {
@@ -120,7 +120,7 @@ func executeHTTPDownload(ctx context.Context, job core.Job, _ chan<- core.Progre
 	timeoutMs := params.IntDefault(job.Params, "timeout_ms", 300000)
 	maxBytes := int64(params.IntDefault(job.Params, "max_bytes", defaultDownloadMaxBytes))
 	// allow_private_networks disables the SSRF guard — honored only when the
-	// operator opted in (HAZYFLOW_ALLOW_PRIVATE_EGRESS), else ignored.
+	// operator opted in (DAZYFLOW_ALLOW_PRIVATE_EGRESS), else ignored.
 	allowPrivate := params.BoolDefault(job.Params, "allow_private_networks", false) && hfnet.PrivateEgressAllowed()
 
 	// Resolve the destination (workspace or scratch://) and open its root.

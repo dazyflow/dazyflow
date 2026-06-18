@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 func init() {
@@ -16,7 +16,7 @@ func init() {
 			Label:       "Stripe",
 			Subtitle:    "On payment failed",
 			Summary:     "Trigger that fires when a Stripe payment attempt fails, with the decline reason ready for an alert.",
-			Description: "Starts the flow when a payment attempt fails in your Stripe account (a payment_intent.payment_failed webhook event). Setup is the same endpoint as the payment trigger: point a Stripe webhook at https://<your-hazyflow-host>/api/v1/events/stripe/<tenant>, subscribe it to payment_intent.payment_failed, and save the endpoint's signing secret (whsec_…) as a secret named STRIPE_WEBHOOK_SECRET. The 'Failure reason' output carries Stripe's decline message ('Your card was declined.') — wire it with the amount and payer email into a notify step.",
+			Description: "Starts the flow when a payment attempt fails in your Stripe account (a payment_intent.payment_failed webhook event). Setup is the same endpoint as the payment trigger: point a Stripe webhook at https://<your-dazyflow-host>/api/v1/events/stripe/<tenant>, subscribe it to payment_intent.payment_failed, and save the endpoint's signing secret (whsec_…) as a secret named STRIPE_WEBHOOK_SECRET. The 'Failure reason' output carries Stripe's decline message ('Your card was declined.') — wire it with the amount and payer email into a notify step.",
 			Integration: "Stripe",
 			Category:    "trigger",
 			Icon:        "credit-card",

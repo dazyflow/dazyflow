@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // Failure-notification dispatcher. Listens on the bus for a single
@@ -171,7 +171,7 @@ func (s *Service) fireFailureNotification(ctx context.Context, graph core.Graph,
 		return
 	}
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
-	req.Header.Set("User-Agent", "hazyflow-failure-notify/1.0")
+	req.Header.Set("User-Agent", "dazyflow-failure-notify/1.0")
 	resp, err := failureNotifyClient.Do(req)
 	if err != nil {
 		s.logFailureNotifyError(graph, fmt.Errorf("post: %w", err))
@@ -190,7 +190,7 @@ func (s *Service) fireFailureNotification(ctx context.Context, graph core.Graph,
 // webhook channel.
 func (s *Service) fireFailureEmail(ctx context.Context, graph core.Graph, payload FailurePayload) {
 	if s.Mailer == nil {
-		s.logFailureNotifyError(graph, fmt.Errorf("email channel configured but no mailer on this deployment (set HAZYFLOW_SMTP_URL)"))
+		s.logFailureNotifyError(graph, fmt.Errorf("email channel configured but no mailer on this deployment (set DAZYFLOW_SMTP_URL)"))
 		return
 	}
 	name := graph.Name

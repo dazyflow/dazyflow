@@ -37,7 +37,7 @@ export function SignIn() {
   const [signupEnabled, setSignupEnabled] = useState(false);
   // The org whose SSO we offer. Prefer an explicit ?org=, otherwise fall
   // back to the org encoded in the host on a wildcard-subdomain deploy
-  // (e.g. acme.hazyflow.app → "acme"), resolved once the public auth
+  // (e.g. acme.dazyflow.app → "acme"), resolved once the public auth
   // config tells us the wildcard domain.
   const [org, setOrg] = useState(queryOrg);
 

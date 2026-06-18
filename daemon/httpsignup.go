@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/auth"
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/auth"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // Self-serve signup. The endpoint:
@@ -33,14 +33,14 @@ import (
 // What this DELIBERATELY isn't (yet):
 //
 //   - Captcha — the per-IP auth rate limit plus email verification
-//     (active when HAZYFLOW_SMTP_URL + PUBLIC_BASE_URL are set; see
+//     (active when DAZYFLOW_SMTP_URL + PUBLIC_BASE_URL are set; see
 //     email_verification.go) are the current anti-abuse story.
 //   - Plan selection / billing — every signup lands on the free
 //     tier; plan gating is a T3 item once Stripe is wired.
 //
 // Deployments that don't want self-serve signup leave
 // `EnableSignup` false; the endpoint returns 501 — except for emails in
-// the platform-admin allowlist (HAZYFLOW_PLATFORM_ADMINS), which may
+// the platform-admin allowlist (DAZYFLOW_PLATFORM_ADMINS), which may
 // always sign up so a fresh instance can bootstrap its first super-admin
 // without temporarily opening signup to the world.
 
@@ -63,7 +63,7 @@ func (h *HTTPGateway) signUp(rw http.ResponseWriter, r *http.Request) {
 	email := strings.ToLower(strings.TrimSpace(body.Email))
 	// Signup is closed by default. Two ways through the gate: the operator
 	// enabled self-serve signup, or this email is in the platform-admin
-	// allowlist (HAZYFLOW_PLATFORM_ADMINS). The allowlist path is the
+	// allowlist (DAZYFLOW_PLATFORM_ADMINS). The allowlist path is the
 	// bootstrap hatch — it lets a fresh instance mint its first super-admin
 	// without flipping EnableSignup on and back off. It's self-limiting:
 	// once the account exists the duplicate check below returns 409, so a

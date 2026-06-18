@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  X,
   Sparkles,
   Copy,
   Check,
@@ -10,7 +9,6 @@ import {
   Plus,
   FileText,
   Webhook as WebhookIcon,
-  CalendarClock,
   Link as LinkIcon,
   ExternalLink,
 } from "lucide-react";
@@ -22,191 +20,6 @@ import { Switch } from "./Switch";
 import { ConfirmModal } from "./ConfirmModal";
 import { webhookKeys } from "../flowStatus";
 import { formatDateTime } from "../lib/datetime";
-
-// TriggersModal is the per-flow "how does this flow start?" editor,
-// promoted out of the Settings modal into its own toolbar button. It
-// splits triggers into three task-framed tabs — Form (the hosted intake
-// form, the non-technical home), Webhook (the bearer-secret developer
-// surface), and Schedule (cron) — rather than one scrolling list.
-//
-// Model: at most one webhook trigger and one cron trigger per flow
-// (a singleton per type). The hosted form is NOT its own trigger type —
-// it's `public_form` on the webhook trigger, so the Form and Webhook
-// tabs edit the same underlying object. Enabling the form auto-creates
-// the webhook trigger (with a generated secret) under the hood, so a
-// non-technical owner never has to know the word "webhook".
-//
-// Flows with >1 webhook or >1 cron are only creatable via the API; the
-// UI edits the first of each type and preserves the rest untouched on
-// save rather than destroying data it can't display.
-type Props = {
-  graph: Graph;
-  onClose: () => void;
-  onSave: (next: Graph) => void | Promise<void>;
-  // onAddSchedule inserts a cron_trigger ("Schedule") node onto the
-  // canvas and closes the modal. The Schedule tab calls this instead of
-  // writing a graph-level cron trigger, so a flow's schedule lives in one
-  // place (the node), edited with the inspector picker. Omitted ⇒ the tab
-  // falls back to the legacy graph-level cron editor.
-  onAddSchedule?: () => void;
-  // hasScheduleNode is true when the canvas already holds a cron_trigger
-  // node. settingsGraph carries no nodes, so the editor computes this from
-  // its live node state and passes it in.
-  hasScheduleNode?: boolean;
-};
-
-type Tab = "form" | "webhook" | "schedule";
-
-export function TriggersModal({ graph, onClose, onSave, onAddSchedule, hasScheduleNode }: Props) {
-  const { t } = useTranslation();
-  // Local working copy: edits only commit to the parent on Save.
-  const [draft, setDraft] = useState<Graph>(graph);
-  useEffect(() => {
-    setDraft(graph);
-  }, [graph.id]);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  const triggers = draft.triggers ?? [];
-  const webhook = triggers.find((tr) => tr.type === "webhook");
-  const cron = triggers.find((tr) => tr.type === "cron");
-
-  // Default tab: Form when the hosted form is already on; otherwise the
-  // friendly Form tab still leads (it's the most common non-tech intent
-  // and its CTA explains the rest).
-  const [tab, setTab] = useState<Tab>(
-    webhook?.public_form ? "form" : webhook ? "webhook" : "form",
-  );
-
-  // upsert edits the first trigger of `type`, creating it from `make()`
-  // when absent. Extras of the same type (API-only) are left untouched.
-  const upsert = (
-    type: GraphTrigger["type"],
-    make: () => GraphTrigger,
-    patch: Partial<GraphTrigger>,
-  ) => {
-    const idx = triggers.findIndex((tr) => tr.type === type);
-    const next =
-      idx === -1
-        ? [...triggers, { ...make(), ...patch }]
-        : triggers.map((tr, i) => (i === idx ? { ...tr, ...patch } : tr));
-    setDraft({ ...draft, triggers: next });
-  };
-
-  // remove drops the first trigger of `type`, preserving any extras.
-  const remove = (type: GraphTrigger["type"]) => {
-    const idx = triggers.findIndex((tr) => tr.type === type);
-    if (idx === -1) return;
-    const next = triggers.filter((_, i) => i !== idx);
-    setDraft({ ...draft, triggers: next.length ? next : undefined });
-  };
-
-  const upsertWebhook = (patch: Partial<GraphTrigger>) =>
-    upsert("webhook", () => ({ type: "webhook", secrets: [randomHex(16)] }), patch);
-  // Cron triggers always carry the editor's browser timezone, stamped
-  // on every edit, so the user reasons purely in their own clock: the
-  // daemon interprets the expression in this zone (DST included) and the
-  // "next fires" preview is computed the same way. Re-stamping on each
-  // edit also upgrades legacy (pre-tz) triggers the moment they're touched.
-  const upsertCron = (patch: Partial<GraphTrigger>) =>
-    upsert(
-      "cron",
-      () => ({ type: "cron", cron: "0 9 * * *", tz: browserTimeZone() }),
-      { tz: browserTimeZone(), ...patch },
-    );
-
-  // Count any same-type extras so we can reassure the (rare) owner that
-  // they're preserved, not silently dropped, by the singleton UI.
-  const extraCount =
-    Math.max(0, triggers.filter((tr) => tr.type === "webhook").length - 1) +
-    Math.max(0, triggers.filter((tr) => tr.type === "cron").length - 1);
-
-  const tabs: { key: Tab; icon: typeof FileText; label: string }[] = [
-    { key: "form", icon: FileText, label: t("triggers.tab.form") },
-    { key: "webhook", icon: WebhookIcon, label: t("triggers.tab.webhook") },
-    { key: "schedule", icon: CalendarClock, label: t("triggers.tab.schedule") },
-  ];
-
-  return (
-    <div className="settings-backdrop" onClick={onClose}>
-      <div
-        className="settings-dialog triggers-dialog"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="settings-head">
-          <h2>{t("triggers.title")}</h2>
-          <button
-            className="icon ghost"
-            onClick={onClose}
-            aria-label={t("settings.close")}
-          >
-            <X size={18} />
-          </button>
-        </div>
-        <div className="settings-tabs">
-          {tabs.map(({ key, icon: Icon, label }) => (
-            <button
-              key={key}
-              type="button"
-              className={tab === key ? "active" : ""}
-              onClick={() => setTab(key)}
-            >
-              <Icon size={13} style={{ verticalAlign: -2, marginRight: 6 }} />
-              {label}
-            </button>
-          ))}
-        </div>
-        <div className="settings-body">
-          {tab === "form" && (
-            <FormTab graph={draft} webhook={webhook} onChange={upsertWebhook} />
-          )}
-          {tab === "webhook" && (
-            <WebhookTab
-              graph={draft}
-              webhook={webhook}
-              onChange={upsertWebhook}
-              onCreate={() => upsertWebhook({})}
-              onRemove={() => remove("webhook")}
-            />
-          )}
-          {tab === "schedule" && (
-            <ScheduleTab
-              cron={cron}
-              hasScheduleNode={!!hasScheduleNode}
-              onChange={(c) => upsertCron({ cron: c })}
-              onAddScheduleNode={onAddSchedule}
-              onCreate={() => upsertCron({})}
-              onRemove={() => remove("cron")}
-            />
-          )}
-          {extraCount > 0 && (
-            <p className="desc trigger-extras-note">
-              {t("triggers.extrasPreserved", { count: extraCount })}
-            </p>
-          )}
-        </div>
-        <div className="settings-foot">
-          <button onClick={onClose}>{t("settings.cancel")}</button>
-          <button
-            className="primary"
-            onClick={() => {
-              onSave(draft);
-              onClose();
-            }}
-          >
-            {t("settings.save")}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // TriggerEmpty is the per-tab "nothing set up yet" state with a single
 // call-to-action that creates the trigger of that type.
@@ -449,92 +262,6 @@ export function WebhookStatusLine({ webhook }: { webhook?: GraphTrigger }) {
   );
 }
 
-// ScheduleTab wraps the cron preset picker. Three states, in priority
-// order: (1) a Schedule node already owns the schedule → point at it on
-// the canvas; (2) nothing scheduled → CTA adds a Schedule node (or, with
-// no node-insert callback, falls back to the legacy graph-level cron);
-// (3) a legacy graph-level cron exists → keep editing it inline so old
-// flows aren't stranded.
-function ScheduleTab({
-  cron,
-  hasScheduleNode,
-  onChange,
-  onAddScheduleNode,
-  onCreate,
-  onRemove,
-}: {
-  cron?: GraphTrigger;
-  hasScheduleNode: boolean;
-  onChange: (cron: string) => void;
-  onAddScheduleNode?: () => void;
-  onCreate: () => void;
-  onRemove: () => void;
-}) {
-  const { t } = useTranslation();
-  if (hasScheduleNode) {
-    return (
-      <div className="trigger-empty">
-        <CalendarClock size={28} className="trigger-empty-icon" />
-        <div className="trigger-empty-title">
-          {t("triggers.schedule.managedTitle")}
-        </div>
-        <div className="desc">{t("triggers.schedule.managedDesc")}</div>
-        {/* If a legacy graph-level cron ALSO exists, the flow would fire
-            twice. Surface it here with a remove path so the duplicate-source
-            lint warning is actionable. */}
-        {cron && (
-          <div style={{ marginTop: 14 }}>
-            <div className="desc" style={{ color: "var(--danger)" }}>
-              {t("triggers.schedule.legacyWarn")}
-            </div>
-            <button
-              type="button"
-              className="ghost"
-              onClick={onRemove}
-              style={{ marginTop: 8 }}
-            >
-              <Trash2 size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-              {t("triggers.schedule.removeLegacy")}
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  }
-  if (!cron) {
-    return (
-      <TriggerEmpty
-        icon={CalendarClock}
-        title={t("triggers.schedule.emptyTitle")}
-        desc={t("triggers.schedule.emptyDesc")}
-        cta={t("triggers.schedule.add")}
-        onAdd={onAddScheduleNode ?? onCreate}
-      />
-    );
-  }
-  return (
-    <div>
-      <div className="trigger-tab-head">
-        <p className="settings-help" style={{ margin: 0 }}>
-          {t("triggers.schedule.help")}
-        </p>
-        <button
-          type="button"
-          className="ghost"
-          onClick={onRemove}
-          aria-label={t("settings.triggers.removeAria")}
-          title={t("triggers.schedule.removeTitle")}
-        >
-          <Trash2 size={14} />
-        </button>
-      </div>
-      <TriggerScheduleField value={cron.cron ?? ""} onChange={onChange} />
-    </div>
-  );
-}
-
-// ── moved verbatim from SettingsModal: webhook + form helpers ──
-
 // randomHex returns a URL-safe hex string of the requested byte
 // length. Uses the browser's crypto.getRandomValues for cryptographic
 // randomness — secrets generated here are equivalent to
@@ -656,8 +383,8 @@ function RecentSubmissions({ graph }: { graph: Graph }) {
 // ── Unified code/value family ──────────────────────────────────────
 //
 // Every copyable value or code snippet in the inspector shares one
-// visual language: a themed code well (.hz-code, --code-bg/--code-fg),
-// a mono value, and the same copy button (.hz-code-btn). The only
+// visual language: a themed code well (.dz-code, --code-bg/--code-fg),
+// a mono value, and the same copy button (.dz-code-btn). The only
 // variant is single-line (CodeField) vs multi-line (CodeBlock); both
 // carry an optional caption above. This replaced three divergent
 // treatments — a tiny inline chip, a dark <pre> well, and a bordered
@@ -680,7 +407,7 @@ function useCopyButton(value: string) {
   return (extraClass?: string) => (
     <button
       type="button"
-      className={"hz-code-btn" + (extraClass ? " " + extraClass : "")}
+      className={"dz-code-btn" + (extraClass ? " " + extraClass : "")}
       onClick={copy}
       title={t("settings.triggers.copyTitle")}
     >
@@ -712,22 +439,22 @@ export function CodeField({
   method?: string;
   action?: { href: string; label: string };
   // trailing renders an extra control after the copy button (e.g. a
-  // Revoke button on a webhook key row), styled with .hz-code-btn so it
+  // Revoke button on a webhook key row), styled with .dz-code-btn so it
   // matches the copy/Open buttons.
   trailing?: ReactNode;
 }) {
   const copyButton = useCopyButton(value);
   return (
-    <div className="hz-codefield">
+    <div className="dz-codefield">
       {label && (
-        <span className="hz-code-label">
+        <span className="dz-code-label">
           {icon}
           {label}
         </span>
       )}
-      <div className="hz-code hz-code-row">
-        {method && <span className="hz-code-method">{method}</span>}
-        <code className="hz-code-value" title={value}>
+      <div className="dz-code dz-code-row">
+        {method && <span className="dz-code-method">{method}</span>}
+        <code className="dz-code-value" title={value}>
           {value}
         </code>
         {copyButton()}
@@ -736,7 +463,7 @@ export function CodeField({
             href={action.href}
             target="_blank"
             rel="noreferrer noopener"
-            className="hz-code-btn hz-code-link"
+            className="dz-code-btn dz-code-link"
           >
             <ExternalLink size={13} />
             <span>{action.label}</span>
@@ -788,7 +515,7 @@ function WebhookKeys({
             trailing={
               <button
                 type="button"
-                className="hz-code-btn hz-code-btn-danger"
+                className="dz-code-btn dz-code-btn-danger"
                 onClick={() => setPendingRevoke(i)}
                 title={t("settings.triggers.revokeTitle")}
               >
@@ -836,8 +563,8 @@ function WebhookKeys({
 function CodeBlock({ value }: { value: string }) {
   const copyButton = useCopyButton(value);
   return (
-    <div className="hz-code hz-code-block">
-      {copyButton("hz-code-btn-float")}
+    <div className="dz-code dz-code-block">
+      {copyButton("dz-code-btn-float")}
       <pre>{value}</pre>
     </div>
   );

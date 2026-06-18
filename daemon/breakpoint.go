@@ -3,7 +3,7 @@ package daemon
 import (
 	"sync"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // pauseRegistry tracks breakpoint pause state per graph run (#12).

@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // fakeStore captures writes for inspection. Concurrency-safe so a
@@ -200,7 +200,7 @@ func TestSecretSet_RequiresValue(t *testing.T) {
 }
 
 func TestSecretSet_UnwiredHookIsClearError(t *testing.T) {
-	// No withFakeWriter — leave the writer nil to simulate hzd
+	// No withFakeWriter — leave the writer nil to simulate dzd
 	// running without --master-key. Save & restore the global so
 	// later tests in this file still pass.
 	prev := currentWriter()

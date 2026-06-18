@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // Persisted OAuth provider credentials live in the same encrypted
@@ -111,7 +111,7 @@ func listConfiguredProviders(ctx context.Context, secrets *EncryptedSecrets) ([]
 
 // HydrateOAuthProvidersFromStore reads every persisted set of provider
 // credentials and re-registers them in r. Called once at boot, after
-// the env-var registration in cmd/hzd — persisted entries win, which
+// the env-var registration in cmd/dzd — persisted entries win, which
 // is what makes the admin UI's "set credentials here" overrideable at
 // runtime without requiring an operator to also clear the env var.
 //

@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/engine"
 
-	_ "git.sr.ht/~klahr/hazyflow/drops/stripe"
+	_ "git.sr.ht/~klahr/dazyflow/drops/stripe"
 )
 
 // Signing helper: signStripe in stripe_test.go (shared with the

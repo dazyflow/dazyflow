@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // EncryptedSecrets is the built-in per-tenant secret store. It's the
@@ -51,11 +51,11 @@ import (
 //   - HSM-backed: the KEK lives in process memory. An attacker with
 //     memory dump access wins. HSM-backed KEK is a future option.
 //   - Key-rotating in place: rotating the KEK re-wraps every tenant DEK
-//     under the new key. RewrapDEKs does this (hzd's
+//     under the new key. RewrapDEKs does this (dzd's
 //     --rotate-master-key); the DEK plaintexts — and so every stored
 //     ciphertext — are untouched, so no secret is re-entered.
 //   - Audit-logged by default: secret reads aren't logged unless
-//     HAZYFLOW_AUDIT_SECRET_READS is set (high-volume — resolution runs on
+//     DAZYFLOW_AUDIT_SECRET_READS is set (high-volume — resolution runs on
 //     every node execution). When on, Get emits a "secret.read" audit event
 //     (name + actor, never the value). See EnableReadAudit.
 type EncryptedSecrets struct {
@@ -74,13 +74,13 @@ type EncryptedSecrets struct {
 	// readAudit, when non-nil, makes Get emit a best-effort "secret.read"
 	// audit event (name + actor, never the value). Disabled by default —
 	// secret resolution runs on every node execution, so it's high-volume —
-	// and turned on via HAZYFLOW_AUDIT_SECRET_READS (see EnableReadAudit).
+	// and turned on via DAZYFLOW_AUDIT_SECRET_READS (see EnableReadAudit).
 	readAudit core.AuditLog
 }
 
 // EnableReadAudit turns on best-effort auditing of secret reads, writing a
-// "secret.read" event for every successful Get. Off by default; cmd/hzd calls
-// this only when HAZYFLOW_AUDIT_SECRET_READS is set.
+// "secret.read" event for every successful Get. Off by default; cmd/dzd calls
+// this only when DAZYFLOW_AUDIT_SECRET_READS is set.
 func (e *EncryptedSecrets) EnableReadAudit(a core.AuditLog) {
 	e.readAudit = a
 }
@@ -123,7 +123,7 @@ func (e *EncryptedSecrets) rng() io.Reader {
 }
 
 // SecretsBackend is the exported alias for the persistence boundary so
-// callers outside this package (cmd/hzd) can hold a variable of the
+// callers outside this package (cmd/dzd) can hold a variable of the
 // store type and pass either backend to NewEncryptedSecrets. The
 // methods stay unexported, so only this package's MemSecretsStore /
 // PgSecretsStore can implement it.
@@ -369,7 +369,7 @@ func (e *EncryptedSecrets) RewrapDEKs(ctx context.Context, newMasterKey []byte) 
 				skipped++
 				continue
 			}
-			return rotated, skipped, fmt.Errorf("unwrap DEK for %q with current key (wrong HAZYFLOW_MASTER_KEY?): %w", tenant, openErr)
+			return rotated, skipped, fmt.Errorf("unwrap DEK for %q with current key (wrong DAZYFLOW_MASTER_KEY?): %w", tenant, openErr)
 		}
 
 		newNonce := make([]byte, newKEK.NonceSize())
@@ -458,7 +458,7 @@ func (e *EncryptedSecrets) dekFor(ctx context.Context, tenant string) (cipher.AE
 
 	dekBytes, err := e.kek.Open(nil, nonce, wrapped, nil)
 	if err != nil {
-		return nil, fmt.Errorf("unwrap DEK for %q (wrong HAZYFLOW_MASTER_KEY?): %w", tenant, err)
+		return nil, fmt.Errorf("unwrap DEK for %q (wrong DAZYFLOW_MASTER_KEY?): %w", tenant, err)
 	}
 	block, err := aes.NewCipher(dekBytes)
 	if err != nil {

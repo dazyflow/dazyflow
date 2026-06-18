@@ -31,7 +31,7 @@ export function CommentNode({ data, selected }: NodeProps) {
 
   return (
     <div
-      className="hz-frame"
+      className="dz-frame"
       style={{
         background: `color-mix(in srgb, ${color} 9%, transparent)`,
         borderColor: `color-mix(in srgb, ${color} 55%, var(--border))`,
@@ -42,7 +42,7 @@ export function CommentNode({ data, selected }: NodeProps) {
       {selected && d.onRequestDelete && (
         <button
           type="button"
-          className="hz-frame-delete nodrag nopan"
+          className="dz-frame-delete nodrag nopan"
           aria-label={i18n.t("commentNode.delete")}
           title={i18n.t("commentNode.delete")}
           onClick={(e) => {
@@ -55,7 +55,7 @@ export function CommentNode({ data, selected }: NodeProps) {
         </button>
       )}
       <input
-        className="hz-frame-title nodrag"
+        className="dz-frame-title nodrag"
         value={title}
         placeholder={i18n.t("commentNode.placeholder")}
         spellCheck={false}

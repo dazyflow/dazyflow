@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // StdioDescriptor names a subprocess to run as an MCP server. One
@@ -86,7 +86,7 @@ func (c *Catalog) RegisterStdio(desc StdioDescriptor) error {
 	hctx, hcancel := context.WithTimeout(context.Background(), timeout)
 	defer hcancel()
 
-	info, err := client.Initialize(hctx, "hazyflow", "1.0")
+	info, err := client.Initialize(hctx, "dazyflow", "1.0")
 	if err != nil {
 		killSubprocess(cmd, stdin)
 		return fmt.Errorf("initialize %q: %w", desc.Name, err)

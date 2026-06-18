@@ -10,12 +10,12 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/internal/smtputil"
+	"git.sr.ht/~klahr/dazyflow/internal/smtputil"
 )
 
 // Mailer sends the platform's own transactional email — invitation
 // links, failure notifications — through ONE operator-configured SMTP
-// account (HAZYFLOW_SMTP_URL + HAZYFLOW_SMTP_FROM). This is deliberately
+// account (DAZYFLOW_SMTP_URL + DAZYFLOW_SMTP_FROM). This is deliberately
 // separate from the Email drop: that one sends through each tenant's
 // own mail server as a flow step; this one is daemon infrastructure,
 // off until the operator wires it.
@@ -45,7 +45,7 @@ func NewMailerFromURL(rawURL, from string) (*Mailer, error) {
 	}
 	u, err := url.Parse(rawURL)
 	if err != nil {
-		return nil, fmt.Errorf("HAZYFLOW_SMTP_URL: %w", err)
+		return nil, fmt.Errorf("DAZYFLOW_SMTP_URL: %w", err)
 	}
 	m := &Mailer{From: from, timeout: 15 * time.Second}
 	switch u.Scheme {
@@ -54,19 +54,19 @@ func NewMailerFromURL(rawURL, from string) (*Mailer, error) {
 	case "smtps":
 		m.tlsMode = "implicit"
 	default:
-		return nil, fmt.Errorf("HAZYFLOW_SMTP_URL: scheme must be smtp:// or smtps:// (got %q)", u.Scheme)
+		return nil, fmt.Errorf("DAZYFLOW_SMTP_URL: scheme must be smtp:// or smtps:// (got %q)", u.Scheme)
 	}
 	if v := u.Query().Get("tls"); v != "" {
 		switch v {
 		case "starttls", "implicit", "none":
 			m.tlsMode = v
 		default:
-			return nil, fmt.Errorf("HAZYFLOW_SMTP_URL: ?tls= must be starttls, implicit, or none")
+			return nil, fmt.Errorf("DAZYFLOW_SMTP_URL: ?tls= must be starttls, implicit, or none")
 		}
 	}
 	m.host = u.Hostname()
 	if m.host == "" {
-		return nil, fmt.Errorf("HAZYFLOW_SMTP_URL: host is required")
+		return nil, fmt.Errorf("DAZYFLOW_SMTP_URL: host is required")
 	}
 	m.port = u.Port()
 	if m.port == "" {
@@ -86,7 +86,7 @@ func NewMailerFromURL(rawURL, from string) (*Mailer, error) {
 		m.From = m.username
 	}
 	if m.From == "" {
-		return nil, fmt.Errorf("HAZYFLOW_SMTP_FROM is required (or put the sender as the URL's username)")
+		return nil, fmt.Errorf("DAZYFLOW_SMTP_FROM is required (or put the sender as the URL's username)")
 	}
 	return m, nil
 }

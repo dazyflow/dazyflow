@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Node as FlowNode, Edge as FlowEdge } from "@xyflow/react";
 import { api } from "../api";
 import type { Manifest } from "../types";
-import { type HazyNodeData } from "../components/nodeCardShared";
+import { type DazyNodeData } from "../components/nodeCardShared";
 
 // RESOURCE_PICKER_KINDS maps a string param's `format` to the (provider, kind)
 // whose account-resource list resolves its opaque id to a friendly name.
@@ -31,7 +31,7 @@ const pickerFormat = (sch: unknown): string => {
 
 // ResourceResolverInput is the editor state the resolver reads.
 type ResourceResolverInput = {
-  nodes: FlowNode<HazyNodeData>[];
+  nodes: FlowNode<DazyNodeData>[];
   edges: FlowEdge[];
   paramsByID: Record<string, Record<string, unknown>>;
   manifestByID: Map<string, Manifest>;
@@ -66,7 +66,7 @@ export function useResourceResolver({
     if (!token) return;
     const combos = new Map<string, { provider: string; kind: string; account?: string }>();
     for (const n of nodes) {
-      const props = manifestByID.get((n.data as HazyNodeData).moduleID)?.params_schema?.properties;
+      const props = manifestByID.get((n.data as DazyNodeData).moduleID)?.params_schema?.properties;
       if (!props) continue;
       const p = paramsByID[n.id] ?? {};
       for (const [key, sch] of Object.entries(props)) {
@@ -124,7 +124,7 @@ export function useResourceResolver({
   return useMemo(() => {
     const byId = new Map(nodes.map((n) => [n.id, n]));
     const propsOf = (id: string) =>
-      manifestByID.get((byId.get(id)?.data as HazyNodeData | undefined)?.moduleID ?? "")
+      manifestByID.get((byId.get(id)?.data as DazyNodeData | undefined)?.moduleID ?? "")
         ?.params_schema?.properties;
     // resolveOwn turns a node's OWN picker param value into a friendly name
     // (via the id→name cache), or undefined if unpicked/unresolved.

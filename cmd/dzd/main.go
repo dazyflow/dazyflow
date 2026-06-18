@@ -1,8 +1,8 @@
-// Command hzd is the Hazyflow daemon. It serves the control gRPC API
+// Command dzd is the Dazyflow daemon. It serves the control gRPC API
 // backed by a daemon.Service. Control-plane state (jobs, api-keys,
 // sessions, users, encrypted secrets, org metadata) is Postgres-backed
-// and HAZYFLOW_POSTGRES_DSN is required; graph workspaces and sandboxes
-// are git/filesystem-backed under HAZYFLOW_DATA_DIR.
+// and DAZYFLOW_POSTGRES_DSN is required; graph workspaces and sandboxes
+// are git/filesystem-backed under DAZYFLOW_DATA_DIR.
 package main
 
 import (
@@ -23,6 +23,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
 	// Embed the IANA timezone database in the binary. The runtime image is
 	// alpine without tzdata (a scratch/distroless image would have none
 	// either), so without this time.LoadLocation fails and every tz-aware
@@ -36,84 +37,84 @@ import (
 	"google.golang.org/grpc/health"
 	grpc_health_v1 "google.golang.org/grpc/health/grpc_health_v1"
 
-	"git.sr.ht/~klahr/hazyflow/auth"
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/core/buildinfo"
-	"git.sr.ht/~klahr/hazyflow/daemon"
-	_ "git.sr.ht/~klahr/hazyflow/drops"
-	"git.sr.ht/~klahr/hazyflow/drops/drive"
-	"git.sr.ht/~klahr/hazyflow/drops/gcal"
-	gitdrop "git.sr.ht/~klahr/hazyflow/drops/git"
-	"git.sr.ht/~klahr/hazyflow/drops/github"
-	"git.sr.ht/~klahr/hazyflow/drops/gmail"
-	"git.sr.ht/~klahr/hazyflow/drops/homeassistant"
-	"git.sr.ht/~klahr/hazyflow/drops/io"
-	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
-	"git.sr.ht/~klahr/hazyflow/drops/notion"
-	secretsdrop "git.sr.ht/~klahr/hazyflow/drops/secrets"
-	"git.sr.ht/~klahr/hazyflow/drops/sheets"
-	"git.sr.ht/~klahr/hazyflow/drops/slack"
-	"git.sr.ht/~klahr/hazyflow/drops/stripe"
-	"git.sr.ht/~klahr/hazyflow/drops/trigger/gform"
-	"git.sr.ht/~klahr/hazyflow/engine"
-	"git.sr.ht/~klahr/hazyflow/engine/jobstore"
-	"git.sr.ht/~klahr/hazyflow/engine/mcp"
+	"git.sr.ht/~klahr/dazyflow/auth"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core/buildinfo"
+	"git.sr.ht/~klahr/dazyflow/daemon"
+	_ "git.sr.ht/~klahr/dazyflow/drops"
+	"git.sr.ht/~klahr/dazyflow/drops/drive"
+	"git.sr.ht/~klahr/dazyflow/drops/gcal"
+	gitdrop "git.sr.ht/~klahr/dazyflow/drops/git"
+	"git.sr.ht/~klahr/dazyflow/drops/github"
+	"git.sr.ht/~klahr/dazyflow/drops/gmail"
+	"git.sr.ht/~klahr/dazyflow/drops/homeassistant"
+	"git.sr.ht/~klahr/dazyflow/drops/io"
+	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	"git.sr.ht/~klahr/dazyflow/drops/notion"
+	secretsdrop "git.sr.ht/~klahr/dazyflow/drops/secrets"
+	"git.sr.ht/~klahr/dazyflow/drops/sheets"
+	"git.sr.ht/~klahr/dazyflow/drops/slack"
+	"git.sr.ht/~klahr/dazyflow/drops/stripe"
+	"git.sr.ht/~klahr/dazyflow/drops/trigger/gform"
+	"git.sr.ht/~klahr/dazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/engine/jobstore"
+	"git.sr.ht/~klahr/dazyflow/engine/mcp"
 )
 
 func main() {
-	// All runtime configuration comes from HAZYFLOW_* env vars (see
+	// All runtime configuration comes from DAZYFLOW_* env vars (see
 	// .env.example for the full list and meanings). Only two flags
 	// remain — both one-shot operator commands that exit after running,
 	// where an env var would either silently re-run on every restart
 	// (rotate-master-key) or sit useless across the daemon's lifetime
 	// (import-users-from-json).
-	rotateKeyB64 := flag.String("rotate-master-key", "", "rotate the encrypted-secret store's KEK: re-wrap every tenant DEK from HAZYFLOW_MASTER_KEY (the CURRENT key) to this new base64-encoded 32-byte key, print a report, and EXIT without serving. Re-runnable. After it succeeds, restart hzd with HAZYFLOW_MASTER_KEY set to the new key. No secret values are re-entered.")
-	importUsersFrom := flag.String("import-users-from-json", "", "one-time migration: import users from this JSON user file into the Postgres user store (requires HAZYFLOW_POSTGRES_DSN), then exit. Idempotent — accounts already in Postgres are skipped, never overwritten.")
+	rotateKeyB64 := flag.String("rotate-master-key", "", "rotate the encrypted-secret store's KEK: re-wrap every tenant DEK from DAZYFLOW_MASTER_KEY (the CURRENT key) to this new base64-encoded 32-byte key, print a report, and EXIT without serving. Re-runnable. After it succeeds, restart dzd with DAZYFLOW_MASTER_KEY set to the new key. No secret values are re-entered.")
+	importUsersFrom := flag.String("import-users-from-json", "", "one-time migration: import users from this JSON user file into the Postgres user store (requires DAZYFLOW_POSTGRES_DSN), then exit. Idempotent — accounts already in Postgres are skipped, never overwritten.")
 	flag.Parse()
 
-	listen := envStr("HAZYFLOW_LISTEN", ":50050")
-	devKey := envBool("HAZYFLOW_DEV_KEY", false)
-	// HAZYFLOW_DEV relaxes the production-config guardrails (default DB
+	listen := envStr("DAZYFLOW_LISTEN", ":50050")
+	devKey := envBool("DAZYFLOW_DEV_KEY", false)
+	// DAZYFLOW_DEV relaxes the production-config guardrails (default DB
 	// password, missing master key) so the bundled defaults boot for local
 	// development. It must NOT be set in production.
-	devMode := envBool("HAZYFLOW_DEV", false)
+	devMode := envBool("DAZYFLOW_DEV", false)
 	// Workers per process. Two is plenty for hand-tuned in-house
-	// workloads; raise it (HAZYFLOW_WORKER_COUNT) on an execution-heavy
-	// node, or scale out by adding hzd replicas behind Postgres. Both
+	// workloads; raise it (DAZYFLOW_WORKER_COUNT) on an execution-heavy
+	// node, or scale out by adding dzd replicas behind Postgres. Both
 	// axes are safe: the job queue claims with FOR UPDATE SKIP LOCKED so
 	// workers never double-claim. Each worker can run one node at a time,
 	// so this is the per-process concurrency ceiling for flow execution.
-	workerCount := envInt("HAZYFLOW_WORKER_COUNT", 2)
+	workerCount := envInt("DAZYFLOW_WORKER_COUNT", 2)
 	if workerCount < 1 {
 		workerCount = 1
 	}
-	remotes := envStr("HAZYFLOW_REMOTE_MODULES", "")
-	httpListen := envStr("HAZYFLOW_HTTP", "")
-	postgresDSN := envStr("HAZYFLOW_POSTGRES_DSN", "")
-	pgMaxConns := envInt("HAZYFLOW_PG_MAX_CONNS", 0)
-	pgMinConns := envInt("HAZYFLOW_PG_MIN_CONNS", 0)
-	webDist := envStr("HAZYFLOW_WEB_DIST", "")
-	landingDir := envStr("HAZYFLOW_LANDING_DIR", "")
-	masterKeyB64 := envStr("HAZYFLOW_MASTER_KEY", "")
-	publicBaseURL := envStr("HAZYFLOW_PUBLIC_BASE_URL", "")
-	supportContact := envStr("HAZYFLOW_SUPPORT_CONTACT", "")
-	enableSignup := envBool("HAZYFLOW_ENABLE_SIGNUP", false)
-	enableMetrics := envBool("HAZYFLOW_ENABLE_METRICS", false)
-	mcpServers := envStr("HAZYFLOW_MCP_SERVERS", "")
-	// HAZYFLOW_DATA_DIR is the root for every piece of on-disk state
+	remotes := envStr("DAZYFLOW_REMOTE_MODULES", "")
+	httpListen := envStr("DAZYFLOW_HTTP", "")
+	postgresDSN := envStr("DAZYFLOW_POSTGRES_DSN", "")
+	pgMaxConns := envInt("DAZYFLOW_PG_MAX_CONNS", 0)
+	pgMinConns := envInt("DAZYFLOW_PG_MIN_CONNS", 0)
+	webDist := envStr("DAZYFLOW_WEB_DIST", "")
+	landingDir := envStr("DAZYFLOW_LANDING_DIR", "")
+	masterKeyB64 := envStr("DAZYFLOW_MASTER_KEY", "")
+	publicBaseURL := envStr("DAZYFLOW_PUBLIC_BASE_URL", "")
+	supportContact := envStr("DAZYFLOW_SUPPORT_CONTACT", "")
+	enableSignup := envBool("DAZYFLOW_ENABLE_SIGNUP", false)
+	enableMetrics := envBool("DAZYFLOW_ENABLE_METRICS", false)
+	mcpServers := envStr("DAZYFLOW_MCP_SERVERS", "")
+	// DAZYFLOW_DATA_DIR is the root for every piece of on-disk state
 	// (git-backed graph workspace, per-tenant sandbox roots).
 	// Conventional subdirs inside: workspace/, sandbox/. Container
 	// deployments pin this to /data; the dev default keeps everything
-	// tucked into a single ./.hazyflow/ folder at the repo root.
-	dataDir := envStr("HAZYFLOW_DATA_DIR", "./.hazyflow")
+	// tucked into a single ./.dazyflow/ folder at the repo root.
+	dataDir := envStr("DAZYFLOW_DATA_DIR", "./.dazyflow")
 	workspaceDir := filepath.Join(dataDir, "workspace")
 	sandboxBase := filepath.Join(dataDir, "sandbox")
-	webOrigin := envStr("HAZYFLOW_WEB_ORIGIN", "http://localhost:5174")
-	// Optional wildcard domain for per-org subdomains (e.g. "hazyflow.app",
-	// so "acme.hazyflow.app" routes to the sign-in page with org=acme).
+	webOrigin := envStr("DAZYFLOW_WEB_ORIGIN", "http://localhost:5174")
+	// Optional wildcard domain for per-org subdomains (e.g. "dazyflow.app",
+	// so "acme.dazyflow.app" routes to the sign-in page with org=acme).
 	// Empty disables the feature. Normalize away a leading dot / scheme so
-	// "https://.hazyflow.app" and "hazyflow.app" both work.
-	wildcardDomain := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(envStr("HAZYFLOW_WILDCARD_DOMAIN", ""))), ".")
+	// "https://.dazyflow.app" and "dazyflow.app" both work.
+	wildcardDomain := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(envStr("DAZYFLOW_WILDCARD_DOMAIN", ""))), ".")
 	if i := strings.Index(wildcardDomain, "://"); i >= 0 {
 		wildcardDomain = wildcardDomain[i+3:]
 	}
@@ -122,38 +123,38 @@ func main() {
 	// in-code change rather than a per-deployment knob.
 	const authRatePerMin = 20
 	const authRateBurst = 10
-	httpEgressAllow := envStr("HAZYFLOW_HTTP_EGRESS_ALLOW", "")
-	trustProxyHeaders := envBool("HAZYFLOW_TRUST_PROXY_HEADERS", false)
-	sessionTTL := envDuration("HAZYFLOW_SESSION_TTL", 24*time.Hour)
+	httpEgressAllow := envStr("DAZYFLOW_HTTP_EGRESS_ALLOW", "")
+	trustProxyHeaders := envBool("DAZYFLOW_TRUST_PROXY_HEADERS", false)
+	sessionTTL := envDuration("DAZYFLOW_SESSION_TTL", 24*time.Hour)
 	// Session-lookup cache TTL. Every cookie/bearer-authenticated request
 	// validates its session token; with Postgres that's a DB round-trip
 	// each time. A short in-process cache collapses that to ~1 query per
 	// token per window. Same-instance sign-out/rotation invalidates the
 	// cache immediately; the TTL only bounds cross-instance revocation
 	// lag, so keep it short. 0 disables the cache.
-	sessionCacheTTL := envDuration("HAZYFLOW_SESSION_CACHE_TTL", 15*time.Second)
-	maxGraphTimeout := envDuration("HAZYFLOW_MAX_GRAPH_TIMEOUT", 0)
+	sessionCacheTTL := envDuration("DAZYFLOW_SESSION_CACHE_TTL", 15*time.Second)
+	maxGraphTimeout := envDuration("DAZYFLOW_MAX_GRAPH_TIMEOUT", 0)
 	// Resource guards. MAX_GRAPH_NODES is a defense-in-depth ceiling
 	// against pathologically large graphs; 1000 nodes is generous for
 	// real workflows. MAX_CONCURRENT_JOBS is 0 (unlimited) until
 	// per-tenant fairness becomes a real concern.
 	const maxGraphNodes = 1000
 	const maxConcurrentJobs = 0
-	slackSigningSecret := envStr("HAZYFLOW_SLACK_SIGNING_SECRET", "")
-	githubWebhookSecret := envStr("HAZYFLOW_GITHUB_WEBHOOK_SECRET", "")
-	approvalHMACSecret := envStr("HAZYFLOW_APPROVAL_HMAC_SECRET", "")
+	slackSigningSecret := envStr("DAZYFLOW_SLACK_SIGNING_SECRET", "")
+	githubWebhookSecret := envStr("DAZYFLOW_GITHUB_WEBHOOK_SECRET", "")
+	approvalHMACSecret := envStr("DAZYFLOW_APPROVAL_HMAC_SECRET", "")
 	// OIDC bearer-token auth (optional): accept IdP-issued JWTs on the
 	// API. Issuer set = on; everything else has sane defaults.
-	oidcIssuer := envStr("HAZYFLOW_OIDC_ISSUER", "")
-	oidcClientID := envStr("HAZYFLOW_OIDC_CLIENT_ID", "")
-	oidcAudience := envStr("HAZYFLOW_OIDC_AUDIENCE", "")
-	oidcTenantClaim := envStr("HAZYFLOW_OIDC_TENANT_CLAIM", "")
-	oidcRolesClaim := envStr("HAZYFLOW_OIDC_ROLES_CLAIM", "")
+	oidcIssuer := envStr("DAZYFLOW_OIDC_ISSUER", "")
+	oidcClientID := envStr("DAZYFLOW_OIDC_CLIENT_ID", "")
+	oidcAudience := envStr("DAZYFLOW_OIDC_AUDIENCE", "")
+	oidcTenantClaim := envStr("DAZYFLOW_OIDC_TENANT_CLAIM", "")
+	oidcRolesClaim := envStr("DAZYFLOW_OIDC_ROLES_CLAIM", "")
 	// Optional issuer→tenant binding: a comma-separated allowlist of tenant
 	// ids this issuer may assert via its tenant claim. Empty = accept any
 	// tenant the issuer asserts (unchanged single-issuer behavior).
 	var oidcAllowedTenants []string
-	for _, t := range strings.Split(envStr("HAZYFLOW_OIDC_ALLOWED_TENANTS", ""), ",") {
+	for _, t := range strings.Split(envStr("DAZYFLOW_OIDC_ALLOWED_TENANTS", ""), ",") {
 		if t = strings.TrimSpace(t); t != "" {
 			oidcAllowedTenants = append(oidcAllowedTenants, t)
 		}
@@ -161,20 +162,20 @@ func main() {
 	// Billing (T3). All off by default: no Stripe key = no checkout/
 	// portal/webhook endpoints; FREE_RUNS_PER_MONTH=0 = no run gate.
 	// A SaaS deployment sets all four; self-hosted installs set none.
-	stripeSecretKey := envStr("HAZYFLOW_STRIPE_SECRET_KEY", "")
-	stripePriceID := envStr("HAZYFLOW_STRIPE_PRICE_ID", "")
-	stripeWebhookSecret := envStr("HAZYFLOW_STRIPE_WEBHOOK_SECRET", "")
-	freeRunsPerMonth := envInt("HAZYFLOW_FREE_RUNS_PER_MONTH", 0)
+	stripeSecretKey := envStr("DAZYFLOW_STRIPE_SECRET_KEY", "")
+	stripePriceID := envStr("DAZYFLOW_STRIPE_PRICE_ID", "")
+	stripeWebhookSecret := envStr("DAZYFLOW_STRIPE_WEBHOOK_SECRET", "")
+	freeRunsPerMonth := envInt("DAZYFLOW_FREE_RUNS_PER_MONTH", 0)
 	if freeRunsPerMonth > 0 {
 		log.Printf("plan gate enabled: free tier capped at %d runs/month (pro unlimited)", freeRunsPerMonth)
 	}
-	freePollingDisabled := !envBool("HAZYFLOW_FREE_POLLING_TRIGGERS", true)
+	freePollingDisabled := !envBool("DAZYFLOW_FREE_POLLING_TRIGGERS", true)
 	if freePollingDisabled {
 		log.Print("plan gate enabled: schedules/polling triggers are Pro-only (free tenants run manually)")
 	}
 	// Transactional mailer (invitation links, failure-notification email).
-	// Off without HAZYFLOW_SMTP_URL; everything degrades to links/webhooks.
-	mailer, err := daemon.NewMailerFromURL(envStr("HAZYFLOW_SMTP_URL", ""), envStr("HAZYFLOW_SMTP_FROM", ""))
+	// Off without DAZYFLOW_SMTP_URL; everything degrades to links/webhooks.
+	mailer, err := daemon.NewMailerFromURL(envStr("DAZYFLOW_SMTP_URL", ""), envStr("DAZYFLOW_SMTP_FROM", ""))
 	if err != nil {
 		log.Fatalf("%v", err)
 	}
@@ -189,7 +190,7 @@ func main() {
 	// OTEL_EXPORTER_OTLP_ENDPOINT (or _TRACES_ENDPOINT) is set, so the
 	// engine's spans actually leave the process. No endpoint = noop, no
 	// overhead. Shutdown flushes batched spans on exit.
-	traceShutdown, tracing, err := daemon.SetupTracing(ctx, "hzd", "dev")
+	traceShutdown, tracing, err := daemon.SetupTracing(ctx, "dzd", "dev")
 	if err != nil {
 		log.Printf("tracing: %v (continuing without trace export)", err)
 	} else if tracing {
@@ -203,15 +204,15 @@ func main() {
 
 	applyNetworkPolicy(httpEgressAllow, devMode)
 
-	// hzd runs on Postgres — there is no in-memory mode. Fail fast and
+	// dzd runs on Postgres — there is no in-memory mode. Fail fast and
 	// clearly when the DSN is missing, before the insecure-defaults guard
 	// (which would otherwise complain about the master key first).
 	if postgresDSN == "" {
-		log.Fatal("HAZYFLOW_POSTGRES_DSN is required — hzd runs on Postgres. For local development, `make pg` starts the bundled database and `make dev` points at it (see the README).")
+		log.Fatal("DAZYFLOW_POSTGRES_DSN is required — dzd runs on Postgres. For local development, `make pg` starts the bundled database and `make dev` points at it (see the README).")
 	}
 
 	// Refuse to boot with the bundled insecure defaults (default DB
-	// password, empty master key). HAZYFLOW_DEV=1 opts out (and is logged)
+	// password, empty master key). DAZYFLOW_DEV=1 opts out (and is logged)
 	// for local development.
 	validateProductionConfig(devMode, postgresDSN, masterKeyB64)
 
@@ -224,11 +225,11 @@ func main() {
 
 	// One-time migration: import a JSON user file into the Postgres user
 	// store, then exit. Idempotent (existing accounts skipped). Lets a dev
-	// deployment move to HAZYFLOW_POSTGRES_DSN without stranding accounts created
+	// deployment move to DAZYFLOW_POSTGRES_DSN without stranding accounts created
 	// on the JSON file.
 	if *importUsersFrom != "" {
 		if postgresDSN == "" {
-			log.Fatalf("--import-users-from-json requires HAZYFLOW_POSTGRES_DSN (the destination store)")
+			log.Fatalf("--import-users-from-json requires DAZYFLOW_POSTGRES_DSN (the destination store)")
 		}
 		src, err := auth.OpenJSONUserStore(*importUsersFrom)
 		if err != nil {
@@ -262,22 +263,22 @@ func main() {
 		log.Println("workspace store: in-memory (graphs lost on restart)")
 	}
 
-	// Event bus: Postgres LISTEN/NOTIFY so any hzd replica can stream a
+	// Event bus: Postgres LISTEN/NOTIFY so any dzd replica can stream a
 	// run's events (multi-node).
 	pgBus, err := daemon.NewPgBus(ctx, pgPool)
 	if err != nil {
 		log.Fatalf("postgres event bus: %v", err)
 	}
 	// RecordingBus persists every published run event (progress lines,
-	// node transitions, terminal) as run logs — `hzctl job logs` and the
+	// node transitions, terminal) as run logs — `dzctl job logs` and the
 	// logs endpoints read them back. Decorating at the bus keeps one
 	// wire point for every publisher; each replica records its own
 	// events exactly once.
 	recBus := daemon.NewRecordingBus(pgBus, stores.runLogs)
-	// HAZYFLOW_LOG_RUN_PAYLOADS=false keeps run logs free of payload PII
+	// DAZYFLOW_LOG_RUN_PAYLOADS=false keeps run logs free of payload PII
 	// (GDPR P2.1): only node status + terminal lines are persisted, not the
 	// streamed content that can echo personal data from a flow.
-	logPayloads := envBool("HAZYFLOW_LOG_RUN_PAYLOADS", true)
+	logPayloads := envBool("DAZYFLOW_LOG_RUN_PAYLOADS", true)
 	recBus.SetLogPayloads(logPayloads)
 	var bus daemon.Bus = recBus
 	log.Printf("event bus: postgres LISTEN/NOTIFY (multi-node), run-log recording on (payload content logging=%t)", logPayloads)
@@ -300,7 +301,7 @@ func main() {
 	io.SetQuotaReserver(quota.Reserve)
 	remoteCatalog := engine.NewRemoteCatalog()
 	if err := registerRemotes(remoteCatalog, remotes); err != nil {
-		log.Fatalf("HAZYFLOW_REMOTE_MODULES: %v", err)
+		log.Fatalf("DAZYFLOW_REMOTE_MODULES: %v", err)
 	}
 	// Secret schemes. The secret:// encrypted store (per-tenant, write-only
 	// over the API) is set up below in setupEncryptedSecrets.
@@ -417,7 +418,7 @@ func main() {
 	// store) the running daemon uses.
 	if *rotateKeyB64 != "" {
 		if encryptedSecrets == nil {
-			log.Fatalf("--rotate-master-key requires HAZYFLOW_MASTER_KEY (the current key) to be set")
+			log.Fatalf("--rotate-master-key requires DAZYFLOW_MASTER_KEY (the current key) to be set")
 		}
 		newKey, err := base64.StdEncoding.DecodeString(*rotateKeyB64)
 		if err != nil {
@@ -427,14 +428,14 @@ func main() {
 		if err != nil {
 			log.Fatalf("rotate master key: %v", err)
 		}
-		log.Printf("master-key rotation complete: %d DEK(s) re-wrapped, %d already on the new key. Restart hzd with HAZYFLOW_MASTER_KEY set to the new key.", rotated, skipped)
+		log.Printf("master-key rotation complete: %d DEK(s) re-wrapped, %d already on the new key. Restart dzd with DAZYFLOW_MASTER_KEY set to the new key.", rotated, skipped)
 		return
 	}
 
 	oauthRegistry := setupOAuth(encryptedSecrets, publicBaseURL)
 	mcpCatalog := mcp.NewCatalog()
 	if err := registerMCPServers(mcpCatalog, mcpServers); err != nil {
-		log.Fatalf("HAZYFLOW_MCP_SERVERS: %v", err)
+		log.Fatalf("DAZYFLOW_MCP_SERVERS: %v", err)
 	}
 
 	eng := &engine.Engine{
@@ -481,9 +482,9 @@ func main() {
 	}
 	if oidcIssuer != "" {
 		oidcCfg := auth.OIDCConfig{
-			Issuer:      oidcIssuer,
-			ClientID:    oidcClientID,
-			Audience:    oidcAudience,
+			Issuer:         oidcIssuer,
+			ClientID:       oidcClientID,
+			Audience:       oidcAudience,
 			TenantClaim:    oidcTenantClaim,
 			RolesClaim:     oidcRolesClaim,
 			AllowedTenants: oidcAllowedTenants,
@@ -494,7 +495,7 @@ func main() {
 		// that silently rejects every SSO token.
 		verifier, err := auth.NewOIDCVerifier(ctx, oidcCfg)
 		if err != nil {
-			log.Fatalf("HAZYFLOW_OIDC_ISSUER: %v", err)
+			log.Fatalf("DAZYFLOW_OIDC_ISSUER: %v", err)
 		}
 		authChain = append(authChain, &auth.OIDCAuthenticator{Config: oidcCfg, Verifier: verifier})
 		log.Printf("OIDC bearer auth enabled (issuer %s) — IdP-issued JWTs authenticate API calls", oidcIssuer)
@@ -505,7 +506,7 @@ func main() {
 		Jobs:       jobs,
 		Engine:     eng,
 		Bus:        bus,
-		WorkerID:   "hzd-dev",
+		WorkerID:   "dzd-dev",
 		// AdminKeys uses the same MemKeyStore the Authenticator reads
 		// from, so admin-issued keys are immediately recognized.
 		AdminKeys:              ks,
@@ -540,7 +541,7 @@ func main() {
 		RunLogs:             stores.runLogs,
 	}
 
-	// Approval-link flow: when HAZYFLOW_APPROVAL_HMAC_SECRET is set,
+	// Approval-link flow: when DAZYFLOW_APPROVAL_HMAC_SECRET is set,
 	// mint signed per-(run,node) approval URLs (engine.ApprovalSigner)
 	// and route the HMAC-verified /approve/{run}/{node} endpoint on
 	// the main HTTP gateway (see gw.Approval below). Set BEFORE workers
@@ -548,11 +549,11 @@ func main() {
 	var approvalListener *daemon.ApprovalListener
 	if approvalHMACSecret != "" {
 		if publicBaseURL == "" {
-			log.Fatalf("HAZYFLOW_APPROVAL_HMAC_SECRET requires HAZYFLOW_PUBLIC_BASE_URL (for the approval URLs)")
+			log.Fatalf("DAZYFLOW_APPROVAL_HMAC_SECRET requires DAZYFLOW_PUBLIC_BASE_URL (for the approval URLs)")
 		}
 		secret, err := base64.StdEncoding.DecodeString(approvalHMACSecret)
 		if err != nil || len(secret) < 16 {
-			log.Fatalf("HAZYFLOW_APPROVAL_HMAC_SECRET: need a base64-encoded secret of at least 16 bytes (shared across nodes)")
+			log.Fatalf("DAZYFLOW_APPROVAL_HMAC_SECRET: need a base64-encoded secret of at least 16 bytes (shared across nodes)")
 		}
 		signer := &daemon.HMACApprovalSigner{BaseURL: publicBaseURL, Secret: secret}
 		eng.ApprovalSigner = signer
@@ -564,12 +565,12 @@ func main() {
 	// reaper) so shutdown can drain them: on SIGTERM the claim loops stop
 	// taking new work, in-flight nodes run to completion (their exec context
 	// is detached from the signal), and main waits — bounded by
-	// HAZYFLOW_SHUTDOWN_GRACE — for them to finish before the process exits.
+	// DAZYFLOW_SHUTDOWN_GRACE — for them to finish before the process exits.
 	var bgWg sync.WaitGroup
 
 	// Shared metrics registry: HTTP RED on the gateway, per-node latency
 	// from the workers. Always created (cheap); /metrics only serves it
-	// when HAZYFLOW_ENABLE_METRICS is on.
+	// when DAZYFLOW_ENABLE_METRICS is on.
 	appMetrics := daemon.NewMetrics()
 
 	// Workers count node executions through a buffered recorder so the
@@ -674,11 +675,11 @@ func main() {
 		if err != nil {
 			log.Fatalf("issue dev key: %v", err)
 		}
-		fmt.Printf("DEV API KEY (set HZCTL_TOKEN=%s):\n%s\n", ct, ct)
+		fmt.Printf("DEV API KEY (set DZCTL_TOKEN=%s):\n%s\n", ct, ct)
 	}
 
 	// gRPC serves plain — production deployments terminate TLS at an
-	// L7 proxy (Caddy/nginx/Traefik/ingress) and run hzd unencrypted
+	// L7 proxy (Caddy/nginx/Traefik/ingress) and run dzd unencrypted
 	// inside the trust boundary.
 	unary, stream := daemon.AuthInterceptors(svc.Auth)
 	serverOpts := []grpc.ServerOption{
@@ -705,7 +706,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("listen %s: %v", listen, err)
 	}
-	log.Printf("hzd %s listening on %s", buildinfo.String(), listen)
+	log.Printf("dzd %s listening on %s", buildinfo.String(), listen)
 
 	go func() {
 		<-ctx.Done()
@@ -723,7 +724,7 @@ func main() {
 	// result before the process exits. Bounded so a stuck node can't block
 	// shutdown forever — an unfinished node's lease expires and another
 	// instance reclaims it.
-	grace := envDuration("HAZYFLOW_SHUTDOWN_GRACE", 25*time.Second)
+	grace := envDuration("DAZYFLOW_SHUTDOWN_GRACE", 25*time.Second)
 	if waitForGroup(&bgWg, grace) {
 		log.Println("workers drained cleanly")
 	} else {
@@ -738,7 +739,7 @@ func main() {
 func applyNetworkPolicy(httpEgressAllow string, devMode bool) {
 	if httpEgressAllow != "" {
 		if err := hfnet.SetEgressAllowlist(strings.Split(httpEgressAllow, ",")); err != nil {
-			log.Fatalf("HAZYFLOW_HTTP_EGRESS_ALLOW: %v", err)
+			log.Fatalf("DAZYFLOW_HTTP_EGRESS_ALLOW: %v", err)
 		}
 		log.Printf("http_request egress allowlist active: %s", httpEgressAllow)
 	} else if !devMode {
@@ -746,16 +747,16 @@ func applyNetworkPolicy(httpEgressAllow string, devMode bool) {
 		// deployment outbound connector traffic should be pinned to approved
 		// (ideally EU) endpoints so a flow can't exfiltrate to an arbitrary
 		// host. See PRIVACY.md § International transfers.
-		log.Print("ADVISORY: HAZYFLOW_HTTP_EGRESS_ALLOW is unset — outbound connector egress is unrestricted; pin it to approved endpoints for EU/GDPR deployments (PRIVACY.md § Transfers)")
+		log.Print("ADVISORY: DAZYFLOW_HTTP_EGRESS_ALLOW is unset — outbound connector egress is unrestricted; pin it to approved endpoints for EU/GDPR deployments (PRIVACY.md § Transfers)")
 	}
 	// The http_* drops expose an `allow_private_networks` param that disables
 	// the SSRF guard (reaching loopback/private/link-local incl. cloud
 	// metadata). On an untrusted multi-tenant deployment that's a
 	// tenant-controllable SSRF bypass, so the param is ignored unless the
 	// operator opts in here. Default off.
-	if envBool("HAZYFLOW_ALLOW_PRIVATE_EGRESS", false) {
+	if envBool("DAZYFLOW_ALLOW_PRIVATE_EGRESS", false) {
 		hfnet.SetAllowPrivateEgress(true)
-		log.Print("WARNING: HAZYFLOW_ALLOW_PRIVATE_EGRESS=1 — flows may set allow_private_networks to reach private/loopback hosts (SSRF guard becomes opt-out)")
+		log.Print("WARNING: DAZYFLOW_ALLOW_PRIVATE_EGRESS=1 — flows may set allow_private_networks to reach private/loopback hosts (SSRF guard becomes opt-out)")
 	}
 	// Route git-over-https clones (git_checkout / git_log) through an
 	// SSRF-guarded client (blocks private/loopback/link-local at dial, e.g.
@@ -778,7 +779,7 @@ type coreStores struct {
 // openCoreStores connects the shared pgxpool and opens the key / user /
 // session / job stores on top of it; the session store is fronted with a
 // short-TTL read cache. devSeed seeds the bundled default user for local
-// development. Fatal on any failure — hzd has no in-memory fallback. The
+// development. Fatal on any failure — dzd has no in-memory fallback. The
 // caller owns the returned pool and must Close it.
 func openCoreStores(ctx context.Context, dsn string, maxConns, minConns int, sessionCacheTTL time.Duration, devSeed bool) coreStores {
 	poolCfg, err := pgxpool.ParseConfig(dsn)
@@ -789,7 +790,7 @@ func openCoreStores(ctx context.Context, dsn string, maxConns, minConns int, ses
 	// small for real multi-tenant load — every worker, the gateway, the
 	// scheduler, and the reaper share this one pool, so 4 connections starve
 	// under even modest concurrency. Default to 20 (override with
-	// HAZYFLOW_PG_MAX_CONNS) and keep a couple of warm connections.
+	// DAZYFLOW_PG_MAX_CONNS) and keep a couple of warm connections.
 	if maxConns > 0 {
 		poolCfg.MaxConns = int32(maxConns)
 	} else {
@@ -809,7 +810,7 @@ func openCoreStores(ctx context.Context, dsn string, maxConns, minConns int, ses
 	}
 	log.Printf("postgres pool: max_conns=%d min_conns=%d", poolCfg.MaxConns, poolCfg.MinConns)
 	if poolCfg.MaxConns < 10 {
-		log.Printf("WARNING: postgres pool max_conns=%d is low for production; set HAZYFLOW_PG_MAX_CONNS to 20+ once you have real concurrent load", poolCfg.MaxConns)
+		log.Printf("WARNING: postgres pool max_conns=%d is low for production; set DAZYFLOW_PG_MAX_CONNS to 20+ once you have real concurrent load", poolCfg.MaxConns)
 	}
 	pgKeys, err := auth.NewPgKeyStore(ctx, pool)
 	if err != nil {
@@ -882,7 +883,7 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 	// claims; the JobStore makes that contention safe.
 	for i := 0; i < d.workerCount; i++ {
 		w := daemon.NewWorker(daemon.WorkerConfig{
-			ID:      fmt.Sprintf("hzd-dev-w%d", i),
+			ID:      fmt.Sprintf("dzd-dev-w%d", i),
 			Metrics: d.metrics,
 			Usage:   d.usage,
 		}, d.jobs, d.eng, d.bus)
@@ -902,7 +903,7 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 	// Cron scheduler fires graphs that declare cron triggers. Always on.
 	sched := daemon.NewScheduler(d.svc)
 	// Multi-node: gate firing on a Postgres advisory-lock leader so only one
-	// hzd fires each schedule. Single-node stays the default always-leader.
+	// dzd fires each schedule. Single-node stays the default always-leader.
 	if d.pgPool != nil {
 		leader := daemon.NewPgLeader(d.pgPool, daemon.SchedulerLockKey)
 		go leader.Run(ctx)
@@ -924,7 +925,7 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 	// ones that are actually done — once at startup (recovering runs orphaned
 	// by a prior crash) and then on an interval. Idempotent across replicas.
 	reaperDispatcher := daemon.NewDispatcher(d.jobs, d.bus, d.eng, log.New(os.Stderr, "reaper: ", log.LstdFlags))
-	reapInterval := envDuration("HAZYFLOW_REAP_INTERVAL", time.Minute)
+	reapInterval := envDuration("DAZYFLOW_REAP_INTERVAL", time.Minute)
 	bgWg.Add(1)
 	go func() {
 		defer bgWg.Done()
@@ -955,15 +956,15 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 
 // startRetentionSweeps prunes the jobs table, audit_events, and run_logs
 // on an hourly interval (after a startup pass), bounded by
-// HAZYFLOW_JOB_RETENTION / HAZYFLOW_AUDIT_RETENTION /
-// HAZYFLOW_RUN_LOG_RETENTION. A retention <= 0 disables that sweep; when
+// DAZYFLOW_JOB_RETENTION / DAZYFLOW_AUDIT_RETENTION /
+// DAZYFLOW_RUN_LOG_RETENTION. A retention <= 0 disables that sweep; when
 // all are off no goroutine is started.
 func startRetentionSweeps(ctx context.Context, jobs core.JobStore, runLogs daemon.RunLogStore, pgPool *pgxpool.Pool, bgWg *sync.WaitGroup) {
-	jobRetention := envDuration("HAZYFLOW_JOB_RETENTION", 30*24*time.Hour)
-	auditRetention := envDuration("HAZYFLOW_AUDIT_RETENTION", 90*24*time.Hour)
+	jobRetention := envDuration("DAZYFLOW_JOB_RETENTION", 30*24*time.Hour)
+	auditRetention := envDuration("DAZYFLOW_AUDIT_RETENTION", 90*24*time.Hour)
 	// Run logs default to the JOB retention: a run's log should outlive
 	// neither the run record it narrates nor the operator's expectations.
-	runLogRetention := envDuration("HAZYFLOW_RUN_LOG_RETENTION", jobRetention)
+	runLogRetention := envDuration("DAZYFLOW_RUN_LOG_RETENTION", jobRetention)
 	if jobRetention <= 0 && auditRetention <= 0 && runLogRetention <= 0 {
 		return
 	}
@@ -1065,18 +1066,18 @@ func buildGateway(ctx context.Context, d gatewayDeps) {
 	gw.Users = d.users
 	gw.Sessions = d.sessions
 	gw.SessionTTL = d.sessionTTL
-	// TOTP 2FA: enabled only when HAZYFLOW_TOTP_KEY decodes to a 32-byte AES
+	// TOTP 2FA: enabled only when DAZYFLOW_TOTP_KEY decodes to a 32-byte AES
 	// key. Absent/malformed → 2FA stays off (the /totp endpoints 503 and
 	// sign-in never asks for a second factor). The in-memory challenge store
 	// bridges the two sign-in legs.
 	if totpKey, terr := auth.LoadTOTPKey(); terr == nil {
 		gw.TOTPKey = totpKey
 		gw.TOTPChallenges = auth.NewMemTOTPChallengeStore()
-		log.Print("two-factor authentication (TOTP) enabled (HAZYFLOW_TOTP_KEY set)")
+		log.Print("two-factor authentication (TOTP) enabled (DAZYFLOW_TOTP_KEY set)")
 	} else if !errors.Is(terr, auth.ErrTOTPKeyMissing) {
 		// Set-but-broken is an operator mistake worth shouting about; merely
 		// unset is the silent, supported "2FA off" path.
-		log.Fatalf("HAZYFLOW_TOTP_KEY: %v", terr)
+		log.Fatalf("DAZYFLOW_TOTP_KEY: %v", terr)
 	}
 	gw.Memberships = d.memberships
 	gw.Invitations = d.invitations
@@ -1111,9 +1112,9 @@ func buildGateway(ctx context.Context, d gatewayDeps) {
 	// Opt-in (compliance) auditing of secret *reads*. Off by default because
 	// secret resolution runs on every node execution — high volume. When on,
 	// each successful Get emits a "secret.read" event (name + actor, no value).
-	if envBool("HAZYFLOW_AUDIT_SECRET_READS", false) && d.encryptedSecrets != nil {
+	if envBool("DAZYFLOW_AUDIT_SECRET_READS", false) && d.encryptedSecrets != nil {
 		d.encryptedSecrets.EnableReadAudit(auditLog)
-		log.Print("secret-read auditing enabled (HAZYFLOW_AUDIT_SECRET_READS)")
+		log.Print("secret-read auditing enabled (DAZYFLOW_AUDIT_SECRET_READS)")
 	}
 	// Readiness gates on the DB being reachable.
 	pool := d.pgPool
@@ -1123,7 +1124,7 @@ func buildGateway(ctx context.Context, d gatewayDeps) {
 	}
 	if d.landingDir != "" {
 		if d.webDist == "" {
-			log.Printf("HAZYFLOW_LANDING_DIR %s ignored: requires HAZYFLOW_WEB_DIST (the landing auth-gate falls back to the SPA shell for signed-in users)", d.landingDir)
+			log.Printf("DAZYFLOW_LANDING_DIR %s ignored: requires DAZYFLOW_WEB_DIST (the landing auth-gate falls back to the SPA shell for signed-in users)", d.landingDir)
 		} else {
 			log.Printf("serving marketing landing from %s (GET / auth-gated: anonymous -> landing.html, signed-in -> app)", d.landingDir)
 		}
@@ -1153,7 +1154,7 @@ func buildGateway(ctx context.Context, d gatewayDeps) {
 			sc = daemon.NewStripeClient(d.stripeSecretKey, d.stripePriceID)
 			log.Print("Stripe checkout/portal enabled at /api/v1/me/billing/*")
 		} else if d.stripeSecretKey != "" {
-			log.Print("HAZYFLOW_STRIPE_SECRET_KEY set without HAZYFLOW_STRIPE_PRICE_ID — checkout disabled")
+			log.Print("DAZYFLOW_STRIPE_SECRET_KEY set without DAZYFLOW_STRIPE_PRICE_ID — checkout disabled")
 		}
 		gw.Billing = daemon.NewBillingHandler(sc, d.stripeWebhook)
 		if d.stripeWebhook != "" {
@@ -1174,24 +1175,24 @@ func buildGateway(ctx context.Context, d gatewayDeps) {
 		// (e.g. "com") would make the CORS/CSRF suffix match trust every
 		// origin under that public suffix. Require at least two labels.
 		if !daemon.IsValidWildcardDomain(d.wildcardDomain) {
-			log.Fatalf("invalid wildcard domain %q: must have at least two labels (e.g. \"hazyflow.app\"); a bare public suffix would trust every subdomain", d.wildcardDomain)
+			log.Fatalf("invalid wildcard domain %q: must have at least two labels (e.g. \"dazyflow.app\"); a bare public suffix would trust every subdomain", d.wildcardDomain)
 		}
 		log.Printf("per-org subdomains enabled for *.%s (CORS/CSRF allow subdomains; sign-in derives org from host)", d.wildcardDomain)
 	}
 	// Bootstrap the platform:admin super-admin role from an email allowlist
 	// (normalize to lowercase + trimmed so the gateway can compare exactly).
 	// This is the only grant path — see the field doc on PlatformAdmins.
-	for _, e := range strings.Split(envStr("HAZYFLOW_PLATFORM_ADMINS", ""), ",") {
+	for _, e := range strings.Split(envStr("DAZYFLOW_PLATFORM_ADMINS", ""), ",") {
 		if e = strings.ToLower(strings.TrimSpace(e)); e != "" {
 			gw.PlatformAdmins = append(gw.PlatformAdmins, e)
 		}
 	}
 	if len(gw.PlatformAdmins) > 0 {
-		log.Printf("platform admins (from HAZYFLOW_PLATFORM_ADMINS): %v", gw.PlatformAdmins)
+		log.Printf("platform admins (from DAZYFLOW_PLATFORM_ADMINS): %v", gw.PlatformAdmins)
 	}
 	// Upstream URL for the admin System section's update check. Defaults to
-	// the project's production origin; set HAZYFLOW_UPDATE_URL="" to disable.
-	gw.UpdateURL = strings.TrimSpace(envStr("HAZYFLOW_UPDATE_URL", daemon.DefaultUpdateURL))
+	// the project's production origin; set DAZYFLOW_UPDATE_URL="" to disable.
+	gw.UpdateURL = strings.TrimSpace(envStr("DAZYFLOW_UPDATE_URL", daemon.DefaultUpdateURL))
 	if gw.UpdateURL != "" {
 		log.Printf("update check enabled (source: %s)", gw.UpdateURL)
 	}
@@ -1297,11 +1298,11 @@ func registerRemotes(cat *engine.RemoteCatalog, spec string) error {
 // defaultInsecurePassword is the DB password shipped in the bundled .env /
 // docker-compose defaults so the stack boots out of the box. It must never
 // survive into a real deployment — validateProductionConfig refuses to start
-// with it unless HAZYFLOW_DEV is set.
-const defaultInsecurePassword = "hazyflow"
+// with it unless DAZYFLOW_DEV is set.
+const defaultInsecurePassword = "dazyflow"
 
 // validateProductionConfig fails closed on the bundled insecure defaults
-// (default DB password, empty master key). HAZYFLOW_DEV=1 turns these into
+// (default DB password, empty master key). DAZYFLOW_DEV=1 turns these into
 // warnings so local development with the shipped defaults still boots.
 func validateProductionConfig(devMode bool, postgresDSN, masterKeyB64 string) {
 	problems := productionConfigProblems(postgresDSN, masterKeyB64)
@@ -1310,14 +1311,14 @@ func validateProductionConfig(devMode bool, postgresDSN, masterKeyB64 string) {
 	}
 	if devMode {
 		for _, p := range problems {
-			log.Printf("WARNING (HAZYFLOW_DEV): %s", p)
+			log.Printf("WARNING (DAZYFLOW_DEV): %s", p)
 		}
 		return
 	}
 	for _, p := range problems {
 		log.Printf("FATAL: %s", p)
 	}
-	log.Fatal("refusing to start with insecure production config; fix the above or set HAZYFLOW_DEV=1 for local development")
+	log.Fatal("refusing to start with insecure production config; fix the above or set DAZYFLOW_DEV=1 for local development")
 }
 
 // productionConfigProblems returns human-readable descriptions of every
@@ -1327,7 +1328,7 @@ func productionConfigProblems(postgresDSN, masterKeyB64 string) []string {
 	var problems []string
 	if cfg, err := pgxpool.ParseConfig(postgresDSN); err == nil {
 		if cfg.ConnConfig.Password == defaultInsecurePassword {
-			problems = append(problems, "HAZYFLOW_POSTGRES_DSN uses the default database password "+strconv.Quote(defaultInsecurePassword)+" — change POSTGRES_PASSWORD and the DSN to a strong secret")
+			problems = append(problems, "DAZYFLOW_POSTGRES_DSN uses the default database password "+strconv.Quote(defaultInsecurePassword)+" — change POSTGRES_PASSWORD and the DSN to a strong secret")
 		}
 	}
 	// Require TLS to Postgres. Only require/verify-ca/verify-full guarantee an
@@ -1340,11 +1341,11 @@ func productionConfigProblems(postgresDSN, masterKeyB64 string) []string {
 		case "require", "verify-ca", "verify-full":
 			// Encrypted, no fallback — good.
 		default:
-			problems = append(problems, "HAZYFLOW_POSTGRES_DSN does not enforce TLS — add sslmode=require (or verify-full with a CA) so the connection to Postgres can't fall back to plaintext")
+			problems = append(problems, "DAZYFLOW_POSTGRES_DSN does not enforce TLS — add sslmode=require (or verify-full with a CA) so the connection to Postgres can't fall back to plaintext")
 		}
 	}
 	if masterKeyB64 == "" {
-		problems = append(problems, "HAZYFLOW_MASTER_KEY is empty — stored-secret encryption is DISABLED; set a stable 32-byte base64 key (`openssl rand -base64 32`)")
+		problems = append(problems, "DAZYFLOW_MASTER_KEY is empty — stored-secret encryption is DISABLED; set a stable 32-byte base64 key (`openssl rand -base64 32`)")
 	}
 	return problems
 }
@@ -1364,7 +1365,7 @@ func dsnSSLMode(dsn string) string {
 	return ""
 }
 
-// Config knobs come from HAZYFLOW_* env vars. The helpers below give a
+// Config knobs come from DAZYFLOW_* env vars. The helpers below give a
 // uniform read-with-default surface; an empty/unset var means "use the
 // default", and an unparseable value silently falls back to the default
 // rather than failing startup (matches the prior flag-default behavior).
@@ -1411,10 +1412,10 @@ func envDuration(key string, def time.Duration) time.Duration {
 // in with on a fresh deployment otherwise, and the user this seeds is
 // scoped to the same dev/default tenant the dev API key uses.
 //
-// It is gated on dev mode (HAZYFLOW_DEV / HAZYFLOW_DEV_KEY): a durable
+// It is gated on dev mode (DAZYFLOW_DEV / DAZYFLOW_DEV_KEY): a durable
 // production deploy must NOT get a publicly-known admin credential. There,
-// bootstrap the first account with HAZYFLOW_ENABLE_SIGNUP=1 (then grant it
-// platform:admin via HAZYFLOW_PLATFORM_ADMINS) — see DEPLOY.md.
+// bootstrap the first account with DAZYFLOW_ENABLE_SIGNUP=1 (then grant it
+// platform:admin via DAZYFLOW_PLATFORM_ADMINS) — see DEPLOY.md.
 func seedDefaultUser(ctx context.Context, users auth.UserStore, dev bool) {
 	if !dev {
 		return
@@ -1465,7 +1466,7 @@ func setupEncryptedSecrets(ctx context.Context, masterKeyB64 string, secrets map
 	}
 	key, err := base64.StdEncoding.DecodeString(masterKeyB64)
 	if err != nil {
-		log.Fatalf("HAZYFLOW_MASTER_KEY: not valid base64: %v", err)
+		log.Fatalf("DAZYFLOW_MASTER_KEY: not valid base64: %v", err)
 	}
 	// Persist ciphertext + wrapped DEKs to Postgres (survives restart).
 	pg, err := daemon.NewPgSecretsStore(ctx, pool)
@@ -1583,6 +1584,9 @@ func wireConnectorTokenHooks(reg *daemon.OAuthRegistry) {
 		return slack.ListChannels(ctx, core.Job{Params: map[string]any{"account": account}})
 	})
 	github.SetTokenLookup(bind("github"))
+	// gmail, sheets, gcal, drive and gform all ride one Google OAuth provider
+	// and share a single token lookup (drops/internal/google); each package's
+	// SetTokenLookup is a thin shim onto it, so these all wire the same hook.
 	gmail.SetTokenLookup(bind("google"))
 	sheets.SetTokenLookup(bind("google"))
 	gcal.SetTokenLookup(bind("google"))

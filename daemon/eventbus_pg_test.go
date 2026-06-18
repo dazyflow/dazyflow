@@ -8,17 +8,17 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
-// Gated on HAZYFLOW_TEST_DB (a real Postgres), like the jobstore/auth
+// Gated on DAZYFLOW_TEST_DB (a real Postgres), like the jobstore/auth
 // integration tests.
 func pgBusPool(t *testing.T) (*pgxpool.Pool, context.Context) {
 	t.Helper()
-	url := os.Getenv("HAZYFLOW_TEST_DB")
+	url := os.Getenv("DAZYFLOW_TEST_DB")
 	if url == "" {
-		t.Skip("set HAZYFLOW_TEST_DB to run Postgres bus tests")
+		t.Skip("set DAZYFLOW_TEST_DB to run Postgres bus tests")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	pool, err := pgxpool.New(ctx, url)
@@ -54,7 +54,7 @@ func recv(t *testing.T, ch <-chan BusEvent, within time.Duration) BusEvent {
 }
 
 // TestPgBus_CrossInstance is the core HA property: an event published on
-// one hzd reaches a subscriber on a *different* hzd.
+// one dzd reaches a subscriber on a *different* dzd.
 func TestPgBus_CrossInstance(t *testing.T) {
 	pool, ctx := pgBusPool(t)
 	busA, err := NewPgBus(ctx, pool) // "node A"

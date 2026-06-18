@@ -7,14 +7,14 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 	"github.com/jackc/pgx/v5"
 )
 
 // Integration tests for postgres_insert_rows. Skipped unless
-// HAZYFLOW_TEST_DB is set, matching the project convention:
+// DAZYFLOW_TEST_DB is set, matching the project convention:
 //
-//   HAZYFLOW_TEST_DB=postgres://localhost/hazyflow_test \
+//   DAZYFLOW_TEST_DB=postgres://localhost/dazyflow_test \
 //     go test ./drops/db/
 //
 // The unit tests below (validation, param parsing) run unconditionally
@@ -26,13 +26,13 @@ import (
 // individual tests don't need to repeat the gate.
 func pgTestSetup(t *testing.T) (dsn, table string) {
 	t.Helper()
-	dsn = os.Getenv("HAZYFLOW_TEST_DB")
+	dsn = os.Getenv("DAZYFLOW_TEST_DB")
 	if dsn == "" {
-		t.Skip("set HAZYFLOW_TEST_DB to run Postgres integration tests")
+		t.Skip("set DAZYFLOW_TEST_DB to run Postgres integration tests")
 	}
 	// Unique per test: t.Name with non-ident chars stripped + ns suffix.
 	base := strip(t.Name())
-	table = fmt.Sprintf("hz_test_%s_%d", base, time.Now().UnixNano())
+	table = fmt.Sprintf("dz_test_%s_%d", base, time.Now().UnixNano())
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -139,7 +139,7 @@ func TestPostgresInsert_RollbackOnFailure(t *testing.T) {
 func TestPostgresInsert_NamedSchema(t *testing.T) {
 	dsn, table := pgTestSetup(t)
 	// Use a custom schema; assume the test DB allows CREATE SCHEMA.
-	schemaName := fmt.Sprintf("hz_test_%d", time.Now().UnixNano())
+	schemaName := fmt.Sprintf("dz_test_%d", time.Now().UnixNano())
 	ctx := t.Context()
 	conn, _ := pgx.Connect(ctx, dsn)
 	defer conn.Close(ctx)

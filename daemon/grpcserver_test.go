@@ -16,14 +16,14 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
-	controlpb "git.sr.ht/~klahr/hazyflow/api/gen/control"
-	"git.sr.ht/~klahr/hazyflow/auth"
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/daemon"
-	"git.sr.ht/~klahr/hazyflow/engine"
-	"git.sr.ht/~klahr/hazyflow/engine/jobstore"
-	_ "git.sr.ht/~klahr/hazyflow/drops"
-	"git.sr.ht/~klahr/hazyflow/workspace"
+	controlpb "git.sr.ht/~klahr/dazyflow/api/gen/control"
+	"git.sr.ht/~klahr/dazyflow/auth"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon"
+	"git.sr.ht/~klahr/dazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/engine/jobstore"
+	_ "git.sr.ht/~klahr/dazyflow/drops"
+	"git.sr.ht/~klahr/dazyflow/workspace"
 )
 
 type harness struct {
@@ -229,7 +229,7 @@ func TestGRPC_BadTokenRejected(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
-	ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer hzk_garbage_dead")
+	ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer dzk_garbage_dead")
 	_, err := gs.ListGraphs(ctx, &controlpb.ListGraphsRequest{Tenant: "acme", Workspace: "ws1"})
 	if err == nil {
 		t.Fatal("expected unauthenticated")

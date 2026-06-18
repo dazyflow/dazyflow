@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 )
 
 func init() {
@@ -68,7 +68,7 @@ func init() {
 }
 
 // executeSecretSet resolves (tenant, name, value) and writes through
-// the SecretWriter hook hzd installed at startup. The drop never
+// the SecretWriter hook dzd installed at startup. The drop never
 // echoes the value in its output — only the name — so a downstream
 // node accidentally wired to it can't leak the secret into a Result
 // the run-detail page persists.
@@ -111,7 +111,7 @@ func executeSecretSet(ctx context.Context, job core.Job, _ chan<- core.Progress)
 	write := currentWriter()
 	if write == nil {
 		return params.Err(job, "not_configured",
-			"This deployment doesn't have an encrypted secret store wired up, so secret_set can't write anything. Start hzd with --master-key (or $HAZYFLOW_MASTER_KEY) to enable the encrypted secret store."), nil
+			"This deployment doesn't have an encrypted secret store wired up, so secret_set can't write anything. Start dzd with --master-key (or $DAZYFLOW_MASTER_KEY) to enable the encrypted secret store."), nil
 	}
 	if err := write(ctx, job.Tenant, name, value); err != nil {
 		return params.ErrDetails(job, "write_failed",

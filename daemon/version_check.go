@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/core/buildinfo"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core/buildinfo"
 )
 
 // Version self-check — the System section of the platform admin page asks
@@ -25,16 +25,16 @@ import (
 // deployment always runs the newest release, and it already publishes its
 // build version on the unauthenticated GET /api/v1 descriptor. So we just
 // fetch that and compare — no git-host coupling, no token, works for any
-// operator. The upstream URL is configurable (HAZYFLOW_UPDATE_URL) and the
+// operator. The upstream URL is configurable (DAZYFLOW_UPDATE_URL) and the
 // check fires only when an admin opens the page (never in the background),
 // so it isn't a silent phone-home. Empty URL disables it. The result is
 // cached process-wide so a refreshing admin can't amplify requests against
 // the canonical instance.
 
 // DefaultUpdateURL is the canonical deployment's public service descriptor.
-// Its build.version is, by definition, the latest released version. The hzd
-// binary uses this as the default for HAZYFLOW_UPDATE_URL.
-const DefaultUpdateURL = "https://hazyflow.r8.rs/api/v1"
+// Its build.version is, by definition, the latest released version. The dzd
+// binary uses this as the default for DAZYFLOW_UPDATE_URL.
+const DefaultUpdateURL = "https://dazyflow.r8.rs/api/v1"
 
 const releaseCacheTTL = 15 * time.Minute
 

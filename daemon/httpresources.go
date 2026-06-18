@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // Flow resources (${resource.NAME}) are named pointers at external content

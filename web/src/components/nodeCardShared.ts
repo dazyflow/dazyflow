@@ -58,10 +58,10 @@ export function friendlyTokenText(raw: string, labels?: TokenLabels): string | n
   return null;
 }
 
-// HazyNodeData is the shape we stash on each React Flow node. We carry the
+// DazyNodeData is the shape we stash on each React Flow node. We carry the
 // live manifest so the canvas can render the same icon and label as the
 // catalog without a second lookup.
-export type HazyNodeData = {
+export type DazyNodeData = {
   label: string;
   moduleID: string;
   manifest?: Manifest;
@@ -194,7 +194,7 @@ export function secondsToWords(seconds: number | null | undefined): string {
 export function portColor(mime: string[] | undefined): string {
   if (!mime || mime.length === 0) return "var(--border-strong)";
   const m = mime[0];
-  if (m === "application/x-hazyflow-exec") return "#e6e6e6"; // white — control/exec flow (loop body)
+  if (m === "application/x-dazyflow-exec") return "#e6e6e6"; // white — control/exec flow (loop body)
   if (m.startsWith("text/")) return "#4a8"; // green — plain text
   if (m === "application/x-bool") return "#e0699f"; // rose  — boolean (true/false)
   if (m === "application/json") return "#5b8def"; // blue  — structured data

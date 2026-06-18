@@ -8,10 +8,10 @@ import (
 	"mime"
 	"strings"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/mailmsg"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/mailmsg"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 func init() {
@@ -215,7 +215,7 @@ func buildRFC822(h rfcHeaders, body string, atts []mailmsg.Attachment) string {
 		return strings.Join(lines, "\r\n") + "\r\n\r\n" + body
 	}
 
-	boundary := "hazyflow-" + mailmsg.RandomHex(16)
+	boundary := "dazyflow-" + mailmsg.RandomHex(16)
 	add("Content-Type", `multipart/mixed; boundary="`+boundary+`"`)
 
 	var b strings.Builder

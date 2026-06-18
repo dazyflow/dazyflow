@@ -11,13 +11,13 @@ import (
 
 	"github.com/pquerna/otp/totp"
 
-	"git.sr.ht/~klahr/hazyflow/auth"
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/auth"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // newTOTPHarness wires the password stores + a 32-byte TOTP key + the
 // in-memory challenge store, then seeds one password user the test can
-// enrol. Mirrors how cmd/hzd wires 2FA when HAZYFLOW_TOTP_KEY is set.
+// enrol. Mirrors how cmd/dzd wires 2FA when DAZYFLOW_TOTP_KEY is set.
 func newTOTPHarness(t *testing.T) (*gatewayHarness, auth.User, string) {
 	t.Helper()
 	h := newGatewayHarness(t)
@@ -30,7 +30,7 @@ func newTOTPHarness(t *testing.T) (*gatewayHarness, auth.User, string) {
 	h.gw.TOTPKey = key
 	h.gw.TOTPChallenges = auth.NewMemTOTPChallengeStore()
 	// Extend the auth chain so a session token issued by sign-in / verify
-	// validates on /me/totp calls, like real hzd.
+	// validates on /me/totp calls, like real dzd.
 	h.svc.Auth = auth.Chain{
 		&auth.APIKeyAuthenticator{Store: h.ks},
 		&auth.SessionAuthenticator{Store: h.gw.Sessions},

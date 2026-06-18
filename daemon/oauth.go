@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // OAuth 2.0 authorization-code flow. This is what makes the
@@ -234,7 +234,7 @@ type pendingOAuth struct {
 	returnTo string
 	// binding ties the flow to the browser that started it (RFC 6749
 	// §10.12). When non-empty, the callback requires a matching value in the
-	// hz_oauth_state cookie — without this, an attacker can complete a flow
+	// dz_oauth_state cookie — without this, an attacker can complete a flow
 	// they started and inject their own provider account into a victim's org.
 	// Empty for the JSON/manual authorize path (the link is handed to a
 	// different agent), which relies on the unguessable single-use state.

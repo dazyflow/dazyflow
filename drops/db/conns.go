@@ -11,7 +11,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
+	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 )
 
 // errInvalidDSN is returned in place of a driver parse error so a
@@ -110,7 +110,7 @@ func (r *pgPoolRegistry) pgPool(ctx context.Context, tenant, dsn string) (*pgxpo
 		return nil, errInvalidDSN
 	}
 	// SSRF guard: a tenant supplies the DSN, so without this they could point
-	// a Postgres drop at an internal host — including hzd's own control-plane
+	// a Postgres drop at an internal host — including dzd's own control-plane
 	// database — and probe/connect. Install the shared dial guard (post-DNS,
 	// rebinding-resistant); it's a no-op when the operator opted into private
 	// egress.

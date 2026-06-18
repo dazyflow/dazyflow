@@ -11,11 +11,11 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/mimetype"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
-	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/mimetype"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 func init() {
@@ -106,7 +106,7 @@ func executeHTTPUpload(ctx context.Context, job core.Job, _ chan<- core.Progress
 	multi := params.BoolDefault(job.Params, "multipart", false)
 	timeoutMs := params.IntDefault(job.Params, "timeout_ms", 300000)
 	// allow_private_networks disables the SSRF guard — honored only when the
-	// operator opted in (HAZYFLOW_ALLOW_PRIVATE_EGRESS), else ignored.
+	// operator opted in (DAZYFLOW_ALLOW_PRIVATE_EGRESS), else ignored.
 	allowPrivate := params.BoolDefault(job.Params, "allow_private_networks", false) && hfnet.PrivateEgressAllowed()
 
 	// Open the source file from the sandbox (workspace or scratch://).

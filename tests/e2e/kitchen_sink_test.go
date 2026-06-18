@@ -13,14 +13,14 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/auth"
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/daemon"
-	"git.sr.ht/~klahr/hazyflow/engine"
-	"git.sr.ht/~klahr/hazyflow/engine/jobstore"
-	_ "git.sr.ht/~klahr/hazyflow/drops"
-	hzio "git.sr.ht/~klahr/hazyflow/drops/io"
-	"git.sr.ht/~klahr/hazyflow/workspace"
+	"git.sr.ht/~klahr/dazyflow/auth"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon"
+	"git.sr.ht/~klahr/dazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/engine/jobstore"
+	_ "git.sr.ht/~klahr/dazyflow/drops"
+	dzio "git.sr.ht/~klahr/dazyflow/drops/io"
+	"git.sr.ht/~klahr/dazyflow/workspace"
 )
 
 // fullStack wires every production-relevant piece together: auth + Git
@@ -50,13 +50,13 @@ func newFullStack(t *testing.T, quotaBytes int64) *fullStack {
 	}
 	quota.SetCacheTTL(0)
 	// Wire the atomic quota reserver the SAME way production does
-	// (cmd/hzd/main.go: io.SetQuotaReserver). Without it, file_write falls back
+	// (cmd/dzd/main.go: io.SetQuotaReserver). Without it, file_write falls back
 	// to the per-job QuotaUsed snapshot, which two concurrent same-tenant writes
 	// can both pass before either commits — the exact TOCTOU the reservation
 	// closes. It's a process global, so clear it on cleanup (e2e tests run
 	// serially within the package).
-	hzio.SetQuotaReserver(quota.Reserve)
-	t.Cleanup(func() { hzio.SetQuotaReserver(nil) })
+	dzio.SetQuotaReserver(quota.Reserve)
+	t.Cleanup(func() { dzio.SetQuotaReserver(nil) })
 
 	flakyCalls := &atomic.Int32{}
 	failuresLeft := &atomic.Int32{}

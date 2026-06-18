@@ -110,7 +110,7 @@ import { useLocation, useParams } from "react-router-dom";
 // to decide whether the bare-root visit should land on /welcome
 // (first-time) or /flows (returning). Written by FlowList itself
 // when the graph list resolves; cleared when it resolves empty.
-const HAS_FLOWS_KEY = "hazyflow.hasFlows";
+const HAS_FLOWS_KEY = "dazyflow.hasFlows";
 
 // RootRedirect decides where a logged-in user lands on the bare root.
 // Three branches:

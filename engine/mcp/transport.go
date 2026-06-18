@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sync"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // Transport is the per-tool core.Transport implementation. The same
@@ -142,7 +142,7 @@ func contentSummary(content []ContentItem) string {
 	return "tool reported error"
 }
 
-// synthesizeManifest converts an MCP tool descriptor into a Hazyflow
+// synthesizeManifest converts an MCP tool descriptor into a Dazyflow
 // manifest the engine can validate against. Tool IDs follow the
 // "mcp:<server>:<tool>" convention so graph authors see clearly where
 // the node lives.

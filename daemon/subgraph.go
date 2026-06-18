@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // SubGraphRunner is the hook the Worker uses to submit a child graph
@@ -81,7 +81,7 @@ func (s *Service) SubmitChild(
 	// place. graph:admin lets this synthetic principal bypass the
 	// child's visibility regardless of ownership.
 	principal := core.Principal{
-		Subject:   "hazyflow-subgraph",
+		Subject:   "dazyflow-subgraph",
 		Tenant:    parentRec.Tenant,
 		Workspace: parentRec.Workspace,
 		Roles: []core.Role{{

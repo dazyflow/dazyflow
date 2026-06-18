@@ -88,15 +88,15 @@ func TestPGRegistry_BadDSNDoesNotPoison(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// Integration test — gated on HAZYFLOW_TEST_DB. Confirms that two
+// Integration test — gated on DAZYFLOW_TEST_DB. Confirms that two
 // consecutive pgPool calls for the same key return the same pool
 // pointer (i.e., we actually reuse rather than creating a fresh one).
 // ---------------------------------------------------------------------
 
 func TestPGRegistry_ReusesPoolAcrossCalls(t *testing.T) {
-	dsn := os.Getenv("HAZYFLOW_TEST_DB")
+	dsn := os.Getenv("DAZYFLOW_TEST_DB")
 	if dsn == "" {
-		t.Skip("set HAZYFLOW_TEST_DB to run Postgres integration tests")
+		t.Skip("set DAZYFLOW_TEST_DB to run Postgres integration tests")
 	}
 	r := newPGPoolRegistry(time.Hour, time.Hour)
 	t.Cleanup(r.closeAll)

@@ -42,14 +42,14 @@ func TestMetrics_RenderHTTPAndNode(t *testing.T) {
 	out := b.String()
 
 	for _, want := range []string{
-		`hazyflow_http_requests_total{method="GET",code="200"} 2`,
-		`hazyflow_http_requests_total{method="POST",code="500"} 1`,
-		`hazyflow_http_request_duration_seconds_count{method="GET"} 2`,
-		`hazyflow_http_request_duration_seconds_count{method="POST"} 1`,
-		`hazyflow_node_duration_seconds_count{status="succeeded"} 1`,
-		`hazyflow_node_duration_seconds_count{status="failed"} 1`,
-		`hazyflow_node_duration_seconds_bucket{status="failed",le="10"} 0`,
-		`hazyflow_node_duration_seconds_bucket{status="failed",le="30"} 1`,
+		`dazyflow_http_requests_total{method="GET",code="200"} 2`,
+		`dazyflow_http_requests_total{method="POST",code="500"} 1`,
+		`dazyflow_http_request_duration_seconds_count{method="GET"} 2`,
+		`dazyflow_http_request_duration_seconds_count{method="POST"} 1`,
+		`dazyflow_node_duration_seconds_count{status="succeeded"} 1`,
+		`dazyflow_node_duration_seconds_count{status="failed"} 1`,
+		`dazyflow_node_duration_seconds_bucket{status="failed",le="10"} 0`,
+		`dazyflow_node_duration_seconds_bucket{status="failed",le="30"} 1`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("metrics render missing %q\n--- out ---\n%s", want, out)

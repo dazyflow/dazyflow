@@ -8,8 +8,8 @@ import (
 	"io"
 	"log"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 // subgraphOutputBinding mirrors the JSON shape the subgraph module
@@ -366,7 +366,7 @@ func (d *Dispatcher) maybeCompleteGraph(
 	// total rather than O(nodes²) (every node's terminal transition used
 	// to re-Get every other node). Still store-backed (not an in-process
 	// counter), so it stays correct when sibling nodes complete on other
-	// hzd replicas writing the same shared store.
+	// dzd replicas writing the same shared store.
 	recs, err := d.store.ListNodeRecords(ctx, core.ListNodeRecordsOpts{
 		Tenant:     graph.Tenant,
 		Workspace:  graph.Workspace,

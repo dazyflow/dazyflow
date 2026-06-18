@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strings"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // defaultFormFields is the contact-form shape a hosted form falls back
@@ -91,7 +91,7 @@ func (w *WebhookListener) handleForm(rw http.ResponseWriter, r *http.Request) {
 			return
 		}
 		principal := core.Principal{
-			Subject:   "hazyflow-form",
+			Subject:   "dazyflow-form",
 			Tenant:    g.Tenant,
 			Workspace: g.Workspace,
 			Roles: []core.Role{{

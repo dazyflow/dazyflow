@@ -27,7 +27,7 @@ void i18n
       // Prefer an explicit user choice from localStorage; only fall
       // back to the browser's Accept-Language when nothing is stored.
       order: ["localStorage", "navigator", "htmlTag"],
-      lookupLocalStorage: "hazyflow.lang",
+      lookupLocalStorage: "dazyflow.lang",
       caches: ["localStorage"],
     },
     interpolation: {

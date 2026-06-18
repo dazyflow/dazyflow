@@ -525,7 +525,7 @@ function isLiveStatus(s: JobStatus): boolean {
 
 // RunLogs renders the run's persisted log (progress lines, node
 // transitions, terminal outcome) below the timeline — the web twin of
-// `hzctl job logs`. History loads once via seq-cursor paging; while the
+// `dzctl job logs`. History loads once via seq-cursor paging; while the
 // run is live it append-polls from the cursor, so each tick fetches
 // only new lines. A daemon without a log store answers 501 and the
 // section hides entirely (old daemons, or logging disabled).

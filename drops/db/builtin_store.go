@@ -10,10 +10,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/limits"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/limits"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/dazyflow/engine"
 	_ "modernc.org/sqlite"
 )
 
@@ -24,7 +24,7 @@ import (
 // keep rows WITHOUT provisioning Postgres or even picking a filename —
 // "save it somewhere" just works. Power users who outgrow it graduate
 // to sqlite_* (pick your own file) or postgres_* (bring a DSN).
-const builtinStorePath = ".hazyflow-store/data.db"
+const builtinStorePath = ".dazyflow-store/data.db"
 
 func init() {
 	engine.Register(engine.NativeDrop{
@@ -400,7 +400,7 @@ func executeBuiltinStoreQuery(ctx context.Context, job core.Job, _ chan<- core.P
 		// Fail fast at the shared row ceiling rather than letting it grow.
 		if len(out) > limits.MaxRows() {
 			return params.Err(job, "too_many_rows",
-				fmt.Sprintf("query returned more than the %d-row limit; add a LIMIT clause, set the 'limit' param, or raise HAZYFLOW_MAX_ROWS", limits.MaxRows())), nil
+				fmt.Sprintf("query returned more than the %d-row limit; add a LIMIT clause, set the 'limit' param, or raise DAZYFLOW_MAX_ROWS", limits.MaxRows())), nil
 		}
 	}
 	if err := rows.Err(); err != nil {

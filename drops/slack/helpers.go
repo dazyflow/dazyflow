@@ -10,24 +10,21 @@
 // connected Slack workspace's access token via the
 // SetTokenLookup hook. The lookup hook avoids an import cycle
 // (daemon → drops/slack would conflict with the umbrella
-// integrations import that hzd already does); production wires it
+// integrations import that dzd already does); production wires it
 // at startup, tests can stub it.
 package slack
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 	"sync"
-	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
-	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/oauthtok"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 )
 
 // maxResponseBytes caps how much of an API response we buffer, so a
@@ -36,52 +33,17 @@ import (
 // real Slack response.
 const maxResponseBytes = 64 << 20 // 64 MiB
 
-// TokenLookup resolves an account name to a Slack access token by
-// asking the daemon's OAuth registry. Returns ("", err) when the
-// account isn't connected.
-type TokenLookup func(ctx context.Context, account string) (string, error)
+// tokenHook holds the daemon's per-account Slack OAuth lookup plus the
+// resolve sequence shared with the other OAuth connectors (drops/internal/
+// oauthtok): explicit `token` param first, else the connected account's token.
+var tokenHook = oauthtok.New("Slack", "slack", "slack")
 
-var (
-	tokenLookupMu sync.RWMutex
-	tokenLookup   TokenLookup
-)
+// SetTokenLookup wires the daemon's OAuth registry to the Slack drops. Called
+// once at dzd startup. nil clears the lookup (drops then require a `token`).
+func SetTokenLookup(fn oauthtok.Lookup) { tokenHook.Set(fn) }
 
-// SetTokenLookup wires the daemon's OAuth registry to the Slack
-// drops. Called once at hzd startup. nil clears the lookup (drops
-// then require an explicit `token` param).
-func SetTokenLookup(fn TokenLookup) {
-	tokenLookupMu.Lock()
-	defer tokenLookupMu.Unlock()
-	tokenLookup = fn
-}
-
-// resolveToken figures out the access token for a job, in priority
-// order: explicit params.token (raw, useful for tests and quick
-// one-offs) → OAuth lookup by params.account (production path).
-// Returns a clear error code so users see "connect your Slack
-// account first" rather than a generic auth failure.
 func resolveToken(ctx context.Context, job core.Job) (string, error) {
-	if t, _ := params.StringOpt(job.Params, "token"); t != "" {
-		return t, nil
-	}
-	account, _ := params.StringOpt(job.Params, "account")
-	if account == "" {
-		account = "default"
-	}
-	tokenLookupMu.RLock()
-	fn := tokenLookup
-	tokenLookupMu.RUnlock()
-	if fn == nil {
-		return "", fmt.Errorf("no Slack token: pass `token` directly or connect a Slack account via /api/v1/oauth/slack/authorize")
-	}
-	tok, err := fn(ctx, account)
-	if err != nil {
-		return "", fmt.Errorf("lookup token for account %q: %w", account, err)
-	}
-	if tok == "" {
-		return "", fmt.Errorf("slack account %q is not connected", account)
-	}
-	return tok, nil
+	return tokenHook.Resolve(ctx, job)
 }
 
 // resolveBlocks pulls the Block Kit array off the job in priority order:
@@ -209,43 +171,21 @@ func slackDo(ctx context.Context, method, url, token string, body []byte, timeou
 	if timeoutMS <= 0 {
 		timeoutMS = 15000
 	}
-	reqCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMS)*time.Millisecond)
-	defer cancel()
-
-	var rdr io.Reader
+	headers := map[string]string{"Authorization": "Bearer " + token}
 	if body != nil {
-		rdr = bytes.NewReader(body)
-	}
-	req, err := http.NewRequestWithContext(reqCtx, method, url, rdr)
-	if err != nil {
-		return slackEnvelope{}, nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json; charset=utf-8")
+		headers["Content-Type"] = "application/json; charset=utf-8"
 	}
 
-	// base_url is a tenant-supplied param, so guard the dial: the SSRF
+	// base_url is a tenant-supplied param, so net.Do guards the dial: the SSRF
 	// client blocks loopback/private/link-local targets (cloud metadata,
-	// internal services) and the egress allowlist (when the operator sets
-	// one) bounds which public hosts the bearer token may be sent to.
-	if err := hfnet.EgressAllowedFor(ctx, url); err != nil {
-		return slackEnvelope{}, nil, err
-	}
-	resp, err := hfnet.SafeHTTPClient(time.Duration(timeoutMS)*time.Millisecond, hfnet.PrivateEgressAllowed()).Do(req)
+	// internal services) and the egress allowlist (when the operator sets one)
+	// bounds which public hosts the bearer token may be sent to.
+	status, raw, _, err := hfnet.Do(ctx, method, url, headers, body, timeoutMS, maxResponseBytes)
 	if err != nil {
 		return slackEnvelope{}, nil, err
 	}
-	defer resp.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
-	if err != nil {
-		return slackEnvelope{}, nil, err
-	}
-	if int64(len(raw)) > maxResponseBytes {
-		return slackEnvelope{}, nil, fmt.Errorf("slack response exceeds %d bytes", maxResponseBytes)
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return slackEnvelope{}, nil, fmt.Errorf("slack returned %d: %s", resp.StatusCode, string(raw))
+	if status < 200 || status >= 300 {
+		return slackEnvelope{}, nil, fmt.Errorf("slack returned %d: %s", status, string(raw))
 	}
 	return decodeSlackJSON(raw)
 }

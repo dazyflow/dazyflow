@@ -12,7 +12,7 @@ import (
 	"net/http"
 	"strings"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 const (
@@ -108,7 +108,7 @@ func (h *GitHubEventsHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request)
 	//     attacker who knows the global secret can't forge a delivery to
 	//     a tenant whose secret it doesn't know.
 	//   - Otherwise fall back to the global env-configured secret. This
-	//     preserves single-tenant deploys that use HAZYFLOW_GITHUB_WEBHOOK_SECRET
+	//     preserves single-tenant deploys that use DAZYFLOW_GITHUB_WEBHOOK_SECRET
 	//     and haven't moved their secret into the per-tenant store.
 	//   - If neither exists, reject (fail closed).
 	secret := h.tenantSecret(r.Context(), tenant)
@@ -279,7 +279,7 @@ func (h *GitHubEventsHandler) fanoutSeed(ctx context.Context, tenant, moduleID s
 		return
 	}
 	principal := core.Principal{
-		Subject: "hazyflow-github-events",
+		Subject: "dazyflow-github-events",
 		Tenant:  tenant,
 		Roles: []core.Role{{
 			Name:        "github-events",

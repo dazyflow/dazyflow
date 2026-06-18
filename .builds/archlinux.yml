@@ -8,9 +8,9 @@ packages:
 secrets:
   - 6a3daa36-3866-48d4-8846-ecfa57a0d0dd
 sources:
-  - git@git.sr.ht:~klahr/hazyflow
+  - git@git.sr.ht:~klahr/dazyflow
 environment:
-  HAZYFLOW_TEST_DB: postgres://hazyflow:hazyflow@localhost:5432/hazyflow_test
+  DAZYFLOW_TEST_DB: postgres://dazyflow:dazyflow@localhost:5432/dazyflow_test
 tasks:
   - postgres: |
       sudo -iu postgres initdb -D /var/lib/postgres/data
@@ -18,19 +18,19 @@ tasks:
       sudo -iu postgres pg_ctl -D /var/lib/postgres/data -l /tmp/pg.log -o "-p 5432" -w start \
         || { echo "=== pg.log ==="; cat /tmp/pg.log; exit 1; }
       for i in $(seq 1 30); do pg_isready -h localhost -p 5432 && break; sleep 1; done
-      sudo -iu postgres psql -c "CREATE USER hazyflow WITH PASSWORD 'hazyflow';"
-      sudo -iu postgres psql -c "CREATE DATABASE hazyflow_test OWNER hazyflow;"
+      sudo -iu postgres psql -c "CREATE USER dazyflow WITH PASSWORD 'dazyflow';"
+      sudo -iu postgres psql -c "CREATE DATABASE dazyflow_test OWNER dazyflow;"
   - build: |
-      cd hazyflow
+      cd dazyflow
       go build ./...
   - test: |
-      cd hazyflow
+      cd dazyflow
       go test -race ./...
   - vet: |
-      cd hazyflow
+      cd dazyflow
       go vet ./...
   - vuln: |
-      cd hazyflow
+      cd dazyflow
       go install golang.org/x/vuln/cmd/govulncheck@latest
       "$(go env GOPATH)/bin/govulncheck" ./...
   # Software Bill of Materials (A.8.25 / A.8.29 supply-chain). syft scans the
@@ -39,18 +39,18 @@ tasks:
   # sbom.spdx.json / sbom.cdx.json to the artifact set. Not committed —
   # see .gitignore.
   - sbom: |
-      cd hazyflow
+      cd dazyflow
       curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
         | sh -s -- -b "$(go env GOPATH)/bin"
       "$(go env GOPATH)/bin/syft" dir:. \
         -o spdx-json=sbom.spdx.json \
         -o cyclonedx-json=sbom.cdx.json
       echo "generated sbom.spdx.json + sbom.cdx.json"
-  - hzctl-e2e: |
-      cd hazyflow
+  - dzctl-e2e: |
+      cd dazyflow
       bash examples/csv-pipeline/run.sh
   - web: |
-      cd hazyflow/web
+      cd dazyflow/web
       npm ci
       npm run build
   # Confirm the deployable image actually builds — deploy/ references it
@@ -58,8 +58,8 @@ tasks:
   # daemon needed in the build VM. Not pushed anywhere; releases tag and
   # push by hand (see deploy/README.md).
   - docker-image: |
-      cd hazyflow
-      podman build -t hazyflow/hzd:ci .
+      cd dazyflow
+      podman build -t dazyflow/dzd:ci .
 
 triggers:
   - action: email

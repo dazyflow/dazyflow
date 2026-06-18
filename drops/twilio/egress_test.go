@@ -6,8 +6,8 @@ import (
 	"os"
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
+	"git.sr.ht/~klahr/dazyflow/core"
+	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 )
 
 func TestMain(m *testing.M) {

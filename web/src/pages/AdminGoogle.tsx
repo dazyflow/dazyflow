@@ -8,7 +8,7 @@ import type { GoogleAccountsResponse } from "../types";
 // AdminGoogle is the org-admin page for managing the organization's shared
 // Google connections. Google accounts are org-level credentials (not
 // per-user): an admin connects and names them here, and every member's
-// flows use them. Because Hazyflow authorizes Google incrementally (each
+// flows use them. Because Dazyflow authorizes Google incrementally (each
 // integration requests only its own scopes), one account can cover some
 // services but not others — so this page shows a per-account permission
 // matrix and lets an admin top up a missing service (re-consent, which
@@ -36,7 +36,7 @@ export function AdminGoogle() {
   const [busy, setBusy] = useState(false);
   // connectOpen drives the "connect a named account" modal; pendingDisconnect
   // holds the account name awaiting delete confirmation. Both replace the
-  // old window.prompt / window.confirm with in-app Hazyflow modals.
+  // old window.prompt / window.confirm with in-app Dazyflow modals.
   const [connectOpen, setConnectOpen] = useState(false);
   const [pendingDisconnect, setPendingDisconnect] = useState<string | null>(null);
 

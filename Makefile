@@ -1,5 +1,5 @@
-# Hazyflow — common tasks. `make up` boots the Docker Compose stack
-# (Postgres + hzd); the rest cover its lifecycle and local dev.
+# Dazyflow — common tasks. `make up` boots the Docker Compose stack
+# (Postgres + dzd); the rest cover its lifecycle and local dev.
 
 COMPOSE ?= docker compose
 
@@ -16,9 +16,9 @@ export VERSION COMMIT BUILD_DATE
 # Linker flags for the native `make bin` build. -s -w strip the symbol
 # and DWARF tables; the -X flags inject the version vars into buildinfo.
 LDFLAGS := -s -w \
-  -X git.sr.ht/~klahr/hazyflow/core/buildinfo.Version=$(VERSION) \
-  -X git.sr.ht/~klahr/hazyflow/core/buildinfo.Commit=$(COMMIT) \
-  -X git.sr.ht/~klahr/hazyflow/core/buildinfo.Date=$(BUILD_DATE)
+  -X git.sr.ht/~klahr/dazyflow/core/buildinfo.Version=$(VERSION) \
+  -X git.sr.ht/~klahr/dazyflow/core/buildinfo.Commit=$(COMMIT) \
+  -X git.sr.ht/~klahr/dazyflow/core/buildinfo.Date=$(BUILD_DATE)
 
 .DEFAULT_GOAL := help
 
@@ -31,26 +31,26 @@ help: ## List targets
 
 ## --- Docker Compose stack ---
 
-up: ## Start the stack (Postgres + hzd) detached on http://localhost:8080
+up: ## Start the stack (Postgres + dzd) detached on http://localhost:8080
 	$(COMPOSE) up -d
 
 down: ## Stop the stack (named volumes persist)
 	$(COMPOSE) down
 
 restart: ## Recreate the daemon with the latest config/code
-	$(COMPOSE) up -d --build hzd
+	$(COMPOSE) up -d --build dzd
 
 logs: ## Follow the daemon logs
-	$(COMPOSE) logs -f hzd
+	$(COMPOSE) logs -f dzd
 
 ps: ## Show stack status
 	$(COMPOSE) ps
 
 build: ## Build the daemon image
-	$(COMPOSE) build hzd
+	$(COMPOSE) build dzd
 
 rebuild: ## Rebuild the image from scratch (no layer cache)
-	$(COMPOSE) build --no-cache hzd
+	$(COMPOSE) build --no-cache dzd
 
 env: ## Sync .env with .env.example (creates one if missing; appends new keys; never overwrites existing values)
 	@./scripts/sync-env.sh
@@ -67,24 +67,24 @@ pg-down: ## Stop the bundled dev Postgres (data persists in the pgdata volume)
 # `postgres` service name. That hostname only resolves inside the Compose
 # network, so for the native run we rewrite it to localhost (the bundled
 # Postgres publishes 127.0.0.1:5432 exactly for this). The containerized
-# hzd is stopped first — both want :8080. `make restart` brings it back.
-dev: pg ## Run hzd locally against the bundled Postgres (make pg). Sources .env when present (DSN host rewritten to localhost), else a minimal dev set.
-	@$(COMPOSE) stop hzd >/dev/null 2>&1 || true
+# dzd is stopped first — both want :8080. `make restart` brings it back.
+dev: pg ## Run dzd locally against the bundled Postgres (make pg). Sources .env when present (DSN host rewritten to localhost), else a minimal dev set.
+	@$(COMPOSE) stop dzd >/dev/null 2>&1 || true
 	@if [ -f .env ]; then \
 		set -a; . ./.env; set +a; \
-		HAZYFLOW_POSTGRES_DSN=$$(printf '%s' "$$HAZYFLOW_POSTGRES_DSN" | sed 's/@postgres:/@localhost:/') \
-		HAZYFLOW_DEV=1 \
-		HAZYFLOW_HTTP=:8080 go run ./cmd/hzd; \
+		DAZYFLOW_POSTGRES_DSN=$$(printf '%s' "$$DAZYFLOW_POSTGRES_DSN" | sed 's/@postgres:/@localhost:/') \
+		DAZYFLOW_DEV=1 \
+		DAZYFLOW_HTTP=:8080 go run ./cmd/dzd; \
 	else \
-		HAZYFLOW_HTTP=:8080 \
-		HAZYFLOW_DEV=1 \
-		HAZYFLOW_DEV_KEY=1 \
-		HAZYFLOW_ENABLE_SIGNUP=1 \
-		HAZYFLOW_WEB_ORIGIN=http://localhost:5173 \
-		HAZYFLOW_PUBLIC_BASE_URL=http://localhost:5173 \
-		HAZYFLOW_MASTER_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
-		HAZYFLOW_POSTGRES_DSN=postgres://hazyflow:hazyflow@localhost:5432/hazyflow?sslmode=disable \
-		go run ./cmd/hzd; \
+		DAZYFLOW_HTTP=:8080 \
+		DAZYFLOW_DEV=1 \
+		DAZYFLOW_DEV_KEY=1 \
+		DAZYFLOW_ENABLE_SIGNUP=1 \
+		DAZYFLOW_WEB_ORIGIN=http://localhost:5173 \
+		DAZYFLOW_PUBLIC_BASE_URL=http://localhost:5173 \
+		DAZYFLOW_MASTER_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
+		DAZYFLOW_POSTGRES_DSN=postgres://dazyflow:dazyflow@localhost:5432/dazyflow?sslmode=disable \
+		go run ./cmd/dzd; \
 	fi
 
 web: ## Run the Vite dev server (http://localhost:5173)
@@ -104,9 +104,9 @@ fmt: ## Format Go sources
 # image: VERSION/COMMIT/BUILD_DATE are exported, so `docker compose` reads
 # them as build args. These targets cover the native binary and tagging.
 
-bin: ## Build a stamped native hzd binary (CGO off, trimmed, stripped)
-	CGO_ENABLED=0 go build -trimpath -ldflags="$(LDFLAGS)" -o hzd ./cmd/hzd
-	@ls -lh hzd
+bin: ## Build a stamped native dzd binary (CGO off, trimmed, stripped)
+	CGO_ENABLED=0 go build -trimpath -ldflags="$(LDFLAGS)" -o dzd ./cmd/dzd
+	@ls -lh dzd
 
 version: ## Print the version that a build would stamp right now
 	@echo "version=$(VERSION) commit=$(COMMIT) date=$(BUILD_DATE)"

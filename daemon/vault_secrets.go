@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 	openbao "github.com/openbao/openbao/api/v2"
 )
 

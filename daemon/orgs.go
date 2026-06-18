@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/auth"
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/auth"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // switchOrg re-issues the caller's session against a tenant they
@@ -623,11 +623,11 @@ func (h *HTTPGateway) createInvitation(rw http.ResponseWriter, r *http.Request, 
 	emailSent := false
 	if acceptURL := h.inviteURL(token); h.svc.Mailer != nil && strings.HasPrefix(acceptURL, "http") {
 		body := fmt.Sprintf(
-			"%s invited you to join their organization on Hazyflow.\n\n"+
+			"%s invited you to join their organization on Dazyflow.\n\n"+
 				"Accept the invitation:\n%s\n\n"+
 				"The link expires %s. If you weren't expecting this, ignore this email.",
 			p.Subject, acceptURL, inv.ExpiresAt.Format("2006-01-02"))
-		if err := h.svc.Mailer.Send(r.Context(), email, "You're invited to Hazyflow", body); err != nil {
+		if err := h.svc.Mailer.Send(r.Context(), email, "You're invited to Dazyflow", body); err != nil {
 			h.logger.Printf("invite email to %s: %v", email, err)
 		} else {
 			emailSent = true
@@ -954,7 +954,7 @@ func (h *HTTPGateway) getPublicAuthConfig(rw http.ResponseWriter, r *http.Reques
 		"admin_bootstrap": h.adminBootstrapAvailable(r.Context()),
 		// wildcard_domain, when set, lets the sign-in page derive the
 		// target org from a "<org>.<domain>" host so a visit to
-		// acme.hazyflow.app preselects org=acme. Empty = feature off.
+		// acme.dazyflow.app preselects org=acme. Empty = feature off.
 		"wildcard_domain": h.WildcardDomain,
 	})
 }

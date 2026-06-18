@@ -45,10 +45,10 @@ export function JsonEditor({
 
   return (
     <div
-      className={"hz-json-editor" + (invalid ? " invalid" : "")}
+      className={"dz-json-editor" + (invalid ? " invalid" : "")}
       style={{ minHeight: `calc(${rows} * 1.5em + 16px)` }}
     >
-      <pre ref={preRef} className="hz-json-pre" aria-hidden="true">
+      <pre ref={preRef} className="dz-json-pre" aria-hidden="true">
         {/* Tokens are React span elements (not an HTML string), so React
             escapes every value — no dangerouslySetInnerHTML, no XSS surface.
             Trailing newline keeps the last line visible when the value ends
@@ -60,7 +60,7 @@ export function JsonEditor({
       </pre>
       <textarea
         ref={taRef}
-        className="hz-json-ta"
+        className="dz-json-ta"
         spellCheck={false}
         value={value}
         placeholder={placeholder}
@@ -97,37 +97,37 @@ function tokenizeJSON(src: string): ReactNode[] {
     if (m[1] !== undefined) {
       const colon = m[2]; // e.g. "  :" — keep the whitespace plain, colour ":"
       out.push(
-        <span key={key++} className="hz-j-key">
+        <span key={key++} className="dz-j-key">
           {m[1]}
         </span>,
       );
       if (colon.length > 1) out.push(colon.slice(0, -1));
       out.push(
-        <span key={key++} className="hz-j-punct">
+        <span key={key++} className="dz-j-punct">
           :
         </span>,
       );
     } else if (m[3] !== undefined) {
       out.push(
-        <span key={key++} className="hz-j-string">
+        <span key={key++} className="dz-j-string">
           {m[3]}
         </span>,
       );
     } else if (m[4] !== undefined) {
       out.push(
-        <span key={key++} className="hz-j-number">
+        <span key={key++} className="dz-j-number">
           {m[4]}
         </span>,
       );
     } else if (m[5] !== undefined) {
       out.push(
-        <span key={key++} className="hz-j-bool">
+        <span key={key++} className="dz-j-bool">
           {m[5]}
         </span>,
       );
     } else {
       out.push(
-        <span key={key++} className="hz-j-punct">
+        <span key={key++} className="dz-j-punct">
           {m[6]}
         </span>,
       );

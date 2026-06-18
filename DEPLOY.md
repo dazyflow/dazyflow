@@ -1,18 +1,18 @@
-# Deploying hzd
+# Deploying dzd
 
-Every knob below is a `HAZYFLOW_*` environment variable. `hzd` itself
+Every knob below is a `DAZYFLOW_*` environment variable. `dzd` itself
 only has two flags, both one-shot operator commands that exit after
 running (`--rotate-master-key`, `--import-users-from-json`). For the
 canonical list see `.env.example`.
 
 ## TLS / reverse-proxy contract
 
-`hzd` does **not** terminate TLS. Run it behind a TLS-terminating reverse
+`dzd` does **not** terminate TLS. Run it behind a TLS-terminating reverse
 proxy (nginx, Caddy, Traefik, a k8s ingress) and proxy plain HTTP to the
 gateway port.
 
 The proxy MUST:
-- terminate TLS and forward to `hzd`'s HTTP port (`HAZYFLOW_HTTP`) over
+- terminate TLS and forward to `dzd`'s HTTP port (`DAZYFLOW_HTTP`) over
   HTTP;
 - set `X-Forwarded-Proto: https` on forwarded requests;
 - forward the `Host` and `Origin` headers unchanged (the gateway's CSRF
@@ -20,17 +20,17 @@ The proxy MUST:
 - upgrade WebSocket/SSE connections (Vite HMR in dev, the chat + run SSE
   streams in prod).
 
-`hzd` MUST be configured with:
-- `HAZYFLOW_TRUST_PROXY_HEADERS=1` — so it honors `X-Forwarded-Proto` and
+`dzd` MUST be configured with:
+- `DAZYFLOW_TRUST_PROXY_HEADERS=1` — so it honors `X-Forwarded-Proto` and
   marks session cookies `Secure` + sends HSTS on forwarded-HTTPS
-  requests. **Do not set this if hzd is exposed directly** (a client
+  requests. **Do not set this if dzd is exposed directly** (a client
   could spoof the header to flip Secure on over plain HTTP).
-- `HAZYFLOW_WEB_ORIGIN=https://your.domain` — the exact browser origin,
+- `DAZYFLOW_WEB_ORIGIN=https://your.domain` — the exact browser origin,
   for the CORS allowlist + the cookie-origin CSRF check.
-- `HAZYFLOW_PUBLIC_BASE_URL=https://your.domain` — used for OAuth
+- `DAZYFLOW_PUBLIC_BASE_URL=https://your.domain` — used for OAuth
   redirect URIs and failure-notification deep links.
 
-What the gateway does once `HAZYFLOW_TRUST_PROXY_HEADERS=1` is on and the
+What the gateway does once `DAZYFLOW_TRUST_PROXY_HEADERS=1` is on and the
 request arrives as forwarded-HTTPS:
 - session cookie gets `Secure` (plus the existing `HttpOnly` +
   `SameSite=Lax`);
@@ -48,7 +48,7 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/app.example.com/privkey.pem;
 
     location / {
-        proxy_pass http://127.0.0.1:8080;     # hzd listens on HAZYFLOW_HTTP=:8080
+        proxy_pass http://127.0.0.1:8080;     # dzd listens on DAZYFLOW_HTTP=:8080
         proxy_http_version 1.1;
         proxy_set_header Host              $host;
         proxy_set_header Origin            $http_origin;
@@ -67,47 +67,47 @@ Matching `.env` for the daemon (everything operator-controllable is an
 env var — see `.env.example` for the full catalogue):
 
 ```env
-HAZYFLOW_HTTP=:8080
-HAZYFLOW_WEB_DIST=/srv/web
-HAZYFLOW_TRUST_PROXY_HEADERS=1
-HAZYFLOW_WEB_ORIGIN=https://app.example.com
-HAZYFLOW_PUBLIC_BASE_URL=https://app.example.com
-HAZYFLOW_POSTGRES_DSN=postgres://hazyflow:…@db/hazyflow?sslmode=require
-HAZYFLOW_MASTER_KEY=<32-byte base64; openssl rand -base64 32>
+DAZYFLOW_HTTP=:8080
+DAZYFLOW_WEB_DIST=/srv/web
+DAZYFLOW_TRUST_PROXY_HEADERS=1
+DAZYFLOW_WEB_ORIGIN=https://app.example.com
+DAZYFLOW_PUBLIC_BASE_URL=https://app.example.com
+DAZYFLOW_POSTGRES_DSN=postgres://dazyflow:…@db/dazyflow?sslmode=require
+DAZYFLOW_MASTER_KEY=<32-byte base64; openssl rand -base64 32>
 ```
 
-Container deployments don't have to set `HAZYFLOW_HTTP` /
-`HAZYFLOW_WEB_DIST` — the supplied Dockerfile bakes those in via
+Container deployments don't have to set `DAZYFLOW_HTTP` /
+`DAZYFLOW_WEB_DIST` — the supplied Dockerfile bakes those in via
 `ENV` (see `Dockerfile`).
 
 ## Kubernetes — single pod (simplest start)
 
-`deploy/k8s/hazyflow.yaml` is a one-replica Deployment + a PersistentVolumeClaim
+`deploy/k8s/dazyflow.yaml` is a one-replica Deployment + a PersistentVolumeClaim
 + a Service + a Secret template — no load balancer, no ingress. You reach the
 UI through `kubectl port-forward`. `deploy/k8s/kustomization.yaml` ties it
 together so the whole thing applies with `kubectl apply -k deploy/k8s/`.
-Everything is configured by `HAZYFLOW_*` env vars on the container — there
+Everything is configured by `DAZYFLOW_*` env vars on the container — there
 are no daemon flags to set.
 
 1. **Postgres** — create a managed Postgres (on DO: a DigitalOcean Managed
    PostgreSQL database; it's external to the cluster). DO requires SSL, so the
    DSN ends in `?sslmode=require`. Add the cluster (or its VPC) to the
-   database's trusted sources. No in-cluster DB and no migration Job — `hzd`
+   database's trusted sources. No in-cluster DB and no migration Job — `dzd`
    applies its schema on boot.
-2. **Secret** — edit `hazyflow-secrets`: a fresh `HAZYFLOW_MASTER_KEY`
+2. **Secret** — edit `dazyflow-secrets`: a fresh `DAZYFLOW_MASTER_KEY`
    (`openssl rand -base64 32`, keep a sealed off-cluster backup) and the
-   `HAZYFLOW_POSTGRES_DSN` from step 1. (For where secrets come from on DO —
+   `DAZYFLOW_POSTGRES_DSN` from step 1. (For where secrets come from on DO —
    which has no managed secret store — see "Getting secrets into the cluster"
    below.)
 3. **Image** — build and push from the repo Dockerfile. On DO: push to
    DigitalOcean Container Registry (`doctl registry login`, then
-   `docker push registry.digitalocean.com/<you>/hzd:<tag>`) and integrate it
+   `docker push registry.digitalocean.com/<you>/dzd:<tag>`) and integrate it
    with the cluster (`doctl kubernetes cluster registry add <cluster>`) so
    pulls are authenticated without a manual `imagePullSecret`. Set the image
    in the Deployment (or via the `images:` stub in `kustomization.yaml`).
 4. **Apply** — `kubectl apply -k deploy/k8s/`.
-5. **Reach it** — `kubectl port-forward deploy/hazyflow 8080:8080`, then open
-   <http://localhost:8080>. `HAZYFLOW_WEB_ORIGIN` / `HAZYFLOW_PUBLIC_BASE_URL`
+5. **Reach it** — `kubectl port-forward deploy/dazyflow 8080:8080`, then open
+   <http://localhost:8080>. `DAZYFLOW_WEB_ORIGIN` / `DAZYFLOW_PUBLIC_BASE_URL`
    are preset to `http://localhost:8080` to match.
 
 Why a PVC and not `emptyDir`: **flow graphs are stored as git repos on disk
@@ -125,15 +125,15 @@ Probes: liveness `/healthz`, readiness `/readyz` (marks the pod NotReady when
 Postgres is unreachable). The `grpc.health.v1.Health` service on :50050 is
 also registered if you prefer a `grpc_health_probe` sidecar.
 
-The pod runs as the image's unprivileged `hazyflow` user (uid 1000, which
+The pod runs as the image's unprivileged `dazyflow` user (uid 1000, which
 owns `/data`) with a hardened security context: `runAsNonRoot`,
 `readOnlyRootFilesystem` (only the `/data` PVC and a `/tmp` emptyDir are
 writable), all capabilities dropped, no privilege escalation, and the
 `RuntimeDefault` seccomp profile. `terminationGracePeriodSeconds: 35` sits
-above `HAZYFLOW_SHUTDOWN_GRACE` (25s) so a rollout drains in-flight nodes
+above `DAZYFLOW_SHUTDOWN_GRACE` (25s) so a rollout drains in-flight nodes
 rather than killing them mid-write.
 
-`HAZYFLOW_TRUST_PROXY_HEADERS` is intentionally **unset**: the pod is reached
+`DAZYFLOW_TRUST_PROXY_HEADERS` is intentionally **unset**: the pod is reached
 directly via port-forward with no TLS-terminating proxy, and setting it there
 would let a client spoof `X-Forwarded-Proto`. Turn it on only once a real
 TLS proxy sits in front (next section).
@@ -142,7 +142,7 @@ TLS proxy sits in front (next section).
 
 DigitalOcean has **no managed secret manager** (and no KMS) for DOKS — App
 Platform's encrypted env vars don't extend to Kubernetes. The inline
-`Secret` in `hazyflow.yaml` is a convenience for a first apply; don't commit
+`Secret` in `dazyflow.yaml` is a convenience for a first apply; don't commit
 real values in it. Options, simplest first:
 
 - **`kubectl` out of band** — apply the Secret by hand (or `kubectl create
@@ -156,7 +156,7 @@ real values in it. Options, simplest first:
   Doppler, Infisical, 1Password, etc. — heavier; reach for these when you
   already run one of those stores.
 
-Either way the `HAZYFLOW_MASTER_KEY` needs a sealed backup *outside* whichever
+Either way the `DAZYFLOW_MASTER_KEY` needs a sealed backup *outside* whichever
 mechanism you choose — losing it makes every stored flow secret undecryptable.
 
 ## Scaling up — load balancer, TLS, multi-replica
@@ -174,32 +174,32 @@ The steps:
    automatically; point a DNS A record at the LB IP. Install cert-manager and
    create a `letsencrypt-prod` ClusterIssuer (stub at the bottom of
    `ingress.yaml`). Edit `app.example.com` in `ingress.yaml`, set
-   `HAZYFLOW_WEB_ORIGIN` / `HAZYFLOW_PUBLIC_BASE_URL` to the same https origin,
-   add `HAZYFLOW_TRUST_PROXY_HEADERS=1`, uncomment `ingress.yaml` in
+   `DAZYFLOW_WEB_ORIGIN` / `DAZYFLOW_PUBLIC_BASE_URL` to the same https origin,
+   add `DAZYFLOW_TRUST_PROXY_HEADERS=1`, uncomment `ingress.yaml` in
    `kustomization.yaml`, and re-apply.
 2. **Raise `replicas`** on the Deployment. Switch the `/data` volume from the
    RWO PVC to a `ReadWriteMany` volume (block storage can't be shared across
    pods — on DO that means storing workspace/`file_write` artifacts in object
    storage / DO Spaces instead) and drop the `Recreate` strategy back to a
-   rolling update. Set the same `HAZYFLOW_APPROVAL_HMAC_SECRET` on every pod
+   rolling update. Set the same `DAZYFLOW_APPROVAL_HMAC_SECRET` on every pod
    if you use unauthenticated approval links.
 3. **Add the operational resources** as needed: a `PodDisruptionBudget`
    (`minAvailable: 1`), a CPU `HorizontalPodAutoscaler` (DOKS ships
    metrics-server; for backlog-aware scaling use the Prometheus metric
-   `hazyflow_jobs_oldest_queued_seconds` via prometheus-adapter), and a
+   `dazyflow_jobs_oldest_queued_seconds` via prometheus-adapter), and a
    default-deny `NetworkPolicy` (DOKS enforces it via Cilium). Note a
    `PodDisruptionBudget` is *not* useful at one replica — `minAvailable: 1`
    there blocks node drains entirely.
 
-`/metrics` is off by default. If you enable it (`HAZYFLOW_ENABLE_METRICS=1`)
+`/metrics` is off by default. If you enable it (`DAZYFLOW_ENABLE_METRICS=1`)
 note it shares port 8080 with the API, so it can't be isolated by
 NetworkPolicy — block it at the ingress (as `ingress.yaml` does) and let
 Prometheus scrape the in-cluster Service directly.
 
 ## Per-org subdomains (optional)
 
-Set `HAZYFLOW_WILDCARD_DOMAIN=<apex>` (e.g. `hazyflow.app`) to give each
-org its own subdomain. A visit to `acme.hazyflow.app` lands on the
+Set `DAZYFLOW_WILDCARD_DOMAIN=<apex>` (e.g. `dazyflow.app`) to give each
+org its own subdomain. A visit to `acme.dazyflow.app` lands on the
 sign-in page with `org=acme` preselected, so that org's "Sign in with
 Google" button shows without a `?org=` query param. Leave it empty and
 the daemon behaves exactly as a single-host deploy.
@@ -207,15 +207,15 @@ the daemon behaves exactly as a single-host deploy.
 What it changes when set:
 
 - **CORS + CSRF** accept any `*.<apex>` subdomain as a browser origin, in
-  addition to the exact `HAZYFLOW_WEB_ORIGIN` entries. The apex itself is
-  not implied — list it in `HAZYFLOW_WEB_ORIGIN` as usual. The match is a
-  strict subdomain suffix, so `evil-hazyflow.app` does not match
-  `hazyflow.app`.
+  addition to the exact `DAZYFLOW_WEB_ORIGIN` entries. The apex itself is
+  not implied — list it in `DAZYFLOW_WEB_ORIGIN` as usual. The match is a
+  strict subdomain suffix, so `evil-dazyflow.app` does not match
+  `dazyflow.app`.
 - **Session cookies stay host-only** (no parent-domain cookie). Each
   org's session is scoped to its own subdomain, so one org's subdomain
   can never read another's cookie.
 - **Google/OAuth sign-in** still uses a single redirect URI on the apex
-  (`HAZYFLOW_PUBLIC_BASE_URL`), so you register **one** redirect URI with
+  (`DAZYFLOW_PUBLIC_BASE_URL`), so you register **one** redirect URI with
   the provider regardless of how many org subdomains exist. The apex
   callback issues the session, then 302s the browser to
   `<subdomain>/api/v1/auth/handoff?ot=…` with a single-use, short-lived
@@ -228,8 +228,8 @@ Infrastructure prerequisites:
 - A wildcard DNS record `*.<apex>` pointing at the proxy.
 - A wildcard TLS certificate (`*.<apex>`) at the proxy. Let's Encrypt
   issues these via the DNS-01 challenge.
-- `HAZYFLOW_PUBLIC_BASE_URL` set to the apex (`https://<apex>`).
-- The proxy must route every `*.<apex>` host to the same hzd upstream
+- `DAZYFLOW_PUBLIC_BASE_URL` set to the apex (`https://<apex>`).
+- The proxy must route every `*.<apex>` host to the same dzd upstream
   (the sign-in handoff state is held in-process). An nginx `server_name`
   of `<apex> *.<apex>` with the same `proxy_pass` covers both.
 
@@ -242,26 +242,26 @@ automatic DNS provisioning — adding an org's subdomain is an ops step
 
 ## Durability
 
-`HAZYFLOW_POSTGRES_DSN` is **required** — `hzd` runs on Postgres and
+`DAZYFLOW_POSTGRES_DSN` is **required** — `dzd` runs on Postgres and
 refuses to start without it. Jobs, API keys, sessions, users, encrypted
 secrets, memberships, invitations, per-org SSO config, and per-org
 profiles all persist to Postgres. (Graph workspaces and execution
-sandboxes are git/filesystem-backed under `HAZYFLOW_DATA_DIR`.) Provide a
-stable `HAZYFLOW_MASTER_KEY` (32-byte base64); losing it makes every
+sandboxes are git/filesystem-backed under `DAZYFLOW_DATA_DIR`.) Provide a
+stable `DAZYFLOW_MASTER_KEY` (32-byte base64); losing it makes every
 stored secret undecryptable.
 
 ### First admin (bootstrap)
 
 A fresh instance has no users, and signup is invite-only by default
-(`HAZYFLOW_ENABLE_SIGNUP` off) — a chicken-and-egg, since there's no admin
+(`DAZYFLOW_ENABLE_SIGNUP` off) — a chicken-and-egg, since there's no admin
 to send the first invite. Resolve it with the platform-admin allowlist:
 
 ```sh
-HAZYFLOW_PLATFORM_ADMINS=you@example.com   # comma-separated for several
+DAZYFLOW_PLATFORM_ADMINS=you@example.com   # comma-separated for several
 ```
 
 Emails in this allowlist may sign up via `POST /api/v1/auth/signup` (the
-web UI's sign-up form) **even while `HAZYFLOW_ENABLE_SIGNUP` is off** — so
+web UI's sign-up form) **even while `DAZYFLOW_ENABLE_SIGNUP` is off** — so
 you don't have to open self-serve signup to the world just to create your
 own account. On sign-up (and every later sign-in) the listed email is
 granted `platform:admin`. The bypass is self-limiting: once the account
@@ -275,11 +275,11 @@ toggle involved at all.)
 
 ### Fail-closed config guard
 
-`hzd` **refuses to start** if it would run with a bundled insecure
-default — a missing `HAZYFLOW_POSTGRES_DSN`, a DSN still using the shipped
+`dzd` **refuses to start** if it would run with a bundled insecure
+default — a missing `DAZYFLOW_POSTGRES_DSN`, a DSN still using the shipped
 default DB password, a DSN that does not enforce TLS (`sslmode` is
 anything other than `require`/`verify-ca`/`verify-full`), or an empty
-`HAZYFLOW_MASTER_KEY`. The boot log prints a `FATAL` line naming each
+`DAZYFLOW_MASTER_KEY`. The boot log prints a `FATAL` line naming each
 offending value. Fix them (set a strong `POSTGRES_PASSWORD`, a TLS
 `sslmode`, and a real master key) and restart.
 
@@ -291,7 +291,7 @@ on-host from remote. If you use the bundled `postgres` service, see
 below; for a managed/remote DB the provider already terminates TLS and you
 just append `?sslmode=require` to the DSN.
 
-`HAZYFLOW_DEV=1` downgrades the guard from fatal to warnings so the
+`DAZYFLOW_DEV=1` downgrades the guard from fatal to warnings so the
 bundled defaults boot for a local trial. **Never set it in production** —
 it exists only so `docker compose up -d` works for a throwaway smoke
 test.
@@ -299,10 +299,10 @@ test.
 ### Postgres TLS for the bundled service
 
 The bundled `postgres:16-alpine` ships with **SSL off**, so the fail-closed
-guard above will reject the default `sslmode=disable` DSN and `hzd` will
+guard above will reject the default `sslmode=disable` DSN and `dzd` will
 restart-loop (nginx then returns `502`). This is a different TLS hop from
-your reverse proxy: the proxy terminates browser↔`hzd` TLS, while this guard
-is about the `hzd`↔Postgres link. The proxy can't satisfy it — you have to
+your reverse proxy: the proxy terminates browser↔`dzd` TLS, while this guard
+is about the `dzd`↔Postgres link. The proxy can't satisfy it — you have to
 give Postgres its own cert.
 
 A **self-signed cert is enough**: `sslmode=require` demands an encrypted
@@ -343,29 +343,29 @@ remote DB's identity.)
    ```
 
 3. Point the DSN at TLS — change `sslmode=disable` to `sslmode=require` in
-   `HAZYFLOW_POSTGRES_DSN` (in `.env`), then recreate:
+   `DAZYFLOW_POSTGRES_DSN` (in `.env`), then recreate:
 
    ```sh
    docker compose up -d
-   docker compose logs -f hzd   # the FATAL TLS line should be gone
-   docker compose ps            # hzd "Up (healthy)", not Restarting
+   docker compose logs -f dzd   # the FATAL TLS line should be gone
+   docker compose ps            # dzd "Up (healthy)", not Restarting
    ```
 
 `ssl=on` only *offers* TLS; it still accepts plaintext clients, so this
-change is backward-compatible with a `HAZYFLOW_DEV=1` local stack that
+change is backward-compatible with a `DAZYFLOW_DEV=1` local stack that
 connects with `sslmode=disable`.
 
 ### Migrating an existing JSON user file to Postgres
 
 If you ran in dev mode with users in a JSON file (legacy:
-`./.hazyflow-users.json`; current layout: `<data>/state/users.json`)
+`./.dazyflow-users.json`; current layout: `<data>/state/users.json`)
 and are adopting Postgres, import those accounts once so nobody is
-stranded. This is one of the only two flags `hzd` still accepts — a
+stranded. This is one of the only two flags `dzd` still accepts — a
 one-shot command that exits after running:
 
 ```sh
-HAZYFLOW_POSTGRES_DSN="$DSN" \
-    hzd --import-users-from-json ./.hazyflow/state/users.json
+DAZYFLOW_POSTGRES_DSN="$DSN" \
+    dzd --import-users-from-json ./.dazyflow/state/users.json
 # logs "user import complete: N imported, M skipped", then exits
 ```
 
@@ -379,15 +379,15 @@ Postgres backup covers jobs, users, sessions, encrypted secrets,
 memberships, and the rest of the control plane. Two things live **outside**
 the DB and must be backed up alongside it:
 
-- the **`HAZYFLOW_MASTER_KEY`**, required to decrypt the `encrypted_secrets`
+- the **`DAZYFLOW_MASTER_KEY`**, required to decrypt the `encrypted_secrets`
   rows (a DB backup without it is undecryptable);
-- the **`HAZYFLOW_DATA_DIR` (`/data`) volume** — your flow graphs are stored
+- the **`DAZYFLOW_DATA_DIR` (`/data`) volume** — your flow graphs are stored
   as git repos there, not in Postgres, so a DB-only backup does not capture
   them. Back up the PVC (snapshot it, or `git push` each workspace to a
   remote).
 
 - **Logical backup (simplest):**
-  `pg_dump "$HAZYFLOW_POSTGRES_DSN" | gzip > hazyflow-$(date +%F).sql.gz`.
+  `pg_dump "$DAZYFLOW_POSTGRES_DSN" | gzip > dazyflow-$(date +%F).sql.gz`.
   Restore into a fresh DB with `gunzip -c … | psql "$DSN"`.
 - **Point-in-time recovery:** for larger deployments use base backups +
   WAL archiving (`pg_basebackup` / your managed provider's PITR). The app
@@ -411,15 +411,15 @@ you expose the daemon; see `.env.example` for the detail.
 
 - The auth rate limiter is fixed at **20/min per IP (burst 10)** on
   `/api/v1/auth/{signin,signup}` — not a knob, but worth knowing it's there.
-- `HAZYFLOW_DEV_KEY` / `HAZYFLOW_DEV` — dev-only; never set in production.
-- `HAZYFLOW_HTTP_EGRESS_ALLOW` — allowlist the hosts outbound HTTP drops may
+- `DAZYFLOW_DEV_KEY` / `DAZYFLOW_DEV` — dev-only; never set in production.
+- `DAZYFLOW_HTTP_EGRESS_ALLOW` — allowlist the hosts outbound HTTP drops may
   reach (the IP-level SSRF guard blocks private/loopback/metadata regardless).
-- `HAZYFLOW_ALLOW_PRIVATE_EGRESS` — keep **off** on multi-tenant deploys; on,
+- `DAZYFLOW_ALLOW_PRIVATE_EGRESS` — keep **off** on multi-tenant deploys; on,
   it lets flows reach private/loopback/cloud-metadata addresses (and the
   DB/SMTP drop hosts).
-- `HAZYFLOW_ENABLE_SHELL` — **off** by default; on, it's host RCE for anyone
+- `DAZYFLOW_ENABLE_SHELL` — **off** by default; on, it's host RCE for anyone
   who can run a flow. Single-tenant / CI box only.
-- `HAZYFLOW_AUDIT_SECRET_READS` — **off** by default; on, every successful
+- `DAZYFLOW_AUDIT_SECRET_READS` — **off** by default; on, every successful
   secret resolution emits a `secret.read` audit event (secret name + actor,
   never the value). High-volume (resolution runs on every node execution) —
   enable only when a compliance regime requires a read trail.
@@ -429,38 +429,38 @@ you expose the daemon; see `.env.example` for the detail.
 ## Observability
 
 - **Health probes:** HTTP `GET /healthz` (liveness) and `GET /readyz`
-  (readiness — pings Postgres when `HAZYFLOW_POSTGRES_DSN` is set). For
+  (readiness — pings Postgres when `DAZYFLOW_POSTGRES_DSN` is set). For
   gRPC-only / k8s deployments, the standard `grpc.health.v1.Health`
   service is registered on the gRPC port (use `grpc_health_probe`); its
   overall status tracks the same readiness check.
-- **Metrics:** `HAZYFLOW_ENABLE_METRICS=1` exposes a Prometheus
+- **Metrics:** `DAZYFLOW_ENABLE_METRICS=1` exposes a Prometheus
   `GET /metrics` endpoint. Off by default — it reveals tenant names, so
   enable it only behind a restricted scrape network. Series exposed:
-  - `hazyflow_up` — liveness.
-  - `hazyflow_jobs{status}` — node-job counts by status. `queued` is
+  - `dazyflow_up` — liveness.
+  - `dazyflow_jobs{status}` — node-job counts by status. `queued` is
     queue depth, `running` is in-flight work.
-  - `hazyflow_jobs_oldest_queued_seconds` — age of the oldest claimable
+  - `dazyflow_jobs_oldest_queued_seconds` — age of the oldest claimable
     node job. **The leading indicator for execution backlog**: when this
-    climbs, workers can't keep up. Raise `HAZYFLOW_WORKER_COUNT` or add
+    climbs, workers can't keep up. Raise `DAZYFLOW_WORKER_COUNT` or add
     replicas before users feel the lag.
-  - `hazyflow_pg_pool_connections{state}` (`acquired`/`idle`/`total`),
-    `hazyflow_pg_pool_max_connections`, and
-    `hazyflow_pg_pool_empty_acquires_total`. **The earliest warning of
+  - `dazyflow_pg_pool_connections{state}` (`acquired`/`idle`/`total`),
+    `dazyflow_pg_pool_max_connections`, and
+    `dazyflow_pg_pool_empty_acquires_total`. **The earliest warning of
     pool exhaustion**: a rising `empty_acquires_total` (or `acquired`
     pinned at `max`) means requests are waiting for a connection. Raise
-    `HAZYFLOW_PG_MAX_CONNS` or scale out.
-  - `hazyflow_session_cache_hits_total` / `_misses_total` — auth-lookup
+    `DAZYFLOW_PG_MAX_CONNS` or scale out.
+  - `dazyflow_session_cache_hits_total` / `_misses_total` — auth-lookup
     cache effectiveness. A healthy hit ratio means the per-request
     session lookup isn't hammering Postgres; the miss rate tracks raw
     authenticated-request load.
-  - `hazyflow_quota_bytes_used/_limit{tenant}` — per-tenant disk usage.
-  - `hazyflow_http_requests_total{method,code}` and
-    `hazyflow_http_request_duration_seconds{method}` (histogram) — HTTP
+  - `dazyflow_quota_bytes_used/_limit{tenant}` — per-tenant disk usage.
+  - `dazyflow_http_requests_total{method,code}` and
+    `dazyflow_http_request_duration_seconds{method}` (histogram) — HTTP
     RED. Rate is the counter's increase; error ratio is the share of
     `code` >= 500 (or >= 400); latency percentiles come from the
     histogram (`histogram_quantile(0.99, ...)`). The front-door health
     signal.
-  - `hazyflow_node_duration_seconds{status}` (histogram) — per-node
+  - `dazyflow_node_duration_seconds{status}` (histogram) — per-node
     execution latency, split by terminal status. Rising p99 here is the
     flow-engine analogue of slow requests; the `failed` series' rate is
     your node error rate. Counts retried attempts (each is a real
@@ -472,13 +472,13 @@ you expose the daemon; see `.env.example` for the detail.
   above your acceptable trigger-to-start latency for a few minutes; pool
   `acquired / max` sustained above ~0.8 or any sustained rise in
   `empty_acquires_total`; and watch the `jobs` table and `audit_events`
-  row counts against the `HAZYFLOW_JOB_RETENTION` /
-  `HAZYFLOW_AUDIT_RETENTION` windows to confirm the retention sweeps keep
+  row counts against the `DAZYFLOW_JOB_RETENTION` /
+  `DAZYFLOW_AUDIT_RETENTION` windows to confirm the retention sweeps keep
   up. The histograms use fixed buckets (5ms to 60s); per-route HTTP
   labels and per-module node labels are intentionally omitted to keep
   cardinality bounded — say so if you want either dimension added.
 - **Tracing:** set the standard `OTEL_EXPORTER_OTLP_ENDPOINT` (or
-  `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`) and `hzd` installs an OTLP trace
+  `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`) and `dzd` installs an OTLP trace
   exporter so graph/node spans flow to your collector (Jaeger, Tempo,
   the OTel Collector, Honeycomb, …). Unset = no export (zero overhead).
   All standard `OTEL_EXPORTER_OTLP_*` env vars (headers, TLS, timeout)
@@ -486,17 +486,17 @@ you expose the daemon; see `.env.example` for the detail.
 
 ## Graceful shutdown
 
-On `SIGTERM`/`SIGINT`, `hzd` drains: it stops the gRPC server gracefully,
+On `SIGTERM`/`SIGINT`, `dzd` drains: it stops the gRPC server gracefully,
 stops claiming new jobs, and lets any in-flight node finish and finalize
-its run before exiting. The wait is bounded by `HAZYFLOW_SHUTDOWN_GRACE`
-(default `25s`); if it elapses with work still running, `hzd` exits
+its run before exiting. The wait is bounded by `DAZYFLOW_SHUTDOWN_GRACE`
+(default `25s`); if it elapses with work still running, `dzd` exits
 anyway and the unfinished node's lease expires so another instance
-reclaims it. Set `HAZYFLOW_SHUTDOWN_GRACE` below your orchestrator's
+reclaims it. Set `DAZYFLOW_SHUTDOWN_GRACE` below your orchestrator's
 termination grace (e.g. keep it under k8s
 `terminationGracePeriodSeconds`, default 30s) so the process drains
 rather than being `SIGKILL`ed mid-write.
 
-A separate reaper sweep (every `HAZYFLOW_REAP_INTERVAL`, default `1m`,
+A separate reaper sweep (every `DAZYFLOW_REAP_INTERVAL`, default `1m`,
 plus once at startup) recovers any graph run left marked `running` by a
 hard crash whose nodes have all reached a terminal state — so a `SIGKILL`
 or power loss can't strand a run forever.
@@ -509,8 +509,8 @@ Two paths:
 - **Authenticated (inbox UI):** `POST /api/v1/approvals/{run}/{node}` on the
   gateway — always available, uses the caller's API-key/session.
 - **Unauthenticated link (email/Slack):** opt in by setting
-  `HAZYFLOW_APPROVAL_HMAC_SECRET=<base64≥16B>` (plus
-  `HAZYFLOW_PUBLIC_BASE_URL` so links resolve to a real origin). The
+  `DAZYFLOW_APPROVAL_HMAC_SECRET=<base64≥16B>` (plus
+  `DAZYFLOW_PUBLIC_BASE_URL` so links resolve to a real origin). The
   engine then mints signed `<base>/approve/<run>/<node>?token=…` URLs
   and the main HTTP gateway routes them through HMAC verification
   before resuming — no separate listener to expose. Use the **same
@@ -521,7 +521,7 @@ Two paths:
 
 Every node you drop on the canvas — triggers, transforms, and the connectors
 (Gmail, Slack, Sheets, Notion, GitHub, Claude, Excel, ntfy, webhooks) — is a
-native Go drop compiled into `hzd`. There is no plugin/marketplace install
+native Go drop compiled into `dzd`. There is no plugin/marketplace install
 step and no separate runtime: the catalog is fixed at build time. Connectors
 that need credentials use the OAuth providers configured under **Admin →
 Connector apps** (`/admin/oauth`) or a `${secret.…}` token.
@@ -530,7 +530,7 @@ Connector apps** (`/admin/oauth`) or a `${secret.…}` token.
 
 Out of the box, secrets are held in the **built-in encrypted store** — flows
 reference them as `${secret.NAME}` (the `tenant://` provider), values are
-AES-256-GCM encrypted under a per-tenant key wrapped by `HAZYFLOW_MASTER_KEY`,
+AES-256-GCM encrypted under a per-tenant key wrapped by `DAZYFLOW_MASTER_KEY`,
 and the UI is write-only (you never read a value back). That's the zero-infra
 default; no external dependency. For master-key handling and rotation, see
 **[SECURITY.md](SECURITY.md)**.

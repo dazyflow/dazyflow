@@ -16,7 +16,7 @@ self-contained.
 | **Multi-output fan** | `fetch_invoice.response_body` feeds *both* `classify` and `archive` |
 | **Dormant edges** | the not-taken branch (`notify_cfo` or `auto_approve`) records as `skipped` |
 | **Per-tenant sandbox** | `file_write` puts archives in `<sandbox>/dev/default/archive/` |
-| **mTLS-disabled-for-dev opt-in** | hzd dials backend over insecure HTTP because the backend isn't TLS |
+| **mTLS-disabled-for-dev opt-in** | dzd dials backend over insecure HTTP because the backend isn't TLS |
 | **Audit isolation** | graph JSON on disk never holds resolved secret values |
 
 ## Topology
@@ -85,4 +85,4 @@ real corporate workflows.
 
 2. **Webhook bodies are still ignored.** The graph has no access to `POST /trigger/... <body>`. Workflows that need the inbound data (e.g. "process the invoice whose ID is in the webhook payload") must hardcode IDs or fetch a "latest" endpoint. The fix is a `webhook_input` module the engine seeds with the body.
 
-3. **Port collisions hit demos hard.** Default :8080 collided with something on the dev box, hzd silently lost the listener thread. Picked :18080 to dodge; production deployments need explicit health-check failures when a bind fails (current behavior: log + continue, which is wrong).
+3. **Port collisions hit demos hard.** Default :8080 collided with something on the dev box, dzd silently lost the listener thread. Picked :18080 to dodge; production deployments need explicit health-check failures when a bind fails (current behavior: log + continue, which is wrong).

@@ -11,10 +11,10 @@ const (
 	PermSecretWrite       Permission = "secret:write"
 	PermOrganizationAdmin Permission = "organization:admin"
 	// PermPlatformAdmin is the cross-tenant super-admin role. Carriers
-	// can see and act on every tenant on the hzd instance — manage
+	// can see and act on every tenant on the dzd instance — manage
 	// keys, list runs, issue keys in any tenant, etc. Distinct from
 	// organization:admin (which is per-tenant). For SaaS-style hosting
-	// where the operator runs hzd for many customer orgs.
+	// where the operator runs dzd for many customer orgs.
 	PermPlatformAdmin Permission = "platform:admin"
 )
 

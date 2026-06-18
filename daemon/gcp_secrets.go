@@ -18,7 +18,7 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // GcpSecretsProvider is the Google Cloud flavour of the BYO secret manager
@@ -235,7 +235,7 @@ func (c *gcpAPIClient) verify(ctx context.Context, cfg GcpSecretsConfig) error {
 	if _, err := c.token(ctx, cfg); err != nil {
 		return err
 	}
-	_, err := c.accessSecret(ctx, cfg, "hazyflow-connection-test")
+	_, err := c.accessSecret(ctx, cfg, "dazyflow-connection-test")
 	if err == nil {
 		return nil // probe actually exists — fine
 	}

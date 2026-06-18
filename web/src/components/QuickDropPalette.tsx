@@ -124,8 +124,8 @@ export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAl
     }
     // Only push when our marker isn't already on top, so the StrictMode
     // remount doesn't stack a second entry.
-    if (!window.history.state?.hazyPalette) {
-      window.history.pushState({ hazyPalette: true }, "");
+    if (!window.history.state?.dazyPalette) {
+      window.history.pushState({ dazyPalette: true }, "");
     }
     const onPop = () => onCloseRef.current();
     window.addEventListener("popstate", onPop);
@@ -138,10 +138,10 @@ export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAl
       // otherwise the back()'s popstate would be caught by the new
       // listener and close the palette the instant it opened. After a
       // real Back pop the marker is already gone, so we skip it.
-      if (window.history.state?.hazyPalette) {
+      if (window.history.state?.dazyPalette) {
         pendingHistoryPop = setTimeout(() => {
           pendingHistoryPop = null;
-          if (window.history.state?.hazyPalette) window.history.back();
+          if (window.history.state?.dazyPalette) window.history.back();
         }, 0);
       }
     };

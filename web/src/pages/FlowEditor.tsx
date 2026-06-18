@@ -97,8 +97,8 @@ import { formatDateTime } from "../lib/datetime";
 import { Inspector } from "../components/Inspector";
 import { FlowStatusChip } from "../components/FlowStatusChip";
 import { flowRunStatusPublished } from "../flowStatus";
-import { HazyNode } from "../components/NodeCard";
-import { portColor, type HazyNodeData } from "../components/nodeCardShared";
+import { DazyNode } from "../components/NodeCard";
+import { portColor, type DazyNodeData } from "../components/nodeCardShared";
 import { CommentNode } from "../components/CommentNode";
 import { RunHistory } from "../components/RunHistory";
 import { RerouteEdge } from "../components/RerouteEdge";
@@ -115,7 +115,7 @@ import { useResourceResolver } from "./useResourceResolver";
 // Custom node-types registry. React Flow caches by reference, so this
 // is declared at module scope rather than inline in the component to
 // avoid unnecessary remounts on each render.
-const nodeTypes = { hazy: HazyNode, comment: CommentNode };
+const nodeTypes = { dazy: DazyNode, comment: CommentNode };
 const edgeTypes = { reroute: RerouteEdge };
 
 // How long the editor waits after the last edit before autosaving. Short
@@ -144,7 +144,7 @@ function timeAgo(iso: string): string {
 function buildTestEventSample(formFields?: string[]): Record<string, string> {
   if (!formFields || formFields.length === 0) {
     return {
-      message: "Test event from Hazyflow",
+      message: "Test event from Dazyflow",
       name: "Jane Example",
       email: "jane@example.com",
       submitted_at: new Date().toISOString(),
@@ -170,7 +170,7 @@ function sampleValueFor(field: string): string {
   if (f === "email" || f.endsWith("_email")) return "jane@example.com";
   if (f === "name" || f.endsWith("_name")) return "Jane Example";
   if (f === "message" || f === "body" || f === "notes" || f === "comment" || f === "comments") {
-    return "Test event from Hazyflow";
+    return "Test event from Dazyflow";
   }
   if (f === "phone" || f === "telephone" || f === "mobile") return "+1 555 0123";
   if (f === "company" || f === "organisation" || f === "organization") return "Acme AB";
@@ -237,7 +237,7 @@ function EditorInner() {
     return m;
   }, [manifests]);
 
-  const [nodes, setNodes] = useState<FlowNode<HazyNodeData>[]>([]);
+  const [nodes, setNodes] = useState<FlowNode<DazyNodeData>[]>([]);
   const [edges, setEdges] = useState<FlowEdge[]>([]);
   // Comment frames (#3) live in their own state as React Flow nodes of
   // type "comment" — kept separate from `nodes` so node logic (align,
@@ -267,12 +267,12 @@ function EditorInner() {
   // engine behaviour but must round-trip through save() so the user's
   // chosen name/icon/description survive reloads.
   const [name, setName] = useState<string | undefined>(undefined);
-  // Browser tab title mirrors the flow: "<FLOW NAME> | Hazyflow". Reset on
+  // Browser tab title mirrors the flow: "<FLOW NAME> | Dazyflow". Reset on
   // unmount so list pages go back to the plain app title.
   useEffect(() => {
-    document.title = name ? `${name} | Hazyflow` : "Hazyflow";
+    document.title = name ? `${name} | Dazyflow` : "Dazyflow";
     return () => {
-      document.title = "Hazyflow";
+      document.title = "Dazyflow";
     };
   }, [name]);
   const [icon, setIcon] = useState<string | undefined>(undefined);
@@ -291,7 +291,7 @@ function EditorInner() {
   // Lets an unchanged node reuse its previous data object so only edited cards
   // re-render. Pruned of deleted nodes on each rebuild.
   const nodeDataCacheRef = useRef<
-    Map<string, { deps: unknown[]; node: FlowNode<HazyNodeData> }>
+    Map<string, { deps: unknown[]; node: FlowNode<DazyNodeData> }>
   >(new Map());
   const [selectedID, setSelectedID] = useState<string | null>(null);
   // Opens the "N to configure" modal — a click-to-jump checklist of every
@@ -399,7 +399,7 @@ function EditorInner() {
   const [currentRunID, setCurrentRunID] = useState<string | null>(() => {
     const fromURL = searchParams.get("run");
     if (fromURL) return fromURL;
-    return id ? localStorage.getItem(`hazyflow.lastRun.${id}`) : null;
+    return id ? localStorage.getItem(`dazyflow.lastRun.${id}`) : null;
   });
   // liveLogs holds per-node stdout/stderr lines streamed via SSE
   // progress events. Cleared on every new run. The Inspector renders
@@ -440,10 +440,10 @@ function EditorInner() {
   // time nudge. Dismissal is remembered globally: once they've learned the
   // concept we stop showing it on every new flow.
   const [triggerHintDismissed, setTriggerHintDismissed] = useState(
-    () => localStorage.getItem("hazyflow.triggerHintSeen") === "1",
+    () => localStorage.getItem("dazyflow.triggerHintSeen") === "1",
   );
   const dismissTriggerHint = () => {
-    localStorage.setItem("hazyflow.triggerHintSeen", "1");
+    localStorage.setItem("dazyflow.triggerHintSeen", "1");
     setTriggerHintDismissed(true);
   };
   // Every genuine change of the selected node rests the narrow-screen
@@ -455,7 +455,7 @@ function EditorInner() {
     setInspectorExpanded(false);
   }, [selectedID]);
 
-  const rfRef = useRef<ReactFlowInstance<FlowNode<HazyNodeData>, FlowEdge> | null>(null);
+  const rfRef = useRef<ReactFlowInstance<FlowNode<DazyNodeData>, FlowEdge> | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   // streamAbortRef holds the AbortController for the one SSE run-stream
   // that's currently active. subscribeToRun aborts the previous stream
@@ -483,7 +483,7 @@ function EditorInner() {
       setNodes(
         (g.nodes ?? []).map((n, i) => ({
           id: n.id,
-          type: "hazy",
+          type: "dazy",
           position: n.position ?? { x: 80 + i * 240, y: 80 },
           data: {
             label: mm.get(n.module)?.label ?? n.module,
@@ -810,7 +810,7 @@ function EditorInner() {
       const frameChanges = changes.filter((c) => "id" in c && frameIds.has(c.id));
       const nodeChanges = changes.filter((c) => !("id" in c) || !frameIds.has(c.id));
       if (nodeChanges.length) {
-        setNodes((nds) => applyNodeChanges(nodeChanges, nds) as FlowNode<HazyNodeData>[]);
+        setNodes((nds) => applyNodeChanges(nodeChanges, nds) as FlowNode<DazyNodeData>[]);
       }
       if (frameChanges.length) {
         setFrameNodes((fns) => applyNodeChanges(frameChanges, fns));
@@ -1062,7 +1062,7 @@ function EditorInner() {
         ...nds,
         {
           id: newID,
-          type: "hazy",
+          type: "dazy",
           position,
           data: { label: m.label, moduleID: m.id, manifest: m },
         },
@@ -1094,7 +1094,7 @@ function EditorInner() {
     () => nodes.reduce((n, node) => n + (node.selected ? 1 : 0), 0),
     [nodes],
   );
-  const nodeBox = (n: FlowNode<HazyNodeData>) => ({
+  const nodeBox = (n: FlowNode<DazyNodeData>) => ({
     x: n.position.x,
     y: n.position.y,
     w: n.measured?.width ?? n.width ?? 0,
@@ -1179,7 +1179,7 @@ function EditorInner() {
           ...nds,
           {
             id: newID,
-            type: "hazy",
+            type: "dazy",
             position,
             data: { label: m.label, moduleID: m.id, manifest: m },
           },
@@ -1231,7 +1231,7 @@ function EditorInner() {
         ...nds,
         {
           id: newID,
-          type: "hazy",
+          type: "dazy",
           position,
           data: { label: m.label, moduleID: "ntfy", manifest: m },
         },
@@ -1293,7 +1293,7 @@ function EditorInner() {
 
   const onDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    const moduleID = e.dataTransfer.getData("application/x-hazyflow-module");
+    const moduleID = e.dataTransfer.getData("application/x-dazyflow-module");
     if (!moduleID) return;
     const m = manifestByID.get(moduleID);
     if (!m) return;
@@ -1346,7 +1346,7 @@ function EditorInner() {
       if (sel.length === 0) return;
       const ids = new Set(sel.map((n) => n.id));
       const payload = {
-        __hazyflow_clipboard: 1,
+        __dazyflow_clipboard: 1,
         nodes: sel.map((n) => ({
           id: n.id,
           position: n.position,
@@ -1373,8 +1373,8 @@ function EditorInner() {
       if (inTextField()) return;
       const text = e.clipboardData?.getData("text/plain") ?? "";
       let payload: {
-        __hazyflow_clipboard?: number;
-        nodes?: { id: string; position: { x: number; y: number }; data?: HazyNodeData }[];
+        __dazyflow_clipboard?: number;
+        nodes?: { id: string; position: { x: number; y: number }; data?: DazyNodeData }[];
         edges?: { source: string; target: string; sourceHandle?: string; targetHandle?: string }[];
         params?: Record<string, Record<string, unknown>>;
       };
@@ -1383,7 +1383,7 @@ function EditorInner() {
       } catch {
         return;
       }
-      if (!payload || payload.__hazyflow_clipboard !== 1 || !payload.nodes?.length) return;
+      if (!payload || payload.__dazyflow_clipboard !== 1 || !payload.nodes?.length) return;
       e.preventDefault();
 
       // New IDs, derived against the live graph; a placeholder array keeps
@@ -1395,15 +1395,15 @@ function EditorInner() {
         const moduleID = cn.data?.moduleID ?? cn.id.replace(/_\d+$/, "");
         const newID = nextID(working, moduleID);
         idMap.set(cn.id, newID);
-        working.push({ id: newID } as FlowNode<HazyNodeData>);
+        working.push({ id: newID } as FlowNode<DazyNodeData>);
       }
       const OFFSET = 48;
-      const newNodes: FlowNode<HazyNodeData>[] = payload.nodes.map((cn) => {
+      const newNodes: FlowNode<DazyNodeData>[] = payload.nodes.map((cn) => {
         const moduleID = cn.data?.moduleID ?? cn.id.replace(/_\d+$/, "");
         const manifest = manifestByID.get(moduleID) ?? cn.data?.manifest;
         return {
           id: idMap.get(cn.id)!,
-          type: "hazy",
+          type: "dazy",
           position: { x: cn.position.x + OFFSET, y: cn.position.y + OFFSET },
           selected: true,
           data: { label: cn.data?.label ?? moduleID, moduleID, manifest },
@@ -1449,7 +1449,7 @@ function EditorInner() {
     [nodes, selectedID],
   );
 
-  const onInspectorChange = (id: string, patch: Partial<HazyNodeData>) => {
+  const onInspectorChange = (id: string, patch: Partial<DazyNodeData>) => {
     setNodes((nds) =>
       nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...patch } } : n)),
     );
@@ -1507,7 +1507,7 @@ function EditorInner() {
   // nested-loop config check below.
   const loopOwnerByNode = useMemo(() => {
     const moduleOf = (id: string) =>
-      (nodes.find((n) => n.id === id)?.data as HazyNodeData | undefined)?.moduleID;
+      (nodes.find((n) => n.id === id)?.data as DazyNodeData | undefined)?.moduleID;
     const outEdges = new Map<string, string[]>();
     for (const e of edges) {
       if (!e.target) continue;
@@ -1642,10 +1642,10 @@ function EditorInner() {
     for (const e of edges) {
       if (!e.sourceHandle || !e.targetHandle || e.targetHandle === "pass") continue;
       const tgt = byId.get(e.target);
-      const tgtMod = (tgt?.data as HazyNodeData | undefined)?.moduleID;
+      const tgtMod = (tgt?.data as DazyNodeData | undefined)?.moduleID;
       if (!tgtMod || tgtMod === "for_each") continue;
       if (disabledNodes.has(e.target) || loopOwnerByNode.has(e.target)) continue;
-      const srcMod = (byId.get(e.source)?.data as HazyNodeData | undefined)?.moduleID;
+      const srcMod = (byId.get(e.source)?.data as DazyNodeData | undefined)?.moduleID;
       if (portIsList(srcMod, e.sourceHandle, "outputs") && !portIsList(tgtMod, e.targetHandle, "inputs")) {
         out.set(e.target, t("nodeCard.loopHint"));
       }
@@ -1667,7 +1667,7 @@ function EditorInner() {
   // upstream of them is switched off (the engine's skip cascade) — shown
   // greyed so the canvas honestly previews what a run would do. The
   // disabled node itself is not in this set (it gets the stronger
-  // hz-node-off style + chip).
+  // dz-node-off style + chip).
   const offByCascade = useMemo(() => {
     if (disabledNodes.size === 0) return new Set<string>();
     const outEdges = new Map<string, string[]>();
@@ -1696,7 +1696,7 @@ function EditorInner() {
   const tokenLabels = useMemo(() => {
     const m: Record<string, string> = {};
     for (const n of nodes) {
-      const d = n.data as HazyNodeData;
+      const d = n.data as DazyNodeData;
       const man = d.manifest ?? manifestByID.get(d.moduleID);
       if (!man) continue;
       const nodeLabel = man.label || d.moduleID;
@@ -1723,7 +1723,7 @@ function EditorInner() {
     return m;
   }, [edges, tokenLabels]);
 
-  const displayNodes = useMemo<FlowNode<HazyNodeData>[]>(() => {
+  const displayNodes = useMemo<FlowNode<DazyNodeData>[]>(() => {
     // Inline fields show only for a single selection, so a multi-select
     // (e.g. for align/distribute) keeps every card collapsed.
     const sel = nodes.filter((n) => n.selected);
@@ -1734,7 +1734,7 @@ function EditorInner() {
     // (and re-render) on each keystroke. The deps array below is the exact set
     // the data object reads, so reuse is correctness-preserving — any change
     // rebuilds. Cached node objects keep a stable reference, so the memoised
-    // HazyNode (and React Flow) skips unchanged cards.
+    // DazyNode (and React Flow) skips unchanged cards.
     const cache = nodeDataCacheRef.current;
     const seen = new Set<string>();
     const result = nodes.map((n) => {
@@ -1777,7 +1777,7 @@ function EditorInner() {
       if (hit && hit.deps.length === deps.length && hit.deps.every((v, i) => v === deps[i])) {
         return hit.node;
       }
-      const node: FlowNode<HazyNodeData> = {
+      const node: FlowNode<DazyNodeData> = {
         ...n,
         data: {
           ...n.data,
@@ -2154,7 +2154,7 @@ function EditorInner() {
       ...nds.filter((n) => !S.has(n.id)),
       {
         id: sgId,
-        type: "hazy",
+        type: "dazy",
         position: { x: cx, y: cy },
         selected: true,
         data: {
@@ -2890,7 +2890,7 @@ function EditorInner() {
     // Acknowledge the Slack-channel reminder so subsequent runs of this
     // flow don't re-open the gate just for it.
     if (id && slackTargets.length > 0) {
-      localStorage.setItem(`hazyflow.slackAck.${id}`, "1");
+      localStorage.setItem(`dazyflow.slackAck.${id}`, "1");
     }
     setGateOpen(false);
     setRunning(true);
@@ -2899,7 +2899,7 @@ function EditorInner() {
       const { job_id } = await api.runGraph(token, activeTenant, activeWorkspace, id);
       setCurrentRunID(job_id);
       setLockedRunID(job_id);
-      if (id) localStorage.setItem(`hazyflow.lastRun.${id}`, job_id);
+      if (id) localStorage.setItem(`dazyflow.lastRun.${id}`, job_id);
       subscribeToRun(job_id);
     } catch (e) {
       setError((e as Error).message);
@@ -2962,7 +2962,7 @@ function EditorInner() {
       );
       setCurrentRunID(job_id);
       setLockedRunID(job_id);
-      localStorage.setItem(`hazyflow.lastRun.${id}`, job_id);
+      localStorage.setItem(`dazyflow.lastRun.${id}`, job_id);
       subscribeToRun(job_id);
     } catch (e) {
       setError((e as Error).message);
@@ -3009,7 +3009,7 @@ function EditorInner() {
     const slackReminderPending =
       slackTargets.length > 0 &&
       !!id &&
-      localStorage.getItem(`hazyflow.slackAck.${id}`) !== "1";
+      localStorage.getItem(`dazyflow.slackAck.${id}`) !== "1";
     if (needsSetup || slackReminderPending) {
       setGateOpen(true);
       return;
@@ -3028,7 +3028,7 @@ function EditorInner() {
   // preview reflect that run instead of the previously-loaded one.
   const selectHistoricalRun = (runID: string) => {
     setCurrentRunID(runID);
-    if (id) localStorage.setItem(`hazyflow.lastRun.${id}`, runID);
+    if (id) localStorage.setItem(`dazyflow.lastRun.${id}`, runID);
     subscribeToRun(runID);
   };
 
@@ -3087,7 +3087,7 @@ function EditorInner() {
   const hasAnyTrigger =
     triggers.length > 0 ||
     nodes.some((n) => {
-      const m = (n.data as HazyNodeData | undefined)?.moduleID;
+      const m = (n.data as DazyNodeData | undefined)?.moduleID;
       return (
         m === "cron_trigger" ||
         m === "poll_trigger" ||
@@ -3108,7 +3108,7 @@ function EditorInner() {
         // n.data.params here kept the chip stuck on "Manual only" even
         // after the user configured a webhook secret or cron string.
         nodes.map((n) => ({
-          module: (n.data as HazyNodeData | undefined)?.moduleID ?? "",
+          module: (n.data as DazyNodeData | undefined)?.moduleID ?? "",
           params: paramsByID[n.id] ?? {},
         })),
         // A scheduler-triggered flow that hasn't been published yet reads
@@ -3840,9 +3840,9 @@ function EditorInner() {
         )}
         <ReactFlow
           // Frames first so they paint behind the real nodes. Cast: comment
-          // nodes carry CommentData, not HazyNodeData — the array is mixed,
+          // nodes carry CommentData, not DazyNodeData — the array is mixed,
           // but each renderer reads its own data shape.
-          nodes={[...displayFrames, ...displayNodes] as FlowNode<HazyNodeData>[]}
+          nodes={[...displayFrames, ...displayNodes] as FlowNode<DazyNodeData>[]}
           edges={coloredEdges}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
@@ -4300,7 +4300,7 @@ function EditorInner() {
                   // same currentRunID the regular Run does.
                   setCurrentRunID(job_id);
                   setLockedRunID(job_id);
-                  localStorage.setItem(`hazyflow.lastRun.${id}`, job_id);
+                  localStorage.setItem(`dazyflow.lastRun.${id}`, job_id);
                   // Mark the editor as running so the "Run this step" button
                   // flips to a Stop affordance for the life of the partial run
                   // — subscribeToRun's terminal handler clears it on completion.
@@ -4604,7 +4604,7 @@ function ConnectionGate({
 
 // nextID generates a unique node ID for a freshly-dropped module by
 // counting existing nodes with the same module prefix.
-function nextID(existing: FlowNode<HazyNodeData>[], moduleID: string): string {
+function nextID(existing: FlowNode<DazyNodeData>[], moduleID: string): string {
   let i = existing.filter((n) => n.id.startsWith(moduleID)).length + 1;
   while (existing.some((n) => n.id === `${moduleID}_${i}`)) i++;
   return `${moduleID}_${i}`;

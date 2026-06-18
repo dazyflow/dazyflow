@@ -9,7 +9,7 @@ import (
 
 // PgUsageStore is the durable, multi-replica UsageStore. One row per
 // (tenant, month); increments are atomic INSERT … ON CONFLICT upserts so
-// concurrent workers across hzd instances never lose counts.
+// concurrent workers across dzd instances never lose counts.
 type PgUsageStore struct {
 	pool *pgxpool.Pool
 }

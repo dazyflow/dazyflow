@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 func init() {
@@ -75,7 +75,7 @@ func init() {
 // poll_trigger. The scheduler fires the whole graph on the graph's cron
 // schedule; this node runs as a root and stamps the fire moment so
 // downstream steps can read when they ran. Manual runs (the Run button
-// or 'hzctl graph run') produce a valid one-off fire — the same graph
+// or 'dzctl graph run') produce a valid one-off fire — the same graph
 // behaves identically whether the scheduler or a user fired it, which is
 // the natural mental model for "test this scheduled workflow now."
 func executeCronTrigger(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {

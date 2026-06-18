@@ -68,7 +68,7 @@ func CanAdminOrg(p Principal) bool {
 // different tenant.
 func RequireTenant(p Principal, tenant string) error {
 	// Platform admins cross tenant boundaries by design — the role's
-	// whole purpose is operating multiple tenants on one hzd. The
+	// whole purpose is operating multiple tenants on one dzd. The
 	// principal itself may not even carry a tenant (operator keys
 	// often don't).
 	if p.Has(PermPlatformAdmin) {

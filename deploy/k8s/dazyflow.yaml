@@ -1,14 +1,14 @@
-# Kubernetes manifest for a SINGLE-POD Hazyflow deployment — the simplest
+# Kubernetes manifest for a SINGLE-POD Dazyflow deployment — the simplest
 # possible start: one replica, no load balancer, no ingress. Reach the UI with
 #
-#   kubectl port-forward deploy/hazyflow 8080:8080
+#   kubectl port-forward deploy/dazyflow 8080:8080
 #
 # then open http://localhost:8080.
 #
 # Assumes an EXTERNAL/managed Postgres (e.g. DigitalOcean Managed Postgres)
 # referenced via the Secret below. Apply with:
 #
-#   kubectl apply -k deploy/k8s/      (or: kubectl apply -f deploy/k8s/hazyflow.yaml)
+#   kubectl apply -k deploy/k8s/      (or: kubectl apply -f deploy/k8s/dazyflow.yaml)
 #
 # Liveness uses /healthz (process up); readiness uses /readyz (pings Postgres)
 # so the pod is marked NotReady when the DB is unreachable.
@@ -21,23 +21,23 @@
 apiVersion: v1
 kind: Secret
 metadata:
-  name: hazyflow-secrets
+  name: dazyflow-secrets
 type: Opaque
 stringData:
   # REPLACE both. master-key: openssl rand -base64 32 (keep a sealed backup —
   # losing it makes every stored secret undecryptable).
-  HAZYFLOW_MASTER_KEY: "REPLACE_WITH_BASE64_32_BYTE_KEY"
-  HAZYFLOW_POSTGRES_DSN: "postgres://USER:PASS@your-postgres-host:5432/hazyflow?sslmode=require"
+  DAZYFLOW_MASTER_KEY: "REPLACE_WITH_BASE64_32_BYTE_KEY"
+  DAZYFLOW_POSTGRES_DSN: "postgres://USER:PASS@your-postgres-host:5432/dazyflow?sslmode=require"
 ---
-# Flow graphs live in git repos on disk under /data (HAZYFLOW_DATA_DIR), NOT
+# Flow graphs live in git repos on disk under /data (DAZYFLOW_DATA_DIR), NOT
 # in Postgres — so /data MUST persist or a pod restart loses every flow. A
 # ReadWriteOnce PVC is exactly right for a single pod; on DOKS the default
 # do-block-storage StorageClass is RWO. 10Gi is plenty to start.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: hazyflow-data
-  labels: { app: hazyflow }
+  name: dazyflow-data
+  labels: { app: dazyflow }
 spec:
   accessModes: [ReadWriteOnce]
   resources:
@@ -48,8 +48,8 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: hazyflow
-  labels: { app: hazyflow }
+  name: dazyflow
+  labels: { app: dazyflow }
 spec:
   replicas: 1
   # The /data PVC is ReadWriteOnce, so a replacement pod can't attach the
@@ -59,17 +59,17 @@ spec:
   strategy:
     type: Recreate
   selector:
-    matchLabels: { app: hazyflow }
+    matchLabels: { app: dazyflow }
   template:
     metadata:
-      labels: { app: hazyflow }
+      labels: { app: dazyflow }
     spec:
-      # Keep above HAZYFLOW_SHUTDOWN_GRACE (25s, below) so SIGTERM drains
+      # Keep above DAZYFLOW_SHUTDOWN_GRACE (25s, below) so SIGTERM drains
       # in-flight nodes and finalizes their runs before the kubelet SIGKILLs.
       terminationGracePeriodSeconds: 35
       securityContext:
         runAsNonRoot: true
-        # Matches the image's `hazyflow` user (Dockerfile: adduser -u 1000),
+        # Matches the image's `dazyflow` user (Dockerfile: adduser -u 1000),
         # which owns /data. fsGroup makes the mounted /data PVC and /tmp
         # volume group-writable by the process.
         runAsUser: 1000
@@ -78,9 +78,9 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-        - name: hzd
-          image: hazyflow/hzd:latest # build + push from the repo Dockerfile
-          # Container layout defaults (HAZYFLOW_HTTP / _WEB_DIST / _DATA_DIR)
+        - name: dzd
+          image: dazyflow/dzd:latest # build + push from the repo Dockerfile
+          # Container layout defaults (DAZYFLOW_HTTP / _WEB_DIST / _DATA_DIR)
           # come from the image's ENV. Everything else is operator policy.
           securityContext:
             allowPrivilegeEscalation: false
@@ -89,16 +89,16 @@ spec:
               drop: [ALL]
           env:
             # Reached directly via port-forward (no TLS-terminating proxy), so
-            # do NOT set HAZYFLOW_TRUST_PROXY_HEADERS — a client could spoof
+            # do NOT set DAZYFLOW_TRUST_PROXY_HEADERS — a client could spoof
             # X-Forwarded-Proto otherwise. The origins are the port-forward
             # URL; change all three (add TRUST_PROXY_HEADERS=1) once you front
             # it with a real hostname + TLS via ingress.yaml.
-            - { name: HAZYFLOW_WEB_ORIGIN,      value: "http://localhost:8080" }
-            - { name: HAZYFLOW_PUBLIC_BASE_URL, value: "http://localhost:8080" }
+            - { name: DAZYFLOW_WEB_ORIGIN,      value: "http://localhost:8080" }
+            - { name: DAZYFLOW_PUBLIC_BASE_URL, value: "http://localhost:8080" }
             # Drain in-flight work on SIGTERM; keep < terminationGracePeriodSeconds.
-            - { name: HAZYFLOW_SHUTDOWN_GRACE,  value: "25s" }
+            - { name: DAZYFLOW_SHUTDOWN_GRACE,  value: "25s" }
           envFrom:
-            - secretRef: { name: hazyflow-secrets }
+            - secretRef: { name: dazyflow-secrets }
           ports:
             - { name: http, containerPort: 8080 }
           livenessProbe:
@@ -118,7 +118,7 @@ spec:
       volumes:
         - name: data
           persistentVolumeClaim:
-            claimName: hazyflow-data
+            claimName: dazyflow-data
         # readOnlyRootFilesystem needs a writable /tmp for transient scratch
         # (go-git, TLS, etc.).
         - name: tmp
@@ -127,11 +127,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: hazyflow
-  labels: { app: hazyflow }
+  name: dazyflow
+  labels: { app: dazyflow }
 spec:
   # ClusterIP is enough — reach it with `kubectl port-forward`. Switch to an
   # ingress (deploy/k8s/ingress.yaml) when you want public access + TLS.
-  selector: { app: hazyflow }
+  selector: { app: dazyflow }
   ports:
     - { name: http, port: 8080, targetPort: http }

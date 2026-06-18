@@ -51,7 +51,7 @@ type tokenBucket struct {
 	last   time.Time
 }
 
-// NewAuthRateLimiter is the exported constructor cmd/hzd uses to build the
+// NewAuthRateLimiter is the exported constructor cmd/dzd uses to build the
 // gateway's auth limiter. It always returns a non-nil limiter: an
 // unconfigured (perMinute <= 0) deploy falls back to the safe default
 // policy rather than disabling throttling.
@@ -151,7 +151,7 @@ func (l *ipRateLimiter) evictOldestLocked() {
 
 // trustedProxies holds the operator-configured set of CIDRs whose
 // connections are allowed to assert a client IP via X-Forwarded-For. It
-// is parsed once from $HAZYFLOW_TRUSTED_PROXIES (comma-separated CIDRs,
+// is parsed once from $DAZYFLOW_TRUSTED_PROXIES (comma-separated CIDRs,
 // e.g. "10.0.0.0/8,2001:db8::/32") on first use. When the env var is
 // unset/empty the slice is nil and XFF is never honored — behavior is
 // then identical to the pre-proxy code (RemoteAddr only). Invalid CIDR
@@ -162,7 +162,7 @@ var (
 )
 
 func loadTrustedProxies() {
-	raw := os.Getenv("HAZYFLOW_TRUSTED_PROXIES")
+	raw := os.Getenv("DAZYFLOW_TRUSTED_PROXIES")
 	for _, part := range strings.Split(raw, ",") {
 		part = strings.TrimSpace(part)
 		if part == "" {
@@ -201,7 +201,7 @@ func isTrustedProxy(ip net.IP) bool {
 // proxy is the proxy's IP — so without further config every client would
 // share one bucket behind the TLS ingress.
 //
-// To fix that an operator sets $HAZYFLOW_TRUSTED_PROXIES to the CIDR(s)
+// To fix that an operator sets $DAZYFLOW_TRUSTED_PROXIES to the CIDR(s)
 // the ingress connects from. Only when the direct peer (RemoteAddr) is
 // within that allowlist do we consult X-Forwarded-For; otherwise XFF is
 // ignored entirely (an untrusted peer can forge it freely).

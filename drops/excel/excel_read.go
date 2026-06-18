@@ -9,10 +9,10 @@ import (
 
 	"github.com/xuri/excelize/v2"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/limits"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/limits"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 func init() {
@@ -109,7 +109,7 @@ func executeExcelRead(_ context.Context, job core.Job, _ chan<- core.Progress) (
 	}
 	if len(grid) > limits.MaxRows() {
 		return params.Err(job, "too_many_rows",
-			fmt.Sprintf("sheet has %d rows, over the %d-row limit (raise HAZYFLOW_MAX_ROWS or use 'range'/'skip' to narrow it)", len(grid), limits.MaxRows())), nil
+			fmt.Sprintf("sheet has %d rows, over the %d-row limit (raise DAZYFLOW_MAX_ROWS or use 'range'/'skip' to narrow it)", len(grid), limits.MaxRows())), nil
 	}
 	grid, err = applyRange(grid, params.StringDefault(job.Params, "range", ""), params.IntDefault(job.Params, "skip", 0))
 	if err != nil {

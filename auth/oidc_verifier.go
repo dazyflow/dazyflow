@@ -17,7 +17,7 @@ import (
 //
 // The ctx given here is used for the discovery fetch AND becomes the
 // base context for background JWKS refreshes, so pass a long-lived one
-// (hzd passes its root context), not a request context.
+// (dzd passes its root context), not a request context.
 func NewOIDCVerifier(ctx context.Context, cfg OIDCConfig) (IDTokenVerifier, error) {
 	if cfg.Issuer == "" {
 		return nil, fmt.Errorf("oidc: issuer is required")
@@ -63,7 +63,7 @@ func (v *oidcVerifier) Verify(ctx context.Context, rawIDToken string) (Claims, e
 	// Optional issuer→tenant binding. The library has already verified the
 	// signature/issuer/audience/expiry, but the tenant value itself is
 	// asserted by the (single trusted) issuer with nothing tying it to a
-	// specific Hazyflow tenant. When the operator pins an allowlist, fail
+	// specific Dazyflow tenant. When the operator pins an allowlist, fail
 	// closed on any tenant outside it; when unset, accept whatever the
 	// issuer asserts (unchanged behavior for single-trusted-issuer setups).
 	if len(v.cfg.AllowedTenants) > 0 && !containsString(v.cfg.AllowedTenants, tenant) {

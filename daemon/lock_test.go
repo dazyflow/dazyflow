@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // TestSaveGraph_LockedByActiveRun covers the rule that SaveGraph

@@ -1,8 +1,8 @@
 // Package daemon contains the orchestration layer that ties auth, workspace
 // storage, job persistence, and the execution engine together. Both the
-// gRPC server in cmd/hzd and the integration tests in tests/e2e depend on
+// gRPC server in cmd/dzd and the integration tests in tests/e2e depend on
 // it, which is why it lives in its own importable package rather than
-// inside cmd/hzd.
+// inside cmd/dzd.
 package daemon
 
 import (
@@ -19,10 +19,10 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/auth"
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
-	"git.sr.ht/~klahr/hazyflow/workspace"
+	"git.sr.ht/~klahr/dazyflow/auth"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/workspace"
 )
 
 // WorkspaceLookup resolves a (tenant, workspace) pair to its backing Git
@@ -245,7 +245,7 @@ func safeWorkspaceSegment(tenant, ws string) (string, string, error) {
 // auditing where applicable.
 //
 // Service is decoupled from execution: SubmitGraph enqueues a job and a
-// Worker (running in the same process or another hzd instance) picks it up
+// Worker (running in the same process or another dzd instance) picks it up
 // and runs it. The Bus stitches the two together so streaming RPCs can
 // follow a job's progress regardless of which worker handled it.
 //
@@ -260,7 +260,7 @@ type Service struct {
 	Jobs       core.JobStore
 	Engine     *engine.Engine
 	Bus        Bus
-	WorkerID   string // identifies this hzd instance in JobStore records
+	WorkerID   string // identifies this dzd instance in JobStore records
 
 	// AdminKeys, when set, powers the API key admin endpoints. Without
 	// it those endpoints return 501. Splitting from Auth keeps the
@@ -288,7 +288,7 @@ type Service struct {
 	// PublicBaseURL is the externally-reachable origin of the daemon,
 	// used by failure_notify to construct UI links to the failing
 	// run. Empty = no link in the notification payload. Same value
-	// hzd already collects via --public-base-url for the OAuth flow.
+	// dzd already collects via --public-base-url for the OAuth flow.
 	PublicBaseURL string
 
 	// SupportContact is an operator-configured email or URL the web
@@ -322,7 +322,7 @@ type Service struct {
 	// FreePollingDisabled keeps schedule/poll triggers off the free plan
 	// (the scheduler skips firing them; manual Run still works). False
 	// (the default) leaves scheduling open to everyone. Configured by
-	// HAZYFLOW_FREE_POLLING_TRIGGERS=0; requires Plans to enforce.
+	// DAZYFLOW_FREE_POLLING_TRIGGERS=0; requires Plans to enforce.
 	FreePollingDisabled bool
 
 	// Mailer, when set, delivers the platform's transactional email
@@ -331,7 +331,7 @@ type Service struct {
 	Mailer *Mailer
 
 	// RunLogs, when set, is the persisted run-log store (written by the
-	// RecordingBus, read by `hzctl job logs` / the logs endpoints). Nil
+	// RecordingBus, read by `dzctl job logs` / the logs endpoints). Nil
 	// = logs aren't persisted on this deployment.
 	RunLogs RunLogStore
 
@@ -340,7 +340,7 @@ type Service struct {
 	// the workspace HEAD it was computed at, so a save (which moves HEAD)
 	// transparently invalidates it on the next read.
 	//
-	// Service has no constructor (it's built as a struct literal in cmd/hzd
+	// Service has no constructor (it's built as a struct literal in cmd/dzd
 	// and in tests), so suggestCache is created lazily on first write — but
 	// always under suggestMu, and the nil-map read in DropSuggestions is also
 	// taken under suggestMu, so the lazy init is race-free.
@@ -1093,7 +1093,7 @@ func (s *Service) PromoteGraph(ctx context.Context, p core.Principal, tenant, ws
 // pick up the root nodes, run them, and as each completes the worker
 // enqueues whatever downstream node has become ready.
 //
-// This is the manual-submission path (hzctl graph run). For trigger-fed
+// This is the manual-submission path (dzctl graph run). For trigger-fed
 // runs that need to deliver event data into the graph, see
 // SubmitGraphWithSeed.
 func (s *Service) SubmitGraph(ctx context.Context, p core.Principal, g core.Graph) (string, error) {

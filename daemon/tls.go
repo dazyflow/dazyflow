@@ -10,7 +10,7 @@ import (
 
 // TLSFiles holds the file paths for a TLS identity (own cert + key) and
 // the CA bundle used to verify the peer. Either side of the connection
-// uses the same struct: hzd's server config and hzctl's client config
+// uses the same struct: dzd's server config and dzctl's client config
 // both point at PEM files on disk.
 type TLSFiles struct {
 	CertFile string

@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 func init() {
@@ -50,7 +50,7 @@ func init() {
 
 // MIMEList marks a Ref whose Inline field carries a []core.Ref. Downstream
 // modules can either consume the list via Inline or split it before reading.
-const MIMEList = "application/x-hazyflow-list+json"
+const MIMEList = "application/x-dazyflow-list+json"
 
 func executeMerge(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	refs := core.VariadicInputs(job.Input, "items")

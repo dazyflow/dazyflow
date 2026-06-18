@@ -9,13 +9,13 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/auth"
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/daemon"
-	"git.sr.ht/~klahr/hazyflow/engine"
-	"git.sr.ht/~klahr/hazyflow/engine/jobstore"
-	_ "git.sr.ht/~klahr/hazyflow/drops"
-	"git.sr.ht/~klahr/hazyflow/workspace"
+	"git.sr.ht/~klahr/dazyflow/auth"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon"
+	"git.sr.ht/~klahr/dazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/engine/jobstore"
+	_ "git.sr.ht/~klahr/dazyflow/drops"
+	"git.sr.ht/~klahr/dazyflow/workspace"
 )
 
 func TestFSQuota_LimitsPerTenant(t *testing.T) {
@@ -94,7 +94,7 @@ func TestFSQuota_CacheRespectsTTL(t *testing.T) {
 	}
 }
 
-// E2E quota harness — drives writes through the full hzd stack.
+// E2E quota harness — drives writes through the full dzd stack.
 type quotaHarness struct {
 	svc       *daemon.Service
 	jobs      core.JobStore

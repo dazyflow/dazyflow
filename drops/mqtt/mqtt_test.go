@@ -6,8 +6,8 @@ import (
 	"os"
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
+	"git.sr.ht/~klahr/dazyflow/core"
+	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 )
 
 func TestMain(m *testing.M) {
@@ -58,7 +58,7 @@ func TestPublish_SuccessAndConfig(t *testing.T) {
 	if cap.QoS != 2 || !cap.Retain {
 		t.Errorf("qos/retain = %d/%v", cap.QoS, cap.Retain)
 	}
-	if cap.ClientID != "hazyflow-job-1" {
+	if cap.ClientID != "dazyflow-job-1" {
 		t.Errorf("client_id = %q", cap.ClientID)
 	}
 	meta := res.Output["meta"].Inline.(map[string]any)

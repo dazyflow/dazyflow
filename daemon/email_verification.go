@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/auth"
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/auth"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // Email verification. Active only on deployments with a transactional
@@ -60,7 +60,7 @@ func (h *HTTPGateway) sendVerificationEmail(r *http.Request, user auth.User) boo
 	link := strings.TrimRight(h.svc.PublicBaseURL, "/") + "/verify-email?email=" +
 		url.QueryEscape(user.Email) + "&token=" + token
 	body := fmt.Sprintf(
-		"Welcome to Hazyflow!\n\n"+
+		"Welcome to Dazyflow!\n\n"+
 			"Confirm this email address:\n%s\n\n"+
 			"The link expires %s. If you didn't create this account, ignore this email.",
 		link, exp.Format("2006-01-02"))

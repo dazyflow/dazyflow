@@ -732,7 +732,7 @@ var File_node_proto protoreflect.FileDescriptor
 const file_node_proto_rawDesc = "" +
 	"\n" +
 	"\n" +
-	"node.proto\x12\x10hazyflow.node.v1\"\x14\n" +
+	"node.proto\x12\x10dazyflow.node.v1\"\x14\n" +
 	"\x12GetManifestRequest\"\x9c\x01\n" +
 	"\x04Port\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
@@ -749,8 +749,8 @@ const file_node_proto_rawDesc = "" +
 	"\x05color\x18\x04 \x01(\tR\x05color\x12'\n" +
 	"\x0fexecution_model\x18\x05 \x01(\tR\x0eexecutionModel\x12#\n" +
 	"\rprocess_model\x18\x06 \x01(\tR\fprocessModel\x12.\n" +
-	"\x06inputs\x18\a \x03(\v2\x16.hazyflow.node.v1.PortR\x06inputs\x120\n" +
-	"\aoutputs\x18\b \x03(\v2\x16.hazyflow.node.v1.PortR\aoutputs\x12#\n" +
+	"\x06inputs\x18\a \x03(\v2\x16.dazyflow.node.v1.PortR\x06inputs\x120\n" +
+	"\aoutputs\x18\b \x03(\v2\x16.dazyflow.node.v1.PortR\aoutputs\x12#\n" +
 	"\rparams_schema\x18\t \x01(\fR\fparamsSchema\x12\x1e\n" +
 	"\n" +
 	"idempotent\x18\n" +
@@ -768,14 +768,14 @@ const file_node_proto_rawDesc = "" +
 	"\anode_id\x18\x03 \x01(\tR\x06nodeId\x12\x19\n" +
 	"\btrace_id\x18\x04 \x01(\tR\atraceId\x12\x17\n" +
 	"\aspan_id\x18\x05 \x01(\tR\x06spanId\x126\n" +
-	"\x05input\x18\x06 \x03(\v2 .hazyflow.node.v1.Job.InputEntryR\x05input\x12\x16\n" +
+	"\x05input\x18\x06 \x03(\v2 .dazyflow.node.v1.Job.InputEntryR\x05input\x12\x16\n" +
 	"\x06params\x18\a \x01(\fR\x06params\x120\n" +
-	"\x03env\x18\b \x03(\v2\x1e.hazyflow.node.v1.Job.EnvEntryR\x03env\x12\x18\n" +
+	"\x03env\x18\b \x03(\v2\x1e.dazyflow.node.v1.Job.EnvEntryR\x03env\x12\x18\n" +
 	"\acleanup\x18\t \x01(\tR\acleanup\x1aO\n" +
 	"\n" +
 	"InputEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12+\n" +
-	"\x05value\x18\x02 \x01(\v2\x15.hazyflow.node.v1.RefR\x05value:\x028\x01\x1a6\n" +
+	"\x05value\x18\x02 \x01(\v2\x15.dazyflow.node.v1.RefR\x05value:\x028\x01\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x82\x01\n" +
@@ -791,18 +791,18 @@ const file_node_proto_rawDesc = "" +
 	"\x06Result\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12\x16\n" +
 	"\x06status\x18\x02 \x01(\tR\x06status\x12<\n" +
-	"\x06output\x18\x03 \x03(\v2$.hazyflow.node.v1.Result.OutputEntryR\x06output\x120\n" +
-	"\x05error\x18\x04 \x01(\v2\x1a.hazyflow.node.v1.JobErrorR\x05error\x1aP\n" +
+	"\x06output\x18\x03 \x03(\v2$.dazyflow.node.v1.Result.OutputEntryR\x06output\x120\n" +
+	"\x05error\x18\x04 \x01(\v2\x1a.dazyflow.node.v1.JobErrorR\x05error\x1aP\n" +
 	"\vOutputEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12+\n" +
-	"\x05value\x18\x02 \x01(\v2\x15.hazyflow.node.v1.RefR\x05value:\x028\x01\"\x80\x01\n" +
+	"\x05value\x18\x02 \x01(\v2\x15.dazyflow.node.v1.RefR\x05value:\x028\x01\"\x80\x01\n" +
 	"\x05Event\x128\n" +
-	"\bprogress\x18\x01 \x01(\v2\x1a.hazyflow.node.v1.ProgressH\x00R\bprogress\x122\n" +
-	"\x06result\x18\x02 \x01(\v2\x18.hazyflow.node.v1.ResultH\x00R\x06resultB\t\n" +
+	"\bprogress\x18\x01 \x01(\v2\x1a.dazyflow.node.v1.ProgressH\x00R\bprogress\x122\n" +
+	"\x06result\x18\x02 \x01(\v2\x18.dazyflow.node.v1.ResultH\x00R\x06resultB\t\n" +
 	"\apayload2\x9b\x01\n" +
 	"\vNodeService\x12O\n" +
-	"\vGetManifest\x12$.hazyflow.node.v1.GetManifestRequest\x1a\x1a.hazyflow.node.v1.Manifest\x12;\n" +
-	"\aExecute\x12\x15.hazyflow.node.v1.Job\x1a\x17.hazyflow.node.v1.Event0\x01B/Z-git.sr.ht/~klahr/hazyflow/api/gen/node;nodepbb\x06proto3"
+	"\vGetManifest\x12$.dazyflow.node.v1.GetManifestRequest\x1a\x1a.dazyflow.node.v1.Manifest\x12;\n" +
+	"\aExecute\x12\x15.dazyflow.node.v1.Job\x1a\x17.dazyflow.node.v1.Event0\x01B/Z-git.sr.ht/~klahr/dazyflow/api/gen/node;nodepbb\x06proto3"
 
 var (
 	file_node_proto_rawDescOnce sync.Once
@@ -818,34 +818,34 @@ func file_node_proto_rawDescGZIP() []byte {
 
 var file_node_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_node_proto_goTypes = []any{
-	(*GetManifestRequest)(nil), // 0: hazyflow.node.v1.GetManifestRequest
-	(*Port)(nil),               // 1: hazyflow.node.v1.Port
-	(*Manifest)(nil),           // 2: hazyflow.node.v1.Manifest
-	(*Ref)(nil),                // 3: hazyflow.node.v1.Ref
-	(*Job)(nil),                // 4: hazyflow.node.v1.Job
-	(*Progress)(nil),           // 5: hazyflow.node.v1.Progress
-	(*JobError)(nil),           // 6: hazyflow.node.v1.JobError
-	(*Result)(nil),             // 7: hazyflow.node.v1.Result
-	(*Event)(nil),              // 8: hazyflow.node.v1.Event
-	nil,                        // 9: hazyflow.node.v1.Job.InputEntry
-	nil,                        // 10: hazyflow.node.v1.Job.EnvEntry
-	nil,                        // 11: hazyflow.node.v1.Result.OutputEntry
+	(*GetManifestRequest)(nil), // 0: dazyflow.node.v1.GetManifestRequest
+	(*Port)(nil),               // 1: dazyflow.node.v1.Port
+	(*Manifest)(nil),           // 2: dazyflow.node.v1.Manifest
+	(*Ref)(nil),                // 3: dazyflow.node.v1.Ref
+	(*Job)(nil),                // 4: dazyflow.node.v1.Job
+	(*Progress)(nil),           // 5: dazyflow.node.v1.Progress
+	(*JobError)(nil),           // 6: dazyflow.node.v1.JobError
+	(*Result)(nil),             // 7: dazyflow.node.v1.Result
+	(*Event)(nil),              // 8: dazyflow.node.v1.Event
+	nil,                        // 9: dazyflow.node.v1.Job.InputEntry
+	nil,                        // 10: dazyflow.node.v1.Job.EnvEntry
+	nil,                        // 11: dazyflow.node.v1.Result.OutputEntry
 }
 var file_node_proto_depIdxs = []int32{
-	1,  // 0: hazyflow.node.v1.Manifest.inputs:type_name -> hazyflow.node.v1.Port
-	1,  // 1: hazyflow.node.v1.Manifest.outputs:type_name -> hazyflow.node.v1.Port
-	9,  // 2: hazyflow.node.v1.Job.input:type_name -> hazyflow.node.v1.Job.InputEntry
-	10, // 3: hazyflow.node.v1.Job.env:type_name -> hazyflow.node.v1.Job.EnvEntry
-	11, // 4: hazyflow.node.v1.Result.output:type_name -> hazyflow.node.v1.Result.OutputEntry
-	6,  // 5: hazyflow.node.v1.Result.error:type_name -> hazyflow.node.v1.JobError
-	5,  // 6: hazyflow.node.v1.Event.progress:type_name -> hazyflow.node.v1.Progress
-	7,  // 7: hazyflow.node.v1.Event.result:type_name -> hazyflow.node.v1.Result
-	3,  // 8: hazyflow.node.v1.Job.InputEntry.value:type_name -> hazyflow.node.v1.Ref
-	3,  // 9: hazyflow.node.v1.Result.OutputEntry.value:type_name -> hazyflow.node.v1.Ref
-	0,  // 10: hazyflow.node.v1.NodeService.GetManifest:input_type -> hazyflow.node.v1.GetManifestRequest
-	4,  // 11: hazyflow.node.v1.NodeService.Execute:input_type -> hazyflow.node.v1.Job
-	2,  // 12: hazyflow.node.v1.NodeService.GetManifest:output_type -> hazyflow.node.v1.Manifest
-	8,  // 13: hazyflow.node.v1.NodeService.Execute:output_type -> hazyflow.node.v1.Event
+	1,  // 0: dazyflow.node.v1.Manifest.inputs:type_name -> dazyflow.node.v1.Port
+	1,  // 1: dazyflow.node.v1.Manifest.outputs:type_name -> dazyflow.node.v1.Port
+	9,  // 2: dazyflow.node.v1.Job.input:type_name -> dazyflow.node.v1.Job.InputEntry
+	10, // 3: dazyflow.node.v1.Job.env:type_name -> dazyflow.node.v1.Job.EnvEntry
+	11, // 4: dazyflow.node.v1.Result.output:type_name -> dazyflow.node.v1.Result.OutputEntry
+	6,  // 5: dazyflow.node.v1.Result.error:type_name -> dazyflow.node.v1.JobError
+	5,  // 6: dazyflow.node.v1.Event.progress:type_name -> dazyflow.node.v1.Progress
+	7,  // 7: dazyflow.node.v1.Event.result:type_name -> dazyflow.node.v1.Result
+	3,  // 8: dazyflow.node.v1.Job.InputEntry.value:type_name -> dazyflow.node.v1.Ref
+	3,  // 9: dazyflow.node.v1.Result.OutputEntry.value:type_name -> dazyflow.node.v1.Ref
+	0,  // 10: dazyflow.node.v1.NodeService.GetManifest:input_type -> dazyflow.node.v1.GetManifestRequest
+	4,  // 11: dazyflow.node.v1.NodeService.Execute:input_type -> dazyflow.node.v1.Job
+	2,  // 12: dazyflow.node.v1.NodeService.GetManifest:output_type -> dazyflow.node.v1.Manifest
+	8,  // 13: dazyflow.node.v1.NodeService.Execute:output_type -> dazyflow.node.v1.Event
 	12, // [12:14] is the sub-list for method output_type
 	10, // [10:12] is the sub-list for method input_type
 	10, // [10:10] is the sub-list for extension type_name

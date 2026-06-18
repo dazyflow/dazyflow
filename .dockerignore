@@ -3,9 +3,9 @@
 .git
 **/node_modules
 web/dist
-.hazyflow-workspace
-.hazyflow-sandbox
-.hazyflow-users.json
+.dazyflow-workspace
+.dazyflow-sandbox
+.dazyflow-users.json
 *.log
 OVERNIGHT.md
 
@@ -17,5 +17,5 @@ OVERNIGHT.md
 certs/
 *.key
 *.pem
-.hazyflow/
+.dazyflow/
 *.xlsx

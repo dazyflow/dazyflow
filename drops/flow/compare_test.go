@@ -3,7 +3,7 @@ package flow
 import (
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // got reads the 1/0 Result the Compare drop emits, as a bool.

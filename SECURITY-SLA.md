@@ -1,6 +1,6 @@
 # Vulnerability remediation SLA
 
-This document defines how quickly a known vulnerability in Hazyflow (or its
+This document defines how quickly a known vulnerability in Dazyflow (or its
 dependencies) is triaged and fixed once detected. It exists so operators,
 auditors, and downstream users have a concrete, citable policy — it satisfies
 the "documented remediation SLA" gap called out in

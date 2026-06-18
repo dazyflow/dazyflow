@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 func init() {
@@ -64,7 +64,7 @@ func init() {
 // webhook_input (which the daemon pre-completes outside the worker
 // path), poll_trigger runs normally — there's no per-fire data to
 // inject, and "the time" is intrinsic to the fire moment itself.
-// Manual runs (e.g. `hzctl graph run` or the UI's Run button)
+// Manual runs (e.g. `dzctl graph run` or the UI's Run button)
 // produce a perfectly valid result, treated as a one-off fire of
 // the poll graph. That's by design: the same graph should work
 // whether the scheduler fired it or the user did, which is the

@@ -1,13 +1,13 @@
 # syntax=docker/dockerfile:1
 
-# Multi-stage build for the Hazyflow daemon + web bundle.
+# Multi-stage build for the Dazyflow daemon + web bundle.
 #
 #   1. web   — build the React/Vite bundle to /web/dist
-#   2. build — compile the static hzd binary (CGO off)
+#   2. build — compile the static dzd binary (CGO off)
 #   3. final — distroless nonroot runtime with the binary + bundle
 #
 # The daemon serves the bundle from the same port as the API when
-# HAZYFLOW_WEB_DIST is set (we set it to /srv/web below).
+# DAZYFLOW_WEB_DIST is set (we set it to /srv/web below).
 
 # ---- 1. web bundle ----------------------------------------------------
 FROM node:22-alpine AS web
@@ -67,32 +67,32 @@ ENV CGO_ENABLED=0 GOOS=linux
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     go build -trimpath -ldflags="-s -w \
-      -X git.sr.ht/~klahr/hazyflow/core/buildinfo.Version=${VERSION} \
-      -X git.sr.ht/~klahr/hazyflow/core/buildinfo.Commit=${COMMIT} \
-      -X git.sr.ht/~klahr/hazyflow/core/buildinfo.Date=${BUILD_DATE}" \
-      -o /out/hzd ./cmd/hzd
+      -X git.sr.ht/~klahr/dazyflow/core/buildinfo.Version=${VERSION} \
+      -X git.sr.ht/~klahr/dazyflow/core/buildinfo.Commit=${COMMIT} \
+      -X git.sr.ht/~klahr/dazyflow/core/buildinfo.Date=${BUILD_DATE}" \
+      -o /out/dzd ./cmd/dzd
 RUN mkdir -p /data/workspace /data/sandbox /data/state
 
 # ---- 3. runtime -------------------------------------------------------
-# hzd is a self-contained Go binary — every drop (connectors included) is
+# dzd is a self-contained Go binary — every drop (connectors included) is
 # native Go now, so the runtime image needs no Node. Just the binary, CA roots
 # for outbound HTTPS to vendor APIs, and the web assets.
 FROM alpine:latest AS final
-RUN apk add --no-cache ca-certificates && adduser -D -u 1000 hazyflow
+RUN apk add --no-cache ca-certificates && adduser -D -u 1000 dazyflow
 WORKDIR /srv
-COPY --from=build /out/hzd /usr/local/bin/hzd
+COPY --from=build /out/dzd /usr/local/bin/dzd
 COPY --from=web /web/dist /srv/web
 # Workspace + sandbox dirs live under /data, owned by the unprivileged
-# `hazyflow` user (uid 1000). Mount a volume here in production so git-backed
+# `dazyflow` user (uid 1000). Mount a volume here in production so git-backed
 # graphs and per-tenant sandboxes persist across container restarts. (Set
-# HAZYFLOW_POSTGRES_DSN for the durable control-plane stores.)
+# DAZYFLOW_POSTGRES_DSN for the durable control-plane stores.)
 COPY --from=build --chown=1000:1000 /data /data
 EXPOSE 50050 8080
-USER hazyflow
+USER dazyflow
 # Container layout defaults — every other knob is configured via
-# HAZYFLOW_* env vars on the container (see .env.example for the full
+# DAZYFLOW_* env vars on the container (see .env.example for the full
 # catalogue). Override these here only when rebaking the image.
-ENV HAZYFLOW_HTTP=:8080 \
-    HAZYFLOW_WEB_DIST=/srv/web \
-    HAZYFLOW_DATA_DIR=/data
-ENTRYPOINT ["/usr/local/bin/hzd"]
+ENV DAZYFLOW_HTTP=:8080 \
+    DAZYFLOW_WEB_DIST=/srv/web \
+    DAZYFLOW_DATA_DIR=/data
+ENTRYPOINT ["/usr/local/bin/dzd"]

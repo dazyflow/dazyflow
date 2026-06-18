@@ -1,5 +1,5 @@
-/* Hazyflow visual editor theme.
-   Tokens ported from the sibling ../hazy project (synthwave/violet dark
+/* Dazyflow visual editor theme.
+   Tokens ported from the sibling ../dazy project (synthwave/violet dark
    palette). Light mode kept available for completeness but the editor
    leans dark — the canvas reads better on a near-black surface. */
 
@@ -45,12 +45,12 @@
      near-black canvas). Themed so light mode can flip it to dark. */
   --canvas-dot: rgba(255, 255, 255, 0.05);
 
-  /* Copyable code/value family (.hz-code): terminal-style in the dark
+  /* Copyable code/value family (.dz-code): terminal-style in the dark
      theme, themed light in light mode so the code stays readable. */
   --code-bg: #0a0918;
   --code-fg: #d8d4ec;
 
-  /* JSON syntax-highlight token colours (hz-json-editor). Tuned for the
+  /* JSON syntax-highlight token colours (dz-json-editor). Tuned for the
      dark --code-bg well; the light theme overrides them below. */
   --json-key: #9f83fe;
   --json-string: #4ec96d;
@@ -223,7 +223,7 @@ body {
   line-height: 1.45;
 }
 
-/* Background nebula on dark mode — pulled from ../hazy. Two radial
+/* Background nebula on dark mode — pulled from ../dazy. Two radial
    gradient washes that anchor the violet brand at the corners. */
 :root[data-theme="dark"] body {
   background:

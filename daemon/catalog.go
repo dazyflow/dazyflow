@@ -17,8 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/core/buildinfo"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core/buildinfo"
 	yaml "go.yaml.in/yaml/v3"
 )
 
@@ -167,7 +167,7 @@ type ServiceDescriptor struct {
 
 const (
 	apiVersion = "1.0.0"
-	apiService = "hazyflow"
+	apiService = "dazyflow"
 )
 
 // serviceDescriptor handles GET /api/v1.

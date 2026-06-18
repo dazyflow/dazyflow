@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/auth"
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/auth"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 func hasPlatformAdmin(roles []core.Role) bool {
@@ -142,7 +142,7 @@ func TestSignup_ElevatesPlatformAdmin(t *testing.T) {
 }
 
 // TestSignup_AllowlistBypassesDisabledSignup proves the bootstrap hatch:
-// with self-serve signup OFF, an email in HAZYFLOW_PLATFORM_ADMINS can
+// with self-serve signup OFF, an email in DAZYFLOW_PLATFORM_ADMINS can
 // still create its account (so a fresh instance can mint its first
 // super-admin without toggling EnableSignup), while everyone else still
 // gets the 501. And the bypass is self-limiting — a second attempt for

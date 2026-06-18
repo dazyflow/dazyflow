@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/daemon"
+	"git.sr.ht/~klahr/dazyflow/daemon"
 	"go.opentelemetry.io/otel"
 )
 

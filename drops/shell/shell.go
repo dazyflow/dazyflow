@@ -21,9 +21,9 @@ import (
 
 	"github.com/creack/pty"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 )
 
 func init() {
@@ -33,8 +33,8 @@ func init() {
 	// RCE primitive on a multi-tenant deployment, where any user with
 	// graph:run could read the host, the daemon env (master key!), and reach
 	// internal services. So it is OFF unless the operator explicitly opts in
-	// with HAZYFLOW_ENABLE_SHELL — and even then its env is scrubbed of
-	// HAZYFLOW_* secrets (see executeShell).
+	// with DAZYFLOW_ENABLE_SHELL — and even then its env is scrubbed of
+	// DAZYFLOW_* secrets (see executeShell).
 	if !shellEnabled() {
 		return
 	}
@@ -110,7 +110,7 @@ const (
 // shellEnabled reports whether the operator opted into the shell drop. Any
 // non-empty value other than "0"/"false" enables it.
 func shellEnabled() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("HAZYFLOW_ENABLE_SHELL"))) {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("DAZYFLOW_ENABLE_SHELL"))) {
 	case "", "0", "false", "no", "off":
 		return false
 	default:
@@ -118,7 +118,7 @@ func shellEnabled() bool {
 	}
 }
 
-// scrubbedEnv is the host environment minus every HAZYFLOW_* variable, so a
+// scrubbedEnv is the host environment minus every DAZYFLOW_* variable, so a
 // command can't read the daemon's secrets (master key, Postgres DSN, webhook
 // signing secrets, trusted signing keys, …) out of its own environment. CI
 // ergonomics are preserved: PATH, HOME, GOPATH, language toolchain vars, etc.
@@ -128,7 +128,7 @@ func scrubbedEnv() []string {
 	out := make([]string, 0, len(src))
 	for _, kv := range src {
 		k, _, ok := strings.Cut(kv, "=")
-		if ok && strings.HasPrefix(k, "HAZYFLOW_") {
+		if ok && strings.HasPrefix(k, "DAZYFLOW_") {
 			continue
 		}
 		out = append(out, kv)
@@ -171,7 +171,7 @@ func executeShell(ctx context.Context, job core.Job, progress chan<- core.Progre
 
 	cmd := exec.CommandContext(runCtx, cmdName, args...)
 	cmd.Dir = workdir
-	// Never expose the daemon's HAZYFLOW_* secrets (master key, DSN, webhook
+	// Never expose the daemon's DAZYFLOW_* secrets (master key, DSN, webhook
 	// secrets) to the command — see scrubbedEnv.
 	cmd.Env = scrubbedEnv()
 	combined := &boundedBuffer{limit: maxBytes}

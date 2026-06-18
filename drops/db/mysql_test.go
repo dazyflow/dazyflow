@@ -8,28 +8,28 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 	_ "github.com/go-sql-driver/mysql"
 )
 
 // Integration tests for the mysql_* drops. Skipped unless
-// HAZYFLOW_TEST_MYSQL is set:
+// DAZYFLOW_TEST_MYSQL is set:
 //
-//   HAZYFLOW_TEST_MYSQL='user:pass@tcp(localhost:3306)/hazyflow_test?parseTime=true' \
+//   DAZYFLOW_TEST_MYSQL='user:pass@tcp(localhost:3306)/dazyflow_test?parseTime=true' \
 //     go test ./drops/db/
 //
 // Use a dedicated test database. We create + drop tables named
-// hz_test_*_<unix-ns> per test, so concurrent runs in the same DB
+// dz_test_*_<unix-ns> per test, so concurrent runs in the same DB
 // don't collide.
 
 func mysqlTestSetup(t *testing.T) (dsn, table string) {
 	t.Helper()
-	dsn = os.Getenv("HAZYFLOW_TEST_MYSQL")
+	dsn = os.Getenv("DAZYFLOW_TEST_MYSQL")
 	if dsn == "" {
-		t.Skip("set HAZYFLOW_TEST_MYSQL to run MySQL integration tests")
+		t.Skip("set DAZYFLOW_TEST_MYSQL to run MySQL integration tests")
 	}
 	base := strip(t.Name())
-	table = fmt.Sprintf("hz_test_%s_%d", base, time.Now().UnixNano())
+	table = fmt.Sprintf("dz_test_%s_%d", base, time.Now().UnixNano())
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()

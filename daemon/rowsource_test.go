@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 func inputFieldsResp(t *testing.T, body []byte) (string, []string) {
@@ -82,7 +82,7 @@ func TestInputFields_GoogleFormStructuralKeys(t *testing.T) {
 }
 
 func TestInputFields_GoogleFormLiveFetcher(t *testing.T) {
-	// When the live fetcher is wired (cmd/hzd does this with gform.FieldNames),
+	// When the live fetcher is wired (cmd/dzd does this with gform.FieldNames),
 	// the Google Form source returns the form's actual question titles.
 	SetGoogleFormFieldFetcher(func(_ context.Context, n core.Node) ([]string, error) {
 		if n.Params["form_id"] != "F1" {

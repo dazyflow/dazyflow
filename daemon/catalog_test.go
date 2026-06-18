@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // Coverage for the public discovery + catalog read handlers in catalog.go.
@@ -39,8 +39,8 @@ func TestServiceDescriptor_PublicNoAuth(t *testing.T) {
 		Links   map[string]string        `json:"links"`
 	}
 	decodeJSON(t, rw, &d)
-	if d.Service != "hazyflow" {
-		t.Errorf("service = %q, want hazyflow", d.Service)
+	if d.Service != "dazyflow" {
+		t.Errorf("service = %q, want dazyflow", d.Service)
 	}
 	if d.Version == "" {
 		t.Error("apiVersion empty")

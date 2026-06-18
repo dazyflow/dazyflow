@@ -9,7 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // planStoreContract runs the behavior shared by both backends.
@@ -68,12 +68,12 @@ func TestMemPlanStore(t *testing.T) {
 	planStoreContract(t, NewMemPlanStore())
 }
 
-// Gated on HAZYFLOW_TEST_DB (a real Postgres), like the jobstore/auth
+// Gated on DAZYFLOW_TEST_DB (a real Postgres), like the jobstore/auth
 // integration tests.
 func TestPgPlanStore(t *testing.T) {
-	url := os.Getenv("HAZYFLOW_TEST_DB")
+	url := os.Getenv("DAZYFLOW_TEST_DB")
 	if url == "" {
-		t.Skip("set HAZYFLOW_TEST_DB to run Postgres plan tests")
+		t.Skip("set DAZYFLOW_TEST_DB to run Postgres plan tests")
 	}
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, url)

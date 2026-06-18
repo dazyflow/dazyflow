@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // Billing surface (T3):
@@ -113,7 +113,7 @@ func (h *HTTPGateway) billingCheckout(rw http.ResponseWriter, r *http.Request, p
 	base := h.svc.PublicBaseURL
 	if base == "" {
 		writeAPIError(rw, http.StatusInternalServerError, "not_configured",
-			"HAZYFLOW_PUBLIC_BASE_URL must be set for Checkout redirects")
+			"DAZYFLOW_PUBLIC_BASE_URL must be set for Checkout redirects")
 		return
 	}
 	u, err := h.Billing.Stripe.CreateCheckoutSession(r.Context(), tenant,
@@ -186,7 +186,7 @@ type stripeEvent struct {
 // stops retrying.
 func (h *HTTPGateway) stripeEvents(rw http.ResponseWriter, r *http.Request) {
 	if h.Billing == nil || h.Billing.WebhookSecret == "" {
-		http.Error(rw, "Stripe events endpoint not configured (set HAZYFLOW_STRIPE_WEBHOOK_SECRET)",
+		http.Error(rw, "Stripe events endpoint not configured (set DAZYFLOW_STRIPE_WEBHOOK_SECRET)",
 			http.StatusNotImplemented)
 		return
 	}

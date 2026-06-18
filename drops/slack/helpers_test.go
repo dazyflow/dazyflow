@@ -3,7 +3,7 @@ package slack
 import (
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // TestResolveBlocks covers the shapes a user can paste/build into the Blocks

@@ -23,13 +23,13 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	controlpb "git.sr.ht/~klahr/hazyflow/api/gen/control"
-	"git.sr.ht/~klahr/hazyflow/auth"
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/daemon"
-	"git.sr.ht/~klahr/hazyflow/engine"
-	"git.sr.ht/~klahr/hazyflow/engine/jobstore"
-	"git.sr.ht/~klahr/hazyflow/workspace"
+	controlpb "git.sr.ht/~klahr/dazyflow/api/gen/control"
+	"git.sr.ht/~klahr/dazyflow/auth"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon"
+	"git.sr.ht/~klahr/dazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/engine/jobstore"
+	"git.sr.ht/~klahr/dazyflow/workspace"
 )
 
 // testCerts holds an in-memory PKI tree: one CA signs both a server cert
@@ -53,7 +53,7 @@ func makeTestCerts(t *testing.T) *testCerts {
 	}
 	caTmpl := &x509.Certificate{
 		SerialNumber:          big.NewInt(1),
-		Subject:               pkix.Name{CommonName: "hazyflow-test-ca"},
+		Subject:               pkix.Name{CommonName: "dazyflow-test-ca"},
 		NotBefore:             now.Add(-time.Minute),
 		NotAfter:              now.Add(time.Hour),
 		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
@@ -71,12 +71,12 @@ func makeTestCerts(t *testing.T) *testCerts {
 	serverKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	serverTmpl := &x509.Certificate{
 		SerialNumber: big.NewInt(2),
-		Subject:      pkix.Name{CommonName: "hazyflow-test-server"},
+		Subject:      pkix.Name{CommonName: "dazyflow-test-server"},
 		NotBefore:    now.Add(-time.Minute),
 		NotAfter:     now.Add(time.Hour),
 		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		DNSNames:     []string{"localhost", "hzd.test"},
+		DNSNames:     []string{"localhost", "dzd.test"},
 		IPAddresses:  []net.IP{net.ParseIP("127.0.0.1")},
 	}
 	serverBytes, _ := x509.CreateCertificate(rand.Reader, serverTmpl, caCert, &serverKey.PublicKey, caKey)
@@ -87,7 +87,7 @@ func makeTestCerts(t *testing.T) *testCerts {
 	clientKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	clientTmpl := &x509.Certificate{
 		SerialNumber: big.NewInt(3),
-		Subject:      pkix.Name{CommonName: "hazyflow-test-client"},
+		Subject:      pkix.Name{CommonName: "dazyflow-test-client"},
 		NotBefore:    now.Add(-time.Minute),
 		NotAfter:     now.Add(time.Hour),
 		KeyUsage:     x509.KeyUsageDigitalSignature,

@@ -12,9 +12,9 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
 
-	nodepb "git.sr.ht/~klahr/hazyflow/api/gen/node"
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine/mcp"
+	nodepb "git.sr.ht/~klahr/dazyflow/api/gen/node"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/engine/mcp"
 )
 
 // ----------------------------------------------------------------------

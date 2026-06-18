@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"strings"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
-	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 func init() {
@@ -55,7 +55,7 @@ func init() {
 					"retain":{"type":"boolean","title":"Retain","default":false,"description":"Broker keeps this as the topic's last known message for new subscribers."},
 					"username":{"type":"string","title":"Username","default":"${secret.MQTT_USERNAME}","x_advanced":true,"description":"Broker username. Defaults to the MQTT_USERNAME secret; leave blank for anonymous brokers."},
 					"password":{"type":"string","title":"Password","default":"${secret.MQTT_PASSWORD}","x_advanced":true,"description":"Broker password. Defaults to the MQTT_PASSWORD secret."},
-					"client_id":{"type":"string","title":"Client ID","x_advanced":true,"description":"MQTT client id. Defaults to a hazyflow-derived id."},
+					"client_id":{"type":"string","title":"Client ID","x_advanced":true,"description":"MQTT client id. Defaults to a dazyflow-derived id."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for connect + publish, in milliseconds."}
 				},
 				"required":["broker","topic","payload"]
@@ -100,7 +100,7 @@ func executePublish(ctx context.Context, job core.Job, _ chan<- core.Progress) (
 
 	clientID := strings.TrimSpace(params.StringDefault(job.Params, "client_id", ""))
 	if clientID == "" {
-		clientID = "hazyflow-" + job.ID
+		clientID = "dazyflow-" + job.ID
 	}
 
 	cfg := publishConfig{

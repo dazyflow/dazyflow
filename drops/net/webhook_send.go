@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 func init() {
@@ -121,7 +121,7 @@ func executeWebhookSend(ctx context.Context, job core.Job, _ chan<- core.Progres
 	}
 
 	// allow_private_networks disables the SSRF guard, but only when the
-	// operator has opted in (HAZYFLOW_ALLOW_PRIVATE_EGRESS). Without the
+	// operator has opted in (DAZYFLOW_ALLOW_PRIVATE_EGRESS). Without the
 	// per-request flag this stays guarded even where the operator enabled
 	// private egress (e.g. for Home Assistant) — matching http_request.
 	reqAllowPrivate, _ := params.Bool(job.Params, "allow_private_networks")

@@ -6,7 +6,7 @@ import { Switch } from "./Switch";
 import { iconFor, isBrandedIcon, dropColor } from "../icons";
 import type { Manifest, Port, JSONSchema, Ref } from "../types";
 import {
-  type HazyNodeData,
+  type DazyNodeData,
   type TokenLabels,
   portColor,
   friendlyTokenText,
@@ -92,12 +92,12 @@ function operatorSymbol(m: Manifest): string {
   return m.label ?? "?";
 }
 
-// HazyNodeImpl is wrapped in React.memo (exported as HazyNode below) so a node
+// DazyNodeImpl is wrapped in React.memo (exported as DazyNode below) so a node
 // only re-renders when its own props change. This pairs with FlowEditor's
 // granular per-node memoisation of `data`: unchanged nodes keep a stable data
 // reference, so editing one field redraws only that card, not every node.
-function HazyNodeImpl({ data, selected }: NodeProps) {
-  const d = data as HazyNodeData;
+function DazyNodeImpl({ data, selected }: NodeProps) {
+  const d = data as DazyNodeData;
   const Icon = iconFor(d.manifest?.icon, d.manifest?.category);
   const color = dropColor(d.manifest?.category, d.manifest?.color);
 
@@ -249,13 +249,13 @@ function HazyNodeImpl({ data, selected }: NodeProps) {
   return (
     <div
       className={
-        "hz-node" +
+        "dz-node" +
         (selected ? " selected" : "") +
         statusClass +
-        (isTrigger ? " hz-node-trigger" : "") +
-        (d.loopOwned ? " hz-loop-owned" : "") +
-        (d.disabled ? " hz-node-off" : "") +
-        (!d.disabled && d.offByCascade ? " hz-node-off-cascade" : "") +
+        (isTrigger ? " dz-node-trigger" : "") +
+        (d.loopOwned ? " dz-loop-owned" : "") +
+        (d.disabled ? " dz-node-off" : "") +
+        (!d.disabled && d.offByCascade ? " dz-node-off-cascade" : "") +
         (d.lintMessage ? " lint-warn" : "") +
         (d.configErrors?.length ? " config-err" : "") +
         (d.setupNeeded ? " needs-setup" : "") +
@@ -269,10 +269,10 @@ function HazyNodeImpl({ data, selected }: NodeProps) {
       style={isTrigger ? ({ "--node-accent": color } as React.CSSProperties) : undefined}
     >
       {d.breakpoint && (
-        <div className="hz-node-bp" aria-label={i18n.t("nodeCard.breakpoint")} title={i18n.t("nodeCard.breakpointTitle")} />
+        <div className="dz-node-bp" aria-label={i18n.t("nodeCard.breakpoint")} title={i18n.t("nodeCard.breakpointTitle")} />
       )}
       {d.disabled && (
-        <div className="hz-node-offchip" title={i18n.t("nodeCard.offTitle")}>
+        <div className="dz-node-offchip" title={i18n.t("nodeCard.offTitle")}>
           {i18n.t("nodeCard.off")}
         </div>
       )}
@@ -291,7 +291,7 @@ function HazyNodeImpl({ data, selected }: NodeProps) {
         />
       )}
 
-      <div className="hz-node-main">
+      <div className="dz-node-main">
         {d.manifest?.brand_logo ? (
           <div className="icon brand-logo">
             <img src={d.manifest.brand_logo} alt="" draggable={false} />
@@ -310,10 +310,10 @@ function HazyNodeImpl({ data, selected }: NodeProps) {
             <Icon size={16} color="#140d30" strokeWidth={2.2} />
           </div>
         )}
-        <div className="hz-node-body">
+        <div className="dz-node-body">
           <div className="label">{d.label}</div>
           {d.manifest?.subtitle && (
-            <div className="hz-node-subtitle">{d.manifest.subtitle}</div>
+            <div className="dz-node-subtitle">{d.manifest.subtitle}</div>
           )}
         </div>
       </div>
@@ -322,7 +322,7 @@ function HazyNodeImpl({ data, selected }: NodeProps) {
         // nodrag: keep React Flow from dragging the node while the user
         // interacts with a field. nowheel similarly lets the field behave
         // like a normal input inside the canvas.
-        <div className="hz-node-params nodrag nowheel">
+        <div className="dz-node-params nodrag nowheel">
           {visibleLiteralFields.map(({ key, label, schema: s }) => {
             // Resource-picker params show read-only as the resolved resource
             // name — never the opaque id. Until the name resolves (it's
@@ -347,9 +347,9 @@ function HazyNodeImpl({ data, selected }: NodeProps) {
                 ? name ?? i18n.t("nodeCard.pickerWired")
                 : name ?? (idStr ? i18n.t("nodeCard.pickerLoading") : unsetText);
               return (
-                <label key={key} className="hz-param">
-                  <span className="hz-param-label">{label}</span>
-                  <span className="hz-param-readonly" title={name || undefined}>
+                <label key={key} className="dz-param">
+                  <span className="dz-param-label">{label}</span>
+                  <span className="dz-param-readonly" title={name || undefined}>
                     {text}
                   </span>
                 </label>
@@ -360,9 +360,9 @@ function HazyNodeImpl({ data, selected }: NodeProps) {
             if (s.format === "duration-seconds") {
               const secs = d.params?.[key] ?? s.default;
               return (
-                <label key={key} className="hz-param">
-                  <span className="hz-param-label">{label}</span>
-                  <span className="hz-param-readonly">
+                <label key={key} className="dz-param">
+                  <span className="dz-param-label">{label}</span>
+                  <span className="dz-param-readonly">
                     {secondsToWords(typeof secs === "number" ? secs : null)}
                   </span>
                 </label>
@@ -375,9 +375,9 @@ function HazyNodeImpl({ data, selected }: NodeProps) {
                 ? (d.params[key] as string)
                 : String(s.default ?? "");
               return (
-                <label key={key} className="hz-param">
-                  <span className="hz-param-label">{label}</span>
-                  <span className="hz-param-readonly">{cronToWords(cronVal)}</span>
+                <label key={key} className="dz-param">
+                  <span className="dz-param-label">{label}</span>
+                  <span className="dz-param-readonly">{cronToWords(cronVal)}</span>
                 </label>
               );
             }
@@ -386,8 +386,8 @@ function HazyNodeImpl({ data, selected }: NodeProps) {
             // times, edited via the inspector.
             if (isValueSource) {
               return (
-                <label key={key} className="hz-param">
-                  <span className="hz-param-label">{label}</span>
+                <label key={key} className="dz-param">
+                  <span className="dz-param-label">{label}</span>
                   <ParamInput
                     schema={s}
                     value={d.params?.[key] ?? s.default ?? ""}
@@ -402,9 +402,9 @@ function HazyNodeImpl({ data, selected }: NodeProps) {
             const friendly =
               typeof rawVal === "string" ? friendlyTokenText(rawVal, d.tokenLabels) : null;
             return (
-              <label key={key} className="hz-param">
-                <span className="hz-param-label">{label}</span>
-                <span className="hz-param-readonly">
+              <label key={key} className="dz-param">
+                <span className="dz-param-label">{label}</span>
+                <span className="dz-param-readonly">
                   {friendly ?? (strVal || i18n.t("nodeCard.pickerUnset"))}
                 </span>
               </label>
@@ -413,9 +413,9 @@ function HazyNodeImpl({ data, selected }: NodeProps) {
         </div>
       )}
 
-      <div className="hz-ports">
+      <div className="dz-ports">
         {hasDeclaredInputs && (
-          <div className="hz-port-col">
+          <div className="dz-port-col">
             {inputs.map((p) => {
               const c = portColor(p.mime);
               const isPass = p.port === "pass";
@@ -423,15 +423,15 @@ function HazyNodeImpl({ data, selected }: NodeProps) {
               // sits right after the name, Unreal-style (see inlineByPort).
               const field = inlineByPort[p.port];
               return (
-                <div key={"il-" + p.port} className="hz-port-in-row">
-                  <div className={"hz-port-label hz-port-in" + (isPass ? " hz-pass-row" : "")}>
+                <div key={"il-" + p.port} className="dz-port-in-row">
+                  <div className={"dz-port-label dz-port-in" + (isPass ? " dz-pass-row" : "")}>
                     <Handle
                       type="target"
                       position={Position.Left}
                       id={p.port}
                       className={
                         isPass
-                          ? "hz-pass-pin" + (connectedInputs.includes(p.port) ? " connected" : "")
+                          ? "dz-pass-pin" + (connectedInputs.includes(p.port) ? " connected" : "")
                           : undefined
                       }
                       style={
@@ -450,7 +450,7 @@ function HazyNodeImpl({ data, selected }: NodeProps) {
                     {!isPass && (p.label ?? p.port)}
                   </div>
                   {field && (
-                    <div className="hz-port-inline nodrag nowheel">
+                    <div className="dz-port-inline nodrag nowheel">
                       <ParamInput
                         schema={field}
                         value={d.params?.[p.port] ?? field.default ?? ""}
@@ -467,7 +467,7 @@ function HazyNodeImpl({ data, selected }: NodeProps) {
         {/* Outputs always carry a visible label, single or multi — so a
             one-output drop (e.g. Text) names what it emits instead of
             showing a bare, unlabeled dot. */}
-        <div className="hz-port-col right">
+        <div className="dz-port-col right">
           {outputs.map((p) => {
             const c = portColor(p.mime);
             const ref = d.outputs?.[p.port];
@@ -476,9 +476,9 @@ function HazyNodeImpl({ data, selected }: NodeProps) {
               <div
                 key={"ol-" + p.port}
                 className={
-                  "hz-port-label hz-port-out" +
+                  "dz-port-label dz-port-out" +
                   (ref ? " has-value" : "") +
-                  (isPass ? " hz-pass-row" : "")
+                  (isPass ? " dz-pass-row" : "")
                 }
               >
                 <Handle
@@ -487,7 +487,7 @@ function HazyNodeImpl({ data, selected }: NodeProps) {
                   id={p.port}
                   className={
                     isPass
-                      ? "hz-pass-pin" + (connectedOutputs.includes(p.port) ? " connected" : "")
+                      ? "dz-pass-pin" + (connectedOutputs.includes(p.port) ? " connected" : "")
                       : undefined
                   }
                   style={
@@ -503,7 +503,7 @@ function HazyNodeImpl({ data, selected }: NodeProps) {
                 {/* Watch port values (#10): the value this port emitted on
                     the latest run, revealed on hover. */}
                 {!isPass && ref && (
-                  <span className="hz-port-peek nodrag nowheel">{peekValue(ref)}</span>
+                  <span className="dz-port-peek nodrag nowheel">{peekValue(ref)}</span>
                 )}
               </div>
             );
@@ -512,12 +512,12 @@ function HazyNodeImpl({ data, selected }: NodeProps) {
       </div>
 
       {d.lintMessage && (
-        <div className="hz-node-lint" title={d.lintMessage} aria-label={i18n.t("nodeCard.lintWarning")}>
+        <div className="dz-node-lint" title={d.lintMessage} aria-label={i18n.t("nodeCard.lintWarning")}>
           <AlertTriangle size={13} />
         </div>
       )}
       {d.loopHint && (
-        <div className="hz-node-loop" title={d.loopHint} aria-label={i18n.t("nodeCard.loopWarnAria")}>
+        <div className="dz-node-loop" title={d.loopHint} aria-label={i18n.t("nodeCard.loopWarnAria")}>
           <Repeat size={13} />
         </div>
       )}
@@ -529,30 +529,30 @@ function HazyNodeImpl({ data, selected }: NodeProps) {
           // instead of a Connect link that would dead-end.
           const locked = d.canConnect === false;
           const icon = d.manifest?.brand_logo ? (
-            <img src={d.manifest.brand_logo} alt="" className="hz-node-setup-logo" draggable={false} />
+            <img src={d.manifest.brand_logo} alt="" className="dz-node-setup-logo" draggable={false} />
           ) : (
-            <Icon size={14} className="hz-node-setup-logo" />
+            <Icon size={14} className="dz-node-setup-logo" />
           );
           if (locked) {
             const label = i18n.t("nodeCard.askAdmin", { name });
             return (
-              <div className="hz-node-setup hz-node-setup-locked" title={label} aria-label={i18n.t("nodeCard.needsSetupAria")}>
+              <div className="dz-node-setup dz-node-setup-locked" title={label} aria-label={i18n.t("nodeCard.needsSetupAria")}>
                 {icon}
-                <span className="hz-node-setup-label">{label}</span>
+                <span className="dz-node-setup-label">{label}</span>
               </div>
             );
           }
           return (
             <a
-              className="hz-node-setup nodrag"
+              className="dz-node-setup nodrag"
               href={`/apps/${d.setupNeeded.slug}`}
               title={i18n.t("nodeCard.needsSetup", { name })}
               aria-label={i18n.t("nodeCard.needsSetupAria")}
               onClick={(e) => e.stopPropagation()}
             >
               {icon}
-              <span className="hz-node-setup-label">{i18n.t("nodeCard.connect", { name })}</span>
-              <ChevronRight size={14} className="hz-node-setup-arrow" />
+              <span className="dz-node-setup-label">{i18n.t("nodeCard.connect", { name })}</span>
+              <ChevronRight size={14} className="dz-node-setup-arrow" />
             </a>
           );
         })()}
@@ -560,10 +560,10 @@ function HazyNodeImpl({ data, selected }: NodeProps) {
   );
 }
 
-// HazyNode is the memoised node renderer registered with React Flow. With
+// DazyNode is the memoised node renderer registered with React Flow. With
 // FlowEditor handing each node a referentially-stable `data` object, memo lets
 // an unedited card skip re-rendering when another node's field changes.
-export const HazyNode = memo(HazyNodeImpl);
+export const DazyNode = memo(DazyNodeImpl);
 
 // ParamInput renders the editor for one primitive param. The control follows
 // the schema: enum → select, boolean → switch, integer/number → number
@@ -588,11 +588,11 @@ function ParamInput({
   const friendly = rawStr ? friendlyTokenText(rawStr, tokenLabels) : null;
   if (friendly) {
     return (
-      <span className="hz-token-chip nodrag">
-        <span className="hz-token-chip-text">{friendly}</span>
+      <span className="dz-token-chip nodrag">
+        <span className="dz-token-chip-text">{friendly}</span>
         <button
           type="button"
-          className="hz-token-chip-x"
+          className="dz-token-chip-x"
           aria-label={i18n.t("tokenChip.clear")}
           title={i18n.t("tokenChip.clear")}
           onClick={() => onChange("")}
@@ -697,7 +697,7 @@ function OperatorChip({
   connectedOutputs,
   statusClass,
 }: {
-  d: HazyNodeData;
+  d: DazyNodeData;
   selected: boolean;
   color: string;
   inputs: Port[];
@@ -737,10 +737,10 @@ function OperatorChip({
   return (
     <div
       className={
-        "hz-node hz-op" +
+        "dz-node dz-op" +
         (selected ? " selected" : "") +
         statusClass +
-        (d.disabled ? " hz-node-off" : "") +
+        (d.disabled ? " dz-node-off" : "") +
         (d.lintMessage ? " lint-warn" : "") +
         (d.configErrors?.length ? " config-err" : "") +
         (d.paused ? " paused" : "")
@@ -749,7 +749,7 @@ function OperatorChip({
       title={d.label}
     >
       {d.breakpoint && (
-        <div className="hz-node-bp" aria-label={i18n.t("nodeCard.breakpoint")} title={i18n.t("nodeCard.breakpointTitle")} />
+        <div className="dz-node-bp" aria-label={i18n.t("nodeCard.breakpoint")} title={i18n.t("nodeCard.breakpointTitle")} />
       )}
       <Handle
         type="target"
@@ -765,7 +765,7 @@ function OperatorChip({
         style={{ ...dotStyle(portColor(inputs[1].mime), connectedInputs.includes(inputs[1].port), undefined, missingByPort.has(inputs[1].port)), top: "68%" }}
         title={missingByPort.get(inputs[1].port) ?? portTooltip(inputs[1])}
       />
-      <span className="hz-op-symbol" style={{ fontSize }}>
+      <span className="dz-op-symbol" style={{ fontSize }}>
         {sym}
       </span>
       <Handle
@@ -776,12 +776,12 @@ function OperatorChip({
         title={portTooltip(outputs[0])}
       />
       {d.lintMessage && (
-        <div className="hz-node-lint" title={d.lintMessage} aria-label={i18n.t("nodeCard.lintWarning")}>
+        <div className="dz-node-lint" title={d.lintMessage} aria-label={i18n.t("nodeCard.lintWarning")}>
           <AlertTriangle size={13} />
         </div>
       )}
       {d.loopHint && (
-        <div className="hz-node-loop" title={d.loopHint} aria-label={i18n.t("nodeCard.loopWarnAria")}>
+        <div className="dz-node-loop" title={d.loopHint} aria-label={i18n.t("nodeCard.loopWarnAria")}>
           <Repeat size={13} />
         </div>
       )}
@@ -849,7 +849,7 @@ function dotStyle(color: string, filled: boolean, place?: "in" | "out", missing?
 // in-pin on the left edge and the out-pin on the right edge, mirroring UE's
 // exec flow). It's hollow when idle and fills in when a value is threaded
 // through — both states, plus the hover colour, are driven by CSS off the
-// .hz-pass-pin / .connected classes via currentColor.
+// .dz-pass-pin / .connected classes via currentColor.
 function PassPinIcon() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
@@ -859,7 +859,7 @@ function PassPinIcon() {
 }
 
 // passPinStyle positions the universal passthrough pin on the card edge.
-// Shape (the triangle) and colour come from the .hz-pass-pin CSS class — this
+// Shape (the triangle) and colour come from the .dz-pass-pin CSS class — this
 // only supplies the edge offset, matching dotStyle's placement so pass and
 // data pins line up.
 function passPinStyle(place: "in" | "out") {

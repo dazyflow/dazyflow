@@ -9,7 +9,7 @@ describe("JsonEditor", () => {
       <JsonEditor value={'{"k": "<img src=x onerror=alert(1)>"}'} onChange={() => {}} />,
     );
     // The key is coloured as a token...
-    expect(container.querySelector(".hz-j-key")).toHaveTextContent('"k"');
+    expect(container.querySelector(".dz-j-key")).toHaveTextContent('"k"');
     // ...and the malicious value is rendered as text, never as a live element.
     expect(container.querySelector("img")).toBeNull();
     expect(container.textContent).toContain("<img src=x onerror=alert(1)>");

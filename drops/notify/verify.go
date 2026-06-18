@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
-	"git.sr.ht/~klahr/hazyflow/engine"
-	"git.sr.ht/~klahr/hazyflow/internal/smtputil"
+	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	"git.sr.ht/~klahr/dazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/internal/smtputil"
 )
 
 // Connection verification for this package's integrations, registered so the
@@ -62,7 +62,7 @@ func verifyEmail(ctx context.Context, conn map[string]string) error {
 
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
 	if err := hfnet.CheckDialHost(addr); err != nil {
-		return errors.New("that looks like a local/private address — the operator must enable private-network access (HAZYFLOW_ALLOW_PRIVATE_EGRESS) to reach it")
+		return errors.New("that looks like a local/private address — the operator must enable private-network access (DAZYFLOW_ALLOW_PRIVATE_EGRESS) to reach it")
 	}
 
 	var auth smtp.Auth

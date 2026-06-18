@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // A ResourceLister enumerates the selectable items of a given KIND inside a
@@ -14,7 +14,7 @@ import (
 // param pickers (pick-your-form, pick-your-sheet) so a user chooses from a
 // dropdown instead of pasting an opaque ID.
 //
-// Listers are injected from cmd/hzd, where the connector packages are
+// Listers are injected from cmd/dzd, where the connector packages are
 // importable, so the daemon stays free of connector dependencies — the same
 // looseness the token / resource-fetcher / row-source hooks use. extra
 // carries any query params beyond kind/account (e.g. a future tabs lister

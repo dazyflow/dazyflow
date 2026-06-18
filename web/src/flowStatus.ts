@@ -1,7 +1,7 @@
 // Mirror of core.FlowRunStatusOf (core/flowstatus.go). Keep the two in
 // lockstep: this drives the editor/Triggers-modal status chip, while the
 // flow list reads the server-computed `run_status` from the same Go logic.
-import type { Graph, Node as HazyGraphNode } from "./types";
+import type { Graph, Node as DazyGraphNode } from "./types";
 
 export type FlowRunStatus = "live" | "manual" | "paused" | "needs_publish";
 
@@ -50,7 +50,7 @@ export function webhookKeys(
 // without a manual Run. Rules mirror HasConfiguredAutoTrigger in Go.
 export function hasConfiguredAutoTrigger(
   triggers: Graph["triggers"],
-  nodes: Pick<HazyGraphNode, "module" | "params">[],
+  nodes: Pick<DazyGraphNode, "module" | "params">[],
 ): boolean {
   for (const tr of triggers ?? []) {
     if (tr.type === "cron" && (tr.cron ?? "").trim() !== "") return true;
@@ -83,7 +83,7 @@ export function hasConfiguredAutoTrigger(
 // core.HasConfiguredSchedulerTrigger (Go).
 export function hasConfiguredSchedulerTrigger(
   triggers: Graph["triggers"],
-  nodes: Pick<HazyGraphNode, "module" | "params">[],
+  nodes: Pick<DazyGraphNode, "module" | "params">[],
 ): boolean {
   for (const tr of triggers ?? []) {
     if (tr.type === "cron" && (tr.cron ?? "").trim() !== "") return true;
@@ -111,7 +111,7 @@ export function hasConfiguredSchedulerTrigger(
 export function flowRunStatus(
   disabled: boolean | undefined,
   triggers: Graph["triggers"],
-  nodes: Pick<HazyGraphNode, "module" | "params">[],
+  nodes: Pick<DazyGraphNode, "module" | "params">[],
 ): FlowRunStatus {
   if (disabled) return "paused";
   return hasConfiguredAutoTrigger(triggers, nodes) ? "live" : "manual";
@@ -126,7 +126,7 @@ export function flowRunStatus(
 export function flowRunStatusPublished(
   disabled: boolean | undefined,
   triggers: Graph["triggers"],
-  nodes: Pick<HazyGraphNode, "module" | "params">[],
+  nodes: Pick<DazyGraphNode, "module" | "params">[],
   published: boolean | undefined,
 ): FlowRunStatus {
   const base = flowRunStatus(disabled, triggers, nodes);

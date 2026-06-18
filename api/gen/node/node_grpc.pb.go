@@ -19,8 +19,8 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	NodeService_GetManifest_FullMethodName = "/hazyflow.node.v1.NodeService/GetManifest"
-	NodeService_Execute_FullMethodName     = "/hazyflow.node.v1.NodeService/Execute"
+	NodeService_GetManifest_FullMethodName = "/dazyflow.node.v1.NodeService/GetManifest"
+	NodeService_Execute_FullMethodName     = "/dazyflow.node.v1.NodeService/Execute"
 )
 
 // NodeServiceClient is the client API for NodeService service.
@@ -152,7 +152,7 @@ type NodeService_ExecuteServer = grpc.ServerStreamingServer[Event]
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var NodeService_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "hazyflow.node.v1.NodeService",
+	ServiceName: "dazyflow.node.v1.NodeService",
 	HandlerType: (*NodeServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // drop builds a minimal valid NativeDrop (Register requires Summary +

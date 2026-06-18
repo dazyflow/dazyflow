@@ -93,7 +93,7 @@ func (s *PgRunLogStore) DeleteByTenant(ctx context.Context, tenant string) (int,
 
 // Prune deletes entries older than the cutoff in batches, returning the
 // total removed. Same shape as the jobs/audit retention pruners; wired
-// into hzd's hourly retention sweep behind HAZYFLOW_RUN_LOG_RETENTION.
+// into dzd's hourly retention sweep behind DAZYFLOW_RUN_LOG_RETENTION.
 func (s *PgRunLogStore) Prune(ctx context.Context, olderThan time.Duration, batch int) (int, error) {
 	if olderThan <= 0 {
 		return 0, nil

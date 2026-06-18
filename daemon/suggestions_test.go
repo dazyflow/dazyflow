@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/daemon"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon"
 )
 
 // find returns the adjacency entry for the from→to module pair, or nil.

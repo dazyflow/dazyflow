@@ -12,7 +12,7 @@ import (
 	"os"
 	"strings"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // Scheme marks a sandbox path that lives in the run's ephemeral scratch

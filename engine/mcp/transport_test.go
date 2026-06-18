@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine/mcp"
-	"git.sr.ht/~klahr/hazyflow/engine/mcp/mcptest"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/engine/mcp"
+	"git.sr.ht/~klahr/dazyflow/engine/mcp/mcptest"
 )
 
 // registerInProcess wires a FakeServer into a fresh Catalog using
@@ -21,7 +21,7 @@ func registerInProcess(t *testing.T, serverName string, srv *mcptest.FakeServer)
 	go srv.Serve(serverReadsFromClient, serverWritesToClient)
 
 	client := mcp.NewClient(clientWritesToServer, clientReadFromServer)
-	info, err := client.Initialize(t.Context(), "hazyflow-test", "1.0")
+	info, err := client.Initialize(t.Context(), "dazyflow-test", "1.0")
 	if err != nil {
 		t.Fatalf("init: %v", err)
 	}

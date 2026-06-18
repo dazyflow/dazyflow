@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // FSQuota tracks per-tenant disk usage by walking the tenant directory

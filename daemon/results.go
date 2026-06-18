@@ -4,7 +4,7 @@
 // user collect rows with zero setup; these endpoints let them *see* those
 // rows. A "board" is just a user table inside the workspace's built-in
 // store SQLite file. There is no new storage system here: the read path is
-// a thin, read-only open of the same `.hazyflow-store/data.db` the drops
+// a thin, read-only open of the same `.dazyflow-store/data.db` the drops
 // write to, scoped to the caller's (tenant, workspace).
 //
 // Because the store lives under the sandbox subtree it already rides the
@@ -25,7 +25,7 @@ import (
 	"strconv"
 	"strings"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 	_ "modernc.org/sqlite"
 )
 
@@ -34,7 +34,7 @@ import (
 // is re-declared here rather than imported because importing drops/db into
 // the daemon would run that package's init()s and re-register its drops.
 // Keep in sync with drops/db/builtin_store.go.
-const builtinStoreRelPath = ".hazyflow-store/data.db"
+const builtinStoreRelPath = ".dazyflow-store/data.db"
 
 // boardRowLimit caps how many rows BoardRows returns in a single page,
 // even if a larger ?limit is requested. The page is meant to be browsed,

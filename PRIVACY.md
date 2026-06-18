@@ -1,13 +1,13 @@
 # GDPR & data-protection notes
 
-This document describes how `hzd` (the hazyflow daemon) **processes personal
+This document describes how `dzd` (the dazyflow daemon) **processes personal
 data**, which technical data-protection measures it implements, and what an
 operator must do to run it in line with the EU General Data Protection
 Regulation (GDPR) and related EU rules. It complements the
 [ISO 27001 control mapping](COMPLIANCE.md) and [SECURITY.md](SECURITY.md);
 deployment specifics are in [DEPLOY.md](DEPLOY.md).
 
-**Last reviewed:** 2026-06-15 · **Scope:** the hazyflow product. Not legal
+**Last reviewed:** 2026-06-15 · **Scope:** the dazyflow product. Not legal
 advice.
 
 ## What this document is — and is not
@@ -15,10 +15,10 @@ advice.
 GDPR compliance is a property of an **organisation's data-processing
 practices**, not of software. A binary has no lawful basis, no Records of
 Processing, no Data Processing Agreements, and no Data Protection Officer —
-those are things the operating organisation holds. **Hazyflow cannot be
+those are things the operating organisation holds. **Dazyflow cannot be
 "GDPR compliant" on its own.**
 
-What hazyflow does is **implement the technical and organisational measures
+What dazyflow does is **implement the technical and organisational measures
 (Art. 24, 25, 32) that a compliant deployment relies on**, and expose the
 controls (retention, encryption, access scoping, egress restriction) an
 operator needs. This file inventories the personal data the product touches
@@ -28,20 +28,20 @@ it for — your Record of Processing and DPAs.
 
 **Use this phrasing externally:**
 
-- ✅ "hazyflow **implements technical measures that support GDPR** (encryption,
+- ✅ "dazyflow **implements technical measures that support GDPR** (encryption,
   access control, configurable retention, egress restriction)."
 - ✅ "Operated within our GDPR-compliant processing programme as **data
   controller**, with DPAs in place for each enabled connector."
-- ❌ "hazyflow **is GDPR compliant / certified**." — a tool cannot be either.
+- ❌ "dazyflow **is GDPR compliant / certified**." — a tool cannot be either.
 
 ## Roles
 
 - **You (the operating organisation) are the data controller** (and, where you
   run flows on behalf of your own customers, also a **processor** to them —
   in which case you need a DPA with them and this product sits under it).
-- **hazyflow-the-software is the tool you process with**, running on
+- **dazyflow-the-software is the tool you process with**, running on
   infrastructure you control. Anthropic provides the binary, not a managed
-  service — Anthropic does not receive your data through hzd itself (see
+  service — Anthropic does not receive your data through dzd itself (see
   [§ Does the product phone home](#does-the-product-phone-home)).
 - **Each connector vendor is a sub-processor** of any personal data your flows
   send to it (see [§ Personal data sent to third parties](#personal-data-sent-to-third-parties)).
@@ -94,7 +94,7 @@ any prompt that may carry personal data.
 - **Configurable LLM endpoints** — the Claude and OpenAI drops accept a custom
   base URL, so you can route to an EU-region or self-hosted/proxied model
   instead of the US default.
-- **Egress allowlist** — `HAZYFLOW_HTTP_EGRESS_ALLOW` restricts which hosts
+- **Egress allowlist** — `DAZYFLOW_HTTP_EGRESS_ALLOW` restricts which hosts
   flows may reach (exact host, `*.subdomain`, or CIDR). Set it to your
   approved (ideally EU) endpoints so a flow can't silently exfiltrate to an
   un-vetted destination. An always-on SSRF guard additionally blocks
@@ -115,17 +115,17 @@ Each right now has a supported endpoint (built 2026-06-15); see
 | **Rectification (16)** | **Built in** — `POST /api/v1/me/password` (change password) and `POST /api/v1/me/email` (supervised email re-key: re-points memberships + API keys, revokes sessions). Org display-name via `PUT /api/v1/admin/org/profile`. | Use the self-service endpoints. |
 | **Erasure (17)** | **Built in** — `DELETE /api/v1/me/account` (self-serve, `?confirm=<email>`), `DELETE /api/v1/admin/users/{email}` (platform admin), `DELETE /api/v1/admin/orgs/{tenant}`. Cascades across users, sessions, api_keys, memberships, invitations, jobs, run_logs, bus_events, org config/profile, and the tenant's `/data`; audit is pseudonymised (user) or deleted (org). | Call the deletion endpoint; member removal (`DELETE …/admin/members/{email}`) still exists for the lighter "remove from org" case. |
 | **Restriction (18) / Objection (21)** | Disable the account's sessions/keys to halt processing. | Revoke sessions + API keys; pause the org's flows. |
-| **Automated decisions (22)** | hzd runs operator-authored flows; any profiling is in your flow logic, not the platform. | Assess per flow. |
+| **Automated decisions (22)** | dzd runs operator-authored flows; any profiling is in your flow logic, not the platform. | Assess per flow. |
 
 ## Retention (Art. 5(1)(e))
 
-Retention sweeps run hourly and are **on by default** (`cmd/hzd/main.go`):
+Retention sweeps run hourly and are **on by default** (`cmd/dzd/main.go`):
 
 | Data | Env var | Default |
 |---|---|---|
-| Terminal jobs | `HAZYFLOW_JOB_RETENTION` | 30 days |
-| Run logs | `HAZYFLOW_RUN_LOG_RETENTION` | = job retention (30 days) |
-| Audit events (incl. IPs) | `HAZYFLOW_AUDIT_RETENTION` | 90 days |
+| Terminal jobs | `DAZYFLOW_JOB_RETENTION` | 30 days |
+| Run logs | `DAZYFLOW_RUN_LOG_RETENTION` | = job retention (30 days) |
+| Audit events (incl. IPs) | `DAZYFLOW_AUDIT_RETENTION` | 90 days |
 | Bus-event spool | — | 1 hour (fixed) |
 
 A value `<= 0` disables that sweep (retain indefinitely) — only do this with a
@@ -147,13 +147,13 @@ Implemented by the product; see [SECURITY.md](SECURITY.md) and
 [COMPLIANCE.md](COMPLIANCE.md) for detail.
 
 - **At rest:** AES-256-GCM envelope encryption for secrets/OAuth tokens/TOTP
-  (per-tenant DEK wrapped by `HAZYFLOW_MASTER_KEY`); bcrypt passwords;
+  (per-tenant DEK wrapped by `DAZYFLOW_MASTER_KEY`); bcrypt passwords;
   hashed session and API-key tokens.
 - **In transit:** TLS for the browser (Secure cookies + HSTS behind a TLS
   proxy), optional gRPC mTLS, HTTPS to all connectors, and **enforced TLS to
-  Postgres** — `hzd` refuses to start in production unless the DSN sets
+  Postgres** — `dzd` refuses to start in production unless the DSN sets
   `sslmode=require` / `verify-ca` / `verify-full` (`productionConfigProblems`,
-  `cmd/hzd/main.go`).
+  `cmd/dzd/main.go`).
 - **Access control:** per-tenant + per-workspace isolation enforced at the
   authz layer and in SQL (`core/authz.go`); one org cannot read another's data.
 - **Master key:** keep a sealed off-cluster backup — losing it makes every
@@ -161,7 +161,7 @@ Implemented by the product; see [SECURITY.md](SECURITY.md) and
 
 ## Cookies / ePrivacy
 
-The only cookie is the session cookie (`hazyflow_session`): `HttpOnly`,
+The only cookie is the session cookie (`dazyflow_session`): `HttpOnly`,
 `SameSite=Lax`, `Secure` over HTTPS (`daemon/httpgateway.go`). It is
 **strictly necessary** for authentication, so under the ePrivacy Directive it
 needs **no consent banner**. There are no analytics, advertising, or
@@ -173,7 +173,7 @@ scripts/fonts. If you later add analytics, this changes and consent is required.
 No automatic telemetry. There is no analytics SDK, crash reporter, or tracker
 in the daemon or frontend. The only outbound calls the platform makes on its
 own are operator-controlled: an **update check** (only when an admin opens the
-System page; URL configurable via `HAZYFLOW_UPDATE_URL`, empty disables) and
+System page; URL configurable via `DAZYFLOW_UPDATE_URL`, empty disables) and
 **OTLP tracing** (only if `OTEL_EXPORTER_OTLP_ENDPOINT` is set). Everything
 else is the flows you build.
 
@@ -193,8 +193,8 @@ else is the flows you build.
 1. Maintain a **Record of Processing**; use the [third-party table](#personal-data-sent-to-third-parties) as your sub-processor list.
 2. Sign a **DPA** and confirm a **transfer mechanism (DPF/SCCs)** for every connector you enable; enable LLM zero-retention.
 3. Set **retention** values for your legal/operational needs.
-4. Keep all infrastructure (Postgres + backups, registry, tracing) in an **EU region**; use `sslmode=require` (now enforced) and back up `HAZYFLOW_MASTER_KEY` separately.
-5. Constrain egress with `HAZYFLOW_HTTP_EGRESS_ALLOW`.
+4. Keep all infrastructure (Postgres + backups, registry, tracing) in an **EU region**; use `sslmode=require` (now enforced) and back up `DAZYFLOW_MASTER_KEY` separately.
+5. Constrain egress with `DAZYFLOW_HTTP_EGRESS_ALLOW`.
 6. Point support staff at the **data-subject-rights endpoints** (export / rectification / erasure, below) — they're now built in, not a manual runbook.
 
 ## Known gaps
@@ -211,7 +211,7 @@ Tracked here and in [COMPLIANCE.md § Known gaps](COMPLIANCE.md):
   in code.
 - **Personal data in run logs/payloads is not redacted by default** — only
   secrets are (`engine/redact.go`). Mitigate with a short
-  `HAZYFLOW_RUN_LOG_RETENTION`, `HAZYFLOW_LOG_RUN_PAYLOADS=false` (drops content
+  `DAZYFLOW_RUN_LOG_RETENTION`, `DAZYFLOW_LOG_RUN_PAYLOADS=false` (drops content
   lines, keeps the status trail), and per-run deletion via
   `DELETE /api/v1/me/runs/{run_id}/logs`.
 - **Very short secret values are not redacted** — secret redaction
@@ -224,7 +224,7 @@ Tracked here and in [COMPLIANCE.md § Known gaps](COMPLIANCE.md):
   `secret_to_persistence` rule), and resolved secrets only land in node
   *params*, never auto-copied into a `Result` unless a module deliberately
   echoes them. Operators handling sub-6-char credentials should still prefer
-  `HAZYFLOW_LOG_RUN_PAYLOADS=false`.
+  `DAZYFLOW_LOG_RUN_PAYLOADS=false`.
 
 > **Resolved 2026-06-15:** account/org **erasure** (Art. 17), **data export**
 > (Art. 15/20), and **self-service rectification** (Art. 16) are now built-in

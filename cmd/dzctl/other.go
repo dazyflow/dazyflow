@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	controlpb "git.sr.ht/~klahr/hazyflow/api/gen/control"
+	controlpb "git.sr.ht/~klahr/dazyflow/api/gen/control"
 )
 
 func moduleCmd() *cobra.Command {
@@ -32,9 +32,9 @@ func moduleListCmd() *cobra.Command {
 		Short: "List or search modules known to the daemon.",
 		Long: `List modules. Filters compose with AND across fields and OR within values, e.g.
 
-    hzctl module list --category=ai --provider=anthropic
-    hzctl module list --query "http"
-    hzctl module list --tag llm --tag mcp`,
+    dzctl module list --category=ai --provider=anthropic
+    dzctl module list --query "http"
+    dzctl module list --tag llm --tag mcp`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			conn, err := daemonConn(serverFlag)
 			if err != nil {
@@ -184,7 +184,7 @@ func jobLogsCmd() *cobra.Command {
 		Use:   "logs JOB_ID",
 		Short: "Print a run's log (progress lines, node transitions, outcome).",
 		Long: "Replays the run's persisted log. With --follow the stream stays " +
-			"open and tails live events until the run terminates — `hzctl job " +
+			"open and tails live events until the run terminates — `dzctl job " +
 			"logs --follow` right after `graph run` watches the whole run. " +
 			"Requires membership of the run's tenant.",
 		Args: cobra.ExactArgs(1),

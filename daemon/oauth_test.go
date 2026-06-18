@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/auth"
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/auth"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // fakeProvider stands in for a real OAuth server. It serves the
@@ -296,7 +296,7 @@ func TestHTTPOAuth_AuthorizeBadReturnTo(t *testing.T) {
 }
 
 // callbackWithBinding builds an OAuth callback request that carries the
-// hz_oauth_state cookie set by the authorize step, so the browser-binding
+// dz_oauth_state cookie set by the authorize step, so the browser-binding
 // check (RFC 6749 §10.12) passes — mirroring a real browser that keeps the
 // cookie across the redirect.
 func callbackWithBinding(authResp *httptest.ResponseRecorder, target string) *http.Request {
@@ -360,7 +360,7 @@ func TestHTTPOAuth_CallbackHappyPath(t *testing.T) {
 func TestHTTPOAuth_CallbackRejectsWrongBrowser(t *testing.T) {
 	// A flow started via the browser-redirect path is bound to the browser
 	// that started it. A callback that arrives WITHOUT the matching
-	// hz_oauth_state cookie (e.g. an attacker who induced the victim to
+	// dz_oauth_state cookie (e.g. an attacker who induced the victim to
 	// complete the attacker's flow) must be rejected and store no token.
 	h, _ := newOAuthHarness(t)
 	rw := h.do(t, "GET", "/api/v1/oauth/test/authorize?account=main&return_to=/apps", nil)

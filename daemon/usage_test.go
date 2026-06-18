@@ -99,12 +99,12 @@ func TestMemUsageStore_Concurrent(t *testing.T) {
 	}
 }
 
-// Gated on HAZYFLOW_TEST_DB (a real Postgres), like the jobstore/auth
+// Gated on DAZYFLOW_TEST_DB (a real Postgres), like the jobstore/auth
 // integration tests.
 func TestPgUsageStore(t *testing.T) {
-	url := os.Getenv("HAZYFLOW_TEST_DB")
+	url := os.Getenv("DAZYFLOW_TEST_DB")
 	if url == "" {
-		t.Skip("set HAZYFLOW_TEST_DB to run Postgres usage tests")
+		t.Skip("set DAZYFLOW_TEST_DB to run Postgres usage tests")
 	}
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, url)

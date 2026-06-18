@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/auth"
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/auth"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 func TestMetrics_JobGauges(t *testing.T) {
@@ -28,8 +28,8 @@ func TestMetrics_JobGauges(t *testing.T) {
 	}
 	body := rw.Body.String()
 	for _, want := range []string{
-		`hazyflow_jobs{status="queued"} 2`,
-		`hazyflow_jobs{status="running"} 0`,
+		`dazyflow_jobs{status="queued"} 2`,
+		`dazyflow_jobs{status="running"} 0`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("metrics body missing %q\n--- body ---\n%s", want, body)
@@ -53,8 +53,8 @@ func TestMetrics_SessionCacheGauges(t *testing.T) {
 
 	body := h.do(t, "GET", "/metrics", nil).Body.String()
 	for _, want := range []string{
-		"hazyflow_session_cache_hits_total 1",
-		"hazyflow_session_cache_misses_total 1",
+		"dazyflow_session_cache_hits_total 1",
+		"dazyflow_session_cache_misses_total 1",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("metrics body missing %q\n--- body ---\n%s", want, body)
@@ -74,9 +74,9 @@ func TestMetrics_HTTPRedSeries(t *testing.T) {
 
 	body := h.do(t, "GET", "/metrics", nil).Body.String()
 	for _, want := range []string{
-		`hazyflow_http_requests_total{method="GET",code="200"}`,
-		"hazyflow_http_request_duration_seconds_bucket",
-		`hazyflow_http_request_duration_seconds_count{method="GET"}`,
+		`dazyflow_http_requests_total{method="GET",code="200"}`,
+		"dazyflow_http_request_duration_seconds_bucket",
+		`dazyflow_http_request_duration_seconds_count{method="GET"}`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("metrics body missing %q\n--- body ---\n%s", want, body)
@@ -120,9 +120,9 @@ func TestMetrics_EnabledEmitsUpAndQuotaGauges(t *testing.T) {
 	}
 	body := rw.Body.String()
 	for _, want := range []string{
-		"hazyflow_up 1",
-		`hazyflow_quota_bytes_used{tenant="acme"} 200`,
-		`hazyflow_quota_bytes_limit{tenant="acme"} 1000`,
+		"dazyflow_up 1",
+		`dazyflow_quota_bytes_used{tenant="acme"} 200`,
+		`dazyflow_quota_bytes_limit{tenant="acme"} 1000`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("metrics body missing %q\n--- body ---\n%s", want, body)
@@ -138,10 +138,10 @@ func TestMetrics_EnabledWithoutQuotaStillServesUp(t *testing.T) {
 		t.Fatalf("status = %d, want 200", rw.Code)
 	}
 	body := rw.Body.String()
-	if !strings.Contains(body, "hazyflow_up 1") {
-		t.Errorf("missing hazyflow_up gauge: %s", body)
+	if !strings.Contains(body, "dazyflow_up 1") {
+		t.Errorf("missing dazyflow_up gauge: %s", body)
 	}
-	if strings.Contains(body, "hazyflow_quota_bytes_used") {
+	if strings.Contains(body, "dazyflow_quota_bytes_used") {
 		t.Errorf("quota gauges present without a quota provider: %s", body)
 	}
 }

@@ -6,14 +6,14 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // TestRunNode_RedactsConnectorOAuthToken guards the connector-token
 // redaction fix. Connectors (slack/github/gmail) resolve their OAuth
 // access token *inside* Execute via a SetTokenLookup hook, NOT via a
 // ${secret.} param — so the token never enters the secret-provider path
-// that populates the redaction set. cmd/hzd/wireConnectorTokenHooks now
+// that populates the redaction set. cmd/dzd/wireConnectorTokenHooks now
 // calls engine.RegisterRuntimeSecret with the fetched token; this test
 // mirrors that wiring and asserts an echoed token is scrubbed from the
 // persisted Result (output AND error), which is what the run-detail API

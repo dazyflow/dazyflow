@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // TestScratchScheme_WriteThenRead proves the scratch:// scheme end to

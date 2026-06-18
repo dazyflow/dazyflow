@@ -7,8 +7,8 @@ import (
 	"sort"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/auth"
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/auth"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // APIKeySummary is the redacted view of an API key that's safe to
@@ -30,7 +30,7 @@ type APIKeySummary struct {
 // optional — when empty the service derives one. Workspace defaults
 // to the admin's own workspace when blank. Tenant defaults to the
 // admin's own tenant; only platform admins may specify a different
-// one (used when bootstrapping new customer tenants on a shared hzd).
+// one (used when bootstrapping new customer tenants on a shared dzd).
 type IssueAPIKeyParams struct {
 	ID        string      `json:"id"`
 	Subject   string      `json:"subject"`
@@ -220,11 +220,11 @@ func (s *Service) IssueOwnAPIKey(ctx context.Context, p core.Principal, params S
 // overwrites every column on a key-id collision. A caller-supplied ID
 // that already belongs to a *different* tenant must be rejected — else
 // issuing would silently hijack or revoke that tenant's key (key IDs are
-// not secret; they travel in the hzk_<id>_... wire format). An empty ID is
+// not secret; they travel in the dzk_<id>_... wire format). An empty ID is
 // always server-generated, so it's free by construction.
 // resolveKeyID returns the caller's requested key ID, or a freshly
 // generated "k"-prefixed one when none was supplied. Key IDs are not
-// secret (they travel in the hzk_<id>_... wire format), so a random
+// secret (they travel in the dzk_<id>_... wire format), so a random
 // 12-char suffix is enough to avoid collisions.
 func resolveKeyID(requested string) (string, error) {
 	if requested != "" {
@@ -285,7 +285,7 @@ func resolveAdminTenant(p core.Principal, requested string) (string, error) {
 }
 
 // UserSummary is the per-subject roll-up the Admin users view uses.
-// "User" isn't a first-class entity in Hazyflow today — we derive
+// "User" isn't a first-class entity in Dazyflow today — we derive
 // one synthetic record per distinct Subject across the tenant's keys.
 // The aggregate Permissions union is what the principal would
 // effectively get if all their active keys were combined.

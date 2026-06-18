@@ -24,7 +24,7 @@ import (
 // Module-scoped (like googleSignInStates) so its lifecycle is
 // independent of the gateway. This shares the SSO flow's existing
 // single-instance assumption: the apex callback and the subdomain
-// handoff must land on the same hzd process (all *.<domain> hosts route
+// handoff must land on the same dzd process (all *.<domain> hosts route
 // to one upstream), which is the case for the supported single-node /
 // sticky-routed deployments.
 var handoffStore = struct {

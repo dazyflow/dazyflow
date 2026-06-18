@@ -3,7 +3,7 @@ package value
 import (
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 func TestText_EmitsParam(t *testing.T) {

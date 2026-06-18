@@ -33,7 +33,7 @@ export function Switch({
   return (
     <label
       className={
-        "hz-switch" + (disabled ? " disabled" : "") + (compact ? " compact" : "")
+        "dz-switch" + (disabled ? " disabled" : "") + (compact ? " compact" : "")
       }
     >
       <input
@@ -44,13 +44,13 @@ export function Switch({
         aria-label={ariaLabel}
         onChange={(e) => onChange(e.target.checked)}
       />
-      <span className="hz-switch-track" aria-hidden="true">
-        <span className="hz-switch-thumb" />
+      <span className="dz-switch-track" aria-hidden="true">
+        <span className="dz-switch-thumb" />
       </span>
       {(label || description) && (
-        <span className="hz-switch-text">
-          {label && <span className="hz-switch-label">{label}</span>}
-          {description && <span className="hz-switch-desc">{description}</span>}
+        <span className="dz-switch-text">
+          {label && <span className="dz-switch-label">{label}</span>}
+          {description && <span className="dz-switch-desc">{description}</span>}
         </span>
       )}
     </label>

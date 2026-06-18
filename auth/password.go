@@ -12,7 +12,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // User is a password-authenticated identity. PasswordHash is bcrypt.
@@ -80,7 +80,7 @@ var ErrUnknownUser = errors.New("unknown user")
 // returns ~instantly while an existing one pays full bcrypt cost — a remotely
 // observable timing difference that reveals which emails have accounts, the
 // very enumeration this function's uniform error is meant to prevent.
-var timingDummyHash, _ = bcrypt.GenerateFromPassword([]byte("hazyflow-timing-equalizer"), bcrypt.DefaultCost)
+var timingDummyHash, _ = bcrypt.GenerateFromPassword([]byte("dazyflow-timing-equalizer"), bcrypt.DefaultCost)
 
 // VerifyPassword normalizes email and bcrypt-compares the password.
 // Returns the User on success; ErrInvalidCredential on any failure

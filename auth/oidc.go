@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // OIDCConfig configures the OIDC bearer-token authenticator.
@@ -13,7 +13,7 @@ type OIDCConfig struct {
 	Issuer   string
 	Audience string
 	ClientID string
-	// TenantClaim names the claim that maps to a Hazyflow tenant ID
+	// TenantClaim names the claim that maps to a Dazyflow tenant ID
 	// (default "tenant"). Different IdPs use different conventions; for
 	// Microsoft Entra it's typically "tid", for Google Workspace "hd".
 	TenantClaim string
@@ -21,7 +21,7 @@ type OIDCConfig struct {
 	// AllowedTenants optionally constrains which tenant claim values this
 	// issuer may assert. The verifier checks sig/iss/aud/exp, but the
 	// tenant comes straight from the (issuer-controlled) token body with
-	// no binding back to Hazyflow — so a single trusted issuer can mint a
+	// no binding back to Dazyflow — so a single trusted issuer can mint a
 	// token for ANY tenant id. When AllowedTenants is non-empty, a token
 	// whose tenant claim is not in this list is rejected. When empty,
 	// behavior is unchanged (any tenant the issuer asserts is honored),
@@ -31,12 +31,12 @@ type OIDCConfig struct {
 
 // OIDCAuthenticator accepts IdP-issued bearer JWTs on the API: a token
 // minted by Microsoft Entra / Okta / Google Workspace (any OIDC issuer)
-// authenticates a request without a Hazyflow session or API key —
+// authenticates a request without a Dazyflow session or API key —
 // machine-to-machine and SSO-backed automation. It slots into the auth
 // Chain after the API-key and session authenticators; non-JWT
 // credentials fall through untouched. The production Verifier comes
 // from NewOIDCVerifier (go-oidc discovery + JWKS, see oidc_verifier.go),
-// wired by hzd when HAZYFLOW_OIDC_ISSUER is set.
+// wired by dzd when DAZYFLOW_OIDC_ISSUER is set.
 
 type OIDCAuthenticator struct {
 	Config   OIDCConfig

@@ -7,7 +7,7 @@ import (
 	"log"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // effectiveGraphTimeout picks the timeout that applies to a run:
@@ -34,7 +34,7 @@ func (s *Service) effectiveGraphTimeout(g core.Graph) time.Duration {
 // Terminal bus event, so a fast-completing run doesn't keep a timer
 // alive for nothing.
 //
-// Watchdogs do NOT survive an hzd restart — a deployment that needs
+// Watchdogs do NOT survive an dzd restart — a deployment that needs
 // crash-safe enforcement should also wire a periodic sweep at
 // startup (out of scope for v1; flagged in the TODO).
 func (s *Service) startGraphTimeoutWatchdog(runID, tenant, workspace string, timeout time.Duration) {
@@ -65,7 +65,7 @@ func (s *Service) runGraphTimeoutWatchdog(runID, tenant, workspace string, timeo
 			// lets us bypass private-flow visibility if the run was on
 			// a private flow whose owner isn't us.
 			sysP := core.Principal{
-				Subject:   "hazyflow-timeout",
+				Subject:   "dazyflow-timeout",
 				Tenant:    tenant,
 				Workspace: workspace,
 				Roles: []core.Role{{
@@ -84,7 +84,7 @@ func (s *Service) runGraphTimeoutWatchdog(runID, tenant, workspace string, timeo
 			// error is worth logging because something is wrong with
 			// the cancel path itself.
 			if err != nil && !errors.Is(err, core.ErrConflict) {
-				log.Printf("hazyflow-timeout: cancel %s: %v", runID, err)
+				log.Printf("dazyflow-timeout: cancel %s: %v", runID, err)
 			}
 			return
 		}

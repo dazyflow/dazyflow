@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -301,9 +301,9 @@ func TestNewEncryptedSecrets_NilStore(t *testing.T) {
 // ---- Postgres integration (gated) -----------------------------------
 
 func TestPgSecretsStore_RoundTrip(t *testing.T) {
-	dsn := os.Getenv("HAZYFLOW_TEST_DB")
+	dsn := os.Getenv("DAZYFLOW_TEST_DB")
 	if dsn == "" {
-		t.Skip("set HAZYFLOW_TEST_DB to run Postgres integration tests")
+		t.Skip("set DAZYFLOW_TEST_DB to run Postgres integration tests")
 	}
 	ctx := t.Context()
 	pool, err := pgxpool.New(ctx, dsn)
@@ -350,9 +350,9 @@ func TestPgSecretsStore_TenantIsolationOnDisk(t *testing.T) {
 	// Same test as the in-memory variant but against the real DB —
 	// confirms the WHERE tenant=$1 clauses are correctly scoped on
 	// both reads and lists.
-	dsn := os.Getenv("HAZYFLOW_TEST_DB")
+	dsn := os.Getenv("DAZYFLOW_TEST_DB")
 	if dsn == "" {
-		t.Skip("set HAZYFLOW_TEST_DB to run Postgres integration tests")
+		t.Skip("set DAZYFLOW_TEST_DB to run Postgres integration tests")
 	}
 	ctx := t.Context()
 	pool, _ := pgxpool.New(ctx, dsn)

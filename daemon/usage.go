@@ -52,7 +52,7 @@ func usagePeriod(t time.Time) string {
 
 // MemUsageStore is the in-process UsageStore for dev/no-DSN deployments
 // and tests. Counts vanish on restart — same caveat as the rest of the
-// in-memory stores, and hzd already logs the loud "lost on restart"
+// in-memory stores, and dzd already logs the loud "lost on restart"
 // warning when running without Postgres.
 type MemUsageStore struct {
 	mu      sync.Mutex

@@ -11,15 +11,15 @@ import (
 )
 
 // PgBus is the multi-node Bus. The in-process MemoryBus only fans out to
-// subscribers on the same hzd; PgBus lets ANY hzd serve the streaming
+// subscribers on the same dzd; PgBus lets ANY dzd serve the streaming
 // RPC/SSE for a run regardless of which node's worker produced the
 // events.
 //
 // Design — a tiny durable spool + LISTEN/NOTIFY wake:
 //
 //	Publish:  INSERT the JSON event into bus_events, then pg_notify a
-//	          wake on the "hazy_bus" channel.
-//	Listener: one dedicated connection LISTENs on "hazy_bus"; on each
+//	          wake on the "dazy_bus" channel.
+//	Listener: one dedicated connection LISTENs on "dazy_bus"; on each
 //	          wake it drains every row newer than the last it saw and
 //	          fans each out to local subscribers for that job. Draining
 //	          "id > lastSeen" (not the notify payload) means a missed or
@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS bus_events (
 );
 `
 
-const pgBusChannel = "hazy_bus"
+const pgBusChannel = "dazy_bus"
 
 // NewPgBus provisions the spool table, captures the current high-water
 // mark (so brand-new subscribers don't get a backlog), and starts the

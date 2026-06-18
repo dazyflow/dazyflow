@@ -57,7 +57,7 @@ const QUICKSTART_TEMPLATE = "daily-reminder-ntfy";
 // to decide between first-time and returning copy: a user who's
 // already built a flow gets a quieter "Welcome back" headline
 // instead of the full onboarding wizard tone.
-const HAS_FLOWS_KEY = "hazyflow.hasFlows";
+const HAS_FLOWS_KEY = "dazyflow.hasFlows";
 
 export function Welcome() {
   const { t } = useTranslation();
@@ -95,7 +95,7 @@ export function Welcome() {
   // context. The trailing period sits outside the gate so the
   // sentence flows either way.
   const showTenant = shouldShowTenantID(me, tenants.length);
-  // Returning users see a quieter heading ("Welcome back to Hazy
+  // Returning users see a quieter heading ("Welcome back to Dazy
   // Flow", "Pick up where you left off") instead of the first-run
   // wizard tone. Hint comes from the same localStorage flag
   // RootRedirect uses, so the two surfaces stay consistent.

@@ -96,8 +96,8 @@ func (m *Metrics) render(w io.Writer) {
 	defer m.mu.Unlock()
 
 	if len(m.httpReqs) > 0 {
-		fmt.Fprint(w, "# HELP hazyflow_http_requests_total HTTP requests handled, by method and status code.\n")
-		fmt.Fprint(w, "# TYPE hazyflow_http_requests_total counter\n")
+		fmt.Fprint(w, "# HELP dazyflow_http_requests_total HTTP requests handled, by method and status code.\n")
+		fmt.Fprint(w, "# TYPE dazyflow_http_requests_total counter\n")
 		keys := make([]string, 0, len(m.httpReqs))
 		for k := range m.httpReqs {
 			keys = append(keys, k)
@@ -105,25 +105,25 @@ func (m *Metrics) render(w io.Writer) {
 		sort.Strings(keys)
 		for _, k := range keys {
 			method, code, _ := strings.Cut(k, "\x00")
-			fmt.Fprintf(w, "hazyflow_http_requests_total{method=%s,code=%s} %d\n",
+			fmt.Fprintf(w, "dazyflow_http_requests_total{method=%s,code=%s} %d\n",
 				promLabel(method), promLabel(code), m.httpReqs[k].Load())
 		}
 	}
 
 	if len(m.httpDur) > 0 {
-		fmt.Fprint(w, "# HELP hazyflow_http_request_duration_seconds HTTP request latency by method.\n")
-		fmt.Fprint(w, "# TYPE hazyflow_http_request_duration_seconds histogram\n")
+		fmt.Fprint(w, "# HELP dazyflow_http_request_duration_seconds HTTP request latency by method.\n")
+		fmt.Fprint(w, "# TYPE dazyflow_http_request_duration_seconds histogram\n")
 		for _, method := range sortedKeys(m.httpDur) {
-			m.httpDur[method].render(w, "hazyflow_http_request_duration_seconds",
+			m.httpDur[method].render(w, "dazyflow_http_request_duration_seconds",
 				"method="+promLabel(method))
 		}
 	}
 
 	if len(m.nodeDur) > 0 {
-		fmt.Fprint(w, "# HELP hazyflow_node_duration_seconds Per-node execution latency by terminal status.\n")
-		fmt.Fprint(w, "# TYPE hazyflow_node_duration_seconds histogram\n")
+		fmt.Fprint(w, "# HELP dazyflow_node_duration_seconds Per-node execution latency by terminal status.\n")
+		fmt.Fprint(w, "# TYPE dazyflow_node_duration_seconds histogram\n")
 		for _, status := range sortedKeys(m.nodeDur) {
-			m.nodeDur[status].render(w, "hazyflow_node_duration_seconds",
+			m.nodeDur[status].render(w, "dazyflow_node_duration_seconds",
 				"status="+promLabel(status))
 		}
 	}

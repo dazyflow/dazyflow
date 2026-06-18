@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { X, Trash2, Info, Play, Square, BellRing } from "lucide-react";
 import { iconFor, dropColor as resolveDropColor } from "../icons";
-import type { HazyNodeData } from "./nodeCardShared";
+import type { DazyNodeData } from "./nodeCardShared";
 import {
   SchemaForm,
   supportsSchemaForm,
@@ -31,8 +31,8 @@ import type { SetupNeed } from "../lib/requiredConnections";
 import type { OAuthProviderStatus, Graph, GraphTrigger, Manifest } from "../types";
 
 type Props = {
-  selected: Node<HazyNodeData> | null;
-  onChange: (id: string, patch: Partial<HazyNodeData>) => void;
+  selected: Node<DazyNodeData> | null;
+  onChange: (id: string, patch: Partial<DazyNodeData>) => void;
   // params are stashed alongside the node-data in the Flow node — passed
   // in here separately so the textarea stays controllable without a
   // round-trip through React Flow's internal state.
@@ -543,7 +543,7 @@ export function Inspector({
           // the user's mid-typing keystrokes.
           <>
             {loopOwnerNodeId && (
-              <div className="hz-loop-banner">
+              <div className="dz-loop-banner">
                 {t("loopBody.runsPerRow")}
               </div>
             )}

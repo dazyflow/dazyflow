@@ -18,7 +18,7 @@ cd "$(dirname "$0")"
 ROOT="$(cd ../.. && pwd)"
 
 SANDBOX_BASE=$(mktemp -d)
-HZD_LOG=/tmp/ap-hzd.log
+DZD_LOG=/tmp/ap-dzd.log
 BE_LOG=/tmp/ap-be.log
 
 # Ephemeral Postgres for the encrypted secret store (secret://). Own
@@ -27,21 +27,21 @@ BE_LOG=/tmp/ap-be.log
 PG_CONTAINER=ap-demo-pg
 PG_PORT=55432
 PG_PASS=ap-demo-not-a-real-password
-PG_DSN="postgres://hazyflow:${PG_PASS}@localhost:${PG_PORT}/hazyflow?sslmode=disable"
+PG_DSN="postgres://dazyflow:${PG_PASS}@localhost:${PG_PORT}/dazyflow?sslmode=disable"
 
 cleanup() {
-    kill "${HZD_PID:-}" "${BE_PID:-}" 2>/dev/null || true
+    kill "${DZD_PID:-}" "${BE_PID:-}" 2>/dev/null || true
     wait 2>/dev/null || true
     docker rm -f "$PG_CONTAINER" >/dev/null 2>&1 || true
-    rm -rf "$SANDBOX_BASE" /tmp/ap-hzd /tmp/ap-hzctl /tmp/ap-backend
-    rm -f /tmp/ap-low.json /tmp/ap-high.json "$HZD_LOG" "$BE_LOG"
+    rm -rf "$SANDBOX_BASE" /tmp/ap-dzd /tmp/ap-dzctl /tmp/ap-backend
+    rm -f /tmp/ap-low.json /tmp/ap-high.json "$DZD_LOG" "$BE_LOG"
 }
 trap cleanup EXIT
 
 # --- 1. build --------------------------------------------------------------
 echo "[1/7] building binaries"
-(cd "$ROOT" && go build -o /tmp/ap-hzd ./cmd/hzd)
-(cd "$ROOT" && go build -o /tmp/ap-hzctl ./cmd/hzctl)
+(cd "$ROOT" && go build -o /tmp/ap-dzd ./cmd/dzd)
+(cd "$ROOT" && go build -o /tmp/ap-dzctl ./cmd/dzctl)
 go build -o /tmp/ap-backend ./mock-backend
 
 # --- 2. start mock backend + ephemeral Postgres ---------------------------
@@ -53,17 +53,17 @@ sleep 0.2
 echo "      starting ephemeral Postgres (container $PG_CONTAINER on :$PG_PORT)"
 docker rm -f "$PG_CONTAINER" >/dev/null 2>&1 || true
 docker run -d --rm --name "$PG_CONTAINER" \
-    -e POSTGRES_USER=hazyflow -e POSTGRES_PASSWORD="$PG_PASS" -e POSTGRES_DB=hazyflow \
+    -e POSTGRES_USER=dazyflow -e POSTGRES_PASSWORD="$PG_PASS" -e POSTGRES_DB=dazyflow \
     -p "$PG_PORT":5432 postgres:16-alpine >/dev/null
 # The official postgres image restarts once after initdb, so pg_isready
 # can report "up" during init and then reset the next connection. Probe
 # with a real query (over the in-container socket) so we only proceed once
-# the server truly accepts connections — hzd Fatal-exits on a failed
+# the server truly accepts connections — dzd Fatal-exits on a failed
 # connect, with no retry of its own.
 echo -n "      waiting for Postgres"
 pg_ready=0
 for _ in $(seq 1 60); do
-    if docker exec "$PG_CONTAINER" psql -U hazyflow -d hazyflow -c 'select 1' >/dev/null 2>&1; then
+    if docker exec "$PG_CONTAINER" psql -U dazyflow -d dazyflow -c 'select 1' >/dev/null 2>&1; then
         pg_ready=1; break
     fi
     echo -n "."; sleep 0.5
@@ -71,39 +71,39 @@ done
 if [[ "$pg_ready" -ne 1 ]]; then echo " FAILED"; echo "ERROR: Postgres did not become ready" >&2; exit 1; fi
 echo " ready"
 
-# --- 3. start hzd -----------------------------------------------------------
+# --- 3. start dzd -----------------------------------------------------------
 # /trigger/ paths land on the same HTTP listener as the API; we don't run
-# a separate webhook port anymore. All hzd config goes via HAZYFLOW_*.
+# a separate webhook port anymore. All dzd config goes via DAZYFLOW_*.
 # Secrets live in the encrypted secret store (secret://), which needs a
 # master key + Postgres (the ephemeral container above). The key is
 # generated per-run; secrets are seeded over the API in step 3b.
-echo "[3/7] starting hzd (workers=2, http=:18080, sandbox=$SANDBOX_BASE)"
+echo "[3/7] starting dzd (workers=2, http=:18080, sandbox=$SANDBOX_BASE)"
 MASTER_KEY=$(head -c32 /dev/urandom | base64)
-HAZYFLOW_LISTEN=":50099" \
-HAZYFLOW_HTTP=":18080" \
-HAZYFLOW_DEV_KEY=1 \
-HAZYFLOW_DATA_DIR="$SANDBOX_BASE" \
-HAZYFLOW_MASTER_KEY="$MASTER_KEY" \
-HAZYFLOW_POSTGRES_DSN="$PG_DSN" \
-HAZYFLOW_ALLOW_PRIVATE_EGRESS=1 \
-/tmp/ap-hzd \
-    > "$HZD_LOG" 2>&1 &
-HZD_PID=$!
+DAZYFLOW_LISTEN=":50099" \
+DAZYFLOW_HTTP=":18080" \
+DAZYFLOW_DEV_KEY=1 \
+DAZYFLOW_DATA_DIR="$SANDBOX_BASE" \
+DAZYFLOW_MASTER_KEY="$MASTER_KEY" \
+DAZYFLOW_POSTGRES_DSN="$PG_DSN" \
+DAZYFLOW_ALLOW_PRIVATE_EGRESS=1 \
+/tmp/ap-dzd \
+    > "$DZD_LOG" 2>&1 &
+DZD_PID=$!
 # Postgres-backed boot (connect + migrate) can take 10-20s on a cold
 # container, so wait generously for the HTTP listener before proceeding.
 booted=0
 for _ in $(seq 1 60); do
-    if grep -q "listening on \[::\]:18080" "$HZD_LOG" 2>/dev/null; then booted=1; break; fi
-    if ! kill -0 "$HZD_PID" 2>/dev/null; then break; fi  # hzd died — stop waiting
+    if grep -q "listening on \[::\]:18080" "$DZD_LOG" 2>/dev/null; then booted=1; break; fi
+    if ! kill -0 "$DZD_PID" 2>/dev/null; then break; fi  # dzd died — stop waiting
     sleep 0.5
 done
 if [[ "$booted" -ne 1 ]]; then
-    echo "ERROR: hzd did not come up; log follows:" >&2
-    sed 's/^/      /' "$HZD_LOG" >&2
+    echo "ERROR: dzd did not come up; log follows:" >&2
+    sed 's/^/      /' "$DZD_LOG" >&2
     exit 1
 fi
-grep -E "listening" "$HZD_LOG" | sed 's/^/      /' || true
-TOKEN=$(grep -oE 'hzk_[a-z0-9_]+' "$HZD_LOG" | head -1)
+grep -E "listening" "$DZD_LOG" | sed 's/^/      /' || true
+TOKEN=$(grep -oE 'dzk_[a-z0-9_]+' "$DZD_LOG" | head -1)
 
 # --- 3b. seed the demo secrets into the encrypted store -------------------
 echo "[3b/7] seeding secrets (secret://INVOICE_API_KEY, SLACK_TOKEN, APPROVAL_API_KEY)"
@@ -119,8 +119,8 @@ seed_secret APPROVAL_API_KEY "Bearer approval-system-key-ghi"
 
 # --- 4. save the two pipeline graphs --------------------------------------
 echo "[4/7] saving graphs"
-HZCTL_TOKEN=$TOKEN /tmp/ap-hzctl --server=localhost:50099 graph save pipeline-low.json > /dev/null
-HZCTL_TOKEN=$TOKEN /tmp/ap-hzctl --server=localhost:50099 graph save pipeline-high.json > /dev/null
+DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 graph save pipeline-low.json > /dev/null
+DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 graph save pipeline-high.json > /dev/null
 
 # --- 5. fire the low-value invoice via webhook ----------------------------
 echo "[5/7] webhook → process-invoice-low (\$250 amount → auto-approve path)"
@@ -144,10 +144,10 @@ sed 's/^/    /' "$BE_LOG"
 echo
 
 echo "--- low-invoice ($LOW_JOB) node trail ---"
-HZCTL_TOKEN=$TOKEN /tmp/ap-hzctl --server=localhost:50099 job list process-invoice-low 2>&1 | sed 's/^/    /'
+DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 job list process-invoice-low 2>&1 | sed 's/^/    /'
 echo
 echo "--- high-invoice ($HIGH_JOB) node trail ---"
-HZCTL_TOKEN=$TOKEN /tmp/ap-hzctl --server=localhost:50099 job list process-invoice-high 2>&1 | sed 's/^/    /'
+DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 job list process-invoice-high 2>&1 | sed 's/^/    /'
 
 echo
 echo "--- archived invoices on disk ---"
@@ -161,7 +161,7 @@ cat "$SANDBOX_BASE/sandbox/dev/default/archive/invoice-big-99.json" | sed 's/^/ 
 
 echo
 echo "--- audit: saved graph still references secrets symbolically ---"
-HZCTL_TOKEN=$TOKEN /tmp/ap-hzctl --server=localhost:50099 graph load process-invoice-low 2>&1 \
+DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 graph load process-invoice-low 2>&1 \
     | grep -E '"Authorization"|"url"' | head -10 | sed 's/^/    /'
 
 # --- assertions -----------------------------------------------------------
@@ -177,17 +177,17 @@ assert() {
     fi
 }
 assert "low-invoice graph succeeded" \
-    "HZCTL_TOKEN=$TOKEN /tmp/ap-hzctl --server=localhost:50099 job status $LOW_JOB 2>&1 | grep -q 'status:    succeeded'"
+    "DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 job status $LOW_JOB 2>&1 | grep -q 'status:    succeeded'"
 assert "high-invoice graph succeeded" \
-    "HZCTL_TOKEN=$TOKEN /tmp/ap-hzctl --server=localhost:50099 job status $HIGH_JOB 2>&1 | grep -q 'status:    succeeded'"
+    "DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 job status $HIGH_JOB 2>&1 | grep -q 'status:    succeeded'"
 assert "low invoice routed to auto_approve" \
-    "HZCTL_TOKEN=$TOKEN /tmp/ap-hzctl --server=localhost:50099 job list process-invoice-low 2>&1 | grep auto_approve | grep -q succeeded"
+    "DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 job list process-invoice-low 2>&1 | grep auto_approve | grep -q succeeded"
 assert "low invoice's notify_cfo was skipped" \
-    "HZCTL_TOKEN=$TOKEN /tmp/ap-hzctl --server=localhost:50099 job list process-invoice-low 2>&1 | grep notify_cfo | grep -q skipped"
+    "DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 job list process-invoice-low 2>&1 | grep notify_cfo | grep -q skipped"
 assert "high invoice routed to notify_cfo" \
-    "HZCTL_TOKEN=$TOKEN /tmp/ap-hzctl --server=localhost:50099 job list process-invoice-high 2>&1 | grep notify_cfo | grep -q succeeded"
+    "DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 job list process-invoice-high 2>&1 | grep notify_cfo | grep -q succeeded"
 assert "high invoice's auto_approve was skipped" \
-    "HZCTL_TOKEN=$TOKEN /tmp/ap-hzctl --server=localhost:50099 job list process-invoice-high 2>&1 | grep auto_approve | grep -q skipped"
+    "DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 job list process-invoice-high 2>&1 | grep auto_approve | grep -q skipped"
 assert "both invoices archived" \
     "test -f $SANDBOX_BASE/sandbox/dev/default/archive/invoice-42.json && test -f $SANDBOX_BASE/sandbox/dev/default/archive/invoice-big-99.json"
 assert "mock backend saw correct API key for /invoices" \
@@ -195,7 +195,7 @@ assert "mock backend saw correct API key for /invoices" \
 assert "no SSRF or auth refusals in backend log" \
     "! grep -q 'unauthorized' $BE_LOG"
 assert "graph JSON still references secret:// (resolved secrets not leaked)" \
-    "HZCTL_TOKEN=$TOKEN /tmp/ap-hzctl --server=localhost:50099 graph load process-invoice-low 2>&1 | grep -q 'secret://INVOICE_API_KEY'"
+    "DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 graph load process-invoice-low 2>&1 | grep -q 'secret://INVOICE_API_KEY'"
 
 if [[ $errors -eq 0 ]]; then
     echo

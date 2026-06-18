@@ -73,11 +73,11 @@ function orgGlyph(icon: string | undefined, size: number) {
 // COLLAPSE_KEY persists the sidebar collapsed/expanded choice across
 // reloads. The sidebar is always visible; small viewports just default
 // to the icons-only rail until the user expands it.
-const COLLAPSE_KEY = "hazyflow.sidebar.collapsed";
+const COLLAPSE_KEY = "dazyflow.sidebar.collapsed";
 // APPROVAL_SEEN_KEY is the sticky local flag the Approvals nav link
 // uses to stay visible after the user has used the approval inbox
 // at least once. See the everHadApproval state below.
-const APPROVAL_SEEN_KEY = "hazyflow.approvalsEverSeen";
+const APPROVAL_SEEN_KEY = "dazyflow.approvalsEverSeen";
 // MOBILE_BREAK mirrors the @media (max-width: 768px) rule in app.css —
 // AppShell uses it to default new visitors on small viewports to the
 // rail layout on first paint.
@@ -300,7 +300,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   // Top-bar branding. In the editor the open flow takes the slot; the
   // org's name/logo replaces the product wordmark once the org has a
-  // profile set; otherwise it's the Hazyflow mark.
+  // profile set; otherwise it's the Dazyflow mark.
   const curTenant = activeTenant || me?.tenant || "";
   const orgMembership = me?.memberships?.find((m) => m.tenant === curTenant);
   const orgName = orgMembership?.display_name;
@@ -330,10 +330,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         </button>
         {/* The logo is the home affordance — clicking it lands on the
             start/welcome screen (where no flow is selected), matching
-            the sibling `hazy` app's brand-click-goes-home behaviour. */}
-        <NavLink to="/welcome" className="brand" title={orgName || "Hazyflow"}>
+            the sibling `dazy` app's brand-click-goes-home behaviour. */}
+        <NavLink to="/welcome" className="brand" title={orgName || "Dazyflow"}>
           {/* Mark: the open flow's icon in the editor, else the org logo
-              when set, else the Hazyflow favicon. */}
+              when set, else the Dazyflow favicon. */}
           {showFlow && activeFlowIcon ? (
             <FlowIcon icon={activeFlowIcon} size={22} className="brand-flow-icon" />
           ) : !showFlow && isImageIcon(orgIcon) ? (
@@ -358,7 +358,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {/* Title: the open flow's name in the editor; otherwise the
               org's name once set, falling back to the product wordmark. */}
           <span className="brand-title">
-            {showFlow ? activeFlowName : orgName || "Hazyflow"}
+            {showFlow ? activeFlowName : orgName || "Dazyflow"}
           </span>
         </NavLink>
         <div className="spacer" />
@@ -446,7 +446,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               onExport={async (tid) => {
                 if (!token) return;
                 const data = await api.exportOrg(token, tid);
-                downloadJson(data, `hazyflow-org-${tid}-export.json`);
+                downloadJson(data, `dazyflow-org-${tid}-export.json`);
               }}
               onDelete={async (tid, password) => {
                 if (!token) return;
@@ -615,7 +615,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
           {/* Account control pinned to the very bottom of the sidebar —
               the entry point to per-user actions (Settings, Sign out).
-              Mirrors the sibling `hazy` app's sidebar-footer account
+              Mirrors the sibling `dazy` app's sidebar-footer account
               menu. Shows just the user icon in the collapsed rail. */}
           {me && (
             <AccountMenu
@@ -725,7 +725,7 @@ function WorkspaceSwitcher({
 
 // AccountMenu is the lower-left sidebar account control — the entry
 // point to per-user actions (Settings, Sign out). Modelled on the
-// sibling `hazy` app, whose account/settings menu lives in the sidebar
+// sibling `dazy` app, whose account/settings menu lives in the sidebar
 // footer. The trigger shows a user icon + email (the email hides via
 // .nav-label in the collapsed rail, leaving just the icon); the menu
 // pops upward so it doesn't run off the bottom of the viewport.
@@ -855,7 +855,7 @@ function AccountMenu({
             {version && (
               <>
                 <div className="workspace-pop-sep" role="separator" />
-                <div className="account-pop-version">hzd v{version}</div>
+                <div className="account-pop-version">dzd v{version}</div>
               </>
             )}
           </div>,
@@ -866,7 +866,7 @@ function AccountMenu({
 }
 
 // FlowMenu is the top-right three-dots menu acting on the current flow
-// (mirrors hazy's per-context menu). Today it has one action — open the
+// (mirrors dazy's per-context menu). Today it has one action — open the
 // flow-settings modal, which lives inside the editor and is invoked via
 // the callback the editor registered on ActiveFlowContext.
 function FlowMenu({ onOpenSettings }: { onOpenSettings: () => void }) {

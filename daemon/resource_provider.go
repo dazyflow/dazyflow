@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // ResourceFetcher fetches the live content of one resource definition —
 // e.g. for type "google_sheet", the sheet's rows + headers. Registered
-// per type in cmd/hzd so the daemon stays free of drop/connector imports
+// per type in cmd/dzd so the daemon stays free of drop/connector imports
 // (the same looseness wireConnectorTokenHooks uses). tenant/flow ride on
 // ctx, so a fetcher can resolve the right OAuth account.
 type ResourceFetcher func(ctx context.Context, def core.ResourceDef) (any, error)

@@ -19,12 +19,12 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"git.sr.ht/~klahr/hazyflow/auth"
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/auth"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // HTTPGateway exposes Service over JSON/HTTP so browsers and other
-// non-gRPC clients can drive Hazyflow. The endpoint surface is small
+// non-gRPC clients can drive Dazyflow. The endpoint surface is small
 // on purpose — just enough to power a visual editor:
 //
 //	GET    /api/v1/drops                                      — list drop manifests
@@ -45,8 +45,8 @@ type HTTPGateway struct {
 	logger         *log.Logger
 	AllowedOrigins []string // empty = "*"
 
-	// WildcardDomain, when set (e.g. "hazyflow.app"), treats every
-	// subdomain "<org>.hazyflow.app" as an allowed browser origin for
+	// WildcardDomain, when set (e.g. "dazyflow.app"), treats every
+	// subdomain "<org>.dazyflow.app" as an allowed browser origin for
 	// the CORS allowlist + the CSRF origin check, on top of the exact
 	// entries in AllowedOrigins. It also lets the sign-in page derive
 	// the target org from the host and powers the OAuth sign-in handoff
@@ -54,11 +54,11 @@ type HTTPGateway struct {
 	// subdomain via a one-time token so cookies stay host-only — see
 	// authHandoff). Empty disables all per-org-subdomain behaviour, so
 	// single-host deployments are unaffected. Wired from
-	// $HAZYFLOW_WILDCARD_DOMAIN.
+	// $DAZYFLOW_WILDCARD_DOMAIN.
 	//
-	// Must have at least two labels (e.g. "hazyflow.app"). A single-label
+	// Must have at least two labels (e.g. "dazyflow.app"). A single-label
 	// value like "com" would suffix-match every ".com" origin and is
-	// rejected: cmd/hzd refuses to boot on one, and originAllowed ignores it
+	// rejected: cmd/dzd refuses to boot on one, and originAllowed ignores it
 	// (trusts nobody) as a defense-in-depth backstop. See IsValidWildcardDomain.
 	WildcardDomain string
 
@@ -70,7 +70,7 @@ type HTTPGateway struct {
 	SessionTTL time.Duration // default 24h when zero
 
 	// TOTPKey is the 32-byte AES key that encrypts users' TOTP secrets
-	// at rest (decoded from HAZYFLOW_TOTP_KEY by cmd/hzd). When it's not
+	// at rest (decoded from DAZYFLOW_TOTP_KEY by cmd/dzd). When it's not
 	// the required 32 bytes, 2FA is considered un-configured at the
 	// install level: the /me/totp + /auth/totp endpoints return 503 and
 	// sign-in never asks for a second factor.
@@ -79,7 +79,7 @@ type HTTPGateway struct {
 	// step during sign-in. An in-memory store is fine — challenges live
 	// five minutes and losing them on restart just re-prompts for the
 	// password. Nil with a configured TOTPKey disables the challenge leg
-	// (sign-in would fail closed for enrolled users), so cmd/hzd wires
+	// (sign-in would fail closed for enrolled users), so cmd/dzd wires
 	// both together.
 	TOTPChallenges auth.TOTPChallengeStore
 
@@ -97,8 +97,8 @@ type HTTPGateway struct {
 
 	// EnableSignup opens POST /api/v1/auth/signup for self-serve
 	// account creation. Defaults to false — production deployments
-	// often want admin-invite-only signup. The hzd binary opts in
-	// via --signup or $HAZYFLOW_ENABLE_SIGNUP.
+	// often want admin-invite-only signup. The dzd binary opts in
+	// via --signup or $DAZYFLOW_ENABLE_SIGNUP.
 	EnableSignup bool
 
 	// PlatformAdmins is the lowercased email allowlist that bootstraps the
@@ -108,7 +108,7 @@ type HTTPGateway struct {
 	// users get the role stamped onto their session at sign-in/signup/SSO
 	// (see elevatePlatformAdmin); the list is the single source of truth,
 	// so removing an email + re-login revokes it. Wired from
-	// $HAZYFLOW_PLATFORM_ADMINS.
+	// $DAZYFLOW_PLATFORM_ADMINS.
 	PlatformAdmins []string
 
 	// platformAdminGranted remembers which allowlisted emails have already
@@ -122,14 +122,14 @@ type HTTPGateway struct {
 	// (GET /api/v1), whose build.version the admin System section reads as
 	// "the latest released version" to compare against this build. No auth
 	// — it's a public endpoint. Empty disables the check (the page still
-	// loads). Wired from $HAZYFLOW_UPDATE_URL, defaulting to the project's
+	// loads). Wired from $DAZYFLOW_UPDATE_URL, defaulting to the project's
 	// production origin.
 	UpdateURL string
 
 	// EnableMetrics mounts an unauthenticated GET /metrics Prometheus
 	// endpoint. Off by default: it exposes tenant names + disk usage, so
 	// operators opt in via --metrics and restrict scrape access at the
-	// network/proxy layer. Wired by hzd.
+	// network/proxy layer. Wired by dzd.
 	EnableMetrics bool
 
 	// Audit, when set, records administrative actions (graph save/run,
@@ -138,18 +138,18 @@ type HTTPGateway struct {
 	Audit core.AuditLog
 
 	// SlackEvents handles Slack Events API POSTs (app_mention etc.).
-	// Nil = the route returns 501. Wired by hzd when the Slack
+	// Nil = the route returns 501. Wired by dzd when the Slack
 	// signing-secret flag/env is set.
 	SlackEvents *SlackEventsHandler
 
 	// GitHubEvents handles GitHub webhook POSTs (push, pull_request).
-	// Nil = the route returns 501. Wired by hzd when the GitHub
+	// Nil = the route returns 501. Wired by dzd when the GitHub
 	// webhook-secret flag/env is set.
 	GitHubEvents *GitHubEventsHandler
 
 	// StripeEvents handles tenant Stripe webhook POSTs (payment
 	// events for stripe_on_payment triggers — distinct from Billing's
-	// platform webhook). Nil = the route returns 501. Wired by hzd
+	// platform webhook). Nil = the route returns 501. Wired by dzd
 	// when the encrypted secret store is configured; auth is the
 	// per-tenant STRIPE_WEBHOOK_SECRET signing secret.
 	StripeEvents *StripeEventsHandler
@@ -191,7 +191,7 @@ type HTTPGateway struct {
 
 	// Approval serves the HMAC-verified POST /approve/{run}/{node}
 	// endpoint for unauthenticated email/Slack approvers. Set by
-	// cmd/hzd when HAZYFLOW_APPROVAL_HMAC_SECRET is configured. Nil
+	// cmd/dzd when DAZYFLOW_APPROVAL_HMAC_SECRET is configured. Nil
 	// leaves the route unregistered so the gateway 404s on /approve/*.
 	Approval *ApprovalListener
 
@@ -209,7 +209,7 @@ type HTTPGateway struct {
 
 	// TrustProxyHeaders makes the gateway honor X-Forwarded-Proto when
 	// deciding whether a request arrived over HTTPS (for the Secure
-	// cookie flag + HSTS). Enable ONLY when hzd sits behind a trusted
+	// cookie flag + HSTS). Enable ONLY when dzd sits behind a trusted
 	// TLS-terminating reverse proxy — otherwise a direct client could
 	// spoof the header. Off by default.
 	TrustProxyHeaders bool
@@ -246,7 +246,7 @@ type HTTPGateway struct {
 	idempotency *idempotencyStore
 
 	// LandingDir, when non-empty, points at a directory of static
-	// marketing-site files (the separate hazyflow-landing repo:
+	// marketing-site files (the separate dazyflow-landing repo:
 	// landing.html, style.css, /pricing, /privacy, /terms, assets).
 	// When set alongside WebDist, GET / is auth-gated: a signed-in
 	// browser (valid session cookie) gets the SPA shell, an anonymous
@@ -313,7 +313,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	})
 	// Readiness: can the process actually serve requests (deps reachable)?
 	// ReadyCheck is nil for the dev/in-memory deployment — then ready ==
-	// alive. With Postgres, cmd/hzd wires a pool ping so orchestration
+	// alive. With Postgres, cmd/dzd wires a pool ping so orchestration
 	// holds traffic until the DB is reachable.
 	mux.HandleFunc("GET /readyz", func(rw http.ResponseWriter, r *http.Request) {
 		if h.ReadyCheck != nil {
@@ -382,7 +382,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// original principal.
 	mux.HandleFunc("GET /api/v1/oauth/{provider}/callback", h.oauthCallback)
 	mux.HandleFunc("GET /api/v1/drops", h.requireAuth(h.listModules))
-	// Legacy alias — hzctl and older proxies still hit /modules. Keep
+	// Legacy alias — dzctl and older proxies still hit /modules. Keep
 	// it pointing at the same handler so we can deprecate at our pace.
 	mux.HandleFunc("GET /api/v1/modules", h.requireAuth(h.listModules))
 
@@ -543,7 +543,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// admins only (the answer is instance-wide, not per-org).
 	mux.HandleFunc("GET /api/v1/admin/version", h.requireAuth(h.adminVersion))
 	// OAuth provider configuration: paste client_id + client_secret in
-	// the admin UI instead of HAZYFLOW_OAUTH_*_CLIENT_ID env vars + a
+	// the admin UI instead of DAZYFLOW_OAUTH_*_CLIENT_ID env vars + a
 	// restart. Persisted creds win over env on the next boot.
 	mux.HandleFunc("GET /api/v1/admin/oauth-providers", h.requireAuth(h.listAdminOAuthProviders))
 	mux.HandleFunc("PUT /api/v1/admin/oauth-providers/{name}", h.requireAuth(h.upsertAdminOAuthProvider))
@@ -602,7 +602,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// outside requireAuth. Mounting on the main HTTP gateway means a
 	// default --http-only deploy serves these routes without the
 	// operator having to spin up the optional standalone --webhook
-	// listener too. cmd/hzd's --webhook flag still binds a separate
+	// listener too. cmd/dzd's --webhook flag still binds a separate
 	// listener for operators who want port separation.
 	//
 	// Methods are listed explicitly because Go 1.22's ServeMux rejects
@@ -620,7 +620,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// HMAC-verified approval endpoint for email/Slack approvers. The
 	// token in the URL is the auth here, so no requireAuth wrapper —
 	// the route 404s when Approval is nil (i.e. the operator hasn't
-	// configured HAZYFLOW_APPROVAL_HMAC_SECRET + PUBLIC_BASE_URL).
+	// configured DAZYFLOW_APPROVAL_HMAC_SECRET + PUBLIC_BASE_URL).
 	if h.Approval != nil {
 		mux.HandleFunc("POST /approve/", h.Approval.handle)
 	}
@@ -833,10 +833,10 @@ func (h *HTTPGateway) requireAuth(next func(rw http.ResponseWriter, r *http.Requ
 	}
 }
 
-const sessionCookieName = "hazyflow_session"
+const sessionCookieName = "dazyflow_session"
 
 // credentialFromRequest extracts a bearer credential from either the
-// Authorization header (preferred, used by hzctl and API-key clients)
+// Authorization header (preferred, used by dzctl and API-key clients)
 // or the session cookie set by /auth/signin (used by the browser).
 func credentialFromRequest(r *http.Request) string {
 	if h := r.Header.Get("Authorization"); h != "" {
@@ -905,7 +905,7 @@ func (h *HTTPGateway) withCORSAndLogging(next http.Handler) http.Handler {
 
 // requestIsHTTPS reports whether the request reached the user over TLS.
 // Directly: r.TLS is set. Behind a TLS-terminating reverse proxy the
-// connection to hzd is plain HTTP, so we consult X-Forwarded-Proto —
+// connection to dzd is plain HTTP, so we consult X-Forwarded-Proto —
 // but only when TrustProxyHeaders is on, since an untrusted client
 // could otherwise forge it to flip on the Secure cookie flag.
 func (h *HTTPGateway) requestIsHTTPS(r *http.Request) bool {
@@ -921,11 +921,11 @@ func (h *HTTPGateway) requestIsHTTPS(r *http.Request) bool {
 // originAllowed reports whether a browser Origin header is trusted for
 // CORS + CSRF. An origin is allowed if it exactly matches one of the
 // configured AllowedOrigins, or — when WildcardDomain is set — if it is
-// a subdomain of that domain (e.g. "https://acme.hazyflow.app" against
-// WildcardDomain "hazyflow.app"). The Origin header is set by the
+// a subdomain of that domain (e.g. "https://acme.dazyflow.app" against
+// WildcardDomain "dazyflow.app"). The Origin header is set by the
 // browser and not forgeable by page script, so suffix-matching the host
-// is safe; "evil-hazyflow.app" doesn't end in ".hazyflow.app" so it
-// won't match. The apex itself ("https://hazyflow.app") is intentionally
+// is safe; "evil-dazyflow.app" doesn't end in ".dazyflow.app" so it
+// won't match. The apex itself ("https://dazyflow.app") is intentionally
 // NOT matched here — it carries a scheme/port we want pinned, so it must
 // be listed explicitly in AllowedOrigins like any other exact origin.
 func (h *HTTPGateway) originAllowed(origin string) bool {
@@ -937,7 +937,7 @@ func (h *HTTPGateway) originAllowed(origin string) bool {
 	// Only honour the wildcard if it's specific enough to be safe. A
 	// single-label value like "com" would suffix-match every ".com" origin —
 	// catastrophic — so a misconfigured domain trusts nobody rather than
-	// everybody. cmd/hzd also rejects such a value at boot (fail-loud); this
+	// everybody. cmd/dzd also rejects such a value at boot (fail-loud); this
 	// is the defense-in-depth backstop on the request path.
 	if IsValidWildcardDomain(h.WildcardDomain) {
 		if u, err := url.Parse(origin); err == nil {
@@ -960,7 +960,7 @@ func hostIsSubdomainOf(host, domain string) bool {
 
 // IsValidWildcardDomain reports whether d is specific enough to use as a
 // CORS/CSRF subdomain-suffix match. It requires at least two non-empty labels
-// (one dot), so "hazyflow.app" is accepted but a bare public suffix like "com"
+// (one dot), so "dazyflow.app" is accepted but a bare public suffix like "com"
 // — which would trust every ".com" origin — is rejected. This is a coarse
 // label-count guard, not a public-suffix-list check: a value like "co.uk"
 // passes the count but is still a registry suffix, so operators must not set
@@ -1085,7 +1085,7 @@ func (h *HTTPGateway) elevatePlatformAdmin(ctx context.Context, u auth.User) aut
 	key := strings.ToLower(strings.TrimSpace(u.Email))
 	if _, seen := h.platformAdminGranted.LoadOrStore(key, struct{}{}); !seen {
 		h.audit(ctx, core.Principal{Tenant: u.Tenant, Subject: u.Email},
-			"platform_admin.granted", u.Email, "source=HAZYFLOW_PLATFORM_ADMINS")
+			"platform_admin.granted", u.Email, "source=DAZYFLOW_PLATFORM_ADMINS")
 	}
 	return u
 }
@@ -1524,7 +1524,7 @@ func (h *HTTPGateway) listAPIKeys(rw http.ResponseWriter, r *http.Request, p cor
 	writeJSON(rw, http.StatusOK, map[string]any{"keys": keys})
 }
 
-// listTenants returns the set of tenants on this hzd. Platform admins
+// listTenants returns the set of tenants on this dzd. Platform admins
 // only. Powers the tenant switcher in the top bar for super-admin UIs.
 func (h *HTTPGateway) listTenants(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenants, err := h.svc.ListTenants(r.Context(), p)
@@ -1845,7 +1845,7 @@ func (h *HTTPGateway) testTrigger(rw http.ResponseWriter, r *http.Request, p cor
 // signature).
 func (h *HTTPGateway) slackEvents(rw http.ResponseWriter, r *http.Request) {
 	if h.SlackEvents == nil {
-		http.Error(rw, "Slack events endpoint not configured (set --slack-signing-secret on hzd)", http.StatusNotImplemented)
+		http.Error(rw, "Slack events endpoint not configured (set --slack-signing-secret on dzd)", http.StatusNotImplemented)
 		return
 	}
 	h.SlackEvents.ServeHTTP(rw, r)
@@ -1853,7 +1853,7 @@ func (h *HTTPGateway) slackEvents(rw http.ResponseWriter, r *http.Request) {
 
 func (h *HTTPGateway) githubEvents(rw http.ResponseWriter, r *http.Request) {
 	if h.GitHubEvents == nil {
-		http.Error(rw, "GitHub events endpoint not configured (set --github-webhook-secret on hzd)", http.StatusNotImplemented)
+		http.Error(rw, "GitHub events endpoint not configured (set --github-webhook-secret on dzd)", http.StatusNotImplemented)
 		return
 	}
 	h.GitHubEvents.ServeHTTP(rw, r)

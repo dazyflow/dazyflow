@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/hazyflow/auth"
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/auth"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // Data export — Right of access + portability (GDPR Art. 15/20). Assembles
@@ -125,7 +125,7 @@ func (h *HTTPGateway) exportOrgHandler(rw http.ResponseWriter, r *http.Request, 
 	exp := h.assembleOrgExport(r.Context(), tenant)
 	h.audit(r.Context(), p, "org.export", tenant, "organization data export")
 	rw.Header().Set("Content-Disposition",
-		`attachment; filename="hazyflow-org-`+tenant+`-export.json"`)
+		`attachment; filename="dazyflow-org-`+tenant+`-export.json"`)
 	writeJSON(rw, http.StatusOK, exp)
 }
 
@@ -327,7 +327,7 @@ func (h *HTTPGateway) exportHandler(rw http.ResponseWriter, r *http.Request, p c
 	}
 	h.audit(r.Context(), p, "account.export", p.Subject, "data subject export (Art. 15/20)")
 	// Offer it as a download so a browser saves a file rather than rendering it.
-	rw.Header().Set("Content-Disposition", `attachment; filename="hazyflow-data-export.json"`)
+	rw.Header().Set("Content-Disposition", `attachment; filename="dazyflow-data-export.json"`)
 	writeJSON(rw, http.StatusOK, exp)
 }
 

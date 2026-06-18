@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
+	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 )
 
 // TestMain enables the operator private-egress opt-in for the whole test

@@ -7,10 +7,10 @@ import (
 	"sort"
 	"sync"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/limits"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/params"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/limits"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 func init() {
@@ -53,7 +53,7 @@ func init() {
 				// that node + its downstream chain as the loop body the engine
 				// runs once per item. The dispatcher excludes those nodes from
 				// normal execution (see loopBodyOwners).
-				{Port: "body", Label: "Loop body", MIME: []string{"application/x-hazyflow-exec"}},
+				{Port: "body", Label: "Loop body", MIME: []string{"application/x-dazyflow-exec"}},
 				{Port: "results", Label: "Results", MIME: []string{MIMEList}},
 				{Port: "errors", Label: "Failed rows", MIME: []string{"application/json"}},
 			},
@@ -263,7 +263,7 @@ func bodyResultPayload(gr engine.GraphResult) map[string]any {
 // is an OOM vector; fail fast before materializing it.
 func capItems(n int) error {
 	if max := limits.MaxRows(); n > max {
-		return fmt.Errorf("items list has %d entries, exceeds the %d-item limit (raise HAZYFLOW_MAX_ROWS to iterate larger lists)", n, max)
+		return fmt.Errorf("items list has %d entries, exceeds the %d-item limit (raise DAZYFLOW_MAX_ROWS to iterate larger lists)", n, max)
 	}
 	return nil
 }

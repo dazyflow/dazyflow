@@ -12,8 +12,8 @@ import (
 
 	"github.com/google/cel-go/cel"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/drops/internal/limits"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/limits"
 )
 
 // capRows rejects an input list that exceeds the per-drop row ceiling, so a
@@ -22,7 +22,7 @@ import (
 // input is refused, not first allocated.
 func capRows(n int) error {
 	if max := limits.MaxRows(); n > max {
-		return fmt.Errorf("input has %d rows, exceeds the %d-row limit (raise HAZYFLOW_MAX_ROWS to process larger batches)", n, max)
+		return fmt.Errorf("input has %d rows, exceeds the %d-row limit (raise DAZYFLOW_MAX_ROWS to process larger batches)", n, max)
 	}
 	return nil
 }

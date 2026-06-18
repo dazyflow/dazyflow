@@ -10,11 +10,11 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/auth"
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
-	"git.sr.ht/~klahr/hazyflow/engine/jobstore"
-	"git.sr.ht/~klahr/hazyflow/workspace"
+	"git.sr.ht/~klahr/dazyflow/auth"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/engine/jobstore"
+	"git.sr.ht/~klahr/dazyflow/workspace"
 )
 
 // gatewayHarness assembles a minimal daemon stack + an HTTP gateway,
@@ -579,7 +579,7 @@ func TestHTTPGateway_ListPendingApprovals(t *testing.T) {
 		Result: &core.Result{
 			Status: core.StatusAwaiting,
 			Output: map[string]core.Ref{
-				"pending_url": {MIME: "text/plain", Inline: "https://hzd/approve/run-1/approval?token=abc"},
+				"pending_url": {MIME: "text/plain", Inline: "https://dzd/approve/run-1/approval?token=abc"},
 				"prompt":      {MIME: "text/plain", Inline: "Approve invoice?"},
 			},
 		},
@@ -604,7 +604,7 @@ func TestHTTPGateway_ListPendingApprovals(t *testing.T) {
 		Status: core.JobStatusAwaiting,
 		Result: &core.Result{
 			Output: map[string]core.Ref{
-				"pending_url": {Inline: "https://hzd/approve/run-other/approval?token=zzz"},
+				"pending_url": {Inline: "https://dzd/approve/run-other/approval?token=zzz"},
 			},
 		},
 	})
@@ -652,7 +652,7 @@ func TestHTTPGateway_ApproveAuthedResumesAwaitingNode(t *testing.T) {
 		Result: &core.Result{
 			Status: core.StatusAwaiting,
 			Output: map[string]core.Ref{
-				"pending_url": {Inline: "https://hzd/approve/run-1/a?token=x"},
+				"pending_url": {Inline: "https://dzd/approve/run-1/a?token=x"},
 			},
 		},
 	})
@@ -707,7 +707,7 @@ func TestHTTPGateway_ApproveAuthedIgnoresSpoofedApprover(t *testing.T) {
 		Status: core.JobStatusAwaiting,
 		Result: &core.Result{
 			Status: core.StatusAwaiting,
-			Output: map[string]core.Ref{"pending_url": {Inline: "https://hzd/approve/run-spoof/a?token=x"}},
+			Output: map[string]core.Ref{"pending_url": {Inline: "https://dzd/approve/run-spoof/a?token=x"}},
 		},
 	})
 	// Caller tries to attribute the approval to "mallory".
@@ -854,7 +854,7 @@ func TestHTTPGateway_ListPendingApprovalsAcceptsWorkspaceNarrow(t *testing.T) {
 			GraphRunID: e.runID, GraphID: "g", NodeID: "a",
 			Tenant: "t", Workspace: e.ws, Status: core.JobStatusAwaiting,
 			Result: &core.Result{Output: map[string]core.Ref{
-				"pending_url": {Inline: "https://hzd/approve"},
+				"pending_url": {Inline: "https://dzd/approve"},
 			}},
 		})
 	}
@@ -1416,7 +1416,7 @@ func TestHTTPGateway_TenantAdminCantSpecifyForeignTenant(t *testing.T) {
 
 func TestHTTPGateway_AdminEndpoints501WhenUnconfigured(t *testing.T) {
 	h := newGatewayHarness(t)
-	h.svc.AdminKeys = nil // simulate an hzd built without admin tooling
+	h.svc.AdminKeys = nil // simulate an dzd built without admin tooling
 	rw := h.adminDo(t, "GET", "/api/v1/admin/api-keys", nil)
 	if rw.Code != http.StatusNotImplemented {
 		t.Errorf("unconfigured code = %d, want 501", rw.Code)
@@ -1673,7 +1673,7 @@ func TestHTTPGateway_CSRF_CookieAuthRequiresOrigin(t *testing.T) {
 	// is attached but no Origin header is set.
 	req := httptest.NewRequest("PUT", "/api/v1/me/flows/t%2Fws%2Fg-csrf", bytes.NewBufferString(`{}`))
 	req.Header.Set("Content-Type", "application/json")
-	req.AddCookie(&http.Cookie{Name: "hazyflow_session", Value: "any-session"})
+	req.AddCookie(&http.Cookie{Name: "dazyflow_session", Value: "any-session"})
 	rw := httptest.NewRecorder()
 	ServeForTest(h.gw, rw, req)
 	if rw.Code != http.StatusForbidden {
@@ -1690,7 +1690,7 @@ func TestHTTPGateway_CSRF_AllowedOriginPasses(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+h.token) // still need real auth
 	req.Header.Set("Origin", "https://app.example.com")
-	req.AddCookie(&http.Cookie{Name: "hazyflow_session", Value: "any-session"})
+	req.AddCookie(&http.Cookie{Name: "dazyflow_session", Value: "any-session"})
 	rw := httptest.NewRecorder()
 	ServeForTest(h.gw, rw, req)
 	if rw.Code != http.StatusOK {
@@ -1704,7 +1704,7 @@ func TestHTTPGateway_CSRF_DisallowedOriginRejected(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/api/v1/me/flows/t%2Fws%2Fg-evil", bytes.NewBufferString(`{}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Origin", "https://evil.example.com")
-	req.AddCookie(&http.Cookie{Name: "hazyflow_session", Value: "any-session"})
+	req.AddCookie(&http.Cookie{Name: "dazyflow_session", Value: "any-session"})
 	rw := httptest.NewRecorder()
 	ServeForTest(h.gw, rw, req)
 	if rw.Code != http.StatusForbidden {
@@ -1721,7 +1721,7 @@ func TestHTTPGateway_CSRF_GetMethodNotAffected(t *testing.T) {
 	h.gw.AllowedOrigins = []string{"https://app.example.com"}
 	req := httptest.NewRequest("GET", "/api/v1/me", nil)
 	req.Header.Set("Authorization", "Bearer "+h.token)
-	req.AddCookie(&http.Cookie{Name: "hazyflow_session", Value: "any"})
+	req.AddCookie(&http.Cookie{Name: "dazyflow_session", Value: "any"})
 	// No Origin header — should still pass since it's a GET.
 	rw := httptest.NewRecorder()
 	ServeForTest(h.gw, rw, req)

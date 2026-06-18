@@ -9,7 +9,7 @@ import (
 	"maps"
 	"sync"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // GraphProgress wraps a node-level Progress event with the graph context so

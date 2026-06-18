@@ -10,7 +10,7 @@ import (
 	"net/url"
 	"strings"
 
-	"git.sr.ht/~klahr/hazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 const webhookInputModuleID = "webhook_input"
@@ -32,7 +32,7 @@ const webhookInputModuleID = "webhook_input"
 // The listener authenticates via the per-graph trigger secret rather
 // than the daemon's normal API-key chain. That's intentional: webhook
 // callers (Stripe, GitHub, your CI provider) typically don't have a
-// Hazyflow API key but do hold a per-integration secret.
+// Dazyflow API key but do hold a per-integration secret.
 type WebhookListener struct {
 	svc    *Service
 	logger *log.Logger
@@ -152,7 +152,7 @@ func (w *WebhookListener) handleTrigger(rw http.ResponseWriter, r *http.Request)
 	// authorization — graph:admin lets the principal fire private
 	// flows without owning them.
 	principal := core.Principal{
-		Subject:   "hazyflow-webhook",
+		Subject:   "dazyflow-webhook",
 		Tenant:    g.Tenant,
 		Workspace: g.Workspace,
 		Roles: []core.Role{{

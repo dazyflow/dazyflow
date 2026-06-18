@@ -7,13 +7,13 @@ import (
 	"path/filepath"
 	"testing"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
-	"git.sr.ht/~klahr/hazyflow/engine/jobstore"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/engine/jobstore"
 	_ "modernc.org/sqlite"
 )
 
-// seedBoardStore creates a `.hazyflow-store/data.db` under the sandbox
+// seedBoardStore creates a `.dazyflow-store/data.db` under the sandbox
 // root for (tenant, workspace) and writes a `leads` table with two rows,
 // mirroring what the Built-in store · Save drop would have produced.
 func seedBoardStore(t *testing.T, sb *FSSandbox, tenant, workspace string) {
@@ -22,7 +22,7 @@ func seedBoardStore(t *testing.T, sb *FSSandbox, tenant, workspace string) {
 	if err != nil {
 		t.Fatalf("sandbox root: %v", err)
 	}
-	dir := filepath.Join(root, ".hazyflow-store")
+	dir := filepath.Join(root, ".dazyflow-store")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("mkdir store: %v", err)
 	}

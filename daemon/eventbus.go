@@ -3,8 +3,8 @@ package daemon
 import (
 	"sync"
 
-	"git.sr.ht/~klahr/hazyflow/core"
-	"git.sr.ht/~klahr/hazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 // BusEvent is what flows from a worker to subscribers waiting on a job.
@@ -45,8 +45,8 @@ type TerminalEvent struct {
 
 // Bus is the contract between workers (publishers) and the API layer
 // (subscribers waiting for a graph run to finish). The in-memory
-// implementation below is sufficient for a single-node hzd; a multi-node
-// deployment would swap in a Redis/NATS-backed Bus so any hzd can serve
+// implementation below is sufficient for a single-node dzd; a multi-node
+// deployment would swap in a Redis/NATS-backed Bus so any dzd can serve
 // the streaming RPC regardless of which one's worker did the work.
 type Bus interface {
 	Publish(jobID string, ev BusEvent)
