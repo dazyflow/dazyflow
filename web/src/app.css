@@ -2727,6 +2727,46 @@ button.warning:hover:not(:disabled) {
   opacity: 0.5;
   cursor: default;
 }
+/* "Label / Rename label" — same row-action treatment as Make live, but
+   muted so it reads as a secondary action next to it. */
+.history-label-btn {
+  display: inline-flex;
+  align-items: center;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  padding: var(--space-0) var(--space-2) var(--space-2);
+}
+.history-label-btn:hover {
+  color: var(--text);
+}
+/* Optional release-name field inside the publish/go-live modal. Stacked
+   label over input, sitting above the explanatory confirm message. */
+.publish-label-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--muted);
+}
+.publish-label-field input {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--text-base);
+  font-weight: 400;
+}
+.publish-label-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
 /* Generic centered modal (diff-vs-published). Mirrors .settings-backdrop. */
 .modal-backdrop {
   position: fixed;
@@ -7065,6 +7105,20 @@ button.warning:hover:not(:disabled) {
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}
+/* A revision's human name — a warm "name tag" distinct from the publish
+   (green) and save (accent) badges. May hold arbitrary user text, so let
+   it wrap-truncate rather than blow out the row. */
+.history-badge.label {
+  display: inline-flex;
+  align-items: center;
+  max-width: 16ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--warning, #d99e2b);
+  background: color-mix(in srgb, var(--warning, #d99e2b) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warning, #d99e2b) 32%, transparent);
 }
 .google-signin-btn {
   display: flex;

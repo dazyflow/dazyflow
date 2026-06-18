@@ -485,6 +485,10 @@ export type Revision = {
   message: string;
   when: string;
   autosave: boolean;
+  // Optional human name attached to this revision (e.g. "Black Friday
+  // config"). Keyed to the commit, so it survives publishes and rollbacks.
+  // Empty/absent when the revision is unlabeled.
+  label?: string;
 };
 
 export type JobError = {

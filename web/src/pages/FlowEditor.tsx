@@ -57,6 +57,7 @@ import {
   StepForward,
   CircleOff,
   PanelRight,
+  Tag,
 } from "lucide-react";
 import { useAuth } from "../auth";
 import { useThemeMode } from "../theme";
@@ -107,6 +108,8 @@ import { ConfirmModal } from "../components/ConfirmModal";
 import { PublishCelebration } from "../components/PublishCelebration";
 import { browserTimeZone } from "../components/TriggersModal";
 import { QuickDropPalette } from "../components/QuickDropPalette";
+import { PromptModal } from "../components/PromptModal";
+import { PublishLabelModal } from "../components/PublishLabelModal";
 import { useResourceResolver } from "./useResourceResolver";
 
 // Custom node-types registry. React Flow caches by reference, so this
@@ -332,6 +335,13 @@ function EditorInner() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [previewRef, setPreviewRef] = useState<string | null>(null);
   const [restoring, setRestoring] = useState(false);
+  // labelEditing holds the revision whose label is being edited in the
+  // prompt modal (null = closed). Set/clear a human name for a commit.
+  const [labelEditing, setLabelEditing] = useState<Revision | null>(null);
+  // makeLivePrompt holds the unlabeled revision a "Make live" (rollback)
+  // is about to publish — it opens the publish modal that nudges for a
+  // release name. Already-labeled revisions publish without the prompt.
+  const [makeLivePrompt, setMakeLivePrompt] = useState<Revision | null>(null);
   // Publish state. publishInfo is the draft-vs-live status; null until
   // loaded. publishedCommit (mirrored from the history fetch) marks which
   // revision is currently live in the history panel. diffOpen toggles the
@@ -2341,12 +2351,12 @@ function EditorInner() {
   // endpoint, different ref. Both go live for automatic triggers; the
   // editor keeps showing the draft.
   const publishRef = useCallback(
-    async (ref?: string) => {
+    async (ref?: string, label?: string) => {
       if (!token || !id) return;
       setPublishing(true);
       setError(null);
       try {
-        await api.publishFlow(token, activeTenant, activeWorkspace, id, ref);
+        await api.publishFlow(token, activeTenant, activeWorkspace, id, ref, label);
         await loadPublishInfo();
         if (showHistory) {
           const res = await api.flowHistory(token, activeTenant, activeWorkspace, id);
@@ -2374,7 +2384,7 @@ function EditorInner() {
   // safety). Going off disables — the universal kill switch that stops cron,
   // poll, webhook, and form triggers alike. Animates on going live.
   const setLive = useCallback(
-    async (on: boolean) => {
+    async (on: boolean, label?: string) => {
       if (!token || !id) return;
       setPublishing(true);
       setError(null);
@@ -2385,7 +2395,7 @@ function EditorInner() {
           // flow resumes its existing live version untouched. Publishing needs
           // graph:admin; a graph:edit-only user can still resume (re-enable).
           if (!publishInfo?.published && hasPerm("graph:admin")) {
-            await api.publishFlow(token, activeTenant, activeWorkspace, id);
+            await api.publishFlow(token, activeTenant, activeWorkspace, id, undefined, label);
           }
           if (disabled) {
             await api.setFlowEnabled(token, activeTenant, activeWorkspace, id, true);
@@ -2500,6 +2510,27 @@ function EditorInner() {
       }
     },
     [token, id, activeTenant, activeWorkspace, hydrateGraph],
+  );
+
+  // saveLabel names a revision (or clears its name when label is empty)
+  // without publishing it, then refreshes the history list so the new name
+  // shows immediately. The label is keyed to the commit server-side, so it
+  // survives later publishes and rollbacks. Admin-gated by the daemon.
+  const saveLabel = useCallback(
+    async (commit: string, label: string) => {
+      if (!token || !id) return;
+      setLabelEditing(null);
+      setError(null);
+      try {
+        await api.labelRevision(token, activeTenant, activeWorkspace, id, commit, label);
+        const res = await api.flowHistory(token, activeTenant, activeWorkspace, id);
+        setRevisions(res.revisions ?? []);
+        setPublishedCommit(res.published_commit ?? null);
+      } catch (e) {
+        setError((e as Error).message);
+      }
+    },
+    [token, id, activeTenant, activeWorkspace],
   );
 
   // refreshLock asks the daemon whether any run of this flow is still
@@ -3460,10 +3491,16 @@ function EditorInner() {
                       </span>
                       <span className="history-row-meta">
                         <span className="history-row-author">{rev.author}</span>
+                        {rev.label && (
+                          <span className="history-badge label" title={t("editor.labelBadgeTitle")}>
+                            <Tag size={11} style={{ verticalAlign: -1, marginRight: 3 }} />
+                            {rev.label}
+                          </span>
+                        )}
                         {publishedCommit === rev.commit && (
                           <span className="history-badge live" title={t("editor.publishedTitle")}>
                             <Rocket size={11} style={{ verticalAlign: -1, marginRight: 3 }} />
-                            {t("editor.live")}
+                            {t("editor.currentRelease")}
                           </span>
                         )}
                         <span className={`history-badge ${rev.autosave ? "autosave" : "checkpoint"}`}>
@@ -3474,11 +3511,26 @@ function EditorInner() {
                     {/* "Make live" rolls the published tag to this revision
                         (a rollback). Hidden on the already-live one and for
                         non-admins. Distinct from "Restore", which makes it
-                        the new editable HEAD. */}
+                        the new editable HEAD. "Label" names the revision
+                        (admin-gated) — set or change the human name. */}
+                    {hasPerm("graph:admin") && (
+                      <button
+                        className="history-label-btn"
+                        onClick={() => setLabelEditing(rev)}
+                        title={t("editor.labelTitle")}
+                      >
+                        <Tag size={12} style={{ verticalAlign: -1, marginRight: 4 }} />
+                        {rev.label ? t("editor.relabel") : t("editor.label")}
+                      </button>
+                    )}
                     {hasPerm("graph:admin") && publishedCommit !== rev.commit && (
                       <button
                         className="history-makelive"
-                        onClick={() => void publishRef(rev.commit)}
+                        onClick={() =>
+                          rev.label
+                            ? void publishRef(rev.commit)
+                            : setMakeLivePrompt(rev)
+                        }
                         disabled={publishing}
                         title={t("editor.makeLiveTitle")}
                       >
@@ -3491,6 +3543,19 @@ function EditorInner() {
               </ul>
             )}
           </div>
+        )}
+        {/* Label prompt: name (or rename/clear) the selected revision. An
+            empty submit clears any existing label. */}
+        {labelEditing && (
+          <PromptModal
+            title={t("editor.labelTitle")}
+            label={t("editor.labelFieldLabel")}
+            hint={t("editor.labelHint")}
+            initialValue={labelEditing.label ?? ""}
+            confirmLabel={t("editor.labelConfirm")}
+            onSubmit={(value) => void saveLabel(labelEditing.commit, value)}
+            onCancel={() => setLabelEditing(null)}
+          />
         )}
         {/* Test-run sample editor: edit the JSON payload before firing a
             webhook flow, so edge cases can be exercised (not just the one
@@ -4088,40 +4153,61 @@ function EditorInner() {
           onSave={persistSettings}
         />
       )}
-      {/* Live-switch confirm — going live is "a thing" (automatic triggers
-          run it); pausing stops them all; "update" pushes the draft live. */}
-      {publishConfirm && (
+      {/* Pause confirm — stops every automatic trigger. A plain yes/no; no
+          release name involved. */}
+      {publishConfirm === "pause" && (
         <ConfirmModal
+          title={t("editor.confirmPauseTitle")}
+          message={t("editor.confirmPauseBody")}
+          confirmLabel={t("editor.pause")}
+          danger
+          onConfirm={() => {
+            setPublishConfirm(null);
+            void setLive(false);
+          }}
+          onCancel={() => setPublishConfirm(null)}
+        />
+      )}
+      {/* Go-live / publish-changes confirm — going live is "a thing"
+          (automatic triggers run it), so it also nudges for a release name
+          (optional). The skip button publishes unnamed. */}
+      {(publishConfirm === "live" || publishConfirm === "update") && (
+        <PublishLabelModal
           title={
-            publishConfirm === "pause"
-              ? t("editor.confirmPauseTitle")
-              : publishConfirm === "update"
+            publishConfirm === "update"
               ? t("editor.confirmUpdateTitle")
               : t("editor.confirmPublishTitle")
           }
           message={
-            publishConfirm === "pause"
-              ? t("editor.confirmPauseBody")
-              : publishConfirm === "update"
+            publishConfirm === "update"
               ? t("editor.confirmUpdateBody")
               : t("editor.confirmPublishBody")
           }
           confirmLabel={
-            publishConfirm === "pause"
-              ? t("editor.pause")
-              : publishConfirm === "update"
-              ? t("editor.publishChanges")
-              : t("editor.goLive")
+            publishConfirm === "update" ? t("editor.publishChanges") : t("editor.goLive")
           }
-          danger={publishConfirm === "pause"}
-          onConfirm={() => {
+          onPublish={(label) => {
             const action = publishConfirm;
             setPublishConfirm(null);
-            if (action === "pause") void setLive(false);
-            else if (action === "update") void publishRef();
-            else void setLive(true);
+            if (action === "update") void publishRef(undefined, label);
+            else void setLive(true, label);
           }}
           onCancel={() => setPublishConfirm(null)}
+        />
+      )}
+      {/* Make-live (rollback) on an unlabeled revision — same release-name
+          nudge before publishing that older commit. */}
+      {makeLivePrompt && (
+        <PublishLabelModal
+          title={t("editor.confirmMakeLiveTitle")}
+          message={t("editor.confirmMakeLiveBody")}
+          confirmLabel={t("editor.makeLive")}
+          onPublish={(label) => {
+            const rev = makeLivePrompt;
+            setMakeLivePrompt(null);
+            void publishRef(rev.commit, label);
+          }}
+          onCancel={() => setMakeLivePrompt(null)}
         />
       )}
       {justPublished && <PublishCelebration />}

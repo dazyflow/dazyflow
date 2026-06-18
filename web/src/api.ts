@@ -645,13 +645,25 @@ export const api = {
     ),
   // publishFlow promotes a revision to "live" — automatic triggers run it
   // while manual/test runs keep using the draft. Omit ref to publish the
-  // current draft (HEAD); pass an older commit to roll back to it.
-  publishFlow: (token: string, tenant: string, workspace: string, id: string, ref?: string) =>
+  // current draft (HEAD); pass an older commit to roll back to it. An
+  // optional label names the published revision (empty leaves any existing
+  // name untouched); the name is keyed to the commit, so it persists.
+  publishFlow: (
+    token: string,
+    tenant: string,
+    workspace: string,
+    id: string,
+    ref?: string,
+    label?: string,
+  ) =>
     request<{ flow_id: string; published_commit: string }>(
       token,
       "POST",
       `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/publish`,
-      ref ? { ref } : {},
+      {
+        ...(ref ? { ref } : {}),
+        ...(label ? { label } : {}),
+      },
     ),
   // unpublishFlow clears the published pointer (the inverse of publishFlow).
   // Scheduler-triggered flows stop firing; webhook flows fall back to HEAD —
@@ -669,6 +681,23 @@ export const api = {
       "POST",
       `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/restore`,
       { ref },
+    ),
+  // labelRevision names a revision (ref) without publishing it. An empty
+  // label clears the existing one. The label is keyed to the commit, so it
+  // survives publishes and rollbacks. Gated on graph:admin by the daemon.
+  labelRevision: (
+    token: string,
+    tenant: string,
+    workspace: string,
+    id: string,
+    ref: string,
+    label: string,
+  ) =>
+    request<{ flow_id: string; commit: string; label: string }>(
+      token,
+      "POST",
+      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/label`,
+      { ref, label },
     ),
   // autosave=true marks an editor autosave: the daemon coalesces
   // consecutive autosaves of the same flow into one commit so the
