@@ -78,11 +78,16 @@ func init() {
 				},
 				"required":["service"]
 			}`),
-			// Calling a service is not idempotent in general (toggle flips each
-			// time), but Home Assistant absorbs duplicate turn_on/turn_off, so a
-			// retry on a transport blip is usually safe — leave retries on.
+			// Calling a service is not idempotent in general. turn_on/turn_off
+			// happen to absorb duplicates, but this drop is generic over every
+			// service — lock.unlock, cover.open_cover, button.press, script.*,
+			// *.toggle, media volume steps are NOT safe to replay, and Home
+			// Assistant's REST API has no idempotency key to dedupe a retry.
+			// So a transport blip after HA already executed would fire the
+			// physical action twice. Don't auto-retry; the author can wire an
+			// explicit on_error edge for the services they know are safe.
 			Idempotent:  false,
-			RetryPolicy: core.RetryExponentialBackoff,
+			RetryPolicy: core.RetryNever,
 		},
 		Execute: executeCallService,
 	})

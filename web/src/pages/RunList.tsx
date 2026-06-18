@@ -11,6 +11,27 @@ import type { RunSummary, JobStatus } from "../types";
 
 const PAGE_SIZE = 50;
 
+// runStatusLabel maps a run's machine status to a human label so the status
+// column carries meaning beyond the color dot (accessibility + clarity).
+function runStatusLabel(status: JobStatus, t: (key: string) => string): string {
+  switch (status) {
+    case "queued":
+      return t("runList.statusQueued");
+    case "running":
+      return t("runList.statusRunning");
+    case "awaiting":
+      return t("runList.statusAwaiting");
+    case "succeeded":
+      return t("runList.statusSucceeded");
+    case "failed":
+      return t("runList.statusFailed");
+    case "cancelled":
+      return t("runList.statusCancelled");
+    default:
+      return status;
+  }
+}
+
 export function RunList() {
   const { t } = useTranslation();
   // Status filter chips. Label keys (not literals) are resolved against
@@ -331,7 +352,22 @@ export function RunList() {
                     </td>
                   )}
                   <td>
-                    <span className={"status-dot " + r.status} />
+                    {/* Status is not color-only: a text label rides next to
+                        the dot so a color-blind user (or anyone) can tell a
+                        run apart — especially "Waiting for approval", which
+                        means the run is parked on the viewer. */}
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <span className={"status-dot " + r.status} />
+                      <span style={{ fontSize: "var(--text-sm)" }}>
+                        {runStatusLabel(r.status, t)}
+                      </span>
+                    </span>
                   </td>
                   <td style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-sm)" }}>
                     {/* Primary action: open the run-detail page, the
@@ -369,6 +405,9 @@ export function RunList() {
                       ? formatDuration(r.started_at ?? r.enqueued_at, r.finished_at)
                       : r.status === "running"
                       ? t("runList.inProgress")
+                      : r.status === "awaiting"
+                      ? /* not finished — parked on the viewer; "—" would read
+                           as "done with no duration" */ t("runList.statusAwaiting")
                       : "—"}
                     {r.error_code && (
                       <span style={{ color: "var(--danger)", marginLeft: 6 }}>

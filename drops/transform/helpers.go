@@ -50,6 +50,21 @@ func celVars(row map[string]any) map[string]any {
 	return map[string]any{"row": row, "now": time.Now().UTC()}
 }
 
+// celCostLimit caps the abstract evaluation cost of a single expression.
+// CEL has no wall-clock budget, so without this a pathological expression
+// (deep nesting, large string/list ops) over the row ceiling could burn
+// CPU unbounded and ignore job cancellation. The ceiling is far above any
+// ordinary field/date expression but stops runaway inputs; an over-budget
+// eval fails the row with a cost error rather than hanging the worker.
+const celCostLimit uint64 = 1_000_000
+
+// celProgram compiles ast into a program with the shared cost ceiling.
+// All transform drops go through it so the bound can't be forgotten at a
+// single call site.
+func celProgram(env *cel.Env, ast *cel.Ast) (cel.Program, error) {
+	return env.Program(ast, cel.CostLimit(celCostLimit))
+}
+
 func errResult(job core.Job, code, msg string) core.Result {
 	return core.Result{
 		JobID:  job.ID,

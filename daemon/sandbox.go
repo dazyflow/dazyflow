@@ -95,7 +95,7 @@ func (s *FSSandbox) ScratchRoot(tenant, workspace, runID string) (string, error)
 	if !isSafeIdent(workspace) {
 		return "", fmt.Errorf("unsafe workspace identifier %q", workspace)
 	}
-	if !isSafeIdent(runID) {
+	if !isSafeScratchID(runID) {
 		return "", fmt.Errorf("unsafe run identifier %q", runID)
 	}
 	path := filepath.Join(s.base, tenant, workspace, scratchDirName, runID)
@@ -116,10 +116,29 @@ func (s *FSSandbox) ScratchRoot(tenant, workspace, runID string) (string, error)
 // RemoveAll treats a missing path as success, so reclaiming a run that
 // never wrote scratch is a no-op.
 func (s *FSSandbox) RemoveScratch(tenant, workspace, runID string) error {
-	if !isSafeIdent(tenant) || !isSafeIdent(workspace) || !isSafeIdent(runID) {
+	if !isSafeIdent(tenant) || !isSafeIdent(workspace) || !isSafeScratchID(runID) {
 		return fmt.Errorf("unsafe identifier in scratch reclaim (%q/%q/%q)", tenant, workspace, runID)
 	}
 	return os.RemoveAll(filepath.Join(s.base, tenant, workspace, scratchDirName, runID))
+}
+
+// isSafeScratchID validates a run scratch identifier. A loop body run
+// namespaces its scratch per item with a "<parentRunID>/iN" sub-path so
+// concurrent iterations don't collide on a shared scratch directory; accept
+// "/"-separated segments as long as each segment is itself a safe identifier
+// (which rejects "", ".", ".." and traversal). Reclaiming the parent run's
+// scratch (RemoveScratch with the bare parent ID) still removes every nested
+// item directory with it.
+func isSafeScratchID(runID string) bool {
+	if runID == "" {
+		return false
+	}
+	for _, seg := range strings.Split(runID, "/") {
+		if !isSafeIdent(seg) {
+			return false
+		}
+	}
+	return true
 }
 
 // RemoveTenant deletes a tenant's entire subtree (every workspace and all

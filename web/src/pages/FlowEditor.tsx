@@ -4171,6 +4171,41 @@ function EditorInner() {
             </span>
           </div>
         )}
+        {/* Publish discoverability: the #1 "why didn't my flow run?" trap is a
+            triggered flow left unpublished. A draft with a trigger never fires
+            until it's live, and the only other hint is a hover tooltip. Surface
+            it proactively (not dismissible — it self-clears the moment the flow
+            goes live). Only shown to those who can actually publish. */}
+        {publishInfo &&
+          !publishInfo.published &&
+          triggers.length > 0 &&
+          hasPerm("graph:admin") && (
+            <div
+              className="editor-conn-banner"
+              style={{
+                top:
+                  60 +
+                  (error ? 68 : 0) +
+                  (lintIssues.length > 0 ? 68 : 0) +
+                  (!connBannerDismissed && needsSetup ? 68 : 0),
+              }}
+              role="status"
+            >
+              <span className="editor-conn-banner-text">
+                {t("editor.publishNudge")}
+              </span>
+              <span className="editor-conn-banner-actions">
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => setPublishConfirm("live")}
+                  disabled={publishing || !!previewRef}
+                >
+                  {t("editor.publishNudgeCta")}
+                </button>
+              </span>
+            </div>
+          )}
       </div>
       <div className="inspector">
         <Inspector

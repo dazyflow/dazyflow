@@ -216,7 +216,7 @@ func compileComputeSteps(env *cel.Env, params map[string]any) ([]computeStep, er
 		if issues != nil && issues.Err() != nil {
 			return nil, fmt.Errorf("compute[%q]: %v", k, issues.Err())
 		}
-		prog, err := env.Program(ast)
+		prog, err := celProgram(env, ast)
 		if err != nil {
 			return nil, fmt.Errorf("compute[%q]: program: %w", k, err)
 		}
@@ -241,7 +241,7 @@ func compileOptionalFilter(env *cel.Env, params map[string]any) (cel.Program, er
 	if issues != nil && issues.Err() != nil {
 		return nil, fmt.Errorf("filter: %v", issues.Err())
 	}
-	return env.Program(ast)
+	return celProgram(env, ast)
 }
 
 func evalFilter(_ context.Context, prog cel.Program, row map[string]any) (bool, error) {

@@ -151,7 +151,7 @@ func executeRouteRows(ctx context.Context, job core.Job, _ chan<- core.Progress)
 			return errResult(job, "bad_param",
 				fmt.Sprintf("routes[%d] (slot %q): compile filter: %v", i, s.slot, issues.Err())), nil
 		}
-		prog, err := env.Program(ast)
+		prog, err := celProgram(env, ast)
 		if err != nil {
 			return errResult(job, "internal",
 				fmt.Sprintf("routes[%d] (slot %q): build program: %v", i, s.slot, err)), nil

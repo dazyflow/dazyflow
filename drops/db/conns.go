@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	stdnet "net"
 	"sync"
 	"time"
@@ -12,6 +13,11 @@ import (
 
 	hfnet "git.sr.ht/~klahr/hazyflow/drops/net"
 )
+
+// errInvalidDSN is returned in place of a driver parse error so a
+// credential-bearing connection string never surfaces in a user-visible
+// run record.
+var errInvalidDSN = errors.New("invalid connection string")
 
 // Pool reuse for the Postgres drops. Connection setup (TCP + TLS + auth)
 // dominates the wall time of a small per-job INSERT/QUERY, so caching
@@ -97,7 +103,11 @@ func (r *pgPoolRegistry) pgPool(ctx context.Context, tenant, dsn string) (*pgxpo
 
 	cfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
-		return nil, err
+		// pgx's parse error can echo the DSN — which carries the password —
+		// and this error surfaces verbatim in a user-visible run record. Return
+		// a generic message; the host/db naming in genuine connect errors below
+		// is safe, the credential-bearing DSN is not.
+		return nil, errInvalidDSN
 	}
 	// SSRF guard: a tenant supplies the DSN, so without this they could point
 	// a Postgres drop at an internal host — including hzd's own control-plane
@@ -216,7 +226,13 @@ func (r *sqlDBRegistry) sqlDB(ctx context.Context, tenant, dsn string) (*sql.DB,
 	// targets before connecting (no-op when the operator opted into private
 	// egress). Only TCP MySQL DSNs are checked; unix sockets aren't network.
 	if r.driverName == "mysql" {
-		if cfg, perr := mysql.ParseDSN(dsn); perr == nil && cfg.Net == "tcp" {
+		cfg, perr := mysql.ParseDSN(dsn)
+		if perr != nil {
+			// As with pgx above: the parse error can echo the DSN/password.
+			// sql.Open would re-parse and leak it too, so reject here generically.
+			return nil, errInvalidDSN
+		}
+		if cfg.Net == "tcp" {
 			if err := hfnet.CheckDialHost(cfg.Addr); err != nil {
 				return nil, err
 			}
@@ -225,7 +241,7 @@ func (r *sqlDBRegistry) sqlDB(ctx context.Context, tenant, dsn string) (*sql.DB,
 
 	db, err := sql.Open(r.driverName, dsn)
 	if err != nil {
-		return nil, err
+		return nil, errInvalidDSN
 	}
 	if err := db.PingContext(ctx); err != nil {
 		_ = db.Close()

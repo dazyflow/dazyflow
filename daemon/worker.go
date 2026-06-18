@@ -514,6 +514,7 @@ func (w *Worker) runNode(ctx context.Context, graph core.Graph, rec core.JobReco
 // because the graph already round-trips through JSON as its stored payload.
 func (w *Worker) bodyRunner(body core.Graph, graphRunID string) engine.BodyRunner {
 	bodyJSON, marshalErr := json.Marshal(body)
+	var seq atomic.Int64
 	return func(ctx context.Context, item core.Ref) (engine.GraphResult, error) {
 		if marshalErr != nil {
 			return engine.GraphResult{}, fmt.Errorf("clone loop body: %w", marshalErr)
@@ -522,11 +523,14 @@ func (w *Worker) bodyRunner(body core.Graph, graphRunID string) engine.BodyRunne
 		if err := json.Unmarshal(bodyJSON, &g); err != nil {
 			return engine.GraphResult{}, fmt.Errorf("clone loop body: %w", err)
 		}
-		// The parent run's ID rides along so body nodes get the parent's
-		// per-run scratch space (file-writing drops like sheets_export_pdf
-		// work inside a loop; the dispatcher reclaims the scratch when the
-		// parent run finishes).
-		ctx = engine.WithLoopRunID(ctx, graphRunID)
+		// Each iteration gets its OWN scratch namespace, nested under the
+		// parent run's scratch as "<parentRunID>/iN". The for_each drop runs
+		// iterations concurrently, so a single shared scratch dir would let two
+		// body drops that write a fixed-named file (e.g. sheets_export_pdf)
+		// clobber each other. Nesting under the parent keeps cleanup correct:
+		// reclaiming the parent run's scratch removes every item subdir with it.
+		itemRunID := fmt.Sprintf("%s/i%d", graphRunID, seq.Add(1)-1)
+		ctx = engine.WithLoopRunID(ctx, itemRunID)
 		return w.engine.Run(engine.WithLoopItem(ctx, item.Inline), g, nil)
 	}
 }

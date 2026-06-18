@@ -69,7 +69,10 @@ export function FlowList() {
     return () => {
       cancelled = true;
     };
-  }, [token, me, activeWorkspace]);
+    // activeTenant is read above (listGraphs) so it MUST be a dependency —
+    // without it, switching to an org whose workspace has the same name never
+    // re-runs this effect and the previous org's flows persist.
+  }, [token, me, activeTenant, activeWorkspace]);
 
   // createNew is called by the modal with a human name (+ optional
   // description). The machine ID is derived from the name so the user

@@ -12,6 +12,7 @@ import {
   type AccountPicker,
 } from "./SchemaForm";
 import { LiveConsole } from "./LiveConsole";
+import { ConfirmModal } from "./ConfirmModal";
 import { ApprovalPanel } from "./ApprovalPanel";
 import { ForEachEditor } from "./ForEachEditor";
 import {
@@ -157,6 +158,10 @@ export function Inspector({
   const navigate = useNavigate();
   const [sampling, setSampling] = useState(false);
   const [sampleError, setSampleError] = useState<string | null>(null);
+  // Node deletion goes through the themed ConfirmModal (Escape/backdrop
+  // cancel, safe default) rather than a raw window.confirm — consistent with
+  // every other destructive action and translatable.
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [mode, setMode] = useState<Mode>("form");
   const [jsonText, setJsonText] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
@@ -652,15 +657,7 @@ export function Inspector({
             <button
               type="button"
               className="inspector-delete"
-              onClick={() => {
-                if (
-                  window.confirm(
-                    t("inspector.deleteConfirm", { id: selected.id }),
-                  )
-                ) {
-                  onDelete(selected.id);
-                }
-              }}
+              onClick={() => setConfirmDelete(true)}
             >
               <Trash2 size={14} />
               {t("inspector.deleteNode")}
@@ -668,6 +665,19 @@ export function Inspector({
           </div>
         )}
       </div>
+      {confirmDelete && onDelete && (
+        <ConfirmModal
+          title={t("inspector.deleteNode")}
+          message={t("inspector.deleteConfirm", { id: selected.id })}
+          confirmLabel={t("inspector.deleteNode")}
+          danger
+          onConfirm={() => {
+            setConfirmDelete(false);
+            onDelete(selected.id);
+          }}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      )}
     </>
   );
 }

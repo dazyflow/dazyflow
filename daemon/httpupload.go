@@ -88,12 +88,37 @@ func (h *HTTPGateway) uploadWorkspaceFile(rw http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Quota check before any disk mutation. header.Size is the
-	// client-claimed size — accurate enough for the budget check
-	// (the actual write is bounded by maxUploadBytes anyway).
+	// Quota check before any disk mutation. ParseMultipartForm has already
+	// buffered the part (to memory/temp, bounded by maxUploadBytes), so
+	// header.Size is the actual byte count, not a client-declared length.
+	//
+	// Prefer the atomic Reserve path: a bare Used()+size check is a TOCTOU
+	// race (two concurrent uploads both read the same stale Used() and both
+	// pass, together busting the limit). Reserve counts the bytes as in-flight
+	// under a lock; release() frees the reservation once the file has landed
+	// (where it then counts toward Used()).
 	if h.svc.Engine.Quota != nil {
-		if limit := h.svc.Engine.Quota.Limit(tenant); limit > 0 {
-			used, _ := h.svc.Engine.Quota.Used(tenant)
+		if reserver, ok := h.svc.Engine.Quota.(core.QuotaReserver); ok {
+			release, err := reserver.Reserve(tenant, header.Size)
+			if err != nil {
+				if errors.Is(err, core.ErrQuotaExceeded) {
+					writeJSONError(rw, http.StatusInsufficientStorage,
+						fmt.Sprintf("upload of %d bytes would exceed the tenant storage limit", header.Size))
+					return
+				}
+				writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("quota: %v", err))
+				return
+			}
+			defer release()
+		} else if limit := h.svc.Engine.Quota.Limit(tenant); limit > 0 {
+			// Provider without atomic reservation: fall back to the snapshot
+			// check, but fail CLOSED on a usage-read error — discarding it
+			// (used=0) would silently disable the quota.
+			used, err := h.svc.Engine.Quota.Used(tenant)
+			if err != nil {
+				writeJSONError(rw, http.StatusInternalServerError, "could not read storage usage")
+				return
+			}
 			if used+header.Size > limit {
 				writeJSONError(rw, http.StatusInsufficientStorage,
 					fmt.Sprintf("upload of %d bytes would push tenant past %d (currently %d)",

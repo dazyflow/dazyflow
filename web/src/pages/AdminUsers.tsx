@@ -381,6 +381,7 @@ function InvitationCard({
   const { token } = useAuth();
   const [copied, setCopied] = useState(false);
   const [revoking, setRevoking] = useState(false);
+  const [confirmRevoke, setConfirmRevoke] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   const copy = async () => {
@@ -452,12 +453,25 @@ function InvitationCard({
       </div>
       <div className="user-card-actions">
         {inv.pending && (
-          <button onClick={revoke} disabled={revoking}>
+          <button onClick={() => setConfirmRevoke(true)} disabled={revoking}>
             <X size={12} style={{ marginRight: 4, verticalAlign: -1 }} />
             {revoking ? t("admin.users.revoking") : t("admin.users.revoke")}
           </button>
         )}
       </div>
+      {confirmRevoke && (
+        <ConfirmModal
+          title={t("admin.users.revoke")}
+          message={t("admin.users.revokeInviteConfirm", { email: inv.email })}
+          confirmLabel={t("admin.users.revoke")}
+          danger
+          onConfirm={() => {
+            setConfirmRevoke(false);
+            void revoke();
+          }}
+          onCancel={() => setConfirmRevoke(false)}
+        />
+      )}
       {err && (
         <div className="card error" style={{ width: "100%", marginTop: "var(--space-2)" }}>
           {err}

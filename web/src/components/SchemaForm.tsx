@@ -535,7 +535,15 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
               }
               let n =
                 schema.type === "integer" ? parseInt(raw, 10) : parseFloat(raw);
-              if (Number.isNaN(n)) return;
+              // Don't silently swallow unparseable input: clearing to
+              // undefined keeps the stored value in sync with what the field
+              // can actually represent (rather than leaving a stale committed
+              // number while the box shows garbage), so required-field
+              // validation flags it instead of the user thinking it saved.
+              if (Number.isNaN(n)) {
+                onChange(undefined);
+                return;
+              }
               // Clamp to the schema's bounds so an out-of-range value (e.g. a
               // negative quantity) can't be stored — the field never holds
               // what the backend would only reject at run time.

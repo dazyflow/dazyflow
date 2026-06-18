@@ -27,7 +27,7 @@ func TestWebhookSend_ObjectBodyJSONEncoded(t *testing.T) {
 	defer srv.Close()
 
 	res, err := executeWebhookSend(context.Background(), core.Job{
-		Params: map[string]any{"url": srv.URL},
+		Params: map[string]any{"url": srv.URL, "allow_private_networks": true}, // httptest binds 127.0.0.1
 		Input:  map[string]core.Ref{"body": {Inline: map[string]any{"event": "deploy", "ok": true}}},
 	}, nil)
 	if err != nil || res.Status != core.StatusOK {
@@ -53,7 +53,7 @@ func TestWebhookSend_StringBody(t *testing.T) {
 	}))
 	defer srv.Close()
 	res, _ := executeWebhookSend(context.Background(), core.Job{
-		Params: map[string]any{"url": srv.URL, "body": "raw text", "content_type": "text/plain"},
+		Params: map[string]any{"url": srv.URL, "body": "raw text", "content_type": "text/plain", "allow_private_networks": true},
 	}, nil)
 	if res.Status != core.StatusOK || gotBody != "raw text" {
 		t.Errorf("status=%q body=%q", res.Status, gotBody)
@@ -70,7 +70,7 @@ func TestWebhookSend_URLFromInput(t *testing.T) {
 	// Both set: the wired URL input must win over the param (the param URL
 	// points nowhere and would fail the send if used).
 	res, _ := executeWebhookSend(context.Background(), core.Job{
-		Params: map[string]any{"url": "https://param.example.invalid/should-not-be-called", "body": "x"},
+		Params: map[string]any{"url": "https://param.example.invalid/should-not-be-called", "body": "x", "allow_private_networks": true},
 		Input:  map[string]core.Ref{"url": {Inline: srv.URL}},
 	}, nil)
 	if res.Status != core.StatusOK {
@@ -103,7 +103,7 @@ func TestWebhookSend_4xxIsError(t *testing.T) {
 	}))
 	defer srv.Close()
 	res, _ := executeWebhookSend(context.Background(), core.Job{
-		Params: map[string]any{"url": srv.URL, "body": "x"},
+		Params: map[string]any{"url": srv.URL, "body": "x", "allow_private_networks": true},
 	}, nil)
 	if res.Status != core.StatusError || res.Error.Code != "webhook_error" {
 		t.Errorf("err = %+v", res.Error)

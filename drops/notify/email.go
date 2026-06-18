@@ -273,12 +273,15 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 	emitProgress(progress, job, 1.0, "delivered")
 
 	meta := map[string]any{
-		"host":       host,
-		"port":       port,
-		"from":       from,
-		"to":         to,
-		"cc":         cc,
-		"bcc":        bcc,
+		"host":    host,
+		"port":    port,
+		"from":    from,
+		"to":      to,
+		"cc":      cc,
+		// BCC is blind by design: it rides the SMTP envelope only and is
+		// stripped from the headers. Surfacing the addresses in the persisted,
+		// downstream-wireable meta would defeat that — expose only the count.
+		"bcc_count":  len(bcc),
 		"subject":    subject,
 		"bytes_sent": len(msg),
 	}

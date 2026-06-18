@@ -1224,13 +1224,19 @@ func graphResultFromRecord(rec core.JobRecord) engine.GraphResult {
 	return out
 }
 
-// GetJob fetches a job record, enforcing tenant isolation.
+// GetJob fetches a job record, enforcing tenant AND workspace isolation.
+// Using RequireWorkspace (not just RequireTenant) stops a workspace-scoped
+// principal — e.g. an API key issued for workspace A — from reading or acting
+// on runs in workspace B of the same tenant by supplying their run ID. This
+// gates every /me/runs/* route (loadRunScoped) plus run-log read/delete.
+// Tenant-scoped principals (no workspace binding) and org admins are
+// unaffected, matching the platform's workspace model.
 func (s *Service) GetJob(ctx context.Context, p core.Principal, jobID string) (core.JobRecord, error) {
 	rec, err := s.Jobs.Get(ctx, jobID)
 	if err != nil {
 		return core.JobRecord{}, err
 	}
-	if err := core.RequireTenant(p, rec.Tenant); err != nil {
+	if err := core.RequireWorkspace(p, rec.Tenant, rec.Workspace); err != nil {
 		return core.JobRecord{}, err
 	}
 	return rec, nil

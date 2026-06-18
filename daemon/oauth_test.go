@@ -295,6 +295,20 @@ func TestHTTPOAuth_AuthorizeBadReturnTo(t *testing.T) {
 	}
 }
 
+// callbackWithBinding builds an OAuth callback request that carries the
+// hz_oauth_state cookie set by the authorize step, so the browser-binding
+// check (RFC 6749 §10.12) passes — mirroring a real browser that keeps the
+// cookie across the redirect.
+func callbackWithBinding(authResp *httptest.ResponseRecorder, target string) *http.Request {
+	req := httptest.NewRequest("GET", target, nil)
+	for _, c := range authResp.Result().Cookies() {
+		if c.Name == oauthStateCookie {
+			req.AddCookie(c)
+		}
+	}
+	return req
+}
+
 func TestHTTPOAuth_CallbackHappyPath(t *testing.T) {
 	// 1. Hit authorize, capture the state from the redirect.
 	// 2. POST that state + a fake code to /callback.
@@ -311,9 +325,8 @@ func TestHTTPOAuth_CallbackHappyPath(t *testing.T) {
 		t.Fatal("state missing")
 	}
 
-	// Callback is unauthenticated.
-	req := httptest.NewRequest("GET",
-		"/api/v1/oauth/test/callback?code=the-code&state="+state, nil)
+	// Callback is unauthenticated, but carries the browser-binding cookie.
+	req := callbackWithBinding(rw, "/api/v1/oauth/test/callback?code=the-code&state="+state)
 	cb := httptest.NewRecorder()
 	ServeForTest(h.gw, cb, req)
 	if cb.Code != http.StatusFound {
@@ -344,6 +357,28 @@ func TestHTTPOAuth_CallbackHappyPath(t *testing.T) {
 	}
 }
 
+func TestHTTPOAuth_CallbackRejectsWrongBrowser(t *testing.T) {
+	// A flow started via the browser-redirect path is bound to the browser
+	// that started it. A callback that arrives WITHOUT the matching
+	// hz_oauth_state cookie (e.g. an attacker who induced the victim to
+	// complete the attacker's flow) must be rejected and store no token.
+	h, _ := newOAuthHarness(t)
+	rw := h.do(t, "GET", "/api/v1/oauth/test/authorize?account=main&return_to=/apps", nil)
+	loc, _ := url.Parse(rw.Header().Get("Location"))
+	state := loc.Query().Get("state")
+
+	// No cookie attached → binding check fails.
+	req := httptest.NewRequest("GET", "/api/v1/oauth/test/callback?code=the-code&state="+state, nil)
+	cb := httptest.NewRecorder()
+	ServeForTest(h.gw, cb, req)
+	if cb.Code != http.StatusBadRequest {
+		t.Fatalf("callback without binding cookie: status=%d, want 400", cb.Code)
+	}
+	if _, err := h.gw.EncryptedSecrets.Get(core.WithTenant(t.Context(), "t"), "oauth.test.main"); err == nil {
+		t.Error("token was stored despite failed browser binding")
+	}
+}
+
 func TestHTTPOAuth_CallbackBadState(t *testing.T) {
 	// A callback with a state we never minted (or already consumed)
 	// must 400 rather than processing the code.
@@ -363,16 +398,14 @@ func TestHTTPOAuth_CallbackReplayRejected(t *testing.T) {
 	loc, _ := url.Parse(rw.Header().Get("Location"))
 	state := loc.Query().Get("state")
 
-	req := httptest.NewRequest("GET",
-		"/api/v1/oauth/test/callback?code=c&state="+state, nil)
+	req := callbackWithBinding(rw, "/api/v1/oauth/test/callback?code=c&state="+state)
 	first := httptest.NewRecorder()
 	ServeForTest(h.gw, first, req)
 	if first.Code != http.StatusFound {
 		t.Fatalf("first callback: %d", first.Code)
 	}
 	// Replay the same state.
-	req2 := httptest.NewRequest("GET",
-		"/api/v1/oauth/test/callback?code=c&state="+state, nil)
+	req2 := callbackWithBinding(rw, "/api/v1/oauth/test/callback?code=c&state="+state)
 	replay := httptest.NewRecorder()
 	ServeForTest(h.gw, replay, req2)
 	if replay.Code != http.StatusBadRequest {
@@ -388,8 +421,7 @@ func TestHTTPOAuth_CallbackProviderDeniedConsent(t *testing.T) {
 	loc, _ := url.Parse(rw.Header().Get("Location"))
 	state := loc.Query().Get("state")
 
-	req := httptest.NewRequest("GET",
-		"/api/v1/oauth/test/callback?error=access_denied&state="+state, nil)
+	req := callbackWithBinding(rw, "/api/v1/oauth/test/callback?error=access_denied&state="+state)
 	cb := httptest.NewRecorder()
 	ServeForTest(h.gw, cb, req)
 	if cb.Code != http.StatusFound {
@@ -417,7 +449,7 @@ func TestHTTPOAuth_ListProvidersShowsConnectedAccounts(t *testing.T) {
 	rw := h.do(t, "GET", "/api/v1/oauth/test/authorize?account=main&return_to=/x", nil)
 	loc, _ := url.Parse(rw.Header().Get("Location"))
 	state := loc.Query().Get("state")
-	req := httptest.NewRequest("GET", "/api/v1/oauth/test/callback?code=c&state="+state, nil)
+	req := callbackWithBinding(rw, "/api/v1/oauth/test/callback?code=c&state="+state)
 	cb := httptest.NewRecorder()
 	ServeForTest(h.gw, cb, req)
 

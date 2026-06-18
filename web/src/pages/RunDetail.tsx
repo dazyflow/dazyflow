@@ -69,6 +69,14 @@ export function RunDetail() {
   const [graph, setGraph] = useState<Graph | null>(null);
   const [manifests, setManifests] = useState<Map<string, Manifest>>(new Map());
 
+  // Reset the friendly-naming state whenever the run changes, so navigating
+  // run A → run B never renders A's flow name and node labels against B's
+  // run while B's graph is still loading (or fails to load).
+  useEffect(() => {
+    setGraph(null);
+    setManifests(new Map());
+  }, [runID]);
+
   useEffect(() => {
     const tenant = activeTenant || me?.tenant || "";
     const workspace = activeWorkspace || me?.workspace || "";
@@ -415,6 +423,10 @@ export function RunDetail() {
                 <div className="node-body">
                   {n.Result?.error && (
                     <div className="node-err-block">
+                      <NodeErrorExplanation
+                        code={n.Result.error.code}
+                        message={n.Result.error.message}
+                      />
                       <div className="node-err-code">{n.Result.error.code}</div>
                       <div>{n.Result.error.message}</div>
                       {n.Result.error.details && (
@@ -733,6 +745,47 @@ function RunFailureBanner({
           <div className="run-error-msg">{run.Result.error.message}</div>
         )}
       </div>
+    </div>
+  );
+}
+
+// NodeErrorExplanation renders the same plain-English headline + next-action
+// that RunFailureBanner shows, but for an INDIVIDUAL failed/awaiting node the
+// user expands in the timeline. Without it, expanding a failed node showed
+// only the raw daemon string (e.g. `secret "postgres_dsn" not found`) with no
+// guidance — exactly where a non-technical user looks for "what do I do?".
+// Renders nothing when explainRunError can't match (the raw code/message
+// below still shows).
+function NodeErrorExplanation({
+  code,
+  message,
+}: {
+  code?: string;
+  message?: string;
+}) {
+  const { t } = useTranslation();
+  const explanation = explainRunError(code, message);
+  if (!explanation) return null;
+  const action = explanation.action;
+  const isExternal = action?.href.startsWith("http") || false;
+  return (
+    <div className="run-error-headline">
+      <span>{t(explanation.headlineKey, explanation.headlineValues ?? {})}</span>
+      {action &&
+        (isExternal ? (
+          <a
+            className="primary run-error-action"
+            href={action.href}
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            {t(action.labelKey)}
+          </a>
+        ) : (
+          <Link className="primary run-error-action" to={action.href}>
+            {t(action.labelKey)}
+          </Link>
+        ))}
     </div>
   );
 }

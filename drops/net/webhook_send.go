@@ -54,6 +54,7 @@ func init() {
 					"body":{"type":"string","title":"Body","description":"Text to send. The Body input overrides this when connected."},
 					"content_type":{"type":"string","title":"Content type","default":"application/json","x_advanced":true,"description":"Content-Type sent with a text body."},
 					"headers":{"type":"object","title":"Headers","x_advanced":true,"description":"Extra request headers."},
+					"allow_private_networks":{"type":"boolean","title":"Allow private networks","default":false,"x_advanced":true,"description":"Permit sending to private/internal addresses. Only takes effect if the operator has enabled private egress."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
 				"required":["url"]
@@ -119,7 +120,12 @@ func executeWebhookSend(ctx context.Context, job core.Job, _ chan<- core.Progres
 		req.Header.Set("Idempotency-Key", job.IdempotencyKey())
 	}
 
-	resp, err := buildClient(timeout, PrivateEgressAllowed()).Do(req)
+	// allow_private_networks disables the SSRF guard, but only when the
+	// operator has opted in (HAZYFLOW_ALLOW_PRIVATE_EGRESS). Without the
+	// per-request flag this stays guarded even where the operator enabled
+	// private egress (e.g. for Home Assistant) — matching http_request.
+	reqAllowPrivate, _ := params.Bool(job.Params, "allow_private_networks")
+	resp, err := buildClient(timeout, reqAllowPrivate && PrivateEgressAllowed()).Do(req)
 	if err != nil {
 		return params.Err(job, "webhook_http_error", err.Error()), nil
 	}

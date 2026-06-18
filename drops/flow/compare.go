@@ -199,12 +199,16 @@ func evaluate(a, b any, op string, incMin, incMax bool) (bool, error) {
 	case "not_equals":
 		return !looseEqual(a, b), nil
 	case "contains":
-		sa, _ := a.(string)
-		sb, _ := b.(string)
+		sa, sb, err := stringPair(a, b, "contains")
+		if err != nil {
+			return false, err
+		}
 		return strings.Contains(sa, sb), nil
 	case "not_contains":
-		sa, _ := a.(string)
-		sb, _ := b.(string)
+		sa, sb, err := stringPair(a, b, "not_contains")
+		if err != nil {
+			return false, err
+		}
 		return !strings.Contains(sa, sb), nil
 	case "less_than":
 		return numericCompare(a, b, -1)
@@ -278,6 +282,34 @@ func inclusiveFlag(p map[string]any, key string) bool {
 		return b
 	}
 	return true
+}
+
+// stringPair coerces both operands to text for the contains operators.
+// Scalars (text, numbers, booleans) stringify; nil and containers (lists,
+// objects) are an explicit error rather than silently becoming "" — which
+// would make `contains` evaluate strings.Contains("", "") == true and
+// silently misroute a Branch wired to the Result.
+func stringPair(a, b any, op string) (string, string, error) {
+	sa, oka := toStr(a)
+	sb, okb := toStr(b)
+	if !oka || !okb {
+		return "", "", fmt.Errorf("%s needs text values, got %T and %T", op, a, b)
+	}
+	return sa, sb, nil
+}
+
+func toStr(v any) (string, bool) {
+	switch x := v.(type) {
+	case string:
+		return x, true
+	case bool:
+		return fmt.Sprintf("%t", x), true
+	case json.Number:
+		return x.String(), true
+	case int, int32, int64, float32, float64:
+		return fmt.Sprintf("%v", x), true
+	}
+	return "", false
 }
 
 func looseEqual(a, b any) bool {

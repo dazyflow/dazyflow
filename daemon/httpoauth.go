@@ -2,11 +2,15 @@ package daemon
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"net/url"
 	"sort"
 	"strings"
+	"time"
 
 	"git.sr.ht/~klahr/hazyflow/core"
 )
@@ -34,6 +38,14 @@ import (
 // which tenant the resulting token belongs to.
 func (h *HTTPGateway) oauthAuthorize(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	provider := r.PathValue("provider")
+	// Bind this browser-redirect flow to the caller's browser: mint a nonce,
+	// stash it on the pending state, and drop it as an httpOnly cookie the
+	// callback re-checks (RFC 6749 §10.12 anti-CSRF).
+	binding, err := newOAuthBinding()
+	if err != nil {
+		writeJSONError(rw, http.StatusInternalServerError, "mint state binding: "+err.Error())
+		return
+	}
 	target, status, msg := h.buildAuthorizeURL(p,
 		provider,
 		r.URL.Query().Get("account"),
@@ -42,12 +54,57 @@ func (h *HTTPGateway) oauthAuthorize(rw http.ResponseWriter, r *http.Request, p 
 		// (incremental authorization); empty/unknown → the provider's full
 		// scope set, unchanged.
 		scopeSubsetForIntegration(provider, r.URL.Query().Get("integration")),
+		binding,
 	)
 	if status != http.StatusOK {
 		writeJSONError(rw, status, msg)
 		return
 	}
+	h.setOAuthStateCookie(rw, binding)
 	http.Redirect(rw, r, target, http.StatusFound)
+}
+
+// oauthStateCookie is the name of the browser-binding cookie for the OAuth
+// redirect flow. Scoped to the OAuth path so it isn't sent on every request.
+const oauthStateCookie = "hz_oauth_state"
+
+// newOAuthBinding returns 32 bytes of entropy hex-encoded — the value shared
+// between the pending state and the browser cookie.
+func newOAuthBinding() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
+// setOAuthStateCookie writes the browser-binding cookie. SameSite=Lax so it
+// rides the top-level redirect back from the provider; httpOnly so script
+// can't read it; Secure when the public origin is https.
+func (h *HTTPGateway) setOAuthStateCookie(rw http.ResponseWriter, binding string) {
+	http.SetCookie(rw, &http.Cookie{
+		Name:     oauthStateCookie,
+		Value:    binding,
+		Path:     "/api/v1/oauth",
+		MaxAge:   int(h.OAuth.state.ttl / time.Second),
+		HttpOnly: true,
+		Secure:   strings.HasPrefix(h.svc.PublicBaseURL, "https"),
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+// clearOAuthStateCookie expires the binding cookie after the callback
+// consumes (or rejects) it, so a stale value can't linger.
+func (h *HTTPGateway) clearOAuthStateCookie(rw http.ResponseWriter) {
+	http.SetCookie(rw, &http.Cookie{
+		Name:     oauthStateCookie,
+		Value:    "",
+		Path:     "/api/v1/oauth",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   strings.HasPrefix(h.svc.PublicBaseURL, "https"),
+		SameSite: http.SameSiteLaxMode,
+	})
 }
 
 // buildAuthorizeURL is the shared path between the legacy redirect
@@ -62,7 +119,10 @@ func (h *HTTPGateway) oauthAuthorize(rw http.ResponseWriter, r *http.Request, p 
 // scopes, when non-empty, overrides the provider's full scope list — used
 // for incremental authorization (request only one integration's scopes).
 // nil/empty falls back to the provider's complete Scopes.
-func (h *HTTPGateway) buildAuthorizeURL(p core.Principal, providerName, account, returnTo string, scopes []string) (string, int, string) {
+// binding, when non-empty, ties the flow to the caller's browser via the
+// hz_oauth_state cookie (the browser-redirect path sets it). Pass "" for the
+// JSON/manual path, where the authorize link is opened by a different agent.
+func (h *HTTPGateway) buildAuthorizeURL(p core.Principal, providerName, account, returnTo string, scopes []string, binding string) (string, int, string) {
 	if h.OAuth == nil {
 		return "", http.StatusNotImplemented, "OAuth not configured"
 	}
@@ -110,6 +170,7 @@ func (h *HTTPGateway) buildAuthorizeURL(p core.Principal, providerName, account,
 		provider: providerName,
 		account:  account,
 		returnTo: returnTo,
+		binding:  binding,
 	})
 	if err != nil {
 		return "", http.StatusInternalServerError, fmt.Sprintf("mint state: %v", err)
@@ -172,6 +233,21 @@ func (h *HTTPGateway) oauthCallback(rw http.ResponseWriter, r *http.Request) {
 		// happens (proxy weirdness?) we'd rather fail loudly.
 		writeJSONError(rw, http.StatusBadRequest, "state/provider mismatch")
 		return
+	}
+	// Browser-binding check: a flow started via the redirect path carries a
+	// binding nonce that must match the hz_oauth_state cookie in THIS browser.
+	// This stops an attacker from completing a flow they started and injecting
+	// their provider account into the victim's org. Flows started via the
+	// JSON/manual path have no binding (the link is opened elsewhere) and skip
+	// the check, relying on the unguessable single-use state.
+	if pending.binding != "" {
+		c, cerr := r.Cookie(oauthStateCookie)
+		if cerr != nil || subtle.ConstantTimeCompare([]byte(c.Value), []byte(pending.binding)) != 1 {
+			h.clearOAuthStateCookie(rw)
+			writeJSONError(rw, http.StatusBadRequest, "OAuth state did not match this browser session")
+			return
+		}
+		h.clearOAuthStateCookie(rw)
 	}
 
 	if providerErr != "" {

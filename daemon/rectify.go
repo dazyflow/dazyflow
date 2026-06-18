@@ -120,14 +120,24 @@ func (h *HTTPGateway) changeEmailHandler(rw http.ResponseWriter, r *http.Request
 
 	var warnings []string
 	// 1) Create the row under the new identity (Subject mirrors Email for
-	//    human accounts, so it changes too).
+	//    human accounts, so it changes too). Crucially, DROP the old address's
+	//    verification state: a verified account must not carry "verified" onto
+	//    an unconfirmed new address, or email-verification gating could be
+	//    bypassed by re-keying. The new address re-earns verified by confirming
+	//    the link sent below.
 	newUser := u
 	newUser.Email = newEmail
 	newUser.Subject = newEmail
+	newUser.VerifiedAt = nil
+	newUser.VerifyTokenHash = nil
+	newUser.VerifyExpiresAt = nil
 	if err := h.Users.PutUser(r.Context(), newUser); err != nil {
 		writeAPIError(rw, http.StatusInternalServerError, "rekey_failed", "create new identity: "+err.Error())
 		return
 	}
+	// Send a confirmation to the new address (best-effort; mints its own
+	// token and persists it). No-op when verification isn't configured.
+	verificationSent := h.sendVerificationEmail(r, newUser)
 	// 2) Re-point memberships (keyed by email).
 	if h.Memberships != nil {
 		if ms, err := h.Memberships.ListByEmail(r.Context(), oldEmail); err == nil {
@@ -162,11 +172,16 @@ func (h *HTTPGateway) changeEmailHandler(rw http.ResponseWriter, r *http.Request
 		warnings = append(warnings, "delete old row: "+err.Error())
 	}
 	h.audit(r.Context(), p, "account.email_change", newEmail, "re-keyed from "+oldEmail)
+	note := "email changed; sign in again with the new address"
+	if verificationSent {
+		note += ". Check your inbox to confirm the new address."
+	}
 	writeJSON(rw, http.StatusOK, map[string]any{
-		"ok":        true,
-		"new_email": newEmail,
-		"note":      "email changed; sign in again with the new address",
-		"warnings":  warnings,
+		"ok":                true,
+		"new_email":         newEmail,
+		"note":              note,
+		"verification_sent": verificationSent,
+		"warnings":          warnings,
 	})
 }
 

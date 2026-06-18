@@ -74,6 +74,14 @@ type UserStore interface {
 
 var ErrUnknownUser = errors.New("unknown user")
 
+// timingDummyHash is a bcrypt hash of a throwaway password. The unknown-user
+// and no-password-set paths compare against it so they spend the same bcrypt
+// cost as a genuine wrong-password compare. Without this, a missing account
+// returns ~instantly while an existing one pays full bcrypt cost — a remotely
+// observable timing difference that reveals which emails have accounts, the
+// very enumeration this function's uniform error is meant to prevent.
+var timingDummyHash, _ = bcrypt.GenerateFromPassword([]byte("hazyflow-timing-equalizer"), bcrypt.DefaultCost)
+
 // VerifyPassword normalizes email and bcrypt-compares the password.
 // Returns the User on success; ErrInvalidCredential on any failure
 // (unknown user OR wrong password) so callers cannot enumerate
@@ -84,7 +92,11 @@ func VerifyPassword(ctx context.Context, store UserStore, email, password string
 		return User{}, ErrInvalidCredential
 	}
 	u, err := store.GetByEmail(ctx, email)
-	if err != nil {
+	if err != nil || len(u.PasswordHash) == 0 {
+		// Equalize timing: spend the bcrypt cost even when there's no account
+		// (or no password set, e.g. an SSO-only user) so the response time
+		// doesn't betray account existence.
+		_ = bcrypt.CompareHashAndPassword(timingDummyHash, []byte(password))
 		return User{}, ErrInvalidCredential
 	}
 	if bcrypt.CompareHashAndPassword(u.PasswordHash, []byte(password)) != nil {

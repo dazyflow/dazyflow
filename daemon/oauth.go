@@ -232,7 +232,14 @@ type pendingOAuth struct {
 	provider string
 	account  string
 	returnTo string
-	created  time.Time
+	// binding ties the flow to the browser that started it (RFC 6749
+	// §10.12). When non-empty, the callback requires a matching value in the
+	// hz_oauth_state cookie — without this, an attacker can complete a flow
+	// they started and inject their own provider account into a victim's org.
+	// Empty for the JSON/manual authorize path (the link is handed to a
+	// different agent), which relies on the unguessable single-use state.
+	binding string
+	created time.Time
 }
 
 // oauthStateStore is a TTL-bounded in-memory map keyed by state

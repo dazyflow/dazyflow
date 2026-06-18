@@ -819,11 +819,15 @@ func (h *HTTPGateway) listConnectionsMe(rw http.ResponseWriter, r *http.Request,
 // /integrations) — same semantics as the legacy redirect path.
 func (h *HTTPGateway) startConnectionMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	provider := r.PathValue("provider")
+	// No browser binding here: the JSON authorize URL is handed to another
+	// agent/browser to open, so a cookie set on this response wouldn't be
+	// present at the callback. The unguessable single-use state still applies.
 	target, status, msg := h.buildAuthorizeURL(p,
 		provider,
 		r.URL.Query().Get("account"),
 		r.URL.Query().Get("return_to"),
 		scopeSubsetForIntegration(provider, r.URL.Query().Get("integration")),
+		"",
 	)
 	if status != http.StatusOK {
 		// Code mapping: 501 = OAuth subsystem not configured;

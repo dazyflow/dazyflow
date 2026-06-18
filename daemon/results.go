@@ -348,6 +348,13 @@ func (h *HTTPGateway) listBoardsMe(rw http.ResponseWriter, r *http.Request, p co
 	if !ok {
 		return
 	}
+	// Boards hold run output (often user-collected data); reading them needs
+	// the same authority as viewing results. The board service does no authz
+	// of its own, so it must be gated here.
+	if err := core.Require(p, core.PermGraphRun); err != nil {
+		writeAPIError(rw, http.StatusForbidden, "forbidden", err.Error())
+		return
+	}
 	boards, err := h.svc.ListBoards(r.Context(), p, tenant, workspace)
 	if err != nil {
 		writeBoardError(rw, err)
@@ -364,6 +371,10 @@ func (h *HTTPGateway) getBoardMe(rw http.ResponseWriter, r *http.Request, p core
 	if !ok {
 		return
 	}
+	if err := core.Require(p, core.PermGraphRun); err != nil {
+		writeAPIError(rw, http.StatusForbidden, "forbidden", err.Error())
+		return
+	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 	page, err := h.svc.BoardRows(r.Context(), p, tenant, workspace, r.PathValue("name"), limit, offset)
@@ -377,6 +388,13 @@ func (h *HTTPGateway) getBoardMe(rw http.ResponseWriter, r *http.Request, p core
 func (h *HTTPGateway) clearBoardMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, workspace, ok := h.boardScope(rw, r, p)
 	if !ok {
+		return
+	}
+	// Clearing a board is destructive (drops the table). Require edit
+	// authority, not the read-level graph:run — a viewer must not be able to
+	// wipe collected data.
+	if err := core.Require(p, core.PermGraphEdit); err != nil {
+		writeAPIError(rw, http.StatusForbidden, "forbidden", err.Error())
 		return
 	}
 	name := r.PathValue("name")

@@ -423,17 +423,40 @@ func ssrfGuard(address string) error {
 	return nil
 }
 
+// extraUnsafeCIDRs are internal-routed ranges that Go's IP predicates don't
+// classify: RFC 6598 carrier-grade NAT (100.64.0.0/10, routed inside many
+// hosting providers) and RFC 6052 NAT64 (64:ff9b::/96, which can embed an
+// IPv4 metadata/private address inside an IPv6 literal).
+var extraUnsafeCIDRs = func() []*stdnet.IPNet {
+	var out []*stdnet.IPNet
+	for _, c := range []string{"100.64.0.0/10", "64:ff9b::/96"} {
+		if _, n, err := stdnet.ParseCIDR(c); err == nil {
+			out = append(out, n)
+		}
+	}
+	return out
+}()
+
 // isUnsafeIP enumerates the address ranges that should never be reachable
 // from a user-supplied URL. Loopback (127/8, ::1), link-local (169.254/16
 // — AWS metadata!), RFC 1918 (10/8, 172.16/12, 192.168/16), RFC 4193
-// (fc00::/7), multicast, and unspecified all get blocked.
+// (fc00::/7), CGNAT (100.64/10), NAT64 (64:ff9b::/96), multicast, and
+// unspecified all get blocked.
 func isUnsafeIP(ip stdnet.IP) bool {
-	return ip.IsLoopback() ||
+	if ip.IsLoopback() ||
 		ip.IsLinkLocalUnicast() ||
 		ip.IsLinkLocalMulticast() ||
 		ip.IsPrivate() ||
 		ip.IsMulticast() ||
-		ip.IsUnspecified()
+		ip.IsUnspecified() {
+		return true
+	}
+	for _, n := range extraUnsafeCIDRs {
+		if n.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 func isSSRFError(err error) bool {

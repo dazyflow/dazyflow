@@ -71,10 +71,42 @@ func TestFSSandbox_ScratchLifecycle(t *testing.T) {
 func TestFSSandbox_ScratchRejectsUnsafeRunID(t *testing.T) {
 	sb, _ := daemon.NewFSSandbox(t.TempDir())
 	sp := any(sb).(core.ScratchProvider)
-	for _, bad := range []string{"..", "../escape", "a/b", ""} {
+	// Each "/"-separated segment must be a safe identifier; traversal,
+	// empty segments, and leading dots are rejected. (A bare "a/b" is now
+	// accepted as a nested loop-item scratch path — see the next test.)
+	for _, bad := range []string{"..", "../escape", "a/../b", "a//b", "/abs", "a/..", ""} {
 		if _, err := sp.ScratchRoot("acme", "ws", bad); err == nil {
 			t.Errorf("ScratchRoot accepted unsafe run id %q", bad)
 		}
+	}
+}
+
+// TestFSSandbox_ScratchNestedRunID covers the loop-body case: a per-item
+// scratch path "<parentRunID>/iN" is accepted and nests under the parent
+// run's scratch, so reclaiming the parent removes every item subdir.
+func TestFSSandbox_ScratchNestedRunID(t *testing.T) {
+	sb, _ := daemon.NewFSSandbox(t.TempDir())
+	sp := any(sb).(core.ScratchProvider)
+	a, err := sp.ScratchRoot("acme", "ws", "run123/i0")
+	if err != nil {
+		t.Fatalf("nested scratch i0: %v", err)
+	}
+	b, err := sp.ScratchRoot("acme", "ws", "run123/i1")
+	if err != nil {
+		t.Fatalf("nested scratch i1: %v", err)
+	}
+	if a == b {
+		t.Fatalf("concurrent iterations got the same scratch dir %q", a)
+	}
+	if _, err := os.Stat(a); err != nil {
+		t.Errorf("item scratch i0 missing: %v", err)
+	}
+	// Reclaiming the parent run removes both item subdirs.
+	if err := sp.RemoveScratch("acme", "ws", "run123"); err != nil {
+		t.Fatalf("RemoveScratch parent: %v", err)
+	}
+	if _, err := os.Stat(a); !os.IsNotExist(err) {
+		t.Errorf("item scratch i0 still present after parent reclaim: %v", err)
 	}
 }
 

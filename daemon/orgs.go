@@ -315,6 +315,12 @@ func (h *HTTPGateway) removeMember(rw http.ResponseWriter, r *http.Request, p co
 			return
 		}
 	}
+	// Guard: a non-owner admin can't evict a peer admin.
+	if m, err := h.Memberships.GetMembership(r.Context(), email, tenant); err == nil &&
+		h.peerAdminBlocked(r.Context(), p, email, tenant, m.Roles) {
+		writeJSONError(rw, http.StatusForbidden, "only the org owner can remove another admin")
+		return
+	}
 	if err := h.Memberships.DeleteMembership(r.Context(), email, tenant); err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
@@ -350,6 +356,43 @@ func (h *HTTPGateway) revokeMemberSessions(ctx context.Context, email string) {
 	} else if n > 0 {
 		h.logger.Printf("session sweep for %s: %d session(s) revoked after membership change", email, n)
 	}
+}
+
+// rolesGrantOrgAdmin reports whether any role in the set carries the
+// organization:admin permission.
+func rolesGrantOrgAdmin(roles []core.Role) bool {
+	for _, r := range roles {
+		if r.Has(core.PermOrganizationAdmin) {
+			return true
+		}
+	}
+	return false
+}
+
+// callerIsOrgOwner reports whether the principal is the home owner of
+// tenant — the owner's roles live on the User record (Users.Tenant==tenant),
+// not on a Membership row.
+func (h *HTTPGateway) callerIsOrgOwner(ctx context.Context, p core.Principal, tenant string) bool {
+	if h.Users == nil {
+		return false
+	}
+	u, err := h.Users.GetByEmail(ctx, strings.ToLower(strings.TrimSpace(p.Subject)))
+	return err == nil && u.Tenant == tenant
+}
+
+// peerAdminBlocked stops a co-admin from removing or demoting ANOTHER org
+// admin — without it, two admins can evict each other (hostile takeover /
+// mutual lockout). Acting on yourself, or acting as the org owner or a
+// platform admin, is always allowed; only a non-owner admin touching a
+// *peer* admin is refused.
+func (h *HTTPGateway) peerAdminBlocked(ctx context.Context, p core.Principal, targetEmail, tenant string, targetRoles []core.Role) bool {
+	if !rolesGrantOrgAdmin(targetRoles) {
+		return false // target isn't an admin — ordinary member edit
+	}
+	if strings.EqualFold(strings.TrimSpace(targetEmail), strings.TrimSpace(p.Subject)) {
+		return false // acting on yourself is fine
+	}
+	return !isPlatformAdmin(p) && !h.callerIsOrgOwner(ctx, p, tenant)
 }
 
 // resolveCatalogRoles fills in permissions for name-only roles from the
@@ -463,6 +506,12 @@ func (h *HTTPGateway) updateMemberRoles(rw http.ResponseWriter, r *http.Request,
 			return
 		}
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
+		return
+	}
+	// Guard: a non-owner admin can't demote a peer admin (checked against the
+	// member's CURRENT roles, before the change is applied).
+	if h.peerAdminBlocked(r.Context(), p, email, tenant, m.Roles) {
+		writeJSONError(rw, http.StatusForbidden, "only the org owner can change another admin's roles")
 		return
 	}
 	m.Roles = body.Roles

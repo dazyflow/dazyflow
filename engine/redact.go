@@ -2,6 +2,8 @@ package engine
 
 import (
 	"context"
+	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 
@@ -188,6 +190,8 @@ func redactString(s string, set *secretSet) string {
 // holds) redacting every string it contains, in place where possible.
 func redactValue(v any, set *secretSet) any {
 	switch tv := v.(type) {
+	case nil:
+		return nil
 	case string:
 		return redactString(tv, set)
 	case []byte:
@@ -202,11 +206,77 @@ func redactValue(v any, set *secretSet) any {
 			out[redactString(k, set)] = redactValue(val, set)
 		}
 		return out
+	case map[string]string:
+		out := make(map[string]string, len(tv))
+		for k, val := range tv {
+			out[redactString(k, set)] = redactString(val, set)
+		}
+		return out
+	case []string:
+		for i, s := range tv {
+			tv[i] = redactString(s, set)
+		}
+		return tv
+	case []map[string]any:
+		for i, m := range tv {
+			if rm, ok := redactValue(m, set).(map[string]any); ok {
+				tv[i] = rm
+			}
+		}
+		return tv
+	case []map[string]string:
+		for i, m := range tv {
+			if rm, ok := redactValue(m, set).(map[string]string); ok {
+				tv[i] = rm
+			}
+		}
+		return tv
 	case []any:
 		for i, val := range tv {
 			tv[i] = redactValue(val, set)
 		}
 		return tv
+	default:
+		// Drops emit many other container shapes ([]struct decoded from JSON,
+		// map[string]int, nested generics). Walk them reflectively so a secret
+		// echoed into any slice/map still gets scrubbed; everything else
+		// (scalars, structs) is returned unchanged.
+		return redactReflect(v, set)
+	}
+}
+
+// redactReflect handles container shapes the fast-path type switch in
+// redactValue doesn't enumerate. Slices/arrays and maps are rebuilt as
+// []any / map[string]any with every reachable string redacted. The fast
+// path already covers the common concrete types so this only runs for the
+// long tail; converting to the generic shape is safe because a redacted
+// Result is serialized before any downstream consumer sees it.
+func redactReflect(v any, set *secretSet) any {
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Slice, reflect.Array:
+		n := rv.Len()
+		out := make([]any, n)
+		for i := 0; i < n; i++ {
+			out[i] = redactValue(rv.Index(i).Interface(), set)
+		}
+		return out
+	case reflect.Map:
+		out := make(map[string]any, rv.Len())
+		iter := rv.MapRange()
+		for iter.Next() {
+			ks, ok := iter.Key().Interface().(string)
+			if !ok {
+				ks = fmt.Sprint(iter.Key().Interface())
+			}
+			out[redactString(ks, set)] = redactValue(iter.Value().Interface(), set)
+		}
+		return out
+	case reflect.Pointer, reflect.Interface:
+		if rv.IsNil() {
+			return v
+		}
+		return redactValue(rv.Elem().Interface(), set)
 	default:
 		return v
 	}
