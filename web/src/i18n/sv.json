@@ -1107,13 +1107,6 @@
       "days_other": "Var {{count}}:e dag"
     }
   },
-  "runHistory": {
-    "noRun": "Ingen körning",
-    "head": "Senaste körningar",
-    "empty": "Inga körningar än.",
-    "loadMore": "Ladda fler",
-    "awaitingApproval": "Väntar på godkännande"
-  },
   "issueKey": {
     "title": "Skapa API-nyckel",
     "subjectLabel": "Subjekt (vem äger den här nyckeln) *",

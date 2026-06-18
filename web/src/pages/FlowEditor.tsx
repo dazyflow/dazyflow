@@ -100,7 +100,6 @@ import { flowRunStatusPublished } from "../flowStatus";
 import { DazyNode } from "../components/NodeCard";
 import { portColor, type DazyNodeData } from "../components/nodeCardShared";
 import { CommentNode } from "../components/CommentNode";
-import { RunHistory } from "../components/RunHistory";
 import { RerouteEdge } from "../components/RerouteEdge";
 import { SettingsModal } from "../components/SettingsModal";
 import { ConfigChecklistModal } from "../components/ConfigChecklistModal";
@@ -3023,15 +3022,6 @@ function EditorInner() {
     await doRun();
   };
 
-  // selectHistoricalRun makes the chosen run "current" and re-subscribes
-  // to its SSE stream so per-node statuses + the Inspector's output
-  // preview reflect that run instead of the previously-loaded one.
-  const selectHistoricalRun = (runID: string) => {
-    setCurrentRunID(runID);
-    if (id) localStorage.setItem(`dazyflow.lastRun.${id}`, runID);
-    subscribeToRun(runID);
-  };
-
   // When the editor opens with a stashed last-run ID, pull its status
   // into the canvas. The SSE handler emits initial node-snapshots for
   // terminal runs too, so this populates the dots for a graph the user
@@ -3386,17 +3376,6 @@ function EditorInner() {
                   </>
                 )}
               </div>
-            )}
-            {me && id && (
-              <span className="toolbar-run-history">
-                <RunHistory
-                  tenant={activeTenant}
-                  workspace={activeWorkspace}
-                  graphID={id}
-                  currentRunID={currentRunID}
-                  onSelect={selectHistoricalRun}
-                />
-              </span>
             )}
           </div>
 

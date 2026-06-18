@@ -5694,36 +5694,6 @@ button.warning:hover:not(:disabled) {
   opacity: 0.7;
 }
 
-/* Run history dropdown */
-.run-history-pop {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  width: 280px;
-  max-height: 360px;
-  overflow-y: auto;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-2);
-  box-shadow: var(--shadow-pop);
-  z-index: 100;
-  padding: var(--space-1);
-}
-.run-history-head {
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--text-xs);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--faint);
-  border-bottom: 1px solid var(--border);
-  margin-bottom: var(--space-1);
-}
-.run-history-empty {
-  padding: var(--space-3);
-  font-size: var(--text-sm);
-  color: var(--faint);
-  text-align: center;
-}
 /* Status dot — the at-a-glance run state in history rows and the run
    header. These spans had no styling at all, so they were invisible: a
    run parked at an await_approval node looked identical to a finished
@@ -5771,38 +5741,7 @@ button.warning:hover:not(:disabled) {
   }
 }
 
-/* Inline "Awaiting approval" tag in a run-history row — the textual
-   companion to the amber dot for the parked state. */
-.run-awaiting-tag {
-  margin-left: var(--space-2);
-  padding: 1px 6px;
-  border-radius: var(--r-1);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--status-awaiting);
-  background: color-mix(in srgb, var(--status-awaiting) 16%, transparent);
-}
-
-.run-history-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  width: 100%;
-  text-align: left;
-  background: transparent;
-  border: none;
-  border-radius: var(--r-2);
-  padding: var(--space-2) var(--space-3);
-  cursor: pointer;
-  color: var(--ink);
-  font-size: var(--text-md);
-}
-.run-history-row:hover {
-  background: var(--surface-2);
-}
-.run-history-row.active {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-}
+/* Filter-chip row — shared by the Runs list and the Schedules page. */
 .run-history-filters {
   display: flex;
   flex-wrap: wrap;
@@ -5829,13 +5768,6 @@ button.warning:hover:not(:disabled) {
   color: var(--ink);
   border-color: var(--accent);
 }
-.run-load-more {
-  width: calc(100% - 8px);
-  margin: var(--space-1);
-  font-size: var(--text-sm);
-  padding: var(--space-2);
-}
-
 .run-table {
   width: 100%;
   border-collapse: collapse;
@@ -7602,19 +7534,17 @@ button.warning:hover:not(:disabled) {
   padding: 0;
   justify-content: center;
 }
-/* Tight toolbar: drop the text labels, the Ctrl+K hint, and the
-   run-history switcher, collapsing secondary actions to square icon
-   buttons. The primary action keeps its label — it's the focal point
-   and conveys run state. Keyed on the canvas container's own width (see
-   `container: editor-canvas` on .editor .canvas) so it triggers whenever
-   the *toolbar* is short — including when the Inspector pane is open —
-   rather than only on a narrow viewport. The threshold sits above the
-   full-label content width (~900px with a node selected, when Breakpoint
-   + "N to configure" are also present) so labels collapse before they can
-   overlap. */
+/* Tight toolbar: drop the text labels and the Ctrl+K hint, collapsing
+   secondary actions to square icon buttons. The primary action keeps its
+   label — it's the focal point and conveys run state. Keyed on the canvas
+   container's own width (see `container: editor-canvas` on .editor .canvas)
+   so it triggers whenever the *toolbar* is short — including when the
+   Inspector pane is open — rather than only on a narrow viewport. The
+   threshold sits above the full-label content width (~900px with a node
+   selected, when Breakpoint + "N to configure" are also present) so labels
+   collapse before they can overlap. */
 @container editor-canvas (max-width: 960px) {
-  .editor-toolbar .toolbar-label,
-  .editor-toolbar .toolbar-run-history {
+  .editor-toolbar .toolbar-label {
     display: none;
   }
   .editor-toolbar button.primary .toolbar-label {

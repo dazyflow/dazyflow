@@ -111,9 +111,8 @@ export function RunList() {
     };
   }, [token, filter, activeWorkspace, activeTenant]);
 
-  // Live polling whenever anything is in-flight. Same heuristic as the
-  // RunHistory dropdown — refresh only the first PAGE_SIZE rows so a
-  // long scrollback isn't repeatedly fetched.
+  // Live polling whenever anything is in-flight — refresh only the first
+  // PAGE_SIZE rows so a long scrollback isn't repeatedly fetched.
   //
   // The interval depends on the derived `anyLive` boolean, NOT the whole
   // `runs` array — the tick calls setRuns, so depending on `runs` rebuilt

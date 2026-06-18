@@ -1107,13 +1107,6 @@
       "days_other": "Every {{count}} days"
     }
   },
-  "runHistory": {
-    "noRun": "No run",
-    "head": "Recent runs",
-    "empty": "No runs yet.",
-    "loadMore": "Load more",
-    "awaitingApproval": "Awaiting approval"
-  },
   "issueKey": {
     "title": "Issue API key",
     "subjectLabel": "Subject (who owns this key) *",
