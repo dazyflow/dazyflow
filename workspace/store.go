@@ -255,6 +255,10 @@ type Revision struct {
 	Message  string    `json:"message"`
 	When     time.Time `json:"when"`
 	Autosave bool      `json:"autosave"`
+	// Label is the optional human name a publish gave this revision
+	// (e.g. "Black Friday config"), empty when unlabeled. Keyed to the
+	// commit, so rollback to an older revision brings its label back.
+	Label string `json:"label,omitempty"`
 }
 
 // History returns the commits that touched graphs/<id>.json, newest first,
@@ -288,6 +292,7 @@ func (s *Store) History(id string, limit int) ([]Revision, error) {
 			Message:  c.Message,
 			When:     c.Author.When,
 			Autosave: strings.HasPrefix(c.Message, "autosave:"),
+			Label:    s.revisionLabel(id, c.Hash.String()),
 		})
 		return nil
 	})
@@ -534,6 +539,19 @@ func (s *Store) Head() (string, error) {
 	return head.Hash().String(), nil
 }
 
+// Resolve turns a ref (branch, tag, "HEAD", or raw hash) into its commit
+// hash as a hex string. Used by callers that need to record the exact
+// revision a ref pointed at (e.g. which commit a label was attached to).
+func (s *Store) Resolve(ref string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	h, err := s.resolve(ref)
+	if err != nil {
+		return "", err
+	}
+	return h.String(), nil
+}
+
 func (s *Store) resolve(ref string) (plumbing.Hash, error) {
 	if h, err := s.repo.ResolveRevision(plumbing.Revision(ref)); err == nil {
 		return *h, nil
@@ -547,6 +565,83 @@ func (s *Store) resolve(ref string) (plumbing.Hash, error) {
 
 func graphPath(id string) string        { return "graphs/" + id + ".json" }
 func envTag(graphID, env string) string { return "graphs/" + graphID + "/" + env }
+
+// labelTag names the annotated tag that carries a revision's human label:
+// refs/tags/graphs/<id>/labels/<commit>. Distinct namespace from the env
+// tags (graphs/<id>/<env>) so labels never collide with a published/staging
+// pointer and the scheduler's resolve path is untouched.
+func labelTag(graphID, commit string) string {
+	return "graphs/" + graphID + "/labels/" + commit
+}
+
+// SetRevisionLabel attaches a human label to a specific commit, stored as an
+// annotated Git tag at labelTag(id, commit). Labels are keyed by commit, not
+// by environment: republishing an older revision (rollback) brings back the
+// label it was given, and the version-history panel shows each revision's
+// name. Re-labeling replaces the previous label; an empty label clears it.
+func (s *Store) SetRevisionLabel(graphID, commit, label string) error {
+	if graphID == "" {
+		return errors.New("graphID required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	hash, err := s.resolve(commit)
+	if err != nil {
+		return err
+	}
+	name := plumbing.NewTagReferenceName(labelTag(graphID, hash.String()))
+	// Force-replace: drop any existing label tag for this commit first
+	// (CreateTag errors if the tag already exists).
+	if err := s.repo.Storer.RemoveReference(name); err != nil &&
+		!errors.Is(err, plumbing.ErrReferenceNotFound) {
+		return fmt.Errorf("clear label: %w", err)
+	}
+	if strings.TrimSpace(label) == "" {
+		return nil // empty label = clear
+	}
+	_, err = s.repo.CreateTag(labelTag(graphID, hash.String()), hash, &git.CreateTagOptions{
+		Message: label,
+		Tagger: &object.Signature{
+			Name:  "hazyflow",
+			Email: "hazyflow@local",
+			When:  time.Now(),
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("create label tag: %w", err)
+	}
+	return nil
+}
+
+// RevisionLabel returns the human label attached to graphID@commit, or ""
+// when the revision is unlabeled.
+func (s *Store) RevisionLabel(graphID, commit string) (string, error) {
+	if graphID == "" {
+		return "", errors.New("graphID required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	hash, err := s.resolve(commit)
+	if err != nil {
+		return "", err
+	}
+	return s.revisionLabel(graphID, hash.String()), nil
+}
+
+// revisionLabel reads a commit's label tag, returning "" when absent or
+// unreadable. commit must be a full hash string. Caller holds s.mu.
+func (s *Store) revisionLabel(graphID, commit string) string {
+	name := plumbing.NewTagReferenceName(labelTag(graphID, commit))
+	ref, err := s.repo.Reference(name, false)
+	if err != nil {
+		return ""
+	}
+	tag, err := s.repo.TagObject(ref.Hash())
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(tag.Message)
+}
 
 // Branches/Tags surface the underlying refs for callers that want to do
 // their own listing/diff.

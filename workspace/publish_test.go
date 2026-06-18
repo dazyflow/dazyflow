@@ -93,6 +93,76 @@ func TestStore_PublishAndLoadPublished(t *testing.T) {
 	}
 }
 
+// TestStore_RevisionLabel covers the per-commit label model: labels round-trip
+// through SetRevisionLabel/RevisionLabel, surface in History keyed to their
+// commit, persist across re-publishes, and are replaceable (including clear).
+func TestStore_RevisionLabel(t *testing.T) {
+	s, err := OpenFS("")
+	if err != nil {
+		t.Fatalf("OpenFS: %v", err)
+	}
+	mk := func(node string) core.Graph {
+		return core.Graph{ID: "flow1", Nodes: []core.Node{{ID: node, Module: "noop"}}}
+	}
+
+	v1, err := s.Save(mk("a"), "anna@acme.com")
+	if err != nil {
+		t.Fatalf("save v1: %v", err)
+	}
+	v2, err := s.Save(mk("b"), "anna@acme.com")
+	if err != nil {
+		t.Fatalf("save v2: %v", err)
+	}
+
+	// Unlabeled commit reads back empty (absent tag is not an error).
+	if lbl, err := s.RevisionLabel("flow1", v1); err != nil || lbl != "" {
+		t.Fatalf("RevisionLabel unlabeled = (%q, %v), want (\"\", nil)", lbl, err)
+	}
+
+	// Label v1, then move HEAD past it. The label stays keyed to v1.
+	if err := s.SetRevisionLabel("flow1", v1, "Black Friday config"); err != nil {
+		t.Fatalf("SetRevisionLabel v1: %v", err)
+	}
+	if lbl, err := s.RevisionLabel("flow1", v1); err != nil || lbl != "Black Friday config" {
+		t.Fatalf("RevisionLabel v1 = (%q, %v), want (\"Black Friday config\", nil)", lbl, err)
+	}
+	if lbl, _ := s.RevisionLabel("flow1", v2); lbl != "" {
+		t.Fatalf("RevisionLabel v2 = %q, want \"\" (label is per-commit)", lbl)
+	}
+
+	// History carries each revision's label on the right commit.
+	revs, err := s.History("flow1", 100)
+	if err != nil {
+		t.Fatalf("History: %v", err)
+	}
+	for _, r := range revs {
+		switch r.Commit {
+		case v1:
+			if r.Label != "Black Friday config" {
+				t.Fatalf("history v1 label = %q, want \"Black Friday config\"", r.Label)
+			}
+		case v2:
+			if r.Label != "" {
+				t.Fatalf("history v2 label = %q, want \"\"", r.Label)
+			}
+		}
+	}
+
+	// Re-labeling replaces; empty clears.
+	if err := s.SetRevisionLabel("flow1", v1, "pre-GDPR"); err != nil {
+		t.Fatalf("relabel v1: %v", err)
+	}
+	if lbl, _ := s.RevisionLabel("flow1", v1); lbl != "pre-GDPR" {
+		t.Fatalf("after relabel, v1 = %q, want \"pre-GDPR\"", lbl)
+	}
+	if err := s.SetRevisionLabel("flow1", v1, ""); err != nil {
+		t.Fatalf("clear v1 label: %v", err)
+	}
+	if lbl, _ := s.RevisionLabel("flow1", v1); lbl != "" {
+		t.Fatalf("after clear, v1 = %q, want \"\"", lbl)
+	}
+}
+
 // TestStore_ClearEnvironment covers unpublishing: clearing the published tag
 // drops PublishedCommit back to "" (so the scheduler treats the flow as not
 // live) while LoadPublishedOrHead falls back to the current HEAD draft. It's

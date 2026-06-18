@@ -895,6 +895,7 @@ func (s *Service) DropSuggestions(ctx context.Context, p core.Principal, tenant,
 type PublishInfo struct {
 	Published       bool   `json:"published"`
 	PublishedCommit string `json:"published_commit,omitempty"`
+	PublishedLabel  string `json:"published_label,omitempty"`
 	HeadCommit      string `json:"head_commit,omitempty"`
 	Dirty           bool   `json:"dirty"`
 }
@@ -906,7 +907,12 @@ type PublishInfo struct {
 // rollback to that version. Returns the published commit hash. Gated on
 // graph:admin — the same bar as environment promotion. No active-run lock
 // is needed: publishing moves a tag, it doesn't mutate the draft.
-func (s *Service) PublishFlow(ctx context.Context, p core.Principal, tenant, ws, id, ref string) (string, error) {
+//
+// label is an optional human name for the published revision (e.g. "Black
+// Friday config"); it's attached to the resolved commit, so a later rollback
+// to it brings the name back. An empty label leaves any existing label on
+// that commit intact.
+func (s *Service) PublishFlow(ctx context.Context, p core.Principal, tenant, ws, id, ref, label string) (string, error) {
 	if err := core.RequireWorkspace(p, tenant, ws); err != nil {
 		return "", err
 	}
@@ -933,7 +939,16 @@ func (s *Service) PublishFlow(ctx context.Context, p core.Principal, tenant, ws,
 	if err := store.PromoteToEnvironment(id, workspace.PublishedEnv, target); err != nil {
 		return "", err
 	}
-	return store.PublishedCommit(id)
+	commit, err := store.PublishedCommit(id)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(label) != "" {
+		if err := store.SetRevisionLabel(id, commit, label); err != nil {
+			return "", err
+		}
+	}
+	return commit, nil
 }
 
 // UnpublishFlow clears a flow's published pointer, the inverse of PublishFlow.
@@ -1002,6 +1017,9 @@ func (s *Service) PublishedInfo(ctx context.Context, p core.Principal, tenant, w
 	}
 	info.Published = true
 	info.PublishedCommit = pub
+	if lbl, lerr := store.RevisionLabel(id, pub); lerr == nil {
+		info.PublishedLabel = lbl
+	}
 	pubGraph, err := store.LoadAt(pub, id)
 	if err != nil {
 		return PublishInfo{}, err
@@ -1012,6 +1030,47 @@ func (s *Service) PublishedInfo(ctx context.Context, p core.Principal, tenant, w
 	// the honest "does the draft differ from what's live" test.
 	info.Dirty = !reflect.DeepEqual(head, pubGraph)
 	return info, nil
+}
+
+// LabelRevision sets (or clears) the human label on a flow revision,
+// decoupled from publishing — it names a version without making it live.
+// ref defaults to HEAD ("name my current draft"); an older commit hash
+// names that revision. An empty label clears any existing label. Returns
+// the resolved commit the label was written to. Gated on graph:admin (the
+// same bar as publish); no active-run lock — it only moves a tag, leaving
+// the draft and HEAD untouched.
+func (s *Service) LabelRevision(ctx context.Context, p core.Principal, tenant, ws, id, ref, label string) (string, error) {
+	if err := core.RequireWorkspace(p, tenant, ws); err != nil {
+		return "", err
+	}
+	if err := core.Require(p, core.PermGraphAdmin); err != nil {
+		return "", err
+	}
+	store, err := s.Workspaces.Open(tenant, ws)
+	if err != nil {
+		return "", err
+	}
+	target := ref
+	if target == "" {
+		target = "HEAD"
+	}
+	// Authorize against the target revision's content (mirrors PublishFlow):
+	// labeling a flow you can't view should 404, not leak its existence.
+	g, err := store.LoadAt(target, id)
+	if err != nil {
+		return "", err
+	}
+	if core.AuthorizeGraphView(p, g) != nil {
+		return "", fmt.Errorf("graph %q: %w", id, core.ErrNotFound)
+	}
+	commit, err := store.Resolve(target)
+	if err != nil {
+		return "", err
+	}
+	if err := store.SetRevisionLabel(id, commit, label); err != nil {
+		return "", err
+	}
+	return commit, nil
 }
 
 // PromoteGraph moves the environment tag (e.g. "production") to commit.

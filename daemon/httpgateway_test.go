@@ -131,6 +131,68 @@ func (h *gatewayHarness) do(t *testing.T, method, path string, body any) *httpte
 	return rw
 }
 
+// TestHTTPGateway_LabelRevision covers the label route: naming the current
+// draft (HEAD) attaches a per-commit label that surfaces in the history
+// listing, and an empty label clears it.
+func TestHTTPGateway_LabelRevision(t *testing.T) {
+	h := newGatewayHarness(t)
+	const fid = "t%2Fws%2Flabelme"
+	if rw := h.do(t, "PUT", "/api/v1/me/flows/"+fid, core.Graph{
+		ID: "labelme", Tenant: "t", Workspace: "ws",
+		Nodes: []core.Node{{ID: "a", Module: "noop"}},
+	}); rw.Code != http.StatusOK {
+		t.Fatalf("create flow: code=%d body=%s", rw.Code, rw.Body.String())
+	}
+
+	// Name the current draft.
+	rw := h.do(t, "POST", "/api/v1/me/flows/"+fid+"/label", map[string]any{"label": "Black Friday config"})
+	if rw.Code != http.StatusOK {
+		t.Fatalf("label: code=%d body=%s", rw.Code, rw.Body.String())
+	}
+	var lr struct {
+		Commit string `json:"commit"`
+		Label  string `json:"label"`
+	}
+	if err := json.Unmarshal(rw.Body.Bytes(), &lr); err != nil {
+		t.Fatalf("unmarshal label resp: %v", err)
+	}
+	if lr.Label != "Black Friday config" || lr.Commit == "" {
+		t.Fatalf("label resp = %+v, want labeled non-empty commit", lr)
+	}
+
+	// History surfaces the label keyed to that commit.
+	labelInHistory := func() string {
+		rw := h.do(t, "GET", "/api/v1/me/flows/"+fid+"/history", nil)
+		if rw.Code != http.StatusOK {
+			t.Fatalf("history: code=%d body=%s", rw.Code, rw.Body.String())
+		}
+		var hist struct {
+			Revisions []workspace.Revision `json:"revisions"`
+		}
+		if err := json.Unmarshal(rw.Body.Bytes(), &hist); err != nil {
+			t.Fatalf("unmarshal history: %v", err)
+		}
+		for _, r := range hist.Revisions {
+			if r.Commit == lr.Commit {
+				return r.Label
+			}
+		}
+		t.Fatalf("labeled commit %s not found in history", lr.Commit)
+		return ""
+	}
+	if got := labelInHistory(); got != "Black Friday config" {
+		t.Fatalf("history label = %q, want \"Black Friday config\"", got)
+	}
+
+	// Empty label clears it.
+	if rw := h.do(t, "POST", "/api/v1/me/flows/"+fid+"/label", map[string]any{"label": ""}); rw.Code != http.StatusOK {
+		t.Fatalf("clear label: code=%d body=%s", rw.Code, rw.Body.String())
+	}
+	if got := labelInHistory(); got != "" {
+		t.Fatalf("after clear, history label = %q, want \"\"", got)
+	}
+}
+
 func TestHTTPGateway_HealthzNoAuth(t *testing.T) {
 	h := newGatewayHarness(t)
 	req := httptest.NewRequest("GET", "/healthz", nil)

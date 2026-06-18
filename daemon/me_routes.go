@@ -314,6 +314,42 @@ func (h *HTTPGateway) restoreFlowMe(rw http.ResponseWriter, r *http.Request, p c
 	writeJSON(rw, http.StatusOK, h.flowMutationResponse(commit, g))
 }
 
+// labelRevisionMe is POST /me/flows/{flow_id}/label {ref?, label} — name a
+// revision without publishing it. ref defaults to HEAD ("name my draft"); an
+// older commit hash names that revision. An empty label clears the existing
+// label. The label is keyed to the commit, so it persists across publishes
+// and rollbacks. Gated on graph:admin inside the service.
+func (h *HTTPGateway) labelRevisionMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	tenant, workspace, id, ok := h.readFlowID(rw, r, p)
+	if !ok {
+		return
+	}
+	var body struct {
+		Ref   string `json:"ref"`
+		Label string `json:"label"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
+		writeAPIError(rw, http.StatusBadRequest, "decode_failed", "decode body: "+err.Error())
+		return
+	}
+	label := strings.TrimSpace(body.Label)
+	commit, err := h.svc.LabelRevision(r.Context(), p, tenant, workspace, id, strings.TrimSpace(body.Ref), label)
+	if err != nil {
+		if errors.Is(err, core.ErrNotFound) {
+			writeAPIError(rw, http.StatusNotFound, "flow_not_found", flowNotFoundMessage(tenant, workspace, id))
+			return
+		}
+		writeAPIError(rw, http.StatusForbidden, "forbidden", err.Error())
+		return
+	}
+	h.audit(r.Context(), p, "graph.label", id, "commit="+commit+" label="+label)
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"flow_id": tenant + "/" + workspace + "/" + id,
+		"commit":  commit,
+		"label":   label,
+	})
+}
+
 // publishFlowMe is POST /me/flows/{flow_id}/publish {ref?} — promote a
 // revision to "live". Automatic triggers run the published revision;
 // manual + test runs keep using the draft (HEAD). ref defaults to HEAD
@@ -325,18 +361,20 @@ func (h *HTTPGateway) publishFlowMe(rw http.ResponseWriter, r *http.Request, p c
 		return
 	}
 	var body struct {
-		Ref string `json:"ref"`
+		Ref   string `json:"ref"`
+		Label string `json:"label"`
 	}
-	// Body is optional — an empty POST publishes HEAD. An empty body decodes
-	// to io.EOF, which we ignore; a *malformed* body is logged (we still fall
-	// back to publishing HEAD) so a client sending a bad ref isn't silently
-	// treated as "no ref".
+	// Body is optional — an empty POST publishes HEAD with no label. An empty
+	// body decodes to io.EOF, which we ignore; a *malformed* body is logged
+	// (we still fall back to publishing HEAD) so a client sending a bad ref
+	// isn't silently treated as "no ref".
 	if r.Body != nil {
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
 			h.logger.Printf("publishFlowMe: ignoring malformed optional body for %s/%s/%s: %v", tenant, workspace, id, err)
 		}
 	}
-	commit, err := h.svc.PublishFlow(r.Context(), p, tenant, workspace, id, strings.TrimSpace(body.Ref))
+	label := strings.TrimSpace(body.Label)
+	commit, err := h.svc.PublishFlow(r.Context(), p, tenant, workspace, id, strings.TrimSpace(body.Ref), label)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
 			writeAPIError(rw, http.StatusNotFound, "flow_not_found", flowNotFoundMessage(tenant, workspace, id))
@@ -345,11 +383,19 @@ func (h *HTTPGateway) publishFlowMe(rw http.ResponseWriter, r *http.Request, p c
 		writeAPIError(rw, http.StatusForbidden, "forbidden", err.Error())
 		return
 	}
-	h.audit(r.Context(), p, "graph.publish", id, "commit="+commit)
-	writeJSON(rw, http.StatusOK, map[string]any{
+	detail := "commit=" + commit
+	if label != "" {
+		detail += " label=" + label
+	}
+	h.audit(r.Context(), p, "graph.publish", id, detail)
+	resp := map[string]any{
 		"flow_id":          tenant + "/" + workspace + "/" + id,
 		"published_commit": commit,
-	})
+	}
+	if label != "" {
+		resp["published_label"] = label
+	}
+	writeJSON(rw, http.StatusOK, resp)
 }
 
 // unpublishFlowMe is POST /me/flows/{flow_id}/unpublish — clear the published
