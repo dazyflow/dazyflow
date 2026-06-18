@@ -17,7 +17,7 @@ import { orgFromHost } from "../lib/orgFromHost";
 //                lands the user in.
 export function SignIn() {
   const { t } = useTranslation();
-  const { signInWithPassword, verifyTOTP, error, loading } = useAuth();
+  const { signInWithPassword, verifyTOTP, error, loading, clearError } = useAuth();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const presetEmail = searchParams.get("email") ?? "";
@@ -40,6 +40,12 @@ export function SignIn() {
   // (e.g. acme.hazyflow.app → "acme"), resolved once the public auth
   // config tells us the wildcard domain.
   const [org, setOrg] = useState(queryOrg);
+
+  // Clear any error left over from the sign-up page (or a prior visit) so a
+  // stale message doesn't greet a fresh arrival on the sign-in form.
+  useEffect(() => {
+    clearError();
+  }, [clearError]);
 
   // Whether self-serve signup is enabled, plus the wildcard domain used
   // to derive the org from the host. Default signupEnabled false so the
@@ -182,6 +188,24 @@ export function SignIn() {
                 : t("signIn.useRecoveryCode")}
             </button>
           </div>
+          {/* Back out of the second-factor step to the email/password form.
+              Without this the only escape from a mistyped email (now stuck on
+              the code prompt) was a full page reload. */}
+          <div className="signin-alt">
+            <button
+              type="button"
+              className="linklike"
+              onClick={() => {
+                setChallenge(null);
+                setTotpCode("");
+                setRecoveryCode("");
+                setUseRecovery(false);
+                clearError();
+              }}
+            >
+              {t("signIn.back")}
+            </button>
+          </div>
         </form>
       </div>
     );
@@ -262,6 +286,7 @@ export function SignIn() {
                   ? `/signup?email=${encodeURIComponent(email)}&invite=${encodeURIComponent(inviteToken)}`
                   : "/signup"
               }
+              onClick={() => clearError()}
             >
               {t("signIn.createAccount")}
             </Link>

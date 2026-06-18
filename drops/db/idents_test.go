@@ -17,6 +17,13 @@ func TestValidateColumnType_AcceptsRealTypes(t *testing.T) {
 		"DOUBLE PRECISION",
 		"INT UNSIGNED",
 		"TIMESTAMP WITH TIME ZONE",
+		"DATETIME",   // SQLite/MySQL
+		"jsonb",      // Postgres
+		"uuid",       // Postgres
+		"bool",       // alias
+		"char(1)",    // length spec, lower-case
+		"timestamp",  // bare
+		"double   precision", // collapsed interior whitespace still resolves
 		"", // absent override defaults to TEXT — allowed
 	} {
 		t.Run(typ, func(t *testing.T) {
@@ -34,6 +41,15 @@ func TestValidateColumnType_RejectsInjection(t *testing.T) {
 		"TEXT; SELECT 1",
 		`TEXT" `,
 		"int/*comment*/",
+		// The character-class allowlist used to let these through: a
+		// comma+parens smuggles an extra column / constraint definition
+		// even though every character is "safe".
+		"int, evil text",
+		"text, PRIMARY KEY (id)",
+		"text NOT NULL",
+		"text(10) CHECK (x>0)",
+		"notarealtype",
+		"varchar(255) DEFAULT ''",
 		strings.Repeat("A", maxColumnTypeLen+1),
 	} {
 		t.Run(typ, func(t *testing.T) {

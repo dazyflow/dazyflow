@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"maps"
 	"sync"
 
 	"git.sr.ht/~klahr/hazyflow/core"
@@ -185,6 +187,7 @@ func (e *Engine) RunNode(
 	graph core.Graph,
 	graphRunID string,
 	nodeID string,
+	recordID string,
 	prior map[string]core.Result,
 	progress chan<- core.Progress,
 ) (core.Result, error) {
@@ -219,18 +222,27 @@ func (e *Engine) RunNode(
 	manifest := transport.Manifest()
 	input := assembleInput(graph, node.ID, manifest, prior)
 
-	jobID, err := newJobID()
-	if err != nil {
-		recordSpanError(span, err)
-		return core.Result{Status: core.StatusError}, fmt.Errorf("generate job ID: %w", err)
+	// The job ID is the idempotency key for outbound side effects
+	// (Job.IdempotencyKey). It MUST be stable across retries so a retried
+	// POST is deduped by the receiving service — the worker re-invokes
+	// RunNode with the same record ID on every attempt. Fall back to a
+	// random ID only for callers that don't supply one (e.g. ad-hoc tests).
+	jobID := recordID
+	if jobID == "" {
+		jobID, err = newJobID()
+		if err != nil {
+			recordSpanError(span, err)
+			return core.Result{Status: core.StatusError}, fmt.Errorf("generate job ID: %w", err)
+		}
 	}
+	params, env := cloneNodeIO(node.Params, node.Env)
 	job := core.Job{
 		ID:      jobID,
 		GraphID: graph.ID,
 		NodeID:  node.ID,
 		Input:   input,
-		Params:  node.Params,
-		Env:     node.Env,
+		Params:  params,
+		Env:     env,
 		Cleanup: core.CleanupOnGraphComplete,
 	}
 	if err := e.populateSandbox(&job, graph, graphRunID); err != nil {
@@ -264,7 +276,14 @@ func (e *Engine) RunNode(
 	// sink so they register the resolved token for redaction too.
 	ctx = withSecretSink(ctx, secrets)
 
-	result, execErr := transport.Execute(ctx, job, progress)
+	// Scrub secrets a drop might echo into live progress events before they
+	// leave the engine — redactResult only covers the final Result.
+	redactedProgress, progressDone := redactProgress(ctx, progress, secrets)
+	result, execErr := transport.Execute(ctx, job, redactedProgress)
+	if redactedProgress != nil {
+		close(redactedProgress)
+		<-progressDone
+	}
 	if result.JobID == "" {
 		result.JobID = job.ID
 	}
@@ -313,13 +332,14 @@ func (e *Engine) runNode(
 		return core.Result{Status: core.StatusError}, fmt.Errorf("generate job ID: %w", err)
 	}
 
+	params, env := cloneNodeIO(node.Params, node.Env)
 	job := core.Job{
 		ID:      jobID,
 		GraphID: graph.ID,
 		NodeID:  node.ID,
 		Input:   input,
-		Params:  node.Params,
-		Env:     node.Env,
+		Params:  params,
+		Env:     env,
 		Cleanup: core.CleanupOnGraphComplete,
 	}
 	// The in-process Run path has no per-run ID of its own — but a loop-body
@@ -354,7 +374,7 @@ func (e *Engine) runNode(
 
 	nodeProgress := make(chan core.Progress)
 	forwarderDone := make(chan struct{})
-	go forwardProgress(ctx, job.ID, node.ID, nodeProgress, progress, forwarderDone)
+	go forwardProgress(ctx, job.ID, node.ID, nodeProgress, progress, secrets, forwarderDone)
 
 	result, execErr := transport.Execute(ctx, job, nodeProgress)
 	close(nodeProgress)
@@ -422,6 +442,7 @@ func forwardProgress(
 	jobID, nodeID string,
 	in <-chan core.Progress,
 	out chan<- GraphProgress,
+	set *secretSet,
 	done chan<- struct{},
 ) {
 	defer close(done)
@@ -429,6 +450,7 @@ func forwardProgress(
 		if out == nil {
 			continue
 		}
+		p = redactProgressEvent(p, set)
 		select {
 		case out <- GraphProgress{JobID: jobID, NodeID: nodeID, Progress: p}:
 		case <-ctx.Done():
@@ -484,6 +506,30 @@ func newJobID() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(buf), nil
+}
+
+// cloneNodeIO returns deep copies of a node's Params and Env. The engine
+// resolves ${secret.…}/${upstream.…} placeholders into params IN PLACE, so
+// without a copy the resolved cleartext (including secret values) would be
+// written back into the caller's shared graph map — leaking secrets into any
+// later serialization/inspection of the graph and making a re-run
+// non-deterministic. Params can hold nested maps/slices, so a shallow
+// maps.Clone is insufficient; a JSON round-trip mirrors how the graph is
+// already stored and persisted. Env is flat strings, so a shallow clone is
+// exact. On a (practically impossible) marshal error we fall back to the
+// original maps rather than failing the node — resolution would then mutate
+// in place, the pre-existing behavior.
+func cloneNodeIO(params map[string]any, env map[string]string) (map[string]any, map[string]string) {
+	outParams := params
+	if len(params) > 0 {
+		if b, err := json.Marshal(params); err == nil {
+			var cp map[string]any
+			if json.Unmarshal(b, &cp) == nil {
+				outParams = cp
+			}
+		}
+	}
+	return outParams, maps.Clone(env)
 }
 
 func errorResult(graphID, code, msg string) GraphResult {

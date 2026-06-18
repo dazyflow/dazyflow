@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 
 	"git.sr.ht/~klahr/hazyflow/core"
 	"git.sr.ht/~klahr/hazyflow/drops/internal/mimetype"
@@ -111,12 +112,12 @@ func executeFilePicker(_ context.Context, job core.Job, _ chan<- core.Progress) 
 			return params.Err(job, "io", fmt.Sprintf("open %q: %v", path, err)), nil
 		}
 		defer f.Close()
-		buf := make([]byte, info.Size())
-		n, err := f.Read(buf)
-		if err != nil && err.Error() != "EOF" {
+		// io.ReadAll, like file_read — a single f.Read sized to info.Size()
+		// can short-read and silently truncate the file.
+		buf, err := io.ReadAll(f)
+		if err != nil {
 			return params.Err(job, "io", fmt.Sprintf("read %q: %v", path, err)), nil
 		}
-		buf = buf[:n]
 		// Same convention as file_read: text MIMEs get a string so
 		// the value survives gRPC's JSON wrapping; binary MIMEs go
 		// across as []byte (base64 over the wire).

@@ -3,6 +3,8 @@ package daemon
 import (
 	"net"
 	"net/http"
+	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -16,6 +18,20 @@ import (
 // Memory is bounded by sweeping idle buckets; a bucket is "idle" once it
 // has refilled back to full and hasn't been touched for the sweep
 // window, so the map tracks only currently-active clients.
+// Safe defaults applied when the operator leaves the auth rate limit
+// unconfigured (perMinute <= 0). Previously that disabled throttling
+// entirely — an unconfigured deploy invited credential stuffing. We now
+// fall back to a conservative non-zero policy so auth endpoints are always
+// throttled unless the operator explicitly raises the limit.
+const (
+	defaultAuthRatePerMin = 30
+	defaultAuthRateBurst  = 10
+	// maxRateLimiterBuckets bounds the per-IP bucket map. Without a cap a
+	// flood of distinct source IPs (or IP rotation) grows the map without
+	// bound between GC sweeps. When full we evict the oldest-seen bucket.
+	maxRateLimiterBuckets = 50_000
+)
+
 type ipRateLimiter struct {
 	mu      sync.Mutex
 	buckets map[string]*tokenBucket
@@ -29,19 +45,25 @@ type tokenBucket struct {
 	last   time.Time
 }
 
-// NewAuthRateLimiter is the exported constructor cmd/hzd uses to build
-// the gateway's auth limiter. Returns nil (limiter disabled) when
-// perMinute <= 0.
+// NewAuthRateLimiter is the exported constructor cmd/hzd uses to build the
+// gateway's auth limiter. It always returns a non-nil limiter: an
+// unconfigured (perMinute <= 0) deploy falls back to the safe default
+// policy rather than disabling throttling.
 func NewAuthRateLimiter(perMinute, burst int) *ipRateLimiter {
 	return newIPRateLimiter(perMinute, burst)
 }
 
 // newIPRateLimiter builds a limiter allowing `perMinute` requests per IP
-// in steady state, with a `burst` capacity for short spikes. Returns nil
-// when perMinute <= 0 (caller treats nil as "disabled").
+// in steady state, with a `burst` capacity for short spikes. When
+// perMinute <= 0 it applies the safe defaults (defaultAuthRatePerMin /
+// defaultAuthRateBurst) instead of disabling — an unconfigured deploy must
+// still be throttled.
 func newIPRateLimiter(perMinute, burst int) *ipRateLimiter {
 	if perMinute <= 0 {
-		return nil
+		perMinute = defaultAuthRatePerMin
+		if burst <= 0 {
+			burst = defaultAuthRateBurst
+		}
 	}
 	if burst <= 0 {
 		burst = 1
@@ -63,6 +85,13 @@ func (l *ipRateLimiter) Allow(ip string) bool {
 	l.gcLocked(now)
 	b := l.buckets[ip]
 	if b == nil {
+		// Bound memory: if the map is full, drop the least-recently-touched
+		// bucket to make room. Evicting a stranger's bucket only resets them
+		// to a full bucket, so the worst case is a missed throttle for one
+		// IP under extreme churn — acceptable versus unbounded growth.
+		if len(l.buckets) >= maxRateLimiterBuckets {
+			l.evictOldestLocked()
+		}
 		b = &tokenBucket{tokens: l.burst, last: now}
 		l.buckets[ip] = b
 	}
@@ -94,15 +123,119 @@ func (l *ipRateLimiter) gcLocked(now time.Time) {
 	}
 }
 
-// clientIP extracts the source IP for rate-limiting. Uses RemoteAddr —
-// behind a reverse proxy that's the proxy's IP unless the proxy sets
-// RemoteAddr via PROXY protocol. (Honoring X-Forwarded-For is a
-// follow-up; it's spoofable without a trusted-proxy allowlist, so the
-// conservative default is the connection's peer address.)
+// evictOldestLocked removes the bucket with the oldest `last` timestamp to
+// make room when the map hits its cap. Caller holds s.mu. O(n), but only on
+// the rare full-map insert path — the GC sweep keeps the map well below cap
+// in normal operation.
+func (l *ipRateLimiter) evictOldestLocked() {
+	var oldestIP string
+	var oldest time.Time
+	first := true
+	for ip, b := range l.buckets {
+		if first || b.last.Before(oldest) {
+			oldestIP = ip
+			oldest = b.last
+			first = false
+		}
+	}
+	if !first {
+		delete(l.buckets, oldestIP)
+	}
+}
+
+// trustedProxies holds the operator-configured set of CIDRs whose
+// connections are allowed to assert a client IP via X-Forwarded-For. It
+// is parsed once from $HAZYFLOW_TRUSTED_PROXIES (comma-separated CIDRs,
+// e.g. "10.0.0.0/8,2001:db8::/32") on first use. When the env var is
+// unset/empty the slice is nil and XFF is never honored — behavior is
+// then identical to the pre-proxy code (RemoteAddr only). Invalid CIDR
+// entries are skipped (a malformed allowlist must never widen trust).
+var (
+	trustedProxiesOnce sync.Once
+	trustedProxies     []*net.IPNet
+)
+
+func loadTrustedProxies() {
+	raw := os.Getenv("HAZYFLOW_TRUSTED_PROXIES")
+	for _, part := range strings.Split(raw, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		// Accept a bare IP as a /32 (or /128) as well as a CIDR.
+		if !strings.Contains(part, "/") {
+			if ip := net.ParseIP(part); ip != nil {
+				if ip.To4() != nil {
+					part += "/32"
+				} else {
+					part += "/128"
+				}
+			}
+		}
+		if _, ipnet, err := net.ParseCIDR(part); err == nil {
+			trustedProxies = append(trustedProxies, ipnet)
+		}
+	}
+}
+
+func isTrustedProxy(ip net.IP) bool {
+	if ip == nil {
+		return false
+	}
+	for _, n := range trustedProxies {
+		if n.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// clientIP extracts the source IP for rate-limiting. By default it uses
+// the connection's peer address (RemoteAddr), which behind a reverse
+// proxy is the proxy's IP — so without further config every client would
+// share one bucket behind the TLS ingress.
+//
+// To fix that an operator sets $HAZYFLOW_TRUSTED_PROXIES to the CIDR(s)
+// the ingress connects from. Only when the direct peer (RemoteAddr) is
+// within that allowlist do we consult X-Forwarded-For; otherwise XFF is
+// ignored entirely (an untrusted peer can forge it freely).
+//
+// We honor the RIGHTMOST X-Forwarded-For entry that is NOT itself a
+// trusted proxy. XFF is appended by each hop, so the rightmost entries
+// are the ones our own infrastructure added and can be believed; walking
+// right-to-left and stopping at the first non-trusted address yields the
+// real client even with a chain of trusted proxies, while a client-
+// injected prefix (the leftmost, attacker-controlled entries) is
+// discarded. If every listed hop is trusted (or the header is empty) we
+// fall back to RemoteAddr.
 func clientIP(r *http.Request) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
+	trustedProxiesOnce.Do(loadTrustedProxies)
+
+	host := r.RemoteAddr
+	if h, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		host = h
+	}
+
+	// Only a trusted peer may speak for someone else via XFF.
+	if len(trustedProxies) == 0 || !isTrustedProxy(net.ParseIP(host)) {
+		return host
+	}
+
+	xff := r.Header.Get("X-Forwarded-For")
+	if xff == "" {
+		return host
+	}
+	parts := strings.Split(xff, ",")
+	for i := len(parts) - 1; i >= 0; i-- {
+		ip := net.ParseIP(strings.TrimSpace(parts[i]))
+		if ip == nil {
+			// A malformed hop breaks the trust chain — stop and use what
+			// we have (the peer) rather than trusting anything further left.
+			break
+		}
+		if !isTrustedProxy(ip) {
+			return ip.String()
+		}
 	}
 	return host
 }

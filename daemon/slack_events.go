@@ -23,6 +23,13 @@ import (
 // using this module.
 const slackOnMentionModuleID = "slack_on_mention"
 
+// slackTriggerSecretName is the tenant secret holding the Slack app's
+// signing secret (Basic Information → "Signing Secret"). Organization
+// scope (bare name), same convention as Stripe's STRIPE_WEBHOOK_SECRET —
+// resolved per request and bound to the URL tenant so one tenant's
+// secret can't validate another tenant's events.
+const slackTriggerSecretName = "SLACK_SIGNING_SECRET"
+
 // maxSlackBodyBytes caps the body the handler accepts. Slack events
 // are usually a few KB; the cap protects against an attacker who
 // learned the signing secret from posting an arbitrarily large body.
@@ -91,10 +98,6 @@ func (h *SlackEventsHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) 
 		http.Error(rw, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if h.signingSecret == "" {
-		http.Error(rw, "Slack events endpoint not configured (set --slack-signing-secret)", http.StatusNotImplemented)
-		return
-	}
 	tenant := r.PathValue("tenant")
 	if tenant == "" {
 		http.Error(rw, "expected /api/v1/events/slack/<tenant>", http.StatusBadRequest)
@@ -116,7 +119,31 @@ func (h *SlackEventsHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if err := h.verifySignature(r.Header, body); err != nil {
+	// Resolve the signing secret BOUND to the URL tenant. Policy
+	// (per-tenant preferred, global fallback):
+	//
+	//   - If this tenant configured its own SLACK_SIGNING_SECRET, verify
+	//     against that ONLY. A tenant that set its own secret is thereby
+	//     protected from the shared-secret cross-tenant injection — an
+	//     attacker who knows the global signing secret can't forge an
+	//     event to a tenant whose secret it doesn't know.
+	//   - Otherwise fall back to the global env-configured signing secret.
+	//     This preserves single-tenant deploys that pass --slack-signing-secret
+	//     and haven't moved their secret into the per-tenant store.
+	//   - If neither exists, reject (fail closed).
+	secret := h.tenantSecret(r.Context(), tenant)
+	if secret == "" {
+		secret = h.signingSecret
+	}
+	if secret == "" {
+		// Same generic 401 as a bad signature — an unauthenticated caller
+		// probing tenant names learns nothing about which tenants exist.
+		h.logger.Printf("reject %s: no signing secret configured", tenant)
+		http.Error(rw, "invalid signature", http.StatusUnauthorized)
+		return
+	}
+
+	if err := h.verifySignature(r.Header, body, secret); err != nil {
 		// 401 keeps the error generic — exposing "stale timestamp" vs
 		// "bad signature" would help an attacker calibrate. Detailed
 		// reason goes to the log only.
@@ -321,16 +348,35 @@ func nodeChannelFilterMatches(params map[string]any, eventChannel string) bool {
 	return f == eventChannel
 }
 
+// tenantSecret reads this tenant's own SLACK_SIGNING_SECRET from the
+// encrypted secret store, bound to the URL tenant. Empty (no store, not
+// configured, or any lookup error) means "no per-tenant secret" — the
+// caller then falls back to the global env secret.
+func (h *SlackEventsHandler) tenantSecret(ctx context.Context, tenant string) string {
+	if h.svc == nil || h.svc.EncryptedSecrets == nil {
+		return ""
+	}
+	secret, err := h.svc.EncryptedSecrets.GetExact(ctx, tenant, slackTriggerSecretName)
+	if err != nil {
+		return ""
+	}
+	return secret
+}
+
 // verifySignature implements the Slack signing-secret scheme:
 //
 //	base   = "v0:" + timestamp + ":" + body
-//	sig    = "v0=" + hex(hmac-sha256(signingSecret, base))
+//	sig    = "v0=" + hex(hmac-sha256(secret, base))
 //	header X-Slack-Signature must equal sig (constant-time)
+//
+// The secret is resolved per request (per-tenant preferred, global
+// fallback) and passed in, so the signature is verified against the
+// secret bound to the URL tenant.
 //
 // Plus a replay window: reject if the timestamp is more than
 // ~5 minutes off from server time. See:
 // https://api.slack.com/authentication/verifying-requests-from-slack
-func (h *SlackEventsHandler) verifySignature(header http.Header, body []byte) error {
+func (h *SlackEventsHandler) verifySignature(header http.Header, body []byte, secret string) error {
 	tsStr := header.Get("X-Slack-Request-Timestamp")
 	sig := header.Get("X-Slack-Signature")
 	if tsStr == "" || sig == "" {
@@ -343,7 +389,7 @@ func (h *SlackEventsHandler) verifySignature(header http.Header, body []byte) er
 	if skew := h.now().Unix() - ts; skew > int64(slackSignatureMaxSkew.Seconds()) || skew < -int64(slackSignatureMaxSkew.Seconds()) {
 		return fmt.Errorf("timestamp skew %ds outside replay window", skew)
 	}
-	mac := hmac.New(sha256.New, []byte(h.signingSecret))
+	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte("v0:"))
 	mac.Write([]byte(tsStr))
 	mac.Write([]byte(":"))

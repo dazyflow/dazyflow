@@ -471,7 +471,7 @@ func (w *Worker) runNode(ctx context.Context, graph core.Graph, rec core.JobReco
 			execCtx = engine.WithBodyRunner(execCtx, w.bodyRunner(body, rec.GraphRunID))
 		}
 	}
-	result, err := w.engine.RunNode(execCtx, graph, rec.GraphRunID, rec.NodeID, prior, nodeProgress)
+	result, err := w.engine.RunNode(execCtx, graph, rec.GraphRunID, rec.NodeID, rec.ID, prior, nodeProgress)
 
 	// Translate a deadline expiry into a structured failure. Without
 	// this, ctx.Err() bubbling up as a generic error makes per-node

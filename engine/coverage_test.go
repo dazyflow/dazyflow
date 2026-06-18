@@ -212,7 +212,7 @@ func TestEngine_Run_CyclicGraphIsInvalid(t *testing.T) {
 func TestEngine_RunNode_UnknownNode(t *testing.T) {
 	e := newEngineWith(t)
 	g := core.Graph{ID: "g", Nodes: []core.Node{{ID: "a", Module: "noop"}}}
-	res, err := e.RunNode(t.Context(), g, "run-1", "ghost", nil, nil)
+	res, err := e.RunNode(t.Context(), g, "run-1", "ghost", "rec-ghost", nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "ghost") {
 		t.Errorf("err = %v, want one mentioning 'ghost'", err)
 	}
@@ -224,7 +224,7 @@ func TestEngine_RunNode_UnknownNode(t *testing.T) {
 func TestEngine_RunNode_NoResolver(t *testing.T) {
 	e := &Engine{}
 	g := core.Graph{Nodes: []core.Node{{ID: "a", Module: "noop"}}}
-	res, err := e.RunNode(t.Context(), g, "run-1", "a", nil, nil)
+	res, err := e.RunNode(t.Context(), g, "run-1", "a", "rec-a", nil, nil)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -238,7 +238,7 @@ func TestEngine_RunNode_ResolverFails(t *testing.T) {
 	// modules not in any catalog — that surfaces as resolve_failed.
 	e := newEngineWith(t)
 	g := core.Graph{Nodes: []core.Node{{ID: "a", Module: "nowhere"}}}
-	res, err := e.RunNode(t.Context(), g, "run", "a", nil, nil)
+	res, err := e.RunNode(t.Context(), g, "run", "a", "rec-a", nil, nil)
 	if err == nil {
 		t.Fatal("expected resolve error")
 	}
@@ -256,7 +256,7 @@ func TestEngine_RunNode_SandboxError(t *testing.T) {
 	})
 	e.Sandbox = &fakeSandbox{rootErr: errors.New("bad name")}
 	g := core.Graph{Tenant: "t", Workspace: "w", Nodes: []core.Node{{ID: "a", Module: "noop"}}}
-	res, err := e.RunNode(t.Context(), g, "run-1", "a", nil, nil)
+	res, err := e.RunNode(t.Context(), g, "run-1", "a", "rec-a", nil, nil)
 	if err == nil || res.Error == nil || res.Error.Code != "sandbox" {
 		t.Errorf("res = %+v err = %v, want sandbox error", res, err)
 	}
@@ -282,7 +282,7 @@ func TestEngine_RunNode_SecretError(t *testing.T) {
 	g := core.Graph{
 		Nodes: []core.Node{{ID: "a", Module: "noop", Params: map[string]any{"k": "secret://X"}}},
 	}
-	res, err := e.RunNode(t.Context(), g, "run-1", "a", nil, nil)
+	res, err := e.RunNode(t.Context(), g, "run-1", "a", "rec-a", nil, nil)
 	if err == nil || res.Error == nil || res.Error.Code != "secret" {
 		t.Errorf("res=%+v err=%v, want secret error", res, err)
 	}
@@ -317,7 +317,7 @@ func TestEngine_RunNode_ApprovalURLAttached(t *testing.T) {
 	sig := &stubSigner{}
 	e.ApprovalSigner = sig
 	g := core.Graph{Nodes: []core.Node{{ID: "approve-step", Module: "await"}}}
-	if _, err := e.RunNode(t.Context(), g, "run-99", "approve-step", nil, nil); err != nil {
+	if _, err := e.RunNode(t.Context(), g, "run-99", "approve-step", "rec-approve", nil, nil); err != nil {
 		t.Fatalf("RunNode: %v", err)
 	}
 	if sig.saw[0] != "run-99" || sig.saw[1] != "approve-step" {
@@ -867,7 +867,7 @@ func TestForwardProgress_DrainsAfterCancel(t *testing.T) {
 	in := make(chan core.Progress, 2)
 	out := make(chan GraphProgress) // unbuffered so the send blocks
 	done := make(chan struct{})
-	go forwardProgress(ctx, "j", "n", in, out, done)
+	go forwardProgress(ctx, "j", "n", in, out, nil, done)
 
 	// Send one event with no reader on out; the goroutine blocks in
 	// `case out <- …`. Cancel — it must abandon, drain remaining events

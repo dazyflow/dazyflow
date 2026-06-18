@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"maps"
+	"net/url"
 	"strings"
 
 	"git.sr.ht/~klahr/hazyflow/core"
@@ -131,7 +132,7 @@ func executeCallService(ctx context.Context, job core.Job, _ chan<- core.Progres
 		return params.Err(job, "internal", err.Error()), nil
 	}
 
-	status, respBody, err := haDo(ctx, job, "POST", "/api/services/"+domain+"/"+svc, payload)
+	status, respBody, err := haDo(ctx, job, "POST", "/api/services/"+url.PathEscape(domain)+"/"+url.PathEscape(svc), payload)
 	if f := httpFailure(job, status, respBody, err); f != nil {
 		return *f, nil
 	}

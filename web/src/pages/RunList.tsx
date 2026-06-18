@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Activity, ExternalLink, RotateCcw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
+import { ConfirmModal } from "../components/ConfirmModal";
 import { shouldShowTenantID } from "../lib/visibleTenant";
 import { formatDateTime } from "../lib/datetime";
 import type { RunSummary, JobStatus } from "../types";
@@ -32,6 +33,9 @@ export function RunList() {
   // populated/shown in the Failed filter, where retrying makes sense.
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [retrying, setRetrying] = useState(false);
+  // Confirm before a bulk retry — it resumes many runs at once (re-running
+  // their failed-and-downstream steps, side effects included).
+  const [confirmBulk, setConfirmBulk] = useState(false);
   // graph_id → display name, so the FLOW column reads "Order received
   // alert" instead of the slug. Best-effort: a missing entry (deleted
   // flow, fetch error) falls back to the raw id.
@@ -89,21 +93,31 @@ export function RunList() {
   // Live polling whenever anything is in-flight. Same heuristic as the
   // RunHistory dropdown — refresh only the first PAGE_SIZE rows so a
   // long scrollback isn't repeatedly fetched.
+  //
+  // The interval depends on the derived `anyLive` boolean, NOT the whole
+  // `runs` array — the tick calls setRuns, so depending on `runs` rebuilt
+  // the interval every 3s (a teardown + new timer per tick). The current
+  // row count (for the refresh limit) is read from a ref so the callback
+  // stays stable.
+  const anyLive = runs.some(
+    (r) =>
+      r.status === "queued" ||
+      r.status === "running" ||
+      r.status === "awaiting",
+  );
+  const runCountRef = useRef(runs.length);
+  runCountRef.current = runs.length;
   useEffect(() => {
-    if (!token) return;
-    const anyLive = runs.some(
-      (r) =>
-        r.status === "queued" ||
-        r.status === "running" ||
-        r.status === "awaiting",
-    );
-    if (!anyLive) return;
+    if (!token || !anyLive) return;
     const t = window.setInterval(() => {
       api
         .listAllRuns(token, {
-          limit: Math.max(PAGE_SIZE, runs.length),
+          limit: Math.max(PAGE_SIZE, runCountRef.current),
           status: filter || undefined,
           workspace: activeWorkspace || undefined,
+          // Match the initial load: without the tenant, a multi-tenant
+          // principal's poll can replace the list with other tenants' runs.
+          tenant: activeTenant || undefined,
         })
         .then((r) => {
           const page = r.runs ?? [];
@@ -113,7 +127,7 @@ export function RunList() {
         .catch(() => {});
     }, 3000);
     return () => window.clearInterval(t);
-  }, [token, runs, filter, activeWorkspace, activeTenant]);
+  }, [token, anyLive, filter, activeWorkspace, activeTenant]);
 
   // The Failed filter doubles as a retry inbox: checkboxes + a bulk
   // "Retry selected" that resumes each failed run from where it failed.
@@ -166,6 +180,8 @@ export function RunList() {
         tenant: activeTenant || undefined,
       });
       setRuns(r.runs ?? []);
+    } catch (e) {
+      setError((e as Error).message);
     } finally {
       setRetrying(false);
     }
@@ -185,6 +201,8 @@ export function RunList() {
       const next = r.runs ?? [];
       setRuns((prev) => [...prev, ...next]);
       setHasMore(next.length === PAGE_SIZE);
+    } catch (e) {
+      setError((e as Error).message);
     } finally {
       setLoading(false);
     }
@@ -242,7 +260,7 @@ export function RunList() {
           <span>{t("runList.selectedCount", { count: selected.size })}</span>
           <button
             className="primary"
-            onClick={() => void bulkRetry()}
+            onClick={() => setConfirmBulk(true)}
             disabled={retrying}
             style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
           >
@@ -392,6 +410,20 @@ export function RunList() {
             {loading ? t("common.loading") : t("runList.loadMore")}
           </button>
         </div>
+      )}
+
+      {confirmBulk && (
+        <ConfirmModal
+          title={t("runList.confirmBulkRetryTitle")}
+          message={t("runList.confirmBulkRetryBody", { count: selected.size })}
+          confirmLabel={t("runList.retrySelected")}
+          danger
+          onConfirm={() => {
+            setConfirmBulk(false);
+            void bulkRetry();
+          }}
+          onCancel={() => setConfirmBulk(false)}
+        />
       )}
     </div>
   );

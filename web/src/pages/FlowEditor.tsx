@@ -302,6 +302,18 @@ function EditorInner() {
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // loadFailed is set when the INITIAL graph load fails with a non-404
+  // (500/network). In that state `nodes` is [] but that empty canvas does
+  // NOT reflect the server graph — so editing + autosave is blocked to
+  // stop an empty graph overwriting the real one. Cleared on a successful
+  // (re)load. A 404 is the normal "never saved yet" state and does NOT set
+  // this flag.
+  const [loadFailed, setLoadFailed] = useState(false);
+  // graphLoading gates the empty-state CTA so a populated flow doesn't flash
+  // "Add your first step" during the initial graph fetch. true from mount
+  // (and on every flow switch) until the load settles (success / 404 /
+  // error). Starts true so the very first render shows nothing, not the CTA.
+  const [graphLoading, setGraphLoading] = useState(true);
   // OAuth providers + which accounts the tenant has connected. Drives
   // the pre-run connection check. null = not loaded / OAuth disabled,
   // in which case the check is skipped (never blocks a run).
@@ -312,6 +324,19 @@ function EditorInner() {
   // gateOpen shows the "set up first" modal that a blocked Run attempt
   // raises. The specifics come from the live missing* memos below.
   const [gateOpen, setGateOpen] = useState(false);
+  // orphanWarnOpen shows the "some steps aren't connected" confirm a Run
+  // attempt raises when the flow has orphaned nodes. Soft gate: the user can
+  // run anyway (the orphans simply won't participate).
+  const [orphanWarnOpen, setOrphanWarnOpen] = useState(false);
+  // deletePending holds a queued node/edge deletion awaiting confirmation, so
+  // a single Delete keypress can't silently wipe work. React Flow's
+  // onBeforeDelete returns a Promise we park here; the ConfirmModal resolves
+  // it true (proceed with the deletion) or false (cancel).
+  const [deletePending, setDeletePending] = useState<{
+    nodes: number;
+    edges: number;
+    resolve: (ok: boolean) => void;
+  } | null>(null);
   // Test-run sample editor: lets the user tweak the JSON payload fed to a
   // webhook flow before firing, so they can exercise edge cases instead of
   // the one auto-generated shape. Pre-filled from buildTestEventSample.
@@ -536,6 +561,8 @@ function EditorInner() {
     if (!token || !me || !id || !activeTenant || !activeWorkspace) return;
     let cancelled = false;
     setError(null);
+    setLoadFailed(false);
+    setGraphLoading(true);
     // A flow switch makes the current state (and its dirty flag) moot —
     // it describes the PREVIOUS flow. Drop the flag immediately so
     // neither the dirty-guard nor a pending autosave can act on it.
@@ -631,7 +658,15 @@ function EditorInner() {
           loadedIDRef.current = requestedID;
           return;
         }
+        // Non-404 failure (500/network): the empty canvas does NOT reflect
+        // the server graph. Surface the error AND latch loadFailed so the
+        // autosave/save path can't PUT an empty graph over the real one
+        // until a successful reload clears the flag.
         setError(msg);
+        setLoadFailed(true);
+      })
+      .finally(() => {
+        if (!cancelled) setGraphLoading(false);
       });
 
     return () => {
@@ -1568,6 +1603,24 @@ function EditorInner() {
     return out;
   }, [nodes, paramsByID, providers, secrets, disabledNodes]);
 
+  // orphanedNodeIDs are nodes that, in a multi-node flow, touch NO edge at
+  // all (no incoming and no outgoing wire). They'll never run as part of the
+  // flow — almost always a forgotten connection — so the Run path warns
+  // before launching (a soft "Run anyway" gate, not a hard block: a lone
+  // trigger/action might be intentional during building). A single-node flow
+  // is never flagged; a disabled node is skipped (it never runs anyway).
+  const orphanedNodeIDs = useMemo(() => {
+    if (nodes.length < 2) return [] as string[];
+    const wired = new Set<string>();
+    for (const e of edges) {
+      wired.add(e.source);
+      wired.add(e.target);
+    }
+    return nodes
+      .filter((n) => !disabledNodes.has(n.id) && !wired.has(n.id))
+      .map((n) => n.id);
+  }, [nodes, edges, disabledNodes]);
+
   // loopHintByNode flags a node that has a LIST wired into a one-at-a-time
   // input — e.g. a Google Form's "responses" list straight into an AI/email
   // step. That step would run once on the whole batch; the fix is a For each
@@ -2197,8 +2250,15 @@ function EditorInner() {
     ...overrides,
   });
 
-  const save = async (autosave = false) => {
-    if (!token || !me || !id) return;
+  const save = async (autosave = false): Promise<boolean> => {
+    if (!token || !me || !id) return false;
+    // Never PUT over a graph we failed to load — the in-memory state is the
+    // empty fallback, not the server's. (Defends manual Save too, not just
+    // the autosave effect.)
+    if (loadFailed) {
+      setError(t("editor.loadFailedBlocked"));
+      return false;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -2211,6 +2271,7 @@ function EditorInner() {
       // need to flip. Cheap status probe; ignored on autosave bursts is
       // fine since we refresh on the next explicit interaction too.
       if (!autosave) void loadPublishInfo();
+      return true;
     } catch (e) {
       const msg = (e as Error).message;
       setError(msg);
@@ -2223,6 +2284,7 @@ function EditorInner() {
       ) {
         void refreshLock();
       }
+      return false;
     } finally {
       setSaving(false);
     }
@@ -2243,12 +2305,21 @@ function EditorInner() {
   // dirtyRef too (skip hydrating over local edits made mid-fetch).
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
+  // Mirror of loadFailed for the unmount/unload flush (reads latest value
+  // without re-registering the listener) — never flush the empty fallback
+  // over a graph we couldn't load.
+  const loadFailedRef = useRef(loadFailed);
+  loadFailedRef.current = loadFailed;
   const buildGraphRef = useRef(buildGraph);
   buildGraphRef.current = buildGraph;
   useEffect(() => {
     if (!dirty || saving || !token || !me || !id) return;
     if (!hasPerm("graph:edit") || lockedRunID) return;
     if (previewRef) return; // never autosave a history preview as the HEAD
+    // The initial load failed (non-404): the in-memory empty graph is NOT
+    // the server's, so autosaving would clobber the real graph. Block until
+    // a successful reload clears loadFailed.
+    if (loadFailed) return;
     // The in-memory state must belong to the flow in the URL. After a
     // flow switch there's a beat where `id` is the new flow but the
     // nodes are still the old one's — autosaving then writes flow A's
@@ -2277,6 +2348,7 @@ function EditorInner() {
     timeoutSeconds,
     lockedRunID,
     previewRef,
+    loadFailed,
     token,
     me,
     id,
@@ -2292,8 +2364,25 @@ function EditorInner() {
   // lands even on a fast refresh. Best-effort: a 409 from an active run is
   // the only realistic loss, and the in-app autosave already covers the rest.
   useEffect(() => {
+    // flush PUTs the current (dirty) graph immediately, bypassing the
+    // debounce. Used both on page unload (pagehide) AND on component
+    // unmount / in-app route change (the effect cleanup) — the debounced
+    // autosave clears its pending timer on unmount, so without this an edit
+    // made within the ~1.5s window just before navigating away is silently
+    // dropped. It reads `g` (and so the flow id) from buildGraphRef at call
+    // time; because `id` is an effect dep, a route change tears this effect
+    // down with the PREVIOUS flow's closure, so the flush targets the flow
+    // the edits actually belong to. Blocked when the initial load failed —
+    // never overwrite the real graph with the empty fallback.
     const flush = () => {
-      if (!dirtyRef.current || !token || !id || !hasPerm("graph:edit")) return;
+      if (
+        !dirtyRef.current ||
+        loadFailedRef.current ||
+        !token ||
+        !id ||
+        !hasPerm("graph:edit")
+      )
+        return;
       const g = buildGraphRef.current();
       const path = `/me/flows/${encodeURIComponent(`${g.tenant}/${g.workspace}/${g.id}`)}?autosave=1`;
       try {
@@ -2312,7 +2401,12 @@ function EditorInner() {
       }
     };
     window.addEventListener("pagehide", flush);
-    return () => window.removeEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      // Unmount / route change: flush any edit still inside the debounce
+      // window before this editor instance (and its pending timer) is gone.
+      flush();
+    };
   }, [token, id, hasPerm]);
 
   // --- Version history ------------------------------------------------
@@ -2852,6 +2946,23 @@ function EditorInner() {
     }
   };
 
+  // confirmDelete gates React Flow's delete (Backspace/Delete on a selection,
+  // or the inspector's remove). It opens the ConfirmModal and resolves the
+  // promise React Flow awaits: true proceeds, false cancels. A single confirm
+  // covers a multi-select delete. Empty selections (nothing to remove) pass
+  // through without a prompt.
+  const confirmDelete = useCallback(
+    (params: { nodes: FlowNode[]; edges: FlowEdge[] }): Promise<boolean> => {
+      const nodeCount = params.nodes.length;
+      const edgeCount = params.edges.length;
+      if (nodeCount === 0 && edgeCount === 0) return Promise.resolve(true);
+      return new Promise<boolean>((resolve) => {
+        setDeletePending({ nodes: nodeCount, edges: edgeCount, resolve });
+      });
+    },
+    [],
+  );
+
   const runWithLiveStatus = async () => {
     if (!token || !me || !id) return;
     // Hard-block a run that's missing a required value (e.g. ntfy with no
@@ -2877,6 +2988,12 @@ function EditorInner() {
       localStorage.getItem(`hazyflow.slackAck.${id}`) !== "1";
     if (needsSetup || slackReminderPending) {
       setGateOpen(true);
+      return;
+    }
+    // Soft warning: orphaned (unconnected) steps won't run. Confirm before
+    // launching so a forgotten wire doesn't read as a silently-skipped step.
+    if (orphanedNodeIDs.length > 0) {
+      setOrphanWarnOpen(true);
       return;
     }
     await doRun();
@@ -3710,6 +3827,7 @@ function EditorInner() {
           onNodeDrag={onNodeDrag}
           onNodeDragStop={onNodeDragStop}
           onEdgesChange={onEdgesChange}
+          onBeforeDelete={confirmDelete}
           onConnect={onConnect}
           isValidConnection={isValidConnection}
           onConnectStart={onConnectStart}
@@ -3755,7 +3873,7 @@ function EditorInner() {
             Point first-timers straight at "Add step". Hidden once the palette
             is open or any node exists. pointer-events:none lets clicks fall
             through to the canvas except on the button itself. */}
-        {nodes.length === 0 && !paletteOpen && (
+        {nodes.length === 0 && !paletteOpen && !graphLoading && (
           <div
             style={{
               position: "absolute",
@@ -3786,6 +3904,26 @@ function EditorInner() {
               <Plus size={15} />
               <span>{t("editor.addEntryPoint")}</span>
             </button>
+          </div>
+        )}
+        {/* While the graph is fetching, a populated flow would otherwise show
+            a blank canvas (or flash the empty-state CTA above). Show a quiet
+            loading note instead. */}
+        {graphLoading && nodes.length === 0 && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              top: 48,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              pointerEvents: "none",
+              color: "var(--faint)",
+            }}
+            role="status"
+          >
+            {t("editor.loadingGraph")}
           </div>
         )}
         {/* Trigger discoverability: a flow with steps but no trigger only
@@ -4085,8 +4223,12 @@ function EditorInner() {
                   // Save the in-flight graph first — sample fires
                   // against the persisted version, so an unsaved edit
                   // to params/wiring would otherwise be invisible to
-                  // the partial run.
-                  await save();
+                  // the partial run. If the save didn't land (error, or a
+                  // failed-load block), bail: sampling the stale/empty
+                  // persisted graph would be misleading. save() already
+                  // surfaced the error.
+                  const ok = await save();
+                  if (!ok) return undefined;
                   const { job_id } = await api.sampleNode(
                     token,
                     activeTenant,
@@ -4151,6 +4293,42 @@ function EditorInner() {
           graph={settingsGraph}
           onClose={() => setSettingsOpen(false)}
           onSave={persistSettings}
+        />
+      )}
+      {/* Delete confirm — a single Delete keypress can wipe selected nodes
+          and their edges, so confirm once (covers multi-select). */}
+      {deletePending && (
+        <ConfirmModal
+          title={t("editor.confirmDeleteTitle")}
+          message={t("editor.confirmDeleteBody", {
+            count: deletePending.nodes + deletePending.edges,
+          })}
+          confirmLabel={t("editor.delete")}
+          danger
+          onConfirm={() => {
+            deletePending.resolve(true);
+            setDeletePending(null);
+          }}
+          onCancel={() => {
+            deletePending.resolve(false);
+            setDeletePending(null);
+          }}
+        />
+      )}
+      {/* Orphaned-step warning — a soft gate before a Run when the flow has
+          steps that aren't connected to anything (they won't participate). */}
+      {orphanWarnOpen && (
+        <ConfirmModal
+          title={t("editor.confirmOrphansTitle")}
+          message={t("editor.confirmOrphansBody", {
+            count: orphanedNodeIDs.length,
+          })}
+          confirmLabel={t("editor.runAnyway")}
+          onConfirm={() => {
+            setOrphanWarnOpen(false);
+            void doRun();
+          }}
+          onCancel={() => setOrphanWarnOpen(false)}
         />
       )}
       {/* Pause confirm — stops every automatic trigger. A plain yes/no; no

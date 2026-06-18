@@ -56,8 +56,12 @@ func init() {
 				},
 				"required":["webhook_url","content"]
 			}`),
-			Idempotent:  false,
-			RetryPolicy: core.RetryExponentialBackoff,
+			Idempotent: false,
+			// Discord webhook execution has no generic idempotency header,
+			// so a retried POST posts the message twice. This drop is a
+			// terminal leaf the engine auto-retries on backoff, so retries
+			// must be off here.
+			RetryPolicy: core.RetryNever,
 		},
 		Execute: executeSendMessage,
 	})

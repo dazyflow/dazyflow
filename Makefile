@@ -73,6 +73,7 @@ dev: pg ## Run hzd locally against the bundled Postgres (make pg). Sources .env 
 	@if [ -f .env ]; then \
 		set -a; . ./.env; set +a; \
 		HAZYFLOW_POSTGRES_DSN=$$(printf '%s' "$$HAZYFLOW_POSTGRES_DSN" | sed 's/@postgres:/@localhost:/') \
+		HAZYFLOW_DEV=1 \
 		HAZYFLOW_HTTP=:8080 go run ./cmd/hzd; \
 	else \
 		HAZYFLOW_HTTP=:8080 \

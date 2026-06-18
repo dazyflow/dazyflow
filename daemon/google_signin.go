@@ -34,7 +34,42 @@ const (
 	googleTokenURL    = "https://oauth2.googleapis.com/token"
 	googleUserinfoURL = "https://www.googleapis.com/oauth2/v3/userinfo"
 	googleScopes      = "openid email profile"
+	// googleOIDCIssuer is the issuer Google asserts in its ID tokens. The
+	// scheme-less form "accounts.google.com" also appears in the wild, but
+	// go-oidc discovery uses the canonical https form; we accept both when
+	// checking the iss claim below.
+	googleOIDCIssuer = "https://accounts.google.com"
 )
+
+// googleVerifierCache memoizes one OIDC verifier per client_id. Each
+// verifier does OIDC discovery + JWKS fetch once and then refreshes keys in
+// the background, so we must not rebuild one per callback. Keyed by
+// client_id because the audience check is client-id-specific.
+var googleVerifierCache = struct {
+	mu sync.Mutex
+	m  map[string]auth.IDTokenVerifier
+}{m: map[string]auth.IDTokenVerifier{}}
+
+// googleIDTokenVerifier returns a cached (or freshly built) OIDC verifier
+// that validates a Google ID token's signature against Google's JWKS and
+// asserts iss=accounts.google.com, aud=clientID, and exp. Reuses the
+// repo's NewOIDCVerifier (Google is standard OIDC).
+func googleIDTokenVerifier(ctx context.Context, clientID string) (auth.IDTokenVerifier, error) {
+	googleVerifierCache.mu.Lock()
+	defer googleVerifierCache.mu.Unlock()
+	if v, ok := googleVerifierCache.m[clientID]; ok {
+		return v, nil
+	}
+	v, err := auth.NewOIDCVerifier(ctx, auth.OIDCConfig{
+		Issuer:   googleOIDCIssuer,
+		Audience: clientID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	googleVerifierCache.m[clientID] = v
+	return v, nil
+}
 
 // googleSignInStates pairs a random state value with the tenant the
 // user is signing into. Module-scoped because the lifecycle is shorter
@@ -302,13 +337,21 @@ func (h *HTTPGateway) googleSignInCallback(rw http.ResponseWriter, r *http.Reque
 			"Google sign-in is no longer configured for that organization")
 		return
 	}
-	tok, info, err := exchangeGoogleCode(r.Context(), cfg, code, h.googleRedirectURI())
+	tok, idToken, info, err := exchangeGoogleCode(r.Context(), cfg, code, h.googleRedirectURI())
 	if err != nil {
 		h.signInError(rw, r, st, classifyGoogleError(err), http.StatusBadGateway, err.Error())
 		return
 	}
 	_ = tok // access token isn't stored — sign-in is one-shot
-	email := strings.ToLower(strings.TrimSpace(info.Email))
+	// Verify the ID token's signature, issuer, audience, and expiry against
+	// Google's JWKS. Without this, identity rested entirely on the userinfo
+	// response, which the signed token must corroborate before we trust it.
+	verifiedEmail, reason, status, msg := h.verifyGoogleIDToken(r.Context(), cfg, idToken, info)
+	if reason != "" {
+		h.signInError(rw, r, st, reason, status, msg)
+		return
+	}
+	email := verifiedEmail
 	if reason, status, msg := validateGoogleClaims(info, email, cfg); reason != "" {
 		h.signInError(rw, r, st, reason, status, msg)
 		return
@@ -334,7 +377,11 @@ func (h *HTTPGateway) googleSignInCallback(rw http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	activeTenant, activeWorkspace, activeRoles := h.resolveActiveOrg(r, user, isNew, email, st)
+	activeTenant, activeWorkspace, activeRoles, reason, status, msg := h.resolveActiveOrg(r, cfg, user, isNew, email, st)
+	if reason != "" {
+		h.signInError(rw, r, st, reason, status, msg)
+		return
+	}
 	ttl := h.SessionTTL
 	if ttl <= 0 {
 		ttl = 24 * time.Hour
@@ -363,6 +410,47 @@ func (h *HTTPGateway) signInError(rw http.ResponseWriter, r *http.Request, st go
 		return
 	}
 	writeJSONError(rw, status, msg)
+}
+
+// verifyGoogleIDToken cryptographically verifies the ID token returned by
+// the token exchange: signature against Google's JWKS, iss == Google,
+// aud == the org's configured client_id, and exp not passed (all enforced
+// by NewOIDCVerifier). It then derives the authoritative email from the
+// signed token and requires it to match the userinfo response, so a tampered
+// userinfo body can't substitute a different identity. Returns the verified
+// (lower-cased) email, or a (reason, status, msg) triple on failure.
+func (h *HTTPGateway) verifyGoogleIDToken(ctx context.Context, cfg auth.OrgAuthConfig, idToken string, info googleUserInfo) (email, reason string, status int, msg string) {
+	if idToken == "" {
+		return "", "no_id_token", http.StatusBadGateway, "google didn't return an id_token"
+	}
+	verifier, err := googleIDTokenVerifier(ctx, cfg.GoogleClientID)
+	if err != nil {
+		return "", "verifier_init_failed", http.StatusBadGateway,
+			"could not initialize Google token verification: "+err.Error()
+	}
+	claims, err := verifier.Verify(ctx, idToken)
+	if err != nil {
+		return "", "id_token_invalid", http.StatusForbidden,
+			"google id_token failed verification: "+err.Error()
+	}
+	// Pull the email out of the signed claims (go-oidc surfaces extra
+	// claims via Extras). This is the trusted identity; userinfo is only a
+	// corroborating display source.
+	signedEmail := ""
+	if claims.Extras != nil {
+		if e, ok := claims.Extras["email"].(string); ok {
+			signedEmail = strings.ToLower(strings.TrimSpace(e))
+		}
+	}
+	if signedEmail == "" {
+		return "", "no_email", http.StatusBadGateway, "google id_token carried no email claim"
+	}
+	uiEmail := strings.ToLower(strings.TrimSpace(info.Email))
+	if uiEmail != "" && uiEmail != signedEmail {
+		return "", "email_mismatch", http.StatusForbidden,
+			"google id_token email does not match the userinfo email"
+	}
+	return signedEmail, "", 0, ""
 }
 
 // validateGoogleClaims enforces the three sign-in preconditions on Google's
@@ -423,27 +511,97 @@ func (h *HTTPGateway) resolveSignInUser(rw http.ResponseWriter, r *http.Request,
 
 // resolveActiveOrg picks the (tenant, workspace, roles) the session lands in.
 // An existing user signing into a different org than their home tenant uses
-// (or auto-gets) a Membership in that org — the workspace admin who enabled
-// SSO for the domain has implicitly authorized everyone in it to join, with
-// the basic editor role. Everyone else lands in their home org.
-func (h *HTTPGateway) resolveActiveOrg(r *http.Request, user auth.User, isNew bool, email string, st googleSignInState) (tenant, workspace string, roles []core.Role) {
+// an existing Membership in that org if they have one; otherwise we may
+// auto-create one — but ONLY when the org restricts SSO to a Workspace
+// domain the user matches (the admin who set the domain has authorized
+// everyone in it), OR the user has a pending invitation to the org. Without
+// either signal, auto-enrolling any Google account that happens to know the
+// org's tenant id is far too broad, so we reject with a clear message.
+// Returns a non-empty reason/status/msg when the sign-in must be refused.
+func (h *HTTPGateway) resolveActiveOrg(r *http.Request, cfg auth.OrgAuthConfig, user auth.User, isNew bool, email string, st googleSignInState) (tenant, workspace string, roles []core.Role, reason string, status int, msg string) {
 	if isNew || user.Tenant == st.Tenant || h.Memberships == nil {
-		return user.Tenant, user.Workspace, user.Roles
+		return user.Tenant, user.Workspace, user.Roles, "", 0, ""
 	}
 	if m, err := h.Memberships.GetMembership(r.Context(), email, st.Tenant); err == nil {
-		return m.Tenant, m.Workspace, m.Roles
+		return m.Tenant, m.Workspace, m.Roles, "", 0, ""
+	}
+	// No existing membership: only auto-enroll when there's an authorizing
+	// signal. A matching Workspace-domain restriction means the admin opted
+	// the whole domain in; a pending invitation is an explicit per-user grant.
+	//
+	// The roles granted depend on WHICH signal authorized the join — and
+	// must NOT be defaultSignupRoles(), which carries tenant_owner /
+	// PermOrganizationAdmin (correct for a brand-new home org, a privilege
+	// escalation when joining an EXISTING org).
+	domainAuthorized := cfg.GoogleWorkspaceDomain != "" &&
+		strings.EqualFold(cfg.GoogleWorkspaceDomain, emailDomain(email))
+	inv, hasInvite := h.pendingInvitation(r.Context(), email, st.Tenant)
+	if !domainAuthorized && !hasInvite {
+		return "", "", nil, "not_invited", http.StatusForbidden,
+			"your account isn't a member of this organization — ask an admin to invite you"
+	}
+	// Domain-authorized joiners get a minimal default role (editor — no org
+	// administration); an invitation carries its own scoped roles, which we
+	// honor exactly (mirrors acceptInvitation in orgs.go).
+	workspace = "main"
+	roles = []core.Role{core.TeamRoleEditor()}
+	if hasInvite {
+		workspace = inv.Workspace
+		roles = inv.Roles
 	}
 	m := auth.Membership{
 		UserEmail: email,
 		Tenant:    st.Tenant,
-		Workspace: "main",
-		Roles:     defaultSignupRoles(),
+		Workspace: workspace,
+		Roles:     roles,
+		InvitedBy: inv.InvitedBy,
 		CreatedAt: time.Now().UTC(),
 	}
-	if err := h.Memberships.PutMembership(r.Context(), m); err == nil {
-		return m.Tenant, m.Workspace, m.Roles
+	if err := h.Memberships.PutMembership(r.Context(), m); err != nil {
+		// Don't silently fall through to the user's home org — that would
+		// drop them into the wrong tenant with their home-org roles. Fail loud.
+		return "", "", nil, "membership_create_failed", http.StatusInternalServerError,
+			fmt.Sprintf("could not enroll you in this organization: %v", err)
 	}
-	return user.Tenant, user.Workspace, user.Roles
+	// An invitation is single-use: mark it accepted so it can't be reused
+	// (best-effort — the membership already exists; mirrors acceptInvitation).
+	if hasInvite && h.Invitations != nil {
+		_ = h.Invitations.MarkAccepted(r.Context(), inv.Token, m.CreatedAt)
+	}
+	return m.Tenant, m.Workspace, m.Roles, "", 0, ""
+}
+
+// emailDomain returns the lower-cased domain part of an email, or "" when
+// the address has no "@".
+func emailDomain(email string) string {
+	at := strings.LastIndex(email, "@")
+	if at < 0 || at == len(email)-1 {
+		return ""
+	}
+	return strings.ToLower(email[at+1:])
+}
+
+// pendingInvitation returns the still-acceptable invitation addressed to
+// email in tenant, and ok=true when one exists. The returned invitation's
+// scoped Roles/Workspace are what the joiner gets — never the broad
+// signup defaults. Best-effort: a missing/erroring store reads as "no
+// invite" (ok=false), which (absent a domain match) correctly blocks
+// auto-enroll.
+func (h *HTTPGateway) pendingInvitation(ctx context.Context, email, tenant string) (inv auth.Invitation, ok bool) {
+	if h.Invitations == nil {
+		return auth.Invitation{}, false
+	}
+	invs, err := h.Invitations.ListByTenant(ctx, tenant)
+	if err != nil {
+		return auth.Invitation{}, false
+	}
+	now := time.Now().UTC()
+	for _, candidate := range invs {
+		if strings.EqualFold(strings.TrimSpace(candidate.Email), strings.TrimSpace(email)) && candidate.IsPending(now) {
+			return candidate, true
+		}
+	}
+	return auth.Invitation{}, false
 }
 
 // completeSignIn delivers the freshly-issued session to the browser and lands
@@ -497,9 +655,10 @@ type googleUserInfo struct {
 }
 
 // exchangeGoogleCode is the standard OAuth code → token round trip,
-// followed by a userinfo lookup. Returns the access token + verified
-// user info.
-func exchangeGoogleCode(ctx context.Context, cfg auth.OrgAuthConfig, code, redirectURI string) (string, googleUserInfo, error) {
+// followed by a userinfo lookup. Returns the access token, the raw
+// id_token (a signed JWT the caller must verify before trusting), and the
+// userinfo profile.
+func exchangeGoogleCode(ctx context.Context, cfg auth.OrgAuthConfig, code, redirectURI string) (string, string, googleUserInfo, error) {
 	form := url.Values{}
 	form.Set("client_id", cfg.GoogleClientID)
 	form.Set("client_secret", cfg.GoogleClientSecret)
@@ -509,7 +668,7 @@ func exchangeGoogleCode(ctx context.Context, cfg auth.OrgAuthConfig, code, redir
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, googleTokenURL, strings.NewReader(form.Encode()))
 	if err != nil {
-		return "", googleUserInfo{}, fmt.Errorf("build token request: %w", err)
+		return "", "", googleUserInfo{}, fmt.Errorf("build token request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
@@ -517,12 +676,12 @@ func exchangeGoogleCode(ctx context.Context, cfg auth.OrgAuthConfig, code, redir
 	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", googleUserInfo{}, fmt.Errorf("token request: %w", err)
+		return "", "", googleUserInfo{}, fmt.Errorf("token request: %w", err)
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", googleUserInfo{}, fmt.Errorf("token exchange %d: %s", resp.StatusCode, body)
+		return "", "", googleUserInfo{}, fmt.Errorf("token exchange %d: %s", resp.StatusCode, body)
 	}
 	var tok struct {
 		AccessToken string `json:"access_token"`
@@ -530,33 +689,33 @@ func exchangeGoogleCode(ctx context.Context, cfg auth.OrgAuthConfig, code, redir
 		TokenType   string `json:"token_type"`
 	}
 	if err := json.Unmarshal(body, &tok); err != nil {
-		return "", googleUserInfo{}, fmt.Errorf("parse token response: %w", err)
+		return "", "", googleUserInfo{}, fmt.Errorf("parse token response: %w", err)
 	}
 	if tok.AccessToken == "" {
-		return "", googleUserInfo{}, fmt.Errorf("no access_token in response")
+		return "", "", googleUserInfo{}, fmt.Errorf("no access_token in response")
 	}
 	// Fetch userinfo with the access token (less brittle than parsing
 	// id_token in-house; Google's userinfo endpoint is the canonical
 	// claim set).
 	uiReq, err := http.NewRequestWithContext(ctx, http.MethodGet, googleUserinfoURL, nil)
 	if err != nil {
-		return "", googleUserInfo{}, fmt.Errorf("build userinfo request: %w", err)
+		return "", "", googleUserInfo{}, fmt.Errorf("build userinfo request: %w", err)
 	}
 	uiReq.Header.Set("Authorization", "Bearer "+tok.AccessToken)
 	uiResp, err := client.Do(uiReq)
 	if err != nil {
-		return "", googleUserInfo{}, fmt.Errorf("userinfo request: %w", err)
+		return "", "", googleUserInfo{}, fmt.Errorf("userinfo request: %w", err)
 	}
 	defer uiResp.Body.Close()
 	uiBody, _ := io.ReadAll(io.LimitReader(uiResp.Body, 64*1024))
 	if uiResp.StatusCode < 200 || uiResp.StatusCode >= 300 {
-		return "", googleUserInfo{}, fmt.Errorf("userinfo %d: %s", uiResp.StatusCode, uiBody)
+		return "", "", googleUserInfo{}, fmt.Errorf("userinfo %d: %s", uiResp.StatusCode, uiBody)
 	}
 	var info googleUserInfo
 	if err := json.Unmarshal(uiBody, &info); err != nil {
-		return "", googleUserInfo{}, fmt.Errorf("parse userinfo: %w", err)
+		return "", "", googleUserInfo{}, fmt.Errorf("parse userinfo: %w", err)
 	}
-	return tok.AccessToken, info, nil
+	return tok.AccessToken, tok.IDToken, info, nil
 }
 
 // Compile-time check that defaultSignupRoles still exists where this

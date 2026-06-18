@@ -62,6 +62,13 @@ func init() {
 				"required":["summary","start","end"]
 			}`),
 			Idempotent: false,
+			// events.insert is a non-idempotent POST (a retry creates a
+			// second event). No RetryPolicy is set, so the engine only
+			// retries this via an explicit OnErrorRetry edge — not the
+			// auto-backoff path — so we leave the policy unset rather than
+			// forcing RetryNever. If auto-retry is ever wanted here, thread
+			// a request id (events.insert accepts a client-supplied id)
+			// before turning on backoff.
 		},
 		Execute: executeCreateEvent,
 	})

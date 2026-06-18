@@ -38,21 +38,39 @@ export function Apps() {
 
   useEffect(() => {
     if (!token) return;
+    // Cancelled-flag guard: a late response from a previous token (sign-out /
+    // tenant switch) must not overwrite the current page's state. Mirrors the
+    // pattern used across the run pages.
+    let cancelled = false;
     api
       .listDrops(token)
-      .then((r) => setDrops(r.drops))
+      .then((r) => {
+        if (!cancelled) setDrops(r.drops);
+      })
       .catch((e) => {
+        if (cancelled) return;
         const msg = e instanceof APIError ? `${e.status}: ${e.message}` : (e as Error).message;
         setError(msg);
       });
     api
       .listSecrets(token, undefined, undefined, true)
-      .then((r) => setSecrets(r.secrets))
-      .catch(() => setSecrets([]));
+      .then((r) => {
+        if (!cancelled) setSecrets(r.secrets);
+      })
+      .catch(() => {
+        if (!cancelled) setSecrets([]);
+      });
     api
       .listProviders(token)
-      .then((r) => setProviders(r.providers))
-      .catch(() => setProviders([]));
+      .then((r) => {
+        if (!cancelled) setProviders(r.providers);
+      })
+      .catch(() => {
+        if (!cancelled) setProviders([]);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
 
   // Group drops by integration slug. The standard-library bucket
@@ -239,13 +257,20 @@ export function AppDetail() {
 
   useEffect(() => {
     if (!token) return;
+    let cancelled = false;
     api
       .listDrops(token)
-      .then((r) => setDrops(r.drops))
+      .then((r) => {
+        if (!cancelled) setDrops(r.drops);
+      })
       .catch((e) => {
+        if (cancelled) return;
         const msg = e instanceof APIError ? `${e.status}: ${e.message}` : (e as Error).message;
         setError(msg);
       });
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
 
   const { meta, integrationDrops } = useMemo(() => {
@@ -390,64 +415,124 @@ function IntegrationConnections({
 
   const [secrets, setSecrets] = useState<string[] | null>(null);
   const [secretsOff, setSecretsOff] = useState(false);
+  // secretsErr/providersErr latch a non-501 fetch failure. Without them a
+  // failed fetch left `secrets` null forever, so the card showed "Loading…"
+  // indefinitely; now the card shows an error with a Retry instead.
+  const [secretsErr, setSecretsErr] = useState(false);
   const [providers, setProviders] = useState<OAuthProviderStatus[] | null>(null);
   const [providersOff, setProvidersOff] = useState(false);
+  const [providersErr, setProvidersErr] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = () => {
+  // refresh re-fetches connection state. `isCancelled` lets the mount effect
+  // discard a response that resolves after the user navigated away (stale
+  // write); on-demand callers (after connect/disconnect) pass nothing.
+  const refresh = (isCancelled?: () => boolean) => {
     if (!token) return;
+    const live = () => !(isCancelled?.() ?? false);
     if (needsSecret) {
+      setSecretsErr(false);
       api
         .listSecrets(token, undefined, undefined, true)
         .then((r) => {
+          if (!live()) return;
           setSecrets(r.secrets);
           setSecretsOff(false);
         })
         .catch((e) => {
+          if (!live()) return;
           if (e instanceof APIError && featureUnavailable(e.status)) setSecretsOff(true);
-          else setError(e instanceof APIError ? e.message : (e as Error).message);
+          else {
+            setSecretsErr(true);
+            setError(e instanceof APIError ? e.message : (e as Error).message);
+          }
         });
     }
     if (needsOAuth) {
+      setProvidersErr(false);
       api
         .listProviders(token)
         .then((r) => {
+          if (!live()) return;
           setProviders(r.providers);
           setProvidersOff(false);
         })
         .catch((e) => {
+          if (!live()) return;
           if (e instanceof APIError && featureUnavailable(e.status)) setProvidersOff(true);
-          else setError(e instanceof APIError ? e.message : (e as Error).message);
+          else {
+            setProvidersErr(true);
+            setError(e instanceof APIError ? e.message : (e as Error).message);
+          }
         });
     }
   };
   // reqs is derived from drops (stable per detail load), so token is the
   // only real dependency; needsSecret/needsOAuth are read inside refresh.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(refresh, [token, slug]);
+  useEffect(() => {
+    let cancelled = false;
+    refresh(() => cancelled);
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, slug]);
 
   // OAuth bounces back to /apps/:slug?oauth=success|error. Show
   // the result once, then strip the params so a refresh doesn't re-show.
-  const oauthResult = searchParams.get("oauth");
-  const oauthError = searchParams.get("error") ?? "";
-  const dismissBanner = () => {
+  // Snapshot the OAuth callback result on the first render, then strip the
+  // params from the URL so a refresh (or the effects below re-running) can't
+  // re-show a stale banner. The banner stays visible from this local state
+  // until the user dismisses it.
+  const [oauthBanner, setOauthBanner] = useState<{
+    result: string;
+    error: string;
+    name: string;
+  } | null>(() => {
+    const result = searchParams.get("oauth");
+    if (!result) return null;
+    const provider = searchParams.get("provider") ?? "";
+    return {
+      result,
+      error: searchParams.get("error") ?? "",
+      name: provider ? oauthProviderDisplay(provider).name : name,
+    };
+  });
+  useEffect(() => {
+    if (!searchParams.get("oauth")) return;
     const next = new URLSearchParams(searchParams);
     next.delete("oauth");
     next.delete("provider");
     next.delete("account");
     next.delete("error");
     setSearchParams(next, { replace: true });
-  };
+    // Run once for this callback round-trip; setSearchParams clears the
+    // param so it won't re-fire.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const dismissBanner = () => setOauthBanner(null);
 
   if (reqs.length === 0 && connectionFields.length === 0) return null;
 
   return (
     <section className="integration-connections">
-      {oauthResult === "error" && (
+      {oauthBanner?.result === "success" && (
+        <div className="card connections-banner success">
+          <span>
+            {t("integrations.connection.connectSuccess", {
+              name: oauthBanner.name,
+            })}
+          </span>
+          <button type="button" className="link-button" onClick={dismissBanner}>
+            {t("common.dismiss")}
+          </button>
+        </div>
+      )}
+      {oauthBanner?.result === "error" && (
         <div className="card connections-banner error">
           <span>
             {t("integrations.connection.connectFailed", {
-              error: oauthError || t("connections.unknownError"),
+              error: oauthBanner.error || t("connections.unknownError"),
             })}
           </span>
           <button type="button" className="link-button" onClick={dismissBanner}>
@@ -462,8 +547,10 @@ function IntegrationConnections({
           name={name}
           slug={slug}
           secrets={secrets}
-          loading={secrets === null && !secretsOff}
+          loading={secrets === null && !secretsOff && !secretsErr}
           off={secretsOff}
+          errored={secretsErr}
+          onRetry={() => refresh()}
           canWrite={canWrite}
           verifiable={connectionVerifiable}
           onChanged={refresh}
@@ -476,8 +563,10 @@ function IntegrationConnections({
             req={req}
             name={name}
             configured={secrets?.includes(req.name) ?? false}
-            loading={secrets === null && !secretsOff}
+            loading={secrets === null && !secretsOff && !secretsErr}
             off={secretsOff}
+            errored={secretsErr}
+            onRetry={() => refresh()}
             canWrite={canWrite}
             onChanged={refresh}
           />
@@ -486,8 +575,10 @@ function IntegrationConnections({
             key={`oauth:${req.name}`}
             req={req}
             status={providers?.find((p) => p.name === req.name) ?? null}
-            loading={providers === null && !providersOff}
+            loading={providers === null && !providersOff && !providersErr}
             off={providersOff}
+            errored={providersErr}
+            onRetry={() => refresh()}
             canWrite={canWrite}
             slug={slug}
             integration={name}
@@ -527,6 +618,8 @@ function SecretCard({
   configured,
   loading,
   off,
+  errored,
+  onRetry,
   canWrite,
   onChanged,
 }: {
@@ -535,6 +628,8 @@ function SecretCard({
   configured: boolean;
   loading: boolean;
   off: boolean;
+  errored?: boolean;
+  onRetry?: () => void;
   canWrite: boolean;
   onChanged: () => void;
 }) {
@@ -543,6 +638,7 @@ function SecretCard({
   const [value, setValue] = useState("");
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
 
@@ -573,11 +669,17 @@ function SecretCard({
 
   const remove = async () => {
     if (!token) return;
+    setRemoving(true);
+    setErr(null);
     try {
       await api.deleteSecret(token, req.name);
-      onChanged();
     } catch (e) {
       setErr(e instanceof APIError ? e.message : (e as Error).message);
+    } finally {
+      setRemoving(false);
+      // Always re-read from the server so the card reflects the real
+      // state whether the delete succeeded or failed.
+      onChanged();
     }
   };
 
@@ -593,6 +695,15 @@ function SecretCard({
       />
       {off ? (
         <p className="connection-note">{t("integrations.connection.storeOff")}</p>
+      ) : errored ? (
+        <div className="connection-note">
+          <p>{t("integrations.connection.loadFailed")}</p>
+          {onRetry && (
+            <button type="button" className="ghost" onClick={onRetry}>
+              {t("common.retry")}
+            </button>
+          )}
+        </div>
       ) : loading ? (
         <p className="connection-note">{t("common.loading")}</p>
       ) : configured && !editing ? (
@@ -611,8 +722,11 @@ function SecretCard({
                 type="button"
                 className="danger-outline"
                 onClick={() => setConfirming(true)}
+                disabled={removing}
               >
-                {t("integrations.connection.disconnect")}
+                {removing
+                  ? t("integrations.connection.disconnecting")
+                  : t("integrations.connection.disconnect")}
               </button>
             </div>
           )}
@@ -659,7 +773,7 @@ function SecretCard({
       {confirming && (
         <ConfirmModal
           title={t("integrations.connection.disconnect")}
-          message={t("integrations.connection.removeConfirm", { name: req.name })}
+          message={t("integrations.connection.removeConfirm", { name })}
           confirmLabel={t("integrations.connection.disconnect")}
           danger
           onConfirm={() => {
@@ -682,6 +796,8 @@ function OAuthCard({
   status,
   loading,
   off,
+  errored,
+  onRetry,
   canWrite,
   slug,
   integration,
@@ -690,6 +806,8 @@ function OAuthCard({
   status: OAuthProviderStatus | null;
   loading: boolean;
   off: boolean;
+  errored?: boolean;
+  onRetry?: () => void;
   canWrite: boolean;
   slug: string;
   integration: string;
@@ -718,6 +836,15 @@ function OAuthCard({
       />
       {off ? (
         <p className="connection-note">{t("integrations.connection.oauthOff")}</p>
+      ) : errored ? (
+        <div className="connection-note">
+          <p>{t("integrations.connection.loadFailed")}</p>
+          {onRetry && (
+            <button type="button" className="ghost" onClick={onRetry}>
+              {t("common.retry")}
+            </button>
+          )}
+        </div>
       ) : loading ? (
         <p className="connection-note">{t("common.loading")}</p>
       ) : canWrite ? (
@@ -750,6 +877,8 @@ function ConnectionFieldsCard({
   secrets,
   loading,
   off,
+  errored,
+  onRetry,
   canWrite,
   verifiable,
   onChanged,
@@ -760,6 +889,8 @@ function ConnectionFieldsCard({
   secrets: string[] | null;
   loading: boolean;
   off: boolean;
+  errored?: boolean;
+  onRetry?: () => void;
   canWrite: boolean;
   verifiable: boolean;
   onChanged: () => void;
@@ -769,6 +900,7 @@ function ConnectionFieldsCard({
   const [values, setValues] = useState<Record<string, string>>({});
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   // testState tracks the "Test connection" button: idle, in-flight, or a
@@ -822,13 +954,19 @@ function ConnectionFieldsCard({
 
   const disconnect = async () => {
     if (!token) return;
+    setRemoving(true);
+    setErr(null);
     try {
       for (const f of fields) {
         if (isSet(f)) await api.deleteSecret(token, keyFor(f));
       }
-      onChanged();
     } catch (e) {
       setErr(e instanceof APIError ? e.message : (e as Error).message);
+    } finally {
+      setRemoving(false);
+      // Re-read from the server regardless: a partial failure (some fields
+      // deleted, one errored) still needs the card to show the true state.
+      onChanged();
     }
   };
 
@@ -846,6 +984,15 @@ function ConnectionFieldsCard({
       />
       {off ? (
         <p className="connection-note">{t("integrations.connection.storeOff")}</p>
+      ) : errored ? (
+        <div className="connection-note">
+          <p>{t("integrations.connection.loadFailed")}</p>
+          {onRetry && (
+            <button type="button" className="ghost" onClick={onRetry}>
+              {t("common.retry")}
+            </button>
+          )}
+        </div>
       ) : loading ? (
         <p className="connection-note">{t("common.loading")}</p>
       ) : connected && !editing ? (
@@ -896,8 +1043,11 @@ function ConnectionFieldsCard({
                 type="button"
                 className="danger-outline"
                 onClick={() => setConfirming(true)}
+                disabled={removing}
               >
-                {t("integrations.connection.disconnect")}
+                {removing
+                  ? t("integrations.connection.disconnecting")
+                  : t("integrations.connection.disconnect")}
               </button>
             </div>
           )}

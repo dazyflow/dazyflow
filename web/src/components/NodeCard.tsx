@@ -269,7 +269,7 @@ function HazyNodeImpl({ data, selected }: NodeProps) {
       style={isTrigger ? ({ "--node-accent": color } as React.CSSProperties) : undefined}
     >
       {d.breakpoint && (
-        <div className="hz-node-bp" aria-label="breakpoint" title="Breakpoint — run pauses after this node" />
+        <div className="hz-node-bp" aria-label={i18n.t("nodeCard.breakpoint")} title={i18n.t("nodeCard.breakpointTitle")} />
       )}
       {d.disabled && (
         <div className="hz-node-offchip" title={i18n.t("nodeCard.offTitle")}>
@@ -512,12 +512,12 @@ function HazyNodeImpl({ data, selected }: NodeProps) {
       </div>
 
       {d.lintMessage && (
-        <div className="hz-node-lint" title={d.lintMessage} aria-label="lint warning">
+        <div className="hz-node-lint" title={d.lintMessage} aria-label={i18n.t("nodeCard.lintWarning")}>
           <AlertTriangle size={13} />
         </div>
       )}
       {d.loopHint && (
-        <div className="hz-node-loop" title={d.loopHint} aria-label="runs once on the whole list">
+        <div className="hz-node-loop" title={d.loopHint} aria-label={i18n.t("nodeCard.loopWarnAria")}>
           <Repeat size={13} />
         </div>
       )}
@@ -536,7 +536,7 @@ function HazyNodeImpl({ data, selected }: NodeProps) {
           if (locked) {
             const label = i18n.t("nodeCard.askAdmin", { name });
             return (
-              <div className="hz-node-setup hz-node-setup-locked" title={label} aria-label="needs setup">
+              <div className="hz-node-setup hz-node-setup-locked" title={label} aria-label={i18n.t("nodeCard.needsSetupAria")}>
                 {icon}
                 <span className="hz-node-setup-label">{label}</span>
               </div>
@@ -547,7 +547,7 @@ function HazyNodeImpl({ data, selected }: NodeProps) {
               className="hz-node-setup nodrag"
               href={`/apps/${d.setupNeeded.slug}`}
               title={i18n.t("nodeCard.needsSetup", { name })}
-              aria-label="needs setup"
+              aria-label={i18n.t("nodeCard.needsSetupAria")}
               onClick={(e) => e.stopPropagation()}
             >
               {icon}
@@ -749,7 +749,7 @@ function OperatorChip({
       title={d.label}
     >
       {d.breakpoint && (
-        <div className="hz-node-bp" aria-label="breakpoint" title="Breakpoint — run pauses after this node" />
+        <div className="hz-node-bp" aria-label={i18n.t("nodeCard.breakpoint")} title={i18n.t("nodeCard.breakpointTitle")} />
       )}
       <Handle
         type="target"
@@ -776,12 +776,12 @@ function OperatorChip({
         title={portTooltip(outputs[0])}
       />
       {d.lintMessage && (
-        <div className="hz-node-lint" title={d.lintMessage} aria-label="lint warning">
+        <div className="hz-node-lint" title={d.lintMessage} aria-label={i18n.t("nodeCard.lintWarning")}>
           <AlertTriangle size={13} />
         </div>
       )}
       {d.loopHint && (
-        <div className="hz-node-loop" title={d.loopHint} aria-label="runs once on the whole list">
+        <div className="hz-node-loop" title={d.loopHint} aria-label={i18n.t("nodeCard.loopWarnAria")}>
           <Repeat size={13} />
         </div>
       )}

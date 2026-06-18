@@ -5032,6 +5032,13 @@ button.warning:hover:not(:disabled) {
 .sf-field-missing > .label-row label {
   color: var(--danger);
 }
+.sf-required-mark {
+  flex-shrink: 0;
+  color: var(--danger);
+  font-weight: 600;
+  line-height: 1;
+  cursor: help;
+}
 .sf-required-flag {
   flex-shrink: 0;
   font-size: var(--text-xs);

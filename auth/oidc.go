@@ -18,6 +18,15 @@ type OIDCConfig struct {
 	// Microsoft Entra it's typically "tid", for Google Workspace "hd".
 	TenantClaim string
 	RolesClaim  string
+	// AllowedTenants optionally constrains which tenant claim values this
+	// issuer may assert. The verifier checks sig/iss/aud/exp, but the
+	// tenant comes straight from the (issuer-controlled) token body with
+	// no binding back to Hazyflow — so a single trusted issuer can mint a
+	// token for ANY tenant id. When AllowedTenants is non-empty, a token
+	// whose tenant claim is not in this list is rejected. When empty,
+	// behavior is unchanged (any tenant the issuer asserts is honored),
+	// preserving single-trusted-issuer setups. Comparison is exact.
+	AllowedTenants []string
 }
 
 // OIDCAuthenticator accepts IdP-issued bearer JWTs on the API: a token

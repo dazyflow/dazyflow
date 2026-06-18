@@ -64,7 +64,7 @@ func (h *HTTPGateway) putResource(rw http.ResponseWriter, r *http.Request, p cor
 		writeJSONError(rw, http.StatusBadRequest, err.Error())
 		return
 	}
-	if status, msg := authorizeSecretScope(p, scope, true); status != 0 {
+	if status, msg := h.authorizeFlowSecretScope(r.Context(), p, scope, flow, true); status != 0 {
 		writeJSONError(rw, status, msg)
 		return
 	}
@@ -110,7 +110,7 @@ func (h *HTTPGateway) listResources(rw http.ResponseWriter, r *http.Request, p c
 		writeJSONError(rw, http.StatusBadRequest, err.Error())
 		return
 	}
-	if status, msg := authorizeSecretScope(p, scope, false); status != 0 {
+	if status, msg := h.authorizeFlowSecretScope(r.Context(), p, scope, flow, false); status != 0 {
 		writeJSONError(rw, status, msg)
 		return
 	}
@@ -155,7 +155,7 @@ func (h *HTTPGateway) deleteResource(rw http.ResponseWriter, r *http.Request, p 
 		writeJSONError(rw, http.StatusBadRequest, err.Error())
 		return
 	}
-	if status, msg := authorizeSecretScope(p, scope, true); status != 0 {
+	if status, msg := h.authorizeFlowSecretScope(r.Context(), p, scope, flow, true); status != 0 {
 		writeJSONError(rw, status, msg)
 		return
 	}

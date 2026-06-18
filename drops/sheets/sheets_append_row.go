@@ -79,8 +79,11 @@ func init() {
 				},
 				"required":["spreadsheet_id"]
 			}`),
-			Idempotent:  false,
-			RetryPolicy: core.RetryExponentialBackoff,
+			Idempotent: false,
+			// Sheets values.append has no idempotency header, so a retried
+			// POST appends the row twice. This drop is a terminal leaf the
+			// engine auto-retries on backoff, so retries must be off here.
+			RetryPolicy: core.RetryNever,
 		},
 		Execute: executeSheetsAppend,
 	})

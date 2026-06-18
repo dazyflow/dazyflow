@@ -61,8 +61,12 @@ func init() {
 				},
 				"required":["account_sid","auth_token","to","body"]
 			}`),
-			Idempotent:  false,
-			RetryPolicy: core.RetryExponentialBackoff,
+			Idempotent: false,
+			// Twilio's Messages API has no generic idempotency header, so
+			// a retried POST sends a second SMS — and double-bills. This
+			// drop is a terminal leaf the engine auto-retries on backoff,
+			// so retries must be off here.
+			RetryPolicy: core.RetryNever,
 		},
 		Execute: executeSendSMS,
 	})

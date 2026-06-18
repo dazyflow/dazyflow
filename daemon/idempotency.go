@@ -23,6 +23,9 @@ package daemon
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"io"
 	"net/http"
 	"sync"
 	"time"
@@ -42,6 +45,12 @@ type idempotentResponse struct {
 	headers  http.Header
 	body     []byte
 	storedAt time.Time
+	// reqHash binds the entry to the request that minted it: a sha256 over
+	// method+path+body. A later request reusing the same key but carrying a
+	// different payload is misuse (the spec's "same key, different body"),
+	// and replaying the first response would silently mask it — so a hash
+	// mismatch is rejected with 422 instead of replayed.
+	reqHash string
 	// done is false while the request that reserved this key is still
 	// in flight (the handler hasn't returned yet), and true once a
 	// completed response has been cached. An in-flight entry exists so
@@ -75,7 +84,7 @@ func newIdempotencyStore() *idempotencyStore {
 // in-flight reservation (e.g. a handler that hung and never resolved)
 // can't lock a key out forever. The common crash/panic case is handled
 // up front by the caller's deferred abort; this is the backstop.
-func (s *idempotencyStore) begin(key string) (existing *idempotentResponse, fresh bool) {
+func (s *idempotencyStore) begin(key, reqHash string) (existing *idempotentResponse, fresh bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if e, ok := s.entries[key]; ok {
@@ -86,7 +95,10 @@ func (s *idempotencyStore) begin(key string) (existing *idempotentResponse, fres
 		delete(s.entries, key)
 		s.removeFromOrderLocked(key)
 	}
-	s.entries[key] = &idempotentResponse{storedAt: time.Now()} // done=false: reserved
+	// done=false: reserved. reqHash is stamped now so a concurrent retry of
+	// the SAME key with a DIFFERENT body is caught while the first request
+	// is still in flight, not only after it commits.
+	s.entries[key] = &idempotentResponse{storedAt: time.Now(), reqHash: reqHash}
 	s.order = append(s.order, key)
 	s.evictLocked()
 	return nil, true
@@ -98,9 +110,13 @@ func (s *idempotencyStore) commit(key string, e *idempotentResponse) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	e.done = true
-	// Keep the key's existing slot in `order` (set by begin); just swap
-	// the value in place so a re-put doesn't double-append.
-	if _, ok := s.entries[key]; !ok {
+	// Carry the request hash from the reservation onto the completed entry
+	// so a later replay can still detect a same-key/different-body misuse.
+	if prev, ok := s.entries[key]; ok {
+		if e.reqHash == "" {
+			e.reqHash = prev.reqHash
+		}
+	} else {
 		// Reservation was evicted under cache pressure; re-add it.
 		s.order = append(s.order, key)
 	}
@@ -169,8 +185,25 @@ func (h *HTTPGateway) idempotencyMiddleware(routePattern string, next func(rw ht
 			return
 		}
 		cacheKey := p.Subject + "|" + r.Method + "|" + routePattern + "|" + key
-		existing, fresh := h.idempotency.begin(cacheKey)
+		// Buffer the body so we can hash it AND hand an intact copy to the
+		// downstream handler. The body hash binds the cached entry to the
+		// exact payload that minted it (plus method+path), so reusing a key
+		// with a different payload can't silently replay the first response.
+		reqHash, err := readBodyHash(r)
+		if err != nil {
+			writeAPIError(rw, http.StatusBadRequest, "bad_request", "could not read request body")
+			return
+		}
+		existing, fresh := h.idempotency.begin(cacheKey, reqHash)
 		if !fresh {
+			// Same key, different request shape is misuse — refuse rather
+			// than replay a response for a payload the client didn't send.
+			if existing.reqHash != "" && existing.reqHash != reqHash {
+				rw.Header().Set("Idempotency-Replay", "false")
+				writeAPIError(rw, http.StatusUnprocessableEntity, "idempotency_key_reused",
+					"this Idempotency-Key was already used with a different request body")
+				return
+			}
 			if !existing.done {
 				// A request with this key is in flight right now. Running
 				// the handler again would fire the action twice, so refuse
@@ -216,6 +249,32 @@ func (h *HTTPGateway) idempotencyMiddleware(routePattern string, next func(rw ht
 			committed = true
 		}
 	}
+}
+
+// readBodyHash reads r.Body fully, restores it (so the downstream handler
+// reads the same bytes), and returns a sha256 over method+path+body. The
+// method+path are folded in so the same body on two different routes hashes
+// differently — defense in depth atop the route-pattern cache key. A nil
+// body hashes as the empty body.
+func readBodyHash(r *http.Request) (string, error) {
+	var raw []byte
+	if r.Body != nil {
+		b, err := io.ReadAll(r.Body)
+		_ = r.Body.Close()
+		if err != nil {
+			return "", err
+		}
+		raw = b
+		// Restore the consumed body for the downstream handler.
+		r.Body = io.NopCloser(bytes.NewReader(raw))
+	}
+	sum := sha256.New()
+	sum.Write([]byte(r.Method))
+	sum.Write([]byte("\n"))
+	sum.Write([]byte(r.URL.Path))
+	sum.Write([]byte("\n"))
+	sum.Write(raw)
+	return hex.EncodeToString(sum.Sum(nil)), nil
 }
 
 // captureWriter buffers the response so it can be cached AND emitted

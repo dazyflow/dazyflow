@@ -97,9 +97,12 @@ export function Templates() {
     try {
       const tplGraph: Graph = await api.loadTemplateGraph(tpl.graph_file);
       // Generate a fresh ID — keep a human-readable slug from the
-      // template ID plus a short suffix so multiple forks of the
-      // same template don't collide.
-      const suffix = Math.random().toString(36).slice(2, 8);
+      // template ID plus a short suffix so multiple forks of the same
+      // template don't collide. crypto.randomUUID() is collision-resistant
+      // (the old Math.random slug could repeat and silently overwrite an
+      // existing fork via the saveGraph PUT); take the first UUID segment
+      // for a short, readable suffix.
+      const suffix = crypto.randomUUID().slice(0, 8);
       const newID = `${tpl.id}-${suffix}`;
       const cloned: Graph = {
         ...tplGraph,

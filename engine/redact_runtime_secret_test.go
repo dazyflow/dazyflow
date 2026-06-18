@@ -43,7 +43,7 @@ func TestRunNode_RedactsConnectorOAuthToken(t *testing.T) {
 	})
 
 	g := core.Graph{ID: "g", Tenant: "acme", Nodes: []core.Node{{ID: "n", Module: "connector_echo"}}}
-	res, err := e.RunNode(t.Context(), g, "run1", "n", nil, nil)
+	res, err := e.RunNode(t.Context(), g, "run1", "n", "rec1", nil, nil)
 	if err != nil {
 		t.Fatalf("RunNode: %v", err)
 	}

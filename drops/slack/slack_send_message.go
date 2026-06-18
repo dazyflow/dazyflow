@@ -70,8 +70,12 @@ func init() {
 				},
 				"required":["channel"]
 			}`),
-			Idempotent:  false,
-			RetryPolicy: core.RetryExponentialBackoff,
+			Idempotent: false,
+			// Slack's chat.postMessage does NOT honor a generic
+			// Idempotency-Key, so a retried POST would post the message
+			// twice. This drop is a terminal leaf, which the engine
+			// auto-retries on backoff — so retries must be off here.
+			RetryPolicy: core.RetryNever,
 		},
 		Execute: executeSlackSendMessage,
 	})

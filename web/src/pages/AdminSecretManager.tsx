@@ -3,6 +3,7 @@ import { Cloud, Lock, Trash2 } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { api, APIError } from "../api";
 import { useAuth } from "../auth";
+import { ConfirmModal } from "../components/ConfirmModal";
 import type {
   AwsSecretManagerConfig,
   AwsSecretManagerStatus,
@@ -36,6 +37,8 @@ export function AdminSecretManager() {
   const [editing, setEditing] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
 
   const [address, setAddress] = useState("");
   const [mount, setMount] = useState("secret");
@@ -128,14 +131,21 @@ export function AdminSecretManager() {
   };
 
   const remove = async () => {
-    if (!token) return;
-    if (!window.confirm(t("connections.secretManager.removeConfirm"))) return;
+    if (!token || removing) return;
+    setRemoving(true);
+    setErr(null);
     try {
       await api.deleteSecretManager(token);
+      // Reflect the new state ONLY after the API confirms the delete — the
+      // previous code flipped configured:false eagerly, which lied (and
+      // hid the real config) if the request then failed. load() re-reads
+      // the authoritative status from the server.
       setStatus({ configured: false });
       load();
     } catch (e) {
       setErr(e instanceof APIError ? e.message : (e as Error).message);
+    } finally {
+      setRemoving(false);
     }
   };
 
@@ -174,7 +184,8 @@ export function AdminSecretManager() {
               <button
                 type="button"
                 className="icon-button danger"
-                onClick={() => void remove()}
+                onClick={() => setConfirmRemove(true)}
+                disabled={removing}
                 aria-label={t("connections.secretManager.remove")}
                 title={t("connections.secretManager.remove")}
               >
@@ -183,6 +194,20 @@ export function AdminSecretManager() {
             </div>
           )}
         </div>
+      )}
+
+      {confirmRemove && (
+        <ConfirmModal
+          title={t("connections.secretManager.removeTitle")}
+          message={t("connections.secretManager.removeConfirm")}
+          confirmLabel={t("connections.secretManager.remove")}
+          danger
+          onConfirm={() => {
+            setConfirmRemove(false);
+            void remove();
+          }}
+          onCancel={() => setConfirmRemove(false)}
+        />
       )}
 
       {showForm && (
@@ -301,6 +326,8 @@ function useProviderSlot<S extends { configured: boolean }, C>(
   const [editing, setEditing] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
 
   const load = useCallback(() => {
     if (!token) return;
@@ -331,13 +358,17 @@ function useProviderSlot<S extends { configured: boolean }, C>(
   };
 
   const remove = async () => {
-    if (!token) return;
-    if (!window.confirm(removeConfirm)) return;
+    if (!token || removing) return;
+    setRemoving(true);
+    setErr(null);
     try {
       await del(token);
+      // Re-read authoritative status only after the delete confirms.
       load();
     } catch (e) {
       setErr(e instanceof APIError ? e.message : (e as Error).message);
+    } finally {
+      setRemoving(false);
     }
   };
 
@@ -346,7 +377,23 @@ function useProviderSlot<S extends { configured: boolean }, C>(
     setEditing(true);
   };
 
-  return { status, editing, setEditing, err, busy, startEdit, save, remove };
+  return {
+    status,
+    editing,
+    setEditing,
+    err,
+    busy,
+    removing,
+    startEdit,
+    save,
+    remove,
+    // confirmRemove drives the themed delete confirm rendered by ProviderShell
+    // (replacing the old window.confirm in `remove`).
+    confirmRemove,
+    requestRemove: () => setConfirmRemove(true),
+    cancelRemove: () => setConfirmRemove(false),
+    removeConfirmMessage: removeConfirm,
+  };
 }
 
 // ProviderShell renders the shared chrome around a provider slot: the
@@ -406,7 +453,8 @@ function ProviderShell({
               <button
                 type="button"
                 className="icon-button danger"
-                onClick={() => void slot.remove()}
+                onClick={() => slot.requestRemove()}
+                disabled={slot.removing}
                 aria-label={t("connections.secretManager.remove")}
                 title={t("connections.secretManager.remove")}
               >
@@ -415,6 +463,20 @@ function ProviderShell({
             </div>
           )}
         </div>
+      )}
+
+      {slot.confirmRemove && (
+        <ConfirmModal
+          title={t("connections.secretManager.removeTitle")}
+          message={slot.removeConfirmMessage}
+          confirmLabel={t("connections.secretManager.remove")}
+          danger
+          onConfirm={() => {
+            slot.cancelRemove();
+            void slot.remove();
+          }}
+          onCancel={() => slot.cancelRemove()}
+        />
       )}
 
       {showForm && (

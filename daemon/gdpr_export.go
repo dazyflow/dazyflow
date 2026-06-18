@@ -176,12 +176,99 @@ func (h *HTTPGateway) assembleOrgExport(ctx context.Context, tenant string) OrgE
 					continue
 				}
 				exp.Flows = append(exp.Flows, exportOrgFlow{
-					Workspace: ws, ID: id, Graph: g,
+					Workspace: ws, ID: id, Graph: redactGraphSecrets(g),
 				})
 			}
 		}
 	}
 	return exp
+}
+
+// redactedValue is the placeholder substituted for a secret-bearing field
+// in an export. Distinct from "" so the reader can tell a redaction from an
+// genuinely empty value.
+const redactedValue = "***redacted***"
+
+// redactGraphSecrets returns a copy of g safe to serialize into an org
+// export: webhook trigger secrets and any node Param/Env whose key looks
+// credential-bearing are blanked. Unlike the per-user export (which only
+// emits FlowSummary metadata, never the graph body), the org export carries
+// each flow's full graph, so it would otherwise leak the webhook bearer
+// token and any inline credentials. We deep-copy the slices and maps we
+// touch so the on-disk graph the store handed us is never mutated in place.
+func redactGraphSecrets(g core.Graph) core.Graph {
+	if len(g.Triggers) > 0 {
+		triggers := make([]core.GraphTrigger, len(g.Triggers))
+		copy(triggers, g.Triggers)
+		for i := range triggers {
+			if triggers[i].Secret != "" {
+				triggers[i].Secret = redactedValue
+			}
+		}
+		g.Triggers = triggers
+	}
+	if len(g.Nodes) > 0 {
+		nodes := make([]core.Node, len(g.Nodes))
+		copy(nodes, g.Nodes)
+		for i := range nodes {
+			nodes[i].Params = redactParams(nodes[i].Params)
+			nodes[i].Env = redactEnv(nodes[i].Env)
+		}
+		g.Nodes = nodes
+	}
+	return g
+}
+
+// redactParams copies params, blanking values whose key looks secret. Only
+// string values are masked in place; non-string secret-keyed values are
+// replaced with the redaction marker too.
+func redactParams(in map[string]any) map[string]any {
+	if len(in) == 0 {
+		return in
+	}
+	out := make(map[string]any, len(in))
+	for k, v := range in {
+		if looksSecretKey(k) {
+			out[k] = redactedValue
+			continue
+		}
+		out[k] = v
+	}
+	return out
+}
+
+func redactEnv(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return in
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		if looksSecretKey(k) {
+			out[k] = redactedValue
+			continue
+		}
+		out[k] = v
+	}
+	return out
+}
+
+// looksSecretKey is a conservative name heuristic: a param/env key
+// containing any of these substrings is treated as credential-bearing.
+// Inline credentials are an anti-pattern (the secret store is the right
+// home), but until every flow is migrated we must not leak the ones that
+// are still inline.
+func looksSecretKey(key string) bool {
+	k := strings.ToLower(key)
+	for _, needle := range []string{
+		"secret", "token", "password", "passwd", "apikey", "api_key",
+		"access_key", "private_key", "client_secret", "credential", "auth",
+		"bearer",
+	} {
+		if strings.Contains(k, needle) {
+			return true
+		}
+	}
+	return false
 }
 
 // exportHandler serves the current subject's data export. Read-only and

@@ -1,6 +1,7 @@
 import { NodeResizer, type NodeProps } from "@xyflow/react";
 import { Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import i18n from "../i18n";
 
 // CommentNode is an editor-only "frame": a resizable, titled, colored box
 // that sits behind the real nodes to group them visually (#3). It has no
@@ -42,8 +43,8 @@ export function CommentNode({ data, selected }: NodeProps) {
         <button
           type="button"
           className="hz-frame-delete nodrag nopan"
-          aria-label="Delete comment"
-          title="Delete comment"
+          aria-label={i18n.t("commentNode.delete")}
+          title={i18n.t("commentNode.delete")}
           onClick={(e) => {
             // Stop the canvas from re-selecting/dragging on the same tap.
             e.stopPropagation();
@@ -56,7 +57,7 @@ export function CommentNode({ data, selected }: NodeProps) {
       <input
         className="hz-frame-title nodrag"
         value={title}
-        placeholder="Comment"
+        placeholder={i18n.t("commentNode.placeholder")}
         spellCheck={false}
         onChange={(e) => {
           setTitle(e.target.value);

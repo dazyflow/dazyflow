@@ -149,6 +149,15 @@ func main() {
 	oidcAudience := envStr("HAZYFLOW_OIDC_AUDIENCE", "")
 	oidcTenantClaim := envStr("HAZYFLOW_OIDC_TENANT_CLAIM", "")
 	oidcRolesClaim := envStr("HAZYFLOW_OIDC_ROLES_CLAIM", "")
+	// Optional issuer→tenant binding: a comma-separated allowlist of tenant
+	// ids this issuer may assert via its tenant claim. Empty = accept any
+	// tenant the issuer asserts (unchanged single-issuer behavior).
+	var oidcAllowedTenants []string
+	for _, t := range strings.Split(envStr("HAZYFLOW_OIDC_ALLOWED_TENANTS", ""), ",") {
+		if t = strings.TrimSpace(t); t != "" {
+			oidcAllowedTenants = append(oidcAllowedTenants, t)
+		}
+	}
 	// Billing (T3). All off by default: no Stripe key = no checkout/
 	// portal/webhook endpoints; FREE_RUNS_PER_MONTH=0 = no run gate.
 	// A SaaS deployment sets all four; self-hosted installs set none.
@@ -475,8 +484,9 @@ func main() {
 			Issuer:      oidcIssuer,
 			ClientID:    oidcClientID,
 			Audience:    oidcAudience,
-			TenantClaim: oidcTenantClaim,
-			RolesClaim:  oidcRolesClaim,
+			TenantClaim:    oidcTenantClaim,
+			RolesClaim:     oidcRolesClaim,
+			AllowedTenants: oidcAllowedTenants,
 		}
 		// Discovery + JWKS fetch happen here, against the root ctx so
 		// background key refreshes outlive this call. Fail loud: a

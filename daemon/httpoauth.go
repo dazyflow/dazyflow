@@ -98,7 +98,11 @@ func (h *HTTPGateway) buildAuthorizeURL(p core.Principal, providerName, account,
 	if returnTo == "" {
 		returnTo = "/apps"
 	}
-	if !strings.HasPrefix(returnTo, "/") {
+	// safeReturnPath rejects not just non-rooted paths but also the
+	// off-origin shapes plain HasPrefix(returnTo, "/") lets through —
+	// "//evil.com" (protocol-relative) and "/\evil.com" (which some
+	// browsers normalize to a host) — closing the open-redirect hole.
+	if !safeReturnPath(returnTo) {
 		return "", http.StatusBadRequest, "return_to must be a relative path starting with /"
 	}
 	state, err := h.OAuth.state.mint(pendingOAuth{
@@ -202,6 +206,13 @@ func (h *HTTPGateway) oauthCallback(rw http.ResponseWriter, r *http.Request) {
 // `?oauth=success|error&provider=…&account=…[&error=…]` so the UI
 // can render a toast without polling.
 func redirectWithStatus(rw http.ResponseWriter, r *http.Request, returnTo, provider, account, status, errMsg string) {
+	// Defense in depth: returnTo was already validated when the state was
+	// minted, but re-check here before url.Parse/http.Redirect so a value
+	// that ever slips through (or a future caller) can't turn the callback
+	// into an open redirect. safeReturnPath rejects "//host" and "/\host".
+	if !safeReturnPath(returnTo) {
+		returnTo = "/apps"
+	}
 	u, err := url.Parse(returnTo)
 	if err != nil {
 		http.Error(rw, "invalid return_to", http.StatusInternalServerError)

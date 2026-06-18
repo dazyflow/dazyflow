@@ -84,7 +84,9 @@ export function explainRunError(
       headlineKey: "explain.slackChannelNotFound",
       action: {
         labelKey: "explain.actionInviteBot",
-        href: "https://slack.com",
+        // Slack's own "add apps to a channel" help — the marketing homepage
+        // (slack.com) gave no guidance on the actual fix (/invite the app).
+        href: "https://slack.com/help/articles/202035138-Add-apps-to-your-Slack-workspace",
       },
     };
   }
@@ -93,7 +95,9 @@ export function explainRunError(
       headlineKey: "explain.slackNotInChannel",
       action: {
         labelKey: "explain.actionInviteBot",
-        href: "https://slack.com",
+        // Slack's own "add apps to a channel" help — the marketing homepage
+        // (slack.com) gave no guidance on the actual fix (/invite the app).
+        href: "https://slack.com/help/articles/202035138-Add-apps-to-your-Slack-workspace",
       },
     };
   }
@@ -125,6 +129,85 @@ export function explainRunError(
         href: `/secrets?focus=${encodeURIComponent(name)}`,
       },
     };
+  }
+
+  // Rate limiting — the remote service told us to slow down. Common with
+  // bulk sends (email/SMS/Slack) and API-heavy flows. Honest "wait and
+  // retry" guidance; no single fix-it destination.
+  if (
+    lc.includes("rate limit") ||
+    lc.includes("ratelimit") ||
+    lc.includes("too many requests") ||
+    lc.includes("429")
+  ) {
+    return { headlineKey: "explain.rateLimited" };
+  }
+
+  // Permission denied at the remote service — the connected account is
+  // valid but isn't allowed to do this (missing scope, restricted resource).
+  // Reconnecting often re-grants scopes, so point at Apps.
+  if (
+    lc.includes("permission denied") ||
+    lc.includes("forbidden") ||
+    lc.includes("insufficient scope") ||
+    lc.includes("missing_scope") ||
+    lc.includes("not authorized") ||
+    lc.includes("unauthorized")
+  ) {
+    return {
+      headlineKey: "explain.permissionDenied",
+      action: { labelKey: "explain.actionReconnect", href: "/apps" },
+    };
+  }
+
+  // Expired / invalid auth on a non-Slack provider. The Slack-specific
+  // invalid_auth is handled above; this catches the generic shapes
+  // (expired token, 401 Unauthorized) other connectors surface.
+  if (
+    lc.includes("token expired") ||
+    lc.includes("expired token") ||
+    lc.includes("invalid token") ||
+    lc.includes("401")
+  ) {
+    return {
+      headlineKey: "explain.authExpired",
+      action: { labelKey: "explain.actionReconnect", href: "/apps" },
+    };
+  }
+
+  // Network-reachability failures — the remote host couldn't be reached
+  // (DNS, refused connection, dropped socket). Usually transient or a
+  // wrong URL; a Retry often clears it, so no destination.
+  if (
+    lc.includes("connection refused") ||
+    lc.includes("no such host") ||
+    lc.includes("dns") ||
+    lc.includes("dial tcp") ||
+    lc.includes("network is unreachable") ||
+    lc.includes("eof") && lc.includes("connection")
+  ) {
+    return { headlineKey: "explain.networkUnreachable" };
+  }
+
+  // Remote returned malformed/unexpected data — often an upstream error page
+  // where JSON was expected. Points at the failing step's output for detail.
+  if (
+    lc.includes("invalid character") ||
+    lc.includes("unexpected end of json") ||
+    lc.includes("failed to parse") ||
+    lc.includes("invalid json")
+  ) {
+    return { headlineKey: "explain.badResponse" };
+  }
+
+  // Remote resource not found (404 from the service) — a wrong id/path in a
+  // field (a deleted doc, a typo'd channel/spreadsheet id).
+  if (
+    lc.includes("404") ||
+    lc.includes("not found") ||
+    lc.includes("does not exist")
+  ) {
+    return { headlineKey: "explain.remoteNotFound" };
   }
 
   // Structured infra/runtime codes the daemon emits. For these the raw

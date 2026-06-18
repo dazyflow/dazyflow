@@ -15,8 +15,20 @@ func putResourceBodyJSON(typ string, config map[string]any) []byte {
 	return b
 }
 
+// saveFlowGraph creates a flow graph owned by the harness principal ("alice")
+// so flow-scoped secret/resource CRUD authorizes (authorizeFlowSecretScope
+// resolves the flow's graph and gates on AuthorizeGraphEdit/View — a flow that
+// doesn't exist is correctly rejected as forbidden).
+func saveFlowGraph(t *testing.T, h *gatewayHarness, id string) {
+	t.Helper()
+	if _, err := h.ws.Save(core.Graph{ID: id, Tenant: "t", Workspace: "ws", Owner: "alice"}, "alice"); err != nil {
+		t.Fatalf("save flow %q: %v", id, err)
+	}
+}
+
 func TestResources_FlowCRUDRoundTrip(t *testing.T) {
 	h := newSecretsHarness(t)
+	saveFlowGraph(t, h, "f1")
 	cfg := map[string]any{"spreadsheet_id": "S1", "range": "Leads", "account": "default"}
 	rw := h.do(t, "PUT", "/api/v1/resources/leads?scope=flow&flow=f1",
 		json.RawMessage(putResourceBodyJSON("google_sheet", cfg)))
@@ -57,6 +69,7 @@ func TestResources_FlowCRUDRoundTrip(t *testing.T) {
 
 func TestResources_HiddenFromSecretsListing(t *testing.T) {
 	h := newSecretsHarness(t)
+	saveFlowGraph(t, h, "f1")
 	h.do(t, "PUT", "/api/v1/resources/leads?scope=flow&flow=f1",
 		json.RawMessage(putResourceBodyJSON("google_sheet", map[string]any{"spreadsheet_id": "S1"})))
 	// A flow secret too, to be sure the listing works at all.
@@ -76,6 +89,7 @@ func TestResources_HiddenFromSecretsListing(t *testing.T) {
 
 func TestResources_RejectsBadInput(t *testing.T) {
 	h := newSecretsHarness(t)
+	saveFlowGraph(t, h, "f1")
 	// Empty type.
 	rw := h.do(t, "PUT", "/api/v1/resources/leads?scope=flow&flow=f1",
 		json.RawMessage(putResourceBodyJSON("", map[string]any{})))

@@ -18,7 +18,7 @@ export function AcceptInvite() {
   const { t } = useTranslation();
   const { token: inviteToken } = useParams();
   const navigate = useNavigate();
-  const { token, me, setActiveTenant } = useAuth();
+  const { token, me, setActiveTenant, signOut } = useAuth();
   const [details, setDetails] = useState<InvitationDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [accepting, setAccepting] = useState(false);
@@ -153,6 +153,17 @@ export function AcceptInvite() {
               values={{ current: me?.subject, invited: details.email }}
               components={[<strong />, <strong />]}
             />
+            {/* Escape hatch: sign out so the recipient can sign in as the
+                invited address, instead of being stuck on this message. */}
+            <div style={{ marginTop: "var(--space-3)" }}>
+              <button
+                type="button"
+                className="primary"
+                onClick={() => void signOut()}
+              >
+                {t("acceptInvite.signOutToSwitch")}
+              </button>
+            </div>
           </div>
         )}
         {usable && !me && (

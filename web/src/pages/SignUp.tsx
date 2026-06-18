@@ -14,7 +14,7 @@ import { api } from "../api";
 // round-trip.
 export function SignUp() {
   const { t } = useTranslation();
-  const { signUpWithPassword, error, loading } = useAuth();
+  const { signUpWithPassword, error, loading, clearError } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   // Pre-fill from /invite-flow deep links so the recipient doesn't
@@ -35,6 +35,12 @@ export function SignUp() {
   // wide, but a platform-admin email can still claim its first account
   // here (the server enforces the allowlist — see httpsignup.go).
   const [signupAllowed, setSignupAllowed] = useState<boolean | null>(null);
+
+  // Clear any error left over from the sign-in page so a stale "wrong
+  // password" doesn't greet someone who just clicked through to sign up.
+  useEffect(() => {
+    clearError();
+  }, [clearError]);
 
   useEffect(() => {
     let cancelled = false;

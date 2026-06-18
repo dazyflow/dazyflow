@@ -119,13 +119,31 @@ type gitHubErrorEnvelope struct {
 // (Bearer token, vnd.github+json, pinned API version). The caller
 // decides 2xx vs error so it can run extractGitHubError on the body.
 func githubDo(ctx context.Context, method, url, token string, body []byte, timeoutMS int) (int, []byte, error) {
-	status, raw, _, err := githubDoH(ctx, method, url, token, body, timeoutMS)
+	status, raw, _, err := githubDoIdemH(ctx, method, url, token, body, timeoutMS, "")
+	return status, raw, err
+}
+
+// githubDoIdem is githubDo with an explicit Idempotency-Key. The engine
+// auto-retries terminal/leaf nodes (and OnErrorRetry edges) with a stable
+// key per node per run, so a side-effecting POST — create issue, add
+// comment — could fire twice. GitHub REST honors the Idempotency-Key
+// header, deduping a replayed POST server-side, so threading
+// job.IdempotencyKey() here makes a retry safe. An empty idemKey sends no
+// header (read-only calls don't need one).
+func githubDoIdem(ctx context.Context, method, url, token string, body []byte, timeoutMS int, idemKey string) (int, []byte, error) {
+	status, raw, _, err := githubDoIdemH(ctx, method, url, token, body, timeoutMS, idemKey)
 	return status, raw, err
 }
 
 // githubDoH is githubDo plus the response headers, for callers that need
 // them (e.g. list pagination follows the Link header's rel="next").
 func githubDoH(ctx context.Context, method, url, token string, body []byte, timeoutMS int) (int, []byte, http.Header, error) {
+	return githubDoIdemH(ctx, method, url, token, body, timeoutMS, "")
+}
+
+// githubDoIdemH is the shared implementation: githubDoH plus an optional
+// Idempotency-Key header (sent only when idemKey is non-empty).
+func githubDoIdemH(ctx context.Context, method, url, token string, body []byte, timeoutMS int, idemKey string) (int, []byte, http.Header, error) {
 	if timeoutMS <= 0 {
 		timeoutMS = 15000
 	}
@@ -143,6 +161,9 @@ func githubDoH(ctx context.Context, method, url, token string, body []byte, time
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	if idemKey != "" {
+		req.Header.Set("Idempotency-Key", idemKey)
+	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

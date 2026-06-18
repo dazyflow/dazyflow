@@ -60,6 +60,16 @@ func (v *oidcVerifier) Verify(ctx context.Context, rawIDToken string) (Claims, e
 	}
 	tenant, _ := all[tenantClaim].(string)
 
+	// Optional issuer→tenant binding. The library has already verified the
+	// signature/issuer/audience/expiry, but the tenant value itself is
+	// asserted by the (single trusted) issuer with nothing tying it to a
+	// specific Hazyflow tenant. When the operator pins an allowlist, fail
+	// closed on any tenant outside it; when unset, accept whatever the
+	// issuer asserts (unchanged behavior for single-trusted-issuer setups).
+	if len(v.cfg.AllowedTenants) > 0 && !containsString(v.cfg.AllowedTenants, tenant) {
+		return Claims{}, fmt.Errorf("oidc: tenant %q is not in the issuer's allowed-tenants list", tenant)
+	}
+
 	rolesClaim := v.cfg.RolesClaim
 	if rolesClaim == "" {
 		rolesClaim = "roles"
@@ -70,6 +80,16 @@ func (v *oidcVerifier) Verify(ctx context.Context, rawIDToken string) (Claims, e
 		Roles:   stringList(all[rolesClaim]),
 		Extras:  all,
 	}, nil
+}
+
+// containsString reports whether s is exactly one of the list elements.
+func containsString(list []string, s string) bool {
+	for _, e := range list {
+		if e == s {
+			return true
+		}
+	}
+	return false
 }
 
 // stringList renders a roles claim however the IdP shapes it: a JSON

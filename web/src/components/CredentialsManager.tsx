@@ -3,6 +3,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, APIError, type SecretScope } from "../api";
 import { useAuth } from "../auth";
+import { ConfirmModal } from "./ConfirmModal";
 
 // CredentialsManager lists hand-entered secrets (DB URLs, API tokens) by name
 // — never value, the daemon has no read-back — with delete buttons and an add
@@ -40,6 +41,9 @@ export function CredentialsManager({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [highlighted, setHighlighted] = useState<string | null>(null);
+  // pendingDelete holds the secret name awaiting a themed delete confirm
+  // (replacing window.confirm).
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const valueInputRef = useRef<HTMLTextAreaElement | null>(null);
   const rowRefs = useRef<Map<string, HTMLLIElement | null>>(new Map());
 
@@ -79,7 +83,6 @@ export function CredentialsManager({
 
   const remove = async (n: string) => {
     if (!token) return;
-    if (!window.confirm(t("connections.deleteConfirm", { name: n }))) return;
     try {
       await api.deleteSecret(token, n, scope, flow);
       onChanged();
@@ -116,7 +119,7 @@ export function CredentialsManager({
                   className="icon-button danger"
                   aria-label={t("connections.deleteSecret", { name: n })}
                   title={t("connections.deleteSecret", { name: n })}
-                  onClick={() => remove(n)}
+                  onClick={() => setPendingDelete(n)}
                 >
                   <Trash2 size={15} />
                 </button>
@@ -158,6 +161,20 @@ export function CredentialsManager({
             <Plus size={15} /> {busy ? t("connections.saving") : t("connections.addSecret")}
           </button>
         </form>
+      )}
+      {pendingDelete && (
+        <ConfirmModal
+          title={t("connections.deleteSecretTitle")}
+          message={t("connections.deleteConfirm", { name: pendingDelete })}
+          confirmLabel={t("common.delete")}
+          danger
+          onConfirm={() => {
+            const n = pendingDelete;
+            setPendingDelete(null);
+            void remove(n);
+          }}
+          onCancel={() => setPendingDelete(null)}
+        />
       )}
     </div>
   );

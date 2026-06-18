@@ -2,10 +2,12 @@ package daemon
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"git.sr.ht/~klahr/hazyflow/core"
 	"git.sr.ht/~klahr/hazyflow/engine"
@@ -15,29 +17,41 @@ import (
 func TestHMACApprovalSigner_DeterministicAndVerifies(t *testing.T) {
 	s := &HMACApprovalSigner{BaseURL: "https://hzd", Secret: []byte("topsecret")}
 	url1 := s.SignApprovalURL("run-1", "node-A")
-	url2 := s.SignApprovalURL("run-1", "node-A")
-	if url1 != url2 {
-		t.Errorf("URL not deterministic: %q vs %q", url1, url2)
-	}
-	if !strings.Contains(url1, "/approve/run-1/node-A?token=") {
+	if !strings.Contains(url1, "/approve/run-1/node-A?exp=") ||
+		!strings.Contains(url1, "&token=") {
 		t.Errorf("URL shape unexpected: %q", url1)
 	}
-	tok := strings.TrimPrefix(strings.Split(url1, "token=")[1], "")
-	if !s.verifyToken("run-1", "node-A", tok) {
+	// computeToken is deterministic given (run, node, exp).
+	exp := time.Now().Add(time.Hour).Unix()
+	tok := s.computeToken("run-1", "node-A", exp)
+	if s.computeToken("run-1", "node-A", exp) != tok {
+		t.Error("computeToken not deterministic for the same inputs")
+	}
+	if !s.verifyToken("run-1", "node-A", exp, tok) {
 		t.Error("verify returned false for self-signed token")
 	}
-	if s.verifyToken("run-2", "node-A", tok) {
+	if s.verifyToken("run-2", "node-A", exp, tok) {
 		t.Error("verify accepted token for wrong run ID")
 	}
-	if s.verifyToken("run-1", "node-A", "deadbeef") {
+	if s.verifyToken("run-1", "node-A", exp+1, tok) {
+		t.Error("verify accepted token for a tampered (extended) expiry")
+	}
+	if s.verifyToken("run-1", "node-A", exp, "deadbeef") {
 		t.Error("verify accepted a bogus token")
+	}
+	// A valid signature past its expiry must still be rejected.
+	pastExp := time.Now().Add(-time.Hour).Unix()
+	pastTok := s.computeToken("run-1", "node-A", pastExp)
+	if s.verifyToken("run-1", "node-A", pastExp, pastTok) {
+		t.Error("verify accepted an expired token")
 	}
 }
 
 func TestHMACApprovalSigner_DifferentSecretsProduceDifferentTokens(t *testing.T) {
 	s1 := &HMACApprovalSigner{BaseURL: "https://hzd", Secret: []byte("aaa")}
 	s2 := &HMACApprovalSigner{BaseURL: "https://hzd", Secret: []byte("bbb")}
-	if s1.computeToken("r", "n") == s2.computeToken("r", "n") {
+	exp := time.Now().Add(time.Hour).Unix()
+	if s1.computeToken("r", "n", exp) == s2.computeToken("r", "n", exp) {
 		t.Error("two different secrets produced the same token")
 	}
 }
@@ -136,9 +150,11 @@ func TestApprovalListener_ValidTokenResumes(t *testing.T) {
 
 	signer := &HMACApprovalSigner{BaseURL: "https://x", Secret: []byte("shared-secret")}
 	a := NewApprovalListener(svc, signer)
-	token := signer.computeToken("run-1", "node-A")
+	exp := time.Now().Add(time.Hour).Unix()
+	token := signer.computeToken("run-1", "node-A", exp)
 
-	req := httptest.NewRequest("POST", "/approve/run-1/node-A?token="+token+"&decision=approve&approver=alice", nil)
+	req := httptest.NewRequest("POST",
+		fmt.Sprintf("/approve/run-1/node-A?token=%s&decision=approve&exp=%d&approver=alice", token, exp), nil)
 	rw := httptest.NewRecorder()
 	ServeApprovalForTest(a, rw, req)
 	if rw.Code != http.StatusOK {

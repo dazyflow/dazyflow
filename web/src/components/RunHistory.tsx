@@ -90,19 +90,26 @@ export function RunHistory({
   // non-terminal (queued/running/awaiting), refresh the FIRST page
   // every 3 seconds so the visible dots track reality. Stops as soon
   // as the dropdown closes or all visible rows reach terminal state.
+  //
+  // The interval depends on the derived `anyLive` boolean, NOT the whole
+  // `runs` array — the tick calls setRuns, so depending on `runs` rebuilt
+  // the interval every 3s (a teardown + new timer per tick). The current
+  // row count (for the refresh limit) is read from a ref so the callback
+  // stays stable. Mirrors RunList's fixed pattern.
+  const anyLive = runs.some(
+    (r) =>
+      r.status === "queued" ||
+      r.status === "running" ||
+      r.status === "awaiting",
+  );
+  const runCountRef = useRef(runs.length);
+  runCountRef.current = runs.length;
   useEffect(() => {
-    if (!open || !token) return;
-    const anyLive = runs.some(
-      (r) =>
-        r.status === "queued" ||
-        r.status === "running" ||
-        r.status === "awaiting",
-    );
-    if (!anyLive) return;
+    if (!open || !token || !anyLive) return;
     const t = window.setInterval(() => {
       api
         .listRuns(token, tenant, workspace, graphID, {
-          limit: Math.max(PAGE_SIZE, runs.length),
+          limit: Math.max(PAGE_SIZE, runCountRef.current),
           status: filter || undefined,
         })
         .then((r) => {
@@ -115,7 +122,7 @@ export function RunHistory({
         });
     }, 3000);
     return () => window.clearInterval(t);
-  }, [open, token, tenant, workspace, graphID, filter, runs]);
+  }, [open, token, tenant, workspace, graphID, filter, anyLive]);
 
   const loadMore = async () => {
     if (!token || loading) return;

@@ -33,7 +33,7 @@ func TestRunNode_ThreadsScopeToSecretResolver(t *testing.T) {
 		ID: "flow-123", Tenant: "acme", Workspace: "ws-1",
 		Nodes: []core.Node{{ID: "n", Module: "sink", Params: map[string]any{"k": "${secret.KEY}"}}},
 	}
-	if _, err := e.RunNode(context.Background(), g, "run-1", "n", nil, nil); err != nil {
+	if _, err := e.RunNode(context.Background(), g, "run-1", "n", "rec1", nil, nil); err != nil {
 		t.Fatalf("RunNode: %v", err)
 	}
 	if cap.tenant != "acme" || cap.flow != "flow-123" {

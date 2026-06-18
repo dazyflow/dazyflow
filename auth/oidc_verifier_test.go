@@ -214,6 +214,30 @@ func TestOIDCAuthenticator_ThroughChain(t *testing.T) {
 	}
 }
 
+func TestOIDCVerifier_AllowedTenants(t *testing.T) {
+	idp := newFakeIdP(t)
+
+	// Unset allowlist: any tenant the issuer asserts is honored (unchanged).
+	v := newTestOIDCVerifier(t, idp, OIDCConfig{})
+	if c, err := v.Verify(context.Background(), idp.mint(t, map[string]any{"tenant": "anything"})); err != nil || c.Tenant != "anything" {
+		t.Errorf("unset allowlist should accept any tenant: %+v / %v", c, err)
+	}
+
+	// Configured allowlist: an in-list tenant passes, an out-of-list one
+	// is rejected even though the token is otherwise perfectly valid.
+	v = newTestOIDCVerifier(t, idp, OIDCConfig{AllowedTenants: []string{"acme", "globex"}})
+	if c, err := v.Verify(context.Background(), idp.mint(t, map[string]any{"tenant": "acme"})); err != nil || c.Tenant != "acme" {
+		t.Errorf("in-list tenant should verify: %+v / %v", c, err)
+	}
+	if _, err := v.Verify(context.Background(), idp.mint(t, map[string]any{"tenant": "evilcorp"})); err == nil {
+		t.Error("out-of-list tenant must be rejected even with a valid signature")
+	}
+	// An empty/absent tenant claim is also outside a configured allowlist.
+	if _, err := v.Verify(context.Background(), idp.mint(t, nil)); err == nil {
+		t.Error("absent tenant claim must be rejected when an allowlist is configured")
+	}
+}
+
 func TestNewOIDCVerifier_ConfigErrors(t *testing.T) {
 	if _, err := NewOIDCVerifier(context.Background(), OIDCConfig{}); err == nil ||
 		!strings.Contains(err.Error(), "issuer") {

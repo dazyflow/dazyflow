@@ -10,10 +10,19 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"git.sr.ht/~klahr/hazyflow/core"
 )
+
+// approvalTokenTTL bounds how long a signed approval link stays valid.
+// An approval URL is emailed to a human; without an expiry the link is an
+// eternal bearer credential that resumes the run forever. Two weeks is
+// generous enough for an out-of-office approver yet bounds the blast
+// radius of a leaked link.
+const approvalTokenTTL = 14 * 24 * time.Hour
 
 // ApprovalDecision is the input from the human approver, accepted by
 // Service.Approve and forwarded to the resumed node-record as Result
@@ -40,25 +49,47 @@ type HMACApprovalSigner struct {
 
 // SignApprovalURL builds the absolute URL the approver hits. Format:
 //
-//	<base>/approve/<graphRunID>/<nodeID>?token=<hex>
+//	<base>/approve/<graphRunID>/<nodeID>?exp=<unix>&token=<hex>
+//
+// The token signs (run, node, exp) so a link holder cannot extend the
+// expiry or forge a link for another pause. By design a single link backs
+// both outcomes — the approver picks approve/reject at click time (the
+// mailer/UI renders both buttons against this base, appending
+// `&decision=reject` for the reject button). The `decision` and `approver`
+// query params are deliberately NOT signed: the link is a time-boxed
+// capability to decide this pause, and whoever holds it is the approver, so
+// choosing either outcome is exactly the intended action. `approver` is a
+// display label only and must never authorize anything.
+// Deterministic given (run, node, exp): a retried await_approval Execute
+// within the same TTL bucket re-emits the same URL.
 func (s *HMACApprovalSigner) SignApprovalURL(graphRunID, nodeID string) string {
-	token := s.computeToken(graphRunID, nodeID)
-	return fmt.Sprintf("%s/approve/%s/%s?token=%s", s.BaseURL, graphRunID, nodeID, token)
+	exp := time.Now().Add(approvalTokenTTL).Unix()
+	token := s.computeToken(graphRunID, nodeID, exp)
+	return fmt.Sprintf("%s/approve/%s/%s?exp=%d&token=%s",
+		s.BaseURL, graphRunID, nodeID, exp, token)
 }
 
-func (s *HMACApprovalSigner) computeToken(graphRunID, nodeID string) string {
+// computeToken signs (run, node, exp). exp is signed so it can't be
+// extended; run+node bind the token to exactly one pause.
+func (s *HMACApprovalSigner) computeToken(graphRunID, nodeID string, exp int64) string {
 	m := hmac.New(sha256.New, s.Secret)
 	m.Write([]byte(graphRunID))
 	m.Write([]byte(":"))
 	m.Write([]byte(nodeID))
+	m.Write([]byte(":"))
+	m.Write([]byte(strconv.FormatInt(exp, 10)))
 	return hex.EncodeToString(m.Sum(nil))
 }
 
-// verifyToken does constant-time comparison so a malicious approver
-// can't time-side-channel the expected token character by character.
-func (s *HMACApprovalSigner) verifyToken(graphRunID, nodeID, provided string) bool {
-	expected := s.computeToken(graphRunID, nodeID)
-	return subtle.ConstantTimeCompare([]byte(expected), []byte(provided)) == 1
+// verifyToken does constant-time comparison so a malicious holder can't
+// time-side-channel the expected token character by character, then checks
+// the signed expiry hasn't passed.
+func (s *HMACApprovalSigner) verifyToken(graphRunID, nodeID string, exp int64, provided string) bool {
+	expected := s.computeToken(graphRunID, nodeID, exp)
+	if subtle.ConstantTimeCompare([]byte(expected), []byte(provided)) != 1 {
+		return false
+	}
+	return time.Now().Unix() <= exp
 }
 
 // Approve is the resume path: a human (via ApprovalListener) signals
@@ -171,15 +202,26 @@ func (a *ApprovalListener) handle(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	graphRunID, nodeID := parts[0], parts[1]
-	token := r.URL.Query().Get("token")
-	if token == "" || !a.signer.verifyToken(graphRunID, nodeID, token) {
-		http.Error(rw, "invalid token", http.StatusUnauthorized)
-		return
-	}
+	// The expiry is signed into the token, so we read it from the query and
+	// verify the signature covers (run, node, exp): a link holder can't
+	// extend the expiry or forge a link for another pause. The decision is
+	// the approver's choice at click time and is intentionally not signed.
 	decision := r.URL.Query().Get("decision")
 	if decision == "" {
 		decision = "approve"
 	}
+	exp, err := strconv.ParseInt(r.URL.Query().Get("exp"), 10, 64)
+	if err != nil {
+		http.Error(rw, "invalid or missing exp", http.StatusUnauthorized)
+		return
+	}
+	token := r.URL.Query().Get("token")
+	if token == "" || !a.signer.verifyToken(graphRunID, nodeID, exp, token) {
+		http.Error(rw, "invalid or expired token", http.StatusUnauthorized)
+		return
+	}
+	// approver is a display label only; it is NOT part of the signed
+	// payload and must never be trusted to authorize the action.
 	approver := r.URL.Query().Get("approver")
 	comment := r.URL.Query().Get("comment")
 

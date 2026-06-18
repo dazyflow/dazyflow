@@ -66,8 +66,11 @@ func init() {
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				}
 			}`),
-			Idempotent:  false,
-			RetryPolicy: core.RetryExponentialBackoff,
+			Idempotent: false,
+			// Notion's create-page API has no idempotency key, so a retry
+			// genuinely creates a duplicate page — delivery is fire-once
+			// (same as gmail/sheets/slack send).
+			RetryPolicy: core.RetryNever,
 		},
 		Execute: executeNotionCreatePage,
 	})

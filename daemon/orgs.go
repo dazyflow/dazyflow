@@ -107,6 +107,34 @@ func (h *HTTPGateway) switchOrg(rw http.ResponseWriter, r *http.Request, p core.
 	})
 }
 
+// maxSelfServeOrgsPerUser caps how many organizations a single account may
+// create via POST /me/orgs. A generous bound that still stops one account
+// from minting tenants without limit. Platform admins provisioning orgs on
+// users' behalf use the admin path, which isn't subject to this cap.
+const maxSelfServeOrgsPerUser = 10
+
+// countOrgsCreatedBy returns how many orgs the subject created. A createOrg
+// stamps the creator's own email as InvitedBy on the admin membership it
+// seeds, so a self-invited admin membership marks an org this user created.
+// Best-effort: a store that can't list yields (0, err) and the caller lets
+// the create proceed rather than blocking on a transient store error.
+func (h *HTTPGateway) countOrgsCreatedBy(ctx context.Context, subject string) (int, error) {
+	if h.Memberships == nil {
+		return 0, nil
+	}
+	ms, err := h.Memberships.ListByEmail(ctx, subject)
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, m := range ms {
+		if strings.EqualFold(m.InvitedBy, subject) {
+			n++
+		}
+	}
+	return n, nil
+}
+
 // createOrg lets a signed-in user self-serve a new organization. Body:
 // {display_name}. It mints a fresh org_<hex> tenant, makes the caller its
 // admin (a Membership with the admin role), and seeds the org profile with
@@ -121,6 +149,15 @@ func (h *HTTPGateway) createOrg(rw http.ResponseWriter, r *http.Request, p core.
 	// Anti-abuse: on verification-active deployments an unverified signup
 	// can't spin up extra tenants. Mirrors invitation creation.
 	if !h.requireVerifiedInviter(rw, r, p) {
+		return
+	}
+	// Per-creator cap: an unbounded self-serve create lets one account spin
+	// up arbitrarily many tenants (storage/abuse). Count the orgs this user
+	// created — every createOrg grants the creator an admin membership whose
+	// InvitedBy is themselves, so that's the marker we count.
+	if n, err := h.countOrgsCreatedBy(r.Context(), p.Subject); err == nil && n >= maxSelfServeOrgsPerUser {
+		writeJSONError(rw, http.StatusTooManyRequests,
+			fmt.Sprintf("you've reached the limit of %d organizations per account — ask an admin if you need more", maxSelfServeOrgsPerUser))
 		return
 	}
 	var body struct {

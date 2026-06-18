@@ -37,7 +37,7 @@ func runNodeSafely(e *Engine, g core.Graph, nodeID string, prior map[string]core
 			}
 			close(done)
 		}()
-		out.result, out.err = e.RunNode(ctx, g, "run-adv", nodeID, prior, nil)
+		out.result, out.err = e.RunNode(ctx, g, "run-adv", nodeID, "rec-adv", prior, nil)
 	}()
 	select {
 	case <-done:

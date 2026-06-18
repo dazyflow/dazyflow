@@ -43,6 +43,13 @@ type User struct {
 	TOTPEnrolledAt     *time.Time `json:"totp_enrolled_at,omitempty"`
 	RecoveryCodeHashes []string   `json:"recovery_code_hashes,omitempty"`
 
+	// TOTPLastStep is the most recent TOTP time-step (unix/period) this
+	// user successfully authenticated with. A code is valid for ~90s
+	// (period 30 × skew ±1), so without recording the consumed step an
+	// observed code could be replayed inside its window. ConsumeTOTPChallenge
+	// rejects any code whose step is <= this. Zero = never used a TOTP code.
+	TOTPLastStep int64 `json:"totp_last_step,omitempty"`
+
 	// Email-verification state. All three are zero on deployments
 	// without a transactional mailer (verification can't run there) and
 	// on accounts created before the feature; omitempty keeps existing

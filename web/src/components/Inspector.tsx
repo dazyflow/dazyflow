@@ -82,9 +82,10 @@ type Props = {
   // the parent submits a graph-subset run via /sample and pipes the
   // result back through the same SSE channel the regular Run button
   // uses, so the inspector's existing Output section lights up.
-  // Returns the run ID on success (or throws). When omitted the
-  // button is hidden.
-  onSample?: (nodeID: string) => Promise<string>;
+  // Returns the run ID on success, or undefined when the pre-sample save
+  // didn't land (the parent already surfaced that error); or throws. When
+  // omitted the button is hidden.
+  onSample?: (nodeID: string) => Promise<string | undefined>;
   // onClose dismisses the inspector. Used by the mobile bottom-sheet
   // layout to let the user reclaim the canvas; clears the selection
   // so the same selection-driven open logic doesn't reopen instantly.

@@ -75,8 +75,12 @@ func init() {
 				},
 				"required":["topic"]
 			}`),
-			Idempotent:  false,
-			RetryPolicy: core.RetryExponentialBackoff,
+			Idempotent: false,
+			// ntfy's publish endpoint has no generic idempotency header, so
+			// a retried POST sends the notification twice. This drop is a
+			// terminal leaf the engine auto-retries on backoff, so retries
+			// must be off here.
+			RetryPolicy: core.RetryNever,
 		},
 		Execute: executeNtfy,
 	})
@@ -165,7 +169,11 @@ func executeNtfy(ctx context.Context, job core.Job, progress chan<- core.Progres
 		return params.Err(job, "ntfy_http_error", err.Error()), nil
 	}
 	defer resp.Body.Close()
-	text, _ := io.ReadAll(resp.Body)
+	// Cap the response read like the other notify helpers (verify.go uses
+	// 1<<16) so a hostile/buggy upstream can't stream an unbounded body —
+	// we only need the first chunk for the error detail below anyway.
+	const maxResponseBytes = 1 << 16 // 64 KiB
+	text, _ := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		detail := string(text)
 		if len(detail) > 512 {

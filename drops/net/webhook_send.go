@@ -110,13 +110,23 @@ func executeWebhookSend(ctx context.Context, job core.Job, _ chan<- core.Progres
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
+	// Best-effort idempotency: this drop opts into retry but POST/PUT/PATCH
+	// aren't safe to replay, so a transient 5xx/timeout after the server
+	// committed would deliver twice. Send a stable per-record key (same as
+	// github/stripe) so a downstream that honors Idempotency-Key dedupes the
+	// retry; APIs that don't recognize the header ignore it.
+	if !hasHeader(headers, "Idempotency-Key") {
+		req.Header.Set("Idempotency-Key", job.IdempotencyKey())
+	}
 
 	resp, err := buildClient(timeout, PrivateEgressAllowed()).Do(req)
 	if err != nil {
 		return params.Err(job, "webhook_http_error", err.Error()), nil
 	}
 	defer resp.Body.Close()
-	text, _ := io.ReadAll(resp.Body)
+	// Cap the buffered response (success + error-detail paths) like
+	// http_request does, so a huge/streaming body can't exhaust memory.
+	text, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		detail := string(text)
 		if len(detail) > 512 {

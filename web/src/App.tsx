@@ -60,7 +60,7 @@ export function App() {
         <Route path="/" element={<RootRedirect />} />
         <Route path="/welcome" element={<Welcome />} />
         <Route path="/flows" element={<FlowList />} />
-        <Route path="/flows/:id" element={<FlowEditor />} />
+        <Route path="/flows/:id" element={<KeyedFlowEditor />} />
         {/* Legacy /pipelines/* paths — bookmarks from before the rename
             still land in the right place. */}
         <Route path="/pipelines" element={<Navigate to="/flows" replace />} />
@@ -139,6 +139,16 @@ function RootRedirect() {
     /* private mode / strict iframe — treat as first-time */
   }
   return <Navigate to={hasFlows ? "/flows" : "/welcome"} replace />;
+}
+
+// KeyedFlowEditor remounts FlowEditor whenever the :id changes. Without
+// a key, react-router keeps the same FlowEditor instance mounted across
+// flow→flow navigation, so it would carry the previous flow's
+// currentRunID / SSE subscription / lastRun and node statuses into the
+// new flow. Keying on the id forces a fresh mount per flow.
+function KeyedFlowEditor() {
+  const { id } = useParams();
+  return <FlowEditor key={id} />;
 }
 
 function LegacyPipelineRedirect() {

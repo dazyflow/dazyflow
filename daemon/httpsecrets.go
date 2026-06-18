@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -73,11 +74,14 @@ func secretScopeFromRequest(r *http.Request) (scope SecretScope, flow string, er
 }
 
 // authorizeSecretScope gates a secret operation by scope. Organization reads
-// need secret:read and writes secret:write. Flow scope needs graph:edit — if
-// you can edit flows here you can manage a flow's own secrets; the
-// resolution-time blast-radius guard (a flow resolves only its own flow
-// secrets) is what makes this safe. Returns (status, message) with status 0
-// meaning authorized.
+// need secret:read and writes secret:write. Flow scope needs graph:edit.
+//
+// NOTE: this tenant-wide form does NOT bind the authorization to a specific
+// flow id — it's retained only for callers that don't yet pass through the
+// per-flow gate (see httpresources.go, which has the same cross-flow gap and
+// should migrate to authorizeFlowSecretScope). New secret CRUD paths must use
+// (*HTTPGateway).authorizeFlowSecretScope so flow scope is authorized against
+// the specific ?flow=<id>. Returns (status, message); status 0 = authorized.
 func authorizeSecretScope(p core.Principal, scope SecretScope, write bool) (int, string) {
 	if scope == ScopeFlow {
 		if err := core.Require(p, core.PermGraphEdit); err != nil {
@@ -90,6 +94,41 @@ func authorizeSecretScope(p core.Principal, scope SecretScope, write bool) (int,
 		perm = core.PermSecretWrite
 	}
 	if err := core.Require(p, perm); err != nil {
+		return http.StatusForbidden, err.Error()
+	}
+	return 0, ""
+}
+
+// authorizeFlowSecretScope gates a secret operation by scope, and for flow
+// scope authorizes against the SPECIFIC flow (the ?flow=<id> that flows into
+// the flow.<id>.<name> storage key) rather than the tenant-wide graph:edit
+// permission. A bare core.Require(p, PermGraphEdit) would let any member with
+// graph:edit read/overwrite/delete ANOTHER flow's secrets within the tenant —
+// so we resolve the flow's graph and gate with the per-graph helper:
+// AuthorizeGraphEdit for writes (PUT/DELETE), AuthorizeGraphView for reads
+// (GET). Organization scope is delegated to authorizeSecretScope unchanged.
+// Returns (status, message) with status 0 meaning authorized.
+func (h *HTTPGateway) authorizeFlowSecretScope(ctx context.Context, p core.Principal, scope SecretScope, flow string, write bool) (int, string) {
+	if scope != ScopeFlow {
+		return authorizeSecretScope(p, scope, write)
+	}
+	// Resolve the flow id to its graph within the principal's workspace, then
+	// authorize against that graph. A missing/unreadable flow is reported as
+	// forbidden — the same shape as an authz failure — so a caller can't probe
+	// which flow ids exist via the secrets endpoint.
+	store, err := h.svc.Workspaces.Open(p.Tenant, p.Workspace)
+	if err != nil {
+		return http.StatusForbidden, "flow not accessible"
+	}
+	g, err := store.Load(flow)
+	if err != nil {
+		return http.StatusForbidden, "flow not accessible"
+	}
+	authz := core.AuthorizeGraphView
+	if write {
+		authz = core.AuthorizeGraphEdit
+	}
+	if err := authz(p, g); err != nil {
 		return http.StatusForbidden, err.Error()
 	}
 	return 0, ""
@@ -117,7 +156,7 @@ func (h *HTTPGateway) putSecret(rw http.ResponseWriter, r *http.Request, p core.
 		writeJSONError(rw, http.StatusBadRequest, err.Error())
 		return
 	}
-	if status, msg := authorizeSecretScope(p, scope, true); status != 0 {
+	if status, msg := h.authorizeFlowSecretScope(r.Context(), p, scope, flow, true); status != 0 {
 		writeJSONError(rw, status, msg)
 		return
 	}
@@ -160,7 +199,7 @@ func (h *HTTPGateway) listSecrets(rw http.ResponseWriter, r *http.Request, p cor
 	}
 	// Listing names is gated on read/edit even though values aren't
 	// returned — names alone leak which services a flow uses.
-	if status, msg := authorizeSecretScope(p, scope, false); status != 0 {
+	if status, msg := h.authorizeFlowSecretScope(r.Context(), p, scope, flow, false); status != 0 {
 		writeJSONError(rw, status, msg)
 		return
 	}
@@ -211,7 +250,7 @@ func (h *HTTPGateway) deleteSecret(rw http.ResponseWriter, r *http.Request, p co
 		writeJSONError(rw, http.StatusBadRequest, err.Error())
 		return
 	}
-	if status, msg := authorizeSecretScope(p, scope, true); status != 0 {
+	if status, msg := h.authorizeFlowSecretScope(r.Context(), p, scope, flow, true); status != 0 {
 		writeJSONError(rw, status, msg)
 		return
 	}

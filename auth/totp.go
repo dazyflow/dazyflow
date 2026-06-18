@@ -5,6 +5,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -13,10 +14,57 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 	qrcode "github.com/skip2/go-qrcode"
 	"golang.org/x/crypto/bcrypt"
 )
+
+// TOTP validation parameters. period 30s with skew ±1 matches the
+// enrollment defaults of pquerna/otp's totp.Validate and gives a ~90s
+// acceptance window.
+const (
+	totpPeriodSeconds = 30
+	totpSkewSteps     = 1
+)
+
+// validateTOTPStep validates code against secret and, on success, returns the
+// time-step (unix/period) of the window that matched. Unlike totp.Validate it
+// exposes which step accepted, so the caller can persist it and reject a later
+// replay of a code from the same (or an earlier) step within its ~90s life.
+// The per-step comparison is constant-time.
+func validateTOTPStep(code, secret string, now time.Time) (int64, bool) {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return 0, false
+	}
+	opts := totp.ValidateOpts{
+		Period:    totpPeriodSeconds,
+		Skew:      totpSkewSteps,
+		Digits:    otp.DigitsSix,
+		Algorithm: otp.AlgorithmSHA1,
+	}
+	cur := now.Unix() / totpPeriodSeconds
+	matched := int64(0)
+	ok := false
+	// Iterate the whole window regardless of an early match so timing doesn't
+	// leak which step (or whether any) accepted.
+	for d := -int64(totpSkewSteps); d <= int64(totpSkewSteps); d++ {
+		step := cur + d
+		if step < 0 {
+			continue
+		}
+		expected, err := totp.GenerateCodeCustom(secret, time.Unix(step*totpPeriodSeconds, 0), opts)
+		if err != nil {
+			continue
+		}
+		if subtle.ConstantTimeCompare([]byte(code), []byte(expected)) == 1 && !ok {
+			matched = step
+			ok = true
+		}
+	}
+	return matched, ok
+}
 
 // TOTP 2FA for password-authenticated users. The shape mirrors the rest
 // of this package: it operates over the UserStore boundary (so it works
@@ -233,7 +281,7 @@ func EnrolConfirm(ctx context.Context, store UserStore, key []byte, email, code 
 	if err != nil {
 		return nil, err
 	}
-	if !totp.Validate(strings.TrimSpace(code), secret) {
+	if _, ok := validateTOTPStep(code, secret, time.Now()); !ok {
 		return nil, ErrTOTPInvalid
 	}
 	codes, hashes, err := generateRecoveryCodes()
@@ -244,6 +292,11 @@ func EnrolConfirm(ctx context.Context, store UserStore, key []byte, email, code 
 	u.TOTPEnabled = true
 	u.TOTPEnrolledAt = &now
 	u.RecoveryCodeHashes = hashes
+	// Note: we deliberately do NOT burn the enrollment code's step here.
+	// Enrollment confirm runs inside an already-authenticated session, and
+	// burning it would reject a legitimate first sign-in that lands in the
+	// same ~90s window. Replay protection applies to the sign-in leg
+	// (ConsumeTOTPChallenge), which is the code an attacker would observe.
 	if err := store.PutUser(ctx, u); err != nil {
 		return nil, err
 	}
@@ -443,8 +496,20 @@ func ConsumeTOTPChallenge(ctx context.Context, challenges TOTPChallengeStore, us
 		if derr != nil {
 			return TOTPChallengeResult{}, derr
 		}
-		if !totp.Validate(strings.TrimSpace(code), secret) {
+		step, ok := validateTOTPStep(code, secret, time.Now())
+		if !ok {
 			return TOTPChallengeResult{}, ErrTOTPInvalid
+		}
+		// Replay protection: a TOTP code stays valid for ~90s. Reject a
+		// code from a step we have already consumed (or an earlier one) so
+		// an observed/sniffed code can't be redeemed a second time inside
+		// its window. Persist the consumed step before completing login.
+		if u.TOTPLastStep != 0 && step <= u.TOTPLastStep {
+			return TOTPChallengeResult{}, ErrTOTPInvalid
+		}
+		u.TOTPLastStep = step
+		if err := users.PutUser(ctx, u); err != nil {
+			return TOTPChallengeResult{}, err
 		}
 		factor = FactorTOTP
 	case strings.TrimSpace(recoveryCode) != "":

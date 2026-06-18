@@ -14,6 +14,10 @@ type AuthCtx = {
   me: WhoAmI | null;
   loading: boolean;
   error: string | null;
+  // clearError wipes the context error. SignIn/SignUp call it when the user
+  // navigates between them so a stale sign-in failure doesn't show on the
+  // sign-up page (and vice versa).
+  clearError: () => void;
   // signInWithPassword resolves to a discriminator: when the account has
   // 2FA enabled the server withholds the session and returns a challenge
   // instead, so the caller must collect a code and finish via verifyTOTP.
@@ -247,12 +251,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // their home org and an org they were invited into. Best-effort —
     // a network error is non-fatal, the local state still updates.
     if (token && t && me?.subject?.includes("@")) {
+      setError(null);
       void api
         .switchOrg(token, t)
         .then(() => api.whoami(token))
         .then((w) => setMe(w))
-        .catch(() => {
-          /* best-effort; the next whoami refresh will reconcile */
+        .catch((e) => {
+          // The server refused to re-scope the session, so subsequent calls
+          // would still hit the OLD tenant — claiming we switched would be a
+          // lie. Surface it (the chrome banner reads context `error`) instead
+          // of silently leaving the user in the wrong scope.
+          setError(
+            i18n.t("signIn.switchOrgFailed", {
+              error: e instanceof Error ? e.message : String(e),
+            }),
+          );
         });
     }
   };
@@ -377,6 +390,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const hasPerm = (p: Permission) =>
     !!me && me.permissions.includes(p);
 
+  const clearError = useCallback(() => setError(null), []);
+
   return (
     <Ctx.Provider
       value={{
@@ -384,6 +399,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         me,
         loading,
         error,
+        clearError,
         signInWithPassword,
         verifyTOTP,
         signUpWithPassword,

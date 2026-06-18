@@ -96,8 +96,11 @@ func init() {
 					"required":["to"]
 				}`,
 			),
-			Idempotent:  false,
-			RetryPolicy: core.RetryExponentialBackoff,
+			Idempotent: false,
+			// SMTP send has no idempotency mechanism, so a retried send
+			// delivers the email twice. This drop is a terminal leaf the
+			// engine auto-retries on backoff, so retries must be off here.
+			RetryPolicy: core.RetryNever,
 		},
 		Execute: executeEmail,
 	})

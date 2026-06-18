@@ -114,9 +114,59 @@ func redactResult(result *core.Result, set *secretSet) {
 		result.Output[port] = ref
 	}
 	if result.Error != nil {
+		result.Error.Code = redactString(result.Error.Code, set)
 		result.Error.Message = redactString(result.Error.Message, set)
 		result.Error.Details = redactString(result.Error.Details, set)
 	}
+}
+
+// redactProgressEvent scrubs every resolved secret from a single progress
+// event's Message and Data. redactResult only scrubs the final persisted
+// Result; without this a drop that echoes a resolved secret into a live
+// progress event (e.g. "GET https://api/?token=…") would stream it to the
+// UI and any persisted progress, bypassing redaction entirely.
+func redactProgressEvent(p core.Progress, set *secretSet) core.Progress {
+	if set.empty() {
+		return p
+	}
+	p.Message = redactString(p.Message, set)
+	if p.Data != nil {
+		if m, ok := redactValue(p.Data, set).(map[string]any); ok {
+			p.Data = m
+		}
+	}
+	return p
+}
+
+// redactProgress returns a progress channel to hand to transport.Execute
+// whose events are scrubbed of every resolved secret before being forwarded
+// to dst, plus a done channel that closes once every buffered event has been
+// forwarded. The caller must close the returned channel after Execute
+// returns and then receive on done. When dst is nil there is nothing to
+// redact: the returned channel is nil (drops guard nil progress sends) and
+// done is already closed.
+func redactProgress(ctx context.Context, dst chan<- core.Progress, set *secretSet) (chan<- core.Progress, <-chan struct{}) {
+	done := make(chan struct{})
+	if dst == nil {
+		close(done)
+		return nil, done
+	}
+	in := make(chan core.Progress, 16)
+	go func() {
+		defer close(done)
+		for p := range in {
+			select {
+			case dst <- redactProgressEvent(p, set):
+			case <-ctx.Done():
+				// Consumer gone; keep draining so Execute is never blocked on
+				// a full channel, but stop forwarding.
+				for range in {
+				}
+				return
+			}
+		}
+	}()
+	return in, done
 }
 
 // redactString replaces every secret plaintext substring in s.

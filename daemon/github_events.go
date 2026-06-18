@@ -20,6 +20,13 @@ const (
 	githubOnNewPRModuleID = "github_on_new_pr"
 )
 
+// githubTriggerSecretName is the tenant secret holding the webhook's
+// signing secret (the "Secret" field in the repo's webhook settings).
+// Organization scope (bare name), same convention as Stripe's
+// STRIPE_WEBHOOK_SECRET — resolved per request and bound to the URL
+// tenant so one tenant's secret can't validate another's deliveries.
+const githubTriggerSecretName = "GITHUB_WEBHOOK_SECRET"
+
 // maxGitHubBodyBytes caps incoming webhook payloads. GitHub push
 // events on large monorepos can be a few hundred KB; 1 MiB leaves
 // headroom without letting a malformed sender exhaust memory.
@@ -75,10 +82,6 @@ func (h *GitHubEventsHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request)
 		http.Error(rw, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if h.webhookSecret == "" {
-		http.Error(rw, "GitHub events endpoint not configured (set HAZYFLOW_GITHUB_WEBHOOK_SECRET)", http.StatusNotImplemented)
-		return
-	}
 	tenant := r.PathValue("tenant")
 	if tenant == "" {
 		http.Error(rw, "expected /api/v1/events/github/<tenant>", http.StatusBadRequest)
@@ -96,7 +99,32 @@ func (h *GitHubEventsHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if err := h.verifySignature(r.Header, body); err != nil {
+	// Resolve the signing secret BOUND to the URL tenant. Policy
+	// (per-tenant preferred, global fallback):
+	//
+	//   - If this tenant configured its own GITHUB_WEBHOOK_SECRET, verify
+	//     against that ONLY. A tenant that set its own secret is thereby
+	//     protected from the shared-secret cross-tenant injection — an
+	//     attacker who knows the global secret can't forge a delivery to
+	//     a tenant whose secret it doesn't know.
+	//   - Otherwise fall back to the global env-configured secret. This
+	//     preserves single-tenant deploys that use HAZYFLOW_GITHUB_WEBHOOK_SECRET
+	//     and haven't moved their secret into the per-tenant store.
+	//   - If neither exists, reject (fail closed).
+	secret := h.tenantSecret(r.Context(), tenant)
+	if secret == "" {
+		secret = h.webhookSecret
+	}
+	if secret == "" {
+		// Same 401 + body as a bad signature: an unauthenticated caller
+		// probing tenant names learns nothing about which tenants exist
+		// or have GitHub configured.
+		h.logger.Printf("reject %s: no webhook secret configured", tenant)
+		http.Error(rw, "invalid signature", http.StatusUnauthorized)
+		return
+	}
+
+	if err := verifyGitHubSignature(r.Header, body, secret); err != nil {
 		h.logger.Printf("reject %s: %v", tenant, err)
 		http.Error(rw, "invalid signature", http.StatusUnauthorized)
 		return
@@ -299,10 +327,29 @@ func (h *GitHubEventsHandler) fanoutSeed(ctx context.Context, tenant, moduleID s
 	}
 }
 
-// verifySignature implements GitHub's webhook signing scheme:
+// tenantSecret reads this tenant's own GITHUB_WEBHOOK_SECRET from the
+// encrypted secret store, bound to the URL tenant. Empty (no store, not
+// configured, or any lookup error) means "no per-tenant secret" — the
+// caller then falls back to the global env secret.
+func (h *GitHubEventsHandler) tenantSecret(ctx context.Context, tenant string) string {
+	if h.svc == nil || h.svc.EncryptedSecrets == nil {
+		return ""
+	}
+	secret, err := h.svc.EncryptedSecrets.GetExact(ctx, tenant, githubTriggerSecretName)
+	if err != nil {
+		return ""
+	}
+	return secret
+}
+
+// verifyGitHubSignature implements GitHub's webhook signing scheme:
 //
-//	sig = "sha256=" + hex(hmac-sha256(webhookSecret, body))
+//	sig = "sha256=" + hex(hmac-sha256(secret, body))
 //	header X-Hub-Signature-256 must equal sig (constant-time)
+//
+// The secret is resolved per request (per-tenant preferred, global
+// fallback) and passed in, so the signature is verified against the
+// secret bound to the URL tenant.
 //
 // Unlike Slack's scheme there's no timestamp in the signature, so
 // no replay window — GitHub relies on TLS + per-delivery UUIDs
@@ -311,7 +358,7 @@ func (h *GitHubEventsHandler) fanoutSeed(ctx context.Context, tenant, moduleID s
 // it; mitigation is keeping the secret confidential and using
 // the per-delivery UUID for idempotency at the receiving side
 // (out of scope for V1).
-func (h *GitHubEventsHandler) verifySignature(header http.Header, body []byte) error {
+func verifyGitHubSignature(header http.Header, body []byte, secret string) error {
 	sig := header.Get("X-Hub-Signature-256")
 	if sig == "" {
 		return fmt.Errorf("missing X-Hub-Signature-256 header")
@@ -319,7 +366,7 @@ func (h *GitHubEventsHandler) verifySignature(header http.Header, body []byte) e
 	if !strings.HasPrefix(sig, "sha256=") {
 		return fmt.Errorf("signature header missing sha256= prefix")
 	}
-	mac := hmac.New(sha256.New, []byte(h.webhookSecret))
+	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write(body)
 	expected := "sha256=" + hex.EncodeToString(mac.Sum(nil))
 	if !hmac.Equal([]byte(expected), []byte(strings.TrimSpace(sig))) {

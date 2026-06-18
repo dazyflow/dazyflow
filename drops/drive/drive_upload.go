@@ -65,6 +65,11 @@ func init() {
 				}
 			}`),
 			Idempotent: false,
+			// A Drive upload is a non-idempotent POST (a retry creates a
+			// second file — Drive has no generic idempotency header). No
+			// RetryPolicy is set, so the engine only retries this via an
+			// explicit OnErrorRetry edge, not the auto-backoff path — we
+			// leave the policy unset rather than forcing RetryNever.
 		},
 		Execute: executeUpload,
 	})

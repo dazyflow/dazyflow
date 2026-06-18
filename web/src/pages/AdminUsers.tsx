@@ -16,12 +16,23 @@ import {
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
+import { ConfirmModal } from "../components/ConfirmModal";
 import type {
   InvitationSummary,
   MemberSummary,
   Role,
 } from "../types";
 import { formatDate } from "../lib/datetime";
+
+// isAdminMember reports whether a member's role set grants org admin —
+// either a catalog role named "admin" or any role carrying the
+// organization:admin permission. Drives the last-admin guard so the org
+// can never be left with no one who can manage it.
+function isAdminMember(m: MemberSummary): boolean {
+  return m.roles.some(
+    (r) => r.name === "admin" || (r.permissions ?? []).includes("organization:admin"),
+  );
+}
 
 // AdminUsers is the People page for an organization: the home owner
 // plus everyone who's accepted an invite, plus the pending invites
@@ -30,7 +41,7 @@ import { formatDate } from "../lib/datetime";
 // the original confusion this page is rewritten to fix.
 export function AdminUsers() {
   const { t } = useTranslation();
-  const { token, hasPerm } = useAuth();
+  const { token, hasPerm, me } = useAuth();
   const [members, setMembers] = useState<MemberSummary[]>([]);
   const [invites, setInvites] = useState<InvitationSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -122,7 +133,13 @@ export function AdminUsers() {
       )}
       <div className="user-list">
         {members.map((m) => (
-          <MemberCard key={m.email} member={m} onChanged={refresh} />
+          <MemberCard
+            key={m.email}
+            member={m}
+            adminCount={members.filter(isAdminMember).length}
+            isSelf={!!me?.subject && me.subject === m.email}
+            onChanged={refresh}
+          />
         ))}
       </div>
 
@@ -166,44 +183,94 @@ export function AdminUsers() {
 
 function MemberCard({
   member,
+  adminCount,
+  isSelf,
   onChanged,
 }: {
   member: MemberSummary;
+  // adminCount is the number of admins across the whole org, used for the
+  // last-admin guard so the org can never be left with no one who can
+  // manage it.
+  adminCount: number;
+  // isSelf marks the card for the signed-in admin — privilege-reducing
+  // changes to your own account get an extra confirm (it's easy to lock
+  // yourself out of the admin surfaces in one careless click).
+  isSelf: boolean;
   onChanged: () => void;
 }) {
   const { t } = useTranslation();
   const { token } = useAuth();
   const [removing, setRemoving] = useState(false);
   const [savingRole, setSavingRole] = useState(false);
+  // pendingRole defers a confirmed role change: set when a privilege-
+  // reducing self-change needs a confirm, applied on ConfirmModal accept.
+  const [pendingRole, setPendingRole] = useState<TeamRoleName | null>(null);
+  // confirmRemove gates member removal behind the themed ConfirmModal
+  // (replacing window.confirm).
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  // err shows action failures / guard messages inline in the card (themed),
+  // replacing the old native window.alert().
+  const [err, setErr] = useState<string | null>(null);
 
-  const remove = async () => {
+  const wasAdmin = isAdminMember(member);
+
+  const doRemove = async () => {
     if (!token) return;
-    if (!confirm(t("admin.users.removeConfirm", { email: member.email }))) return;
     setRemoving(true);
+    setErr(null);
     try {
       await api.removeMember(token, member.email);
       onChanged();
     } catch (e) {
-      alert((e as Error).message);
+      setErr((e as Error).message);
     } finally {
       setRemoving(false);
     }
   };
 
+  const remove = () => {
+    // Last-admin guard: never let the org be left without an admin.
+    if (wasAdmin && adminCount <= 1) {
+      setErr(t("admin.users.lastAdminBlocked"));
+      return;
+    }
+    setErr(null);
+    setConfirmRemove(true);
+  };
+
   const currentRole = teamRoleOf(member.roles);
-  const changeRole = async (next: string) => {
-    if (!token || next === currentRole) return;
-    if (next !== "viewer" && next !== "editor" && next !== "admin") return;
+  const applyRole = async (next: TeamRoleName) => {
+    if (!token) return;
     setSavingRole(true);
+    setErr(null);
     try {
       // Name-only: the server fills in the catalog role's permissions.
       await api.updateMemberRoles(token, member.email, [{ name: next, permissions: [] }]);
       onChanged();
     } catch (e) {
-      alert((e as Error).message);
+      setErr((e as Error).message);
     } finally {
       setSavingRole(false);
     }
+  };
+
+  const changeRole = (next: string) => {
+    if (!token || next === currentRole) return;
+    if (next !== "viewer" && next !== "editor" && next !== "admin") return;
+    // A privilege-reducing change = leaving the admin role. Block it
+    // outright if this is the last admin; otherwise, when it's the admin
+    // demoting THEMSELVES, require an explicit confirm before they drop
+    // their own access.
+    const losingAdmin = wasAdmin && next !== "admin";
+    if (losingAdmin && adminCount <= 1) {
+      setErr(t("admin.users.lastAdminBlocked"));
+      return;
+    }
+    if (losingAdmin && isSelf) {
+      setPendingRole(next);
+      return;
+    }
+    void applyRole(next);
   };
 
   const roleNames = member.roles.map((r) => r.name).join(", ");
@@ -267,6 +334,38 @@ function MemberCard({
           </button>
         )}
       </div>
+      {err && (
+        <div className="card error" style={{ width: "100%", marginTop: "var(--space-2)" }}>
+          {err}
+        </div>
+      )}
+      {confirmRemove && (
+        <ConfirmModal
+          title={t("admin.users.remove")}
+          message={t("admin.users.removeConfirm", { email: member.email })}
+          confirmLabel={t("admin.users.remove")}
+          danger
+          onConfirm={() => {
+            setConfirmRemove(false);
+            void doRemove();
+          }}
+          onCancel={() => setConfirmRemove(false)}
+        />
+      )}
+      {pendingRole && (
+        <ConfirmModal
+          title={t("admin.users.selfDemoteTitle")}
+          message={t("admin.users.selfDemoteBody")}
+          confirmLabel={t("admin.users.selfDemoteConfirm")}
+          danger
+          onConfirm={() => {
+            const next = pendingRole;
+            setPendingRole(null);
+            void applyRole(next);
+          }}
+          onCancel={() => setPendingRole(null)}
+        />
+      )}
     </div>
   );
 }
@@ -282,6 +381,7 @@ function InvitationCard({
   const { token } = useAuth();
   const [copied, setCopied] = useState(false);
   const [revoking, setRevoking] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   const copy = async () => {
     const link = absoluteInviteURL(inv.accept_url);
@@ -298,11 +398,12 @@ function InvitationCard({
   const revoke = async () => {
     if (!token) return;
     setRevoking(true);
+    setErr(null);
     try {
       await api.revokeInvitation(token, inv.token);
       onChanged();
     } catch (e) {
-      alert((e as Error).message);
+      setErr((e as Error).message);
     } finally {
       setRevoking(false);
     }
@@ -357,6 +458,11 @@ function InvitationCard({
           </button>
         )}
       </div>
+      {err && (
+        <div className="card error" style={{ width: "100%", marginTop: "var(--space-2)" }}>
+          {err}
+        </div>
+      )}
     </div>
   );
 }

@@ -45,6 +45,39 @@ func newUserStoreWithUser(t *testing.T, email string) *JSONUserStore {
 	return store
 }
 
+// TestTOTP_RejectsReplayWithinWindow locks in replay protection: a TOTP
+// code is valid for ~90s, so the same code must not be redeemable twice even
+// with a fresh login challenge.
+func TestTOTP_RejectsReplayWithinWindow(t *testing.T) {
+	ctx := context.Background()
+	key := testTOTPKey(t)
+	const email = "replay@example.com"
+	users := newUserStoreWithUser(t, email)
+
+	setup, err := EnrolStart(ctx, users, key, email)
+	if err != nil {
+		t.Fatalf("EnrolStart: %v", err)
+	}
+	if _, err := EnrolConfirm(ctx, users, key, email, codeFor(t, setup.SecretBase32)); err != nil {
+		t.Fatalf("EnrolConfirm: %v", err)
+	}
+
+	challenges := NewMemTOTPChallengeStore()
+	code := codeFor(t, setup.SecretBase32)
+
+	// First use of the code succeeds.
+	tok1, _ := IssueTOTPChallenge(ctx, challenges, email)
+	if _, err := ConsumeTOTPChallenge(ctx, challenges, users, key, tok1, code, ""); err != nil {
+		t.Fatalf("first consume: %v", err)
+	}
+	// Replaying the SAME code (same time-step) on a fresh challenge must be
+	// rejected — the consumed step was burned.
+	tok2, _ := IssueTOTPChallenge(ctx, challenges, email)
+	if _, err := ConsumeTOTPChallenge(ctx, challenges, users, key, tok2, code, ""); err != ErrTOTPInvalid {
+		t.Fatalf("replay consume err = %v, want ErrTOTPInvalid", err)
+	}
+}
+
 func TestTOTPEnrolConfirmAndLogin(t *testing.T) {
 	ctx := context.Background()
 	key := testTOTPKey(t)

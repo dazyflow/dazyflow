@@ -1,4 +1,14 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+  cloneElement,
+  createContext,
+  isValidElement,
+  useContext,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { Braces, Info, Lock, Plus, Upload, X } from "lucide-react";
@@ -776,14 +786,16 @@ function valueMatches(value: unknown, schema: JSONSchema): boolean {
 function FieldWrap({
   name,
   schema,
+  required,
   stack,
   value,
   children,
 }: {
   name: string;
   schema: JSONSchema;
-  // required is still accepted by every call site but no longer rendered —
-  // the non-tech UI drops the "*" required marker entirely.
+  // required drives the always-visible "required" marker (so a field that
+  // needs a value is flagged while configuring, not only after a failed Run
+  // populates missingKeys).
   required: boolean;
   stack?: boolean;
   // value is passed for fields that can hold a ${...} reference
@@ -795,6 +807,18 @@ function FieldWrap({
   const { t } = useTranslation();
   const { missingKeys } = useFormCtx();
   const missing = missingKeys?.has(name) ?? false;
+  // A process-unique control id so <label htmlFor> associates with the
+  // rendered input/select/textarea even when the same field `name` repeats
+  // (nested objects, array items). We inject it onto the single child
+  // control below rather than threading an id prop through every field type.
+  const controlId = useId();
+  const labelledChildren =
+    isValidElement(children) &&
+    (children.props as { id?: string }).id === undefined
+      ? cloneElement(children as React.ReactElement<{ id?: string }>, {
+          id: controlId,
+        })
+      : children;
   const example =
     schema.examples && schema.examples.length > 0
       ? String(schema.examples[0])
@@ -804,9 +828,20 @@ function FieldWrap({
     <div className={missing ? "sf-field sf-field-missing" : "sf-field"}>
       <div className="label-row">
         <span className="sf-label-group">
-          <label htmlFor={name}>
+          <label htmlFor={controlId}>
             {schema.title || humanize(name)}
           </label>
+          {/* Always-on required marker so a field that needs a value reads
+              as such while configuring — not only after a failed Run. */}
+          {required && !missing && (
+            <span
+              className="sf-required-mark"
+              title={t("schemaForm.requiredHint")}
+              aria-label={t("schemaForm.requiredHint")}
+            >
+              *
+            </span>
+          )}
           {/* Red "needs a value" marker — set when this field is flagged by
               the config check, so jumping from the "N to configure" modal
               lands the eye on exactly what to fill in. */}
@@ -831,7 +866,7 @@ function FieldWrap({
           )}
         </span>
       </div>
-      {stack ? <div>{children}</div> : children}
+      {stack ? <div>{labelledChildren}</div> : labelledChildren}
       {example !== undefined && (
         <div className="desc sf-example">{t("schemaForm.example", { value: example })}</div>
       )}
@@ -1558,10 +1593,18 @@ function ReferenceMenu({
 
   useEffect(() => {
     if (!open || groups || error) return;
+    let cancelled = false;
     api
       .listReferences(ctx.token, ctx.tenant, ctx.workspace, ctx.flowId, ctx.nodeId)
-      .then((r) => setGroups(r.groups))
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+      .then((r) => {
+        if (!cancelled) setGroups(r.groups);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [open, groups, error, ctx]);
 
   useEffect(() => {
@@ -1637,6 +1680,9 @@ function ReferenceMenu({
         className="ghost ref-insert-btn"
         onClick={() => {
           setQuery("");
+          // Reset a previous transient error so reopening the menu refetches
+          // (the load effect's guard skips while `error` is set).
+          setError(null);
           setOpen(true);
         }}
         aria-haspopup="dialog"
@@ -1688,7 +1734,18 @@ function ReferenceMenu({
                 />
               </div>
               <div className="settings-body ref-dialog-body">
-                {error && <div className="ref-pop-msg ref-pop-error">{error}</div>}
+                {error && (
+                  <div className="ref-pop-msg ref-pop-error">
+                    <span>{error}</span>{" "}
+                    <button
+                      type="button"
+                      className="link-button"
+                      onClick={() => setError(null)}
+                    >
+                      {t("common.retry")}
+                    </button>
+                  </div>
+                )}
                 {!groups && !error && !hasExtra && (
                   <div className="ref-pop-msg">{t("schemaForm.refPicker.loading")}</div>
                 )}
@@ -2401,16 +2458,18 @@ function defaultFor(schema: JSONSchema): unknown {
 
 export type RowCond = { column: string; op: string; value: string };
 
-const ROW_COND_OPS: { id: string; label: string; value: "text" | "number" | "none" }[] = [
-  { id: "equals", label: "is", value: "text" },
-  { id: "not_equals", label: "is not", value: "text" },
-  { id: "contains", label: "contains", value: "text" },
-  { id: "gt", label: "greater than", value: "number" },
-  { id: "lt", label: "less than", value: "number" },
-  { id: "is_empty", label: "is empty", value: "none" },
-  { id: "is_not_empty", label: "is not empty", value: "none" },
-  { id: "before_today", label: "is before today", value: "none" },
-  { id: "after_today", label: "is after today", value: "none" },
+// labelKey is resolved against i18n at render time so the operator dropdown
+// switches with the active locale.
+const ROW_COND_OPS: { id: string; labelKey: string; value: "text" | "number" | "none" }[] = [
+  { id: "equals", labelKey: "schemaForm.rowCond.opEquals", value: "text" },
+  { id: "not_equals", labelKey: "schemaForm.rowCond.opNotEquals", value: "text" },
+  { id: "contains", labelKey: "schemaForm.rowCond.opContains", value: "text" },
+  { id: "gt", labelKey: "schemaForm.rowCond.opGt", value: "number" },
+  { id: "lt", labelKey: "schemaForm.rowCond.opLt", value: "number" },
+  { id: "is_empty", labelKey: "schemaForm.rowCond.opIsEmpty", value: "none" },
+  { id: "is_not_empty", labelKey: "schemaForm.rowCond.opIsNotEmpty", value: "none" },
+  { id: "before_today", labelKey: "schemaForm.rowCond.opBeforeToday", value: "none" },
+  { id: "after_today", labelKey: "schemaForm.rowCond.opAfterToday", value: "none" },
 ];
 
 function rowCondValueKind(op: string): "text" | "number" | "none" {
@@ -2499,9 +2558,13 @@ function RowConditionField({
   value: string;
   onChange: (v: string) => void;
 }) {
+  const { t } = useTranslation();
   const parsedInit = parseRowCEL(value);
   const [advanced, setAdvanced] = useState(parsedInit === null);
   const [conds, setConds] = useState<RowCond[]>(parsedInit ?? []);
+  // tooAdvanced shows an inline note when the typed expression can't be
+  // represented in the simple builder (replaces a window.alert about CEL).
+  const [tooAdvanced, setTooAdvanced] = useState(false);
 
   const emit = (next: RowCond[]) => {
     setConds(next);
@@ -2518,7 +2581,7 @@ function RowConditionField({
         <textarea
           rows={2}
           value={value}
-          placeholder='e.g. row.status == "unpaid"'
+          placeholder={t("schemaForm.rowCond.advancedPlaceholder")}
           onChange={(e) => onChange(e.target.value)}
           style={{ resize: "vertical", width: "100%", fontFamily: "monospace" }}
         />
@@ -2530,17 +2593,21 @@ function RowConditionField({
             if (p === null) {
               // Keep the user's expression; just tell them it's not
               // simple enough to edit visually.
-              window.alert(
-                "This condition is too advanced for the simple builder. Edit it as CEL here.",
-              );
+              setTooAdvanced(true);
               return;
             }
+            setTooAdvanced(false);
             setConds(p);
             setAdvanced(false);
           }}
         >
-          Use simple builder
+          {t("schemaForm.rowCond.useSimple")}
         </button>
+        {tooAdvanced && (
+          <div className="desc sf-rowcond-warn" role="status">
+            {t("schemaForm.rowCond.tooAdvanced")}
+          </div>
+        )}
       </div>
     );
   }
@@ -2548,7 +2615,7 @@ function RowConditionField({
   return (
     <div className="sf-rowcond">
       {conds.length === 0 && (
-        <div className="desc">No conditions yet — every row passes.</div>
+        <div className="desc">{t("schemaForm.rowCond.empty")}</div>
       )}
       {conds.map((c, i) => {
         const kind = rowCondValueKind(c.op);
@@ -2558,9 +2625,13 @@ function RowConditionField({
             className="sf-rowcond-row"
             style={{ display: "flex", gap: 6, marginBottom: 6, alignItems: "center" }}
           >
-            {i > 0 && <span className="desc" style={{ minWidth: 28 }}>and</span>}
+            {i > 0 && (
+              <span className="desc" style={{ minWidth: 28 }}>
+                {t("schemaForm.rowCond.and")}
+              </span>
+            )}
             <input
-              placeholder="column"
+              placeholder={t("schemaForm.rowCond.columnPlaceholder")}
               value={c.column}
               onChange={(e) => setCond(i, { column: e.target.value })}
               style={{ flex: "1 1 0" }}
@@ -2568,14 +2639,14 @@ function RowConditionField({
             <select value={c.op} onChange={(e) => setCond(i, { op: e.target.value })}>
               {ROW_COND_OPS.map((o) => (
                 <option key={o.id} value={o.id}>
-                  {o.label}
+                  {t(o.labelKey)}
                 </option>
               ))}
             </select>
             {kind !== "none" && (
               <input
                 type={kind === "number" ? "number" : "text"}
-                placeholder="value"
+                placeholder={t("schemaForm.rowCond.valuePlaceholder")}
                 value={c.value}
                 onChange={(e) => setCond(i, { value: e.target.value })}
                 style={{ flex: "1 1 0" }}
@@ -2583,7 +2654,7 @@ function RowConditionField({
             )}
             <button
               type="button"
-              aria-label="Remove condition"
+              aria-label={t("schemaForm.rowCond.removeCondition")}
               onClick={() => removeCond(i)}
               className="sf-rowcond-remove"
             >
@@ -2594,14 +2665,14 @@ function RowConditionField({
       })}
       <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
         <button type="button" className="sf-rowcond-add" onClick={addCond}>
-          <Plus size={14} /> Add condition
+          <Plus size={14} /> {t("schemaForm.rowCond.addCondition")}
         </button>
         <button
           type="button"
           className="sf-rowcond-toggle"
           onClick={() => setAdvanced(true)}
         >
-          Advanced (CEL)
+          {t("schemaForm.rowCond.advanced")}
         </button>
       </div>
     </div>

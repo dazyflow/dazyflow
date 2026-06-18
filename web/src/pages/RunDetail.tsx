@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, AlertCircle, ChevronDown, ChevronRight, RotateCw, RotateCcw } from "lucide-react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { ArrowLeft, AlertCircle, ChevronDown, ChevronRight, RotateCw, RotateCcw, Square } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import { api, APIError } from "../api";
 import { useAuth } from "../auth";
+import { ConfirmModal } from "../components/ConfirmModal";
 import { explainRunError } from "../lib/explainRunError";
 import type { Graph, JobRecord, JobStatus, Manifest, Ref, RunLogEntry } from "../types";
 import { formatDateTime } from "../lib/datetime";
@@ -33,6 +34,7 @@ import { formatDateTime } from "../lib/datetime";
 export function RunDetail() {
   const { t } = useTranslation();
   const { runID } = useParams<{ runID: string }>();
+  const navigate = useNavigate();
   const { token, me, activeTenant, activeWorkspace } = useAuth();
   const [run, setRun] = useState<JobRecord | null>(null);
   const [nodes, setNodes] = useState<JobRecord[]>([]);
@@ -41,6 +43,12 @@ export function RunDetail() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [replaying, setReplaying] = useState(false);
   const [retrying, setRetrying] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  // Confirm gates: Replay re-fires every step (incl. side effects like
+  // sending emails), and Cancel stops an in-flight run — both warrant a
+  // deliberate yes/no.
+  const [confirmReplay, setConfirmReplay] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
   // Friendly naming: the flow's display name for the heading, and module
   // labels for timeline rows ("ntfy" instead of "ntfy_1"). Best-effort —
   // a deleted flow or fetch error falls back to the raw IDs.
@@ -113,15 +121,22 @@ export function RunDetail() {
   // a manual reload. Mirrors RunList's polling pattern.
   useEffect(() => {
     if (!token || !runID || !live) return;
+    let cancelled = false;
     const t = window.setInterval(() => {
       Promise.all([api.getJob(token, runID), api.listRunNodes(token, runID)])
         .then(([r, ns]) => {
+          // Guard against a late tick resolving after unmount or after the
+          // run/effect changed — same pattern as the initial load.
+          if (cancelled) return;
           setRun(r);
           setNodes(ns.nodes ?? []);
         })
         .catch(() => {});
     }, 2000);
-    return () => window.clearInterval(t);
+    return () => {
+      cancelled = true;
+      window.clearInterval(t);
+    };
   }, [token, runID, live]);
 
   const toggle = (nid: string) =>
@@ -131,16 +146,19 @@ export function RunDetail() {
     if (!token || !run) return;
     setReplaying(true);
     try {
-      // Use the tenant/workspace baked into the original run record
-      // — replays go back to the same scope, not the user's current
-      // workspace switcher state. Less surprising for "I'm
-      // investigating an old run."
-      const result = await api.runGraph(token, "", "", run.GraphID);
-      // runGraph signature takes tenant/workspace; rely on the
-      // server falling back to principal scope when empty. (If it
-      // requires explicit, swap to using activeTenant/Workspace.)
+      // Pass the active tenant/workspace explicitly rather than empty
+      // strings — the gateway builds the flow scope from these, and empty
+      // values left the call relying on a server-side fallback that isn't
+      // guaranteed. (The run record carries no tenant/workspace of its own;
+      // the active scope is the same one RunList's retry uses.)
+      const result = await api.runGraph(
+        token,
+        activeTenant || me?.tenant || "",
+        activeWorkspace || me?.workspace || "",
+        run.GraphID,
+      );
       if (result?.job_id) {
-        window.location.href = `/runs/${encodeURIComponent(result.job_id)}`;
+        navigate(`/runs/${encodeURIComponent(result.job_id)}`);
       }
     } catch (e) {
       const msg = e instanceof APIError ? `${e.status}: ${e.message}` : (e as Error).message;
@@ -159,13 +177,32 @@ export function RunDetail() {
     try {
       const result = await api.retryRun(token, run.ID);
       if (result?.job_id) {
-        window.location.href = `/runs/${encodeURIComponent(result.job_id)}`;
+        navigate(`/runs/${encodeURIComponent(result.job_id)}`);
       }
     } catch (e) {
       const msg = e instanceof APIError ? `${e.status}: ${e.message}` : (e as Error).message;
       setError(t("runDetail.retryFailed", { error: msg }));
     } finally {
       setRetrying(false);
+    }
+  };
+
+  // cancel stops a run that's still in flight (queued / running / awaiting an
+  // approval). The daemon marks it cancelled; the live poll picks up the new
+  // status. Surfaced via a confirm since it abandons in-progress work.
+  const cancel = async () => {
+    if (!token || !run) return;
+    setCancelling(true);
+    try {
+      await api.cancelRun(token, run.ID);
+      // Optimistically reflect the stop; the poll reconciles with the daemon.
+      const fresh = await api.getJob(token, run.ID).catch(() => null);
+      if (fresh) setRun(fresh);
+    } catch (e) {
+      const msg = e instanceof APIError ? `${e.status}: ${e.message}` : (e as Error).message;
+      setError(t("runDetail.cancelFailed", { error: msg }));
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -226,6 +263,20 @@ export function RunDetail() {
           >
             <button type="button" className="secondary">{t("runDetail.openInEditor")}</button>
           </Link>
+          {/* Stop an in-flight run. Only shown while the run can still be
+              stopped (running, or parked awaiting an approval). */}
+          {(run.Status === "running" || run.Status === "awaiting" || run.Status === "queued") && (
+            <button
+              type="button"
+              className="danger"
+              onClick={() => setConfirmCancel(true)}
+              disabled={cancelling}
+              title={t("runDetail.cancelTitle")}
+            >
+              <Square size={13} style={{ marginRight: 6, verticalAlign: -2 }} />
+              {cancelling ? t("runDetail.cancelling") : t("runDetail.cancel")}
+            </button>
+          )}
           {(run.Status === "failed" || run.Status === "cancelled") && (
             <button
               type="button"
@@ -238,12 +289,14 @@ export function RunDetail() {
               {retrying ? t("runDetail.retrying") : t("runDetail.retry")}
             </button>
           )}
+          {/* Replay re-runs every step from scratch — including side effects
+              (sending emails/messages). Distinct icon (↻ vs ↺ for Retry) and
+              a confirm before firing so it isn't mistaken for the cheaper,
+              resume-from-failure Retry. */}
           <button
             type="button"
-            className={
-              run.Status === "failed" || run.Status === "cancelled" ? "secondary" : "primary"
-            }
-            onClick={replay}
+            className="secondary"
+            onClick={() => setConfirmReplay(true)}
             disabled={replaying}
             title={t("runDetail.replayTitle")}
           >
@@ -262,7 +315,7 @@ export function RunDetail() {
       {run.Status === "failed" && (
         <RunFailureBanner
           run={run}
-          failedNodeID={failedNode?.NodeID}
+          failedNodeLabel={failedNode ? nodeLabel(failedNode.NodeID) : undefined}
         />
       )}
 
@@ -412,6 +465,33 @@ export function RunDetail() {
       </div>
 
       {token && <RunLogs token={token} runID={run.ID} live={live} />}
+
+      {confirmReplay && (
+        <ConfirmModal
+          title={t("runDetail.confirmReplayTitle")}
+          message={t("runDetail.confirmReplayBody")}
+          confirmLabel={t("runDetail.replay")}
+          danger
+          onConfirm={() => {
+            setConfirmReplay(false);
+            void replay();
+          }}
+          onCancel={() => setConfirmReplay(false)}
+        />
+      )}
+      {confirmCancel && (
+        <ConfirmModal
+          title={t("runDetail.confirmCancelTitle")}
+          message={t("runDetail.confirmCancelBody")}
+          confirmLabel={t("runDetail.cancel")}
+          danger
+          onConfirm={() => {
+            setConfirmCancel(false);
+            void cancel();
+          }}
+          onCancel={() => setConfirmCancel(false)}
+        />
+      )}
     </div>
   );
 }
@@ -450,6 +530,7 @@ function RunLogs({
   // effects) can't duplicate lines.
   const fetchMore = async () => {
     for (;;) {
+      const before = cursor.current;
       const page = await api.listRunLogs(token, runID, {
         after: cursor.current,
         limit: 1000,
@@ -464,6 +545,10 @@ function RunLogs({
         });
       }
       if (logs.length < 1000) return;
+      // Safety valve: a full page that didn't advance the cursor (a buggy
+      // backend re-returning the same page, or seqs at-or-below `after`)
+      // would otherwise spin this loop forever. Stop if no forward progress.
+      if (cursor.current <= before) return;
     }
   };
 
@@ -589,10 +674,10 @@ function SummaryRow({ label, value }: { label: string; value: React.ReactNode })
 //      this layer — no fake headline.
 function RunFailureBanner({
   run,
-  failedNodeID,
+  failedNodeLabel,
 }: {
   run: JobRecord;
-  failedNodeID: string | undefined;
+  failedNodeLabel: string | undefined;
 }) {
   const { t } = useTranslation();
   const explanation = explainRunError(
@@ -626,8 +711,8 @@ function RunFailureBanner({
           </div>
         )}
         <div className="run-error-title">
-          {failedNodeID
-            ? t("runDetail.failedAt", { node: failedNodeID })
+          {failedNodeLabel
+            ? t("runDetail.failedAt", { node: failedNodeLabel })
             : t("runDetail.failed")}
           {run.Result?.error?.code && (
             <span className="run-error-code"> · {run.Result.error.code}</span>

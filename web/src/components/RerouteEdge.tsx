@@ -4,6 +4,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import i18n from "../i18n";
 
 // RerouteEdge draws a connection through optional "knot" waypoints — the
 // approach-B reroute (see #4): the edge stays a single source→target
@@ -147,7 +148,7 @@ export function RerouteEdge({
 
   return (
     // Label the connection for assistive tech: which two steps it wires.
-    <g role="img" aria-label={`connection from ${source} to ${target}`}>
+    <g role="img" aria-label={i18n.t("rerouteEdge.connectionLabel", { source, target })}>
       <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />
       {/* Data-flow animation (#9): dots travel source→target along the path
           while the downstream node is running. Two staggered dots read as

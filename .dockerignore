@@ -8,3 +8,14 @@ web/dist
 .hazyflow-users.json
 *.log
 OVERNIGHT.md
+
+# Secrets and credentials must never enter the build context: the Dockerfile
+# does `COPY . .`, which would otherwise bake them into an image layer.
+.env
+.env.*
+!.env.example
+certs/
+*.key
+*.pem
+.hazyflow/
+*.xlsx

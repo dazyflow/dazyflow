@@ -107,7 +107,7 @@ func TestRunNode_RedactsLeakedSecret(t *testing.T) {
 			{ID: "n", Module: "echo", Params: map[string]any{"token": "${secret.api}"}},
 		},
 	}
-	res, err := e.RunNode(t.Context(), g, "run1", "n", nil, nil)
+	res, err := e.RunNode(t.Context(), g, "run1", "n", "rec1", nil, nil)
 	if err != nil {
 		t.Fatalf("RunNode: %v", err)
 	}

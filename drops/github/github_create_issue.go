@@ -136,7 +136,11 @@ func executeGitHubCreateIssue(ctx context.Context, job core.Job, _ chan<- core.P
 	}
 
 	endpoint := currentHTTPBase() + "/repos/" + url.PathEscape(owner) + "/" + url.PathEscape(repo) + "/issues"
-	status, respBody, err := githubDo(ctx, "POST", endpoint, token, raw, params.IntDefault(job.Params, "timeout_ms", 15000))
+	// Creating an issue is a non-idempotent POST and this drop is a
+	// terminal leaf, so the engine auto-retries it — pass the job's stable
+	// Idempotency-Key (GitHub honors the header) so a replay dedupes
+	// server-side instead of opening a duplicate issue.
+	status, respBody, err := githubDoIdem(ctx, "POST", endpoint, token, raw, params.IntDefault(job.Params, "timeout_ms", 15000), job.IdempotencyKey())
 	if err != nil {
 		return params.Err(job, "github_http_error", err.Error()), nil
 	}
