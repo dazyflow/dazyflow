@@ -1,0 +1,27 @@
+# Production overlay. Run with explicit -f files so the dev
+# docker-compose.override.yml (which disables Postgres TLS) is NOT merged:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Adds Caddy in front of dzd for automatic HTTPS on the apex domain
+# (HTTP-01 challenge — needs ports 80/443 reachable, which the DO firewall allows).
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - dzd
+
+volumes:
+  caddy_data:
+  caddy_config:

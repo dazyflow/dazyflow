@@ -90,7 +90,7 @@ go build -o "${WORKDIR}/seed" ./scripts/ha_loadtest
 say "seeding node-less poll graph (every 1s) into shared workspace"
 "${WORKDIR}/seed" --base "$WS_DIR" --tenant "$TENANT" --graph "$GRAPH_ID" --interval 1
 
-start_hzd() { # args: name logfile grpc-port
+start_dzd() { # args: name logfile grpc-port
 	DAZYFLOW_POSTGRES_DSN="$DSN" \
 	DAZYFLOW_DATA_DIR="$DATA_DIR" \
 	DAZYFLOW_LISTEN="127.0.0.1:$3" \
@@ -99,9 +99,9 @@ start_hzd() { # args: name logfile grpc-port
 
 # --- 4. Start both nodes ----------------------------------------------------
 say "starting node A (:50051) and node B (:50052)"
-start_hzd a "$LOG_A" 50051; PID_A=$!
+start_dzd a "$LOG_A" 50051; PID_A=$!
 sleep 3   # let A win leadership first
-start_hzd b "$LOG_B" 50052; PID_B=$!
+start_dzd b "$LOG_B" 50052; PID_B=$!
 sleep 4   # let B settle as follower
 
 kill -0 "$PID_A" 2>/dev/null || fail "node A exited early; see $LOG_A"

@@ -6,9 +6,9 @@
 /dz-drophost
 /ha_loadtest
 /.dazyflow/
-/.hazyflow/
 *.xlsx
 /.env
+/certs/
 
 /node_modules/
 # Build/tooling caches — regenerated, never commit

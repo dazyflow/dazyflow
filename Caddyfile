@@ -1,0 +1,11 @@
+# Apex-only HTTPS. Caddy auto-provisions + renews the cert via Let's Encrypt
+# (HTTP-01). ACME_EMAIL comes from .env. Caddy forwards X-Forwarded-Proto and
+# upgrades WebSocket/SSE automatically, so dzd just needs
+# DAZYFLOW_TRUST_PROXY_HEADERS=1 (set in .env).
+{
+	email {$ACME_EMAIL}
+}
+
+dazyflow.app {
+	reverse_proxy dzd:8080
+}
