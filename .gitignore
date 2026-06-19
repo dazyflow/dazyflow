@@ -6,6 +6,10 @@
 /dz-drophost
 /ha_loadtest
 /.dazyflow/
+# Legacy runtime data dir (pre-rename). Was accidentally committed; held nested
+# git repos recorded as gitlinks with no .gitmodules, which broke CI checkout's
+# `git submodule update --init --recursive`.
+/.hazyflow/
 *.xlsx
 /.env
 /certs/
@@ -22,6 +26,7 @@ web/.vite/
 .keys/
 # Dazy personal API key used by the complete-dazyflow-tasks skill — never commit
 dazy-key
+hazy-key
 # Local Claude Code state stays out of git, but the shared skills under
 # .claude/skills/ are committed so the team gets them.
 /.claude/*
