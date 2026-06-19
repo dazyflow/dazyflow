@@ -1,10 +1,48 @@
 package db
 
 import (
+	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
+
+	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 )
+
+// TestMySQLSSRFDial_BlocksAtDial proves the MySQL egress guard runs at the
+// actual dial on the resolved address — not just as a pre-flight hostname
+// check — so it resists DNS rebinding. We exercise the exact dialer the
+// driver invokes (ssrfMySQLDial) against private/metadata destinations.
+func TestMySQLSSRFDial_BlocksAtDial(t *testing.T) {
+	// This package's TestMain turns private egress ON (so integration tests
+	// can reach a local DB), which disables the guard. Turn it OFF for this
+	// test, then restore the package default. With the guard active the
+	// Control rejects each address AFTER DNS resolution but BEFORE connecting,
+	// so these assertions never touch the network.
+	hfnet.SetAllowPrivateEgress(false)
+	defer hfnet.SetAllowPrivateEgress(true)
+	for _, addr := range []string{
+		"127.0.0.1:3306",       // loopback
+		"169.254.169.254:3306", // cloud metadata (link-local)
+		"10.1.2.3:3306",        // RFC1918 private
+		"[::1]:3306",           // IPv6 loopback
+	} {
+		t.Run(addr, func(t *testing.T) {
+			_, err := ssrfMySQLDial(context.Background(), addr)
+			if err == nil || !strings.Contains(err.Error(), "ssrf_blocked") {
+				t.Fatalf("dial to %s must be ssrf_blocked, got %v", addr, err)
+			}
+		})
+	}
+}
+
+// TestRegisterMySQLSSRFDialer_Idempotent: the once-guarded registration is
+// safe to call repeatedly (it runs on every MySQL connect).
+func TestRegisterMySQLSSRFDialer_Idempotent(t *testing.T) {
+	registerMySQLSSRFDialer()
+	registerMySQLSSRFDialer() // must not panic on the global driver map
+}
 
 // ---------------------------------------------------------------------
 // Unit tests — no real Postgres needed. We test the registry's

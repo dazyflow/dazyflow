@@ -418,7 +418,22 @@ you expose the daemon; see `.env.example` for the detail.
   it lets flows reach private/loopback/cloud-metadata addresses (and the
   DB/SMTP drop hosts).
 - `DAZYFLOW_ENABLE_SHELL` — **off** by default; on, it's host RCE for anyone
-  who can run a flow. Single-tenant / CI box only.
+  who can run a flow. Single-tenant / CI box only. The toggle is **fail-closed**:
+  only `1`/`true`/`yes`/`on` enable it — any other value (including `disabled`
+  or a typo) leaves it off, so you can't arm RCE by accident.
+  - **Env exposure:** an enabled shell command inherits the daemon's
+    environment with only `DAZYFLOW_*` removed. The app's own secrets (master
+    key, DSN, signing keys) are withheld, but **third-party** secrets in the
+    daemon env (`AWS_*`, `GOOGLE_APPLICATION_CREDENTIALS`, generic API keys)
+    are NOT — they pass through to the command. If the daemon holds such
+    secrets, set `DAZYFLOW_SHELL_ENV_ALLOW` to a comma-separated allowlist of
+    variable names (e.g. `GOPATH,CARGO_HOME`); the command then sees only
+    those plus `PATH`/`HOME`, and everything else is withheld.
+  - **Cleanup:** on timeout the daemon kills the command's whole process
+    group (SIGKILL), so backgrounded/daemonized children are reaped rather
+    than orphaned onto the host. There is still no CPU/memory/PID cgroup cap —
+    a runaway command can consume host resources until its timeout; size the
+    box and `timeout_ms` accordingly.
 - `DAZYFLOW_AUDIT_SECRET_READS` — **off** by default; on, every successful
   secret resolution emits a `secret.read` audit event (secret name + actor,
   never the value). High-volume (resolution runs on every node execution) —

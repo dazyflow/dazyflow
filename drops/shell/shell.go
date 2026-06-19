@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/creack/pty"
@@ -107,33 +108,76 @@ const (
 	defaultMaxOutputBytes = 1024 * 1024
 )
 
-// shellEnabled reports whether the operator opted into the shell drop. Any
-// non-empty value other than "0"/"false" enables it.
+// shellEnabled reports whether the operator opted into the shell drop.
+// FAIL-CLOSED: only an explicit affirmative ("1"/"true"/"yes"/"on")
+// turns it on; every other value — empty, "0"/"false"/"no"/"off", AND
+// anything unrecognized like "disabled", "none", or a typo — leaves this
+// host-RCE primitive OFF. This matches cmd/dzd's envBool convention. The
+// earlier "anything non-negative enables" logic failed OPEN: an operator
+// who wrote DAZYFLOW_ENABLE_SHELL=disabled (reasonably expecting it off)
+// would have silently armed remote code execution. A security-critical
+// toggle must never enable on a value the operator didn't clearly mean
+// as "yes".
 func shellEnabled() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("DAZYFLOW_ENABLE_SHELL"))) {
-	case "", "0", "false", "no", "off":
-		return false
-	default:
+	case "1", "true", "yes", "on":
 		return true
+	default:
+		return false
 	}
 }
 
-// scrubbedEnv is the host environment minus every DAZYFLOW_* variable, so a
-// command can't read the daemon's secrets (master key, Postgres DSN, webhook
-// signing secrets, trusted signing keys, …) out of its own environment. CI
-// ergonomics are preserved: PATH, HOME, GOPATH, language toolchain vars, etc.
-// all pass through — only the app's own secret namespace is removed.
+// scrubbedEnv builds the environment handed to the command.
+//
+// Floor (always): every DAZYFLOW_* variable is removed, so a command can't
+// read the daemon's own secrets (master key, Postgres DSN, webhook signing
+// secrets, trusted signing keys, …) out of its environment. CI ergonomics
+// are preserved by default: PATH, HOME, GOPATH, language toolchain vars,
+// etc. all pass through — only the app's own secret namespace is removed.
+//
+// Least-privilege (opt-in): when DAZYFLOW_SHELL_ENV_ALLOW is set (a
+// comma-separated list of variable names), the command instead sees ONLY
+// those variables plus a minimal safe base (PATH, HOME) — nothing else.
+// This is for boxes whose daemon environment also holds THIRD-PARTY secrets
+// (AWS_*, GOOGLE_APPLICATION_CREDENTIALS, generic API keys) that the
+// prefix scrub above wouldn't catch: the operator names exactly what a
+// command may see, and everything unlisted is withheld.
 func scrubbedEnv() []string {
+	allow := parseShellEnvAllow(os.Getenv("DAZYFLOW_SHELL_ENV_ALLOW"))
 	src := os.Environ()
 	out := make([]string, 0, len(src))
 	for _, kv := range src {
 		k, _, ok := strings.Cut(kv, "=")
 		if ok && strings.HasPrefix(k, "DAZYFLOW_") {
+			// The app's own secrets are withheld in every mode.
 			continue
+		}
+		if allow != nil {
+			if _, want := allow[k]; !want {
+				continue
+			}
 		}
 		out = append(out, kv)
 	}
 	return out
+}
+
+// parseShellEnvAllow turns the DAZYFLOW_SHELL_ENV_ALLOW list into a set, or
+// returns nil when unset (signalling "no allowlist — pass the full scrubbed
+// env"). PATH and HOME are always included so commands still resolve and
+// run; the operator need only name the extras a command genuinely needs.
+func parseShellEnvAllow(s string) map[string]struct{} {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	allow := map[string]struct{}{"PATH": {}, "HOME": {}}
+	for _, name := range strings.Split(s, ",") {
+		if name = strings.TrimSpace(name); name != "" {
+			allow[name] = struct{}{}
+		}
+	}
+	return allow
 }
 
 func executeShell(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
@@ -174,6 +218,28 @@ func executeShell(ctx context.Context, job core.Job, progress chan<- core.Progre
 	// Never expose the daemon's DAZYFLOW_* secrets (master key, DSN, webhook
 	// secrets) to the command — see scrubbedEnv.
 	cmd.Env = scrubbedEnv()
+	// On timeout/cancel, tear down the WHOLE process group, not just the
+	// direct child. pty.Start (below) makes the command a session leader, so
+	// its PID doubles as its process-group ID; killing the group reaps
+	// grandchildren the command backgrounded (`thing &`, a fork bomb) that a
+	// bare Process.Kill would orphan to keep running on the host after the
+	// node "finished". The pgid==pid guard is a hard safety interlock: we
+	// signal a group ONLY when the child genuinely leads its own group, so a
+	// negative-PID kill can never escape to the daemon's own process group.
+	// WaitDelay backstops a child that ignores the signal or holds the pty.
+	cmd.Cancel = func() error {
+		if cmd.Process == nil {
+			return nil
+		}
+		pid := cmd.Process.Pid
+		if pgid, err := syscall.Getpgid(pid); err == nil && pgid == pid {
+			if syscall.Kill(-pgid, syscall.SIGKILL) == nil {
+				return nil
+			}
+		}
+		return cmd.Process.Kill()
+	}
+	cmd.WaitDelay = 5 * time.Second
 	combined := &boundedBuffer{limit: maxBytes}
 
 	emitProgress(progress, job, 0.1, "exec "+cmdName)

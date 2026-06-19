@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+	"time"
 
 	"git.sr.ht/~klahr/dazyflow/auth"
 )
@@ -143,6 +144,28 @@ func TestSignupInvite_NotAnOrgInvite(t *testing.T) {
 	// The unauthenticated org-invite detail endpoint hides it.
 	if rw := h.do(t, "GET", "/api/v1/invitations/"+token, nil); rw.Code != http.StatusNotFound {
 		t.Fatalf("viewInvitation on signup-invite: want 404, got %d %s", rw.Code, rw.Body.String())
+	}
+}
+
+// TestSignupInvite_ExpiredStaysClosed: an expired signup-invite no longer
+// opens the gate (IsPending is false past expiry).
+func TestSignupInvite_ExpiredStaysClosed(t *testing.T) {
+	h := signupInviteHarness(t)
+	now := time.Now().UTC()
+	if err := h.gw.Invitations.PutInvitation(t.Context(), auth.Invitation{
+		Token:     "inv_expiredtoken000000000000000",
+		Email:     "old@example.com",
+		Tenant:    auth.SignupInviteTenant,
+		CreatedAt: now.Add(-48 * time.Hour),
+		ExpiresAt: now.Add(-time.Hour), // already expired
+	}); err != nil {
+		t.Fatalf("seed expired invite: %v", err)
+	}
+	if rw := h.do(t, "POST", "/api/v1/auth/signup", map[string]string{
+		"email": "old@example.com", "password": "TestPassw0rd!23",
+		"signup_invite": "inv_expiredtoken000000000000000",
+	}); rw.Code != http.StatusNotImplemented {
+		t.Fatalf("expired signup-invite: want 501, got %d %s", rw.Code, rw.Body.String())
 	}
 }
 

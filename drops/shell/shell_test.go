@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"git.sr.ht/~klahr/dazyflow/core"
 )
@@ -300,6 +301,80 @@ func TestScrubbedEnv(t *testing.T) {
 	}
 }
 
+// TestScrubbedEnv_Allowlist: with DAZYFLOW_SHELL_ENV_ALLOW set, the command
+// sees ONLY the listed vars plus the PATH/HOME base — third-party secrets
+// the prefix scrub wouldn't catch (e.g. AWS_*) are withheld.
+func TestScrubbedEnv_Allowlist(t *testing.T) {
+	t.Setenv("DAZYFLOW_MASTER_KEY", "topsecret") // app secret: always scrubbed
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "leak-me")  // third-party secret
+	t.Setenv("MYVAR", "wanted")
+	t.Setenv("DAZYFLOW_SHELL_ENV_ALLOW", "MYVAR")
+
+	env := scrubbedEnv()
+	has := func(prefix string) bool {
+		for _, kv := range env {
+			if strings.HasPrefix(kv, prefix) {
+				return true
+			}
+		}
+		return false
+	}
+	if !has("MYVAR=") {
+		t.Error("allowlisted MYVAR was withheld")
+	}
+	if !has("PATH=") {
+		t.Error("PATH base var should always pass so commands resolve")
+	}
+	if has("AWS_SECRET_ACCESS_KEY=") {
+		t.Error("non-allowlisted third-party secret leaked through the allowlist")
+	}
+	if has("DAZYFLOW_") {
+		t.Error("DAZYFLOW_ secret leaked")
+	}
+}
+
+// TestExecuteShell_KillsProcessGroupOnTimeout proves the timeout tears down
+// the whole process group, not just the direct child: a grandchild the
+// command backgrounded must NOT outlive the node. Without the group-kill
+// the backgrounded subshell would survive its parent and write the marker.
+func TestExecuteShell_KillsProcessGroupOnTimeout(t *testing.T) {
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "orphan-was-here")
+	// Background a subshell that IGNORES SIGHUP, waits 2s, then writes the
+	// marker; keep the parent alive for 10s. The `trap '' HUP` matters:
+	// closing the pty already SIGHUPs the session, so a naive child would
+	// die from that alone and wouldn't prove the group-kill does anything.
+	// A SIGHUP-ignoring child (the `nohup`/daemon case) survives everything
+	// EXCEPT the process-group SIGKILL — so this only passes if Cancel
+	// actually signals the group. The 300ms timeout fires while the parent
+	// is still running, so Cancel runs before the child's 2s timer.
+	script := "( trap '' HUP; sleep 2; touch '" + marker + "' ) & sleep 10"
+
+	res, err := executeShell(t.Context(), core.Job{
+		ID:            "orphan",
+		WorkspaceRoot: dir,
+		Params: map[string]any{
+			"command":    "sh",
+			"args":       []any{"-c", script},
+			"timeout_ms": 300,
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	// The timeout path reports a "timeout" error — that's expected here; the
+	// behaviour under test is what happens to the grandchild, below.
+	if res.Error == nil || res.Error.Code != "timeout" {
+		t.Fatalf("expected timeout error, got status=%q err=%+v", res.Status, res.Error)
+	}
+	// Wait past the grandchild's 2s timer. If the group was killed it never
+	// fires; if it was orphaned the marker appears.
+	time.Sleep(2500 * time.Millisecond)
+	if _, statErr := os.Stat(marker); statErr == nil {
+		t.Fatal("backgrounded grandchild survived the timeout — process group was NOT killed")
+	}
+}
+
 func TestShellEnabled(t *testing.T) {
 	cases := []struct {
 		val  string
@@ -314,7 +389,14 @@ func TestShellEnabled(t *testing.T) {
 		{"1", true},
 		{"true", true},
 		{"yes", true},
-		{"anything", true},
+		{"on", true},
+		{"TRUE", true}, // affirmatives are case-insensitive too
+		// FAIL-CLOSED: unrecognized values must NOT enable an RCE primitive.
+		// These are the footguns the old "default: true" logic armed.
+		{"anything", false},
+		{"disabled", false},
+		{"none", false},
+		{"enable", false}, // not in the affirmative set — stays off
 	}
 	for _, c := range cases {
 		t.Run(c.val, func(t *testing.T) {

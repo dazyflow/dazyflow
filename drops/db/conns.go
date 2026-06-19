@@ -19,6 +19,32 @@ import (
 // run record.
 var errInvalidDSN = errors.New("invalid connection string")
 
+// mysqlSSRFNet is the go-sql-driver/mysql network name whose registered
+// dialer applies the shared SSRF guard. Routing TCP MySQL DSNs through it
+// makes the MySQL drop's egress defense match Postgres's: the guard runs at
+// the actual dial, on the RESOLVED IP, so it's resistant to DNS rebinding
+// (a hostname that passes a pre-flight check but resolves to a private or
+// metadata address at connect time is still refused). database/sql exposes
+// no dial hook, but the mysql driver does.
+const mysqlSSRFNet = "dazyflow-ssrf-tcp"
+
+// ssrfMySQLDial dials addr over TCP with the shared SSRF control, which
+// inspects the resolved IP at dial time and refuses loopback / private /
+// link-local / metadata destinations. A nil control (the operator opted
+// into private egress) degrades to a plain dial — same posture as the
+// Postgres path.
+func ssrfMySQLDial(ctx context.Context, addr string) (stdnet.Conn, error) {
+	d := &stdnet.Dialer{Control: hfnet.SSRFDialControl()}
+	return d.DialContext(ctx, "tcp", addr)
+}
+
+// registerMySQLSSRFDialer installs ssrfMySQLDial under mysqlSSRFNet exactly
+// once. RegisterDialContext mutates a process-global map in the driver, so
+// it must not run per-connection.
+var registerMySQLSSRFDialer = sync.OnceFunc(func() {
+	mysql.RegisterDialContext(mysqlSSRFNet, ssrfMySQLDial)
+})
+
 // Pool reuse for the Postgres drops. Connection setup (TCP + TLS + auth)
 // dominates the wall time of a small per-job INSERT/QUERY, so caching
 // pools across jobs that hit the same database is a real win — but
@@ -233,9 +259,20 @@ func (r *sqlDBRegistry) sqlDB(ctx context.Context, tenant, dsn string) (*sql.DB,
 			return nil, errInvalidDSN
 		}
 		if cfg.Net == "tcp" {
+			// Fast pre-flight: reject an obviously-private/loopback host up
+			// front with a clear error (the common misconfig). No-op when the
+			// operator opted into private egress.
 			if err := hfnet.CheckDialHost(cfg.Addr); err != nil {
 				return nil, err
 			}
+			// Authoritative guard: route the connection through a dialer that
+			// re-checks the RESOLVED IP at dial time, closing the DNS-rebinding
+			// window the pre-flight alone leaves open (a host can pass the check
+			// above, then rebind to 169.254.169.254 before the driver connects).
+			// Mirrors the Postgres DialFunc path.
+			registerMySQLSSRFDialer()
+			cfg.Net = mysqlSSRFNet
+			dsn = cfg.FormatDSN()
 		}
 	}
 

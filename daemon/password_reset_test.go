@@ -1,6 +1,8 @@
 package daemon
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"git.sr.ht/~klahr/dazyflow/auth"
 )
 
 var resetLinkRE = regexp.MustCompile(`https://app\.example/reset-password\?email=([^&\s]+)&token=([a-f0-9]{64})`)
@@ -176,6 +180,62 @@ func TestWelcomeEmail_SentOnSignup(t *testing.T) {
 			t.Fatalf("no welcome email captured:\nto=%v\ndata=%s", to, data)
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// TestPasswordReset_ExpiredToken: a token whose expiry has passed is
+// rejected even though the hash matches.
+func TestPasswordReset_ExpiredToken(t *testing.T) {
+	h, users, _ := verificationHarness(t)
+	token := "abc123def456" // plaintext the "email" would carry
+	hash := sha256.Sum256([]byte(token))
+	past := time.Now().Add(-time.Minute)
+	pw, _ := auth.HashPassword("OldPassw0rd!23")
+	if err := users.PutUser(t.Context(), auth.User{
+		Email: "expired@example.com", Subject: "expired@example.com", Tenant: "t",
+		PasswordHash: pw, ResetTokenHash: hash[:], ResetExpiresAt: &past,
+	}); err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+	if rw := h.do(t, "POST", "/api/v1/auth/reset-password", map[string]string{
+		"email": "expired@example.com", "token": token, "password": "NewPassw0rd!99",
+	}); rw.Code != http.StatusBadRequest {
+		t.Fatalf("expired token: want 400, got %d %s", rw.Code, rw.Body.String())
+	}
+}
+
+// TestPasswordReset_SSOAccountNoEmail: an account with no password (e.g.
+// SSO-only) gets no reset email — reset is for password accounts.
+func TestPasswordReset_SSOAccountNoEmail(t *testing.T) {
+	h, users, srv := verificationHarness(t)
+	if err := users.PutUser(t.Context(), auth.User{
+		Email: "sso@example.com", Subject: "sso@example.com", Tenant: "t",
+		// no PasswordHash
+	}); err != nil {
+		t.Fatalf("seed sso user: %v", err)
+	}
+	if rw := h.do(t, "POST", "/api/v1/auth/forgot-password", map[string]string{
+		"email": "sso@example.com",
+	}); rw.Code != http.StatusOK {
+		t.Fatalf("forgot for sso: want 200, got %d", rw.Code)
+	}
+	time.Sleep(200 * time.Millisecond) // let any (erroneous) async send run
+	if _, _, data, _ := srv.snapshot(); resetLinkRE.MatchString(data) {
+		t.Fatalf("a reset link was emailed to an SSO-only account:\n%s", data)
+	}
+}
+
+// TestPasswordReset_MalformedBody: garbage JSON is a clean 400, not a panic.
+func TestPasswordReset_MalformedBody(t *testing.T) {
+	h, _, _ := verificationHarness(t)
+	for _, path := range []string{"/api/v1/auth/forgot-password", "/api/v1/auth/reset-password"} {
+		req := httptest.NewRequest("POST", path, bytes.NewBufferString("{not json"))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		ServeForTest(h.gw, rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("%s with garbage body: want 400, got %d", path, rec.Code)
+		}
 	}
 }
 

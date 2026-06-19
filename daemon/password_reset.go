@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -62,7 +63,19 @@ func (h *HTTPGateway) requestPasswordReset(rw http.ResponseWriter, r *http.Reque
 	// is a reset, not a first-time set.
 	if h.passwordResetActive() && email != "" {
 		if user, err := h.Users.GetByEmail(r.Context(), email); err == nil && user.Email != "" && len(user.PasswordHash) > 0 {
-			h.sendPasswordResetEmail(r, user)
+			// Audit the request now (cheap, constant-ish), but send the email
+			// OFF the request path. A synchronous SMTP send (seconds) only for
+			// real accounts would make response time a timing oracle for
+			// account existence — defeating the uniform 200 below, which is the
+			// whole point of this endpoint. The detached context lets the send
+			// outlive the handler; its timeout stops a hung mail server from
+			// piling up goroutines (and the route is IP-rate-limited upstream).
+			h.auditAuth(r.Context(), r, user.Tenant, user.Email, "auth.password_reset_requested", "")
+			go func(u auth.User) {
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				h.sendPasswordResetEmail(ctx, u)
+			}(user)
 		}
 	}
 	writeJSON(rw, http.StatusOK, map[string]any{"ok": true})
@@ -71,8 +84,11 @@ func (h *HTTPGateway) requestPasswordReset(rw http.ResponseWriter, r *http.Reque
 // sendPasswordResetEmail mints a fresh token onto the user record
 // (invalidating any earlier one) and emails the link. Best-effort: a
 // failure logs and returns false; it never surfaces to the caller (see
-// requestPasswordReset's uniform response).
-func (h *HTTPGateway) sendPasswordResetEmail(r *http.Request, user auth.User) bool {
+// requestPasswordReset's uniform response). Runs on a detached context
+// from a goroutine, so it must not touch the request. The token is
+// stored (PutUser) BEFORE the email is sent, so a recipient can never
+// receive a link whose token isn't yet valid.
+func (h *HTTPGateway) sendPasswordResetEmail(ctx context.Context, user auth.User) bool {
 	if !h.passwordResetActive() {
 		return false
 	}
@@ -87,7 +103,7 @@ func (h *HTTPGateway) sendPasswordResetEmail(r *http.Request, user auth.User) bo
 	exp := now.Add(resetTokenTTL)
 	user.ResetTokenHash = hash[:]
 	user.ResetExpiresAt = &exp
-	if err := h.Users.PutUser(r.Context(), user); err != nil {
+	if err := h.Users.PutUser(ctx, user); err != nil {
 		h.logger.Printf("password reset for %s: save token: %v", user.Email, err)
 		return false
 	}
@@ -98,11 +114,10 @@ func (h *HTTPGateway) sendPasswordResetEmail(r *http.Request, user auth.User) bo
 			"Choose a new password:\n%s\n\n"+
 			"The link expires %s. If you didn't request this, ignore this email — your password is unchanged.",
 		link, exp.Format("2006-01-02 15:04 MST"))
-	if err := h.svc.Mailer.Send(r.Context(), user.Email, "Reset your Dazyflow password", body); err != nil {
+	if err := h.svc.Mailer.Send(ctx, user.Email, "Reset your Dazyflow password", body); err != nil {
 		h.logger.Printf("password reset for %s: send: %v", user.Email, err)
 		return false
 	}
-	h.auditAuth(r.Context(), r, user.Tenant, user.Email, "auth.password_reset_requested", "")
 	return true
 }
 
