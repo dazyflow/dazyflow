@@ -1333,6 +1333,12 @@
     "runsPerRow": "Det här steget körs en gång per rad. Använd ”Från varje rad” i fältets { }-meny för att infoga en kolumn."
   },
   "renderPreview": {
+    "assistLabel": "Beskriv ditt mejl — AI skriver det",
+    "assistPlaceholder": "t.ex. En vänlig “order skickad”-notis med varorna och totalsumman",
+    "generate": "Generera",
+    "generating": "Skriver…",
+    "providerLabel": "AI-leverantör",
+    "needConnect": "Anslut Claude eller ChatGPT på <0>Appar-sidan</0> för att använda detta.",
     "starters": "Börja med:",
     "starter": { "greeting": "Hälsning", "receipt": "Kvitto", "announcement": "Tillkännagivande" },
     "sampleData": "Exempeldata (endast för förhandsvisning)",

@@ -15,7 +15,14 @@ import (
 
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/llmtask"
+	"git.sr.ht/~klahr/dazyflow/internal/llm"
 )
+
+// openaiModels is shared by the task drops and the shared LLM registry.
+var openaiModels = []llmtask.ModelOption{
+	{ID: "gpt-4o", Label: "GPT-4o"},
+	{ID: "gpt-4o-mini", Label: "GPT-4o mini"},
+}
 
 const (
 	defaultBase  = "https://api.openai.com"
@@ -87,21 +94,24 @@ func (provider) Call(ctx context.Context, apiKey string, req llmtask.Request) (l
 }
 
 func init() {
-	llmtask.RegisterAll(llmtask.Config{
-		Provider:     provider{},
+	llm.Register(llm.ProviderInfo{
+		Name:         "openai",
 		Integration:  "ChatGPT",
-		Icon:         "openai",
-		Color:        "#10a37f",
 		DefaultModel: defaultModel,
-		Models: []llmtask.ModelOption{
-			{ID: "gpt-4o", Label: "GPT-4o"},
-			{ID: "gpt-4o-mini", Label: "GPT-4o mini"},
-		},
+		Models:       openaiModels,
+		Provider:     provider{},
+	})
+	llmtask.RegisterAll(llmtask.Config{
+		Provider:       provider{},
+		Integration:    "ChatGPT",
+		Icon:           "openai",
+		Color:          "#10a37f",
+		DefaultModel:   defaultModel,
+		Models:         openaiModels,
 		KeyPlaceholder: "sk-…",
 		AskID:          "chatgpt",
 		TaskIDPrefix:   "gpt",
 		VerifyKey:      verifyKey,
-		// New provider — no legacy ids to alias.
 	})
 }
 

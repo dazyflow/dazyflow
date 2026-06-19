@@ -26,51 +26,24 @@ import (
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 	"git.sr.ht/~klahr/dazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/internal/llm"
 )
 
 // maxResponseBytes caps how much of a response we buffer, so a hostile or
 // buggy upstream (reachable via the base_url override) can't OOM the daemon.
 const maxResponseBytes = 64 << 20
 
-// Tool is a provider-neutral forced tool: the model must call it, so its
-// returned input matches Schema. Providers map it to their own shape
-// (Anthropic input_schema / OpenAI function parameters).
-type Tool struct {
-	Name        string
-	Description string
-	Schema      map[string]any
-}
-
-// Request is one single-turn generation, provider-neutral.
-type Request struct {
-	Model       string
-	System      string
-	UserText    string
-	Messages    []any // optional multi-turn ({role,content}); overrides System+UserText
-	MaxTokens   int
-	Temperature *float64
-	Tool        *Tool
-	BaseURL     string // tenant override; "" = provider default
-	TimeoutMS   int
-}
-
-// Result is the normalized provider response.
-type Result struct {
-	Text string         // concatenated text output
-	Tool map[string]any // forced-tool input, when Request.Tool was set
-	Raw  map[string]any // raw decoded response (emitted for debugging)
-}
-
-// Provider is one LLM backend. Implementations live in the per-vendor packages.
-type Provider interface {
-	Call(ctx context.Context, apiKey string, req Request) (Result, *core.JobError)
-}
-
-// ModelOption is one entry in a drop's model picker.
-type ModelOption struct {
-	ID    string
-	Label string
-}
+// The provider-neutral request/response vocabulary now lives in internal/llm
+// (the shared LLM layer used by both these drops and editor features like the
+// render_template AI assist). These aliases keep the provider packages and
+// their tests referring to llmtask.Request/Result/Tool/Provider unchanged.
+type (
+	Tool        = llm.Tool
+	Request     = llm.Request
+	Result      = llm.Result
+	Provider    = llm.Provider
+	ModelOption = llm.ModelOption
+)
 
 // Config is a provider's branding + model set, supplied to RegisterAll.
 type Config struct {

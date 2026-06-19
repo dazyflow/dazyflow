@@ -859,6 +859,32 @@ export const api = {
       "/tools/render-template/preview",
       { template, data },
     ),
+
+  // assistRenderTemplate turns a plain-English description into an HTML email
+  // template using the tenant's connected Claude/ChatGPT key. `fields` are
+  // the merge-field names available (from the sample data) so the model uses
+  // the right ones. need_connect=true means no AI provider is connected yet.
+  assistRenderTemplate: (
+    token: string,
+    description: string,
+    fields: string[],
+    provider?: string,
+  ) =>
+    request<{ template?: string; error?: string; need_connect?: boolean; provider?: string }>(
+      token,
+      "POST",
+      "/tools/render-template/assist",
+      { description, fields, provider },
+    ),
+
+  // listLLMProviders returns the AI providers this tenant has connected, so
+  // the editor can show a picker (and know when none are connected).
+  listLLMProviders: (token: string) =>
+    request<{ providers: { name: string; label: string }[] }>(
+      token,
+      "GET",
+      "/tools/llm-providers",
+    ),
   // sampleNode fires a partial run that ends at nodeID — the daemon
   // strips every node and edge outside nodeID's upstream chain before
   // submitting. Returns the run_id so the caller can subscribe to the

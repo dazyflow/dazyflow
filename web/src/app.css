@@ -8583,3 +8583,36 @@ button.files-name:hover {
   font-size: var(--text-xs);
   white-space: pre-wrap;
 }
+
+/* render_template AI assist row (top of the preview pane). */
+.rtp-assist { display: flex; flex-direction: column; gap: var(--space-1); }
+.rtp-assist-row { display: flex; gap: var(--space-2); }
+.rtp-desc {
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px var(--space-2);
+  font-size: var(--text-sm);
+  background: var(--surface);
+}
+.rtp-desc:focus { outline: none; border-color: var(--accent); }
+.rtp-generate {
+  white-space: nowrap;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink, #fff);
+  border-radius: var(--radius);
+  padding: 6px 14px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.rtp-generate:disabled { opacity: 0.5; cursor: default; }
+.rtp-provider {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: var(--text-sm);
+  padding: 6px var(--space-1);
+  max-width: 9rem;
+}

@@ -16,7 +16,16 @@ import (
 
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/llmtask"
+	"git.sr.ht/~klahr/dazyflow/internal/llm"
 )
+
+// claudeModels is the model picker, shared by the task drops (llmtask) and
+// the shared LLM registry (internal/llm) so both list the same set.
+var claudeModels = []llmtask.ModelOption{
+	{ID: "claude-opus-4-8", Label: "Claude Opus 4.8"},
+	{ID: "claude-sonnet-4-6", Label: "Claude Sonnet 4.6"},
+	{ID: "claude-haiku-4-5-20251001", Label: "Claude Haiku 4.5"},
+}
 
 const (
 	apiVersion   = "2023-06-01"
@@ -85,17 +94,22 @@ func (provider) Call(ctx context.Context, apiKey string, req llmtask.Request) (l
 }
 
 func init() {
-	llmtask.RegisterAll(llmtask.Config{
-		Provider:     provider{},
+	// Shared LLM registry: makes this provider available to editor/platform
+	// features (the render_template AI assist) — not just the flow drops.
+	llm.Register(llm.ProviderInfo{
+		Name:         "claude",
 		Integration:  "Claude",
-		Icon:         "claude",
-		Color:        "#cc7755",
 		DefaultModel: defaultModel,
-		Models: []llmtask.ModelOption{
-			{ID: "claude-opus-4-8", Label: "Claude Opus 4.8"},
-			{ID: "claude-sonnet-4-6", Label: "Claude Sonnet 4.6"},
-			{ID: "claude-haiku-4-5-20251001", Label: "Claude Haiku 4.5"},
-		},
+		Models:       claudeModels,
+		Provider:     provider{},
+	})
+	llmtask.RegisterAll(llmtask.Config{
+		Provider:       provider{},
+		Integration:    "Claude",
+		Icon:           "claude",
+		Color:          "#cc7755",
+		DefaultModel:   defaultModel,
+		Models:         claudeModels,
 		KeyPlaceholder: "sk-ant-…",
 		AskID:          "claude",
 		TaskIDPrefix:   "claude",

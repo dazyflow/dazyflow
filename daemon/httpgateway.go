@@ -526,6 +526,10 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// Live preview for the render_template step's editor — renders {template,
 	// data} through the same engine the drop uses. See render_preview.go.
 	mux.HandleFunc("POST /api/v1/tools/render-template/preview", h.requireAuth(h.renderTemplatePreview))
+	// AI assist: plain-English description → HTML email template, using the
+	// tenant's connected Claude/ChatGPT key. See render_assist.go.
+	mux.HandleFunc("POST /api/v1/tools/render-template/assist", h.requireAuth(h.renderTemplateAssist))
+	mux.HandleFunc("GET /api/v1/tools/llm-providers", h.requireAuth(h.renderTemplateLLMProviders))
 	// validate/graph lints a Graph JSON literal without saving — for
 	// LLMs that compose a graph in chat and want a dry-run before
 	// committing. Distinct from /me/flows/{id}/validate which lints

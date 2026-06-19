@@ -1333,6 +1333,12 @@
     "runsPerRow": "This step runs once per row. Use “From each row” in a field's { } menu to insert a column."
   },
   "renderPreview": {
+    "assistLabel": "Describe your email — AI writes it",
+    "assistPlaceholder": "e.g. A friendly order-shipped note with the items and total",
+    "generate": "Generate",
+    "generating": "Writing…",
+    "providerLabel": "AI provider",
+    "needConnect": "Connect Claude or ChatGPT on the <0>Apps page</0> to use this.",
     "starters": "Start from:",
     "starter": { "greeting": "Greeting", "receipt": "Receipt", "announcement": "Announcement" },
     "sampleData": "Sample data (for preview only)",
