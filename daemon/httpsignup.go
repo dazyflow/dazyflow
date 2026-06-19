@@ -167,6 +167,11 @@ func (h *HTTPGateway) signUp(rw http.ResponseWriter, r *http.Request) {
 	// banner via whoami until the link is clicked.
 	verificationSent := h.sendVerificationEmail(r, user)
 
+	// Welcome email: best-effort, on every signup path. Distinct from
+	// verification (see welcome_email.go) — one confirms the address,
+	// this one greets the new account.
+	h.sendWelcomeEmail(r, user)
+
 	// Auto sign-in: issue a session immediately so the UI can land
 	// the user on the welcome page without an extra round trip
 	// through the sign-in form.

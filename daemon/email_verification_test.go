@@ -247,10 +247,16 @@ func TestEmailVerification_Resend(t *testing.T) {
 	var newToken string
 	deadline := time.Now().Add(2 * time.Second)
 	for {
+		// The mailer captures every message, so scan for the MOST RECENT
+		// verify link (the resend) rather than the first (the original
+		// signup, whose token is oldToken).
 		_, _, data, _ := srv.snapshot()
-		if m := verifyLinkRE.FindStringSubmatch(data); m != nil && m[2] != oldToken {
-			newToken = m[2]
-			break
+		ms := verifyLinkRE.FindAllStringSubmatch(data, -1)
+		if len(ms) > 0 {
+			if last := ms[len(ms)-1]; last[2] != oldToken {
+				newToken = last[2]
+				break
+			}
 		}
 		if time.Now().After(deadline) {
 			t.Fatal("no fresh link after resend")

@@ -58,6 +58,15 @@ type User struct {
 	VerifiedAt      *time.Time `json:"verified_at,omitempty"`
 	VerifyTokenHash []byte     `json:"verify_token_hash,omitempty"`
 	VerifyExpiresAt *time.Time `json:"verify_expires_at,omitempty"`
+
+	// Password-reset state. Both zero on accounts with no reset in
+	// flight; omitempty keeps existing stores byte-compatible. Mirrors
+	// the email-verification token: ResetTokenHash is the SHA-256 of the
+	// emailed token (the store never holds the clickable secret), and
+	// the pair is cleared the moment the reset is consumed or superseded
+	// by a fresh request. See daemon/password_reset.go.
+	ResetTokenHash []byte     `json:"reset_token_hash,omitempty"`
+	ResetExpiresAt *time.Time `json:"reset_expires_at,omitempty"`
 }
 
 // EmailVerified reports whether the account's address was confirmed.

@@ -123,6 +123,35 @@
     "bannerSending": "Skickar…",
     "bannerDismiss": "Dölj tills vidare"
   },
+  "forgotPassword": {
+    "title": "Återställ ditt lösenord",
+    "subtitle": "Ange din konto-e-post så skickar vi en länk för att välja ett nytt lösenord.",
+    "email": "E-post",
+    "submit": "Skicka återställningslänk",
+    "submitting": "Skickar…",
+    "sentTitle": "Kolla din inkorg",
+    "sentBody": "Om det finns ett konto för {{email}} har vi skickat en länk för att återställa lösenordet. Länken går ut om en timme.",
+    "backToSignin": "Tillbaka till inloggning"
+  },
+  "resetPassword": {
+    "title": "Välj ett nytt lösenord",
+    "subtitle": "Ange ett nytt lösenord för {{email}}.",
+    "email": "E-post",
+    "newPassword": "Nytt lösenord",
+    "hint": "Minst 8 tecken.",
+    "confirm": "Bekräfta nytt lösenord",
+    "submit": "Spara nytt lösenord",
+    "submitting": "Sparar…",
+    "tooShort": "Lösenordet måste vara minst 8 tecken.",
+    "mismatch": "Lösenorden matchar inte.",
+    "badLinkTitle": "Länken är ofullständig",
+    "badLinkBody": "Återställningslänken saknar e-post eller token. Begär en ny.",
+    "requestNew": "Begär en ny återställningslänk",
+    "doneTitle": "Lösenordet uppdaterat",
+    "doneBody": "Ditt lösenord har ändrats och du har loggats ut överallt. Logga in med ditt nya lösenord.",
+    "toSignin": "Logga in",
+    "backToSignin": "Tillbaka till inloggning"
+  },
   "files": {
     "title": "Filer",
     "noAccess": "Arbetsytans filer hanteras av redaktörer och administratörer. Fråga en administratör om du behöver åtkomst.",
@@ -239,6 +268,7 @@
     "submitting": "Loggar in…",
     "newHere": "Ny här?",
     "createAccount": "Skapa ett konto",
+    "forgotPassword": "Glömt lösenordet?",
     "continueWithGoogle": "Fortsätt med Google",
     "or": "eller",
     "sessionExpired": "Din session har gått ut. Logga in igen.",

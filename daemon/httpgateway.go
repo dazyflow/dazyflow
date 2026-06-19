@@ -336,6 +336,11 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/auth/signin", h.rateLimitAuth(h.signIn))
 	mux.HandleFunc("POST /api/v1/auth/signup", h.rateLimitAuth(h.signUp))
 	mux.HandleFunc("POST /api/v1/auth/verify-email", h.rateLimitAuth(h.verifyEmail))
+	// Password reset (forgot → email link → set new password). Both
+	// unauthenticated and rate-limited; the token in reset-password is
+	// the credential. See password_reset.go.
+	mux.HandleFunc("POST /api/v1/auth/forgot-password", h.rateLimitAuth(h.requestPasswordReset))
+	mux.HandleFunc("POST /api/v1/auth/reset-password", h.rateLimitAuth(h.resetPassword))
 	// Rate-limited like the other auth routes: resend mints+sends a fresh
 	// token, so an authenticated client must not be able to hammer it to spam
 	// email or churn tokens. IP limiter wraps the auth check.

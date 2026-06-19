@@ -277,6 +277,14 @@ export function SignIn() {
           {busy ? t("signIn.submitting") : t("signIn.submit")}
         </button>
         {error && <div className="error">{error}</div>}
+        <div className="signin-alt">
+          <Link
+            to={email.trim() ? `/forgot-password?email=${encodeURIComponent(email.trim())}` : "/forgot-password"}
+            onClick={() => clearError()}
+          >
+            {t("signIn.forgotPassword")}
+          </Link>
+        </div>
         {signupEnabled && (
           <div className="signin-alt">
             {t("signIn.newHere")}{" "}

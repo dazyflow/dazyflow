@@ -459,6 +459,19 @@ export const api = {
       "POST",
       "/me/verification/resend",
     ),
+  // Password reset. requestPasswordReset is intentionally non-enumerating
+  // — the server always returns 200 regardless of whether the email has
+  // an account — so the UI shows the same "check your inbox" message
+  // either way. resetPassword consumes the emailed link's email+token and
+  // sets the new password (no auth — the token is the proof).
+  requestPasswordReset: (email: string) =>
+    request<{ ok: boolean }>(null, "POST", "/auth/forgot-password", { email }),
+  resetPassword: (email: string, resetToken: string, password: string) =>
+    request<{ ok: boolean }>(null, "POST", "/auth/reset-password", {
+      email,
+      token: resetToken,
+      password,
+    }),
   // Template gallery: index lives at /templates/index.json under the
   // web app's static assets (NOT /api/v1/...). Each template entry
   // points at its own graph file, fetched lazily when the user

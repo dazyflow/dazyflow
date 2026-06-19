@@ -59,7 +59,14 @@ func (f *fakeSMTP) serve(conn net.Conn) {
 			if line == "." {
 				inData = false
 				f.mu.Lock()
-				f.data = strings.Join(data, "\r\n")
+				// Accumulate every message body, not just the last. A single
+				// action can now send more than one email (e.g. signup emits
+				// both a verification link and a welcome), so callers that
+				// scan `data` for a particular message must see all of them.
+				if f.data != "" {
+					f.data += "\r\n"
+				}
+				f.data += strings.Join(data, "\r\n")
 				f.mu.Unlock()
 				w("250 ok")
 				continue
