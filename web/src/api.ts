@@ -8,6 +8,7 @@ import type {
   InvitationDetails,
   AdminOAuthProvider,
   InvitationSummary,
+  SignupInviteSummary,
   LintIssue,
   Manifest,
   Revision,
@@ -435,8 +436,15 @@ export const api = {
   // signUp returns the same shape as signIn — the server issues a
   // session immediately so the UI can land the user on the welcome
   // page without an extra round trip.
-  signUp: (email: string, password: string) =>
-    request<SignInResponse>(null, "POST", "/auth/signup", { email, password }),
+  // signupInvite is the optional platform signup-invite token: on a
+  // signup-disabled deployment it's what authorizes this email to
+  // create an account (see SignUp.tsx and daemon/signup_invite.go).
+  signUp: (email: string, password: string, signupInvite?: string) =>
+    request<SignInResponse>(null, "POST", "/auth/signup", {
+      email,
+      password,
+      ...(signupInvite ? { signup_invite: signupInvite } : {}),
+    }),
   // Email verification: verifyEmail consumes the emailed link's
   // email+token pair (no auth — the click can land in any browser);
   // resendVerification re-mints + re-sends for the signed-in user.
@@ -1440,6 +1448,26 @@ export const api = {
       token,
       "DELETE",
       `/admin/invitations/${encodeURIComponent(inviteToken)}`,
+    ),
+
+  // Platform signup-invites (platform:admin only): invite a specific
+  // email to create its own account on a signup-disabled deployment.
+  // Distinct from org invitations above — see daemon/signup_invite.go.
+  createSignupInvite: (token: string, email: string) =>
+    request<SignupInviteSummary>(token, "POST", "/admin/signup-invites", {
+      email,
+    }),
+  listSignupInvites: (token: string) =>
+    request<{ invites: SignupInviteSummary[] }>(
+      token,
+      "GET",
+      "/admin/signup-invites",
+    ),
+  revokeSignupInvite: (token: string, inviteToken: string) =>
+    request<void>(
+      token,
+      "DELETE",
+      `/admin/signup-invites/${encodeURIComponent(inviteToken)}`,
     ),
 
   // viewInvitation is unauthenticated — the token IS the credential.

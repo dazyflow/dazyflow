@@ -8,6 +8,7 @@ import {
   ScrollText,
   ShieldCheck,
   Plug,
+  UserPlus,
   Lock,
   ServerCog,
   CircleArrowUp,
@@ -76,6 +77,7 @@ export function Admin() {
           <h2 className="admin-group-label">{t("admin.groupPlatform")}</h2>
           <div className="admin-grid">
             <AdminCard to="/admin/oauth" icon={<Plug size={18} />} title={t("admin.cardOAuthTitle")} desc={t("admin.cardOAuthDesc")} />
+            <AdminCard to="/admin/platform" icon={<UserPlus size={18} />} title={t("admin.cardPlatformTitle")} desc={t("admin.cardPlatformDesc")} />
           </div>
 
           <h2 className="admin-group-label">{t("admin.groupSystem")}</h2>

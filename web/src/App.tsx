@@ -27,6 +27,7 @@ import { AdminModules } from "./pages/AdminModules";
 import { AdminWorkspace } from "./pages/AdminWorkspace";
 import { AdminOrgSSO } from "./pages/AdminOrgSSO";
 import { AdminOAuthProviders } from "./pages/AdminOAuthProviders";
+import { AdminPlatform } from "./pages/AdminPlatform";
 import { AdminGoogle } from "./pages/AdminGoogle";
 import { AdminSecretManager } from "./pages/AdminSecretManager";
 import { AdminGitCredentials } from "./pages/AdminGitCredentials";
@@ -89,6 +90,7 @@ export function App() {
         <Route path="/admin/workspace" element={<AdminWorkspace />} />
         <Route path="/admin/sso" element={<AdminOrgSSO />} />
         <Route path="/admin/oauth" element={<AdminOAuthProviders />} />
+        <Route path="/admin/platform" element={<AdminPlatform />} />
         <Route path="/admin/google" element={<AdminGoogle />} />
         <Route path="/admin/secret-manager" element={<AdminSecretManager />} />
         <Route path="/admin/git-credentials" element={<AdminGitCredentials />} />

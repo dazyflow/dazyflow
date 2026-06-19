@@ -752,7 +752,10 @@ func (h *HTTPGateway) viewInvitation(rw http.ResponseWriter, r *http.Request) {
 	}
 	token := r.PathValue("token")
 	inv, err := h.Invitations.GetByToken(r.Context(), token)
-	if err != nil {
+	if err != nil || inv.IsSignupInvite() {
+		// Signup-invites share this store but aren't org-join invites —
+		// they're consumed by the signUp gate, never viewed here. Treat
+		// them as not-found so this endpoint stays purely org-scoped.
 		writeJSONError(rw, http.StatusNotFound, "invitation not found")
 		return
 	}
@@ -797,7 +800,9 @@ func (h *HTTPGateway) acceptInvitation(rw http.ResponseWriter, r *http.Request, 
 	}
 	token := r.PathValue("token")
 	inv, err := h.Invitations.GetByToken(r.Context(), token)
-	if err != nil {
+	if err != nil || inv.IsSignupInvite() {
+		// A signup-invite creates its own account at signUp time; it has
+		// no org to accept into. Reject it here as not-found.
 		writeJSONError(rw, http.StatusNotFound, "invitation not found")
 		return
 	}

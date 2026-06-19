@@ -48,6 +48,12 @@ import (
 type signupRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
+	// SignupInvite is the optional platform signup-invite token (see
+	// signup_invite.go). When self-serve signup is disabled, a valid,
+	// pending invite for this email is the third way through the gate
+	// — letting a platform owner onboard specific users one at a time
+	// without opening signup to the world.
+	SignupInvite string `json:"signup_invite,omitempty"`
 }
 
 func (h *HTTPGateway) signUp(rw http.ResponseWriter, r *http.Request) {
@@ -61,15 +67,20 @@ func (h *HTTPGateway) signUp(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	email := strings.ToLower(strings.TrimSpace(body.Email))
-	// Signup is closed by default. Two ways through the gate: the operator
-	// enabled self-serve signup, or this email is in the platform-admin
-	// allowlist (DAZYFLOW_PLATFORM_ADMINS). The allowlist path is the
-	// bootstrap hatch — it lets a fresh instance mint its first super-admin
-	// without flipping EnableSignup on and back off. It's self-limiting:
+	// Signup is closed by default. Three ways through the gate: the
+	// operator enabled self-serve signup; this email is in the
+	// platform-admin allowlist (DAZYFLOW_PLATFORM_ADMINS); or the request
+	// carries a valid, pending platform signup-invite issued for this
+	// email (see signup_invite.go). The allowlist path is the bootstrap
+	// hatch — it lets a fresh instance mint its first super-admin without
+	// flipping EnableSignup on and back off. All three are self-limiting:
 	// once the account exists the duplicate check below returns 409, so a
-	// listed email can be claimed exactly once. The new account is elevated
-	// to platform:admin at IssueSession time (see elevatePlatformAdmin).
-	if !h.EnableSignup && !h.isPlatformAdminEmail(email) {
+	// listed email or an invited email can be claimed exactly once. The
+	// new account is elevated to platform:admin at IssueSession time (see
+	// elevatePlatformAdmin) only for allowlisted emails — an invited user
+	// is an ordinary tenant owner.
+	invited := h.validSignupInvite(r.Context(), email, body.SignupInvite)
+	if !h.EnableSignup && !h.isPlatformAdminEmail(email) && !invited {
 		writeJSONError(rw, http.StatusNotImplemented, "self-serve signup is not enabled on this deployment")
 		return
 	}
@@ -122,6 +133,18 @@ func (h *HTTPGateway) signUp(rw http.ResponseWriter, r *http.Request) {
 		// genuinely unexpected (disk write failure, e.g.).
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("create user: %v", err))
 		return
+	}
+
+	// Burn the signup-invite now that the account exists. Best-effort:
+	// the email-uniqueness check above already makes the token single-use
+	// (a second signup with it hits the 409), so a failure to stamp
+	// accepted_at only affects the operator's pending-invites view, not
+	// security. validSignupInvite already confirmed the token is pending
+	// and addressed to this email.
+	if invited {
+		if err := h.Invitations.MarkAccepted(r.Context(), body.SignupInvite, time.Now().UTC()); err != nil {
+			h.logger.Printf("signup-invite %s: mark accepted: %v", body.SignupInvite, err)
+		}
 	}
 
 	// Seed the org's display name from the email's domain so the

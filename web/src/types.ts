@@ -430,6 +430,23 @@ export type InvitationSummary = {
   accept_url: string;
 };
 
+// SignupInviteSummary is a platform signup-invite (platform:admin
+// only): an offer for a specific email to create its own account on a
+// signup-disabled deployment. The create call returns the same shape
+// minus the lifecycle fields. See daemon/signup_invite.go.
+export type SignupInviteSummary = {
+  token: string;
+  email: string;
+  invited_by?: string;
+  created_at?: string;
+  expires_at: string;
+  accepted_at?: string | null;
+  revoked_at?: string | null;
+  pending?: boolean;
+  signup_url: string;
+  email_sent?: boolean;
+};
+
 export type MemberSummary = {
   email: string;
   tenant: string;

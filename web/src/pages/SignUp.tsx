@@ -23,6 +23,12 @@ export function SignUp() {
   // directly on the accept page.
   const presetEmail = searchParams.get("email") ?? "";
   const inviteToken = searchParams.get("invite") ?? "";
+  // signupInvite is the platform-owner invite token (distinct from the
+  // org-invite `invite` above). When present the email is locked to the
+  // invited address, the page stays open even on a signup-disabled
+  // deployment (the server validates the token), and there's no org to
+  // accept into afterwards — the user lands on the normal welcome flow.
+  const signupInvite = searchParams.get("signup_invite") ?? "";
   const [email, setEmail] = useState(presetEmail);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -43,6 +49,13 @@ export function SignUp() {
   }, [clearError]);
 
   useEffect(() => {
+    // A signup-invite is its own authorization: the server checks the
+    // token, so the page must stay open even when public signup is off.
+    // Skip the probe entirely rather than risk bouncing the invitee.
+    if (signupInvite) {
+      setSignupAllowed(true);
+      return;
+    }
     let cancelled = false;
     api
       .getPublicAuthConfig()
@@ -55,7 +68,7 @@ export function SignUp() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [signupInvite]);
 
   if (signupAllowed === null) return <div />;
   if (!signupAllowed) {
@@ -85,10 +98,16 @@ export function SignUp() {
           }
           setBusy(true);
           try {
-            await signUpWithPassword(email.trim(), password);
-            // Land on the invite-accept page if the signup came from
-            // an invitation link; otherwise the usual welcome wizard.
-            navigate(inviteToken ? `/invite/${inviteToken}` : "/welcome");
+            await signUpWithPassword(email.trim(), password, signupInvite);
+            // A platform signup-invite creates the user's own account, so
+            // there's no org to accept — straight to the welcome wizard.
+            // An org-invite link (`invite`) still routes to its accept
+            // page; everyone else gets the welcome wizard.
+            navigate(
+              inviteToken && !signupInvite
+                ? `/invite/${inviteToken}`
+                : "/welcome",
+            );
           } catch {
             /* server error already set on context.error */
           } finally {
@@ -102,7 +121,12 @@ export function SignUp() {
           id="email"
           type="email"
           autoComplete="username"
-          autoFocus
+          // On an invite, the email is fixed to the address the owner
+          // invited — the server binds the new account to it, so let the
+          // recipient see but not change it, and put focus on the
+          // password they actually need to fill in.
+          readOnly={!!signupInvite}
+          autoFocus={!signupInvite}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com"
@@ -112,6 +136,7 @@ export function SignUp() {
           id="password"
           type="password"
           autoComplete="new-password"
+          autoFocus={!!signupInvite}
           minLength={8}
           value={password}
           onChange={(e) => setPassword(e.target.value)}

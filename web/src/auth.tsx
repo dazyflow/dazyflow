@@ -39,7 +39,11 @@ type AuthCtx = {
   // and lands them in the same authenticated state as a sign-in call.
   // Errors surface on the context (`error`) and are re-thrown so the
   // caller can branch on success.
-  signUpWithPassword: (email: string, password: string) => Promise<void>;
+  signUpWithPassword: (
+    email: string,
+    password: string,
+    signupInvite?: string,
+  ) => Promise<void>;
   signOut: () => Promise<void>;
   hasPerm: (p: Permission) => boolean;
   // Workspace state. `workspaces` is the list the principal can access
@@ -344,11 +348,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // signUpWithPassword: same wire shape as signInWithPassword (the
   // backend issues a session immediately on signup), so we can
   // collapse the two code paths after the initial API call.
-  const signUpWithPassword = async (email: string, password: string) => {
+  const signUpWithPassword = async (
+    email: string,
+    password: string,
+    signupInvite?: string,
+  ) => {
     setLoading(true);
     setError(null);
     try {
-      const r = await api.signUp(email, password);
+      const r = await api.signUp(email, password, signupInvite);
       await applySession(r.token as string);
     } catch (e) {
       setError((e as Error).message);

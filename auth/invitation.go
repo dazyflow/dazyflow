@@ -49,6 +49,27 @@ func (i Invitation) IsPending(now time.Time) bool {
 	return i.AcceptedAt == nil && i.RevokedAt == nil && now.Before(i.ExpiresAt)
 }
 
+// SignupInviteTenant is the sentinel Tenant value that marks an
+// Invitation as a platform signup-invite rather than an org-join
+// invite. A platform admin issues these to authorize one specific
+// email to create its OWN account — own tenant, default signup roles —
+// on a deployment where self-serve signup is disabled (see the signUp
+// gate in daemon/httpsignup.go). The value is NOT a real tenant: no
+// org, membership, workspace, or profile is ever keyed on it, and no
+// account ever lands here (signup mints a fresh usr_<hex> tenant).
+// Reusing the invitations store rather than a parallel table means
+// signup-invites inherit its TTL, audit trail, and GDPR erasure
+// (DeleteByEmail) for free. The org-join handlers
+// (viewInvitation/acceptInvitation) reject any invite where
+// IsSignupInvite is true, and a tenant admin's ListByTenant never
+// returns these because their tenant is never the sentinel.
+const SignupInviteTenant = "_signup"
+
+// IsSignupInvite reports whether this invitation is a platform
+// signup-invite (see SignupInviteTenant) rather than an org-join
+// invite. The two share a store but never a code path.
+func (i Invitation) IsSignupInvite() bool { return i.Tenant == SignupInviteTenant }
+
 // InvitationStore is the invitation lookup boundary. GetByToken is
 // the no-auth lookup used by the /invite/<token> detail endpoint;
 // the rest of the surface is admin-only.

@@ -568,6 +568,14 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/admin/invitations", h.requireAuth(h.createInvitation))
 	mux.HandleFunc("GET /api/v1/admin/invitations", h.requireAuth(h.listInvitations))
 	mux.HandleFunc("DELETE /api/v1/admin/invitations/{token}", h.requireAuth(h.revokeInvitation))
+	// Platform signup-invites: a platform owner invites a specific email
+	// to create its own account on a signup-disabled deployment. Distinct
+	// from org invitations above — the recipient gets their own tenant,
+	// not a membership. The token is consumed by the signUp gate, not an
+	// accept endpoint. See signup_invite.go.
+	mux.HandleFunc("POST /api/v1/admin/signup-invites", h.requireAuth(h.createSignupInvite))
+	mux.HandleFunc("GET /api/v1/admin/signup-invites", h.requireAuth(h.listSignupInvites))
+	mux.HandleFunc("DELETE /api/v1/admin/signup-invites/{token}", h.requireAuth(h.revokeSignupInvite))
 	mux.HandleFunc("GET /api/v1/admin/members", h.requireAuth(h.listMembers))
 	mux.HandleFunc("PATCH /api/v1/admin/members/{email}", h.requireAuth(h.updateMemberRoles))
 	mux.HandleFunc("DELETE /api/v1/admin/members/{email}", h.requireAuth(h.removeMember))
