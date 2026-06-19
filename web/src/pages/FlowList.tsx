@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Plus, Workflow, Lock, Globe } from "lucide-react";
+import { Plus, Workflow, Lock, Globe, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import { FlowIcon, isBrandedIcon } from "../icons";
 import { FlowStatusChip } from "../components/FlowStatusChip";
+import { CreateWithAIModal } from "../components/CreateWithAIModal";
 import { isImageIcon } from "../lib/iconImage";
 import { shouldShowTenantID } from "../lib/visibleTenant";
 import { userScope } from "../recentFlow";
-import type { FlowSummary } from "../types";
+import type { FlowSummary, Graph } from "../types";
 
 // HAS_FLOWS_KEY mirrors the key App.tsx's RootRedirect reads when
 // deciding whether a bare-root visit lands on /welcome or /flows.
@@ -30,6 +31,7 @@ export function FlowList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [aiCreating, setAiCreating] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -92,6 +94,25 @@ export function FlowList() {
     navigate(`/flows/${encodeURIComponent(id)}`);
   };
 
+  // createFromGraph persists an AI-generated DRAFT and opens it in the editor
+  // for review. Same save+open path as a blank flow — it is NOT run; the user
+  // reviews, tweaks, and publishes when ready.
+  const createFromGraph = async (graph: Graph) => {
+    if (!token || !activeWorkspace) return;
+    const name = (graph.name || "AI-generated flow").trim();
+    const id = `${slugify(name)}-${Math.random().toString(36).slice(2, 8)}`;
+    await api.saveGraph(token, {
+      id,
+      tenant: activeTenant,
+      workspace: activeWorkspace,
+      nodes: graph.nodes ?? [],
+      edges: graph.edges ?? [],
+      name,
+      description: graph.description,
+    });
+    navigate(`/flows/${encodeURIComponent(id)}`);
+  };
+
   return (
     <div>
       <div className="page-title">
@@ -115,6 +136,14 @@ export function FlowList() {
           </Link>
           <button
             className="primary"
+            onClick={() => setAiCreating(true)}
+            disabled={!canEdit}
+            title={!canEdit ? t("flowList.needEdit") : undefined}
+          >
+            <Sparkles size={16} style={{ marginRight: 6, verticalAlign: -3 }} />
+            {t("flowList.createWithAI")}
+          </button>
+          <button
             onClick={() => setCreating(true)}
             disabled={!canEdit}
             title={!canEdit ? t("flowList.needEdit") : undefined}
@@ -156,6 +185,12 @@ export function FlowList() {
           onCreate={async (name, description) => {
             await createNew(name, description);
           }}
+        />
+      )}
+      {aiCreating && (
+        <CreateWithAIModal
+          onCancel={() => setAiCreating(false)}
+          onGenerated={createFromGraph}
         />
       )}
       <div className="graph-list">

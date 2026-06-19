@@ -8616,3 +8616,19 @@ button.files-name:hover {
   padding: 6px var(--space-1);
   max-width: 9rem;
 }
+
+/* AI flow-generation progress checklist (CreateWithAIModal). */
+.ai-steps { list-style: none; margin: var(--space-2) 0 0; padding: 0; }
+.ai-step {
+  display: flex; align-items: center; gap: var(--space-2);
+  font-size: var(--text-sm); padding: 4px 0; color: var(--muted);
+}
+.ai-step-dot {
+  display: inline-flex; width: 18px; height: 18px; align-items: center; justify-content: center;
+  border-radius: 999px; font-size: 11px; flex: 0 0 auto;
+  border: 1px solid var(--border);
+}
+.ai-step.done { color: var(--fg, inherit); }
+.ai-step.done .ai-step-dot { background: var(--accent); color: var(--accent-ink, #fff); border-color: var(--accent); }
+.ai-step.active .ai-step-dot { color: var(--accent); border-color: var(--accent); animation: ai-pulse 1s ease-in-out infinite; }
+@keyframes ai-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }

@@ -90,10 +90,12 @@ export type FlowSummary = {
   description?: string;
   owner?: string;
   visibility?: Visibility;
-  // run_status ("live" | "manual" | "paused") is computed server-side by
-  // core.FlowRunStatusOf so the list can show the status chip without
-  // fetching each full graph. Optional: older daemons omit it.
-  run_status?: "live" | "manual" | "paused";
+  // run_status is computed server-side by core.FlowRunStatusOf (see
+  // core/flowstatus.go) so the list can show the status chip without
+  // fetching each full graph. "needs_publish" = a trigger is configured but
+  // not yet published (e.g. a freshly AI-generated scheduled flow), so it
+  // won't fire until the user publishes. Optional: older daemons omit it.
+  run_status?: "live" | "manual" | "paused" | "needs_publish";
 };
 
 // DropAdjacency is one directed port-to-port co-occurrence mined from the

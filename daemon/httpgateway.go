@@ -530,6 +530,11 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// tenant's connected Claude/ChatGPT key. See render_assist.go.
 	mux.HandleFunc("POST /api/v1/tools/render-template/assist", h.requireAuth(h.renderTemplateAssist))
 	mux.HandleFunc("GET /api/v1/tools/llm-providers", h.requireAuth(h.renderTemplateLLMProviders))
+	// Flagship: describe a flow in plain English → a DRAFT flow graph
+	// (grounded on the catalog, structured output, validate-and-repair).
+	// Never saves or runs — the editor opens it for review. See flowgen.go.
+	mux.HandleFunc("POST /api/v1/tools/flow/generate", h.requireAuth(h.renderFlowGenerate))
+	mux.HandleFunc("POST /api/v1/tools/flow/generate/stream", h.requireAuth(h.renderFlowGenerateStream))
 	// validate/graph lints a Graph JSON literal without saving — for
 	// LLMs that compose a graph in chat and want a dry-run before
 	// committing. Distinct from /me/flows/{id}/validate which lints

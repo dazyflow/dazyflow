@@ -372,6 +372,7 @@
     "title": "Flöden",
     "fromTemplate": "Från mall",
     "newFlow": "Nytt flöde",
+    "createWithAI": "Skapa med AI",
     "emptyTitle": "Inga flöden än",
     "emptyBody": "Börja från en färdig mall, eller skapa ett tomt flöde och bygg det själv.",
     "emptyTemplateCta": "Börja från en mall",
@@ -1331,6 +1332,17 @@
   },
   "loopBody": {
     "runsPerRow": "Det här steget körs en gång per rad. Använd ”Från varje rad” i fältets { }-meny för att infoga en kolumn."
+  },
+  "createAI": {
+    "title": "Skapa ett flöde med AI",
+    "label": "Vad ska det här flödet göra?",
+    "placeholder": "t.ex. Varje vardag kl. 9, mejla mig gårdagens nya registreringar från databasen",
+    "hint": "Beskriv resultatet med vanliga ord. AI skissar stegen — du granskar och justerar innan något körs.",
+    "providerLabel": "AI-leverantör",
+    "generate": "Generera flöde",
+    "generating": "Bygger ditt flöde…",
+    "needConnect": "Anslut Claude eller ChatGPT på <0>Appar-sidan</0> för att använda detta.",
+    "empty": "AI kunde inte bygga ett flöde av det — prova att beskriva det annorlunda."
   },
   "renderPreview": {
     "assistLabel": "Beskriv ditt mejl — AI skriver det",

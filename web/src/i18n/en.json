@@ -372,6 +372,7 @@
     "title": "Flows",
     "fromTemplate": "From template",
     "newFlow": "New flow",
+    "createWithAI": "Create with AI",
     "emptyTitle": "No flows yet",
     "emptyBody": "Start from a ready-made template, or create a blank flow and build it yourself.",
     "emptyTemplateCta": "Start from a template",
@@ -1331,6 +1332,17 @@
   },
   "loopBody": {
     "runsPerRow": "This step runs once per row. Use “From each row” in a field's { } menu to insert a column."
+  },
+  "createAI": {
+    "title": "Create a flow with AI",
+    "label": "What should this flow do?",
+    "placeholder": "e.g. Every weekday at 9am, email me yesterday's new signups from the database",
+    "hint": "Describe the outcome in plain words. AI drafts the steps — you review and tweak before anything runs.",
+    "providerLabel": "AI provider",
+    "generate": "Generate flow",
+    "generating": "Building your flow…",
+    "needConnect": "Connect Claude or ChatGPT on the <0>Apps page</0> to use this.",
+    "empty": "AI couldn't build a flow from that — try describing it differently."
   },
   "renderPreview": {
     "assistLabel": "Describe your email — AI writes it",

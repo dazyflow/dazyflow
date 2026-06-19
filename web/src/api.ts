@@ -885,6 +885,71 @@ export const api = {
       "GET",
       "/tools/llm-providers",
     ),
+
+  // streamFlowGenerate is the streaming sibling of generateFlow: it POSTs the
+  // description and reads server-sent progress frames so the UI can narrate
+  // the build (understanding → drafting → validating → repairing → done).
+  // EventSource can't POST or send auth headers, so we read the SSE stream off
+  // a fetch body, exactly like streamJob. onEvent gets each frame's kind
+  // ("progress" | "error" | "done") and parsed data.
+  streamFlowGenerate(
+    token: string,
+    body: { description: string; provider?: string; tz?: string },
+    onEvent: (kind: string, data: unknown) => void,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    return fetch(API_BASE + "/tools/flow/generate/stream", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal,
+    }).then(async (res) => {
+      if (!res.ok || !res.body) {
+        if (res.status === 401) notifyUnauthorized();
+        throw new APIError(res.status, await res.text());
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) return;
+        buffer += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = buffer.indexOf("\n\n")) >= 0) {
+          const frame = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 2);
+          if (frame.startsWith(":")) continue;
+          let name = "message";
+          let dataLine = "";
+          for (const line of frame.split("\n")) {
+            if (line.startsWith("event: ")) name = line.slice(7);
+            else if (line.startsWith("data: ")) dataLine = line.slice(6);
+          }
+          if (dataLine) {
+            try {
+              onEvent(name, JSON.parse(dataLine));
+            } catch {
+              onEvent(name, dataLine);
+            }
+          }
+        }
+      }
+    });
+  },
+
+  // generateFlow turns a plain-English description into a DRAFT flow graph
+  // (grounded on the catalog, validated + repaired server-side). Returns the
+  // graph for review — it is NOT saved or run. `issues` are remaining lint
+  // findings (usually warnings) to surface.
+  generateFlow: (token: string, description: string, provider?: string) =>
+    request<{
+      graph?: Graph;
+      issues?: { code: string; severity: string; message: string; node_ids?: string[] }[];
+      provider?: string;
+      error?: string;
+      need_connect?: boolean;
+    }>(token, "POST", "/tools/flow/generate", { description, provider }),
   // sampleNode fires a partial run that ends at nodeID — the daemon
   // strips every node and edge outside nodeID's upstream chain before
   // submitting. Returns the run_id so the caller can subscribe to the
