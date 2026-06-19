@@ -3,12 +3,13 @@ package transform
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"html/template"
 	"strings"
 
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/internal/htmltmpl"
 )
 
 func init() {
@@ -82,49 +83,9 @@ func init() {
 	})
 }
 
-// maxRenderBytes caps the rendered output. html/template has no built-in
-// size or time budget, so a template that ranges over a large data input
-// (or expands explosively) could otherwise allocate unbounded memory and
-// ignore cancellation. The cap is far above any real email body but turns
-// a runaway render into a clean error instead of an OOM. Generous because
-// emails with inlined CSS + a long table are legitimately large.
-const maxRenderBytes = 8 << 20 // 8 MiB
-
-// templateFuncs is the small, deliberately-safe helper set exposed to
-// templates. All are pure string/JSON ops — nothing that touches the
-// filesystem, network, or process — so an authored template can't reach
-// outside the render.
-var templateFuncs = template.FuncMap{
-	// default returns fallback when v is nil or an empty string; otherwise v.
-	// Usage: {{.name | default "there"}}
-	"default": func(fallback, v any) any {
-		if v == nil {
-			return fallback
-		}
-		if s, ok := v.(string); ok && s == "" {
-			return fallback
-		}
-		return v
-	},
-	"upper": strings.ToUpper,
-	"lower": strings.ToLower,
-	// join concatenates a list with sep. Accepts []string or []any of
-	// stringables so it works on JSON-decoded arrays.
-	"join": func(sep string, list any) string {
-		switch xs := list.(type) {
-		case []string:
-			return strings.Join(xs, sep)
-		case []any:
-			parts := make([]string, len(xs))
-			for i, x := range xs {
-				parts[i] = fmt.Sprintf("%v", x)
-			}
-			return strings.Join(parts, sep)
-		default:
-			return fmt.Sprintf("%v", list)
-		}
-	},
-}
+// The HTML render engine (parse + safe FuncMap + output cap) lives in
+// internal/htmltmpl so the editor's live-preview endpoint renders through
+// the exact same code — preview == what the flow sends.
 
 // executeRenderTemplate renders an HTML template with merge data into a
 // single HTML string on the `html` output. The template comes from the
@@ -148,29 +109,27 @@ func executeRenderTemplate(_ context.Context, job core.Job, _ chan<- core.Progre
 		return errResult(job, "bad_input", err.Error()), nil
 	}
 
-	tmpl, err := template.New("render").Funcs(templateFuncs).Parse(tmplText)
+	html, err := htmltmpl.Render(tmplText, data, 0)
 	if err != nil {
-		// A parse error is the author's mistake (mismatched {{ }}, bad
-		// action) — surface it as a param error with the engine's message.
-		return errResult(job, "bad_param", fmt.Sprintf("template: %v", err)), nil
-	}
-
-	var buf strings.Builder
-	lw := &limitedWriter{w: &buf, limit: maxRenderBytes}
-	if err := tmpl.Execute(lw, data); err != nil {
-		if lw.tripped {
-			return errResult(job, "too_large", fmt.Sprintf("rendered output exceeds the %d-byte limit", maxRenderBytes)), nil
+		var pe *htmltmpl.ParseError
+		switch {
+		case errors.As(err, &pe):
+			// A parse error is the author's mistake (mismatched {{ }}, bad
+			// action) — surface it as a param error.
+			return errResult(job, "bad_param", fmt.Sprintf("template: %v", pe.Err)), nil
+		case errors.Is(err, htmltmpl.ErrTooLarge):
+			return errResult(job, "too_large", err.Error()), nil
+		default:
+			// An execution error (missing method, bad range operand, …).
+			return errResult(job, "eval", fmt.Sprintf("render: %v", err)), nil
 		}
-		// An execution error (e.g. calling a missing method, bad range
-		// operand) — report which expression failed via the wrapped message.
-		return errResult(job, "eval", fmt.Sprintf("render: %v", err)), nil
 	}
 
 	return core.Result{
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
-			"html": {MIME: "text/html", Inline: buf.String()},
+			"html": {MIME: "text/html", Inline: html},
 		},
 	}, nil
 }
@@ -241,25 +200,4 @@ func normalizeTemplateData(inline any) (any, error) {
 		return map[string]any{}, nil
 	}
 	return nil, fmt.Errorf("data: unsupported input type %T", inline)
-}
-
-// limitedWriter caps how many bytes a render may produce. Past the limit
-// Write returns an error (tripping html/template's Execute) and records
-// tripped so the caller can distinguish a size overflow from an ordinary
-// template error.
-type limitedWriter struct {
-	w       *strings.Builder
-	limit   int
-	written int
-	tripped bool
-}
-
-func (l *limitedWriter) Write(p []byte) (int, error) {
-	if l.written+len(p) > l.limit {
-		l.tripped = true
-		return 0, fmt.Errorf("output limit exceeded")
-	}
-	n, err := l.w.Write(p)
-	l.written += n
-	return n, err
 }

@@ -227,18 +227,6 @@ func TestRenderTemplate_WholeObjectPrint(t *testing.T) {
 	}
 }
 
-// TestLimitedWriter exercises the output cap directly (cheaper than
-// allocating 8 MiB to trip the real ceiling).
-func TestLimitedWriter(t *testing.T) {
-	var b strings.Builder
-	lw := &limitedWriter{w: &b, limit: 10}
-	if _, err := lw.Write([]byte("12345")); err != nil {
-		t.Fatalf("first write under limit: %v", err)
-	}
-	if _, err := lw.Write([]byte("678901")); err == nil {
-		t.Fatal("write past limit should error")
-	}
-	if !lw.tripped {
-		t.Error("tripped should be set after overflow")
-	}
-}
+// The output-cap unit test moved to internal/htmltmpl (where limitedWriter
+// now lives). The cap is still covered here end-to-end via
+// TestRenderTemplate_OutputCapViaExecute, which drives the real Execute path.

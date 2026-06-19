@@ -846,6 +846,19 @@ export const api = {
       "/validate/cron",
       { expr, tz },
     ),
+
+  // previewRenderTemplate renders a render_template step's template against
+  // sample data using the SAME engine the drop uses at run time, so the
+  // editor preview is exactly what the flow will send. Returns the HTML, or
+  // an `error` string (template mistakes are expected while typing — they
+  // come back as an error field, not a thrown request).
+  previewRenderTemplate: (token: string, template: string, data: unknown) =>
+    request<{ html?: string; error?: string }>(
+      token,
+      "POST",
+      "/tools/render-template/preview",
+      { template, data },
+    ),
   // sampleNode fires a partial run that ends at nodeID — the daemon
   // strips every node and edge outside nodeID's upstream chain before
   // submitting. Returns the run_id so the caller can subscribe to the

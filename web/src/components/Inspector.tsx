@@ -14,6 +14,7 @@ import {
 import { LiveConsole } from "./LiveConsole";
 import { ConfirmModal } from "./ConfirmModal";
 import { ApprovalPanel } from "./ApprovalPanel";
+import { RenderTemplatePreview } from "./RenderTemplatePreview";
 import { ForEachEditor } from "./ForEachEditor";
 import {
   TriggerScheduleField,
@@ -562,6 +563,22 @@ export function Inspector({
               missingKeys={missingKeys}
               onChange={(v) => onParamsChange(selected.id, v)}
             />
+            {/* The render_template step asks for HTML template syntax — the
+                scariest field for a non-technical user. A live preview +
+                starter layouts turns "write Go template code" into "tweak and
+                watch it update". */}
+            {d.moduleID === "render_template" && (
+              <RenderTemplatePreview
+                template={
+                  typeof currentParams.template === "string"
+                    ? currentParams.template
+                    : ""
+                }
+                onInsertTemplate={(tmpl) =>
+                  onParamsChange(selected.id, { ...currentParams, template: tmpl })
+                }
+              />
+            )}
           </>
         )}
 

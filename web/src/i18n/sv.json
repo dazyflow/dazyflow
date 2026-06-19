@@ -1332,6 +1332,15 @@
   "loopBody": {
     "runsPerRow": "Det här steget körs en gång per rad. Använd ”Från varje rad” i fältets { }-meny för att infoga en kolumn."
   },
+  "renderPreview": {
+    "starters": "Börja med:",
+    "starter": { "greeting": "Hälsning", "receipt": "Kvitto", "announcement": "Tillkännagivande" },
+    "sampleData": "Exempeldata (endast för förhandsvisning)",
+    "badJson": "Exempeldata är inte giltig JSON än.",
+    "preview": "Live-förhandsvisning",
+    "rendering": "uppdaterar…",
+    "typeToPreview": "Lägg till en mall ovan — eller välj en layout — för att se den här."
+  },
   "approval": {
     "notifyNtfy": "Avisera mig på ntfy med godkännandelänken",
     "notifyNtfyHint": "Lägger till ett ntfy-steg kopplat till godkännandets länk, så att godkännaren får en tryckbar avisering. Dra sedan Godkänd-utgången till steget som ska köras när det godkänts (t.ex. Skicka e-post)."

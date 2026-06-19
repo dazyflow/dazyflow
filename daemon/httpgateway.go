@@ -523,6 +523,9 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 		h.requireAuth(h.idempotencyMiddleware("/me/connections/{provider}/authorize", h.startConnectionMe)))
 	mux.HandleFunc("DELETE /api/v1/me/connections/{provider}", h.requireAuth(h.disconnectConnectionMe))
 	mux.HandleFunc("POST /api/v1/validate/cron", h.requireAuth(h.validateCron))
+	// Live preview for the render_template step's editor — renders {template,
+	// data} through the same engine the drop uses. See render_preview.go.
+	mux.HandleFunc("POST /api/v1/tools/render-template/preview", h.requireAuth(h.renderTemplatePreview))
 	// validate/graph lints a Graph JSON literal without saving — for
 	// LLMs that compose a graph in chat and want a dry-run before
 	// committing. Distinct from /me/flows/{id}/validate which lints

@@ -1332,6 +1332,15 @@
   "loopBody": {
     "runsPerRow": "This step runs once per row. Use “From each row” in a field's { } menu to insert a column."
   },
+  "renderPreview": {
+    "starters": "Start from:",
+    "starter": { "greeting": "Greeting", "receipt": "Receipt", "announcement": "Announcement" },
+    "sampleData": "Sample data (for preview only)",
+    "badJson": "Sample data isn't valid JSON yet.",
+    "preview": "Live preview",
+    "rendering": "updating…",
+    "typeToPreview": "Add a template above — or pick a layout — to see it here."
+  },
   "approval": {
     "notifyNtfy": "Notify me on ntfy with the approval link",
     "notifyNtfyHint": "Adds an ntfy step wired to this approval's link, so the approver gets a tappable notification. Then drag the Approved output to the step that should run once it's approved (e.g. Send email)."
