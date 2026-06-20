@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -46,4 +47,31 @@ func authCtx(ctx context.Context) (context.Context, error) {
 		return ctx, fmt.Errorf("DZCTL_TOKEN not set (issue one via `dzd --dev-key`)")
 	}
 	return metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+token), nil
+}
+
+// withConn dials the daemon, builds the authenticated context, and runs fn
+// with both, closing the connection afterwards. It folds the dial +
+// defer-Close + authCtx preamble repeated across every networked command
+// into one place while preserving the exact error behaviour (dial errors,
+// then the DZCTL_TOKEN message).
+func withConn(cmd *cobra.Command, fn func(ctx context.Context, conn *grpc.ClientConn) error) error {
+	conn, err := daemonConn(serverFlag)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	ctx, err := authCtx(cmd.Context())
+	if err != nil {
+		return err
+	}
+	return fn(ctx, conn)
+}
+
+// addScopeFlags registers the standard --tenant/--workspace flag pair on
+// cmd and returns pointers to the bound values. Defaults and names match
+// the per-command declarations they replace.
+func addScopeFlags(cmd *cobra.Command) (tenant, workspace *string) {
+	tenant = cmd.Flags().String("tenant", "dev", "tenant")
+	workspace = cmd.Flags().String("workspace", "main", "workspace")
+	return tenant, workspace
 }

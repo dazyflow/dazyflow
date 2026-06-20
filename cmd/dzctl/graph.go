@@ -1,13 +1,16 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc"
 
+	"git.sr.ht/~klahr/dazyflow/api/convert"
 	controlpb "git.sr.ht/~klahr/dazyflow/api/gen/control"
 	"git.sr.ht/~klahr/dazyflow/core"
 )
@@ -47,22 +50,15 @@ func graphLintCmd() *cobra.Command {
 }
 
 func graphListCmd() *cobra.Command {
-	var tenant, workspace string
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List graphs in a workspace.",
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			conn, err := daemonConn(serverFlag)
-			if err != nil {
-				return err
-			}
-			defer conn.Close()
-			ctx, err := authCtx(cmd.Context())
-			if err != nil {
-				return err
-			}
+	}
+	tenant, workspace := addScopeFlags(cmd)
+	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
+		return withConn(cmd, func(ctx context.Context, conn *grpc.ClientConn) error {
 			resp, err := controlpb.NewGraphServiceClient(conn).ListGraphs(ctx, &controlpb.ListGraphsRequest{
-				Tenant: tenant, Workspace: workspace,
+				Tenant: *tenant, Workspace: *workspace,
 			})
 			if err != nil {
 				return err
@@ -71,10 +67,8 @@ func graphListCmd() *cobra.Command {
 				fmt.Println(id)
 			}
 			return nil
-		},
+		})
 	}
-	cmd.Flags().StringVar(&tenant, "tenant", "dev", "tenant")
-	cmd.Flags().StringVar(&workspace, "workspace", "main", "workspace")
 	return cmd
 }
 
@@ -92,113 +86,83 @@ func graphSaveCmd() *cobra.Command {
 			if err := json.Unmarshal(data, &g); err != nil {
 				return fmt.Errorf("parse: %w", err)
 			}
-			conn, err := daemonConn(serverFlag)
-			if err != nil {
-				return err
-			}
-			defer conn.Close()
-			ctx, err := authCtx(cmd.Context())
-			if err != nil {
-				return err
-			}
-			pb, err := graphToPB(g)
-			if err != nil {
-				return err
-			}
-			resp, err := controlpb.NewGraphServiceClient(conn).SaveGraph(ctx, &controlpb.SaveGraphRequest{Graph: pb})
-			if err != nil {
-				return err
-			}
-			fmt.Println(resp.Commit)
-			return nil
+			return withConn(cmd, func(ctx context.Context, conn *grpc.ClientConn) error {
+				pb, err := convert.GraphToPB(g)
+				if err != nil {
+					return err
+				}
+				resp, err := controlpb.NewGraphServiceClient(conn).SaveGraph(ctx, &controlpb.SaveGraphRequest{Graph: pb})
+				if err != nil {
+					return err
+				}
+				fmt.Println(resp.Commit)
+				return nil
+			})
 		},
 	}
 	return cmd
 }
 
 func graphLoadCmd() *cobra.Command {
-	var tenant, workspace, ref string
+	var ref string
 	cmd := &cobra.Command{
 		Use:   "load ID",
 		Short: "Print a graph JSON from the daemon.",
 		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			conn, err := daemonConn(serverFlag)
-			if err != nil {
-				return err
-			}
-			defer conn.Close()
-			ctx, err := authCtx(cmd.Context())
-			if err != nil {
-				return err
-			}
+	}
+	tenant, workspace := addScopeFlags(cmd)
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		return withConn(cmd, func(ctx context.Context, conn *grpc.ClientConn) error {
 			resp, err := controlpb.NewGraphServiceClient(conn).LoadGraph(ctx, &controlpb.LoadGraphRequest{
-				Tenant: tenant, Workspace: workspace, GraphId: args[0], Ref: ref,
+				Tenant: *tenant, Workspace: *workspace, GraphId: args[0], Ref: ref,
 			})
 			if err != nil {
 				return err
 			}
-			g, err := graphFromPB(resp.Graph)
+			g, err := convert.GraphFromPB(resp.Graph)
 			if err != nil {
 				return err
 			}
 			enc := json.NewEncoder(os.Stdout)
 			enc.SetIndent("", "  ")
 			return enc.Encode(g)
-		},
+		})
 	}
-	cmd.Flags().StringVar(&tenant, "tenant", "dev", "tenant")
-	cmd.Flags().StringVar(&workspace, "workspace", "main", "workspace")
 	cmd.Flags().StringVar(&ref, "ref", "", "git ref (branch, tag, or hash); empty = HEAD")
 	return cmd
 }
 
 func graphPromoteCmd() *cobra.Command {
-	var tenant, workspace string
 	cmd := &cobra.Command{
 		Use:   "promote ID ENV COMMIT",
 		Short: "Move an environment tag to a specific commit.",
 		Args:  cobra.ExactArgs(3),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			conn, err := daemonConn(serverFlag)
-			if err != nil {
-				return err
-			}
-			defer conn.Close()
-			ctx, err := authCtx(cmd.Context())
-			if err != nil {
-				return err
-			}
-			_, err = controlpb.NewGraphServiceClient(conn).PromoteGraph(ctx, &controlpb.PromoteGraphRequest{
-				Tenant: tenant, Workspace: workspace,
+	}
+	tenant, workspace := addScopeFlags(cmd)
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		return withConn(cmd, func(ctx context.Context, conn *grpc.ClientConn) error {
+			_, err := controlpb.NewGraphServiceClient(conn).PromoteGraph(ctx, &controlpb.PromoteGraphRequest{
+				Tenant: *tenant, Workspace: *workspace,
 				GraphId: args[0], Env: args[1], Commit: args[2],
 			})
 			return err
-		},
+		})
 	}
-	cmd.Flags().StringVar(&tenant, "tenant", "dev", "tenant")
-	cmd.Flags().StringVar(&workspace, "workspace", "main", "workspace")
 	return cmd
 }
 
 func graphRunCmd() *cobra.Command {
-	var tenant, workspace, ref string
+	var ref string
 	cmd := &cobra.Command{
 		Use:   "run ID",
 		Short: "Execute a graph and stream progress.",
 		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			conn, err := daemonConn(serverFlag)
-			if err != nil {
-				return err
-			}
-			defer conn.Close()
-			ctx, err := authCtx(cmd.Context())
-			if err != nil {
-				return err
-			}
+	}
+	tenant, workspace := addScopeFlags(cmd)
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		return withConn(cmd, func(ctx context.Context, conn *grpc.ClientConn) error {
 			stream, err := controlpb.NewGraphServiceClient(conn).RunGraph(ctx, &controlpb.RunGraphRequest{
-				Tenant: tenant, Workspace: workspace, GraphId: args[0], Ref: ref,
+				Tenant: *tenant, Workspace: *workspace, GraphId: args[0], Ref: ref,
 			})
 			if err != nil {
 				return err
@@ -224,71 +188,8 @@ func graphRunCmd() *cobra.Command {
 					return nil
 				}
 			}
-		},
+		})
 	}
-	cmd.Flags().StringVar(&tenant, "tenant", "dev", "tenant")
-	cmd.Flags().StringVar(&workspace, "workspace", "main", "workspace")
 	cmd.Flags().StringVar(&ref, "ref", "", "git ref; empty = HEAD")
 	return cmd
-}
-
-// graphToPB / graphFromPB live here rather than in daemon so dzctl doesn't
-// drag the whole server package into its binary.
-
-func graphToPB(g core.Graph) (*controlpb.Graph, error) {
-	out := &controlpb.Graph{
-		Id: g.ID, Version: g.Version, Tenant: g.Tenant, Workspace: g.Workspace,
-	}
-	for _, n := range g.Nodes {
-		params, err := json.Marshal(n.Params)
-		if err != nil {
-			return nil, err
-		}
-		out.Nodes = append(out.Nodes, &controlpb.Node{
-			Id: n.ID, Module: n.Module, Params: params, Env: n.Env,
-		})
-	}
-	for _, e := range g.Edges {
-		out.Edges = append(out.Edges, &controlpb.Edge{
-			From: e.From, FromPort: e.FromPort,
-			To: e.To, ToPort: e.ToPort, OnError: string(e.OnError),
-		})
-	}
-	for _, t := range g.Triggers {
-		out.Triggers = append(out.Triggers, &controlpb.GraphTrigger{
-			Type: t.Type, Cron: t.Cron, Secret: t.Secret,
-			IntervalSeconds: int32(t.IntervalSeconds),
-		})
-	}
-	return out, nil
-}
-
-func graphFromPB(g *controlpb.Graph) (core.Graph, error) {
-	out := core.Graph{
-		ID: g.Id, Version: g.Version, Tenant: g.Tenant, Workspace: g.Workspace,
-	}
-	for _, n := range g.Nodes {
-		var params map[string]any
-		if len(n.Params) > 0 {
-			if err := json.Unmarshal(n.Params, &params); err != nil {
-				return core.Graph{}, err
-			}
-		}
-		out.Nodes = append(out.Nodes, core.Node{
-			ID: n.Id, Module: n.Module, Params: params, Env: n.Env,
-		})
-	}
-	for _, e := range g.Edges {
-		out.Edges = append(out.Edges, core.Edge{
-			From: e.From, FromPort: e.FromPort,
-			To: e.To, ToPort: e.ToPort, OnError: core.OnError(e.OnError),
-		})
-	}
-	for _, t := range g.Triggers {
-		out.Triggers = append(out.Triggers, core.GraphTrigger{
-			Type: t.Type, Cron: t.Cron, Secret: t.Secret,
-			IntervalSeconds: int(t.IntervalSeconds),
-		})
-	}
-	return out, nil
 }

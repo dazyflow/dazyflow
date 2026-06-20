@@ -2,9 +2,7 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"time"
 
 	"google.golang.org/grpc"
@@ -12,6 +10,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	"git.sr.ht/~klahr/dazyflow/api/convert"
 	controlpb "git.sr.ht/~klahr/dazyflow/api/gen/control"
 	"git.sr.ht/~klahr/dazyflow/auth"
 	"git.sr.ht/~klahr/dazyflow/core"
@@ -64,6 +63,17 @@ func PrincipalFromContext(ctx context.Context) (core.Principal, bool) {
 	return p, ok
 }
 
+// mustPrincipal extracts the authenticated principal or returns a
+// codes.Unauthenticated error. Handlers that require authentication use
+// this instead of repeating the PrincipalFromContext + status.Error dance.
+func mustPrincipal(ctx context.Context) (core.Principal, error) {
+	p, ok := PrincipalFromContext(ctx)
+	if !ok {
+		return core.Principal{}, status.Error(codes.Unauthenticated, "no principal")
+	}
+	return p, nil
+}
+
 func authenticate(ctx context.Context, authn auth.Authenticator) (context.Context, error) {
 	if authn == nil {
 		return ctx, status.Error(codes.Unauthenticated, "authenticator not configured")
@@ -98,11 +108,11 @@ type grpcHandlers struct {
 }
 
 func (h *grpcHandlers) SaveGraph(ctx context.Context, req *controlpb.SaveGraphRequest) (*controlpb.SaveGraphResponse, error) {
-	p, ok := PrincipalFromContext(ctx)
-	if !ok {
-		return nil, status.Error(codes.Unauthenticated, "no principal")
+	p, err := mustPrincipal(ctx)
+	if err != nil {
+		return nil, err
 	}
-	g, err := graphFromPB(req.Graph)
+	g, err := convert.GraphFromPB(req.Graph)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -119,7 +129,7 @@ func (h *grpcHandlers) LoadGraph(ctx context.Context, req *controlpb.LoadGraphRe
 	if err != nil {
 		return nil, toStatus(err)
 	}
-	pbGraph, err := graphToPB(g)
+	pbGraph, err := convert.GraphToPB(g)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -145,18 +155,15 @@ func (h *grpcHandlers) PromoteGraph(ctx context.Context, req *controlpb.PromoteG
 
 func (h *grpcHandlers) RunGraph(req *controlpb.RunGraphRequest, stream controlpb.GraphService_RunGraphServer) error {
 	ctx := stream.Context()
-	p, ok := PrincipalFromContext(ctx)
-	if !ok {
-		return status.Error(codes.Unauthenticated, "no principal")
+	p, err := mustPrincipal(ctx)
+	if err != nil {
+		return err
 	}
 
 	// Caller can either embed the graph or refer to one already in storage.
-	var (
-		g   core.Graph
-		err error
-	)
+	var g core.Graph
 	if req.Graph != nil {
-		g, err = graphFromPB(req.Graph)
+		g, err = convert.GraphFromPB(req.Graph)
 	} else {
 		g, err = h.svc.LoadGraph(ctx, p, req.Tenant, req.Workspace, req.GraphId, req.Ref)
 	}
@@ -348,73 +355,6 @@ func (h *grpcHandlers) ListDrops(ctx context.Context, req *controlpb.ListDropsRe
 }
 
 // ============================================================ conversion
-
-func graphToPB(g core.Graph) (*controlpb.Graph, error) {
-	out := &controlpb.Graph{
-		Id: g.ID, Version: g.Version,
-		Tenant: g.Tenant, Workspace: g.Workspace,
-	}
-	for _, n := range g.Nodes {
-		params, err := json.Marshal(n.Params)
-		if err != nil {
-			return nil, fmt.Errorf("marshal params for %q: %w", n.ID, err)
-		}
-		out.Nodes = append(out.Nodes, &controlpb.Node{
-			Id: n.ID, Module: n.Module, Params: params, Env: n.Env,
-		})
-	}
-	for _, e := range g.Edges {
-		out.Edges = append(out.Edges, &controlpb.Edge{
-			From: e.From, FromPort: e.FromPort,
-			To: e.To, ToPort: e.ToPort,
-			OnError: string(e.OnError),
-		})
-	}
-	for _, t := range g.Triggers {
-		out.Triggers = append(out.Triggers, &controlpb.GraphTrigger{
-			Type:   t.Type,
-			Cron:   t.Cron,
-			Secret: t.Secret,
-		})
-	}
-	return out, nil
-}
-
-func graphFromPB(g *controlpb.Graph) (core.Graph, error) {
-	if g == nil {
-		return core.Graph{}, errors.New("graph required")
-	}
-	out := core.Graph{
-		ID: g.Id, Version: g.Version,
-		Tenant: g.Tenant, Workspace: g.Workspace,
-	}
-	for _, n := range g.Nodes {
-		var params map[string]any
-		if len(n.Params) > 0 {
-			if err := json.Unmarshal(n.Params, &params); err != nil {
-				return core.Graph{}, fmt.Errorf("unmarshal params for %q: %w", n.Id, err)
-			}
-		}
-		out.Nodes = append(out.Nodes, core.Node{
-			ID: n.Id, Module: n.Module, Params: params, Env: n.Env,
-		})
-	}
-	for _, e := range g.Edges {
-		out.Edges = append(out.Edges, core.Edge{
-			From: e.From, FromPort: e.FromPort,
-			To: e.To, ToPort: e.ToPort,
-			OnError: core.OnError(e.OnError),
-		})
-	}
-	for _, t := range g.Triggers {
-		out.Triggers = append(out.Triggers, core.GraphTrigger{
-			Type:   t.Type,
-			Cron:   t.Cron,
-			Secret: t.Secret,
-		})
-	}
-	return out, nil
-}
 
 func progressToPB(p engine.GraphProgress) *controlpb.GraphProgress {
 	out := &controlpb.GraphProgress{
