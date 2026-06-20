@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"time"
 
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc"
 
 	controlpb "git.sr.ht/~klahr/dazyflow/api/gen/control"
 )
@@ -36,43 +38,36 @@ func moduleListCmd() *cobra.Command {
     dzctl module list --query "http"
     dzctl module list --tag llm --tag mcp`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			conn, err := daemonConn(serverFlag)
-			if err != nil {
-				return err
-			}
-			defer conn.Close()
-			ctx, err := authCtx(cmd.Context())
-			if err != nil {
-				return err
-			}
-			resp, err := controlpb.NewDropServiceClient(conn).ListDrops(ctx, &controlpb.ListDropsRequest{
-				Query:      query,
-				Categories: categories,
-				Providers:  providers,
-				Tags:       tags,
-			})
-			if err != nil {
-				return err
-			}
-			if len(resp.Drops) == 0 {
-				fmt.Println("no modules match the filter")
-				return nil
-			}
-			if verbose {
+			return withConn(cmd, func(ctx context.Context, conn *grpc.ClientConn) error {
+				resp, err := controlpb.NewDropServiceClient(conn).ListDrops(ctx, &controlpb.ListDropsRequest{
+					Query:      query,
+					Categories: categories,
+					Providers:  providers,
+					Tags:       tags,
+				})
+				if err != nil {
+					return err
+				}
+				if len(resp.Drops) == 0 {
+					fmt.Println("no modules match the filter")
+					return nil
+				}
+				if verbose {
+					for _, m := range resp.Drops {
+						printModuleVerbose(m)
+					}
+					return nil
+				}
+				fmt.Printf("%-32s  %-14s  %-20s  %s\n", "ID", "CATEGORY", "PROVIDER", "LABEL")
 				for _, m := range resp.Drops {
-					printModuleVerbose(m)
+					fmt.Printf("%-32s  %-14s  %-20s  %s\n",
+						truncate(m.Id, 32),
+						truncate(m.Category, 14),
+						truncate(m.Provider, 20),
+						m.Label)
 				}
 				return nil
-			}
-			fmt.Printf("%-32s  %-14s  %-20s  %s\n", "ID", "CATEGORY", "PROVIDER", "LABEL")
-			for _, m := range resp.Drops {
-				fmt.Printf("%-32s  %-14s  %-20s  %s\n",
-					truncate(m.Id, 32),
-					truncate(m.Category, 14),
-					truncate(m.Provider, 20),
-					m.Label)
-			}
-			return nil
+			})
 		},
 	}
 	cmd.Flags().StringVar(&query, "query", "", "substring match against id, label, description")
@@ -89,28 +84,21 @@ func moduleShowCmd() *cobra.Command {
 		Short: "Print detailed info for one module.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			conn, err := daemonConn(serverFlag)
-			if err != nil {
-				return err
-			}
-			defer conn.Close()
-			ctx, err := authCtx(cmd.Context())
-			if err != nil {
-				return err
-			}
-			resp, err := controlpb.NewDropServiceClient(conn).ListDrops(ctx, &controlpb.ListDropsRequest{
-				Query: args[0],
-			})
-			if err != nil {
-				return err
-			}
-			for _, m := range resp.Drops {
-				if m.Id == args[0] {
-					printModuleVerbose(m)
-					return nil
+			return withConn(cmd, func(ctx context.Context, conn *grpc.ClientConn) error {
+				resp, err := controlpb.NewDropServiceClient(conn).ListDrops(ctx, &controlpb.ListDropsRequest{
+					Query: args[0],
+				})
+				if err != nil {
+					return err
 				}
-			}
-			return fmt.Errorf("module %q not found", args[0])
+				for _, m := range resp.Drops {
+					if m.Id == args[0] {
+						printModuleVerbose(m)
+						return nil
+					}
+				}
+				return fmt.Errorf("module %q not found", args[0])
+			})
 		},
 	}
 }
@@ -189,47 +177,40 @@ func jobLogsCmd() *cobra.Command {
 			"Requires membership of the run's tenant.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			conn, err := daemonConn(serverFlag)
-			if err != nil {
-				return err
-			}
-			defer conn.Close()
-			ctx, err := authCtx(cmd.Context())
-			if err != nil {
-				return err
-			}
-			stream, err := controlpb.NewJobServiceClient(conn).StreamJobLogs(ctx, &controlpb.StreamJobLogsRequest{
-				JobId:    args[0],
-				Follow:   follow,
-				AfterSeq: afterSeq,
-			})
-			if err != nil {
-				return err
-			}
-			for {
-				e, err := stream.Recv()
-				if err == io.EOF {
-					return nil
-				}
+			return withConn(cmd, func(ctx context.Context, conn *grpc.ClientConn) error {
+				stream, err := controlpb.NewJobServiceClient(conn).StreamJobLogs(ctx, &controlpb.StreamJobLogsRequest{
+					JobId:    args[0],
+					Follow:   follow,
+					AfterSeq: afterSeq,
+				})
 				if err != nil {
 					return err
 				}
-				ts := e.Ts
-				if t, perr := time.Parse(time.RFC3339Nano, e.Ts); perr == nil {
-					ts = t.Local().Format("15:04:05.000")
+				for {
+					e, err := stream.Recv()
+					if err == io.EOF {
+						return nil
+					}
+					if err != nil {
+						return err
+					}
+					ts := e.Ts
+					if t, perr := time.Parse(time.RFC3339Nano, e.Ts); perr == nil {
+						ts = t.Local().Format("15:04:05.000")
+					}
+					node := e.NodeId
+					if node == "" {
+						node = "run"
+					}
+					// Labelled output lines show their stream (stdout/stderr)
+					// instead of the generic "progress".
+					kind := e.Kind
+					if e.Stream != "" {
+						kind = e.Stream
+					}
+					fmt.Printf("%s  %-10s %-8s %s\n", ts, truncate(node, 10), kind, e.Message)
 				}
-				node := e.NodeId
-				if node == "" {
-					node = "run"
-				}
-				// Labelled output lines show their stream (stdout/stderr)
-				// instead of the generic "progress".
-				kind := e.Kind
-				if e.Stream != "" {
-					kind = e.Stream
-				}
-				fmt.Printf("%s  %-10s %-8s %s\n", ts, truncate(node, 10), kind, e.Message)
-			}
+			})
 		},
 	}
 	cmd.Flags().BoolVarP(&follow, "follow", "f", false, "keep streaming live events until the run terminates")
@@ -247,24 +228,17 @@ func jobCancelCmd() *cobra.Command {
 			"safe to retry. Requires graph:run on the run's tenant.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			conn, err := daemonConn(serverFlag)
-			if err != nil {
-				return err
-			}
-			defer conn.Close()
-			ctx, err := authCtx(cmd.Context())
-			if err != nil {
-				return err
-			}
-			_, err = controlpb.NewJobServiceClient(conn).CancelJob(ctx, &controlpb.CancelJobRequest{
-				JobId:  args[0],
-				Reason: reason,
+			return withConn(cmd, func(ctx context.Context, conn *grpc.ClientConn) error {
+				_, err := controlpb.NewJobServiceClient(conn).CancelJob(ctx, &controlpb.CancelJobRequest{
+					JobId:  args[0],
+					Reason: reason,
+				})
+				if err != nil {
+					return err
+				}
+				fmt.Printf("cancelled %s\n", args[0])
+				return nil
 			})
-			if err != nil {
-				return err
-			}
-			fmt.Printf("cancelled %s\n", args[0])
-			return nil
 		},
 	}
 	cmd.Flags().StringVar(&reason, "reason", "", "free-text reason recorded on the run (default: \"cancelled by user\")")
@@ -277,39 +251,32 @@ func jobStatusCmd() *cobra.Command {
 		Short: "Show a job's status.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			conn, err := daemonConn(serverFlag)
-			if err != nil {
-				return err
-			}
-			defer conn.Close()
-			ctx, err := authCtx(cmd.Context())
-			if err != nil {
-				return err
-			}
-			rec, err := controlpb.NewJobServiceClient(conn).GetJob(ctx, &controlpb.GetJobRequest{JobId: args[0]})
-			if err != nil {
-				return err
-			}
-			fmt.Printf("id:        %s\n", rec.Id)
-			fmt.Printf("graph:     %s\n", rec.GraphId)
-			fmt.Printf("tenant:    %s\n", rec.Tenant)
-			fmt.Printf("workspace: %s\n", rec.Workspace)
-			fmt.Printf("status:    %s\n", rec.Status)
-			fmt.Printf("attempt:   %d\n", rec.Attempt)
-			fmt.Printf("worker:    %s\n", rec.WorkerId)
-			if rec.EnqueuedAt > 0 {
-				fmt.Printf("enqueued:  %s\n", time.Unix(0, rec.EnqueuedAt).Format(time.RFC3339))
-			}
-			if rec.StartedAt > 0 {
-				fmt.Printf("started:   %s\n", time.Unix(0, rec.StartedAt).Format(time.RFC3339))
-			}
-			if rec.FinishedAt > 0 {
-				fmt.Printf("finished:  %s\n", time.Unix(0, rec.FinishedAt).Format(time.RFC3339))
-			}
-			if rec.Error != nil {
-				fmt.Printf("error:     %s: %s\n", rec.Error.Code, rec.Error.Message)
-			}
-			return nil
+			return withConn(cmd, func(ctx context.Context, conn *grpc.ClientConn) error {
+				rec, err := controlpb.NewJobServiceClient(conn).GetJob(ctx, &controlpb.GetJobRequest{JobId: args[0]})
+				if err != nil {
+					return err
+				}
+				fmt.Printf("id:        %s\n", rec.Id)
+				fmt.Printf("graph:     %s\n", rec.GraphId)
+				fmt.Printf("tenant:    %s\n", rec.Tenant)
+				fmt.Printf("workspace: %s\n", rec.Workspace)
+				fmt.Printf("status:    %s\n", rec.Status)
+				fmt.Printf("attempt:   %d\n", rec.Attempt)
+				fmt.Printf("worker:    %s\n", rec.WorkerId)
+				if rec.EnqueuedAt > 0 {
+					fmt.Printf("enqueued:  %s\n", time.Unix(0, rec.EnqueuedAt).Format(time.RFC3339))
+				}
+				if rec.StartedAt > 0 {
+					fmt.Printf("started:   %s\n", time.Unix(0, rec.StartedAt).Format(time.RFC3339))
+				}
+				if rec.FinishedAt > 0 {
+					fmt.Printf("finished:  %s\n", time.Unix(0, rec.FinishedAt).Format(time.RFC3339))
+				}
+				if rec.Error != nil {
+					fmt.Printf("error:     %s: %s\n", rec.Error.Code, rec.Error.Message)
+				}
+				return nil
+			})
 		},
 	}
 }
@@ -320,23 +287,16 @@ func jobListCmd() *cobra.Command {
 		Short: "List jobs for a graph.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			conn, err := daemonConn(serverFlag)
-			if err != nil {
-				return err
-			}
-			defer conn.Close()
-			ctx, err := authCtx(cmd.Context())
-			if err != nil {
-				return err
-			}
-			resp, err := controlpb.NewJobServiceClient(conn).ListJobsForGraph(ctx, &controlpb.ListJobsForGraphRequest{GraphId: args[0]})
-			if err != nil {
-				return err
-			}
-			for _, r := range resp.Jobs {
-				fmt.Printf("%s  %-10s  attempt=%d  worker=%s\n", r.Id, r.Status, r.Attempt, r.WorkerId)
-			}
-			return nil
+			return withConn(cmd, func(ctx context.Context, conn *grpc.ClientConn) error {
+				resp, err := controlpb.NewJobServiceClient(conn).ListJobsForGraph(ctx, &controlpb.ListJobsForGraphRequest{GraphId: args[0]})
+				if err != nil {
+					return err
+				}
+				for _, r := range resp.Jobs {
+					fmt.Printf("%s  %-10s  attempt=%d  worker=%s\n", r.Id, r.Status, r.Attempt, r.WorkerId)
+				}
+				return nil
+			})
 		},
 	}
 }
