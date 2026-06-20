@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -28,13 +27,13 @@ import (
 // name, required scopes, setup help) with the runtime state
 // (configured? when last updated? env-supplied?).
 type adminProviderRow struct {
-	Name         string    `json:"name"`
-	DisplayName  string    `json:"display_name"`
-	AuthorizeURL string    `json:"authorize_url"`
-	Scopes       []string  `json:"scopes"`
-	SetupHelp    string    `json:"setup_help"`
-	RedirectURI  string    `json:"redirect_uri"`
-	Configured   bool      `json:"configured"`
+	Name         string   `json:"name"`
+	DisplayName  string   `json:"display_name"`
+	AuthorizeURL string   `json:"authorize_url"`
+	Scopes       []string `json:"scopes"`
+	SetupHelp    string   `json:"setup_help"`
+	RedirectURI  string   `json:"redirect_uri"`
+	Configured   bool     `json:"configured"`
 	// ClientID is the configured OAuth client ID, if any. It's a public
 	// identifier (not a secret — it rides along in authorize URLs), so we
 	// return it for the admin UI to show. The client *secret* is never
@@ -113,9 +112,8 @@ func (h *HTTPGateway) upsertAdminOAuthProvider(rw http.ResponseWriter, r *http.R
 			fmt.Sprintf("unknown OAuth provider %q (known: %s)", name, knownProviderNames()))
 		return
 	}
-	var body adminUpsertProviderRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, "decode body: "+err.Error())
+	body, ok := decodeRequestJSON[adminUpsertProviderRequest](rw, r)
+	if !ok {
 		return
 	}
 	body.ClientID = strings.TrimSpace(body.ClientID)

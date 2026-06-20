@@ -859,6 +859,46 @@ func (h *HTTPGateway) requireAuth(next func(rw http.ResponseWriter, r *http.Requ
 
 const sessionCookieName = "dazyflow_session"
 
+// sessionTTL is the session lifetime, defaulting to 24h when SessionTTL is
+// unset (or non-positive). Centralizes the `ttl := h.SessionTTL; if ttl <= 0
+// { ttl = 24h }` default repeated at every session-issue site.
+func (h *HTTPGateway) sessionTTL() time.Duration {
+	if h.SessionTTL <= 0 {
+		return 24 * time.Hour
+	}
+	return h.SessionTTL
+}
+
+// setSessionCookie installs the host-only session cookie for token, expiring
+// at expires. The Secure flag tracks whether the request reached us over TLS
+// (requestIsHTTPS, which also honors a trusted X-Forwarded-Proto). Single
+// source for every cookie-issuing sign-in path (password, SSO, handoff).
+func (h *HTTPGateway) setSessionCookie(rw http.ResponseWriter, r *http.Request, token string, expires time.Time) {
+	http.SetCookie(rw, &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    token,
+		Path:     "/",
+		Expires:  expires,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   h.requestIsHTTPS(r),
+	})
+}
+
+// clearSessionCookie expires the session cookie (sign-out). Mirrors
+// setSessionCookie's attributes so the browser matches and drops it.
+func (h *HTTPGateway) clearSessionCookie(rw http.ResponseWriter, r *http.Request) {
+	http.SetCookie(rw, &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   h.requestIsHTTPS(r),
+	})
+}
+
 // credentialFromRequest extracts a bearer credential from either the
 // Authorization header (preferred, used by dzctl and API-key clients)
 // or the session cookie set by /auth/signin (used by the browser).
@@ -1052,25 +1092,13 @@ func (h *HTTPGateway) signIn(rw http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	ttl := h.SessionTTL
-	if ttl <= 0 {
-		ttl = 24 * time.Hour
-	}
-	sess, token, err := auth.IssueSession(r.Context(), h.Sessions, h.elevatePlatformAdmin(r.Context(), user), ttl)
+	sess, token, err := auth.IssueSession(r.Context(), h.Sessions, h.elevatePlatformAdmin(r.Context(), user), h.sessionTTL())
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("issue session: %v", err))
 		return
 	}
 	h.auditAuth(r.Context(), r, sess.Tenant, sess.Subject, "auth.signin", "method=password")
-	http.SetCookie(rw, &http.Cookie{
-		Name:     sessionCookieName,
-		Value:    token,
-		Path:     "/",
-		Expires:  sess.ExpiresAt,
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		Secure:   h.requestIsHTTPS(r),
-	})
+	h.setSessionCookie(rw, r, token, sess.ExpiresAt)
 	writeJSON(rw, http.StatusOK, map[string]any{
 		"token":      token,
 		"subject":    sess.Subject,
@@ -1177,15 +1205,7 @@ func (h *HTTPGateway) signOut(rw http.ResponseWriter, r *http.Request) {
 		}
 		_ = h.Sessions.DeleteSession(r.Context(), key)
 	}
-	http.SetCookie(rw, &http.Cookie{
-		Name:     sessionCookieName,
-		Value:    "",
-		Path:     "/",
-		MaxAge:   -1,
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		Secure:   h.requestIsHTTPS(r),
-	})
+	h.clearSessionCookie(rw, r)
 	rw.WriteHeader(http.StatusNoContent)
 }
 
@@ -1319,8 +1339,7 @@ func (h *HTTPGateway) getOrgProfile(rw http.ResponseWriter, r *http.Request, p c
 		writeJSONError(rw, http.StatusNotImplemented, "org profiles not configured")
 		return
 	}
-	if !core.CanAdminOrg(p) {
-		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
+	if !requireOrgAdmin(rw, p) {
 		return
 	}
 	tenant := r.URL.Query().Get("tenant")
@@ -1358,16 +1377,14 @@ func (h *HTTPGateway) putOrgProfile(rw http.ResponseWriter, r *http.Request, p c
 		writeJSONError(rw, http.StatusNotImplemented, "org profiles not configured")
 		return
 	}
-	if !core.CanAdminOrg(p) {
-		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
+	if !requireOrgAdmin(rw, p) {
 		return
 	}
-	var body struct {
+	body, ok := decodeRequestJSON[struct {
 		DisplayName string `json:"display_name"`
 		Icon        string `json:"icon"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
+	}](rw, r)
+	if !ok {
 		return
 	}
 	name := strings.TrimSpace(body.DisplayName)

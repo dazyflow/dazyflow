@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -44,22 +43,36 @@ type fileEntry struct {
 	ModTime time.Time `json:"mod_time"`
 }
 
-// openWorkspaceFS runs the shared auth + sandbox gate and returns an opened
-// os.Root for (tenant, workspace). The caller must Close it. On failure it
-// writes the error response and returns ok=false.
-func (h *HTTPGateway) openWorkspaceFS(rw http.ResponseWriter, r *http.Request, p core.Principal, perm core.Permission) (*os.Root, bool) {
-	tenant := r.PathValue("tenant")
-	workspace := r.PathValue("workspace")
+// requireWorkspaceEdit runs the shared gate for the workspace-file surface:
+// the {tenant}/{workspace} path values must be writable by the principal
+// (RequireWorkspace + graph:edit) and the engine sandbox must be configured.
+// Returns the resolved (tenant, workspace) and ok=false (after writing the
+// error response) when the handler should stop. Shared by the file CRUD
+// (via openWorkspaceFS), the upload handler, and the usage endpoint.
+func (h *HTTPGateway) requireWorkspaceEdit(rw http.ResponseWriter, r *http.Request, p core.Principal) (tenant, workspace string, ok bool) {
+	tenant = r.PathValue("tenant")
+	workspace = r.PathValue("workspace")
 	if err := core.RequireWorkspace(p, tenant, workspace); err != nil {
 		writeJSONError(rw, http.StatusForbidden, err.Error())
-		return nil, false
+		return "", "", false
 	}
-	if err := core.Require(p, perm); err != nil {
+	if err := core.Require(p, core.PermGraphEdit); err != nil {
 		writeJSONError(rw, http.StatusForbidden, err.Error())
-		return nil, false
+		return "", "", false
 	}
 	if h.svc.Engine == nil || h.svc.Engine.Sandbox == nil {
 		writeJSONError(rw, http.StatusServiceUnavailable, "workspace sandbox not configured")
+		return "", "", false
+	}
+	return tenant, workspace, true
+}
+
+// openWorkspaceFS runs the shared auth + sandbox gate and returns an opened
+// os.Root for (tenant, workspace). The caller must Close it. On failure it
+// writes the error response and returns ok=false.
+func (h *HTTPGateway) openWorkspaceFS(rw http.ResponseWriter, r *http.Request, p core.Principal) (*os.Root, bool) {
+	tenant, workspace, ok := h.requireWorkspaceEdit(rw, r, p)
+	if !ok {
 		return nil, false
 	}
 	root, err := h.svc.Engine.Sandbox.Root(tenant, workspace)
@@ -98,7 +111,7 @@ func isScratch(rel string) bool {
 }
 
 func (h *HTTPGateway) listWorkspaceFiles(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	rootFS, ok := h.openWorkspaceFS(rw, r, p, core.PermGraphEdit)
+	rootFS, ok := h.openWorkspaceFS(rw, r, p)
 	if !ok {
 		return
 	}
@@ -160,7 +173,7 @@ func (h *HTTPGateway) listWorkspaceFiles(rw http.ResponseWriter, r *http.Request
 }
 
 func (h *HTTPGateway) downloadWorkspaceFile(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	rootFS, ok := h.openWorkspaceFS(rw, r, p, core.PermGraphEdit)
+	rootFS, ok := h.openWorkspaceFS(rw, r, p)
 	if !ok {
 		return
 	}
@@ -207,7 +220,7 @@ func (h *HTTPGateway) downloadWorkspaceFile(rw http.ResponseWriter, r *http.Requ
 }
 
 func (h *HTTPGateway) deleteWorkspaceFile(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	rootFS, ok := h.openWorkspaceFS(rw, r, p, core.PermGraphEdit)
+	rootFS, ok := h.openWorkspaceFS(rw, r, p)
 	if !ok {
 		return
 	}
@@ -236,17 +249,16 @@ func (h *HTTPGateway) deleteWorkspaceFile(rw http.ResponseWriter, r *http.Reques
 }
 
 func (h *HTTPGateway) mkdirWorkspaceDir(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	rootFS, ok := h.openWorkspaceFS(rw, r, p, core.PermGraphEdit)
+	rootFS, ok := h.openWorkspaceFS(rw, r, p)
 	if !ok {
 		return
 	}
 	defer rootFS.Close()
 
-	var body struct {
+	body, ok := decodeRequestJSON[struct {
 		Path string `json:"path"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
+	}](rw, r)
+	if !ok {
 		return
 	}
 	rel, err := cleanWorkspaceRel(body.Path)
@@ -266,18 +278,17 @@ func (h *HTTPGateway) mkdirWorkspaceDir(rw http.ResponseWriter, r *http.Request,
 }
 
 func (h *HTTPGateway) renameWorkspaceFile(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	rootFS, ok := h.openWorkspaceFS(rw, r, p, core.PermGraphEdit)
+	rootFS, ok := h.openWorkspaceFS(rw, r, p)
 	if !ok {
 		return
 	}
 	defer rootFS.Close()
 
-	var body struct {
+	body, ok := decodeRequestJSON[struct {
 		From string `json:"from"`
 		To   string `json:"to"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
+	}](rw, r)
+	if !ok {
 		return
 	}
 	from, err := cleanWorkspaceRel(body.From)
@@ -328,14 +339,8 @@ func (h *HTTPGateway) renameWorkspaceFile(rw http.ResponseWriter, r *http.Reques
 }
 
 func (h *HTTPGateway) workspaceFileUsage(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	tenant := r.PathValue("tenant")
-	workspace := r.PathValue("workspace")
-	if err := core.RequireWorkspace(p, tenant, workspace); err != nil {
-		writeJSONError(rw, http.StatusForbidden, err.Error())
-		return
-	}
-	if err := core.Require(p, core.PermGraphEdit); err != nil {
-		writeJSONError(rw, http.StatusForbidden, err.Error())
+	tenant, _, ok := h.requireWorkspaceEdit(rw, r, p)
+	if !ok {
 		return
 	}
 	// Quota is per-tenant. limit==0 means unlimited; used is best-effort and

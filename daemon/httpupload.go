@@ -34,18 +34,8 @@ const maxUploadBytes = 200 << 20 // 200 MiB
 // graph in this workspace can stage files for it. Cross-tenant writes
 // are rejected at RequireWorkspace.
 func (h *HTTPGateway) uploadWorkspaceFile(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	tenant := r.PathValue("tenant")
-	workspace := r.PathValue("workspace")
-	if err := core.RequireWorkspace(p, tenant, workspace); err != nil {
-		writeJSONError(rw, http.StatusForbidden, err.Error())
-		return
-	}
-	if err := core.Require(p, core.PermGraphEdit); err != nil {
-		writeJSONError(rw, http.StatusForbidden, err.Error())
-		return
-	}
-	if h.svc.Engine == nil || h.svc.Engine.Sandbox == nil {
-		writeJSONError(rw, http.StatusServiceUnavailable, "workspace sandbox not configured")
+	tenant, workspace, ok := h.requireWorkspaceEdit(rw, r, p)
+	if !ok {
 		return
 	}
 

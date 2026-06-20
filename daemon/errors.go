@@ -2,9 +2,13 @@ package daemon
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"log"
 	"net/http"
 	"strings"
+
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // ErrorEnvelope is the structured error shape every spec-aligned
@@ -98,6 +102,49 @@ func codeForStatus(status int) string {
 		}
 		return "error"
 	}
+}
+
+// decodeRequestJSON decodes the request body into a T, writing a 400
+// "decode_failed" envelope and returning ok=false on a parse error. It
+// centralizes the ~identical json.NewDecoder(r.Body).Decode(&x) +
+// 400-on-error dance scattered across the handlers, standardizing the code
+// on "decode_failed" and the message on "decode body: <err>".
+func decodeRequestJSON[T any](rw http.ResponseWriter, r *http.Request) (T, bool) {
+	var v T
+	if err := json.NewDecoder(r.Body).Decode(&v); err != nil {
+		writeAPIError(rw, http.StatusBadRequest, "decode_failed", "decode body: "+err.Error())
+		return v, false
+	}
+	return v, true
+}
+
+// decodeRequestJSONOptional is decodeRequestJSON for handlers whose body is
+// optional: an empty body (io.EOF) decodes to the zero T and is treated as
+// success. Any other parse error still writes the 400 envelope and returns
+// ok=false.
+func decodeRequestJSONOptional[T any](rw http.ResponseWriter, r *http.Request) (T, bool) {
+	var v T
+	if r.Body == nil {
+		return v, true
+	}
+	if err := json.NewDecoder(r.Body).Decode(&v); err != nil && !errors.Is(err, io.EOF) {
+		writeAPIError(rw, http.StatusBadRequest, "decode_failed", "decode body: "+err.Error())
+		return v, false
+	}
+	return v, true
+}
+
+// requireOrgAdmin gates a handler on the organization:admin capability,
+// writing a 403 "forbidden" / "organization:admin required" envelope and
+// returning false when the caller lacks it. Consolidates the open-coded
+// `if !core.CanAdminOrg(p) { … }` checks across the admin handlers onto one
+// envelope + code.
+func requireOrgAdmin(rw http.ResponseWriter, p core.Principal) bool {
+	if !core.CanAdminOrg(p) {
+		writeAPIError(rw, http.StatusForbidden, "forbidden", "organization:admin required")
+		return false
+	}
+	return true
 }
 
 // jsonErrors wraps a handler so the Go ServeMux's built-in plain-text

@@ -382,15 +382,11 @@ func (h *HTTPGateway) googleSignInCallback(rw http.ResponseWriter, r *http.Reque
 		h.signInError(rw, r, st, reason, status, msg)
 		return
 	}
-	ttl := h.SessionTTL
-	if ttl <= 0 {
-		ttl = 24 * time.Hour
-	}
 	sessUser := user
 	sessUser.Tenant = activeTenant
 	sessUser.Workspace = activeWorkspace
 	sessUser.Roles = activeRoles
-	sess, token, err := auth.IssueSession(r.Context(), h.Sessions, h.elevatePlatformAdmin(r.Context(), sessUser), ttl)
+	sess, token, err := auth.IssueSession(r.Context(), h.Sessions, h.elevatePlatformAdmin(r.Context(), sessUser), h.sessionTTL())
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("issue session: %v", err))
 		return
@@ -426,12 +422,12 @@ func (h *HTTPGateway) verifyGoogleIDToken(ctx context.Context, cfg auth.OrgAuthC
 	verifier, err := googleIDTokenVerifier(ctx, cfg.GoogleClientID)
 	if err != nil {
 		return "", "verifier_init_failed", http.StatusBadGateway,
-			"could not initialize Google token verification: "+err.Error()
+			"could not initialize Google token verification: " + err.Error()
 	}
 	claims, err := verifier.Verify(ctx, idToken)
 	if err != nil {
 		return "", "id_token_invalid", http.StatusForbidden,
-			"google id_token failed verification: "+err.Error()
+			"google id_token failed verification: " + err.Error()
 	}
 	// Pull the email out of the signed claims (go-oidc surfaces extra
 	// claims via Extras). This is the trusted identity; userinfo is only a
@@ -631,15 +627,7 @@ func (h *HTTPGateway) completeSignIn(rw http.ResponseWriter, r *http.Request, st
 	}
 	// Same host (apex sign-in, or the subdomains feature is off): set the
 	// session cookie inline and land the user where the flow started.
-	http.SetCookie(rw, &http.Cookie{
-		Name:     sessionCookieName,
-		Value:    token,
-		Path:     "/",
-		Expires:  sess.ExpiresAt,
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		Secure:   h.requestIsHTTPS(r),
-	})
+	h.setSessionCookie(rw, r, token, sess.ExpiresAt)
 	http.Redirect(rw, r, target, http.StatusFound)
 }
 
