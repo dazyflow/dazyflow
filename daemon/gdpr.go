@@ -70,6 +70,31 @@ func (r *EraseReport) warnf(format string, args ...any) {
 	r.Warnings = append(r.Warnings, fmt.Sprintf(format, args...))
 }
 
+// eraseStep runs one count-returning erasure op and records the outcome:
+// on error it appends a "name: <err>" warning; on success it hands the
+// count to set. It does NOT do the capability assertion (the caller has
+// already narrowed the store) — it just removes the repeated
+// error-or-assign branch the cascade does for every store.
+func (rep *EraseReport) eraseStep(name string, op func() (int, error), set func(int)) {
+	if n, err := op(); err != nil {
+		rep.warnf("%s: %v", name, err)
+	} else {
+		set(n)
+	}
+}
+
+// tallyByTenant runs the DeleteByTenant erasure for one store IF it
+// satisfies tenantEraser, recording the warning/count via eraseStep. The
+// many tenant-scoped steps in deleteOrgData share this exact shape (assert
+// → delete → warn-or-assign); a store that doesn't implement the
+// capability is silently skipped, matching the original per-step `ok`
+// guard.
+func (rep *EraseReport) tallyByTenant(ctx context.Context, name string, store any, tenant string, set func(int)) {
+	if e, ok := store.(tenantEraser); ok {
+		rep.eraseStep(name, func() (int, error) { return e.DeleteByTenant(ctx, tenant) }, set)
+	}
+}
+
 // eraseUserIdentity removes a data subject's identity-level personal data:
 // sessions, API keys, org memberships, pending invitations, the user row,
 // and (pseudonymising, not deleting) their actor in the audit trail. It
@@ -92,48 +117,33 @@ func (h *HTTPGateway) eraseUserIdentity(ctx context.Context, email string) (Eras
 	// Sessions: cut access first so an erased account can't keep acting
 	// mid-cascade.
 	if rev, ok := h.Sessions.(auth.SessionRevoker); ok {
-		if n, err := rev.RevokeSubjectSessions(ctx, u.Subject); err != nil {
-			rep.warnf("sessions: %v", err)
-		} else {
-			rep.Sessions = n
-		}
+		rep.eraseStep("sessions", func() (int, error) { return rev.RevokeSubjectSessions(ctx, u.Subject) },
+			func(n int) { rep.Sessions = n })
 	}
 	// API keys issued to this subject (across tenants).
 	if ks, ok := h.svc.AdminKeys.(subjectEraser); ok {
-		if n, err := ks.DeleteBySubject(ctx, u.Subject); err != nil {
-			rep.warnf("api_keys: %v", err)
-		} else {
-			rep.APIKeys = n
-		}
+		rep.eraseStep("api_keys", func() (int, error) { return ks.DeleteBySubject(ctx, u.Subject) },
+			func(n int) { rep.APIKeys = n })
 	} else if h.svc.AdminKeys != nil {
 		rep.warnf("api_keys: store does not support subject deletion; revoke manually")
 	}
 	// Memberships in every org.
 	if ms, ok := h.Memberships.(emailEraser); ok {
-		if n, err := ms.DeleteByEmail(ctx, email); err != nil {
-			rep.warnf("memberships: %v", err)
-		} else {
-			rep.Memberships = n
-		}
+		rep.eraseStep("memberships", func() (int, error) { return ms.DeleteByEmail(ctx, email) },
+			func(n int) { rep.Memberships = n })
 	}
 	// Pending invitations addressed to this email.
 	if inv, ok := h.Invitations.(emailEraser); ok {
-		if n, err := inv.DeleteByEmail(ctx, email); err != nil {
-			rep.warnf("invitations: %v", err)
-		} else {
-			rep.Invitations = n
-		}
+		rep.eraseStep("invitations", func() (int, error) { return inv.DeleteByEmail(ctx, email) },
+			func(n int) { rep.Invitations = n })
 	}
 	// Audit: pseudonymise rather than delete — keep the security trail
 	// (what/when/where) without the identifier. The actor may have been
 	// recorded as the subject or the email, so scrub both.
 	if an, ok := h.Audit.(actorAnonymizer); ok {
 		for _, actor := range dedupeNonEmpty(u.Subject, email) {
-			if n, err := an.AnonymizeActor(ctx, actor); err != nil {
-				rep.warnf("audit: %v", err)
-			} else {
-				rep.AuditEvents += n
-			}
+			rep.eraseStep("audit", func() (int, error) { return an.AnonymizeActor(ctx, actor) },
+				func(n int) { rep.AuditEvents += n })
 		}
 	}
 	// Finally the user row itself.
@@ -178,51 +188,15 @@ func (h *HTTPGateway) deleteOrgData(ctx context.Context, tenant string) (EraseRe
 		}
 	}
 	// Job records (run history + payloads/results).
-	if js, ok := h.svc.Jobs.(tenantEraser); ok {
-		if n, err := js.DeleteByTenant(ctx, tenant); err != nil {
-			rep.warnf("jobs: %v", err)
-		} else {
-			rep.Jobs = n
-		}
-	}
+	rep.tallyByTenant(ctx, "jobs", h.svc.Jobs, tenant, func(n int) { rep.Jobs = n })
 	// Run logs and spooled bus events reference jobs, so delete them
 	// while the job rows are still present to scope the join.
-	if rl, ok := h.svc.RunLogs.(tenantEraser); ok {
-		if n, err := rl.DeleteByTenant(ctx, tenant); err != nil {
-			rep.warnf("run_logs: %v", err)
-		} else {
-			rep.RunLogs = n
-		}
-	}
-	if bus, ok := h.svc.Bus.(tenantEraser); ok {
-		if n, err := bus.DeleteByTenant(ctx, tenant); err != nil {
-			rep.warnf("bus_events: %v", err)
-		} else {
-			rep.BusEvents = n
-		}
-	}
+	rep.tallyByTenant(ctx, "run_logs", h.svc.RunLogs, tenant, func(n int) { rep.RunLogs = n })
+	rep.tallyByTenant(ctx, "bus_events", h.svc.Bus, tenant, func(n int) { rep.BusEvents = n })
 	// API keys, memberships, invitations scoped to the tenant.
-	if ks, ok := h.svc.AdminKeys.(tenantEraser); ok {
-		if n, err := ks.DeleteByTenant(ctx, tenant); err != nil {
-			rep.warnf("api_keys: %v", err)
-		} else {
-			rep.APIKeys = n
-		}
-	}
-	if ms, ok := h.Memberships.(tenantEraser); ok {
-		if n, err := ms.DeleteByTenant(ctx, tenant); err != nil {
-			rep.warnf("memberships: %v", err)
-		} else {
-			rep.Memberships = n
-		}
-	}
-	if inv, ok := h.Invitations.(tenantEraser); ok {
-		if n, err := inv.DeleteByTenant(ctx, tenant); err != nil {
-			rep.warnf("invitations: %v", err)
-		} else {
-			rep.Invitations = n
-		}
-	}
+	rep.tallyByTenant(ctx, "api_keys", h.svc.AdminKeys, tenant, func(n int) { rep.APIKeys = n })
+	rep.tallyByTenant(ctx, "memberships", h.Memberships, tenant, func(n int) { rep.Memberships = n })
+	rep.tallyByTenant(ctx, "invitations", h.Invitations, tenant, func(n int) { rep.Invitations = n })
 	// Org SSO config + display profile.
 	if h.OrgAuth != nil {
 		if err := h.OrgAuth.DeleteOrgAuth(ctx, tenant); err != nil {
@@ -240,13 +214,7 @@ func (h *HTTPGateway) deleteOrgData(ctx context.Context, tenant string) (EraseRe
 	}
 	// The tenant is gone, so there is no security trail to preserve —
 	// hard-delete its audit events.
-	if ae, ok := h.Audit.(tenantEraser); ok {
-		if n, err := ae.DeleteByTenant(ctx, tenant); err != nil {
-			rep.warnf("audit: %v", err)
-		} else {
-			rep.AuditEvents = n
-		}
-	}
+	rep.tallyByTenant(ctx, "audit", h.Audit, tenant, func(n int) { rep.AuditEvents = n })
 	return rep, nil
 }
 

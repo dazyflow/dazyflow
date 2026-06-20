@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS usage_counters (
 `
 
 func NewPgUsageStore(ctx context.Context, pool *pgxpool.Pool) (*PgUsageStore, error) {
-	if _, err := pool.Exec(ctx, pgUsageSchema); err != nil {
+	if err := applyPgSchema(ctx, pool, pgUsageSchema); err != nil {
 		return nil, err
 	}
 	return &PgUsageStore{pool: pool}, nil

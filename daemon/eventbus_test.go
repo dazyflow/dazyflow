@@ -106,7 +106,7 @@ func TestMemoryBus_PublishCancelRace(t *testing.T) {
 // path. fanout/Subscribe touch only the mutex + subs map (no pool), so the
 // concurrency contract is testable without a database.
 func TestPgBus_FanoutCancelRace(t *testing.T) {
-	b := &PgBus{subs: make(map[string][]chan BusEvent)}
+	b := &PgBus{}
 	const job = "job-1"
 	stop := make(chan struct{})
 	var pubWg, subWg sync.WaitGroup
@@ -120,7 +120,7 @@ func TestPgBus_FanoutCancelRace(t *testing.T) {
 				case <-stop:
 					return
 				default:
-					b.fanout(job, BusEvent{Progress: &engine.GraphProgress{JobID: job}})
+					b.local.fanout(job, BusEvent{Progress: &engine.GraphProgress{JobID: job}})
 				}
 			}
 		}()

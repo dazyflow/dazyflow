@@ -153,11 +153,11 @@ func TestVaultConfig_StorageRoundTrip(t *testing.T) {
 		Mount:     "secret",
 		Auth:      VaultAuth{Method: "approle", RoleID: "r", SecretID: "s"},
 	}
-	if err := saveVaultConfig(ctx, es, "acme", cfg); err != nil {
+	if err := saveProviderConfig(ctx, es, "acme", vaultConfigSecretName, cfg); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 
-	got, ok, err := loadVaultConfig(ctx, es, "acme")
+	got, ok, err := loadProviderConfig[VaultConfig](ctx, es, "acme", vaultConfigSecretName)
 	if err != nil || !ok {
 		t.Fatalf("load: ok=%v err=%v", ok, err)
 	}
@@ -166,12 +166,12 @@ func TestVaultConfig_StorageRoundTrip(t *testing.T) {
 	}
 
 	// A different tenant has no config (not an error).
-	if _, ok, err := loadVaultConfig(ctx, es, "globex"); ok || err != nil {
+	if _, ok, err := loadProviderConfig[VaultConfig](ctx, es, "globex", vaultConfigSecretName); ok || err != nil {
 		t.Errorf("globex: ok=%v err=%v, want false/nil", ok, err)
 	}
 
 	// Saving an invalid config is refused.
-	if err := saveVaultConfig(ctx, es, "acme", VaultConfig{Address: "https://x"}); err == nil {
+	if err := saveProviderConfig(ctx, es, "acme", vaultConfigSecretName, VaultConfig{Address: "https://x"}); err == nil {
 		t.Error("invalid config should not save")
 	}
 

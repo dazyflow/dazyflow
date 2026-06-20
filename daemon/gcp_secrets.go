@@ -48,7 +48,7 @@ func NewGcpSecretsProviderForStore(es *EncryptedSecrets, httpTimeout time.Durati
 	return NewGcpSecretsProvider(
 		newGcpAPIClient(httpTimeout),
 		func(ctx context.Context, tenant string) (GcpSecretsConfig, bool, error) {
-			return loadGcpConfig(ctx, es, tenant)
+			return loadProviderConfig[GcpSecretsConfig](ctx, es, tenant, gcpConfigSecretName)
 		},
 		0,
 	)
@@ -69,36 +69,27 @@ func (p *GcpSecretsProvider) Scheme() string { return "gcp" }
 // project. The tenant comes from context — a BYO secret is always
 // tenant-scoped, never global.
 func (p *GcpSecretsProvider) Get(ctx context.Context, ref string) (string, error) {
-	tenant, ok := core.TenantFromContext(ctx)
-	if !ok {
-		return "", fmt.Errorf("gcp://%s: no tenant in context — BYO secrets are tenant-scoped", ref)
-	}
-	name, field := splitCloudSecretRef(ref)
-	if name == "" {
-		return "", fmt.Errorf("gcp reference %q must be NAME or NAME#field", ref)
-	}
-	key := tenant + "\x00" + ref
-	if v, ok := p.cache.get(key); ok {
-		return v, nil
-	}
-
-	cfg, ok, err := p.loadConfig(ctx, tenant)
-	if err != nil {
-		return "", fmt.Errorf("gcp: loading this tenant's secret-manager config: %w", err)
-	}
-	if !ok {
-		return "", fmt.Errorf("gcp://%s: this tenant has no GCP Secret Manager configured", ref)
-	}
-	raw, err := p.client.accessSecret(ctx, cfg, name)
-	if err != nil {
-		return "", fmt.Errorf("gcp: reading %q: %w", name, err)
-	}
-	val, err := pluckJSONField(raw, field)
-	if err != nil {
-		return "", fmt.Errorf("gcp: secret %q: %w", name, err)
-	}
-	p.cache.put(key, val)
-	return val, nil
+	type parsed struct{ name, field string }
+	return resolveCachedSecret(ctx, "gcp", ref, p.cache,
+		func(tenant, ref string) (string, parsed, error) {
+			name, field := splitCloudSecretRef(ref)
+			if name == "" {
+				return "", parsed{}, fmt.Errorf("gcp reference %q must be NAME or NAME#field", ref)
+			}
+			return tenant + "\x00" + ref, parsed{name: name, field: field}, nil
+		},
+		p.loadConfig,
+		func(ctx context.Context, cfg GcpSecretsConfig, pr parsed) (string, error) {
+			raw, err := p.client.accessSecret(ctx, cfg, pr.name)
+			if err != nil {
+				return "", fmt.Errorf("gcp: reading %q: %w", pr.name, err)
+			}
+			val, err := pluckJSONField(raw, pr.field)
+			if err != nil {
+				return "", fmt.Errorf("gcp: secret %q: %w", pr.name, err)
+			}
+			return val, nil
+		})
 }
 
 // GcpSecretsConfig is one tenant's connection to GCP Secret Manager: the
@@ -157,18 +148,6 @@ func (c GcpSecretsConfig) endpointURL() string {
 // gcpConfigSecretName is the reserved encrypted-store key for a tenant's GCP
 // connection (the "cfg:" prefix hides it from user-facing listings).
 const gcpConfigSecretName = "cfg:secret-manager-gcp"
-
-func saveGcpConfig(ctx context.Context, es *EncryptedSecrets, tenant string, cfg GcpSecretsConfig) error {
-	return saveProviderConfig(ctx, es, tenant, gcpConfigSecretName, cfg)
-}
-
-func loadGcpConfig(ctx context.Context, es *EncryptedSecrets, tenant string) (GcpSecretsConfig, bool, error) {
-	return loadProviderConfig[GcpSecretsConfig](ctx, es, tenant, gcpConfigSecretName)
-}
-
-func deleteGcpConfig(ctx context.Context, es *EncryptedSecrets, tenant string) error {
-	return deleteProviderConfig(ctx, es, tenant, gcpConfigSecretName)
-}
 
 // gcpAPIClient speaks Secret Manager's REST API with service-account JWT →
 // OAuth token auth. Tokens are cached per (token_uri, client_email) until

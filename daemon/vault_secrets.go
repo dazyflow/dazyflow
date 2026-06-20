@@ -48,7 +48,7 @@ func NewVaultProviderForStore(es *EncryptedSecrets, httpTimeout time.Duration) *
 	return NewVaultProvider(
 		newVaultAPIClient(httpTimeout),
 		func(ctx context.Context, tenant string) (VaultConfig, bool, error) {
-			return loadVaultConfig(ctx, es, tenant)
+			return loadProviderConfig[VaultConfig](ctx, es, tenant, vaultConfigSecretName)
 		},
 		0,
 	)
@@ -70,36 +70,27 @@ func (p *VaultProvider) Scheme() string { return "vault" }
 // configured manager and returns FIELD. The tenant comes from context — a
 // BYO secret is always tenant-scoped, never global.
 func (p *VaultProvider) Get(ctx context.Context, ref string) (string, error) {
-	tenant, ok := core.TenantFromContext(ctx)
-	if !ok {
-		return "", fmt.Errorf("vault://%s: no tenant in context — BYO secrets are tenant-scoped", ref)
-	}
-	path, field, err := splitVaultRef(ref)
-	if err != nil {
-		return "", err
-	}
-	key := tenant + "\x00" + path + "\x00" + field
-	if v, ok := p.cache.get(key); ok {
-		return v, nil
-	}
-
-	cfg, ok, err := p.loadConfig(ctx, tenant)
-	if err != nil {
-		return "", fmt.Errorf("vault: loading this tenant's secret-manager config: %w", err)
-	}
-	if !ok {
-		return "", fmt.Errorf("vault://%s: this tenant has no secret manager configured", ref)
-	}
-	fields, err := p.client.readKV(ctx, cfg, path)
-	if err != nil {
-		return "", fmt.Errorf("vault: reading %q from %s: %w", path, cfg.Address, err)
-	}
-	val, ok := fields[field]
-	if !ok {
-		return "", fmt.Errorf("vault: secret %q has no field %q", path, field)
-	}
-	p.cache.put(key, val)
-	return val, nil
+	type parsed struct{ path, field string }
+	return resolveCachedSecret(ctx, "vault", ref, p.cache,
+		func(tenant, ref string) (string, parsed, error) {
+			path, field, err := splitVaultRef(ref)
+			if err != nil {
+				return "", parsed{}, err
+			}
+			return tenant + "\x00" + path + "\x00" + field, parsed{path: path, field: field}, nil
+		},
+		p.loadConfig,
+		func(ctx context.Context, cfg VaultConfig, pr parsed) (string, error) {
+			fields, err := p.client.readKV(ctx, cfg, pr.path)
+			if err != nil {
+				return "", fmt.Errorf("vault: reading %q from %s: %w", pr.path, cfg.Address, err)
+			}
+			val, ok := fields[pr.field]
+			if !ok {
+				return "", fmt.Errorf("vault: secret %q has no field %q", pr.path, pr.field)
+			}
+			return val, nil
+		})
 }
 
 // nowFunc is a clock seam for the cache-expiry tests.
@@ -172,16 +163,6 @@ type vaultClient interface {
 // manager config is stored in its own encrypted store. The "cfg:" prefix is
 // filtered out of the user-facing secret listing (see filterReservedSecretNames).
 const vaultConfigSecretName = "cfg:secret-manager"
-
-// saveVaultConfig / loadVaultConfig are the vault bindings of the shared
-// per-provider config storage.
-func saveVaultConfig(ctx context.Context, es *EncryptedSecrets, tenant string, cfg VaultConfig) error {
-	return saveProviderConfig(ctx, es, tenant, vaultConfigSecretName, cfg)
-}
-
-func loadVaultConfig(ctx context.Context, es *EncryptedSecrets, tenant string) (VaultConfig, bool, error) {
-	return loadProviderConfig[VaultConfig](ctx, es, tenant, vaultConfigSecretName)
-}
 
 // filterReservedSecretNames drops internal "cfg:" entries (e.g. the secret-
 // manager config) from a user-facing secret listing.

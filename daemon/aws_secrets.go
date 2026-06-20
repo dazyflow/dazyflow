@@ -48,7 +48,7 @@ func NewAwsSecretsProviderForStore(es *EncryptedSecrets, httpTimeout time.Durati
 	return NewAwsSecretsProvider(
 		newAwsAPIClient(httpTimeout),
 		func(ctx context.Context, tenant string) (AwsSecretsConfig, bool, error) {
-			return loadAwsConfig(ctx, es, tenant)
+			return loadProviderConfig[AwsSecretsConfig](ctx, es, tenant, awsConfigSecretName)
 		},
 		0,
 	)
@@ -71,64 +71,27 @@ func (p *AwsSecretsProvider) Scheme() string { return "aws" }
 // JSON object and the named key is returned. The tenant comes from context —
 // a BYO secret is always tenant-scoped, never global.
 func (p *AwsSecretsProvider) Get(ctx context.Context, ref string) (string, error) {
-	tenant, ok := core.TenantFromContext(ctx)
-	if !ok {
-		return "", fmt.Errorf("aws://%s: no tenant in context — BYO secrets are tenant-scoped", ref)
-	}
-	name, field := splitCloudSecretRef(ref)
-	if name == "" {
-		return "", fmt.Errorf("aws reference %q must be NAME or NAME#field", ref)
-	}
-	key := tenant + "\x00" + ref
-	if v, ok := p.cache.get(key); ok {
-		return v, nil
-	}
-
-	cfg, ok, err := p.loadConfig(ctx, tenant)
-	if err != nil {
-		return "", fmt.Errorf("aws: loading this tenant's secret-manager config: %w", err)
-	}
-	if !ok {
-		return "", fmt.Errorf("aws://%s: this tenant has no AWS Secrets Manager configured", ref)
-	}
-	raw, err := p.client.getSecretValue(ctx, cfg, name)
-	if err != nil {
-		return "", fmt.Errorf("aws: reading %q: %w", name, err)
-	}
-	val, err := pluckJSONField(raw, field)
-	if err != nil {
-		return "", fmt.Errorf("aws: secret %q: %w", name, err)
-	}
-	p.cache.put(key, val)
-	return val, nil
-}
-
-// splitCloudSecretRef parses "NAME" / "NAME#field" for the aws/gcp providers.
-// Unlike Vault (where a KV secret is always a field map), a cloud secret is
-// often a single opaque string, so the field is optional.
-func splitCloudSecretRef(ref string) (name, field string) {
-	if i := strings.LastIndexByte(ref, '#'); i > 0 && i < len(ref)-1 {
-		return ref[:i], ref[i+1:]
-	}
-	return ref, ""
-}
-
-// pluckJSONField returns raw verbatim when field is empty; otherwise raw must
-// be a JSON object and the named key is returned (strings pass through,
-// anything else re-encodes as JSON — same policy as stringifyVaultValue).
-func pluckJSONField(raw, field string) (string, error) {
-	if field == "" {
-		return raw, nil
-	}
-	var obj map[string]any
-	if err := json.Unmarshal([]byte(raw), &obj); err != nil {
-		return "", fmt.Errorf("value is not a JSON object, cannot pluck field %q", field)
-	}
-	v, ok := obj[field]
-	if !ok {
-		return "", fmt.Errorf("no field %q", field)
-	}
-	return stringifyVaultValue(v), nil
+	type parsed struct{ name, field string }
+	return resolveCachedSecret(ctx, "aws", ref, p.cache,
+		func(tenant, ref string) (string, parsed, error) {
+			name, field := splitCloudSecretRef(ref)
+			if name == "" {
+				return "", parsed{}, fmt.Errorf("aws reference %q must be NAME or NAME#field", ref)
+			}
+			return tenant + "\x00" + ref, parsed{name: name, field: field}, nil
+		},
+		p.loadConfig,
+		func(ctx context.Context, cfg AwsSecretsConfig, pr parsed) (string, error) {
+			raw, err := p.client.getSecretValue(ctx, cfg, pr.name)
+			if err != nil {
+				return "", fmt.Errorf("aws: reading %q: %w", pr.name, err)
+			}
+			val, err := pluckJSONField(raw, pr.field)
+			if err != nil {
+				return "", fmt.Errorf("aws: secret %q: %w", pr.name, err)
+			}
+			return val, nil
+		})
 }
 
 // AwsSecretsConfig is one tenant's connection to AWS Secrets Manager. Static
@@ -167,18 +130,6 @@ func (c AwsSecretsConfig) endpointURL() string {
 // awsConfigSecretName is the reserved encrypted-store key for a tenant's AWS
 // connection (the "cfg:" prefix hides it from user-facing listings).
 const awsConfigSecretName = "cfg:secret-manager-aws"
-
-func saveAwsConfig(ctx context.Context, es *EncryptedSecrets, tenant string, cfg AwsSecretsConfig) error {
-	return saveProviderConfig(ctx, es, tenant, awsConfigSecretName, cfg)
-}
-
-func loadAwsConfig(ctx context.Context, es *EncryptedSecrets, tenant string) (AwsSecretsConfig, bool, error) {
-	return loadProviderConfig[AwsSecretsConfig](ctx, es, tenant, awsConfigSecretName)
-}
-
-func deleteAwsConfig(ctx context.Context, es *EncryptedSecrets, tenant string) error {
-	return deleteProviderConfig(ctx, es, tenant, awsConfigSecretName)
-}
 
 // awsAPIClient speaks Secrets Manager's JSON-RPC ("x-amz-json-1.1") protocol
 // with hand-rolled SigV4 request signing. Like the Vault client it does NOT

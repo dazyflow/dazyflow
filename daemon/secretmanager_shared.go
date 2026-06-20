@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,49 +19,148 @@ import (
 // must NOT drift between them: the value cache, the encrypted
 // per-tenant config storage, and the HTTP config endpoints' bodies.
 
-// secretCacheEntry is one cached resolved value.
-type secretCacheEntry struct {
-	value string
+// ttlCacheEntry is one cached value with its expiry.
+type ttlCacheEntry[V any] struct {
+	value V
 	exp   time.Time
+}
+
+// ttlCache is a concurrency-safe map keyed by string with a per-entry
+// TTL: entries expire on read (so the map doesn't accumulate dead keys)
+// against the nowFunc clock seam tests drive. It backs both the BYO
+// secret value cache and the billing plan cache — same map+mutex+
+// expire-on-read shape — leaving each only its own write-through policy.
+type ttlCache[V any] struct {
+	ttl time.Duration
+
+	mu      sync.Mutex
+	entries map[string]ttlCacheEntry[V]
+}
+
+func newTTLCache[V any](ttl time.Duration) *ttlCache[V] {
+	return &ttlCache[V]{ttl: ttl, entries: map[string]ttlCacheEntry[V]{}}
+}
+
+func (c *ttlCache[V]) get(key string) (V, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e, ok := c.entries[key]
+	if !ok {
+		var zero V
+		return zero, false
+	}
+	if !e.exp.After(nowFunc()) {
+		delete(c.entries, key)
+		var zero V
+		return zero, false
+	}
+	return e.value, true
+}
+
+func (c *ttlCache[V]) put(key string, val V) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.entries[key] = ttlCacheEntry[V]{value: val, exp: nowFunc().Add(c.ttl)}
 }
 
 // tenantSecretCache is the short-TTL value cache every BYO provider
 // fronts its manager with, so a flow referencing a secret on every run
 // doesn't hammer the upstream. Keys are provider-specific (tenant +
-// ref); expired entries are dropped on read so the map doesn't
-// accumulate dead keys. Uses nowFunc as its clock seam (tests).
-type tenantSecretCache struct {
-	ttl time.Duration
-
-	mu      sync.Mutex
-	entries map[string]secretCacheEntry
-}
+// ref). Backed by ttlCache.
+type tenantSecretCache = ttlCache[string]
 
 func newTenantSecretCache(ttl time.Duration) *tenantSecretCache {
 	if ttl <= 0 {
 		ttl = defaultVaultCacheTTL
 	}
-	return &tenantSecretCache{ttl: ttl, entries: map[string]secretCacheEntry{}}
+	return newTTLCache[string](ttl)
 }
 
-func (c *tenantSecretCache) get(key string) (string, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	e, ok := c.entries[key]
+// resolveCachedSecret is the shared Get path every BYO provider runs:
+// tenant-from-context → parse the ref → cache lookup → load the tenant's
+// config → fetch from the backend → cache the value. Only parse and fetch
+// differ per provider, so each Get supplies those two closures and shares
+// everything that must NOT drift (the tenant requirement, the cache key
+// discipline, the "not configured" handling). scheme labels the provider
+// in the tenant/not-configured errors.
+//
+// parse returns the cache key (provider-specific: vault keys on
+// tenant+path+field, the cloud providers on tenant+ref) and a parsed
+// value handed to fetch. fetch must already wrap its own errors.
+func resolveCachedSecret[P any, C any](
+	ctx context.Context,
+	scheme, ref string,
+	cache *tenantSecretCache,
+	parse func(tenant, ref string) (cacheKey string, parsed P, err error),
+	load func(ctx context.Context, tenant string) (cfg C, ok bool, err error),
+	fetch func(ctx context.Context, cfg C, parsed P) (string, error),
+) (string, error) {
+	tenant, ok := core.TenantFromContext(ctx)
 	if !ok {
-		return "", false
+		return "", fmt.Errorf("%s://%s: no tenant in context — BYO secrets are tenant-scoped", scheme, ref)
 	}
-	if !e.exp.After(nowFunc()) {
-		delete(c.entries, key)
-		return "", false
+	key, parsed, err := parse(tenant, ref)
+	if err != nil {
+		return "", err
 	}
-	return e.value, true
+	if v, ok := cache.get(key); ok {
+		return v, nil
+	}
+	cfg, ok, err := load(ctx, tenant)
+	if err != nil {
+		return "", fmt.Errorf("%s: loading this tenant's secret-manager config: %w", scheme, err)
+	}
+	if !ok {
+		return "", notConfiguredError(scheme, ref)
+	}
+	val, err := fetch(ctx, cfg, parsed)
+	if err != nil {
+		return "", err
+	}
+	cache.put(key, val)
+	return val, nil
 }
 
-func (c *tenantSecretCache) put(key, val string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.entries[key] = secretCacheEntry{value: val, exp: nowFunc().Add(c.ttl)}
+// notConfiguredError renders the per-provider "tenant has no X configured"
+// message. The wording differs per provider (it names the actual product),
+// so it can't fold into resolveCachedSecret's generic body.
+func notConfiguredError(scheme, ref string) error {
+	switch scheme {
+	case "aws":
+		return fmt.Errorf("aws://%s: this tenant has no AWS Secrets Manager configured", ref)
+	case "gcp":
+		return fmt.Errorf("gcp://%s: this tenant has no GCP Secret Manager configured", ref)
+	default:
+		return fmt.Errorf("vault://%s: this tenant has no secret manager configured", ref)
+	}
+}
+
+// splitCloudSecretRef parses "NAME" / "NAME#field" for the aws/gcp providers.
+// Unlike Vault (where a KV secret is always a field map), a cloud secret is
+// often a single opaque string, so the field is optional.
+func splitCloudSecretRef(ref string) (name, field string) {
+	if i := strings.LastIndexByte(ref, '#'); i > 0 && i < len(ref)-1 {
+		return ref[:i], ref[i+1:]
+	}
+	return ref, ""
+}
+
+// pluckJSONField returns raw verbatim when field is empty; otherwise raw must
+// be a JSON object and the named key is returned (strings pass through,
+// anything else re-encodes as JSON — same policy as stringifyVaultValue).
+func pluckJSONField(raw, field string) (string, error) {
+	if field == "" {
+		return raw, nil
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(raw), &obj); err != nil {
+		return "", fmt.Errorf("value is not a JSON object, cannot pluck field %q", field)
+	}
+	v, ok := obj[field]
+	if !ok {
+		return "", fmt.Errorf("no field %q", field)
+	}
+	return stringifyVaultValue(v), nil
 }
 
 // providerConfig is what every per-tenant connection config can do:
@@ -143,6 +243,31 @@ func putSecretManagerConfig[T providerConfig](
 	action, target, detail := audit(cfg)
 	h.audit(r.Context(), p, action, target, detail)
 	rw.WriteHeader(http.StatusNoContent)
+}
+
+// getSecretManagerConfig is the shared GET body for all three providers:
+// gate → load → render the redacted view. When no config is stored it
+// returns toView's zero-value view (each provider's zero view is
+// {Configured:false}). label names the provider in the load error.
+func getSecretManagerConfig[T any](
+	h *HTTPGateway, rw http.ResponseWriter, r *http.Request, p core.Principal,
+	label, secretName string,
+	toView func(cfg T, configured bool) any,
+) {
+	if !h.secretManagerGate(rw, p, core.PermSecretRead) {
+		return
+	}
+	cfg, ok, err := loadProviderConfig[T](r.Context(), h.EncryptedSecrets, p.Tenant, secretName)
+	if err != nil {
+		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("load %s config: %v", label, err))
+		return
+	}
+	if !ok {
+		var zero T
+		writeJSON(rw, http.StatusOK, toView(zero, false))
+		return
+	}
+	writeJSON(rw, http.StatusOK, toView(cfg, true))
 }
 
 // deleteSecretManagerConfig is the shared DELETE body: gate → delete →

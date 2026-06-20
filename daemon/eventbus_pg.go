@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"log"
-	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -43,8 +42,7 @@ type PgBus struct {
 	logger    *log.Logger
 	retention time.Duration
 
-	mu   sync.Mutex
-	subs map[string][]chan BusEvent
+	local localSubscribers
 
 	lastSeen int64
 }
@@ -64,14 +62,13 @@ const pgBusChannel = "dazy_bus"
 // mark (so brand-new subscribers don't get a backlog), and starts the
 // listener + sweep goroutines. They stop when ctx is cancelled.
 func NewPgBus(ctx context.Context, pool *pgxpool.Pool) (*PgBus, error) {
-	if _, err := pool.Exec(ctx, pgBusSchema); err != nil {
+	if err := applyPgSchema(ctx, pool, pgBusSchema); err != nil {
 		return nil, err
 	}
 	b := &PgBus{
 		pool:      pool,
 		logger:    log.New(log.Writer(), "bus-pg: ", log.LstdFlags),
 		retention: time.Hour,
-		subs:      make(map[string][]chan BusEvent),
 	}
 	var maxID *int64
 	if err := pool.QueryRow(ctx, `SELECT max(id) FROM bus_events`).Scan(&maxID); err != nil {
@@ -111,46 +108,7 @@ func (b *PgBus) Publish(jobID string, ev BusEvent) {
 // Subscribe registers a local channel for a job's events. Identical
 // fan-out semantics to MemoryBus (buffered, non-blocking, drop-on-slow).
 func (b *PgBus) Subscribe(jobID string) (<-chan BusEvent, func()) {
-	ch := make(chan BusEvent, 32)
-	b.mu.Lock()
-	b.subs[jobID] = append(b.subs[jobID], ch)
-	b.mu.Unlock()
-
-	var once sync.Once
-	cancel := func() {
-		once.Do(func() {
-			b.mu.Lock()
-			defer b.mu.Unlock()
-			list := b.subs[jobID]
-			for i, c := range list {
-				if c == ch {
-					b.subs[jobID] = append(list[:i], list[i+1:]...)
-					break
-				}
-			}
-			if len(b.subs[jobID]) == 0 {
-				delete(b.subs, jobID)
-			}
-			close(ch)
-		})
-	}
-	return ch, cancel
-}
-
-// fanout delivers ev to local subscribers for jobID (non-blocking).
-func (b *PgBus) fanout(jobID string, ev BusEvent) {
-	// Send under the lock — same reasoning as MemoryBus.Publish: cancel()
-	// closes channels under b.mu, so sending outside the lock would race
-	// that close and panic (the `default` only guards against blocking, not
-	// a send on a closed channel). Sends are non-blocking, so this is cheap.
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	for _, c := range b.subs[jobID] {
-		select {
-		case c <- ev:
-		default:
-		}
-	}
+	return b.local.subscribe(jobID)
 }
 
 // listen holds a dedicated connection on the LISTEN channel and drains
@@ -238,7 +196,7 @@ func (b *PgBus) drainNew(ctx context.Context) {
 	// stall the drain loop.
 	b.lastSeen = maxID
 	for _, p := range batch {
-		b.fanout(p.jobID, p.ev)
+		b.local.fanout(p.jobID, p.ev)
 	}
 }
 

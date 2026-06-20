@@ -86,7 +86,7 @@ type PgAuditLog struct {
 }
 
 func NewPgAuditLog(ctx context.Context, pool *pgxpool.Pool) (*PgAuditLog, error) {
-	if _, err := pool.Exec(ctx, pgAuditSchema); err != nil {
+	if err := applyPgSchema(ctx, pool, pgAuditSchema); err != nil {
 		return nil, err
 	}
 	return &PgAuditLog{pool: pool}, nil

@@ -197,20 +197,20 @@ func TestGcpConfig_StorageRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	keyJSON, _ := gcpTestKey(t, "https://oauth2.googleapis.com/token")
 	cfg := GcpSecretsConfig{ProjectID: "proj", ServiceAccountKey: keyJSON}
-	if err = saveGcpConfig(ctx, es, "acme", cfg); err != nil {
+	if err = saveProviderConfig(ctx, es, "acme", gcpConfigSecretName, cfg); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	got, ok, err := loadGcpConfig(ctx, es, "acme")
+	got, ok, err := loadProviderConfig[GcpSecretsConfig](ctx, es, "acme", gcpConfigSecretName)
 	if err != nil || !ok || got != cfg {
 		t.Fatalf("load = ok=%v err=%v, want roundtrip", ok, err)
 	}
-	if _, ok, _ := loadGcpConfig(ctx, es, "globex"); ok {
+	if _, ok, _ := loadProviderConfig[GcpSecretsConfig](ctx, es, "globex", gcpConfigSecretName); ok {
 		t.Error("other tenant should be not-configured")
 	}
-	if err := deleteGcpConfig(ctx, es, "acme"); err != nil {
+	if err := deleteProviderConfig(ctx, es, "acme", gcpConfigSecretName); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	if _, ok, _ := loadGcpConfig(ctx, es, "acme"); ok {
+	if _, ok, _ := loadProviderConfig[GcpSecretsConfig](ctx, es, "acme", gcpConfigSecretName); ok {
 		t.Error("config still present after delete")
 	}
 }

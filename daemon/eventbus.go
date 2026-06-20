@@ -53,59 +53,83 @@ type Bus interface {
 	Subscribe(jobID string) (<-chan BusEvent, func())
 }
 
-// MemoryBus fans out events to every active subscriber for a job. Sends
-// are non-blocking — a slow subscriber drops events rather than back the
-// worker up.
-type MemoryBus struct {
+// localSubscribers is the per-job fan-out machinery shared by MemoryBus
+// (which fans out directly in Publish) and PgBus (which fans out from its
+// spool drain). It owns the subscriber map and the invariant that sends
+// happen under the lock so a concurrent cancel can't close a channel
+// mid-send. Embed it; both buses get subscribe/fanout for free.
+type localSubscribers struct {
 	mu   sync.Mutex
 	subs map[string][]chan BusEvent
 }
 
-func NewMemoryBus() *MemoryBus {
-	return &MemoryBus{subs: make(map[string][]chan BusEvent)}
-}
-
-func (b *MemoryBus) Publish(jobID string, ev BusEvent) {
-	// Send under the lock. cancel() closes a subscriber channel while
-	// holding b.mu, so sending outside the lock races that close — and the
-	// `default` below avoids *blocking* on a full channel, not the panic
-	// from a send on a *closed* one. Holding the lock across the loop makes
-	// send and close mutually exclusive. Sends are non-blocking, so the
-	// critical section stays short.
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	for _, c := range b.subs[jobID] {
-		select {
-		case c <- ev:
-		default:
-			// Subscriber too slow; drop event. The worker keeps moving.
-		}
-	}
-}
-
-func (b *MemoryBus) Subscribe(jobID string) (<-chan BusEvent, func()) {
+// subscribe registers a buffered channel for jobID's events and returns
+// it with an idempotent cancel that deregisters and closes it. The buffer
+// (32) plus non-blocking fanout means a slow reader drops events rather
+// than backing up the publisher.
+func (l *localSubscribers) subscribe(jobID string) (<-chan BusEvent, func()) {
 	ch := make(chan BusEvent, 32)
-	b.mu.Lock()
-	b.subs[jobID] = append(b.subs[jobID], ch)
-	b.mu.Unlock()
+	l.mu.Lock()
+	if l.subs == nil {
+		l.subs = make(map[string][]chan BusEvent)
+	}
+	l.subs[jobID] = append(l.subs[jobID], ch)
+	l.mu.Unlock()
 
 	var once sync.Once
 	cancel := func() {
 		once.Do(func() {
-			b.mu.Lock()
-			defer b.mu.Unlock()
-			list := b.subs[jobID]
+			l.mu.Lock()
+			defer l.mu.Unlock()
+			list := l.subs[jobID]
 			for i, c := range list {
 				if c == ch {
-					b.subs[jobID] = append(list[:i], list[i+1:]...)
+					l.subs[jobID] = append(list[:i], list[i+1:]...)
 					break
 				}
 			}
-			if len(b.subs[jobID]) == 0 {
-				delete(b.subs, jobID)
+			if len(l.subs[jobID]) == 0 {
+				delete(l.subs, jobID)
 			}
 			close(ch)
 		})
 	}
 	return ch, cancel
+}
+
+// fanout delivers ev to every active subscriber for jobID. Sends happen
+// under the lock: cancel() closes a subscriber channel while holding
+// l.mu, so sending outside the lock would race that close — and the
+// `default` only avoids *blocking* on a full channel, not the panic from
+// a send on a *closed* one. Holding the lock across the loop makes send
+// and close mutually exclusive; sends are non-blocking, so it stays short.
+func (l *localSubscribers) fanout(jobID string, ev BusEvent) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, c := range l.subs[jobID] {
+		select {
+		case c <- ev:
+		default:
+			// Subscriber too slow; drop event. The publisher keeps moving.
+		}
+	}
+}
+
+// MemoryBus fans out events to every active subscriber for a job. Sends
+// are non-blocking — a slow subscriber drops events rather than back the
+// worker up.
+type MemoryBus struct {
+	local localSubscribers
+}
+
+func NewMemoryBus() *MemoryBus {
+	return &MemoryBus{}
+}
+
+func (b *MemoryBus) Publish(jobID string, ev BusEvent) {
+	b.local.fanout(jobID, ev)
+}
+
+func (b *MemoryBus) Subscribe(jobID string) (<-chan BusEvent, func()) {
+	return b.local.subscribe(jobID)
 }

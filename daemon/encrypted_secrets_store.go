@@ -2,9 +2,11 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"sync"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -178,9 +180,9 @@ type PgSecretsStore struct {
 // extra usage is fine.
 func NewPgSecretsStore(ctx context.Context, pool *pgxpool.Pool) (*PgSecretsStore, error) {
 	if pool == nil {
-		return nil, ErrSecretNotFound
+		return nil, errors.New("NewPgSecretsStore: nil pool")
 	}
-	if _, err := pool.Exec(ctx, pgSecretsSchema); err != nil {
+	if err := applyPgSchema(ctx, pool, pgSecretsSchema); err != nil {
 		return nil, err
 	}
 	return &PgSecretsStore{pool: pool}, nil
@@ -296,8 +298,16 @@ func (p *PgSecretsStore) setWrappedDEK(ctx context.Context, tenant string, wrapp
 	return tag.RowsAffected() == 1, nil
 }
 
-// isPgNoRows detects pgx's no-rows sentinel without importing pgx
-// in the test file (and with one fewer alias to remember).
+// applyPgSchema runs a store's CREATE-TABLE-IF-NOT-EXISTS DDL at
+// construction time. Every Pg*Store constructor opens the same way, so
+// this keeps the "ensure schema, bail on error" step in one place.
+func applyPgSchema(ctx context.Context, pool *pgxpool.Pool, schema string) error {
+	_, err := pool.Exec(ctx, schema)
+	return err
+}
+
+// isPgNoRows detects pgx's no-rows sentinel via errors.Is against
+// pgx.ErrNoRows — robust to wrapping, unlike a string compare.
 func isPgNoRows(err error) bool {
-	return err != nil && err.Error() == "no rows in result set"
+	return errors.Is(err, pgx.ErrNoRows)
 }

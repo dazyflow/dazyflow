@@ -29,7 +29,7 @@ CREATE INDEX IF NOT EXISTS run_logs_run_idx ON run_logs (run_id, seq);
 `
 
 func NewPgRunLogStore(ctx context.Context, pool *pgxpool.Pool) (*PgRunLogStore, error) {
-	if _, err := pool.Exec(ctx, pgRunLogSchema); err != nil {
+	if err := applyPgSchema(ctx, pool, pgRunLogSchema); err != nil {
 		return nil, err
 	}
 	return &PgRunLogStore{pool: pool}, nil

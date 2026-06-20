@@ -2,10 +2,8 @@ package daemon
 
 import (
 	"context"
-	"errors"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -33,7 +31,7 @@ CREATE TABLE IF NOT EXISTS stripe_webhook_events (
 `
 
 func NewPgPlanStore(ctx context.Context, pool *pgxpool.Pool) (*PgPlanStore, error) {
-	if _, err := pool.Exec(ctx, pgPlanSchema); err != nil {
+	if err := applyPgSchema(ctx, pool, pgPlanSchema); err != nil {
 		return nil, err
 	}
 	return &PgPlanStore{pool: pool}, nil
@@ -50,7 +48,7 @@ func (s *PgPlanStore) GetPlan(ctx context.Context, tenant string) (TenantPlan, e
 		&p.StripeSubscriptionID, &p.SubscriptionStatus, &periodEnd)
 	if err != nil {
 		// No row = free plan, same contract as the memory store.
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isPgNoRows(err) {
 			return TenantPlan{Tenant: tenant, Plan: PlanFree}, nil
 		}
 		return TenantPlan{}, err
