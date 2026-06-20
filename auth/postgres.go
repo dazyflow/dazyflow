@@ -174,7 +174,7 @@ func (s *PgKeyStore) ListByTenant(ctx context.Context, tenant string) ([]APIKey,
 		SELECT id, tenant, workspace, subject, roles, salt, hash, expires_at, revoked_at
 		FROM api_keys WHERE tenant=$1 ORDER BY id
 	`
-	return s.queryKeys(ctx, q, tenant)
+	return queryRows(ctx, s.pool, scanKey, q, tenant)
 }
 
 func (s *PgKeyStore) ListAll(ctx context.Context) ([]APIKey, error) {
@@ -182,7 +182,7 @@ func (s *PgKeyStore) ListAll(ctx context.Context) ([]APIKey, error) {
 		SELECT id, tenant, workspace, subject, roles, salt, hash, expires_at, revoked_at
 		FROM api_keys ORDER BY id
 	`
-	return s.queryKeys(ctx, q)
+	return queryRows(ctx, s.pool, scanKey, q)
 }
 
 // ListBySubject returns every key issued to a principal subject, across
@@ -192,49 +192,56 @@ func (s *PgKeyStore) ListBySubject(ctx context.Context, subject string) ([]APIKe
 		SELECT id, tenant, workspace, subject, roles, salt, hash, expires_at, revoked_at
 		FROM api_keys WHERE subject=$1 ORDER BY id
 	`
-	return s.queryKeys(ctx, q, subject)
+	return queryRows(ctx, s.pool, scanKey, q, subject)
 }
 
 // DeleteBySubject hard-deletes every key for a subject (erasure, Art. 17).
 // Returns the number removed.
 func (s *PgKeyStore) DeleteBySubject(ctx context.Context, subject string) (int, error) {
-	tag, err := s.pool.Exec(ctx, `DELETE FROM api_keys WHERE subject=$1`, subject)
-	if err != nil {
-		return 0, err
-	}
-	return int(tag.RowsAffected()), nil
+	return deleteWhere(ctx, s.pool, "api_keys", "subject", subject)
 }
 
 // DeleteByTenant hard-deletes every key in a tenant — for org deletion.
 func (s *PgKeyStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
-	tag, err := s.pool.Exec(ctx, `DELETE FROM api_keys WHERE tenant=$1`, tenant)
-	if err != nil {
-		return 0, err
-	}
-	return int(tag.RowsAffected()), nil
+	return deleteWhere(ctx, s.pool, "api_keys", "tenant", tenant)
 }
 
-func (s *PgKeyStore) queryKeys(ctx context.Context, q string, args ...any) ([]APIKey, error) {
-	rows, err := s.pool.Query(ctx, q, args...)
+// rowScanner unifies pgx.Row (QueryRow) and pgx.Rows (Query) so one
+// scan helper serves both the single-get and list paths.
+type rowScanner interface {
+	Scan(dest ...any) error
+}
+
+// queryRows runs a list query and scans every row through scan, returning
+// the collected slice. It centralizes the open / defer-Close / loop-scan /
+// rows.Err() boilerplate every Pg*Store list helper used to repeat.
+func queryRows[T any](ctx context.Context, pool *pgxpool.Pool, scan func(rowScanner) (T, error), query string, args ...any) ([]T, error) {
+	rows, err := pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	out := make([]APIKey, 0)
+	out := make([]T, 0)
 	for rows.Next() {
-		k, err := scanKey(rows)
+		v, err := scan(rows)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, k)
+		out = append(out, v)
 	}
 	return out, rows.Err()
 }
 
-// rowScanner unifies pgx.Row (QueryRow) and pgx.Rows (Query) so one
-// scanKey helper serves both the single-get and list paths.
-type rowScanner interface {
-	Scan(dest ...any) error
+// deleteWhere runs `DELETE FROM <table> WHERE <col>=$1` and returns the
+// rows-affected count. table and col are passed as compile-time constants
+// at every call site (never user input) — they can't be bound as query
+// parameters, so they're concatenated here; the value is always bound.
+func deleteWhere(ctx context.Context, pool *pgxpool.Pool, table, col string, val any) (int, error) {
+	tag, err := pool.Exec(ctx, `DELETE FROM `+table+` WHERE `+col+`=$1`, val)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
 }
 
 func scanKey(row rowScanner) (APIKey, error) {
@@ -353,28 +360,30 @@ func unmarshalRecoveryCodes(b []byte) ([]string, error) {
 	return codes, nil
 }
 
-func (s *PgUserStore) GetByEmail(ctx context.Context, email string) (User, error) {
-	email = strings.ToLower(strings.TrimSpace(email))
-	const q = `SELECT email, password_hash, subject, tenant, workspace, roles, created_at,
-	                  totp_secret_enc, totp_enabled, totp_enrolled_at, recovery_codes,
-	                  verified_at, verify_token_hash, verify_expires_at, totp_last_step,
-	                  reset_token_hash, reset_expires_at
-	             FROM users WHERE email=$1`
+// userColumns is the users SELECT/Scan column list, shared by GetByEmail,
+// ListUsers, and (positionally) the PutUser INSERT — keeping the three in
+// lockstep so a new column can't be added to one read path and forgotten
+// in the other.
+const userColumns = `email, password_hash, subject, tenant, workspace, roles, created_at,
+	totp_secret_enc, totp_enabled, totp_enrolled_at, recovery_codes,
+	verified_at, verify_token_hash, verify_expires_at, totp_last_step,
+	reset_token_hash, reset_expires_at`
+
+// scanUser scans one users row (in userColumns order) into a User,
+// decoding the roles and recovery-codes JSONB columns. Used by both
+// GetByEmail and ListUsers.
+func scanUser(row rowScanner) (User, error) {
 	var (
 		u           User
 		rolesRaw    []byte
 		recoveryRaw []byte
 	)
-	err := s.pool.QueryRow(ctx, q, email).Scan(
+	if err := row.Scan(
 		&u.Email, &u.PasswordHash, &u.Subject, &u.Tenant, &u.Workspace, &rolesRaw, &u.CreatedAt,
 		&u.TOTPSecretEnc, &u.TOTPEnabled, &u.TOTPEnrolledAt, &recoveryRaw,
 		&u.VerifiedAt, &u.VerifyTokenHash, &u.VerifyExpiresAt, &u.TOTPLastStep,
 		&u.ResetTokenHash, &u.ResetExpiresAt,
-	)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return User{}, ErrUnknownUser
-		}
+	); err != nil {
 		return User{}, err
 	}
 	roles, err := unmarshalRoles(rolesRaw)
@@ -387,6 +396,19 @@ func (s *PgUserStore) GetByEmail(ctx context.Context, email string) (User, error
 		return User{}, err
 	}
 	u.RecoveryCodeHashes = codes
+	return u, nil
+}
+
+func (s *PgUserStore) GetByEmail(ctx context.Context, email string) (User, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	const q = `SELECT ` + userColumns + ` FROM users WHERE email=$1`
+	u, err := scanUser(s.pool.QueryRow(ctx, q, email))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return User{}, ErrUnknownUser
+		}
+		return User{}, err
+	}
 	return u, nil
 }
 
@@ -408,10 +430,7 @@ func (s *PgUserStore) PutUser(ctx context.Context, u User) error {
 		created = time.Now()
 	}
 	const q = `
-		INSERT INTO users (email, password_hash, subject, tenant, workspace, roles, created_at,
-		                   totp_secret_enc, totp_enabled, totp_enrolled_at, recovery_codes,
-		                   verified_at, verify_token_hash, verify_expires_at, totp_last_step,
-		                   reset_token_hash, reset_expires_at)
+		INSERT INTO users (` + userColumns + `)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
 		ON CONFLICT (email) DO UPDATE SET
 		  password_hash=EXCLUDED.password_hash, subject=EXCLUDED.subject,
@@ -430,41 +449,8 @@ func (s *PgUserStore) PutUser(ctx context.Context, u User) error {
 }
 
 func (s *PgUserStore) ListUsers(ctx context.Context) ([]User, error) {
-	rows, err := s.pool.Query(ctx, `SELECT email, password_hash, subject, tenant, workspace, roles, created_at,
-	                                       totp_secret_enc, totp_enabled, totp_enrolled_at, recovery_codes,
-	                                       verified_at, verify_token_hash, verify_expires_at, totp_last_step,
-	                                       reset_token_hash, reset_expires_at
-	                                  FROM users ORDER BY email`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := make([]User, 0)
-	for rows.Next() {
-		var (
-			u           User
-			rolesRaw    []byte
-			recoveryRaw []byte
-		)
-		if err := rows.Scan(&u.Email, &u.PasswordHash, &u.Subject, &u.Tenant, &u.Workspace, &rolesRaw, &u.CreatedAt,
-			&u.TOTPSecretEnc, &u.TOTPEnabled, &u.TOTPEnrolledAt, &recoveryRaw,
-			&u.VerifiedAt, &u.VerifyTokenHash, &u.VerifyExpiresAt, &u.TOTPLastStep,
-			&u.ResetTokenHash, &u.ResetExpiresAt); err != nil {
-			return nil, err
-		}
-		roles, err := unmarshalRoles(rolesRaw)
-		if err != nil {
-			return nil, err
-		}
-		u.Roles = roles
-		codes, err := unmarshalRecoveryCodes(recoveryRaw)
-		if err != nil {
-			return nil, err
-		}
-		u.RecoveryCodeHashes = codes
-		out = append(out, u)
-	}
-	return out, rows.Err()
+	const q = `SELECT ` + userColumns + ` FROM users ORDER BY email`
+	return queryRows(ctx, s.pool, scanUser, q)
 }
 
 // DeleteUser hard-deletes the user row (erasure, Art. 17). Idempotent:

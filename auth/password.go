@@ -2,12 +2,9 @@ package auth
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -125,41 +122,32 @@ func HashPassword(password string) ([]byte, error) {
 
 // JSONUserStore persists users to a single JSON file. Mutations rewrite
 // the file atomically (.tmp + rename) under a mutex. Intended for dev
-// / single-node deployments — production should use a database.
+// / single-node deployments — production should use a database. The
+// load/flush/atomic-write machinery lives in the embedded jsonFileStore.
 type JSONUserStore struct {
-	mu    sync.RWMutex
-	path  string
-	users map[string]User
+	*jsonFileStore[string, User]
+}
+
+// normalizeUserEmail lower-cases and trims the record's email — applied on
+// load and on Put so the map key and the stored value stay canonical.
+func normalizeUserEmail(u User) User {
+	u.Email = strings.ToLower(strings.TrimSpace(u.Email))
+	return u
 }
 
 func OpenJSONUserStore(path string) (*JSONUserStore, error) {
-	s := &JSONUserStore{path: path, users: make(map[string]User)}
-	if path == "" {
-		return s, nil
-	}
-	data, err := os.ReadFile(path)
+	base, err := newJSONFileStore(path, func(u User) string { return u.Email }, normalizeUserEmail)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return s, nil
-		}
-		return nil, fmt.Errorf("read %q: %w", path, err)
+		return nil, err
 	}
-	var slice []User
-	if err := json.Unmarshal(data, &slice); err != nil {
-		return nil, fmt.Errorf("parse %q: %w", path, err)
-	}
-	for _, u := range slice {
-		u.Email = strings.ToLower(strings.TrimSpace(u.Email))
-		s.users[u.Email] = u
-	}
-	return s, nil
+	return &JSONUserStore{base}, nil
 }
 
 func (s *JSONUserStore) GetByEmail(_ context.Context, email string) (User, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	u, ok := s.users[email]
+	u, ok := s.items[email]
 	if !ok {
 		return User{}, ErrUnknownUser
 	}
@@ -167,21 +155,21 @@ func (s *JSONUserStore) GetByEmail(_ context.Context, email string) (User, error
 }
 
 func (s *JSONUserStore) PutUser(_ context.Context, u User) error {
-	u.Email = strings.ToLower(strings.TrimSpace(u.Email))
+	u = normalizeUserEmail(u)
 	if u.Email == "" {
 		return fmt.Errorf("email required")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.users[u.Email] = u
+	s.items[u.Email] = u
 	return s.flushLocked()
 }
 
 func (s *JSONUserStore) ListUsers(_ context.Context) ([]User, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := make([]User, 0, len(s.users))
-	for _, u := range s.users {
+	out := make([]User, 0, len(s.items))
+	for _, u := range s.items {
 		out = append(out, u)
 	}
 	return out, nil
@@ -192,25 +180,6 @@ func (s *JSONUserStore) DeleteUser(_ context.Context, email string) error {
 	email = strings.ToLower(strings.TrimSpace(email))
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	delete(s.users, email)
+	delete(s.items, email)
 	return s.flushLocked()
-}
-
-func (s *JSONUserStore) flushLocked() error {
-	if s.path == "" {
-		return nil
-	}
-	slice := make([]User, 0, len(s.users))
-	for _, u := range s.users {
-		slice = append(slice, u)
-	}
-	data, err := json.MarshalIndent(slice, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, s.path)
 }

@@ -101,16 +101,22 @@ func (s *MemSessionStore) DeleteSession(_ context.Context, id string) error {
 }
 
 func (s *MemSessionStore) RevokeSubjectSessions(_ context.Context, subject string) (int, error) {
+	return s.deleteSessions(func(sess Session) bool { return sess.Subject == subject }), nil
+}
+
+// deleteSessions removes every session matching pred and returns the
+// count. Holds the write lock.
+func (s *MemSessionStore) deleteSessions(pred func(Session) bool) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	n := 0
 	for id, sess := range s.sessions {
-		if sess.Subject == subject {
+		if pred(sess) {
 			delete(s.sessions, id)
 			n++
 		}
 	}
-	return n, nil
+	return n
 }
 
 // SessionAuthenticator slots into the auth Chain alongside
