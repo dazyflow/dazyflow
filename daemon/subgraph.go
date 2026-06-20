@@ -80,15 +80,7 @@ func (s *Service) SubmitChild(
 	// because they could load and edit the parent in the first
 	// place. graph:admin lets this synthetic principal bypass the
 	// child's visibility regardless of ownership.
-	principal := core.Principal{
-		Subject:   "dazyflow-subgraph",
-		Tenant:    parentRec.Tenant,
-		Workspace: parentRec.Workspace,
-		Roles: []core.Role{{
-			Name:        "subgraph",
-			Permissions: []core.Permission{core.PermGraphRun, core.PermGraphAdmin},
-		}},
-	}
+	principal := SystemPrincipal("dazyflow-subgraph", parentRec.Tenant, parentRec.Workspace)
 	return s.submitGraphWithParent(ctx, principal, g, seeds, parentRec.ID)
 }
 

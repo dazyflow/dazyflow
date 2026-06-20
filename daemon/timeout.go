@@ -64,18 +64,7 @@ func (s *Service) runGraphTimeoutWatchdog(runID, tenant, workspace string, timeo
 			// scheduler uses: PermGraphRun lets us cancel; PermGraphAdmin
 			// lets us bypass private-flow visibility if the run was on
 			// a private flow whose owner isn't us.
-			sysP := core.Principal{
-				Subject:   "dazyflow-timeout",
-				Tenant:    tenant,
-				Workspace: workspace,
-				Roles: []core.Role{{
-					Name: "timeout",
-					Permissions: []core.Permission{
-						core.PermGraphRun,
-						core.PermGraphAdmin,
-					},
-				}},
-			}
+			sysP := SystemPrincipal("dazyflow-timeout", tenant, workspace)
 			ctx, cancelCtx := context.WithTimeout(context.Background(), 30*time.Second)
 			err := s.CancelGraphRun(ctx, sysP, runID, fmt.Sprintf("graph timeout after %s", timeout))
 			cancelCtx()

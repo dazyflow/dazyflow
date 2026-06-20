@@ -410,20 +410,47 @@ func (d *Dispatcher) maybeCompleteGraph(
 	}
 
 	final := &core.Result{Status: core.StatusOK}
-	if cerr := d.store.Complete(ctx, graphRunID, core.JobStatusSucceeded, final); cerr == nil {
-		breakpoints.clear(graphRunID)
-		d.reclaimScratch(graph, graphRunID)
-		d.bus.Publish(graphRunID, BusEvent{Terminal: &TerminalEvent{
-			JobID:  graphRunID,
-			Status: core.JobStatusSucceeded,
-			GraphRes: engine.GraphResult{
-				GraphID: graph.ID,
-				Status:  core.StatusOK,
-				Nodes:   nodeResults,
-			},
-		}})
-		d.maybeResumeParent(ctx, graphRunID, core.StatusOK, nil)
+	d.finalizeGraph(ctx, graph, graphRunID, core.JobStatusSucceeded, final,
+		engine.GraphResult{
+			GraphID: graph.ID,
+			Status:  core.StatusOK,
+			Nodes:   nodeResults,
+		},
+		core.StatusOK, nil)
+}
+
+// finalizeGraph runs the shared terminal sequence for a graph run that
+// has reached a definite end state: persist the terminal record, clear
+// any pending breakpoints, reclaim the run's scratch directory, publish
+// the Terminal bus event, and resume a waiting parent (for subgraph
+// runs). It is a no-op past the Complete call if the record was already
+// terminal — Complete returning non-nil means another writer beat us,
+// so we must not double-publish. Used by both the success and failure
+// completion paths; the cancel path keeps its own ordering (it clears
+// breakpoints before flipping the record and propagates Complete
+// errors) but shares reclaimScratch.
+func (d *Dispatcher) finalizeGraph(
+	ctx context.Context,
+	graph core.Graph,
+	graphRunID string,
+	status core.JobStatus,
+	result *core.Result,
+	graphRes engine.GraphResult,
+	resumeStatus string,
+	resumeErr *core.JobError,
+) {
+	if cerr := d.store.Complete(ctx, graphRunID, status, result); cerr != nil {
+		return
 	}
+	breakpoints.clear(graphRunID)
+	d.reclaimScratch(graph, graphRunID)
+	d.bus.Publish(graphRunID, BusEvent{Terminal: &TerminalEvent{
+		JobID:    graphRunID,
+		Status:   status,
+		Error:    graphRes.Error,
+		GraphRes: graphRes,
+	}})
+	d.maybeResumeParent(ctx, graphRunID, resumeStatus, resumeErr)
 }
 
 // reclaimScratch removes a finished run's ephemeral scratch directory
@@ -458,21 +485,13 @@ func (d *Dispatcher) markGraphFailed(
 		}
 	}
 	result := &core.Result{Status: core.StatusError, Error: errPayload}
-	if cerr := d.store.Complete(ctx, graphRunID, core.JobStatusFailed, result); cerr == nil {
-		breakpoints.clear(graphRunID)
-		d.reclaimScratch(graph, graphRunID)
-		d.bus.Publish(graphRunID, BusEvent{Terminal: &TerminalEvent{
-			JobID:  graphRunID,
-			Status: core.JobStatusFailed,
-			Error:  errPayload,
-			GraphRes: engine.GraphResult{
-				GraphID: graph.ID,
-				Status:  core.StatusError,
-				Error:   errPayload,
-			},
-		}})
-		d.maybeResumeParent(ctx, graphRunID, core.StatusError, errPayload)
-	}
+	d.finalizeGraph(ctx, graph, graphRunID, core.JobStatusFailed, result,
+		engine.GraphResult{
+			GraphID: graph.ID,
+			Status:  core.StatusError,
+			Error:   errPayload,
+		},
+		core.StatusError, errPayload)
 }
 
 // maybeResumeParent walks the child→parent linkage and, if present,

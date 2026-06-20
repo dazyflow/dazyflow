@@ -151,15 +151,7 @@ func (w *WebhookListener) handleTrigger(rw http.ResponseWriter, r *http.Request)
 	// possession of the per-graph webhook secret already proves
 	// authorization — graph:admin lets the principal fire private
 	// flows without owning them.
-	principal := core.Principal{
-		Subject:   "dazyflow-webhook",
-		Tenant:    g.Tenant,
-		Workspace: g.Workspace,
-		Roles: []core.Role{{
-			Name:        "webhook",
-			Permissions: []core.Permission{core.PermGraphRun, core.PermGraphAdmin},
-		}},
-	}
+	principal := SystemPrincipal("dazyflow-webhook", g.Tenant, g.Workspace)
 	runID, err := w.svc.SubmitGraphWithSeed(r.Context(), principal, g, seeds)
 	if err != nil {
 		w.logger.Printf("submit %s/%s/%s: %v", tenant, workspace, graphID, err)

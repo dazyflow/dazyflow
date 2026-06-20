@@ -9,6 +9,8 @@ import (
 	"maps"
 	"sync"
 
+	"go.opentelemetry.io/otel/trace"
+
 	"git.sr.ht/~klahr/dazyflow/core"
 )
 
@@ -207,6 +209,102 @@ func (e *Engine) RunNode(
 	ctx, span := startNodeSpan(ctx, graph, node)
 	defer span.End()
 
+	// The job ID is the idempotency key for outbound side effects
+	// (Job.IdempotencyKey). It MUST be stable across retries so a retried
+	// POST is deduped by the receiving service — the worker re-invokes
+	// RunNode with the same record ID on every attempt. Fall back to a
+	// random ID only for callers that don't supply one (e.g. ad-hoc tests).
+	jobID := recordID
+	if jobID == "" {
+		id, err := newJobID()
+		if err != nil {
+			recordSpanError(span, err)
+			return core.Result{Status: core.StatusError}, fmt.Errorf("generate job ID: %w", err)
+		}
+		jobID = id
+	}
+
+	// The distributed path stamps sandbox/template errors on the span and
+	// namespaces scratch (and the approval URL) by the per-run graphRunID.
+	return e.buildAndExecute(ctx, span, graph, node, prior, jobID, graphRunID,
+		func(err error) { recordSpanError(span, err) },
+		func(execCtx context.Context, transport core.Transport, job core.Job, secrets *secretSet) (core.Result, error) {
+			// Scrub secrets a drop might echo into live progress events before
+			// they leave the engine — redactResult only covers the final Result.
+			redactedProgress, progressDone := redactProgress(execCtx, progress, secrets)
+			result, execErr := transport.Execute(execCtx, job, redactedProgress)
+			if redactedProgress != nil {
+				close(redactedProgress)
+				<-progressDone
+			}
+			return result, execErr
+		})
+}
+
+// runNode resolves the transport, assembles the Job from upstream outputs,
+// runs Execute with a per-node progress forwarder, and returns the result.
+func (e *Engine) runNode(
+	ctx context.Context,
+	graph core.Graph,
+	node core.Node,
+	prior map[string]core.Result,
+	progress chan<- GraphProgress,
+) (core.Result, error) {
+	ctx, span := startNodeSpan(ctx, graph, node)
+	defer span.End()
+
+	jobID, err := newJobID()
+	if err != nil {
+		return core.Result{Status: core.StatusError}, fmt.Errorf("generate job ID: %w", err)
+	}
+
+	// The in-process Run path has no per-run ID of its own — but a loop-body
+	// run carries the PARENT run's ID on ctx (WithLoopRunID) so body nodes
+	// share the parent's scratch space. Outside a loop this stays "" (no
+	// scratch), as before. populateSandbox reads the run ID from ctx, so it
+	// must run inside buildAndExecute after the ctx is set up.
+	//
+	// recordErr is a no-op here: the in-process path historically did NOT
+	// stamp the span with sandbox/template errors (only resolve/exec errors),
+	// so we preserve that to avoid changing emitted spans.
+	return e.buildAndExecute(ctx, span, graph, node, prior, jobID,
+		loopRunIDFromContext(ctx),
+		func(error) {},
+		func(execCtx context.Context, transport core.Transport, job core.Job, secrets *secretSet) (core.Result, error) {
+			nodeProgress := make(chan core.Progress)
+			forwarderDone := make(chan struct{})
+			go forwardProgress(execCtx, job.ID, node.ID, nodeProgress, progress, secrets, forwarderDone)
+			result, execErr := transport.Execute(execCtx, job, nodeProgress)
+			close(nodeProgress)
+			<-forwarderDone
+			return result, execErr
+		})
+}
+
+// buildAndExecute holds the body shared by RunNode (distributed worker
+// path) and runNode (in-process Run path): resolve the transport,
+// assemble the Job from upstream outputs, populate the sandbox, inject
+// connection defaults, resolve secret/resource templates, sign the
+// approval URL, run the transport, and post-process the result
+// (passthrough + secret redaction + span error). The two entrypoints
+// differ only in their job-ID source, the run ID used to namespace
+// scratch, whether sandbox/template errors are stamped on the span
+// (recordErr), and how progress is wired (exec) — all passed in.
+//
+// exec receives the fully wired execution context, the assembled job,
+// and the resolved secret set, runs transport.Execute with the caller's
+// progress strategy, and returns its result. The transport is rebound
+// onto execCtx so callers that read it via WithResolver see it.
+func (e *Engine) buildAndExecute(
+	ctx context.Context,
+	span trace.Span,
+	graph core.Graph,
+	node core.Node,
+	prior map[string]core.Result,
+	jobID, scratchRunID string,
+	recordErr func(error),
+	exec func(ctx context.Context, transport core.Transport, job core.Job, secrets *secretSet) (core.Result, error),
+) (core.Result, error) {
 	// Tenant rides on ctx through resolution so the scripted catalog returns
 	// this tenant's installed (and version-pinned) drops, not the global set.
 	ctx = core.WithTenant(ctx, graph.Tenant)
@@ -222,19 +320,6 @@ func (e *Engine) RunNode(
 	manifest := transport.Manifest()
 	input := assembleInput(graph, node.ID, manifest, prior)
 
-	// The job ID is the idempotency key for outbound side effects
-	// (Job.IdempotencyKey). It MUST be stable across retries so a retried
-	// POST is deduped by the receiving service — the worker re-invokes
-	// RunNode with the same record ID on every attempt. Fall back to a
-	// random ID only for callers that don't supply one (e.g. ad-hoc tests).
-	jobID := recordID
-	if jobID == "" {
-		jobID, err = newJobID()
-		if err != nil {
-			recordSpanError(span, err)
-			return core.Result{Status: core.StatusError}, fmt.Errorf("generate job ID: %w", err)
-		}
-	}
 	params, env := cloneNodeIO(node.Params, node.Env)
 	job := core.Job{
 		ID:      jobID,
@@ -245,8 +330,8 @@ func (e *Engine) RunNode(
 		Env:     env,
 		Cleanup: core.CleanupOnGraphComplete,
 	}
-	if err := e.populateSandbox(&job, graph, graphRunID); err != nil {
-		recordSpanError(span, err)
+	if err := e.populateSandbox(&job, graph, scratchRunID); err != nil {
+		recordErr(err)
 		return core.Result{
 			Status: core.StatusError,
 			Error:  &core.JobError{Code: "sandbox", Message: err.Error()},
@@ -256,14 +341,18 @@ func (e *Engine) RunNode(
 	injectConnectionDefaults(sctx, e.Secrets, manifest, &job)
 	secrets, err := resolveTemplatesCollecting(sctx, e.Secrets, e.Resources, prior, &job)
 	if err != nil {
-		recordSpanError(span, err)
+		recordErr(err)
 		return core.Result{
 			Status: core.StatusError,
 			Error:  &core.JobError{Code: templateErrCode(err), Message: err.Error()},
 		}, err
 	}
+	// Sign the approval URL for await_approval modules. The in-process Run
+	// path has no signer (ApprovalSigner is nil), so this is naturally a
+	// no-op there — matching the historical behavior where runNode never
+	// set ApprovalURL.
 	if manifest.AwaitsApproval && e.ApprovalSigner != nil {
-		job.ApprovalURL = e.ApprovalSigner.SignApprovalURL(graphRunID, node.ID)
+		job.ApprovalURL = e.ApprovalSigner.SignApprovalURL(scratchRunID, node.ID)
 	}
 	jobIDsFromSpan(ctx, &job)
 
@@ -276,109 +365,7 @@ func (e *Engine) RunNode(
 	// sink so they register the resolved token for redaction too.
 	ctx = withSecretSink(ctx, secrets)
 
-	// Scrub secrets a drop might echo into live progress events before they
-	// leave the engine — redactResult only covers the final Result.
-	redactedProgress, progressDone := redactProgress(ctx, progress, secrets)
-	result, execErr := transport.Execute(ctx, job, redactedProgress)
-	if redactedProgress != nil {
-		close(redactedProgress)
-		<-progressDone
-	}
-	if result.JobID == "" {
-		result.JobID = job.ID
-	}
-	core.ApplyPassthrough(job.Input, &result)
-	// Scrub resolved secret values from the result before it leaves the
-	// engine (and lands in the job store / run-detail UI).
-	redactResult(&result, secrets)
-	if execErr != nil {
-		recordSpanError(span, execErr)
-	} else if result.Status == core.StatusError && result.Error != nil {
-		recordSpanError(span, fmt.Errorf("%s: %s", result.Error.Code, result.Error.Message))
-	}
-	return result, execErr
-}
-
-// runNode resolves the transport, assembles the Job from upstream outputs,
-// runs Execute with a per-node progress forwarder, and returns the result.
-func (e *Engine) runNode(
-	ctx context.Context,
-	graph core.Graph,
-	node core.Node,
-	prior map[string]core.Result,
-	progress chan<- GraphProgress,
-) (core.Result, error) {
-	ctx, span := startNodeSpan(ctx, graph, node)
-	defer span.End()
-
-	// Tenant rides on ctx through resolution so the scripted catalog returns
-	// this tenant's installed (and version-pinned) drops, not the global set.
-	ctx = core.WithTenant(ctx, graph.Tenant)
-
-	transport, err := e.Resolver.Resolve(ctx, node.Module)
-	if err != nil {
-		recordSpanError(span, err)
-		return core.Result{
-			Status: core.StatusError,
-			Error:  &core.JobError{Code: "resolve_failed", Message: err.Error()},
-		}, err
-	}
-
-	input := assembleInput(graph, node.ID, transport.Manifest(), prior)
-
-	jobID, err := newJobID()
-	if err != nil {
-		recordSpanError(span, err)
-		return core.Result{Status: core.StatusError}, fmt.Errorf("generate job ID: %w", err)
-	}
-
-	params, env := cloneNodeIO(node.Params, node.Env)
-	job := core.Job{
-		ID:      jobID,
-		GraphID: graph.ID,
-		NodeID:  node.ID,
-		Input:   input,
-		Params:  params,
-		Env:     env,
-		Cleanup: core.CleanupOnGraphComplete,
-	}
-	// The in-process Run path has no per-run ID of its own — but a loop-body
-	// run carries the PARENT run's ID on ctx (WithLoopRunID) so body nodes
-	// share the parent's scratch space. Outside a loop this stays "" (no
-	// scratch), as before.
-	if err := e.populateSandbox(&job, graph, loopRunIDFromContext(ctx)); err != nil {
-		return core.Result{
-			Status: core.StatusError,
-			Error:  &core.JobError{Code: "sandbox", Message: err.Error()},
-		}, err
-	}
-	sctx := scopeCtx(ctx, graph)
-	injectConnectionDefaults(sctx, e.Secrets, transport.Manifest(), &job)
-	secrets, err := resolveTemplatesCollecting(sctx, e.Secrets, e.Resources, prior, &job)
-	if err != nil {
-		return core.Result{
-			Status: core.StatusError,
-			Error:  &core.JobError{Code: templateErrCode(err), Message: err.Error()},
-		}, err
-	}
-	jobIDsFromSpan(ctx, &job)
-
-	// Tenant rides on the context into Execute so connector token lookups
-	// (OAuth GetOAuthToken) can resolve the per-tenant account.
-	ctx = core.WithTenant(ctx, job.Tenant)
-	ctx = WithResolver(ctx, e.Resolver)
-	// Those same connector lookups resolve OAuth tokens *inside* Execute,
-	// outside the secret-provider path that populated `secrets`. Expose a
-	// sink so they register the resolved token for redaction too.
-	ctx = withSecretSink(ctx, secrets)
-
-	nodeProgress := make(chan core.Progress)
-	forwarderDone := make(chan struct{})
-	go forwardProgress(ctx, job.ID, node.ID, nodeProgress, progress, secrets, forwarderDone)
-
-	result, execErr := transport.Execute(ctx, job, nodeProgress)
-	close(nodeProgress)
-	<-forwarderDone
+	result, execErr := exec(ctx, transport, job, secrets)
 
 	if result.JobID == "" {
 		result.JobID = job.ID
