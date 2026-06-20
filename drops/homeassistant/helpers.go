@@ -116,36 +116,10 @@ func httpFailure(job core.Job, status int, body []byte, err error) *core.Result 
 		r := params.Err(job, "auth", "Home Assistant rejected the access token (401). Re-create a long-lived access token and reconnect.")
 		return &r
 	}
-	if status < 200 || status >= 300 {
-		r := params.Err(job, "ha_error", fmt.Sprintf("Home Assistant returned %d: %s", status, extractError(body)))
-		return &r
-	}
-	return nil
-}
-
-// textInputOr returns the text wired into input port `port` (string or raw
-// bytes), or `fallback` when the port is unwired/empty. ok is false only when
-// the port carries a NON-text value — a wiring mistake the caller rejects.
-// Same pattern as slack/stripe/ntfy (a local copy per package, never a
-// cross-import of another drop).
-func textInputOr(job core.Job, port, fallback string) (val string, ok bool) {
-	in, present := job.Input[port]
-	if !present || in.Inline == nil {
-		return fallback, true
-	}
-	switch v := in.Inline.(type) {
-	case string:
-		if v != "" {
-			return v, true
-		}
-		return fallback, true
-	case []byte:
-		if len(v) > 0 {
-			return string(v), true
-		}
-		return fallback, true
-	}
-	return "", false
+	// Generic non-2xx → the shared "ha_error: Home Assistant returned %d: %s"
+	// epilogue (transport-error path already handled above with HA's friendlier
+	// wording, so err is nil here).
+	return params.HTTPFailure(job, "ha", "Home Assistant", status, body, nil, extractError)
 }
 
 // entityState is the shape Home Assistant returns from GET /api/states/<id>.

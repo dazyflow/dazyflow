@@ -18,12 +18,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
-	"sync"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/apibase"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/oauthtok"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 )
 
@@ -115,24 +113,13 @@ func parseBlocksJSON(data []byte) (any, *core.JobError) {
 
 // httpBase is the Slack API root. Tests override via SetHTTPBase to
 // point at an httptest server.
-var (
-	httpBaseMu sync.RWMutex
-	httpBase   = "https://slack.com/api"
-)
+var httpBase = apibase.New("https://slack.com/api")
 
 // SetHTTPBase swaps the API base URL — tests use this to redirect
 // all Slack calls to a local httptest server.
-func SetHTTPBase(base string) {
-	httpBaseMu.Lock()
-	defer httpBaseMu.Unlock()
-	httpBase = base
-}
+func SetHTTPBase(base string) { httpBase.Set(base) }
 
-func currentHTTPBase() string {
-	httpBaseMu.RLock()
-	defer httpBaseMu.RUnlock()
-	return httpBase
-}
+func currentHTTPBase() string { return httpBase.Get() }
 
 // decodeSlackResponse reads + parses a Slack API JSON response.
 // Every Slack API call follows the same {ok, error, ...} envelope,
@@ -155,12 +142,7 @@ func decodeSlackJSON(body []byte) (slackEnvelope, map[string]any, error) {
 // slackBaseURL resolves the API root for a job: an explicit base_url param
 // (proxy / self-hosted / tests) wins, else the package default (which
 // tests can swap via SetHTTPBase).
-func slackBaseURL(job core.Job) string {
-	if b, _ := params.StringOpt(job.Params, "base_url"); b != "" {
-		return strings.TrimRight(b, "/")
-	}
-	return currentHTTPBase()
-}
+func slackBaseURL(job core.Job) string { return httpBase.For(job) }
 
 // slackDo runs one authenticated Slack Web API call and returns the
 // shared {ok,error,...} envelope plus the raw decoded body. A non-2xx

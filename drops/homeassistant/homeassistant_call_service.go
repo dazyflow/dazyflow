@@ -99,7 +99,7 @@ func init() {
 // service-data body (Home Assistant's protocol), along with anything in the
 // 'data' param.
 func executeCallService(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	service, ok := textInputOr(job, "service", params.StringDefault(job.Params, "service", ""))
+	service, ok := params.TextInputOr(job, "service", params.StringDefault(job.Params, "service", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'Service' input must be text"), nil
 	}
@@ -112,7 +112,7 @@ func executeCallService(ctx context.Context, job core.Job, _ chan<- core.Progres
 		return params.Err(job, "bad_param", "'service' must be written as domain.service — e.g. light.turn_on, not just turn_on"), nil
 	}
 
-	entityID, ok := textInputOr(job, "entity_id", params.StringDefault(job.Params, "entity_id", ""))
+	entityID, ok := params.TextInputOr(job, "entity_id", params.StringDefault(job.Params, "entity_id", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'Entity' input must be text"), nil
 	}

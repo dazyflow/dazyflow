@@ -63,7 +63,7 @@ func init() {
 }
 
 func executeCancelSubscription(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	sub, ok := textInputOr(job, "subscription", params.StringDefault(job.Params, "subscription", ""))
+	sub, ok := params.TextInputOr(job, "subscription", params.StringDefault(job.Params, "subscription", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'Subscription' input must be text (a sub_… id)"), nil
 	}

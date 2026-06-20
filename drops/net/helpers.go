@@ -2,10 +2,7 @@ package net
 
 import (
 	"fmt"
-
-	"git.sr.ht/~klahr/dazyflow/core"
 )
-
 
 func paramHeaders(params map[string]any, key string) (map[string]string, error) {
 	v, ok := params[key]
@@ -25,14 +22,4 @@ func paramHeaders(params map[string]any, key string) (map[string]string, error) 
 		out[k] = s
 	}
 	return out, nil
-}
-
-func emitProgress(ch chan<- core.Progress, job core.Job, pct float64, msg string) {
-	if ch == nil {
-		return
-	}
-	select {
-	case ch <- core.Progress{JobID: job.ID, NodeID: job.NodeID, Percent: &pct, Message: msg}:
-	default:
-	}
 }

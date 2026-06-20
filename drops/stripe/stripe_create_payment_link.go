@@ -63,7 +63,7 @@ func init() {
 }
 
 func executeCreatePaymentLink(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	price, ok := textInputOr(job, "price", params.StringDefault(job.Params, "price", ""))
+	price, ok := params.TextInputOr(job, "price", params.StringDefault(job.Params, "price", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'Price' input must be text (a price_… id)"), nil
 	}

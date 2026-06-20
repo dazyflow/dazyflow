@@ -65,7 +65,7 @@ func init() {
 }
 
 func executeListSubscriptions(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	customer, ok := textInputOr(job, "customer", params.StringDefault(job.Params, "customer", ""))
+	customer, ok := params.TextInputOr(job, "customer", params.StringDefault(job.Params, "customer", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'Customer' input must be text (a cus_… id)"), nil
 	}

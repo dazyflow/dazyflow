@@ -73,14 +73,14 @@ func init() {
 }
 
 func executeSendSMS(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	to, ok := textInputOr(job, "to", params.StringDefault(job.Params, "to", ""))
+	to, ok := params.TextInputOr(job, "to", params.StringDefault(job.Params, "to", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'To' input must be text"), nil
 	}
 	if strings.TrimSpace(to) == "" {
 		return params.Err(job, "bad_param", "'to' is required — set it or wire the 'To' input"), nil
 	}
-	body, ok := textInputOr(job, "body", params.StringDefault(job.Params, "body", ""))
+	body, ok := params.TextInputOr(job, "body", params.StringDefault(job.Params, "body", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'Body' input must be text"), nil
 	}

@@ -69,7 +69,7 @@ func init() {
 }
 
 func executeSearchCustomers(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	query, ok := textInputOr(job, "query", params.StringDefault(job.Params, "query", ""))
+	query, ok := params.TextInputOr(job, "query", params.StringDefault(job.Params, "query", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'Query' input must be text"), nil
 	}

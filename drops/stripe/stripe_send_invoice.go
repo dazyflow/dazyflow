@@ -143,8 +143,8 @@ func init() {
 				{Port: "status", Label: "Status", MIME: []string{"text/plain"}},
 			},
 			ParamsSchema: sendInvoiceParamsSchema,
-			Idempotent:  false,
-			RetryPolicy: core.RetryExponentialBackoff,
+			Idempotent:   false,
+			RetryPolicy:  core.RetryExponentialBackoff,
 		},
 		Execute: executeSendInvoice,
 	})
@@ -162,7 +162,7 @@ func init() {
 // invoice may linger in the dashboard — visible and deletable, never
 // sent.
 func executeSendInvoice(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	customer, ok := textInputOr(job, "customer", params.StringDefault(job.Params, "customer", ""))
+	customer, ok := params.TextInputOr(job, "customer", params.StringDefault(job.Params, "customer", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'Customer' input must be text (a cus_… id)"), nil
 	}
@@ -176,7 +176,7 @@ func executeSendInvoice(ctx context.Context, job core.Job, _ chan<- core.Progres
 	if amount < 1 {
 		return params.Err(job, "bad_param", "'amount' is required — set it or wire the 'Amount' input (smallest currency unit)"), nil
 	}
-	description, ok := textInputOr(job, "description", params.StringDefault(job.Params, "description", ""))
+	description, ok := params.TextInputOr(job, "description", params.StringDefault(job.Params, "description", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'Description' input must be text"), nil
 	}

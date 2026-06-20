@@ -9,9 +9,9 @@ package drive
 import (
 	"context"
 	"strings"
-	"sync"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/apibase"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/google"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 )
@@ -38,34 +38,28 @@ func resolveToken(ctx context.Context, job core.Job) (string, error) {
 
 // Test seams: list/download hit the API root; upload hits the upload root.
 var (
-	baseMu     sync.RWMutex
-	apiBase    = driveAPIBase
-	uploadBase = driveUploadBase
+	apiBase    = apibase.New(driveAPIBase)
+	uploadBase = apibase.New(driveUploadBase)
 )
 
 // SetHTTPBases swaps both Drive roots (tests point them at one httptest server).
 func SetHTTPBases(api, upload string) {
-	baseMu.Lock()
-	defer baseMu.Unlock()
-	apiBase, uploadBase = api, upload
+	apiBase.Set(api)
+	uploadBase.Set(upload)
 }
 
 func apiBaseURL(job core.Job) string {
 	if b, _ := params.StringOpt(job.Params, "base_url"); b != "" {
 		return b
 	}
-	baseMu.RLock()
-	defer baseMu.RUnlock()
-	return apiBase
+	return apiBase.Get()
 }
 
 func uploadBaseURL(job core.Job) string {
 	if b, _ := params.StringOpt(job.Params, "upload_url"); b != "" {
 		return b
 	}
-	baseMu.RLock()
-	defer baseMu.RUnlock()
-	return uploadBase
+	return uploadBase.Get()
 }
 
 func googleDo(ctx context.Context, method, url, token, contentType string, body []byte, timeoutMS int) (int, []byte, error) {

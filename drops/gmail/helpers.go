@@ -10,10 +10,10 @@ import (
 	"encoding/base64"
 	"fmt"
 	"strings"
-	"sync"
 	"unicode/utf8"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/apibase"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/google"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 )
@@ -32,25 +32,18 @@ func resolveToken(ctx context.Context, job core.Job) (string, error) {
 	return google.ResolveToken(ctx, job)
 }
 
-var (
-	httpBaseMu sync.RWMutex
-	httpBase   = "https://gmail.googleapis.com/gmail/v1"
-)
+var httpBase = apibase.New("https://gmail.googleapis.com/gmail/v1")
 
 // SetHTTPBase swaps the Gmail API root (tests point it at httptest).
-func SetHTTPBase(base string) {
-	httpBaseMu.Lock()
-	defer httpBaseMu.Unlock()
-	httpBase = base
-}
+func SetHTTPBase(base string) { httpBase.Set(base) }
 
+// baseURL honors a per-job base_url verbatim (no trailing-slash trim — Gmail
+// endpoints are concatenated as-is by the callers), else the package default.
 func baseURL(job core.Job) string {
 	if b, _ := params.StringOpt(job.Params, "base_url"); b != "" {
 		return b
 	}
-	httpBaseMu.RLock()
-	defer httpBaseMu.RUnlock()
-	return httpBase
+	return httpBase.Get()
 }
 
 // gmailDo runs one authenticated Gmail API call. Returns status + body.

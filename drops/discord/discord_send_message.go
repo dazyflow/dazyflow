@@ -72,7 +72,7 @@ func executeSendMessage(ctx context.Context, job core.Job, _ chan<- core.Progres
 	if strings.TrimSpace(webhookURL) == "" {
 		return params.Err(job, "bad_param", "no Discord webhook: add a DISCORD_WEBHOOK_URL secret (the webhook_url param resolves it by default) or set webhook_url on the step"), nil
 	}
-	content, ok := textInputOr(job, "content", params.StringDefault(job.Params, "content", ""))
+	content, ok := params.TextInputOr(job, "content", params.StringDefault(job.Params, "content", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'Content' input must be text"), nil
 	}

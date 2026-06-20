@@ -75,14 +75,14 @@ func executePublish(ctx context.Context, job core.Job, _ chan<- core.Progress) (
 	if broker == "" {
 		return params.Err(job, "bad_param", "'broker' is required (e.g. tcp://broker.example.com:1883)"), nil
 	}
-	topic, ok := textInputOr(job, "topic", params.StringDefault(job.Params, "topic", ""))
+	topic, ok := params.TextInputOr(job, "topic", params.StringDefault(job.Params, "topic", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'Topic' input must be text"), nil
 	}
 	if strings.TrimSpace(topic) == "" {
 		return params.Err(job, "bad_param", "'topic' is required — set it or wire the 'Topic' input"), nil
 	}
-	payload, ok := textInputOr(job, "payload", params.StringDefault(job.Params, "payload", ""))
+	payload, ok := params.TextInputOr(job, "payload", params.StringDefault(job.Params, "payload", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'Payload' input must be text"), nil
 	}

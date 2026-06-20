@@ -10,9 +10,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sync"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/apibase"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/oauthtok"
 	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 )
@@ -37,23 +37,12 @@ func resolveToken(ctx context.Context, job core.Job) (string, error) {
 	return tokenHook.Resolve(ctx, job)
 }
 
-var (
-	httpBaseMu sync.RWMutex
-	httpBase   = "https://api.notion.com/v1"
-)
+var httpBase = apibase.New("https://api.notion.com/v1")
 
 // SetHTTPBase swaps the Notion API root (tests point it at httptest).
-func SetHTTPBase(base string) {
-	httpBaseMu.Lock()
-	defer httpBaseMu.Unlock()
-	httpBase = base
-}
+func SetHTTPBase(base string) { httpBase.Set(base) }
 
-func currentHTTPBase() string {
-	httpBaseMu.RLock()
-	defer httpBaseMu.RUnlock()
-	return httpBase
-}
+func currentHTTPBase() string { return httpBase.Get() }
 
 // notionDo runs one authenticated Notion API call. Returns status + body;
 // the caller maps non-2xx via notionError.

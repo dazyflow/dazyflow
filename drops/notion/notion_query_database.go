@@ -75,7 +75,7 @@ func init() {
 
 func executeNotionQueryDatabase(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	// The Database ID input pin overrides the param when wired.
-	dbID, ok := textInputOr(job, "database_id", params.StringDefault(job.Params, "database_id", ""))
+	dbID, ok := params.TextInputOr(job, "database_id", params.StringDefault(job.Params, "database_id", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'Database ID' input must be text"), nil
 	}

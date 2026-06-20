@@ -73,31 +73,6 @@ func init() {
 	})
 }
 
-// textInputOr returns the text wired into input port `port` (string or raw
-// bytes), or `fallback` when the port is unwired/empty. ok is false only when
-// the port carries a NON-text value — a wiring mistake the caller rejects.
-// Lets Title be supplied by an upstream wire or a param (same pattern as
-// gmail send's To/Subject/Body).
-func textInputOr(job core.Job, port, fallback string) (val string, ok bool) {
-	in, present := job.Input[port]
-	if !present || in.Inline == nil {
-		return fallback, true
-	}
-	switch v := in.Inline.(type) {
-	case string:
-		if v != "" {
-			return v, true
-		}
-		return fallback, true
-	case []byte:
-		if len(v) > 0 {
-			return string(v), true
-		}
-		return fallback, true
-	}
-	return "", false
-}
-
 func executeGitHubCreateIssue(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	owner, _ := params.StringOpt(job.Params, "owner")
 	repo, _ := params.StringOpt(job.Params, "repo")
@@ -105,7 +80,7 @@ func executeGitHubCreateIssue(ctx context.Context, job core.Job, _ chan<- core.P
 		return params.Err(job, "bad_param", "'owner' and 'repo' are required"), nil
 	}
 	// The Title input overrides the param when wired (input-overrides-param).
-	title, ok := textInputOr(job, "title", params.StringDefault(job.Params, "title", ""))
+	title, ok := params.TextInputOr(job, "title", params.StringDefault(job.Params, "title", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'Title' input must be text"), nil
 	}

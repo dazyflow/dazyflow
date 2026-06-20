@@ -9,8 +9,6 @@ package discord
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"git.sr.ht/~klahr/dazyflow/core"
@@ -42,42 +40,8 @@ func discordDo(ctx context.Context, job core.Job, url string, body []byte) (int,
 
 // extractDiscordError pulls the message (plus code) out of a Discord error
 // body, so "Invalid Webhook Token" reaches the user instead of a bare status.
+// Discord's {message,code} shape is the shared one, so this is a thin wrapper
+// over params.APIErrorMessage.
 func extractDiscordError(body []byte) string {
-	var e struct {
-		Message string `json:"message"`
-		Code    int    `json:"code"`
-	}
-	if err := json.Unmarshal(body, &e); err == nil && e.Message != "" {
-		if e.Code != 0 {
-			return fmt.Sprintf("%d: %s", e.Code, e.Message)
-		}
-		return e.Message
-	}
-	if len(body) > 200 {
-		return string(body[:200])
-	}
-	return string(body)
-}
-
-// textInputOr returns the text wired into input port `port` (string or raw
-// bytes), or `fallback` when the port is unwired/empty. ok is false only when
-// the port carries a NON-text value — a wiring mistake the caller rejects.
-func textInputOr(job core.Job, port, fallback string) (val string, ok bool) {
-	in, present := job.Input[port]
-	if !present || in.Inline == nil {
-		return fallback, true
-	}
-	switch v := in.Inline.(type) {
-	case string:
-		if v != "" {
-			return v, true
-		}
-		return fallback, true
-	case []byte:
-		if len(v) > 0 {
-			return string(v), true
-		}
-		return fallback, true
-	}
-	return "", false
+	return params.APIErrorMessage(body, 200)
 }
