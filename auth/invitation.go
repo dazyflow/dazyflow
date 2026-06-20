@@ -4,12 +4,9 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"git.sr.ht/~klahr/dazyflow/core"
@@ -97,33 +94,18 @@ func MintInvitationToken() (string, error) {
 
 // JSONInvitationStore is the JSON-file backing — same shape as the
 // other dev stores in this package. Tokens unique → keyed directly
-// on token.
+// on token. The load/flush/atomic-write machinery lives in the embedded
+// jsonFileStore.
 type JSONInvitationStore struct {
-	mu    sync.RWMutex
-	path  string
-	items map[string]Invitation
+	*jsonFileStore[string, Invitation]
 }
 
 func OpenJSONInvitationStore(path string) (*JSONInvitationStore, error) {
-	s := &JSONInvitationStore{path: path, items: make(map[string]Invitation)}
-	if path == "" {
-		return s, nil
-	}
-	data, err := os.ReadFile(path)
+	base, err := newJSONFileStore(path, func(i Invitation) string { return i.Token }, nil)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return s, nil
-		}
-		return nil, fmt.Errorf("read %q: %w", path, err)
+		return nil, err
 	}
-	var slice []Invitation
-	if err := json.Unmarshal(data, &slice); err != nil {
-		return nil, fmt.Errorf("parse %q: %w", path, err)
-	}
-	for _, i := range slice {
-		s.items[i.Token] = i
-	}
-	return s, nil
+	return &JSONInvitationStore{base}, nil
 }
 
 func (s *JSONInvitationStore) PutInvitation(_ context.Context, inv Invitation) error {
@@ -227,23 +209,4 @@ func (s *JSONInvitationStore) MarkRevoked(_ context.Context, token string, at ti
 	inv.RevokedAt = &at
 	s.items[token] = inv
 	return s.flushLocked()
-}
-
-func (s *JSONInvitationStore) flushLocked() error {
-	if s.path == "" {
-		return nil
-	}
-	slice := make([]Invitation, 0, len(s.items))
-	for _, i := range s.items {
-		slice = append(slice, i)
-	}
-	data, err := json.MarshalIndent(slice, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, s.path)
 }

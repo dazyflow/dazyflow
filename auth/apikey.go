@@ -22,15 +22,15 @@ const apiKeyPrefix = "dzk_"
 // APIKey is the on-disk record. Hashed secret only — the cleartext is
 // returned exactly once at issue time and never persisted.
 type APIKey struct {
-	ID         string
-	Tenant     string
-	Workspace  string
-	Subject    string
-	Roles      []core.Role
-	Salt       []byte
-	Hash       []byte
-	ExpiresAt  *time.Time
-	RevokedAt  *time.Time
+	ID        string
+	Tenant    string
+	Workspace string
+	Subject   string
+	Roles     []core.Role
+	Salt      []byte
+	Hash      []byte
+	ExpiresAt *time.Time
+	RevokedAt *time.Time
 }
 
 // APIKeyStore is the lookup boundary the Authenticator uses — read-only
@@ -111,7 +111,9 @@ func (a *APIKeyAuthenticator) now() time.Time {
 // to the user, then forget it. expiresAt is optional: nil = never
 // expires (operator-issued, long-lived); a non-nil value stamps the
 // record so the authenticator rejects the key after that time.
-func IssueAPIKey(store interface{ PutKey(context.Context, APIKey) error }, ctx context.Context, id, tenant, workspace, subject string, roles []core.Role, expiresAt *time.Time) (APIKey, string, error) {
+func IssueAPIKey(store interface {
+	PutKey(context.Context, APIKey) error
+}, ctx context.Context, id, tenant, workspace, subject string, roles []core.Role, expiresAt *time.Time) (APIKey, string, error) {
 	if err := validateKeyID(id); err != nil {
 		return APIKey{}, "", err
 	}
@@ -209,17 +211,40 @@ func (m *MemKeyStore) Revoke(_ context.Context, id string, at time.Time) error {
 	return nil
 }
 
+// filterKeys returns every key matching pred, sorted by ID for
+// deterministic output. Holds the read lock for the snapshot.
+func (m *MemKeyStore) filterKeys(pred func(APIKey) bool) []APIKey {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make([]APIKey, 0)
+	for _, k := range m.keys {
+		if pred(k) {
+			out = append(out, k)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
+}
+
+// deleteKeys removes every key matching pred and returns the count.
+// Holds the write lock.
+func (m *MemKeyStore) deleteKeys(pred func(APIKey) bool) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := 0
+	for id, k := range m.keys {
+		if pred(k) {
+			delete(m.keys, id)
+			n++
+		}
+	}
+	return n
+}
+
 // ListAll returns every key in the store. Used by platform admins to
 // derive the tenant catalog (no separate tenants table exists today).
 func (m *MemKeyStore) ListAll(_ context.Context) ([]APIKey, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	out := make([]APIKey, 0, len(m.keys))
-	for _, k := range m.keys {
-		out = append(out, k)
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
-	return out, nil
+	return m.filterKeys(func(APIKey) bool { return true }), nil
 }
 
 // ListByTenant returns every key whose Tenant matches. Keys are
@@ -227,56 +252,20 @@ func (m *MemKeyStore) ListAll(_ context.Context) ([]APIKey, error) {
 // those (the admin UI) should redact them on the way out. Sorted by ID
 // for deterministic test output.
 func (m *MemKeyStore) ListByTenant(_ context.Context, tenant string) ([]APIKey, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	out := make([]APIKey, 0)
-	for _, k := range m.keys {
-		if k.Tenant == tenant {
-			out = append(out, k)
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
-	return out, nil
+	return m.filterKeys(func(k APIKey) bool { return k.Tenant == tenant }), nil
 }
 
 // ListBySubject returns every key issued to a subject (GDPR export).
 func (m *MemKeyStore) ListBySubject(_ context.Context, subject string) ([]APIKey, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	out := make([]APIKey, 0)
-	for _, k := range m.keys {
-		if k.Subject == subject {
-			out = append(out, k)
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
-	return out, nil
+	return m.filterKeys(func(k APIKey) bool { return k.Subject == subject }), nil
 }
 
 // DeleteBySubject hard-deletes every key for a subject (erasure).
 func (m *MemKeyStore) DeleteBySubject(_ context.Context, subject string) (int, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	n := 0
-	for id, k := range m.keys {
-		if k.Subject == subject {
-			delete(m.keys, id)
-			n++
-		}
-	}
-	return n, nil
+	return m.deleteKeys(func(k APIKey) bool { return k.Subject == subject }), nil
 }
 
 // DeleteByTenant hard-deletes every key in a tenant (org deletion).
 func (m *MemKeyStore) DeleteByTenant(_ context.Context, tenant string) (int, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	n := 0
-	for id, k := range m.keys {
-		if k.Tenant == tenant {
-			delete(m.keys, id)
-			n++
-		}
-	}
-	return n, nil
+	return m.deleteKeys(func(k APIKey) bool { return k.Tenant == tenant }), nil
 }
