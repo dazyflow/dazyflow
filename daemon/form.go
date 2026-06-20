@@ -90,15 +90,7 @@ func (w *WebhookListener) handleForm(rw http.ResponseWriter, r *http.Request) {
 			http.Error(rw, "this form's flow has no webhook step to receive it", http.StatusBadRequest)
 			return
 		}
-		principal := core.Principal{
-			Subject:   "dazyflow-form",
-			Tenant:    g.Tenant,
-			Workspace: g.Workspace,
-			Roles: []core.Role{{
-				Name:        "form",
-				Permissions: []core.Permission{core.PermGraphRun, core.PermGraphAdmin},
-			}},
-		}
+		principal := SystemPrincipal("dazyflow-form", g.Tenant, g.Workspace)
 		runID, err := w.svc.SubmitGraphWithSeed(r.Context(), principal, g, seeds)
 		if err != nil {
 			w.logger.Printf("form submit %s/%s/%s: %v", tenant, workspace, graphID, err)

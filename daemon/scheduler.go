@@ -137,15 +137,7 @@ func NewScheduler(svc *Service) *Scheduler {
 			// visibility: an admin who set up a schedule on a private
 			// flow shouldn't have that schedule break because they're
 			// not the active subject at fire time.
-			return core.Principal{
-				Subject:   "dazyflow-scheduler",
-				Tenant:    tenant,
-				Workspace: workspace,
-				Roles: []core.Role{{
-					Name:        "scheduler",
-					Permissions: []core.Permission{core.PermGraphRun, core.PermGraphAdmin},
-				}},
-			}
+			return SystemPrincipal("dazyflow-scheduler", tenant, workspace)
 		},
 	}
 }
@@ -309,47 +301,47 @@ func (s *Scheduler) rescan(ctx context.Context) error {
 				next[k] = entry
 			}
 
-				// poll_trigger NODES carry their interval on the node (same
-				// model as cron_trigger above; poll is no longer a graph-level
-				// trigger). Same overflow/ceiling guard the old graph-level poll
-				// used: reject <= 0 and anything past the 1-year max, since
-				// IntervalSeconds * time.Second overflows int64 ns past ~292y and
-				// would otherwise fire every tick.
-				//
-				// google_form_trigger uses the identical interval mechanism: the
-				// scheduler just fires the graph on the node's interval_seconds,
-				// and the node itself fetches new Form responses since its stored
-				// cursor at execute time (see drops/trigger/gform).
-				for _, node := range g.Nodes {
-					if node.Module != "poll_trigger" && node.Module != "google_form_trigger" {
-						continue
-					}
-					if triggerNodeDisabled(node) {
-						continue // this trigger is individually paused
-					}
-					secs := paramSeconds(node.Params, "interval_seconds")
-					if secs == 0 {
-						continue // unset — runs only on manual Run
-					}
-					if secs < 0 || secs > core.MaxPollIntervalSeconds {
-						s.logger.Printf("bad poll interval %d on node %s of %s/%s/%s",
-							secs, node.ID, tenant, workspace, gid)
-						continue
-					}
-					entry := &scheduledGraph{
-						graphID:   gid,
-						tenant:    tenant,
-						workspace: workspace,
-						interval:  time.Duration(secs) * time.Second,
-					}
-					k := fmt.Sprintf("%s/%s/%s@%s", tenant, workspace, gid, node.ID)
-					if existing, ok := s.tracked[k]; ok && !existing.scheduleAt.IsZero() {
-						entry.scheduleAt = existing.scheduleAt
-					} else {
-						entry.scheduleAt = entry.nextFireFrom(now)
-					}
-					next[k] = entry
+			// poll_trigger NODES carry their interval on the node (same
+			// model as cron_trigger above; poll is no longer a graph-level
+			// trigger). Same overflow/ceiling guard the old graph-level poll
+			// used: reject <= 0 and anything past the 1-year max, since
+			// IntervalSeconds * time.Second overflows int64 ns past ~292y and
+			// would otherwise fire every tick.
+			//
+			// google_form_trigger uses the identical interval mechanism: the
+			// scheduler just fires the graph on the node's interval_seconds,
+			// and the node itself fetches new Form responses since its stored
+			// cursor at execute time (see drops/trigger/gform).
+			for _, node := range g.Nodes {
+				if node.Module != "poll_trigger" && node.Module != "google_form_trigger" {
+					continue
 				}
+				if triggerNodeDisabled(node) {
+					continue // this trigger is individually paused
+				}
+				secs := paramSeconds(node.Params, "interval_seconds")
+				if secs == 0 {
+					continue // unset — runs only on manual Run
+				}
+				if secs < 0 || secs > core.MaxPollIntervalSeconds {
+					s.logger.Printf("bad poll interval %d on node %s of %s/%s/%s",
+						secs, node.ID, tenant, workspace, gid)
+					continue
+				}
+				entry := &scheduledGraph{
+					graphID:   gid,
+					tenant:    tenant,
+					workspace: workspace,
+					interval:  time.Duration(secs) * time.Second,
+				}
+				k := fmt.Sprintf("%s/%s/%s@%s", tenant, workspace, gid, node.ID)
+				if existing, ok := s.tracked[k]; ok && !existing.scheduleAt.IsZero() {
+					entry.scheduleAt = existing.scheduleAt
+				} else {
+					entry.scheduleAt = entry.nextFireFrom(now)
+				}
+				next[k] = entry
+			}
 		}
 	}
 	s.mu.Lock()

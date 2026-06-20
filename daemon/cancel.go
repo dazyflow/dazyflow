@@ -97,14 +97,10 @@ func (s *Service) CancelGraphRun(ctx context.Context, p core.Principal, graphRun
 		return fmt.Errorf("cancel graph record: %w", err)
 	}
 	// Reclaim the run's ephemeral scratch now that it's terminal.
-	// Best-effort, same as the dispatcher's success/failure paths.
-	if s.Engine != nil {
-		if sp, ok := s.Engine.Sandbox.(core.ScratchProvider); ok {
-			if err := sp.RemoveScratch(g.Tenant, g.Workspace, graphRunID); err != nil && s.Logger != nil {
-				s.Logger.Printf("scratch reclaim for cancelled run %s: %v", graphRunID, err)
-			}
-		}
-	}
+	// Best-effort, same as the dispatcher's success/failure paths —
+	// route through the dispatcher's reclaimScratch so the
+	// ScratchProvider assertion lives in exactly one place.
+	NewDispatcher(s.Jobs, s.bus(), s.Engine, s.Logger).reclaimScratch(g, graphRunID)
 	s.bus().Publish(graphRunID, BusEvent{Terminal: &TerminalEvent{
 		JobID:  graphRunID,
 		Status: core.JobStatusCancelled,

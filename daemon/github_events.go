@@ -273,63 +273,8 @@ func (h *GitHubEventsHandler) dispatchPullRequest(tenant string, body []byte, rw
 // graph, and submits a run for any that declares a node with the
 // matching trigger module. Mirrors slack_events.fanoutSeed.
 func (h *GitHubEventsHandler) fanoutSeed(ctx context.Context, tenant, moduleID string, seed core.Result) {
-	workspaces, err := h.svc.Workspaces.List(tenant)
-	if err != nil {
-		h.logger.Printf("list workspaces for %s: %v", tenant, err)
-		return
-	}
-	principal := core.Principal{
-		Subject: "dazyflow-github-events",
-		Tenant:  tenant,
-		Roles: []core.Role{{
-			Name:        "github-events",
-			Permissions: []core.Permission{core.PermGraphRun, core.PermGraphAdmin},
-		}},
-	}
-	for _, ws := range workspaces {
-		store, err := h.svc.Workspaces.Open(tenant, ws)
-		if err != nil {
-			h.logger.Printf("open %s/%s: %v", tenant, ws, err)
-			continue
-		}
-		ids, err := store.ListGraphs()
-		if err != nil {
-			h.logger.Printf("list graphs %s/%s: %v", tenant, ws, err)
-			continue
-		}
-		principal.Workspace = ws
-		for _, id := range ids {
-			// Match + run the published revision (HEAD fallback for
-			// never-published flows): an external event fires the version
-			// that was deliberately published, not a draft.
-			g, err := store.LoadPublishedOrHead(id)
-			if err != nil {
-				h.logger.Printf("load %s/%s/%s: %v", tenant, ws, id, err)
-				continue
-			}
-			// A paused flow must not fire on inbound events — same rule the
-			// /trigger webhook enforces. Skip disabled graphs entirely.
-			if g.Disabled {
-				continue
-			}
-			seeds := map[string]core.Result{}
-			for _, n := range g.Nodes {
-				if n.Module == moduleID {
-					seeds[n.ID] = seed
-				}
-			}
-			if len(seeds) == 0 {
-				continue
-			}
-			runID, err := h.svc.SubmitGraphWithSeed(ctx, principal, g, seeds)
-			if err != nil {
-				h.logger.Printf("submit %s/%s/%s: %v", tenant, ws, id, err)
-				continue
-			}
-			h.logger.Printf("fired %s/%s/%s → %s (%d %s seed(s))",
-				tenant, ws, id, runID, len(seeds), moduleID)
-		}
-	}
+	fanoutSeed(ctx, h.svc, h.logger, "dazyflow-github-events", tenant, moduleID, seed,
+		func(n core.Node) bool { return n.Module == moduleID })
 }
 
 // tenantSecret reads this tenant's own GITHUB_WEBHOOK_SECRET from the
