@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -169,20 +171,7 @@ func errorResultOrErr(err error) (ToolCallResult, error) {
 	}
 	var herr *HTTPError
 	if errors.As(err, &herr) && herr.Status >= 400 && herr.Status < 500 {
-		payload := map[string]any{
-			"status":  herr.Status,
-			"path":    herr.Path,
-			"message": herr.Message,
-		}
-		if herr.Code != "" {
-			payload["code"] = herr.Code
-		}
-		if len(herr.Details) > 0 {
-			payload["details"] = herr.Details
-		}
-		if herr.Doc != "" {
-			payload["doc"] = herr.Doc
-		}
+		payload := herr.ToToolPayload()
 		b, mErr := json.MarshalIndent(payload, "", "  ")
 		if mErr != nil {
 			// Falling back to the flat shape keeps a botched marshal
@@ -195,6 +184,123 @@ func errorResultOrErr(err error) (ToolCallResult, error) {
 		}, nil
 	}
 	return ToolCallResult{}, err
+}
+
+// ─────────────────────────── handler scaffolds ───────────────────────────
+
+// requireStrings extracts the named string args, returning an
+// "<a>, <b>, and <c> are required" error result (matching the legacy
+// per-tool messages) when any is empty. The returned slice is aligned
+// with keys so callers can index positionally.
+//
+// The message phrasing reproduces the prior hand-written errors
+// exactly: a single missing field reads "id is required", two read
+// "name and value are required", three+ use the Oxford-comma "a, b,
+// and c are required" form. Behaviour-preserving — the LLM still sees
+// the same strings.
+func requireStrings(args map[string]any, keys ...string) ([]string, *ToolCallResult) {
+	vals := make([]string, len(keys))
+	for i, k := range keys {
+		vals[i] = stringField(args, k, "")
+	}
+	for _, v := range vals {
+		if v == "" {
+			res := ErrorResult(requiredFieldsMessage(keys))
+			return nil, &res
+		}
+	}
+	return vals, nil
+}
+
+// requiredFieldsMessage renders the "<fields> are required" phrasing
+// shared by every required-field guard, matching the originals:
+//   - 1 field:  "id is required"
+//   - 2 fields: "name and value are required"
+//   - 3+ fields:"run_id, node_id, and decision are required"
+func requiredFieldsMessage(keys []string) string {
+	switch len(keys) {
+	case 0:
+		return "required fields missing"
+	case 1:
+		return keys[0] + " is required"
+	case 2:
+		return keys[0] + " and " + keys[1] + " are required"
+	default:
+		head := keys[:len(keys)-1]
+		return strings.Join(head, ", ") + ", and " + keys[len(keys)-1] + " are required"
+	}
+}
+
+// scopedHandler is the inner body of a scoped tool. It receives the
+// decoded args plus the resolved tenant/workspace; the scaffold has
+// already validated required fields and (when requested) stamped the
+// idempotency key onto ctx. Returning a non-nil error routes through
+// errorResultOrErr just like the hand-written tools did.
+type scopedHandler func(ctx context.Context, c *DazydClient, args map[string]any, tenant, workspace string) (ToolCallResult, error)
+
+// scopedTool builds a Tool whose handler decodes args, validates the
+// declared required string fields, resolves tenant/workspace scope,
+// optionally stamps an Idempotency-Key derived from the tool name +
+// raw args, and maps client errors through errorResultOrErr. The inner
+// func owns the actual request and the success epilogue.
+//
+// This collapses the decode → required-fields → scoped → idempotency →
+// errorResultOrErr boilerplate that every scoped flow tool repeated.
+func scopedTool(c *DazydClient, d Defaults, name, description, schema string, required []string, idempotent bool, fn scopedHandler) Tool {
+	return Tool{
+		Name:        name,
+		Description: description,
+		InputSchema: json.RawMessage(schema),
+		Handler: func(ctx context.Context, raw json.RawMessage) (ToolCallResult, error) {
+			args, err := decodeArgs(raw)
+			if err != nil {
+				return ErrorResult(err.Error()), nil
+			}
+			if _, bad := requireStrings(args, required...); bad != nil {
+				return *bad, nil
+			}
+			tenant, workspace, err := scoped(args, d)
+			if err != nil {
+				return ErrorResult(err.Error()), nil
+			}
+			if idempotent {
+				ctx = withIdempotencyKey(ctx, idempotencyKeyFor(name, raw))
+			}
+			res, err := fn(ctx, c, args, tenant, workspace)
+			if err != nil {
+				return errorResultOrErr(err)
+			}
+			return res, nil
+		},
+	}
+}
+
+// flowPathTool covers the most common scoped shape: a single required
+// "id", a fixed HTTP verb against /me/flows/{flow_id}{suffix}, and a
+// TextResult(out) epilogue. run_flow, get_flow, enable/disable, and
+// validate_flow all reduce to this.
+//
+// verb is one of "GET"/"POST". POST tools default to sending an
+// idempotency key; pass idempotent=false for read-only POSTs (e.g.
+// validate_flow) that the legacy code deliberately left un-keyed.
+func flowPathTool(c *DazydClient, d Defaults, name, description, schema, verb, suffix string, idempotent bool) Tool {
+	return scopedTool(c, d, name, description, schema, []string{"id"}, idempotent,
+		func(ctx context.Context, c *DazydClient, args map[string]any, tenant, workspace string) (ToolCallResult, error) {
+			id := stringField(args, "id", "")
+			path := "/me/flows/" + composeFlowID(tenant, workspace, id) + suffix
+			var out map[string]any
+			var err error
+			switch verb {
+			case "GET":
+				err = c.Get(ctx, path, &out)
+			default: // "POST"
+				err = c.Post(ctx, path, nil, &out)
+			}
+			if err != nil {
+				return ToolCallResult{}, err
+			}
+			return TextResult(out), nil
+		})
 }
 
 // ─────────────────────────── tool definitions ───────────────────────────
@@ -212,17 +318,10 @@ func listIntegrations(c *DazydClient) Tool {
 			if err != nil {
 				return ErrorResult(err.Error()), nil
 			}
-			qs := ""
-			if q := stringField(args, "q", ""); q != "" {
-				qs = "?q=" + pathSegment(q)
-			}
-			if cat := stringField(args, "category", ""); cat != "" {
-				sep := "?"
-				if qs != "" {
-					sep = "&"
-				}
-				qs += sep + "category=" + pathSegment(cat)
-			}
+			qs := buildQuery(map[string]string{
+				"q":        stringField(args, "q", ""),
+				"category": stringField(args, "category", ""),
+			})
 			var out map[string]any
 			if err := c.Get(ctx, "/catalog/integrations"+qs, &out); err != nil {
 				return errorResultOrErr(err)
@@ -272,21 +371,12 @@ func listDrops(c *DazydClient) Tool {
 			if err != nil {
 				return ErrorResult(err.Error()), nil
 			}
-			qs := ""
-			add := func(k, v string) {
-				if v == "" {
-					return
-				}
-				sep := "?"
-				if qs != "" {
-					sep = "&"
-				}
-				qs += sep + k + "=" + pathSegment(v)
-			}
-			add("q", stringField(args, "q", ""))
-			add("category", stringField(args, "category", ""))
-			add("integration", stringField(args, "integration", ""))
-			add("tag", stringField(args, "tag", ""))
+			qs := buildQuery(map[string]string{
+				"q":           stringField(args, "q", ""),
+				"category":    stringField(args, "category", ""),
+				"integration": stringField(args, "integration", ""),
+				"tag":         stringField(args, "tag", ""),
+			})
 			var out map[string]any
 			if err := c.Get(ctx, "/catalog/drops"+qs, &out); err != nil {
 				return errorResultOrErr(err)
@@ -383,17 +473,10 @@ func startConnection(c *DazydClient) Tool {
 			if provider == "" {
 				return ErrorResult("provider is required"), nil
 			}
-			qs := ""
-			if a := stringField(args, "account", ""); a != "" {
-				qs = "?account=" + pathSegment(a)
-			}
-			if rt := stringField(args, "return_to", ""); rt != "" {
-				sep := "?"
-				if qs != "" {
-					sep = "&"
-				}
-				qs += sep + "return_to=" + pathSegment(rt)
-			}
+			qs := buildQuery(map[string]string{
+				"account":   stringField(args, "account", ""),
+				"return_to": stringField(args, "return_to", ""),
+			})
 			var out map[string]any
 			ctx = withIdempotencyKey(ctx, idempotencyKeyFor("start_connection", raw))
 			if err := c.Post(ctx, "/me/connections/"+pathSegment(provider)+"/authorize"+qs, nil, &out); err != nil {
@@ -531,127 +614,63 @@ func disableFlow(c *DazydClient, d Defaults) Tool {
 		"/disable")
 }
 func enableOrDisable(c *DazydClient, d Defaults, name, desc, suffix string) Tool {
-	return Tool{
-		Name:        name,
-		Description: desc,
-		InputSchema: json.RawMessage(`{"type":"object","required":["id"],"properties":{
+	return flowPathTool(c, d, name, desc,
+		`{"type":"object","required":["id"],"properties":{
 			"id":        {"type":"string"},
 			"tenant":    {"type":"string"},
 			"workspace": {"type":"string"}
-		}}`),
-		Handler: func(ctx context.Context, raw json.RawMessage) (ToolCallResult, error) {
-			args, err := decodeArgs(raw)
-			if err != nil {
-				return ErrorResult(err.Error()), nil
-			}
-			id := stringField(args, "id", "")
-			if id == "" {
-				return ErrorResult("id is required"), nil
-			}
-			tenant, workspace, err := scoped(args, d)
-			if err != nil {
-				return ErrorResult(err.Error()), nil
-			}
-			var out map[string]any
-			ctx = withIdempotencyKey(ctx, idempotencyKeyFor(name, raw))
-			if err := c.Post(ctx, "/me/flows/"+composeFlowID(tenant, workspace, id)+suffix, nil, &out); err != nil {
-				return errorResultOrErr(err)
-			}
-			return TextResult(out), nil
-		},
-	}
+		}}`,
+		"POST", suffix, true)
 }
 
 // deleteFlow removes a flow from the workspace. Refuses with 409 if
 // a run is currently in flight on this flow (same lock as save/patch).
 // Idempotent on the wire: a missing flow returns 204.
 func deleteFlow(c *DazydClient, d Defaults) Tool {
-	return Tool{
-		Name:        "delete_flow",
-		Description: "Permanently remove a flow. Use this when the user wants to undo a creation or retire a flow. Refuses (HTTP 409) if a run is currently active on the flow. Idempotent: deleting a missing flow is a no-op.",
-		InputSchema: json.RawMessage(`{"type":"object","required":["id"],"properties":{
+	return scopedTool(c, d, "delete_flow",
+		"Permanently remove a flow. Use this when the user wants to undo a creation or retire a flow. Refuses (HTTP 409) if a run is currently active on the flow. Idempotent: deleting a missing flow is a no-op.",
+		`{"type":"object","required":["id"],"properties":{
 			"id":        {"type":"string"},
 			"tenant":    {"type":"string"},
 			"workspace": {"type":"string"}
-		}}`),
-		Handler: func(ctx context.Context, raw json.RawMessage) (ToolCallResult, error) {
-			args, err := decodeArgs(raw)
-			if err != nil {
-				return ErrorResult(err.Error()), nil
-			}
+		}}`,
+		[]string{"id"}, true,
+		func(ctx context.Context, c *DazydClient, args map[string]any, tenant, workspace string) (ToolCallResult, error) {
 			id := stringField(args, "id", "")
-			if id == "" {
-				return ErrorResult("id is required"), nil
-			}
-			tenant, workspace, err := scoped(args, d)
-			if err != nil {
-				return ErrorResult(err.Error()), nil
-			}
-			ctx = withIdempotencyKey(ctx, idempotencyKeyFor("delete_flow", raw))
 			if err := c.Delete(ctx, "/me/flows/"+composeFlowID(tenant, workspace, id)); err != nil {
-				return errorResultOrErr(err)
+				return ToolCallResult{}, err
 			}
 			return TextResult(map[string]any{"id": id, "deleted": true}), nil
-		},
-	}
+		})
 }
 
 func listFlows(c *DazydClient, d Defaults) Tool {
-	return Tool{
-		Name:        "list_flows",
-		Description: "List flow IDs in a workspace. Use to discover what already exists before creating a new flow.",
-		InputSchema: json.RawMessage(`{"type":"object","properties":{
+	return scopedTool(c, d, "list_flows",
+		"List flow IDs in a workspace. Use to discover what already exists before creating a new flow.",
+		`{"type":"object","properties":{
 			"tenant":    {"type":"string","description":"Tenant slug. Defaults to the bearer's tenant."},
 			"workspace": {"type":"string","description":"Workspace name. Defaults to the bearer's workspace."}
-		}}`),
-		Handler: func(ctx context.Context, raw json.RawMessage) (ToolCallResult, error) {
-			args, err := decodeArgs(raw)
-			if err != nil {
-				return ErrorResult(err.Error()), nil
-			}
-			tenant, workspace, err := scoped(args, d)
-			if err != nil {
-				return ErrorResult(err.Error()), nil
-			}
+		}}`,
+		nil, false,
+		func(ctx context.Context, c *DazydClient, args map[string]any, tenant, workspace string) (ToolCallResult, error) {
 			var out map[string]any
-			path := fmt.Sprintf("/me/flows?tenant=%s&workspace=%s", pathSegment(tenant), pathSegment(workspace))
+			path := "/me/flows" + buildQuery(map[string]string{"tenant": tenant, "workspace": workspace})
 			if err := c.Get(ctx, path, &out); err != nil {
-				return errorResultOrErr(err)
+				return ToolCallResult{}, err
 			}
 			return TextResult(out), nil
-		},
-	}
+		})
 }
 
 func getFlow(c *DazydClient, d Defaults) Tool {
-	return Tool{
-		Name:        "get_flow",
-		Description: "Fetch a flow's full graph payload (nodes, edges, triggers, settings) so you can show the user what's there or build an updated version off it.",
-		InputSchema: json.RawMessage(`{"type":"object","required":["id"],"properties":{
+	return flowPathTool(c, d, "get_flow",
+		"Fetch a flow's full graph payload (nodes, edges, triggers, settings) so you can show the user what's there or build an updated version off it.",
+		`{"type":"object","required":["id"],"properties":{
 			"id":        {"type":"string","description":"Flow ID."},
 			"tenant":    {"type":"string"},
 			"workspace": {"type":"string"}
-		}}`),
-		Handler: func(ctx context.Context, raw json.RawMessage) (ToolCallResult, error) {
-			args, err := decodeArgs(raw)
-			if err != nil {
-				return ErrorResult(err.Error()), nil
-			}
-			id := stringField(args, "id", "")
-			if id == "" {
-				return ErrorResult("id is required"), nil
-			}
-			tenant, workspace, err := scoped(args, d)
-			if err != nil {
-				return ErrorResult(err.Error()), nil
-			}
-			var out map[string]any
-			if err := c.Get(ctx, "/me/flows/"+composeFlowID(tenant, workspace, id), &out); err != nil {
-				return errorResultOrErr(err)
-			}
-			return TextResult(out), nil
-		},
-	}
+		}}`,
+		"GET", "", false)
 }
 
 // saveFlow backs both create_flow and update_flow. The wire shape is
@@ -659,10 +678,8 @@ func getFlow(c *DazydClient, d Defaults) Tool {
 // but exposing two distinct tool names lets the LLM (and the user
 // watching it) signal intent.
 func saveFlow(c *DazydClient, d Defaults, name, description string) Tool {
-	return Tool{
-		Name:        name,
-		Description: description,
-		InputSchema: json.RawMessage(`{
+	return scopedTool(c, d, name, description,
+		`{
 			"type":"object",
 			"required":["id","nodes"],
 			"properties":{
@@ -708,20 +725,10 @@ func saveFlow(c *DazydClient, d Defaults, name, description string) Tool {
 					"items": {"type":"object"}
 				}
 			}
-		}`),
-		Handler: func(ctx context.Context, raw json.RawMessage) (ToolCallResult, error) {
-			args, err := decodeArgs(raw)
-			if err != nil {
-				return ErrorResult(err.Error()), nil
-			}
+		}`,
+		[]string{"id"}, true,
+		func(ctx context.Context, c *DazydClient, args map[string]any, tenant, workspace string) (ToolCallResult, error) {
 			id := stringField(args, "id", "")
-			if id == "" {
-				return ErrorResult("id is required"), nil
-			}
-			tenant, workspace, err := scoped(args, d)
-			if err != nil {
-				return ErrorResult(err.Error()), nil
-			}
 			// Build the body. Path values overwrite anything passed in
 			// args so the resource at /graphs/{t}/{w}/{id} matches the
 			// URL — same rule the gateway already enforces.
@@ -739,15 +746,11 @@ func saveFlow(c *DazydClient, d Defaults, name, description string) Tool {
 				body["edges"] = []any{}
 			}
 			var out map[string]any
-			// Key includes the tool name so retried create_flow vs
-			// update_flow with the same args don't collide on cache.
-			ctx = withIdempotencyKey(ctx, idempotencyKeyFor(name, raw))
 			if err := c.Put(ctx, "/me/flows/"+composeFlowID(tenant, workspace, id), body, &out); err != nil {
-				return errorResultOrErr(err)
+				return ToolCallResult{}, err
 			}
 			return TextResult(out), nil
-		},
-	}
+		})
 }
 
 // patchFlow exposes the gateway's PATCH /me/flows/{id} (RFC 7396 JSON
@@ -762,43 +765,30 @@ func saveFlow(c *DazydClient, d Defaults, name, description string) Tool {
 // `{"nodes":[<full new nodes list>]}` — there is no per-index array
 // merge in RFC 7396.
 func patchFlow(c *DazydClient, d Defaults) Tool {
-	return Tool{
-		Name: "patch_flow",
-		Description: "Apply a JSON Merge Patch (RFC 7396) to an existing flow. " +
-			"Use for incremental edits — the patch body is a sparse subset of the Graph; " +
-			"unspecified keys are left alone, nulls delete, arrays replace wholesale. " +
+	return scopedTool(c, d, "patch_flow",
+		"Apply a JSON Merge Patch (RFC 7396) to an existing flow. "+
+			"Use for incremental edits — the patch body is a sparse subset of the Graph; "+
+			"unspecified keys are left alone, nulls delete, arrays replace wholesale. "+
 			"Refuses with HTTP 409 if a run of this flow is currently in flight.",
-		InputSchema: json.RawMessage(`{"type":"object","required":["id","patch"],"properties":{
+		`{"type":"object","required":["id","patch"],"properties":{
 			"id":        {"type":"string","description":"Flow ID."},
 			"tenant":    {"type":"string"},
 			"workspace": {"type":"string"},
 			"patch":     {"type":"object","description":"Sparse Graph document. Only keys you want to change. Use null to delete a key."}
-		}}`),
-		Handler: func(ctx context.Context, raw json.RawMessage) (ToolCallResult, error) {
-			args, err := decodeArgs(raw)
-			if err != nil {
-				return ErrorResult(err.Error()), nil
-			}
+		}}`,
+		[]string{"id"}, true,
+		func(ctx context.Context, c *DazydClient, args map[string]any, tenant, workspace string) (ToolCallResult, error) {
 			id := stringField(args, "id", "")
-			if id == "" {
-				return ErrorResult("id is required"), nil
-			}
-			tenant, workspace, err := scoped(args, d)
-			if err != nil {
-				return ErrorResult(err.Error()), nil
-			}
 			patch, ok := args["patch"].(map[string]any)
 			if !ok {
 				return ErrorResult("patch must be a JSON object"), nil
 			}
 			var out map[string]any
-			ctx = withIdempotencyKey(ctx, idempotencyKeyFor("patch_flow", raw))
 			if err := c.Patch(ctx, "/me/flows/"+composeFlowID(tenant, workspace, id), patch, &out); err != nil {
-				return errorResultOrErr(err)
+				return ToolCallResult{}, err
 			}
 			return TextResult(out), nil
-		},
-	}
+		})
 }
 
 // validateFlow lints the flow at HEAD without saving. Lets the LLM
@@ -806,36 +796,16 @@ func patchFlow(c *DazydClient, d Defaults) Tool {
 // schema mismatches, orphaned nodes, hardcoded secrets, etc. Returns
 // the same lint shape SaveFlow appends after a write.
 func validateFlow(c *DazydClient, d Defaults) Tool {
-	return Tool{
-		Name:        "validate_flow",
-		Description: "Lint a flow (currently saved version) without running it. Returns {ok, issues:[{severity,node,field,message}]}. Use after create_flow / update_flow / patch_flow to verify the saved shape lints clean before triggering a run.",
-		InputSchema: json.RawMessage(`{"type":"object","required":["id"],"properties":{
+	// Read-only operation: no idempotency key needed (the server won't
+	// dedupe GET-like calls anyway), hence idempotent=false.
+	return flowPathTool(c, d, "validate_flow",
+		"Lint a flow (currently saved version) without running it. Returns {ok, issues:[{severity,node,field,message}]}. Use after create_flow / update_flow / patch_flow to verify the saved shape lints clean before triggering a run.",
+		`{"type":"object","required":["id"],"properties":{
 			"id":        {"type":"string"},
 			"tenant":    {"type":"string"},
 			"workspace": {"type":"string"}
-		}}`),
-		Handler: func(ctx context.Context, raw json.RawMessage) (ToolCallResult, error) {
-			args, err := decodeArgs(raw)
-			if err != nil {
-				return ErrorResult(err.Error()), nil
-			}
-			id := stringField(args, "id", "")
-			if id == "" {
-				return ErrorResult("id is required"), nil
-			}
-			tenant, workspace, err := scoped(args, d)
-			if err != nil {
-				return ErrorResult(err.Error()), nil
-			}
-			var out map[string]any
-			// Read-only operation: no idempotency key needed (the server
-			// won't dedupe GET-like calls anyway).
-			if err := c.Post(ctx, "/me/flows/"+composeFlowID(tenant, workspace, id)+"/validate", nil, &out); err != nil {
-				return errorResultOrErr(err)
-			}
-			return TextResult(out), nil
-		},
-	}
+		}}`,
+		"POST", "/validate", false)
 }
 
 // validateGraph dry-runs the lint over a Graph JSON document without
@@ -874,37 +844,24 @@ func validateGraph(c *DazydClient) Tool {
 // supplied JSON payload — exactly as a real /trigger or /form POST
 // would — and returns the run ID to observe.
 func testTriggerFlow(c *DazydClient, d Defaults) Tool {
-	return Tool{
-		Name:        "test_trigger_flow",
-		Description: "Fire a flow as if a webhook/form trigger had received the supplied JSON payload. Returns the run ID. Use this to verify a trigger-driven flow without exposing it to real traffic.",
-		InputSchema: json.RawMessage(`{"type":"object","required":["id","payload"],"properties":{
+	return scopedTool(c, d, "test_trigger_flow",
+		"Fire a flow as if a webhook/form trigger had received the supplied JSON payload. Returns the run ID. Use this to verify a trigger-driven flow without exposing it to real traffic.",
+		`{"type":"object","required":["id","payload"],"properties":{
 			"id":        {"type":"string"},
 			"tenant":    {"type":"string"},
 			"workspace": {"type":"string"},
 			"payload":   {"description":"JSON payload to seed the trigger node with. Object, array, or primitive."}
-		}}`),
-		Handler: func(ctx context.Context, raw json.RawMessage) (ToolCallResult, error) {
-			args, err := decodeArgs(raw)
-			if err != nil {
-				return ErrorResult(err.Error()), nil
-			}
+		}}`,
+		[]string{"id"}, true,
+		func(ctx context.Context, c *DazydClient, args map[string]any, tenant, workspace string) (ToolCallResult, error) {
 			id := stringField(args, "id", "")
-			if id == "" {
-				return ErrorResult("id is required"), nil
-			}
-			tenant, workspace, err := scoped(args, d)
-			if err != nil {
-				return ErrorResult(err.Error()), nil
-			}
 			body := map[string]any{"payload": args["payload"]}
 			var out map[string]any
-			ctx = withIdempotencyKey(ctx, idempotencyKeyFor("test_trigger_flow", raw))
 			if err := c.Post(ctx, "/me/flows/"+composeFlowID(tenant, workspace, id)+"/test-trigger", body, &out); err != nil {
-				return errorResultOrErr(err)
+				return ToolCallResult{}, err
 			}
 			return TextResult(out), nil
-		},
-	}
+		})
 }
 
 // sampleNode executes a single node with synthetic input so the LLM
@@ -912,76 +869,42 @@ func testTriggerFlow(c *DazydClient, d Defaults) Tool {
 // running the whole flow. Useful for debugging during authoring or
 // for the LLM to reason about a transformation node's behavior.
 func sampleNode(c *DazydClient, d Defaults) Tool {
-	return Tool{
-		Name:        "sample_node",
-		Description: "Run a single node in isolation with the supplied input map and return its output. Inputs are keyed by port name. Used for debugging a node mid-flow without running the upstream chain.",
-		InputSchema: json.RawMessage(`{"type":"object","required":["id","node_id"],"properties":{
+	return scopedTool(c, d, "sample_node",
+		"Run a single node in isolation with the supplied input map and return its output. Inputs are keyed by port name. Used for debugging a node mid-flow without running the upstream chain.",
+		`{"type":"object","required":["id","node_id"],"properties":{
 			"id":        {"type":"string","description":"Flow ID."},
 			"tenant":    {"type":"string"},
 			"workspace": {"type":"string"},
 			"node_id":   {"type":"string"},
 			"inputs":    {"type":"object","description":"Map of input-port-name → value. Optional; defaults to empty."}
-		}}`),
-		Handler: func(ctx context.Context, raw json.RawMessage) (ToolCallResult, error) {
-			args, err := decodeArgs(raw)
-			if err != nil {
-				return ErrorResult(err.Error()), nil
-			}
+		}}`,
+		[]string{"id", "node_id"}, true,
+		func(ctx context.Context, c *DazydClient, args map[string]any, tenant, workspace string) (ToolCallResult, error) {
 			id := stringField(args, "id", "")
 			nodeID := stringField(args, "node_id", "")
-			if id == "" || nodeID == "" {
-				return ErrorResult("id and node_id are required"), nil
-			}
-			tenant, workspace, err := scoped(args, d)
-			if err != nil {
-				return ErrorResult(err.Error()), nil
-			}
 			body := map[string]any{}
 			if inputs, ok := args["inputs"].(map[string]any); ok {
 				body["inputs"] = inputs
 			}
 			var out map[string]any
-			ctx = withIdempotencyKey(ctx, idempotencyKeyFor("sample_node", raw))
 			path := "/me/flows/" + composeFlowID(tenant, workspace, id) +
 				"/nodes/" + pathSegment(nodeID) + "/sample"
 			if err := c.Post(ctx, path, body, &out); err != nil {
-				return errorResultOrErr(err)
+				return ToolCallResult{}, err
 			}
 			return TextResult(out), nil
-		},
-	}
+		})
 }
 
 func runFlow(c *DazydClient, d Defaults) Tool {
-	return Tool{
-		Name:        "run_flow",
-		Description: "Submit a run of an existing flow. Returns the run ID; pair with wait_for_run or get_run to observe outcome.",
-		InputSchema: json.RawMessage(`{"type":"object","required":["id"],"properties":{
+	return flowPathTool(c, d, "run_flow",
+		"Submit a run of an existing flow. Returns the run ID; pair with wait_for_run or get_run to observe outcome.",
+		`{"type":"object","required":["id"],"properties":{
 			"id":        {"type":"string"},
 			"tenant":    {"type":"string"},
 			"workspace": {"type":"string"}
-		}}`),
-		Handler: func(ctx context.Context, raw json.RawMessage) (ToolCallResult, error) {
-			args, err := decodeArgs(raw)
-			if err != nil {
-				return ErrorResult(err.Error()), nil
-			}
-			id := stringField(args, "id", "")
-			if id == "" {
-				return ErrorResult("id is required"), nil
-			}
-			tenant, workspace, err := scoped(args, d)
-			if err != nil {
-				return ErrorResult(err.Error()), nil
-			}
-			var out map[string]any
-			ctx = withIdempotencyKey(ctx, idempotencyKeyFor("run_flow", raw))
-			if err := c.Post(ctx, "/me/flows/"+composeFlowID(tenant, workspace, id)+"/run", nil, &out); err != nil {
-				return errorResultOrErr(err)
-			}
-			return TextResult(out), nil
-		},
-	}
+		}}`,
+		"POST", "/run", true)
 }
 
 func cancelRun(c *DazydClient) Tool {
@@ -1061,19 +984,19 @@ func listRuns(c *DazydClient, d Defaults) Tool {
 			status := stringField(args, "status", "")
 			limit := intField(args, "limit", 50)
 
+			qs := buildQuery(map[string]string{
+				"limit":  strconv.Itoa(limit),
+				"status": status,
+			})
 			var path string
 			if flowID != "" {
 				tenant, workspace, err := scoped(args, d)
 				if err != nil {
 					return ErrorResult(err.Error()), nil
 				}
-				path = fmt.Sprintf("/me/flows/%s/runs?limit=%d",
-					composeFlowID(tenant, workspace, flowID), limit)
+				path = "/me/flows/" + composeFlowID(tenant, workspace, flowID) + "/runs" + qs
 			} else {
-				path = fmt.Sprintf("/me/runs?limit=%d", limit)
-			}
-			if status != "" {
-				path += "&status=" + pathSegment(status)
+				path = "/me/runs" + qs
 			}
 			var out map[string]any
 			if err := c.Get(ctx, path, &out); err != nil {
@@ -1175,17 +1098,10 @@ func listPendingApprovals(c *DazydClient, d Defaults) Tool {
 			if err != nil {
 				return ErrorResult(err.Error()), nil
 			}
-			tenant := stringField(args, "tenant", d.Tenant)
-			workspace := stringField(args, "workspace", d.Workspace)
-			path := "/approvals/pending"
-			sep := "?"
-			if tenant != "" {
-				path += sep + "tenant=" + pathSegment(tenant)
-				sep = "&"
-			}
-			if workspace != "" {
-				path += sep + "workspace=" + pathSegment(workspace)
-			}
+			path := "/approvals/pending" + buildQuery(map[string]string{
+				"tenant":    stringField(args, "tenant", d.Tenant),
+				"workspace": stringField(args, "workspace", d.Workspace),
+			})
 			var out map[string]any
 			if err := c.Get(ctx, path, &out); err != nil {
 				return errorResultOrErr(err)
@@ -1216,11 +1132,11 @@ func approveNode(c *DazydClient) Tool {
 			if runID == "" || nodeID == "" || decision == "" {
 				return ErrorResult("run_id, node_id, and decision are required"), nil
 			}
-			path := fmt.Sprintf("/approvals/%s/%s?decision=%s",
-				pathSegment(runID), pathSegment(nodeID), pathSegment(decision))
-			if c := stringField(args, "comment", ""); c != "" {
-				path += "&comment=" + pathSegment(c)
-			}
+			path := "/approvals/" + pathSegment(runID) + "/" + pathSegment(nodeID) +
+				buildQuery(map[string]string{
+					"decision": decision,
+					"comment":  stringField(args, "comment", ""),
+				})
 			var out map[string]any
 			ctx = withIdempotencyKey(ctx, idempotencyKeyFor("approve_node", raw))
 			if err := c.Post(ctx, path, nil, &out); err != nil {
