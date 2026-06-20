@@ -21,6 +21,13 @@ import type { Graph, OAuthProviderStatus, TemplateSummary } from "../types";
 // The gallery itself is static (web/public/templates/index.json).
 // Adding a template is a JSON file + a one-line index entry; no
 // daemon code change.
+
+// SHARED_NTFY_PLACEHOLDER is the topic the ntfy template ships with.
+// It's a guessable, world-readable shared topic, so useTemplate swaps
+// it for an unguessable per-fork topic on fork (see the nodes map below).
+// Kept in sync with web/public/templates/daily-reminder-ntfy.json.
+const SHARED_NTFY_PLACEHOLDER = "my-daily-hello";
+
 export function Templates() {
   const { t } = useTranslation();
   const { token, activeTenant, activeWorkspace, hasPerm } = useAuth();
@@ -112,14 +119,38 @@ export function Templates() {
         // owner intentionally left blank — the daemon stamps the
         // caller as owner on first save.
         owner: "",
-        // Stamp the forker's time zone onto Schedule (cron_trigger) nodes that
-        // ship without one. Templates are zone-neutral (a shared "0 9 * * *"
-        // means 9am wherever you are), so the fork is where it gets personalised
-        // — otherwise both the schedule and its fired_at would run in UTC.
+        // Per-fork personalisation of nodes that ship a placeholder default:
+        //  - cron_trigger: stamp the forker's time zone. Templates are
+        //    zone-neutral (a shared "0 9 * * *" means 9am wherever you are),
+        //    so the fork is where it gets personalised — otherwise both the
+        //    schedule and its fired_at would run in UTC.
+        //  - ntfy: stamp a unique topic. ntfy topics are world-readable —
+        //    anyone who knows the topic can read (and publish to) it — and
+        //    templates ship a shared placeholder topic, so every fork would
+        //    otherwise push to (and receive) the same global ntfy.sh topic.
+        //    Give each fork an unguessable topic; the user can still change
+        //    it in the editor.
         nodes: (tplGraph.nodes ?? []).map((n) => {
-          const tz = (n.params as { tz?: unknown } | undefined)?.tz;
-          if (n.module === "cron_trigger" && !(typeof tz === "string" && tz.trim())) {
-            return { ...n, params: { ...(n.params ?? {}), tz: browserTimeZone() } };
+          if (n.module === "cron_trigger") {
+            const tz = (n.params as { tz?: unknown } | undefined)?.tz;
+            if (!(typeof tz === "string" && tz.trim())) {
+              return { ...n, params: { ...(n.params ?? {}), tz: browserTimeZone() } };
+            }
+            return n;
+          }
+          if (n.module === "ntfy") {
+            const topic = (n.params as { topic?: unknown } | undefined)?.topic;
+            const t = typeof topic === "string" ? topic.trim() : "";
+            if (t === "" || t === SHARED_NTFY_PLACEHOLDER) {
+              return {
+                ...n,
+                params: {
+                  ...(n.params ?? {}),
+                  topic: `dazyflow-${crypto.randomUUID().slice(0, 8)}`,
+                },
+              };
+            }
+            return n;
           }
           return n;
         }),

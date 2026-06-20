@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Plus, Workflow, Lock, Globe, Sparkles } from "lucide-react";
+import { Plus, Workflow, Lock, Globe, Sparkles, Clock, Pause, Play } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
@@ -9,8 +9,14 @@ import { FlowStatusChip } from "../components/FlowStatusChip";
 import { CreateWithAIModal } from "../components/CreateWithAIModal";
 import { isImageIcon } from "../lib/iconImage";
 import { shouldShowTenantID } from "../lib/visibleTenant";
+import {
+  describeSchedule,
+  formatNextRun,
+  summarizeFlowSchedule,
+  type FlowSchedule,
+} from "../lib/schedule";
 import { userScope } from "../recentFlow";
-import type { FlowSummary, Graph } from "../types";
+import type { FlowSummary, Graph, ScheduleEntry } from "../types";
 
 // HAS_FLOWS_KEY mirrors the key App.tsx's RootRedirect reads when
 // deciding whether a bare-root visit lands on /welcome or /flows.
@@ -32,6 +38,11 @@ export function FlowList() {
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [aiCreating, setAiCreating] = useState(false);
+  // Schedules fold-in: the standalone Schedules page is gone — its
+  // workspace-wide overview + per-trigger pause/resume now live on each
+  // scheduled flow's card below.
+  const [schedules, setSchedules] = useState<ScheduleEntry[]>([]);
+  const [schedBusy, setSchedBusy] = useState<string | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -75,6 +86,56 @@ export function FlowList() {
     // without it, switching to an org whose workspace has the same name never
     // re-runs this effect and the previous org's flows persist.
   }, [token, me, activeTenant, activeWorkspace]);
+
+  // Load the workspace's schedules (cron/poll triggers + next-run preview)
+  // and group them by flow. Non-blocking: a failure here just omits the
+  // schedule chips, it never blanks the flow list.
+  const loadSchedules = useCallback(() => {
+    if (!token || !activeWorkspace) return;
+    api
+      .listSchedules(token, {
+        tenant: activeTenant || undefined,
+        workspace: activeWorkspace || undefined,
+      })
+      .then((r) => setSchedules(r.schedules ?? []))
+      .catch(() => setSchedules([]));
+  }, [token, activeTenant, activeWorkspace]);
+  useEffect(loadSchedules, [loadSchedules]);
+
+  const scheduleByFlow = useMemo(() => {
+    const m = new Map<string, ScheduleEntry[]>();
+    for (const s of schedules) {
+      const arr = m.get(s.graph_id);
+      if (arr) arr.push(s);
+      else m.set(s.graph_id, [s]);
+    }
+    return m;
+  }, [schedules]);
+
+  // Pause/resume a flow's scheduling as a whole: if anything is currently
+  // firing, pause every active trigger; otherwise resume every
+  // per-trigger-paused one. (Flow-level pauses can't be lifted per-trigger,
+  // so summarizeFlowSchedule already excludes those node ids.)
+  const toggleFlowSchedule = async (flowId: string, sum: FlowSchedule) => {
+    if (!token || schedBusy) return;
+    setSchedBusy(flowId);
+    const tn = activeTenant || me?.tenant || "";
+    const ws = activeWorkspace || "";
+    const targets = sum.active ? sum.activeNodeIds : sum.pausedNodeIds;
+    const enabled = !sum.active;
+    try {
+      await Promise.all(
+        targets.map((nodeId) =>
+          api.setTriggerEnabled(token, tn, ws, flowId, nodeId, enabled),
+        ),
+      );
+      loadSchedules();
+    } catch {
+      /* leave state as-is; a failed toggle simply doesn't change it */
+    } finally {
+      setSchedBusy(null);
+    }
+  };
 
   // createNew is called by the modal with a human name (+ optional
   // description). The machine ID is derived from the name so the user
@@ -198,6 +259,11 @@ export function FlowList() {
           const isPrivate = f.visibility === "private";
           const ownedByMe = !!me && f.owner === me.subject;
           const displayName = f.name || f.id;
+          const schedEntries = scheduleByFlow.get(f.id);
+          const sched =
+            schedEntries && schedEntries.length
+              ? summarizeFlowSchedule(schedEntries)
+              : null;
           return (
             <Link
               key={f.id}
@@ -251,6 +317,14 @@ export function FlowList() {
                     </span>
                   )}
                 </div>
+                {sched && (
+                  <FlowScheduleChip
+                    sum={sched}
+                    canEdit={canEdit}
+                    busy={schedBusy === f.id}
+                    onToggle={() => toggleFlowSchedule(f.id, sched)}
+                  />
+                )}
                 {f.description && (
                   <div
                     className="meta"
@@ -271,6 +345,64 @@ export function FlowList() {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// FlowScheduleChip is the per-flow schedule summary that replaced the
+// standalone Schedules page: the cadence, the next run (or paused state),
+// and an inline pause/resume that flips every trigger on the flow at once.
+// The card is a <Link>, so the toggle stops click propagation to avoid
+// navigating. The toggle is gated on graph:edit — viewers just read status.
+function FlowScheduleChip({
+  sum,
+  canEdit,
+  busy,
+  onToggle,
+}: {
+  sum: FlowSchedule;
+  canEdit: boolean;
+  busy: boolean;
+  onToggle: () => void;
+}) {
+  const { t } = useTranslation();
+  const cadence = describeSchedule(sum.entries[0], t);
+  let statusText: string;
+  let resume = false;
+  let showToggle = false;
+  if (sum.flowDisabled) {
+    statusText = t("schedules.flowPaused");
+  } else if (sum.active) {
+    statusText = sum.nextRun
+      ? t("flowList.nextRun", { when: formatNextRun(sum.nextRun) })
+      : t("schedules.never");
+    showToggle = canEdit;
+  } else {
+    statusText = t("schedules.paused");
+    resume = true;
+    showToggle = canEdit;
+  }
+  return (
+    <div className={"flow-schedule" + (sum.active ? "" : " is-paused")}>
+      <Clock size={12} className="flow-schedule-icon" />
+      <span className="flow-schedule-cadence">{cadence}</span>
+      <span className="flow-schedule-status">{statusText}</span>
+      {showToggle && (
+        <button
+          type="button"
+          className="flow-schedule-toggle"
+          disabled={busy}
+          title={resume ? t("schedules.resume") : t("schedules.pause")}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onToggle();
+          }}
+        >
+          {resume ? <Play size={12} /> : <Pause size={12} />}
+          {resume ? t("schedules.resume") : t("schedules.pause")}
+        </button>
+      )}
     </div>
   );
 }

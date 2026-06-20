@@ -43,15 +43,16 @@ const GOALS: {
 const DEV_CATEGORY = "For developer teams";
 
 // QUICKSTART_TEMPLATE is the one zero-setup flow we put front-and-centre
-// above the goal grid: a daily ntfy push needs no admin, no OAuth, no
-// external account — just a topic name. The goal cards mostly route to
-// templates gated behind Slack/Gmail, so a brand-new owner with nothing
-// connected could otherwise dead-end. This deep-links straight to that
-// single template via /templates?template=<id> (the focus param the
-// Templates page filters on) so it lands on the card, not buried in a
-// category list. Must match the template `id` in
+// above the goal grid. It must produce a visible result on a single Run
+// click with nothing connected — `instant-summary` feeds a built-in
+// sample dataset into a render step and shows the output right in the
+// editor, so a brand-new owner sees a flow *work* before meeting any
+// OAuth/secret wall the goal cards mostly route into. This deep-links
+// straight to that single template via /templates?template=<id> (the
+// focus param the Templates page filters on) so it lands on the card,
+// not buried in a category list. Must match the template `id` in
 // public/templates/index.json.
-const QUICKSTART_TEMPLATE = "daily-reminder-ntfy";
+const QUICKSTART_TEMPLATE = "instant-summary";
 
 // HAS_FLOWS_KEY mirrors App.tsx's RootRedirect signal. We read it
 // to decide between first-time and returning copy: a user who's

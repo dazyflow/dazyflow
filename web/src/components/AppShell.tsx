@@ -9,7 +9,6 @@ import {
   ShieldCheck,
   Activity,
   Table2,
-  CalendarClock,
   Gauge,
   Inbox,
   ChevronDown,
@@ -19,7 +18,6 @@ import {
   Building2,
   Boxes,
   LayoutTemplate,
-  Key,
   Settings as SettingsIcon,
   MoreVertical,
   X,
@@ -514,20 +512,6 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Table2 size={18} />
             <span className="nav-label">{t("nav.results")}</span>
           </NavLink>
-          <NavLink
-            to="/schedules"
-            title={t("nav.schedules")}
-          >
-            <CalendarClock size={18} />
-            <span className="nav-label">{t("nav.schedules")}</span>
-          </NavLink>
-          <NavLink
-            to="/usage"
-            title={t("nav.usage")}
-          >
-            <Gauge size={18} />
-            <span className="nav-label">{t("nav.usage")}</span>
-          </NavLink>
           {/* Files is an authoring surface (workspace inputs/outputs), gated to
               editors/admins like Secrets — viewers (graph:run only) don't see
               it and can't browse/download. */}
@@ -560,27 +544,18 @@ export function AppShell({ children }: { children: ReactNode }) {
               )}
             </NavLink>
           )}
-          <div className="group-label">{t("nav.appsGroup")}</div>
-          {/* "Secrets" only appears for users who can actually manage
-              them (secret:write — the editor role has it, viewers don't).
-              Without it the page is just hidden sections, so we keep it
-              out of the menu rather than show a non-techie a dead
-              surface. */}
-          {hasPerm("secret:write") && (
-            <NavLink
-              to="/secrets"
-              title={t("nav.connections")}
-            >
-              <Key size={18} />
-              <span className="nav-label">{t("nav.connections")}</span>
-            </NavLink>
-          )}
+          {/* Connections merges the old "Apps" (integration catalog) and
+              "Secrets" (raw credential vault) nav items into one tabbed
+              hub — both answered "what's connected / what needs setup?",
+              so two siblings were just confusing. Shown to everyone: the
+              catalog is viewable by all, and the Secrets tab gates its own
+              write controls on secret:write internally. */}
           <NavLink
-            to="/apps"
-            title={t("nav.integrations")}
+            to="/connections"
+            title={t("nav.connections")}
           >
             <Boxes size={18} />
-            <span className="nav-label">{t("nav.integrations")}</span>
+            <span className="nav-label">{t("nav.connections")}</span>
           </NavLink>
           <div className="sidebar-spacer" />
           {/* Classical collapse arrow. Duplicates the hamburger's
@@ -821,6 +796,21 @@ function AccountMenu({
             >
               <SettingsIcon size={14} />
               {t("account.settings")}
+            </button>
+            {/* Usage (plan + consumption) moved out of the primary sidebar
+                into the account menu — it's billing/account info, not a
+                workspace surface a first-time user needs in their face. */}
+            <button
+              type="button"
+              role="menuitem"
+              className="workspace-pop-row account-pop-row"
+              onClick={() => {
+                setOpen(false);
+                navigate("/usage");
+              }}
+            >
+              <Gauge size={14} />
+              {t("nav.usage")}
             </button>
             {showAdmin && (
               <button

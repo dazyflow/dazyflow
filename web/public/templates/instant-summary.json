@@ -1,0 +1,30 @@
+{
+  "id": "instant-summary",
+  "version": "1",
+  "name": "See a flow run",
+  "description": "A built-in sample dataset flows into a Render-text step that turns the rows into a tidy summary. No accounts, no triggers, no configuration — just press Run to see output appear. The ideal first flow.",
+  "icon": "sparkles",
+  "nodes": [
+    {
+      "id": "data",
+      "module": "json",
+      "params": {
+        "json": "[{\"region\":\"North\",\"orders\":42},{\"region\":\"South\",\"orders\":37},{\"region\":\"East\",\"orders\":51},{\"region\":\"West\",\"orders\":29}]"
+      },
+      "position": { "x": 240, "y": 200 }
+    },
+    {
+      "id": "summary",
+      "module": "render_text",
+      "params": {
+        "template": "'• ' + row.region + ': ' + string(row.orders) + ' orders'",
+        "prefix": "Orders by region\n\n",
+        "separator": "\n"
+      },
+      "position": { "x": 560, "y": 200 }
+    }
+  ],
+  "edges": [
+    {"from": "data", "from_port": "out", "to": "summary", "to_port": "rows", "on_error": ""}
+  ]
+}

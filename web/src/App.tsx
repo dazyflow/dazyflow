@@ -6,15 +6,14 @@ import { SignIn } from "./pages/SignIn";
 import { SignUp } from "./pages/SignUp";
 import { Welcome } from "./pages/Welcome";
 import { Templates } from "./pages/Templates";
-import { Apps, AppDetail } from "./pages/Apps";
-import { Secrets } from "./pages/Secrets";
+import { AppDetail } from "./pages/Apps";
+import { Connections } from "./pages/Connections";
 import { Files } from "./pages/Files";
 import { FlowList } from "./pages/FlowList";
 import { FlowEditor } from "./pages/FlowEditor";
 import { RunList } from "./pages/RunList";
 import { RunDetail } from "./pages/RunDetail";
 import { Results } from "./pages/Results";
-import { Schedules } from "./pages/Schedules";
 import { Approvals } from "./pages/Approvals";
 import { Usage } from "./pages/Usage";
 import { VerifyEmail } from "./pages/VerifyEmail";
@@ -74,13 +73,20 @@ export function App() {
           element={<LegacyPipelineRedirect />}
         />
         <Route path="/templates" element={<Templates />} />
-        <Route path="/secrets" element={<Secrets />} />
+        <Route path="/connections" element={<Connections />} />
+        {/* Apps + Secrets merged into the tabbed /connections hub. These
+            redirects keep old bookmarks and the editor's
+            /secrets?focus=NAME credential deep-link working — the query
+            string (focus) is preserved and the right tab is selected. */}
+        <Route path="/secrets" element={<ConnectionsRedirect tab="secrets" />} />
+        <Route path="/apps" element={<ConnectionsRedirect tab="apps" />} />
         <Route path="/files" element={<Files />} />
-        <Route path="/apps" element={<Apps />} />
         <Route path="/apps/:slug" element={<AppDetail />} />
         <Route path="/runs" element={<RunList />} />
         <Route path="/results" element={<Results />} />
-        <Route path="/schedules" element={<Schedules />} />
+        {/* Schedules folded into the flow list (per-flow status + pause/
+            resume). Redirect keeps old bookmarks landing somewhere useful. */}
+        <Route path="/schedules" element={<Navigate to="/flows" replace />} />
         <Route path="/runs/:runID" element={<RunDetail />} />
         <Route path="/approvals" element={<Approvals />} />
         <Route path="/usage" element={<Usage />} />
@@ -167,4 +173,15 @@ function LegacyPipelineRedirect() {
       replace
     />
   );
+}
+
+// ConnectionsRedirect sends the old /apps and /secrets paths to the
+// merged /connections hub, selecting the right tab and preserving any
+// existing query string (notably the editor's ?focus=NAME on /secrets,
+// which the Secrets tab still consumes).
+function ConnectionsRedirect({ tab }: { tab: "apps" | "secrets" }) {
+  const loc = useLocation();
+  const params = new URLSearchParams(loc.search);
+  params.set("tab", tab);
+  return <Navigate to={{ pathname: "/connections", search: `?${params}` }} replace />;
 }

@@ -1,6 +1,18 @@
 {
   "templates": [
     {
+      "id": "instant-summary",
+      "title": "See a flow run instantly (no setup)",
+      "use_case": "Click Use, then press Run — a formatted summary appears right away. The fastest way to watch a flow work end to end, with nothing to connect.",
+      "category": "Spreadsheets & data",
+      "description": "A built-in sample dataset (JSON) flows into a Render-text step that turns the rows into a tidy bullet-point summary. No accounts, no triggers, no configuration — fork it and hit Run to see output immediately. The ideal first flow.",
+      "icon": "sparkles",
+      "tags": ["starter", "no-setup", "demo", "instant", "summary"],
+      "integrations": [],
+      "no_setup": true,
+      "graph_file": "/templates/instant-summary.json"
+    },
+    {
       "id": "webhook-to-slack",
       "title": "Website form → Slack message",
       "use_case": "Get a Slack message the moment an external system fires a webhook at you, so no event slips through.",

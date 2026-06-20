@@ -74,12 +74,12 @@
     "templates": "Mallar",
     "flows": "Flöden",
     "runs": "Körningar",
-    "results": "Resultat",
+    "results": "Data",
     "schedules": "Scheman",
     "usage": "Förbrukning",
     "files": "Filer",
     "approvals": "Godkännanden",
-    "connections": "Hemligheter",
+    "connections": "Anslutningar",
     "integrations": "Appar",
     "admin": "Admin",
     "toggleNav": "växla navigering",
@@ -303,8 +303,8 @@
     "inTenant": " i organisation <0>{{tenant}}</0>",
     "continueTitle": "Fortsätt där du slutade",
     "intro": "Så, vad bygger vi idag?",
-    "featuredTitle": "Snabbaste starten — inga konton att ansluta",
-    "featuredDesc": "Skicka en daglig push-notis till dig själv med ntfy. Välj ett ämne, prenumerera i den kostnadsfria appen, så är du klar på ungefär två minuter.",
+    "featuredTitle": "Se ett flöde köra — med ett klick",
+    "featuredDesc": "Öppna startflödet och tryck på Kör. En formaterad sammanfattning visas direkt — inga konton, ingen konfiguration, inget att ansluta. Snabbaste sättet att se hur flöden fungerar.",
     "featuredCta": "Prova det",
     "goalNotifyTitle": "Få en notis när något händer",
     "goalNotifyDesc": "Ett nytt formulärsvar, mejl eller rad → ett Slack-meddelande.",
@@ -388,7 +388,8 @@
     "privateOwnedBy": "Privat — ägs av {{owner}}",
     "orgTooltip": "Synlig för alla i den här arbetsytan",
     "ownerLabel": "Ägare:",
-    "needEdit": "Du behöver redigeringsbehörighet för att skapa flöden."
+    "needEdit": "Du behöver redigeringsbehörighet för att skapa flöden.",
+    "nextRun": "Nästa körning {{when}}"
   },
   "settings": {
     "title": "Flödesinställningar",
@@ -557,6 +558,8 @@
   },
   "connections": {
     "title": "Hemligheter",
+    "tabApps": "Appar",
+    "tabSecrets": "Hemligheter",
     "intro": "Hemligheter låter dig hantera återanvändbar konfigurationsdata. De är krypterade och används för känsliga värden som API-nycklar, tokens och databas-URL:er — skrivskyddade, så ett värde visas aldrig igen efter att du sparat det. För att ansluta en app som Slack eller Gmail, använd Appar-sidan.",
     "scopeHelp": "De här hemligheterna är tillgängliga för alla flöden i din organisation. Ett enskilt flöde kan åsidosätta en med sin egen — ange dem under flödets Inställningar → Hemligheter.",
     "setupIncompleteTitle": "Servern är inte färdigkonfigurerad ännu",
@@ -665,6 +668,8 @@
     "subtitle": "Organisation <0>{{tenant}}</0> · arbetsyta <1>{{workspace}}</1>",
     "anyWorkspace": "(alla)",
     "groupOrg": "Organisation",
+    "groupAdvanced": "Avancerat",
+    "advancedHint": "Integrationer, enkel inloggning, granskningslogg och andra inställningar som de flesta team ställer in en gång eller aldrig.",
     "groupPlatform": "Plattform",
     "groupSystem": "System",
     "system": {

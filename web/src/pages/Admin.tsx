@@ -14,6 +14,8 @@ import {
   CircleArrowUp,
   CheckCircle2,
   AlertTriangle,
+  ChevronRight,
+  ChevronDown,
 } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
@@ -27,9 +29,32 @@ import { orgDisplayName } from "../lib/orgDisplayName";
 // the grouping rather than per-card text. Role gate accepts organization:admin
 // (the right one) or graph:admin (a coarser fallback so power users who
 // set the system up land here before refining roles).
+// ADV_KEY persists whether the "Advanced" section is expanded. It
+// defaults collapsed so the first thing an admin sees is the short
+// everyday list (People / Organization / API keys); the enterprise +
+// connection settings most teams touch once or never sit one click away.
+const ADV_KEY = "dazyflow.admin.advancedOpen";
+
 export function Admin() {
   const { t } = useTranslation();
   const { me, hasPerm, activeTenant, activeWorkspace } = useAuth();
+  const [advancedOpen, setAdvancedOpen] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(ADV_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleAdvanced = () =>
+    setAdvancedOpen((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem(ADV_KEY, next ? "1" : "0");
+      } catch {
+        /* localStorage might be blocked in a strict-mode iframe */
+      }
+      return next;
+    });
   if (!hasPerm("organization:admin") && !hasPerm("graph:admin")) {
     return (
       <div className="card" style={{ color: "var(--danger)" }}>
@@ -56,18 +81,37 @@ export function Admin() {
         </div>
       </div>
 
+      {/* Everyday org administration — the short list an admin actually
+          reaches for. The rest moved into the Advanced disclosure below. */}
       <h2 className="admin-group-label">{t("admin.groupOrg")}</h2>
       <div className="admin-grid">
-        <AdminCard to="/admin/api-keys" icon={<KeyRound size={18} />} title={t("admin.cardApiKeysTitle")} desc={t("admin.cardApiKeysDesc")} />
         <AdminCard to="/admin/users" icon={<Users size={18} />} title={t("admin.cardUsersTitle")} desc={t("admin.cardUsersDesc")} />
-        <AdminCard to="/admin/sso" icon={<ShieldCheck size={18} />} title={t("admin.cardSSOTitle")} desc={t("admin.cardSSODesc")} />
-        <AdminCard to="/admin/google" icon={<img src="/brands/google-g.svg" alt="" width={18} height={18} />} title={t("admin.cardGoogleTitle")} desc={t("admin.cardGoogleDesc")} />
-        <AdminCard to="/admin/secret-manager" icon={<Lock size={18} />} title={t("admin.cardSecretManagerTitle")} desc={t("admin.cardSecretManagerDesc")} />
-        <AdminCard to="/admin/git-credentials" icon={<KeyRound size={18} />} title={t("admin.cardGitTitle")} desc={t("admin.cardGitDesc")} />
         <AdminCard to="/admin/workspace" icon={<Building2 size={18} />} title={t("admin.cardWorkspaceTitle")} desc={t("admin.cardWorkspaceDesc")} />
-        <AdminCard to="/admin/modules" icon={<Boxes size={18} />} title={t("admin.cardModulesTitle")} desc={t("admin.cardModulesDesc")} />
-        <AdminCard to="/admin/audit" icon={<ScrollText size={18} />} title={t("admin.cardAuditTitle")} desc={t("admin.cardAuditDesc")} />
+        <AdminCard to="/admin/api-keys" icon={<KeyRound size={18} />} title={t("admin.cardApiKeysTitle")} desc={t("admin.cardApiKeysDesc")} />
       </div>
+
+      {/* Advanced: integrations + enterprise/infra settings most teams set
+          once or never. Collapsed by default; the choice is remembered. */}
+      <button
+        type="button"
+        className="admin-advanced-toggle"
+        onClick={toggleAdvanced}
+        aria-expanded={advancedOpen}
+      >
+        {advancedOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+        <span className="admin-advanced-label">{t("admin.groupAdvanced")}</span>
+        <span className="desc admin-advanced-hint">{t("admin.advancedHint")}</span>
+      </button>
+      {advancedOpen && (
+        <div className="admin-grid">
+          <AdminCard to="/admin/google" icon={<img src="/brands/google-g.svg" alt="" width={18} height={18} />} title={t("admin.cardGoogleTitle")} desc={t("admin.cardGoogleDesc")} />
+          <AdminCard to="/admin/git-credentials" icon={<KeyRound size={18} />} title={t("admin.cardGitTitle")} desc={t("admin.cardGitDesc")} />
+          <AdminCard to="/admin/sso" icon={<ShieldCheck size={18} />} title={t("admin.cardSSOTitle")} desc={t("admin.cardSSODesc")} />
+          <AdminCard to="/admin/secret-manager" icon={<Lock size={18} />} title={t("admin.cardSecretManagerTitle")} desc={t("admin.cardSecretManagerDesc")} />
+          <AdminCard to="/admin/modules" icon={<Boxes size={18} />} title={t("admin.cardModulesTitle")} desc={t("admin.cardModulesDesc")} />
+          <AdminCard to="/admin/audit" icon={<ScrollText size={18} />} title={t("admin.cardAuditTitle")} desc={t("admin.cardAuditDesc")} />
+        </div>
+      )}
 
       {/* OAuth provider apps are instance-wide (shared across every org), so
           only the platform operator sees them — a tenant admin would get a

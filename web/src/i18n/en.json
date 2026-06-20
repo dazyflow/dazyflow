@@ -74,12 +74,12 @@
     "templates": "Templates",
     "flows": "Flows",
     "runs": "Runs",
-    "results": "Results",
+    "results": "Data",
     "schedules": "Schedules",
     "usage": "Usage",
     "files": "Files",
     "approvals": "Approvals",
-    "connections": "Secrets",
+    "connections": "Connections",
     "integrations": "Apps",
     "admin": "Admin",
     "toggleNav": "toggle navigation",
@@ -303,8 +303,8 @@
     "inTenant": " in organization <0>{{tenant}}</0>",
     "continueTitle": "Pick up where you left off",
     "intro": "So, what are we building today?",
-    "featuredTitle": "Fastest start — no accounts to connect",
-    "featuredDesc": "Send yourself a daily push notification with ntfy. Pick a topic, subscribe in the free app, and you're done in about two minutes.",
+    "featuredTitle": "See a flow run — in one click",
+    "featuredDesc": "Open the starter flow and press Run. A formatted summary appears instantly — no accounts, no setup, nothing to connect. The fastest way to see how flows work.",
     "featuredCta": "Try it",
     "goalNotifyTitle": "Get notified when something happens",
     "goalNotifyDesc": "A new form submission, email, or entry → a Slack message.",
@@ -388,7 +388,8 @@
     "privateOwnedBy": "Private — owned by {{owner}}",
     "orgTooltip": "Visible to everyone in this workspace",
     "ownerLabel": "Owner:",
-    "needEdit": "You need edit access to create flows."
+    "needEdit": "You need edit access to create flows.",
+    "nextRun": "Next run {{when}}"
   },
   "settings": {
     "title": "Flow settings",
@@ -557,6 +558,8 @@
   },
   "connections": {
     "title": "Secrets",
+    "tabApps": "Apps",
+    "tabSecrets": "Secrets",
     "intro": "Secrets let you manage reusable configuration data. They're encrypted and used for sensitive values like API keys, tokens, and database URLs — write-only, so a value is never shown again after you save it. To connect an app like Slack or Gmail, use the Apps page.",
     "scopeHelp": "These secrets are available to every flow in your organization. A single flow can override one with its own — set those in the flow's Settings → Secrets.",
     "setupIncompleteTitle": "Setup isn't finished on this server yet",
@@ -665,6 +668,8 @@
     "subtitle": "Organization <0>{{tenant}}</0> · workspace <1>{{workspace}}</1>",
     "anyWorkspace": "(any)",
     "groupOrg": "Organization",
+    "groupAdvanced": "Advanced",
+    "advancedHint": "Integrations, single sign-on, audit log, and other settings most teams set once or never.",
     "groupPlatform": "Platform",
     "groupSystem": "System",
     "system": {
