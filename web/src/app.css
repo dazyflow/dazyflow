@@ -49,17 +49,6 @@
   flex-shrink: 0;
   border-radius: 6px;
 }
-/* Small-screen tightening of the topbar: the user-meta chips collapse
-   to icon-only so the toolbar and the canvas below have more room. The
-   brand title stays visible — on a small screen it's the only label
-   telling you which flow you're in. It truncates rather than hides. */
-@media (max-width: 768px) {
-  .topbar .topbar-workspace,
-  .topbar .topbar-sep,
-  .topbar .topbar-email {
-    display: none;
-  }
-}
 /* Keep the brand title on one line and let it shrink/ellipsize instead
    of pushing the toolbar off-screen when a long flow name lands here. */
 .topbar .brand-title {
@@ -2908,51 +2897,6 @@ button.warning:hover:not(:disabled) {
 }
 .diff-row.changed {
   color: var(--text);
-}
-/* Schedules calendar: a 7-day timeline of upcoming trigger fires. */
-.schedule-calendar {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: var(--space-2);
-}
-.schedule-cal-day {
-  border: 1px solid var(--border);
-  border-radius: var(--r-2, 6px);
-  background: var(--surface, transparent);
-  min-height: 120px;
-  padding: var(--space-2);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-.schedule-cal-head {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: var(--space-1);
-  margin-bottom: var(--space-1);
-}
-.schedule-cal-empty {
-  color: var(--faint);
-  font-size: var(--text-sm);
-}
-.schedule-cal-fire {
-  font-size: var(--text-sm);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.schedule-cal-time {
-  font-family: var(--font-mono);
-  color: var(--accent, #7c5cff);
-}
-.schedule-cal-flow {
-  color: var(--muted);
-}
-@media (max-width: 900px) {
-  .schedule-calendar {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 .test-sample-input {
   width: 100%;

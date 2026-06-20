@@ -173,18 +173,14 @@ type vaultClient interface {
 // filtered out of the user-facing secret listing (see filterReservedSecretNames).
 const vaultConfigSecretName = "cfg:secret-manager"
 
-// saveVaultConfig / loadVaultConfig / deleteVaultConfig are the vault
-// bindings of the shared per-provider config storage.
+// saveVaultConfig / loadVaultConfig are the vault bindings of the shared
+// per-provider config storage.
 func saveVaultConfig(ctx context.Context, es *EncryptedSecrets, tenant string, cfg VaultConfig) error {
 	return saveProviderConfig(ctx, es, tenant, vaultConfigSecretName, cfg)
 }
 
 func loadVaultConfig(ctx context.Context, es *EncryptedSecrets, tenant string) (VaultConfig, bool, error) {
 	return loadProviderConfig[VaultConfig](ctx, es, tenant, vaultConfigSecretName)
-}
-
-func deleteVaultConfig(ctx context.Context, es *EncryptedSecrets, tenant string) error {
-	return deleteProviderConfig(ctx, es, tenant, vaultConfigSecretName)
 }
 
 // filterReservedSecretNames drops internal "cfg:" entries (e.g. the secret-

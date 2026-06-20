@@ -46,12 +46,6 @@ func WithResolver(ctx context.Context, r Resolver) context.Context {
 	return context.WithValue(ctx, resolverCtxKey{}, r)
 }
 
-// ResolverFromContext returns the Resolver set by WithResolver, if any.
-func ResolverFromContext(ctx context.Context) (Resolver, bool) {
-	r, ok := ctx.Value(resolverCtxKey{}).(Resolver)
-	return r, ok
-}
-
 // NodeResolver is the default Resolver. It consults catalogs in order:
 // native registry → remote (gRPC) modules → MCP tools. (A subprocess
 // "local descriptor" catalog existed in the plugin era; it was never

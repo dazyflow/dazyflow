@@ -1,6 +1,9 @@
 # Compiled binaries (build outputs — never commit; rebuild with `make`/`go build`)
 /dzctl
 /dzd
+# Legacy pre-rename binary names (hazyflow → dazyflow); were tracked by mistake.
+/hzctl
+/hzd
 /transformer
 /dz-drops
 /dz-drophost
