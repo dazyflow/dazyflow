@@ -124,13 +124,13 @@ func (c *DazydClient) do(ctx context.Context, method, path string, body, out any
 // shape only fills Message. Tools branch on Code when present —
 // machine-readable beats parsing English.
 type HTTPError struct {
-	Status   int
-	Path     string
-	Body     string // raw response body, useful for diagnostics
-	Code     string
-	Message  string
-	Details  []ErrorDetail
-	Doc      string
+	Status  int
+	Path    string
+	Body    string // raw response body, useful for diagnostics
+	Code    string
+	Message string
+	Details []ErrorDetail
+	Doc     string
 }
 
 // ErrorDetail mirrors the gateway's ErrorDetail shape (per-field
@@ -146,6 +146,29 @@ func (e *HTTPError) Error() string {
 		return fmt.Sprintf("%s: %d %s (code: %s)", e.Path, e.Status, e.Message, e.Code)
 	}
 	return fmt.Sprintf("%s: %d %s", e.Path, e.Status, e.Body)
+}
+
+// ToToolPayload renders the structured fields of an HTTPError into the
+// map shape the MCP layer surfaces to the LLM. The status/path/message
+// keys are always present; code/details/doc only appear when non-empty
+// so the LLM isn't handed empty fields to reason about. errorResultOrErr
+// marshals this map into the tool-error text.
+func (e *HTTPError) ToToolPayload() map[string]any {
+	payload := map[string]any{
+		"status":  e.Status,
+		"path":    e.Path,
+		"message": e.Message,
+	}
+	if e.Code != "" {
+		payload["code"] = e.Code
+	}
+	if len(e.Details) > 0 {
+		payload["details"] = e.Details
+	}
+	if e.Doc != "" {
+		payload["doc"] = e.Doc
+	}
+	return payload
 }
 
 // parseErrorEnvelope walks the response body looking for the
@@ -197,6 +220,26 @@ func parseErrorEnvelope(body []byte) (code, message, doc string, details []Error
 // from the LLM and could contain anything.
 func pathSegment(s string) string {
 	return url.PathEscape(s)
+}
+
+// buildQuery turns a set of key→value pairs into a "?a=1&b=2" query
+// string suffix, skipping empty values entirely. Returns "" when no
+// pairs survive, so callers can append it unconditionally. Values are
+// URL-encoded via net/url.Values; key order is deterministic (sorted)
+// — neither is observable to a conforming server, which decodes the
+// params back to their literal values regardless of encoding/order.
+func buildQuery(params map[string]string) string {
+	v := url.Values{}
+	for k, val := range params {
+		if val == "" {
+			continue
+		}
+		v.Set(k, val)
+	}
+	if len(v) == 0 {
+		return ""
+	}
+	return "?" + v.Encode()
 }
 
 // composeFlowID encodes the (tenant, workspace, id) triple as the
