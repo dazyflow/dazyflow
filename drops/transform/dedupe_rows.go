@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/engine"
@@ -78,24 +77,9 @@ func init() {
 // identities, and matches the lenient equality used elsewhere in
 // the package.
 func executeDedupeRows(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	rowsRef, ok := job.Input["rows"]
+	rows, headers, errRes, ok := loadRowsAndHeaders(job)
 	if !ok {
-		return errResult(job, "missing_input", "input port 'rows' is required"), nil
-	}
-	rows, err := normalizeRows(rowsRef.Inline)
-	if err != nil {
-		return errResult(job, "bad_input", err.Error()), nil
-	}
-
-	var headers []string
-	if h, ok := job.Input["headers"]; ok && h.Inline != nil {
-		headers, err = normalizeHeaders(h.Inline)
-		if err != nil {
-			return errResult(job, "bad_input", err.Error()), nil
-		}
-	}
-	if headers == nil {
-		headers = deriveHeaders(rows)
+		return errRes, nil
 	}
 
 	by, err := parseDedupeBy(job.Params, headers, rows)
@@ -113,7 +97,7 @@ func executeDedupeRows(_ context.Context, job core.Job, _ chan<- core.Progress) 
 	switch keep {
 	case "first":
 		for _, row := range rows {
-			k := rowKey(row, by)
+			k := keyString(row, by)
 			if _, ok := seen[k]; ok {
 				continue
 			}
@@ -127,7 +111,7 @@ func executeDedupeRows(_ context.Context, job core.Job, _ chan<- core.Progress) 
 		// of each group, but don't reorder the result."
 		toEmit := make(map[int]struct{}, len(rows))
 		for i := len(rows) - 1; i >= 0; i-- {
-			k := rowKey(rows[i], by)
+			k := keyString(rows[i], by)
 			if _, ok := seen[k]; ok {
 				continue
 			}
@@ -200,17 +184,4 @@ func parseKeep(params map[string]any) (string, error) {
 		return "last", nil
 	}
 	return "", fmt.Errorf("keep: expected \"first\" or \"last\", got %q", s)
-}
-
-// rowKey hashes the listed cells into a stable string. We separate
-// each cell with NUL so adjacent strings like {"a":"x", "b":"y"} and
-// {"a":"xy", "b":""} can't collide. fmt.Sprint(nil) gives "<nil>"
-// which is the same regardless of which Go nil-typed value was
-// stored — fine for "treat all nulls as equal."
-func rowKey(row map[string]any, by []string) string {
-	parts := make([]string, len(by))
-	for i, col := range by {
-		parts[i] = fmt.Sprint(row[col])
-	}
-	return strings.Join(parts, "\x00")
 }

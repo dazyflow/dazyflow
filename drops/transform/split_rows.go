@@ -69,24 +69,9 @@ func init() {
 // and the SQL drops — partial routing is worse than no routing for
 // downstream consumers expecting deterministic split sizes.
 func executeSplitRows(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	rowsRef, ok := job.Input["rows"]
+	rows, headers, errRes, ok := loadRowsAndHeaders(job)
 	if !ok {
-		return errResult(job, "missing_input", "input port 'rows' is required"), nil
-	}
-	rows, err := normalizeRows(rowsRef.Inline)
-	if err != nil {
-		return errResult(job, "bad_input", err.Error()), nil
-	}
-
-	var headers []string
-	if h, ok := job.Input["headers"]; ok && h.Inline != nil {
-		headers, err = normalizeHeaders(h.Inline)
-		if err != nil {
-			return errResult(job, "bad_input", err.Error()), nil
-		}
-	}
-	if headers == nil {
-		headers = deriveHeaders(rows)
+		return errRes, nil
 	}
 
 	env, err := newRowCELEnv()

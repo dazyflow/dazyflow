@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
@@ -88,7 +87,7 @@ func init() {
 //   - excluded (lowercase) instead of EXCLUDED
 //   - SQLite's ON CONFLICT requires 3.24+; modernc.org/sqlite ships
 //     a recent build so this is safe.
-func executeSQLiteUpsertRows(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
+func executeSQLiteUpsertRows(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	path, err := params.String(job.Params, "path")
 	if err != nil {
 		return params.Err(job, "bad_param", err.Error()), nil
@@ -113,9 +112,8 @@ func executeSQLiteUpsertRows(_ context.Context, job core.Job, _ chan<- core.Prog
 	if errRes != nil {
 		return *errRes, nil
 	}
-	rows, headers := ri.rows, ri.headers
 
-	if errRes := checkConflictInHeaders(job, conflictCols, headers); errRes != nil {
+	if errRes := checkConflictInHeaders(job, conflictCols, ri.headers); errRes != nil {
 		return *errRes, nil
 	}
 
@@ -150,136 +148,5 @@ func executeSQLiteUpsertRows(_ context.Context, job core.Job, _ chan<- core.Prog
 	}
 	defer db.Close()
 
-	createTable := true
-	if v, present := params.Bool(job.Params, "create_table"); present {
-		createTable = v
-	}
-	if createTable && len(headers) > 0 {
-		colTypes, err := parseColumnTypes(job.Params)
-		if err != nil {
-			return params.Err(job, "db", err.Error()), nil
-		}
-		if err := sqliteEnsureTableWithUnique(db, table, headers, colTypes, conflictCols); err != nil {
-			return params.Err(job, "db", err.Error()), nil
-		}
-	}
-
-	if len(rows) == 0 {
-		return core.Result{
-			JobID:  job.ID,
-			Status: core.StatusOK,
-			Output: map[string]core.Ref{
-				"processed": {MIME: "application/json", Inline: 0},
-			},
-		}, nil
-	}
-
-	if !updateColsExplicit {
-		updateCols = subtract(headers, conflictCols)
-	}
-
-	processed, err := sqliteUpsertBatch(db, table, headers, conflictCols, updateCols, rows)
-	if err != nil {
-		return params.Err(job, "db", err.Error()), nil
-	}
-	return core.Result{
-		JobID:  job.ID,
-		Status: core.StatusOK,
-		Output: map[string]core.Ref{
-			"processed": {MIME: "application/json", Inline: processed},
-		},
-	}, nil
-}
-
-// sqliteEnsureTableWithUnique mirrors the Postgres helper — CREATE
-// TABLE IF NOT EXISTS with a UNIQUE on the conflict columns. SQLite
-// uses the same syntax for this, so the only real difference is the
-// default storage class (TEXT here matches drops/io/excel_read's
-// all-strings output).
-func sqliteEnsureTableWithUnique(db *sql.DB, table string, headers []string, colTypes map[string]string, conflictCols []string) error {
-	cols := make([]string, len(headers))
-	for i, h := range headers {
-		t := "TEXT"
-		if v, ok := colTypes[h]; ok && v != "" {
-			t = v
-		}
-		cols[i] = fmt.Sprintf("%s %s", quoteIdent(h), t)
-	}
-	uniqueCols := make([]string, len(conflictCols))
-	for i, c := range conflictCols {
-		uniqueCols[i] = quoteIdent(c)
-	}
-	stmt := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (%s, UNIQUE (%s))",
-		quoteIdent(table), strings.Join(cols, ", "), strings.Join(uniqueCols, ", "))
-	if _, err := db.Exec(stmt); err != nil {
-		return fmt.Errorf("create table: %w", err)
-	}
-	return nil
-}
-
-// sqliteUpsertBatch runs all rows in one transaction. Generated SQL:
-//
-//	INSERT INTO "t" ("a","b","c")
-//	VALUES (?,?,?)
-//	ON CONFLICT ("a") DO UPDATE
-//	  SET "b" = excluded."b", "c" = excluded."c"
-//
-// Lowercase `excluded` matches SQLite's convention (Postgres uses
-// upper). DO NOTHING substitutes when updateCols is empty.
-func sqliteUpsertBatch(db *sql.DB, table string, headers, conflictCols, updateCols []string, rows []map[string]any) (int, error) {
-	tx, err := db.Begin()
-	if err != nil {
-		return 0, fmt.Errorf("begin tx: %w", err)
-	}
-
-	cols := make([]string, len(headers))
-	placeholders := make([]string, len(headers))
-	for i, h := range headers {
-		cols[i] = quoteIdent(h)
-		placeholders[i] = "?"
-	}
-	conflictList := make([]string, len(conflictCols))
-	for i, c := range conflictCols {
-		conflictList[i] = quoteIdent(c)
-	}
-
-	var conflictClause string
-	if len(updateCols) == 0 {
-		conflictClause = fmt.Sprintf("ON CONFLICT (%s) DO NOTHING", strings.Join(conflictList, ", "))
-	} else {
-		assignments := make([]string, len(updateCols))
-		for i, c := range updateCols {
-			q := quoteIdent(c)
-			assignments[i] = fmt.Sprintf("%s = excluded.%s", q, q)
-		}
-		conflictClause = fmt.Sprintf("ON CONFLICT (%s) DO UPDATE SET %s",
-			strings.Join(conflictList, ", "), strings.Join(assignments, ", "))
-	}
-
-	stmt, err := tx.Prepare(fmt.Sprintf(
-		"INSERT INTO %s (%s) VALUES (%s) %s",
-		quoteIdent(table), strings.Join(cols, ", "), strings.Join(placeholders, ", "), conflictClause,
-	))
-	if err != nil {
-		_ = tx.Rollback()
-		return 0, fmt.Errorf("prepare upsert: %w", err)
-	}
-	defer stmt.Close()
-
-	count := 0
-	for i, row := range rows {
-		args := make([]any, len(headers))
-		for j, h := range headers {
-			args[j] = row[h]
-		}
-		if _, err := stmt.Exec(args...); err != nil {
-			_ = tx.Rollback()
-			return 0, fmt.Errorf("upsert row %d: %w", i, err)
-		}
-		count++
-	}
-	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("commit: %w", err)
-	}
-	return count, nil
+	return runUpsert(ctx, job, sqliteDialect{}, sqlConn{db: db}, quoteIdent(table), ri, conflictCols, updateCols, updateColsExplicit)
 }

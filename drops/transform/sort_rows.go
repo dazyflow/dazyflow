@@ -76,24 +76,9 @@ type sortKey struct {
 // changing. Like map_rows, the input row map is never mutated; we
 // sort a copied slice and emit the new ordering.
 func executeSortRows(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	rowsRef, ok := job.Input["rows"]
+	rows, headers, errRes, ok := loadRowsAndHeaders(job)
 	if !ok {
-		return errResult(job, "missing_input", "input port 'rows' is required"), nil
-	}
-	rows, err := normalizeRows(rowsRef.Inline)
-	if err != nil {
-		return errResult(job, "bad_input", err.Error()), nil
-	}
-
-	var headers []string
-	if h, ok := job.Input["headers"]; ok && h.Inline != nil {
-		headers, err = normalizeHeaders(h.Inline)
-		if err != nil {
-			return errResult(job, "bad_input", err.Error()), nil
-		}
-	}
-	if headers == nil {
-		headers = deriveHeaders(rows)
+		return errRes, nil
 	}
 
 	keys, err := parseSortKeys(job.Params)
@@ -119,14 +104,7 @@ func executeSortRows(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 		return false
 	})
 
-	return core.Result{
-		JobID:  job.ID,
-		Status: core.StatusOK,
-		Output: map[string]core.Ref{
-			"rows":    {MIME: "application/json", Inline: out},
-			"headers": {MIME: "application/json", Inline: headers},
-		},
-	}, nil
+	return resultRows(job, out, headers), nil
 }
 
 // parseSortKeys accepts the loose JSON shape the schema documents:

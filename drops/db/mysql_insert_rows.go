@@ -2,10 +2,8 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
@@ -102,108 +100,11 @@ func executeMySQLInsertRows(ctx context.Context, job core.Job, _ chan<- core.Pro
 	if errRes != nil {
 		return *errRes, nil
 	}
-	rows, headers := ri.rows, ri.headers
 
 	db, err := defaultMySQLRegistry.sqlDB(ctx, job.Tenant, dsn)
 	if err != nil {
 		return params.Err(job, "db", fmt.Sprintf("connect: %v", err)), nil
 	}
 
-	createTable := true
-	if v, present := params.Bool(job.Params, "create_table"); present {
-		createTable = v
-	}
-	if createTable && len(headers) > 0 {
-		colTypes, err := parseColumnTypes(job.Params)
-		if err != nil {
-			return params.Err(job, "db", err.Error()), nil
-		}
-		if err := mysqlEnsureTable(ctx, db, table, headers, colTypes); err != nil {
-			return params.Err(job, "db", err.Error()), nil
-		}
-	}
-
-	if len(rows) == 0 {
-		return core.Result{
-			JobID:  job.ID,
-			Status: core.StatusOK,
-			Output: map[string]core.Ref{
-				"inserted": {MIME: "application/json", Inline: 0},
-			},
-		}, nil
-	}
-
-	inserted, err := mysqlInsertBatch(ctx, db, table, headers, rows)
-	if err != nil {
-		return params.Err(job, "db", err.Error()), nil
-	}
-	return core.Result{
-		JobID:  job.ID,
-		Status: core.StatusOK,
-		Output: map[string]core.Ref{
-			"inserted": {MIME: "application/json", Inline: inserted},
-		},
-	}, nil
-}
-
-// mysqlEnsureTable issues CREATE TABLE IF NOT EXISTS sized to
-// headers. Default column type is TEXT (which in MySQL stores up to
-// 65,535 bytes — plenty for Excel string columns). VARCHAR would
-// need a length and we don't know it; users who want VARCHAR(N)
-// pass it explicitly via column_types.
-func mysqlEnsureTable(ctx context.Context, db *sql.DB, table string, headers []string, colTypes map[string]string) error {
-	cols := make([]string, len(headers))
-	for i, h := range headers {
-		t := "TEXT"
-		if v, ok := colTypes[h]; ok && v != "" {
-			t = v
-		}
-		cols[i] = fmt.Sprintf("%s %s", quoteIdentBacktick(h), t)
-	}
-	stmt := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (%s)", quoteIdentBacktick(table), strings.Join(cols, ", "))
-	if _, err := db.ExecContext(ctx, stmt); err != nil {
-		return fmt.Errorf("create table: %w", err)
-	}
-	return nil
-}
-
-// mysqlInsertBatch runs all rows in one transaction. Per-row failure
-// rolls the whole batch back — same contract as the other db drops.
-func mysqlInsertBatch(ctx context.Context, db *sql.DB, table string, headers []string, rows []map[string]any) (int, error) {
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return 0, fmt.Errorf("begin tx: %w", err)
-	}
-	cols := make([]string, len(headers))
-	placeholders := make([]string, len(headers))
-	for i, h := range headers {
-		cols[i] = quoteIdentBacktick(h)
-		placeholders[i] = "?"
-	}
-	stmt, err := tx.PrepareContext(ctx, fmt.Sprintf(
-		"INSERT INTO %s (%s) VALUES (%s)",
-		quoteIdentBacktick(table), strings.Join(cols, ", "), strings.Join(placeholders, ", "),
-	))
-	if err != nil {
-		_ = tx.Rollback()
-		return 0, fmt.Errorf("prepare insert: %w", err)
-	}
-	defer stmt.Close()
-
-	count := 0
-	for i, row := range rows {
-		args := make([]any, len(headers))
-		for j, h := range headers {
-			args[j] = row[h]
-		}
-		if _, err := stmt.ExecContext(ctx, args...); err != nil {
-			_ = tx.Rollback()
-			return 0, fmt.Errorf("insert row %d: %w", i, err)
-		}
-		count++
-	}
-	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("commit: %w", err)
-	}
-	return count, nil
+	return runInsert(ctx, job, mysqlDialect{}, sqlConn{db: db}, quoteIdentBacktick(table), ri)
 }

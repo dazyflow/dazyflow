@@ -185,7 +185,7 @@ func openBuiltinStore(job core.Job, create bool) (*sql.DB, *core.Result) {
 // same batch-insert-in-one-transaction behaviour, but the database file
 // is fixed and auto-created so the user never sees a path or connection
 // string. The table is always auto-created from the row shape.
-func executeBuiltinStoreAppend(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
+func executeBuiltinStoreAppend(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	table, err := params.String(job.Params, "table")
 	if err != nil {
 		return params.Err(job, "bad_param", err.Error()), nil
@@ -237,7 +237,7 @@ func executeBuiltinStoreAppend(_ context.Context, job core.Job, _ chan<- core.Pr
 		if err != nil {
 			return params.Err(job, "db", err.Error()), nil
 		}
-		if err := ensureTable(db, table, headers, colTypes); err != nil {
+		if err := sqliteEnsureTable(db, table, headers, colTypes); err != nil {
 			return params.Err(job, "db", err.Error()), nil
 		}
 		// Schema evolution: when the table already exists, ensureTable
@@ -259,7 +259,7 @@ func executeBuiltinStoreAppend(_ context.Context, job core.Job, _ chan<- core.Pr
 			Output: map[string]core.Ref{"inserted": {MIME: "application/json", Inline: 0}},
 		}, nil
 	}
-	inserted, err := insertBatch(db, table, headers, rows)
+	inserted, err := sqlConn{db: db}.execBatch(ctx, insertSQL(sqliteDialect{}, quoteIdent(table), headers, ""), headers, rows, "insert")
 	if err != nil {
 		return params.Err(job, "db", err.Error()), nil
 	}

@@ -105,24 +105,9 @@ func executeGroupAggregate(_ context.Context, job core.Job, _ chan<- core.Progre
 		return errResult(job, "bad_param", err.Error()), nil
 	}
 
-	rowsRef, ok := job.Input["rows"]
+	rows, headers, errRes, ok := loadRowsAndHeaders(job)
 	if !ok {
-		return errResult(job, "missing_input", "input port 'rows' is required"), nil
-	}
-	rows, err := normalizeRows(rowsRef.Inline)
-	if err != nil {
-		return errResult(job, "bad_input", err.Error()), nil
-	}
-
-	var headers []string
-	if h, ok := job.Input["headers"]; ok && h.Inline != nil {
-		headers, err = normalizeHeaders(h.Inline)
-		if err != nil {
-			return errResult(job, "bad_input", err.Error()), nil
-		}
-	}
-	if headers == nil {
-		headers = deriveHeaders(rows)
+		return errRes, nil
 	}
 
 	// Verify columns referenced by params actually exist in the
@@ -161,7 +146,7 @@ func executeGroupAggregate(_ context.Context, job core.Job, _ chan<- core.Progre
 	order := make([]string, 0) // first-seen group order, for deterministic output
 
 	for i, row := range rows {
-		key := joinKeyString(row, by)
+		key := keyString(row, by)
 		acc, ok := groups[key]
 		if !ok {
 			kv := make(map[string]any, len(by))

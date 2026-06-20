@@ -1,19 +1,22 @@
 // Package transform hosts data-shaping drops — nodes that don't talk
-// to anything external, they just rearrange rows that flow between
-// other drops. The first inhabitant is map_rows; future siblings
-// might include things like sort_rows, dedupe_rows, etc.
+// to anything external, they just rearrange the rows that flow between
+// other drops: map_rows, compute_rows, route_rows, split_rows,
+// sort_rows, dedupe_rows, group_aggregate, join_rows, render_text, and
+// the JSON/results parsers. They all share the {column: value}[] row
+// shape emitted by excel_read and the db query drops, normalized
+// through drops/internal/rows.
 package transform
 
 import (
-	"encoding/json"
 	"fmt"
-	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/cel-go/cel"
 
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/limits"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/rows"
 )
 
 // capRows rejects an input list that exceeds the per-drop row ceiling, so a
@@ -73,121 +76,100 @@ func errResult(job core.Job, code, msg string) core.Result {
 	}
 }
 
-// normalizeRows / normalizeHeaders / deriveHeaders mirror the same
-// helpers in drops/db. We duplicate rather than import to
-// avoid cross-integration coupling — each integration package owns
-// its own row-handling so a refactor in one doesn't ripple.
+// normalizeRows / coerceRowMap / normalizeHeaders / deriveHeaders are
+// thin aliases over the shared drops/internal/rows package. The
+// transform variant caps the input against the row ceiling (so a
+// transform can't be made to hold an unbounded list) and accepts a
+// single object as a one-row list (the shape a webhook/form body
+// arrives in) — both expressed via Options.
 func normalizeRows(inline any) ([]map[string]any, error) {
-	if inline == nil {
-		return nil, nil
-	}
-	switch v := inline.(type) {
-	case []map[string]any:
-		if err := capRows(len(v)); err != nil {
-			return nil, err
-		}
-		return v, nil
-	case []map[string]string:
-		if err := capRows(len(v)); err != nil {
-			return nil, err
-		}
-		out := make([]map[string]any, len(v))
-		for i, r := range v {
-			m := make(map[string]any, len(r))
-			for k, val := range r {
-				m[k] = val
-			}
-			out[i] = m
-		}
-		return out, nil
-	case []any:
-		if err := capRows(len(v)); err != nil {
-			return nil, err
-		}
-		out := make([]map[string]any, 0, len(v))
-		for i, item := range v {
-			m, err := coerceRowMap(item)
-			if err != nil {
-				return nil, fmt.Errorf("row %d: %w", i, err)
-			}
-			out = append(out, m)
-		}
-		return out, nil
-	case map[string]any:
-		// A single object is one row. This is the shape a webhook or
-		// hosted-form trigger emits for a JSON object body
-		// (buildWebhookSeed / collectFormValues), so wiring
-		// webhook_input.body straight into a transform's rows port — the
-		// most common starter shape — just works instead of failing with
-		// "unsupported input type".
-		return []map[string]any{v}, nil
-	case map[string]string:
-		m := make(map[string]any, len(v))
-		for k, val := range v {
-			m[k] = val
-		}
-		return []map[string]any{m}, nil
-	case string:
-		// An empty string is "no rows" (a webhook fired with no body),
-		// matching the db drops' contract. Otherwise parse JSON, accepting
-		// either an array of objects or a single object.
-		if v == "" {
-			return nil, nil
-		}
-		var parsed any
-		if err := json.Unmarshal([]byte(v), &parsed); err != nil {
-			return nil, fmt.Errorf("rows JSON: %w", err)
-		}
-		return normalizeRows(parsed)
-	}
-	return nil, fmt.Errorf("rows: unsupported input type %T", inline)
+	return rows.Normalize(inline, rows.Options{Cap: capRows, AllowSingleObject: true})
 }
 
 func coerceRowMap(item any) (map[string]any, error) {
-	switch m := item.(type) {
-	case map[string]any:
-		return m, nil
-	case map[string]string:
-		out := make(map[string]any, len(m))
-		for k, v := range m {
-			out[k] = v
-		}
-		return out, nil
-	}
-	return nil, fmt.Errorf("expected object, got %T", item)
+	return rows.CoerceRowMap(item)
 }
 
 func normalizeHeaders(inline any) ([]string, error) {
-	switch v := inline.(type) {
-	case []string:
-		return v, nil
-	case []any:
-		out := make([]string, len(v))
-		for i, h := range v {
-			s, ok := h.(string)
-			if !ok {
-				return nil, fmt.Errorf("headers[%d]: expected string, got %T", i, h)
-			}
-			out[i] = s
-		}
-		return out, nil
-	}
-	return nil, fmt.Errorf("headers: unsupported input type %T", inline)
+	return rows.NormalizeHeaders(inline)
 }
 
-func deriveHeaders(rows []map[string]any) []string {
-	seen := map[string]struct{}{}
-	for _, r := range rows {
-		for k := range r {
-			seen[k] = struct{}{}
+func deriveHeaders(r []map[string]any) []string {
+	return rows.DeriveHeaders(r)
+}
+
+// loadRowsAndHeaders is the shared prologue for the row-shaping drops:
+// read the required `rows` input and normalize it, then read the
+// optional `headers` input (deriving from the rows when none is wired).
+// On a bad input it returns a fully-formed error Result and ok=false,
+// which callers return verbatim. This collapses the ~15-line read /
+// normalize / derive block every transform drop opened with.
+func loadRowsAndHeaders(job core.Job) (rowsOut []map[string]any, headers []string, errRes core.Result, ok bool) {
+	rowsRef, present := job.Input["rows"]
+	if !present {
+		return nil, nil, errResult(job, "missing_input", "input port 'rows' is required"), false
+	}
+	rowsOut, err := normalizeRows(rowsRef.Inline)
+	if err != nil {
+		return nil, nil, errResult(job, "bad_input", err.Error()), false
+	}
+	if h, ok := job.Input["headers"]; ok && h.Inline != nil {
+		headers, err = normalizeHeaders(h.Inline)
+		if err != nil {
+			return nil, nil, errResult(job, "bad_input", err.Error()), false
 		}
 	}
-	headers := make([]string, 0, len(seen))
-	for k := range seen {
-		headers = append(headers, k)
+	if headers == nil {
+		headers = deriveHeaders(rowsOut)
 	}
-	sort.Strings(headers)
-	return headers
+	return rowsOut, headers, core.Result{}, true
+}
+
+// resultRows builds the common OK Result that emits a `rows` list plus a
+// `headers` list — the epilogue shared by sort_rows, dedupe_rows, and
+// the rest of the row-passthrough drops. Drops with extra output ports
+// (route_rows' per-slot buckets, dedupe_rows' dropped count) build their
+// Result inline instead.
+func resultRows(job core.Job, rowsOut []map[string]any, headers []string) core.Result {
+	return core.Result{
+		JobID:  job.ID,
+		Status: core.StatusOK,
+		Output: map[string]core.Ref{
+			"rows":    {MIME: "application/json", Inline: rowsOut},
+			"headers": {MIME: "application/json", Inline: headers},
+		},
+	}
+}
+
+// compileRowExpr compiles a CEL expression against env with the shared
+// cost ceiling, wrapping both the compile-time issues and the
+// program-build error with label so callers don't repeat the
+// env.Compile → issues.Err() → celProgram dance. label is the human
+// prefix for the error (e.g. `compute["total"]`, `filter`).
+func compileRowExpr(env *cel.Env, expr, label string) (cel.Program, error) {
+	ast, issues := env.Compile(expr)
+	if issues != nil && issues.Err() != nil {
+		return nil, fmt.Errorf("%s: %v", label, issues.Err())
+	}
+	prog, err := celProgram(env, ast)
+	if err != nil {
+		return nil, fmt.Errorf("%s: program: %w", label, err)
+	}
+	return prog, nil
+}
+
+// keyString canonicalizes a row's values for the listed columns into one
+// hash-table-friendly string, used by dedupe_rows and join_rows to bucket
+// rows by identity. Equality uses fmt.Sprint so int 30 and string "30"
+// match — the same lenient rule map_rows.filter_eq uses, so users don't
+// pre-cast columns coming out of Excel/JSON. Cells are separated by the
+// ASCII unit separator (\x1f) so adjacent values can't collide.
+func keyString(row map[string]any, cols []string) string {
+	parts := make([]string, len(cols))
+	for i, c := range cols {
+		parts[i] = fmt.Sprint(row[c])
+	}
+	return strings.Join(parts, "\x1f")
 }
 
 // normalizeStringSlice accepts []string or []any-of-string. Used for

@@ -94,24 +94,9 @@ type mapSpec struct {
 // `compute_rows` drop backed by CEL or similar — not turning this
 // one into a partial expression evaluator.
 func executeMapRows(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	rowsRef, ok := job.Input["rows"]
+	rows, inputHeaders, errRes, ok := loadRowsAndHeaders(job)
 	if !ok {
-		return errResult(job, "missing_input", "input port 'rows' is required"), nil
-	}
-	rows, err := normalizeRows(rowsRef.Inline)
-	if err != nil {
-		return errResult(job, "bad_input", err.Error()), nil
-	}
-
-	var inputHeaders []string
-	if h, ok := job.Input["headers"]; ok && h.Inline != nil {
-		inputHeaders, err = normalizeHeaders(h.Inline)
-		if err != nil {
-			return errResult(job, "bad_input", err.Error()), nil
-		}
-	}
-	if inputHeaders == nil {
-		inputHeaders = deriveHeaders(rows)
+		return errRes, nil
 	}
 
 	spec, err := parseMapSpec(job.Params)
@@ -177,14 +162,7 @@ func executeMapRows(_ context.Context, job core.Job, _ chan<- core.Progress) (co
 		outRows = append(outRows, outRow)
 	}
 
-	return core.Result{
-		JobID:  job.ID,
-		Status: core.StatusOK,
-		Output: map[string]core.Ref{
-			"rows":    {MIME: "application/json", Inline: outRows},
-			"headers": {MIME: "application/json", Inline: outputHeaders},
-		},
-	}, nil
+	return resultRows(job, outRows, outputHeaders), nil
 }
 
 func parseMapSpec(params map[string]any) (mapSpec, error) {
