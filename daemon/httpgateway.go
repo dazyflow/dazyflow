@@ -592,6 +592,9 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/admin/signup-invites", h.requireAuth(h.createSignupInvite))
 	mux.HandleFunc("GET /api/v1/admin/signup-invites", h.requireAuth(h.listSignupInvites))
 	mux.HandleFunc("DELETE /api/v1/admin/signup-invites/{token}", h.requireAuth(h.revokeSignupInvite))
+	// Platform-admin SMTP smoke test — send one message through the
+	// transactional Mailer to confirm it actually delivers. See admin_smtp.go.
+	mux.HandleFunc("POST /api/v1/admin/smtp-test", h.requireAuth(h.smtpTest))
 	mux.HandleFunc("GET /api/v1/admin/members", h.requireAuth(h.listMembers))
 	mux.HandleFunc("PATCH /api/v1/admin/members/{email}", h.requireAuth(h.updateMemberRoles))
 	mux.HandleFunc("DELETE /api/v1/admin/members/{email}", h.requireAuth(h.removeMember))

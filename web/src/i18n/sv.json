@@ -807,6 +807,16 @@
       "statusExpired": "Utgången",
       "expiresAt": "går ut {{date}}"
     },
+    "smtpTest": {
+      "head": "Testa plattformens e-post",
+      "subtitle": "Skicka ett testmeddelande via den konfigurerade e-postservern (DAZYFLOW_SMTP_URL) för att bekräfta att leverans fungerar. Vid start kontrolleras bara att URL:en är giltig, inte att servern accepterar e-post. Lämna fältet tomt för att skicka till dig själv.",
+      "recipientLabel": "Mottagare",
+      "recipientPlaceholder": "person@exempel.se",
+      "send": "Skicka testmejl",
+      "sending": "Skickar…",
+      "sent": "Testmejl skickat till {{to}}. Kontrollera inkorgen för att bekräfta leverans.",
+      "invalid": "Det där ser inte ut som en giltig e-postadress än."
+    },
     "sso": {
       "needAdmin": "Du behöver <0>organization:admin</0> för att konfigurera inloggning.",
       "notConfigured": "Inloggningsinställningar är inte aktiverade på den här dzd-instansen.",

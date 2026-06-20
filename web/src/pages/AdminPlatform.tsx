@@ -4,6 +4,7 @@ import {
   Check,
   Copy,
   Mail,
+  Send,
   ShieldCheck,
   UserPlus,
   X,
@@ -42,6 +43,87 @@ export function AdminPlatform() {
         </div>
       </div>
       <SignupInviteSection />
+      <SmtpTestSection />
+    </div>
+  );
+}
+
+// SmtpTestSection lets a platform admin fire one test message through the
+// instance mailer (DAZYFLOW_SMTP_URL). Boot only checks that the URL
+// parses; this is the only way to confirm the server actually accepts
+// mail. Leave the field blank to send to yourself.
+function SmtpTestSection() {
+  const { t } = useTranslation();
+  const { token, me } = useAuth();
+  const [to, setTo] = useState("");
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(
+    null,
+  );
+
+  const trimmed = to.trim();
+  const looksValid = trimmed === "" || EMAIL_RE.test(trimmed);
+  const canSend = !sending && looksValid;
+
+  const send = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token || !canSend) return;
+    setSending(true);
+    setResult(null);
+    try {
+      const r = await api.smtpTest(token, trimmed || undefined);
+      setResult({ ok: true, msg: t("admin.smtpTest.sent", { to: r.to }) });
+    } catch (e) {
+      setResult({ ok: false, msg: (e as Error).message });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div style={{ marginTop: "var(--space-5)" }}>
+      <h2 className="admin-section-head">{t("admin.smtpTest.head")}</h2>
+      <div className="sub" style={{ marginBottom: "var(--space-3)" }}>
+        {t("admin.smtpTest.subtitle")}
+      </div>
+      <form
+        onSubmit={send}
+        style={{ display: "flex", gap: "var(--space-2)", alignItems: "flex-start" }}
+      >
+        <input
+          type="email"
+          value={to}
+          onChange={(e) => setTo(e.target.value)}
+          placeholder={me?.subject ?? t("admin.smtpTest.recipientPlaceholder")}
+          aria-label={t("admin.smtpTest.recipientLabel")}
+          style={{ flex: 1 }}
+        />
+        <button type="submit" className="primary" disabled={!canSend}>
+          <Send size={14} style={{ marginRight: 6 }} />
+          {sending ? t("admin.smtpTest.sending") : t("admin.smtpTest.send")}
+        </button>
+      </form>
+      {!looksValid && (
+        <div className="sub" style={{ color: "var(--danger)", marginTop: "var(--space-1)" }}>
+          {t("admin.smtpTest.invalid")}
+        </div>
+      )}
+      {result && (
+        <div
+          className={result.ok ? "card" : "card error"}
+          style={{
+            marginTop: "var(--space-2)",
+            ...(result.ok ? { color: "var(--success, var(--accent))" } : {}),
+          }}
+        >
+          {result.ok ? (
+            <Check size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+          ) : (
+            <AlertCircle size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+          )}
+          {result.msg}
+        </div>
+      )}
     </div>
   );
 }

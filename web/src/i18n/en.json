@@ -807,6 +807,16 @@
       "statusExpired": "Expired",
       "expiresAt": "expires {{date}}"
     },
+    "smtpTest": {
+      "head": "Test platform email",
+      "subtitle": "Send one test message through the configured mailer (DAZYFLOW_SMTP_URL) to confirm it actually delivers. Startup only checks that the URL is valid, not that the server accepts mail. Leave the field blank to send to yourself.",
+      "recipientLabel": "Recipient",
+      "recipientPlaceholder": "person@example.com",
+      "send": "Send test email",
+      "sending": "Sending…",
+      "sent": "Test email sent to {{to}}. Check the inbox to confirm delivery.",
+      "invalid": "That doesn't look like a valid email yet."
+    },
     "sso": {
       "needAdmin": "You need <0>organization:admin</0> to configure sign-in.",
       "notConfigured": "Sign-in settings aren't enabled on this dzd instance.",

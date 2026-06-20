@@ -1583,6 +1583,16 @@ export const api = {
       `/admin/signup-invites/${encodeURIComponent(inviteToken)}`,
     ),
 
+  // smtpTest sends one throwaway message through the platform mailer. An
+  // empty `to` means "send to me" (the daemon defaults to the caller).
+  smtpTest: (token: string, to?: string) =>
+    request<{ ok: boolean; to: string; from: string }>(
+      token,
+      "POST",
+      "/admin/smtp-test",
+      to ? { to } : {},
+    ),
+
   // viewInvitation is unauthenticated — the token IS the credential.
   viewInvitation: (inviteToken: string) =>
     request<InvitationDetails>(
