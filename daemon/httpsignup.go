@@ -289,8 +289,8 @@ func defaultSignupRoles() []core.Role {
 	}
 }
 
-// Workspace provisioning for new signups: the current MapWorkspaces
-// build hardcodes a shared dev workspace at startup, so signup
-// users transparently share that store. When per-tenant workspace
-// storage lands (TODO: workspace create/list), the signup handler
-// will need to create the (tenant, "main") entry here.
+// Workspace provisioning for new signups: every org has exactly one
+// workspace, named "main" (set on the User above). Its backing store is
+// provisioned lazily on first use by AutoFSWorkspaces.Open, so signup
+// itself creates nothing here. There is deliberately no workspace
+// create/list surface — workspace is not a user-facing concept.

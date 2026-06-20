@@ -2,7 +2,7 @@
   "id": "mcp-lookup-and-route",
   "version": "1",
   "tenant": "dev",
-  "workspace": "default",
+  "workspace": "main",
   "nodes": [
     {
       "id": "lookup",

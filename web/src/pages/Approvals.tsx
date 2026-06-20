@@ -96,18 +96,9 @@ export function Approvals() {
         <div>
           <h1>{t("approvals.title")}</h1>
           <div className="sub">
-            {t(
-              shouldShowTenantID(me, tenants.length)
-                ? "approvals.subtitle"
-                : "approvals.subtitleWorkspaceOnly",
-              {
-                tenant: activeTenant || me?.tenant,
-                workspace:
-                  activeWorkspace ||
-                  me?.workspace ||
-                  t("approvals.anyWorkspace"),
-              },
-            )}
+            {shouldShowTenantID(me, tenants.length)
+              ? t("approvals.subtitle", { tenant: activeTenant || me?.tenant })
+              : t("approvals.subtitleWorkspaceOnly")}
             {items.length > 0 && (
               <>
                 {" · "}

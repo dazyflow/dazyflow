@@ -597,10 +597,6 @@ export const api = {
       "POST",
       "/me/totp/recovery-codes",
     ),
-  listWorkspaces: (token: string, tenant?: string) => {
-    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
-    return request<{ workspaces: string[] }>(token, "GET", "/workspaces" + qs);
-  },
   listTenants: (token: string) =>
     request<{ tenants: string[] }>(token, "GET", "/admin/tenants"),
   // adminVersion drives the System section: running build vs. the newest

@@ -38,7 +38,7 @@ control API, and asserts the output matches.
 | Distributed worker pool | dzd spins 2 workers; node `transform` lands on whichever claims first |
 | Native ↔ remote interop | file_read (Go, native) → csv_uppercase (Go, gRPC) → file_write (Go, native) |
 | Inline data over gRPC | file_read in `inline:true` mode embeds the file content into the Ref, dzd serializes it through the engine's protobuf adapter |
-| Sandbox containment | `file_read` and `file_write` both operate on `$SANDBOX_BASE/dev/default/`; absolute paths or `..` would be rejected |
+| Sandbox containment | `file_read` and `file_write` both operate on `$SANDBOX_BASE/dev/main/`; absolute paths or `..` would be rejected |
 | Progress streaming | The `[transform] 50% uppercasing 52 bytes` line travels remote → engine → gRPC stream → dzctl |
 | Audit | The graph + each node have JobRecords with worker IDs, timestamps, attempts |
 

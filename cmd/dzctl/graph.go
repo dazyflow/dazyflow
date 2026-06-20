@@ -74,7 +74,7 @@ func graphListCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&tenant, "tenant", "dev", "tenant")
-	cmd.Flags().StringVar(&workspace, "workspace", "default", "workspace")
+	cmd.Flags().StringVar(&workspace, "workspace", "main", "workspace")
 	return cmd
 }
 
@@ -148,7 +148,7 @@ func graphLoadCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&tenant, "tenant", "dev", "tenant")
-	cmd.Flags().StringVar(&workspace, "workspace", "default", "workspace")
+	cmd.Flags().StringVar(&workspace, "workspace", "main", "workspace")
 	cmd.Flags().StringVar(&ref, "ref", "", "git ref (branch, tag, or hash); empty = HEAD")
 	return cmd
 }
@@ -177,7 +177,7 @@ func graphPromoteCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&tenant, "tenant", "dev", "tenant")
-	cmd.Flags().StringVar(&workspace, "workspace", "default", "workspace")
+	cmd.Flags().StringVar(&workspace, "workspace", "main", "workspace")
 	return cmd
 }
 
@@ -227,7 +227,7 @@ func graphRunCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&tenant, "tenant", "dev", "tenant")
-	cmd.Flags().StringVar(&workspace, "workspace", "default", "workspace")
+	cmd.Flags().StringVar(&workspace, "workspace", "main", "workspace")
 	cmd.Flags().StringVar(&ref, "ref", "", "git ref; empty = HEAD")
 	return cmd
 }

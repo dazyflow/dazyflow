@@ -9,13 +9,13 @@ self-contained.
 
 | Feature | Where |
 |---|---|
-| **Webhook trigger** with per-graph secret | `POST /trigger/dev/default/process-invoice-{low,high}` |
+| **Webhook trigger** with per-graph secret | `POST /trigger/dev/main/process-invoice-{low,high}` |
 | **http_request** with secret-injected `Authorization` | every outbound call |
 | **Secret references** (`secret://...`) preserved in graph JSON | audit grep at end of `run.sh` |
 | **Branch** with field-path + numeric condition | `classify` node, `amount > 1000` |
 | **Multi-output fan** | `fetch_invoice.response_body` feeds *both* `classify` and `archive` |
 | **Dormant edges** | the not-taken branch (`notify_cfo` or `auto_approve`) records as `skipped` |
-| **Per-tenant sandbox** | `file_write` puts archives in `<sandbox>/dev/default/archive/` |
+| **Per-tenant sandbox** | `file_write` puts archives in `<sandbox>/dev/main/archive/` |
 | **mTLS-disabled-for-dev opt-in** | dzd dials backend over insecure HTTP because the backend isn't TLS |
 | **Audit isolation** | graph JSON on disk never holds resolved secret values |
 

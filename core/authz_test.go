@@ -41,10 +41,17 @@ func TestRequireWorkspace_TenantAdminBypassesWorkspace(t *testing.T) {
 	}
 }
 
-func TestRequireWorkspace_MismatchFails(t *testing.T) {
+// Workspace is no longer an authorization dimension (one workspace per
+// org), so RequireWorkspace decides purely on the tenant: a differing
+// workspace within the same tenant passes, while a cross-tenant request
+// still fails.
+func TestRequireWorkspace_WorkspaceNotAnAuthzDimension(t *testing.T) {
 	p := Principal{Tenant: "acme", Workspace: "ws1", Roles: []Role{roleRunner}}
-	if err := RequireWorkspace(p, "acme", "ws2"); !errors.Is(err, ErrUnauthorized) {
-		t.Errorf("workspace mismatch should fail: %v", err)
+	if err := RequireWorkspace(p, "acme", "ws2"); err != nil {
+		t.Errorf("same-tenant access must not depend on workspace: %v", err)
+	}
+	if err := RequireWorkspace(p, "other", "ws1"); !errors.Is(err, ErrUnauthorized) {
+		t.Errorf("cross-tenant access should still fail: %v", err)
 	}
 }
 

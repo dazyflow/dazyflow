@@ -84,20 +84,14 @@ func RequireTenant(p Principal, tenant string) error {
 	return nil
 }
 
-// RequireWorkspace ensures the principal is scoped to (or admin over) the
-// given workspace within its tenant. Tenant admins implicitly pass.
-func RequireWorkspace(p Principal, tenant, workspace string) error {
-	if err := RequireTenant(p, tenant); err != nil {
-		return err
-	}
-	if p.Has(PermOrganizationAdmin) {
-		return nil
-	}
-	if workspace != "" && p.Workspace != "" && p.Workspace != workspace {
-		return fmt.Errorf("%w: principal workspace %q cannot access workspace %q",
-			ErrUnauthorized, p.Workspace, workspace)
-	}
-	return nil
+// RequireWorkspace is retained as the call-site spelling across the
+// daemon, but workspace is no longer an authorization dimension: every
+// org has exactly one workspace, so access is fully decided by the
+// tenant. It therefore just delegates to RequireTenant. (The `workspace`
+// parameter is kept so the ~25 call sites — and the graph helpers below —
+// don't churn; it is intentionally unused.)
+func RequireWorkspace(p Principal, tenant, _ string) error {
+	return RequireTenant(p, tenant)
 }
 
 // AuthorizeGraphRun bundles the checks the engine should run before

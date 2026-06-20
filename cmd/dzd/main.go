@@ -671,7 +671,7 @@ func main() {
 			core.PermOrganizationAdmin, core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
 			core.PermSecretRead, core.PermSecretWrite,
 		}}
-		_, ct, err := auth.IssueAPIKey(ks, ctx, "dev", "dev", "default", "dev@local", []core.Role{adminRole}, nil)
+		_, ct, err := auth.IssueAPIKey(ks, ctx, "dev", "dev", "main", "dev@local", []core.Role{adminRole}, nil)
 		if err != nil {
 			log.Fatalf("issue dev key: %v", err)
 		}
@@ -1442,7 +1442,7 @@ func seedDefaultUser(ctx context.Context, users auth.UserStore, dev bool) {
 		PasswordHash: hash,
 		Subject:      "test@example.com",
 		Tenant:       "dev",
-		Workspace:    "default",
+		Workspace:    "main",
 		Roles:        []core.Role{adminRole},
 		CreatedAt:    time.Now(),
 	}

@@ -350,7 +350,6 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// challenge token is the principal) and rate-limited like the rest
 	// of the auth surface.
 	mux.HandleFunc("POST /api/v1/auth/totp", h.rateLimitAuth(h.totpVerify))
-	mux.HandleFunc("GET /api/v1/workspaces", h.requireAuth(h.listWorkspaces))
 	mux.HandleFunc("POST /api/v1/workspaces/{tenant}/{workspace}/files", h.requireAuth(h.uploadWorkspaceFile))
 	mux.HandleFunc("GET /api/v1/workspaces/{tenant}/{workspace}/files/list", h.requireAuth(h.listWorkspaceFiles))
 	mux.HandleFunc("GET /api/v1/workspaces/{tenant}/{workspace}/files/download", h.requireAuth(h.downloadWorkspaceFile))
@@ -1397,19 +1396,6 @@ func (h *HTTPGateway) putOrgProfile(rw http.ResponseWriter, r *http.Request, p c
 		"icon":         pr.Icon,
 		"updated_at":   pr.UpdatedAt,
 	})
-}
-
-// listWorkspaces returns the workspaces the bearer can access. The UI
-// uses it to drive the top-bar switcher. Platform admins may pass
-// ?tenant= to list workspaces in any tenant; everyone else's tenant
-// query is ignored (their principal binding wins).
-func (h *HTTPGateway) listWorkspaces(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	ws, err := h.svc.ListWorkspaces(r.Context(), p, r.URL.Query().Get("tenant"))
-	if err != nil {
-		writeJSONError(rw, http.StatusInternalServerError, err.Error())
-		return
-	}
-	writeJSON(rw, http.StatusOK, map[string]any{"workspaces": ws})
 }
 
 func (h *HTTPGateway) listModules(rw http.ResponseWriter, r *http.Request, p core.Principal) {

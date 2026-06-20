@@ -37,7 +37,7 @@ const ADV_KEY = "dazyflow.admin.advancedOpen";
 
 export function Admin() {
   const { t } = useTranslation();
-  const { me, hasPerm, activeTenant, activeWorkspace } = useAuth();
+  const { me, hasPerm, activeTenant } = useAuth();
   const [advancedOpen, setAdvancedOpen] = useState<boolean>(() => {
     try {
       return localStorage.getItem(ADV_KEY) === "1";
@@ -73,9 +73,8 @@ export function Admin() {
               i18nKey="admin.subtitle"
               values={{
                 tenant: orgDisplayName(me, activeTenant || me?.tenant || ""),
-                workspace: activeWorkspace || me?.workspace || t("admin.anyWorkspace"),
               }}
-              components={[<strong />, <strong />]}
+              components={[<strong />]}
             />
           </div>
         </div>

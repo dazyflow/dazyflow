@@ -46,12 +46,12 @@ DZCTL_TOKEN=$TOKEN /tmp/mcp-dzctl --server=localhost:50099 graph save pipeline.j
 DZCTL_TOKEN=$TOKEN /tmp/mcp-dzctl --server=localhost:50099 graph run mcp-lookup-and-route 2>&1 | tail -5
 
 echo "[5/5] inspecting outcome"
-echo "    archives written under $SANDBOX_BASE/dev/default/users/:"
-ls "$SANDBOX_BASE/dev/default/users/" | sed 's/^/      /'
+echo "    archives written under $SANDBOX_BASE/dev/main/users/:"
+ls "$SANDBOX_BASE/dev/main/users/" | sed 's/^/      /'
 
-if [[ -f "$SANDBOX_BASE/dev/default/users/premium.json" ]]; then
+if [[ -f "$SANDBOX_BASE/dev/main/users/premium.json" ]]; then
     echo "    premium.json content:"
-    sed 's/^/      /' "$SANDBOX_BASE/dev/default/users/premium.json"
+    sed 's/^/      /' "$SANDBOX_BASE/dev/main/users/premium.json"
 fi
 
 echo
@@ -71,7 +71,7 @@ assert "tools appear as mcp:ap-demo:* modules" \
 assert "graph succeeded end-to-end" \
     "DZCTL_TOKEN=$TOKEN /tmp/mcp-dzctl --server=localhost:50099 job list mcp-lookup-and-route 2>&1 | grep -E '^[a-f0-9]+ +succeeded'"
 assert "MCP tool result reached the branch and routed to premium" \
-    "test -f $SANDBOX_BASE/dev/default/users/premium.json"
+    "test -f $SANDBOX_BASE/dev/main/users/premium.json"
 assert "regular path was skipped (branch correctly forked)" \
     "DZCTL_TOKEN=$TOKEN /tmp/mcp-dzctl --server=localhost:50099 job list mcp-lookup-and-route 2>&1 | grep save_regular | grep -q skipped"
 

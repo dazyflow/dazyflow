@@ -179,11 +179,12 @@ export function FlowList() {
       <div className="page-title">
         <div>
           <h1>{t("flowList.title")}</h1>
-          <div className="sub">
-            {shouldShowTenantID(me, tenants.length)
-              ? `${activeTenant || me?.tenant}/${activeWorkspace}`
-              : activeWorkspace}
-          </div>
+          {/* Org name only as context, and only when the user belongs to
+              more than one org. One workspace per org, so no workspace is
+              shown — a lone "main" was pure noise. */}
+          {shouldShowTenantID(me, tenants.length) && (
+            <div className="sub">{activeTenant || me?.tenant}</div>
+          )}
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <Link

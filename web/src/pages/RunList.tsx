@@ -234,16 +234,9 @@ export function RunList() {
         <div>
           <h1>{t("runList.title")}</h1>
           <div className="sub">
-            {t(
-              shouldShowTenantID(me, tenants.length)
-                ? "runList.subtitle"
-                : "runList.subtitleWorkspaceOnly",
-              {
-                tenant: activeTenant || me?.tenant,
-                workspace:
-                  activeWorkspace || me?.workspace || t("runList.anyWorkspace"),
-              },
-            )}
+            {shouldShowTenantID(me, tenants.length)
+              ? t("runList.subtitle", { tenant: activeTenant || me?.tenant })
+              : t("runList.subtitleWorkspaceOnly")}
           </div>
         </div>
       </div>

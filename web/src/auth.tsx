@@ -6,8 +6,16 @@ import i18n from "./i18n";
 import type { Permission, WhoAmI } from "./types";
 
 const STORAGE_KEY = "dazyflow.token";
-const WS_STORAGE_KEY = "dazyflow.activeWorkspace";
 const TENANT_STORAGE_KEY = "dazyflow.activeTenant";
+
+// Every org has exactly one workspace. The concept is no longer
+// user-facing: there's no switcher and no per-workspace scoping in the
+// UI. `activeWorkspace` still exists purely as the value threaded into
+// the API calls that take a workspace path segment — it resolves to the
+// principal's bound workspace (historically "main") and never changes
+// within an org. DEFAULT_WORKSPACE is the fallback when a principal has
+// no explicit binding (e.g. a platform admin browsing another org).
+const DEFAULT_WORKSPACE = "main";
 
 type AuthCtx = {
   token: string | null;
@@ -46,14 +54,11 @@ type AuthCtx = {
   ) => Promise<void>;
   signOut: () => Promise<void>;
   hasPerm: (p: Permission) => boolean;
-  // Workspace state. `workspaces` is the list the principal can access
-  // (single entry for scoped keys; many for tenant admins).
-  // `activeWorkspace` is what the UI's pages should query against — it
-  // defaults to me.workspace, or the first listed entry for admins
-  // whose key isn't bound to one workspace.
-  workspaces: string[];
+  // activeWorkspace is the single workspace of the active org, threaded
+  // into the API calls that still take a workspace path segment. It is
+  // not user-selectable — one workspace per org — and is derived from the
+  // principal's binding (see DEFAULT_WORKSPACE).
   activeWorkspace: string;
-  setActiveWorkspace: (ws: string) => void;
 
   // Tenant state. For platform admins (no tenant binding), `tenants`
   // lists every tenant on the dzd instance and `activeTenant` is
@@ -86,7 +91,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [reloadKey, setReloadKey] = useState(0);
   const [loading, setLoading] = useState<boolean>(!!token);
   const [error, setError] = useState<string | null>(null);
-  const [workspaces, setWorkspaces] = useState<string[]>([]);
   const [activeWorkspace, setActiveWorkspaceState] = useState<string>("");
   const [tenants, setTenants] = useState<string[]>([]);
   const [activeTenant, setActiveTenantState] = useState<string>("");
@@ -114,7 +118,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!token) {
       setMe(null);
-      setWorkspaces([]);
       setActiveWorkspaceState("");
       setTenants([]);
       setActiveTenantState("");
@@ -193,60 +196,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [token, reloadKey]);
 
-  // Workspace loader — rerun whenever the active tenant changes so
-  // platform admins flipping the tenant switcher see the right list
-  // immediately. Picks a sensible activeWorkspace: cached value if
-  // it's still in the new tenant's list, else the principal's binding,
-  // else the first entry.
+  // One workspace per org: there's no list to fetch and nothing to pick.
+  // activeWorkspace simply mirrors the principal's bound workspace (which
+  // a tenant switch refreshes via whoami), falling back to the default for
+  // a principal with no explicit binding. It exists only to feed the API
+  // calls that still carry a workspace path segment.
   useEffect(() => {
-    if (!token || !activeTenant) {
-      setWorkspaces([]);
-      setActiveWorkspaceState("");
-      return;
-    }
-    let cancelled = false;
-    api
-      .listWorkspaces(token, activeTenant)
-      .then((r) => {
-        if (cancelled) return;
-        const accessible = r.workspaces ?? [];
-        setWorkspaces(accessible);
-        const chosen = pickActive(
-          accessible,
-          localStorage.getItem(WS_STORAGE_KEY) ?? "",
-          me?.workspace ?? "",
-        );
-        setActiveWorkspaceState(chosen);
-        if (chosen) localStorage.setItem(WS_STORAGE_KEY, chosen);
-        else localStorage.removeItem(WS_STORAGE_KEY);
-      })
-      .catch(() => {
-        /* leave workspaces empty — switcher shows "(pick)" */
-      });
-    return () => {
-      cancelled = true;
-    };
-    // me is intentionally read inside but excluded from deps —
-    // re-running on every me update would double-fetch right after
-    // sign-in. The activeTenant dep covers the meaningful transitions.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, activeTenant]);
-
-  const setActiveWorkspace = (ws: string) => {
-    setActiveWorkspaceState(ws);
-    if (ws) localStorage.setItem(WS_STORAGE_KEY, ws);
-    else localStorage.removeItem(WS_STORAGE_KEY);
-  };
+    setActiveWorkspaceState(token ? me?.workspace || DEFAULT_WORKSPACE : "");
+  }, [token, me]);
 
   const setActiveTenant = (t: string) => {
     setActiveTenantState(t);
     if (t) localStorage.setItem(TENANT_STORAGE_KEY, t);
     else localStorage.removeItem(TENANT_STORAGE_KEY);
-    // Switching tenants invalidates the current workspace choice —
-    // workspaces are tenant-scoped. Drop it; the post-whoami flow on
-    // next reload will pick a sensible default for the new tenant.
-    setActiveWorkspaceState("");
-    localStorage.removeItem(WS_STORAGE_KEY);
+    // The new org's workspace is re-derived from whoami below (and by the
+    // me-driven effect above), so no explicit workspace reset is needed.
     // For password-auth users, also tell the server to re-issue the
     // session against the new tenant so the next /graphs / /secrets /
     // /admin call lands in the right scope. Platform admins skip this
@@ -381,11 +345,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
     localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(WS_STORAGE_KEY);
     localStorage.removeItem(TENANT_STORAGE_KEY);
     setToken(null);
     setMe(null);
-    setWorkspaces([]);
     setActiveWorkspaceState("");
     setTenants([]);
     setActiveTenantState("");
@@ -413,9 +375,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signUpWithPassword,
         signOut,
         hasPerm,
-        workspaces,
         activeWorkspace,
-        setActiveWorkspace,
         tenants,
         activeTenant,
         setActiveTenant,

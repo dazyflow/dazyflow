@@ -633,8 +633,8 @@
   },
   "approvals": {
     "title": "Approvals",
-    "subtitle": "Pending in {{tenant}}/{{workspace}}",
-    "subtitleWorkspaceOnly": "Pending in {{workspace}}",
+    "subtitle": "Pending in {{tenant}}",
+    "subtitleWorkspaceOnly": "Pending",
     "waitingSuffix": "<0>{{count}}</0> waiting",
     "anyWorkspace": "(any)",
     "inboxZero": "Inbox zero — nothing waiting on your decision.",
@@ -665,7 +665,7 @@
   "admin": {
     "title": "Admin",
     "needAdmin": "You need <0>organization:admin</0> or <0>graph:admin</0> to view this page.",
-    "subtitle": "Organization <0>{{tenant}}</0> · workspace <1>{{workspace}}</1>",
+    "subtitle": "Organization <0>{{tenant}}</0>",
     "anyWorkspace": "(any)",
     "groupOrg": "Organization",
     "groupAdvanced": "Advanced",
@@ -998,8 +998,8 @@
   },
   "runList": {
     "title": "Runs",
-    "subtitle": "All runs in {{tenant}}/{{workspace}}",
-    "subtitleWorkspaceOnly": "All runs in {{workspace}}",
+    "subtitle": "All runs in {{tenant}}",
+    "subtitleWorkspaceOnly": "All runs",
     "anyWorkspace": "(any)",
     "filterAll": "All",
     "filterRunning": "Running",

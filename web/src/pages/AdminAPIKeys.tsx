@@ -156,7 +156,6 @@ export function AdminAPIKeys() {
                   <tr>
                     <th>{t("admin.apiKeys.colId")}</th>
                     <th>{t("admin.apiKeys.colSubject")}</th>
-                    <th>{t("admin.apiKeys.colWorkspace")}</th>
                     <th>{t("admin.apiKeys.colRoles")}</th>
                     <th>{t("admin.apiKeys.colExpires")}</th>
                     <th>{t("admin.apiKeys.colStatus")}</th>
@@ -222,9 +221,6 @@ function APIKeyRow({
     <tr className={confirming ? "row-confirming" : undefined}>
       <td style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-sm)" }}>{k.id}</td>
       <td>{k.subject}</td>
-      <td style={{ color: "var(--muted)", fontSize: "var(--text-sm)" }}>
-        {k.workspace || t("admin.apiKeys.anyWorkspace")}
-      </td>
       <td style={{ fontSize: "var(--text-sm)" }}>
         {k.roles.map((r) => r.name).join(", ")}
       </td>

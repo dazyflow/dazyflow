@@ -15,7 +15,7 @@
 //	        "DAZYFLOW_URL":     "http://localhost:8080",
 //	        "DAZYFLOW_API_KEY": "<bearer token>",
 //	        "DAZYFLOW_TENANT":    "dev",        // optional
-//	        "DAZYFLOW_WORKSPACE": "default"     // optional
+//	        "DAZYFLOW_WORKSPACE": "main"        // optional
 //	      }
 //	    }
 //	  }

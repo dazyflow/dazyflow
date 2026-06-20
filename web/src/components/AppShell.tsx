@@ -112,9 +112,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     me,
     signOut,
     hasPerm,
-    workspaces,
     activeWorkspace,
-    setActiveWorkspace,
     tenants,
     activeTenant,
     setActiveTenant,
@@ -385,15 +383,6 @@ export function AppShell({ children }: { children: ReactNode }) {
               </strong>
               <ChevronDown size={12} />
             </button>
-            <span className="topbar-workspace">
-              {/* Only renders when there's more than one workspace — a lone
-                  "main" next to the org name is noise. */}
-              <WorkspaceSwitcher
-                activeWorkspace={activeWorkspace || me.workspace}
-                workspaces={workspaces}
-                onPick={setActiveWorkspace}
-              />
-            </span>
             {inEditor && openSettings && (
               <FlowMenu onOpenSettings={openSettings} />
             )}
@@ -624,79 +613,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     </ActiveFlowContext.Provider>
   );
 }
-
-// WorkspaceSwitcher renders the workspace picker — a dropdown to choose the
-// active workspace. It only appears when the principal has MORE THAN ONE
-// workspace: with a single workspace (the common case, "main") there's
-// nothing to switch, so showing a lone "main" next to the org is just noise.
-// Org/tenant identity lives in the separate org switcher, so this chip shows
-// only the workspace name.
-function WorkspaceSwitcher({
-  activeWorkspace,
-  workspaces,
-  onPick,
-}: {
-  activeWorkspace: string;
-  workspaces: string[];
-  onPick: (ws: string) => void;
-}) {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const multi = workspaces.length > 1;
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target.closest(".workspace-switcher")) setOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [open]);
-  if (!multi) return null;
-  const label = <strong>{activeWorkspace || t("common.noneParen")}</strong>;
-  return (
-    <div className="workspace-switcher" style={{ position: "relative" }}>
-      <button
-        type="button"
-        className="ghost"
-        onClick={() => setOpen((v) => !v)}
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 6,
-          fontSize: "var(--text-md)",
-          padding: "4px 10px",
-        }}
-        title={t("nav.switchWorkspace")}
-      >
-        <FolderTree size={13} />
-        <span>{label}</span>
-        <ChevronDown size={12} />
-      </button>
-      {open && (
-        <div className="workspace-pop">
-          <div className="workspace-pop-head">{t("nav.workspaceGroup")}</div>
-          {workspaces.map((ws) => (
-            <button
-              key={ws}
-              type="button"
-              className={
-                "workspace-pop-row" + (ws === activeWorkspace ? " active" : "")
-              }
-              onClick={() => {
-                onPick(ws);
-                setOpen(false);
-              }}
-            >
-              {ws}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 
 // AccountMenu is the lower-left sidebar account control — the entry
 // point to per-user actions (Settings, Sign out). Modelled on the

@@ -4,7 +4,7 @@
 # What this proves:
 #   - A third-party gRPC module slots into Dazyflow via --remote
 #   - Data flows: native file_read → remote csv_uppercase → native file_write
-#   - The sandbox holds: file_read reads from $DATA_DIR/dev/default,
+#   - The sandbox holds: file_read reads from $DATA_DIR/dev/main,
 #     file_write produces output there
 set -euo pipefail
 
@@ -28,14 +28,14 @@ go build -o /tmp/csv-xform-demo ./transformer
 
 echo "[2/6] seeding input.csv"
 # dzd's sandbox lives under $DATA_DIR/sandbox/<tenant>/<workspace>/
-mkdir -p "$DATA_DIR/sandbox/dev/default"
-cat > "$DATA_DIR/sandbox/dev/default/input.csv" <<EOF
+mkdir -p "$DATA_DIR/sandbox/dev/main"
+cat > "$DATA_DIR/sandbox/dev/main/input.csv" <<EOF
 name,role
 alice,engineer
 bob,manager
 charlie,intern
 EOF
-echo "    input.csv ($(wc -c < "$DATA_DIR/sandbox/dev/default/input.csv") bytes)"
+echo "    input.csv ($(wc -c < "$DATA_DIR/sandbox/dev/main/input.csv") bytes)"
 
 # wait_for polls a bash /dev/tcp probe until the port accepts or it times out.
 wait_for() { # host port label
@@ -81,16 +81,16 @@ DZCTL_TOKEN="$TOKEN" /tmp/dzctl-demo --server=localhost:50099 graph save pipelin
 DZCTL_TOKEN="$TOKEN" /tmp/dzctl-demo --server=localhost:50099 graph run csv-uppercase 2>&1 | sed 's/^/    /'
 
 echo "[6/6] verifying output"
-if [[ -f "$DATA_DIR/sandbox/dev/default/output.csv" ]]; then
+if [[ -f "$DATA_DIR/sandbox/dev/main/output.csv" ]]; then
     echo "    output.csv exists"
     echo "    --- output.csv ---"
-    sed 's/^/    /' "$DATA_DIR/sandbox/dev/default/output.csv"
+    sed 's/^/    /' "$DATA_DIR/sandbox/dev/main/output.csv"
     echo "    ------------------"
     EXPECT="NAME,ROLE
 ALICE,ENGINEER
 BOB,MANAGER
 CHARLIE,INTERN"
-    if [[ "$(cat "$DATA_DIR/sandbox/dev/default/output.csv")" == "$EXPECT" ]]; then
+    if [[ "$(cat "$DATA_DIR/sandbox/dev/main/output.csv")" == "$EXPECT" ]]; then
         echo "[ok]  pipeline produced the expected uppercase CSV"
     else
         echo "[!!]  contents differ from expected"

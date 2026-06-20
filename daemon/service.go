@@ -30,9 +30,10 @@ import (
 // use MapWorkspaces.
 type WorkspaceLookup interface {
 	Open(tenant, workspace string) (*workspace.Store, error)
-	// List returns every workspace name registered under the supplied
-	// tenant. Used by Service.ListWorkspaces to populate the admin
-	// workspace switcher.
+	// List returns every workspace directory present under the supplied
+	// tenant. It is no longer user-facing (one workspace per org); the
+	// event-routing handlers (github/slack/stripe webhooks, GDPR export)
+	// use it to scan a tenant's stores for matching flows.
 	List(tenant string) ([]string, error)
 }
 
@@ -127,7 +128,7 @@ func (a *AutoFSWorkspaces) Open(tenant, ws string) (*workspace.Store, error) {
 // rather than erroring — the switcher then shows the default. In
 // memory mode (empty base) it reports the workspaces opened so far.
 func (a *AutoFSWorkspaces) List(tenant string) ([]string, error) {
-	st, _, err := safeWorkspaceSegment(tenant, "default")
+	st, _, err := safeWorkspaceSegment(tenant, "main")
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +167,7 @@ func (a *AutoFSWorkspaces) List(tenant string) ([]string, error) {
 // workspace half of the GDPR erasure cascade (Art. 17). Idempotent. In
 // memory mode (empty base) it just drops the cached stores.
 func (a *AutoFSWorkspaces) RemoveTenant(tenant string) error {
-	st, _, err := safeWorkspaceSegment(tenant, "default")
+	st, _, err := safeWorkspaceSegment(tenant, "main")
 	if err != nil {
 		return err
 	}
@@ -670,34 +671,6 @@ func (s *Service) ListGraphs(ctx context.Context, p core.Principal, tenant, ws s
 		}
 	}
 	return visible, nil
-}
-
-// ListWorkspaces returns the workspaces the principal can access.
-// Three rules:
-//   - Principals bound to a specific workspace (p.Workspace != "")
-//     see only that one — they can't peek at siblings.
-//   - Principals with an empty Workspace (typical for tenant admins)
-//     see every workspace under their own Tenant.
-//   - Platform admins may pass `narrowTenant` to list workspaces in
-//     any tenant — used by the cross-tenant switcher.
-//
-// The UI uses this to populate the workspace switcher in the top bar;
-// non-admins simply see a single entry and the switcher hides.
-func (s *Service) ListWorkspaces(ctx context.Context, p core.Principal, narrowTenant string) ([]string, error) {
-	if p.Workspace != "" {
-		return []string{p.Workspace}, nil
-	}
-	tenant := p.Tenant
-	if narrowTenant != "" && (p.Has(core.PermPlatformAdmin) || narrowTenant == p.Tenant) {
-		tenant = narrowTenant
-	}
-	if tenant == "" {
-		return nil, fmt.Errorf("tenant is required (principal has no tenant binding)")
-	}
-	if s.Workspaces == nil {
-		return nil, nil
-	}
-	return s.Workspaces.List(tenant)
 }
 
 // FlowSummary is the slim per-flow payload the UI list view consumes —

@@ -2,7 +2,7 @@
   "id": "csv-uppercase",
   "version": "1",
   "tenant": "dev",
-  "workspace": "default",
+  "workspace": "main",
   "nodes": [
     {
       "id": "load",

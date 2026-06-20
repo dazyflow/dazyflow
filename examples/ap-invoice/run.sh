@@ -125,14 +125,14 @@ DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 graph save pipeline-hi
 # --- 5. fire the low-value invoice via webhook ----------------------------
 echo "[5/7] webhook → process-invoice-low (\$250 amount → auto-approve path)"
 LOW_JOB=$(curl -s -X POST -H "Authorization: Bearer webhook-secret" \
-    http://127.0.0.1:18080/trigger/dev/default/process-invoice-low | grep -oE '[a-f0-9]{20,}')
+    http://127.0.0.1:18080/trigger/dev/main/process-invoice-low | grep -oE '[a-f0-9]{20,}')
 echo "      → job $LOW_JOB"
 sleep 0.5
 
 # --- 6. fire the high-value invoice ---------------------------------------
 echo "[6/7] webhook → process-invoice-high (\$12,500 amount → CFO path)"
 HIGH_JOB=$(curl -s -X POST -H "Authorization: Bearer webhook-secret" \
-    http://127.0.0.1:18080/trigger/dev/default/process-invoice-high | grep -oE '[a-f0-9]{20,}')
+    http://127.0.0.1:18080/trigger/dev/main/process-invoice-high | grep -oE '[a-f0-9]{20,}')
 echo "      → job $HIGH_JOB"
 sleep 0.5
 
@@ -151,13 +151,13 @@ DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 job list process-invoi
 
 echo
 echo "--- archived invoices on disk ---"
-ls -1 "$SANDBOX_BASE/sandbox/dev/default/archive/" 2>&1 | sed 's/^/    /'
+ls -1 "$SANDBOX_BASE/sandbox/dev/main/archive/" 2>&1 | sed 's/^/    /'
 echo
 echo "--- archive/invoice-42.json contents ---"
-cat "$SANDBOX_BASE/sandbox/dev/default/archive/invoice-42.json" | sed 's/^/    /'
+cat "$SANDBOX_BASE/sandbox/dev/main/archive/invoice-42.json" | sed 's/^/    /'
 echo
 echo "--- archive/invoice-big-99.json contents ---"
-cat "$SANDBOX_BASE/sandbox/dev/default/archive/invoice-big-99.json" | sed 's/^/    /'
+cat "$SANDBOX_BASE/sandbox/dev/main/archive/invoice-big-99.json" | sed 's/^/    /'
 
 echo
 echo "--- audit: saved graph still references secrets symbolically ---"
@@ -189,7 +189,7 @@ assert "high invoice routed to notify_cfo" \
 assert "high invoice's auto_approve was skipped" \
     "DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 job list process-invoice-high 2>&1 | grep auto_approve | grep -q skipped"
 assert "both invoices archived" \
-    "test -f $SANDBOX_BASE/sandbox/dev/default/archive/invoice-42.json && test -f $SANDBOX_BASE/sandbox/dev/default/archive/invoice-big-99.json"
+    "test -f $SANDBOX_BASE/sandbox/dev/main/archive/invoice-42.json && test -f $SANDBOX_BASE/sandbox/dev/main/archive/invoice-big-99.json"
 assert "mock backend saw correct API key for /invoices" \
     "! grep -q 'invoices: bad Authorization' $BE_LOG"
 assert "no SSRF or auth refusals in backend log" \

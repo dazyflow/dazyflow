@@ -633,8 +633,8 @@
   },
   "approvals": {
     "title": "Godkännanden",
-    "subtitle": "Pågående i {{tenant}}/{{workspace}}",
-    "subtitleWorkspaceOnly": "Pågående i {{workspace}}",
+    "subtitle": "Pågående i {{tenant}}",
+    "subtitleWorkspaceOnly": "Pågående",
     "waitingSuffix": "<0>{{count}}</0> väntande",
     "anyWorkspace": "(alla)",
     "inboxZero": "Inbox zero — inget väntar på ditt beslut.",
@@ -665,7 +665,7 @@
   "admin": {
     "title": "Admin",
     "needAdmin": "Du behöver <0>organization:admin</0> eller <0>graph:admin</0> för att se den här sidan.",
-    "subtitle": "Organisation <0>{{tenant}}</0> · arbetsyta <1>{{workspace}}</1>",
+    "subtitle": "Organisation <0>{{tenant}}</0>",
     "anyWorkspace": "(alla)",
     "groupOrg": "Organisation",
     "groupAdvanced": "Avancerat",
@@ -998,8 +998,8 @@
   },
   "runList": {
     "title": "Körningar",
-    "subtitle": "Alla körningar i {{tenant}}/{{workspace}}",
-    "subtitleWorkspaceOnly": "Alla körningar i {{workspace}}",
+    "subtitle": "Alla körningar i {{tenant}}",
+    "subtitleWorkspaceOnly": "Alla körningar",
     "anyWorkspace": "(alla)",
     "filterAll": "Alla",
     "filterRunning": "Pågående",

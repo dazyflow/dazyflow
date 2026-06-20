@@ -2,7 +2,7 @@
   "id": "process-invoice-low",
   "version": "1",
   "tenant": "dev",
-  "workspace": "default",
+  "workspace": "main",
   "nodes": [
     {
       "id": "inbound",
