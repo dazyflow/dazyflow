@@ -61,24 +61,40 @@ func FlowRunStatusPublished(g Graph, published bool) FlowRunStatus {
 // from an HTTP endpoint and are intentionally excluded (they don't require
 // publishing). Mirrors the relevant cases of HasConfiguredAutoTrigger.
 func HasConfiguredSchedulerTrigger(g Graph) bool {
+	hasScheduler, _ := classifyTriggers(g)
+	return hasScheduler
+}
+
+// classifyTriggers scans g once and reports whether it carries a configured
+// trigger that fires via the SCHEDULER (graph-level cron, cron_trigger node,
+// or poll_trigger/google_form_trigger node with a valid interval) and,
+// separately, whether it carries a reachable webhook_input node. The two
+// public classifiers are thin views over this: HasConfiguredSchedulerTrigger
+// is hasScheduler, HasConfiguredAutoTrigger is hasScheduler || hasWebhook.
+func classifyTriggers(g Graph) (hasScheduler, hasWebhook bool) {
 	for _, tr := range g.Triggers {
 		if tr.Type == "cron" && strings.TrimSpace(tr.Cron) != "" {
-			return true
+			hasScheduler = true
 		}
 	}
 	for _, n := range g.Nodes {
 		switch n.Module {
 		case "cron_trigger":
 			if expr, _ := n.Params["cron"].(string); strings.TrimSpace(expr) != "" {
-				return true
+				hasScheduler = true
 			}
 		case "poll_trigger", "google_form_trigger":
 			if secs, ok := paramInt(n.Params, "interval_seconds"); ok && secs > 0 && secs <= MaxPollIntervalSeconds {
-				return true
+				hasScheduler = true
+			}
+		case "webhook_input":
+			publicForm, _ := n.Params["public_form"].(bool)
+			if len(WebhookSecrets(n.Params)) > 0 || publicForm {
+				hasWebhook = true
 			}
 		}
 	}
-	return false
+	return hasScheduler, hasWebhook
 }
 
 // HasConfiguredAutoTrigger reports whether the flow has at least one
@@ -98,27 +114,6 @@ func HasConfiguredSchedulerTrigger(g Graph) bool {
 // the runtime ignores them (see lintTriggers), so a flow carrying only one
 // of those is manual-only in practice.
 func HasConfiguredAutoTrigger(g Graph) bool {
-	for _, tr := range g.Triggers {
-		if tr.Type == "cron" && strings.TrimSpace(tr.Cron) != "" {
-			return true
-		}
-	}
-	for _, n := range g.Nodes {
-		switch n.Module {
-		case "cron_trigger":
-			if expr, _ := n.Params["cron"].(string); strings.TrimSpace(expr) != "" {
-				return true
-			}
-		case "poll_trigger", "google_form_trigger":
-			if secs, ok := paramInt(n.Params, "interval_seconds"); ok && secs > 0 && secs <= MaxPollIntervalSeconds {
-				return true
-			}
-		case "webhook_input":
-			publicForm, _ := n.Params["public_form"].(bool)
-			if len(WebhookSecrets(n.Params)) > 0 || publicForm {
-				return true
-			}
-		}
-	}
-	return false
+	hasScheduler, hasWebhook := classifyTriggers(g)
+	return hasScheduler || hasWebhook
 }

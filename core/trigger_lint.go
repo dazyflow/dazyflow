@@ -76,14 +76,30 @@ func lintTriggers(g Graph) []LintIssue {
 		}
 	}
 
+	// Single pass over the nodes, bucketing the trigger-bearing modules.
+	// The per-module rules below run on these buckets so each module's
+	// findings stay grouped (cron, then poll, then webhook) regardless of
+	// how the nodes are interleaved on the canvas — preserving the issue
+	// ordering callers/tests expect.
+	var cronNodes, pollNodes, webhookNodes []Node
+	hasCronNode := false
+	for _, n := range g.Nodes {
+		switch n.Module {
+		case "cron_trigger":
+			cronNodes = append(cronNodes, n)
+			hasCronNode = true
+		case "poll_trigger":
+			pollNodes = append(pollNodes, n)
+		case "webhook_input":
+			webhookNodes = append(webhookNodes, n)
+		}
+	}
+
 	// cron_trigger nodes carry their own schedule (Phase 2). Lint a
 	// configured one the same way as a graph-level cron trigger. A blank
 	// schedule is intentional ("run only on demand"), so it's not flagged —
 	// only a malformed or never-firing expression is.
-	for _, n := range g.Nodes {
-		if n.Module != "cron_trigger" {
-			continue
-		}
+	for _, n := range cronNodes {
 		expr, _ := n.Params["cron"].(string)
 		expr = strings.TrimSpace(expr)
 		if expr == "" {
@@ -105,10 +121,7 @@ func lintTriggers(g Graph) []LintIssue {
 	// schedule). A blank interval is intentional ("run only on demand"), so
 	// it's not flagged — only a non-positive or over-the-ceiling value, which
 	// the scheduler would refuse to run.
-	for _, n := range g.Nodes {
-		if n.Module != "poll_trigger" {
-			continue
-		}
+	for _, n := range pollNodes {
 		secs, ok := paramInt(n.Params, "interval_seconds")
 		if !ok || secs == 0 {
 			continue // unset/zero — manual-only, fine (mirrors a blank cron)
@@ -126,10 +139,7 @@ func lintTriggers(g Graph) []LintIssue {
 	// webhook_input nodes carry the secret + hosted-form opt-in. A node with
 	// neither a secret nor a public form is unreachable: the /trigger endpoint
 	// rejects unauthenticated POSTs and there's no form to receive submissions.
-	for _, n := range g.Nodes {
-		if n.Module != "webhook_input" {
-			continue
-		}
+	for _, n := range webhookNodes {
 		publicForm, _ := n.Params["public_form"].(bool)
 		if len(WebhookSecrets(n.Params)) == 0 && !publicForm {
 			// Worded for people who don't know what a bearer token or an
@@ -146,13 +156,6 @@ func lintTriggers(g Graph) []LintIssue {
 	// to a flow that still has a legacy graph-level cron — surface it so the
 	// owner removes one. (The two are otherwise complementary: only one cron
 	// authority should win.)
-	hasCronNode := false
-	for _, n := range g.Nodes {
-		if n.Module == "cron_trigger" {
-			hasCronNode = true
-			break
-		}
-	}
 	hasGraphCron := false
 	for _, tr := range g.Triggers {
 		if tr.Type == "cron" {
