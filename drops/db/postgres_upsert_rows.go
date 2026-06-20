@@ -4,12 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 	"git.sr.ht/~klahr/dazyflow/engine"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func init() {
@@ -122,9 +120,8 @@ func executePostgresUpsertRows(ctx context.Context, job core.Job, _ chan<- core.
 	if errRes != nil {
 		return *errRes, nil
 	}
-	rows, headers := ri.rows, ri.headers
 
-	if errRes := checkConflictInHeaders(job, conflictCols, headers); errRes != nil {
+	if errRes := checkConflictInHeaders(job, conflictCols, ri.headers); errRes != nil {
 		return *errRes, nil
 	}
 
@@ -134,157 +131,5 @@ func executePostgresUpsertRows(ctx context.Context, job core.Job, _ chan<- core.
 	}
 
 	qualified := fmt.Sprintf("%s.%s", quoteIdent(schema), quoteIdent(table))
-
-	createTable := true
-	if v, present := params.Bool(job.Params, "create_table"); present {
-		createTable = v
-	}
-	if createTable && len(headers) > 0 {
-		colTypes, err := parseColumnTypes(job.Params)
-		if err != nil {
-			return params.Err(job, "db", err.Error()), nil
-		}
-		if err := pgEnsureTableWithUnique(ctx, pool, qualified, headers, colTypes, conflictCols); err != nil {
-			return params.Err(job, "db", err.Error()), nil
-		}
-	}
-
-	if len(rows) == 0 {
-		return core.Result{
-			JobID:  job.ID,
-			Status: core.StatusOK,
-			Output: map[string]core.Ref{
-				"processed": {MIME: "application/json", Inline: 0},
-			},
-		}, nil
-	}
-
-	// Decide the final update set:
-	//   - explicit []        → DO NOTHING
-	//   - explicit non-empty → use those (validated above)
-	//   - absent             → derive (headers minus conflict_columns)
-	if !updateColsExplicit {
-		updateCols = subtract(headers, conflictCols)
-	}
-
-	processed, err := pgUpsertBatch(ctx, pool, qualified, headers, conflictCols, updateCols, rows)
-	if err != nil {
-		return params.Err(job, "db", err.Error()), nil
-	}
-	return core.Result{
-		JobID:  job.ID,
-		Status: core.StatusOK,
-		Output: map[string]core.Ref{
-			"processed": {MIME: "application/json", Inline: processed},
-		},
-	}, nil
-}
-
-// pgEnsureTableWithUnique extends pgEnsureTable with a UNIQUE
-// constraint on the conflict columns — required for ON CONFLICT to
-// have a target. For existing tables the user is on the hook to make
-// sure the constraint exists; we don't try to ALTER it.
-func pgEnsureTableWithUnique(ctx context.Context, pool *pgxpool.Pool, qualified string, headers []string, colTypes map[string]string, conflictCols []string) error {
-	cols := make([]string, len(headers))
-	for i, h := range headers {
-		t := "TEXT"
-		if v, ok := colTypes[h]; ok && v != "" {
-			t = v
-		}
-		cols[i] = fmt.Sprintf("%s %s", quoteIdent(h), t)
-	}
-	uniqueCols := make([]string, len(conflictCols))
-	for i, c := range conflictCols {
-		uniqueCols[i] = quoteIdent(c)
-	}
-	stmt := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (%s, UNIQUE (%s))",
-		qualified, strings.Join(cols, ", "), strings.Join(uniqueCols, ", "))
-	if _, err := pool.Exec(ctx, stmt); err != nil {
-		return fmt.Errorf("create table: %w", err)
-	}
-	return nil
-}
-
-// pgUpsertBatch runs all rows in one transaction. The generated
-// statement looks like:
-//
-//	INSERT INTO "schema"."table" ("a","b","c")
-//	VALUES ($1,$2,$3)
-//	ON CONFLICT ("a") DO UPDATE
-//	  SET "b" = EXCLUDED."b", "c" = EXCLUDED."c"
-//
-// EXCLUDED is Postgres's pseudo-table referencing the row we tried to
-// insert; without it we'd be re-binding the same parameters.
-//
-// When updateCols is empty we substitute DO NOTHING — explicit
-// "insert if absent, leave existing alone" semantics that's a common
-// idempotency pattern for event ingestion.
-func pgUpsertBatch(ctx context.Context, pool *pgxpool.Pool, qualified string, headers, conflictCols, updateCols []string, rows []map[string]any) (int, error) {
-	tx, err := pool.Begin(ctx)
-	if err != nil {
-		return 0, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }() // no-op after Commit
-
-	cols := make([]string, len(headers))
-	placeholders := make([]string, len(headers))
-	for i, h := range headers {
-		cols[i] = quoteIdent(h)
-		placeholders[i] = fmt.Sprintf("$%d", i+1)
-	}
-	conflictList := make([]string, len(conflictCols))
-	for i, c := range conflictCols {
-		conflictList[i] = quoteIdent(c)
-	}
-
-	var conflictClause string
-	if len(updateCols) == 0 {
-		conflictClause = fmt.Sprintf("ON CONFLICT (%s) DO NOTHING", strings.Join(conflictList, ", "))
-	} else {
-		assignments := make([]string, len(updateCols))
-		for i, c := range updateCols {
-			q := quoteIdent(c)
-			assignments[i] = fmt.Sprintf("%s = EXCLUDED.%s", q, q)
-		}
-		conflictClause = fmt.Sprintf("ON CONFLICT (%s) DO UPDATE SET %s",
-			strings.Join(conflictList, ", "), strings.Join(assignments, ", "))
-	}
-
-	stmt := fmt.Sprintf(
-		"INSERT INTO %s (%s) VALUES (%s) %s",
-		qualified, strings.Join(cols, ", "), strings.Join(placeholders, ", "), conflictClause,
-	)
-
-	count := 0
-	for i, row := range rows {
-		args := make([]any, len(headers))
-		for j, h := range headers {
-			args[j] = row[h]
-		}
-		if _, err := tx.Exec(ctx, stmt, args...); err != nil {
-			return 0, fmt.Errorf("upsert row %d: %w", i, err)
-		}
-		count++
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return 0, fmt.Errorf("commit: %w", err)
-	}
-	return count, nil
-}
-
-// subtract returns the elements of a that aren't in b, preserving
-// order. Used to default update_columns to (headers \ conflict_columns).
-func subtract(a, b []string) []string {
-	skip := make(map[string]struct{}, len(b))
-	for _, x := range b {
-		skip[x] = struct{}{}
-	}
-	out := make([]string, 0, len(a))
-	for _, x := range a {
-		if _, ok := skip[x]; ok {
-			continue
-		}
-		out = append(out, x)
-	}
-	return out
+	return runUpsert(ctx, job, postgresDialect{}, pgxConn{pool: pool}, qualified, ri, conflictCols, updateCols, updateColsExplicit)
 }

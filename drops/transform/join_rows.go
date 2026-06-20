@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strings"
 
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/limits"
@@ -161,7 +160,7 @@ func executeJoinRows(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 	rightIndex := make(map[string][]map[string]any, len(rightRows))
 	rightOrder := make([]string, 0, len(rightIndex)) // first-seen key order, for deterministic right/outer output
 	for _, r := range rightRows {
-		k := joinKeyString(r, rightKeysInLeftOrder)
+		k := keyString(r, rightKeysInLeftOrder)
 		if _, seen := rightIndex[k]; !seen {
 			rightOrder = append(rightOrder, k)
 		}
@@ -175,7 +174,7 @@ func executeJoinRows(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 	maxOut := limits.MaxRows()
 	out := make([]map[string]any, 0, len(leftRows))
 	for _, lr := range leftRows {
-		k := joinKeyString(lr, leftKeys)
+		k := keyString(lr, leftKeys)
 		matches := rightIndex[k]
 		if len(matches) == 0 {
 			// No right rows for this key. Inner skips; left/outer
@@ -325,21 +324,6 @@ func requireColumns(side string, headers []string, rows []map[string]any, needed
 		return fmt.Errorf("%s side has no column %q (declared headers: %v)", side, col, headers)
 	}
 	return nil
-}
-
-// joinKeyString canonicalizes a row's join-key values into a single
-// hash-table-friendly string. Equality uses fmt.Sprint so int 30 and
-// string "30" join correctly — same rule map_rows.filter_eq uses, so
-// users don't have to pre-cast columns coming out of Excel/JSON.
-//
-// The separator is "\x1f" (ASCII unit separator) so values that
-// themselves contain "|" don't collide with adjacent values.
-func joinKeyString(row map[string]any, cols []string) string {
-	parts := make([]string, len(cols))
-	for i, c := range cols {
-		parts[i] = fmt.Sprint(row[c])
-	}
-	return strings.Join(parts, "\x1f")
 }
 
 // mergeRow emits one output row from a (left, right) pair. Either may

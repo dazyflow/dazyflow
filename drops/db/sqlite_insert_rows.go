@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
@@ -97,7 +96,7 @@ func init() {
 // the tenant quota because the per-INSERT delta isn't knowable up
 // front. A daily quota sweep is the right place for that, not this
 // drop.
-func executeSQLiteInsertRows(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
+func executeSQLiteInsertRows(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	path, err := params.String(job.Params, "path")
 	if err != nil {
 		return params.Err(job, "bad_param", err.Error()), nil
@@ -116,7 +115,6 @@ func executeSQLiteInsertRows(_ context.Context, job core.Job, _ chan<- core.Prog
 	if errRes != nil {
 		return *errRes, nil
 	}
-	rows, headers := ri.rows, ri.headers
 
 	// Resolve the database path through os.Root so a hostile params
 	// payload (or upstream Ref) can't write the SQLite file outside
@@ -157,108 +155,5 @@ func executeSQLiteInsertRows(_ context.Context, job core.Job, _ chan<- core.Prog
 	}
 	defer db.Close()
 
-	// create_table defaults to true (matches the schema). The user
-	// only opts out when they've pre-created the table with custom
-	// indexes / constraints they don't want overwritten. params.Bool
-	// returns (val, present) so we can distinguish "unset" from
-	// "explicit false."
-	createTable := true
-	if v, present := params.Bool(job.Params, "create_table"); present {
-		createTable = v
-	}
-	if createTable && len(headers) > 0 {
-		colTypes, err := parseColumnTypes(job.Params)
-		if err != nil {
-			return params.Err(job, "db", err.Error()), nil
-		}
-		if err := ensureTable(db, table, headers, colTypes); err != nil {
-			return params.Err(job, "db", err.Error()), nil
-		}
-	}
-
-	if len(rows) == 0 {
-		return core.Result{
-			JobID:  job.ID,
-			Status: core.StatusOK,
-			Output: map[string]core.Ref{
-				"inserted": {MIME: "application/json", Inline: 0},
-			},
-		}, nil
-	}
-
-	inserted, err := insertBatch(db, table, headers, rows)
-	if err != nil {
-		return params.Err(job, "db", err.Error()), nil
-	}
-	return core.Result{
-		JobID:  job.ID,
-		Status: core.StatusOK,
-		Output: map[string]core.Ref{
-			"inserted": {MIME: "application/json", Inline: inserted},
-		},
-	}, nil
-}
-
-// ensureTable issues a CREATE TABLE IF NOT EXISTS sized to headers.
-// Column types default to TEXT (SQLite's universal storage class)
-// unless overridden by column_types. Identifiers are wrapped in
-// proper SQL double-quotes (NOT Go's %q, which uses C-style escape
-// sequences SQLite doesn't understand) so non-ASCII names like
-// "FÖRETAG" and SQL keywords like "order" both round-trip safely.
-func ensureTable(db *sql.DB, table string, headers []string, colTypes map[string]string) error {
-	cols := make([]string, len(headers))
-	for i, h := range headers {
-		t := "TEXT"
-		if v, ok := colTypes[h]; ok && v != "" {
-			t = v
-		}
-		cols[i] = fmt.Sprintf("%s %s", quoteIdent(h), t)
-	}
-	stmt := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (%s)", quoteIdent(table), strings.Join(cols, ", "))
-	if _, err := db.Exec(stmt); err != nil {
-		return fmt.Errorf("create table: %w", err)
-	}
-	return nil
-}
-
-// insertBatch runs all rows in one transaction. Per-row failure
-// rolls the whole batch back — half a load is worse than no load
-// when the next step in the pipeline assumes the table is consistent.
-func insertBatch(db *sql.DB, table string, headers []string, rows []map[string]any) (int, error) {
-	tx, err := db.Begin()
-	if err != nil {
-		return 0, fmt.Errorf("begin tx: %w", err)
-	}
-	cols := make([]string, len(headers))
-	placeholders := make([]string, len(headers))
-	for i, h := range headers {
-		cols[i] = quoteIdent(h)
-		placeholders[i] = "?"
-	}
-	stmt, err := tx.Prepare(fmt.Sprintf(
-		"INSERT INTO %s (%s) VALUES (%s)",
-		quoteIdent(table), strings.Join(cols, ", "), strings.Join(placeholders, ", "),
-	))
-	if err != nil {
-		_ = tx.Rollback()
-		return 0, fmt.Errorf("prepare insert: %w", err)
-	}
-	defer stmt.Close()
-
-	count := 0
-	for i, row := range rows {
-		args := make([]any, len(headers))
-		for j, h := range headers {
-			args[j] = row[h] // nil → NULL via database/sql
-		}
-		if _, err := stmt.Exec(args...); err != nil {
-			_ = tx.Rollback()
-			return 0, fmt.Errorf("insert row %d: %w", i, err)
-		}
-		count++
-	}
-	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("commit: %w", err)
-	}
-	return count, nil
+	return runInsert(ctx, job, sqliteDialect{}, sqlConn{db: db}, quoteIdent(table), ri)
 }

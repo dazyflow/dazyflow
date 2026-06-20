@@ -124,13 +124,9 @@ func executeRenderText(ctx context.Context, job core.Job, _ chan<- core.Progress
 		if err != nil {
 			return errResult(job, "internal", fmt.Sprintf("cel env: %v", err)), nil
 		}
-		ast, issues := env.Compile(template)
-		if issues != nil && issues.Err() != nil {
-			return errResult(job, "bad_param", fmt.Sprintf("template: %v", issues.Err())), nil
-		}
-		prog, err = celProgram(env, ast)
+		prog, err = compileRowExpr(env, template, "template")
 		if err != nil {
-			return errResult(job, "bad_param", fmt.Sprintf("template program: %v", err)), nil
+			return errResult(job, "bad_param", err.Error()), nil
 		}
 	}
 

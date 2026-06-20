@@ -1,12 +1,12 @@
 package db
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
-	"sort"
 	"strings"
+
+	"git.sr.ht/~klahr/dazyflow/drops/internal/rows"
 )
 
 // paramInt accepts JSON numbers (float64), Go ints, or int64, so a
@@ -113,101 +113,40 @@ func isSandboxEscape(err error) bool {
 	return false
 }
 
-// normalizeRows accepts the same shapes as drops/io/excel_write
-// — native typed slices in-process, and JSON-roundtripped []any of
-// map[string]any when the upstream node went through gRPC or MCP.
+// normalizeRows / coerceRowMap / normalizeHeaders / deriveHeaders are
+// thin aliases over the shared drops/internal/rows package. The db
+// drops only accept list shapes (a bare object is rejected) and do not
+// pre-cap the input here, so they pass the zero-value Options.
 func normalizeRows(inline any) ([]map[string]any, error) {
-	if inline == nil {
-		return nil, nil
-	}
-	switch v := inline.(type) {
-	case []map[string]any:
-		return v, nil
-	case []map[string]string:
-		out := make([]map[string]any, len(v))
-		for i, r := range v {
-			m := make(map[string]any, len(r))
-			for k, val := range r {
-				m[k] = val
-			}
-			out[i] = m
-		}
-		return out, nil
-	case []any:
-		out := make([]map[string]any, 0, len(v))
-		for i, item := range v {
-			m, err := coerceRowMap(item)
-			if err != nil {
-				return nil, fmt.Errorf("row %d: %w", i, err)
-			}
-			out = append(out, m)
-		}
-		return out, nil
-	case string:
-		// An empty string is "no rows" rather than malformed JSON. This
-		// shows up when a webhook trigger fires with no request body
-		// (buildWebhookSeed defaults body to "") and the graph wires
-		// webhook_input.body straight into a store's rows port — a
-		// common shape for hosted-form flows. Returning a nil slice
-		// here keeps the empty-payload path quiet; the caller's
-		// "len(rows) == 0 → insert nothing" branch handles the rest.
-		if v == "" {
-			return nil, nil
-		}
-		var parsed []map[string]any
-		if err := json.Unmarshal([]byte(v), &parsed); err != nil {
-			return nil, fmt.Errorf("rows JSON: %w", err)
-		}
-		return parsed, nil
-	}
-	return nil, fmt.Errorf("rows: unsupported input type %T", inline)
+	return rows.Normalize(inline, rows.Options{})
 }
 
 func coerceRowMap(item any) (map[string]any, error) {
-	switch m := item.(type) {
-	case map[string]any:
-		return m, nil
-	case map[string]string:
-		out := make(map[string]any, len(m))
-		for k, v := range m {
-			out[k] = v
-		}
-		return out, nil
-	}
-	return nil, fmt.Errorf("expected object, got %T", item)
+	return rows.CoerceRowMap(item)
 }
 
 func normalizeHeaders(inline any) ([]string, error) {
-	switch v := inline.(type) {
-	case []string:
-		return v, nil
-	case []any:
-		out := make([]string, len(v))
-		for i, h := range v {
-			s, ok := h.(string)
-			if !ok {
-				return nil, fmt.Errorf("headers[%d]: expected string, got %T", i, h)
-			}
-			out[i] = s
-		}
-		return out, nil
-	}
-	return nil, fmt.Errorf("headers: unsupported input type %T", inline)
+	return rows.NormalizeHeaders(inline)
 }
 
-// deriveHeaders gives a stable column ordering when the user didn't
-// wire a "headers" input — the union of row keys, sorted alphabetically.
-func deriveHeaders(rows []map[string]any) []string {
-	seen := map[string]struct{}{}
-	for _, r := range rows {
-		for k := range r {
-			seen[k] = struct{}{}
+func deriveHeaders(r []map[string]any) []string {
+	return rows.DeriveHeaders(r)
+}
+
+// subtract returns the elements of a that aren't in b, preserving
+// order. Used by the upsert drops to default update_columns to
+// (headers \ conflict_columns).
+func subtract(a, b []string) []string {
+	skip := make(map[string]struct{}, len(b))
+	for _, x := range b {
+		skip[x] = struct{}{}
+	}
+	out := make([]string, 0, len(a))
+	for _, x := range a {
+		if _, ok := skip[x]; ok {
+			continue
 		}
+		out = append(out, x)
 	}
-	headers := make([]string, 0, len(seen))
-	for k := range seen {
-		headers = append(headers, k)
-	}
-	sort.Strings(headers)
-	return headers
+	return out
 }

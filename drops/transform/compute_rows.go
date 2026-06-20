@@ -89,24 +89,9 @@ func init() {
 // columns aren't visible to filter. Users wanting "filter on a
 // computed value" should chain compute_rows → map_rows.
 func executeComputeRows(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	rowsRef, ok := job.Input["rows"]
+	rows, inputHeaders, errRes, ok := loadRowsAndHeaders(job)
 	if !ok {
-		return errResult(job, "missing_input", "input port 'rows' is required"), nil
-	}
-	rows, err := normalizeRows(rowsRef.Inline)
-	if err != nil {
-		return errResult(job, "bad_input", err.Error()), nil
-	}
-
-	var inputHeaders []string
-	if h, ok := job.Input["headers"]; ok && h.Inline != nil {
-		inputHeaders, err = normalizeHeaders(h.Inline)
-		if err != nil {
-			return errResult(job, "bad_input", err.Error()), nil
-		}
-	}
-	if inputHeaders == nil {
-		inputHeaders = deriveHeaders(rows)
+		return errRes, nil
 	}
 
 	env, err := newRowCELEnv()
@@ -212,13 +197,9 @@ func compileComputeSteps(env *cel.Env, params map[string]any) ([]computeStep, er
 		if !ok {
 			return nil, fmt.Errorf("compute[%q]: expected string expression, got %T", k, m[k])
 		}
-		ast, issues := env.Compile(exprStr)
-		if issues != nil && issues.Err() != nil {
-			return nil, fmt.Errorf("compute[%q]: %v", k, issues.Err())
-		}
-		prog, err := celProgram(env, ast)
+		prog, err := compileRowExpr(env, exprStr, fmt.Sprintf("compute[%q]", k))
 		if err != nil {
-			return nil, fmt.Errorf("compute[%q]: program: %w", k, err)
+			return nil, err
 		}
 		steps = append(steps, computeStep{column: k, prog: prog})
 	}
@@ -237,11 +218,7 @@ func compileOptionalFilter(env *cel.Env, params map[string]any) (cel.Program, er
 	if exprStr == "" {
 		return nil, nil
 	}
-	ast, issues := env.Compile(exprStr)
-	if issues != nil && issues.Err() != nil {
-		return nil, fmt.Errorf("filter: %v", issues.Err())
-	}
-	return celProgram(env, ast)
+	return compileRowExpr(env, exprStr, "filter")
 }
 
 func evalFilter(_ context.Context, prog cel.Program, row map[string]any) (bool, error) {

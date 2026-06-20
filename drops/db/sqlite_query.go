@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 
 	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/limits"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 	"git.sr.ht/~klahr/dazyflow/engine"
 	_ "modernc.org/sqlite"
@@ -84,33 +83,14 @@ func executeSQLiteQuery(ctx context.Context, job core.Job, _ chan<- core.Progres
 	if err != nil {
 		return params.Err(job, "bad_param", err.Error()), nil
 	}
-	sqlText, err := params.String(job.Params, "sql")
-	if err != nil {
-		return params.Err(job, "bad_param", err.Error()), nil
-	}
-	if sqlText == "" {
-		return params.Err(job, "bad_param", "sql is empty"), nil
+	// Validate sql/params/limit before the sandbox probe so a bad query
+	// fails with bad_param regardless of whether the file exists.
+	qp, errRes := parseQueryParams(job)
+	if errRes != nil {
+		return *errRes, nil
 	}
 	if job.WorkspaceRoot == "" {
 		return params.Err(job, "no_sandbox", "sqlite_query requires a workspace sandbox"), nil
-	}
-
-	var args []any
-	if v, ok := job.Params["params"]; ok && v != nil {
-		raw, ok := v.([]any)
-		if !ok {
-			return params.Err(job, "bad_param",
-				fmt.Sprintf("params: expected array, got %T", v)), nil
-		}
-		args = raw
-	}
-
-	limit := 0
-	if n, ok := paramInt(job.Params, "limit"); ok {
-		if n < 0 {
-			return params.Err(job, "bad_param", "limit must be >= 0"), nil
-		}
-		limit = n
 	}
 
 	// Probe-open the path through os.Root so a hostile params payload
@@ -136,56 +116,5 @@ func executeSQLiteQuery(ctx context.Context, job core.Job, _ chan<- core.Progres
 	}
 	defer db.Close()
 
-	rows, err := db.QueryContext(ctx, sqlText, args...)
-	if err != nil {
-		return params.Err(job, "db", fmt.Sprintf("query: %v", err)), nil
-	}
-	defer rows.Close()
-
-	columns, err := rows.Columns()
-	if err != nil {
-		return params.Err(job, "db", fmt.Sprintf("columns: %v", err)), nil
-	}
-
-	out := make([]map[string]any, 0, 16)
-	for rows.Next() {
-		// database/sql scans by reference, so we need a slice of
-		// pointers-into-vals to receive the row, then read vals back
-		// into a map.
-		vals := make([]any, len(columns))
-		ptrs := make([]any, len(columns))
-		for i := range vals {
-			ptrs[i] = &vals[i]
-		}
-		if err := rows.Scan(ptrs...); err != nil {
-			return params.Err(job, "db", fmt.Sprintf("scan row %d: %v", len(out), err)), nil
-		}
-		rec := make(map[string]any, len(columns))
-		for i, c := range columns {
-			rec[c] = vals[i]
-		}
-		out = append(out, rec)
-		if limit > 0 && len(out) >= limit {
-			break
-		}
-		// limit=0 means "no user-imposed cap" — but the whole result set is
-		// buffered in memory, so an unbounded SELECT would OOM the daemon.
-		// Fail fast at the shared row ceiling rather than letting it grow.
-		if len(out) > limits.MaxRows() {
-			return params.Err(job, "too_many_rows",
-				fmt.Sprintf("query returned more than the %d-row limit; add a LIMIT clause, set the 'limit' param, or raise DAZYFLOW_MAX_ROWS", limits.MaxRows())), nil
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return params.Err(job, "db", fmt.Sprintf("iterate: %v", err)), nil
-	}
-
-	return core.Result{
-		JobID:  job.ID,
-		Status: core.StatusOK,
-		Output: map[string]core.Ref{
-			"rows":    {MIME: "application/json", Inline: out},
-			"columns": {MIME: "application/json", Inline: columns},
-		},
-	}, nil
+	return runQueryParsed(ctx, job, sqlConn{db: db}, qp)
 }

@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/limits"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 	"git.sr.ht/~klahr/dazyflow/engine"
 )
@@ -83,30 +82,9 @@ func executeMySQLQuery(ctx context.Context, job core.Job, _ chan<- core.Progress
 	if err != nil {
 		return params.Err(job, "bad_param", err.Error()), nil
 	}
-	sqlText, err := params.String(job.Params, "sql")
-	if err != nil {
-		return params.Err(job, "bad_param", err.Error()), nil
-	}
-	if sqlText == "" {
-		return params.Err(job, "bad_param", "sql is empty"), nil
-	}
-
-	var args []any
-	if v, ok := job.Params["params"]; ok && v != nil {
-		raw, ok := v.([]any)
-		if !ok {
-			return params.Err(job, "bad_param",
-				fmt.Sprintf("params: expected array, got %T", v)), nil
-		}
-		args = raw
-	}
-
-	limit := 0
-	if n, ok := paramInt(job.Params, "limit"); ok {
-		if n < 0 {
-			return params.Err(job, "bad_param", "limit must be >= 0"), nil
-		}
-		limit = n
+	qp, errRes := parseQueryParams(job)
+	if errRes != nil {
+		return *errRes, nil
 	}
 
 	db, err := defaultMySQLRegistry.sqlDB(ctx, job.Tenant, dsn)
@@ -114,60 +92,8 @@ func executeMySQLQuery(ctx context.Context, job core.Job, _ chan<- core.Progress
 		return params.Err(job, "db", fmt.Sprintf("connect: %v", err)), nil
 	}
 
-	rows, err := db.QueryContext(ctx, sqlText, args...)
-	if err != nil {
-		return params.Err(job, "db", fmt.Sprintf("query: %v", err)), nil
-	}
-	defer rows.Close()
-
-	columns, err := rows.Columns()
-	if err != nil {
-		return params.Err(job, "db", fmt.Sprintf("columns: %v", err)), nil
-	}
-
-	out := make([]map[string]any, 0, 16)
-	for rows.Next() {
-		vals := make([]any, len(columns))
-		ptrs := make([]any, len(columns))
-		for i := range vals {
-			ptrs[i] = &vals[i]
-		}
-		if err := rows.Scan(ptrs...); err != nil {
-			return params.Err(job, "db", fmt.Sprintf("scan row %d: %v", len(out), err)), nil
-		}
-		rec := make(map[string]any, len(columns))
-		for i, c := range columns {
-			// MySQL driver returns []byte for text/varchar columns by
-			// default. Convert to string for the common case so JSON
-			// downstream consumers don't see base64-encoded blobs.
-			if b, ok := vals[i].([]byte); ok {
-				rec[c] = string(b)
-			} else {
-				rec[c] = vals[i]
-			}
-		}
-		out = append(out, rec)
-		if limit > 0 && len(out) >= limit {
-			break
-		}
-		// limit=0 means "no user-imposed cap" — but the whole result set is
-		// buffered in memory, so an unbounded SELECT would OOM the daemon.
-		// Fail fast at the shared row ceiling rather than letting it grow.
-		if len(out) > limits.MaxRows() {
-			return params.Err(job, "too_many_rows",
-				fmt.Sprintf("query returned more than the %d-row limit; add a LIMIT clause, set the 'limit' param, or raise DAZYFLOW_MAX_ROWS", limits.MaxRows())), nil
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return params.Err(job, "db", fmt.Sprintf("iterate: %v", err)), nil
-	}
-
-	return core.Result{
-		JobID:  job.ID,
-		Status: core.StatusOK,
-		Output: map[string]core.Ref{
-			"rows":    {MIME: "application/json", Inline: out},
-			"columns": {MIME: "application/json", Inline: columns},
-		},
-	}, nil
+	// The MySQL driver hands back []byte for text/varchar columns by
+	// default; sqlConn.bytesToString converts them so JSON consumers
+	// downstream see strings rather than base64 blobs.
+	return runQueryParsed(ctx, job, sqlConn{db: db, bytesToString: true}, qp)
 }

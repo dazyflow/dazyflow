@@ -4,12 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 	"git.sr.ht/~klahr/dazyflow/engine"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func init() {
@@ -120,7 +118,6 @@ func executePostgresInsertRows(ctx context.Context, job core.Job, _ chan<- core.
 	if errRes != nil {
 		return *errRes, nil
 	}
-	rows, headers := ri.rows, ri.headers
 
 	pool, err := defaultPGRegistry.pgPool(ctx, job.Tenant, dsn)
 	if err != nil {
@@ -128,99 +125,5 @@ func executePostgresInsertRows(ctx context.Context, job core.Job, _ chan<- core.
 	}
 
 	qualified := fmt.Sprintf("%s.%s", quoteIdent(schema), quoteIdent(table))
-
-	createTable := true
-	if v, present := params.Bool(job.Params, "create_table"); present {
-		createTable = v
-	}
-	if createTable && len(headers) > 0 {
-		colTypes, err := parseColumnTypes(job.Params)
-		if err != nil {
-			return params.Err(job, "db", err.Error()), nil
-		}
-		if err := pgEnsureTable(ctx, pool, qualified, headers, colTypes); err != nil {
-			return params.Err(job, "db", err.Error()), nil
-		}
-	}
-
-	if len(rows) == 0 {
-		return core.Result{
-			JobID:  job.ID,
-			Status: core.StatusOK,
-			Output: map[string]core.Ref{
-				"inserted": {MIME: "application/json", Inline: 0},
-			},
-		}, nil
-	}
-
-	inserted, err := pgInsertBatch(ctx, pool, qualified, headers, rows)
-	if err != nil {
-		return params.Err(job, "db", err.Error()), nil
-	}
-	return core.Result{
-		JobID:  job.ID,
-		Status: core.StatusOK,
-		Output: map[string]core.Ref{
-			"inserted": {MIME: "application/json", Inline: inserted},
-		},
-	}, nil
-}
-
-// pgEnsureTable issues a CREATE TABLE IF NOT EXISTS using TEXT as the
-// universal default. Postgres TEXT is unbounded and stores anything,
-// which matches the "Excel rows are strings" reality from excel_read.
-// Callers tighten this with column_types: {"age":"integer","created_at":"timestamptz"}.
-func pgEnsureTable(ctx context.Context, pool *pgxpool.Pool, qualified string, headers []string, colTypes map[string]string) error {
-	cols := make([]string, len(headers))
-	for i, h := range headers {
-		t := "TEXT"
-		if v, ok := colTypes[h]; ok && v != "" {
-			t = v
-		}
-		cols[i] = fmt.Sprintf("%s %s", quoteIdent(h), t)
-	}
-	stmt := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (%s)", qualified, strings.Join(cols, ", "))
-	if _, err := pool.Exec(ctx, stmt); err != nil {
-		return fmt.Errorf("create table: %w", err)
-	}
-	return nil
-}
-
-// pgInsertBatch runs all rows in one transaction. Per-row failure
-// rolls the whole batch back. pgx's transaction wrapper handles the
-// rollback automatically when the deferred close sees a non-committed
-// state, so we don't need an explicit Rollback in the error path.
-func pgInsertBatch(ctx context.Context, pool *pgxpool.Pool, qualified string, headers []string, rows []map[string]any) (int, error) {
-	tx, err := pool.Begin(ctx)
-	if err != nil {
-		return 0, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }() // no-op if already committed
-
-	cols := make([]string, len(headers))
-	placeholders := make([]string, len(headers))
-	for i, h := range headers {
-		cols[i] = quoteIdent(h)
-		placeholders[i] = fmt.Sprintf("$%d", i+1)
-	}
-	stmt := fmt.Sprintf(
-		"INSERT INTO %s (%s) VALUES (%s)",
-		qualified, strings.Join(cols, ", "), strings.Join(placeholders, ", "),
-	)
-
-	count := 0
-	for i, row := range rows {
-		args := make([]any, len(headers))
-		for j, h := range headers {
-			args[j] = row[h] // nil → NULL via pgx
-		}
-		if _, err := tx.Exec(ctx, stmt, args...); err != nil {
-			return 0, fmt.Errorf("insert row %d: %w", i, err)
-		}
-		count++
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return 0, fmt.Errorf("commit: %w", err)
-	}
-	return count, nil
+	return runInsert(ctx, job, postgresDialect{}, pgxConn{pool: pool}, qualified, ri)
 }
