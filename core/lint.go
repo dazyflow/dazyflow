@@ -187,14 +187,18 @@ func placeholderIssue(nodeID, module, field, marker string) LintIssue {
 	}
 }
 
-// findTemplatePlaceholder walks params depth-first and returns the
-// first (field path, matched marker) it finds, or ("","") if none.
-func findTemplatePlaceholder(keyPath string, v any) (string, string) {
+// walkParams performs the depth-first traversal of a param value (string /
+// map / slice) shared by every lint rule that scans node params. For each
+// string leaf it calls visit(path, str), where path is the dotted/indexed
+// key path to that leaf (keyPath for the root). Maps are visited in sorted
+// key order and slices in index order, so the traversal — and therefore the
+// "first hit" any caller observes — is deterministic. If visit returns true
+// the walk stops immediately and walkParams returns true (first-match
+// short-circuit); otherwise it returns false after visiting every leaf.
+func walkParams(keyPath string, v any, visit func(path, str string) bool) bool {
 	switch t := v.(type) {
 	case string:
-		if m := templatePlaceholderPattern.FindString(t); m != "" {
-			return orSelf(keyPath), m
-		}
+		return visit(keyPath, t)
 	case map[string]any:
 		keys := make([]string, 0, len(t))
 		for k := range t {
@@ -202,18 +206,32 @@ func findTemplatePlaceholder(keyPath string, v any) (string, string) {
 		}
 		sort.Strings(keys)
 		for _, k := range keys {
-			if hit, marker := findTemplatePlaceholder(join(keyPath, k), t[k]); hit != "" {
-				return hit, marker
+			if walkParams(join(keyPath, k), t[k], visit) {
+				return true
 			}
 		}
 	case []any:
 		for i, child := range t {
-			if hit, marker := findTemplatePlaceholder(fmt.Sprintf("%s[%d]", keyPath, i), child); hit != "" {
-				return hit, marker
+			if walkParams(fmt.Sprintf("%s[%d]", keyPath, i), child, visit) {
+				return true
 			}
 		}
 	}
-	return "", ""
+	return false
+}
+
+// findTemplatePlaceholder walks params depth-first and returns the
+// first (field path, matched marker) it finds, or ("","") if none.
+func findTemplatePlaceholder(keyPath string, v any) (string, string) {
+	field, marker := "", ""
+	walkParams(keyPath, v, func(path, str string) bool {
+		if m := templatePlaceholderPattern.FindString(str); m != "" {
+			field, marker = orSelf(path), m
+			return true
+		}
+		return false
+	})
+	return field, marker
 }
 
 // lintDanglingReferences warns when a node interpolates
@@ -270,20 +288,12 @@ func lintDanglingReferences(g Graph, nodesByID map[string]Node) []LintIssue {
 // collectUpstreamRefs walks a param value (string / map / slice) and calls
 // add for every ${upstream.<id>…} node ID it finds.
 func collectUpstreamRefs(v any, add func(string)) {
-	switch t := v.(type) {
-	case string:
-		for _, id := range upstreamRefIDs(t) {
+	walkParams("", v, func(_, str string) bool {
+		for _, id := range upstreamRefIDs(str) {
 			add(id)
 		}
-	case map[string]any:
-		for _, child := range t {
-			collectUpstreamRefs(child, add)
-		}
-	case []any:
-		for _, child := range t {
-			collectUpstreamRefs(child, add)
-		}
-	}
+		return false // visit every leaf
+	})
 }
 
 // upstreamRefIDs returns the upstream node IDs referenced in s.
@@ -397,23 +407,9 @@ func nodeUsesSecret(n Node) bool {
 // looking for a secret placeholder. Other scalar types can't carry
 // a placeholder (bools, numbers, nil) so they're skipped.
 func hasSecretRef(v any) bool {
-	switch t := v.(type) {
-	case string:
-		return secretPlaceholderPattern.MatchString(t)
-	case map[string]any:
-		for _, child := range t {
-			if hasSecretRef(child) {
-				return true
-			}
-		}
-	case []any:
-		for _, child := range t {
-			if hasSecretRef(child) {
-				return true
-			}
-		}
-	}
-	return false
+	return walkParams("", v, func(_, str string) bool {
+		return secretPlaceholderPattern.MatchString(str)
+	})
 }
 
 // hardcodedSecretExempt lists params (per module) where a literal
@@ -484,39 +480,23 @@ func hardcodedIssue(nodeID, module, field string) LintIssue {
 // suppressed (see hardcodedSecretExempt); provider-pattern values are
 // flagged regardless.
 func findHardcodedSecret(keyPath string, v any, exempt map[string]bool) string {
-	switch t := v.(type) {
-	case string:
-		if knownSecretValue.MatchString(t) {
-			return orSelf(keyPath)
+	field := ""
+	walkParams(keyPath, v, func(path, str string) bool {
+		if knownSecretValue.MatchString(str) {
+			field = orSelf(path)
+			return true
 		}
-		// Key-name heuristic only applies when we know the key (keyPath
+		// Key-name heuristic only applies when we know the key (path
 		// non-empty) — a bare top-level string param has no key context.
 		// Exemption matches the ROOT param so a list like `secrets`
 		// covers its elements (`secrets[0]`, `secrets[1]`, …).
-		if keyPath != "" && !exempt[rootParam(keyPath)] && secretKeyNameLeaf(keyPath) && isLiteralSecret(t) {
-			return keyPath
+		if path != "" && !exempt[rootParam(path)] && secretKeyNameLeaf(path) && isLiteralSecret(str) {
+			field = path
+			return true
 		}
-	case map[string]any:
-		// Deterministic key order.
-		keys := make([]string, 0, len(t))
-		for k := range t {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		for _, k := range keys {
-			child := join(keyPath, k)
-			if hit := findHardcodedSecret(child, t[k], exempt); hit != "" {
-				return hit
-			}
-		}
-	case []any:
-		for i, child := range t {
-			if hit := findHardcodedSecret(fmt.Sprintf("%s[%d]", keyPath, i), child, exempt); hit != "" {
-				return hit
-			}
-		}
-	}
-	return ""
+		return false
+	})
+	return field
 }
 
 // isLiteralSecret reports whether s is a non-template literal long

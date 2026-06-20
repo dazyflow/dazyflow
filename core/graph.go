@@ -281,18 +281,33 @@ func (g Graph) UpstreamSubset(target string) (Graph, bool) {
 			queue = append(queue, pred)
 		}
 	}
+	keep := make(map[string]struct{}, len(included))
+	for id := range included {
+		keep[id] = struct{}{}
+	}
+	return g.Subset(keep), true
+}
+
+// Subset returns a copy of g restricted to the nodes whose IDs are in keep:
+// nodes not in keep are dropped, and an edge survives only when BOTH of its
+// endpoints are kept (so edges leaving the subset toward an excluded node are
+// pruned). All other graph fields (identity, triggers, display metadata, …)
+// are copied unchanged. Pure — g is not mutated.
+func (g Graph) Subset(keep map[string]struct{}) Graph {
 	sub := g
-	sub.Nodes = make([]Node, 0, len(included))
+	sub.Nodes = make([]Node, 0, len(keep))
 	for _, n := range g.Nodes {
-		if included[n.ID] {
+		if _, ok := keep[n.ID]; ok {
 			sub.Nodes = append(sub.Nodes, n)
 		}
 	}
 	sub.Edges = make([]Edge, 0, len(g.Edges))
 	for _, e := range g.Edges {
-		if included[e.From] && included[e.To] {
+		_, fromOK := keep[e.From]
+		_, toOK := keep[e.To]
+		if fromOK && toOK {
 			sub.Edges = append(sub.Edges, e)
 		}
 	}
-	return sub, true
+	return sub
 }
