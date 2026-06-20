@@ -6268,7 +6268,11 @@ button.warning:hover:not(:disabled) {
   padding: var(--space-6) var(--space-4);
   color: var(--muted);
 }
-.admin-empty svg {
+/* Only the decorative icon sitting directly in the empty state gets the
+   accent color + drop margin. Scoped to a direct child so it doesn't leak
+   into icons nested in the call-to-action button below (e.g. the Plus),
+   which would otherwise be tinted accent and nudged off-center. */
+.admin-empty > svg {
   color: var(--accent);
   margin-bottom: var(--space-3);
 }

@@ -128,7 +128,7 @@ function SignupInviteSection() {
           style={{ flex: 1 }}
         />
         <button type="submit" className="primary" disabled={!canSubmit}>
-          <UserPlus size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+          <UserPlus size={14} style={{ marginRight: 6 }} />
           {submitting
             ? t("admin.signupInvites.inviting")
             : t("admin.signupInvites.invite")}
@@ -284,7 +284,7 @@ function SignupInviteCard({
       <div className="user-card-actions">
         {inv.pending && (
           <button onClick={() => setConfirmRevoke(true)} disabled={revoking}>
-            <X size={12} style={{ marginRight: 4, verticalAlign: -1 }} />
+            <X size={12} style={{ marginRight: 4 }} />
             {revoking
               ? t("admin.signupInvites.revoking")
               : t("admin.signupInvites.revoke")}

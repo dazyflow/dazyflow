@@ -40,9 +40,9 @@ function RedirectURIDisplay({ uri }: { uri: string }) {
       <code className="sso-readonly">{uri}</code>
       <button type="button" onClick={copy} className="sso-copy-btn">
         {copied ? (
-          <Check size={12} style={{ marginRight: 6, verticalAlign: -1 }} />
+          <Check size={12} style={{ marginRight: 6 }} />
         ) : (
-          <Copy size={12} style={{ marginRight: 6, verticalAlign: -1 }} />
+          <Copy size={12} style={{ marginRight: 6 }} />
         )}
         {copied ? t("admin.sso.copyRedirectDone") : t("admin.sso.copyRedirect")}
       </button>

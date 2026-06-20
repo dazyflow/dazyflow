@@ -345,9 +345,9 @@ function CopyButton({ text, labelKey }: { text: string; labelKey: string }) {
   return (
     <button type="button" onClick={copy} style={{ marginTop: "var(--space-2)" }}>
       {copied ? (
-        <Check size={12} style={{ marginRight: 6, verticalAlign: -1 }} />
+        <Check size={12} style={{ marginRight: 6 }} />
       ) : (
-        <Copy size={12} style={{ marginRight: 6, verticalAlign: -1 }} />
+        <Copy size={12} style={{ marginRight: 6 }} />
       )}
       {copied ? t("connectMcp.copied") : t(labelKey)}
     </button>

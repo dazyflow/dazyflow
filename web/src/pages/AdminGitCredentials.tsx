@@ -217,7 +217,7 @@ export function AdminGitCredentials() {
         </div>
 
         <button className="primary" disabled={!canSave} onClick={() => void save()}>
-          <Plus size={15} style={{ verticalAlign: -2, marginRight: 4 }} />
+          <Plus size={15} style={{ marginRight: 4 }} />
           {saving ? t("gitCreds.saving") : t("gitCreds.saveBtn")}
         </button>
         <div className="desc" style={{ marginTop: 6 }}>{t("gitCreds.atLeastOne")}</div>

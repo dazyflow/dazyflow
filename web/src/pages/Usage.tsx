@@ -132,7 +132,7 @@ export function Usage() {
             <div style={{ display: "flex", gap: 8 }}>
               {billing.can_upgrade && (
                 <button className="primary" disabled={redirecting} onClick={() => void goToStripe("checkout")}>
-                  <Sparkles size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+                  <Sparkles size={14} style={{ marginRight: 6 }} />
                   {t("usage.upgrade")}
                 </button>
               )}

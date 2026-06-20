@@ -163,7 +163,7 @@ export function Approvals() {
                     onClick={() => decide(item, "reject")}
                     disabled={!!inflight}
                   >
-                    <XCircle size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+                    <XCircle size={14} style={{ marginRight: 6 }} />
                     {inflight === "reject" ? t("approvals.rejecting") : t("approvals.reject")}
                   </button>
                   <button
@@ -171,7 +171,7 @@ export function Approvals() {
                     onClick={() => decide(item, "approve")}
                     disabled={!!inflight}
                   >
-                    <CheckCircle2 size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+                    <CheckCircle2 size={14} style={{ marginRight: 6 }} />
                     {inflight === "approve" ? t("approvals.approving") : t("approvals.approve")}
                   </button>
                 </div>

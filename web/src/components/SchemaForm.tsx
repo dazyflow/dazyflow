@@ -1951,7 +1951,7 @@ function DictField({
         </div>
       ))}
       <button type="button" className="sf-add" onClick={addEmpty}>
-        <Plus size={12} style={{ marginRight: 4, verticalAlign: -1 }} />
+        <Plus size={12} style={{ marginRight: 4 }} />
         {t("schemaForm.add")}
       </button>
     </div>
@@ -2000,7 +2000,7 @@ function ArrayField({
         </div>
       ))}
       <button type="button" className="sf-add" onClick={addEmpty}>
-        <Plus size={12} style={{ marginRight: 4, verticalAlign: -1 }} />
+        <Plus size={12} style={{ marginRight: 4 }} />
         {t("schemaForm.add")}
       </button>
     </div>
@@ -2084,7 +2084,7 @@ function MultiSelectField({
           }}
         />
         <button type="button" className="sf-add" onClick={addCustom}>
-          <Plus size={12} style={{ marginRight: 4, verticalAlign: -1 }} />
+          <Plus size={12} style={{ marginRight: 4 }} />
           {t("schemaForm.add")}
         </button>
       </div>
@@ -2281,7 +2281,7 @@ function MappingField({
           className="sf-add"
           onClick={() => commit([...rows, { column: "", source: "" }])}
         >
-          <Plus size={12} style={{ marginRight: 4, verticalAlign: -1 }} />
+          <Plus size={12} style={{ marginRight: 4 }} />
           {t("schemaForm.mapping.add")}
         </button>
         {autoPairs.length > 0 && (

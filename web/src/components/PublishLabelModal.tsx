@@ -75,7 +75,7 @@ export function PublishLabelModal({
             {t("editor.publishWithoutName")}
           </button>
           <button type="button" className="primary" onClick={() => onPublish(value.trim())}>
-            <Rocket size={14} style={{ verticalAlign: -2, marginRight: 5 }} />
+            <Rocket size={14} style={{ marginRight: 5 }} />
             {confirmLabel}
           </button>
         </div>

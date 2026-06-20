@@ -24,7 +24,6 @@ import { Admin } from "./pages/Admin";
 import { AdminAPIKeys } from "./pages/AdminAPIKeys";
 import { AdminUsers } from "./pages/AdminUsers";
 import { AdminAudit } from "./pages/AdminAudit";
-import { AdminModules } from "./pages/AdminModules";
 import { AdminWorkspace } from "./pages/AdminWorkspace";
 import { AdminOrgSSO } from "./pages/AdminOrgSSO";
 import { AdminOAuthProviders } from "./pages/AdminOAuthProviders";
@@ -97,7 +96,6 @@ export function App() {
         <Route path="/admin/api-keys" element={<AdminAPIKeys />} />
         <Route path="/admin/users" element={<AdminUsers />} />
         <Route path="/admin/audit" element={<AdminAudit />} />
-        <Route path="/admin/modules" element={<AdminModules />} />
         <Route path="/admin/workspace" element={<AdminWorkspace />} />
         <Route path="/admin/sso" element={<AdminOrgSSO />} />
         <Route path="/admin/oauth" element={<AdminOAuthProviders />} />

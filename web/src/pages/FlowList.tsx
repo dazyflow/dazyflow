@@ -202,7 +202,7 @@ export function FlowList() {
             disabled={!canEdit}
             title={!canEdit ? t("flowList.needEdit") : undefined}
           >
-            <Sparkles size={16} style={{ marginRight: 6, verticalAlign: -3 }} />
+            <Sparkles size={16} style={{ marginRight: 6 }} />
             {t("flowList.createWithAI")}
           </button>
           <button
@@ -210,7 +210,7 @@ export function FlowList() {
             disabled={!canEdit}
             title={!canEdit ? t("flowList.needEdit") : undefined}
           >
-            <Plus size={16} style={{ marginRight: 6, verticalAlign: -3 }} />
+            <Plus size={16} style={{ marginRight: 6 }} />
             {t("flowList.newFlow")}
           </button>
         </div>

@@ -42,7 +42,7 @@ function TriggerEmpty({
       <div className="trigger-empty-title">{title}</div>
       <div className="desc">{desc}</div>
       <button className="primary" onClick={onAdd} style={{ marginTop: 12 }}>
-        <Plus size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+        <Plus size={14} style={{ marginRight: 6 }} />
         {cta}
       </button>
     </div>
@@ -532,7 +532,7 @@ function WebhookKeys({
         onClick={addKey}
         title={t("settings.triggers.generateTitle")}
       >
-        <Sparkles size={12} style={{ marginRight: 5, verticalAlign: -2 }} />
+        <Sparkles size={12} style={{ marginRight: 5 }} />
         {keys.length === 0
           ? t("settings.triggers.generate")
           : t("settings.triggers.generateAnother")}

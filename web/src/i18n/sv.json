@@ -723,8 +723,6 @@
     },
     "cardWorkspaceTitle": "Organisation",
     "cardWorkspaceDesc": "Namn, logotyp och gränser.",
-    "cardModulesTitle": "Steg",
-    "cardModulesDesc": "Bläddra bland stegen på den här daemonen.",
     "cardAuditTitle": "Granskningslogg",
     "cardAuditDesc": "Sparningar, körningar, hemligheter, godkännanden.",
     "users": {
@@ -934,17 +932,6 @@
       "colAction": "Åtgärd",
       "colTarget": "Mål",
       "colDetail": "Detalj"
-    },
-    "modules": {
-      "title": "Steg",
-      "subtitle": "Steg registrerade på den här daemonen.",
-      "empty": "Inga moduler registrerade.",
-      "needAdmin": "Du behöver <0>organization:admin</0> för att se modulregistret.",
-      "count_one": "{{count}} modul",
-      "count_other": "{{count}} moduler",
-      "idempotent": "idempotent",
-      "awaitsApproval": "väntar på godkännande",
-      "submitsChild": "delgraf"
     },
     "workspace": {
       "title": "Organisation",

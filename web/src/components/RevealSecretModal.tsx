@@ -40,7 +40,7 @@ export function RevealSecretModal({
           </p>
           <div className="secret-reveal">{issued.secret}</div>
           <button onClick={copy} style={{ marginTop: "var(--space-3)" }}>
-            <Copy size={12} style={{ marginRight: 6, verticalAlign: -1 }} />
+            <Copy size={12} style={{ marginRight: 6 }} />
             {copied ? t("revealSecret.copied") : t("revealSecret.copy")}
           </button>
           <div className="sf-field" style={{ marginTop: "var(--space-4)" }}>

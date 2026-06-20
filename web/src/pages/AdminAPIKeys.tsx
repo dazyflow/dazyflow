@@ -91,7 +91,7 @@ export function AdminAPIKeys() {
         </div>
         {keys.length > 0 && (
           <button className="primary" onClick={() => setCreating(true)}>
-            <Plus size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+            <Plus size={14} style={{ marginRight: 6 }} />
             {t("admin.apiKeys.issueKey")}
           </button>
         )}
@@ -110,7 +110,7 @@ export function AdminAPIKeys() {
           <h2>{t("admin.apiKeys.emptyTitle")}</h2>
           <p>{t("admin.apiKeys.emptyBody")}</p>
           <button className="primary" onClick={() => setCreating(true)}>
-            <Plus size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+            <Plus size={14} style={{ marginRight: 6 }} />
             {t("admin.apiKeys.issueFirst")}
           </button>
         </div>

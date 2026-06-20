@@ -173,7 +173,7 @@ export function CreateWithAIModal({
             className="primary"
             disabled={busy || desc.trim() === "" || needConnect}
           >
-            <Sparkles size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+            <Sparkles size={14} style={{ marginRight: 6 }} />
             {busy ? t("createAI.generating") : t("createAI.generate")}
           </button>
         </div>

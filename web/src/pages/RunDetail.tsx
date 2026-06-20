@@ -292,7 +292,7 @@ export function RunDetail() {
               disabled={cancelling}
               title={t("runDetail.cancelTitle")}
             >
-              <Square size={13} style={{ marginRight: 6, verticalAlign: -2 }} />
+              <Square size={13} style={{ marginRight: 6 }} />
               {cancelling ? t("runDetail.cancelling") : t("runDetail.cancel")}
             </button>
           )}
@@ -304,7 +304,7 @@ export function RunDetail() {
               disabled={retrying}
               title={t("runDetail.retryTitle")}
             >
-              <RotateCcw size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+              <RotateCcw size={14} style={{ marginRight: 6 }} />
               {retrying ? t("runDetail.retrying") : t("runDetail.retry")}
             </button>
           )}
@@ -319,7 +319,7 @@ export function RunDetail() {
             disabled={replaying}
             title={t("runDetail.replayTitle")}
           >
-            <RotateCw size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+            <RotateCw size={14} style={{ marginRight: 6 }} />
             {replaying ? t("runDetail.replaying") : t("runDetail.replay")}
           </button>
         </div>

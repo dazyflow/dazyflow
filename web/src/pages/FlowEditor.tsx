@@ -3572,7 +3572,7 @@ function EditorInner() {
                   previewRef === revisions[0]?.commit
                 }
               >
-                <RotateCcw size={13} style={{ verticalAlign: -2, marginRight: 5 }} />
+                <RotateCcw size={13} style={{ marginRight: 5 }} />
                 {restoring ? t("editor.restoring") : t("editor.restore")}
               </button>
               <button className="ghost" onClick={() => void exitPreview()} disabled={restoring}>
@@ -3639,7 +3639,7 @@ function EditorInner() {
                         onClick={() => setLabelEditing(rev)}
                         title={t("editor.labelTitle")}
                       >
-                        <Tag size={12} style={{ verticalAlign: -1, marginRight: 4 }} />
+                        <Tag size={12} style={{ marginRight: 4 }} />
                         {rev.label ? t("editor.relabel") : t("editor.label")}
                       </button>
                     )}
@@ -3654,7 +3654,7 @@ function EditorInner() {
                         disabled={publishing}
                         title={t("editor.makeLiveTitle")}
                       >
-                        <Rocket size={12} style={{ verticalAlign: -1, marginRight: 4 }} />
+                        <Rocket size={12} style={{ marginRight: 4 }} />
                         {t("editor.makeLive")}
                       </button>
                     )}
@@ -3727,7 +3727,7 @@ function EditorInner() {
                   onClick={() => void submitTestEvent()}
                   disabled={!hasPerm("graph:run")}
                 >
-                  <Send size={14} style={{ verticalAlign: -2, marginRight: 5 }} />
+                  <Send size={14} style={{ marginRight: 5 }} />
                   {t("editor.testRunFire")}
                 </button>
               </div>
@@ -3810,7 +3810,7 @@ function EditorInner() {
                   }}
                   disabled={publishing || !!previewRef}
                 >
-                  <Rocket size={14} style={{ verticalAlign: -2, marginRight: 5 }} />
+                  <Rocket size={14} style={{ marginRight: 5 }} />
                   {t("editor.publish")}
                 </button>
               </div>
@@ -3830,6 +3830,10 @@ function EditorInner() {
           onNodeDrag={onNodeDrag}
           onNodeDragStop={onNodeDragStop}
           onEdgesChange={onEdgesChange}
+          // Both Delete and Backspace remove the selection (React Flow
+          // defaults to Backspace alone). Either way deletion is routed
+          // through onBeforeDelete below, so the confirm gate still applies.
+          deleteKeyCode={["Delete", "Backspace"]}
           onBeforeDelete={confirmDelete}
           onConnect={onConnect}
           isValidConnection={isValidConnection}

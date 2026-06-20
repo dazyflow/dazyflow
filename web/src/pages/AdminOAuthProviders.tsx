@@ -184,12 +184,12 @@ function ProviderRow({
 
       <div className="svc-actions">
         <button className="primary" onClick={save} disabled={saving || !clientID.trim() || !clientSecret.trim()}>
-          <Save size={14} style={{ verticalAlign: -2, marginRight: 4 }} />
+          <Save size={14} style={{ marginRight: 4 }} />
           {saving ? t("admin.oauth.saving") : t("admin.oauth.save")}
         </button>
         {provider.has_persisted && !confirmClear && (
           <button className="ghost" onClick={() => setConfirmClear(true)}>
-            <Trash2 size={14} style={{ verticalAlign: -2, marginRight: 4 }} />
+            <Trash2 size={14} style={{ marginRight: 4 }} />
             {t("admin.oauth.clear")}
           </button>
         )}

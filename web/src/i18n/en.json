@@ -723,8 +723,6 @@
     },
     "cardWorkspaceTitle": "Organization",
     "cardWorkspaceDesc": "Name, logo, and limits.",
-    "cardModulesTitle": "Steps",
-    "cardModulesDesc": "Browse the steps on this daemon.",
     "cardAuditTitle": "Audit log",
     "cardAuditDesc": "Saves, runs, secrets, approvals.",
     "users": {
@@ -934,17 +932,6 @@
       "colAction": "Action",
       "colTarget": "Target",
       "colDetail": "Detail"
-    },
-    "modules": {
-      "title": "Steps",
-      "subtitle": "Steps registered on this daemon.",
-      "empty": "No modules registered.",
-      "needAdmin": "You need <0>organization:admin</0> to view the module registry.",
-      "count_one": "{{count}} module",
-      "count_other": "{{count}} modules",
-      "idempotent": "idempotent",
-      "awaitsApproval": "awaits approval",
-      "submitsChild": "subgraph"
     },
     "workspace": {
       "title": "Organization",

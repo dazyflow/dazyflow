@@ -95,7 +95,7 @@ export function AdminUsers() {
           <div className="sub">{t("admin.users.subtitle")}</div>
         </div>
         <button className="primary" onClick={() => setInviting(true)}>
-          <Plus size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+          <Plus size={14} style={{ marginRight: 6 }} />
           {t("admin.users.inviteButton")}
         </button>
       </div>
@@ -126,7 +126,7 @@ export function AdminUsers() {
           <h2>{t("admin.users.emptyTitle")}</h2>
           <p>{t("admin.users.emptyBody")}</p>
           <button className="primary" onClick={() => setInviting(true)}>
-            <Plus size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+            <Plus size={14} style={{ marginRight: 6 }} />
             {t("admin.users.inviteFirst")}
           </button>
         </div>
@@ -329,7 +329,7 @@ function MemberCard({
         )}
         {!member.home && (
           <button onClick={remove} disabled={removing} title={t("admin.users.removeTitle")}>
-            <Trash2 size={12} style={{ marginRight: 4, verticalAlign: -1 }} />
+            <Trash2 size={12} style={{ marginRight: 4 }} />
             {removing ? t("admin.users.removing") : t("admin.users.remove")}
           </button>
         )}
@@ -454,7 +454,7 @@ function InvitationCard({
       <div className="user-card-actions">
         {inv.pending && (
           <button onClick={() => setConfirmRevoke(true)} disabled={revoking}>
-            <X size={12} style={{ marginRight: 4, verticalAlign: -1 }} />
+            <X size={12} style={{ marginRight: 4 }} />
             {revoking ? t("admin.users.revoking") : t("admin.users.revoke")}
           </button>
         )}

@@ -286,6 +286,13 @@ button {
   font-family: inherit;
   font-size: inherit;
   cursor: pointer;
+  /* Center label + any leading icon on the cross axis so icons sit on the
+     optical midline without per-call-site verticalAlign nudges. Spacing
+     between icon and text stays the icon's own marginRight (no gap here, so
+     buttons that already set one don't double up). */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: var(--surface-2);
   color: var(--ink);
   border: 1px solid var(--border);
