@@ -188,15 +188,15 @@ func TestAwsConfig_StorageRoundTrip(t *testing.T) {
 	}
 	ctx := context.Background()
 	cfg := AwsSecretsConfig{Region: "eu-north-1", AccessKeyID: "AKIA1", SecretAccessKey: "s3cret"}
-	if err = saveAwsConfig(ctx, es, "acme", cfg); err != nil {
+	if err = saveProviderConfig(ctx, es, "acme", awsConfigSecretName, cfg); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	got, ok, err := loadAwsConfig(ctx, es, "acme")
+	got, ok, err := loadProviderConfig[AwsSecretsConfig](ctx, es, "acme", awsConfigSecretName)
 	if err != nil || !ok || got != cfg {
 		t.Fatalf("load = %+v/%v/%v, want %+v", got, ok, err, cfg)
 	}
 	// Other tenant: not configured.
-	if _, ok, err := loadAwsConfig(ctx, es, "globex"); err != nil || ok {
+	if _, ok, err := loadProviderConfig[AwsSecretsConfig](ctx, es, "globex", awsConfigSecretName); err != nil || ok {
 		t.Errorf("other tenant = %v/%v, want not-configured", ok, err)
 	}
 	// The reserved cfg: key stays out of user-facing listings.
@@ -206,10 +206,10 @@ func TestAwsConfig_StorageRoundTrip(t *testing.T) {
 			t.Errorf("reserved name leaked into listing: %q", n)
 		}
 	}
-	if err := deleteAwsConfig(ctx, es, "acme"); err != nil {
+	if err := deleteProviderConfig(ctx, es, "acme", awsConfigSecretName); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	if _, ok, _ := loadAwsConfig(ctx, es, "acme"); ok {
+	if _, ok, _ := loadProviderConfig[AwsSecretsConfig](ctx, es, "acme", awsConfigSecretName); ok {
 		t.Error("config still present after delete")
 	}
 }

@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"fmt"
 	"net/http"
 	"time"
 
@@ -34,25 +33,19 @@ type secretManagerView struct {
 }
 
 func (h *HTTPGateway) getSecretManager(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !h.secretManagerGate(rw, p, core.PermSecretRead) {
-		return
-	}
-	cfg, ok, err := loadVaultConfig(r.Context(), h.EncryptedSecrets, p.Tenant)
-	if err != nil {
-		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("load secret-manager config: %v", err))
-		return
-	}
-	if !ok {
-		writeJSON(rw, http.StatusOK, secretManagerView{Configured: false})
-		return
-	}
-	writeJSON(rw, http.StatusOK, secretManagerView{
-		Configured: true,
-		Address:    cfg.Address,
-		Namespace:  cfg.Namespace,
-		Mount:      cfg.Mount,
-		AuthMethod: cfg.Auth.Method,
-	})
+	getSecretManagerConfig(h, rw, r, p, "secret-manager", vaultConfigSecretName,
+		func(cfg VaultConfig, configured bool) any {
+			if !configured {
+				return secretManagerView{Configured: false}
+			}
+			return secretManagerView{
+				Configured: true,
+				Address:    cfg.Address,
+				Namespace:  cfg.Namespace,
+				Mount:      cfg.Mount,
+				AuthMethod: cfg.Auth.Method,
+			}
+		})
 }
 
 func (h *HTTPGateway) putSecretManager(rw http.ResponseWriter, r *http.Request, p core.Principal) {

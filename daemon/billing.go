@@ -216,36 +216,25 @@ func (b *BillingService) checkRunQuota(ctx context.Context, tenant string) error
 // acceptable upgrade lag, in keeping with the gates' fail-open posture.
 type CachedPlanStore struct {
 	inner PlanStore
-	ttl   time.Duration
-
-	mu      sync.Mutex
-	entries map[string]planCacheEntry
-}
-
-type planCacheEntry struct {
-	plan TenantPlan
-	exp  time.Time
+	cache *ttlCache[TenantPlan]
 }
 
 func NewCachedPlanStore(inner PlanStore, ttl time.Duration) *CachedPlanStore {
 	if ttl <= 0 {
 		ttl = 30 * time.Second
 	}
-	return &CachedPlanStore{inner: inner, ttl: ttl, entries: map[string]planCacheEntry{}}
+	return &CachedPlanStore{inner: inner, cache: newTTLCache[TenantPlan](ttl)}
 }
 
 func (c *CachedPlanStore) GetPlan(ctx context.Context, tenant string) (TenantPlan, error) {
-	c.mu.Lock()
-	if e, ok := c.entries[tenant]; ok && e.exp.After(nowFunc()) {
-		c.mu.Unlock()
-		return e.plan, nil
+	if p, ok := c.cache.get(tenant); ok {
+		return p, nil
 	}
-	c.mu.Unlock()
 	plan, err := c.inner.GetPlan(ctx, tenant)
 	if err != nil {
 		return plan, err
 	}
-	c.store(tenant, plan)
+	c.cache.put(tenant, plan)
 	return plan, nil
 }
 
@@ -256,14 +245,8 @@ func (c *CachedPlanStore) SetPlan(ctx context.Context, p TenantPlan) error {
 	if p.Plan == "" {
 		p.Plan = PlanFree // mirror the stores' normalization
 	}
-	c.store(p.Tenant, p)
+	c.cache.put(p.Tenant, p)
 	return nil
-}
-
-func (c *CachedPlanStore) store(tenant string, plan TenantPlan) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.entries[tenant] = planCacheEntry{plan: plan, exp: nowFunc().Add(c.ttl)}
 }
 
 // MarkStripeEvent passes the webhook dedupe through to the inner store,

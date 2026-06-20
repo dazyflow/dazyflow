@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"fmt"
 	"net/http"
 
 	"git.sr.ht/~klahr/dazyflow/core"
@@ -50,24 +49,18 @@ type awsSecretManagerView struct {
 }
 
 func (h *HTTPGateway) getSecretManagerAws(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !h.secretManagerGate(rw, p, core.PermSecretRead) {
-		return
-	}
-	cfg, ok, err := loadAwsConfig(r.Context(), h.EncryptedSecrets, p.Tenant)
-	if err != nil {
-		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("load AWS secret-manager config: %v", err))
-		return
-	}
-	if !ok {
-		writeJSON(rw, http.StatusOK, awsSecretManagerView{Configured: false})
-		return
-	}
-	writeJSON(rw, http.StatusOK, awsSecretManagerView{
-		Configured:  true,
-		Region:      cfg.Region,
-		AccessKeyID: cfg.AccessKeyID,
-		Endpoint:    cfg.Endpoint,
-	})
+	getSecretManagerConfig(h, rw, r, p, "AWS secret-manager", awsConfigSecretName,
+		func(cfg AwsSecretsConfig, configured bool) any {
+			if !configured {
+				return awsSecretManagerView{Configured: false}
+			}
+			return awsSecretManagerView{
+				Configured:  true,
+				Region:      cfg.Region,
+				AccessKeyID: cfg.AccessKeyID,
+				Endpoint:    cfg.Endpoint,
+			}
+		})
 }
 
 func (h *HTTPGateway) putSecretManagerAws(rw http.ResponseWriter, r *http.Request, p core.Principal) {
@@ -96,23 +89,17 @@ type gcpSecretManagerView struct {
 }
 
 func (h *HTTPGateway) getSecretManagerGcp(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !h.secretManagerGate(rw, p, core.PermSecretRead) {
-		return
-	}
-	cfg, ok, err := loadGcpConfig(r.Context(), h.EncryptedSecrets, p.Tenant)
-	if err != nil {
-		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("load GCP secret-manager config: %v", err))
-		return
-	}
-	if !ok {
-		writeJSON(rw, http.StatusOK, gcpSecretManagerView{Configured: false})
-		return
-	}
-	view := gcpSecretManagerView{Configured: true, ProjectID: cfg.ProjectID, Endpoint: cfg.Endpoint}
-	if key, err := cfg.key(); err == nil {
-		view.ClientEmail = key.ClientEmail
-	}
-	writeJSON(rw, http.StatusOK, view)
+	getSecretManagerConfig(h, rw, r, p, "GCP secret-manager", gcpConfigSecretName,
+		func(cfg GcpSecretsConfig, configured bool) any {
+			if !configured {
+				return gcpSecretManagerView{Configured: false}
+			}
+			view := gcpSecretManagerView{Configured: true, ProjectID: cfg.ProjectID, Endpoint: cfg.Endpoint}
+			if key, err := cfg.key(); err == nil {
+				view.ClientEmail = key.ClientEmail
+			}
+			return view
+		})
 }
 
 func (h *HTTPGateway) putSecretManagerGcp(rw http.ResponseWriter, r *http.Request, p core.Principal) {
