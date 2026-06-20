@@ -66,7 +66,7 @@ func init() {
 }
 
 func executeListEvents(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	rawAfterID, ok := textInputOr(job, "after_id", params.StringDefault(job.Params, "after_id", ""))
+	rawAfterID, ok := params.TextInputOr(job, "after_id", params.StringDefault(job.Params, "after_id", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'After id' input must be text"), nil
 	}

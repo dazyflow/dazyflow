@@ -7,9 +7,9 @@ package gcal
 
 import (
 	"context"
-	"sync"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/apibase"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/google"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 )
@@ -30,29 +30,20 @@ func resolveToken(ctx context.Context, job core.Job) (string, error) {
 }
 
 // Test seam: tests point the API root at one httptest server.
-var (
-	baseMu  sync.RWMutex
-	calBase = calendarAPIBase
-)
+var calBase = apibase.New(calendarAPIBase)
 
 // SetHTTPBase swaps the Calendar API root (tests point it at an httptest server).
-func SetHTTPBase(base string) {
-	baseMu.Lock()
-	defer baseMu.Unlock()
-	calBase = base
-}
+func SetHTTPBase(base string) { calBase.Set(base) }
 
 // base_url is not a user-facing param, but like `token` the engine honors it
 // when present — the integration tests point it at an httptest server. The
 // SafeHTTPClient + egress guard in googleDo still bound where the bearer token
-// may be sent.
+// may be sent. The override is used verbatim (no trailing-slash trim).
 func calBaseURL(job core.Job) string {
 	if b, _ := params.StringOpt(job.Params, "base_url"); b != "" {
 		return b
 	}
-	baseMu.RLock()
-	defer baseMu.RUnlock()
-	return calBase
+	return calBase.Get()
 }
 
 func googleDo(ctx context.Context, method, url, token, contentType string, body []byte, timeoutMS int) (int, []byte, error) {

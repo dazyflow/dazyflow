@@ -10,12 +10,10 @@ package twilio
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
-	"strings"
-	"sync"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/apibase"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 )
@@ -24,26 +22,12 @@ import (
 // buggy upstream (reachable via the base_url override) can't OOM the daemon.
 const maxResponseBytes = 4 << 20 // 4 MiB — Messages responses are small
 
-var (
-	httpBaseMu sync.RWMutex
-	httpBase   = "https://api.twilio.com/2010-04-01"
-)
+var httpBase = apibase.New("https://api.twilio.com/2010-04-01")
 
 // SetHTTPBase swaps the Twilio API root (tests point it at httptest).
-func SetHTTPBase(base string) {
-	httpBaseMu.Lock()
-	defer httpBaseMu.Unlock()
-	httpBase = base
-}
+func SetHTTPBase(base string) { httpBase.Set(base) }
 
-func baseURL(job core.Job) string {
-	if b, _ := params.StringOpt(job.Params, "base_url"); b != "" {
-		return strings.TrimRight(b, "/")
-	}
-	httpBaseMu.RLock()
-	defer httpBaseMu.RUnlock()
-	return httpBase
-}
+func baseURL(job core.Job) string { return httpBase.For(job) }
 
 // resolveCreds reads the account_sid + auth_token params. The schema defaults
 // them to the TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN secrets, which the engine
@@ -91,44 +75,8 @@ func twilioDo(ctx context.Context, job core.Job, method, url, form string) (int,
 
 // extractTwilioError pulls the message (plus code) out of a Twilio error body,
 // so "The 'To' number is not a valid phone number" reaches the user instead of
-// a bare HTTP status.
+// a bare HTTP status. Twilio's {message,code} shape is the shared one, so this
+// is a thin wrapper over params.APIErrorMessage.
 func extractTwilioError(body []byte) string {
-	var e struct {
-		Message string `json:"message"`
-		Code    int    `json:"code"`
-	}
-	if err := json.Unmarshal(body, &e); err == nil && e.Message != "" {
-		if e.Code != 0 {
-			return fmt.Sprintf("%d: %s", e.Code, e.Message)
-		}
-		return e.Message
-	}
-	if len(body) > 200 {
-		return string(body[:200])
-	}
-	return string(body)
-}
-
-// textInputOr returns the text wired into input port `port` (string or raw
-// bytes), or `fallback` when the port is unwired/empty. ok is false only when
-// the port carries a NON-text value — a wiring mistake the caller rejects.
-// Same pattern as the stripe / gmail connectors.
-func textInputOr(job core.Job, port, fallback string) (val string, ok bool) {
-	in, present := job.Input[port]
-	if !present || in.Inline == nil {
-		return fallback, true
-	}
-	switch v := in.Inline.(type) {
-	case string:
-		if v != "" {
-			return v, true
-		}
-		return fallback, true
-	case []byte:
-		if len(v) > 0 {
-			return string(v), true
-		}
-		return fallback, true
-	}
-	return "", false
+	return params.APIErrorMessage(body, 200)
 }

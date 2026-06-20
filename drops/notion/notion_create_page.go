@@ -76,31 +76,6 @@ func init() {
 	})
 }
 
-// textInputOr returns the text wired into input port `port` (string or raw
-// bytes), or `fallback` when the port is unwired/empty. ok is false only when
-// the port carries a NON-text value — a wiring mistake the caller rejects.
-// Lets Title (and query's Database ID) be supplied by an upstream wire or a
-// param — same helper as gmail send's, kept local to the package.
-func textInputOr(job core.Job, port, fallback string) (val string, ok bool) {
-	in, present := job.Input[port]
-	if !present || in.Inline == nil {
-		return fallback, true
-	}
-	switch v := in.Inline.(type) {
-	case string:
-		if v != "" {
-			return v, true
-		}
-		return fallback, true
-	case []byte:
-		if len(v) > 0 {
-			return string(v), true
-		}
-		return fallback, true
-	}
-	return "", false
-}
-
 func executeNotionCreatePage(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	dbID, _ := params.StringOpt(job.Params, "parent_database_id")
 	pgID, _ := params.StringOpt(job.Params, "parent_page_id")
@@ -108,7 +83,7 @@ func executeNotionCreatePage(ctx context.Context, job core.Job, _ chan<- core.Pr
 		return params.Err(job, "bad_param", "set exactly one of 'Add to database' or 'Add under page'"), nil
 	}
 	// The Title input pin overrides the param when wired.
-	title, ok := textInputOr(job, "title", params.StringDefault(job.Params, "title", ""))
+	title, ok := params.TextInputOr(job, "title", params.StringDefault(job.Params, "title", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'Title' input must be text"), nil
 	}

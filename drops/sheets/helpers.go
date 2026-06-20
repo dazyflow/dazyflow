@@ -12,9 +12,9 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"sync"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/apibase"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/google"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 )
@@ -40,38 +40,33 @@ func resolveToken(ctx context.Context, job core.Job) (string, error) {
 
 // Test seams: the read/append drops hit the Sheets API; export hits Drive.
 var (
-	baseMu     sync.RWMutex
-	sheetsBase = sheetsAPIBase
-	driveBase  = driveAPIBase
+	sheetsBase = apibase.New(sheetsAPIBase)
+	driveBase  = apibase.New(driveAPIBase)
 )
 
 // SetHTTPBases swaps both API roots (tests point them at one httptest server).
 func SetHTTPBases(sheets, drive string) {
-	baseMu.Lock()
-	defer baseMu.Unlock()
-	sheetsBase, driveBase = sheets, drive
+	sheetsBase.Set(sheets)
+	driveBase.Set(drive)
 }
 
 // base_url is no longer a user-facing param (removed from the schema), but
 // like `token` the engine still honors it when present — the integration
 // tests point it at an httptest server. The SafeHTTPClient + egress guard in
-// googleDo still bound where the bearer token can be sent.
+// googleDo still bound where the bearer token can be sent. The override is
+// used verbatim (no trailing-slash trim — endpoints are concatenated as-is).
 func sheetsBaseURL(job core.Job) string {
 	if b, _ := params.StringOpt(job.Params, "base_url"); b != "" {
 		return b
 	}
-	baseMu.RLock()
-	defer baseMu.RUnlock()
-	return sheetsBase
+	return sheetsBase.Get()
 }
 
 func driveBaseURL(job core.Job) string {
 	if b, _ := params.StringOpt(job.Params, "base_url"); b != "" {
 		return b
 	}
-	baseMu.RLock()
-	defer baseMu.RUnlock()
-	return driveBase
+	return driveBase.Get()
 }
 
 func googleDo(ctx context.Context, method, url, token, contentType string, body []byte, timeoutMS int) (int, []byte, error) {

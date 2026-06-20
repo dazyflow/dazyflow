@@ -23,9 +23,9 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"sync"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/apibase"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 )
@@ -35,26 +35,12 @@ import (
 // OOM the daemon by streaming an unbounded body.
 const maxResponseBytes = 16 << 20 // 16 MiB
 
-var (
-	httpBaseMu sync.RWMutex
-	httpBase   = "https://api.stripe.com/v1"
-)
+var httpBase = apibase.New("https://api.stripe.com/v1")
 
 // SetHTTPBase swaps the Stripe API root (tests point it at httptest).
-func SetHTTPBase(base string) {
-	httpBaseMu.Lock()
-	defer httpBaseMu.Unlock()
-	httpBase = base
-}
+func SetHTTPBase(base string) { httpBase.Set(base) }
 
-func baseURL(job core.Job) string {
-	if b, _ := params.StringOpt(job.Params, "base_url"); b != "" {
-		return strings.TrimRight(b, "/")
-	}
-	httpBaseMu.RLock()
-	defer httpBaseMu.RUnlock()
-	return httpBase
-}
+func baseURL(job core.Job) string { return httpBase.For(job) }
 
 // resolveAPIKey reads the `api_key` param. The schema defaults it to
 // ${secret.STRIPE_API_KEY}, which the engine resolves before Execute —
@@ -129,30 +115,6 @@ func extractStripeError(body []byte) string {
 		return string(body[:200])
 	}
 	return string(body)
-}
-
-// textInputOr returns the text wired into input port `port` (string or raw
-// bytes), or `fallback` when the port is unwired/empty. ok is false only
-// when the port carries a NON-text value — a wiring mistake the caller
-// rejects. Same pattern as gmail send / the Email drop.
-func textInputOr(job core.Job, port, fallback string) (val string, ok bool) {
-	in, present := job.Input[port]
-	if !present || in.Inline == nil {
-		return fallback, true
-	}
-	switch v := in.Inline.(type) {
-	case string:
-		if v != "" {
-			return v, true
-		}
-		return fallback, true
-	case []byte:
-		if len(v) > 0 {
-			return string(v), true
-		}
-		return fallback, true
-	}
-	return "", false
 }
 
 // numberInputOr returns the whole number wired into input port `port` (a
@@ -230,15 +192,9 @@ func noPaymentTriggerData(job core.Job, message, details string) (core.Result, e
 
 // stripeFailure maps a transport error or a non-2xx Stripe response to
 // an error Result. Returns nil when the call succeeded — the shared
-// epilogue of every drop's stripeDo call.
+// epilogue of every drop's stripeDo call. Delegates to params.HTTPFailure
+// (the shared transport-error/non-2xx epilogue), keeping Stripe's exact
+// error codes ("stripe_http_error"/"stripe_error") and message format.
 func stripeFailure(job core.Job, status int, body []byte, err error) *core.Result {
-	if err != nil {
-		r := params.Err(job, "stripe_http_error", err.Error())
-		return &r
-	}
-	if status < 200 || status >= 300 {
-		r := params.Err(job, "stripe_error", fmt.Sprintf("Stripe returned %d: %s", status, extractStripeError(body)))
-		return &r
-	}
-	return nil
+	return params.HTTPFailure(job, "stripe", "Stripe", status, body, err, extractStripeError)
 }

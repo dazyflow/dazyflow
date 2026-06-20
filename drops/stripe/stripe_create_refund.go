@@ -65,7 +65,7 @@ func init() {
 }
 
 func executeCreateRefund(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	pi, ok := textInputOr(job, "payment_intent", params.StringDefault(job.Params, "payment_intent", ""))
+	pi, ok := params.TextInputOr(job, "payment_intent", params.StringDefault(job.Params, "payment_intent", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'Payment intent' input must be text"), nil
 	}

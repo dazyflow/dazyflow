@@ -66,18 +66,18 @@ func init() {
 }
 
 func executeCreateCustomer(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	email, ok := textInputOr(job, "email", params.StringDefault(job.Params, "email", ""))
+	email, ok := params.TextInputOr(job, "email", params.StringDefault(job.Params, "email", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'Email' input must be text"), nil
 	}
 	if email == "" {
 		return params.Err(job, "bad_param", "'email' is required — set it or wire the 'Email' input"), nil
 	}
-	name, ok := textInputOr(job, "name", params.StringDefault(job.Params, "name", ""))
+	name, ok := params.TextInputOr(job, "name", params.StringDefault(job.Params, "name", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'Name' input must be text"), nil
 	}
-	description, ok := textInputOr(job, "description", params.StringDefault(job.Params, "description", ""))
+	description, ok := params.TextInputOr(job, "description", params.StringDefault(job.Params, "description", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'Description' input must be text"), nil
 	}

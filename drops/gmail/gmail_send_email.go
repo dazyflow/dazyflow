@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"mime"
 	"strings"
 
@@ -85,35 +84,11 @@ func init() {
 	})
 }
 
-// textInputOr returns the text wired into input port `port` (string or raw
-// bytes), or `fallback` when the port is unwired/empty. ok is false only when
-// the port carries a NON-text value — a wiring mistake the caller rejects.
-// Lets To, Subject and Body each be supplied by an upstream wire or a param.
-func textInputOr(job core.Job, port, fallback string) (val string, ok bool) {
-	in, present := job.Input[port]
-	if !present || in.Inline == nil {
-		return fallback, true
-	}
-	switch v := in.Inline.(type) {
-	case string:
-		if v != "" {
-			return v, true
-		}
-		return fallback, true
-	case []byte:
-		if len(v) > 0 {
-			return string(v), true
-		}
-		return fallback, true
-	}
-	return "", false
-}
-
 func executeGmailSend(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	// to / subject / body each take their value from the matching input port
 	// when one is wired, otherwise from the param (the "input overrides param"
 	// pattern). A non-text value wired into any of them is a mistake we reject.
-	to, ok := textInputOr(job, "to", params.StringDefault(job.Params, "to", ""))
+	to, ok := params.TextInputOr(job, "to", params.StringDefault(job.Params, "to", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'To' input must be text"), nil
 	}
@@ -127,11 +102,11 @@ func executeGmailSend(ctx context.Context, job core.Job, _ chan<- core.Progress)
 
 	// Body is optional — an empty body is allowed (send a subject-only email).
 	// Minimal friction for non-tech authors; To is the only hard requirement.
-	body, ok := textInputOr(job, "body", params.StringDefault(job.Params, "body", ""))
+	body, ok := params.TextInputOr(job, "body", params.StringDefault(job.Params, "body", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'Body' input must be text"), nil
 	}
-	subject, ok := textInputOr(job, "subject", params.StringDefault(job.Params, "subject", "(no subject)"))
+	subject, ok := params.TextInputOr(job, "subject", params.StringDefault(job.Params, "subject", "(no subject)"))
 	if !ok {
 		return params.Err(job, "bad_input", "'Subject' input must be text"), nil
 	}
@@ -166,11 +141,8 @@ func executeGmailSend(ctx context.Context, job core.Job, _ chan<- core.Progress)
 
 	endpoint := baseURL(job) + "/users/me/messages/send"
 	status, respBody, err := gmailDo(ctx, "POST", endpoint, token, "application/json; charset=utf-8", raw, params.IntDefault(job.Params, "timeout_ms", 15000))
-	if err != nil {
-		return params.Err(job, "gmail_http_error", err.Error()), nil
-	}
-	if status < 200 || status >= 300 {
-		return params.Err(job, "gmail_error", fmt.Sprintf("Gmail returned %d: %s", status, extractGmailError(respBody))), nil
+	if fail := params.HTTPFailure(job, "gmail", "Gmail", status, respBody, err, extractGmailError); fail != nil {
+		return *fail, nil
 	}
 
 	var parsed struct {

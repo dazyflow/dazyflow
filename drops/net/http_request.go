@@ -160,7 +160,7 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 		}
 	}
 
-	emitProgress(progress, job, 0.1, fmt.Sprintf("%s %s", method, url))
+	params.EmitProgress(progress, job, 0.1, fmt.Sprintf("%s %s", method, url))
 
 	client := buildClient(time.Duration(timeoutMs)*time.Millisecond, allowPrivate)
 	resp, err := client.Do(req)
@@ -178,7 +178,7 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 	}
 	defer resp.Body.Close()
 
-	emitProgress(progress, job, 0.7, fmt.Sprintf("received %d", resp.StatusCode))
+	params.EmitProgress(progress, job, 0.7, fmt.Sprintf("received %d", resp.StatusCode))
 
 	if !statusAccepted(resp.StatusCode, expectStatus) {
 		return params.Err(job, "unexpected_status",
@@ -462,4 +462,3 @@ func isUnsafeIP(ip stdnet.IP) bool {
 func isSSRFError(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "ssrf_blocked")
 }
-

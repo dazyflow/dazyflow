@@ -11,6 +11,7 @@
 package params
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"git.sr.ht/~klahr/dazyflow/core"
@@ -197,4 +198,85 @@ func ErrDetails(job core.Job, code, msg, details string) core.Result {
 		Status: core.StatusError,
 		Error:  &core.JobError{Code: code, Message: msg, Details: details},
 	}
+}
+
+// TextInputOr returns the text wired into input port `port` (string or raw
+// bytes), or `fallback` when the port is unwired/empty. ok is false only when
+// the port carries a NON-text value — a wiring mistake the caller rejects.
+// This was a byte-identical ~18-line copy in every action connector (stripe,
+// twilio, discord, homeassistant, gmail send, notion, mqtt, github, slack);
+// it lives here once. Same "input overrides param" pattern across all of them.
+func TextInputOr(job core.Job, port, fallback string) (val string, ok bool) {
+	in, present := job.Input[port]
+	if !present || in.Inline == nil {
+		return fallback, true
+	}
+	switch v := in.Inline.(type) {
+	case string:
+		if v != "" {
+			return v, true
+		}
+		return fallback, true
+	case []byte:
+		if len(v) > 0 {
+			return string(v), true
+		}
+		return fallback, true
+	}
+	return "", false
+}
+
+// EmitProgress sends a progress update on ch, no-op when ch is nil and
+// non-blocking when the channel is full (a slow consumer never stalls the
+// drop). The byte-identical emitProgress every drop carried.
+func EmitProgress(ch chan<- core.Progress, job core.Job, pct float64, msg string) {
+	if ch == nil {
+		return
+	}
+	select {
+	case ch <- core.Progress{JobID: job.ID, NodeID: job.NodeID, Percent: &pct, Message: msg}:
+	default:
+	}
+}
+
+// APIErrorMessage pulls a human message out of a flat {message, code} error
+// body — the shape Twilio and Discord both return — formatting it as
+// "code: message" when a non-zero code is present, else the bare message.
+// Falls back to the raw body truncated at limit bytes. Vendors whose error
+// JSON nests differently (Stripe's {error:{…}}, Google's, GitHub's) keep
+// their own extractor.
+func APIErrorMessage(body []byte, limit int) string {
+	var e struct {
+		Message string `json:"message"`
+		Code    int    `json:"code"`
+	}
+	if err := json.Unmarshal(body, &e); err == nil && e.Message != "" {
+		if e.Code != 0 {
+			return fmt.Sprintf("%d: %s", e.Code, e.Message)
+		}
+		return e.Message
+	}
+	if len(body) > limit {
+		return string(body[:limit])
+	}
+	return string(body)
+}
+
+// HTTPFailure maps the transport-error / non-2xx epilogue every HTTP drop
+// shares to an error Result, returning nil when the call succeeded. err
+// non-nil is a transport failure → "<vendor>_http_error". A non-2xx status →
+// "<vendor>_error" with "<Vendor label> returned <status>: <extract(body)>";
+// the vendor-facing label and the body extractor stay per-connector so the
+// exact messages tests assert on are preserved. Pass the human label the
+// connector used (e.g. "Stripe", "Twilio") as vendorLabel.
+func HTTPFailure(job core.Job, vendor, vendorLabel string, status int, body []byte, err error, extract func([]byte) string) *core.Result {
+	if err != nil {
+		r := Err(job, vendor+"_http_error", err.Error())
+		return &r
+	}
+	if status < 200 || status >= 300 {
+		r := Err(job, vendor+"_error", fmt.Sprintf("%s returned %d: %s", vendorLabel, status, extract(body)))
+		return &r
+	}
+	return nil
 }

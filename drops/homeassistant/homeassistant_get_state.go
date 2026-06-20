@@ -73,7 +73,7 @@ func init() {
 // 404 means the entity_id doesn't exist on this instance — surfaced with a
 // pointed message rather than a bare HTTP status.
 func executeGetState(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	entityID, ok := textInputOr(job, "entity_id", params.StringDefault(job.Params, "entity_id", ""))
+	entityID, ok := params.TextInputOr(job, "entity_id", params.StringDefault(job.Params, "entity_id", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'Entity' input must be text"), nil
 	}

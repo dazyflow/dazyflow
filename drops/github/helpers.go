@@ -22,9 +22,9 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"sync"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/apibase"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/oauthtok"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
@@ -46,26 +46,15 @@ func resolveToken(ctx context.Context, job core.Job) (string, error) {
 	return tokenHook.Resolve(ctx, job)
 }
 
-var (
-	httpBaseMu sync.RWMutex
-	httpBase   = "https://api.github.com"
-)
+var httpBase = apibase.New("https://api.github.com")
 
 // SetHTTPBase swaps the GitHub API root. Tests point this at an
 // httptest server so they never hit api.github.com. (Also lets
 // GitHub Enterprise deployments self-host with their own API
 // origin if anyone needs that down the line.)
-func SetHTTPBase(base string) {
-	httpBaseMu.Lock()
-	defer httpBaseMu.Unlock()
-	httpBase = base
-}
+func SetHTTPBase(base string) { httpBase.Set(base) }
 
-func currentHTTPBase() string {
-	httpBaseMu.RLock()
-	defer httpBaseMu.RUnlock()
-	return httpBase
-}
+func currentHTTPBase() string { return httpBase.Get() }
 
 // gitHubErrorEnvelope mirrors GitHub's REST v3 error shape. Most
 // errors include a message + documentation_url; some include a

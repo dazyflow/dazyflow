@@ -78,7 +78,7 @@ func executeGmailSearch(ctx context.Context, job core.Job, _ chan<- core.Progres
 	// The Search input pin overrides the param when wired (same pattern as
 	// gmail send's to/subject/body).
 	queryParam, _ := params.StringOpt(job.Params, "query")
-	query, ok := textInputOr(job, "query", queryParam)
+	query, ok := params.TextInputOr(job, "query", queryParam)
 	if !ok {
 		return params.Err(job, "bad_input", "input port 'query' must be text"), nil
 	}

@@ -81,30 +81,6 @@ func init() {
 	})
 }
 
-// textInputOr returns the text wired into input port `port` (string or raw
-// bytes), or `fallback` when the port is unwired/empty. ok is false only when
-// the port carries a NON-text value — a wiring mistake the caller rejects.
-// Lets Channel and Message each be supplied by an upstream wire or a param.
-func textInputOr(job core.Job, port, fallback string) (val string, ok bool) {
-	in, present := job.Input[port]
-	if !present || in.Inline == nil {
-		return fallback, true
-	}
-	switch v := in.Inline.(type) {
-	case string:
-		if v != "" {
-			return v, true
-		}
-		return fallback, true
-	case []byte:
-		if len(v) > 0 {
-			return string(v), true
-		}
-		return fallback, true
-	}
-	return "", false
-}
-
 // executeSlackSendMessage posts to chat.postMessage as the connected bot.
 // channel / text each take their value from the matching input port when one
 // is wired, otherwise from the param (the "input overrides param" pattern);
@@ -115,7 +91,7 @@ func executeSlackSendMessage(ctx context.Context, job core.Job, _ chan<- core.Pr
 	if err != nil {
 		return params.Err(job, "auth", err.Error()), nil
 	}
-	channel, ok := textInputOr(job, "channel", params.StringDefault(job.Params, "channel", ""))
+	channel, ok := params.TextInputOr(job, "channel", params.StringDefault(job.Params, "channel", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'Channel' input must be text"), nil
 	}
@@ -123,7 +99,7 @@ func executeSlackSendMessage(ctx context.Context, job core.Job, _ chan<- core.Pr
 		return params.Err(job, "bad_param", "'channel' is required — set it or wire the 'Channel' input"), nil
 	}
 
-	text, ok := textInputOr(job, "text", params.StringDefault(job.Params, "text", ""))
+	text, ok := params.TextInputOr(job, "text", params.StringDefault(job.Params, "text", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'Message' input must be text"), nil
 	}

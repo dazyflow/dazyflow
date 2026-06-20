@@ -20,7 +20,6 @@ import (
 
 	mqttlib "github.com/eclipse/paho.mqtt.golang"
 
-	"git.sr.ht/~klahr/dazyflow/core"
 	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 )
 
@@ -126,27 +125,4 @@ func pahoPublish(_ context.Context, cfg publishConfig) error {
 		return fmt.Errorf("publish to %q timed out after %s", cfg.Topic, to)
 	}
 	return pt.Error()
-}
-
-// textInputOr returns the text wired into input port `port` (string or raw
-// bytes), or `fallback` when the port is unwired/empty. ok is false only when
-// the port carries a NON-text value — a wiring mistake the caller rejects.
-func textInputOr(job core.Job, port, fallback string) (val string, ok bool) {
-	in, present := job.Input[port]
-	if !present || in.Inline == nil {
-		return fallback, true
-	}
-	switch v := in.Inline.(type) {
-	case string:
-		if v != "" {
-			return v, true
-		}
-		return fallback, true
-	case []byte:
-		if len(v) > 0 {
-			return string(v), true
-		}
-		return fallback, true
-	}
-	return "", false
 }
