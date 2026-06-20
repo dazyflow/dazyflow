@@ -39,17 +39,11 @@ type referenceGroups struct {
 // Access is gated by LoadGraph (visibility/ownership) exactly like the
 // other /me/flows reads.
 func (h *HTTPGateway) listReferences(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	tenant, workspace, id, ok := h.readFlowID(rw, r, p)
+	_, _, id, g, ok := h.loadFlowForRequest(rw, r, p, "")
 	if !ok {
 		return
 	}
 	node := r.URL.Query().Get("node")
-
-	g, err := h.svc.LoadGraph(r.Context(), p, tenant, workspace, id, "")
-	if err != nil {
-		writeAPIError(rw, http.StatusNotFound, "flow_not_found", flowNotFoundMessage(tenant, workspace, id))
-		return
-	}
 
 	// Tenant + flow ride on ctx so live row-source fetches (Sheets headers,
 	// Form questions) can resolve the right OAuth account — same scoping as

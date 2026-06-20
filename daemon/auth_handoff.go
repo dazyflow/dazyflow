@@ -96,14 +96,6 @@ func (h *HTTPGateway) authHandoff(rw http.ResponseWriter, r *http.Request) {
 		http.Redirect(rw, r, "/signin?error=handoff_expired", http.StatusFound)
 		return
 	}
-	http.SetCookie(rw, &http.Cookie{
-		Name:     sessionCookieName,
-		Value:    entry.Token,
-		Path:     "/",
-		Expires:  entry.ExpiresAt,
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		Secure:   h.requestIsHTTPS(r),
-	})
+	h.setSessionCookie(rw, r, entry.Token, entry.ExpiresAt)
 	http.Redirect(rw, r, returnTo, http.StatusFound)
 }

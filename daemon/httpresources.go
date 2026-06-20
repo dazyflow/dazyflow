@@ -46,26 +46,8 @@ func validResourceName(name string) error {
 // idempotent. Gated like a flow-scoped secret write (graph:edit at flow
 // scope, secret:write at organization scope).
 func (h *HTTPGateway) putResource(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if h.EncryptedSecrets == nil {
-		writeJSONError(rw, http.StatusNotImplemented, "encrypted secret store is not configured")
-		return
-	}
-	name := r.PathValue("name")
-	if err := validResourceName(name); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, err.Error())
-		return
-	}
-	if p.Tenant == "" {
-		writeJSONError(rw, http.StatusForbidden, "principal has no tenant")
-		return
-	}
-	scope, flow, err := secretScopeFromRequest(r)
-	if err != nil {
-		writeJSONError(rw, http.StatusBadRequest, err.Error())
-		return
-	}
-	if status, msg := h.authorizeFlowSecretScope(r.Context(), p, scope, flow, true); status != 0 {
-		writeJSONError(rw, status, msg)
+	name, scope, flow, ok := h.secretCRUDGate(rw, r, p, validResourceName, true)
+	if !ok {
 		return
 	}
 	r.Body = http.MaxBytesReader(rw, r.Body, maxSecretValueBytes)
@@ -97,21 +79,8 @@ func (h *HTTPGateway) putResource(rw http.ResponseWriter, r *http.Request, p cor
 // listing (the "res." prefix is reserved), so this is the only way to see
 // them.
 func (h *HTTPGateway) listResources(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if h.EncryptedSecrets == nil {
-		writeJSONError(rw, http.StatusNotImplemented, "encrypted secret store is not configured")
-		return
-	}
-	if p.Tenant == "" {
-		writeJSONError(rw, http.StatusForbidden, "principal has no tenant")
-		return
-	}
-	scope, flow, err := secretScopeFromRequest(r)
-	if err != nil {
-		writeJSONError(rw, http.StatusBadRequest, err.Error())
-		return
-	}
-	if status, msg := h.authorizeFlowSecretScope(r.Context(), p, scope, flow, false); status != 0 {
-		writeJSONError(rw, status, msg)
+	_, scope, flow, ok := h.secretCRUDGate(rw, r, p, noopSecretName, false)
+	if !ok {
 		return
 	}
 	storageNames, err := h.resourceStorageNames(r.Context(), p.Tenant, flow, scope)
@@ -137,26 +106,8 @@ func (h *HTTPGateway) listResources(rw http.ResponseWriter, r *http.Request, p c
 
 // deleteResource removes a resource definition. Idempotent.
 func (h *HTTPGateway) deleteResource(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if h.EncryptedSecrets == nil {
-		writeJSONError(rw, http.StatusNotImplemented, "encrypted secret store is not configured")
-		return
-	}
-	name := r.PathValue("name")
-	if err := validResourceName(name); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, err.Error())
-		return
-	}
-	if p.Tenant == "" {
-		writeJSONError(rw, http.StatusForbidden, "principal has no tenant")
-		return
-	}
-	scope, flow, err := secretScopeFromRequest(r)
-	if err != nil {
-		writeJSONError(rw, http.StatusBadRequest, err.Error())
-		return
-	}
-	if status, msg := h.authorizeFlowSecretScope(r.Context(), p, scope, flow, true); status != 0 {
-		writeJSONError(rw, status, msg)
+	name, scope, flow, ok := h.secretCRUDGate(rw, r, p, validResourceName, true)
+	if !ok {
 		return
 	}
 	if err := h.EncryptedSecrets.DeleteScoped(r.Context(), p.Tenant, flow, scope, secretResourcePrefix+name); err != nil {

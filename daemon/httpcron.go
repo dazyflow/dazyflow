@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -46,9 +45,8 @@ type cronValidateResponse struct {
 // through PUT /graphs as usual; this is a pre-save sanity check that
 // keeps users from saving an expression that silently never fires.
 func (h *HTTPGateway) validateCron(rw http.ResponseWriter, r *http.Request, _ core.Principal) {
-	var body cronValidateRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, "decode body: "+err.Error())
+	body, ok := decodeRequestJSON[cronValidateRequest](rw, r)
+	if !ok {
 		return
 	}
 	expr := strings.TrimSpace(body.Expr)

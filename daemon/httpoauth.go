@@ -323,29 +323,10 @@ func (h *HTTPGateway) oauthListProviders(rw http.ResponseWriter, r *http.Request
 	}
 	names := h.OAuth.Providers()
 
-	// For each provider, find any stored accounts by listing the
-	// tenant's secrets and matching the `oauth.<provider>.` prefix.
-	// One List() call rather than N — the typical tenant has a small
-	// number of secrets.
-	connected := map[string][]string{}
-	if h.EncryptedSecrets != nil {
-		all, err := h.EncryptedSecrets.List(r.Context(), p.Tenant)
-		if err == nil {
-			for _, name := range all {
-				const pfx = "oauth."
-				if !strings.HasPrefix(name, pfx) {
-					continue
-				}
-				rest := name[len(pfx):]
-				dot := strings.Index(rest, ".")
-				if dot < 0 {
-					continue
-				}
-				prov, account := rest[:dot], rest[dot+1:]
-				connected[prov] = append(connected[prov], account)
-			}
-		}
-	}
+	// For each provider, find any stored accounts. Reuses the same
+	// oauth.<provider>.<account> prefix scan as connectedAccounts (one
+	// List() call) so the two surfaces can't drift.
+	connected := h.connectedAccountsByProvider(r.Context(), p.Tenant)
 	out := make([]map[string]any, 0, len(names))
 	for _, n := range names {
 		row := map[string]any{
@@ -377,21 +358,40 @@ func (h *HTTPGateway) oauthListProviders(rw http.ResponseWriter, r *http.Request
 // oauth.<provider>.<account> token for. One List() call + prefix match,
 // shared by oauthListProviders and oauthListAccounts.
 func (h *HTTPGateway) connectedAccounts(ctx context.Context, tenant, provider string) []string {
+	out := h.connectedAccountsByProvider(ctx, tenant)[provider]
+	if out == nil {
+		out = make([]string, 0)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// connectedAccountsByProvider lists every stored OAuth account, grouped by
+// provider, from the tenant's oauth.<provider>.<account> secret names. One
+// List() call serves both the all-providers listing (oauthListProviders) and
+// the per-provider lookup (connectedAccounts), so the prefix-scan lives once.
+func (h *HTTPGateway) connectedAccountsByProvider(ctx context.Context, tenant string) map[string][]string {
+	out := map[string][]string{}
 	if h.EncryptedSecrets == nil {
-		return nil
+		return out
 	}
 	all, err := h.EncryptedSecrets.List(ctx, tenant)
 	if err != nil {
-		return nil
+		return out
 	}
-	pfx := "oauth." + provider + "."
-	out := make([]string, 0)
+	const pfx = "oauth."
 	for _, name := range all {
-		if strings.HasPrefix(name, pfx) {
-			out = append(out, name[len(pfx):])
+		if !strings.HasPrefix(name, pfx) {
+			continue
 		}
+		rest := name[len(pfx):]
+		dot := strings.Index(rest, ".")
+		if dot < 0 {
+			continue
+		}
+		prov, account := rest[:dot], rest[dot+1:]
+		out[prov] = append(out[prov], account)
 	}
-	sort.Strings(out)
 	return out
 }
 
@@ -420,8 +420,7 @@ func (h *HTTPGateway) oauthListAccounts(rw http.ResponseWriter, r *http.Request,
 		writeAPIError(rw, http.StatusForbidden, "forbidden", "principal has no tenant")
 		return
 	}
-	if !core.CanAdminOrg(p) {
-		writeAPIError(rw, http.StatusForbidden, "forbidden", "organization:admin required")
+	if !requireOrgAdmin(rw, p) {
 		return
 	}
 	provider := r.PathValue("provider")

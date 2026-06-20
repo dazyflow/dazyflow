@@ -134,30 +134,66 @@ func (h *HTTPGateway) authorizeFlowSecretScope(ctx context.Context, p core.Princ
 	return 0, ""
 }
 
-// putSecret writes a secret for the requesting principal's tenant.
-// PUT semantics: idempotent, replaces any existing value at the
-// same name. Returns 204 on success.
-func (h *HTTPGateway) putSecret(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+// noopSecretName is the name validator for the list endpoints, which carry
+// no {name} path value: there's nothing to validate, so it always passes.
+func noopSecretName(string) error { return nil }
+
+// requireSecretStore is the two-line guard every encrypted-secret-store
+// handler shares: the store must be configured, and the principal must be
+// bound to a tenant. Returns false after writing the error response. It's
+// the tenant-only subset of secretCRUDGate, for handlers that don't take a
+// {name}/scope (e.g. the OAuth listing/disconnect paths).
+func (h *HTTPGateway) requireSecretStore(rw http.ResponseWriter, p core.Principal) bool {
 	if h.EncryptedSecrets == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "encrypted secret store is not configured")
-		return
-	}
-	name := r.PathValue("name")
-	if err := validSecretName(name); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, err.Error())
-		return
+		return false
 	}
 	if p.Tenant == "" {
 		writeJSONError(rw, http.StatusForbidden, "principal has no tenant")
-		return
+		return false
+	}
+	return true
+}
+
+// secretCRUDGate runs the shared preamble of the secret + resource CRUD
+// handlers: encrypted store present, name path-value validated, tenant-bound
+// principal, scope parsed, and the per-flow authorization for the operation.
+// validate is the name validator (validSecretName / validResourceName); write
+// selects the read-vs-write authorization. Returns the validated name, the
+// resolved scope + flow, and ok=false (after writing the error response) when
+// the handler should stop.
+func (h *HTTPGateway) secretCRUDGate(rw http.ResponseWriter, r *http.Request, p core.Principal, validate func(string) error, write bool) (name string, scope SecretScope, flow string, ok bool) {
+	if h.EncryptedSecrets == nil {
+		writeJSONError(rw, http.StatusNotImplemented, "encrypted secret store is not configured")
+		return "", "", "", false
+	}
+	name = r.PathValue("name")
+	if err := validate(name); err != nil {
+		writeJSONError(rw, http.StatusBadRequest, err.Error())
+		return "", "", "", false
+	}
+	if p.Tenant == "" {
+		writeJSONError(rw, http.StatusForbidden, "principal has no tenant")
+		return "", "", "", false
 	}
 	scope, flow, err := secretScopeFromRequest(r)
 	if err != nil {
 		writeJSONError(rw, http.StatusBadRequest, err.Error())
-		return
+		return "", "", "", false
 	}
-	if status, msg := h.authorizeFlowSecretScope(r.Context(), p, scope, flow, true); status != 0 {
+	if status, msg := h.authorizeFlowSecretScope(r.Context(), p, scope, flow, write); status != 0 {
 		writeJSONError(rw, status, msg)
+		return "", "", "", false
+	}
+	return name, scope, flow, true
+}
+
+// putSecret writes a secret for the requesting principal's tenant.
+// PUT semantics: idempotent, replaces any existing value at the
+// same name. Returns 204 on success.
+func (h *HTTPGateway) putSecret(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	name, scope, flow, ok := h.secretCRUDGate(rw, r, p, validSecretName, true)
+	if !ok {
 		return
 	}
 	r.Body = http.MaxBytesReader(rw, r.Body, maxSecretValueBytes)
@@ -184,23 +220,11 @@ func (h *HTTPGateway) putSecret(rw http.ResponseWriter, r *http.Request, p core.
 // secrets. Sorted alphabetically by the store; the UI can render
 // them as-is.
 func (h *HTTPGateway) listSecrets(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if h.EncryptedSecrets == nil {
-		writeJSONError(rw, http.StatusNotImplemented, "encrypted secret store is not configured")
-		return
-	}
-	if p.Tenant == "" {
-		writeJSONError(rw, http.StatusForbidden, "principal has no tenant")
-		return
-	}
-	scope, flow, err := secretScopeFromRequest(r)
-	if err != nil {
-		writeJSONError(rw, http.StatusBadRequest, err.Error())
-		return
-	}
 	// Listing names is gated on read/edit even though values aren't
-	// returned — names alone leak which services a flow uses.
-	if status, msg := h.authorizeFlowSecretScope(r.Context(), p, scope, flow, false); status != 0 {
-		writeJSONError(rw, status, msg)
+	// returned — names alone leak which services a flow uses. The list
+	// endpoints carry no {name}, so validate is a no-op.
+	_, scope, flow, ok := h.secretCRUDGate(rw, r, p, noopSecretName, false)
+	if !ok {
 		return
 	}
 	// ListScoped strips the scope prefix and, at tenant scope, hides every
@@ -232,26 +256,8 @@ func (h *HTTPGateway) listSecrets(rw http.ResponseWriter, r *http.Request, p cor
 // deleteSecret removes a secret. Idempotent — deleting a missing
 // secret returns 204 just like deleting an existing one.
 func (h *HTTPGateway) deleteSecret(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if h.EncryptedSecrets == nil {
-		writeJSONError(rw, http.StatusNotImplemented, "encrypted secret store is not configured")
-		return
-	}
-	name := r.PathValue("name")
-	if err := validSecretName(name); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, err.Error())
-		return
-	}
-	if p.Tenant == "" {
-		writeJSONError(rw, http.StatusForbidden, "principal has no tenant")
-		return
-	}
-	scope, flow, err := secretScopeFromRequest(r)
-	if err != nil {
-		writeJSONError(rw, http.StatusBadRequest, err.Error())
-		return
-	}
-	if status, msg := h.authorizeFlowSecretScope(r.Context(), p, scope, flow, true); status != 0 {
-		writeJSONError(rw, status, msg)
+	name, scope, flow, ok := h.secretCRUDGate(rw, r, p, validSecretName, true)
+	if !ok {
 		return
 	}
 	if err := h.EncryptedSecrets.DeleteScoped(r.Context(), p.Tenant, flow, scope, name); err != nil {

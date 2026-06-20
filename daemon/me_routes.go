@@ -71,6 +71,62 @@ func (h *HTTPGateway) readFlowID(rw http.ResponseWriter, r *http.Request, p core
 	return tenant, workspace, id, true
 }
 
+// resolveTenantWorkspaceScope applies the /me/flows scope rule: ?tenant=
+// and ?workspace= override the principal's binding, and both must resolve to
+// non-empty. On a missing binding it writes a 400 "missing_scope" envelope
+// and returns ok=false. Shared by the workspace-scoped /me listings
+// (listFlowsMe, suggestionsMe).
+func (h *HTTPGateway) resolveTenantWorkspaceScope(rw http.ResponseWriter, r *http.Request, p core.Principal) (tenant, workspace string, ok bool) {
+	tenant = r.URL.Query().Get("tenant")
+	workspace = r.URL.Query().Get("workspace")
+	if tenant == "" {
+		tenant = p.Tenant
+	}
+	if workspace == "" {
+		workspace = p.Workspace
+	}
+	if tenant == "" || workspace == "" {
+		writeAPIError(rw, http.StatusBadRequest, "missing_scope",
+			"tenant and workspace required (no principal binding)")
+		return "", "", false
+	}
+	return tenant, workspace, true
+}
+
+// loadFlowForRequest resolves the {flow_id} path parameter, loads the flow's
+// graph at ref, and returns the (tenant, workspace, id) plus the graph. On a
+// bad flow_id it writes the readFlowID envelope; on a missing flow it writes
+// a 404 "flow_not_found" with the storage-detail-free message. Returns
+// ok=false when the handler should stop.
+func (h *HTTPGateway) loadFlowForRequest(rw http.ResponseWriter, r *http.Request, p core.Principal, ref string) (tenant, workspace, id string, g core.Graph, ok bool) {
+	tenant, workspace, id, ok = h.readFlowID(rw, r, p)
+	if !ok {
+		return "", "", "", core.Graph{}, false
+	}
+	g, err := h.svc.LoadGraph(r.Context(), p, tenant, workspace, id, ref)
+	if err != nil {
+		writeAPIError(rw, http.StatusNotFound, "flow_not_found", flowNotFoundMessage(tenant, workspace, id))
+		return "", "", "", core.Graph{}, false
+	}
+	return tenant, workspace, id, g, true
+}
+
+// runStoreError maps a run-store error onto the right status: a store that's
+// not enabled / not configured / unsupported is a 501 "not_configured"
+// (operator hasn't wired persistent run logs); anything else is a 404
+// "run_not_found" (the run id is unknown or cross-tenant). Centralizes the
+// substring branching the run-log handlers share.
+func runStoreError(rw http.ResponseWriter, err error) {
+	msg := err.Error()
+	if strings.Contains(msg, "not enabled") ||
+		strings.Contains(msg, "not configured") ||
+		strings.Contains(msg, "does not support") {
+		writeAPIError(rw, http.StatusNotImplemented, "not_configured", msg)
+		return
+	}
+	writeAPIError(rw, http.StatusNotFound, "run_not_found", msg)
+}
+
 // --- /me/flows --------------------------------------------------------
 
 // listRunLogsMe is GET /api/v1/me/runs/{run_id}/logs — a page of the
@@ -85,11 +141,7 @@ func (h *HTTPGateway) deleteRunLogsMe(rw http.ResponseWriter, r *http.Request, p
 	runID := r.PathValue("run_id")
 	n, err := h.svc.DeleteRunLog(r.Context(), p, runID)
 	if err != nil {
-		if strings.Contains(err.Error(), "not enabled") || strings.Contains(err.Error(), "does not support") {
-			writeAPIError(rw, http.StatusNotImplemented, "not_configured", err.Error())
-			return
-		}
-		writeAPIError(rw, http.StatusNotFound, "run_not_found", err.Error())
+		runStoreError(rw, err)
 		return
 	}
 	h.audit(r.Context(), p, "run.logs_delete", runID, "deleted run logs (GDPR P2.1)")
@@ -102,11 +154,7 @@ func (h *HTTPGateway) listRunLogsMe(rw http.ResponseWriter, r *http.Request, p c
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	entries, err := h.svc.RunLogPage(r.Context(), p, runID, after, limit)
 	if err != nil {
-		if strings.Contains(err.Error(), "not enabled") {
-			writeAPIError(rw, http.StatusNotImplemented, "not_configured", err.Error())
-			return
-		}
-		writeAPIError(rw, http.StatusNotFound, "run_not_found", err.Error())
+		runStoreError(rw, err)
 		return
 	}
 	if entries == nil {
@@ -119,17 +167,8 @@ func (h *HTTPGateway) listFlowsMe(rw http.ResponseWriter, r *http.Request, p cor
 	// /me/flows accepts ?tenant= and ?workspace=, falling back to the
 	// principal's binding. Web clients send them explicitly today; LLM
 	// clients with a workspace-scoped key can omit them.
-	tenant := r.URL.Query().Get("tenant")
-	workspace := r.URL.Query().Get("workspace")
-	if tenant == "" {
-		tenant = p.Tenant
-	}
-	if workspace == "" {
-		workspace = p.Workspace
-	}
-	if tenant == "" || workspace == "" {
-		writeAPIError(rw, http.StatusBadRequest, "missing_scope",
-			"tenant and workspace required (no principal binding)")
+	tenant, workspace, ok := h.resolveTenantWorkspaceScope(rw, r, p)
+	if !ok {
 		return
 	}
 	summaries, err := h.svc.ListFlowSummaries(r.Context(), p, tenant, workspace)
@@ -145,17 +184,8 @@ func (h *HTTPGateway) listFlowsMe(rw http.ResponseWriter, r *http.Request, p cor
 // editor's drag-off-pin palette to surface "drops you usually wire next".
 // Same ?tenant=/?workspace= fallback as listFlowsMe.
 func (h *HTTPGateway) suggestionsMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	tenant := r.URL.Query().Get("tenant")
-	workspace := r.URL.Query().Get("workspace")
-	if tenant == "" {
-		tenant = p.Tenant
-	}
-	if workspace == "" {
-		workspace = p.Workspace
-	}
-	if tenant == "" || workspace == "" {
-		writeAPIError(rw, http.StatusBadRequest, "missing_scope",
-			"tenant and workspace required (no principal binding)")
+	tenant, workspace, ok := h.resolveTenantWorkspaceScope(rw, r, p)
+	if !ok {
 		return
 	}
 	items, err := h.svc.DropSuggestions(r.Context(), p, tenant, workspace)
@@ -170,13 +200,8 @@ func (h *HTTPGateway) suggestionsMe(rw http.ResponseWriter, r *http.Request, p c
 }
 
 func (h *HTTPGateway) loadFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	tenant, workspace, id, ok := h.readFlowID(rw, r, p)
+	_, _, _, g, ok := h.loadFlowForRequest(rw, r, p, r.URL.Query().Get("ref"))
 	if !ok {
-		return
-	}
-	g, err := h.svc.LoadGraph(r.Context(), p, tenant, workspace, id, r.URL.Query().Get("ref"))
-	if err != nil {
-		writeAPIError(rw, http.StatusNotFound, "flow_not_found", flowNotFoundMessage(tenant, workspace, id))
 		return
 	}
 	writeJSON(rw, http.StatusOK, g)
@@ -195,9 +220,8 @@ func (h *HTTPGateway) saveFlowMe(rw http.ResponseWriter, r *http.Request, p core
 	if !ok {
 		return
 	}
-	var g core.Graph
-	if err := json.NewDecoder(r.Body).Decode(&g); err != nil {
-		writeAPIError(rw, http.StatusBadRequest, "decode_failed", "decode body: "+err.Error())
+	g, ok := decodeRequestJSON[core.Graph](rw, r)
+	if !ok {
 		return
 	}
 	// Path is source-of-truth; ignore tenant/workspace/id in the body
@@ -289,11 +313,10 @@ func (h *HTTPGateway) restoreFlowMe(rw http.ResponseWriter, r *http.Request, p c
 	if !ok {
 		return
 	}
-	var body struct {
+	body, ok := decodeRequestJSON[struct {
 		Ref string `json:"ref"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeAPIError(rw, http.StatusBadRequest, "decode_failed", "decode body: "+err.Error())
+	}](rw, r)
+	if !ok {
 		return
 	}
 	body.Ref = strings.TrimSpace(body.Ref)
@@ -324,12 +347,11 @@ func (h *HTTPGateway) labelRevisionMe(rw http.ResponseWriter, r *http.Request, p
 	if !ok {
 		return
 	}
-	var body struct {
+	body, ok := decodeRequestJSONOptional[struct {
 		Ref   string `json:"ref"`
 		Label string `json:"label"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
-		writeAPIError(rw, http.StatusBadRequest, "decode_failed", "decode body: "+err.Error())
+	}](rw, r)
+	if !ok {
 		return
 	}
 	label := strings.TrimSpace(body.Label)
@@ -739,10 +761,8 @@ func (h *HTTPGateway) listFlowRunsMe(rw http.ResponseWriter, r *http.Request, p 
 // when the lint is clean. Distinct from validateFlowMe which lints
 // the HEAD of an already-saved flow.
 func (h *HTTPGateway) validateGraphLiteral(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	var g core.Graph
-	if err := json.NewDecoder(r.Body).Decode(&g); err != nil {
-		writeAPIError(rw, http.StatusBadRequest, "decode_failed",
-			"body must be a Graph JSON object: "+err.Error())
+	g, ok := decodeRequestJSON[core.Graph](rw, r)
+	if !ok {
 		return
 	}
 	// Workspace scoping isn't required since we're not touching the
@@ -864,12 +884,7 @@ func (h *HTTPGateway) disconnectConnectionMe(rw http.ResponseWriter, r *http.Req
 		writeAPIError(rw, http.StatusForbidden, "forbidden", err.Error())
 		return
 	}
-	if h.EncryptedSecrets == nil {
-		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "encrypted secret store not configured")
-		return
-	}
-	if p.Tenant == "" {
-		writeAPIError(rw, http.StatusForbidden, "forbidden", "principal has no tenant")
+	if !h.requireSecretStore(rw, p) {
 		return
 	}
 	if providerDefault(provider) == nil {
