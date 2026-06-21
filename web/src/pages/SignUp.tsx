@@ -29,6 +29,14 @@ export function SignUp() {
   // deployment (the server validates the token), and there's no org to
   // accept into afterwards — the user lands on the normal welcome flow.
   const signupInvite = searchParams.get("signup_invite") ?? "";
+  // Lock the email whenever we arrived via an invite link — both the
+  // platform signup-invite (`signup_invite`, server-bound at signUp) and
+  // the org-invite (`invite`, server-bound at the accept step in
+  // orgs.go acceptInvitation, which 403s on a mismatched email). In both
+  // cases the address is fixed to what the owner invited, so editing it
+  // can only produce an account that can't accept — show it, don't allow
+  // changing it.
+  const lockEmail = !!signupInvite || !!inviteToken;
   const [email, setEmail] = useState(presetEmail);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -125,8 +133,8 @@ export function SignUp() {
           // invited — the server binds the new account to it, so let the
           // recipient see but not change it, and put focus on the
           // password they actually need to fill in.
-          readOnly={!!signupInvite}
-          autoFocus={!signupInvite}
+          readOnly={lockEmail}
+          autoFocus={!lockEmail}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com"
@@ -136,7 +144,7 @@ export function SignUp() {
           id="password"
           type="password"
           autoComplete="new-password"
-          autoFocus={!!signupInvite}
+          autoFocus={lockEmail}
           minLength={8}
           value={password}
           onChange={(e) => setPassword(e.target.value)}

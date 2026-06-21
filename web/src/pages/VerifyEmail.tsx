@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { CheckCircle2, MailWarning } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, APIError } from "../api";
@@ -14,6 +14,7 @@ export function VerifyEmail() {
   const { t } = useTranslation();
   const { token: sessionToken, refreshMe } = useAuth();
   const [params] = useSearchParams();
+  const navigate = useNavigate();
   const [state, setState] = useState<"working" | "ok" | "failed">("working");
   const [errMsg, setErrMsg] = useState("");
 
@@ -30,7 +31,12 @@ export function VerifyEmail() {
       .verifyEmail(email, verifyToken)
       .then(async () => {
         setState("ok");
-        if (sessionToken) await refreshMe();
+        if (sessionToken) {
+          // Refresh whoami so the pending banner clears, then return the
+          // user to the welcome flow they came from to keep onboarding.
+          await refreshMe();
+          navigate("/welcome", { replace: true });
+        }
       })
       .catch((e) => {
         setState("failed");
@@ -51,7 +57,7 @@ export function VerifyEmail() {
             <h1 style={{ marginTop: "var(--space-3)" }}>{t("verifyEmail.okTitle")}</h1>
             <p className="sub">{t("verifyEmail.okBody")}</p>
             <p>
-              <Link to={sessionToken ? "/flows" : "/signin"} className="primary-link">
+              <Link to={sessionToken ? "/welcome" : "/signin"} className="primary-link">
                 {sessionToken ? t("verifyEmail.toApp") : t("verifyEmail.toSignin")}
               </Link>
             </p>

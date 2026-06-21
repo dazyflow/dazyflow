@@ -1149,6 +1149,23 @@
   font-size: var(--text-sm);
   margin-top: var(--space-0);
 }
+/* Keep the CTA at its natural width on desktop so the description takes
+   the slack instead of the button getting squeezed against it. */
+.welcome-mcp .welcome-cta {
+  flex-shrink: 0;
+}
+/* On narrow screens the side-by-side layout cramps both the text and the
+   button — stack them so the CTA sits full-width under the description. */
+@media (max-width: 768px) {
+  .welcome-mcp {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .welcome-mcp .welcome-cta {
+    width: 100%;
+    justify-content: center;
+  }
+}
 .mcp-client-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
