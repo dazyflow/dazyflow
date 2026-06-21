@@ -59,9 +59,12 @@ func (h *HTTPGateway) sendVerificationEmail(r *http.Request, user auth.User) boo
 	}
 	link := strings.TrimRight(h.svc.PublicBaseURL, "/") + "/verify-email?email=" +
 		url.QueryEscape(user.Email) + "&token=" + token
+	// Keep this strictly about confirming the address — the separate
+	// welcome email (welcome_email.go) does the greeting. Leading both
+	// with "Welcome to Dazyflow" made the pair read as one mail sent twice.
 	body := fmt.Sprintf(
-		"Welcome to Dazyflow!\n\n"+
-			"Confirm this email address:\n%s\n\n"+
+		"Confirm your email address to finish setting up your Dazyflow account.\n\n"+
+			"Verify this address:\n%s\n\n"+
 			"The link expires %s. If you didn't create this account, ignore this email.",
 		link, exp.Format("2006-01-02"))
 	if err := h.svc.Mailer.Send(r.Context(), user.Email, "Confirm your email", body); err != nil {
