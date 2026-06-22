@@ -385,7 +385,7 @@
     "privateOwnedByYou": "Privat — endast du kan se det här flödet",
     "privateOwnedBy": "Privat — ägs av {{owner}}",
     "orgTooltip": "Synlig för alla i den här arbetsytan",
-    "ownerLabel": "Ägare:",
+    "createdBy": "Skapad av {{owner}}",
     "needEdit": "Du behöver redigeringsbehörighet för att skapa flöden.",
     "nextRun": "Nästa körning {{when}}"
   },

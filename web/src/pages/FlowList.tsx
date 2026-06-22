@@ -279,17 +279,6 @@ export function FlowList() {
                   />
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ display: "block" }}>{displayName}</span>
-                    {f.name && (
-                      <span
-                        style={{
-                          fontFamily: "var(--font-mono)",
-                          fontSize: "var(--text-xs)",
-                          color: "var(--faint)",
-                        }}
-                      >
-                        {f.id}
-                      </span>
-                    )}
                   </span>
                   {f.run_status && (
                     <FlowStatusChip status={f.run_status} size="sm" />
@@ -334,13 +323,11 @@ export function FlowList() {
                     {f.description}
                   </div>
                 )}
-                <div className="meta">
-                  {f.owner && (
-                    <>
-                      {t("flowList.ownerLabel")} <code>{f.owner}</code>
-                    </>
-                  )}
-                </div>
+                {f.owner && (
+                  <div className="meta" style={{ color: "var(--muted)" }}>
+                    {t("flowList.createdBy", { owner: f.owner })}
+                  </div>
+                )}
               </div>
             </Link>
           );

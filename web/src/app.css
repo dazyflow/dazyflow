@@ -8262,7 +8262,8 @@ button.warning:hover:not(:disabled) {
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--code-bg);
-  resize: vertical;
+  resize: both;
+  max-width: 100%;
 }
 .dz-json-editor.invalid {
   border-color: var(--status-failed);

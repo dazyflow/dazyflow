@@ -385,7 +385,7 @@
     "privateOwnedByYou": "Private — only you can see this flow",
     "privateOwnedBy": "Private — owned by {{owner}}",
     "orgTooltip": "Visible to everyone in this workspace",
-    "ownerLabel": "Owner:",
+    "createdBy": "Created by {{owner}}",
     "needEdit": "You need edit access to create flows.",
     "nextRun": "Next run {{when}}"
   },
