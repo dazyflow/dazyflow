@@ -15,6 +15,7 @@ import {
   ReactFlow,
   ReactFlowProvider,
   Background,
+  BackgroundVariant,
   Controls,
   addEdge,
   applyEdgeChanges,
@@ -3864,9 +3865,29 @@ function EditorInner() {
           proOptions={{ hideAttribution: true }}
           colorMode={themeMode}
         >
-          {/* Dot colour is themed via CSS (.react-flow__background circle
-              → var(--canvas-dot)); the prop is just a fallback. */}
-          <Background gap={20} size={1} color="var(--canvas-dot)" />
+          {/* Two-tier line grid (graph-paper feel): a fine 20px grid plus a
+              stronger major line every 100px. The major layer must render
+              FIRST — a later React Flow <Background> rect paints opaquely over
+              the one behind it, so with major last the fine grid vanishes
+              entirely. Major first → fine on top → both tiers show. Stroke
+              colours are themed via CSS per className
+              (.react-flow__background.dz-grid-* path); color prop is a fallback. */}
+          <Background
+            id="grid-major"
+            variant={BackgroundVariant.Lines}
+            gap={100}
+            lineWidth={1}
+            className="dz-grid-major"
+            color="var(--canvas-grid-major)"
+          />
+          <Background
+            id="grid-fine"
+            variant={BackgroundVariant.Lines}
+            gap={20}
+            lineWidth={1}
+            className="dz-grid-fine"
+            color="var(--canvas-grid)"
+          />
           <Controls
             showInteractive={false}
             style={{

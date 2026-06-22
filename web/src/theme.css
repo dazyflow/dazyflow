@@ -46,6 +46,11 @@
   /* React Flow canvas dot-grid colour (faint light dots on the
      near-black canvas). Themed so light mode can flip it to dark. */
   --canvas-dot: rgba(255, 255, 255, 0.05);
+  /* Canvas line-grid, two tiers (dim→bright): a fine 20px grid plus a
+     stronger major line every 5th cell (graph-paper feel). Themed for
+     light mode. */
+  --canvas-grid: rgba(255, 255, 255, 0.05);
+  --canvas-grid-major: rgba(255, 255, 255, 0.22);
 
   /* Copyable code/value family (.dz-code): terminal-style in the dark
      theme, themed light in light mode so the code stays readable. */
@@ -173,6 +178,8 @@
   /* Faint dark dots for the canvas grid (light-on-dark flips to
      dark-on-light). */
   --canvas-dot: rgba(28, 35, 51, 0.07);
+  --canvas-grid: rgba(28, 35, 51, 0.025);
+  --canvas-grid-major: rgba(28, 35, 51, 0.045);
 
   /* Copyable code blocks: a cool light well with slate ink — the
      dark terminal box reads as a hole punched in a light page. */
@@ -261,10 +268,17 @@ body {
   background-attachment: fixed;
 }
 
-/* Canvas dot-grid colour is themed — drive the React Flow background
-   pattern from --canvas-dot so it flips with the theme. */
+/* Canvas grid colour is themed — drive the React Flow background pattern
+   from CSS so it flips with the theme. Dots (legacy) use --canvas-dot; the
+   line grid strokes each tier by its className. */
 .react-flow__background circle {
   fill: var(--canvas-dot);
+}
+.react-flow__background.dz-grid-fine path {
+  stroke: var(--canvas-grid);
+}
+.react-flow__background.dz-grid-major path {
+  stroke: var(--canvas-grid-major);
 }
 
 a {
