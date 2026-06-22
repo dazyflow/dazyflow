@@ -35,7 +35,8 @@ import (
 const (
 	flowGenMaxTokens = 4000
 	flowGenTimeoutMS = 60000
-	maxFlowRepairs   = 2 // up to 3 LLM calls (initial + 2 repairs)
+	maxFlowRepairs   = 2  // up to 3 EMIT attempts (initial + 2 repairs)
+	maxAgentTurns    = 12 // hard cap on total agent turns (explore + validate + emit)
 )
 
 type genNode struct {
@@ -60,49 +61,76 @@ type generatedGraph struct {
 	Trigger *genTrigger `json:"trigger,omitempty"`
 }
 
-func flowGenTool() *llm.Tool {
+// flowShapeSchema is the JSON-schema for a flow graph (name + nodes + edges +
+// trigger). Shared by the agent tool's validate/emit payloads so the model
+// only learns one shape.
+func flowShapeSchema() map[string]any {
+	return map[string]any{
+		"type":        "object",
+		"description": "The flow graph: steps (nodes) wired together (edges), with an optional schedule.",
+		"properties": map[string]any{
+			"name": map[string]any{"type": "string", "description": "A short human title for the flow."},
+			"nodes": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"id":     map[string]any{"type": "string", "description": "Unique id within the flow, e.g. \"fetch\", \"notify\"."},
+						"module": map[string]any{"type": "string", "description": "A step id from the catalog. Required."},
+						"params": map[string]any{"type": "object", "description": "Parameter values for this step, per its catalog params."},
+					},
+					"required": []any{"id", "module"},
+				},
+			},
+			"edges": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"from":      map[string]any{"type": "string"},
+						"from_port": map[string]any{"type": "string"},
+						"to":        map[string]any{"type": "string"},
+						"to_port":   map[string]any{"type": "string"},
+					},
+					"required": []any{"from", "from_port", "to", "to_port"},
+				},
+			},
+			"trigger": map[string]any{
+				"type":        "object",
+				"description": "How the flow starts. Use type \"cron\" with a 5-field expression for a SCHEDULE (e.g. \"0 9 * * 1-5\" = 9am weekdays). Use \"none\" when the flow starts from an event step (e.g. webhook_input) or runs manually.",
+				"properties": map[string]any{
+					"type": map[string]any{"type": "string", "enum": []any{"cron", "none"}},
+					"cron": map[string]any{"type": "string", "description": "5-field cron (minute hour day-of-month month day-of-week), for type=cron."},
+				},
+			},
+		},
+		"required": []any{"nodes"},
+	}
+}
+
+// flowAgentTool is the single forced tool that drives the build LOOP. Each
+// turn the model calls `act` with one action: explore the catalog
+// (search_drops / describe_drop), check a draft (validate), or return the
+// finished flow (emit). Riding ONE forced tool keeps the loop working on the
+// existing provider adapters (single tool_choice + multi-turn messages) — no
+// adapter changes needed.
+func flowAgentTool() *llm.Tool {
 	return &llm.Tool{
-		Name:        "emit_flow",
-		Description: "Return the flow as a graph of steps (nodes) wired together (edges), with an optional schedule.",
+		Name:        "act",
+		Description: "Take ONE step toward building the flow. Explore steps before wiring them, validate your draft, then emit it.",
 		Schema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"name": map[string]any{"type": "string", "description": "A short human title for the flow."},
-				"nodes": map[string]any{
-					"type": "array",
-					"items": map[string]any{
-						"type": "object",
-						"properties": map[string]any{
-							"id":     map[string]any{"type": "string", "description": "Unique id within the flow, e.g. \"fetch\", \"notify\"."},
-							"module": map[string]any{"type": "string", "description": "A step id from the catalog. Required."},
-							"params": map[string]any{"type": "object", "description": "Parameter values for this step, per its catalog params."},
-						},
-						"required": []any{"id", "module"},
-					},
+				"action": map[string]any{
+					"type":        "string",
+					"enum":        []any{"search_drops", "describe_drop", "validate", "emit"},
+					"description": "search_drops: find steps by keyword. describe_drop: get a step's exact params/ports/examples. validate: check a draft against the real validator. emit: return the finished flow.",
 				},
-				"edges": map[string]any{
-					"type": "array",
-					"items": map[string]any{
-						"type": "object",
-						"properties": map[string]any{
-							"from":      map[string]any{"type": "string"},
-							"from_port": map[string]any{"type": "string"},
-							"to":        map[string]any{"type": "string"},
-							"to_port":   map[string]any{"type": "string"},
-						},
-						"required": []any{"from", "from_port", "to", "to_port"},
-					},
-				},
-				"trigger": map[string]any{
-					"type":        "object",
-					"description": "How the flow starts. Use type \"cron\" with a 5-field expression for a SCHEDULE (e.g. \"0 9 * * 1-5\" = 9am weekdays). Use \"none\" when the flow starts from an event step (e.g. webhook_input) or runs manually.",
-					"properties": map[string]any{
-						"type": map[string]any{"type": "string", "enum": []any{"cron", "none"}},
-						"cron": map[string]any{"type": "string", "description": "5-field cron (minute hour day-of-month month day-of-week), for type=cron."},
-					},
-				},
+				"query":   map[string]any{"type": "string", "description": "For search_drops: keywords, e.g. \"send email\" or \"google sheet\"."},
+				"drop_id": map[string]any{"type": "string", "description": "For describe_drop: the catalog step id to inspect, e.g. \"gmail_search_messages\"."},
+				"flow":    flowShapeSchema(),
 			},
-			"required": []any{"nodes"},
+			"required": []any{"action"},
 		},
 	}
 }
@@ -122,13 +150,14 @@ func flowGenSystemPrompt(catalog string) string {
 		"set trigger.type=\"cron\" with the matching 5-field expression. If it starts from an external " +
 		"EVENT (a form submission, an incoming email), DON'T set a cron trigger — instead make the first " +
 		"step the matching trigger node from the catalog (e.g. webhook_input). Otherwise use trigger.type=\"none\".\n" +
-		"- Answer ONLY by calling the emit_flow tool.\n\n" +
+		"- Every turn, answer by calling the `act` tool (see HOW TO WORK below).\n\n" +
 		"PATTERNS (compose these from catalog steps — they are not single steps):\n" +
 		"- Process a list one item at a time (each email, each row): wire the list into for_each.items; " +
 		"wire for_each.body into the per-item step's input; that step's output is collected on for_each.results; " +
 		"then add unwrap_results {node:<per-item step id>, port:<that step's output port>} to flatten results into rows.\n" +
-		"- gmail_search_messages returns only message IDs on its `messages` port. To get sender/subject/body you " +
-		"MUST fetch each id with gmail_get_message inside a for_each (the loop pattern above).\n" +
+		"- gmail_search_messages already returns full email records (from, subject, date, body) on its `messages` " +
+		"port — wire that straight into map_rows / render_text. Only reach for gmail_get_message + a for_each when " +
+		"you have a bare message id from somewhere else.\n" +
 		"- Before sending rows to Slack / SMS / email, turn them into a string with render_text (rows→text). " +
 		"Don't wire raw rows or JSON straight into a text/message field.\n\n" +
 		"MARKERS — params: NAME(type)* = required param. Ports: name[] = a list/table of rows, " +
@@ -140,9 +169,10 @@ func flowGenSystemPrompt(catalog string) string {
 // variant (single JSON response). The editor uses the streaming sibling.
 func (h *HTTPGateway) renderFlowGenerate(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	var body struct {
-		Description string `json:"description"`
-		Provider    string `json:"provider"`
-		TZ          string `json:"tz"`
+		Description string          `json:"description"`
+		Provider    string          `json:"provider"`
+		TZ          string          `json:"tz"`
+		Base        json.RawMessage `json:"base"` // optional: refine this existing flow
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
@@ -153,6 +183,7 @@ func (h *HTTPGateway) renderFlowGenerate(rw http.ResponseWriter, r *http.Request
 		writeJSONError(rw, http.StatusBadRequest, "describe the flow you want")
 		return
 	}
+	desc = refineDesc(body.Base, desc)
 	ctx := core.WithTenant(r.Context(), p.Tenant)
 	chosen, conn := h.pickProvider(ctx, body.Provider)
 	if len(conn) == 0 {
@@ -182,9 +213,10 @@ func (h *HTTPGateway) renderFlowGenerate(rw http.ResponseWriter, r *http.Request
 // the feature feel alive instead of a long spinner.
 func (h *HTTPGateway) renderFlowGenerateStream(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	var body struct {
-		Description string `json:"description"`
-		Provider    string `json:"provider"`
-		TZ          string `json:"tz"`
+		Description string          `json:"description"`
+		Provider    string          `json:"provider"`
+		TZ          string          `json:"tz"`
+		Base        json.RawMessage `json:"base"` // optional: refine this existing flow
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
@@ -195,6 +227,7 @@ func (h *HTTPGateway) renderFlowGenerateStream(rw http.ResponseWriter, r *http.R
 		writeJSONError(rw, http.StatusBadRequest, "describe the flow you want")
 		return
 	}
+	desc = refineDesc(body.Base, desc)
 	flusher, ok := rw.(http.Flusher)
 	if !ok {
 		writeJSONError(rw, http.StatusInternalServerError, "streaming unsupported")
@@ -234,6 +267,68 @@ func (h *HTTPGateway) renderFlowGenerateStream(rw http.ResponseWriter, r *http.R
 	emit("done", map[string]any{"graph": graph, "issues": issues, "provider": chosen.info.Name})
 }
 
+// workspaceGrounding builds a short, tenant-specific grounding block so the
+// generator drafts against what the user ALREADY has: the apps connected
+// (prefer them; anything else needs a connect step) and the secret names that
+// already exist (reference an existing ${secret.NAME} rather than invent one).
+// Best-effort and nil-safe — returns "" when the secret store isn't wired (the
+// unit harness), so it never blocks generation.
+func (h *HTTPGateway) workspaceGrounding(ctx context.Context, tenant string) string {
+	if tenant == "" || h.EncryptedSecrets == nil {
+		return ""
+	}
+	var b strings.Builder
+
+	connected := make([]string, 0)
+	for prov, accts := range h.connectedAccountsByProvider(ctx, tenant) {
+		if len(accts) > 0 {
+			connected = append(connected, prov)
+		}
+	}
+	sort.Strings(connected)
+	if len(connected) > 0 {
+		b.WriteString("CONNECTED APPS (ready to use — prefer these; if the flow needs an app NOT listed, still use it but tell the user they'll need to connect it): ")
+		b.WriteString(strings.Join(connected, ", "))
+		for _, p := range connected {
+			if p == "google" {
+				b.WriteString(" (google covers Gmail, Google Sheets, Calendar and Drive)")
+				break
+			}
+		}
+		b.WriteByte('\n')
+	}
+
+	// ListScoped at tenant scope hides reserved namespaces (oauth./conn./ws./
+	// flow./cfg:), so this is just the user's own org secrets — exactly the
+	// names worth reusing.
+	if names, err := h.EncryptedSecrets.ListScoped(ctx, tenant, "", ScopeTenant); err == nil && len(names) > 0 {
+		sort.Strings(names)
+		const maxSecrets = 25
+		if len(names) > maxSecrets {
+			names = names[:maxSecrets]
+		}
+		b.WriteString("EXISTING SECRETS (reference one as ${secret.NAME} when it fits, instead of inventing a new name): ")
+		b.WriteString(strings.Join(names, ", "))
+		b.WriteByte('\n')
+	}
+
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// refineDesc turns a plain-English change request into a generation prompt
+// that modifies an existing flow rather than rebuilding from scratch. When no
+// base flow is supplied it returns the description unchanged. This is what
+// powers conversational refine: "make it post to #sales instead" against the
+// draft the user just saw.
+func refineDesc(base json.RawMessage, desc string) string {
+	b := strings.TrimSpace(string(base))
+	if b == "" || b == "null" {
+		return desc
+	}
+	return "Here is the CURRENT flow as JSON:\n" + b +
+		"\n\nModify it to satisfy this change, keeping everything else intact:\n" + desc
+}
+
 // pickProvider resolves the connected providers and selects one (the
 // requested name if connected, else the first). Returns the choice + the
 // full connected list (len 0 ⇒ none connected).
@@ -265,63 +360,125 @@ func (h *HTTPGateway) generateFlow(ctx context.Context, provider, key, desc stri
 	}
 	emit("understanding", "Reading your request…")
 	sys := flowGenSystemPrompt(compactCatalog(mans))
-	userText := "Build a flow for this request:\n" + desc
-	tool := flowGenTool()
-
+	// Ground the draft in the user's REALITY: the apps already connected and
+	// the secret names that already exist. Without this the model invents
+	// flows for unconnected apps and makes up ${secret.NAME}s — the two most
+	// common "it generated something I can't run" dead-ends.
+	if ws := h.workspaceGrounding(ctx, tenant); ws != "" {
+		sys += "\n\nYOUR WORKSPACE — ground the flow in what this user already has:\n" + ws
+	}
 	manifestByID := make(map[string]core.Manifest, len(mans))
 	for _, m := range mans {
 		manifestByID[m.ID] = m
 	}
 
+	tool := flowAgentTool()
+	// The system prompt + loop instructions + task all ride the first user turn:
+	// OpenAI ignores Request.System once Messages is set, so the transcript must
+	// be self-contained for both adapters.
+	messages := []any{map[string]any{
+		"role":    "user",
+		"content": sys + "\n\n" + flowAgentInstructions() + "\n\nBuild a flow for this request:\n" + desc,
+	}}
+
 	var best core.Graph
 	var issues []core.LintIssue
-	for attempt := 0; attempt <= maxFlowRepairs; attempt++ {
-		if attempt == 0 {
-			emit("drafting", "Choosing steps and wiring them together…")
-		} else {
-			emit("repairing", fmt.Sprintf("Fixing a couple of issues… (pass %d)", attempt+1))
-		}
+	emitAttempts := 0  // emit turns that failed validation — bounded by maxFlowRepairs
+	parsedAny := false // did the model ever return a parseable flow?
+	emit("drafting", "Choosing steps and wiring them together…")
+
+	for turn := 0; turn < maxAgentTurns; turn++ {
 		res, err := llm.Generate(ctx, provider, key, llm.Request{
-			System: sys, UserText: userText, Tool: tool,
+			Messages: messages, Tool: tool,
 			MaxTokens: flowGenMaxTokens, TimeoutMS: flowGenTimeoutMS,
 		})
 		if err != nil {
 			return core.Graph{}, nil, err
 		}
-		cand, perr := graphFromResult(res)
-		if perr != nil {
-			if attempt == maxFlowRepairs {
-				return core.Graph{}, nil, fmt.Errorf("the model didn't return a usable flow — try rephrasing")
+		act := res.Tool
+		action, _ := act["action"].(string)
+		flowMap := actFlow(act)
+		// Dual-mode: a bare flow object (has "nodes", no "action") is an emit.
+		// Keeps single-shot providers — and every existing test — working.
+		if action == "" {
+			action = "emit"
+			if act["nodes"] != nil {
+				flowMap = act
 			}
-			userText = fmt.Sprintf("Build a flow for this request:\n%s\n\nYour previous answer could not be read (%v). Answer ONLY via emit_flow with valid nodes and edges.", desc, perr)
-			continue
 		}
-		stampGraph(&cand, tenant, workspace)
-		emit("validating", "Checking the flow is valid…")
-		// Validate the schedule with the real cron parser and stamp the
-		// timezone; a bad schedule is stripped (the draft must always save)
-		// and surfaced as a warning rather than silently shipping a trigger
-		// that never fires.
-		cand, issues = finalizeTriggers(cand, tz)
-		// Two checks feed the repair loop: the security/placeholder linter
-		// (core.LintGraph) AND the manifest-level structural validator
-		// (unknown modules, nonexistent ports, MIME-incompatible wiring,
-		// unconnected required inputs, fan-in/variadic bounds). The latter is
-		// exactly what the engine runs before execution — running it HERE means
-		// the model's most common mistakes (a guessed port, a mis-wired
-		// for_each) are fed back for repair instead of surfacing as a cryptic
-		// error the first time the user presses Run.
-		checks := core.LintGraph(cand)
-		checks = append(checks, manifestValidationIssues(cand, manifestByID)...)
-		issues = append(issues, checks...)
-		best = cand
-		if !hasLintError(checks) {
-			return best, issues, nil
+
+		switch action {
+		case "search_drops":
+			q := strFromMap(act, "query")
+			if q != "" {
+				emit("exploring", fmt.Sprintf("Searching steps for %q…", q))
+			} else {
+				emit("exploring", "Looking through the available steps…")
+			}
+			agentTurn(&messages, act, searchDropsForModel(mans, q))
+
+		case "describe_drop":
+			id := strFromMap(act, "drop_id")
+			if id != "" {
+				emit("exploring", "Reading "+id+"…")
+			} else {
+				emit("exploring", "Reading a step's details…")
+			}
+			agentTurn(&messages, act, describeDropForModel(manifestByID, id))
+
+		case "validate":
+			emit("validating", "Double-checking the draft…")
+			g, perr := graphFromMap(flowMap)
+			if perr != nil {
+				agentTurn(&messages, act, "Could not read the flow: "+perr.Error())
+				break
+			}
+			stampGraph(&g, tenant, workspace)
+			g, _ = finalizeTriggers(g, tz)
+			v := core.LintGraph(g)
+			v = append(v, manifestValidationIssues(g, manifestByID)...)
+			if hasLintError(v) {
+				agentTurn(&messages, act, "The flow is NOT valid yet — fix these:\n"+formatLintErrors(v))
+			} else {
+				agentTurn(&messages, act, "The flow is valid. Emit it now.")
+			}
+
+		default: // "emit"
+			emitAttempts++
+			emit("validating", "Checking the flow is valid…")
+			cand, perr := graphFromMap(flowMap)
+			if perr != nil {
+				if emitAttempts > maxFlowRepairs {
+					if !parsedAny {
+						return core.Graph{}, nil, fmt.Errorf("the model didn't return a usable flow — try rephrasing")
+					}
+					return best, issues, nil
+				}
+				agentTurn(&messages, act, "That flow couldn't be read ("+perr.Error()+"). Emit a flow with valid nodes and edges.")
+				continue
+			}
+			parsedAny = true
+			stampGraph(&cand, tenant, workspace)
+			// A bad schedule is stripped (the draft must always save) and surfaced
+			// as a warning rather than shipping a trigger that never fires.
+			cand, issues = finalizeTriggers(cand, tz)
+			// Same two gates the run-time engine uses: the security/placeholder
+			// linter and the manifest-level structural validator. Running them
+			// HERE means a guessed port or mis-wired for_each is repaired now,
+			// not surfaced as a cryptic error the first time the user hits Run.
+			checks := core.LintGraph(cand)
+			checks = append(checks, manifestValidationIssues(cand, manifestByID)...)
+			issues = append(issues, checks...)
+			best = cand
+			if !hasLintError(checks) {
+				return best, issues, nil
+			}
+			if emitAttempts > maxFlowRepairs {
+				return best, issues, nil // best-effort; issues surfaced to the UI
+			}
+			emit("repairing", "Fixing a couple of issues…")
+			agentTurn(&messages, act, "This flow has problems — FIX them, then emit again:\n"+formatLintErrors(checks))
 		}
-		if attempt == maxFlowRepairs {
-			break
-		}
-		userText = repairPrompt(desc, cand, checks)
 	}
 	return best, issues, nil
 }
@@ -384,36 +541,184 @@ func manifestValidationIssues(g core.Graph, manifests map[string]core.Manifest) 
 	return []core.LintIssue{{Code: "invalid_structure", Severity: core.LintError, Message: err.Error()}}
 }
 
-func repairPrompt(desc string, g core.Graph, issues []core.LintIssue) string {
-	draft, _ := json.Marshal(generatedFromGraph(g))
-	var errs strings.Builder
+// formatLintErrors renders the LintError-severity findings as a bullet list for
+// the model's repair turn (warnings are advisory and omitted).
+func formatLintErrors(issues []core.LintIssue) string {
+	var b strings.Builder
 	for _, is := range issues {
 		if is.Severity != core.LintError {
 			continue
 		}
-		errs.WriteString("- " + is.Message)
+		b.WriteString("- ")
+		b.WriteString(is.Message)
 		if len(is.NodeIDs) > 0 {
-			errs.WriteString(" (nodes: " + strings.Join(is.NodeIDs, ", ") + ")")
+			b.WriteString(" (nodes: ")
+			b.WriteString(strings.Join(is.NodeIDs, ", "))
+			b.WriteString(")")
 		}
-		errs.WriteByte('\n')
+		b.WriteByte('\n')
 	}
-	return fmt.Sprintf(
-		"Build a flow for this request:\n%s\n\nYour previous draft was:\n%s\n\n"+
-			"It has these problems — FIX them and return a corrected flow via emit_flow:\n%s",
-		desc, draft, errs.String())
+	return b.String()
 }
 
-func graphFromResult(res llm.Result) (core.Graph, error) {
-	var raw []byte
-	if len(res.Tool) > 0 {
-		raw, _ = json.Marshal(res.Tool)
-	} else {
-		txt := stripCodeFences(strings.TrimSpace(res.Text))
-		if txt == "" {
-			return core.Graph{}, fmt.Errorf("empty response")
-		}
-		raw = []byte(txt)
+// flowAgentInstructions tells the model how the build LOOP works: it calls the
+// single `act` tool repeatedly — explore, then validate, then emit.
+func flowAgentInstructions() string {
+	return "HOW TO WORK — build the flow over several steps, each one a call to the `act` tool:\n" +
+		"  • describe_drop {drop_id}: BEFORE wiring a step you're unsure of, read its exact params, ports and examples.\n" +
+		"  • search_drops {query}: find steps by keyword if the catalog below isn't enough.\n" +
+		"  • validate {flow}: check a draft against the real validator and read back any problems.\n" +
+		"  • emit {flow}: return the finished flow. Only emit once validate comes back clean.\n" +
+		"Good habit: describe the steps you'll use → build → validate → fix → emit. Don't guess a port name — describe_drop it."
+}
+
+func actFlow(act map[string]any) map[string]any {
+	if f, ok := act["flow"].(map[string]any); ok {
+		return f
 	}
+	return nil
+}
+
+func strFromMap(m map[string]any, key string) string {
+	if v, ok := m[key].(string); ok {
+		return v
+	}
+	return ""
+}
+
+// agentTurn appends the model's chosen action + the tool's result to the
+// transcript as plain text turns. We deliberately don't replay tool_use/
+// tool_result blocks — forcing `act` every turn keeps the provider adapters
+// unchanged while still giving the model its own decision history.
+func agentTurn(messages *[]any, act map[string]any, result string) {
+	ab, _ := json.Marshal(act)
+	*messages = append(*messages,
+		map[string]any{"role": "assistant", "content": string(ab)},
+		map[string]any{"role": "user", "content": result + "\n\nContinue by calling act again."},
+	)
+}
+
+// searchDropsForModel returns catalog lines whose id/summary/category/integration
+// match every query token — the in-loop search_drops result.
+func searchDropsForModel(mans []core.Manifest, query string) string {
+	q := strings.TrimSpace(strings.ToLower(query))
+	if q == "" {
+		return "Provide a query, e.g. {\"action\":\"search_drops\",\"query\":\"send email\"}."
+	}
+	tokens := strings.Fields(q)
+	matched := make([]core.Manifest, 0)
+	for _, m := range mans {
+		hay := strings.ToLower(m.ID + " " + m.Summary + " " + m.Category + " " + m.Integration)
+		ok := true
+		for _, t := range tokens {
+			if !strings.Contains(hay, t) {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			matched = append(matched, m)
+		}
+	}
+	if len(matched) == 0 {
+		return "No steps matched \"" + query + "\". Try different keywords, or use the catalog above."
+	}
+	const maxHits = 20
+	if len(matched) > maxHits {
+		matched = matched[:maxHits]
+	}
+	return "Matching steps:\n" + compactCatalog(matched)
+}
+
+// describeDropForModel renders one drop's full spec — params (type/required/
+// description), in/out ports (flags, MIME, label) and worked examples — the
+// in-loop describe_drop result. This is the rich grounding the compact catalog
+// can't carry for every step at once.
+func describeDropForModel(byID map[string]core.Manifest, id string) string {
+	m, ok := byID[strings.TrimSpace(id)]
+	if !ok {
+		return "No step with id \"" + id + "\". Use search_drops or the catalog to find the right id."
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s [%s] — %s\n", m.ID, m.Category, m.Summary)
+
+	var schema struct {
+		Properties map[string]struct {
+			Type        string `json:"type"`
+			Description string `json:"description"`
+		} `json:"properties"`
+		Required []string `json:"required"`
+	}
+	_ = json.Unmarshal(m.ParamsSchema, &schema)
+	req := map[string]bool{}
+	for _, r := range schema.Required {
+		req[r] = true
+	}
+	if len(schema.Properties) > 0 {
+		names := make([]string, 0, len(schema.Properties))
+		for n := range schema.Properties {
+			names = append(names, n)
+		}
+		sort.Strings(names)
+		b.WriteString("  params:\n")
+		for _, n := range names {
+			p := schema.Properties[n]
+			star := ""
+			if req[n] {
+				star = " (required)"
+			}
+			fmt.Fprintf(&b, "    - %s: %s%s — %s\n", n, p.Type, star, p.Description)
+		}
+	}
+	renderPort := func(p core.Port) string {
+		s := p.Port
+		flags := make([]string, 0, 3)
+		if p.Required {
+			flags = append(flags, "required")
+		}
+		if p.List {
+			flags = append(flags, "list")
+		}
+		if p.Variadic {
+			flags = append(flags, "variadic")
+		}
+		if len(flags) > 0 {
+			s += " (" + strings.Join(flags, ",") + ")"
+		}
+		if p.Label != "" {
+			s += " — " + p.Label
+		}
+		if len(p.MIME) > 0 {
+			s += "  [" + strings.Join(p.MIME, " ") + "]"
+		}
+		return s
+	}
+	if len(m.Inputs) > 0 {
+		b.WriteString("  inputs:\n")
+		for _, p := range m.Inputs {
+			fmt.Fprintf(&b, "    < %s\n", renderPort(p))
+		}
+	}
+	if len(m.Outputs) > 0 {
+		b.WriteString("  outputs:\n")
+		for _, p := range m.Outputs {
+			fmt.Fprintf(&b, "    > %s\n", renderPort(p))
+		}
+	}
+	for _, ex := range m.Examples {
+		fmt.Fprintf(&b, "  e.g. %s: %s", ex.Title, compactExample([]core.ParamsExample{ex}))
+		if ex.Notes != "" {
+			fmt.Fprintf(&b, "  // %s", ex.Notes)
+		}
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
+// graphFromMap converts a flow-shaped map (the emit/validate payload, or a bare
+// single-shot flow) into a core.Graph.
+func graphFromMap(m map[string]any) (core.Graph, error) {
+	raw, _ := json.Marshal(m)
 	var gg generatedGraph
 	if err := json.Unmarshal(raw, &gg); err != nil {
 		return core.Graph{}, fmt.Errorf("not valid flow JSON: %w", err)

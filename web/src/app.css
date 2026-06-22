@@ -8872,3 +8872,71 @@ button.files-name:hover {
 }
 
 .welcome-create { margin-top: var(--space-2); }
+
+/* AI draft-ready review step: the heads-up issues the generator returns,
+   shown before the user lands in the canvas. */
+.create-draft-review { max-width: 560px; }
+.create-draft-sub { color: var(--muted); margin: 0 0 var(--space-3); }
+.create-draft-issues {
+  list-style: none;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.create-draft-issue {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--r-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-strong);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+.create-draft-issue.error { border-left-color: var(--danger); }
+.create-draft-issue.warn { border-left-color: var(--warning, #d97706); }
+
+/* AI describe-box example starters — the non-techy on-ramp. */
+.ai-starters { margin: calc(-1 * var(--space-1)) 0 var(--space-1); }
+.ai-starters-label {
+  display: block;
+  font-size: var(--text-sm);
+  color: var(--muted);
+  margin-bottom: var(--space-2);
+}
+.ai-starters-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.ai-starter-chip {
+  text-align: left;
+  font-size: var(--text-sm);
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  padding: var(--space-1h) var(--space-2h);
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms;
+}
+.ai-starter-chip:hover { background: var(--surface-3); border-color: var(--border-strong); }
+
+/* Friendly two-line draft issues: plain-language headline + raw detail. */
+.create-draft-issue { display: flex; flex-direction: column; gap: 2px; }
+.create-draft-issue-head { font-weight: 600; }
+.create-draft-issue-detail { color: var(--muted); font-size: var(--text-sm); line-height: 1.4; }
+
+/* Draft review: plain-language summary + conversational refine. */
+.create-draft-section {
+  font-weight: 600;
+  margin: var(--space-3) 0 var(--space-2);
+}
+.create-draft-steps {
+  margin: 0 0 var(--space-2);
+  padding-left: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--ink);
+}
+.create-draft-steps li { line-height: 1.5; }
+.create-draft-refine { margin-top: var(--space-2); }
+.create-draft-refine-row { display: flex; gap: var(--space-2); }
+.create-draft-refine-row input { flex: 1; }

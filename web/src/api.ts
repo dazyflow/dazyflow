@@ -905,7 +905,9 @@ export const api = {
   // ("progress" | "error" | "done") and parsed data.
   streamFlowGenerate(
     token: string,
-    body: { description: string; provider?: string; tz?: string },
+    // base (optional) is an existing flow graph to MODIFY — powers
+    // conversational refine ("make it post to #sales instead").
+    body: { description: string; provider?: string; tz?: string; base?: unknown },
     onEvent: (kind: string, data: unknown) => void,
     signal?: AbortSignal,
   ): Promise<void> {

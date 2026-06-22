@@ -79,6 +79,7 @@ func BuildTools(c *DazydClient, d Defaults) []Tool {
 		disableFlow(c, d),
 		validateFlow(c, d),
 		validateGraph(c),
+		generateFlowTool(c),
 		testTriggerFlow(c, d),
 		sampleNode(c, d),
 		runFlow(c, d),
@@ -813,6 +814,51 @@ func validateFlow(c *DazydClient, d Defaults) Tool {
 // graph, see if it lints clean, then call create_flow only when
 // satisfied. Avoids the create-fix-update churn of authoring against
 // HEAD-only validate_flow.
+// generateFlowTool wraps the server-side AI generator: plain-English →
+// validated DRAFT graph. It's the agentic loop's front door for MCP clients —
+// instead of hand-authoring nodes/edges, ask for a draft, then refine it with
+// validate_graph / describe_drop / update_flow or persist it with create_flow.
+// The draft is NOT saved or run; the server grounds on the live catalog and
+// repairs structural problems before returning.
+func generateFlowTool(c *DazydClient) Tool {
+	return Tool{
+		Name: "generate_flow",
+		Description: "Draft a flow from a plain-English description using the server-side AI generator (grounded on the live catalog, validated and repaired). Returns {graph, issues} — a DRAFT to refine (validate_graph / describe_drop / update_flow) or persist (create_flow). Requires an AI provider connected on the server; the graph is not saved or run.",
+		InputSchema: json.RawMessage(`{"type":"object","required":["description"],"properties":{
+			"description": {"type":"string","description":"What the flow should do, in plain English. e.g. 'every weekday at 9am email me yesterday's new signups'."},
+			"provider": {"type":"string","description":"Optional AI provider id (e.g. claude, openai). Defaults to the first connected provider."},
+			"tz": {"type":"string","description":"Optional IANA timezone for any schedule (e.g. Europe/Stockholm). Defaults to UTC."}
+		}}`),
+		Handler: func(ctx context.Context, raw json.RawMessage) (ToolCallResult, error) {
+			args, err := decodeArgs(raw)
+			if err != nil {
+				return ErrorResult(err.Error()), nil
+			}
+			desc := stringField(args, "description", "")
+			if strings.TrimSpace(desc) == "" {
+				return ErrorResult("description is required"), nil
+			}
+			body := map[string]any{"description": desc}
+			if p := stringField(args, "provider", ""); p != "" {
+				body["provider"] = p
+			}
+			if tz := stringField(args, "tz", ""); tz != "" {
+				body["tz"] = tz
+			}
+			var out map[string]any
+			if err := c.Post(ctx, "/tools/flow/generate", body, &out); err != nil {
+				return errorResultOrErr(err)
+			}
+			// The endpoint returns 200 with {error, need_connect} when no provider
+			// is connected — surface that as a tool error, not a "successful" blank.
+			if msg, ok := out["error"].(string); ok && msg != "" {
+				return ErrorResult(msg), nil
+			}
+			return TextResult(out), nil
+		},
+	}
+}
+
 func validateGraph(c *DazydClient) Tool {
 	return Tool{
 		Name:        "validate_graph",

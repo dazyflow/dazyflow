@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -41,6 +42,65 @@ func allManifests() []core.Manifest {
 }
 
 func manifestMap() map[string]core.Manifest { return engine.Default.Manifests() }
+
+// describeDrop delegates to the production renderer (describeDropForModel) so
+// the manual dump shows exactly what the agentic loop hands the model.
+func describeDrop(id string) string { return describeDropForModel(manifestMap(), id) }
+
+// TestShippedTemplatesValidate guards every template the gallery ships: each
+// must pass the manifest-level validator (the gate the engine runs before a
+// run). This is what would have caught the redundant/mis-shaped gmail
+// templates. The template_placeholder LINT (REPLACE_WITH_…) is intentional on
+// templates and is not checked here — that's a fill-me marker, not a wiring bug.
+func TestShippedTemplatesValidate(t *testing.T) {
+	dir := "../web/public/templates"
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Skipf("templates dir not found (%v)", err)
+	}
+	mm := manifestMap()
+	seen := 0
+	for _, e := range entries {
+		if e.IsDir() || e.Name() == "index.json" || filepath.Ext(e.Name()) != ".json" {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			t.Fatalf("read %s: %v", e.Name(), err)
+		}
+		var g core.Graph
+		if err := json.Unmarshal(raw, &g); err != nil {
+			t.Errorf("%s: not valid graph JSON: %v", e.Name(), err)
+			continue
+		}
+		if err := core.ValidateWithManifests(g, mm); err != nil {
+			t.Errorf("%s: fails manifest validation (won't run):\n%v", e.Name(), err)
+		}
+		seen++
+	}
+	if seen == 0 {
+		t.Fatal("no template files validated")
+	}
+	t.Logf("validated %d shipped templates", seen)
+}
+
+// TestAgenticDescribe dumps describe_drop for the drops the scenario set
+// touches — the real grounding I read to drive the loop by hand.
+// FLOWGEN_DUMP=1 go test ./daemon -run TestAgenticDescribe -v
+func TestAgenticDescribe(t *testing.T) {
+	if os.Getenv("FLOWGEN_DUMP") == "" {
+		t.Skip("set FLOWGEN_DUMP=1 to dump describe_drop output")
+	}
+	for _, id := range []string{
+		"sheets_read_range", "render_text", "gmail_send_email", "email_send",
+		"gmail_search_messages", "map_rows", "sheets_append_row",
+		"webhook_input", "slack_send_message",
+		"stripe_on_payment_failed", "twilio_send_sms",
+		"postgres_upsert_rows", "postgres_query",
+	} {
+		fmt.Printf("\n==== describe_drop(%q) ====\n%s", id, describeDrop(id))
+	}
+}
 
 func edge(from, fromPort, to, toPort string) map[string]any {
 	return map[string]any{"from": from, "from_port": fromPort, "to": to, "to_port": toPort}
@@ -122,6 +182,93 @@ func TestFlowGen_StructuralGateSurfaces(t *testing.T) {
 	}
 }
 
+// goodEmailFlow is the simple, correct gmail→sheet flow (search returns full
+// records, so no for_each) wrapped as an emit action.
+func goodEmailFlow() map[string]any {
+	return map[string]any{
+		"name": "log emails to sheet",
+		"nodes": []any{
+			node("poll", "poll_trigger", map[string]any{"interval_seconds": 300}),
+			node("search", "gmail_search_messages", map[string]any{"query": "is:unread"}),
+			node("shape", "map_rows", map[string]any{"select": []any{"from", "subject", "date"}}),
+			node("append", "sheets_append_row", map[string]any{"spreadsheet_id": "abc", "range": "Inbox"}),
+		},
+		"edges": []any{
+			edge("search", "messages", "shape", "rows"),
+			edge("shape", "rows", "append", "rows"),
+		},
+	}
+}
+
+// TestFlowGen_AgentExploresThenEmits: the model calls describe_drop (a helper
+// turn that must NOT count as an emit attempt), then emits a clean flow. Proves
+// the agentic dispatch works and exploring is free of the repair budget.
+func TestFlowGen_AgentExploresThenEmits(t *testing.T) {
+	sp := &scriptedProvider{graphs: []map[string]any{
+		{"action": "describe_drop", "drop_id": "gmail_search_messages"},
+		{"action": "search_drops", "query": "google sheet"},
+		{"action": "emit", "flow": goodEmailFlow()},
+	}}
+	llm.Register(llm.ProviderInfo{Name: "fakeflowagent", Integration: "FakeFlowAgent", DefaultModel: "m", Provider: sp})
+
+	h := newGatewayHarness(t)
+	g, issues, err := h.gw.generateFlow(context.Background(), "fakeflowagent", "key",
+		"log my new emails to a google sheet", allManifests(), "t1", "main", "", nil)
+	if err != nil {
+		t.Fatalf("generateFlow: %v", err)
+	}
+	if sp.calls != 3 {
+		t.Fatalf("expected describe + search + emit (3 calls), got %d", sp.calls)
+	}
+	if hasLintError(issues) {
+		t.Fatalf("final graph has errors: %+v", issues)
+	}
+	if len(g.Nodes) != 4 {
+		t.Fatalf("expected the emitted 4-node flow, got %d nodes", len(g.Nodes))
+	}
+}
+
+// TestFlowGen_AgentValidatesBeforeEmit: the model validates a mis-wired draft
+// (gets the structural errors back), then emits a corrected flow. The validate
+// turn isn't an emit, so it doesn't burn the repair budget.
+func TestFlowGen_AgentValidatesBeforeEmit(t *testing.T) {
+	sp := &scriptedProvider{graphs: []map[string]any{
+		{"action": "validate", "flow": miswiredForEach()},
+		{"action": "emit", "flow": goodEmailFlow()},
+	}}
+	llm.Register(llm.ProviderInfo{Name: "fakeflowvalidate", Integration: "FakeFlowValidate", DefaultModel: "m", Provider: sp})
+
+	h := newGatewayHarness(t)
+	g, issues, err := h.gw.generateFlow(context.Background(), "fakeflowvalidate", "key",
+		"log my emails", allManifests(), "t1", "main", "", nil)
+	if err != nil {
+		t.Fatalf("generateFlow: %v", err)
+	}
+	if sp.calls != 2 {
+		t.Fatalf("expected validate + emit (2 calls), got %d", sp.calls)
+	}
+	if hasLintError(issues) || len(g.Nodes) != 4 {
+		t.Fatalf("expected clean 4-node flow, got %d nodes, issues=%+v", len(g.Nodes), issues)
+	}
+}
+
+// TestRefineDesc: conversational refine seeds the prompt with the current flow
+// only when a base is supplied; otherwise the description passes through.
+func TestRefineDesc(t *testing.T) {
+	if got := refineDesc(nil, "do x"); got != "do x" {
+		t.Errorf("nil base should pass through, got %q", got)
+	}
+	if got := refineDesc([]byte("null"), "do x"); got != "do x" {
+		t.Errorf("null base should pass through, got %q", got)
+	}
+	out := refineDesc([]byte(`{"nodes":[{"id":"a","module":"text"}]}`), "post to #sales instead")
+	for _, want := range []string{"CURRENT flow", "post to #sales instead", "\"module\":\"text\""} {
+		if !strings.Contains(out, want) {
+			t.Errorf("refine prompt missing %q in:\n%s", want, out)
+		}
+	}
+}
+
 // TestFlowGen_GroundingEnriched pins the grounding improvements: the catalog
 // carries worked examples and required-input markers, and the system prompt
 // teaches the compose-only patterns (for_each/unwrap_results) and the markers.
@@ -141,6 +288,36 @@ func TestFlowGen_GroundingEnriched(t *testing.T) {
 		if !strings.Contains(sys, want) {
 			t.Errorf("system prompt missing pattern/marker guidance: %q", want)
 		}
+	}
+}
+
+// TestFlowGen_WorkspaceGrounding: the generator grounds on the tenant's
+// connected apps and existing secret names, so it stops inventing flows for
+// unconnected apps and made-up ${secret.NAME}s.
+func TestFlowGen_WorkspaceGrounding(t *testing.T) {
+	h := newGatewayHarness(t)
+	es := newMemSecrets(t)
+	h.gw.EncryptedSecrets = es
+	ctx := context.Background()
+	// A connected Slack account (stored as the oauth.<provider>.<account> name
+	// connectedAccountsByProvider scans for) and a user-defined org secret.
+	if err := es.Put(ctx, "t1", "oauth.slack.default", "xoxb-test"); err != nil {
+		t.Fatal(err)
+	}
+	if err := es.PutScoped(ctx, "t1", "", ScopeTenant, "OPENAI_KEY", "sk-test"); err != nil {
+		t.Fatal(err)
+	}
+
+	g := h.gw.workspaceGrounding(ctx, "t1")
+	if !strings.Contains(g, "CONNECTED APPS") || !strings.Contains(g, "slack") {
+		t.Errorf("expected connected app slack in grounding, got: %q", g)
+	}
+	if !strings.Contains(g, "OPENAI_KEY") {
+		t.Errorf("expected existing secret OPENAI_KEY in grounding, got: %q", g)
+	}
+	// A tenant with no store wired must not error or block generation.
+	if got := (&HTTPGateway{}).workspaceGrounding(ctx, "t1"); got != "" {
+		t.Errorf("no-store grounding should be empty, got %q", got)
 	}
 }
 
@@ -167,6 +344,67 @@ func TestFlowGenEval(t *testing.T) {
 			{From: "summary", FromPort: "text", To: "mail", ToPort: "body"},
 		},
 		Triggers: []core.GraphTrigger{{Type: "cron", Cron: "0 8 * * 1-5"}},
+	})
+
+	// What an agentic model builds AFTER calling describe_drop on
+	// gmail_search_messages and learning `messages` is already full email
+	// records: search -> map_rows -> sheets. No for_each needed.
+	scoreGraph(t, "B-simple: new email -> sheet (search returns full records)", core.Graph{
+		Name: "Log emails to sheet",
+		Nodes: []core.Node{
+			{ID: "poll", Module: "poll_trigger", Params: map[string]any{"interval_seconds": 300}},
+			{ID: "search", Module: "gmail_search_messages", Params: map[string]any{"query": "is:unread", "max_results": 20}},
+			{ID: "shape", Module: "map_rows", Params: map[string]any{"select": []any{"from", "subject", "date"}}},
+			{ID: "append", Module: "sheets_append_row", Params: map[string]any{"spreadsheet_id": "abc", "range": "Inbox"}},
+		},
+		Edges: []core.Edge{
+			{From: "search", FromPort: "messages", To: "shape", ToPort: "rows"},
+			{From: "shape", FromPort: "rows", To: "append", ToPort: "rows"},
+		},
+	})
+
+	// C: contact form -> Slack, formatted via render_text (the example tells
+	// the model to wire render_text.text into slack's body).
+	scoreGraph(t, "C: contact form -> Slack (render_text)", core.Graph{
+		Name: "Form to Slack",
+		Nodes: []core.Node{
+			{ID: "form", Module: "webhook_input", Params: map[string]any{"public_form": true, "form_fields": []any{"name", "email", "message"}}},
+			{ID: "render", Module: "render_text", Params: map[string]any{"template": "'New enquiry from ' + row.name + ' <' + row.email + '>: ' + row.message"}},
+			{ID: "notify", Module: "slack_send_message", Params: map[string]any{"channel": "#sales"}},
+		},
+		Edges: []core.Edge{
+			{From: "form", FromPort: "body", To: "render", ToPort: "rows"},
+			{From: "render", FromPort: "text", To: "notify", ToPort: "text"},
+		},
+	})
+
+	// D: Stripe payment failed -> SMS. describe_drop taught the model that
+	// account_sid/auth_token DEFAULT to the TWILIO_* secrets, so it omits them
+	// (no hardcoding, no invented ${secret} name).
+	scoreGraph(t, "D: Stripe failed -> SMS (secrets auto-default)", core.Graph{
+		Name: "Failed payment SMS",
+		Nodes: []core.Node{
+			{ID: "trig", Module: "stripe_on_payment_failed"},
+			{ID: "sms", Module: "twilio_send_sms", Params: map[string]any{"to": "+15551230000", "from": "+15559876543"}},
+		},
+		Edges: []core.Edge{
+			{From: "trig", FromPort: "failure_message", To: "sms", ToPort: "body"},
+		},
+	})
+
+	// E: weekly Leads sheet -> Postgres upsert (no dupes). describe_drop's note
+	// resolves the connection ("set once under Apps") so no DSN param invented.
+	scoreGraph(t, "E: weekly sheet -> Postgres upsert", core.Graph{
+		Name: "Leads to CRM",
+		Nodes: []core.Node{
+			{ID: "read", Module: "sheets_read_range", Params: map[string]any{"spreadsheet_id": "abc", "range": "Leads"}},
+			{ID: "load", Module: "postgres_upsert_rows", Params: map[string]any{"table": "customers", "conflict_columns": []any{"email"}}},
+		},
+		Edges: []core.Edge{
+			{From: "read", FromPort: "rows", To: "load", ToPort: "rows"},
+			{From: "read", FromPort: "headers", To: "load", ToPort: "headers"},
+		},
+		Triggers: []core.GraphTrigger{{Type: "cron", Cron: "0 9 * * 1"}},
 	})
 
 	// The for_each trap (mis-wired) — caught only by the manifest validator.

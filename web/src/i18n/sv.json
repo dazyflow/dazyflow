@@ -58,7 +58,8 @@
     "unknownParen": "(okänd)",
     "dismiss": "Stäng",
     "secretStored": "(dold)",
-    "close": "Stäng"
+    "close": "Stäng",
+    "back": "Tillbaka"
   },
   "commentNode": {
     "delete": "Ta bort kommentar",
@@ -1337,8 +1338,22 @@
     "tabScratch": "Från grunden",
     "tabTemplate": "Från en mall",
     "modeLabel": "Hur vill du börja?",
-    "modeBlank": "Tomt flöde",
-    "modeAI": "Beskriv med AI"
+    "modeBlank": "Bygg det själv",
+    "modeAI": "Beskriv vad du vill ha",
+    "startersLabel": "Osäker på var du ska börja? Prova någon av dessa:",
+    "draftReadyTitle": "Ditt utkast är klart",
+    "draftReadyBody": "AI byggde flödet. Innan det kan köras behöver du åtgärda punkterna nedan — du kan även göra det senare i redigeraren.",
+    "whatItDoes": "Vad det här flödet gör",
+    "beforeItRuns": "Innan det kan köras behöver du:",
+    "refineLabel": "Vill du ändra något? Beskriv det:",
+    "refinePlaceholder": "t.ex. posta till #sales istället, eller bara mejl från kunder",
+    "refineCta": "Uppdatera",
+    "openDraft": "Öppna utkastet",
+    "issueFillIn": "Lägg till en saknad uppgift",
+    "issueSecret": "Flytta ett lösenord till hemlighetslagret",
+    "issueSchedule": "Ställ in schemat",
+    "issueWiring": "Ett steg behöver åtgärdas",
+    "issueHeadsUp": "Att tänka på"
   },
   "renderPreview": {
     "assistLabel": "Beskriv ditt mejl — AI skriver det",
