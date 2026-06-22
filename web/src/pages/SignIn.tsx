@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import { orgFromHost } from "../lib/orgFromHost";
+import { OtpInput } from "../components/OtpInput";
 
 // SignIn is the email+password sign-in form. It also handles two
 // deep-link query params:
@@ -106,41 +107,46 @@ export function SignIn() {
   // session via verifyTOTP, then follows the same post-sign-in nav as
   // the password path.
   if (challenge) {
+    // Exchange the code (or recovery code) for a session. Shared by the
+    // form submit and the OTP boxes' auto-submit on the sixth digit; the
+    // latter passes the completed code so we don't race React state.
+    const submitTotp = async (codeOverride?: string) => {
+      const code = useRecovery ? "" : (codeOverride ?? totpCode).trim();
+      const recovery = useRecovery ? recoveryCode.trim() : "";
+      if (!code && !recovery) return;
+      if (busy || loading) return;
+      setBusy(true);
+      try {
+        await verifyTOTP(challenge, code, recovery);
+        if (inviteToken) {
+          navigate(`/invite/${inviteToken}`);
+        }
+      } catch {
+        /* error already set on context */
+      } finally {
+        setBusy(false);
+      }
+    };
     return (
       <div className="signin-wrap">
         <form
           className="signin"
-          onSubmit={async (e) => {
+          onSubmit={(e) => {
             e.preventDefault();
-            const code = useRecovery ? "" : totpCode.trim();
-            const recovery = useRecovery ? recoveryCode.trim() : "";
-            if (!code && !recovery) return;
-            setBusy(true);
-            try {
-              await verifyTOTP(challenge, code, recovery);
-              if (inviteToken) {
-                navigate(`/invite/${inviteToken}`);
-              }
-            } catch {
-              /* error already set on context */
-            } finally {
-              setBusy(false);
-            }
+            void submitTotp();
           }}
         >
           <h1>{t("signIn.totpTitle")}</h1>
           {!useRecovery ? (
             <>
-              <label htmlFor="totp-code">{t("signIn.totpCodeLabel")}</label>
-              <input
-                id="totp-code"
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                autoFocus
+              <label>{t("signIn.totpCodeLabel")}</label>
+              <OtpInput
                 value={totpCode}
-                onChange={(e) => setTotpCode(e.target.value)}
-                placeholder="123456"
+                onChange={setTotpCode}
+                onComplete={(v) => void submitTotp(v)}
+                disabled={busy || loading}
+                autoFocus
+                ariaLabel={t("signIn.totpCodeLabel")}
               />
               <div className="desc">{t("signIn.totpCodeHint")}</div>
             </>

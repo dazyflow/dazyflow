@@ -584,13 +584,28 @@ export const api = {
   // one-time recovery codes.
   totpSetup: (token: string) =>
     request<TOTPSetup>(token, "POST", "/me/totp/setup"),
+  // signalUnauthorized:false — a 401 here means "wrong code", not an
+  // expired session. Without this the global handler would tear down the
+  // session and bounce to /signin on a single fat-fingered enrolment code.
   totpConfirm: (token: string, code: string) =>
-    request<{ recovery_codes: string[] }>(token, "POST", "/me/totp/confirm", {
-      code,
-    }),
-  // totpDisable requires the current password as a re-auth gate.
+    request<{ recovery_codes: string[] }>(
+      token,
+      "POST",
+      "/me/totp/confirm",
+      { code },
+      { signalUnauthorized: false },
+    ),
+  // totpDisable requires the current password as a re-auth gate. Same as
+  // confirm: a 401 means "wrong password", not a dead session — don't log
+  // the user out for mistyping it.
   totpDisable: (token: string, password: string) =>
-    request<void>(token, "POST", "/me/totp/disable", { password }),
+    request<void>(
+      token,
+      "POST",
+      "/me/totp/disable",
+      { password },
+      { signalUnauthorized: false },
+    ),
   totpRegenerateRecoveryCodes: (token: string) =>
     request<{ recovery_codes: string[] }>(
       token,

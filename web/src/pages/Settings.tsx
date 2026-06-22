@@ -4,6 +4,7 @@ import { Moon, ShieldCheck, Sun } from "lucide-react";
 import { applyTheme, getTheme, type ThemeMode } from "../theme";
 import { useAuth } from "../auth";
 import { api, APIError, type TOTPSetup, type TOTPStatus } from "../api";
+import { OtpInput } from "../components/OtpInput";
 
 // Settings is the per-user, per-browser preferences page — reached
 // from the account menu in the sidebar. Holds appearance + language,
@@ -116,6 +117,26 @@ function TwoFactorCard() {
   // Disable sub-state.
   const [disabling, setDisabling] = useState(false);
   const [disablePassword, setDisablePassword] = useState("");
+  // Transient "Copied" affordance for the copy buttons.
+  const [copied, setCopied] = useState<"secret" | "codes" | null>(null);
+
+  const copy = (text: string, which: "secret" | "codes") => {
+    void navigator.clipboard?.writeText(text);
+    setCopied(which);
+    window.setTimeout(() => setCopied((c) => (c === which ? null : c)), 1500);
+  };
+
+  // Recovery codes are shown once — let the user keep an offline copy as a
+  // .txt instead of only the clipboard (which a later copy would clobber).
+  const downloadCodes = (codes: string[]) => {
+    const blob = new Blob([codes.join("\n") + "\n"], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "dazyflow-recovery-codes.txt";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const refresh = useCallback(async () => {
     if (!token) return;
@@ -148,11 +169,13 @@ function TwoFactorCard() {
     }
   };
 
-  const confirmEnrol = async () => {
+  const confirmEnrol = async (codeOverride?: string) => {
+    const code = (codeOverride ?? confirmCode).trim();
+    if (code.length < 6 || busy) return;
     setErr(null);
     setBusy(true);
     try {
-      const r = await api.totpConfirm(token, confirmCode.trim());
+      const r = await api.totpConfirm(token, code);
       setRecoveryCodes(r.recovery_codes);
       setSetup(null);
       setConfirmCode("");
@@ -229,58 +252,77 @@ function TwoFactorCard() {
                 </li>
               ))}
             </ul>
-            <button
-              type="button"
-              className="secondary"
-              onClick={() =>
-                void navigator.clipboard?.writeText(recoveryCodes.join("\n"))
-              }
-            >
-              {t("twoFactor.copyCodes")}
-            </button>{" "}
-            <button
-              type="button"
-              className="primary"
-              onClick={() => setRecoveryCodes(null)}
-            >
-              {t("twoFactor.savedCodes")}
-            </button>
+            <div className="totp-actions">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => copy(recoveryCodes.join("\n"), "codes")}
+              >
+                {copied === "codes" ? t("twoFactor.copied") : t("twoFactor.copyCodes")}
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => downloadCodes(recoveryCodes)}
+              >
+                {t("twoFactor.downloadCodes")}
+              </button>
+              <button
+                type="button"
+                className="primary"
+                onClick={() => setRecoveryCodes(null)}
+              >
+                {t("twoFactor.savedCodes")}
+              </button>
+            </div>
           </div>
         )}
 
         {/* Enrolment in progress: QR + manual secret + first-code confirm. */}
         {setup && !recoveryCodes && (
           <div className="totp-enrol">
-            {setup.qr_png_data_url && (
-              <img
-                className="totp-qr"
-                src={setup.qr_png_data_url}
-                alt={t("twoFactor.qrAlt")}
-                width={200}
-                height={200}
-              />
-            )}
-            <p className="desc">{t("twoFactor.manualSecret")}</p>
-            <code className="totp-secret">{setup.secret_base32}</code>
-            <label htmlFor="totp-confirm">{t("twoFactor.confirmLabel")}</label>
-            <input
-              id="totp-confirm"
-              type="text"
-              inputMode="numeric"
-              autoComplete="one-time-code"
+            <div className="totp-qr-row">
+              {setup.qr_png_data_url && (
+                <img
+                  className="totp-qr"
+                  src={setup.qr_png_data_url}
+                  alt={t("twoFactor.qrAlt")}
+                  width={200}
+                  height={200}
+                />
+              )}
+              <div className="totp-manual">
+                <p className="desc">{t("twoFactor.manualSecret")}</p>
+                <div className="totp-secret-row">
+                  <code className="totp-secret">{setup.secret_base32}</code>
+                  <button
+                    type="button"
+                    className="linklike"
+                    onClick={() => copy(setup.secret_base32, "secret")}
+                  >
+                    {copied === "secret" ? t("twoFactor.copied") : t("twoFactor.copySecret")}
+                  </button>
+                </div>
+              </div>
+            </div>
+            <label>{t("twoFactor.confirmLabel")}</label>
+            <OtpInput
               value={confirmCode}
-              onChange={(e) => setConfirmCode(e.target.value)}
-              placeholder="123456"
+              onChange={setConfirmCode}
+              onComplete={(v) => void confirmEnrol(v)}
+              disabled={busy}
+              autoFocus
+              ariaLabel={t("twoFactor.confirmLabel")}
             />
-            <div>
+            <div className="totp-actions">
               <button
                 type="button"
                 className="primary"
-                disabled={busy || !confirmCode.trim()}
+                disabled={busy || confirmCode.trim().length < 6}
                 onClick={() => void confirmEnrol()}
               >
                 {t("twoFactor.confirmEnable")}
-              </button>{" "}
+              </button>
               <button
                 type="button"
                 className="secondary"
