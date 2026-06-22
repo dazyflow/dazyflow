@@ -758,7 +758,7 @@ function AccountMenu({
             {version && (
               <>
                 <div className="workspace-pop-sep" role="separator" />
-                <div className="account-pop-version">dzd v{version}</div>
+                <div className="account-pop-version">v{version}</div>
               </>
             )}
           </div>,
