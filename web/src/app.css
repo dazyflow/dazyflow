@@ -647,6 +647,9 @@
 .account-pop-row {
   display: flex;
   align-items: center;
+  /* The global button{} rule centers flex content; these rows are a
+     menu list, so pin icon + label to the left instead. */
+  justify-content: flex-start;
   gap: var(--space-2);
   font-family: inherit;
 }
