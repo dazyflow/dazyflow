@@ -74,6 +74,55 @@
   }
 }
 
+/* The burger mark: three bars with a deliberately shorter bottom bar.
+   On open (aria-expanded="true") the top/bottom bars rotate into a
+   cross, the bottom bar grows to full width so the X is symmetric, and
+   the middle bar fades out. Toggling the button morphs it back. */
+.topbar .hamburger .burger {
+  position: relative;
+  display: inline-block;
+  width: 20px;
+  height: 16px;
+}
+.topbar .hamburger .burger-bar {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  transition:
+    transform 0.25s ease,
+    opacity 0.2s ease,
+    width 0.25s ease;
+}
+.topbar .hamburger .burger-top {
+  top: 1px;
+}
+.topbar .hamburger .burger-mid {
+  top: 7px;
+}
+.topbar .hamburger .burger-bot {
+  top: 13px;
+  width: 60%;
+}
+.topbar .hamburger[aria-expanded="true"] .burger-top {
+  transform: translateY(6px) rotate(45deg);
+}
+.topbar .hamburger[aria-expanded="true"] .burger-mid {
+  opacity: 0;
+  transform: scaleX(0);
+}
+.topbar .hamburger[aria-expanded="true"] .burger-bot {
+  width: 100%;
+  transform: translateY(-6px) rotate(-45deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .topbar .hamburger .burger-bar {
+    transition: none;
+  }
+}
+
 .topbar .user {
   display: flex;
   align-items: center;
@@ -1252,6 +1301,43 @@
     justify-content: center;
   }
 }
+
+/* Verify-email nag banner. Mirrors .welcome-mcp's responsive behaviour:
+   message and Resend button sit side-by-side on desktop, but on narrow
+   screens the button stacks full-width under the message instead of
+   getting squeezed against it. The button keeps the default (bordered)
+   button styling — not .ghost — so it reads clearly as a button. */
+.verify-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  border-color: var(--warning, #d97706);
+}
+.verify-banner-icon {
+  color: var(--warning, #d97706);
+  flex-shrink: 0;
+}
+.verify-banner-body {
+  flex: 1;
+  min-width: 0;
+}
+.verify-banner-resend {
+  flex-shrink: 0;
+}
+@media (max-width: 768px) {
+  .verify-banner {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  /* Resend drops onto its own full-width row beneath the message; the
+     dismiss X stays on the first row with the icon and text. */
+  .verify-banner-resend {
+    order: 10;
+    width: 100%;
+    justify-content: center;
+  }
+}
 .mcp-client-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -1396,6 +1482,8 @@
 .welcome-cta:hover {
   background: var(--surface-3);
   border-color: var(--border-strong);
+  /* The button-styled link must not pick up the global a:hover underline. */
+  text-decoration: none;
 }
 .welcome-cta.primary {
   background: var(--btn);
@@ -8863,6 +8951,15 @@ button.files-name:hover {
 }
 
 .welcome-create { margin-top: var(--space-2); }
+/* On narrow screens the create CTA stretches edge-to-edge instead of
+   hugging its label, matching the full-width CTAs below it. */
+@media (max-width: 768px) {
+  .welcome-create {
+    display: flex;
+    width: 100%;
+    justify-content: center;
+  }
+}
 
 /* AI draft-ready review step: the heads-up issues the generator returns,
    shown before the user lands in the canvas. */

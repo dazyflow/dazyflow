@@ -2,7 +2,6 @@ import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
-  Menu,
   MailWarning,
   LogOut,
   Workflow,
@@ -18,6 +17,7 @@ import {
   Building2,
   Boxes,
   Plus,
+  Send,
   Settings as SettingsIcon,
   MoreVertical,
   X,
@@ -323,7 +323,14 @@ export function AppShell({ children }: { children: ReactNode }) {
           aria-label={t("nav.toggleNav")}
           aria-expanded={!navCollapsed}
         >
-          <Menu size={20} />
+          {/* Custom 3-bar burger: the bottom bar is shorter (the icon
+              variant we want), and the whole mark morphs into a cross
+              when the drawer is open (aria-expanded="true"). */}
+          <span className="burger" aria-hidden="true">
+            <span className="burger-bar burger-top" />
+            <span className="burger-bar burger-mid" />
+            <span className="burger-bar burger-bot" />
+          </span>
         </button>
         {/* The logo is the home affordance — clicking it lands on the
             start/welcome screen (where no flow is selected), matching
@@ -858,28 +865,24 @@ function VerifyEmailBanner() {
     }
   };
   return (
-    <div
-      className="card"
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "var(--space-3)",
-        marginBottom: "var(--space-4)",
-        borderColor: "var(--warning, #d97706)",
-      }}
-    >
-      <MailWarning size={18} style={{ color: "var(--warning, #d97706)", flexShrink: 0 }} />
-      <div style={{ flex: 1 }}>
+    <div className="card verify-banner">
+      <MailWarning size={18} className="verify-banner-icon" />
+      <div className="verify-banner-body">
         {sent ? t("verifyEmail.bannerSent") : t("verifyEmail.banner")}
       </div>
       {!sent && (
-        <button className="ghost" disabled={busy} onClick={() => void resend()}>
+        <button
+          className="welcome-cta verify-banner-resend"
+          disabled={busy}
+          onClick={() => void resend()}
+        >
+          <Send size={14} />
           {busy ? t("verifyEmail.bannerSending") : t("verifyEmail.bannerResend")}
         </button>
       )}
       <button
         type="button"
-        className="icon-button"
+        className="icon-button verify-banner-dismiss"
         onClick={() => setHidden(true)}
         aria-label={t("verifyEmail.bannerDismiss")}
         title={t("verifyEmail.bannerDismiss")}

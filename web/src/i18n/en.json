@@ -315,9 +315,9 @@
     "goalDevLink": "More for developers →",
     "titleReturning": "Welcome back to Dazyflow",
     "introReturning": "Pick up where you left off, or start a new flow from a template.",
-    "connectMcpTitle": "Build flows with an AI assistant",
-    "connectMcpDesc": "Connect this workspace to Claude (or any assistant that supports MCP) and just describe what you want — it'll draft the flow for you.",
-    "connectMcpCta": "Connect an assistant"
+    "aiBuildTitle": "Or just describe what you want",
+    "aiBuildDesc": "Tell Dazyflow what to build in plain English and it drafts the flow for you, ready to review — no nodes to wire up by hand.",
+    "aiBuildCta": "Describe your flow"
   },
   "connectMcp": {
     "title": "Connect an MCP client",
