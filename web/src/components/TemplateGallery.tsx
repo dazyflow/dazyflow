@@ -8,27 +8,27 @@ import {
   displayNameForIntegrationSlug,
   oauthProviderForIntegration,
 } from "../integrationMeta";
-import { browserTimeZone } from "../components/TriggersModal";
+import { browserTimeZone } from "./TriggersModal";
 import type { Graph, OAuthProviderStatus, TemplateSummary } from "../types";
 
-// Templates is the gallery page: lists pre-built workflows the user
-// can fork into their own workspace with one click. On click we
-// fetch the template's graph file, generate a fresh graph ID, fill
-// in the user's tenant + workspace, and PUT through the normal
-// saveGraph endpoint — same code path as creating a graph by hand,
-// just pre-populated with nodes + edges.
+// TemplateGallery is the reusable card grid of pre-built workflows. It
+// lives inside the "From a template" tab of the Create-flow page (and is
+// reached via the /templates → /flows/new?tab=template redirect). On click
+// we fetch the template's graph file, generate a fresh graph ID, fill in
+// the user's tenant + workspace, and PUT through the normal saveGraph
+// endpoint — same code path as creating a graph by hand, just pre-populated
+// with nodes + edges.
 //
-// The gallery itself is static (web/public/templates/index.json).
-// Adding a template is a JSON file + a one-line index entry; no
-// daemon code change.
+// The gallery itself is static (web/public/templates/index.json). Adding a
+// template is a JSON file + a one-line index entry; no daemon code change.
 
-// SHARED_NTFY_PLACEHOLDER is the topic the ntfy template ships with.
-// It's a guessable, world-readable shared topic, so useTemplate swaps
-// it for an unguessable per-fork topic on fork (see the nodes map below).
-// Kept in sync with web/public/templates/daily-reminder-ntfy.json.
+// SHARED_NTFY_PLACEHOLDER is the topic an ntfy template would ship with.
+// It's a guessable, world-readable shared topic, so useTemplate swaps it
+// for an unguessable per-fork topic on fork (see the nodes map below).
+// Kept for forward-compat with any ntfy template re-added to the gallery.
 const SHARED_NTFY_PLACEHOLDER = "my-daily-hello";
 
-export function Templates() {
+export function TemplateGallery() {
   const { t } = useTranslation();
   const { token, activeTenant, activeWorkspace, hasPerm } = useAuth();
   // Forking a template creates a flow → needs graph:edit. Viewers can
@@ -47,13 +47,12 @@ export function Templates() {
     null,
   );
   const [searchParams, setSearchParams] = useSearchParams();
-  // Goal-first entry from the Welcome page lands here with ?category=…
-  // so the gallery opens already narrowed to the user's intent.
+  // Goal-first entry can land here with ?category=… so the gallery opens
+  // already narrowed to the user's intent.
   const categoryFilter = searchParams.get("category");
-  // ?template=<id> is a tighter focus than category: the Welcome page's
-  // "fastest start" CTA deep-links here so the gallery opens on that one
-  // template (the zero-setup ntfy quickstart) instead of a category list
-  // it would otherwise be buried in. Takes precedence over category.
+  // ?template=<id> is a tighter focus than category: a deep-link can open
+  // the gallery on one template instead of a category list it would
+  // otherwise be buried in. Takes precedence over category.
   const templateFilter = searchParams.get("template");
 
   useEffect(() => {
@@ -166,20 +165,10 @@ export function Templates() {
   };
 
   if (error && !templates) {
-    return (
-      <div className="page">
-        <h1>{t("templates.title")}</h1>
-        <div className="card error">{error}</div>
-      </div>
-    );
+    return <div className="card error">{error}</div>;
   }
   if (!templates) {
-    return (
-      <div className="page">
-        <h1>{t("templates.title")}</h1>
-        <div className="card">{t("common.loading")}</div>
-      </div>
-    );
+    return <div className="card">{t("common.loading")}</div>;
   }
 
   // Group cards under their category heading so a non-technical visitor
@@ -209,9 +198,7 @@ export function Templates() {
   }
 
   return (
-    <div className="page templates-page">
-      <h1>{t("templates.title")}</h1>
-      <p className="page-sub">{t("templates.intro")}</p>
+    <div className="template-gallery">
       {(categoryFilter || templateFilter) && (
         <div className="template-filter-chip">
           <span>
@@ -238,7 +225,7 @@ export function Templates() {
       {groups.length === 0 && (
         <div className="card">
           {t("templates.noneInCategory")}{" "}
-          <Link to="/templates">{t("templates.showAll")}</Link>
+          <Link to="/flows/new?tab=template">{t("templates.showAll")}</Link>
         </div>
       )}
       {groups.map((group) => (

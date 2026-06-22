@@ -17,7 +17,7 @@ import {
   FolderTree,
   Building2,
   Boxes,
-  LayoutTemplate,
+  Plus,
   Settings as SettingsIcon,
   MoreVertical,
   X,
@@ -454,12 +454,17 @@ export function AppShell({ children }: { children: ReactNode }) {
           data-collapsed={navCollapsed ? "true" : "false"}
         >
           <div className="group-label">{t("nav.workspaceGroup")}</div>
+          {/* Primary create CTA — the single entry point into the unified
+              "Create flow" surface (blank / AI / template). Replaces the
+              old standalone Templates nav entry. Collapses to icon-only in
+              the rail like the other entries. */}
           <NavLink
-            to="/templates"
-            title={t("nav.templates")}
+            to="/flows/new"
+            className="sidebar-new-flow"
+            title={t("flowList.newFlow")}
           >
-            <LayoutTemplate size={18} />
-            <span className="nav-label">{t("nav.templates")}</span>
+            <Plus size={18} />
+            <span className="nav-label">{t("flowList.newFlow")}</span>
           </NavLink>
           <NavLink
             to="/flows"

@@ -301,6 +301,7 @@
     "inTenant": " i organisation <0>{{tenant}}</0>",
     "continueTitle": "Fortsätt där du slutade",
     "intro": "Så, vad bygger vi idag?",
+    "createCta": "Skapa ditt första flöde",
     "featuredTitle": "Se ett flöde köra — med ett klick",
     "featuredDesc": "Öppna startflödet och tryck på Kör. En formaterad sammanfattning visas direkt — inga konton, ingen konfiguration, inget att ansluta. Snabbaste sättet att se hur flöden fungerar.",
     "featuredCta": "Prova det",
@@ -375,6 +376,7 @@
     "emptyBody": "Börja från en färdig mall, eller skapa ett tomt flöde och bygg det själv.",
     "emptyTemplateCta": "Börja från en mall",
     "emptyBlankCta": "Skapa ett tomt flöde",
+    "emptyCreateCta": "Skapa ett flöde",
     "newModalTitle": "Nytt flöde",
     "nameLabel": "Namn",
     "namePlaceholder": "t.ex. Daglig försäljningsrapport",
@@ -1329,6 +1331,14 @@
     "generating": "Bygger ditt flöde…",
     "needConnect": "Anslut Claude eller ChatGPT på <0>Appar-sidan</0> för att använda detta.",
     "empty": "AI kunde inte bygga ett flöde av det — prova att beskriva det annorlunda."
+  },
+  "createFlow": {
+    "title": "Skapa ett flöde",
+    "tabScratch": "Från grunden",
+    "tabTemplate": "Från en mall",
+    "modeLabel": "Hur vill du börja?",
+    "modeBlank": "Tomt flöde",
+    "modeAI": "Beskriv med AI"
   },
   "renderPreview": {
     "assistLabel": "Beskriv ditt mejl — AI skriver det",

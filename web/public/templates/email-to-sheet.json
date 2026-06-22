@@ -1,0 +1,82 @@
+{
+  "id": "email-to-sheet",
+  "version": "1",
+  "name": "Save incoming emails to a Google Sheet",
+  "description": "Checks Gmail every few minutes for new inbox messages and adds each one (sender, subject, date) as a row in a Google Sheet — a tidy log of who emailed you. Narrow the search query to log only what you care about (e.g. invoices or enquiries).",
+  "icon": "mail",
+  "nodes": [
+    {
+      "id": "poll",
+      "module": "poll_trigger",
+      "params": { "interval_seconds": 300 },
+      "position": { "x": -120, "y": 200 }
+    },
+    {
+      "id": "search",
+      "module": "gmail_search_messages",
+      "params": {
+        "query": "newer_than:6m label:inbox",
+        "max_results": 20,
+        "account": "default"
+      },
+      "position": { "x": 200, "y": 200 }
+    },
+    {
+      "id": "fetch",
+      "module": "for_each",
+      "params": {},
+      "position": { "x": 520, "y": 200 }
+    },
+    {
+      "id": "get",
+      "module": "gmail_get_message",
+      "params": { "id": "${item.id}", "account": "default", "format": "metadata" },
+      "position": { "x": 520, "y": 360 }
+    },
+    {
+      "id": "unwrap",
+      "module": "unwrap_results",
+      "params": { "port": "message" },
+      "position": { "x": 840, "y": 200 }
+    },
+    {
+      "id": "flatten",
+      "module": "compute_rows",
+      "params": {
+        "compute": {
+          "from": "row.headers.From",
+          "subject": "row.headers.Subject",
+          "received": "row.headers.Date"
+        }
+      },
+      "position": { "x": 1160, "y": 200 }
+    },
+    {
+      "id": "shape",
+      "module": "map_rows",
+      "params": { "select": ["from", "subject", "received"] },
+      "position": { "x": 1480, "y": 200 }
+    },
+    {
+      "id": "append",
+      "module": "sheets_append_row",
+      "params": {
+        "spreadsheet_id": "REPLACE_WITH_YOUR_SHEET_ID",
+        "range": "Inbox Log",
+        "account": "default"
+      },
+      "position": { "x": 1800, "y": 200 }
+    }
+  ],
+  "edges": [
+    { "from": "search", "from_port": "messages", "to": "fetch", "to_port": "items", "on_error": "" },
+    { "from": "fetch", "from_port": "body", "to": "get", "to_port": "pass", "on_error": "" },
+    { "from": "fetch", "from_port": "results", "to": "unwrap", "to_port": "results", "on_error": "" },
+    { "from": "unwrap", "from_port": "rows", "to": "flatten", "to_port": "rows", "on_error": "" },
+    { "from": "unwrap", "from_port": "headers", "to": "flatten", "to_port": "headers", "on_error": "" },
+    { "from": "flatten", "from_port": "rows", "to": "shape", "to_port": "rows", "on_error": "" },
+    { "from": "flatten", "from_port": "headers", "to": "shape", "to_port": "headers", "on_error": "" },
+    { "from": "shape", "from_port": "rows", "to": "append", "to_port": "rows", "on_error": "" },
+    { "from": "shape", "from_port": "headers", "to": "append", "to_port": "headers", "on_error": "" }
+  ]
+}

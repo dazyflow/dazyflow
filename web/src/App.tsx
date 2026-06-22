@@ -5,7 +5,7 @@ import { AppShell } from "./components/AppShell";
 import { SignIn } from "./pages/SignIn";
 import { SignUp } from "./pages/SignUp";
 import { Welcome } from "./pages/Welcome";
-import { Templates } from "./pages/Templates";
+import { CreateFlow } from "./pages/CreateFlow";
 import { Apps, AppDetail } from "./pages/Apps";
 import { Files } from "./pages/Files";
 import { FlowList } from "./pages/FlowList";
@@ -68,8 +68,16 @@ export function App() {
         <Route path="/" element={<RootRedirect />} />
         <Route path="/welcome" element={<Welcome />} />
         <Route path="/flows" element={<FlowList />} />
+        {/* Static "new" is listed before the :id param route. The unified
+            creation surface (blank / AI / template tabs) lives here. */}
+        <Route path="/flows/new" element={<CreateFlow />} />
         <Route path="/flows/:id" element={<KeyedFlowEditor />} />
-        <Route path="/templates" element={<Templates />} />
+        {/* Templates folded into the create page — keep the old path working
+            for bookmarks/deep-links by redirecting onto the template tab. */}
+        <Route
+          path="/templates"
+          element={<Navigate to="/flows/new?tab=template" replace />}
+        />
         {/* Apps is the integration catalog; /apps/:slug is one app's detail. */}
         <Route path="/apps" element={<Apps />} />
         <Route path="/apps/:slug" element={<AppDetail />} />

@@ -1,0 +1,44 @@
+{
+  "id": "sheet-summary-to-slack",
+  "version": "1",
+  "name": "Daily Google Sheet summary → Slack",
+  "description": "Every morning at 09:00, reads a Google Sheet and posts one Slack line per row so your team starts the day with the latest numbers — no opening the sheet. Edit the schedule, the sheet/tab, and the line format to taste.",
+  "icon": "sheets",
+  "triggers": [
+    { "type": "cron", "cron": "0 9 * * *" }
+  ],
+  "nodes": [
+    {
+      "id": "read",
+      "module": "sheets_read_range",
+      "params": {
+        "spreadsheet_id": "REPLACE_WITH_YOUR_SHEET_ID",
+        "range": "Sheet1",
+        "account": "default"
+      },
+      "position": { "x": 200, "y": 200 }
+    },
+    {
+      "id": "render",
+      "module": "render_text",
+      "params": {
+        "template": "'• ' + row.name + ': ' + string(row.value)",
+        "prefix": "*Today's numbers*\n",
+        "separator": "\n",
+        "empty": "No rows in the sheet today."
+      },
+      "position": { "x": 540, "y": 200 }
+    },
+    {
+      "id": "notify",
+      "module": "slack_send_message",
+      "params": { "channel": "#daily", "account": "default" },
+      "position": { "x": 880, "y": 200 }
+    }
+  ],
+  "edges": [
+    { "from": "read", "from_port": "rows", "to": "render", "to_port": "rows", "on_error": "" },
+    { "from": "read", "from_port": "headers", "to": "render", "to_port": "headers", "on_error": "" },
+    { "from": "render", "from_port": "text", "to": "notify", "to_port": "text", "on_error": "" }
+  ]
+}

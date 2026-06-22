@@ -1,0 +1,32 @@
+{
+  "id": "form-to-sheet",
+  "version": "1",
+  "name": "Web form → Google Sheet",
+  "description": "A hosted contact form (you get a public link) appends every submission as a new row in a Google Sheet — like Google Forms, but the responses land straight in the sheet you choose. Paste your sheet's URL into the Append step and pick the tab.",
+  "icon": "sheets",
+  "nodes": [
+    {
+      "id": "form",
+      "module": "webhook_input",
+      "params": {
+        "public_form": true,
+        "form_fields": ["name", "email", "message"],
+        "form_title": "Get in touch"
+      },
+      "position": { "x": 200, "y": 200 }
+    },
+    {
+      "id": "append",
+      "module": "sheets_append_row",
+      "params": {
+        "spreadsheet_id": "REPLACE_WITH_YOUR_SHEET_ID",
+        "range": "Responses",
+        "account": "default"
+      },
+      "position": { "x": 540, "y": 200 }
+    }
+  ],
+  "edges": [
+    { "from": "form", "from_port": "body", "to": "append", "to_port": "rows", "on_error": "" }
+  ]
+}

@@ -1,8 +1,8 @@
 {
-  "id": "instant-summary",
+  "id": "try-it-now",
   "version": "1",
   "name": "See a flow run",
-  "description": "A built-in sample dataset flows into a Render-text step that turns the rows into a tidy summary. No accounts, no triggers, no configuration — just press Run to see output appear. The ideal first flow.",
+  "description": "A built-in sample table flows into a Render-text step that turns the rows into a tidy summary. No accounts, no triggers, no setup — just press Run to see output appear. The ideal first flow.",
   "icon": "sparkles",
   "nodes": [
     {
@@ -25,6 +25,6 @@
     }
   ],
   "edges": [
-    {"from": "data", "from_port": "out", "to": "summary", "to_port": "rows", "on_error": ""}
+    { "from": "data", "from_port": "out", "to": "summary", "to_port": "rows", "on_error": "" }
   ]
 }

@@ -8780,3 +8780,95 @@ button.files-name:hover {
 .ai-step.done .ai-step-dot { background: var(--accent); color: var(--accent-ink, #fff); border-color: var(--accent); }
 .ai-step.active .ai-step-dot { color: var(--accent); border-color: var(--accent); animation: ai-pulse 1s ease-in-out infinite; }
 @keyframes ai-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+/* ── Create-flow surface ───────────────────────────────────────────────
+   The unified /flows/new page: a primary sidebar CTA, a two-tab page
+   (scratch / template), and the blank-vs-AI mode toggle inside the
+   scratch tab. The template tab reuses the existing .template-* styles. */
+
+/* Sidebar "+ New flow" — the one create CTA, styled as a primary action so
+   it reads above the muted nav links. Overrides the .sidebar a base. */
+.sidebar a.sidebar-new-flow {
+  background: var(--btn);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: var(--glow-accent);
+  margin-bottom: var(--space-2);
+}
+.sidebar a.sidebar-new-flow:hover {
+  background: var(--btn-hover);
+  color: #fff;
+  box-shadow: var(--glow-accent-hover);
+}
+.sidebar a.sidebar-new-flow.active {
+  background: var(--btn-hover);
+  color: #fff;
+}
+
+.create-flow-tabs {
+  display: flex;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--border);
+  margin: var(--space-3) 0 var(--space-5);
+}
+.create-flow-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1h);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: var(--muted);
+  font-size: var(--text-base);
+  font-weight: 500;
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: -1px;
+  cursor: pointer;
+  transition: color 120ms, border-color 120ms;
+}
+.create-flow-tab:hover { color: var(--ink); }
+.create-flow-tab.active {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+}
+
+.create-mode-toggle {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  flex-wrap: wrap;
+}
+.create-mode-option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1h);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms, color 120ms;
+}
+.create-mode-option:hover { border-color: var(--border-strong); }
+.create-mode-option.active {
+  border-color: var(--accent);
+  color: var(--ink);
+  background: var(--surface-2);
+}
+/* The radio input itself is redundant with the highlighted chip — keep it
+   in the DOM for accessibility/keyboard but visually hide it. */
+.create-mode-option input { position: absolute; opacity: 0; width: 0; height: 0; }
+
+.create-flow-card {
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.create-flow-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.welcome-create { margin-top: var(--space-2); }

@@ -12,19 +12,20 @@ import {
 // trialPath.test guards the "fresh user, no admin help" experience.
 // Two things must stay true for the trial to convert:
 //
-//   1. The form-to-store template must remain forkable on day one —
-//      no OAuth provider, no tenant secret. It's the only template
-//      Sarah (the non-technical persona from the walkthrough) can
-//      run before her admin enables anything. If a future commit
-//      adds an `account` param or a ${secret....} reference here,
-//      the test fails and the badge promise is broken.
+//   1. The try-it-now template must remain forkable on day one —
+//      no OAuth provider, no tenant secret. It's the one template
+//      a non-technical persona can run before their admin enables
+//      anything. If a future commit adds an `account` param or a
+//      ${secret....} reference here, the test fails and the
+//      no-setup promise is broken.
 //
-//   2. An OAuth-needing template — Gmail → Slack alert — must
+//   2. An OAuth-needing template — New email → Slack message — must
 //      surface a clear "your administrator needs to enable Google
 //      / Slack" signal when the install has no OAuth. The editor's
 //      pre-run gate relies on this, so the run never silently
 //      dispatches into a doomed setup. (This template references no
-//      tenant secret — the cursor dedupe rides for_each/unwrap_results.)
+//      tenant secret — the poll/for_each/unwrap_results flow carries
+//      everything it needs.)
 //
 // The fixtures are the actual JSON shipped under web/public — load
 // them straight from disk so the test pins behaviour against what
@@ -53,7 +54,7 @@ function loadGraph(file: string): TemplateGraph {
 
 // Stub manifest factory — only the fields requiredConnections /
 // unavailableProviders actually read. We hand-wire the manifests for
-// the two drops the trial-path templates use; that's intentional, so
+// the drops the trial-path templates use; that's intentional, so
 // the test doesn't drift the moment someone tweaks an unrelated
 // manifest field.
 function manifest(
@@ -72,8 +73,8 @@ function manifest(
   };
 }
 
-describe("form-to-store template — zero-setup trial path", () => {
-  const tpl = loadGraph("form-to-store.json");
+describe("try-it-now template — zero-setup trial path", () => {
+  const tpl = loadGraph("try-it-now.json");
 
   it("is in the templates index marked no_setup", () => {
     const index = JSON.parse(
@@ -85,19 +86,19 @@ describe("form-to-store template — zero-setup trial path", () => {
         integrations?: string[];
       }>;
     };
-    const entry = index.templates.find((t) => t.id === "form-to-store");
-    expect(entry, "form-to-store missing from index.json").toBeDefined();
+    const entry = index.templates.find((t) => t.id === "try-it-now");
+    expect(entry, "try-it-now missing from index.json").toBeDefined();
     expect(entry!.no_setup).toBe(true);
     expect(entry!.integrations ?? []).toEqual([]);
   });
 
   it("references no OAuth provider in any node param", () => {
-    // The two drops form-to-store uses are webhook_input + the
-    // built-in store — neither is OAuth-backed. We hand-build their
-    // (minimal) manifests with no `account` param.
+    // The two drops try-it-now uses are the json source + render_text —
+    // neither is OAuth-backed. We hand-build their (minimal) manifests
+    // with no `account` param.
     const manifestByID = new Map<string, Manifest>([
-      ["webhook_input", manifest("webhook_input", undefined, false)],
-      ["builtin_store_append", manifest("builtin_store_append", undefined, false)],
+      ["json", manifest("json", undefined, false)],
+      ["render_text", manifest("render_text", undefined, false)],
     ]);
     const nodes = (tpl.nodes ?? []).map((n) => ({
       id: n.id,
@@ -143,17 +144,20 @@ describe("form-to-store template — zero-setup trial path", () => {
   });
 });
 
-describe("gmail-new-email-to-slack template — admin-blocked path", () => {
-  const tpl = loadGraph("gmail-new-email-to-slack.json");
+describe("email-to-slack template — admin-blocked path", () => {
+  const tpl = loadGraph("email-to-slack.json");
 
-  // The graph uses gmail_search_messages, for_each, compute_rows,
-  // slack_send_message. Only the gmail + slack drops are OAuth-backed
-  // (and both take an `account` param). The rest are pure transforms.
+  // The graph uses poll_trigger, gmail_search_messages, for_each,
+  // gmail_get_message, unwrap_results, render_text, slack_send_message.
+  // Only the gmail + slack drops are OAuth-backed (and both take an
+  // `account` param). The rest are pure transforms / triggers.
   const manifestByID = new Map<string, Manifest>([
+    ["poll_trigger", manifest("poll_trigger", undefined, false)],
     ["gmail_search_messages", manifest("gmail_search_messages", "Gmail", true)],
     ["gmail_get_message", manifest("gmail_get_message", "Gmail", true)],
     ["for_each", manifest("for_each", undefined, false)],
-    ["compute_rows", manifest("compute_rows", undefined, false)],
+    ["unwrap_results", manifest("unwrap_results", undefined, false)],
+    ["render_text", manifest("render_text", undefined, false)],
     ["slack_send_message", manifest("slack_send_message", "Slack", true)],
   ]);
 
@@ -177,11 +181,10 @@ describe("gmail-new-email-to-slack template — admin-blocked path", () => {
 
   it("references no tenant secret, so nothing is admin-blocked on the secret axis", () => {
     const { nodes, paramsByID } = frame();
-    // The template used to dedupe via a ${secret.gmail_cursor} reference, but
-    // the cursor pattern now rides the for_each + unwrap_results flow (no
-    // tenant secret involved), so the graph references no ${secret.…} at all.
-    // With the store off there is therefore nothing to surface here — only the
-    // OAuth providers (google/slack) are admin-blocked (asserted above).
+    // The flow carries everything through poll_trigger + for_each +
+    // unwrap_results — no ${secret.…} reference anywhere. With the store
+    // off there is therefore nothing to surface here; only the OAuth
+    // providers (google/slack) are admin-blocked (asserted above).
     expect(unavailableSecretRefs(nodes, paramsByID, null)).toEqual([]);
   });
 

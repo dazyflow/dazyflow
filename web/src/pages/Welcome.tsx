@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Trans, useTranslation } from "react-i18next";
-import { ArrowRight, Plug, Bell, Clock, Database, Zap } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { ArrowRight, Plug, Plus } from "lucide-react";
 import { FlowIcon } from "../icons";
 import { api } from "../api";
 import { useAuth } from "../auth";
@@ -12,47 +11,11 @@ import { orgDisplayName } from "../lib/orgDisplayName";
 import { ConnectMcpClientModal } from "../components/ConnectMcpClientModal";
 
 // Welcome is the post-signup landing wizard — the "first-run"
-// surface from the T0-3 TODO. Intentionally simple: three CTAs that
-// point at the highest-leverage next actions, plus a confirmation
-// of the tenant the user just got. The full step-by-step walkthrough
-// (templates gallery, guided node-drop tutorial) becomes useful once
-// templates ship; for now this is the right surface for "you're in,
-// here's what you can do."
-// GOALS is the goal-first entry into the gallery: each card names an
-// outcome in the user's words and routes to the matching template
-// category. `category` MUST match the category strings in
-// public/templates/index.json verbatim — that's the join key the
-// Templates page filters on. The developer-focused category isn't
-// in this grid — it sits as a small "More for developers →" link
-// below the goals so a non-technical owner's eye lands on the
-// three relevant cards instead of skipping past four.
-const GOALS: {
-  category: string;
-  titleKey: string;
-  descKey: string;
-  Icon: LucideIcon;
-}[] = [
-  { category: "Get notified", titleKey: "welcome.goalNotifyTitle", descKey: "welcome.goalNotifyDesc", Icon: Bell },
-  { category: "Scheduled reports", titleKey: "welcome.goalReportTitle", descKey: "welcome.goalReportDesc", Icon: Clock },
-  { category: "Spreadsheets & data", titleKey: "welcome.goalDataTitle", descKey: "welcome.goalDataDesc", Icon: Database },
-];
-
-// DEV_CATEGORY is the developer-templates filter, surfaced as a
-// secondary link under the goal grid. Same join key as the GOALS
-// entries above so /templates?category= round-trips correctly.
-const DEV_CATEGORY = "For developer teams";
-
-// QUICKSTART_TEMPLATE is the one zero-setup flow we put front-and-centre
-// above the goal grid. It must produce a visible result on a single Run
-// click with nothing connected — `instant-summary` feeds a built-in
-// sample dataset into a render step and shows the output right in the
-// editor, so a brand-new owner sees a flow *work* before meeting any
-// OAuth/secret wall the goal cards mostly route into. This deep-links
-// straight to that single template via /templates?template=<id> (the
-// focus param the Templates page filters on) so it lands on the card,
-// not buried in a category list. Must match the template `id` in
-// public/templates/index.json.
-const QUICKSTART_TEMPLATE = "instant-summary";
+// surface. Intentionally simple: a confirmation of the tenant the user
+// just got, a resume-where-you-left-off link, and a single primary CTA
+// into the unified Create-flow page (blank / AI / template). All the
+// "pick a goal" branching now lives inside that page's template tab,
+// so Welcome stays a one-decision screen.
 
 // HAS_FLOWS_KEY mirrors App.tsx's RootRedirect signal. We read it
 // to decide between first-time and returning copy: a user who's
@@ -150,48 +113,9 @@ export function Welcome() {
         <p className="welcome-intro">
           {isReturning ? t("welcome.introReturning") : t("welcome.intro")}
         </p>
-        <Link
-          to={`/templates?template=${encodeURIComponent(QUICKSTART_TEMPLATE)}`}
-          className="welcome-featured"
-        >
-          <span className="welcome-featured-icon">
-            <Zap size={18} strokeWidth={2.2} />
-          </span>
-          <span className="welcome-featured-body">
-            <span className="welcome-featured-title">
-              {t("welcome.featuredTitle")}
-            </span>
-            <span className="welcome-featured-desc">
-              {t("welcome.featuredDesc")}
-            </span>
-          </span>
-          <span className="welcome-featured-cta">
-            {t("welcome.featuredCta")}
-            <ArrowRight size={15} />
-          </span>
+        <Link to="/flows/new" className="primary welcome-cta welcome-create">
+          <Plus size={16} /> {t("welcome.createCta")}
         </Link>
-        <div className="welcome-goal-grid">
-          {GOALS.map((g) => (
-            <Link
-              key={g.category}
-              to={`/templates?category=${encodeURIComponent(g.category)}`}
-              className="welcome-goal"
-            >
-              <div className="welcome-goal-head">
-                <span className="welcome-goal-icon">
-                  <g.Icon size={18} strokeWidth={2} />
-                </span>
-                <span className="welcome-goal-title">{t(g.titleKey)}</span>
-              </div>
-              <span className="welcome-goal-desc">{t(g.descKey)}</span>
-            </Link>
-          ))}
-        </div>
-        <div className="welcome-goal-dev">
-          <Link to={`/templates?category=${encodeURIComponent(DEV_CATEGORY)}`}>
-            {t("welcome.goalDevLink")}
-          </Link>
-        </div>
         {me && (
           <div className="welcome-mcp">
             <div className="welcome-mcp-body">

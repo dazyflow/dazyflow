@@ -301,6 +301,7 @@
     "inTenant": " in organization <0>{{tenant}}</0>",
     "continueTitle": "Pick up where you left off",
     "intro": "So, what are we building today?",
+    "createCta": "Create your first flow",
     "featuredTitle": "See a flow run — in one click",
     "featuredDesc": "Open the starter flow and press Run. A formatted summary appears instantly — no accounts, no setup, nothing to connect. The fastest way to see how flows work.",
     "featuredCta": "Try it",
@@ -375,6 +376,7 @@
     "emptyBody": "Start from a ready-made template, or create a blank flow and build it yourself.",
     "emptyTemplateCta": "Start from a template",
     "emptyBlankCta": "Create a blank flow",
+    "emptyCreateCta": "Create a flow",
     "newModalTitle": "New flow",
     "nameLabel": "Name",
     "namePlaceholder": "e.g. Daily sales report",
@@ -1329,6 +1331,14 @@
     "generating": "Building your flow…",
     "needConnect": "Connect Claude or ChatGPT on the <0>Apps page</0> to use this.",
     "empty": "AI couldn't build a flow from that — try describing it differently."
+  },
+  "createFlow": {
+    "title": "Create a flow",
+    "tabScratch": "From scratch",
+    "tabTemplate": "From a template",
+    "modeLabel": "How do you want to start?",
+    "modeBlank": "Blank flow",
+    "modeAI": "Describe with AI"
   },
   "renderPreview": {
     "assistLabel": "Describe your email — AI writes it",
