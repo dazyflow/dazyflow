@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -113,15 +114,26 @@ func flowGenSystemPrompt(catalog string) string {
 		"this catalog. Never invent a step id, a param, or a port that isn't listed.\n\n" +
 		"Rules:\n" +
 		"- Every node.module MUST be an id from the catalog.\n" +
-		"- Put only params the step lists; use ${secret.NAME} for credentials.\n" +
+		"- Put only params the step lists; use ${secret.NAME} for credentials — NEVER paste a real key or token.\n" +
 		"- Wire edges output→input using exact port names; types must be compatible.\n" +
+		"- Satisfy every REQUIRED input (marked ! in the catalog): either wire it, or set a param of the same name.\n" +
 		"- Give each node a short unique id. Keep the flow minimal and correct.\n" +
 		"- TRIGGER: if the request implies a SCHEDULE (\"every morning\", \"daily\", \"each Monday\"), " +
 		"set trigger.type=\"cron\" with the matching 5-field expression. If it starts from an external " +
 		"EVENT (a form submission, an incoming email), DON'T set a cron trigger — instead make the first " +
 		"step the matching trigger node from the catalog (e.g. webhook_input). Otherwise use trigger.type=\"none\".\n" +
 		"- Answer ONLY by calling the emit_flow tool.\n\n" +
-		"CATALOG (id [category]: what it does | params | in→out ports):\n" + catalog
+		"PATTERNS (compose these from catalog steps — they are not single steps):\n" +
+		"- Process a list one item at a time (each email, each row): wire the list into for_each.items; " +
+		"wire for_each.body into the per-item step's input; that step's output is collected on for_each.results; " +
+		"then add unwrap_results {node:<per-item step id>, port:<that step's output port>} to flatten results into rows.\n" +
+		"- gmail_search_messages returns only message IDs on its `messages` port. To get sender/subject/body you " +
+		"MUST fetch each id with gmail_get_message inside a for_each (the loop pattern above).\n" +
+		"- Before sending rows to Slack / SMS / email, turn them into a string with render_text (rows→text). " +
+		"Don't wire raw rows or JSON straight into a text/message field.\n\n" +
+		"MARKERS — params: NAME(type)* = required param. Ports: name[] = a list/table of rows, " +
+		"name* = variadic (accepts multiple wires), name! = a required input you must satisfy.\n\n" +
+		"CATALOG (id [category]: what it does | params | in→out ports | e.g. example params):\n" + catalog
 }
 
 // renderFlowGenerate is POST /api/v1/tools/flow/generate — the non-streaming
@@ -256,6 +268,11 @@ func (h *HTTPGateway) generateFlow(ctx context.Context, provider, key, desc stri
 	userText := "Build a flow for this request:\n" + desc
 	tool := flowGenTool()
 
+	manifestByID := make(map[string]core.Manifest, len(mans))
+	for _, m := range mans {
+		manifestByID[m.ID] = m
+	}
+
 	var best core.Graph
 	var issues []core.LintIssue
 	for attempt := 0; attempt <= maxFlowRepairs; attempt++ {
@@ -286,16 +303,25 @@ func (h *HTTPGateway) generateFlow(ctx context.Context, provider, key, desc stri
 		// and surfaced as a warning rather than silently shipping a trigger
 		// that never fires.
 		cand, issues = finalizeTriggers(cand, tz)
-		lint := core.LintGraph(cand)
-		issues = append(issues, lint...)
+		// Two checks feed the repair loop: the security/placeholder linter
+		// (core.LintGraph) AND the manifest-level structural validator
+		// (unknown modules, nonexistent ports, MIME-incompatible wiring,
+		// unconnected required inputs, fan-in/variadic bounds). The latter is
+		// exactly what the engine runs before execution — running it HERE means
+		// the model's most common mistakes (a guessed port, a mis-wired
+		// for_each) are fed back for repair instead of surfacing as a cryptic
+		// error the first time the user presses Run.
+		checks := core.LintGraph(cand)
+		checks = append(checks, manifestValidationIssues(cand, manifestByID)...)
+		issues = append(issues, checks...)
 		best = cand
-		if !hasLintError(lint) {
+		if !hasLintError(checks) {
 			return best, issues, nil
 		}
 		if attempt == maxFlowRepairs {
 			break
 		}
-		userText = repairPrompt(desc, cand, lint)
+		userText = repairPrompt(desc, cand, checks)
 	}
 	return best, issues, nil
 }
@@ -330,6 +356,32 @@ func finalizeTriggers(g core.Graph, tz string) (core.Graph, []core.LintIssue) {
 	}
 	g.Triggers = kept
 	return g, warns
+}
+
+// manifestValidationIssues runs the SAME manifest-level validator the engine
+// runs before execution (unknown module, nonexistent ports, MIME mismatch,
+// unconnected required inputs, fan-in/variadic bounds) and converts each
+// finding into a repairable LintError so the generate loop can feed it back to
+// the model. Returns nil when no catalog was supplied — manifest validation is
+// impossible without it, and the unit tests exercise the loop with none.
+func manifestValidationIssues(g core.Graph, manifests map[string]core.Manifest) []core.LintIssue {
+	if len(manifests) == 0 {
+		return nil
+	}
+	err := core.ValidateWithManifests(g, manifests)
+	if err == nil {
+		return nil
+	}
+	// errors.Join exposes the individual problems via Unwrap() []error — surface
+	// each as its own issue so the repair prompt lists them one per line.
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		out := make([]core.LintIssue, 0, len(joined.Unwrap()))
+		for _, e := range joined.Unwrap() {
+			out = append(out, core.LintIssue{Code: "invalid_structure", Severity: core.LintError, Message: e.Error()})
+		}
+		return out
+	}
+	return []core.LintIssue{{Code: "invalid_structure", Severity: core.LintError, Message: err.Error()}}
 }
 
 func repairPrompt(desc string, g core.Graph, issues []core.LintIssue) string {
@@ -434,6 +486,9 @@ func compactCatalog(mans []core.Manifest) string {
 		if out := compactPorts(m.Outputs); out != "" {
 			b.WriteString(" | out: " + out)
 		}
+		if ex := compactExample(m.Examples); ex != "" {
+			b.WriteString(" | e.g. " + ex)
+		}
 		rows = append(rows, b.String())
 	}
 	sort.Strings(rows)
@@ -450,10 +505,52 @@ func compactPorts(ports []core.Port) string {
 		if p.Variadic {
 			s += "*"
 		}
+		// Required marks an input the flow MUST satisfy (wire or same-named
+		// param). The model can't see this from the param list alone — many
+		// required values arrive only as a wired input — so surface it here.
+		if p.Required {
+			s += "!"
+		}
 		parts = append(parts, s)
 	}
 	return strings.Join(parts, ",")
 }
+
+// compactExample renders the first worked example's params as a single-line
+// JSON snippet the model can copy and adjust — the richest grounding signal,
+// already mandatory on every manifest at registration. Truncated to keep the
+// catalog token-efficient; empty when the params don't parse.
+func compactExample(exs []core.ParamsExample) string {
+	if len(exs) == 0 || len(exs[0].Params) == 0 {
+		return ""
+	}
+	var v any
+	if err := json.Unmarshal(exs[0].Params, &v); err != nil {
+		return ""
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return ""
+	}
+	// Some manifest examples ship REPLACE_WITH_<X> fill-me markers (sheet IDs,
+	// Drive folder ids). The generate loop's linter treats that exact token as
+	// a hard error, so grounding the model on it would teach it to emit a marker
+	// the same pipeline rejects — wasted repair passes it can never resolve.
+	// Humanize it to a benign "your-x" hint that still signals "fill this in".
+	s := replaceWithMarker.ReplaceAllStringFunc(string(b), func(m string) string {
+		sub := replaceWithMarker.FindStringSubmatch(m)
+		return strings.ToLower(strings.ReplaceAll(sub[1], "_", "-"))
+	})
+	const maxExampleLen = 200
+	if len(s) > maxExampleLen {
+		s = s[:maxExampleLen] + "…"
+	}
+	return s
+}
+
+// replaceWithMarker matches the REPLACE_WITH_<TOKEN> fill-me placeholders that
+// ship inside some manifest examples (mirrors core.lint's pattern).
+var replaceWithMarker = regexp.MustCompile(`REPLACE_WITH_([A-Z0-9_]+)`)
 
 func compactParams(schema json.RawMessage) string {
 	if len(schema) == 0 {
