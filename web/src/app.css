@@ -674,6 +674,11 @@
 .settings-page .settings-card {
   max-width: 520px;
 }
+/* .card carries no margin, so stacked sections would touch. Space each
+   section below the first off the one above it. */
+.settings-page .settings-card + .settings-card {
+  margin-top: var(--space-4);
+}
 .settings-page .sf-field + .sf-field {
   margin-top: var(--space-5);
 }
@@ -4870,6 +4875,9 @@ button.warning:hover:not(:disabled) {
 .admin-advanced-toggle {
   display: flex;
   align-items: center;
+  /* The global button{} rule centers flex content; this is a section
+     header, so pin the chevron + label to the left. */
+  justify-content: flex-start;
   gap: var(--space-2);
   width: 100%;
   margin: var(--space-5) 0 var(--space-3);
