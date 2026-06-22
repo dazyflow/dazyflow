@@ -27,6 +27,7 @@ import type {
 export function Apps() {
   const { t } = useTranslation();
   const { token } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [drops, setDrops] = useState<Manifest[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Connection state, used only to bucket cards into Connected vs
@@ -104,6 +105,24 @@ export function Apps() {
     return { ready, needsSetup, connectedSlugs };
   }, [groups, secrets, providers]);
 
+  // Optional ?category= filter narrows the index to integrations whose
+  // catalog steps carry that drop category. The "Connect Claude or ChatGPT"
+  // entry points deep-link here with ?category=ai so the page opens scoped
+  // to just the AI providers. An empty/absent param shows everything.
+  const categoryFilter = searchParams.get("category");
+  const inCategory = (g: (typeof groups)[number]) =>
+    g.drops.some((d) => d.category === categoryFilter);
+  const filteredReady = categoryFilter ? ready.filter(inCategory) : ready;
+  const filteredNeedsSetup = categoryFilter
+    ? needsSetup.filter(inCategory)
+    : needsSetup;
+  const filterLabel = categoryFilter ? categoryLabel(categoryFilter, t) : "";
+  const clearFilter = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("category");
+    setSearchParams(next, { replace: true });
+  };
+
   if (error) {
     return (
       <div className="page">
@@ -121,25 +140,49 @@ export function Apps() {
     );
   }
 
+  const filterEmpty =
+    categoryFilter &&
+    filteredReady.length === 0 &&
+    filteredNeedsSetup.length === 0;
+
   return (
     <div className="page integrations-page">
       <h1>{t("integrations.title")}</h1>
       <p className="page-sub">{t("integrations.intro")}</p>
-      {ready.length > 0 && (
+      {categoryFilter && (
+        <div className="integrations-filter">
+          <span className="integrations-filter-chip">
+            {t("integrations.filterShowing", { label: filterLabel })}
+            <button
+              type="button"
+              className="integrations-filter-clear"
+              onClick={clearFilter}
+            >
+              {t("integrations.filterClear")}
+            </button>
+          </span>
+        </div>
+      )}
+      {filterEmpty && (
+        <div className="card">
+          {t("integrations.filterEmpty", { label: filterLabel })}
+        </div>
+      )}
+      {filteredReady.length > 0 && (
         <>
           <h2 className="integrations-section-head">{t("integrations.readyHead")}</h2>
           <div className="integration-grid">
-            {ready.map((g) => (
+            {filteredReady.map((g) => (
               <IntegrationCard key={g.slug} {...g} connected={connectedSlugs.has(g.slug)} />
             ))}
           </div>
         </>
       )}
-      {needsSetup.length > 0 && (
+      {filteredNeedsSetup.length > 0 && (
         <>
           <h2 className="integrations-section-head">{t("integrations.needsSetupHead")}</h2>
           <div className="integration-grid">
-            {needsSetup.map((g) => (
+            {filteredNeedsSetup.map((g) => (
               <IntegrationCard key={g.slug} {...g} connected={false} />
             ))}
           </div>
@@ -147,6 +190,14 @@ export function Apps() {
       )}
     </div>
   );
+}
+
+// categoryLabel maps a drop category to a friendly filter label. Only the
+// curated categories get prose; anything else falls back to the raw value
+// (capitalized) so a new category still renders something sensible.
+function categoryLabel(category: string, t: (k: string) => string): string {
+  if (category === "ai") return t("integrations.categoryAi");
+  return category.charAt(0).toUpperCase() + category.slice(1);
 }
 
 // IntegrationCard is one tile in the index grid. `connected` shows a

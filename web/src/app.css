@@ -837,10 +837,6 @@
   background: color-mix(in srgb, var(--accent) 18%, transparent);
   color: var(--accent);
 }
-.vis-badge.org {
-  background: color-mix(in srgb, var(--surface-3) 60%, transparent);
-  color: var(--muted);
-}
 
 /* SignIn */
 .signin-wrap {
@@ -1526,6 +1522,35 @@
   font-size: var(--text-base);
   color: var(--muted);
 }
+/* Active-filter banner: the index is scoped to a category (e.g. arriving
+   from "Connect Claude or ChatGPT"). The pill names the filter and offers
+   a one-click "Show all" to drop it. */
+.integrations-filter {
+  margin: var(--space-3) 0 var(--space-1);
+}
+.integrations-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  font-size: var(--text-sm);
+  color: var(--ink);
+}
+.integrations-filter-clear {
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.integrations-filter-clear:hover {
+  text-decoration: underline;
+  background: none;
+}
 .integration-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -2199,12 +2224,25 @@ button.warning:hover:not(:disabled) {
 /* Proactive "this flow needs a connection" banner on the canvas. Mirrors
    the error/lint banner geometry (absolute, top-anchored) with an accent
    border to read as actionable rather than alarming. */
-.editor-conn-banner {
+/* All editor overlay banners (error, lint, run-needs-setup, publish) live in
+   this one flex column instead of each pinning itself with a magic-number top
+   offset. That way any banner can wrap to multiple lines and the rest still
+   stack cleanly beneath it — no more overlap when several are shown at once. */
+.editor-banner-stack {
   position: absolute;
+  top: 60px;
   left: 12px;
   right: 12px;
   max-width: 700px;
   z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  /* Let canvas taps pass through the gaps / empty area; each banner
+     re-enables pointer-events for its own content. */
+  pointer-events: none;
+}
+.editor-conn-banner {
   /* Let canvas taps pass through the banner's text/padding to the node
      underneath (it overlays the top of the canvas, and on a phone a node
      can sit right under it). Only the action buttons re-enable taps. */
@@ -3339,8 +3377,8 @@ button.warning:hover:not(:disabled) {
   .editor[data-has-selection="true"] .canvas > .react-flow {
     width: calc(100% - var(--inspector-w)) !important;
   }
-  /* Keep the run banner clear of the inspector panel. */
-  .editor[data-has-selection="true"] .editor-conn-banner {
+  /* Keep the banner stack clear of the inspector panel. */
+  .editor[data-has-selection="true"] .editor-banner-stack {
     right: calc(var(--inspector-w) + 12px);
   }
 }
@@ -8918,21 +8956,6 @@ button.files-name:hover {
 }
 /* The lone way out of AI mode (and back): a quiet text link under the card,
    not a competing toggle. */
-.create-flow-switch {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1h);
-  align-self: flex-start;
-  background: none;
-  border: none;
-  padding: var(--space-1) 0;
-  margin-top: var(--space-4);
-  color: var(--muted);
-  font-size: var(--text-sm);
-  cursor: pointer;
-  transition: color 120ms;
-}
-.create-flow-switch:hover { color: var(--ink); }
 
 .create-flow-scratch { display: flex; flex-direction: column; }
 
@@ -9031,6 +9054,56 @@ button.files-name:hover {
   color: var(--muted);
   font-size: var(--text-sm);
   margin: 0;
+}
+/* Callout: shared bordered/tinted notice block (see components/Callout.tsx).
+   The leading icon and accent border/tint make it register as a state to
+   note or act on, unlike a bare muted line. One variant per intent so the
+   colour reads consistently wherever a callout appears. */
+.callout {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  color: var(--ink);
+}
+.callout-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.callout-body {
+  min-width: 0;
+}
+.callout-warning {
+  border-color: color-mix(in srgb, var(--warning) 45%, var(--border));
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+}
+.callout-warning .callout-icon {
+  color: var(--warning);
+}
+.callout-info {
+  border-color: color-mix(in srgb, var(--info) 45%, var(--border));
+  background: color-mix(in srgb, var(--info) 12%, transparent);
+}
+.callout-info .callout-icon {
+  color: var(--info);
+}
+.callout-danger {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+.callout-danger .callout-icon {
+  color: var(--danger);
+}
+.callout-success {
+  border-color: color-mix(in srgb, var(--success) 45%, var(--border));
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+}
+.callout-success .callout-icon {
+  color: var(--success);
 }
 .ai-connect-cta {
   display: inline-flex;

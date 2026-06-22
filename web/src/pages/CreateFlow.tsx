@@ -5,6 +5,7 @@ import { Bell, FilePlus2, LayoutTemplate, Mail, MessageSquare, Sheet, Sparkles }
 import { useAuth } from "../auth";
 import { api } from "../api";
 import { TemplateGallery } from "../components/TemplateGallery";
+import { Callout } from "../components/Callout";
 import type { Graph, Manifest } from "../types";
 
 // GenIssue mirrors core.LintIssue — the heads-up findings the generator
@@ -25,66 +26,73 @@ const AI_STARTERS = [
   { Icon: Bell, text: "Text me when a Stripe payment fails" },
 ];
 
-// CreateFlow is the single surface for starting a new flow. Two tabs:
-//  - "From scratch": name a blank flow, or describe one and let AI draft it.
+type CreateTab = "ai" | "blank" | "template";
+
+// CreateFlow is the single surface for starting a new flow. Three tabs:
+//  - "AI assisted" (default): describe a flow and let AI draft it. AI-first
+//    is the deliberate default — the fastest path for a non-technical user.
+//  - "Blank": name + description, an empty graph opened in the editor.
 //  - "From a template": the pre-built gallery (TemplateGallery), forked in
 //    one click.
 // It replaces the old standalone /templates page and the three competing
 // create buttons that used to live on the Flows list. The active tab is
-// reflected in ?tab=scratch|template so the /templates redirect and any
-// deep-link can open straight onto the gallery.
+// reflected in ?tab=ai|blank|template so the /templates redirect and any
+// deep-link can open straight onto the right surface.
 export function CreateFlow() {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const tab = searchParams.get("tab") === "template" ? "template" : "scratch";
-  const setTab = (next: "scratch" | "template") => {
+  const raw = searchParams.get("tab");
+  const tab: CreateTab =
+    raw === "blank" ? "blank" : raw === "template" ? "template" : "ai";
+  const setTab = (next: CreateTab) => {
     const sp = new URLSearchParams(searchParams);
     sp.set("tab", next);
     setSearchParams(sp, { replace: true });
   };
 
+  const tabs: { key: CreateTab; Icon: typeof Sparkles; label: string }[] = [
+    { key: "ai", Icon: Sparkles, label: t("createFlow.tabAI") },
+    { key: "blank", Icon: FilePlus2, label: t("createFlow.tabBlank") },
+    { key: "template", Icon: LayoutTemplate, label: t("createFlow.tabTemplate") },
+  ];
+
   return (
     <div className="page create-flow">
       <h1>{t("createFlow.title")}</h1>
       <div className="create-flow-tabs" role="tablist">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "scratch"}
-          className={"create-flow-tab" + (tab === "scratch" ? " active" : "")}
-          onClick={() => setTab("scratch")}
-        >
-          <FilePlus2 size={16} />
-          {t("createFlow.tabScratch")}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "template"}
-          className={"create-flow-tab" + (tab === "template" ? " active" : "")}
-          onClick={() => setTab("template")}
-        >
-          <LayoutTemplate size={16} />
-          {t("createFlow.tabTemplate")}
-        </button>
+        {tabs.map(({ key, Icon, label }) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={tab === key}
+            className={"create-flow-tab" + (tab === key ? " active" : "")}
+            onClick={() => setTab(key)}
+          >
+            <Icon size={16} />
+            {label}
+          </button>
+        ))}
       </div>
-      {tab === "scratch" ? <FromScratch /> : <TemplateGallery />}
+      {tab === "template" ? <TemplateGallery /> : <FromScratch mode={tab} />}
     </div>
   );
 }
 
-// FromScratch holds the blank-vs-AI creation form. "Blank" saves an empty
-// graph and opens the editor; "AI" streams a draft from the server (same
-// grounded+validated path the old modal used) and opens it for review —
-// nothing is run either way.
-function FromScratch() {
+// FromScratch holds the blank-vs-AI creation form, driven by the `mode` the
+// parent tab selects. "blank" saves an empty graph and opens the editor; "ai"
+// streams a draft from the server (same grounded+validated path the old modal
+// used) and opens it for review — nothing is run either way.
+function FromScratch({ mode }: { mode: "ai" | "blank" }) {
   const { t } = useTranslation();
   const { token, me, activeTenant, activeWorkspace, hasPerm } = useAuth();
   const canEdit = hasPerm("graph:edit");
+  // Connecting an AI provider needs secret:write. A member who can edit
+  // flows but can't connect apps would otherwise be sent to a dead-end
+  // ("ask an admin"), so for them we show an informational hint instead of
+  // the Connect CTA.
+  const canConnect = hasPerm("secret:write");
   const navigate = useNavigate();
-  // AI-first: a non-techy user's fastest path is "describe it, we build it",
-  // so that's the default. "Build it myself" stays one click away.
-  const [mode, setMode] = useState<"blank" | "ai">("ai");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [busy, setBusy] = useState(false);
@@ -452,17 +460,31 @@ function FromScratch() {
               error — show a friendly Connect CTA (same shape as the node
               "Connect X" buttons) in place of the disabled Generate button,
               so there aren't two competing primary actions. */}
-          {needConnect && <p className="ai-connect-hint">{t("createAI.connectHint")}</p>}
+          {needConnect &&
+            (canConnect ? (
+              <p className="ai-connect-hint">{t("createAI.connectHint")}</p>
+            ) : (
+              // No permission to connect: a warning callout makes the
+              // "ask an admin" message register as a blocked state rather
+              // than easily-missed muted text.
+              <Callout variant="warning">{t("createAI.connectHintNoPerm")}</Callout>
+            ))}
           <div className="create-flow-actions">
             {needConnect ? (
-              <button
-                type="button"
-                className="primary ai-connect-cta"
-                onClick={() => navigate("/apps")}
-              >
-                <Sparkles size={14} />
-                {t("createAI.connectCta")}
-              </button>
+              // Only offer the Connect CTA to members who can actually
+              // connect (secret:write). Others got the "ask an admin" hint
+              // above; sending them to /apps would dead-end on a form they
+              // can't use.
+              canConnect && (
+                <button
+                  type="button"
+                  className="primary ai-connect-cta"
+                  onClick={() => navigate("/apps?category=ai")}
+                >
+                  <Sparkles size={14} />
+                  {t("createAI.connectCta")}
+                </button>
+              )
             ) : (
               <button
                 type="submit"
@@ -477,25 +499,6 @@ function FromScratch() {
           </div>
         </form>
       )}
-      {/* The other start path stays one quiet click away — no toggle chrome up
-          top, just a link that flips between describe-it and build-it-yourself. */}
-      <button
-        type="button"
-        className="create-flow-switch"
-        onClick={() => setMode(mode === "ai" ? "blank" : "ai")}
-      >
-        {mode === "ai" ? (
-          <>
-            <FilePlus2 size={14} />
-            {t("createFlow.modeBlank")}
-          </>
-        ) : (
-          <>
-            <Sparkles size={14} />
-            {t("createFlow.modeAI")}
-          </>
-        )}
-      </button>
     </div>
   );
 }

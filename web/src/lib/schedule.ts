@@ -1,4 +1,4 @@
-import { formatDateTime } from "./datetime";
+import { formatClock, formatDateTime } from "./datetime";
 import type { ScheduleEntry } from "../types";
 
 type TFunc = (k: string, o?: Record<string, unknown>) => string;
@@ -15,10 +15,44 @@ export function describeSchedule(s: ScheduleEntry, t: TFunc): string {
   return t("schedules.everySeconds", { count: secs });
 }
 
-// formatNextRun renders an RFC3339 UTC instant in the viewer's local time.
-// next_fires are UTC, so a cron authored in another timezone still shows
-// in the reader's own clock.
-export function formatNextRun(iso: string): string {
+// sameLocalDay reports whether two instants fall on the same calendar day
+// in the viewer's local timezone.
+function sameLocalDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+// formatNextRun renders an RFC3339 UTC instant in the viewer's local time,
+// but leans on relative phrasing when it reads more naturally: "in N minutes"
+// when under an hour away, "Today HH:MM" / "Tomorrow HH:MM" for the next two
+// calendar days, and the full "YYYY-MM-DD HH:MM" only further out. next_fires
+// are UTC, so a cron authored in another timezone still shows in local time.
+export function formatNextRun(iso: string, t: TFunc): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return formatDateTime(iso);
+
+  const now = new Date();
+  const diffMs = d.getTime() - now.getTime();
+
+  // Under an hour out: count down in minutes. mins<1 means it's seconds away;
+  // the <60 guard keeps a value that rounds up to 60 from reading "in 60
+  // minutes" — it falls through to the Today branch instead.
+  const mins = Math.round(diffMs / 60000);
+  if (diffMs >= 0 && mins < 60) {
+    if (mins < 1) return t("schedules.relSoon");
+    return t("schedules.relInMinutes", { count: mins });
+  }
+
+  const time = formatClock(d);
+  if (sameLocalDay(d, now)) return t("schedules.relToday", { time });
+
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+  if (sameLocalDay(d, tomorrow)) return t("schedules.relTomorrow", { time });
+
   return formatDateTime(iso);
 }
 

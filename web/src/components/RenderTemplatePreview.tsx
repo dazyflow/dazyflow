@@ -235,7 +235,7 @@ export function RenderTemplatePreview({
         </div>
         {needConnect ? (
           <div className="rtp-warn">
-            <Trans i18nKey="renderPreview.needConnect" components={[<Link to="/apps" />]} />
+            <Trans i18nKey="renderPreview.needConnect" components={[<Link to="/apps?category=ai" />]} />
           </div>
         ) : assistErr ? (
           <div className="rtp-warn">{assistErr}</div>

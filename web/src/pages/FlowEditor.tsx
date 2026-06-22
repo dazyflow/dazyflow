@@ -3958,30 +3958,26 @@ function EditorInner() {
               </button>
             </div>
           )}
+        {/* All overlay banners share one flex column (.editor-banner-stack)
+            so they stack without magic-number top offsets — any banner can
+            wrap to multiple lines without overlapping the next. */}
+        <div className="editor-banner-stack">
         {error && (
           <div
             role="alert"
             style={{
-              // Pinned below the 48px toolbar so it never covers the
-              // Save/Run actions, and above the pipeline-log strip at the
-              // bottom. z-index keeps it over ReactFlow controls + mini-map.
-              position: "absolute",
-              top: 60,
-              left: 12,
-              right: 12,
               background: "var(--surface)",
               border: "1px solid var(--danger)",
               color: "var(--danger)",
               padding: "10px 14px",
               borderRadius: "var(--r-2)",
               fontSize: "var(--text-md)",
-              maxWidth: 700,
-              zIndex: 10,
               boxShadow: "0 2px 8px color-mix(in srgb, var(--danger) 25%, transparent)",
               display: "flex",
               alignItems: "flex-start",
               justifyContent: "space-between",
               gap: 8,
+              pointerEvents: "auto",
             }}
           >
             <span style={{ flex: 1 }}>{error}</span>
@@ -3999,21 +3995,14 @@ function EditorInner() {
         {lintIssues.length > 0 && (
           <div
             style={{
-              // Below the toolbar; stacks under the error banner when both
-              // are present. Never behind the pipeline-log strip.
-              position: "absolute",
-              top: error ? 128 : 60,
-              left: 12,
-              right: 12,
               background: "var(--surface)",
               border: "1px solid var(--warn, #d4a017)",
               padding: "10px 14px",
               borderRadius: "var(--r-2)",
               fontSize: "var(--text-md)",
-              maxWidth: 700,
               color: "var(--ink)",
-              zIndex: 10,
               boxShadow: "0 2px 8px color-mix(in srgb, var(--warn, #d4a017) 25%, transparent)",
+              pointerEvents: "auto",
             }}
             role="alert"
           >
@@ -4044,17 +4033,7 @@ function EditorInner() {
           </div>
         )}
         {!connBannerDismissed && needsSetup && (
-          <div
-            className="editor-conn-banner"
-            style={{
-              // Below the 48px toolbar; stacks under the error/lint banners.
-              top:
-                60 +
-                (error ? 68 : 0) +
-                (lintIssues.length > 0 ? 68 : 0),
-            }}
-            role="alert"
-          >
+          <div className="editor-conn-banner" role="alert">
             <span className="editor-conn-banner-text">
               {userFixableSetup && (
                 <span className="editor-conn-banner-needs">
@@ -4163,17 +4142,7 @@ function EditorInner() {
           !publishInfo.published &&
           triggers.length > 0 &&
           hasPerm("graph:admin") && (
-            <div
-              className="editor-conn-banner"
-              style={{
-                top:
-                  60 +
-                  (error ? 68 : 0) +
-                  (lintIssues.length > 0 ? 68 : 0) +
-                  (!connBannerDismissed && needsSetup ? 68 : 0),
-              }}
-              role="status"
-            >
+            <div className="editor-conn-banner" role="status">
               <span className="editor-conn-banner-text">
                 {t("editor.publishNudge")}
               </span>
@@ -4189,6 +4158,7 @@ function EditorInner() {
               </span>
             </div>
           )}
+        </div>
       </div>
       <div className="inspector">
         <Inspector

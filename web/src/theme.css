@@ -40,6 +40,8 @@
 
   --danger: var(--status-failed);
   --success: var(--status-completed);
+  --warning: var(--status-warning);
+  --info: var(--accent);
 
   /* React Flow canvas dot-grid colour (faint light dots on the
      near-black canvas). Themed so light mode can flip it to dark. */

@@ -1,15 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Plus, Workflow, Lock, Globe, Clock, Pause, Play } from "lucide-react";
+import { Plus, Workflow, Lock, Clock, Pause, Play } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import { FlowIcon, isBrandedIcon } from "../icons";
 import { FlowStatusChip } from "../components/FlowStatusChip";
 import { isImageIcon } from "../lib/iconImage";
-import { shouldShowTenantID } from "../lib/visibleTenant";
 import {
-  describeSchedule,
   formatNextRun,
   summarizeFlowSchedule,
   type FlowSchedule,
@@ -26,7 +24,7 @@ const HAS_FLOWS_KEY = "dazyflow.hasFlows";
 
 export function FlowList() {
   const { t } = useTranslation();
-  const { token, me, tenants, activeTenant, activeWorkspace, hasPerm } = useAuth();
+  const { token, me, activeTenant, activeWorkspace, hasPerm } = useAuth();
   // Creating a flow needs graph:edit; viewers can browse + open flows but
   // not create. Disable the create CTAs (with a tooltip) so they don't
   // click into a server "missing graph:edit" error. Browsing templates
@@ -139,12 +137,6 @@ export function FlowList() {
       <div className="page-title">
         <div>
           <h1>{t("flowList.title")}</h1>
-          {/* Org name only as context, and only when the user belongs to
-              more than one org. One workspace per org, so no workspace is
-              shown — a lone "main" was pure noise. */}
-          {shouldShowTenantID(me, tenants.length) && (
-            <div className="sub">{activeTenant || me?.tenant}</div>
-          )}
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button
@@ -206,7 +198,10 @@ export function FlowList() {
                   {f.run_status && (
                     <FlowStatusChip status={f.run_status} size="sm" />
                   )}
-                  {isPrivate ? (
+                  {/* Visibility badge is shown only for private flows; an
+                      org-visible flow is the default, so an "Org" chip on
+                      every other card was pure noise. Absence = shared. */}
+                  {isPrivate && (
                     <span
                       className="vis-badge private"
                       title={
@@ -219,14 +214,6 @@ export function FlowList() {
                     >
                       <Lock size={11} />
                       {t("common.private")}
-                    </span>
-                  ) : (
-                    <span
-                      className="vis-badge org"
-                      title={t("flowList.orgTooltip")}
-                    >
-                      <Globe size={11} />
-                      {t("common.org")}
                     </span>
                   )}
                 </div>
@@ -246,7 +233,7 @@ export function FlowList() {
                     {f.description}
                   </div>
                 )}
-                {f.owner && (
+                {f.owner && !ownedByMe && (
                   <div className="meta" style={{ color: "var(--muted)" }}>
                     {t("flowList.createdBy", { owner: f.owner })}
                   </div>
@@ -277,7 +264,6 @@ function FlowScheduleChip({
   onToggle: () => void;
 }) {
   const { t } = useTranslation();
-  const cadence = describeSchedule(sum.entries[0], t);
   let statusText: string;
   let resume = false;
   let showToggle = false;
@@ -285,7 +271,7 @@ function FlowScheduleChip({
     statusText = t("schedules.flowPaused");
   } else if (sum.active) {
     statusText = sum.nextRun
-      ? t("flowList.nextRun", { when: formatNextRun(sum.nextRun) })
+      ? t("flowList.nextRun", { when: formatNextRun(sum.nextRun, t) })
       : t("schedules.never");
     showToggle = canEdit;
   } else {
@@ -296,7 +282,6 @@ function FlowScheduleChip({
   return (
     <div className={"flow-schedule" + (sum.active ? "" : " is-paused")}>
       <Clock size={12} className="flow-schedule-icon" />
-      <span className="flow-schedule-cadence">{cadence}</span>
       <span className="flow-schedule-status">{statusText}</span>
       {showToggle && (
         <button

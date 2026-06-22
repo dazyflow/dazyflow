@@ -54,7 +54,6 @@
     "cancel": "Cancel",
     "delete": "Delete",
     "private": "Private",
-    "org": "Org",
     "unknownParen": "(unknown)",
     "dismiss": "Dismiss",
     "secretStored": "(hidden)",
@@ -387,7 +386,6 @@
     "createCta": "Create flow",
     "privateOwnedByYou": "Private — only you can see this flow",
     "privateOwnedBy": "Private — owned by {{owner}}",
-    "orgTooltip": "Visible to everyone in this workspace",
     "createdBy": "Created by {{owner}}",
     "needEdit": "You need edit access to create flows.",
     "nextRun": "Next run {{when}}"
@@ -523,6 +521,10 @@
     "readyHead": "Ready to use",
     "needsSetupHead": "Needs setup",
     "connectedTip": "Connected",
+    "filterShowing": "Showing {{label}} apps",
+    "filterClear": "Show all",
+    "filterEmpty": "No {{label}} apps are available.",
+    "categoryAi": "AI",
     "backAll": "← All apps",
     "noDrops": "No steps registered for this integration.",
     "officialDocs": "Official documentation ↗",
@@ -1066,7 +1068,12 @@
     "never": "never fires",
     "everyHours": "every {{count}}h",
     "everyMinutes": "every {{count}}m",
-    "everySeconds": "every {{count}}s"
+    "everySeconds": "every {{count}}s",
+    "relToday": "Today {{time}}",
+    "relTomorrow": "Tomorrow {{time}}",
+    "relSoon": "in less than a minute",
+    "relInMinutes_one": "in {{count}} minute",
+    "relInMinutes_other": "in {{count}} minutes"
   },
   "runDetail": {
     "loading": "Loading run…",
@@ -1329,14 +1336,14 @@
     "generating": "Building your flow…",
     "connectCta": "Connect Claude or ChatGPT",
     "connectHint": "AI flow building needs a connected AI provider.",
+    "connectHintNoPerm": "AI flow building needs a connected AI provider — ask an admin to connect Claude or ChatGPT.",
     "empty": "AI couldn't build a flow from that — try describing it differently."
   },
   "createFlow": {
     "title": "Create a flow",
-    "tabScratch": "From scratch",
+    "tabAI": "AI assisted",
+    "tabBlank": "Blank",
     "tabTemplate": "From a template",
-    "modeBlank": "Build it myself",
-    "modeAI": "Describe it with AI",
     "draftReadyTitle": "Your draft is ready",
     "draftReadyBody": "Check the items below, then open it — nothing runs yet.",
     "whatItDoes": "What this flow does",
