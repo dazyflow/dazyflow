@@ -8825,7 +8825,7 @@ button.files-name:hover {
   width: 100%;
   font-size: var(--text-base);
   line-height: 1.5;
-  padding: var(--space-3);
+  padding: var(--space-3) var(--space-4);
   resize: vertical;
 }
 /* The lone way out of AI mode (and back): a quiet text link under the card,
@@ -8838,7 +8838,7 @@ button.files-name:hover {
   background: none;
   border: none;
   padding: var(--space-1) 0;
-  margin-top: var(--space-3);
+  margin-top: var(--space-4);
   color: var(--muted);
   font-size: var(--text-sm);
   cursor: pointer;
@@ -8852,7 +8852,10 @@ button.files-name:hover {
   max-width: 560px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-4);
+  /* Roomier than a stock .card — this is the page's focal surface, so give it
+     breathing space rather than the dense default padding. */
+  padding: var(--space-5);
 }
 .create-flow-actions {
   display: flex;
@@ -8890,7 +8893,7 @@ button.files-name:hover {
 .ai-starters-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1h);
+  gap: var(--space-2);
 }
 .ai-starter {
   display: flex;
@@ -8898,7 +8901,7 @@ button.files-name:hover {
   gap: var(--space-2h);
   width: 100%;
   text-align: left;
-  padding: var(--space-2) var(--space-2h);
+  padding: var(--space-2h) var(--space-3);
   background: transparent;
   border: 1px solid var(--border);
   border-radius: var(--r-2);
@@ -8923,6 +8926,21 @@ button.files-name:hover {
   color: var(--accent);
 }
 .ai-starter-text { flex: 1; line-height: 1.4; }
+
+/* "No AI provider yet" onboarding: a muted hint + a Connect CTA that mirrors
+   the node "Connect X" buttons (icon + label), not a red error card. The
+   button rides the shared .primary styling; this just aligns the glyph. */
+.ai-connect-hint {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  margin: 0;
+}
+.ai-connect-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.ai-connect-cta svg { width: 15px; height: 15px; }
 
 /* Friendly two-line draft issues: plain-language headline + raw detail. */
 .create-draft-issue { display: flex; flex-direction: column; gap: 2px; }

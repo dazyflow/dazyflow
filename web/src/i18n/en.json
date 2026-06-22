@@ -1327,7 +1327,8 @@
     "providerLabel": "AI provider",
     "generate": "Generate flow",
     "generating": "Building your flow…",
-    "needConnect": "Connect Claude or ChatGPT on the <0>Apps page</0> to use this.",
+    "connectCta": "Connect Claude or ChatGPT",
+    "connectHint": "AI flow building needs a connected AI provider.",
     "empty": "AI couldn't build a flow from that — try describing it differently."
   },
   "createFlow": {

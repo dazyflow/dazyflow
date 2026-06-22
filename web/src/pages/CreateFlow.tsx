@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Trans, useTranslation } from "react-i18next";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Bell, FilePlus2, LayoutTemplate, Mail, MessageSquare, Sheet, Sparkles } from "lucide-react";
 import { useAuth } from "../auth";
 import { api } from "../api";
@@ -447,22 +447,33 @@ function FromScratch() {
               })}
             </ul>
           )}
-          {needConnect && (
-            <div className="card" style={{ color: "var(--danger)" }}>
-              <Trans i18nKey="createAI.needConnect" components={[<Link to="/apps" />]} />
-            </div>
-          )}
           {err && <div className="card" style={{ color: "var(--danger)" }}>{err}</div>}
+          {/* No AI provider connected yet: this is first-run onboarding, not an
+              error — show a friendly Connect CTA (same shape as the node
+              "Connect X" buttons) in place of the disabled Generate button,
+              so there aren't two competing primary actions. */}
+          {needConnect && <p className="ai-connect-hint">{t("createAI.connectHint")}</p>}
           <div className="create-flow-actions">
-            <button
-              type="submit"
-              className="primary"
-              disabled={busy || aiDesc.trim() === "" || needConnect || !canEdit}
-              title={!canEdit ? t("flowList.needEdit") : undefined}
-            >
-              <Sparkles size={14} style={{ marginRight: 6 }} />
-              {busy ? t("createAI.generating") : t("createAI.generate")}
-            </button>
+            {needConnect ? (
+              <button
+                type="button"
+                className="primary ai-connect-cta"
+                onClick={() => navigate("/apps")}
+              >
+                <Sparkles size={14} />
+                {t("createAI.connectCta")}
+              </button>
+            ) : (
+              <button
+                type="submit"
+                className="primary"
+                disabled={busy || aiDesc.trim() === "" || !canEdit}
+                title={!canEdit ? t("flowList.needEdit") : undefined}
+              >
+                <Sparkles size={14} style={{ marginRight: 6 }} />
+                {busy ? t("createAI.generating") : t("createAI.generate")}
+              </button>
+            )}
           </div>
         </form>
       )}

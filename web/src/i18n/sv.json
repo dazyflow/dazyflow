@@ -1327,7 +1327,8 @@
     "providerLabel": "AI-leverantör",
     "generate": "Generera flöde",
     "generating": "Bygger ditt flöde…",
-    "needConnect": "Anslut Claude eller ChatGPT på <0>Appar-sidan</0> för att använda detta.",
+    "connectCta": "Anslut Claude eller ChatGPT",
+    "connectHint": "AI-flödesbygge kräver en ansluten AI-leverantör.",
     "empty": "AI kunde inte bygga ett flöde av det — prova att beskriva det annorlunda."
   },
   "createFlow": {
