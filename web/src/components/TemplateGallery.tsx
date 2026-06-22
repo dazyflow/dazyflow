@@ -262,11 +262,6 @@ export function TemplateGallery() {
                       <Icon size={18} strokeWidth={2.2} />
                     </span>
                     <h3>{tpl.title}</h3>
-                    {tpl.no_setup && (
-                      <span className="template-no-setup-badge">
-                        {t("templates.noSetupBadge")}
-                      </span>
-                    )}
                   </div>
                   {tpl.integrations && tpl.integrations.length > 0 && (
                     <TemplateIntegrationRow slugs={tpl.integrations} />

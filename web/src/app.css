@@ -1590,21 +1590,6 @@
    to the title — small enough to read as a tag, prominent enough
    that a non-tech user can scan the gallery and spot the cards
    they can actually use today without contacting their admin. */
-.template-no-setup-badge {
-  display: inline-flex;
-  align-items: center;
-  margin-left: auto;
-  padding: var(--space-0) var(--space-2);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--success, #4ade80) 18%, transparent);
-  color: var(--success, #4ade80);
-  font-size: var(--text-2xs);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
 .connections-banner {
   display: flex;
   align-items: center;
@@ -8899,21 +8884,45 @@ button.files-name:hover {
 .create-draft-issue.error { border-left-color: var(--danger); }
 .create-draft-issue.warn { border-left-color: var(--warning, #d97706); }
 
-/* AI describe-box example starters — the non-techy on-ramp, shown as quiet
-   clickable chips directly under the prompt (no label needed). */
-.ai-starters-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.ai-starter-chip {
+/* AI describe-box example starters — the non-techy on-ramp, shown as clean
+   icon-led suggestion rows directly under the prompt (no label needed).
+   Clicking a row fills the describe box. */
+.ai-starters-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1h);
+}
+.ai-starter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2h);
+  width: 100%;
   text-align: left;
-  font-size: var(--text-sm);
-  color: var(--ink);
-  background: var(--surface-2);
+  padding: var(--space-2) var(--space-2h);
+  background: transparent;
   border: 1px solid var(--border);
   border-radius: var(--r-2);
-  padding: var(--space-1h) var(--space-2h);
+  color: var(--ink);
+  font-size: var(--text-sm);
   cursor: pointer;
   transition: background 120ms, border-color 120ms;
 }
-.ai-starter-chip:hover { background: var(--surface-3); border-color: var(--border-strong); }
+.ai-starter:hover {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+}
+.ai-starter-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-1);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+.ai-starter-text { flex: 1; line-height: 1.4; }
 
 /* Friendly two-line draft issues: plain-language headline + raw detail. */
 .create-draft-issue { display: flex; flex-direction: column; gap: 2px; }

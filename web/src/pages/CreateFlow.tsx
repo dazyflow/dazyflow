@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Trans, useTranslation } from "react-i18next";
-import { FilePlus2, LayoutTemplate, Sparkles } from "lucide-react";
+import { Bell, FilePlus2, LayoutTemplate, Mail, MessageSquare, Sheet, Sparkles } from "lucide-react";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import { TemplateGallery } from "../components/TemplateGallery";
@@ -15,12 +15,14 @@ type GenIssue = { code: string; severity: string; message: string; node_ids?: st
 
 // AI_STARTERS seed the describe box with plain-English examples so a first-time,
 // non-technical user isn't staring at a blank field wondering what to type. Each
-// maps to a flow the catalog can actually build (Sheets / Gmail / Slack / Stripe).
+// maps to a flow the catalog can actually build (Sheets / Gmail / Slack / Stripe)
+// and carries a glyph so the suggestion list reads as polished rows, not raw
+// pills. Clicking a row drops its text straight into the describe box.
 const AI_STARTERS = [
-  "Every weekday at 8am, email me a summary of my Google Sheet",
-  "Post new contact form submissions to my Slack #leads channel",
-  "Save new Gmail emails to a Google Sheet",
-  "Text me when a Stripe payment fails",
+  { Icon: Mail, text: "Every weekday at 8am, email me a summary of my Google Sheet" },
+  { Icon: MessageSquare, text: "Post new contact form submissions to my Slack #leads channel" },
+  { Icon: Sheet, text: "Save new Gmail emails to a Google Sheet" },
+  { Icon: Bell, text: "Text me when a Stripe payment fails" },
 ];
 
 // CreateFlow is the single surface for starting a new flow. Two tabs:
@@ -391,15 +393,18 @@ function FromScratch() {
           {/* Example prompts: a non-techy user's on-ramp. Shown until they've
               typed something or generation has started; clicking fills the box. */}
           {!busy && steps.length === 0 && aiDesc.trim() === "" && (
-            <div className="ai-starters-chips">
-              {AI_STARTERS.map((s) => (
+            <div className="ai-starters-list">
+              {AI_STARTERS.map(({ Icon, text }) => (
                 <button
-                  key={s}
+                  key={text}
                   type="button"
-                  className="ai-starter-chip"
-                  onClick={() => setAiDesc(s)}
+                  className="ai-starter"
+                  onClick={() => setAiDesc(text)}
                 >
-                  {s}
+                  <span className="ai-starter-icon">
+                    <Icon size={16} strokeWidth={2} />
+                  </span>
+                  <span className="ai-starter-text">{text}</span>
                 </button>
               ))}
             </div>
