@@ -34,9 +34,15 @@ import { AcceptInvite } from "./pages/AcceptInvite";
 import { UploadsProvider } from "./uploads";
 
 export function App() {
-  const { token, loading } = useAuth();
-  if (loading && !token) return <div />;
+  const { token } = useAuth();
   if (!token) {
+    // Render the unauthenticated routes even while auth is "loading". A
+    // sign-in / sign-up / TOTP attempt sets loading=true with no token yet,
+    // so blanking the tree here would unmount <SignIn> mid-request — wiping
+    // its local state (the TOTP code step never appears) and re-running its
+    // mount effects (a just-set "wrong password" error gets cleared). The
+    // bootstrap "validating a stored token" case is loading && token, which
+    // already renders the authenticated tree below.
     // Unauthenticated: signin/signup are reachable as deep-links;
     // /invite/<token> renders the public invite landing (the recipient
     // can read who invited them before signing in). Anything else
