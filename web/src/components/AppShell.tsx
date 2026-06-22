@@ -243,11 +243,12 @@ export function AppShell({ children }: { children: ReactNode }) {
     window.addEventListener(FLOWS_CHANGED_EVENT, onChanged);
     return () => window.removeEventListener(FLOWS_CHANGED_EVENT, onChanged);
   }, [refreshFlows]);
-  // Editor pages need a full-bleed canvas — remove the main padding.
-  // Editor pages need a full-bleed canvas. Match either the canonical
-  // /flows/:id or the legacy /pipelines/:id path so an incoming legacy
-  // link still gets the right layout during the one-render redirect.
-  const inEditor = /^\/(flows|pipelines)\/[^/]+/.test(location.pathname);
+  // Editor pages need a full-bleed canvas — remove the main padding. Match the
+  // canonical /flows/:id or the legacy /pipelines/:id path so an incoming
+  // legacy link still gets the right layout during the one-render redirect.
+  // EXCLUDE /flows/new — that's the Create-flow page, a normal padded page, not
+  // an editor canvas (without the exclusion it matches :id and loses its margins).
+  const inEditor = /^\/(flows|pipelines)\/(?!new(?:$|\/))[^/]+/.test(location.pathname);
   const showAdmin =
     hasPerm("organization:admin") || hasPerm("graph:admin");
 
