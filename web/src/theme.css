@@ -281,6 +281,16 @@ body {
   stroke: var(--canvas-grid-major);
 }
 
+/* Hide the canvas grid on small and medium screens (below the large
+   breakpoint) — the graph-paper lines add clutter without aiding layout
+   when there's little room to pan, so only large screens show the grid. */
+@media (max-width: 1024px) {
+  .react-flow__background.dz-grid-fine,
+  .react-flow__background.dz-grid-major {
+    display: none;
+  }
+}
+
 a {
   color: var(--accent);
   text-decoration: none;
