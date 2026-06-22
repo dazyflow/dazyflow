@@ -1233,35 +1233,6 @@
   border: 1px solid var(--border);
   border-radius: var(--r-2);
 }
-/* Connections hub: tab strip above the merged Apps / Secrets panes. */
-.connections-tabs {
-  display: inline-flex;
-  gap: var(--space-1);
-  padding: 3px;
-  margin-bottom: var(--space-4);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--r-2);
-}
-.connections-tab {
-  display: inline-flex;
-  align-items: center;
-  background: none;
-  border: none;
-  color: var(--muted);
-  font-size: var(--text-md);
-  padding: 4px var(--space-3);
-  border-radius: var(--r-1);
-  cursor: pointer;
-}
-.connections-tab:hover:not(.active) {
-  color: var(--ink);
-}
-.connections-tab.active {
-  background: var(--surface-3);
-  color: var(--ink);
-}
-
 .mcp-os-tab {
   display: inline-flex;
   align-items: center;
@@ -6490,6 +6461,17 @@ button.warning:hover:not(:disabled) {
   padding: var(--space-5);
   overflow-y: auto;
   flex: 1;
+}
+/* Admin → Secrets reuses the .settings-tabs underline bar on a full page
+   (not in a modal): align the tabs flush with the page title and give the
+   body its own breathing room instead of the modal's padding. */
+.admin-secrets-tabs {
+  padding-left: 0;
+  padding-right: 0;
+  margin-top: var(--space-4);
+}
+.admin-secrets-body {
+  padding-top: var(--space-4);
 }
 /* ConfirmModal (components/ConfirmModal.tsx): a compact themed
    replacement for window.confirm(). */

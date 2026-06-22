@@ -533,18 +533,15 @@ export function AppShell({ children }: { children: ReactNode }) {
               )}
             </NavLink>
           )}
-          {/* Connections merges the old "Apps" (integration catalog) and
-              "Secrets" (raw credential vault) nav items into one tabbed
-              hub — both answered "what's connected / what needs setup?",
-              so two siblings were just confusing. Shown to everyone: the
-              catalog is viewable by all, and the Secrets tab gates its own
-              write controls on secret:write internally. */}
+          {/* Apps is the integration catalog (connect Slack/Gmail, see
+              what's ready to use). Viewable by everyone. Org secret values
+              live under Admin → Secrets. */}
           <NavLink
-            to="/connections"
-            title={t("nav.connections")}
+            to="/apps"
+            title={t("nav.apps")}
           >
             <Boxes size={18} />
-            <span className="nav-label">{t("nav.connections")}</span>
+            <span className="nav-label">{t("nav.apps")}</span>
           </NavLink>
           <div className="sidebar-spacer" />
           {/* Classical collapse arrow. Duplicates the hamburger's

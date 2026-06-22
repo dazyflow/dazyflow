@@ -890,7 +890,7 @@ function FieldWrap({
                       {t("schemaForm.refSecret", { name: r.payload })}
                       {" "}
                       <Link
-                        to={`/secrets?focus=${encodeURIComponent(r.payload)}`}
+                        to={`/admin/secrets?focus=${encodeURIComponent(r.payload)}`}
                         className="link-button sf-ref-action"
                       >
                         {t("schemaForm.refSecretSetUp")}
@@ -946,7 +946,7 @@ function WiredField({
 // FieldRef is a parsed ${...} reference inside a string field value.
 // Splitting kind from payload (instead of returning pre-formatted strings)
 // lets the renderer attach kind-specific affordances — e.g. tenant
-// credentials get an inline "Set up" link to /secrets?focus=NAME so
+// credentials get an inline "Set up" link to /admin/secrets?focus=NAME so
 // a non-technical user has a one-click path from "this field uses a
 // credential" to "where do I store it."
 type FieldRef =
@@ -1813,7 +1813,7 @@ function TenantSecretChip({
       </span>
       <span className="sf-credential-chip-actions">
         <Link
-          to={`/secrets?focus=${encodeURIComponent(credName)}`}
+          to={`/admin/secrets?focus=${encodeURIComponent(credName)}`}
           className="link-button"
         >
           {t("schemaForm.secretChipSetUp")}

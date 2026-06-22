@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Cloud, Lock, Trash2 } from "lucide-react";
+import { Cloud, Trash2 } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { api, APIError } from "../api";
 import { useAuth } from "../auth";
@@ -14,20 +14,23 @@ import type {
 } from "../types";
 
 // AdminSecretManager is the tenant-level "point the platform at your own
-// secret manager" config — set-once infrastructure, so it lives under
-// Admin alongside Connector apps and SSO, not on the everyday Secrets
-// page. Three providers, each with its own slot so they can coexist:
-// OpenBao/Vault (${vault.PATH#FIELD}), AWS Secrets Manager
-// (${aws.NAME#field}), and GCP Secret Manager (${gcp.NAME#field}). The
-// forms self-hide credentials (they're never read back) and the page
-// shows an unavailable note when the encrypted store that holds the
-// connection configs isn't configured for this deployment.
+// secret manager" config — set-once infrastructure that lives as the
+// "Secret manager" tab of Admin → Secrets. Three providers, each with its
+// own slot so they can coexist: OpenBao/Vault (${vault.PATH#FIELD}), AWS
+// Secrets Manager (${aws.NAME#field}), and GCP Secret Manager
+// (${gcp.NAME#field}). The forms self-hide credentials (they're never read
+// back) and the page shows an unavailable note when the encrypted store
+// that holds the connection configs isn't configured for this deployment.
 
 // featureUnavailable: not configured (501) or not permitted (401/403).
 function featureUnavailable(status: number): boolean {
   return status === 501 || status === 401 || status === 403;
 }
 
+// AdminSecretManager is the "Secret manager" tab of the Admin → Secrets
+// page (AdminSecrets): the tenant-level "point the platform at your own
+// secret manager" config. It renders bare (no page header) because
+// AdminSecrets owns the title and tab bar.
 export function AdminSecretManager() {
   const { t } = useTranslation();
   const { token, hasPerm } = useAuth();
@@ -71,25 +74,10 @@ export function AdminSecretManager() {
     );
   }
 
-  const header = (
-    <div className="page-title">
-      <div>
-        <h1>
-          <Lock size={20} style={{ marginRight: 8, verticalAlign: -3 }} />
-          {t("connections.secretManager.title")}
-        </h1>
-        <div className="sub">{t("connections.secretManager.intro")}</div>
-      </div>
-    </div>
-  );
-
   if (off) {
     return (
-      <div>
-        {header}
-        <div className="card" style={{ color: "var(--muted)" }}>
-          {t("connections.secretManager.unavailable")}
-        </div>
+      <div className="card" style={{ color: "var(--muted)" }}>
+        {t("connections.secretManager.unavailable")}
       </div>
     );
   }
@@ -158,7 +146,6 @@ export function AdminSecretManager() {
 
   return (
     <div>
-      {header}
       {err && <div className="card error">{err}</div>}
 
       <h2 className="admin-section-head">

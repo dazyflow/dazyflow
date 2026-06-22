@@ -76,7 +76,7 @@ describe("explainRunError", () => {
     const r = explainRunError("", 'secret "postgres_dsn" not found');
     expect(r!.headlineKey).toBe("explain.secretMissing");
     expect(r!.headlineValues).toEqual({ name: "postgres_dsn" });
-    expect(r!.action?.href).toBe("/secrets?focus=postgres_dsn");
+    expect(r!.action?.href).toBe("/admin/secrets?focus=postgres_dsn");
   });
 
   it("matches the builtin-secret variant", () => {
@@ -86,7 +86,7 @@ describe("explainRunError", () => {
 
   it("encodes special characters in the focus query param", () => {
     const r = explainRunError("", 'secret "my secret" not found');
-    expect(r!.action?.href).toBe("/secrets?focus=my%20secret");
+    expect(r!.action?.href).toBe("/admin/secrets?focus=my%20secret");
   });
 
   it("maps structured infra/runtime codes to plain-English headlines", () => {

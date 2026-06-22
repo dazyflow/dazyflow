@@ -6,8 +6,7 @@ import { SignIn } from "./pages/SignIn";
 import { SignUp } from "./pages/SignUp";
 import { Welcome } from "./pages/Welcome";
 import { Templates } from "./pages/Templates";
-import { AppDetail } from "./pages/Apps";
-import { Connections } from "./pages/Connections";
+import { Apps, AppDetail } from "./pages/Apps";
 import { Files } from "./pages/Files";
 import { FlowList } from "./pages/FlowList";
 import { FlowEditor } from "./pages/FlowEditor";
@@ -29,7 +28,7 @@ import { AdminOrgSSO } from "./pages/AdminOrgSSO";
 import { AdminOAuthProviders } from "./pages/AdminOAuthProviders";
 import { AdminPlatform } from "./pages/AdminPlatform";
 import { AdminGoogle } from "./pages/AdminGoogle";
-import { AdminSecretManager } from "./pages/AdminSecretManager";
+import { AdminSecrets } from "./pages/AdminSecrets";
 import { AdminGitCredentials } from "./pages/AdminGitCredentials";
 import { AcceptInvite } from "./pages/AcceptInvite";
 import { UploadsProvider } from "./uploads";
@@ -64,28 +63,13 @@ export function App() {
         <Route path="/welcome" element={<Welcome />} />
         <Route path="/flows" element={<FlowList />} />
         <Route path="/flows/:id" element={<KeyedFlowEditor />} />
-        {/* Legacy /pipelines/* paths — bookmarks from before the rename
-            still land in the right place. */}
-        <Route path="/pipelines" element={<Navigate to="/flows" replace />} />
-        <Route
-          path="/pipelines/:id"
-          element={<LegacyPipelineRedirect />}
-        />
         <Route path="/templates" element={<Templates />} />
-        <Route path="/connections" element={<Connections />} />
-        {/* Apps + Secrets merged into the tabbed /connections hub. These
-            redirects keep old bookmarks and the editor's
-            /secrets?focus=NAME credential deep-link working — the query
-            string (focus) is preserved and the right tab is selected. */}
-        <Route path="/secrets" element={<ConnectionsRedirect tab="secrets" />} />
-        <Route path="/apps" element={<ConnectionsRedirect tab="apps" />} />
-        <Route path="/files" element={<Files />} />
+        {/* Apps is the integration catalog; /apps/:slug is one app's detail. */}
+        <Route path="/apps" element={<Apps />} />
         <Route path="/apps/:slug" element={<AppDetail />} />
+        <Route path="/files" element={<Files />} />
         <Route path="/runs" element={<RunList />} />
         <Route path="/results" element={<Results />} />
-        {/* Schedules folded into the flow list (per-flow status + pause/
-            resume). Redirect keeps old bookmarks landing somewhere useful. */}
-        <Route path="/schedules" element={<Navigate to="/flows" replace />} />
         <Route path="/runs/:runID" element={<RunDetail />} />
         <Route path="/approvals" element={<Approvals />} />
         <Route path="/usage" element={<Usage />} />
@@ -101,7 +85,7 @@ export function App() {
         <Route path="/admin/oauth" element={<AdminOAuthProviders />} />
         <Route path="/admin/platform" element={<AdminPlatform />} />
         <Route path="/admin/google" element={<AdminGoogle />} />
-        <Route path="/admin/secret-manager" element={<AdminSecretManager />} />
+        <Route path="/admin/secrets" element={<AdminSecrets />} />
         <Route path="/admin/git-credentials" element={<AdminGitCredentials />} />
         <Route path="/invite/:token" element={<AcceptInvite />} />
         <Route path="*" element={<Navigate to="/flows" replace />} />
@@ -111,9 +95,6 @@ export function App() {
   );
 }
 
-// LegacyPipelineRedirect picks up the :id from the old path and 301s to
-// the canonical /flows/:id, preserving any query string (e.g.
-// ?run=<jobID> from a deep-linked run).
 import { useLocation, useParams } from "react-router-dom";
 
 // HAS_FLOWS_KEY is FlowList's sticky "this user has built at least
@@ -160,26 +141,4 @@ function RootRedirect() {
 function KeyedFlowEditor() {
   const { id } = useParams();
   return <FlowEditor key={id} />;
-}
-
-function LegacyPipelineRedirect() {
-  const { id } = useParams();
-  const loc = useLocation();
-  return (
-    <Navigate
-      to={{ pathname: `/flows/${encodeURIComponent(id ?? "")}`, search: loc.search }}
-      replace
-    />
-  );
-}
-
-// ConnectionsRedirect sends the old /apps and /secrets paths to the
-// merged /connections hub, selecting the right tab and preserving any
-// existing query string (notably the editor's ?focus=NAME on /secrets,
-// which the Secrets tab still consumes).
-function ConnectionsRedirect({ tab }: { tab: "apps" | "secrets" }) {
-  const loc = useLocation();
-  const params = new URLSearchParams(loc.search);
-  params.set("tab", tab);
-  return <Navigate to={{ pathname: "/connections", search: `?${params}` }} replace />;
 }

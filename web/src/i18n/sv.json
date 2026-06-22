@@ -76,7 +76,7 @@
     "usage": "Förbrukning",
     "files": "Filer",
     "approvals": "Godkännanden",
-    "connections": "Anslutningar",
+    "apps": "Appar",
     "admin": "Admin",
     "toggleNav": "växla navigering",
     "closeMenu": "Stäng meny",
@@ -552,10 +552,6 @@
     }
   },
   "connections": {
-    "title": "Hemligheter",
-    "tabApps": "Appar",
-    "tabSecrets": "Hemligheter",
-    "intro": "Hemligheter låter dig hantera återanvändbar konfigurationsdata. De är krypterade och används för känsliga värden som API-nycklar, tokens och databas-URL:er — skrivskyddade, så ett värde visas aldrig igen efter att du sparat det. För att ansluta en app som Slack eller Gmail, använd Appar-sidan.",
     "scopeHelp": "De här hemligheterna är tillgängliga för alla flöden i din organisation. Ett enskilt flöde kan åsidosätta en med sin egen — ange dem under flödets Inställningar → Hemligheter.",
     "setupIncompleteTitle": "Servern är inte färdigkonfigurerad ännu",
     "setupIncompleteBody": "Administratören har inte aktiverat apparna du kan ansluta (Slack, Gmail, Notion, …) eller platsen där hemligheter sparas. Tills det är klart finns det inget du kan göra här — flöden som behöver det går inte att köra.",
@@ -678,6 +674,14 @@
     },
     "cardApiKeysTitle": "API-nycklar",
     "cardApiKeysDesc": "Skapa och återkalla åtkomsttokens.",
+    "cardSecretsTitle": "Hemligheter",
+    "cardSecretsDesc": "Organisationsövergripande uppgifter och er externa hemlighetshanterare.",
+    "secrets": {
+      "title": "Hemligheter",
+      "intro": "Uppgifter som är tillgängliga för varje flöde i den här organisationen.",
+      "tabValues": "Värden",
+      "tabManager": "Hemlighetshanterare"
+    },
     "cardUsersTitle": "Personer",
     "cardUsersDesc": "Bjud in teammedlemmar och sätt roller.",
     "cardSSOTitle": "Single sign-on",

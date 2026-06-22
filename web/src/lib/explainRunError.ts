@@ -126,7 +126,7 @@ export function explainRunError(
       headlineValues: { name },
       action: {
         labelKey: "explain.actionAddSecret",
-        href: `/secrets?focus=${encodeURIComponent(name)}`,
+        href: `/admin/secrets?focus=${encodeURIComponent(name)}`,
       },
     };
   }

@@ -86,6 +86,7 @@ export function Admin() {
         <AdminCard to="/admin/users" icon={<Users size={18} />} title={t("admin.cardUsersTitle")} desc={t("admin.cardUsersDesc")} />
         <AdminCard to="/admin/workspace" icon={<Building2 size={18} />} title={t("admin.cardWorkspaceTitle")} desc={t("admin.cardWorkspaceDesc")} />
         <AdminCard to="/admin/api-keys" icon={<KeyRound size={18} />} title={t("admin.cardApiKeysTitle")} desc={t("admin.cardApiKeysDesc")} />
+        <AdminCard to="/admin/secrets" icon={<Lock size={18} />} title={t("admin.cardSecretsTitle")} desc={t("admin.cardSecretsDesc")} />
       </div>
 
       {/* Advanced: integrations + enterprise/infra settings most teams set
@@ -105,7 +106,6 @@ export function Admin() {
           <AdminCard to="/admin/google" icon={<img src="/brands/google-g.svg" alt="" width={18} height={18} />} title={t("admin.cardGoogleTitle")} desc={t("admin.cardGoogleDesc")} />
           <AdminCard to="/admin/git-credentials" icon={<KeyRound size={18} />} title={t("admin.cardGitTitle")} desc={t("admin.cardGitDesc")} />
           <AdminCard to="/admin/sso" icon={<ShieldCheck size={18} />} title={t("admin.cardSSOTitle")} desc={t("admin.cardSSODesc")} />
-          <AdminCard to="/admin/secret-manager" icon={<Lock size={18} />} title={t("admin.cardSecretManagerTitle")} desc={t("admin.cardSecretManagerDesc")} />
           <AdminCard to="/admin/audit" icon={<ScrollText size={18} />} title={t("admin.cardAuditTitle")} desc={t("admin.cardAuditDesc")} />
         </div>
       )}

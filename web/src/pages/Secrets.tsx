@@ -22,6 +22,9 @@ function featureUnavailable(status: number): boolean {
   return status === 501 || status === 401 || status === 403;
 }
 
+// Secrets is the "Values" tab of the Admin → Secrets page (AdminSecrets):
+// the tenant ${secret.NAME} vault. It renders bare (no page header) because
+// AdminSecrets owns the title and tab bar.
 export function Secrets() {
   const { t } = useTranslation();
   const { token, me, hasPerm } = useAuth();
@@ -63,10 +66,7 @@ export function Secrets() {
   );
 
   return (
-    <div className="page connections-page">
-      <h1>{t("connections.title")}</h1>
-      <p className="page-sub">{t("connections.intro")}</p>
-
+    <>
       {secretsOff && <SetupIncompleteBanner supportContact={me?.support_contact} />}
       {error && <div className="card error">{error}</div>}
 
@@ -79,7 +79,7 @@ export function Secrets() {
             canWrite={canWrite}
             onChanged={refresh}
             // The editor's "Set up this credential" links route to
-            // /secrets?focus=NAME. Consumed once: scroll + highlight an
+            // /admin/secrets?focus=NAME. Consumed once: scroll + highlight an
             // existing row or pre-fill the add-form, then strip the param so
             // a refresh doesn't re-fire the highlight.
             focus={searchParams.get("focus") ?? undefined}
@@ -91,7 +91,7 @@ export function Secrets() {
           />
         </>
       )}
-    </div>
+    </>
   );
 }
 

@@ -76,7 +76,7 @@
     "usage": "Usage",
     "files": "Files",
     "approvals": "Approvals",
-    "connections": "Connections",
+    "apps": "Apps",
     "admin": "Admin",
     "toggleNav": "toggle navigation",
     "closeMenu": "Close menu",
@@ -552,10 +552,6 @@
     }
   },
   "connections": {
-    "title": "Secrets",
-    "tabApps": "Apps",
-    "tabSecrets": "Secrets",
-    "intro": "Secrets let you manage reusable configuration data. They're encrypted and used for sensitive values like API keys, tokens, and database URLs — write-only, so a value is never shown again after you save it. To connect an app like Slack or Gmail, use the Apps page.",
     "scopeHelp": "These secrets are available to every flow in your organization. A single flow can override one with its own — set those in the flow's Settings → Secrets.",
     "setupIncompleteTitle": "Setup isn't finished on this server yet",
     "setupIncompleteBody": "Your administrator hasn't enabled the apps you can connect (Slack, Gmail, Notion, …) or the place where secrets get stored. Until that's done, there's nothing for you to do here — your flows that need those won't be able to run.",
@@ -678,6 +674,14 @@
     },
     "cardApiKeysTitle": "API keys",
     "cardApiKeysDesc": "Issue and revoke access tokens.",
+    "cardSecretsTitle": "Secrets",
+    "cardSecretsDesc": "Organization-wide credentials and your external secret manager.",
+    "secrets": {
+      "title": "Secrets",
+      "intro": "Credentials available to every flow in this organization.",
+      "tabValues": "Values",
+      "tabManager": "Secret manager"
+    },
     "cardUsersTitle": "People",
     "cardUsersDesc": "Invite teammates and set roles.",
     "cardSSOTitle": "Single sign-on",
