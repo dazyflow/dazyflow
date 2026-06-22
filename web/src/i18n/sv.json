@@ -315,9 +315,9 @@
     "goalDevLink": "Mer för utvecklare →",
     "titleReturning": "Välkommen tillbaka till Dazyflow",
     "introReturning": "Fortsätt där du slutade, eller starta ett nytt flöde från en mall.",
-    "connectMcpTitle": "Bygg flöden med en MCP-klient",
-    "connectMcpDesc": "Koppla den här arbetsytan till Claude eller en annan MCP-kompatibel assistent och låt den utforma flöden åt dig.",
-    "connectMcpCta": "Anslut MCP-klient"
+    "connectMcpTitle": "Bygg flöden med en AI-assistent",
+    "connectMcpDesc": "Koppla den här arbetsytan till Claude (eller en annan assistent som stöder MCP) och beskriv bara vad du vill ha — så utformar den flödet åt dig.",
+    "connectMcpCta": "Anslut en assistent"
   },
   "connectMcp": {
     "title": "Anslut en MCP-klient",
