@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" version="1.2" baseProfile="tiny-ps" viewBox="-10 -10 84 84" width="84" height="84">
+  <title>Dazyflow</title>
+  <defs>
+    <linearGradient id="dzflow" x1="0" y1="64" x2="64" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1fb6d4"/>
+      <stop offset=".4" stop-color="#4c84e8"/>
+      <stop offset=".7" stop-color="#9a7bf0"/>
+      <stop offset="1" stop-color="#eba7ee"/>
+    </linearGradient>
+  </defs>
+  <!-- BIMI requires a non-transparent, square image and the SVG Tiny PS profile
+       (no <mask>). So the separating border is a CASING stroke in the background
+       colour along the front loop — same look as logo.svg, mask-free. -->
+  <rect x="-10" y="-10" width="84" height="84" fill="#140d30"/>
+  <g fill="none" stroke-width="9">
+    <circle cx="24" cy="40" r="16" stroke="url(#dzflow)"/>
+    <circle cx="40" cy="24" r="16" stroke="#140d30" stroke-width="14"/>
+    <circle cx="40" cy="24" r="16" stroke="url(#dzflow)"/>
+  </g>
+</svg>

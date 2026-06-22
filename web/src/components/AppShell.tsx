@@ -343,7 +343,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             />
           ) : (
             <img
-              src="/favicon.png"
+              src="/logo.svg"
               alt=""
               className="brand-mark-img"
               width={24}
