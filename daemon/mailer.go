@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"mime"
 	"net"
+	"net/mail"
 	"net/smtp"
 	"net/url"
 	"strings"
@@ -29,9 +30,16 @@ import (
 //	smtps://user:pass@mail.example.com:465           (implicit TLS)
 //
 // Credentials are optional (an internal relay may not need them).
+//
+// DAZYFLOW_SMTP_FROM may carry a display name in RFC 5322 form so the
+// recipient's client shows a friendly sender instead of the bare local
+// part: "Dazyflow <hi@dazyflow.app>". The display name only rides the
+// From: header — the SMTP envelope and the Message-ID domain always use
+// the bare address parsed out of it.
 type Mailer struct {
-	From string
+	From string // From: header, may include a display name
 
+	addr       string // bare envelope sender (MAIL FROM, Message-ID domain)
 	host, port string
 	tlsMode    string // "starttls" | "implicit" | "none"
 	username   string
@@ -90,6 +98,21 @@ func NewMailerFromURL(rawURL, from string) (*Mailer, error) {
 	if m.From == "" {
 		return nil, fmt.Errorf("DAZYFLOW_SMTP_FROM is required (or put the sender as the URL's username)")
 	}
+	// Split the bare address out of From so the envelope and Message-ID
+	// stay valid even when From carries a display name ("Dazyflow
+	// <hi@dazyflow.app>"). With a display name, re-format through
+	// mail.Address so it's MIME-encoded in the header when non-ASCII;
+	// without one, keep the bare address verbatim (no angle brackets). A
+	// From that doesn't parse (e.g. a bare hostless username) falls back
+	// to using it as-is for both — same lenient behaviour as before.
+	if parsed, err := mail.ParseAddress(m.From); err == nil {
+		m.addr = parsed.Address
+		if parsed.Name != "" {
+			m.From = parsed.String()
+		}
+	} else {
+		m.addr = m.From
+	}
 	return m, nil
 }
 
@@ -107,16 +130,18 @@ func (m *Mailer) Send(ctx context.Context, to, subject, body string) error {
 		auth = smtp.PlainAuth("", m.username, m.password, m.host)
 	}
 	return smtputil.Send(ctx, net.JoinHostPort(m.host, m.port), m.host, m.tlsMode,
-		auth, m.From, []string{to}, mailerMessage(m.From, to, subject, body))
+		auth, m.addr, []string{to}, mailerMessage(m.From, m.addr, to, subject, body))
 }
 
-// mailerMessage assembles a plain-text RFC 822 message. Address headers
+// mailerMessage assembles a plain-text RFC 822 message. fromHeader is the
+// full From: header (it may carry a display name); fromAddr is the bare
+// sender address used to derive the Message-ID domain. Address headers
 // are CRLF-stripped (header-injection defense); the subject is MIME-word
 // encoded for non-ASCII.
-func mailerMessage(from, to, subject, body string) []byte {
+func mailerMessage(fromHeader, fromAddr, to, subject, body string) []byte {
 	strip := strings.NewReplacer("\r", "", "\n", "")
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "From: %s\r\n", strip.Replace(from))
+	fmt.Fprintf(&sb, "From: %s\r\n", strip.Replace(fromHeader))
 	fmt.Fprintf(&sb, "To: %s\r\n", strip.Replace(to))
 	fmt.Fprintf(&sb, "Subject: %s\r\n", mime.QEncoding.Encode("utf-8", subject))
 	// Date + Message-ID are required by RFC 5322 and are what every
@@ -126,7 +151,7 @@ func mailerMessage(from, to, subject, body string) []byte {
 	// duplicate copy. Relays that rewrite headers (e.g. Proton) supply
 	// their own; setting ours covers the plain Postfix/SES relays that don't.
 	fmt.Fprintf(&sb, "Date: %s\r\n", time.Now().UTC().Format(time.RFC1123Z))
-	fmt.Fprintf(&sb, "Message-ID: %s\r\n", newMessageID(from))
+	fmt.Fprintf(&sb, "Message-ID: %s\r\n", newMessageID(fromAddr))
 	sb.WriteString("MIME-Version: 1.0\r\n")
 	sb.WriteString("Content-Type: text/plain; charset=UTF-8\r\n\r\n")
 	sb.WriteString(body)

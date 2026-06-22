@@ -133,6 +133,16 @@ func TestNewMailerFromURL(t *testing.T) {
 	if m.tlsMode != "none" || m.port != "25" || m.username != "" {
 		t.Errorf("relay parsed = %+v", m)
 	}
+	// Display name: From: header keeps it, envelope uses the bare address.
+	m, _ = NewMailerFromURL("smtp://u:p@mail.example.com", "Dazyflow <hi@dazyflow.app>")
+	if m.From != "\"Dazyflow\" <hi@dazyflow.app>" || m.addr != "hi@dazyflow.app" {
+		t.Errorf("display-name parsed = From %q addr %q", m.From, m.addr)
+	}
+	// Bare address: no display name, no angle brackets added; addr matches.
+	m, _ = NewMailerFromURL("smtp://u:p@mail.example.com", "hi@dazyflow.app")
+	if m.From != "hi@dazyflow.app" || m.addr != "hi@dazyflow.app" {
+		t.Errorf("bare parsed = From %q addr %q", m.From, m.addr)
+	}
 	// Errors: bad scheme, missing from, bad tls value.
 	if _, err := NewMailerFromURL("http://x", "f@x"); err == nil {
 		t.Error("http scheme accepted")
