@@ -338,29 +338,6 @@ function FromScratch() {
 
   return (
     <div className="create-flow-scratch">
-      <div className="create-mode-toggle" role="radiogroup" aria-label={t("createFlow.modeLabel")}>
-        <label className={"create-mode-option" + (mode === "ai" ? " active" : "")}>
-          <input
-            type="radio"
-            name="create-mode"
-            checked={mode === "ai"}
-            onChange={() => setMode("ai")}
-          />
-          <Sparkles size={15} />
-          <span>{t("createFlow.modeAI")}</span>
-        </label>
-        <label className={"create-mode-option" + (mode === "blank" ? " active" : "")}>
-          <input
-            type="radio"
-            name="create-mode"
-            checked={mode === "blank"}
-            onChange={() => setMode("blank")}
-          />
-          <FilePlus2 size={15} />
-          <span>{t("createFlow.modeBlank")}</span>
-        </label>
-      </div>
-
       {mode === "blank" ? (
         <form className="create-flow-card card" onSubmit={submitBlank}>
           <div className="sf-field">
@@ -401,38 +378,30 @@ function FromScratch() {
           </div>
         </form>
       ) : (
-        <form className="create-flow-card card" onSubmit={submitAI}>
-          <div className="sf-field">
-            <div className="label-row">
-              <label htmlFor="ai-flow-desc">{t("createAI.label")}</label>
-            </div>
-            <textarea
-              id="ai-flow-desc"
-              autoFocus
-              rows={4}
-              value={aiDesc}
-              placeholder={t("createAI.placeholder")}
-              onChange={(e) => setAiDesc(e.target.value)}
-            />
-            <div className="sf-hint">{t("createAI.hint")}</div>
-          </div>
+        <form className="create-flow-card card ai-create" onSubmit={submitAI}>
+          <textarea
+            id="ai-flow-desc"
+            className="ai-create-input"
+            autoFocus
+            rows={3}
+            value={aiDesc}
+            placeholder={t("createAI.placeholder")}
+            onChange={(e) => setAiDesc(e.target.value)}
+          />
           {/* Example prompts: a non-techy user's on-ramp. Shown until they've
               typed something or generation has started; clicking fills the box. */}
           {!busy && steps.length === 0 && aiDesc.trim() === "" && (
-            <div className="ai-starters">
-              <span className="ai-starters-label">{t("createFlow.startersLabel")}</span>
-              <div className="ai-starters-chips">
-                {AI_STARTERS.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    className="ai-starter-chip"
-                    onClick={() => setAiDesc(s)}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
+            <div className="ai-starters-chips">
+              {AI_STARTERS.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  className="ai-starter-chip"
+                  onClick={() => setAiDesc(s)}
+                >
+                  {s}
+                </button>
+              ))}
             </div>
           )}
           {providers.length > 1 && (
@@ -492,6 +461,25 @@ function FromScratch() {
           </div>
         </form>
       )}
+      {/* The other start path stays one quiet click away — no toggle chrome up
+          top, just a link that flips between describe-it and build-it-yourself. */}
+      <button
+        type="button"
+        className="create-flow-switch"
+        onClick={() => setMode(mode === "ai" ? "blank" : "ai")}
+      >
+        {mode === "ai" ? (
+          <>
+            <FilePlus2 size={14} />
+            {t("createFlow.modeBlank")}
+          </>
+        ) : (
+          <>
+            <Sparkles size={14} />
+            {t("createFlow.modeAI")}
+          </>
+        )}
+      </button>
     </div>
   );
 }
