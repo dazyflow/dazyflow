@@ -20,6 +20,7 @@ import {
   Send,
   Settings as SettingsIcon,
   MoreVertical,
+  HelpCircle,
   X,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -29,6 +30,8 @@ import { ActiveFlowContext, FLOWS_CHANGED_EVENT } from "../activeFlow";
 import { shouldShowTenantID } from "../lib/visibleTenant";
 import { tenantDisplayName } from "../lib/orgDisplayName";
 import { OrgSwitcherModal } from "./OrgSwitcherModal";
+import { CommandPalette } from "./CommandPalette";
+import { ShortcutsModal } from "./ShortcutsModal";
 import { FlowIcon } from "../icons";
 import { isImageIcon } from "../lib/iconImage";
 import type { FlowSummary } from "../types";
@@ -173,6 +176,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [pendingCount, setPendingCount] = useState(0);
   // All flows in the active workspace, listed under the "Flows" nav entry.
   const [flows, setFlows] = useState<FlowSummary[]>([]);
+  // Global ⌘K command bar (jump to any page/flow). Mounted app-wide but only
+  // bound to ⌘K OUTSIDE the flow editor, where ⌘K stays "Add step".
+  const [cmdOpen, setCmdOpen] = useState(false);
+  // Keyboard-shortcuts reference (header help button + "?" key).
+  const [helpOpen, setHelpOpen] = useState(false);
   // everHadApproval is a sticky local flag: once a user has seen ANY
   // pending approval in this browser, the Approvals nav link stays
   // visible even after the count drops back to zero — flows with
@@ -251,6 +259,33 @@ export function AppShell({ children }: { children: ReactNode }) {
   const inEditor = /^\/(flows|pipelines)\/(?!new(?:$|\/))[^/]+/.test(location.pathname);
   const showAdmin =
     hasPerm("organization:admin") || hasPerm("graph:admin");
+
+  // ⌘K / Ctrl+K opens the global command bar — except in the flow editor,
+  // which owns ⌘K for its step palette (per the agreed keybinding split).
+  // "?" opens the keyboard-shortcuts reference (ignored while typing).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")) {
+        if (inEditor) return; // editor's step palette handles it
+        e.preventDefault();
+        setCmdOpen((v) => !v);
+        return;
+      }
+      if (e.key === "?" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const el = e.target as HTMLElement | null;
+        const typing =
+          !!el &&
+          (el.tagName === "INPUT" ||
+            el.tagName === "TEXTAREA" ||
+            el.isContentEditable);
+        if (typing) return;
+        e.preventDefault();
+        setHelpOpen((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [inEditor]);
 
   // activeFlowName is published by the editor (via ActiveFlowContext) so
   // the top bar can show which flow is open in place of the wordmark.
@@ -368,6 +403,16 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="spacer" />
         {me && (
           <div className="user">
+            {/* Help: keyboard-shortcuts reference (also on "?"). */}
+            <button
+              type="button"
+              className="icon ghost"
+              onClick={() => setHelpOpen(true)}
+              aria-label={t("shortcuts.title")}
+              title={t("shortcuts.title")}
+            >
+              <HelpCircle size={18} />
+            </button>
             {/* Org switcher: opens a modal listing the orgs you can act in,
                 with an inline "Create organization" form. Always available so
                 even a single-tenant user can spin up a new org. */}
@@ -473,6 +518,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             <Plus size={18} />
             <span className="nav-label">{t("flowList.newFlow")}</span>
+          </NavLink>
+          <NavLink to="/overview" title={t("nav.overview")}>
+            <Gauge size={18} />
+            <span className="nav-label">{t("nav.overview")}</span>
           </NavLink>
           <NavLink
             to="/flows"
@@ -628,6 +677,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           )}
         </main>
       </div>
+      <CommandPalette
+        open={cmdOpen}
+        onClose={() => setCmdOpen(false)}
+        flows={flows}
+      />
+      {helpOpen && <ShortcutsModal onClose={() => setHelpOpen(false)} />}
     </div>
     </ActiveFlowContext.Provider>
   );

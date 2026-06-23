@@ -1,19 +1,34 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Plus, Workflow, Lock, Clock, Pause, Play } from "lucide-react";
+import { Plus, Workflow, Lock, Clock, Pause, Play, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import { FlowIcon, isBrandedIcon } from "../icons";
 import { FlowStatusChip } from "../components/FlowStatusChip";
+import { RunSparkline } from "../components/RunSparkline";
 import { isImageIcon } from "../lib/iconImage";
+import { formatRelative, formatDateTime } from "../lib/datetime";
 import {
   formatNextRun,
   summarizeFlowSchedule,
   type FlowSchedule,
 } from "../lib/schedule";
 import { userScope } from "../recentFlow";
-import type { FlowSummary, ScheduleEntry } from "../types";
+import type { FlowRunStatus } from "../flowStatus";
+import type { FlowSummary, RunSummary, ScheduleEntry } from "../types";
+
+type SortKey = "recent" | "name" | "status";
+
+// Order flows fall in when sorting by run status: live (firing on its own)
+// first, paused last — the order an operator scans for "what's actually
+// running" vs "what's switched off".
+const STATUS_ORDER: Record<FlowRunStatus, number> = {
+  live: 0,
+  needs_publish: 1,
+  manual: 2,
+  paused: 3,
+};
 
 // HAS_FLOWS_KEY mirrors the key App.tsx's RootRedirect reads when
 // deciding whether a bare-root visit lands on /welcome or /flows.
@@ -38,6 +53,15 @@ export function FlowList() {
   // scheduled flow's card below.
   const [schedules, setSchedules] = useState<ScheduleEntry[]>([]);
   const [schedBusy, setSchedBusy] = useState<string | null>(null);
+  // Recent runs across the workspace, grouped per flow — drives each card's
+  // last-run line and health sparkline. Non-blocking: a failure here just
+  // leaves the cards without the run signal, it never blanks the list.
+  const [runsByFlow, setRunsByFlow] = useState<Map<string, RunSummary[]>>(
+    new Map(),
+  );
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<SortKey>("recent");
+  const [statusFilter, setStatusFilter] = useState<FlowRunStatus | "all">("all");
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -107,6 +131,68 @@ export function FlowList() {
     return m;
   }, [schedules]);
 
+  // Pull the most recent runs workspace-wide and bucket them by flow. One
+  // request feeds every card's last-run line + sparkline (vs N per-flow
+  // requests); the API returns newest-first, which both consumers rely on.
+  useEffect(() => {
+    if (!token || !activeWorkspace) return;
+    let cancelled = false;
+    api
+      .listAllRuns(token, {
+        tenant: activeTenant || undefined,
+        workspace: activeWorkspace || undefined,
+        limit: 200,
+      })
+      .then((r) => {
+        if (cancelled) return;
+        const m = new Map<string, RunSummary[]>();
+        for (const run of r.runs ?? []) {
+          const arr = m.get(run.graph_id);
+          if (arr) arr.push(run);
+          else m.set(run.graph_id, [run]);
+        }
+        setRunsByFlow(m);
+      })
+      .catch(() => {
+        if (!cancelled) setRunsByFlow(new Map());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, activeTenant, activeWorkspace]);
+
+  // The flows actually rendered: text-filtered, status-filtered, and sorted
+  // per the toolbar. Derived (not state) so it always tracks the inputs.
+  const visibleFlows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const matchesQuery = (f: FlowSummary) =>
+      !q ||
+      (f.name ?? "").toLowerCase().includes(q) ||
+      f.id.toLowerCase().includes(q) ||
+      (f.description ?? "").toLowerCase().includes(q);
+    const matchesStatus = (f: FlowSummary) =>
+      statusFilter === "all" || f.run_status === statusFilter;
+    const lastRunAt = (f: FlowSummary): number => {
+      const last = runsByFlow.get(f.id)?.[0];
+      const ts = last?.started_at || last?.enqueued_at;
+      return ts ? new Date(ts).getTime() : 0;
+    };
+    const filtered = flows.filter((f) => matchesQuery(f) && matchesStatus(f));
+    const sorted = [...filtered];
+    sorted.sort((a, b) => {
+      if (sort === "name")
+        return (a.name || a.id).localeCompare(b.name || b.id);
+      if (sort === "status")
+        return (
+          (STATUS_ORDER[a.run_status as FlowRunStatus] ?? 9) -
+          (STATUS_ORDER[b.run_status as FlowRunStatus] ?? 9)
+        );
+      // recent: most recently run first; never-run flows sink to the bottom.
+      return lastRunAt(b) - lastRunAt(a);
+    });
+    return sorted;
+  }, [flows, query, statusFilter, sort, runsByFlow]);
+
   // Pause/resume a flow's scheduling as a whole: if anything is currently
   // firing, pause every active trigger; otherwise resume every
   // per-trigger-paused one. (Flow-level pauses can't be lifted per-trigger,
@@ -170,8 +256,58 @@ export function FlowList() {
           </div>
         </div>
       )}
+      {/* Search / sort / filter toolbar — only once there are enough flows
+          to need it. A two-flow workspace doesn't want a filter bar. */}
+      {!loading && !error && flows.length > 1 && (
+        <div className="flow-toolbar">
+          <div className="flow-search">
+            <Search size={15} aria-hidden />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t("flowList.searchPlaceholder")}
+              aria-label={t("flowList.searchPlaceholder")}
+            />
+          </div>
+          <label className="flow-filter">
+            <span className="flow-filter-label">{t("flowList.filterStatus")}</span>
+            <select
+              value={statusFilter}
+              onChange={(e) =>
+                setStatusFilter(e.target.value as FlowRunStatus | "all")
+              }
+            >
+              <option value="all">{t("flowList.statusAll")}</option>
+              <option value="live">{t("flowStatus.live.label")}</option>
+              <option value="manual">{t("flowStatus.manual.label")}</option>
+              <option value="needs_publish">
+                {t("flowStatus.needs_publish.label")}
+              </option>
+              <option value="paused">{t("flowStatus.paused.label")}</option>
+            </select>
+          </label>
+          <label className="flow-filter">
+            <span className="flow-filter-label">{t("flowList.sortBy")}</span>
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as SortKey)}
+            >
+              <option value="recent">{t("flowList.sortRecent")}</option>
+              <option value="name">{t("flowList.sortName")}</option>
+              <option value="status">{t("flowList.sortStatus")}</option>
+            </select>
+          </label>
+        </div>
+      )}
+      {!loading && !error && flows.length > 0 && visibleFlows.length === 0 && (
+        <div className="card flow-empty">
+          <Search size={24} className="flow-empty-icon" />
+          <p>{t("flowList.noMatches")}</p>
+        </div>
+      )}
       <div className="graph-list">
-        {flows.map((f) => {
+        {visibleFlows.map((f) => {
           const isPrivate = f.visibility === "private";
           const ownedByMe = !!me && f.owner === me.subject;
           const displayName = f.name || f.id;
@@ -180,6 +316,8 @@ export function FlowList() {
             schedEntries && schedEntries.length
               ? summarizeFlowSchedule(schedEntries)
               : null;
+          const runs = runsByFlow.get(f.id) ?? [];
+          const lastRun = runs[0];
           return (
             <Link
               key={f.id}
@@ -226,18 +364,41 @@ export function FlowList() {
                   />
                 )}
                 {f.description && (
-                  <div
-                    className="meta"
-                    style={{ color: "var(--muted)", lineHeight: 1.4 }}
-                  >
-                    {f.description}
-                  </div>
+                  <div className="graph-card-desc">{f.description}</div>
                 )}
                 {f.owner && !ownedByMe && (
                   <div className="meta" style={{ color: "var(--muted)" }}>
                     {t("flowList.createdBy", { owner: f.owner })}
                   </div>
                 )}
+                {/* Footer pinned to the card bottom so every card is the same
+                    height regardless of which optional rows above are present —
+                    the ragged grid was the loudest "unfinished" tell. */}
+                <div className="graph-card-foot">
+                  {lastRun ? (
+                    <span
+                      className="graph-card-lastrun"
+                      title={formatDateTime(
+                        lastRun.started_at || lastRun.enqueued_at,
+                      )}
+                    >
+                      <span
+                        className={`run-dot run-dot-${lastRun.status}`}
+                        aria-hidden
+                      />
+                      {t("flowList.lastRun", {
+                        when: formatRelative(
+                          lastRun.started_at || lastRun.enqueued_at,
+                        ),
+                      })}
+                    </span>
+                  ) : (
+                    <span className="graph-card-lastrun is-empty">
+                      {t("flowList.neverRun")}
+                    </span>
+                  )}
+                  <RunSparkline runs={runs} />
+                </div>
               </div>
             </Link>
           );

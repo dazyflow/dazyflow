@@ -5,6 +5,7 @@ import { AppShell } from "./components/AppShell";
 import { SignIn } from "./pages/SignIn";
 import { SignUp } from "./pages/SignUp";
 import { Welcome } from "./pages/Welcome";
+import { Dashboard } from "./pages/Dashboard";
 import { CreateFlow } from "./pages/CreateFlow";
 import { Apps, AppDetail } from "./pages/Apps";
 import { Files } from "./pages/Files";
@@ -67,6 +68,7 @@ export function App() {
       <Routes>
         <Route path="/" element={<RootRedirect />} />
         <Route path="/welcome" element={<Welcome />} />
+        <Route path="/overview" element={<Dashboard />} />
         <Route path="/flows" element={<FlowList />} />
         {/* Static "new" is listed before the :id param route. The unified
             creation surface (blank / AI / template tabs) lives here. */}
@@ -144,7 +146,10 @@ function RootRedirect() {
   } catch {
     /* private mode / strict iframe — treat as first-time */
   }
-  return <Navigate to={hasFlows ? "/flows" : "/welcome"} replace />;
+  // Returning users (already have flows) land on the workspace overview —
+  // the "is everything healthy?" dashboard. First-timers still get the
+  // onboarding wizard.
+  return <Navigate to={hasFlows ? "/overview" : "/welcome"} replace />;
 }
 
 // KeyedFlowEditor remounts FlowEditor whenever the :id changes. Without

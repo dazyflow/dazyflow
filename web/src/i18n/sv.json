@@ -102,7 +102,8 @@
     "orgDeletePassword": "Bekräfta ditt lösenord",
     "orgDeletePasswordPlaceholder": "Ditt kontolösenord",
     "orgDeletePasswordRequired": "Ange ditt lösenord för att bekräfta.",
-    "noSubject": "(inget subjekt)"
+    "noSubject": "(inget subjekt)",
+    "overview": "Översikt"
   },
   "verifyEmail": {
     "working": "Bekräftar din e-postadress…",
@@ -396,7 +397,18 @@
     "orgTooltip": "Synlig för alla i den här arbetsytan",
     "createdBy": "Skapad av {{owner}}",
     "needEdit": "Du behöver redigeringsbehörighet för att skapa flöden.",
-    "nextRun": "Nästa körning {{when}}"
+    "nextRun": "Nästa körning {{when}}",
+    "searchPlaceholder": "Sök flöden…",
+    "filterStatus": "Status",
+    "statusAll": "Alla",
+    "sortBy": "Sortera",
+    "sortRecent": "Senast körd",
+    "sortName": "Namn",
+    "sortStatus": "Status",
+    "noMatches": "Inga flöden matchar dina filter.",
+    "lastRun": "Senaste körning {{when}}",
+    "neverRun": "Aldrig körd",
+    "sparkSummary": "{{ok}} av senaste {{total}} körningarna lyckades"
   },
   "settings": {
     "title": "Flödesinställningar",
@@ -1032,7 +1044,12 @@
     "selectRun": "Markera körning {{id}}",
     "bulkRetryPartial": "{{failed}} av {{total}} körningar kunde inte köras om.",
     "confirmBulkRetryTitle": "Kör om valda körningar?",
-    "confirmBulkRetryBody": "Kör om {{count}} körningar? Var och en återupptas från sitt misslyckade steg och kör om stegen efter det – inklusive sidoeffekter som att skicka e-post eller meddelanden."
+    "confirmBulkRetryBody": "Kör om {{count}} körningar? Var och en återupptas från sitt misslyckade steg och kör om stegen efter det – inklusive sidoeffekter som att skicka e-post eller meddelanden.",
+    "searchPlaceholder": "Sök på körnings-ID eller flöde…",
+    "filterFlow": "Flöde",
+    "allFlows": "Alla flöden",
+    "resultCount": "{{count}}{{more}} körningar",
+    "noMatches": "Inga körningar matchar din sökning."
   },
   "gitCreds": {
     "title": "Git-uppgifter",
@@ -1365,7 +1382,11 @@
     "providerLabel": "AI-leverantör",
     "needConnect": "Anslut Claude eller ChatGPT på <0>Appar-sidan</0> för att använda detta.",
     "starters": "Börja med:",
-    "starter": { "greeting": "Hälsning", "receipt": "Kvitto", "announcement": "Tillkännagivande" },
+    "starter": {
+      "greeting": "Hälsning",
+      "receipt": "Kvitto",
+      "announcement": "Tillkännagivande"
+    },
     "sampleData": "Exempeldata (endast för förhandsvisning)",
     "badJson": "Exempeldata är inte giltig JSON än.",
     "preview": "Live-förhandsvisning",
@@ -1560,10 +1581,47 @@
     "connNeededAskAdmin": "Be en org-administratör att ansluta dessa.",
     "adminBlockedOnly": "Servern är inte färdigkonfigurerad: administratören behöver aktivera {{items}} innan flödet kan köras.",
     "adminBlockedAppend": "Administratören behöver också aktivera: {{items}}.",
-    "adminBlockedCta": "Visa konfigurationsstatus"
+    "adminBlockedCta": "Visa konfigurationsstatus",
+    "tidy": "Städa",
+    "tidyTitle": "Ordna flödet automatiskt i tydliga kolumner",
+    "minimap": "Flödesöversikt"
   },
   "iconUpload": {
     "upload": "Ladda upp bild",
     "remove": "Ta bort"
+  },
+  "commandPalette": {
+    "title": "Kommandofält",
+    "placeholder": "Hoppa till en sida eller ett flöde…",
+    "goTo": "Gå till",
+    "flowSublabel": "Flöde",
+    "noResults": "Inget matchar ”{{query}}”.",
+    "hintOpen": "öppna"
+  },
+  "dashboard": {
+    "title": "Översikt",
+    "subtitle": "Din arbetsyta i ett ögonkast.",
+    "greeting": "Välkommen tillbaka, {{name}}.",
+    "runsToday": "Körningar idag",
+    "successRate": "Andel lyckade",
+    "overRuns": "av {{count}} avslutade",
+    "needsAttention": "Kräver åtgärd",
+    "approvalsWaiting": "Väntar på godkännande",
+    "recentActivity": "Senaste aktivitet",
+    "viewAll": "Visa alla",
+    "noFailures": "Inga misslyckade körningar. Allt klart.",
+    "noRuns": "Inga körningar ännu.",
+    "flowSummary": "{{total}} flöden · {{live}} live",
+    "manageFlows": "Hantera flöden"
+  },
+  "shortcuts": {
+    "title": "Tangentbordsgenvägar",
+    "general": "Allmänt",
+    "editor": "Flödesredigeraren",
+    "commandBar": "Öppna kommandofältet",
+    "help": "Visa tangentbordsgenvägar",
+    "addStep": "Lägg till ett steg",
+    "deleteSelection": "Ta bort markeringen",
+    "moveNode": "Flytta det markerade steget"
   }
 }

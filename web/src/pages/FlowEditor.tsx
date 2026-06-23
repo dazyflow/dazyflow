@@ -17,6 +17,7 @@ import {
   Background,
   BackgroundVariant,
   Controls,
+  MiniMap,
   addEdge,
   applyEdgeChanges,
   applyNodeChanges,
@@ -53,6 +54,7 @@ import {
   AlignHorizontalDistributeCenter,
   AlignVerticalDistributeCenter,
   StickyNote,
+  LayoutGrid,
   Group,
   AlertCircle,
   CircleDot,
@@ -1194,6 +1196,84 @@ function EditorInner() {
     });
     setDirty(true);
   }, []);
+
+  // autoLayout ("Tidy") arranges the whole graph into clean left-to-right
+  // columns by dependency depth — the one-click cleanup pro node editors
+  // have. Layering is longest-path from the roots (no-input nodes) via
+  // bounded relaxation, so a stray cycle can't loop forever. Within a column
+  // nodes keep their current top-to-bottom order; columns are centered on a
+  // shared mid-line for a balanced look.
+  const autoLayout = useCallback(() => {
+    const HGAP = 80;
+    const VGAP = 36;
+    setNodes((nds) => {
+      if (nds.length < 2) return nds;
+      const ids = nds.map((n) => n.id);
+      const idSet = new Set(ids);
+      const es = edges.filter(
+        (e) => idSet.has(e.source) && idSet.has(e.target),
+      );
+      const layer = new Map<string, number>(ids.map((id) => [id, 0]));
+      // |V| relaxation passes settle any DAG's longest paths; the cap also
+      // stops a cycle from diverging.
+      for (let pass = 0; pass < ids.length; pass++) {
+        let changed = false;
+        for (const e of es) {
+          const want = (layer.get(e.source) ?? 0) + 1;
+          if (want > (layer.get(e.target) ?? 0)) {
+            layer.set(e.target, want);
+            changed = true;
+          }
+        }
+        if (!changed) break;
+      }
+      const sizeOf = (n: FlowNode<DazyNodeData>) => ({
+        w: n.measured?.width ?? n.width ?? 240,
+        h: n.measured?.height ?? n.height ?? 120,
+      });
+      // Bucket by column, preserving current vertical order so a tidy doesn't
+      // scramble an arrangement the user already finds readable.
+      const cols = new Map<number, FlowNode<DazyNodeData>[]>();
+      for (const n of nds) {
+        const c = layer.get(n.id) ?? 0;
+        const arr = cols.get(c);
+        if (arr) arr.push(n);
+        else cols.set(c, [n]);
+      }
+      const sortedCols = [...cols.keys()].sort((a, b) => a - b);
+      let maxColH = 0;
+      const colH = new Map<number, number>();
+      for (const c of sortedCols) {
+        const arr = cols.get(c)!;
+        arr.sort((a, b) => a.position.y - b.position.y);
+        const h =
+          arr.reduce((s, n) => s + sizeOf(n).h, 0) + VGAP * (arr.length - 1);
+        colH.set(c, h);
+        if (h > maxColH) maxColH = h;
+      }
+      const startX = 80;
+      const startY = 80;
+      const pos = new Map<string, { x: number; y: number }>();
+      let x = startX;
+      for (const c of sortedCols) {
+        const arr = cols.get(c)!;
+        const colW = Math.max(...arr.map((n) => sizeOf(n).w));
+        let y = startY + (maxColH - (colH.get(c) ?? 0)) / 2;
+        for (const n of arr) {
+          const { w, h } = sizeOf(n);
+          pos.set(n.id, { x: x + (colW - w) / 2, y });
+          y += h + VGAP;
+        }
+        x += colW + HGAP;
+      }
+      return nds.map((n) =>
+        pos.has(n.id) ? { ...n, position: pos.get(n.id)! } : n,
+      );
+    });
+    setDirty(true);
+    // Re-frame once the DOM settles on the new positions.
+    window.setTimeout(() => fitView({ padding: 0.3, duration: 400 }), 50);
+  }, [edges, fitView]);
 
   const onDragOver = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -3215,6 +3295,18 @@ function EditorInner() {
               <StickyNote size={15} />
               <span className="toolbar-label">{t("editor.addFrame")}</span>
             </button>
+            {/* One-click "Tidy" — re-columns the whole graph by dependency
+                depth. Hidden until there are 2+ nodes to arrange. */}
+            {nodes.length >= 2 && (
+              <button
+                className="ghost"
+                onClick={autoLayout}
+                title={t("editor.tidyTitle")}
+              >
+                <LayoutGrid size={15} />
+                <span className="toolbar-label">{t("editor.tidy")}</span>
+              </button>
+            )}
           </div>
 
           {/* Align & distribute — appears only while 2+ nodes are selected,
@@ -3925,6 +4017,24 @@ function EditorInner() {
               background: "var(--surface)",
               border: "1px solid var(--border)",
               borderRadius: "var(--r-2)",
+            }}
+          />
+          {/* Minimap for navigating large graphs — the standard node-editor
+              affordance once a flow grows past a screenful. Node swatches are
+              tinted by run status so the map doubles as a health overview;
+              pannable so clicking jumps the viewport. */}
+          <MiniMap
+            pannable
+            zoomable
+            ariaLabel={t("editor.minimap")}
+            className="dz-minimap"
+            maskColor="var(--canvas-minimap-mask)"
+            nodeColor={(n) => {
+              const status = (n.data as DazyNodeData | undefined)?.status;
+              if (status === "running") return "var(--status-running)";
+              if (status === "succeeded") return "var(--status-completed)";
+              if (status === "failed") return "var(--status-failed)";
+              return "var(--border-strong)";
             }}
           />
         </ReactFlow>

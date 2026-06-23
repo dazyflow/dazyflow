@@ -101,7 +101,8 @@
     "orgDeletePassword": "Confirm your password",
     "orgDeletePasswordPlaceholder": "Your account password",
     "orgDeletePasswordRequired": "Enter your password to confirm.",
-    "noSubject": "(no subject)"
+    "noSubject": "(no subject)",
+    "overview": "Overview"
   },
   "verifyEmail": {
     "working": "Confirming your email…",
@@ -394,7 +395,18 @@
     "privateOwnedBy": "Private — owned by {{owner}}",
     "createdBy": "Created by {{owner}}",
     "needEdit": "You need edit access to create flows.",
-    "nextRun": "Next run {{when}}"
+    "nextRun": "Next run {{when}}",
+    "searchPlaceholder": "Search flows…",
+    "filterStatus": "Status",
+    "statusAll": "All",
+    "sortBy": "Sort",
+    "sortRecent": "Recently run",
+    "sortName": "Name",
+    "sortStatus": "Status",
+    "noMatches": "No flows match your filters.",
+    "lastRun": "Last run {{when}}",
+    "neverRun": "Never run",
+    "sparkSummary": "{{ok}} of last {{total}} runs succeeded"
   },
   "settings": {
     "title": "Flow settings",
@@ -1034,7 +1046,12 @@
     "selectRun": "Select run {{id}}",
     "bulkRetryPartial": "{{failed}} of {{total}} runs could not be retried.",
     "confirmBulkRetryTitle": "Retry selected runs?",
-    "confirmBulkRetryBody": "Retry {{count}} run(s)? Each resumes from its failed step and re-runs the steps after it — including side effects like sending emails or messages."
+    "confirmBulkRetryBody": "Retry {{count}} run(s)? Each resumes from its failed step and re-runs the steps after it — including side effects like sending emails or messages.",
+    "searchPlaceholder": "Search by run ID or flow…",
+    "filterFlow": "Flow",
+    "allFlows": "All flows",
+    "resultCount": "{{count}}{{more}} runs",
+    "noMatches": "No runs match your search."
   },
   "gitCreds": {
     "title": "Git credentials",
@@ -1372,7 +1389,11 @@
     "providerLabel": "AI provider",
     "needConnect": "Connect Claude or ChatGPT on the <0>Apps page</0> to use this.",
     "starters": "Start from:",
-    "starter": { "greeting": "Greeting", "receipt": "Receipt", "announcement": "Announcement" },
+    "starter": {
+      "greeting": "Greeting",
+      "receipt": "Receipt",
+      "announcement": "Announcement"
+    },
     "sampleData": "Sample data (for preview only)",
     "badJson": "Sample data isn't valid JSON yet.",
     "preview": "Live preview",
@@ -1567,10 +1588,47 @@
     "connNeededAskAdmin": "Ask an org admin to connect these.",
     "adminBlockedOnly": "Setup isn't finished on this server: your administrator needs to enable {{items}} before this flow can run.",
     "adminBlockedAppend": "Your administrator also needs to enable: {{items}}.",
-    "adminBlockedCta": "View setup status"
+    "adminBlockedCta": "View setup status",
+    "tidy": "Tidy",
+    "tidyTitle": "Auto-arrange the flow into clean columns",
+    "minimap": "Flow minimap"
   },
   "iconUpload": {
     "upload": "Upload image",
     "remove": "Remove"
+  },
+  "commandPalette": {
+    "title": "Command bar",
+    "placeholder": "Jump to a page or flow…",
+    "goTo": "Go to",
+    "flowSublabel": "Flow",
+    "noResults": "Nothing matches “{{query}}”.",
+    "hintOpen": "open"
+  },
+  "dashboard": {
+    "title": "Overview",
+    "subtitle": "Your workspace at a glance.",
+    "greeting": "Welcome back, {{name}}.",
+    "runsToday": "Runs today",
+    "successRate": "Success rate",
+    "overRuns": "over {{count}} finished",
+    "needsAttention": "Needs attention",
+    "approvalsWaiting": "Approvals waiting",
+    "recentActivity": "Recent activity",
+    "viewAll": "View all",
+    "noFailures": "No failed runs. All clear.",
+    "noRuns": "No runs yet.",
+    "flowSummary": "{{total}} flows · {{live}} live",
+    "manageFlows": "Manage flows"
+  },
+  "shortcuts": {
+    "title": "Keyboard shortcuts",
+    "general": "General",
+    "editor": "Flow editor",
+    "commandBar": "Open the command bar",
+    "help": "Show keyboard shortcuts",
+    "addStep": "Add a step",
+    "deleteSelection": "Delete the selection",
+    "moveNode": "Move the selected step"
   }
 }

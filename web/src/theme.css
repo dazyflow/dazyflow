@@ -51,6 +51,8 @@
      light mode. */
   --canvas-grid: rgba(255, 255, 255, 0.05);
   --canvas-grid-major: rgba(255, 255, 255, 0.22);
+  /* Minimap dimming mask over the off-viewport area. */
+  --canvas-minimap-mask: rgba(10, 6, 26, 0.6);
 
   /* Copyable code/value family (.dz-code): terminal-style in the dark
      theme, themed light in light mode so the code stays readable. */
@@ -189,6 +191,7 @@
   --canvas-dot: rgba(28, 35, 51, 0.07);
   --canvas-grid: rgba(28, 35, 51, 0.025);
   --canvas-grid-major: rgba(28, 35, 51, 0.045);
+  --canvas-minimap-mask: rgba(120, 130, 150, 0.25);
 
   /* Copyable code blocks: a cool light well with slate ink — the
      dark terminal box reads as a hole punched in a light page. */

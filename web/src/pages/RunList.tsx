@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Activity, ExternalLink, RotateCcw } from "lucide-react";
+import { Activity, ExternalLink, RotateCcw, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
@@ -49,6 +49,14 @@ export function RunList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<JobStatus | "">("");
+  // Free-text filter over the loaded rows (run id + flow name). Client-side
+  // by design: the runs API has no text-search param, so this narrows what's
+  // already fetched rather than querying the server.
+  const [query, setQuery] = useState("");
+  // Per-flow filter. "" = all flows (listAllRuns); a graph_id switches the
+  // fetch to that flow's own run history (listRuns), so it's server-side and
+  // paginates correctly past the first page.
+  const [flowFilter, setFlowFilter] = useState("");
   const [hasMore, setHasMore] = useState(false);
   // Failed-runs inbox: ids the user has checked for bulk retry. Only
   // populated/shown in the Failed filter, where retrying makes sense.
@@ -81,22 +89,46 @@ export function RunList() {
     };
   }, [token, activeTenant, activeWorkspace, me]);
 
+  // One fetch path for every load site (initial, poll, load-more, post-retry
+  // refresh) so the all-flows vs per-flow branch lives in a single place.
+  // Per-flow uses listRuns (that flow's own paginated history); all-flows uses
+  // listAllRuns. Both honour the status filter.
+  const fetchRunsPage = useCallback(
+    (offset: number, limit: number = PAGE_SIZE) => {
+      const tok = token!;
+      if (flowFilter) {
+        return api
+          .listRuns(
+            tok,
+            activeTenant || me?.tenant || "",
+            activeWorkspace || me?.workspace || "",
+            flowFilter,
+            { limit, offset, status: filter || undefined },
+          )
+          .then((r) => r.runs ?? []);
+      }
+      return api
+        .listAllRuns(tok, {
+          limit,
+          offset,
+          status: filter || undefined,
+          workspace: activeWorkspace || undefined,
+          tenant: activeTenant || undefined,
+        })
+        .then((r) => r.runs ?? []);
+    },
+    [token, flowFilter, filter, activeTenant, activeWorkspace, me],
+  );
+
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
     setSelected(new Set());
-    api
-      .listAllRuns(token, {
-        limit: PAGE_SIZE,
-        status: filter || undefined,
-        workspace: activeWorkspace || undefined,
-        tenant: activeTenant || undefined,
-      })
-      .then((r) => {
+    fetchRunsPage(0)
+      .then((page) => {
         if (cancelled) return;
-        const page = r.runs ?? [];
         setRuns(page);
         setHasMore(page.length === PAGE_SIZE);
       })
@@ -109,7 +141,7 @@ export function RunList() {
     return () => {
       cancelled = true;
     };
-  }, [token, filter, activeWorkspace, activeTenant]);
+  }, [token, fetchRunsPage]);
 
   // Live polling whenever anything is in-flight — refresh only the first
   // PAGE_SIZE rows so a long scrollback isn't repeatedly fetched.
@@ -130,24 +162,15 @@ export function RunList() {
   useEffect(() => {
     if (!token || !anyLive) return;
     const t = window.setInterval(() => {
-      api
-        .listAllRuns(token, {
-          limit: Math.max(PAGE_SIZE, runCountRef.current),
-          status: filter || undefined,
-          workspace: activeWorkspace || undefined,
-          // Match the initial load: without the tenant, a multi-tenant
-          // principal's poll can replace the list with other tenants' runs.
-          tenant: activeTenant || undefined,
-        })
-        .then((r) => {
-          const page = r.runs ?? [];
+      fetchRunsPage(0, Math.max(PAGE_SIZE, runCountRef.current))
+        .then((page) => {
           setRuns(page);
           setHasMore(page.length >= PAGE_SIZE);
         })
         .catch(() => {});
     }, 3000);
     return () => window.clearInterval(t);
-  }, [token, anyLive, filter, activeWorkspace, activeTenant]);
+  }, [token, anyLive, fetchRunsPage]);
 
   // The Failed filter doubles as a retry inbox: checkboxes + a bulk
   // "Retry selected" that resumes each failed run from where it failed.
@@ -163,7 +186,9 @@ export function RunList() {
 
   const toggleSelectAll = () =>
     setSelected((prev) =>
-      prev.size === runs.length ? new Set() : new Set(runs.map((r) => r.id)),
+      prev.size === visibleRuns.length
+        ? new Set()
+        : new Set(visibleRuns.map((r) => r.id)),
     );
 
   const retryOne = async (id: string) => {
@@ -193,13 +218,7 @@ export function RunList() {
         setError(t("runList.bulkRetryPartial", { failed: failures, total: ids.length }));
       }
       // Refresh so the new runs appear and the retried ones update.
-      const r = await api.listAllRuns(token, {
-        limit: PAGE_SIZE,
-        status: filter || undefined,
-        workspace: activeWorkspace || undefined,
-        tenant: activeTenant || undefined,
-      });
-      setRuns(r.runs ?? []);
+      setRuns(await fetchRunsPage(0));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -211,14 +230,7 @@ export function RunList() {
     if (!token || loading) return;
     setLoading(true);
     try {
-      const r = await api.listAllRuns(token, {
-        limit: PAGE_SIZE,
-        offset: runs.length,
-        status: filter || undefined,
-        workspace: activeWorkspace || undefined,
-        tenant: activeTenant || undefined,
-      });
-      const next = r.runs ?? [];
+      const next = await fetchRunsPage(runs.length);
       setRuns((prev) => [...prev, ...next]);
       setHasMore(next.length === PAGE_SIZE);
     } catch (e) {
@@ -227,6 +239,25 @@ export function RunList() {
       setLoading(false);
     }
   };
+
+  // Flow dropdown options, sorted by display name — only flows that have a
+  // name resolved (others stay reachable via "All flows").
+  const flowOptions = useMemo(
+    () =>
+      Object.entries(flowNames).sort((a, b) => a[1].localeCompare(b[1])),
+    [flowNames],
+  );
+
+  // Text filter applied to the loaded rows: matches run id or flow name.
+  const visibleRuns = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return runs;
+    return runs.filter(
+      (r) =>
+        r.id.toLowerCase().includes(q) ||
+        (flowNames[r.graph_id] ?? r.graph_id).toLowerCase().includes(q),
+    );
+  }, [runs, query, flowNames]);
 
   return (
     <div>
@@ -241,7 +272,7 @@ export function RunList() {
         </div>
       </div>
 
-      <div className="run-history-filters" style={{ marginBottom: "var(--space-4)" }}>
+      <div className="run-history-filters" style={{ marginBottom: "var(--space-3)" }}>
         {STATUS_CHIPS.map((c) => (
           <button
             key={c.labelKey}
@@ -254,6 +285,39 @@ export function RunList() {
             {t(c.labelKey)}
           </button>
         ))}
+      </div>
+
+      <div className="run-toolbar">
+        <div className="flow-search">
+          <Search size={15} aria-hidden />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t("runList.searchPlaceholder")}
+            aria-label={t("runList.searchPlaceholder")}
+          />
+        </div>
+        <label className="flow-filter">
+          <span className="flow-filter-label">{t("runList.filterFlow")}</span>
+          <select
+            value={flowFilter}
+            onChange={(e) => setFlowFilter(e.target.value)}
+          >
+            <option value="">{t("runList.allFlows")}</option>
+            {flowOptions.map(([id, name]) => (
+              <option key={id} value={id}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <span className="run-count">
+          {t("runList.resultCount", {
+            count: visibleRuns.length,
+            more: hasMore ? "+" : "",
+          })}
+        </span>
       </div>
 
       {/* Failed-runs inbox bulk action. Appears in the Failed filter once
@@ -302,7 +366,7 @@ export function RunList() {
         </div>
       )}
 
-      {runs.length > 0 && (
+      {visibleRuns.length > 0 && (
         <div className="card" style={{ padding: 0, overflow: "hidden" }}>
           <table className="run-table">
             <thead>
@@ -312,11 +376,15 @@ export function RunList() {
                     <input
                       type="checkbox"
                       aria-label={t("runList.selectAll")}
-                      checked={runs.length > 0 && selected.size === runs.length}
+                      checked={
+                        visibleRuns.length > 0 &&
+                        selected.size === visibleRuns.length
+                      }
                       ref={(el) => {
                         if (el)
                           el.indeterminate =
-                            selected.size > 0 && selected.size < runs.length;
+                            selected.size > 0 &&
+                            selected.size < visibleRuns.length;
                       }}
                       onChange={toggleSelectAll}
                     />
@@ -331,7 +399,7 @@ export function RunList() {
               </tr>
             </thead>
             <tbody>
-              {runs.map((r) => (
+              {visibleRuns.map((r) => (
                 <tr key={r.id}>
                   {showInbox && (
                     <td>
@@ -432,6 +500,12 @@ export function RunList() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {runs.length > 0 && visibleRuns.length === 0 && (
+        <div className="card" style={{ color: "var(--muted)" }}>
+          {t("runList.noMatches")}
         </div>
       )}
 
