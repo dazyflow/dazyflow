@@ -438,7 +438,7 @@ func scoreGraph(t *testing.T, name string, g core.Graph) {
 	}
 
 	fmt.Printf("\n-- manifest validation (NOW also in the loop) --\n")
-	mi := manifestValidationIssues(g, manifestMap())
+	mi := core.ManifestLintIssues(g, manifestMap())
 	if len(mi) == 0 {
 		fmt.Println("  (clean — loop would ACCEPT)")
 	}

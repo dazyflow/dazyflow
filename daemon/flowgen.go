@@ -435,8 +435,7 @@ func (h *HTTPGateway) generateFlow(ctx context.Context, provider, key, desc stri
 			}
 			stampGraph(&g, tenant, workspace)
 			g, _ = finalizeTriggers(g, tz)
-			v := core.LintGraph(g)
-			v = append(v, manifestValidationIssues(g, manifestByID)...)
+			v := core.ValidateGraphFull(g, manifestByID)
 			if hasLintError(v) {
 				agentTurn(&messages, act, "The flow is NOT valid yet — fix these:\n"+formatLintErrors(v))
 			} else {
@@ -466,8 +465,7 @@ func (h *HTTPGateway) generateFlow(ctx context.Context, provider, key, desc stri
 			// linter and the manifest-level structural validator. Running them
 			// HERE means a guessed port or mis-wired for_each is repaired now,
 			// not surfaced as a cryptic error the first time the user hits Run.
-			checks := core.LintGraph(cand)
-			checks = append(checks, manifestValidationIssues(cand, manifestByID)...)
+			checks := core.ValidateGraphFull(cand, manifestByID)
 			issues = append(issues, checks...)
 			best = cand
 			if !hasLintError(checks) {
@@ -515,31 +513,6 @@ func finalizeTriggers(g core.Graph, tz string) (core.Graph, []core.LintIssue) {
 	return g, warns
 }
 
-// manifestValidationIssues runs the SAME manifest-level validator the engine
-// runs before execution (unknown module, nonexistent ports, MIME mismatch,
-// unconnected required inputs, fan-in/variadic bounds) and converts each
-// finding into a repairable LintError so the generate loop can feed it back to
-// the model. Returns nil when no catalog was supplied — manifest validation is
-// impossible without it, and the unit tests exercise the loop with none.
-func manifestValidationIssues(g core.Graph, manifests map[string]core.Manifest) []core.LintIssue {
-	if len(manifests) == 0 {
-		return nil
-	}
-	err := core.ValidateWithManifests(g, manifests)
-	if err == nil {
-		return nil
-	}
-	// errors.Join exposes the individual problems via Unwrap() []error — surface
-	// each as its own issue so the repair prompt lists them one per line.
-	if joined, ok := err.(interface{ Unwrap() []error }); ok {
-		out := make([]core.LintIssue, 0, len(joined.Unwrap()))
-		for _, e := range joined.Unwrap() {
-			out = append(out, core.LintIssue{Code: "invalid_structure", Severity: core.LintError, Message: e.Error()})
-		}
-		return out
-	}
-	return []core.LintIssue{{Code: "invalid_structure", Severity: core.LintError, Message: err.Error()}}
-}
 
 // formatLintErrors renders the LintError-severity findings as a bullet list for
 // the model's repair turn (warnings are advisory and omitted).

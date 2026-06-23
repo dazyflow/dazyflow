@@ -159,6 +159,50 @@ func ValidateWithManifests(g Graph, manifests map[string]Manifest) error {
 	return errors.Join(errs...)
 }
 
+// ValidateGraphFull is the single authoring gate: it runs BOTH production
+// checks over g and returns their union as lint issues — the security/
+// placeholder linter (LintGraph) and the manifest-level structural validator
+// (ValidateWithManifests: unknown module, missing ports, unsatisfied required
+// inputs, fan-in/variadic/MIME rules).
+//
+// Every author goes through this one function — the server-side AI generator
+// and the POST /validate/graph endpoint both call it — so a graph that lints
+// clean here is acceptable no matter which orchestrator composed it (the
+// server's connected LLM, or an MCP host such as Claude Code authoring through
+// the catalog tools). The two paths cannot drift because there is only one.
+//
+// When manifests is empty the structural gate is skipped (LintGraph only): the
+// caller has no catalog to validate against (e.g. a unit harness), so manifest
+// validation is impossible and we degrade to the placeholder/security rules.
+func ValidateGraphFull(g Graph, manifests map[string]Manifest) []LintIssue {
+	issues := LintGraph(g)
+	return append(issues, ManifestLintIssues(g, manifests)...)
+}
+
+// ManifestLintIssues runs ValidateWithManifests and converts each structural
+// problem into a repairable LintError (one issue per problem, so a repair
+// prompt or UI can list them individually). Returns nil when no catalog is
+// supplied — manifest validation is impossible without one.
+func ManifestLintIssues(g Graph, manifests map[string]Manifest) []LintIssue {
+	if len(manifests) == 0 {
+		return nil
+	}
+	err := ValidateWithManifests(g, manifests)
+	if err == nil {
+		return nil
+	}
+	// errors.Join exposes the individual problems via Unwrap() []error — surface
+	// each as its own issue so a repair prompt lists them one per line.
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		out := make([]LintIssue, 0, len(joined.Unwrap()))
+		for _, e := range joined.Unwrap() {
+			out = append(out, LintIssue{Code: "invalid_structure", Severity: LintError, Message: e.Error()})
+		}
+		return out
+	}
+	return []LintIssue{{Code: "invalid_structure", Severity: LintError, Message: err.Error()}}
+}
+
 // hasInlineParamValue reports whether params carries a usable value for the
 // given input port name — the inline-param fallback for a required input that
 // isn't wired. A nil map, missing key, nil value, or empty string counts as

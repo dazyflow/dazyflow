@@ -776,7 +776,13 @@ func (h *HTTPGateway) validateGraphLiteral(rw http.ResponseWriter, r *http.Reque
 	if g.Workspace == "" {
 		g.Workspace = p.Workspace
 	}
-	issues := core.LintGraph(g)
+	// Run the SAME two gates the AI generator applies (core.ValidateGraphFull:
+	// the security/placeholder linter PLUS the manifest-level structural
+	// validator) so a graph an MCP host hand-authors here validates identically
+	// to one the server LLM drafts. Loading the catalog is best-effort — if it's
+	// unavailable, ValidateGraphFull degrades to LintGraph-only.
+	manifests, _ := h.svc.ListDrops(r.Context(), p)
+	issues := core.ValidateGraphFull(g, manifests)
 	writeJSON(rw, http.StatusOK, map[string]any{
 		"ok":     !hasLintError(issues),
 		"issues": issues,
