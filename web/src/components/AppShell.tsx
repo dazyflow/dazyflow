@@ -16,6 +16,7 @@ import {
   FolderTree,
   Building2,
   Boxes,
+  Plug,
   Plus,
   Send,
   Settings as SettingsIcon,
@@ -30,6 +31,7 @@ import { ActiveFlowContext, FLOWS_CHANGED_EVENT } from "../activeFlow";
 import { shouldShowTenantID } from "../lib/visibleTenant";
 import { tenantDisplayName } from "../lib/orgDisplayName";
 import { OrgSwitcherModal } from "./OrgSwitcherModal";
+import { ConnectMcpClientModal } from "./ConnectMcpClientModal";
 import { CommandPalette } from "./CommandPalette";
 import { ShortcutsModal } from "./ShortcutsModal";
 import { FlowIcon } from "../icons";
@@ -122,6 +124,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     reloadTenants,
   } = useAuth();
   const [orgModalOpen, setOrgModalOpen] = useState(false);
+  // Drives the "Connect an assistant" guided modal (mints a personal,
+  // workspace-scoped API key + hands back the MCP client config). Opened
+  // from the account menu; the modal pulls auth context itself.
+  const [connectingMcp, setConnectingMcp] = useState(false);
   // Daemon version for the account-menu footer. Public GET /api/v1, so
   // no token needed; fetched once on mount. Stays null (footer hidden)
   // if the request fails — it's purely informational.
@@ -644,6 +650,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <AccountMenu
               email={me.subject || t("nav.noSubject")}
               onSignOut={signOut}
+              onConnectMcp={() => setConnectingMcp(true)}
               collapsed={navCollapsed}
               showAdmin={showAdmin}
               version={serverVersion}
@@ -683,6 +690,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         flows={flows}
       />
       {helpOpen && <ShortcutsModal onClose={() => setHelpOpen(false)} />}
+      {connectingMcp && (
+        <ConnectMcpClientModal onClose={() => setConnectingMcp(false)} />
+      )}
     </div>
     </ActiveFlowContext.Provider>
   );
@@ -697,12 +707,14 @@ export function AppShell({ children }: { children: ReactNode }) {
 function AccountMenu({
   email,
   onSignOut,
+  onConnectMcp,
   collapsed,
   showAdmin,
   version,
 }: {
   email: string;
   onSignOut: () => void;
+  onConnectMcp: () => void;
   collapsed: boolean;
   showAdmin: boolean;
   version: string | null;
@@ -786,6 +798,23 @@ function AccountMenu({
             >
               <SettingsIcon size={14} />
               {t("account.settings")}
+            </button>
+            {/* Connect an assistant — the guided MCP-client flow: mints a
+                personal, workspace-scoped API key and hands back the
+                config snippet for Claude Desktop / Claude Code. Lives here
+                as a per-user action next to Settings (the old Welcome-page
+                entry point was dropped in "Simplify welcome"). */}
+            <button
+              type="button"
+              role="menuitem"
+              className="workspace-pop-row account-pop-row"
+              onClick={() => {
+                setOpen(false);
+                onConnectMcp();
+              }}
+            >
+              <Plug size={14} />
+              {t("account.connectMcp")}
             </button>
             {/* Usage (plan + consumption) moved out of the primary sidebar
                 into the account menu — it's billing/account info, not a

@@ -217,6 +217,7 @@
   "account": {
     "menu": "Kontomeny",
     "settings": "Inställningar",
+    "connectMcp": "Anslut en assistent",
     "signOut": "Logga ut"
   },
   "flowMenu": {
@@ -328,7 +329,8 @@
   },
   "connectMcp": {
     "title": "Anslut en MCP-klient",
-    "intro": "Vi skapar en API-nyckel kopplad till ditt konto och visar sedan konfigurationen för den MCP-klient du använder. Nyckeln kan köra och redigera flöden i den här arbetsytan — inget annat.",
+    "introRunEdit": "Vi skapar en API-nyckel kopplad till ditt konto och visar sedan konfigurationen för den MCP-klient du använder. Nyckeln kan köra och redigera flöden i den här arbetsytan — inget annat.",
+    "introRun": "Vi skapar en API-nyckel kopplad till ditt konto och visar sedan konfigurationen för den MCP-klient du använder. Nyckeln kan köra flöden i den här arbetsytan — den ärver din behörighet, så den kan inte redigera dem.",
     "subjectLabel": "Ditt konto",
     "workspaceLabel": "Arbetsyta",
     "workspaceAny": "alla (hela organisationen)",

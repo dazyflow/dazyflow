@@ -1,12 +1,14 @@
 package daemon
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
 
+	"git.sr.ht/~klahr/dazyflow/auth"
 	"git.sr.ht/~klahr/dazyflow/core"
 )
 
@@ -262,6 +264,43 @@ func TestMyAPIKeys_PermissionOverflow(t *testing.T) {
 	rw := h.do(t, "POST", "/api/v1/me/api-keys", body)
 	if rw.Code != http.StatusForbidden {
 		t.Fatalf("code = %d, want 403 (permission overflow); body = %s", rw.Code, rw.Body.String())
+	}
+}
+
+// TestMyAPIKeys_DefaultCappedToViewer covers the Connect-an-assistant
+// default path: a viewer (graph:run only) issuing a key with NO roles
+// gets the claude-mcp default CAPPED to what they hold — a run-only key,
+// not a 403. An assistant can never exceed its user.
+func TestMyAPIKeys_DefaultCappedToViewer(t *testing.T) {
+	h := newGatewayHarness(t)
+
+	// Mint a viewer token (graph:run only) in the same keystore.
+	viewer := core.TeamRoleViewer()
+	_, vtok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-viewer", "t", "ws", "vera", []core.Role{viewer}, nil)
+	if err != nil {
+		t.Fatalf("issue viewer key: %v", err)
+	}
+
+	// Self-issue with no roles → server applies the capped default.
+	req := httptest.NewRequest("POST", "/api/v1/me/api-keys", bytes.NewBufferString("{}"))
+	req.Header.Set("Authorization", "Bearer "+vtok)
+	req.Header.Set("Content-Type", "application/json")
+	rw := httptest.NewRecorder()
+	ServeForTest(h.gw, rw, req)
+	if rw.Code != http.StatusCreated {
+		t.Fatalf("issue: code = %d, want 201; body = %s", rw.Code, rw.Body.String())
+	}
+
+	var issued struct {
+		Roles []core.Role `json:"roles"`
+	}
+	decodeJSON(t, rw, &issued)
+	var perms []core.Permission
+	for _, r := range issued.Roles {
+		perms = append(perms, r.Permissions...)
+	}
+	if len(perms) != 1 || perms[0] != core.PermGraphRun {
+		t.Fatalf("viewer's assistant key perms = %v, want [graph:run] only (no graph:edit)", perms)
 	}
 }
 

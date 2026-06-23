@@ -216,6 +216,7 @@
   "account": {
     "menu": "Account menu",
     "settings": "Settings",
+    "connectMcp": "Connect an assistant",
     "signOut": "Sign out"
   },
   "flowMenu": {
@@ -327,7 +328,8 @@
   },
   "connectMcp": {
     "title": "Connect an MCP client",
-    "intro": "We'll mint an API key scoped to your account, then show you the config snippet for the MCP client you use. The key can run and edit flows in this workspace — nothing else.",
+    "introRunEdit": "We'll mint an API key scoped to your account, then show you the config snippet for the MCP client you use. The key can run and edit flows in this workspace — nothing else.",
+    "introRun": "We'll mint an API key scoped to your account, then show you the config snippet for the MCP client you use. The key can run flows in this workspace — it inherits your access, so it can't edit them.",
     "subjectLabel": "Your account",
     "workspaceLabel": "Workspace",
     "workspaceAny": "any (organization-wide)",

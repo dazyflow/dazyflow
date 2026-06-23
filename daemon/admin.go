@@ -177,23 +177,35 @@ func (s *Service) IssueOwnAPIKey(ctx context.Context, p core.Principal, params S
 		return IssuedAPIKey{}, errors.New("principal has no tenant")
 	}
 
+	callerPerms := principalPermissions(p)
+
 	roles := params.Roles
 	if len(roles) == 0 {
-		// Copy the default so callers can't mutate the package var.
-		copyPerms := make([]core.Permission, len(defaultSelfIssueRole.Permissions))
-		copy(copyPerms, defaultSelfIssueRole.Permissions)
-		roles = []core.Role{{Name: defaultSelfIssueRole.Name, Permissions: copyPerms}}
-	}
-
-	// Cap requested permissions to what the caller actually holds. The
-	// authenticator would refuse the key at use time, but failing here
-	// gives a clearer error message ("you can't grant secret:write to
-	// yourself") and avoids minting a permanently-broken key.
-	callerPerms := principalPermissions(p)
-	for _, r := range roles {
-		for _, perm := range r.Permissions {
-			if _, ok := callerPerms[perm]; !ok {
-				return IssuedAPIKey{}, fmt.Errorf("requested permission %q exceeds caller's own permissions", perm)
+		// Default (Connect-an-assistant) path: take the claude-mcp role
+		// but CAP it to what the caller actually holds — an assistant can
+		// never exceed its user. A viewer (graph:run only) gets a run-only
+		// key rather than an error; an editor gets run+edit. Capping (not
+		// rejecting) is what makes the flow usable by any member.
+		capped := make([]core.Permission, 0, len(defaultSelfIssueRole.Permissions))
+		for _, perm := range defaultSelfIssueRole.Permissions {
+			if _, ok := callerPerms[perm]; ok {
+				capped = append(capped, perm)
+			}
+		}
+		if len(capped) == 0 {
+			return IssuedAPIKey{}, errors.New("your account has no permissions an assistant could use")
+		}
+		roles = []core.Role{{Name: defaultSelfIssueRole.Name, Permissions: capped}}
+	} else {
+		// Explicit roles: reject (don't silently cap) any permission the
+		// caller lacks. The authenticator would refuse the key at use time,
+		// but failing here gives a clearer error message ("you can't grant
+		// secret:write to yourself") and avoids minting a broken key.
+		for _, r := range roles {
+			for _, perm := range r.Permissions {
+				if _, ok := callerPerms[perm]; !ok {
+					return IssuedAPIKey{}, fmt.Errorf("requested permission %q exceeds caller's own permissions", perm)
+				}
 			}
 		}
 	}

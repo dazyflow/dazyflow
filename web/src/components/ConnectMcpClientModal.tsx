@@ -17,11 +17,6 @@ import type { IssuedAPIKey } from "../types";
 // Anthropic Claude brand; the card icons differentiate Desktop (raw
 // mark) from Code (mark inside a terminal frame).
 
-const CLAUDE_ROLE = {
-  name: "claude-mcp",
-  permissions: ["graph:run", "graph:edit"] as const,
-};
-
 type Stage = "confirm" | "reveal";
 
 type ClientID = "claude-desktop" | "claude-code";
@@ -98,6 +93,10 @@ export function ConnectMcpClientModal({ onClose }: { onClose: () => void }) {
 
   const subject = me?.subject ?? "";
   const workspace = activeWorkspace || me?.workspace || "";
+  // The minted key is capped to the caller's own permissions (server
+  // intersects the claude-mcp default with what you hold). Mirror that
+  // here so the copy doesn't promise edit access a viewer won't get.
+  const canEdit = me?.permissions?.includes("graph:edit") ?? false;
 
   const create = async () => {
     if (!token) return;
@@ -108,18 +107,12 @@ export function ConnectMcpClientModal({ onClose }: { onClose: () => void }) {
     setSubmitting(true);
     setError(null);
     try {
-      // Self-issue path. Server takes subject/tenant/workspace from
-      // the session and caps permissions to a subset of the caller's
-      // own — so the Connect button works for any signed-in member,
-      // not just tenant admins.
-      const k = await api.issueMyAPIKey(token, {
-        roles: [
-          {
-            name: CLAUDE_ROLE.name,
-            permissions: [...CLAUDE_ROLE.permissions],
-          },
-        ],
-      });
+      // Self-issue path. Server takes subject/tenant/workspace from the
+      // session and, with no roles specified, mints the claude-mcp default
+      // CAPPED to the caller's own permissions — so the Connect button
+      // works for any signed-in member (a viewer gets a run-only key, an
+      // editor gets run+edit), not just tenant admins.
+      const k = await api.issueMyAPIKey(token, {});
       setIssued(k);
       setStage("reveal");
     } catch (e) {
@@ -142,6 +135,7 @@ export function ConnectMcpClientModal({ onClose }: { onClose: () => void }) {
           <ConfirmStage
             subject={subject}
             workspace={workspace}
+            canEdit={canEdit}
             submitting={submitting}
             error={error}
             onCancel={onClose}
@@ -158,6 +152,7 @@ export function ConnectMcpClientModal({ onClose }: { onClose: () => void }) {
 function ConfirmStage({
   subject,
   workspace,
+  canEdit,
   submitting,
   error,
   onCancel,
@@ -165,6 +160,7 @@ function ConfirmStage({
 }: {
   subject: string;
   workspace: string;
+  canEdit: boolean;
   submitting: boolean;
   error: string | null;
   onCancel: () => void;
@@ -174,7 +170,9 @@ function ConfirmStage({
   return (
     <>
       <div className="settings-body">
-        <p className="settings-help">{t("connectMcp.intro")}</p>
+        <p className="settings-help">
+          {t(canEdit ? "connectMcp.introRunEdit" : "connectMcp.introRun")}
+        </p>
         <div className="sf-field">
           <div className="label-row">
             <label>{t("connectMcp.subjectLabel")}</label>
