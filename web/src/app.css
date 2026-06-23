@@ -7938,6 +7938,25 @@ button.warning:hover:not(:disabled) {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   z-index: 5;
+  /* When the controls can't all fit (small screens, inspector open) the bar
+     scrolls horizontally rather than widening the app. min-width:0 lets it
+     shrink below its content within the column flex layout so the overflow
+     stays inside the toolbar instead of pushing the canvas wider. */
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+/* Hide the horizontal scrollbar — the bar scrolls but reads as a clean
+   single-row toolbar (drag/swipe/wheel still works). */
+.editor-toolbar::-webkit-scrollbar {
+  display: none;
+}
+/* Direct children keep their natural width and overflow into the scroll
+   region instead of compressing — so buttons never squish below their
+   icon/label; the spacer just collapses to nothing when space runs out. */
+.editor-toolbar > * {
+  flex-shrink: 0;
 }
 /* Related actions cluster tightly; clusters are separated by dividers
    and the flexible spacer rather than by one uniform gap. */
