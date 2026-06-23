@@ -183,7 +183,11 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
       name: flowName,
       description: graph.description,
     });
-    navigate(`/flows/${encodeURIComponent(id)}`);
+    // animateBuild signals the editor to play the build animation on first
+    // load (drops appear and wire up in sequence) instead of snapping the
+    // finished graph onto the canvas — this is an AI-built flow, so showing
+    // it assemble reinforces "the assistant built this for you".
+    navigate(`/flows/${encodeURIComponent(id)}`, { state: { animateBuild: true } });
   };
 
   const submitBlank = async (e: React.FormEvent) => {

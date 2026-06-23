@@ -7,13 +7,38 @@ import (
 	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
-// BusEvent is what flows from a worker to subscribers waiting on a job.
-// Exactly one of Progress, NodeStatus, Terminal, or Paused is set per event.
+// BusEvent is what flows from a worker to subscribers waiting on a job —
+// or, for FlowUpdated, from a graph save to editors watching the flow.
+// Exactly one of Progress, NodeStatus, Terminal, Paused, or FlowUpdated is
+// set per event.
 type BusEvent struct {
-	Progress   *engine.GraphProgress
-	NodeStatus *NodeStatusEvent
-	Terminal   *TerminalEvent
-	Paused     *PausedEvent
+	Progress    *engine.GraphProgress
+	NodeStatus  *NodeStatusEvent
+	Terminal    *TerminalEvent
+	Paused      *PausedEvent
+	FlowUpdated *FlowUpdatedEvent
+}
+
+// FlowUpdatedEvent fires when a flow's graph is saved — by anyone: the web
+// editor, the MCP server, or a direct API call. An editor subscribed to the
+// flow (see flowBusKey) uses it to live-reflect external edits — e.g. an AI
+// assistant restructuring the flow through MCP — by re-fetching and animating
+// the new graph onto its canvas. Commit lets a client suppress the echo of
+// its own save; it carries no graph content, so a subscriber only learns
+// "this flow changed", then fetches the graph through the normal authorized
+// load path.
+type FlowUpdatedEvent struct {
+	FlowID   string `json:"flow_id"` // tenant/workspace/id
+	Commit   string `json:"commit"`
+	Author   string `json:"author"`
+	Autosave bool   `json:"autosave"`
+}
+
+// flowBusKey namespaces a flow's update events on the bus, distinct from the
+// job-id keyspace runs use. The same Bus carries both; the prefix keeps a
+// flow id like "acme/main/digest" from ever colliding with a job id.
+func flowBusKey(tenant, workspace, id string) string {
+	return "flow:" + tenant + "/" + workspace + "/" + id
 }
 
 // PausedEvent fires when a run hits a breakpoint (or steps): execution has

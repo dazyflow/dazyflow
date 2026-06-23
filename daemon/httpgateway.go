@@ -461,6 +461,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 		h.requireAuth(h.idempotencyMiddleware("/me/flows/{flow_id}/publish", h.publishFlowMe)))
 	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/unpublish",
 		h.requireAuth(h.idempotencyMiddleware("/me/flows/{flow_id}/unpublish", h.unpublishFlowMe)))
+	mux.HandleFunc("GET /api/v1/me/flows/{flow_id}/watch", h.requireAuth(h.watchFlowMe))
 	mux.HandleFunc("GET /api/v1/me/flows/{flow_id}/references", h.requireAuth(h.listReferences))
 	mux.HandleFunc("GET /api/v1/me/flows/{flow_id}/input-fields", h.requireAuth(h.listInputFields))
 	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/restore",
@@ -2027,6 +2028,65 @@ func (h *HTTPGateway) jobEvents(rw http.ResponseWriter, r *http.Request, p core.
 				writeSSE(rw, "terminal", newSSETerminalView(ev.Terminal))
 				flusher.Flush()
 				return
+			}
+		}
+	}
+}
+
+// watchFlowMe streams `flow_updated` Server-Sent Events for a flow: one
+// frame each time the flow's graph is saved, by anyone (the web editor, the
+// MCP server, a direct API call). An open editor subscribes so it can
+// live-reflect external edits — e.g. an AI assistant restructuring the flow
+// through MCP — animating the new graph onto its canvas.
+//
+// The frame carries only {flow_id, commit, author, autosave} — no graph
+// content. The client re-fetches the graph through the normal authorized
+// load path on receipt, and uses `commit` to ignore the echo of its own
+// save. Mirrors jobEvents' SSE plumbing (headers, flush, 25s keep-alive,
+// disconnect on context cancel).
+func (h *HTTPGateway) watchFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	// Validate scope + readability up front (and resolve the id parts) the
+	// same way a load would — a 403/404 here is clearer than a silent stream
+	// that never emits. The graph itself is discarded; only the key matters.
+	tenant, workspace, id, _, ok := h.loadFlowForRequest(rw, r, p, "")
+	if !ok {
+		return
+	}
+
+	flusher, ok := rw.(http.Flusher)
+	if !ok {
+		writeJSONError(rw, http.StatusInternalServerError, "streaming unsupported")
+		return
+	}
+	rw.Header().Set("Content-Type", "text/event-stream")
+	rw.Header().Set("Cache-Control", "no-cache")
+	rw.Header().Set("X-Accel-Buffering", "no") // for nginx
+	rw.WriteHeader(http.StatusOK)
+	// An initial comment opens the stream so the client's fetch resolves its
+	// response promptly even before the first edit lands.
+	_, _ = fmt.Fprintf(rw, ": watching\n\n")
+	flusher.Flush()
+
+	events, cancel := h.svc.bus().Subscribe(flowBusKey(tenant, workspace, id))
+	defer cancel()
+
+	ping := time.NewTicker(25 * time.Second)
+	defer ping.Stop()
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-ping.C:
+			_, _ = fmt.Fprintf(rw, ": ping\n\n")
+			flusher.Flush()
+		case ev, ok := <-events:
+			if !ok {
+				return
+			}
+			if ev.FlowUpdated != nil {
+				writeSSE(rw, "flow_updated", ev.FlowUpdated)
+				flusher.Flush()
 			}
 		}
 	}

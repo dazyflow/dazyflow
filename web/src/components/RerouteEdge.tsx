@@ -1,6 +1,7 @@
 import { BaseEdge, getBezierPath, useReactFlow, type EdgeProps } from "@xyflow/react";
 import {
   useCallback,
+  type CSSProperties,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
@@ -25,6 +26,12 @@ type RerouteData = {
   // True while data is flowing along this wire during a run (#9) — drives
   // the travelling-dot animation.
   active?: boolean;
+  // Set transiently while a freshly-built or externally-edited graph
+  // animates onto the canvas: the wire "draws in" (stroke-dashoffset sweep)
+  // after drawDelay seconds, so connections appear to be made after the
+  // drops they join settle. Cleared once the animation window passes. See
+  // applyGraphAnimated in FlowEditor.
+  drawDelay?: number;
 };
 
 // splinePath builds a smooth cubic curve passing through every point via
@@ -146,10 +153,27 @@ export function RerouteEdge({
     update(waypoints.filter((_, j) => j !== i));
   };
 
+  const drawing = typeof d.drawDelay === "number";
   return (
     // Label the connection for assistive tech: which two steps it wires.
     <g role="img" aria-label={i18n.t("rerouteEdge.connectionLabel", { source, target })}>
-      <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />
+      {drawing ? (
+        // Draw-in: pathLength=1 normalises the dash so the sweep is uniform
+        // regardless of wire length; the stroke-dashoffset animation (CSS,
+        // keyed off .rf-edge-draw) reveals the wire source→target after the
+        // staggered delay. Replaced by the real BaseEdge once the flag clears.
+        <path
+          className="rf-edge-draw"
+          d={path}
+          fill="none"
+          stroke={stroke}
+          strokeWidth={(style?.strokeWidth as number) ?? 2}
+          pathLength={1}
+          style={{ ["--draw-delay"]: `${d.drawDelay}s` } as CSSProperties}
+        />
+      ) : (
+        <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />
+      )}
       {/* Data-flow animation (#9): dots travel source→target along the path
           while the downstream node is running. Two staggered dots read as
           continuous flow. animateMotion follows the path's draw direction. */}

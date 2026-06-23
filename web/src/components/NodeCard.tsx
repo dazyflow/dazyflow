@@ -260,14 +260,20 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
         (d.lintMessage ? " lint-warn" : "") +
         (d.configErrors?.length ? " config-err" : "") +
         (d.setupNeeded ? " needs-setup" : "") +
-        (d.paused ? " paused" : "")
+        (d.paused ? " paused" : "") +
+        (d.enterDelay != null ? " dz-enter" : "")
       }
       // Identify the card to assistive tech: a labelled group naming the step,
       // its module, and (via aria-selected) whether it's the current selection.
       role="group"
       aria-label={`${d.label || d.moduleID} (${d.moduleID})${d.disabled ? ", disabled" : ""} flow step`}
       aria-selected={selected}
-      style={isTrigger ? ({ "--node-accent": color } as React.CSSProperties) : undefined}
+      style={
+        {
+          ...(isTrigger ? { "--node-accent": color } : {}),
+          ...(d.enterDelay != null ? { "--enter-delay": `${d.enterDelay}s` } : {}),
+        } as React.CSSProperties
+      }
     >
       {d.breakpoint && (
         <div className="dz-node-bp" aria-label={i18n.t("nodeCard.breakpoint")} title={i18n.t("nodeCard.breakpointTitle")} />
@@ -754,9 +760,15 @@ function OperatorChip({
         (d.disabled ? " dz-node-off" : "") +
         (d.lintMessage ? " lint-warn" : "") +
         (d.configErrors?.length ? " config-err" : "") +
-        (d.paused ? " paused" : "")
+        (d.paused ? " paused" : "") +
+        (d.enterDelay != null ? " dz-enter" : "")
       }
-      style={{ ["--op-color"]: color } as React.CSSProperties}
+      style={
+        {
+          ["--op-color"]: color,
+          ...(d.enterDelay != null ? { "--enter-delay": `${d.enterDelay}s` } : {}),
+        } as React.CSSProperties
+      }
       title={d.label}
     >
       {d.breakpoint && (

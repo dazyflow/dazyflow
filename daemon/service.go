@@ -553,10 +553,28 @@ func (s *Service) saveGraph(ctx context.Context, p core.Principal, g core.Graph,
 			g.Owner = p.Subject
 		}
 	}
+	var commit string
 	if coalesce {
-		return store.SaveCoalescing(g, p.Subject)
+		commit, err = store.SaveCoalescing(g, p.Subject)
+	} else {
+		commit, err = store.Save(g, p.Subject)
 	}
-	return store.Save(g, p.Subject)
+	if err != nil {
+		return "", err
+	}
+	// Notify any editor watching this flow so it can live-reflect the change
+	// (e.g. an AI assistant editing through MCP). Fire-and-forget, mirroring
+	// the rest of the Bus contract; Commit lets the saver suppress the echo
+	// of its own write so it doesn't re-animate what it just did.
+	s.bus().Publish(flowBusKey(g.Tenant, g.Workspace, g.ID), BusEvent{
+		FlowUpdated: &FlowUpdatedEvent{
+			FlowID:   g.Tenant + "/" + g.Workspace + "/" + g.ID,
+			Commit:   commit,
+			Author:   p.Subject,
+			Autosave: coalesce,
+		},
+	})
+	return commit, nil
 }
 
 // LoadGraph reads a graph from a tenant/workspace at the given ref

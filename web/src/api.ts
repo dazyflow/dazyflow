@@ -1306,6 +1306,64 @@ export const api = {
       }
     });
   },
+  // watchFlow opens an SSE stream that emits a `flow_updated` frame each
+  // time this flow's graph is saved — by anyone (the web editor, the MCP
+  // server, a direct API call). The editor uses it to live-reflect external
+  // edits (e.g. an AI assistant restructuring the flow through MCP). Read off
+  // a fetch body, like streamJob (EventSource can't send the auth header).
+  // The frame carries only {flow_id, commit, author, autosave}; onUpdated
+  // gets the parsed payload and the caller re-fetches the graph itself.
+  watchFlow(
+    token: string,
+    tenant: string,
+    workspace: string,
+    id: string,
+    onUpdated: (ev: {
+      flow_id: string;
+      commit: string;
+      author: string;
+      autosave: boolean;
+    }) => void,
+    signal: AbortSignal,
+  ): Promise<void> {
+    return fetch(
+      API_BASE +
+        `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/watch`,
+      { method: "GET", headers: { Authorization: `Bearer ${token}` }, signal },
+    ).then(async (res) => {
+      if (!res.ok || !res.body) {
+        if (res.status === 401) notifyUnauthorized();
+        throw new APIError(res.status, await res.text());
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) return;
+        buffer += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = buffer.indexOf("\n\n")) >= 0) {
+          const frame = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 2);
+          if (frame.startsWith(":")) continue; // keep-alive / open comment
+          let name = "message";
+          let dataLine = "";
+          for (const line of frame.split("\n")) {
+            if (line.startsWith("event: ")) name = line.slice(7);
+            else if (line.startsWith("data: ")) dataLine = line.slice(6);
+          }
+          if (name === "flow_updated" && dataLine) {
+            try {
+              onUpdated(JSON.parse(dataLine));
+            } catch {
+              /* ignore malformed frame */
+            }
+          }
+        }
+      }
+    });
+  },
   // listProviders returns every OAuth provider the daemon is
   // configured for, plus which accounts this tenant has already
   // connected. Drives the "Connect an app" panel. 501 when no OAuth

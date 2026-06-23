@@ -7,7 +7,7 @@ import {
   type DragEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
-import { useParams, useSearchParams, useNavigate } from "react-router-dom";
+import { useParams, useSearchParams, useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useActiveFlow, FLOWS_CHANGED_EVENT } from "../activeFlow";
 import { saveRecentFlow, userScope } from "../recentFlow";
@@ -223,6 +223,14 @@ function EditorInner() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  // animateBuild is set by CreateFlow when it opens a freshly AI-generated
+  // flow — the editor plays the build animation on first load. Consumed once
+  // (the ref) so a later re-render or revisit can't replay it; the history
+  // entry's state is also cleared below so a refresh won't re-trigger it.
+  const animateBuildRef = useRef(
+    !!(location.state as { animateBuild?: boolean } | null)?.animateBuild,
+  );
   const { token, me, hasPerm, activeTenant, activeWorkspace } = useAuth();
   // Connecting an app writes conn.<slug>.api_key — needs secret:write. Viewers
   // (graph:run only) can't, and the Apps connection card is hidden for them, so
@@ -242,6 +250,22 @@ function EditorInner() {
 
   const [nodes, setNodes] = useState<FlowNode<DazyNodeData>[]>([]);
   const [edges, setEdges] = useState<FlowEdge[]>([]);
+  // Transient animation state for an AI/MCP build or edit landing on the
+  // canvas (see applyGraphAnimated): per-node entrance delays + per-edge
+  // draw-in delays, both in seconds. Non-null marks a build in progress —
+  // the canvas wears .rf-animating so moved drops glide. Cleared by a timer
+  // once the staggered animation has played out. animEpochRef guards that
+  // timer so a second build supersedes the first's cleanup.
+  const [animApply, setAnimApply] = useState<{
+    enter: Map<string, number>;
+    draw: Map<string, number>;
+  } | null>(null);
+  const animEpochRef = useRef(0);
+  // Commit hashes this editor produced. The live flow-watch fires for every
+  // save — including our own — so we suppress the echo of a commit we just
+  // wrote (otherwise the canvas would re-animate the user's own edit). One-
+  // shot: the hash is removed when its echo arrives.
+  const ownCommitsRef = useRef<Set<string>>(new Set());
   // Comment frames (#3) live in their own state as React Flow nodes of
   // type "comment" — kept separate from `nodes` so node logic (align,
   // copy/paste, params) ignores them, and so they serialize to the
@@ -543,6 +567,81 @@ function EditorInner() {
     setDirty(false);
   }, []);
 
+  // applyGraphAnimated hydrates a graph the way hydrateGraph does, but plays
+  // a build animation as it lands: drops that are NEW scale/fade in left→
+  // right, drops that MOVED glide to their new spots (the .rf-animating
+  // transition), and wires that are NEW draw in after the drops they join.
+  // Used when an AI/MCP build or edit reaches the canvas — see the freshly-
+  // built load path and the live flow-watch subscription. Falls back to a
+  // plain hydrate (no visible deltas → nothing to animate).
+  const applyGraphAnimated = useCallback(
+    (g: Graph) => {
+      const prevNodeIds = new Set(nodes.map((n) => n.id));
+      const prevEdgeIds = new Set(edges.map((e) => e.id));
+      const targetNodes = g.nodes ?? [];
+      const xOf = (n: { position?: { x: number } }, i: number) =>
+        n.position?.x ?? 80 + i * 240;
+
+      // Added drops, ordered left→right so the build sweeps across the canvas
+      // in reading order rather than popping in arbitrary graph order.
+      const NODE_STEP = 0.08; // s between successive drop entrances
+      const NODE_DUR = 0.42; // matches dz-node-enter
+      const enter = new Map<string, number>();
+      targetNodes
+        .map((n, i) => ({ id: n.id, x: xOf(n, i) }))
+        .filter((o) => !prevNodeIds.has(o.id))
+        .sort((a, b) => a.x - b.x)
+        .forEach((o, k) => enter.set(o.id, +(k * NODE_STEP).toFixed(3)));
+      const nodesEnd = enter.size ? (enter.size - 1) * NODE_STEP + NODE_DUR : 0;
+
+      // New wires draw after the drops settle, ordered by their source's x so
+      // connections also sweep left→right. A small overlap with the tail of
+      // the drop entrances reads livelier than a hard handoff.
+      const EDGE_STEP = 0.06;
+      const EDGE_DUR = 0.4; // matches dz-edge-draw
+      const xById = new Map(targetNodes.map((n, i) => [n.id, xOf(n, i)]));
+      const edgesStart = nodesEnd > 0 ? Math.max(0, nodesEnd - 0.12) : 0;
+      const draw = new Map<string, number>();
+      (g.edges ?? [])
+        .map((e) => ({
+          id: `${e.from}.${e.from_port}->${e.to}.${e.to_port}`,
+          x: xById.get(e.from) ?? 0,
+        }))
+        .filter((e) => !prevEdgeIds.has(e.id))
+        .sort((a, b) => a.x - b.x)
+        .forEach((e, k) => draw.set(e.id, +(edgesStart + k * EDGE_STEP).toFixed(3)));
+
+      const totalMs =
+        Math.max(
+          nodesEnd,
+          draw.size ? edgesStart + (draw.size - 1) * EDGE_STEP + EDGE_DUR : 0,
+        ) *
+          1000 +
+        300;
+
+      const epoch = ++animEpochRef.current;
+      // Arm the transition window FIRST, then change positions on the next
+      // frame: a CSS transition added in the same commit as the value change
+      // doesn't animate (the FLIP gotcha), so a moved drop would snap. New
+      // drops mount after hydrate and pick up their entrance via dz-enter.
+      setAnimApply({ enter, draw });
+      requestAnimationFrame(() => {
+        if (animEpochRef.current !== epoch) return;
+        hydrateGraph(g);
+        window.setTimeout(() => {
+          if (animEpochRef.current === epoch) setAnimApply(null);
+        }, totalMs);
+      });
+    },
+    [nodes, edges, hydrateGraph],
+  );
+  // applyGraphAnimated closes over nodes/edges, so its identity changes on
+  // every edit. Effects that trigger a build (the freshly-built load, the
+  // live flow-watch) call it through this ref so they needn't list it as a
+  // dependency — which would otherwise re-run them on every keystroke.
+  const applyGraphAnimatedRef = useRef(applyGraphAnimated);
+  applyGraphAnimatedRef.current = applyGraphAnimated;
+
   // Load modules + graph on mount. The two fetches are kept independent
   // — Promise.all would reject the whole batch if loadGraph 404s for a
   // never-saved flow, leaving the catalog empty (so Ctrl+K had no
@@ -632,10 +731,24 @@ function EditorInner() {
         const tzM = stampScheduleTimezones(g.nodes);
         const changed = tzM.changed;
         const migrated = changed ? { ...g, nodes: tzM.nodes } : g;
-        hydrateGraph(migrated);
+        // A freshly AI-built flow (opened from CreateFlow) animates onto the
+        // canvas; every other open snaps in instantly. Consume the one-shot
+        // flag and scrub it from history so a refresh won't replay the build.
+        if (animateBuildRef.current && (migrated.nodes?.length ?? 0) > 0) {
+          animateBuildRef.current = false;
+          window.history.replaceState({}, "");
+          applyGraphAnimatedRef.current(migrated);
+        } else {
+          hydrateGraph(migrated);
+        }
         loadedIDRef.current = requestedID;
         if (changed && hasPermRef.current("graph:edit")) {
-          api.saveGraph(token, migrated, true).catch(() => {});
+          api
+            .saveGraph(token, migrated, true)
+            .then((res) => {
+              if (res.commit) ownCommitsRef.current.add(res.commit);
+            })
+            .catch(() => {});
         }
       })
       .catch((e) => {
@@ -882,6 +995,9 @@ function EditorInner() {
         data: {
           ...e.data,
           active,
+          // Set only while a build animation plays — drives the wire's
+          // draw-in (see applyGraphAnimated). undefined the rest of the time.
+          drawDelay: animApply?.draw.get(e.id),
           updateWaypoints: (wps: { x: number; y: number }[]) => {
             setEdges((eds) =>
               eds.map((x) =>
@@ -893,7 +1009,7 @@ function EditorInner() {
         },
       };
     });
-  }, [edges, nodes]);
+  }, [edges, nodes, animApply]);
 
   const onConnect = useCallback(
     (params: Connection) => {
@@ -1864,6 +1980,10 @@ function EditorInner() {
       const off = offByCascade.has(n.id);
       const breakpoint = breakpoints.has(n.id);
       const paused = pausedAt === n.id;
+      // Entrance delay while a build animation plays (see applyGraphAnimated);
+      // undefined otherwise, so a node only rebuilds for it when it's actually
+      // entering or when the animation clears.
+      const enterDelay = animApply?.enter.get(n.id);
       const deps: unknown[] = [
         n,
         params,
@@ -1883,6 +2003,7 @@ function EditorInner() {
         canConnect,
         tokenLabels,
         setNodeParam,
+        enterDelay,
       ];
       const hit = cache.get(n.id);
       if (hit && hit.deps.length === deps.length && hit.deps.every((v, i) => v === deps[i])) {
@@ -1909,6 +2030,7 @@ function EditorInner() {
           tokenLabels,
           breakpoint,
           paused,
+          enterDelay,
         },
       };
       cache.set(n.id, { deps, node });
@@ -1935,6 +2057,7 @@ function EditorInner() {
     tokenLabels,
     breakpoints,
     pausedAt,
+    animApply,
   ]);
 
   // Switch a step on/off (saved with the graph as node.disabled). Off = the
@@ -2374,6 +2497,8 @@ function EditorInner() {
     setError(null);
     try {
       const res = await api.saveGraph(token, buildGraph(), autosave);
+      // Remember our own commit so the flow-watch can ignore its echo.
+      if (res.commit) ownCommitsRef.current.add(res.commit);
       setDirty(false);
       // Lint findings are advisory — the save already succeeded.
       // Show them; the user can fix-and-resave or dismiss.
@@ -2423,6 +2548,68 @@ function EditorInner() {
   loadFailedRef.current = loadFailed;
   const buildGraphRef = useRef(buildGraph);
   buildGraphRef.current = buildGraph;
+  // Mirror of previewRef for the flow-watch (below): a history preview shows
+  // an old revision, intentionally diverged from HEAD, so an external HEAD
+  // edit must not animate over it.
+  const previewRefRef = useRef(previewRef);
+  previewRefRef.current = previewRef;
+
+  // Live flow-watch (#mcp): subscribe to server-side saves of this flow so an
+  // external edit — most importantly an AI assistant restructuring the flow
+  // through MCP — animates onto the open canvas in real time. The daemon
+  // emits one `flow_updated` frame per save; we ignore the echo of our own
+  // commits and never clobber unsaved local work or a history preview.
+  //
+  // Gated like the load effect (meReady, not `me`, to avoid identity churn);
+  // the graph fetch + apply go through refs so this resubscribes only on a
+  // real flow/auth change, not on every edit.
+  useEffect(() => {
+    if (!token || !meReady || !id || !activeTenant || !activeWorkspace) return;
+    const ctrl = new AbortController();
+    const watchedID = id;
+    api
+      .watchFlow(
+        token,
+        activeTenant,
+        activeWorkspace,
+        id,
+        (ev) => {
+          // Our own save echoing back — consume the marker and ignore.
+          if (ownCommitsRef.current.has(ev.commit)) {
+            ownCommitsRef.current.delete(ev.commit);
+            return;
+          }
+          // Don't overwrite unsaved local edits, a failed-load fallback, or a
+          // history preview — all intentionally differ from server HEAD.
+          if (dirtyRef.current || loadFailedRef.current || previewRefRef.current) {
+            return;
+          }
+          api
+            .loadGraph(token, activeTenant, activeWorkspace, watchedID)
+            .then((g) => {
+              // Bail if the flow switched, this watch was torn down, or the
+              // user started editing while the fetch was in flight.
+              if (
+                ctrl.signal.aborted ||
+                loadedIDRef.current !== watchedID ||
+                dirtyRef.current ||
+                previewRefRef.current
+              ) {
+                return;
+              }
+              applyGraphAnimatedRef.current(g);
+            })
+            .catch(() => {
+              /* transient fetch error — the next save re-syncs */
+            });
+        },
+        ctrl.signal,
+      )
+      .catch(() => {
+        /* aborted on teardown, or the stream dropped — expected */
+      });
+    return () => ctrl.abort();
+  }, [token, meReady, id, activeTenant, activeWorkspace]);
   useEffect(() => {
     if (!dirty || saving || !token || !me || !id) return;
     if (!hasPerm("graph:edit") || lockedRunID) return;
@@ -3269,7 +3456,7 @@ function EditorInner() {
       ref={wrapperRef}
     >
       <div
-        className="canvas"
+        className={"canvas" + (animApply ? " rf-animating" : "")}
         onDragOver={onDragOver}
         onDrop={onDrop}
         onMouseMove={onCanvasMouseMove}

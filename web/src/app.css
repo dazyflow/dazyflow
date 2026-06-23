@@ -8223,6 +8223,69 @@ button.warning:hover:not(:disabled) {
   filter: drop-shadow(0 0 3px color-mix(in srgb, currentColor 60%, transparent));
 }
 
+/* ───────── Animated graph apply ─────────
+ * When an AI/MCP build or edit lands on the canvas, the new graph animates
+ * in instead of snapping: drops scale/fade in left→right, drops that moved
+ * glide to their new spots, and new wires draw in after the drops they join.
+ * Driven by applyGraphAnimated in FlowEditor, which stamps per-element
+ * --enter-delay / --draw-delay and toggles .rf-animating on the canvas for
+ * the duration of the build, then clears them. */
+
+/* While a build is playing, node position changes interpolate (a moved drop
+   glides) instead of jumping. Scoped to nodes so the viewport pan/zoom
+   transform — also a translate — is never animated. */
+.canvas.rf-animating .react-flow__node {
+  transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* A freshly-added drop scales + fades in after its staggered delay. Applied
+   to the inner card, NOT the React Flow wrapper, whose own transform places
+   the node — animating the wrapper's transform would yank it to the origin. */
+.dz-node.dz-enter {
+  animation: dz-node-enter 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: var(--enter-delay, 0s);
+}
+@keyframes dz-node-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* A freshly-added wire draws in source→target. pathLength=1 (set on the
+   element) normalises the dash so the sweep takes the same time on a short
+   or long wire; `both` keeps it hidden through its delay, then drawn. */
+.rf-edge-draw {
+  fill: none;
+  stroke-dasharray: 1 1;
+  stroke-dashoffset: 1;
+  animation: dz-edge-draw 380ms ease-out both;
+  animation-delay: var(--draw-delay, 0s);
+}
+@keyframes dz-edge-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Respect reduced-motion: the graph still updates, just without the sweep. */
+@media (prefers-reduced-motion: reduce) {
+  .canvas.rf-animating .react-flow__node {
+    transition: none;
+  }
+  .dz-node.dz-enter {
+    animation: none;
+  }
+  .rf-edge-draw {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
+
 /* Align/distribute: compact square icon buttons, present only during a
    multi-select. Tighter than the labelled toolbar buttons. */
 .editor-toolbar .toolbar-align button {

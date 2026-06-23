@@ -129,6 +129,12 @@ export type DazyNodeData = {
   // resolves it to the resource's human name so the card shows "My Intake
   // Form" instead of the raw id. Absent until resolved (falls back to the id).
   resourceLabels?: Record<string, string>;
+  // enterDelay (seconds) is set transiently while a freshly-built or
+  // externally-edited graph animates onto the canvas: the card plays a
+  // scale/fade entrance after this delay so drops appear in sequence rather
+  // than all at once. Cleared once the animation window passes. See
+  // applyGraphAnimated in FlowEditor.
+  enterDelay?: number;
 };
 
 // cronToWords renders a 5-field cron expression in plain words ("Every day
