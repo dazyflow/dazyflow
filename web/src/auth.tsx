@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api, APIError, setUnauthorizedHandler } from "./api";
 import { pickActive } from "./lib/pickActive";
 import i18n from "./i18n";
+import { applyTheme } from "./theme";
 import type { Permission, WhoAmI } from "./types";
 
 const STORAGE_KEY = "dazyflow.token";
@@ -195,6 +196,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cancelled = true;
     };
   }, [token, reloadKey]);
+
+  // Hydrate account-roaming interface prefs (theme, language) once the
+  // session is live. The boot path already applied this browser's cached
+  // theme/lang for a flash-free first paint; here we reconcile to the
+  // account's stored choice so a fresh device picks up the user's real
+  // preference. applyTheme + changeLanguage also refresh the localStorage
+  // caches, so the next cold boot matches without re-fetching. Empty
+  // server values mean "no explicit choice" — leave the local default
+  // alone. Best-effort: a failed fetch just keeps the local state.
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    api
+      .getPreferences(token)
+      .then((p) => {
+        if (cancelled) return;
+        if (p.theme === "dark" || p.theme === "light") applyTheme(p.theme);
+        if (p.language && p.language !== i18n.resolvedLanguage) {
+          void i18n.changeLanguage(p.language);
+        }
+      })
+      .catch(() => {
+        /* non-essential — local theme/language stay as-is */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   // One workspace per org: there's no list to fetch and nothing to pick.
   // activeWorkspace simply mirrors the principal's bound workspace (which

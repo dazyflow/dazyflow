@@ -421,6 +421,11 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/me/totp/confirm", h.requireAuth(h.totpConfirm))
 	mux.HandleFunc("POST /api/v1/me/totp/disable", h.requireAuth(h.totpDisable))
 	mux.HandleFunc("POST /api/v1/me/totp/recovery-codes", h.requireAuth(h.totpRegenerate))
+	// /me/preferences — the caller's own operational notification
+	// settings (e.g. flow-failure email). Always available when password
+	// auth is configured; unknown (API-key) principals read defaults.
+	mux.HandleFunc("GET /api/v1/me/preferences", h.requireAuth(h.getPreferences))
+	mux.HandleFunc("PUT /api/v1/me/preferences", h.requireAuth(h.putPreferences))
 	mux.HandleFunc("GET /api/v1/me/api-keys", h.requireAuth(h.listMyAPIKeysHandler))
 	mux.HandleFunc("POST /api/v1/me/api-keys",
 		h.requireAuth(h.idempotencyMiddleware("/me/api-keys", h.issueMyAPIKeyHandler)))

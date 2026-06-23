@@ -127,6 +127,7 @@ func TestPgUserStore_RoundTrip(t *testing.T) {
 		t.Fatalf("NewPgUserStore: %v", err)
 	}
 
+	noFailureEmail := false
 	u := User{
 		Email:        "Alice@Example.com", // intentionally mixed-case
 		PasswordHash: []byte("bcrypt"),
@@ -134,6 +135,8 @@ func TestPgUserStore_RoundTrip(t *testing.T) {
 		Tenant:       "usr_abc",
 		Workspace:    "default",
 		Roles:        []core.Role{{Name: "tenant_owner"}},
+		Notify:       NotifyPrefs{EmailOnFlowFailure: &noFailureEmail},
+		UI:           UIPrefs{Theme: "light", Language: "sv"},
 	}
 	if err := store.PutUser(ctx, u); err != nil {
 		t.Fatalf("PutUser: %v", err)
@@ -145,6 +148,20 @@ func TestPgUserStore_RoundTrip(t *testing.T) {
 	}
 	if got.Subject != "alice" || got.Email != "alice@example.com" || len(got.Roles) != 1 {
 		t.Errorf("round-trip mismatch: %+v", got)
+	}
+	// Notification preference survives the JSONB round-trip as an
+	// explicit (non-nil) choice.
+	if got.Notify.EmailOnFlowFailure == nil {
+		t.Errorf("Notify.EmailOnFlowFailure lost in round-trip (got nil)")
+	} else if *got.Notify.EmailOnFlowFailure {
+		t.Errorf("Notify.EmailOnFlowFailure = true, want false")
+	}
+	if got.Notify.EmailOnFlowFailureEnabled() {
+		t.Errorf("EmailOnFlowFailureEnabled() = true, want false (explicit opt-out)")
+	}
+	// Interface prefs survive the JSONB round-trip too.
+	if got.UI.Theme != "light" || got.UI.Language != "sv" {
+		t.Errorf("UI prefs round-trip: got %+v, want {light sv}", got.UI)
 	}
 	if _, err := store.GetByEmail(ctx, "ghost@example.com"); err != ErrUnknownUser {
 		t.Errorf("GetByEmail(unknown) err = %v, want ErrUnknownUser", err)

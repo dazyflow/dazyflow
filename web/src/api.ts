@@ -184,6 +184,19 @@ export type TOTPSetup = {
   qr_png_data_url?: string;
 };
 
+// Preferences mirrors GET/PUT /me/preferences — the caller's
+// account-roaming settings: the operational notification toggle plus
+// interface prefs (theme, language) that follow the account across
+// devices. Values are fully resolved (the server flattens its internal
+// "unset = default" notification tri-state); theme/language are "" when
+// the user has made no explicit choice and the client should fall back
+// to its device/browser default.
+export type Preferences = {
+  email_on_flow_failure: boolean;
+  theme: "dark" | "light" | "";
+  language: string;
+};
+
 // BoardSummary / BoardPage mirror the /me/boards wire shapes — a board is
 // a table in the workspace's built-in store (the Results surface).
 export type BoardSummary = { name: string; rows: number };
@@ -612,6 +625,16 @@ export const api = {
       "POST",
       "/me/totp/recovery-codes",
     ),
+  // getPreferences reads the account's roaming settings — used by the
+  // Settings cards and by the app-boot hydration that applies the saved
+  // theme/language. updatePreferences is a PARTIAL update: pass only the
+  // keys you're changing (the independent Settings controls each send
+  // their own field) and the server leaves the rest untouched, echoing
+  // the full resolved state back.
+  getPreferences: (token: string) =>
+    request<Preferences>(token, "GET", "/me/preferences"),
+  updatePreferences: (token: string, patch: Partial<Preferences>) =>
+    request<Preferences>(token, "PUT", "/me/preferences", patch),
   listTenants: (token: string) =>
     request<{ tenants: string[] }>(token, "GET", "/admin/tenants"),
   // adminVersion drives the System section: running build vs. the newest

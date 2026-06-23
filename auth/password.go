@@ -64,6 +64,60 @@ type User struct {
 	// by a fresh request. See daemon/password_reset.go.
 	ResetTokenHash []byte     `json:"reset_token_hash,omitempty"`
 	ResetExpiresAt *time.Time `json:"reset_expires_at,omitempty"`
+
+	// Notify holds the user's operational notification preferences (the
+	// ones they can toggle in Settings — currently just flow-failure
+	// email). A zero NotifyPrefs means "all defaults"; resolve through
+	// the NotifyPrefs methods rather than reading its fields directly.
+	// See NotifyPrefs for why the inner fields are tri-state pointers.
+	Notify NotifyPrefs `json:"notify,omitempty"`
+
+	// UI holds account-roaming interface preferences (theme, language)
+	// so a user's chosen look + locale follow them across devices rather
+	// than living only in one browser's localStorage. Empty fields mean
+	// "no explicit choice" — the client falls back to its device/browser
+	// default. See UIPrefs.
+	UI UIPrefs `json:"ui,omitempty"`
+}
+
+// UIPrefs is a user's account-level interface preferences. Both fields
+// are empty-string-means-unset (no tri-state pointer needed): unlike the
+// notification opt-out, there's no server-side default to distinguish
+// from "never set" — an empty value simply defers to the client's
+// device/browser default (saved theme cache, browser Accept-Language).
+type UIPrefs struct {
+	// Theme is "dark", "light", or "" (no explicit choice). Mirrors the
+	// web client's data-theme values; the server doesn't interpret it
+	// beyond validating the allowed set.
+	Theme string `json:"theme,omitempty"`
+	// Language is a locale code the client understands (e.g. "en",
+	// "sv"), or "" for "use browser detection". Stored opaquely — the
+	// daemon only bounds its shape, it doesn't own the locale list.
+	Language string `json:"language,omitempty"`
+}
+
+// NotifyPrefs is a user's operational notification preferences —
+// notifications the user is allowed to turn off, as distinct from
+// transactional/security mail (email verification, password reset)
+// which is always sent regardless. Persisted as JSON (a JSONB column
+// in Postgres) so a new preference is just a new key, never a schema
+// migration.
+type NotifyPrefs struct {
+	// EmailOnFlowFailure controls whether the owner of a flow is emailed
+	// when one of their flows fails. Tri-state on purpose: nil means
+	// "never set" and resolves to the default (ON) — so accounts that
+	// predate this field, or simply never opened Settings, still get
+	// failure mail without a migration backfilling every row. A non-nil
+	// pointer is the user's explicit choice. Always read it through
+	// EmailOnFlowFailureEnabled, never dereference the pointer directly.
+	EmailOnFlowFailure *bool `json:"email_on_flow_failure,omitempty"`
+}
+
+// EmailOnFlowFailureEnabled resolves the tri-state pointer to its
+// effective value: unset defaults to ON (the opt-out model — owners
+// are notified until they explicitly turn it off).
+func (p NotifyPrefs) EmailOnFlowFailureEnabled() bool {
+	return p.EmailOnFlowFailure == nil || *p.EmailOnFlowFailure
 }
 
 // EmailVerified reports whether the account's address was confirmed.

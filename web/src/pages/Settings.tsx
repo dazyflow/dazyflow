@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Moon, ShieldCheck, Sun } from "lucide-react";
+import { Bell, Moon, ShieldCheck, Sun } from "lucide-react";
 import { applyTheme, getTheme, type ThemeMode } from "../theme";
 import { useAuth } from "../auth";
 import { api, APIError, type TOTPSetup, type TOTPStatus } from "../api";
 import { OtpInput } from "../components/OtpInput";
+import { Switch } from "../components/Switch";
 
 // Settings is the per-user, per-browser preferences page — reached
 // from the account menu in the sidebar. Holds appearance + language,
@@ -12,6 +13,7 @@ import { OtpInput } from "../components/OtpInput";
 // server-side user prefs yet, so switching here is instant and local.
 export function Settings() {
   const { t, i18n } = useTranslation();
+  const { token } = useAuth();
 
   const languages = [
     { code: "en", label: t("appSettings.langEnglish") },
@@ -25,8 +27,21 @@ export function Settings() {
   // mirror just to drive the selected-state on the two cards.
   const [theme, setTheme] = useState<ThemeMode>(getTheme());
   const pickTheme = (mode: ThemeMode) => {
+    // Apply locally first (instant, and refreshes the localStorage boot
+    // cache), then persist to the account so the choice roams to other
+    // devices. The server write is best-effort: a failure leaves the
+    // local change in place — the next change or login reconciles it.
     applyTheme(mode);
     setTheme(mode);
+    if (token) void api.updatePreferences(token, { theme: mode }).catch(() => {});
+  };
+  const pickLanguage = (code: string) => {
+    // changeLanguage swaps the active catalogue AND, via the
+    // languagedetector's localStorage cache, persists the choice locally
+    // so it survives reloads. Mirror it to the account so the locale
+    // roams; best-effort, same contract as the theme write.
+    void i18n.changeLanguage(code);
+    if (token) void api.updatePreferences(token, { language: code }).catch(() => {});
   };
 
   return (
@@ -73,12 +88,7 @@ export function Settings() {
           <select
             id="lang-select"
             value={currentLang}
-            onChange={(e) => {
-              // changeLanguage swaps the active catalogue AND, via the
-              // languagedetector's localStorage cache, persists the
-              // choice so it survives reloads.
-              void i18n.changeLanguage(e.target.value);
-            }}
+            onChange={(e) => pickLanguage(e.target.value)}
           >
             {languages.map((l) => (
               <option key={l.code} value={l.code}>
@@ -90,7 +100,86 @@ export function Settings() {
         </div>
       </div>
 
+      <NotificationsCard />
       <TwoFactorCard />
+    </div>
+  );
+}
+
+// NotificationsCard manages the signed-in user's account-level
+// notification preferences. Unlike the appearance/language cards above
+// (which are browser-local), these persist server-side via
+// /me/preferences, so they follow the account across devices. Loads on
+// mount and saves each toggle immediately; a failed save reverts the
+// switch so the UI never claims a setting that didn't stick.
+function NotificationsCard() {
+  const { t } = useTranslation();
+  const { token } = useAuth();
+  const [emailOnFailure, setEmailOnFailureState] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    api
+      .getPreferences(token)
+      .then((p) => {
+        if (!cancelled) setEmailOnFailureState(p.email_on_flow_failure);
+      })
+      .catch((e) => {
+        if (!cancelled) setErr((e as Error).message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  if (!token) return null;
+
+  const setEmailOnFailure = async (next: boolean) => {
+    if (emailOnFailure === null || busy) return;
+    const prev = emailOnFailure;
+    // Optimistic flip so the toggle feels instant; revert on failure.
+    // Partial PUT — only this field is sent, so the theme/language prefs
+    // the user may also have set are left untouched.
+    setEmailOnFailureState(next);
+    setErr(null);
+    setBusy(true);
+    try {
+      const saved = await api.updatePreferences(token, {
+        email_on_flow_failure: next,
+      });
+      setEmailOnFailureState(saved.email_on_flow_failure);
+    } catch (e) {
+      setEmailOnFailureState(prev);
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="card settings-card">
+      <div className="sf-field">
+        <div className="label-row">
+          <label>
+            <Bell size={16} style={{ verticalAlign: "-3px" }} />{" "}
+            {t("notifications.title")}
+          </label>
+        </div>
+        <div className="desc">{t("notifications.intro")}</div>
+        {emailOnFailure !== null && (
+          <Switch
+            checked={emailOnFailure}
+            onChange={(v) => void setEmailOnFailure(v)}
+            disabled={busy}
+            label={t("notifications.flowFailureLabel")}
+            description={t("notifications.flowFailureDesc")}
+          />
+        )}
+        {err && <div className="error">{err}</div>}
+      </div>
     </div>
   );
 }

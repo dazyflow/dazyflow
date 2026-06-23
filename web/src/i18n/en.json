@@ -223,15 +223,21 @@
   },
   "appSettings": {
     "title": "Settings",
-    "subtitle": "Preferences for your account in this browser.",
+    "subtitle": "Preferences for your account.",
     "themeLabel": "Appearance",
-    "themeDesc": "Pick a colour theme. Saved in this browser.",
+    "themeDesc": "Pick a colour theme. Saved to your account and applied on every device you sign in to.",
     "themeDark": "Dark",
     "themeLight": "Light",
     "languageLabel": "Language",
-    "languageDesc": "Changes the interface language. Saved in this browser; defaults to your browser's language.",
+    "languageDesc": "Changes the interface language. Saved to your account; defaults to your browser's language until you choose.",
     "langEnglish": "English",
     "langSwedish": "Svenska"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "intro": "Choose which emails we send you. Account and security emails (verification, password resets) are always sent.",
+    "flowFailureLabel": "Email me when one of my flows fails",
+    "flowFailureDesc": "Sends a short summary to your account email whenever a flow you own finishes with an error. On by default."
   },
   "twoFactor": {
     "title": "Two-factor authentication",

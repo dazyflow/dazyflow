@@ -64,13 +64,20 @@ type FailurePayload struct {
 // immediately; the goroutine self-terminates on terminal events,
 // context cancellation, or bus closure.
 //
-// No-op when the graph has no FailureNotify or no Webhook —
-// avoids spawning a goroutine that would just exit on the first
-// event. Important because some hot deployment loops trigger many
-// graphs.
+// No-op when the run has nothing to notify — neither a per-flow
+// webhook/email configured on the graph, nor a resolvable owner we
+// could send an account-level failure email to. Avoids spawning a
+// goroutine that would just exit on the first event; important because
+// some hot deployment loops trigger many graphs.
 func (s *Service) startFailureNotifier(graph core.Graph, runID string) {
-	if graph.FailureNotify == nil ||
-		(graph.FailureNotify.Webhook == "" && graph.FailureNotify.Email == "") {
+	hasPerFlow := graph.FailureNotify != nil &&
+		(graph.FailureNotify.Webhook != "" || graph.FailureNotify.Email != "")
+	// Account-level owner email is only worth watching for when we can
+	// both resolve the owner's account (Users) and actually deliver mail
+	// (Mailer). The owner's opt-out is checked lazily at failure time —
+	// here we only avoid spawning when it could never fire.
+	hasOwnerEmail := graph.Owner != "" && s.Users != nil && s.Mailer != nil
+	if !hasPerFlow && !hasOwnerEmail {
 		return
 	}
 	// Subscribe SYNCHRONOUSLY before spawning the goroutine so a
@@ -153,10 +160,23 @@ func (s *Service) watchForFailure(ctx context.Context, graph core.Graph, runID s
 // them back to the user because the dispatcher runs after the run
 // has already terminated — there's no in-progress request to fail.
 func (s *Service) fireFailureNotification(ctx context.Context, graph core.Graph, payload FailurePayload) {
-	if graph.FailureNotify.Email != "" {
-		s.fireFailureEmail(ctx, graph, payload)
+	// Per-flow email channel: an explicit address configured on the
+	// graph (notify some external inbox / on-call address).
+	perFlowEmail := ""
+	if graph.FailureNotify != nil {
+		perFlowEmail = graph.FailureNotify.Email
 	}
-	if graph.FailureNotify.Webhook == "" {
+	if perFlowEmail != "" {
+		s.fireFailureEmail(ctx, graph, payload, perFlowEmail)
+	}
+	// Account-level channel: email the flow owner if their preference
+	// opts in (the default). Deduped against the per-flow address so an
+	// owner who also set FailureNotify.Email to themselves gets a single
+	// mail, not two.
+	if to := s.ownerFailureEmail(ctx, graph); to != "" && !strings.EqualFold(to, perFlowEmail) {
+		s.fireFailureEmail(ctx, graph, payload, to)
+	}
+	if graph.FailureNotify == nil || graph.FailureNotify.Webhook == "" {
 		return
 	}
 	url := graph.FailureNotify.Webhook
@@ -185,10 +205,34 @@ func (s *Service) fireFailureNotification(ctx context.Context, graph core.Graph,
 	}
 }
 
-// fireFailureEmail sends the plain-text failure summary through the
-// operator's transactional mailer. Same best-effort contract as the
+// ownerFailureEmail resolves the address to send the account-level
+// failure email to, or "" when there's nothing to send: no owner, no
+// user store / mailer, the owner has no password account (SSO / API-key
+// subjects won't resolve), or the owner has turned failure email off.
+//
+// The user-store lookup happens here — at failure time — rather than at
+// submit, so the common success path never touches the store.
+func (s *Service) ownerFailureEmail(ctx context.Context, graph core.Graph) string {
+	if graph.Owner == "" || s.Users == nil || s.Mailer == nil {
+		return ""
+	}
+	// Owner is a principal subject; for password users that's their
+	// email, which is what the user store is keyed by. Other owner kinds
+	// simply won't resolve (treated as "no account-level email").
+	u, err := s.Users.GetByEmail(ctx, graph.Owner)
+	if err != nil {
+		return ""
+	}
+	if !u.Notify.EmailOnFlowFailureEnabled() {
+		return ""
+	}
+	return u.Email
+}
+
+// fireFailureEmail sends the plain-text failure summary to `to` through
+// the operator's transactional mailer. Same best-effort contract as the
 // webhook channel.
-func (s *Service) fireFailureEmail(ctx context.Context, graph core.Graph, payload FailurePayload) {
+func (s *Service) fireFailureEmail(ctx context.Context, graph core.Graph, payload FailurePayload, to string) {
 	if s.Mailer == nil {
 		s.logFailureNotifyError(graph, fmt.Errorf("email channel configured but no mailer on this deployment (set DAZYFLOW_SMTP_URL)"))
 		return
@@ -216,7 +260,7 @@ func (s *Service) fireFailureEmail(ctx context.Context, graph core.Graph, payloa
 		fmt.Fprintf(&b, "\nRun details:  %s\n", payload.RunURL)
 	}
 	subject := fmt.Sprintf("Flow %q failed", name)
-	if err := s.Mailer.Send(ctx, graph.FailureNotify.Email, subject, b.String()); err != nil {
+	if err := s.Mailer.Send(ctx, to, subject, b.String()); err != nil {
 		s.logFailureNotifyError(graph, fmt.Errorf("email: %w", err))
 	}
 }

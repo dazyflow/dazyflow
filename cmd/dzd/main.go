@@ -539,6 +539,10 @@ func main() {
 		FreePollingDisabled: freePollingDisabled,
 		Mailer:              mailer,
 		RunLogs:             stores.runLogs,
+		// Users lets failure_notify resolve a flow owner's notification
+		// preferences (the account-level failure-email channel). Same
+		// store the gateway authenticates against.
+		Users: users,
 	}
 
 	// Approval-link flow: when DAZYFLOW_APPROVAL_HMAC_SECRET is set,

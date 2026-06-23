@@ -67,7 +67,14 @@ CREATE TABLE IF NOT EXISTS users (
     totp_enrolled_at TIMESTAMPTZ,
     recovery_codes   JSONB NOT NULL DEFAULT '[]',
     -- Last successfully-consumed TOTP time-step, for replay protection.
-    totp_last_step   BIGINT NOT NULL DEFAULT 0
+    totp_last_step   BIGINT NOT NULL DEFAULT 0,
+    -- Operational notification preferences (flow-failure email, etc.).
+    -- JSONB so a new toggle is a new key, never a schema change. '{}'
+    -- means "all defaults" — see auth.NotifyPrefs.
+    notify_prefs     JSONB NOT NULL DEFAULT '{}',
+    -- Account-roaming interface preferences (theme, language). Same
+    -- JSONB rationale; '{}' means "no explicit choice" — see auth.UIPrefs.
+    ui_prefs         JSONB NOT NULL DEFAULT '{}'
 );
 -- Idempotent migrations for users tables created before 2FA landed.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret_enc  BYTEA;
@@ -80,6 +87,8 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS verify_token_hash BYTEA;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS verify_expires_at TIMESTAMPTZ;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_hash  BYTEA;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_expires_at  TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS notify_prefs      JSONB NOT NULL DEFAULT '{}';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS ui_prefs          JSONB NOT NULL DEFAULT '{}';
 `
 
 // EnsurePgAuthSchema creates the api_keys / sessions / users tables if
@@ -360,6 +369,32 @@ func unmarshalRecoveryCodes(b []byte) ([]string, error) {
 	return codes, nil
 }
 
+func marshalNotifyPrefs(p NotifyPrefs) ([]byte, error) { return json.Marshal(p) }
+
+func unmarshalNotifyPrefs(b []byte) (NotifyPrefs, error) {
+	if len(b) == 0 {
+		return NotifyPrefs{}, nil
+	}
+	var p NotifyPrefs
+	if err := json.Unmarshal(b, &p); err != nil {
+		return NotifyPrefs{}, err
+	}
+	return p, nil
+}
+
+func marshalUIPrefs(p UIPrefs) ([]byte, error) { return json.Marshal(p) }
+
+func unmarshalUIPrefs(b []byte) (UIPrefs, error) {
+	if len(b) == 0 {
+		return UIPrefs{}, nil
+	}
+	var p UIPrefs
+	if err := json.Unmarshal(b, &p); err != nil {
+		return UIPrefs{}, err
+	}
+	return p, nil
+}
+
 // userColumns is the users SELECT/Scan column list, shared by GetByEmail,
 // ListUsers, and (positionally) the PutUser INSERT — keeping the three in
 // lockstep so a new column can't be added to one read path and forgotten
@@ -367,7 +402,7 @@ func unmarshalRecoveryCodes(b []byte) ([]string, error) {
 const userColumns = `email, password_hash, subject, tenant, workspace, roles, created_at,
 	totp_secret_enc, totp_enabled, totp_enrolled_at, recovery_codes,
 	verified_at, verify_token_hash, verify_expires_at, totp_last_step,
-	reset_token_hash, reset_expires_at`
+	reset_token_hash, reset_expires_at, notify_prefs, ui_prefs`
 
 // scanUser scans one users row (in userColumns order) into a User,
 // decoding the roles and recovery-codes JSONB columns. Used by both
@@ -377,12 +412,14 @@ func scanUser(row rowScanner) (User, error) {
 		u           User
 		rolesRaw    []byte
 		recoveryRaw []byte
+		notifyRaw   []byte
+		uiRaw       []byte
 	)
 	if err := row.Scan(
 		&u.Email, &u.PasswordHash, &u.Subject, &u.Tenant, &u.Workspace, &rolesRaw, &u.CreatedAt,
 		&u.TOTPSecretEnc, &u.TOTPEnabled, &u.TOTPEnrolledAt, &recoveryRaw,
 		&u.VerifiedAt, &u.VerifyTokenHash, &u.VerifyExpiresAt, &u.TOTPLastStep,
-		&u.ResetTokenHash, &u.ResetExpiresAt,
+		&u.ResetTokenHash, &u.ResetExpiresAt, &notifyRaw, &uiRaw,
 	); err != nil {
 		return User{}, err
 	}
@@ -396,6 +433,16 @@ func scanUser(row rowScanner) (User, error) {
 		return User{}, err
 	}
 	u.RecoveryCodeHashes = codes
+	notify, err := unmarshalNotifyPrefs(notifyRaw)
+	if err != nil {
+		return User{}, err
+	}
+	u.Notify = notify
+	ui, err := unmarshalUIPrefs(uiRaw)
+	if err != nil {
+		return User{}, err
+	}
+	u.UI = ui
 	return u, nil
 }
 
@@ -425,13 +472,21 @@ func (s *PgUserStore) PutUser(ctx context.Context, u User) error {
 	if err != nil {
 		return err
 	}
+	notify, err := marshalNotifyPrefs(u.Notify)
+	if err != nil {
+		return err
+	}
+	ui, err := marshalUIPrefs(u.UI)
+	if err != nil {
+		return err
+	}
 	created := u.CreatedAt
 	if created.IsZero() {
 		created = time.Now()
 	}
 	const q = `
 		INSERT INTO users (` + userColumns + `)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
 		ON CONFLICT (email) DO UPDATE SET
 		  password_hash=EXCLUDED.password_hash, subject=EXCLUDED.subject,
 		  tenant=EXCLUDED.tenant, workspace=EXCLUDED.workspace, roles=EXCLUDED.roles,
@@ -439,12 +494,13 @@ func (s *PgUserStore) PutUser(ctx context.Context, u User) error {
 		  totp_enrolled_at=EXCLUDED.totp_enrolled_at, recovery_codes=EXCLUDED.recovery_codes,
 		  verified_at=EXCLUDED.verified_at, verify_token_hash=EXCLUDED.verify_token_hash,
 		  verify_expires_at=EXCLUDED.verify_expires_at, totp_last_step=EXCLUDED.totp_last_step,
-		  reset_token_hash=EXCLUDED.reset_token_hash, reset_expires_at=EXCLUDED.reset_expires_at
+		  reset_token_hash=EXCLUDED.reset_token_hash, reset_expires_at=EXCLUDED.reset_expires_at,
+		  notify_prefs=EXCLUDED.notify_prefs, ui_prefs=EXCLUDED.ui_prefs
 	`
 	_, err = s.pool.Exec(ctx, q, u.Email, u.PasswordHash, u.Subject, u.Tenant, u.Workspace, roles, created,
 		u.TOTPSecretEnc, u.TOTPEnabled, u.TOTPEnrolledAt, recovery,
 		u.VerifiedAt, u.VerifyTokenHash, u.VerifyExpiresAt, u.TOTPLastStep,
-		u.ResetTokenHash, u.ResetExpiresAt)
+		u.ResetTokenHash, u.ResetExpiresAt, notify, ui)
 	return err
 }
 

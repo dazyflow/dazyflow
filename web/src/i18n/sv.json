@@ -224,15 +224,21 @@
   },
   "appSettings": {
     "title": "Inställningar",
-    "subtitle": "Inställningar för ditt konto i den här webbläsaren.",
+    "subtitle": "Inställningar för ditt konto.",
     "themeLabel": "Utseende",
-    "themeDesc": "Välj ett färgtema. Sparas i den här webbläsaren.",
+    "themeDesc": "Välj ett färgtema. Sparas på ditt konto och används på alla enheter du loggar in på.",
     "themeDark": "Mörkt",
     "themeLight": "Ljust",
     "languageLabel": "Språk",
-    "languageDesc": "Ändrar gränssnittets språk. Sparas i den här webbläsaren; standard är webbläsarens språk.",
+    "languageDesc": "Ändrar gränssnittets språk. Sparas på ditt konto; standard är webbläsarens språk tills du väljer.",
     "langEnglish": "English",
     "langSwedish": "Svenska"
+  },
+  "notifications": {
+    "title": "Aviseringar",
+    "intro": "Välj vilka e-postmeddelanden vi skickar till dig. Konto- och säkerhetsmeddelanden (verifiering, lösenordsåterställning) skickas alltid.",
+    "flowFailureLabel": "Mejla mig när ett av mina flöden misslyckas",
+    "flowFailureDesc": "Skickar en kort sammanfattning till din konto-e-post när ett flöde du äger avslutas med ett fel. På som standard."
   },
   "twoFactor": {
     "title": "Tvåfaktorsautentisering",

@@ -331,6 +331,13 @@ type Service struct {
 	// channels are off; everything degrades to its link/webhook form.
 	Mailer *Mailer
 
+	// Users, when set, is the password-auth user store. failure_notify
+	// reads it to resolve a flow owner's notification preferences (the
+	// account-level "email me when my flow fails" channel). Nil leaves
+	// only the per-flow FailureNotify.Email/Webhook channels active. The
+	// same store the HTTP gateway authenticates against.
+	Users auth.UserStore
+
 	// RunLogs, when set, is the persisted run-log store (written by the
 	// RecordingBus, read by `dzctl job logs` / the logs endpoints). Nil
 	// = logs aren't persisted on this deployment.
