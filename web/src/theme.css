@@ -233,6 +233,13 @@ body,
   height: 100%;
   margin: 0;
   padding: 0;
+  /* The app is a fixed full-viewport frame (.app-shell is 100vh) whose panes
+     scroll internally — .main, the sidebar, and the editor toolbar each own
+     their overflow. The document itself must never scroll: without this clip,
+     any descendant that pokes a hair past the viewport (e.g. the editor canvas
+     widening the body's 1fr column) gives the whole page a horizontal
+     scrollbar, dragging the topbar and sidebar with it. */
+  overflow: hidden;
 }
 
 body {
