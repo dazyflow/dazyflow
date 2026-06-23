@@ -493,6 +493,12 @@ export type LintIssue = {
   severity: "warn" | "error";
   message: string;
   node_ids?: string[];
+  // Param paths the finding points at (e.g. "spreadsheet_id",
+  // "headers.Authorization", "env.API_KEY"). The editor names these inputs the
+  // way the Inspector does — by schema title — when building the visible
+  // warning, so no node/module/field slugs leak into the help text. `message`
+  // is the slug-bearing fallback for non-UI consumers.
+  fields?: string[];
 };
 
 // Revision is one entry in a flow's commit history (GET /me/flows/{id}/history).

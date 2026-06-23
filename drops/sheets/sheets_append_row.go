@@ -29,7 +29,7 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"sheets", "google", "append", "write"},
 			Examples: []core.ParamsExample{
-				{Title: "Append to a log sheet", Params: json.RawMessage(`{"account":"default","spreadsheet_id":"REPLACE_WITH_YOUR_SHEET_ID","range":"Inbox Log"}`)},
+				{Title: "Append to a log sheet", Params: json.RawMessage(`{"account":"default","spreadsheet_id":"REPLACE_WITH_YOUR_SHEET_URL_OR_ID","range":"Inbox Log"}`)},
 			},
 			RequiresConnections: []core.ConnectionRequirement{
 				{Kind: "oauth", Name: "google", Note: "Google OAuth — sheets/drive scope."},

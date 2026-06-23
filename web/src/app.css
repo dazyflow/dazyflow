@@ -4,6 +4,13 @@
 .app-shell {
   display: grid;
   grid-template-rows: var(--topbar-h) 1fr;
+  /* Pin the single (implicit) column to the viewport with minmax(0, 1fr).
+     Without this it defaults to an `auto` track sized to its widest content —
+     so a wide topbar (long flow/org name + FlowMenu in the editor) would grow
+     the column past 100vw, dragging the shared .body column (and the whole
+     editor) wider than the screen. minmax(0, …) caps it at the viewport and
+     lets the rows shrink instead. */
+  grid-template-columns: minmax(0, 1fr);
   height: 100vh;
 }
 
@@ -134,6 +141,21 @@
   font-weight: 500;
   color: var(--ink);
 }
+/* The right-hand cluster (org switcher, flow menu) must shrink rather than
+   push the topbar past the viewport. min-width:0 lets it compress, and the
+   org-name label ellipsizes instead of forcing the bar wider. */
+.topbar .user {
+  min-width: 0;
+}
+.topbar .org-switcher-trigger {
+  min-width: 0;
+}
+.topbar .org-switcher-trigger strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 22vw;
+}
 
 /* Layout body: sidebar + main content. The sidebar column reads from
    --sidebar-current, which app-shell flips to --sidebar-rail-w when the
@@ -141,7 +163,10 @@
    reflowing smoothly instead of jumping. */
 .body {
   display: grid;
-  grid-template-columns: var(--sidebar-current) 1fr;
+  /* minmax(0, 1fr) (not a bare 1fr) so the content column can shrink below its
+     content's intrinsic width — otherwise a wide canvas/editor would blow the
+     track out past the viewport. */
+  grid-template-columns: var(--sidebar-current) minmax(0, 1fr);
   min-height: 0;
   transition: grid-template-columns 180ms ease;
 }

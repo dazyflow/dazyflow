@@ -29,7 +29,7 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"sheets", "google", "read", "spreadsheet"},
 			Examples: []core.ParamsExample{
-				{Title: "Read a named range", Params: json.RawMessage(`{"account":"default","spreadsheet_id":"REPLACE_WITH_YOUR_SHEET_ID","range":"Master List"}`)},
+				{Title: "Read a named range", Params: json.RawMessage(`{"account":"default","spreadsheet_id":"REPLACE_WITH_YOUR_SHEET_URL_OR_ID","range":"Master List"}`)},
 			},
 			RequiresConnections: []core.ConnectionRequirement{
 				{Kind: "oauth", Name: "google", Note: "Google OAuth — sheets/drive scope."},

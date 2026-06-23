@@ -28,6 +28,12 @@ type LintIssue struct {
 	Severity LintSeverity `json:"severity"`
 	Message  string       `json:"message"`
 	NodeIDs  []string     `json:"node_ids,omitempty"`
+	// Fields are the param paths (e.g. "spreadsheet_id", "headers.Authorization",
+	// "env.API_KEY") this finding points at. The UI uses these to name the
+	// offending input the way the Inspector does — by its schema title, not its
+	// raw key — so the surfaced help text carries no module/node/field slugs.
+	// Message keeps the slug-bearing phrasing as a fallback for CLI/API readers.
+	Fields []string `json:"fields,omitempty"`
 }
 
 // secretPlaceholderPattern matches the `${scheme.<path>}` schemes that
@@ -180,10 +186,11 @@ func placeholderIssue(nodeID, module, field, marker string) LintIssue {
 		Code:     "template_placeholder",
 		Severity: LintError,
 		Message: fmt.Sprintf(
-			"Node %q (module %s) still has the template placeholder %q in %s. Replace it with the real value before running — the upstream service will reject it as-is.",
+			"Node %q (module %s) still has the example value %q in its %s field. That's filler text the template left behind — fill in your own value before running, or this step will fail.",
 			nodeID, module, marker, field,
 		),
 		NodeIDs: []string{nodeID},
+		Fields:  []string{field},
 	}
 }
 
@@ -252,23 +259,47 @@ func lintDanglingReferences(g Graph, nodesByID map[string]Node) []LintIssue {
 	for _, n := range g.Nodes {
 		seen := map[string]bool{}
 		missing := make([]string, 0)
-		add := func(id string) {
-			if _, ok := nodesByID[id]; ok || seen[id] {
-				return
+		fieldSeen := map[string]bool{}
+		fields := make([]string, 0)
+		// isMissing records the referenced node ID if it's absent from the
+		// graph and reports whether it was missing, so the caller can also
+		// note the field path the dangling reference sits in.
+		isMissing := func(id string) bool {
+			if _, ok := nodesByID[id]; ok {
+				return false
 			}
-			seen[id] = true
-			missing = append(missing, id)
+			if !seen[id] {
+				seen[id] = true
+				missing = append(missing, id)
+			}
+			return true
 		}
-		collectUpstreamRefs(n.Params, add)
-		for _, v := range n.Env {
+		noteField := func(path string) {
+			if !fieldSeen[path] {
+				fieldSeen[path] = true
+				fields = append(fields, path)
+			}
+		}
+		walkParams("", n.Params, func(path, str string) bool {
+			for _, id := range upstreamRefIDs(str) {
+				if isMissing(id) {
+					noteField(path)
+				}
+			}
+			return false // visit every leaf
+		})
+		for k, v := range n.Env {
 			for _, id := range upstreamRefIDs(v) {
-				add(id)
+				if isMissing(id) {
+					noteField("env." + k)
+				}
 			}
 		}
 		if len(missing) == 0 {
 			continue
 		}
 		sort.Strings(missing)
+		sort.Strings(fields)
 		issues = append(issues, LintIssue{
 			Code:     "dangling_reference",
 			Severity: LintWarn,
@@ -277,23 +308,13 @@ func lintDanglingReferences(g Graph, nodesByID map[string]Node) []LintIssue {
 				n.ID, n.Module, quotedList(missing),
 			),
 			NodeIDs: []string{n.ID},
+			Fields:  fields,
 		})
 	}
 	sort.Slice(issues, func(i, j int) bool {
 		return issues[i].NodeIDs[0] < issues[j].NodeIDs[0]
 	})
 	return issues
-}
-
-// collectUpstreamRefs walks a param value (string / map / slice) and calls
-// add for every ${upstream.<id>…} node ID it finds.
-func collectUpstreamRefs(v any, add func(string)) {
-	walkParams("", v, func(_, str string) bool {
-		for _, id := range upstreamRefIDs(str) {
-			add(id)
-		}
-		return false // visit every leaf
-	})
 }
 
 // upstreamRefIDs returns the upstream node IDs referenced in s.
@@ -470,6 +491,7 @@ func hardcodedIssue(nodeID, module, field string) LintIssue {
 			nodeID, module, field,
 		),
 		NodeIDs: []string{nodeID},
+		Fields:  []string{field},
 	}
 }
 

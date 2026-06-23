@@ -103,6 +103,7 @@ import { FlowStatusChip } from "../components/FlowStatusChip";
 import { flowRunStatusPublished } from "../flowStatus";
 import { DazyNode } from "../components/NodeCard";
 import { portColor, type DazyNodeData } from "../components/nodeCardShared";
+import { humanize } from "../components/SchemaForm";
 import { CommentNode } from "../components/CommentNode";
 import { RerouteEdge } from "../components/RerouteEdge";
 import { SettingsModal } from "../components/SettingsModal";
@@ -131,6 +132,45 @@ const AUTOSAVE_DEBOUNCE_MS = 1500;
 // Standard local "YYYY-MM-DD HH:MM" everywhere — no relative "ago" strings.
 function timeAgo(iso: string): string {
   return formatDateTime(iso);
+}
+
+// lintFieldLabel names a flagged param the way the Inspector form does: by its
+// schema `title`, falling back to the humanized key — never the raw slug. Env
+// vars have no schema entry and are shown by their bare name in the Inspector,
+// so we keep that.
+function lintFieldLabel(path: string, manifest: Manifest | undefined): string {
+  if (path.startsWith("env.")) return path.slice(4);
+  const top = path.split(/[.[]/)[0];
+  const title = manifest?.params_schema?.properties?.[top]?.title;
+  return title && title.length > 0 ? title : humanize(top);
+}
+
+// lintMessage builds the user-facing sentence for a lint finding using
+// Inspector-style field labels and no node/module/field slugs. The node itself
+// is already highlighted on the canvas, so it goes unnamed. Codes we don't have
+// a label-based string for (or findings missing field data) fall back to the
+// backend `message`, which keeps the slug-bearing phrasing for CLI/API readers.
+function lintMessage(
+  issue: LintIssue,
+  manifest: Manifest | undefined,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): string {
+  const fields = (issue.fields ?? []).map((f) => lintFieldLabel(f, manifest));
+  const field = fields.join(", ");
+  switch (issue.code) {
+    case "template_placeholder":
+      if (field) return t("editor.lintPlaceholder", { field });
+      break;
+    case "hardcoded_secret":
+      if (field) return t("editor.lintHardcoded", { field });
+      break;
+    case "dangling_reference":
+      if (field) return t("editor.lintDangling", { field });
+      break;
+    case "secret_to_persistence":
+      return t("editor.lintSecretPersist");
+  }
+  return issue.message;
 }
 
 // buildTestEventSample produces the JSON object the "Send test event"
@@ -215,6 +255,13 @@ function stampScheduleTimezones(
 
 function EditorInner() {
   const { t } = useTranslation();
+  // Binds the active translator to lintMessage so the badge effect and the
+  // warning banner share one Inspector-style formatter.
+  const describeLint = useCallback(
+    (issue: LintIssue, manifest: Manifest | undefined) =>
+      lintMessage(issue, manifest, t),
+    [t],
+  );
   const {
     setName: setActiveFlowName,
     setIcon: setActiveFlowIcon,
@@ -889,26 +936,30 @@ function EditorInner() {
   // the node→message map whenever lintIssues changes; clears the badge
   // on nodes no longer flagged.
   useEffect(() => {
-    const byNode = new Map<string, string[]>();
+    const byNode = new Map<string, LintIssue[]>();
     for (const iss of lintIssues) {
       for (const nid of iss.node_ids ?? []) {
         const arr = byNode.get(nid) ?? [];
-        arr.push(iss.message);
+        arr.push(iss);
         byNode.set(nid, arr);
       }
     }
     setNodes((nds) => {
       let changed = false;
       const next = nds.map((n) => {
-        const msgs = byNode.get(n.id);
-        const lintMessage = msgs ? msgs.join("\n\n") : undefined;
+        const issues = byNode.get(n.id);
+        // Build each node's badge text from that node's own manifest so the
+        // flagged field is named the way its Inspector form names it.
+        const lintMessage = issues
+          ? issues.map((iss) => describeLint(iss, n.data.manifest)).join("\n\n")
+          : undefined;
         if (n.data.lintMessage === lintMessage) return n;
         changed = true;
         return { ...n, data: { ...n.data, lintMessage } };
       });
       return changed ? next : nds;
     });
-  }, [lintIssues]);
+  }, [lintIssues, describeLint]);
 
   // Register the flow-settings opener so the top-bar three-dots menu
   // can open this editor's settings modal. setSettingsOpen is stable
@@ -4386,12 +4437,19 @@ function EditorInner() {
             <ul style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 6 }}>
               {/* Just the sentence — the machine code (issue.code) stays
                   out of the visible text and rides along as a hover
-                  tooltip for bug reports and grepping. */}
-              {lintIssues.map((issue, i) => (
-                <li key={i} title={issue.code}>
-                  {issue.message}
-                </li>
-              ))}
+                  tooltip for bug reports and grepping. The sentence names the
+                  offending input the way the Inspector does (schema title), so
+                  no node/module/field slugs surface here. */}
+              {lintIssues.map((issue, i) => {
+                const manifest = nodes.find(
+                  (n) => n.id === issue.node_ids?.[0],
+                )?.data.manifest;
+                return (
+                  <li key={i} title={issue.code}>
+                    {describeLint(issue, manifest)}
+                  </li>
+                );
+              })}
             </ul>
           </div>
         )}

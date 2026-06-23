@@ -1881,7 +1881,10 @@ function DurationSecondsField({
   );
 }
 
-function humanize(key: string): string {
+// humanize turns a raw param key ("first_row_headers") into the title-cased
+// label the form shows when a field's schema has no explicit `title`. Exported
+// so the lint banner can name fields the same way the Inspector does.
+export function humanize(key: string): string {
   return key
     .replace(/[_-]+/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());

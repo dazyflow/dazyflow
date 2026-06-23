@@ -464,6 +464,53 @@ func TestLintGraph_NoPlaceholderNotFlagged(t *testing.T) {
 	}
 }
 
+// ---- Fields payload (UI labels findings by field, not by slug) ----
+
+func TestLintGraph_PlaceholderCarriesField(t *testing.T) {
+	g := Graph{Nodes: []Node{
+		node("call", "http_request", map[string]any{
+			"headers": map[string]any{"X-Trace": "REPLACE_WITH_TRACE_ID"},
+		}),
+	}}
+	iss := hasIssueCode(LintGraph(g), "template_placeholder")
+	if iss == nil {
+		t.Fatal("expected template_placeholder")
+	}
+	if len(iss.Fields) != 1 || iss.Fields[0] != "headers.X-Trace" {
+		t.Errorf("fields=%v want [headers.X-Trace]", iss.Fields)
+	}
+}
+
+func TestLintGraph_HardcodedSecretCarriesField(t *testing.T) {
+	g := Graph{Nodes: []Node{
+		node("call", "http_request", map[string]any{
+			"headers": map[string]any{"Authorization": "ghp_0123456789abcdefghijklmnopqrstuvwx"},
+		}),
+	}}
+	iss := hasIssueCode(LintGraph(g), "hardcoded_secret")
+	if iss == nil {
+		t.Fatal("expected hardcoded_secret")
+	}
+	if len(iss.Fields) != 1 || iss.Fields[0] != "headers.Authorization" {
+		t.Errorf("fields=%v want [headers.Authorization]", iss.Fields)
+	}
+}
+
+func TestLintGraph_DanglingReferenceCarriesField(t *testing.T) {
+	g := Graph{Nodes: []Node{
+		node("use", "http_request", map[string]any{
+			"url": "${upstream.gone.body}",
+		}),
+	}}
+	iss := hasIssueCode(LintGraph(g), "dangling_reference")
+	if iss == nil {
+		t.Fatal("expected dangling_reference")
+	}
+	if len(iss.Fields) != 1 || iss.Fields[0] != "url" {
+		t.Errorf("fields=%v want [url]", iss.Fields)
+	}
+}
+
 func TestLintGraph_TemplatePlaceholderOneIssuePerNode(t *testing.T) {
 	// Two placeholder fields on the same node → still one issue,
 	// so the banner doesn't spam.
