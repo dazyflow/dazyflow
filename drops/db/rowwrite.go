@@ -47,16 +47,22 @@ func parseRowsInput(job core.Job) (rowsInput, *core.Result) {
 	// table is shaped from the OUTPUT columns (and an upsert's
 	// conflict_columns refer to the output names too). No mapping → rows
 	// pass through unchanged.
+	mapped := false
 	if mapping, ok := paramStringMap(job.Params, "field_mapping"); ok && len(mapping) > 0 {
 		rows = applyFieldMapping(rows, mapping)
+		mapped = true
 	}
 
+	// Column order, in priority order:
+	//  1. the rows Ref's own Headers — the simplified data model folds the
+	//     former `headers` port onto the rows value, so producers now carry
+	//     column order alongside the rows. Skipped when a field_mapping
+	//     renamed the columns, since the Ref's headers describe the INPUT
+	//     names; the output shape is derived from the rewritten rows below.
+	//  2. derive from the row keys.
 	var headers []string
-	if h, ok := job.Input["headers"]; ok && h.Inline != nil {
-		headers, err = normalizeHeaders(h.Inline)
-		if err != nil {
-			return rowsInput{}, errResult(job, "bad_input", err.Error())
-		}
+	if !mapped && len(rowsRef.Headers) > 0 {
+		headers = rowsRef.Headers
 	}
 	if headers == nil {
 		headers = deriveHeaders(rows)

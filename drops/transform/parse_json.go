@@ -16,6 +16,7 @@ func init() {
 			ID:          "parse_json",
 			Version:     "1.0",
 			Label:       "Parse JSON",
+			Subtitle:    "Read fields from text",
 			Icon:        "braces",
 			Category:    "transformation",
 			Provider:    "internal",
@@ -41,7 +42,6 @@ func init() {
 			},
 			Outputs: []core.Port{
 				{Port: "rows", Label: "Rows", MIME: []string{"application/json"}},
-				{Port: "headers", Label: "Headers", MIME: []string{"application/json"}},
 				{Port: "value", Label: "Value", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
@@ -91,9 +91,8 @@ func executeParseJSON(_ context.Context, job core.Job, _ chan<- core.Progress) (
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
-			"rows":    {MIME: "application/json", Inline: rows},
-			"headers": {MIME: "application/json", Inline: deriveHeaders(rows)},
-			"value":   {MIME: "application/json", Inline: value},
+			"rows":  {MIME: "application/json", Inline: rows, Headers: deriveHeaders(rows)},
+			"value": {MIME: "application/json", Inline: value},
 		},
 	}, nil
 }

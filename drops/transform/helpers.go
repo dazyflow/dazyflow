@@ -113,10 +113,19 @@ func loadRowsAndHeaders(job core.Job) (rowsOut []map[string]any, headers []strin
 	if err != nil {
 		return nil, nil, errResult(job, "bad_input", err.Error()), false
 	}
-	if h, ok := job.Input["headers"]; ok && h.Inline != nil {
-		headers, err = normalizeHeaders(h.Inline)
-		if err != nil {
-			return nil, nil, errResult(job, "bad_input", err.Error()), false
+	// Folded-headers model: the column order travels ON the rows value
+	// (rowsRef.Headers), so there's one wire, not parallel rows + headers
+	// ports. Fall back to a legacy separate `headers` input (for graphs/drops
+	// not yet migrated), then derive from the row keys.
+	switch {
+	case len(rowsRef.Headers) > 0:
+		headers = rowsRef.Headers
+	default:
+		if h, ok := job.Input["headers"]; ok && h.Inline != nil {
+			headers, err = normalizeHeaders(h.Inline)
+			if err != nil {
+				return nil, nil, errResult(job, "bad_input", err.Error()), false
+			}
 		}
 	}
 	if headers == nil {
@@ -135,8 +144,9 @@ func resultRows(job core.Job, rowsOut []map[string]any, headers []string) core.R
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
-			"rows":    {MIME: "application/json", Inline: rowsOut},
-			"headers": {MIME: "application/json", Inline: headers},
+			// One Items port: the column order rides on the rows Ref (Headers).
+			// The former parallel `headers` output port is gone.
+			"rows": {MIME: "application/json", Inline: rowsOut, Headers: headers},
 		},
 	}
 }

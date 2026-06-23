@@ -12,6 +12,12 @@ type Ref struct {
 	MIME   string `json:"mime"`
 	Ref    string `json:"ref,omitempty"`
 	Inline any    `json:"data,omitempty"`
+	// Headers is the column order for a row-list ("Items") value. In the
+	// simplified data model an Items value carries its own column order, so a
+	// flow wires ONE port instead of parallel rows + headers ports. Empty for
+	// non-row values, and for row values whose order can be derived from the
+	// keys (rows.DeriveHeaders). Folds the former `headers` port onto the value.
+	Headers []string `json:"headers,omitempty"`
 }
 
 type Job struct {

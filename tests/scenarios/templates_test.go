@@ -79,6 +79,7 @@ func TestShippedTemplatesCompose(t *testing.T) {
 			if err := json.Unmarshal(data, &g); err != nil {
 				t.Fatalf("parse: %v", err)
 			}
+			g = core.MigrateGraph(g) // validate post-migration, as the daemon loads it
 			normalizeVariadicPorts(&g, manifests)
 
 			if err := core.ValidateWithManifests(g, manifests); err != nil {

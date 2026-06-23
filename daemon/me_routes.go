@@ -249,7 +249,7 @@ func (h *HTTPGateway) saveFlowMe(rw http.ResponseWriter, r *http.Request, p core
 	// contract that downstream alerting may key on. The public rename
 	// (graphs → flows) is wire-only; audit codes are stable.
 	h.audit(r.Context(), p, "graph.save", g.ID, "commit="+commit)
-	writeJSON(rw, http.StatusOK, h.flowMutationResponse(commit, g))
+	writeJSON(rw, http.StatusOK, h.flowMutationResponse(r, commit, g))
 }
 
 // flowMutationResponse is the shared response shape for save + patch.
@@ -258,22 +258,50 @@ func (h *HTTPGateway) saveFlowMe(rw http.ResponseWriter, r *http.Request, p core
 // whether the operator has set --public-base-url. When the flag is
 // false, the trigger URLs in `endpoints` are relative — the LLM
 // should warn the user instead of telling them to paste the URL.
-func (h *HTTPGateway) flowMutationResponse(commit string, g core.Graph) map[string]any {
+func (h *HTTPGateway) flowMutationResponse(r *http.Request, commit string, g core.Graph) map[string]any {
 	scope := g.Tenant + "/" + g.Workspace + "/" + g.ID
+	base := h.effectiveBaseURL(r)
 	resp := map[string]any{
 		"commit":                 commit,
 		"flow_id":                scope,
 		"lint":                   core.LintGraph(g),
-		"endpoints":              h.triggerEndpoints(g),
+		"endpoints":              h.triggerEndpoints(base, g),
 		"public_base_configured": h.svc.PublicBaseURL != "",
 	}
 	// canvas_url is the deep link to the in-app editor for this flow.
-	// Relative when no public base — the LLM can still pass it through
-	// to a browser-mediated user, and a web UI client treats it as
-	// same-origin.
-	base := strings.TrimRight(h.svc.PublicBaseURL, "/")
 	resp["canvas_url"] = base + "/flows/" + g.ID
 	return resp
+}
+
+// effectiveBaseURL returns the origin to build user-facing URLs (trigger,
+// hosted form, editor link) against. The operator's --public-base-url is
+// authoritative when set. Otherwise we derive it from the request — honoring
+// X-Forwarded-Proto/Host so a reverse proxy's external origin wins — so the
+// trigger/form links a user gets are USABLE (absolute) instead of bare paths
+// like "/form/...". The derived value is best-effort: behind a proxy that
+// doesn't forward those headers it may be the internal host, which is why
+// public_base_configured still reports whether the authoritative value is set.
+func (h *HTTPGateway) effectiveBaseURL(r *http.Request) string {
+	if b := strings.TrimRight(h.svc.PublicBaseURL, "/"); b != "" {
+		return b
+	}
+	if r == nil {
+		return ""
+	}
+	scheme := "http"
+	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
+		scheme = proto
+	} else if r.TLS != nil {
+		scheme = "https"
+	}
+	host := r.Header.Get("X-Forwarded-Host")
+	if host == "" {
+		host = r.Host
+	}
+	if host == "" {
+		return ""
+	}
+	return scheme + "://" + host
 }
 
 // historyFlowMe is GET /me/flows/{flow_id}/history — the commit log of a
@@ -334,7 +362,7 @@ func (h *HTTPGateway) restoreFlowMe(rw http.ResponseWriter, r *http.Request, p c
 		return
 	}
 	h.audit(r.Context(), p, "graph.restore", id, "from="+body.Ref+" commit="+commit)
-	writeJSON(rw, http.StatusOK, h.flowMutationResponse(commit, g))
+	writeJSON(rw, http.StatusOK, h.flowMutationResponse(r, commit, g))
 }
 
 // labelRevisionMe is POST /me/flows/{flow_id}/label {ref?, label} — name a
@@ -473,14 +501,8 @@ func (h *HTTPGateway) publishedFlowMe(rw http.ResponseWriter, r *http.Request, p
 // triggers when one is set on the trigger — the LLM can include it
 // in the "how to wire this up" instructions to the user. PublicForm
 // pages take no auth.
-func (h *HTTPGateway) triggerEndpoints(g core.Graph) []map[string]any {
-	base := strings.TrimRight(h.svc.PublicBaseURL, "/")
-	if base == "" {
-		// No public URL is known — surface the relative paths so the
-		// LLM can still tell the user "POST to /trigger/...". Better
-		// than emitting nothing and leaving the user wondering.
-		base = ""
-	}
+func (h *HTTPGateway) triggerEndpoints(base string, g core.Graph) []map[string]any {
+	base = strings.TrimRight(base, "/")
 	out := []map[string]any{}
 	scope := g.Tenant + "/" + g.Workspace + "/" + g.ID
 	// Trigger config lives on nodes now (the Triggers menu is gone): the
@@ -655,7 +677,7 @@ func (h *HTTPGateway) patchFlowMe(rw http.ResponseWriter, r *http.Request, p cor
 		return
 	}
 	h.audit(r.Context(), p, "graph.patch", next.ID, "commit="+commit)
-	writeJSON(rw, http.StatusOK, h.flowMutationResponse(commit, next))
+	writeJSON(rw, http.StatusOK, h.flowMutationResponse(r, commit, next))
 }
 
 // jsonMergePatch applies RFC 7396 merge semantics: for each key in
@@ -776,6 +798,9 @@ func (h *HTTPGateway) validateGraphLiteral(rw http.ResponseWriter, r *http.Reque
 	if g.Workspace == "" {
 		g.Workspace = p.Workspace
 	}
+	// Drop obsolete edges (e.g. folded-away `headers` wires) before validating,
+	// so a graph authored against an older model lints against the current one.
+	g = core.MigrateGraph(g)
 	// Run the SAME two gates the AI generator applies (core.ValidateGraphFull:
 	// the security/placeholder linter PLUS the manifest-level structural
 	// validator) so a graph an MCP host hand-authors here validates identically

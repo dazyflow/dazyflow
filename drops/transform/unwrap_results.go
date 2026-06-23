@@ -52,7 +52,6 @@ func init() {
 			},
 			Outputs: []core.Port{
 				{Port: "rows", Label: "Rows", MIME: []string{"application/json"}},
-				{Port: "headers", Label: "Headers", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
@@ -180,8 +179,7 @@ func executeUnwrapResults(_ context.Context, job core.Job, _ chan<- core.Progres
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
-			"rows":    {MIME: "application/json", Inline: out},
-			"headers": {MIME: "application/json", Inline: deriveHeaders(out)},
+			"rows": {MIME: "application/json", Inline: out, Headers: deriveHeaders(out)},
 		},
 	}, nil
 }

@@ -38,7 +38,6 @@ func init() {
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
 				{Port: "rows", Label: "Rows", Required: true, MIME: []string{"application/json"}},
-				{Port: "headers", Label: "Headers", MIME: []string{"application/json"}},
 				// Optional: wire a spreadsheet id in to override the picker, so a
 				// reference can be threaded from an upstream sheet step.
 				{Port: "spreadsheet_id", Label: "Spreadsheet ID", MIME: []string{"text/plain"}},
@@ -112,8 +111,10 @@ func executeSheetsAppend(ctx context.Context, job core.Job, _ chan<- core.Progre
 	timeout := params.IntDefault(job.Params, "timeout_ms", 15000)
 
 	var headers []string
-	if h, ok := job.Input["headers"]; ok && h.Inline != nil {
-		headers = normalizeHeaders(h.Inline)
+	// Prefer the column order folded onto the rows value itself. (A 'mapping'
+	// param still overrides it, same as before — see the mapping block below.)
+	if len(in.Headers) > 0 {
+		headers = in.Headers
 	}
 
 	// An explicit column mapping is placed BY COLUMN NAME, not by row order:

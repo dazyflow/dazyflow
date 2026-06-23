@@ -176,7 +176,134 @@ func ValidateWithManifests(g Graph, manifests map[string]Manifest) error {
 // validation is impossible and we degrade to the placeholder/security rules.
 func ValidateGraphFull(g Graph, manifests map[string]Manifest) []LintIssue {
 	issues := LintGraph(g)
-	return append(issues, ManifestLintIssues(g, manifests)...)
+	issues = append(issues, ManifestLintIssues(g, manifests)...)
+	issues = append(issues, structuredIntoTextWarnings(g, manifests)...)
+	return append(issues, cardinalityMismatchWarnings(g, manifests)...)
+}
+
+// structuredIntoTextWarnings flags edges that feed STRUCTURED data (a list of
+// rows, or a JSON object) straight into a plain-text input — the "I wired raw
+// data into the email body / message and got a wall of JSON" mistake. It's a
+// WARN, not an error: it's occasionally intentional, and the run won't fail —
+// it'll just look ugly. The fix is to route through a formatting step
+// (render_text) first.
+//
+// High-precision by design: it only fires when the source port is declared a
+// list OR explicitly application/json, AND the destination input accepts ONLY
+// text/plain. A formatting drop's rows input isn't text/plain, so it's never
+// flagged. Ports with no declared MIME (wildcards) are left alone — we can't
+// tell if they're structured, so we don't guess. Needs manifests; returns nil
+// without them.
+func structuredIntoTextWarnings(g Graph, manifests map[string]Manifest) []LintIssue {
+	if len(manifests) == 0 {
+		return nil
+	}
+	byID := make(map[string]Manifest, len(g.Nodes))
+	for _, n := range g.Nodes {
+		if m, ok := manifests[n.Module]; ok {
+			byID[n.ID] = m
+		}
+	}
+	var out []LintIssue
+	for _, e := range g.Edges {
+		src, ok1 := byID[e.From]
+		dst, ok2 := byID[e.To]
+		if !ok1 || !ok2 {
+			continue
+		}
+		op, hasOut := src.Output(e.FromPort)
+		ip, hasIn := dst.Input(e.ToPort)
+		if !hasOut || !hasIn {
+			continue
+		}
+		// A source is "structured" if it's a declared list or JSON, OR it's a
+		// trigger output that isn't plain text — a webhook/form body is an
+		// untyped (wildcard-MIME) object or list, the single most common thing a
+		// beginner wires straight into a message/email body. Including triggers
+		// here is what catches that case the typed checks miss.
+		structuredSource := op.List ||
+			mimeContains(op.MIME, "application/json") ||
+			(src.ExecutionModel == ExecutionTrigger && !mimeIsTextOnly(op.MIME))
+		if structuredSource && mimeIsTextOnly(ip.MIME) {
+			out = append(out, LintIssue{
+				Code:     "structured_into_text",
+				Severity: LintWarn,
+				Message: fmt.Sprintf("node %q feeds raw structured data into %q's text input %q — reference a specific field (e.g. ${trigger.body.<field>} or ${upstream.%s.%s[0].<field>}) or format it with render_text; otherwise it arrives as raw JSON.",
+					e.From, e.To, e.ToPort, e.From, e.FromPort),
+				NodeIDs: []string{e.From, e.To},
+			})
+		}
+	}
+	return out
+}
+
+// cardinalityMismatchWarnings flags an edge from a MANY (list) output into a
+// ONE (single-value) input — the "you fed a list into a one-at-a-time step"
+// case. In the simplified data model the intent is "run the step once per
+// item" (a For each loop); surfacing it lets the author confirm that's what
+// they want (or wire a single item / a render step instead). WARN, not error:
+// a one-input that's untyped (KindAny) or variadic legitimately takes the whole
+// list, so those are skipped to keep the signal low-noise.
+//
+// NOTE: this is the detection half of the many→one model rule. Actually RUNNING
+// the consumer per item automatically (implicit for-each) is a separate engine
+// change; until then, the author wraps it in for_each — which this points to.
+func cardinalityMismatchWarnings(g Graph, manifests map[string]Manifest) []LintIssue {
+	if len(manifests) == 0 {
+		return nil
+	}
+	byID := make(map[string]Manifest, len(g.Nodes))
+	for _, n := range g.Nodes {
+		if m, ok := manifests[n.Module]; ok {
+			byID[n.ID] = m
+		}
+	}
+	var out []LintIssue
+	for _, e := range g.Edges {
+		src, ok1 := byID[e.From]
+		dst, ok2 := byID[e.To]
+		if !ok1 || !ok2 {
+			continue
+		}
+		op, hasOut := src.Output(e.FromPort)
+		ip, hasIn := dst.Input(e.ToPort)
+		if !hasOut || !hasIn || ip.Variadic {
+			continue
+		}
+		if op.Cardinality() == Many && ip.Cardinality() == One && ip.Kind() != KindAny {
+			out = append(out, LintIssue{
+				Code:     "many_into_one",
+				Severity: LintWarn,
+				Message: fmt.Sprintf("node %q sends many items into %q's single-item input %q — to act on each item, wrap %q in a For each loop; otherwise feed a single item.",
+					e.From, e.To, e.ToPort, e.To),
+				NodeIDs: []string{e.From, e.To},
+			})
+		}
+	}
+	return out
+}
+
+func mimeContains(mimes []string, want string) bool {
+	for _, m := range mimes {
+		if m == want {
+			return true
+		}
+	}
+	return false
+}
+
+// mimeIsTextOnly reports whether a port accepts text/plain and nothing else —
+// a pure text sink. An empty set is a wildcard, not a text-only sink.
+func mimeIsTextOnly(mimes []string) bool {
+	if len(mimes) == 0 {
+		return false
+	}
+	for _, m := range mimes {
+		if m != "text/plain" {
+			return false
+		}
+	}
+	return true
 }
 
 // ManifestLintIssues runs ValidateWithManifests and converts each structural

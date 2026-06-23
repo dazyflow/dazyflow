@@ -2,6 +2,7 @@ import { memo } from "react";
 import { Handle, Position, useStore, type NodeProps } from "@xyflow/react";
 import { AlertTriangle, ChevronRight, Repeat } from "lucide-react";
 import i18n from "../i18n";
+import { portTypeLabel } from "../lib/ports";
 import { Switch } from "./Switch";
 import { iconFor, isBrandedIcon, dropColor } from "../icons";
 import type { Manifest, Port, JSONSchema, Ref } from "../types";
@@ -448,6 +449,11 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
                       {isPass && <PassPinIcon />}
                     </Handle>
                     {!isPass && (p.label ?? p.port)}
+                    {!isPass && p.list && (
+                      <span className="dz-port-many" title="many items" style={{ opacity: 0.5, marginLeft: 3 }}>
+                        ▦
+                      </span>
+                    )}
                   </div>
                   {field && (
                     <div className="dz-port-inline nodrag nowheel">
@@ -500,6 +506,11 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
                   {isPass && <PassPinIcon />}
                 </Handle>
                 {!isPass && (p.label ?? p.port)}
+                {!isPass && p.list && (
+                  <span className="dz-port-many" title="many items" style={{ opacity: 0.5, marginLeft: 3 }}>
+                    ▦
+                  </span>
+                )}
                 {/* Watch port values (#10): the value this port emitted on
                     the latest run, revealed on hover. */}
                 {!isPass && ref && (
@@ -890,7 +901,9 @@ function passPinStyle(place: "in" | "out") {
 // nodes where there's no in-card port label to read.
 function portTooltip(port: Port): string {
   const parts = [port.label ? `${port.label} (${port.port})` : port.port];
-  if (port.mime && port.mime.length > 0) parts.push(port.mime.join(" | "));
+  // Lead with the plain-language kind×cardinality ("Items (a table)", "Text")
+  // instead of raw MIME — what's flowing, in words a non-techie reads.
+  parts.push(portTypeLabel(port));
   parts.push(port.required ? i18n.t("nodeCard.portRequired") : i18n.t("nodeCard.portOptional"));
   return parts.join(" — ");
 }

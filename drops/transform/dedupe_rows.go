@@ -40,11 +40,9 @@ func init() {
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
 				{Port: "rows", Label: "Rows", Required: true, MIME: []string{"application/json"}},
-				{Port: "headers", Label: "Headers", Required: false, MIME: []string{"application/json"}},
 			},
 			Outputs: []core.Port{
 				{Port: "rows", Label: "Rows", MIME: []string{"application/json"}},
-				{Port: "headers", Label: "Headers", MIME: []string{"application/json"}},
 				{Port: "dropped", Label: "Duplicate count", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
@@ -129,8 +127,7 @@ func executeDedupeRows(_ context.Context, job core.Job, _ chan<- core.Progress) 
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
-			"rows":    {MIME: "application/json", Inline: out},
-			"headers": {MIME: "application/json", Inline: headers},
+			"rows":    {MIME: "application/json", Inline: out, Headers: headers},
 			"dropped": {MIME: "application/json", Inline: len(rows) - len(out)},
 		},
 	}, nil

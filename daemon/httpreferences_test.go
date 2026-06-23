@@ -72,8 +72,13 @@ func TestReferences_UpstreamAncestorsTriggerAndSecrets(t *testing.T) {
 	tokens := refTokens(t, rw.Body.Bytes())
 
 	up := tokens["upstream"]
-	if !up["${upstream.read.rows}"] || !up["${upstream.read.headers}"] {
-		t.Errorf("upstream missing read ports: %v", up)
+	// Column order is folded onto the rows value now, so there's no separate
+	// `headers` output port/reference — just `rows`.
+	if !up["${upstream.read.rows}"] {
+		t.Errorf("upstream missing read.rows port: %v", up)
+	}
+	if up["${upstream.read.headers}"] {
+		t.Errorf("read.headers should be folded away (no separate headers port): %v", up)
 	}
 	if up["${upstream.other.rows}"] {
 		t.Errorf("upstream leaked unconnected node `other`: %v", up)

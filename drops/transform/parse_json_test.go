@@ -93,7 +93,7 @@ func TestParseJSON_DerivesHeaders(t *testing.T) {
 	if res.Status != core.StatusOK {
 		t.Fatalf("status = %v", res.Status)
 	}
-	headers, _ := res.Output["headers"].Inline.([]string)
+	headers := res.Output["rows"].Headers
 	if !reflect.DeepEqual(headers, []string{"a", "b"}) {
 		t.Errorf("headers = %v, want sorted [a b]", headers)
 	}

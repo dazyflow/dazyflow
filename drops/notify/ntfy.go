@@ -25,7 +25,7 @@ func init() {
 			Label:       "ntfy",
 			Subtitle:    "Send notification",
 			Summary:     "Send a push notification to your phone via an ntfy topic.",
-			Description: "Send a push notification to an ntfy topic — subscribe to the same topic in the free ntfy app to receive it on your phone. The message can be typed on the step or wired in from another step; title, priority, tags and a tap link are optional.",
+			Description: "Send a push notification to an ntfy topic — subscribe to the same topic in the free ntfy app to receive it on your phone. The message can be typed on the step or wired in from another step; title, priority, tags and a tap link are optional. Defaults to the public ntfy.sh server; to use a self-hosted ntfy server, set its Server URL (and a token for protected topics) once via the ntfy connection (Apps page, or the configure_connection tool) — flows then only carry the per-notification topic and message.",
 			Integration: "ntfy",
 			Category:    "network",
 			Icon:        "ntfy",

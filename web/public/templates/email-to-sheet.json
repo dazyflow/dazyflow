@@ -40,7 +40,6 @@
   ],
   "edges": [
     { "from": "search", "from_port": "messages", "to": "shape", "to_port": "rows", "on_error": "" },
-    { "from": "shape", "from_port": "rows", "to": "append", "to_port": "rows", "on_error": "" },
-    { "from": "shape", "from_port": "headers", "to": "append", "to_port": "headers", "on_error": "" }
+    { "from": "shape", "from_port": "rows", "to": "append", "to_port": "rows", "on_error": "" }
   ]
 }

@@ -36,3 +36,4 @@ hazy-key
 !/.claude/skills/
 /.mcp.json
 /docker-compose.override.yml
+/bin

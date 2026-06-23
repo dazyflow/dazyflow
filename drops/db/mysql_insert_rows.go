@@ -51,7 +51,6 @@ func init() {
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
 				{Port: "rows", Label: "Rows", Required: true, MIME: []string{"application/json"}},
-				{Port: "headers", Label: "Headers", Required: false, MIME: []string{"application/json"}},
 			},
 			Outputs: []core.Port{
 				{Port: "inserted", Label: "Rows inserted", MIME: []string{"application/json"}},

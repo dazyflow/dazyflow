@@ -124,7 +124,7 @@ func TestSortRows_HeadersPassThrough(t *testing.T) {
 			"headers": {Inline: []string{"a", "b", "c"}},
 		},
 	}, nil)
-	got := res.Output["headers"].Inline.([]string)
+	got := res.Output["rows"].Headers
 	if !reflect.DeepEqual(got, []string{"a", "b", "c"}) {
 		t.Errorf("headers = %v, want passed through", got)
 	}

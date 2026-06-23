@@ -44,7 +44,6 @@ func init() {
 			},
 			Outputs: []core.Port{
 				{Port: "rows", Label: "Rows", MIME: []string{"application/json"}},
-				{Port: "headers", Label: "Headers", MIME: []string{"application/json"}},
 				// path is re-emitted so any Excel step downstream can target the
 				// same file by wire (mirrors sheets_read_range's spreadsheet_id).
 				{Port: "path", Label: "File path", MIME: []string{"text/plain"}},
@@ -154,9 +153,8 @@ func rowsResult(job core.Job, path string, rows []any, headers []string) core.Re
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
-			"rows":    {MIME: "application/json", Inline: rows},
-			"headers": {MIME: "application/json", Inline: headers},
-			"path":    {MIME: "text/plain", Inline: path},
+			"rows": {MIME: "application/json", Inline: rows, Headers: headers},
+			"path": {MIME: "text/plain", Inline: path},
 		},
 	}
 }

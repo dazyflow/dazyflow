@@ -61,7 +61,6 @@ func init() {
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
 				{Port: "rows", Label: "Rows", Required: true, MIME: []string{"application/json"}},
-				{Port: "headers", Label: "Headers", Required: false, MIME: []string{"application/json"}},
 			},
 			Outputs: []core.Port{
 				{Port: "inserted", Label: "Rows saved", MIME: []string{"application/json"}},
@@ -211,11 +210,10 @@ func executeBuiltinStoreAppend(ctx context.Context, job core.Job, _ chan<- core.
 	}
 
 	var headers []string
-	if h, ok := job.Input["headers"]; ok && h.Inline != nil {
-		headers, err = normalizeHeaders(h.Inline)
-		if err != nil {
-			return params.Err(job, "bad_input", err.Error()), nil
-		}
+	// Prefer the column order folded onto the rows value itself; fall back to
+	// deriving from the row keys.
+	if len(rowsRef.Headers) > 0 {
+		headers = rowsRef.Headers
 	}
 	if headers == nil {
 		headers = deriveHeaders(rows)

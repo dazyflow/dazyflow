@@ -58,14 +58,11 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				{Port: "left_rows", Label: "Left rows", Required: true, MIME: []string{"application/json"}},
-				{Port: "left_headers", Label: "Left headers", MIME: []string{"application/json"}},
-				{Port: "right_rows", Label: "Right rows", Required: true, MIME: []string{"application/json"}},
-				{Port: "right_headers", Label: "Right headers", MIME: []string{"application/json"}},
+				{Port: "left_rows", Label: "Left rows", Required: true, MIME: []string{"application/json"}, List: true},
+				{Port: "right_rows", Label: "Right rows", Required: true, MIME: []string{"application/json"}, List: true},
 			},
 			Outputs: []core.Port{
 				{Port: "rows", Label: "Rows", MIME: []string{"application/json"}},
-				{Port: "headers", Label: "Headers", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
@@ -220,8 +217,7 @@ func executeJoinRows(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
-			"rows":    {MIME: "application/json", Inline: out},
-			"headers": {MIME: "application/json", Inline: outHeaders},
+			"rows": {MIME: "application/json", Inline: out, Headers: outHeaders},
 		},
 	}, nil
 }
@@ -285,11 +281,15 @@ func loadSide(job core.Job, name string) ([]map[string]any, []string, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("%s_rows: %w", name, err)
 	}
-	var headers []string
-	if h, ok := job.Input[name+"_headers"]; ok && h.Inline != nil {
-		headers, err = normalizeHeaders(h.Inline)
-		if err != nil {
-			return nil, nil, fmt.Errorf("%s_headers: %w", name, err)
+	// Folded-headers model: prefer the column order carried on the rows Ref,
+	// then a legacy separate `<side>_headers` input, then derive.
+	headers := rowsRef.Headers
+	if len(headers) == 0 {
+		if h, ok := job.Input[name+"_headers"]; ok && h.Inline != nil {
+			headers, err = normalizeHeaders(h.Inline)
+			if err != nil {
+				return nil, nil, fmt.Errorf("%s_headers: %w", name, err)
+			}
 		}
 	}
 	if headers == nil {

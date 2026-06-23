@@ -348,9 +348,9 @@ func TestGroupAggregate_HeadersAreByThenAlphaAggregates(t *testing.T) {
 		},
 		rows, nil,
 	)
-	h, ok := res.Output["headers"].Inline.([]string)
-	if !ok {
-		t.Fatalf("headers not []string: %T", res.Output["headers"].Inline)
+	h := res.Output["rows"].Headers
+	if len(h) == 0 {
+		t.Fatalf("headers missing on rows output: %+v", res.Output["rows"])
 	}
 	want := []string{"a", "aa", "mm", "zz"}
 	if !reflect.DeepEqual(h, want) {
@@ -460,7 +460,7 @@ func TestGroupAggregate_HeadersSortedRegardlessOfMapOrder(t *testing.T) {
 			},
 			[]map[string]any{{"k": 1}}, nil,
 		)
-		h, _ := res.Output["headers"].Inline.([]string)
+		h := res.Output["rows"].Headers
 		return h
 	}
 	h1 := build()

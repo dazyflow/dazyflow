@@ -24,6 +24,7 @@ import {
   type Connection,
   type Edge as FlowEdge,
   type EdgeChange,
+  type FinalConnectionState,
   type Node as FlowNode,
   type NodeChange,
   type ReactFlowInstance,
@@ -77,7 +78,7 @@ import {
   type MissingConnection,
   type SetupNeed,
 } from "../lib/requiredConnections";
-import { mimeCompatible, pickPort, portsConnectable } from "../lib/ports";
+import { mimeCompatible, pickPort, portsConnectable, connectionHint } from "../lib/ports";
 import { suggestNextDrops, topDropsByUsage } from "../lib/suggest";
 import type {
   DropAdjacency,
@@ -302,6 +303,15 @@ function EditorInner() {
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // connHint is a transient explanation shown when the editor refuses an
+  // incompatible wire ("Items can't plug into a Text input — add a …"). Set in
+  // onConnectEnd, auto-cleared after a few seconds.
+  const [connHint, setConnHint] = useState<string | null>(null);
+  useEffect(() => {
+    if (!connHint) return;
+    const t = setTimeout(() => setConnHint(null), 6000);
+    return () => clearTimeout(t);
+  }, [connHint]);
   // loadFailed is set when the INITIAL graph load fails with a non-404
   // (500/network). In that state `nodes` is [] but that empty canvas does
   // NOT reflect the server graph — so editing + autosave is blocked to
@@ -956,17 +966,38 @@ function EditorInner() {
     },
     [],
   );
-  const onConnectEnd = useCallback((e: MouseEvent | TouchEvent) => {
-    const start = connectStartRef.current;
-    connectStartRef.current = null;
-    if (connectMadeRef.current || !start) return;
-    const pt =
-      "clientX" in e
-        ? { x: e.clientX, y: e.clientY }
-        : { x: e.changedTouches[0]?.clientX ?? 0, y: e.changedTouches[0]?.clientY ?? 0 };
-    setConnectFrom({ ...start, screen: pt });
-    setPaletteOpen(true);
-  }, []);
+  const onConnectEnd = useCallback(
+    (e: MouseEvent | TouchEvent, conn: FinalConnectionState) => {
+      const start = connectStartRef.current;
+      connectStartRef.current = null;
+      if (connectMadeRef.current || !start) return;
+      // Dropped onto a real port that the validator REFUSED → explain why,
+      // instead of the wire silently snapping back. Resolve which end is the
+      // output and which the input, then ask connectionHint.
+      if (conn.toHandle && conn.isValid === false) {
+        const byId = new Map(nodes.map((n) => [n.id, n]));
+        const portAt = (h: { nodeId: string; id?: string | null } | null, side: "out" | "in") => {
+          if (!h) return undefined;
+          const node = byId.get(h.nodeId);
+          const ports = side === "out" ? node?.data.manifest?.outputs : node?.data.manifest?.inputs;
+          return ports?.find((p) => p.port === (h.id ?? (side === "out" ? "out" : "in")));
+        };
+        const fromIsSource = conn.fromHandle?.type === "source";
+        const outPort = portAt(fromIsSource ? conn.fromHandle : conn.toHandle, "out");
+        const inPort = portAt(fromIsSource ? conn.toHandle : conn.fromHandle, "in");
+        const hint = connectionHint(outPort, inPort);
+        if (hint) setConnHint(hint);
+        return; // a refused drop must not also open the quick-add palette
+      }
+      const pt =
+        "clientX" in e
+          ? { x: e.clientX, y: e.clientY }
+          : { x: e.changedTouches[0]?.clientX ?? 0, y: e.changedTouches[0]?.clientY ?? 0 };
+      setConnectFrom({ ...start, screen: pt });
+      setPaletteOpen(true);
+    },
+    [nodes],
+  );
 
   // The MIME of the port the user dragged from (its outputs if they grabbed
   // a source handle, its inputs for a target handle).
@@ -3983,6 +4014,20 @@ function EditorInner() {
             so they stack without magic-number top offsets — any banner can
             wrap to multiple lines without overlapping the next. */}
         <div className="editor-banner-stack">
+        {connHint && (
+          <div className="editor-conn-hint" role="status">
+            <AlertCircle size={15} className="editor-conn-hint-icon" />
+            <span className="editor-conn-hint-text">{connHint}</span>
+            <button
+              className="ghost editor-conn-hint-x"
+              onClick={() => setConnHint(null)}
+              title={t("editor.dismiss")}
+              aria-label={t("editor.dismiss")}
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
         {error && (
           <div
             role="alert"

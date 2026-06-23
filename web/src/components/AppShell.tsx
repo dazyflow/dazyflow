@@ -616,7 +616,16 @@ export function AppShell({ children }: { children: ReactNode }) {
               deployments for unverified password accounts. Hidden in the
               editor so it never eats canvas height. */}
           {me?.verification_pending && !inEditor && <VerifyEmailBanner />}
-          {children}
+          {/* Gentle cross-page fade: keying on the path remounts this wrapper on
+              navigation, re-triggering the .route-fade entry animation. Skipped
+              in the editor — the canvas shouldn't fade/remount on every change. */}
+          {inEditor ? (
+            children
+          ) : (
+            <div key={location.pathname} className="route-fade">
+              {children}
+            </div>
+          )}
         </main>
       </div>
     </div>

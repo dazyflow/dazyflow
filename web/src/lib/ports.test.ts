@@ -1,6 +1,14 @@
 import { describe, it, expect } from "vitest";
 import type { Port } from "../types";
-import { mimeCompatible, pickPort, portsConnectable } from "./ports";
+import {
+  mimeCompatible,
+  pickPort,
+  portsConnectable,
+  portKind,
+  portCardinality,
+  portTypeLabel,
+  connectionHint,
+} from "./ports";
 
 describe("mimeCompatible", () => {
   it("treats an untyped side as anything", () => {
@@ -101,5 +109,43 @@ describe("portsConnectable", () => {
     expect(portsConnectable(out, "pass", inp, "in")).toBe(true); // untyped source
     expect(portsConnectable(out, "out", inp, "nope")).toBe(true); // unknown target port
     expect(portsConnectable(undefined, "out", inp, "in")).toBe(true); // comment node, no manifest
+  });
+});
+
+describe("port kind × cardinality (data model)", () => {
+  it("derives kind from mime", () => {
+    expect(portKind({ mime: ["application/json"] })).toBe("item");
+    expect(portKind({ mime: ["text/plain"] })).toBe("text");
+    expect(portKind({ mime: ["application/x-bool"] })).toBe("bool");
+    expect(portKind({ mime: ["application/pdf"] })).toBe("file");
+    expect(portKind({ mime: [] })).toBe("any");
+    expect(portKind({})).toBe("any");
+  });
+  it("cardinality from list flag", () => {
+    expect(portCardinality({ list: true })).toBe("many");
+    expect(portCardinality({})).toBe("one");
+  });
+  it("plain-language labels", () => {
+    expect(portTypeLabel({ mime: ["application/json"], list: true })).toBe("Items (a table)");
+    expect(portTypeLabel({ mime: ["application/json"] })).toBe("Item");
+    expect(portTypeLabel({ mime: ["text/plain"] })).toBe("Text");
+    expect(portTypeLabel({})).toBe("Anything");
+  });
+});
+
+describe("connectionHint", () => {
+  it("null when compatible or untyped", () => {
+    expect(connectionHint({ port: "a", mime: ["text/plain"] }, { port: "b", mime: ["text/plain"] })).toBeNull();
+    expect(connectionHint({ port: "a" }, { port: "b", mime: ["text/plain"] })).toBeNull();
+  });
+  it("suggests a bridge for Items→Text and Text→Items", () => {
+    expect(connectionHint({ port: "rows", mime: ["application/json"] }, { port: "body", mime: ["text/plain"] }))
+      .toMatch(/Make text from items/);
+    expect(connectionHint({ port: "t", mime: ["text/plain"] }, { port: "rows", mime: ["application/json"] }))
+      .toMatch(/Read fields from text/);
+  });
+  it("generic message for other kind clashes", () => {
+    expect(connectionHint({ port: "ok", mime: ["application/x-bool"] }, { port: "body", mime: ["text/plain"] }))
+      .toMatch(/don.t match/);
   });
 });

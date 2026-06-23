@@ -22,7 +22,7 @@ func runSplit(t *testing.T, params map[string]any, rows []map[string]any, header
 	}
 	return res.Output["matched"].Inline.([]map[string]any),
 		res.Output["unmatched"].Inline.([]map[string]any),
-		res.Output["headers"].Inline.([]string)
+		res.Output["matched"].Headers
 }
 
 func TestSplitRows_BasicPredicate(t *testing.T) {

@@ -36,12 +36,10 @@ func init() {
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
 				{Port: "rows", Label: "Rows", Required: true, MIME: []string{"application/json"}},
-				{Port: "headers", Label: "Headers", Required: false, MIME: []string{"application/json"}},
 			},
 			Outputs: []core.Port{
-				{Port: "matched", Label: "Matched", MIME: []string{"application/json"}},
-				{Port: "unmatched", Label: "Unmatched", MIME: []string{"application/json"}},
-				{Port: "headers", Label: "Headers", MIME: []string{"application/json"}},
+				{Port: "matched", Label: "Matched", MIME: []string{"application/json"}, List: true},
+				{Port: "unmatched", Label: "Unmatched", MIME: []string{"application/json"}, List: true},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
@@ -108,9 +106,8 @@ func executeSplitRows(ctx context.Context, job core.Job, _ chan<- core.Progress)
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
-			"matched":   {MIME: "application/json", Inline: matched},
-			"unmatched": {MIME: "application/json", Inline: unmatched},
-			"headers":   {MIME: "application/json", Inline: headers},
+			"matched":   {MIME: "application/json", Inline: matched, Headers: headers},
+			"unmatched": {MIME: "application/json", Inline: unmatched, Headers: headers},
 		},
 	}, nil
 }

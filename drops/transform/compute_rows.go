@@ -45,11 +45,9 @@ func init() {
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
 				{Port: "rows", Label: "Rows", Required: true, MIME: []string{"application/json"}},
-				{Port: "headers", Label: "Headers", Required: false, MIME: []string{"application/json"}},
 			},
 			Outputs: []core.Port{
 				{Port: "rows", Label: "Rows", MIME: []string{"application/json"}},
-				{Port: "headers", Label: "Headers", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
@@ -159,8 +157,7 @@ func executeComputeRows(ctx context.Context, job core.Job, _ chan<- core.Progres
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
-			"rows":    {MIME: "application/json", Inline: out},
-			"headers": {MIME: "application/json", Inline: outputHeaders},
+			"rows": {MIME: "application/json", Inline: out, Headers: outputHeaders},
 		},
 	}, nil
 }

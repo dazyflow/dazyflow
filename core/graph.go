@@ -75,6 +75,32 @@ type Frame struct {
 	Height float64 `json:"height"`
 }
 
+// legacyHeadersPorts are the port names that carried column order as a separate
+// wire before it was folded onto the row value (core.Ref.Headers). The ports
+// are removed from manifests, so any saved/authored graph still wiring them
+// would fail port validation — MigrateGraph drops those now-dangling edges.
+var legacyHeadersPorts = map[string]bool{"headers": true, "left_headers": true, "right_headers": true}
+
+// MigrateGraph brings a stored or submitted graph up to the current data model.
+// Today that means dropping edges to/from the folded-away `headers` ports: the
+// column order now travels on the row value, so a headers edge is obsolete and
+// (with the port gone) otherwise invalid. Idempotent and cheap — safe to run on
+// every load. Returns the same graph value with Edges filtered.
+func MigrateGraph(g Graph) Graph {
+	if len(g.Edges) == 0 {
+		return g
+	}
+	kept := g.Edges[:0:0]
+	for _, e := range g.Edges {
+		if legacyHeadersPorts[e.FromPort] || legacyHeadersPorts[e.ToPort] {
+			continue // obsolete headers wire — column order rides on the row value now
+		}
+		kept = append(kept, e)
+	}
+	g.Edges = kept
+	return g
+}
+
 type Graph struct {
 	ID        string         `json:"id"`
 	Version   string         `json:"version"`

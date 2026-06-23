@@ -585,7 +585,10 @@ func (s *Service) LoadGraph(ctx context.Context, p core.Principal, tenant, ws, i
 		// existence of private flows doesn't leak via 403 vs 404.
 		return core.Graph{}, fmt.Errorf("graph %q: %w", id, core.ErrNotFound)
 	}
-	return g, nil
+	// Bring stored graphs up to the current data model (e.g. drop the folded-
+	// away `headers` edges) so a flow saved before a model change still loads
+	// and validates.
+	return core.MigrateGraph(g), nil
 }
 
 // FlowHistory returns the commit history of a flow, newest first. Gated on

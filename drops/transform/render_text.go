@@ -18,6 +18,7 @@ func init() {
 			ID:          "render_text",
 			Version:     "1.0",
 			Label:       "Render text",
+			Subtitle:    "Make text from items",
 			Icon:        "text",
 			Category:    "transformation",
 			Provider:    "internal",
@@ -43,7 +44,6 @@ func init() {
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
 				{Port: "rows", Label: "Rows", Required: true, MIME: []string{"application/json"}},
-				{Port: "headers", Label: "Headers", Required: false, MIME: []string{"application/json"}},
 			},
 			Outputs: []core.Port{
 				{Port: "text", Label: "Rendered text", MIME: []string{"text/plain"}},

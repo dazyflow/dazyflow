@@ -37,7 +37,6 @@ func init() {
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
 				{Port: "rows", Label: "Rows", Required: true, MIME: []string{"application/json"}},
-				{Port: "headers", Label: "Headers", MIME: []string{"application/json"}},
 				// Named after the param so the card shows an inline editable box
 				// (Unreal-style); a wired value overrides the typed one — e.g. a
 				// date-stamped filename built by an upstream step, or an Excel
@@ -87,8 +86,10 @@ func executeExcelWrite(_ context.Context, job core.Job, _ chan<- core.Progress) 
 		return params.Err(job, "bad_input", err.Error()), nil
 	}
 	var headers []string
-	if h, ok := job.Input["headers"]; ok && h.Inline != nil {
-		headers = normalizeHeaders(h.Inline)
+	// Prefer the column order folded onto the rows value itself; fall back to
+	// deriving from the row fields.
+	if len(in.Headers) > 0 {
+		headers = in.Headers
 	}
 	if headers == nil {
 		headers = deriveHeaders(rows)

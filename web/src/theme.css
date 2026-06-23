@@ -119,6 +119,15 @@
   --r-3: 12px;
   --r-pill: 999px;
 
+  /* Motion — one source of truth for durations + easings so every transition
+     in the app feels like it belongs to the same system. --ease-out for things
+     entering/responding, --dur-1/2/3 for micro / default / larger movements. */
+  --ease-out: cubic-bezier(0.22, 0.7, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.5, 0, 0.3, 1);
+  --dur-1: 90ms;
+  --dur-2: 160ms;
+  --dur-3: 240ms;
+
   /* Layout */
   --topbar-h: 56px;
   --sidebar-w: 240px;

@@ -62,6 +62,13 @@ func verifyEmail(ctx context.Context, conn map[string]string) error {
 
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
 	if err := hfnet.CheckDialHost(addr); err != nil {
+		// CheckDialHost fails for two very different reasons: the host doesn't
+		// resolve at all (a typo'd or wrong server name) vs. it resolves to a
+		// private/LAN address (the egress guard). Don't tell someone with a typo
+		// to enable private-network access — say the address looks wrong.
+		if strings.Contains(err.Error(), "cannot resolve") {
+			return fmt.Errorf("couldn't find a mail server at %q — check the address", host)
+		}
 		return errors.New("that looks like a local/private address — the operator must enable private-network access (DAZYFLOW_ALLOW_PRIVATE_EGRESS) to reach it")
 	}
 

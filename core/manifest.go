@@ -109,6 +109,72 @@ type Port struct {
 	List bool `json:"list,omitempty"`
 }
 
+// PortKind is the value kind a port carries in the simplified data model — the
+// small set of human-meaningful currencies a flow moves between steps. It's
+// DERIVED from the port's existing MIME declaration (see Port.Kind), so this is
+// the compatibility bridge: manifests keep their MIME for now while tooling,
+// the engine, and the UI move to reading Kind/Cardinality. Phase 1 of the data-
+// layer simplification (Items × one/many) — later phases tighten the mapping.
+type PortKind string
+
+const (
+	KindItem PortKind = "item" // a record: a {field: value} object (application/json)
+	KindText PortKind = "text" // human/plain text (text/plain, text/html)
+	KindBool PortKind = "bool" // a yes/no (application/x-bool)
+	KindFile PortKind = "file" // a file/blob (pdf, spreadsheet, octet-stream, …)
+	KindAny  PortKind = "any"  // untyped pass-through — matches anything
+	// KindNumber is reserved: numbers ride as application/json today, so they
+	// currently derive as KindItem. A dedicated number signal is a later phase.
+	KindNumber PortKind = "number"
+)
+
+// Cardinality is whether a port carries ONE value or MANY (a list). In the
+// simplified model a "table" is just many Items; there is no separate rows type.
+type Cardinality string
+
+const (
+	One  Cardinality = "one"
+	Many Cardinality = "many"
+)
+
+// Kind maps the port's declared MIME types onto the simplified value model.
+// Empty MIME (a wildcard / pass-through port) is KindAny. A port that lists
+// several MIMEs (a flexible sink, e.g. json+text) is classified by its richest
+// structured nature (Item before Text). Unknown/binary MIMEs fall through to
+// KindFile. Pure derivation — it reads existing manifests and changes none.
+func (p Port) Kind() PortKind {
+	if len(p.MIME) == 0 {
+		return KindAny
+	}
+	has := func(m string) bool {
+		for _, x := range p.MIME {
+			if x == m {
+				return true
+			}
+		}
+		return false
+	}
+	switch {
+	case has("application/json"), has("application/x-dazyflow-list+json"):
+		return KindItem
+	case has("text/plain"), has("text/html"):
+		return KindText
+	case has("application/x-bool"):
+		return KindBool
+	default:
+		return KindFile
+	}
+}
+
+// Cardinality reports whether the port carries one value or a list, from the
+// existing List flag.
+func (p Port) Cardinality() Cardinality {
+	if p.List {
+		return Many
+	}
+	return One
+}
+
 type Manifest struct {
 	ID      string `json:"id"`
 	Version string `json:"version"`

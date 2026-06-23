@@ -23,7 +23,7 @@ func runCompute(t *testing.T, params map[string]any, rows []map[string]any, head
 		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
 	}
 	return res.Output["rows"].Inline.([]map[string]any),
-		res.Output["headers"].Inline.([]string)
+		res.Output["rows"].Headers
 }
 
 func TestComputeRows_StringConcat(t *testing.T) {

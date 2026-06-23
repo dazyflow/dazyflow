@@ -3990,6 +3990,35 @@ button.warning:hover:not(:disabled) {
    arrow's colour comes from `color` (inherited as currentColor by the SVG),
    so hover + connected are pure colour/fill swaps. z-index keeps it above
    the card border. */
+/* Live connection feedback: while dragging a wire, React Flow tags the handle
+   under the pointer `connectingto`, adding `valid` only when isValidConnection
+   (our portsConnectable) accepts it. So a `connectingto` handle WITHOUT `valid`
+   is an incompatible target — ring it red so the user sees the wire won't take
+   before releasing (the drop then explains why). A box-shadow ring is used so
+   it doesn't fight the dot's inline background/border colour. */
+.react-flow__handle.connectingto:not(.valid) {
+  border-color: var(--danger) !important;
+  /* Soft pulsing red halo rather than a hard ring — reads as "no" without
+     being jarring. The ring also eases in/out via the base transition below. */
+  animation: dz-handle-invalid 0.9s ease-in-out infinite;
+}
+.react-flow__handle.connectingto.valid {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+/* Ease the ring on/off as the pointer moves between handles. */
+.react-flow__handle.connectingto {
+  transition: box-shadow 130ms ease-out, border-color 130ms ease-out;
+}
+@keyframes dz-handle-invalid {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 50%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--danger) 22%, transparent);
+  }
+}
+
 .react-flow__handle.dz-pass-pin {
   width: 14px;
   height: 14px;
@@ -7699,6 +7728,61 @@ button.warning:hover:not(:disabled) {
   align-items: center;
   justify-content: center;
 }
+/* Connection-refused hint — shown when the editor blocks an incompatible wire.
+   Lives in .editor-banner-stack (which positions the stack), so it's a plain
+   flex-row banner with a warning tone. */
+.editor-conn-hint {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(560px, calc(100vw - 24px));
+  padding: var(--space-2) var(--space-2) var(--space-2) 14px;
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--warning, #d08700) 55%, var(--border));
+  color: var(--text);
+  border-radius: var(--r-3);
+  box-shadow: var(--shadow-2, 0 6px 20px rgba(0, 0, 0, 0.25));
+  /* Soft slide+fade in so the explanation arrives gently, not with a pop. */
+  animation: dz-conn-hint-in 180ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+@keyframes dz-conn-hint-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+/* Respect users who prefer less motion: drop the pulse + entry animations and
+   fall back to a static ring. */
+@media (prefers-reduced-motion: reduce) {
+  .editor-conn-hint {
+    animation: none;
+  }
+  .react-flow__handle.connectingto:not(.valid) {
+    animation: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 55%, transparent);
+  }
+}
+.editor-conn-hint-icon {
+  flex: 0 0 auto;
+  color: var(--warning, #d08700);
+}
+.editor-conn-hint-text {
+  font-size: var(--text-md);
+  line-height: 1.35;
+}
+.editor-conn-hint-x {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 /* The Ctrl+K hint sits inside the Add-drop button as a subtle key cap. */
 .editor-add-drop-kbd {
   font-family: var(--font-mono);
@@ -9134,3 +9218,90 @@ button.files-name:hover {
 .create-draft-refine { margin-top: var(--space-2); }
 .create-draft-refine-row { display: flex; gap: var(--space-2); }
 .create-draft-refine-row input { flex: 1; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Motion polish — consistent, gentle motion across the GUI, built on the
+   --dur-* / --ease-* tokens (theme.css). Additive and low-specificity: it eases
+   the common interactive states without overriding component-specific motion,
+   and never animates layout (width/height) so it can't introduce jank.
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* Cross-page fade — AppShell wraps non-editor pages in .route-fade keyed on the
+   path, so this entry animation re-runs on each navigation. */
+.route-fade {
+  animation: route-fade-in var(--dur-3) var(--ease-out);
+}
+@keyframes route-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Interaction polish: ease the everyday visual states so hover/focus/press
+   glide. Property allow-list only — no width/height. */
+button,
+a,
+.btn,
+input,
+select,
+textarea,
+.card,
+.nav a,
+.sidebar a,
+[role="button"] {
+  transition:
+    background-color var(--dur-2) var(--ease-out),
+    border-color var(--dur-2) var(--ease-out),
+    color var(--dur-2) var(--ease-out),
+    box-shadow var(--dur-2) var(--ease-out),
+    opacity var(--dur-2) var(--ease-out),
+    transform var(--dur-1) var(--ease-out);
+}
+/* A touch of physicality on press; settles back via the transition above. */
+button:active,
+.btn:active,
+[role="button"]:active {
+  transform: translateY(0.5px) scale(0.985);
+}
+
+/* Loading & list settling: content fades up instead of popping in. Add the
+   class to a freshly-loaded container/list. */
+.dz-fade-in {
+  animation: dz-fade-in var(--dur-3) var(--ease-out);
+}
+@keyframes dz-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Editor feel: smooth the editor CHROME (inspector slide, overlay banners) —
+   not the React Flow canvas/nodes, whose transform is owned by the library. */
+.inspector,
+.editor-banner-stack > * {
+  transition:
+    transform var(--dur-3) var(--ease-out),
+    opacity var(--dur-3) var(--ease-out);
+}
+
+/* Accessibility: honor reduced-motion globally — near-instant, no movement. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

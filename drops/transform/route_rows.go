@@ -40,11 +40,11 @@ func init() {
 			Port:  fmt.Sprintf("rows_%d", i),
 			Label: fmt.Sprintf("Routing slot %d", i),
 			MIME:  []string{"application/json"},
+			List:  true, // carries rows — name isn't in the auto-list set, so flag it
 		})
 	}
 	outputs = append(outputs,
-		core.Port{Port: routeDefaultSlot, Label: "Default", MIME: []string{"application/json"}},
-		core.Port{Port: "headers", Label: "Headers", MIME: []string{"application/json"}},
+		core.Port{Port: routeDefaultSlot, Label: "Default", MIME: []string{"application/json"}, List: true},
 	)
 
 	engine.Register(engine.NativeDrop{
@@ -74,7 +74,6 @@ func init() {
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
 				{Port: "rows", Label: "Rows", Required: true, MIME: []string{"application/json"}},
-				{Port: "headers", Label: "Headers", MIME: []string{"application/json"}},
 			},
 			Outputs: outputs,
 			ParamsSchema: json.RawMessage(`{
@@ -175,11 +174,9 @@ func executeRouteRows(ctx context.Context, job core.Job, _ chan<- core.Progress)
 		}
 	}
 
-	out := map[string]core.Ref{
-		"headers": {MIME: "application/json", Inline: headers},
-	}
+	out := map[string]core.Ref{}
 	for slot, rows := range bucket {
-		out[slot] = core.Ref{MIME: "application/json", Inline: rows}
+		out[slot] = core.Ref{MIME: "application/json", Inline: rows, Headers: headers}
 	}
 	return core.Result{
 		JobID:  job.ID,

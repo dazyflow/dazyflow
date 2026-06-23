@@ -38,7 +38,6 @@
   ],
   "edges": [
     { "from": "read", "from_port": "rows", "to": "render", "to_port": "rows", "on_error": "" },
-    { "from": "read", "from_port": "headers", "to": "render", "to_port": "headers", "on_error": "" },
     { "from": "render", "from_port": "text", "to": "notify", "to_port": "text", "on_error": "" }
   ]
 }

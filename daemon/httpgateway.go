@@ -1921,6 +1921,20 @@ func (h *HTTPGateway) sampleNode(rw http.ResponseWriter, r *http.Request, p core
 		writeJSONError(rw, http.StatusNotFound, fmt.Sprintf("node %q not in graph %q", nodeID, id))
 		return
 	}
+	// Sampling re-runs the upstream chain, so a trigger node in the subset would
+	// fail with no_trigger_data (a trigger has no data outside a real firing).
+	// Detect that here and return an actionable error pointing at test-trigger,
+	// instead of submitting a run that dies cryptically.
+	if mans, mErr := h.svc.ListDrops(r.Context(), p); mErr == nil {
+		for _, n := range sub.Nodes {
+			if m, ok := mans[n.Module]; ok && m.ExecutionModel == core.ExecutionTrigger {
+				writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf(
+					"can't sample %q: it depends on trigger node %q (%s), which has no data outside a real firing — use the flow's test-trigger with a payload instead",
+					nodeID, n.ID, n.Module))
+				return
+			}
+		}
+	}
 	runID, err := h.svc.SubmitGraph(r.Context(), p, sub)
 	if err != nil {
 		writeJSONError(rw, http.StatusBadRequest, err.Error())

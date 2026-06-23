@@ -55,6 +55,10 @@ func TestScenarioGraphsValidate(t *testing.T) {
 			if err := json.Unmarshal(data, &g); err != nil {
 				t.Fatalf("parse %s: %v", f, err)
 			}
+			// Validate the graph as it would actually run — after the same
+			// data-model migration the daemon applies on load (e.g. dropping
+			// folded-away `headers` edges).
+			g = core.MigrateGraph(g)
 
 			if err := core.ValidateWithManifests(g, manifests); err != nil {
 				t.Fatalf("graph does not compose against the catalog:\n%v", err)

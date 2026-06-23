@@ -63,12 +63,14 @@ func BuildTools(c *DazydClient, d Defaults) []Tool {
 		describeTriggerKinds(c),
 		listConnections(c),
 		startConnection(c),
+		configureConnection(c),
 		listSecrets(c),
 		setSecret(c),
 		deleteSecret(c),
 		validateCron(c),
 		listFlows(c, d),
 		getFlow(c, d),
+		flowReferences(c, d),
 		saveFlow(c, d, "create_flow",
 			"Create a new flow. Use this for fresh graphs; for in-place edits to an existing flow use update_flow (same wire shape, distinct intent so the LLM doesn't accidentally overwrite something it didn't mean to touch). Note: edits are rejected with HTTP 409 while a run of the flow is active."),
 		saveFlow(c, d, "update_flow",
@@ -77,6 +79,8 @@ func BuildTools(c *DazydClient, d Defaults) []Tool {
 		deleteFlow(c, d),
 		enableFlow(c, d),
 		disableFlow(c, d),
+		publishFlow(c, d),
+		unpublishFlow(c, d),
 		validateFlow(c, d),
 		validateGraph(c),
 		generateFlowTool(c),
@@ -171,7 +175,14 @@ func errorResultOrErr(err error) (ToolCallResult, error) {
 		return ToolCallResult{}, nil
 	}
 	var herr *HTTPError
-	if errors.As(err, &herr) && herr.Status >= 400 && herr.Status < 500 {
+	// Any HTTP status response (4xx OR 5xx) comes back as a tool error the
+	// model can read and explain, rather than a JSON-RPC -32603 the host can't
+	// gracefully surface. A 501 ("OAuth not configured"), 502, or 503 is a
+	// condition the user can act on ("that integration isn't set up on this
+	// server"), not a protocol fault — so it belongs in ToolCallResult.IsError
+	// alongside the 4xx cases. Genuine transport failures (no *HTTPError: DNS,
+	// connection refused, timeouts) still surface as an RPC error.
+	if errors.As(err, &herr) && herr.Status >= 400 {
 		payload := herr.ToToolPayload()
 		b, mErr := json.MarshalIndent(payload, "", "  ")
 		if mErr != nil {
@@ -624,6 +635,101 @@ func enableOrDisable(c *DazydClient, d Defaults, name, desc, suffix string) Tool
 		"POST", suffix, true)
 }
 
+// publishFlow / unpublishFlow control which version of a flow is LIVE.
+// create_flow / update_flow save a DRAFT — the schedule (cron) and inbound
+// webhooks/forms fire the most-recently-PUBLISHED version, so a freshly
+// created or edited flow does nothing on its triggers until it's published.
+// (run_flow / test_trigger_flow run the draft immediately, which is why a flow
+// can run on demand yet never fire on its schedule.) These are the missing
+// step between "saved" and "actually running on its own".
+//
+// idempotent=false: re-publishing AFTER an edit is a distinct, intentional act
+// (the draft changed). An args-derived key would dedupe the second publish onto
+// the first and silently skip activating the new version.
+func publishFlow(c *DazydClient, d Defaults) Tool {
+	return flowPathTool(c, d, "publish_flow",
+		"Publish a flow: make its CURRENT draft the live version, so its schedule (cron) and webhook/form triggers start firing. Call this after create_flow / update_flow whenever the flow has triggers — saving alone leaves it as a draft that only runs via run_flow / test_trigger_flow. Re-publish after each edit you want to go live.",
+		`{"type":"object","required":["id"],"properties":{
+			"id":        {"type":"string"},
+			"tenant":    {"type":"string"},
+			"workspace": {"type":"string"}
+		}}`,
+		"POST", "/publish", false)
+}
+
+func unpublishFlow(c *DazydClient, d Defaults) Tool {
+	return flowPathTool(c, d, "unpublish_flow",
+		"Unpublish a flow: retire the live version so its schedule and webhook/form triggers stop firing, without deleting the flow or its draft. Use to pause a flow's automatic triggering; re-activate later with publish_flow. (To pause scheduled firings while keeping the published version, disable_flow is the lighter touch.)",
+		`{"type":"object","required":["id"],"properties":{
+			"id":        {"type":"string"},
+			"tenant":    {"type":"string"},
+			"workspace": {"type":"string"}
+		}}`,
+		"POST", "/unpublish", false)
+}
+
+// connectionSlug mirrors core.ConnectionSlug: lower-case, trim, spaces→dashes.
+// Kept local so the MCP server stays a thin HTTP client with no core import.
+func connectionSlug(integration string) string {
+	return strings.ReplaceAll(strings.ToLower(strings.TrimSpace(integration)), " ", "-")
+}
+
+// configureConnection sets up a connection-based integration — the ones that
+// use connection FIELDS (SMTP email, ntfy, a custom server endpoint + token)
+// rather than the OAuth dance that start_connection drives. It PUTs the field
+// values to the daemon, which VERIFIES them against the live service before
+// storing (when the integration has a verifier), so bad credentials are
+// rejected with the real error instead of silently saved as "connected".
+//
+// This is the missing counterpart to start_connection: without it, a flow that
+// fails at run time with "<X> isn't connected" had no in-chat fix — the user
+// had to leave for the web Apps page. Find an integration's field keys via
+// describe_integration / list_drops (the `connection_fields` array).
+func configureConnection(c *DazydClient) Tool {
+	return Tool{
+		Name: "configure_connection",
+		Description: "Set up a connection-based integration (e.g. Email/SMTP, ntfy) by storing its connection-field values. The daemon verifies the values against the live service before saving when a verifier exists, so bad credentials surface here, not at run time. Use this when a flow fails with '<X> isn't connected'. For OAuth providers (Google, Slack, GitHub) use start_connection instead. Field keys come from the integration's connection_fields (see describe_integration).",
+		InputSchema: json.RawMessage(`{"type":"object","required":["integration","values"],"properties":{
+			"integration": {"type":"string","description":"Integration name or slug, e.g. 'Email' or 'ntfy'. Case-insensitive; spaces become dashes."},
+			"values":      {"type":"object","description":"Connection field values keyed by field key, e.g. {\"host\":\"smtp.example.com\",\"port\":\"587\",\"username\":\"me@example.com\",\"password\":\"...\",\"from\":\"me@example.com\"} or {\"server\":\"https://ntfy.example.com\"}. Omitted secret fields keep their stored value.","additionalProperties":{"type":"string"}}
+		}}`),
+		Handler: func(ctx context.Context, raw json.RawMessage) (ToolCallResult, error) {
+			args, err := decodeArgs(raw)
+			if err != nil {
+				return ErrorResult(err.Error()), nil
+			}
+			integration := stringField(args, "integration", "")
+			if strings.TrimSpace(integration) == "" {
+				return ErrorResult("integration is required"), nil
+			}
+			vals, ok := args["values"].(map[string]any)
+			if !ok || len(vals) == 0 {
+				return ErrorResult("values must be a non-empty object of field key → value"), nil
+			}
+			// Connection field values are strings; coerce non-strings (a number
+			// port, a bool) so the caller can be loose with types.
+			sv := make(map[string]string, len(vals))
+			keys := make([]string, 0, len(vals))
+			for k, v := range vals {
+				switch t := v.(type) {
+				case string:
+					sv[k] = t
+				default:
+					b, _ := json.Marshal(t)
+					sv[k] = string(b)
+				}
+				keys = append(keys, k)
+			}
+			slug := connectionSlug(integration)
+			ctx = withIdempotencyKey(ctx, idempotencyKeyFor("configure_connection", raw))
+			if err := c.Put(ctx, "/catalog/integrations/"+pathSegment(slug)+"/connection", map[string]any{"values": sv}, nil); err != nil {
+				return errorResultOrErr(err)
+			}
+			return TextResult(map[string]any{"integration": integration, "configured": true, "fields": keys}), nil
+		},
+	}
+}
+
 // deleteFlow removes a flow from the workspace. Refuses with 409 if
 // a run is currently in flight on this flow (same lock as save/patch).
 // Idempotent on the wire: a missing flow returns 204.
@@ -672,6 +778,25 @@ func getFlow(c *DazydClient, d Defaults) Tool {
 			"workspace": {"type":"string"}
 		}}`,
 		"GET", "", false)
+}
+
+// flowReferences exposes GET /me/flows/{flow_id}/references — the catalogue of
+// ${…} placeholder tokens a flow's params can use: every upstream node output
+// (e.g. ${upstream.search.messages[0].id}), the trigger body fields
+// (${trigger.body.name}), and available secrets/resources. THIS is how to learn
+// the exact path to a field before templating it into a param — the shapes are
+// non-obvious (a webhook body arrives as a list, fields live under trigger.body,
+// etc.), so guessing leads to runtime "field not present" failures that pass
+// validation. Call this after wiring nodes, before referencing their data.
+func flowReferences(c *DazydClient, d Defaults) Tool {
+	return flowPathTool(c, d, "flow_references",
+		"List the valid ${…} placeholder tokens for a flow's params: upstream node outputs (e.g. ${upstream.<node>.<port>[0].<field>}), trigger body fields (${trigger.body.<field>}), secrets and resources. Use this to find the EXACT path to a field before putting it in a param — field shapes are non-obvious (a form/webhook body arrives as a list; form fields live under ${trigger.body.…}), and a wrong path passes validation but fails at run time.",
+		`{"type":"object","required":["id"],"properties":{
+			"id":        {"type":"string","description":"Flow ID."},
+			"tenant":    {"type":"string"},
+			"workspace": {"type":"string"}
+		}}`,
+		"GET", "/references", false)
 }
 
 // saveFlow backs both create_flow and update_flow. The wire shape is
@@ -749,6 +874,13 @@ func saveFlow(c *DazydClient, d Defaults, name, description string) Tool {
 			var out map[string]any
 			if err := c.Put(ctx, "/me/flows/"+composeFlowID(tenant, workspace, id), body, &out); err != nil {
 				return ToolCallResult{}, err
+			}
+			// Saving stores a DRAFT. If the flow has triggers (cron/webhook/form),
+			// they won't fire until it's published — surface that next step so the
+			// model doesn't leave a "scheduled" flow silently inactive. run_flow /
+			// test_trigger_flow still exercise the draft on demand.
+			if eps, ok := out["endpoints"].([]any); ok && len(eps) > 0 {
+				out["next_step"] = "Saved as a draft. Call publish_flow with this id to make its triggers (schedule/webhook/form) go live — until then they won't fire on their own (run_flow / test_trigger_flow still work)."
 			}
 			return TextResult(out), nil
 		})
@@ -890,15 +1022,20 @@ func validateGraph(c *DazydClient) Tool {
 // supplied JSON payload — exactly as a real /trigger or /form POST
 // would — and returns the run ID to observe.
 func testTriggerFlow(c *DazydClient, d Defaults) Tool {
+	// idempotent=false, same reasoning as run_flow: firing the trigger again
+	// (even with the SAME payload) is an intentional "test it again", not a
+	// retry. A deterministic args-derived key would dedupe the second call onto
+	// the first, handing back the prior run's ID — so a re-test silently returns
+	// the old (possibly failed) run instead of executing.
 	return scopedTool(c, d, "test_trigger_flow",
-		"Fire a flow as if a webhook/form trigger had received the supplied JSON payload. Returns the run ID. Use this to verify a trigger-driven flow without exposing it to real traffic.",
+		"Fire a flow as if a webhook/form trigger had received the supplied JSON payload. Each call starts a NEW run (call it again to re-test, even with the same payload). Returns the run ID. Use this to verify a trigger-driven flow without exposing it to real traffic.",
 		`{"type":"object","required":["id","payload"],"properties":{
 			"id":        {"type":"string"},
 			"tenant":    {"type":"string"},
 			"workspace": {"type":"string"},
 			"payload":   {"description":"JSON payload to seed the trigger node with. Object, array, or primitive."}
 		}}`,
-		[]string{"id"}, true,
+		[]string{"id"}, false,
 		func(ctx context.Context, c *DazydClient, args map[string]any, tenant, workspace string) (ToolCallResult, error) {
 			id := stringField(args, "id", "")
 			body := map[string]any{"payload": args["payload"]}
@@ -916,13 +1053,12 @@ func testTriggerFlow(c *DazydClient, d Defaults) Tool {
 // for the LLM to reason about a transformation node's behavior.
 func sampleNode(c *DazydClient, d Defaults) Tool {
 	return scopedTool(c, d, "sample_node",
-		"Run a single node in isolation with the supplied input map and return its output. Inputs are keyed by port name. Used for debugging a node mid-flow without running the upstream chain.",
+		"Run a node plus the chain of nodes feeding it, and return what that node emits — to debug a transformation mid-flow. NOTE: it re-executes the upstream nodes, so if the node depends on a TRIGGER (webhook/form/cron), use test_trigger_flow instead — sampling alone can't synthesize trigger data and will fail with no_trigger_data.",
 		`{"type":"object","required":["id","node_id"],"properties":{
 			"id":        {"type":"string","description":"Flow ID."},
 			"tenant":    {"type":"string"},
 			"workspace": {"type":"string"},
-			"node_id":   {"type":"string"},
-			"inputs":    {"type":"object","description":"Map of input-port-name → value. Optional; defaults to empty."}
+			"node_id":   {"type":"string"}
 		}}`,
 		[]string{"id", "node_id"}, true,
 		func(ctx context.Context, c *DazydClient, args map[string]any, tenant, workspace string) (ToolCallResult, error) {
@@ -943,14 +1079,21 @@ func sampleNode(c *DazydClient, d Defaults) Tool {
 }
 
 func runFlow(c *DazydClient, d Defaults) Tool {
+	// idempotent=false on purpose: run_flow is an explicit "run it now" action,
+	// so a SECOND call means "run it AGAIN", not "retry the first call". With a
+	// deterministic args-derived key, two identical run_flow calls collapse onto
+	// one cached run — the user asks to re-run and silently gets the prior run's
+	// ID back. Submitting each call lets re-runs actually fire. (A run is cheap
+	// to repeat and the daemon records each separately, so the lost transport-
+	// retry dedup is an acceptable trade for correct re-run behaviour.)
 	return flowPathTool(c, d, "run_flow",
-		"Submit a run of an existing flow. Returns the run ID; pair with wait_for_run or get_run to observe outcome.",
+		"Submit a run of an existing flow. Each call starts a NEW run (call it again to run again). Returns the run ID; pair with wait_for_run or get_run to observe outcome.",
 		`{"type":"object","required":["id"],"properties":{
 			"id":        {"type":"string"},
 			"tenant":    {"type":"string"},
 			"workspace": {"type":"string"}
 		}}`,
-		"POST", "/run", true)
+		"POST", "/run", false)
 }
 
 func cancelRun(c *DazydClient) Tool {

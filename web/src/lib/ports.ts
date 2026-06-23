@@ -9,6 +9,46 @@ import type { Port } from "../types";
 // any MIME — which is exactly why it must not be auto-chosen by default.
 export const PASS_PORT = "pass";
 
+// PortKind mirrors core.PortKind (core/manifest.go): the small set of
+// human-meaningful value kinds a flow moves between steps, DERIVED from a
+// port's MIME. The UI reads this (not raw MIME) so a non-techie sees "Items" or
+// "Text", not "application/json".
+export type PortKind = "item" | "text" | "bool" | "file" | "any";
+
+export function portKind(p: Pick<Port, "mime">): PortKind {
+  const m = p.mime;
+  if (!m?.length) return "any";
+  if (m.includes("application/json") || m.includes("application/x-dazyflow-list+json")) return "item";
+  if (m.includes("text/plain") || m.includes("text/html")) return "text";
+  if (m.includes("application/x-bool")) return "bool";
+  return "file";
+}
+
+// portCardinality is "one" or "many" — a list port carries many. A "table" is
+// just many Items; there is no separate rows type.
+export function portCardinality(p: Pick<Port, "list">): "one" | "many" {
+  return p.list ? "many" : "one";
+}
+
+// portTypeLabel is the plain-language description shown to the user for what a
+// port carries — kind × cardinality. e.g. "Items" (many records), "Text",
+// "Files". Used in the port tooltip so it's obvious what flows down a wire.
+export function portTypeLabel(p: Pick<Port, "mime" | "list">): string {
+  const many = portCardinality(p) === "many";
+  switch (portKind(p)) {
+    case "item":
+      return many ? "Items (a table)" : "Item";
+    case "text":
+      return many ? "Texts" : "Text";
+    case "bool":
+      return "Yes / no";
+    case "file":
+      return many ? "Files" : "File";
+    default:
+      return "Anything";
+  }
+}
+
 // mimeCompatible reports whether two MIME sets could carry the same value.
 // An empty/absent set on either side is treated as "anything", so untyped
 // pins connect to everything. Otherwise the sets must share an exact MIME
@@ -20,6 +60,28 @@ export const PASS_PORT = "pass";
 export function mimeCompatible(a?: string[], b?: string[]): boolean {
   if (!a?.length || !b?.length) return true;
   return a.some((x) => b.some((y) => x === y));
+}
+
+// connectionHint explains, in plain language, WHY an output can't connect to
+// an input — for the editor to show when it refuses a wire. Returns null when
+// the connection is fine (compatible, or either pin untyped). Cardinality
+// (one/many) is intentionally NOT a reason: the engine auto-lifts one→many and
+// runs many→one per item, so only a KIND clash (e.g. Items into a Text input)
+// is a real error, and the fix is a conversion step.
+export function connectionHint(out?: Port, inp?: Port): string | null {
+  if (!out || !inp) return null;
+  if (mimeCompatible(out.mime, inp.mime)) return null;
+  const from = portKind(out);
+  const to = portKind(inp);
+  if (from === "item" && to === "text") {
+    return "Items can’t plug into a Text input — add a “Make text from items” step in between.";
+  }
+  if (from === "text" && to === "item") {
+    return "Text can’t plug into an Items input — add a “Read fields from text” step in between.";
+  }
+  const noun = (k: PortKind) =>
+    ({ item: "Items", text: "Text", bool: "a Yes/no", file: "a File", any: "data" })[k];
+  return `${noun(from)} can’t connect to ${noun(to)} — the data types don’t match.`;
 }
 
 // portsConnectable is the ConnectionValidator decision: may a wire run from

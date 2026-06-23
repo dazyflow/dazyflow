@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"reflect"
 	"sync"
 
 	"go.opentelemetry.io/otel/trace"
@@ -317,7 +318,11 @@ func (e *Engine) buildAndExecute(
 			Error:  &core.JobError{Code: "resolve_failed", Message: err.Error()},
 		}, err
 	}
-	manifest := transport.Manifest()
+	// MarkListPorts normalizes the conventional list-carrying ports (rows,
+	// results, …) to List=true — the same view the catalog/validation use.
+	// Without it, transport.Manifest() reports those ports as single-value and
+	// the many→one auto-fan would wrongly iterate a node that takes a whole list.
+	manifest := core.MarkListPorts(transport.Manifest())
 	input := assembleInput(graph, node.ID, manifest, prior)
 
 	params, env := cloneNodeIO(node.Params, node.Env)
@@ -365,7 +370,10 @@ func (e *Engine) buildAndExecute(
 	// sink so they register the resolved token for redaction too.
 	ctx = withSecretSink(ctx, secrets)
 
-	result, execErr := exec(ctx, transport, job, secrets)
+	// Many→one: if a single-value input received a list, run the node once per
+	// item and aggregate (the simplified data model's "run for each"). Falls
+	// straight through to a single exec when there's no fan-out.
+	result, execErr := runMaybeFanned(ctx, manifest, job, secrets, transport, exec)
 
 	if result.JobID == "" {
 		result.JobID = job.ID
@@ -414,10 +422,32 @@ func assembleInput(graph core.Graph, nodeID string, manifest core.Manifest, prio
 			input[key] = ref
 			variadicCount[edge.ToPort]++
 		} else {
-			input[edge.ToPort] = ref
+			input[edge.ToPort] = autoLiftToList(port, ref)
 		}
 	}
 	return input
+}
+
+// autoLiftToList implements the one→many rule of the simplified data model: a
+// MANY input port (port.List) fed a single value gets that value wrapped in a
+// one-element list, so every list-consuming drop can assume it received a list.
+// This is the central, lossless half of the model — a flow author wiring a
+// single record (a form submission, an extracted item) into a list step no
+// longer needs a manual wrap, and it works uniformly, not just for drops that
+// happen to tolerate a lone object themselves.
+//
+// Only inline, not-already-a-list values are wrapped. Values that are already a
+// list (any slice/array) pass through untouched, as do out-of-line blob refs
+// (a streamed list is a list by construction) and empty refs.
+func autoLiftToList(port core.Port, ref core.Ref) core.Ref {
+	if !port.List || ref.Inline == nil {
+		return ref
+	}
+	if k := reflect.TypeOf(ref.Inline).Kind(); k == reflect.Slice || k == reflect.Array {
+		return ref
+	}
+	ref.Inline = []any{ref.Inline}
+	return ref
 }
 
 // forwardProgress drains the per-node channel, wrapping each event as a

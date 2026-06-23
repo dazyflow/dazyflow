@@ -277,8 +277,9 @@ func TestSQLiteInsert_EmptyRows(t *testing.T) {
 			"path": "out.db", "table": "t", "create_table": true,
 		},
 		Input: map[string]core.Ref{
-			"rows":    {Inline: []map[string]any{}},
-			"headers": {Inline: []string{"a", "b"}},
+			// Column order now rides on the rows Ref's Headers (the separate
+			// "headers" input port was removed when row order was folded on).
+			"rows": {Inline: []map[string]any{}, Headers: []string{"a", "b"}},
 		},
 	}, nil)
 	if res.Status != core.StatusOK {

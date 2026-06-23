@@ -154,9 +154,9 @@ func TestRouteRows_HeadersPassThrough(t *testing.T) {
 		[]map[string]any{{"id": 1, "name": "x"}},
 		[]string{"id", "name"},
 	)
-	headers, ok := res.Output["headers"].Inline.([]string)
-	if !ok {
-		t.Fatalf("headers not []string: %T", res.Output["headers"].Inline)
+	headers := res.Output["rows_1"].Headers
+	if len(headers) == 0 {
+		t.Fatalf("headers missing on rows_1: %+v", res.Output["rows_1"])
 	}
 	if len(headers) != 2 || headers[0] != "id" || headers[1] != "name" {
 		t.Errorf("headers=%v want [id name]", headers)

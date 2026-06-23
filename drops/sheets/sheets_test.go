@@ -56,7 +56,9 @@ func TestSheetsRead_FlattensWithHeaders(t *testing.T) {
 	if len(rows) != 2 || rows[0]["name"] != "Ada" || rows[1]["email"] != "bo@y" {
 		t.Errorf("rows = %+v", rows)
 	}
-	headers := res.Output["headers"].Inline.([]string)
+	// Column order now rides on the rows Ref's Headers (the former separate
+	// "headers" output port was removed when row order was folded onto the Ref).
+	headers := res.Output["rows"].Headers
 	if strings.Join(headers, ",") != "name,email" {
 		t.Errorf("headers = %v", headers)
 	}
@@ -78,8 +80,9 @@ func TestSheetsAppend_MapsRowsToColumns(t *testing.T) {
 	res, err := executeSheetsAppend(context.Background(), core.Job{
 		Params: map[string]any{"spreadsheet_id": "S1"},
 		Input: map[string]core.Ref{
-			"rows":    {Inline: []map[string]any{{"name": "Ada", "email": "a@x"}, {"name": "Bo", "email": "b@y"}}},
-			"headers": {Inline: []any{"name", "email"}},
+			// Column order now rides on the rows Ref's Headers (the separate
+			// "headers" input port was removed when row order was folded on).
+			"rows": {Inline: []map[string]any{{"name": "Ada", "email": "a@x"}, {"name": "Bo", "email": "b@y"}}, Headers: []string{"name", "email"}},
 		},
 	}, nil)
 	if err != nil || res.Status != core.StatusOK {
@@ -114,12 +117,13 @@ func TestSheetsAppend_StringifiesNestedValues(t *testing.T) {
 	res, err := executeSheetsAppend(context.Background(), core.Job{
 		Params: map[string]any{"spreadsheet_id": "S1"},
 		Input: map[string]core.Ref{
+			// Column order now rides on the rows Ref's Headers (the separate
+			// "headers" input port was removed when row order was folded on).
 			"rows": {Inline: []map[string]any{{
 				"row":   2,
 				"data":  map[string]any{"Email": "b@y", "Name": "Bo"},
 				"error": map[string]any{"code": "auth"},
-			}}},
-			"headers": {Inline: []any{"row", "data", "error"}},
+			}}, Headers: []string{"row", "data", "error"}},
 		},
 	}, nil)
 	if err != nil || res.Status != core.StatusOK {

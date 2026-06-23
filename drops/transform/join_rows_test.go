@@ -45,9 +45,9 @@ func outRows(t *testing.T, res core.Result) []map[string]any {
 
 func outHeaders(t *testing.T, res core.Result) []string {
 	t.Helper()
-	h, ok := res.Output["headers"].Inline.([]string)
-	if !ok {
-		t.Fatalf("headers output not []string: %T", res.Output["headers"].Inline)
+	h := res.Output["rows"].Headers
+	if len(h) == 0 {
+		t.Fatalf("headers missing on rows output: %+v", res.Output["rows"])
 	}
 	return h
 }
@@ -440,7 +440,7 @@ func TestJoinRows_RowsAndHeadersBothEmitted(t *testing.T) {
 	if _, ok := res.Output["rows"]; !ok {
 		t.Error("rows port missing")
 	}
-	if _, ok := res.Output["headers"]; !ok {
-		t.Error("headers port missing")
+	if len(res.Output["rows"].Headers) == 0 {
+		t.Error("rows headers missing")
 	}
 }

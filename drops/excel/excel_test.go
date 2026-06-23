@@ -41,7 +41,9 @@ func TestExcelRead_HeadersAndRows(t *testing.T) {
 	if err != nil || res.Status != core.StatusOK {
 		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
 	}
-	headers := res.Output["headers"].Inline.([]string)
+	// Column order now rides on the rows Ref's Headers (the former separate
+	// "headers" output port was removed when row order was folded onto the Ref).
+	headers := res.Output["rows"].Headers
 	if len(headers) != 2 || headers[0] != "name" {
 		t.Errorf("headers = %v", headers)
 	}
@@ -78,7 +80,7 @@ func TestExcelRead_Skip(t *testing.T) {
 		Params:        map[string]any{"path": "s.xlsx", "skip": 1},
 		WorkspaceRoot: ws,
 	}, nil)
-	headers := res.Output["headers"].Inline.([]string)
+	headers := res.Output["rows"].Headers
 	if len(headers) != 1 || headers[0] != "name" {
 		t.Errorf("headers after skip = %v", headers)
 	}
@@ -109,8 +111,9 @@ func TestExcelWrite_RoundTrip(t *testing.T) {
 		Params:        map[string]any{"path": "out.xlsx", "sheet": "Sales"},
 		WorkspaceRoot: ws,
 		Input: map[string]core.Ref{
-			"rows":    {Inline: []map[string]any{{"name": "Ada", "amount": "100"}, {"name": "Bo", "amount": "250"}}},
-			"headers": {Inline: []any{"name", "amount"}},
+			// Column order now rides on the rows Ref's Headers (the separate
+			// "headers" input port was removed when row order was folded on).
+			"rows": {Inline: []map[string]any{{"name": "Ada", "amount": "100"}, {"name": "Bo", "amount": "250"}}, Headers: []string{"name", "amount"}},
 		},
 	}, nil)
 	if err != nil || res.Status != core.StatusOK {
