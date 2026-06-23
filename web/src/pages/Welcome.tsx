@@ -86,7 +86,7 @@ export function Welcome() {
         <p className="welcome-intro">
           {isReturning ? t("welcome.introReturning") : t("welcome.intro")}
         </p>
-        <Link to="/flows/new" className="primary welcome-cta welcome-create">
+        <Link to="/flows/new?tab=blank" className="primary welcome-cta welcome-create">
           <Plus size={16} /> {t("welcome.createCta")}
         </Link>
         {me && (
