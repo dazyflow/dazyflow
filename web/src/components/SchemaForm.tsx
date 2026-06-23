@@ -1273,14 +1273,32 @@ function ResourcePickerField({
     );
   }
 
-  // The list failed (account not connected, or a transient error). There's
-  // no manual-entry fallback any more, so prompt to connect + offer a retry.
+  // The list failed. Distinguish "no account at all" (prompt to connect) from
+  // "connected but the provider rejected the call" — the common case being a
+  // missing scope (e.g. the Google sheet picker lists via the Drive API, so an
+  // account connected only for Gmail/Calendar 403s here). In that case the old
+  // generic "Connect the account" hint was misleading, so we say the account
+  // may need reconnecting for more access and surface the provider's own
+  // message instead of swallowing it.
   if (err) {
+    const notConnected = /\bnot connected\b|connect (a|the)\b|no .*token/i.test(
+      err,
+    );
     return (
       <div className="resource-picker">
         <div className="resource-picker-hint">
-          {t("schemaForm.resourcePicker.connectHint", { noun })}
+          {notConnected
+            ? t("schemaForm.resourcePicker.connectHint", { noun })
+            : t("schemaForm.resourcePicker.loadFailed", { noun })}
         </div>
+        {!notConnected && (
+          // The raw provider error (e.g. "Request had insufficient
+          // authentication scopes.") — the detail that tells the user whether
+          // to reconnect, enable an API, or just retry.
+          <div className="resource-picker-detail" title={err}>
+            {err}
+          </div>
+        )}
         <button
           type="button"
           className="ghost resource-picker-toggle"

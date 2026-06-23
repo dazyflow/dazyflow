@@ -1304,6 +1304,7 @@
       "any": "Alla {{noun}}",
       "retry": "Försök igen",
       "connectHint": "Anslut kontot för att välja {{noun}} från en lista.",
+      "loadFailed": "Kunde inte ladda din {{noun}}-lista. Kontot kan behöva återanslutas för mer åtkomst (återanslut det från Appar-sidan), eller försök igen.",
       "needsDependency": "Välj {{dep}} först för att välja {{noun}}.",
       "wired": "Anges av ett anslutet steg.",
       "wiredNamed": "{{name}} — anges av ett anslutet steg",

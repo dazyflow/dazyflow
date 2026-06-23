@@ -6114,6 +6114,19 @@ button.warning:hover:not(:disabled) {
   font-size: var(--text-xs);
   color: var(--muted);
 }
+/* The provider's raw error under the hint when a connected account's list
+   call fails (e.g. a scope error). Wraps and clamps so a long Google message
+   stays readable without blowing out the inspector width. */
+.resource-picker-detail {
+  flex-basis: 100%;
+  font-size: var(--text-xs);
+  color: var(--danger);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 
 /* Insert-reference picker: the "{ }" button sits flush after a string
    input; the popover anchors to it and lists grouped ${…} tokens. */

@@ -1311,6 +1311,7 @@
       "any": "Any {{noun}}",
       "retry": "Retry",
       "connectHint": "Connect the account to pick a {{noun}} from a list.",
+      "loadFailed": "Couldn't load your {{noun}} list. The account may need reconnecting for more access (reconnect it from the Apps page), or try again.",
       "needsDependency": "Choose a {{dep}} first to pick a {{noun}}.",
       "wired": "Set by a connected step.",
       "wiredNamed": "{{name}} — set by a connected step",
