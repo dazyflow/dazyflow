@@ -233,6 +233,15 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     docs_url: "https://nominatim.org/release-docs/latest/api/Overview/",
     brand_logo: "/brands/openstreetmap.svg",
   },
+  "open-meteo": {
+    name: "Open-Meteo",
+    description:
+      "Read the weather for any point on the map — free for personal, non-commercial use with no account or API key. Give a step a coordinate — typed in, or wired from a geocode, a form field, or a device's GPS — and get the current conditions (a one-line summary, the temperature, and a Clear/Rain/Snow word you can branch on) or a multi-day forecast. Build a 'text me if it'll rain tomorrow' flow, a morning briefing, or a frost alert for the greenhouse. For commercial use, add an API key and it switches to Open-Meteo's paid endpoint.",
+    technical_notes:
+      "Backed by Open-Meteo's Forecast API (GET /v1/forecast) — current conditions select the current= fields, and the forecast drop reads the daily= column arrays (weather_code, temperature_2m_max/min, precipitation_probability_max) with forecast_days and timezone=auto for local days. weather_code values are WMO codes mapped to descriptions and a branchable class word. The free non-commercial host (api.open-meteo.com) needs no key; supplying the optional per-tenant API key routes requests to the commercial host (customer-api.open-meteo.com) with an apikey param. Deciding whether your use is commercial — and providing a key when it is — is your responsibility. Units accept metric (°C, m/s) or imperial (°F, mph).",
+    docs_url: "https://open-meteo.com/en/docs",
+    brand_logo: "/brands/openmeteo.svg",
+  },
   smhi: {
     name: "SMHI",
     description:
