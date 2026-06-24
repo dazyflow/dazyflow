@@ -408,7 +408,8 @@
     "noMatches": "No flows match your filters.",
     "lastRun": "Last run {{when}}",
     "neverRun": "Never run",
-    "sparkSummary": "{{ok}} of last {{total}} runs succeeded"
+    "sparkSummary": "{{ok}} of last {{total}} runs succeeded",
+    "deleteFlow": "Delete flow"
   },
   "settings": {
     "title": "Flow settings",
@@ -506,7 +507,10 @@
       "privateVisibleDesc": "Only you (and organization admins, for recovery) can see the flow. Triggers still fire it.",
       "owner": "Owner",
       "ownerPlaceholder": "(set on first save)",
-      "ownerDesc": "Stamped by the daemon when the flow is first saved. Only organization admins can transfer ownership."
+      "ownerDesc": "Stamped by the daemon when the flow is first saved. Only organization admins can transfer ownership.",
+      "dangerZone": "Danger zone",
+      "deleteFlow": "Delete flow",
+      "deleteFlowDesc": "Permanently deletes this flow and its entire history. This cannot be undone."
     }
   },
   "triggers": {
@@ -1518,8 +1522,6 @@
     "restoring": "Restoring…",
     "backToLatest": "Back to latest",
     "noHistory": "No saved versions yet.",
-    "autosaveBadge": "Autosave",
-    "checkpointBadge": "Saved",
     "publish": "Publish",
     "publishing": "Publishing…",
     "publishChanges": "Publish changes",
@@ -1674,5 +1676,15 @@
     "addStep": "Add a step",
     "deleteSelection": "Delete the selection",
     "moveNode": "Move the selected step"
+  },
+  "deleteFlow": {
+    "title": "Delete this flow?",
+    "body": "“{{name}}” and its full version history will be permanently deleted. This cannot be undone. Enter your password to confirm.",
+    "passwordLabel": "Your password",
+    "passwordPlaceholder": "Current account password",
+    "confirm": "Delete flow",
+    "deleting": "Deleting…",
+    "wrongPassword": "That password is incorrect.",
+    "locked": "This flow has a run in progress. Stop the run, then try deleting again."
   }
 }

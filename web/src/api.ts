@@ -794,6 +794,25 @@ export const api = {
         enabled ? "enable" : "disable"
       }`,
     ),
+  // deleteGraph permanently removes a flow (its whole Git history). Because
+  // it's irreversible, the daemon password-gates it: pass the account
+  // password, which is re-verified server-side (401 "bad_credentials" on a
+  // wrong/blank password). The daemon also rejects with 409 "flow_locked" if
+  // a run is still active, so callers should surface that as "stop the run
+  // first". Idempotent: deleting an already-gone flow succeeds.
+  deleteGraph: (
+    token: string,
+    tenant: string,
+    workspace: string,
+    id: string,
+    password: string,
+  ) =>
+    request<void>(
+      token,
+      "DELETE",
+      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}`,
+      { password },
+    ),
   // listSchedules returns every cron/poll trigger across the workspace's
   // flows, each with its next-run preview — backs the Schedules page.
   listSchedules: (token: string, opts: { tenant?: string; workspace?: string } = {}) => {

@@ -410,7 +410,8 @@
     "noMatches": "Inga flöden matchar dina filter.",
     "lastRun": "Senaste körning {{when}}",
     "neverRun": "Aldrig körd",
-    "sparkSummary": "{{ok}} av senaste {{total}} körningarna lyckades"
+    "sparkSummary": "{{ok}} av senaste {{total}} körningarna lyckades",
+    "deleteFlow": "Ta bort flöde"
   },
   "settings": {
     "title": "Flödesinställningar",
@@ -508,7 +509,10 @@
       "privateVisibleDesc": "Endast du (och organisation-admins, för återställning) kan se flödet. Triggers kör det fortfarande.",
       "owner": "Ägare",
       "ownerPlaceholder": "(sätts vid första sparningen)",
-      "ownerDesc": "Stämplas av daemonen när flödet sparas första gången. Endast organisation-admins kan överföra ägarskap."
+      "ownerDesc": "Stämplas av daemonen när flödet sparas första gången. Endast organisation-admins kan överföra ägarskap.",
+      "dangerZone": "Riskzon",
+      "deleteFlow": "Ta bort flöde",
+      "deleteFlowDesc": "Tar bort flödet och hela dess historik permanent. Detta kan inte ångras."
     }
   },
   "triggers": {
@@ -1504,8 +1508,6 @@
     "restoring": "Återställer…",
     "backToLatest": "Tillbaka till senaste",
     "noHistory": "Inga sparade versioner än.",
-    "autosaveBadge": "Autospar",
-    "checkpointBadge": "Sparad",
     "publish": "Publicera",
     "publishing": "Publicerar…",
     "publishChanges": "Publicera ändringar",
@@ -1667,5 +1669,15 @@
     "addStep": "Lägg till ett steg",
     "deleteSelection": "Ta bort markeringen",
     "moveNode": "Flytta det markerade steget"
+  },
+  "deleteFlow": {
+    "title": "Ta bort det här flödet?",
+    "body": "”{{name}}” och hela dess versionshistorik tas bort permanent. Detta kan inte ångras. Ange ditt lösenord för att bekräfta.",
+    "passwordLabel": "Ditt lösenord",
+    "passwordPlaceholder": "Nuvarande kontolösenord",
+    "confirm": "Ta bort flöde",
+    "deleting": "Tar bort…",
+    "wrongPassword": "Lösenordet är felaktigt.",
+    "locked": "Flödet har en pågående körning. Stoppa körningen och försök ta bort igen."
   }
 }

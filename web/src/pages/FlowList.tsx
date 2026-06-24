@@ -1,10 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Plus, Workflow, Lock, Clock, Pause, Play, Search } from "lucide-react";
+import {
+  Plus,
+  Workflow,
+  Lock,
+  Clock,
+  Pause,
+  Play,
+  Search,
+  Trash2,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import { Button } from "../components/Button";
+import { DeleteFlowModal } from "../components/DeleteFlowModal";
 import { FlowIcon, isBrandedIcon } from "../icons";
 import { FlowStatusChip } from "../components/FlowStatusChip";
 import { RunSparkline } from "../components/RunSparkline";
@@ -63,6 +73,8 @@ export function FlowList() {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("recent");
   const [statusFilter, setStatusFilter] = useState<FlowRunStatus | "all">("all");
+  // The flow whose password-gated delete confirm is open (null = none).
+  const [deleteTarget, setDeleteTarget] = useState<FlowSummary | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -219,6 +231,33 @@ export function FlowList() {
     }
   };
 
+  // deleteFlow permanently removes a flow after the password confirm. On
+  // success we drop it from the in-memory list (no refetch) and keep the
+  // "has flows" hint in sync so a user who just deleted their last flow lands
+  // back on the welcome wizard rather than an empty list. A thrown error
+  // propagates to DeleteFlowModal, which shows it and stays open.
+  const deleteFlow = async (target: FlowSummary, password: string) => {
+    if (!token) return;
+    const tn = activeTenant || me?.tenant || "";
+    const ws = activeWorkspace || "";
+    await api.deleteGraph(token, tn, ws, target.id, password);
+    setFlows((prev) => {
+      const next = prev.filter((f) => f.id !== target.id);
+      try {
+        if (me) {
+          localStorage.setItem(
+            `${HAS_FLOWS_KEY}.${userScope(me)}`,
+            next.length > 0 ? "1" : "0",
+          );
+        }
+      } catch {
+        /* localStorage might be blocked in a strict-mode iframe */
+      }
+      return next;
+    });
+    setDeleteTarget(null);
+  };
+
   return (
     <div>
       <div className="page-title">
@@ -354,6 +393,26 @@ export function FlowList() {
                       {t("common.private")}
                     </span>
                   )}
+                  {/* The card is a <Link>, so the delete action stops the
+                      click from navigating and opens the password confirm.
+                      Gated on graph:edit — viewers can browse but not delete;
+                      the daemon is the final authority either way. */}
+                  {canEdit && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="graph-card-delete"
+                      title={t("flowList.deleteFlow")}
+                      aria-label={t("flowList.deleteFlow")}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setDeleteTarget(f);
+                      }}
+                    >
+                      <Trash2 size={14} />
+                    </Button>
+                  )}
                 </div>
                 {sched && (
                   <FlowScheduleChip
@@ -404,6 +463,13 @@ export function FlowList() {
           );
         })}
       </div>
+      {deleteTarget && (
+        <DeleteFlowModal
+          flowName={deleteTarget.name || deleteTarget.id}
+          onConfirm={(password) => deleteFlow(deleteTarget, password)}
+          onClose={() => setDeleteTarget(null)}
+        />
+      )}
     </div>
   );
 }

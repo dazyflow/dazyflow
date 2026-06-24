@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"git.sr.ht/~klahr/dazyflow/auth"
 	"git.sr.ht/~klahr/dazyflow/core"
 )
 
@@ -594,9 +595,31 @@ func (h *HTTPGateway) setFlowEnabled(rw http.ResponseWriter, r *http.Request, p 
 
 // deleteFlowMe is the DELETE /me/flows/{flow_id} handler. Idempotent:
 // missing flow → 204. Active run → 409 with code `flow_locked`.
+//
+// Deleting a flow is irreversible (it drops the flow's whole Git history),
+// so it is password-gated like the other high-consequence self-service ops
+// (TOTP disable, email/password change): the caller must re-supply their
+// account password in the request body, and we bcrypt-verify it here so the
+// gate can't be bypassed by calling the API directly. This mirrors
+// changePasswordHandler's reauth so a hijacked session alone can't wipe work.
 func (h *HTTPGateway) deleteFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, workspace, id, ok := h.readFlowID(rw, r, p)
 	if !ok {
+		return
+	}
+	if h.Users == nil {
+		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "password auth not configured")
+		return
+	}
+	var body struct {
+		Password string `json:"password"`
+	}
+	// An empty/invalid body falls through to the password check below, which
+	// rejects a blank password — no separate decode-error path needed.
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	email := strings.ToLower(strings.TrimSpace(p.Subject))
+	if _, err := auth.VerifyPassword(r.Context(), h.Users, email, body.Password); err != nil {
+		writeAPIError(rw, http.StatusUnauthorized, "bad_credentials", "password is incorrect")
 		return
 	}
 	if err := h.svc.DeleteGraph(r.Context(), p, tenant, workspace, id); err != nil {

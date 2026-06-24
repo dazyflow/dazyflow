@@ -3521,6 +3521,25 @@ function EditorInner() {
     }
   };
 
+  // deleteFlow permanently removes the flow, then leaves the now-gone editor
+  // for the flow list. It lets the API error propagate so the SettingsModal
+  // can show "stop the run first" on a 409 lock; the editor's own
+  // beforeunload/dirty guard is irrelevant once the flow no longer exists, so
+  // we navigate straight out on success.
+  const deleteFlow = async (password: string) => {
+    if (!token || !id) return;
+    await api.deleteGraph(token, activeTenant, activeWorkspace, id, password);
+    // Clear dirty BEFORE navigating: the route change tears down the
+    // autosave effect, whose cleanup flushes a keepalive PUT when
+    // dirtyRef.current is true. With unsaved edits that flush would
+    // re-create the flow we just deleted — so silence it via the ref
+    // (setDirty's re-render won't land before the synchronous navigate).
+    dirtyRef.current = false;
+    setDirty(false);
+    window.dispatchEvent(new Event(FLOWS_CHANGED_EVENT));
+    navigate("/flows");
+  };
+
   return (
     <div
       className="editor"
@@ -4011,9 +4030,6 @@ function EditorInner() {
                             {t("editor.currentRelease")}
                           </span>
                         )}
-                        <span className={`history-badge ${rev.autosave ? "autosave" : "checkpoint"}`}>
-                          {rev.autosave ? t("editor.autosaveBadge") : t("editor.checkpointBadge")}
-                        </span>
                       </span>
                     </Button>
                     {/* "Make live" rolls the published tag to this revision
@@ -4756,6 +4772,7 @@ function EditorInner() {
           graph={settingsGraph}
           onClose={() => setSettingsOpen(false)}
           onSave={persistSettings}
+          onDelete={deleteFlow}
         />
       )}
       {/* Delete confirm — a single Delete keypress can wipe selected nodes

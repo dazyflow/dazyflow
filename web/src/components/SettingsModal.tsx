@@ -7,6 +7,7 @@ import { useAuth } from "../auth";
 import { IconUpload } from "./IconUpload";
 import { CredentialsManager } from "./CredentialsManager";
 import { Button } from "./Button";
+import { DeleteFlowModal } from "./DeleteFlowModal";
 import { FlowIcon } from "../icons";
 
 // SettingsModal hosts graph-level configuration that doesn't fit in
@@ -18,16 +19,28 @@ type Props = {
   graph: Graph;
   onClose: () => void;
   onSave: (next: Graph) => void | Promise<void>;
+  // onDelete permanently removes the flow, given the re-entered account
+  // password (the daemon re-verifies it). The parent owns the API call and
+  // the navigation away from the now-gone editor; this modal only drives the
+  // confirm UI. Omit to hide the delete control entirely.
+  onDelete?: (password: string) => Promise<void>;
 };
 
 type Tab = "notifications" | "general" | "secrets";
 
-export function SettingsModal({ graph, onClose, onSave }: Props) {
+export function SettingsModal({ graph, onClose, onSave, onDelete }: Props) {
   const { t } = useTranslation();
+  const { hasPerm } = useAuth();
   const [tab, setTab] = useState<Tab>("notifications");
   // Local working copy: edits only commit to the parent on Save.
   // Cancel discards by simply not calling onSave.
   const [draft, setDraft] = useState<Graph>(graph);
+  // Delete flow: the password-gated confirm (DeleteFlowModal) handles its
+  // own in-flight/error state; we just track whether it's open.
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  // Deletion mutates the workspace, so it follows the same permission as
+  // every other write here (graph:edit) — matching the daemon's gate.
+  const canDelete = !!onDelete && hasPerm("graph:edit");
 
   // Sync the draft if the parent graph changes while the modal is open
   // (e.g. a programmatic reload). In practice this rarely fires.
@@ -268,6 +281,19 @@ export function SettingsModal({ graph, onClose, onSave }: Props) {
                   {t("settings.general.ownerDesc")}
                 </div>
               </div>
+              {canDelete && (
+                <div className="sf-field danger-zone">
+                  <div className="label-row">
+                    <label>{t("settings.general.dangerZone")}</label>
+                  </div>
+                  <Button variant="danger" onClick={() => setConfirmDelete(true)}>
+                    {t("settings.general.deleteFlow")}
+                  </Button>
+                  <div className="desc">
+                    {t("settings.general.deleteFlowDesc")}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           {tab === "secrets" && <FlowSecretsTab graph={graph} />}
@@ -285,6 +311,13 @@ export function SettingsModal({ graph, onClose, onSave }: Props) {
           </Button>
         </div>
       </div>
+      {confirmDelete && onDelete && (
+        <DeleteFlowModal
+          flowName={graph.name || graph.id}
+          onConfirm={onDelete}
+          onClose={() => setConfirmDelete(false)}
+        />
+      )}
     </div>
   );
 }
