@@ -153,6 +153,159 @@ func withInput(j core.Job, in map[string]core.Ref) core.Job {
 	return j
 }
 
+// findRows runs the no-SQL reader and returns its rows, failing the test on
+// any error/non-OK status.
+func findRows(t *testing.T, root string, params map[string]any) []map[string]any {
+	t.Helper()
+	res, err := executeBuiltinStoreFind(t.Context(), core.Job{WorkspaceRoot: root, Params: params}, nil)
+	if err != nil {
+		t.Fatalf("find execute: %v", err)
+	}
+	if res.Status != core.StatusOK {
+		t.Fatalf("find status=%q err=%+v", res.Status, res.Error)
+	}
+	rows, ok := res.Output["rows"].Inline.([]map[string]any)
+	if !ok {
+		t.Fatalf("find rows wrong type: %T", res.Output["rows"].Inline)
+	}
+	return rows
+}
+
+// TestBuiltinStore_Find exercises the no-code reader: filter (CEL from the
+// row-condition builder), in-memory numeric sort, and limit — all without SQL.
+func TestBuiltinStore_Find(t *testing.T) {
+	root := t.TempDir()
+	appendRes, err := executeBuiltinStoreAppend(t.Context(), core.Job{
+		WorkspaceRoot: root,
+		Params:        map[string]any{"table": "invoices"},
+		Input: map[string]core.Ref{
+			"rows": {Inline: []map[string]any{
+				{"customer": "Alice", "status": "unpaid", "amount": "120"},
+				{"customer": "Bob", "status": "paid", "amount": "40"},
+				{"customer": "Carol", "status": "unpaid", "amount": "9"},
+			}},
+			"headers": {Inline: []string{"customer", "status", "amount"}},
+		},
+	}, nil)
+	if err != nil || appendRes.Status != core.StatusOK {
+		t.Fatalf("append: status=%q err=%v %+v", appendRes.Status, err, appendRes.Error)
+	}
+
+	// No filter → every row.
+	if got := findRows(t, root, map[string]any{"table": "invoices"}); len(got) != 3 {
+		t.Fatalf("no filter: got %d rows, want 3", len(got))
+	}
+
+	// Filter: only unpaid invoices (CEL the builder would emit).
+	unpaid := findRows(t, root, map[string]any{
+		"table":  "invoices",
+		"filter": `row.status == "unpaid"`,
+	})
+	if len(unpaid) != 2 {
+		t.Fatalf("unpaid filter: got %d rows, want 2", len(unpaid))
+	}
+
+	// Numeric filter + descending numeric sort: amount > 50 then by amount.
+	// Stored as TEXT, so this also proves numeric (not lexical) ordering.
+	big := findRows(t, root, map[string]any{
+		"table":    "invoices",
+		"filter":   `double(row.amount) > 50`,
+		"sort_by":  "amount",
+		"sort_dir": "desc",
+	})
+	if len(big) != 1 || big[0]["customer"] != "Alice" {
+		t.Fatalf("amount>50 desc: got %+v, want [Alice]", big)
+	}
+
+	// Sort ascending by amount with a limit: "9" must come before "40"
+	// numerically (lexical would put "120" before "40").
+	cheapest := findRows(t, root, map[string]any{
+		"table":    "invoices",
+		"sort_by":  "amount",
+		"sort_dir": "asc",
+		"limit":    2,
+	})
+	if len(cheapest) != 2 {
+		t.Fatalf("limit: got %d rows, want 2", len(cheapest))
+	}
+	if cheapest[0]["customer"] != "Carol" || cheapest[1]["customer"] != "Bob" {
+		t.Errorf("numeric asc order wrong: %v, %v", cheapest[0]["customer"], cheapest[1]["customer"])
+	}
+}
+
+// TestBuiltinStore_FindCollectionFromInput verifies the Collection input
+// overrides the table param: a name wired in wins over the dropdown value.
+func TestBuiltinStore_FindCollectionFromInput(t *testing.T) {
+	root := t.TempDir()
+	if _, err := executeBuiltinStoreAppend(t.Context(), core.Job{
+		WorkspaceRoot: root,
+		Params:        map[string]any{"table": "leads"},
+		Input: map[string]core.Ref{
+			"rows":    {Inline: []map[string]any{{"name": "Alice"}, {"name": "Bob"}}},
+			"headers": {Inline: []string{"name"}},
+		},
+	}, nil); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	// Param points at a non-existent collection; the wired input names the real
+	// one. Getting 2 rows proves the input won.
+	res, err := executeBuiltinStoreFind(t.Context(), core.Job{
+		WorkspaceRoot: root,
+		Params:        map[string]any{"table": "does-not-exist"},
+		Input:         map[string]core.Ref{"table": {Inline: "leads"}},
+	}, nil)
+	if err != nil || res.Status != core.StatusOK {
+		t.Fatalf("find status=%q err=%v %+v", res.Status, err, res.Error)
+	}
+	rows, _ := res.Output["rows"].Inline.([]map[string]any)
+	if len(rows) != 2 {
+		t.Fatalf("wired collection input: got %d rows, want 2", len(rows))
+	}
+}
+
+// TestBuiltinStore_FindMissingCollection verifies that reading a collection
+// that doesn't exist fails loudly (rather than a silent empty result) so a
+// typo'd name surfaces instead of doing nothing.
+func TestBuiltinStore_FindMissingCollection(t *testing.T) {
+	res, err := executeBuiltinStoreFind(t.Context(), core.Job{
+		WorkspaceRoot: t.TempDir(),
+		Params:        map[string]any{"table": "nope"},
+	}, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if res.Status != core.StatusError || res.Error == nil || res.Error.Code != "no_such_collection" {
+		t.Fatalf("missing collection: want no_such_collection error, got status=%q err=%+v", res.Status, res.Error)
+	}
+}
+
+// TestBuiltinStore_FindExistingCollectionNoMatches verifies the kept-empty
+// case: an EXISTING collection where no row matches the filter is a valid
+// empty result, not an error.
+func TestBuiltinStore_FindExistingCollectionNoMatches(t *testing.T) {
+	root := t.TempDir()
+	if _, err := executeBuiltinStoreAppend(t.Context(), core.Job{
+		WorkspaceRoot: root,
+		Params:        map[string]any{"table": "leads"},
+		Input: map[string]core.Ref{
+			"rows":    {Inline: []map[string]any{{"status": "new"}}},
+			"headers": {Inline: []string{"status"}},
+		},
+	}, nil); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	res, err := executeBuiltinStoreFind(t.Context(), core.Job{
+		WorkspaceRoot: root,
+		Params:        map[string]any{"table": "leads", "filter": `row.status == "archived"`},
+	}, nil)
+	if err != nil || res.Status != core.StatusOK {
+		t.Fatalf("status=%q err=%v %+v", res.Status, err, res.Error)
+	}
+	if rows, _ := res.Output["rows"].Inline.([]map[string]any); len(rows) != 0 {
+		t.Fatalf("no matches: got %d rows, want 0 (empty OK, not error)", len(rows))
+	}
+}
+
 // TestBuiltinStore_AppendEmptyBody verifies the empty-webhook-body path:
 // a webhook trigger that fires with no request body emits "" on
 // webhook_input.body; wired straight into a store's rows port that has

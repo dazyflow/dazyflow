@@ -72,7 +72,7 @@
     "templates": "Templates",
     "flows": "Flows",
     "runs": "Runs",
-    "results": "Data",
+    "results": "Collections",
     "usage": "Usage",
     "files": "Files",
     "approvals": "Approvals",
@@ -1004,18 +1004,18 @@
     }
   },
   "results": {
-    "title": "Results",
-    "subtitle": "Data your flows saved to the built-in store.",
+    "title": "Collections",
+    "subtitle": "Rows your flows have saved.",
     "refresh": "Refresh",
-    "emptyTitle": "No results yet",
-    "emptyBody": "Add a “Built-in store · Save” step to a flow and the rows it saves show up here as a table you can revisit.",
+    "emptyTitle": "No collections yet",
+    "emptyBody": "Add a “Collections · Save rows” step to a flow and the rows it saves show up here as a collection you can revisit.",
     "searchPlaceholder": "Search rows…",
     "downloadCsv": "Download CSV",
     "clear": "Clear",
     "clearing": "Clearing…",
-    "clearTitle": "Clear this board?",
+    "clearTitle": "Clear this collection?",
     "clearConfirm": "Clear all rows in “{{name}}”? This can't be undone.",
-    "boardEmpty": "This board has no rows yet.",
+    "boardEmpty": "This collection has no rows yet.",
     "noMatches": "No rows match your search.",
     "rowCount": "Showing {{shown}} of {{total}} rows",
     "truncatedNote": "(first {{limit}} loaded)"
@@ -1326,6 +1326,14 @@
       "usePicker": "Pick a {{noun}} from the list",
       "chooseFromList": "Choose from the list",
       "exprPlaceholder": "A value, or insert a reference with { }"
+    },
+    "collection": {
+      "loading": "Loading collections…",
+      "choose": "Choose a collection…",
+      "empty": "No collections yet"
+    },
+    "collectionColumn": {
+      "none": "Keep saved order"
     },
     "refPicker": {
       "insert": "Insert a reference",

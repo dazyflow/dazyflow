@@ -52,7 +52,7 @@ func newStack(t *testing.T) *stack {
 
 	// AutoFSWorkspaces lazily provisions a workspace per signed-up
 	// tenant, exactly like the self-serve daemon does. FSSandbox gives
-	// filesystem-touching drops (and the built-in store) a place to
+	// filesystem-touching drops (and the Collections store) a place to
 	// write under each workspace.
 	wsRoot := t.TempDir()
 	sandbox, err := daemon.NewFSSandbox(t.TempDir())

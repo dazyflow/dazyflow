@@ -280,6 +280,11 @@ export type JSONSchema = {
   // either spelling and the UI accepts both.
   x_advanced?: boolean;
   "x-advanced"?: boolean;
+  // x_columns_source marks a row-condition filter whose column field should be
+  // a dropdown populated from a data source rather than typed free-hand.
+  // "collection" lists the columns of the collection named by the sibling
+  // `table` param (the Collections "Find rows" drop).
+  x_columns_source?: "collection";
 };
 
 export type Permission =

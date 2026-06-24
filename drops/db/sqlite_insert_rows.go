@@ -33,7 +33,7 @@ func init() {
 			Integration: "SQLite",
 			Tags:        []string{"sqlite", "sql", "database", "insert", "save", "store", "etl"},
 			// Win the "save"/"database" verb over the no-setup KV store
-			// (Built-in store), which matches the same generic terms — SQLite
+			// (Collections), which matches the same generic terms — SQLite
 			// is the canonical zero-config save-to-a-database default.
 			SearchBoost: 25,
 			Description: "Save rows into a database file kept in your workspace — no server, connection string, or setup needed (this is the easy database; use Postgres/MySQL only if you already have one). The table is auto-created from the row shape by default; flip create_table off if you've already set up a schema you don't want overwritten.",

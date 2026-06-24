@@ -36,6 +36,10 @@ const PICKER_FORMATS = new Set([
   "slack-channel",
   "homeassistant-entity",
   "homeassistant-service",
+  // A collection's value is already its human name (like google-sheet-tab),
+  // so the card shows it read-only; it's chosen from the inspector dropdown,
+  // never typed on the card.
+  "collection",
 ]);
 
 // peekValue renders a port's run value as a short, single-line string for
@@ -402,9 +406,17 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
               // A wired input port overrides the picker. Prefer the resolved
               // name (traced from the upstream step) so the card shows the
               // real sheet; fall back to "From upstream" only if we can't.
-              const text = connectedInputs.includes(key)
-                ? name ?? i18n.t("nodeCard.pickerWired")
-                : name ?? (idStr ? i18n.t("nodeCard.pickerLoading") : unsetText);
+              // A collection's value IS its human name (no opaque id to
+              // resolve), so show it directly instead of the "…" name-lookup
+              // placeholder the other pickers use.
+              const text =
+                s.format === "collection"
+                  ? connectedInputs.includes(key)
+                    ? i18n.t("nodeCard.pickerWired")
+                    : idStr || unsetText
+                  : connectedInputs.includes(key)
+                    ? name ?? i18n.t("nodeCard.pickerWired")
+                    : name ?? (idStr ? i18n.t("nodeCard.pickerLoading") : unsetText);
               return (
                 <label key={key} className="dz-param">
                   <span className="dz-param-label">{label}</span>

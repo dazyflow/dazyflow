@@ -200,7 +200,7 @@ export type Preferences = {
 };
 
 // BoardSummary / BoardPage mirror the /me/boards wire shapes — a board is
-// a table in the workspace's built-in store (the Results surface).
+// a table in the workspace's Collections store (the Collections page).
 export type BoardSummary = { name: string; rows: number };
 export type BoardPage = {
   name: string;
@@ -1093,8 +1093,8 @@ export const api = {
     request<RunView>(token, "GET", `/me/runs/${encodeURIComponent(jobID)}`).then(
       runViewToRecord,
     ),
-  // Results boards — the in-app view of the Built-in store. A board is a
-  // table in the workspace's built-in store; these read it back and clear
+  // Results boards — the in-app view of Collections. A board is a
+  // table in the workspace's Collections store; these read it back and clear
   // it. tenant/workspace fall back to the principal's binding when omitted,
   // mirroring the runs surface.
   listBoards: (token: string, tenant?: string, workspace?: string) => {

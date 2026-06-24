@@ -10,12 +10,12 @@ package transform
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/google/cel-go/cel"
 
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/limits"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/rowcel"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/rows"
 )
 
@@ -30,42 +30,24 @@ func capRows(n int) error {
 	return nil
 }
 
-// newRowCELEnv builds the CEL environment shared by the filtering and
-// computing drops (compute_rows, route_rows, split_rows). Two variables
-// are in scope:
-//
-//   - row: the current row as map<string, dyn>.
-//   - now: the current time as a timestamp, so filters and computed
-//     columns can express "overdue", "last week", "due tomorrow" without
-//     the caller precomputing a date column. Bound at eval by celVars.
+// newRowCELEnv builds the row/now CEL environment shared by the filtering and
+// computing drops (compute_rows, route_rows, split_rows). The environment, the
+// cost ceiling, and the compile helper all live in drops/internal/rowcel so
+// the no-code condition builder and every engine that runs its CEL stay in
+// lockstep — see compileRowExpr / celVars below, which delegate there.
 func newRowCELEnv(extra ...cel.EnvOption) (*cel.Env, error) {
-	opts := []cel.EnvOption{
-		cel.Variable("row", cel.MapType(cel.StringType, cel.DynType)),
-		cel.Variable("now", cel.TimestampType),
-	}
-	return cel.NewEnv(append(opts, extra...)...)
+	return rowcel.Env(extra...)
 }
 
-// celVars is the activation for one row evaluation. `now` is sampled
-// per call; within a batch that's day-granularity stable, which is all
-// the time-window filters need.
+// celVars is the activation for one row evaluation (delegates to rowcel.Vars).
 func celVars(row map[string]any) map[string]any {
-	return map[string]any{"row": row, "now": time.Now().UTC()}
+	return rowcel.Vars(row)
 }
 
-// celCostLimit caps the abstract evaluation cost of a single expression.
-// CEL has no wall-clock budget, so without this a pathological expression
-// (deep nesting, large string/list ops) over the row ceiling could burn
-// CPU unbounded and ignore job cancellation. The ceiling is far above any
-// ordinary field/date expression but stops runaway inputs; an over-budget
-// eval fails the row with a cost error rather than hanging the worker.
-const celCostLimit uint64 = 1_000_000
-
-// celProgram compiles ast into a program with the shared cost ceiling.
-// All transform drops go through it so the bound can't be forgotten at a
-// single call site.
+// celProgram compiles ast with the shared cost ceiling (rowcel.CostLimit). All
+// transform drops go through it so the bound can't be forgotten at a call site.
 func celProgram(env *cel.Env, ast *cel.Ast) (cel.Program, error) {
-	return env.Program(ast, cel.CostLimit(celCostLimit))
+	return env.Program(ast, cel.CostLimit(rowcel.CostLimit))
 }
 
 func errResult(job core.Job, code, msg string) core.Result {

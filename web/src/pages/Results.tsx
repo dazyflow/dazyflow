@@ -6,7 +6,7 @@ import { api, type BoardSummary, type BoardPage } from "../api";
 import { Button } from "../components/Button";
 import { ConfirmModal } from "../components/ConfirmModal";
 
-// Results — the in-app view of the Built-in store. Left: the workspace's
+// Results — the in-app view of Collections. Left: the workspace's
 // boards (tables) with row counts. Right: the selected board as a friendly
 // table with client-side search, CSV download, and a Clear action. Mirrors
 // the data-fetching + layout conventions of RunList.
@@ -347,7 +347,7 @@ export function Results() {
 }
 
 // formatCell renders a SQLite value for the table / CSV. Null shows blank;
-// objects (shouldn't occur for the built-in store, which holds scalars)
+// objects (shouldn't occur for the Collections store, which holds scalars)
 // fall back to JSON so nothing renders "[object Object]".
 function formatCell(v: unknown): string {
   if (v === null || v === undefined) return "";

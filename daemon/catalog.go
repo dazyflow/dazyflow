@@ -385,7 +385,7 @@ var integrationSummaries = map[string]string{
 	"Claude":           "Run prompts through Claude to summarize, classify, or generate text inside a flow.",
 	"Git":              "Clone repositories and check out branches inside your workspace.",
 	"Webhook":          "Send a fire-and-forget notification to any URL.",
-	"Built-in store":   "Store and reference encrypted secrets that other steps read via ${secret.…}.",
+	"Collections":      "Save rows to a built-in collection with no setup, then query them back — the storage behind the in-app Collections page.",
 	"standard-library": "Built-in flow primitives — routing, looping, waiting, file I/O, the transform family, and schedule and webhook triggers.",
 }
 

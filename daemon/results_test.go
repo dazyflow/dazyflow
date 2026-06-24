@@ -15,7 +15,7 @@ import (
 
 // seedBoardStore creates a `.dazyflow-store/data.db` under the sandbox
 // root for (tenant, workspace) and writes a `leads` table with two rows,
-// mirroring what the Built-in store · Save drop would have produced.
+// mirroring what the Collections · Save rows drop would have produced.
 func seedBoardStore(t *testing.T, sb *FSSandbox, tenant, workspace string) {
 	t.Helper()
 	root, err := sb.Root(tenant, workspace)

@@ -443,13 +443,59 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
       // non-technical user would otherwise have to hand-write. Power
       // users can flip to the raw CEL textarea at any time.
       if (schema.format === "row-condition") {
+        // x_columns_source:"collection" turns each condition's column field
+        // into a dropdown of the chosen collection's columns (sibling `table`).
+        const collectionCols =
+          schema.x_columns_source === "collection" && typeof siblings?.table === "string"
+            ? (siblings.table as string)
+            : null;
         return (
           <FieldWrap name={name} schema={schema} required={required} value={value}>
-            <RowConditionField
-              value={(value as string) ?? ""}
-              onChange={(v) => onChange(v === "" && !required ? undefined : v)}
-            />
+            {collectionCols !== null ? (
+              <CollectionRowConditionField
+                value={(value as string) ?? ""}
+                onChange={(v) => onChange(v === "" && !required ? undefined : v)}
+                collection={collectionCols}
+                token={references?.token}
+              />
+            ) : (
+              <RowConditionField
+                value={(value as string) ?? ""}
+                onChange={(v) => onChange(v === "" && !required ? undefined : v)}
+              />
+            )}
           </FieldWrap>
+        );
+      }
+      // format:"collection-column" gets a dropdown of the chosen collection's
+      // columns (sibling `table`) — the Find rows "Sort by" field.
+      if (schema.format === "collection-column") {
+        const collection = typeof siblings?.table === "string" ? (siblings.table as string) : "";
+        return (
+          <CollectionColumnField
+            name={name}
+            schema={schema}
+            required={required}
+            value={value}
+            onChange={onChange}
+            collection={collection}
+            token={references?.token}
+          />
+        );
+      }
+      // format:"collection" gets a dropdown of the workspace's existing
+      // collections (the Save rows / Find rows store), with a free-text escape
+      // for a not-yet-created name or a ${…} reference.
+      if (schema.format === "collection") {
+        return (
+          <CollectionField
+            name={name}
+            schema={schema}
+            required={required}
+            value={value}
+            onChange={onChange}
+            references={references}
+          />
         );
       }
       // format:"geo-point" gets the OpenStreetMap map picker — search/click to
@@ -1493,6 +1539,97 @@ function SuggestField({
           ? t("schemaForm.resourcePicker.chooseFromList")
           : t("schemaForm.resourcePicker.useExpression")}
       </Button>
+    </FieldWrap>
+  );
+}
+
+// CollectionField renders a dropdown of the workspace's existing collections
+// (the Save rows / Find rows store), fetched from /me/boards. Unlike the OAuth
+// resource pickers, collection names are user-defined, so it also allows typing
+// a name that isn't in the list yet — one a sibling Save rows step will create,
+// or a ${…} reference — via a "type a name" toggle. The list failing or being
+// empty falls back to that free-text input so the field always works.
+function CollectionField({
+  name,
+  schema,
+  required,
+  value,
+  onChange,
+  references,
+}: {
+  name: string;
+  schema: JSONSchema;
+  required: boolean;
+  value: unknown;
+  onChange: (v: unknown) => void;
+  references?: ReferenceCtx;
+}) {
+  const { t } = useTranslation();
+  const cur = typeof value === "string" ? value : "";
+  const [opts, setOpts] = useState<string[] | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  const token = references?.token;
+  useEffect(() => {
+    if (!token) {
+      setFailed(true);
+      return;
+    }
+    let live = true;
+    api
+      .listBoards(token)
+      .then((r) => live && setOpts(r.boards.map((b) => b.name)))
+      .catch(() => live && setFailed(true));
+    return () => {
+      live = false;
+    };
+  }, [token]);
+
+  // Couldn't list collections (no auth context / fetch error) — fall back to a
+  // plain text input so the field stays usable. A not-yet-created or dynamic
+  // name is supplied by wiring the Collection input instead.
+  if (failed) {
+    return (
+      <FieldWrap name={name} schema={schema} required={required} value={value}>
+        <input
+          type="text"
+          value={cur}
+          onChange={(e) =>
+            onChange(e.target.value === "" && !required ? undefined : e.target.value)
+          }
+        />
+      </FieldWrap>
+    );
+  }
+
+  // Dropdown of existing collections. A current value that isn't in the fetched
+  // list (set via the wired input, or a collection dropped since) is kept as a
+  // selectable option so it isn't silently lost.
+  const options = opts ?? [];
+  const known = options.includes(cur);
+  return (
+    <FieldWrap name={name} schema={schema} required={required} value={value}>
+      <select
+        value={cur}
+        disabled={opts === null}
+        onChange={(e) => onChange(e.target.value === "" && !required ? undefined : e.target.value)}
+      >
+        {!known && (
+          <option value={cur}>
+            {cur ||
+              (opts === null
+                ? t("schemaForm.collection.loading")
+                : options.length === 0
+                  ? t("schemaForm.collection.empty")
+                  : t("schemaForm.collection.choose"))}
+          </option>
+        )}
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </select>
     </FieldWrap>
   );
 }
@@ -2614,9 +2751,13 @@ export function parseRowCEL(cel: string): RowCond[] | null {
 function RowConditionField({
   value,
   onChange,
+  columns,
 }: {
   value: string;
   onChange: (v: string) => void;
+  // columns, when supplied, turns each row's column field into a dropdown of
+  // these names (e.g. the chosen collection's columns). Absent → free text.
+  columns?: string[];
 }) {
   const { t } = useTranslation();
   const parsedInit = parseRowCEL(value);
@@ -2682,42 +2823,68 @@ function RowConditionField({
           <div
             key={i}
             className="sf-rowcond-row"
-            style={{ display: "flex", gap: 6, marginBottom: 6, alignItems: "center" }}
+            style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}
           >
-            {i > 0 && (
-              <span className="desc" style={{ minWidth: 28 }}>
-                {t("schemaForm.rowCond.and")}
-              </span>
-            )}
-            <input
-              placeholder={t("schemaForm.rowCond.columnPlaceholder")}
-              value={c.column}
-              onChange={(e) => setCond(i, { column: e.target.value })}
-              style={{ flex: "1 1 0" }}
-            />
-            <select value={c.op} onChange={(e) => setCond(i, { op: e.target.value })}>
-              {ROW_COND_OPS.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {t(o.labelKey)}
-                </option>
-              ))}
-            </select>
-            {kind !== "none" && (
+            {i > 0 && <span className="desc">{t("schemaForm.rowCond.and")}</span>}
+            {/* Column gets its own full-width row so it stays readable in the
+                narrow inspector; the operator + value share the line below.
+                Cramming all three onto one line collapses the column to an
+                unreadable sliver. */}
+            {columns && columns.length > 0 ? (
+              <select
+                value={c.column}
+                onChange={(e) => setCond(i, { column: e.target.value })}
+                style={{ width: "100%" }}
+              >
+                <option value="">{t("schemaForm.rowCond.columnPlaceholder")}</option>
+                {/* Keep a current value that isn't in the list (typed earlier,
+                    or a column dropped since) selectable so it isn't lost. */}
+                {c.column && !columns.includes(c.column) && (
+                  <option value={c.column}>{c.column}</option>
+                )}
+                {columns.map((col) => (
+                  <option key={col} value={col}>
+                    {col}
+                  </option>
+                ))}
+              </select>
+            ) : (
               <input
-                type={kind === "number" ? "number" : "text"}
-                placeholder={t("schemaForm.rowCond.valuePlaceholder")}
-                value={c.value}
-                onChange={(e) => setCond(i, { value: e.target.value })}
-                style={{ flex: "1 1 0" }}
+                placeholder={t("schemaForm.rowCond.columnPlaceholder")}
+                value={c.column}
+                onChange={(e) => setCond(i, { column: e.target.value })}
+                style={{ width: "100%" }}
               />
             )}
-            <Button
-              aria-label={t("schemaForm.rowCond.removeCondition")}
-              onClick={() => removeCond(i)}
-              className="sf-rowcond-remove"
-            >
-              <X size={14} />
-            </Button>
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <select
+                value={c.op}
+                onChange={(e) => setCond(i, { op: e.target.value })}
+                style={{ flex: "1 1 0", minWidth: 0 }}
+              >
+                {ROW_COND_OPS.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {t(o.labelKey)}
+                  </option>
+                ))}
+              </select>
+              {kind !== "none" && (
+                <input
+                  type={kind === "number" ? "number" : "text"}
+                  placeholder={t("schemaForm.rowCond.valuePlaceholder")}
+                  value={c.value}
+                  onChange={(e) => setCond(i, { value: e.target.value })}
+                  style={{ flex: "1 1 0", minWidth: 0 }}
+                />
+              )}
+              <Button
+                aria-label={t("schemaForm.rowCond.removeCondition")}
+                onClick={() => removeCond(i)}
+                className="sf-rowcond-remove"
+              >
+                <X size={14} />
+              </Button>
+            </div>
           </div>
         );
       })}
@@ -2733,6 +2900,108 @@ function RowConditionField({
         </Button>
       </div>
     </div>
+  );
+}
+
+// useCollectionColumns fetches the column names of a collection (from
+// /me/boards/<name>) so a field can offer them as a dropdown. Returns [] when
+// no collection is chosen yet, the name is a ${…} reference (resolved only at
+// run time), the collection is empty, or the fetch fails — callers fall back to
+// free text in that case.
+function useCollectionColumns(collection: string, token?: string): string[] {
+  const [columns, setColumns] = useState<string[]>([]);
+  useEffect(() => {
+    const name = collection.trim();
+    if (!token || !name || name.includes("${")) {
+      setColumns([]);
+      return;
+    }
+    let live = true;
+    api
+      .getBoard(token, name, { limit: 1 })
+      .then((b) => live && setColumns(b.columns ?? []))
+      .catch(() => live && setColumns([]));
+    return () => {
+      live = false;
+    };
+  }, [token, collection]);
+  return columns;
+}
+
+// CollectionRowConditionField wraps the no-code condition builder with a column
+// dropdown sourced from the chosen collection's own columns.
+function CollectionRowConditionField({
+  value,
+  onChange,
+  collection,
+  token,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  collection: string;
+  token?: string;
+}) {
+  const columns = useCollectionColumns(collection, token);
+  return <RowConditionField value={value} onChange={onChange} columns={columns} />;
+}
+
+// CollectionColumnField is a single column picker sourced from the chosen
+// collection's columns (the Find rows "Sort by" field). Falls back to a plain
+// text input when the columns aren't known yet (no collection chosen, a ${…}
+// reference, an empty collection, or a failed fetch).
+function CollectionColumnField({
+  name,
+  schema,
+  required,
+  value,
+  onChange,
+  collection,
+  token,
+}: {
+  name: string;
+  schema: JSONSchema;
+  required: boolean;
+  value: unknown;
+  onChange: (v: unknown) => void;
+  collection: string;
+  token?: string;
+}) {
+  const { t } = useTranslation();
+  const columns = useCollectionColumns(collection, token);
+  const cur = typeof value === "string" ? value : "";
+
+  if (columns.length === 0) {
+    return (
+      <FieldWrap name={name} schema={schema} required={required} value={value}>
+        <input
+          type="text"
+          value={cur}
+          onChange={(e) =>
+            onChange(e.target.value === "" && !required ? undefined : e.target.value)
+          }
+        />
+      </FieldWrap>
+    );
+  }
+
+  const known = columns.includes(cur);
+  return (
+    <FieldWrap name={name} schema={schema} required={required} value={value}>
+      <select
+        value={cur}
+        onChange={(e) => onChange(e.target.value === "" ? undefined : e.target.value)}
+      >
+        <option value="">{t("schemaForm.collectionColumn.none")}</option>
+        {/* Keep a current value that isn't in the list selectable so a stale /
+            wired value isn't silently dropped. */}
+        {cur && !known && <option value={cur}>{cur}</option>}
+        {columns.map((c) => (
+          <option key={c} value={c}>
+            {c}
+          </option>
+        ))}
+      </select>
+    </FieldWrap>
   );
 }
 

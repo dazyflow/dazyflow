@@ -73,7 +73,7 @@
     "templates": "Mallar",
     "flows": "Flöden",
     "runs": "Körningar",
-    "results": "Data",
+    "results": "Samlingar",
     "usage": "Förbrukning",
     "files": "Filer",
     "approvals": "Godkännanden",
@@ -1002,18 +1002,18 @@
     }
   },
   "results": {
-    "title": "Resultat",
-    "subtitle": "Data som dina flöden sparat i det inbyggda lagret.",
+    "title": "Samlingar",
+    "subtitle": "Rader som dina flöden har sparat.",
     "refresh": "Uppdatera",
-    "emptyTitle": "Inga resultat än",
-    "emptyBody": "Lägg till ett ”Inbyggt lager · Spara”-steg i ett flöde så dyker raderna det sparar upp här som en tabell du kan återkomma till.",
+    "emptyTitle": "Inga samlingar än",
+    "emptyBody": "Lägg till ett ”Samlingar · Spara rader”-steg i ett flöde så dyker raderna det sparar upp här som en samling du kan återkomma till.",
     "searchPlaceholder": "Sök rader…",
     "downloadCsv": "Ladda ner CSV",
     "clear": "Töm",
     "clearing": "Tömmer…",
-    "clearTitle": "Töm den här tavlan?",
+    "clearTitle": "Töm den här samlingen?",
     "clearConfirm": "Töm alla rader i ”{{name}}”? Detta kan inte ångras.",
-    "boardEmpty": "Den här tavlan har inga rader än.",
+    "boardEmpty": "Den här samlingen har inga rader än.",
     "noMatches": "Inga rader matchar din sökning.",
     "rowCount": "Visar {{shown}} av {{total}} rader",
     "truncatedNote": "(första {{limit}} laddade)"
@@ -1319,6 +1319,14 @@
       "usePicker": "Välj {{noun}} från listan",
       "chooseFromList": "Välj från listan",
       "exprPlaceholder": "Ett värde, eller infoga en referens med { }"
+    },
+    "collection": {
+      "loading": "Laddar samlingar…",
+      "choose": "Välj en samling…",
+      "empty": "Inga samlingar än"
+    },
+    "collectionColumn": {
+      "none": "Behåll sparad ordning"
     },
     "refPicker": {
       "insert": "Infoga en referens",

@@ -196,7 +196,7 @@ func TestSearch_SearchBoostBreaksTie(t *testing.T) {
 	// would otherwise put "a_store" ahead of "z_sqlite").
 	cat := map[string]core.Manifest{
 		"a_store": {
-			ID: "a_store", Label: "Built-in store", Category: "io",
+			ID: "a_store", Label: "Collections", Category: "io",
 			Provider: "internal", Tags: []string{"save", "store"},
 			Description: "Save rows with no setup.",
 		},

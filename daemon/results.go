@@ -1,6 +1,6 @@
-// Results boards — an in-app, read-only view of the Built-in store.
+// Results boards — an in-app, read-only view of the Collections.
 //
-// The Built-in store drops (drops/db/builtin_store.go) let a non-technical
+// The Collections drops (drops/db/builtin_store.go) let a non-technical
 // user collect rows with zero setup; these endpoints let them *see* those
 // rows. A "board" is just a user table inside the workspace's built-in
 // store SQLite file. There is no new storage system here: the read path is
@@ -30,7 +30,7 @@ import (
 )
 
 // builtinStoreRelPath mirrors drops/db.builtinStorePath — the fixed,
-// workspace-local SQLite file the Built-in store drops read and write. It
+// workspace-local SQLite file the Collections drops read and write. It
 // is re-declared here rather than imported because importing drops/db into
 // the daemon would run that package's init()s and re-register its drops.
 // Keep in sync with drops/db/builtin_store.go.
@@ -45,7 +45,7 @@ const boardRowLimit = 1000
 // Sentinel errors the HTTP layer maps to status codes. Mirrors the
 // not-configured / not-found / bad-input conventions in me_routes.go.
 var (
-	errBoardsUnavailable = errors.New("the built-in store requires a workspace sandbox")
+	errBoardsUnavailable = errors.New("Collections requires a workspace sandbox")
 	errBoardNotFound     = errors.New("no such board")
 	errBoardInvalidName  = errors.New("invalid board name")
 )
@@ -94,7 +94,7 @@ func validateBoardName(name string) error {
 	return nil
 }
 
-// openBoardStore opens the workspace's built-in store. Returns (nil, nil)
+// openBoardStore opens the workspace's Collections store. Returns (nil, nil)
 // when the store file doesn't exist yet — a workspace whose flows have
 // never saved a row simply has an empty store, which is a valid state, not
 // an error (mirrors openBuiltinStore's create=false path in drops/db).
@@ -121,7 +121,7 @@ func (s *Service) openBoardStore(tenant, workspace string) (*sql.DB, error) {
 	return db, nil
 }
 
-// ListBoards returns the user tables in the workspace's built-in store,
+// ListBoards returns the user tables in the workspace's Collections store,
 // each with its current row count, ordered by name. SQLite internal tables
 // (sqlite_*) are excluded. An empty / never-written store returns an empty
 // list, not an error. Scoping to (tenant, workspace) is the caller's
@@ -232,7 +232,7 @@ func (s *Service) BoardRows(ctx context.Context, p core.Principal, tenant, works
 		}
 		rec := make(map[string]any, len(columns))
 		for i, c := range columns {
-			// The built-in store stores TEXT, so values arrive as strings;
+			// The Collections store stores TEXT, so values arrive as strings;
 			// a stray BLOB column would otherwise marshal to base64 noise.
 			// Render bytes as a string for the friendly table view.
 			if b, ok := vals[i].([]byte); ok {

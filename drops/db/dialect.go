@@ -104,7 +104,7 @@ func createTableSQL(d dialect, table string, headers []string, colTypes map[stri
 
 // sqliteEnsureTable issues a CREATE TABLE IF NOT EXISTS sized to
 // headers against a raw *sql.DB. The dialect-driven runInsert /
-// runUpsert path doesn't need it, but the built-in store calls it
+// runUpsert path doesn't need it, but the Collections store calls it
 // directly (it manages its own schema-evolution dance around the
 // create) so it stays as a small standalone helper.
 func sqliteEnsureTable(db *sql.DB, table string, headers []string, colTypes map[string]string) error {

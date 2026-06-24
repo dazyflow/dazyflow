@@ -18,7 +18,7 @@ import (
 )
 
 // builtinStorePath is the fixed, workspace-local SQLite file the
-// built-in store drops read and write. It lives under a dotted dir so
+// Collections store drops read and write. It lives under a dotted dir so
 // it doesn't clutter the user's visible workspace files. The whole
 // point of these drops is that a non-technical user gets a place to
 // keep rows WITHOUT provisioning Postgres or even picking a filename —
@@ -31,21 +31,21 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "builtin_store_append",
 			Version:     "1.0",
-			Label:       "Built-in store",
-			Subtitle:    "Save",
+			Label:       "Collections",
+			Subtitle:    "Save rows",
 			Color:       "#0a6abf",
 			Icon:        "database",
 			Category:    "io",
 			Provider:    "internal",
-			Integration: "Built-in store",
+			Integration: "Collections",
 			// "results"/"dashboard"/"report" tag this as the writer behind
-			// the in-app Results page (web /results). Tags (not SearchBoost)
+			// the in-app Collections page (web /results). Tags (not SearchBoost)
 			// because a blanket boost would also lift it for "save"/"database",
 			// disturbing the deliberate ranking below SQLite Insert rows for
 			// those generic verbs (see SearchBoost note there).
-			Tags:        []string{"store", "database", "save", "append", "no-setup", "results", "dashboard", "report"},
-			Description: "Save rows to a built-in table — no database to set up and no connection string to paste. Pick a table name and the rows land there; the table is created automatically the first time. Each workspace has its own private store, and the saved rows show up on the Results page so you can browse them in-app.",
-			Summary:     "Append rows to a workspace-local table with zero setup; auto-creates the table, evolves columns on the fly, and surfaces the rows on the Results page.",
+			Tags:        []string{"collection", "collections", "store", "database", "save", "append", "no-setup", "results", "dashboard", "report"},
+			Description: "Save rows to a collection — no database to set up and no connection string to paste. Pick a collection name and the rows land there; the collection is created automatically the first time. Each workspace has its own private Collections, and the saved rows show up under Collections so you can browse them in-app.",
+			Summary:     "Append rows to a workspace-local collection with zero setup; auto-creates the collection, evolves columns on the fly, and surfaces the rows under Collections.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Capture form submissions",
@@ -68,7 +68,7 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"table":        {"type":"string","description":"Name of the table to save into, e.g. leads or signups. Created automatically the first time.","examples":["leads"]},
+					"table":        {"type":"string","title":"Collection","description":"Name of the collection to save into, e.g. leads or signups. Created automatically the first time.","examples":["leads"]},
 					"column_types": {"type":"object","additionalProperties":{"type":"string"},"description":"Optional: force a column's type (e.g. {\"age\":\"INTEGER\"}). Everything defaults to text, which is fine for most things."}
 				},
 				"required":["table"]
@@ -81,16 +81,16 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "builtin_store_query",
 			Version:     "1.0",
-			Label:       "Built-in store",
-			Subtitle:    "Read",
+			Label:       "Collections",
+			Subtitle:    "Query rows",
 			Color:       "#0a6abf",
 			Icon:        "database",
 			Category:    "io",
 			Provider:    "internal",
-			Integration: "Built-in store",
-			Tags:        []string{"store", "database", "read", "query", "select", "no-setup"},
-			Description: "Read rows back out of the built-in store with a SELECT — handy for building a report from data you saved earlier. Use ? placeholders and the params list for any user-supplied values.",
-			Summary:     "Run a SELECT against the workspace's built-in store and emit rows plus column names; empty store returns an empty result.",
+			Integration: "Collections",
+			Tags:        []string{"collection", "collections", "store", "database", "read", "query", "select", "no-setup"},
+			Description: "Read rows back out of a collection with a SELECT — handy for building a report from data you saved earlier. Use ? placeholders and the params list for any user-supplied values.",
+			Summary:     "Run a SELECT against the workspace's Collections and emit rows plus column names; an empty collection returns an empty result.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Latest 50 leads",
@@ -111,7 +111,7 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"sql":    {"type":"string","title":"SQL","description":"A SELECT to run against the built-in store.","examples":["SELECT * FROM leads ORDER BY submitted_at DESC LIMIT 50"]},
+					"sql":    {"type":"string","title":"SQL","description":"A SELECT to run against your Collections.","examples":["SELECT * FROM leads ORDER BY submitted_at DESC LIMIT 50"]},
 					"params": {"type":"array","items":{},"title":"Query values","description":"Values for any ? placeholders in the SQL, in order."},
 					"limit":  {"type":"integer","minimum":1,"title":"Row limit","description":"Optional cap on the number of rows returned."}
 				},
@@ -132,7 +132,7 @@ func init() {
 // to create the parent directory safely.
 func openBuiltinStore(job core.Job, create bool) (*sql.DB, *core.Result) {
 	if job.WorkspaceRoot == "" {
-		r := params.Err(job, "no_sandbox", "the built-in store requires a workspace sandbox")
+		r := params.Err(job, "no_sandbox", "Collections requires a workspace sandbox")
 		return nil, &r
 	}
 	root, err := os.OpenRoot(job.WorkspaceRoot)
@@ -199,7 +199,7 @@ func executeBuiltinStoreAppend(ctx context.Context, job core.Job, _ chan<- core.
 	// A webhook/form body is a single {field: value} object, but the
 	// store appends row *lists*. Wrap a lone object into a one-row list
 	// so "form → save" works without a reshape step in between — that
-	// frictionless path is the whole point of the built-in store.
+	// frictionless path is the whole point of the Collections store.
 	inline := rowsRef.Inline
 	if m, isObj := inline.(map[string]any); isObj {
 		inline = []any{m}
@@ -240,7 +240,7 @@ func executeBuiltinStoreAppend(ctx context.Context, job core.Job, _ chan<- core.
 		}
 		// Schema evolution: when the table already exists, ensureTable
 		// is a CREATE-IF-NOT-EXISTS no-op and any headers added since
-		// would silently break the upcoming INSERT. The built-in store
+		// would silently break the upcoming INSERT. The Collections store
 		// is explicitly the no-schema-management path — Maria edits her
 		// form, adds "phone", and expects new submissions to land. Add
 		// any missing columns now (sqlite_insert_rows keeps its

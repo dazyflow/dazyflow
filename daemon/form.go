@@ -105,7 +105,7 @@ func (w *WebhookListener) handleForm(rw http.ResponseWriter, r *http.Request) {
 }
 
 // maxFormFields caps the total field count on a single hosted-form
-// submission. The built-in store auto-evolves columns from whatever
+// submission. The Collections store auto-evolves columns from whatever
 // gets posted (so the owner doesn't manage schema), so an unbounded
 // payload would let a spammy caller bloat the workspace's schema with
 // 1000s of TEXT columns. 50 is well above what Zapier / Make /

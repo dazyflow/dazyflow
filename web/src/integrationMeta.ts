@@ -370,10 +370,10 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     technical_notes:
       "All operations stay confined to the workspace sandbox via path normalization — clones write into the sandbox root, never above. Read-only today; remote write operations aren't supported.",
   },
-  "built-in-store": {
-    name: "Built-in store",
+  collections: {
+    name: "Collections",
     description:
-      "Save rows to a built-in database with no setup, then query them back — it's the store behind the in-app Results page. Reach for it to collect a flow's output for review, build a lightweight dashboard, or keep running totals without provisioning a real database.",
+      "Save rows to a built-in collection with no setup, then query them back — it's the storage behind the in-app Collections page. Reach for it to collect a flow's output for review, build a lightweight dashboard, or keep running totals without provisioning a real database.",
   },
   "standard-library": {
     name: "Standard library",

@@ -493,7 +493,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/me/schedules", h.requireAuth(h.listSchedulesMe))
 
 	// /me/boards — the Results surface. A "board" is a user table in the
-	// workspace's built-in store; these read it back (read-only) and clear
+	// workspace's Collections store; these read it back (read-only) and clear
 	// it. Scoped to (tenant, workspace) in the handler, mirroring /me/flows.
 	mux.HandleFunc("GET /api/v1/me/boards", h.requireAuth(h.listBoardsMe))
 	mux.HandleFunc("GET /api/v1/me/boards/{name}", h.requireAuth(h.getBoardMe))
