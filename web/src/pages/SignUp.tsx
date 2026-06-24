@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { Button } from "../components/Button";
 import { useAuth } from "../auth";
 import { api } from "../api";
 
@@ -166,15 +167,15 @@ export function SignUp() {
           value={confirm}
           onChange={(e) => setConfirm(e.target.value)}
         />
-        <button
+        <Button
           type="submit"
-          className="primary"
+          variant="primary"
           disabled={
             busy || loading || !email.trim() || !password || passwordMismatch
           }
         >
           {busy ? t("signUp.submitting") : t("signUp.submit")}
-        </button>
+        </Button>
         {(localErr || error) && <div className="error">{localErr ?? error}</div>}
         <div className="signin-alt">
           {t("signUp.haveAccount")} <Link to="/signin">{t("signUp.signInLink")}</Link>

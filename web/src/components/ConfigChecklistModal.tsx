@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { AlertCircle, ChevronRight, X } from "lucide-react";
+import { Button } from "./Button";
 import { iconFor, isBrandedIcon, dropColor } from "../icons";
 
 // ConfigChecklistModal replaces the old "N to configure" popover with a
@@ -97,20 +98,20 @@ export function ConfigChecklistModal({
               </p>
             </div>
           </div>
-          <button
-            className="icon ghost"
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={onClose}
             aria-label={t("settings.close")}
           >
             <X size={18} />
-          </button>
+          </Button>
         </div>
         <div className="settings-body config-modal-body">
           <ul className="config-checklist">
             {entries.map((entry) => (
               <li key={entry.nodeID}>
-                <button
-                  type="button"
+                <Button
                   className="config-checklist-item"
                   onClick={() => onJump(entry.nodeID)}
                   aria-label={t("editor.configModalJump", { label: entry.label })}
@@ -138,15 +139,15 @@ export function ConfigChecklistModal({
                     size={16}
                     aria-hidden="true"
                   />
-                </button>
+                </Button>
               </li>
             ))}
           </ul>
         </div>
         <div className="settings-foot">
-          <button type="button" className="primary" onClick={onClose}>
+          <Button variant="primary" onClick={onClose}>
             {t("common.close")}
-          </button>
+          </Button>
         </div>
       </div>
     </div>,

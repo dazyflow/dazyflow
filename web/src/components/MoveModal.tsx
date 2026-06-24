@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { ChevronRight, CornerLeftUp, Folder } from "lucide-react";
 import { api, APIError } from "../api";
+import { Button } from "./Button";
 import type { FileEntry } from "../types";
 
 // MoveModal is the interactive "Move to…" folder picker: browse the
@@ -89,21 +90,21 @@ export function MoveModal({
         </div>
         <div className="settings-body">
           <nav className="files-breadcrumb move-breadcrumb">
-            <button className="link" onClick={() => setDir("")} disabled={dir === ""}>
+            <Button variant="link" onClick={() => setDir("")} disabled={dir === ""}>
               {t("files.root")}
-            </button>
+            </Button>
             {segments.map((seg, i) => {
               const target = segments.slice(0, i + 1).join("/");
               return (
                 <span key={target} className="files-crumb">
                   <ChevronRight size={14} className="files-crumb-sep" />
-                  <button
-                    className="link"
+                  <Button
+                    variant="link"
                     onClick={() => setDir(target)}
                     disabled={i === segments.length - 1}
                   >
                     {seg}
-                  </button>
+                  </Button>
                 </span>
               );
             })}
@@ -113,13 +114,13 @@ export function MoveModal({
 
           <div className="move-folder-list">
             {dir !== "" && (
-              <button
+              <Button
                 className="move-folder-row"
                 onClick={() => setDir(currentParentOf(dir))}
               >
                 <CornerLeftUp size={16} className="files-icon" />
                 <span className="move-folder-name">{t("files.moveUp")}</span>
-              </button>
+              </Button>
             )}
             {folders === null ? (
               <div className="files-empty">{t("files.loading")}</div>
@@ -131,7 +132,7 @@ export function MoveModal({
                   entry.is_dir &&
                   (f.path === entry.path || f.path.startsWith(entry.path + "/"));
                 return (
-                  <button
+                  <Button
                     key={f.path}
                     className="move-folder-row"
                     disabled={disabled}
@@ -140,24 +141,24 @@ export function MoveModal({
                     <Folder size={16} className="files-icon files-icon-dir" />
                     <span className="move-folder-name">{f.name}</span>
                     <ChevronRight size={16} className="move-folder-chev" />
-                  </button>
+                  </Button>
                 );
               })
             )}
           </div>
         </div>
         <div className="settings-foot">
-          <button type="button" onClick={onCancel}>
+          <Button type="button" onClick={onCancel}>
             {t("common.cancel")}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            className="primary"
+            variant="primary"
             disabled={moving || intoSelf || isNoop}
             onClick={doMove}
           >
             {isNoop ? t("files.moveAlreadyHere") : t("files.moveHere")}
-          </button>
+          </Button>
         </div>
       </div>
     </div>,

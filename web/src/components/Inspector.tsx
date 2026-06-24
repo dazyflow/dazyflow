@@ -25,6 +25,7 @@ import {
   CodeField,
 } from "./TriggersModal";
 import { Switch } from "./Switch";
+import { Button } from "./Button";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import { oauthProviderForIntegration } from "../integrationMeta";
@@ -231,15 +232,17 @@ export function Inspector({
         <div className="panel-head">
           <span>{t("inspector.title")}</span>
           {onClose && (
-            <button
+            <Button
               type="button"
-              className="ghost icon inspector-close"
+              variant="ghost"
+              size="icon"
+              className="inspector-close"
               onClick={onClose}
               aria-label={t("inspector.close")}
               title={t("inspector.close")}
             >
               <X size={16} />
-            </button>
+            </Button>
           )}
         </div>
         <div className="empty">{t("inspector.empty")}</div>
@@ -382,9 +385,11 @@ export function Inspector({
             </span>
           )}
           {onClose && (
-            <button
+            <Button
               type="button"
-              className="ghost icon inspector-close"
+              variant="ghost"
+              size="icon"
+              className="inspector-close"
               onClick={(e) => {
                 e.stopPropagation();
                 onClose();
@@ -393,7 +398,7 @@ export function Inspector({
               title={t("inspector.close")}
             >
               <X size={16} />
-            </button>
+            </Button>
           )}
         </span>
       </div>
@@ -402,9 +407,10 @@ export function Inspector({
           <div className="sf-field inspector-connect">
             {hasPerm("secret:write") ? (
               <>
-                <button
+                <Button
                   type="button"
-                  className="primary inspector-connect-cta"
+                  variant="primary"
+                  className="inspector-connect-cta"
                   onClick={() => navigate(`/apps/${setupNeeded.slug}`)}
                 >
                   {brandLogo ? (
@@ -413,7 +419,7 @@ export function Inspector({
                     <DropIcon size={15} strokeWidth={2.2} />
                   )}
                   {t("nodeCard.connect", { name: setupNeeded.integration })}
-                </button>
+                </Button>
                 <div className="desc">{t("inspector.connectHint")}</div>
               </>
             ) : (
@@ -428,7 +434,7 @@ export function Inspector({
         {onSample && (
           <div className="sf-field">
             {running ? (
-              <button
+              <Button
                 type="button"
                 className="inspector-run-step inspector-stop-step"
                 disabled={cancelling || !onStopRun}
@@ -437,11 +443,12 @@ export function Inspector({
               >
                 <Square size={14} />
                 {cancelling ? t("inspector.stopping") : t("inspector.stop")}
-              </button>
+              </Button>
             ) : (
-              <button
+              <Button
                 type="button"
-                className="primary inspector-run-step"
+                variant="primary"
+                className="inspector-run-step"
                 disabled={sampling}
                 onClick={async () => {
                   if (!onSample) return;
@@ -459,7 +466,7 @@ export function Inspector({
               >
                 <Play size={15} />
                 {sampling ? t("inspector.sampling") : t("inspector.sample")}
-              </button>
+              </Button>
             )}
             {sampleError && (
               <div className="desc" style={{ color: "var(--danger)" }}>
@@ -621,14 +628,15 @@ export function Inspector({
             // the approver gets a tappable notification. (The Approved-port →
             // send-step wire stays a manual drag — it's flow-specific.)
             <div className="inspector-section">
-              <button
+              <Button
                 type="button"
-                className="primary inspector-run-step"
+                variant="primary"
+                className="inspector-run-step"
                 onClick={() => onAddApprovalNtfy(selected.id)}
               >
                 <BellRing size={15} />
                 {t("approval.notifyNtfy")}
-              </button>
+              </Button>
               <div className="desc">{t("approval.notifyNtfyHint")}</div>
             </div>
           )}
@@ -671,14 +679,14 @@ export function Inspector({
 
         {onDelete && (
           <div className="inspector-section">
-            <button
+            <Button
               type="button"
               className="inspector-delete"
               onClick={() => setConfirmDelete(true)}
             >
               <Trash2 size={14} />
               {t("inspector.deleteNode")}
-            </button>
+            </Button>
           </div>
         )}
       </div>

@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import { orgFromHost } from "../lib/orgFromHost";
+import { Button, ButtonLink } from "../components/Button";
 import { OtpInput } from "../components/OtpInput";
 
 // SignIn is the email+password sign-in form. It also handles two
@@ -167,9 +168,9 @@ export function SignIn() {
               <div className="desc">{t("signIn.recoveryCodeHint")}</div>
             </>
           )}
-          <button
+          <Button
             type="submit"
-            className="primary"
+            variant="primary"
             disabled={
               busy ||
               loading ||
@@ -177,11 +178,10 @@ export function SignIn() {
             }
           >
             {busy ? t("signIn.submitting") : t("signIn.verify")}
-          </button>
+          </Button>
           {error && <div className="error">{error}</div>}
           <div className="signin-alt">
-            <button
-              type="button"
+            <Button
               className="linklike"
               onClick={() => {
                 setUseRecovery((v) => !v);
@@ -192,14 +192,13 @@ export function SignIn() {
               {useRecovery
                 ? t("signIn.useAuthenticator")
                 : t("signIn.useRecoveryCode")}
-            </button>
+            </Button>
           </div>
           {/* Back out of the second-factor step to the email/password form.
               Without this the only escape from a mistyped email (now stuck on
               the code prompt) was a full page reload. */}
           <div className="signin-alt">
-            <button
-              type="button"
+            <Button
               className="linklike"
               onClick={() => {
                 setChallenge(null);
@@ -210,7 +209,7 @@ export function SignIn() {
               }}
             >
               {t("signIn.back")}
-            </button>
+            </Button>
           </div>
         </form>
       </div>
@@ -246,10 +245,10 @@ export function SignIn() {
 
         {googleEnabled && (
           <>
-            <a href={googleHref} className="primary google-signin-btn">
+            <ButtonLink variant="primary" className="google-signin-btn" href={googleHref}>
               <img src="/brands/google.svg" alt="" aria-hidden="true" />
               <span>{t("signIn.continueWithGoogle")}</span>
-            </a>
+            </ButtonLink>
             <div className="signin-divider">
               <span>{t("signIn.or")}</span>
             </div>
@@ -275,13 +274,13 @@ export function SignIn() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
-        <button
+        <Button
           type="submit"
-          className="primary"
+          variant="primary"
           disabled={busy || loading || !email.trim() || !password}
         >
           {busy ? t("signIn.submitting") : t("signIn.submit")}
-        </button>
+        </Button>
         {error && <div className="error">{error}</div>}
         <div className="signin-alt">
           <Link

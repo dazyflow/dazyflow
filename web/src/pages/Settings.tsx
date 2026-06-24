@@ -6,6 +6,7 @@ import { useAuth } from "../auth";
 import { api, APIError, type TOTPSetup, type TOTPStatus } from "../api";
 import { OtpInput } from "../components/OtpInput";
 import { Switch } from "../components/Switch";
+import { Button } from "../components/Button";
 
 // Settings is the per-user, per-browser preferences page — reached
 // from the account menu in the sidebar. Holds appearance + language,
@@ -342,27 +343,22 @@ function TwoFactorCard() {
               ))}
             </ul>
             <div className="totp-actions">
-              <button
-                type="button"
-                className="secondary"
+              <Button
                 onClick={() => copy(recoveryCodes.join("\n"), "codes")}
               >
                 {copied === "codes" ? t("twoFactor.copied") : t("twoFactor.copyCodes")}
-              </button>
-              <button
-                type="button"
-                className="secondary"
+              </Button>
+              <Button
                 onClick={() => downloadCodes(recoveryCodes)}
               >
                 {t("twoFactor.downloadCodes")}
-              </button>
-              <button
-                type="button"
-                className="primary"
+              </Button>
+              <Button
+                variant="primary"
                 onClick={() => setRecoveryCodes(null)}
               >
                 {t("twoFactor.savedCodes")}
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -384,13 +380,12 @@ function TwoFactorCard() {
                 <p className="desc">{t("twoFactor.manualSecret")}</p>
                 <div className="totp-secret-row">
                   <code className="totp-secret">{setup.secret_base32}</code>
-                  <button
-                    type="button"
+                  <Button
                     className="linklike"
                     onClick={() => copy(setup.secret_base32, "secret")}
                   >
                     {copied === "secret" ? t("twoFactor.copied") : t("twoFactor.copySecret")}
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -404,17 +399,14 @@ function TwoFactorCard() {
               ariaLabel={t("twoFactor.confirmLabel")}
             />
             <div className="totp-actions">
-              <button
-                type="button"
-                className="primary"
+              <Button
+                variant="primary"
                 disabled={busy || confirmCode.trim().length < 6}
                 onClick={() => void confirmEnrol()}
               >
                 {t("twoFactor.confirmEnable")}
-              </button>
-              <button
-                type="button"
-                className="secondary"
+              </Button>
+              <Button
                 disabled={busy}
                 onClick={() => {
                   setSetup(null);
@@ -423,7 +415,7 @@ function TwoFactorCard() {
                 }}
               >
                 {t("twoFactor.cancel")}
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -440,22 +432,19 @@ function TwoFactorCard() {
                 </p>
                 {!disabling ? (
                   <div>
-                    <button
-                      type="button"
-                      className="secondary"
+                    <Button
                       disabled={busy}
                       onClick={() => void regenerate()}
                     >
                       {t("twoFactor.regenerate")}
-                    </button>{" "}
-                    <button
-                      type="button"
-                      className="danger"
+                    </Button>{" "}
+                    <Button
+                      variant="danger"
                       disabled={busy}
                       onClick={() => setDisabling(true)}
                     >
                       {t("twoFactor.disable")}
-                    </button>
+                    </Button>
                   </div>
                 ) : (
                   <div className="totp-disable">
@@ -470,17 +459,14 @@ function TwoFactorCard() {
                       onChange={(e) => setDisablePassword(e.target.value)}
                     />
                     <div>
-                      <button
-                        type="button"
-                        className="danger"
+                      <Button
+                        variant="danger"
                         disabled={busy || !disablePassword}
                         onClick={() => void disable()}
                       >
                         {t("twoFactor.confirmDisable")}
-                      </button>{" "}
-                      <button
-                        type="button"
-                        className="secondary"
+                      </Button>{" "}
+                      <Button
                         disabled={busy}
                         onClick={() => {
                           setDisabling(false);
@@ -489,7 +475,7 @@ function TwoFactorCard() {
                         }}
                       >
                         {t("twoFactor.cancel")}
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 )}
@@ -499,14 +485,13 @@ function TwoFactorCard() {
                 <p className="totp-state totp-off">
                   {t("twoFactor.stateDisabled")}
                 </p>
-                <button
-                  type="button"
-                  className="primary"
+                <Button
+                  variant="primary"
                   disabled={busy}
                   onClick={() => void startEnrol()}
                 >
                   {t("twoFactor.enable")}
-                </button>
+                </Button>
               </>
             )}
           </>

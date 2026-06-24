@@ -2483,17 +2483,6 @@
   font-size: var(--text-md);
   color: var(--muted);
 }
-/* Outlined destructive button — red text + red border on a transparent
-   fill, matching the old trash affordance. Used by Disconnect. */
-button.danger-outline {
-  background: transparent;
-  color: var(--danger);
-  border-color: var(--danger);
-}
-button.danger-outline:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--danger) 12%, transparent);
-  border-color: var(--danger);
-}
 /* Paused-flow toggle: amber so a disabled flow is never a silent surprise. */
 button.warning {
   background: color-mix(in srgb, var(--warning, #d9822b) 16%, transparent);
@@ -2502,24 +2491,6 @@ button.warning {
 }
 button.warning:hover:not(:disabled) {
   background: color-mix(in srgb, var(--warning, #d9822b) 26%, transparent);
-}
-.icon-button {
-  background: none;
-  border: 1px solid transparent;
-  border-radius: var(--r-1);
-  color: var(--muted);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  padding: var(--space-1);
-}
-.icon-button:hover {
-  color: var(--ink);
-  border-color: var(--border);
-}
-.icon-button.danger:hover {
-  color: var(--danger);
-  border-color: var(--danger);
 }
 /* ----- Pre-run connection gate modal ----- */
 .conn-gate-lede {
@@ -3652,24 +3623,6 @@ button.warning:hover:not(:disabled) {
   font-style: italic;
 }
 
-/* Generic secondary button for the "From template" CTA on the
-   flow list — pairs visually with the primary "New flow" button. */
-/* Secondary buttons match the default gray button so secondary actions
-   read the same everywhere — toolbars and modal footers alike — against
-   the purple .primary action. */
-.secondary {
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  color: var(--ink);
-  border-radius: var(--r-2);
-  font-size: inherit;
-  cursor: pointer;
-}
-.secondary:hover {
-  background: var(--surface-3);
-  border-color: var(--border-strong);
-}
 
 /* Editor layout: canvas | inspector. The catalog used to live to the
    left; it's been replaced by the Ctrl+K quick-drop palette + a toolbar
@@ -5612,8 +5565,17 @@ button.warning:hover:not(:disabled) {
   background: var(--surface-2);
   color: var(--muted);
 }
+/* Quiet inline destructive action: red glyph, no border or fill. Overrides
+   the global .danger border that the consolidated button system applies. */
 .ghost.danger {
   color: var(--danger);
+  background: transparent;
+  border-color: transparent;
+}
+.ghost.danger:hover:not(:disabled),
+.btn.ghost.danger:hover {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  border-color: transparent;
 }
 
 /* Provider strip — the row of SSO/identity-provider tiles. The active
@@ -7405,14 +7367,6 @@ button.warning:hover:not(:disabled) {
   top: var(--space-1h);
   right: var(--space-1h);
 }
-.dz-code-btn-danger {
-  color: var(--danger);
-}
-.dz-code-btn-danger:hover {
-  background: color-mix(in srgb, var(--danger) 12%, var(--surface));
-  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
-}
-
 /* Webhook key-rotation list: a stack of key rows + the add button. */
 .webhook-keys {
   display: flex;
@@ -9037,17 +8991,6 @@ button.warning:hover:not(:disabled) {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-}
-button.files-name {
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  color: var(--accent);
-  font: inherit;
-}
-button.files-name:hover {
-  opacity: 0.8;
 }
 .files-icon {
   color: var(--muted);

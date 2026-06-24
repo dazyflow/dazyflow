@@ -3,6 +3,7 @@ import { Table2, Download, Search, Trash2, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, type BoardSummary, type BoardPage } from "../api";
+import { Button } from "../components/Button";
 import { ConfirmModal } from "../components/ConfirmModal";
 
 // Results — the in-app view of the Built-in store. Left: the workspace's
@@ -129,8 +130,8 @@ export function Results() {
           <h1>{t("results.title")}</h1>
           <div className="sub">{t("results.subtitle")}</div>
         </div>
-        <button
-          className="ghost"
+        <Button
+          variant="ghost"
           onClick={reloadBoards}
           disabled={loading}
           title={t("results.refresh")}
@@ -138,7 +139,7 @@ export function Results() {
         >
           <RefreshCw size={14} />
           {t("results.refresh")}
-        </button>
+        </Button>
       </div>
 
       {error && (
@@ -176,9 +177,8 @@ export function Results() {
           {/* Left: board list. */}
           <div className="card" style={{ padding: "var(--space-2)" }}>
             {boards.map((b) => (
-              <button
+              <Button
                 key={b.name}
-                type="button"
                 onClick={() => setSelected(b.name)}
                 className={"board-item" + (b.name === selected ? " active" : "")}
                 style={{
@@ -213,7 +213,7 @@ export function Results() {
                 <span style={{ color: "var(--faint)", fontSize: "var(--text-xs)" }}>
                   {b.rows}
                 </span>
-              </button>
+              </Button>
             ))}
           </div>
 
@@ -253,17 +253,17 @@ export function Results() {
                   style={{ width: "100%", paddingLeft: 30 }}
                 />
               </div>
-              <button
-                className="ghost"
+              <Button
+                variant="ghost"
                 onClick={downloadCSV}
                 disabled={!page || page.rows.length === 0}
                 style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
               >
                 <Download size={14} />
                 {t("results.downloadCsv")}
-              </button>
-              <button
-                className="ghost"
+              </Button>
+              <Button
+                variant="ghost"
                 onClick={() => setConfirmClear(true)}
                 disabled={clearing || !selected}
                 style={{
@@ -275,7 +275,7 @@ export function Results() {
               >
                 <Trash2 size={14} />
                 {clearing ? t("results.clearing") : t("results.clear")}
-              </button>
+              </Button>
             </div>
 
             {tableLoading && !page && (

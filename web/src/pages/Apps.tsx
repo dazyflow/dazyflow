@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { api, APIError } from "../api";
 import { useAuth } from "../auth";
 import { iconFor, isBrandedIcon, dropColor } from "../icons";
+import { Button } from "../components/Button";
 import { ConfirmModal } from "../components/ConfirmModal";
 import {
   integrationMeta,
@@ -153,13 +154,12 @@ export function Apps() {
         <div className="integrations-filter">
           <span className="integrations-filter-chip">
             {t("integrations.filterShowing", { label: filterLabel })}
-            <button
-              type="button"
+            <Button
               className="integrations-filter-clear"
               onClick={clearFilter}
             >
               {t("integrations.filterClear")}
-            </button>
+            </Button>
           </span>
         </div>
       )}
@@ -574,9 +574,9 @@ function IntegrationConnections({
               name: oauthBanner.name,
             })}
           </span>
-          <button type="button" className="link-button" onClick={dismissBanner}>
+          <Button variant="link" onClick={dismissBanner}>
             {t("common.dismiss")}
-          </button>
+          </Button>
         </div>
       )}
       {oauthBanner?.result === "error" && (
@@ -586,9 +586,9 @@ function IntegrationConnections({
               error: oauthBanner.error || t("connections.unknownError"),
             })}
           </span>
-          <button type="button" className="link-button" onClick={dismissBanner}>
+          <Button variant="link" onClick={dismissBanner}>
             {t("common.dismiss")}
-          </button>
+          </Button>
         </div>
       )}
       {error && <div className="card error">{error}</div>}
@@ -750,9 +750,9 @@ function SecretCard({
         <div className="connection-note">
           <p>{t("integrations.connection.loadFailed")}</p>
           {onRetry && (
-            <button type="button" className="ghost" onClick={onRetry}>
+            <Button variant="ghost" onClick={onRetry}>
               {t("common.retry")}
-            </button>
+            </Button>
           )}
         </div>
       ) : loading ? (
@@ -766,19 +766,18 @@ function SecretCard({
           {err && <div className="card error">{err}</div>}
           {canWrite && (
             <div className="connection-card-footer">
-              <button type="button" className="ghost" onClick={() => setEditing(true)}>
+              <Button variant="ghost" onClick={() => setEditing(true)}>
                 {t("integrations.connection.edit")}
-              </button>
-              <button
-                type="button"
-                className="danger-outline"
+              </Button>
+              <Button
+                variant="danger"
                 onClick={() => setConfirming(true)}
                 disabled={removing}
               >
                 {removing
                   ? t("integrations.connection.disconnecting")
                   : t("integrations.connection.disconnect")}
-              </button>
+              </Button>
             </div>
           )}
         </>
@@ -801,20 +800,19 @@ function SecretCard({
           </label>
           {err && <div className="card error">{err}</div>}
           <div className="connection-card-footer">
-            <button type="submit" className="primary" disabled={busy || !value}>
+            <Button type="submit" variant="primary" disabled={busy || !value}>
               {busy ? t("connections.saving") : t("connections.connect")}
-            </button>
+            </Button>
             {configured && (
-              <button
-                type="button"
-                className="ghost"
+              <Button
+                variant="ghost"
                 onClick={() => {
                   setEditing(false);
                   setValue("");
                 }}
               >
                 {t("common.cancel")}
-              </button>
+              </Button>
             )}
           </div>
         </form>
@@ -891,18 +889,18 @@ function OAuthCard({
         <div className="connection-note">
           <p>{t("integrations.connection.loadFailed")}</p>
           {onRetry && (
-            <button type="button" className="ghost" onClick={onRetry}>
+            <Button variant="ghost" onClick={onRetry}>
               {t("common.retry")}
-            </button>
+            </Button>
           )}
         </div>
       ) : loading ? (
         <p className="connection-note">{t("common.loading")}</p>
       ) : canWrite ? (
         <div className="connection-card-footer">
-          <button type="button" className="primary" onClick={connect}>
+          <Button variant="primary" onClick={connect}>
             {connected ? t("connections.connectAnother") : t("connections.connect")}
-          </button>
+          </Button>
         </div>
       ) : !connected ? (
         // Viewer (no secret:write) + not connected: mirror the secret
@@ -1039,9 +1037,9 @@ function ConnectionFieldsCard({
         <div className="connection-note">
           <p>{t("integrations.connection.loadFailed")}</p>
           {onRetry && (
-            <button type="button" className="ghost" onClick={onRetry}>
+            <Button variant="ghost" onClick={onRetry}>
               {t("common.retry")}
-            </button>
+            </Button>
           )}
         </div>
       ) : loading ? (
@@ -1076,30 +1074,28 @@ function ConnectionFieldsCard({
           {canWrite && (
             <div className="connection-card-footer">
               {verifiable && (
-                <button
-                  type="button"
-                  className="ghost"
+                <Button
+                  variant="ghost"
                   onClick={() => void test()}
                   disabled={testState.kind === "testing"}
                 >
                   {testState.kind === "testing"
                     ? t("integrations.connection.testing")
                     : t("integrations.connection.test")}
-                </button>
+                </Button>
               )}
-              <button type="button" className="ghost" onClick={() => setEditing(true)}>
+              <Button variant="ghost" onClick={() => setEditing(true)}>
                 {t("integrations.connection.edit")}
-              </button>
-              <button
-                type="button"
-                className="danger-outline"
+              </Button>
+              <Button
+                variant="danger"
                 onClick={() => setConfirming(true)}
                 disabled={removing}
               >
                 {removing
                   ? t("integrations.connection.disconnecting")
                   : t("integrations.connection.disconnect")}
-              </button>
+              </Button>
             </div>
           )}
         </>
@@ -1129,24 +1125,23 @@ function ConnectionFieldsCard({
           ))}
           {err && <div className="card error">{err}</div>}
           <div className="connection-card-footer">
-            <button type="submit" className="primary" disabled={busy}>
+            <Button type="submit" variant="primary" disabled={busy}>
               {busy
                 ? verifiable
                   ? t("integrations.connection.verifying")
                   : t("connections.saving")
                 : t("connections.connect")}
-            </button>
+            </Button>
             {connected && (
-              <button
-                type="button"
-                className="ghost"
+              <Button
+                variant="ghost"
                 onClick={() => {
                   setEditing(false);
                   setValues({});
                 }}
               >
                 {t("common.cancel")}
-              </button>
+              </Button>
             )}
           </div>
         </form>

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Copy } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { Button } from "./Button";
 import type { IssuedAPIKey } from "../types";
 
 // RevealSecretModal renders the one-time view of a freshly-minted API
@@ -39,10 +40,10 @@ export function RevealSecretModal({
             {t("revealSecret.warning")}
           </p>
           <div className="secret-reveal">{issued.secret}</div>
-          <button onClick={copy} style={{ marginTop: "var(--space-3)" }}>
+          <Button onClick={copy} style={{ marginTop: "var(--space-3)" }}>
             <Copy size={12} style={{ marginRight: 6 }} />
             {copied ? t("revealSecret.copied") : t("revealSecret.copy")}
-          </button>
+          </Button>
           <div className="sf-field" style={{ marginTop: "var(--space-4)" }}>
             <div className="label-row">
               <label>{t("revealSecret.keyIdLabel")}</label>
@@ -55,9 +56,9 @@ export function RevealSecretModal({
           </div>
         </div>
         <div className="settings-foot">
-          <button className="primary" onClick={onClose}>
+          <Button variant="primary" onClick={onClose}>
             {t("revealSecret.done")}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

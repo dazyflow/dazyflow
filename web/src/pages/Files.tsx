@@ -14,6 +14,7 @@ import {
 import { api, APIError } from "../api";
 import { useAuth } from "../auth";
 import { ConfirmModal } from "../components/ConfirmModal";
+import { Button } from "../components/Button";
 import { PromptModal } from "../components/PromptModal";
 import { MoveModal } from "../components/MoveModal";
 import { useUploads } from "../uploads";
@@ -343,27 +344,27 @@ export function Files() {
 
       <div className="files-toolbar">
         <nav className="files-breadcrumb" aria-label={t("files.breadcrumbLabel")}>
-          <button
-            className="link"
+          <Button
+            variant="link"
             onClick={() => setCwd("")}
             disabled={cwd === ""}
             {...dropProps("")}
           >
             {t("files.root")}
-          </button>
+          </Button>
           {segments.map((seg, i) => {
             const target = segments.slice(0, i + 1).join("/");
             return (
               <span key={target} className="files-crumb">
                 <ChevronRight size={14} className="files-crumb-sep" />
-                <button
-                  className="link"
+                <Button
+                  variant="link"
                   onClick={() => setCwd(target)}
                   disabled={i === segments.length - 1}
                   {...dropProps(target)}
                 >
                   {seg}
-                </button>
+                </Button>
               </span>
             );
           })}
@@ -371,22 +372,20 @@ export function Files() {
 
         {canWrite && (
           <div className="files-actions">
-            <button
-              type="button"
-              className="ghost"
+            <Button
+              variant="ghost"
               onClick={() => setCreatingFolder(true)}
               disabled={busy}
             >
               <FolderPlus size={16} /> {t("files.newFolder")}
-            </button>
-            <button
-              type="button"
-              className="ghost"
+            </Button>
+            <Button
+              variant="ghost"
               onClick={() => fileInput.current?.click()}
               disabled={busy}
             >
               <Upload size={16} /> {t("files.upload")}
-            </button>
+            </Button>
             <input
               ref={fileInput}
               type="file"
@@ -445,10 +444,10 @@ export function Files() {
                 >
                   <td className="files-name-cell">
                     {entry.is_dir ? (
-                      <button className="link files-name" onClick={() => setCwd(entry.path)}>
+                      <Button variant="link" className="files-name" onClick={() => setCwd(entry.path)}>
                         <Folder size={16} className="files-icon files-icon-dir" />
                         {entry.name}
-                      </button>
+                      </Button>
                     ) : (
                       <span className="files-name">
                         <FileIcon size={16} className="files-icon" />
@@ -461,40 +460,45 @@ export function Files() {
                   </td>
                   <td className="files-col-actions">
                     {!entry.is_dir && (
-                      <button
-                        className="icon ghost"
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         title={t("files.download")}
                         onClick={() => onDownload(entry)}
                       >
                         <Download size={16} />
-                      </button>
+                      </Button>
                     )}
                     {canWrite && (
                       <>
-                        <button
-                          className="icon ghost"
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           title={t("files.move")}
                           onClick={() => setMovingPick(entry)}
                           disabled={busy}
                         >
                           <FolderInput size={16} />
-                        </button>
-                        <button
-                          className="icon ghost"
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           title={t("files.rename")}
                           onClick={() => setRenaming(entry)}
                           disabled={busy}
                         >
                           <Pencil size={16} />
-                        </button>
-                        <button
-                          className="icon ghost danger"
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="danger"
                           title={t("files.delete")}
                           onClick={() => setDeleting(entry)}
                           disabled={busy}
                         >
                           <Trash2 size={16} />
-                        </button>
+                        </Button>
                       </>
                     )}
                   </td>

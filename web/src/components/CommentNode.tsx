@@ -2,6 +2,7 @@ import { NodeResizer, type NodeProps } from "@xyflow/react";
 import { Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import i18n from "../i18n";
+import { Button } from "./Button";
 
 // CommentNode is an editor-only "frame": a resizable, titled, colored box
 // that sits behind the real nodes to group them visually (#3). It has no
@@ -40,8 +41,7 @@ export function CommentNode({ data, selected }: NodeProps) {
       {/* Drag handles to resize the box; only shown while selected. */}
       <NodeResizer color={color} isVisible={!!selected} minWidth={140} minHeight={90} />
       {selected && d.onRequestDelete && (
-        <button
-          type="button"
+        <Button
           className="dz-frame-delete nodrag nopan"
           aria-label={i18n.t("commentNode.delete")}
           title={i18n.t("commentNode.delete")}
@@ -52,7 +52,7 @@ export function CommentNode({ data, selected }: NodeProps) {
           }}
         >
           <Trash2 size={14} />
-        </button>
+        </Button>
       )}
       <input
         className="dz-frame-title nodrag"

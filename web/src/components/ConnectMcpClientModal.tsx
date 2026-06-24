@@ -3,6 +3,7 @@ import { AlertCircle, Check, Copy, Terminal } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
+import { Button } from "./Button";
 import type { IssuedAPIKey } from "../types";
 
 // ConnectMcpClientModal mints an API key scoped to the current
@@ -198,12 +199,12 @@ function ConfirmStage({
         )}
       </div>
       <div className="settings-foot">
-        <button type="button" onClick={onCancel} disabled={submitting}>
+        <Button type="button" onClick={onCancel} disabled={submitting}>
           {t("connectMcp.cancel")}
-        </button>
-        <button type="button" className="primary" onClick={onCreate} disabled={submitting}>
+        </Button>
+        <Button type="button" variant="primary" onClick={onCreate} disabled={submitting}>
           {submitting ? t("connectMcp.creating") : t("connectMcp.create")}
-        </button>
+        </Button>
       </div>
     </>
   );
@@ -226,7 +227,7 @@ function RevealStage({ issued, onDone }: { issued: IssuedAPIKey; onDone: () => v
         <p className="settings-help">{t("connectMcp.revealHelp")}</p>
         <div className="mcp-client-grid">
           {CLIENTS.map((c) => (
-            <button
+            <Button
               key={c.id}
               type="button"
               className={"mcp-client-card" + (c.id === activeID ? " active" : "")}
@@ -239,13 +240,13 @@ function RevealStage({ issued, onDone }: { issued: IssuedAPIKey; onDone: () => v
                 <span className="mcp-client-name">{t(c.labelKey)}</span>
                 <span className="mcp-client-vendor">{t(c.vendorKey)}</span>
               </span>
-            </button>
+            </Button>
           ))}
         </div>
         <div className="mcp-client-instructions">
           <div className="mcp-os-tabs" role="tablist">
             {OSES.map((o) => (
-              <button
+              <Button
                 key={o}
                 type="button"
                 role="tab"
@@ -262,7 +263,7 @@ function RevealStage({ issued, onDone }: { issued: IssuedAPIKey; onDone: () => v
                   draggable={false}
                 />
                 {t(`connectMcp.os.${o}`)}
-              </button>
+              </Button>
             ))}
           </div>
           <p>{t(active.instructionsKey)}</p>
@@ -320,9 +321,9 @@ function RevealStage({ issued, onDone }: { issued: IssuedAPIKey; onDone: () => v
         </details>
       </div>
       <div className="settings-foot">
-        <button type="button" className="primary" onClick={onDone}>
+        <Button type="button" variant="primary" onClick={onDone}>
           {t("connectMcp.done")}
-        </button>
+        </Button>
       </div>
     </>
   );
@@ -341,14 +342,14 @@ function CopyButton({ text, labelKey }: { text: string; labelKey: string }) {
     }
   };
   return (
-    <button type="button" onClick={copy} style={{ marginTop: "var(--space-2)" }}>
+    <Button type="button" onClick={copy} style={{ marginTop: "var(--space-2)" }}>
       {copied ? (
         <Check size={12} style={{ marginRight: 6 }} />
       ) : (
         <Copy size={12} style={{ marginRight: 6 }} />
       )}
       {copied ? t("connectMcp.copied") : t(labelKey)}
-    </button>
+    </Button>
   );
 }
 

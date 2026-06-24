@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Copy, ExternalLink, RefreshCw, Tv } from "lucide-react";
 import { api, isErrorCode } from "../api";
 import { useAuth } from "../auth";
+import { Button } from "./Button";
 import type { ShareLink } from "../types";
 
 // ShareOverviewModal manages the workspace's single public overview link —
@@ -125,18 +126,18 @@ export function ShareOverviewModal({ onClose }: { onClose: () => void }) {
                   marginTop: "var(--space-3)",
                 }}
               >
-                <button onClick={copy}>
+                <Button onClick={copy}>
                   <Copy size={12} style={{ marginRight: 6 }} />
                   {copied ? t("share.copied") : t("share.copy")}
-                </button>
-                <button
+                </Button>
+                <Button
                   onClick={() =>
                     window.open(publicURL(link), "_blank", "noreferrer")
                   }
                 >
                   <Tv size={12} style={{ marginRight: 6 }} />
                   {t("share.open")}
-                </button>
+                </Button>
               </div>
               <p className="desc" style={{ marginTop: "var(--space-3)" }}>
                 {t("share.warning")}
@@ -155,23 +156,23 @@ export function ShareOverviewModal({ onClose }: { onClose: () => void }) {
         <div className="settings-foot">
           {link ? (
             <>
-              <button onClick={disable} disabled={busy} className="danger">
+              <Button onClick={disable} disabled={busy} variant="danger">
                 {t("share.disable")}
-              </button>
-              <button onClick={create} disabled={busy}>
+              </Button>
+              <Button onClick={create} disabled={busy}>
                 <RefreshCw size={12} style={{ marginRight: 6 }} />
                 {t("share.regenerate")}
-              </button>
+              </Button>
             </>
           ) : (
             !loading && (
-              <button onClick={create} disabled={busy} className="primary">
+              <Button onClick={create} disabled={busy} variant="primary">
                 <ExternalLink size={12} style={{ marginRight: 6 }} />
                 {t("share.create")}
-              </button>
+              </Button>
             )
           )}
-          <button onClick={onClose}>{t("common.close")}</button>
+          <Button onClick={onClose}>{t("common.close")}</Button>
         </div>
       </div>
     </div>,

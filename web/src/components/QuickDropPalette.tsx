@@ -9,6 +9,7 @@ import {
 import { Search, Box } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { iconFor, isBrandedIcon, dropColor } from "../icons";
+import { Button } from "./Button";
 import type { Manifest } from "../types";
 
 type Props = {
@@ -348,9 +349,9 @@ export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAl
           )}
         </div>
         {onShowAll && (
-          <button type="button" className="quick-palette-showall" onClick={onShowAll}>
+          <Button className="quick-palette-showall" onClick={onShowAll}>
             {t("quickPalette.showAll")}
-          </button>
+          </Button>
         )}
         <div className="quick-palette-hint">
           <span>

@@ -17,6 +17,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
+import { Button } from "../components/Button";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import type { VersionStatus } from "../types";
@@ -91,8 +92,7 @@ export function Admin() {
 
       {/* Advanced: integrations + enterprise/infra settings most teams set
           once or never. Collapsed by default; the choice is remembered. */}
-      <button
-        type="button"
+      <Button
         className="admin-advanced-toggle"
         onClick={toggleAdvanced}
         aria-expanded={advancedOpen}
@@ -100,7 +100,7 @@ export function Admin() {
         {advancedOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
         <span className="admin-advanced-label">{t("admin.groupAdvanced")}</span>
         <span className="desc admin-advanced-hint">{t("admin.advancedHint")}</span>
-      </button>
+      </Button>
       {advancedOpen && (
         <div className="admin-grid">
           <AdminCard to="/admin/google" icon={<img src="/brands/google-g.svg" alt="" width={18} height={18} />} title={t("admin.cardGoogleTitle")} desc={t("admin.cardGoogleDesc")} />

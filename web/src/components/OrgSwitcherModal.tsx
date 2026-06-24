@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Check, Download, Plus, Trash2, X } from "lucide-react";
 import { ConfirmModal } from "./ConfirmModal";
+import { Button } from "./Button";
 
 // OrgSwitcherModal is the centered org switcher + create flow, mirroring the
 // ConfigChecklistModal shell (portal to <body>, settings-backdrop/dialog,
@@ -114,14 +115,15 @@ export function OrgSwitcherModal({
       >
         <div className="settings-head">
           <h2 id="org-switcher-title">{t("nav.orgsTitle")}</h2>
-          <button
-            className="icon ghost"
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={onClose}
             disabled={busy}
             aria-label={t("settings.close")}
           >
             <X size={18} />
-          </button>
+          </Button>
         </div>
         <div className="settings-body org-switcher-body">
           <ul className="org-switcher-list">
@@ -129,7 +131,7 @@ export function OrgSwitcherModal({
               const active = org.tenant === activeTenant;
               return (
                 <li key={org.tenant} className="org-switcher-row">
-                  <button
+                  <Button
                     type="button"
                     className={"org-switcher-item" + (active ? " active" : "")}
                     onClick={() => onPick(org.tenant)}
@@ -150,11 +152,13 @@ export function OrgSwitcherModal({
                         aria-hidden="true"
                       />
                     )}
-                  </button>
+                  </Button>
                   {org.deletable && (
-                    <button
+                    <Button
                       type="button"
-                      className="org-switcher-delete icon ghost"
+                      variant="ghost"
+                      size="icon"
+                      className="org-switcher-delete"
                       onClick={() => {
                         setDeleteError(null);
                         setExportState("idle");
@@ -166,7 +170,7 @@ export function OrgSwitcherModal({
                       aria-label={t("nav.orgDeleteAria", { name: org.name })}
                     >
                       <Trash2 size={15} />
-                    </button>
+                    </Button>
                   )}
                 </li>
               );
@@ -191,7 +195,7 @@ export function OrgSwitcherModal({
               />
               {error && <div className="org-switcher-error">{error}</div>}
               <div className="org-switcher-create-actions">
-                <button
+                <Button
                   type="button"
                   onClick={() => {
                     setCreating(false);
@@ -201,26 +205,26 @@ export function OrgSwitcherModal({
                   disabled={busy}
                 >
                   {t("common.cancel")}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
-                  className="primary"
+                  variant="primary"
                   onClick={() => void submit()}
                   disabled={busy || !name.trim()}
                 >
                   {busy ? t("nav.orgCreating") : t("nav.orgCreate")}
-                </button>
+                </Button>
               </div>
             </div>
           ) : (
-            <button
+            <Button
               type="button"
               className="org-switcher-add"
               onClick={() => setCreating(true)}
             >
               <Plus size={16} />
               <span>{t("nav.orgCreate")}</span>
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -233,7 +237,7 @@ export function OrgSwitcherModal({
               {/* Export-first step: download a copy before the irreversible
                   wipe. Offered, not forced — but placed above Delete. */}
               <span className="org-switcher-export">
-                <button
+                <Button
                   type="button"
                   className="org-switcher-export-btn"
                   disabled={busy || exportState === "exporting"}
@@ -253,7 +257,7 @@ export function OrgSwitcherModal({
                     : exportState === "done"
                       ? t("nav.orgExportAgain")
                       : t("nav.orgExport")}
-                </button>
+                </Button>
                 {exportState === "done" && (
                   <span className="org-switcher-export-done">
                     <Check size={14} /> {t("nav.orgExported")}

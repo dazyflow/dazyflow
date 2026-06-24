@@ -30,6 +30,7 @@ import { useAuth } from "../auth";
 import { ActiveFlowContext, FLOWS_CHANGED_EVENT } from "../activeFlow";
 import { shouldShowTenantID } from "../lib/visibleTenant";
 import { tenantDisplayName } from "../lib/orgDisplayName";
+import { Button } from "./Button";
 import { OrgSwitcherModal } from "./OrgSwitcherModal";
 import { ConnectMcpClientModal } from "./ConnectMcpClientModal";
 import { CommandPalette } from "./CommandPalette";
@@ -358,8 +359,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     >
     <div className="app-shell" data-nav-collapsed={navCollapsed ? "true" : "false"}>
       <header className="topbar">
-        <button
-          className="icon ghost hamburger"
+        <Button
+          variant="ghost"
+          size="icon"
+          className="hamburger"
           onClick={toggleNav}
           aria-label={t("nav.toggleNav")}
           aria-expanded={!navCollapsed}
@@ -372,7 +375,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <span className="burger-bar burger-mid" />
             <span className="burger-bar burger-bot" />
           </span>
-        </button>
+        </Button>
         {/* The logo is the home affordance — clicking it lands on the
             start/welcome screen (where no flow is selected), matching
             the sibling `dazy` app's brand-click-goes-home behaviour. */}
@@ -412,21 +415,22 @@ export function AppShell({ children }: { children: ReactNode }) {
             {/* Help: keyboard-shortcuts reference (also on "?"). Hidden on
                 mobile — there's no physical keyboard there, so the shortcuts
                 reference is irrelevant. */}
-            <button
-              type="button"
-              className="icon ghost shortcuts-help"
+            <Button
+              variant="ghost"
+              size="icon"
+              className="shortcuts-help"
               onClick={() => setHelpOpen(true)}
               aria-label={t("shortcuts.title")}
               title={t("shortcuts.title")}
             >
               <HelpCircle size={18} />
-            </button>
+            </Button>
             {/* Org switcher: opens a modal listing the orgs you can act in,
                 with an inline "Create organization" form. Always available so
                 even a single-tenant user can spin up a new org. */}
-            <button
-              type="button"
-              className="ghost org-switcher-trigger"
+            <Button
+              variant="ghost"
+              className="org-switcher-trigger"
               onClick={() => setOrgModalOpen(true)}
               title={t("nav.switchTenant")}
             >
@@ -443,7 +447,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 )}
               </strong>
               <ChevronDown size={12} />
-            </button>
+            </Button>
             {inEditor && openSettings && (
               <FlowMenu onOpenSettings={openSettings} />
             )}
@@ -618,8 +622,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               collapse action so the affordance sits next to the panel it
               controls — the standard pattern in VS Code, Linear, etc.
               Hidden on mobile where the hamburger drives a slide-over. */}
-          <button
-            type="button"
+          <Button
             className="sidebar-collapse-toggle"
             onClick={toggleNav}
             aria-label={
@@ -643,7 +646,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 ? t("nav.expandSidebar")
                 : t("nav.collapseSidebar")}
             </span>
-          </button>
+          </Button>
           {/* Account control pinned to the very bottom of the sidebar —
               the entry point to per-user actions (Settings, Sign out).
               Mirrors the sibling `dazy` app's sidebar-footer account
@@ -662,8 +665,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {/* Scrim behind the mobile drawer — tap to close. Inert on
             desktop (CSS hides it); only interactive on small screens
             while the drawer is open. */}
-        <button
-          type="button"
+        <Button
           className="sidebar-scrim"
           aria-label={t("nav.closeMenu")}
           tabIndex={navCollapsed ? -1 : 0}
@@ -762,9 +764,8 @@ function AccountMenu({
   }, [open]);
   return (
     <div className="account-menu">
-      <button
+      <Button
         ref={triggerRef}
-        type="button"
         className="account-menu-trigger"
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
@@ -775,7 +776,7 @@ function AccountMenu({
         <SettingsIcon size={18} />
         <span className="nav-label account-email">{email}</span>
         <ChevronDown size={14} className="nav-label account-chevron" />
-      </button>
+      </Button>
       {open && pos &&
         createPortal(
           <div
@@ -789,8 +790,7 @@ function AccountMenu({
               right: "auto",
             }}
           >
-            <button
-              type="button"
+            <Button
               role="menuitem"
               className="workspace-pop-row account-pop-row"
               onClick={() => {
@@ -800,14 +800,13 @@ function AccountMenu({
             >
               <SettingsIcon size={14} />
               {t("account.settings")}
-            </button>
+            </Button>
             {/* Connect an assistant — the guided MCP-client flow: mints a
                 personal, workspace-scoped API key and hands back the
                 config snippet for Claude Desktop / Claude Code. Lives here
                 as a per-user action next to Settings (the old Welcome-page
                 entry point was dropped in "Simplify welcome"). */}
-            <button
-              type="button"
+            <Button
               role="menuitem"
               className="workspace-pop-row account-pop-row"
               onClick={() => {
@@ -817,12 +816,11 @@ function AccountMenu({
             >
               <Plug size={14} />
               {t("account.connectMcp")}
-            </button>
+            </Button>
             {/* Usage (plan + consumption) moved out of the primary sidebar
                 into the account menu — it's billing/account info, not a
                 workspace surface a first-time user needs in their face. */}
-            <button
-              type="button"
+            <Button
               role="menuitem"
               className="workspace-pop-row account-pop-row"
               onClick={() => {
@@ -832,10 +830,9 @@ function AccountMenu({
             >
               <Gauge size={14} />
               {t("nav.usage")}
-            </button>
+            </Button>
             {showAdmin && (
-              <button
-                type="button"
+              <Button
                 role="menuitem"
                 className="workspace-pop-row account-pop-row"
                 onClick={() => {
@@ -845,13 +842,13 @@ function AccountMenu({
               >
                 <ShieldCheck size={14} />
                 {t("nav.admin")}
-              </button>
+              </Button>
             )}
             <div className="workspace-pop-sep" role="separator" />
-            <button
-              type="button"
+            <Button
+              variant="danger"
               role="menuitem"
-              className="workspace-pop-row account-pop-row danger"
+              className="workspace-pop-row account-pop-row"
               onClick={() => {
                 setOpen(false);
                 onSignOut();
@@ -859,7 +856,7 @@ function AccountMenu({
             >
               <LogOut size={14} />
               {t("account.signOut")}
-            </button>
+            </Button>
             {/* Version footer — informational, not a menu item. Hidden
                 until the GET /api/v1 fetch resolves. "dev" on an
                 unstamped local build; a release shows e.g. "v0.1.0". */}
@@ -901,9 +898,9 @@ function FlowMenu({ onOpenSettings }: { onOpenSettings: () => void }) {
   }, [open]);
   return (
     <div className="flow-menu" style={{ position: "relative" }}>
-      <button
-        type="button"
-        className="icon ghost"
+      <Button
+        variant="ghost"
+        size="icon"
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
@@ -911,11 +908,10 @@ function FlowMenu({ onOpenSettings }: { onOpenSettings: () => void }) {
         title={t("flowMenu.label")}
       >
         <MoreVertical size={18} />
-      </button>
+      </Button>
       {open && (
         <div className="workspace-pop account-pop" role="menu">
-          <button
-            type="button"
+          <Button
             role="menuitem"
             className="workspace-pop-row account-pop-row"
             onClick={() => {
@@ -925,7 +921,7 @@ function FlowMenu({ onOpenSettings }: { onOpenSettings: () => void }) {
           >
             <SettingsIcon size={14} />
             {t("flowMenu.settings")}
-          </button>
+          </Button>
         </div>
       )}
     </div>
@@ -966,24 +962,25 @@ function VerifyEmailBanner() {
         {sent ? t("verifyEmail.bannerSent") : t("verifyEmail.banner")}
       </div>
       {!sent && (
-        <button
+        <Button
           className="welcome-cta verify-banner-resend"
           disabled={busy}
           onClick={() => void resend()}
         >
           <Send size={14} />
           {busy ? t("verifyEmail.bannerSending") : t("verifyEmail.bannerResend")}
-        </button>
+        </Button>
       )}
-      <button
-        type="button"
-        className="icon-button verify-banner-dismiss"
+      <Button
+        variant="ghost"
+        size="icon"
+        className="verify-banner-dismiss"
         onClick={() => setHidden(true)}
         aria-label={t("verifyEmail.bannerDismiss")}
         title={t("verifyEmail.bannerDismiss")}
       >
         <X size={14} />
-      </button>
+      </Button>
     </div>
   );
 }

@@ -15,6 +15,7 @@ import {
   secondsToWords,
 } from "./nodeCardShared";
 import { JsonEditor, isInvalidJSON } from "./JsonEditor";
+import { Button } from "./Button";
 
 // PICKER_FORMATS are the string-param formats whose value is an opaque
 // resource ID chosen from a dropdown. On the card they render read-only as
@@ -607,15 +608,14 @@ function ParamInput({
     return (
       <span className="dz-token-chip nodrag">
         <span className="dz-token-chip-text">{friendly}</span>
-        <button
-          type="button"
+        <Button
           className="dz-token-chip-x"
           aria-label={i18n.t("tokenChip.clear")}
           title={i18n.t("tokenChip.clear")}
           onClick={() => onChange("")}
         >
           ×
-        </button>
+        </Button>
       </span>
     );
   }

@@ -10,6 +10,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { AlertCircle, Check, Upload as UploadIcon, X } from "lucide-react";
 import { api, APIError } from "./api";
+import { Button } from "./components/Button";
 
 // Uploads lifts file-upload state above the router so an upload keeps
 // running — and keeps showing progress — while the user navigates between
@@ -220,22 +221,26 @@ function UploadsIndicator() {
                 {task.name}
               </span>
               {(task.status === "uploading" || task.status === "queued") && (
-                <button
-                  className="icon ghost upload-x"
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="upload-x"
                   title={t("uploads.cancel")}
                   onClick={() => cancel(task.id)}
                 >
                   <X size={14} />
-                </button>
+                </Button>
               )}
               {(task.status === "done" || task.status === "error" || task.status === "canceled") && (
-                <button
-                  className="icon ghost upload-x"
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="upload-x"
                   title={t("uploads.dismiss")}
                   onClick={() => dismiss(task.id)}
                 >
                   <X size={14} />
-                </button>
+                </Button>
               )}
             </div>
             <div className="upload-row-meta">

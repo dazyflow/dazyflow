@@ -13,6 +13,7 @@ import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import { ConfirmModal } from "../components/ConfirmModal";
+import { Button } from "../components/Button";
 import type { SignupInviteSummary } from "../types";
 import { formatDate } from "../lib/datetime";
 
@@ -98,10 +99,10 @@ function SmtpTestSection() {
           aria-label={t("admin.smtpTest.recipientLabel")}
           style={{ flex: 1 }}
         />
-        <button type="submit" className="primary" disabled={!canSend}>
+        <Button type="submit" variant="primary" disabled={!canSend}>
           <Send size={14} style={{ marginRight: 6 }} />
           {sending ? t("admin.smtpTest.sending") : t("admin.smtpTest.send")}
-        </button>
+        </Button>
       </form>
       {!looksValid && (
         <div className="sub" style={{ color: "var(--danger)", marginTop: "var(--space-1)" }}>
@@ -209,12 +210,12 @@ function SignupInviteSection() {
           aria-label={t("admin.signupInvites.emailLabel")}
           style={{ flex: 1 }}
         />
-        <button type="submit" className="primary" disabled={!canSubmit}>
+        <Button type="submit" variant="primary" disabled={!canSubmit}>
           <UserPlus size={14} style={{ marginRight: 6 }} />
           {submitting
             ? t("admin.signupInvites.inviting")
             : t("admin.signupInvites.invite")}
-        </button>
+        </Button>
       </form>
       {!looksValid && (
         <div className="sub" style={{ color: "var(--danger)", marginTop: "var(--space-1)" }}>
@@ -280,16 +281,16 @@ function SignupInviteIssuedCard({
               : t("admin.signupInvites.createdCopy", { email: inv.email })}
           </div>
         </div>
-        <button onClick={onDismiss} className="ghost" title={t("admin.signupInvites.dismiss")}>
+        <Button onClick={onDismiss} variant="ghost" title={t("admin.signupInvites.dismiss")}>
           <X size={14} />
-        </button>
+        </Button>
       </div>
       <div className="invite-link-row">
         <code className="invite-link">{link}</code>
-        <button onClick={copy} className="primary">
+        <Button onClick={copy} variant="primary">
           {copied ? <Check size={12} /> : <Copy size={12} />}
           {copied ? t("admin.signupInvites.copied") : t("admin.signupInvites.copy")}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -356,21 +357,21 @@ function SignupInviteCard({
         {inv.pending && (
           <div className="invite-link-row">
             <code className="invite-link">{absoluteSignupURL(inv.signup_url)}</code>
-            <button onClick={copy} title={t("admin.signupInvites.copy")}>
+            <Button onClick={copy} title={t("admin.signupInvites.copy")}>
               {copied ? <Check size={12} /> : <Copy size={12} />}
               {copied ? t("admin.signupInvites.copied") : t("admin.signupInvites.copy")}
-            </button>
+            </Button>
           </div>
         )}
       </div>
       <div className="user-card-actions">
         {inv.pending && (
-          <button onClick={() => setConfirmRevoke(true)} disabled={revoking}>
+          <Button onClick={() => setConfirmRevoke(true)} disabled={revoking}>
             <X size={12} style={{ marginRight: 4 }} />
             {revoking
               ? t("admin.signupInvites.revoking")
               : t("admin.signupInvites.revoke")}
-          </button>
+          </Button>
         )}
       </div>
       {confirmRevoke && (

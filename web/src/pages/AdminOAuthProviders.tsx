@@ -3,6 +3,7 @@ import { AlertCircle, Save, Trash2 } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
+import { Button } from "../components/Button";
 import { ServiceIcon } from "../components/ServiceIcon";
 import type { AdminOAuthProvider } from "../types";
 
@@ -183,25 +184,25 @@ function ProviderRow({
       {error && <div className="svc-error">{error}</div>}
 
       <div className="svc-actions">
-        <button className="primary" onClick={save} disabled={saving || !clientID.trim() || !clientSecret.trim()}>
+        <Button variant="primary" onClick={save} disabled={saving || !clientID.trim() || !clientSecret.trim()}>
           <Save size={14} style={{ marginRight: 4 }} />
           {saving ? t("admin.oauth.saving") : t("admin.oauth.save")}
-        </button>
+        </Button>
         {provider.has_persisted && !confirmClear && (
-          <button className="ghost" onClick={() => setConfirmClear(true)}>
+          <Button variant="ghost" onClick={() => setConfirmClear(true)}>
             <Trash2 size={14} style={{ marginRight: 4 }} />
             {t("admin.oauth.clear")}
-          </button>
+          </Button>
         )}
         {confirmClear && (
           <>
             <span className="svc-confirm">{t("admin.oauth.clearConfirm")}</span>
-            <button className="ghost danger" onClick={clear} disabled={clearing}>
+            <Button variant="ghost" className="danger" onClick={clear} disabled={clearing}>
               {clearing ? t("admin.oauth.clearing") : t("admin.oauth.clearYes")}
-            </button>
-            <button className="ghost" onClick={() => setConfirmClear(false)}>
+            </Button>
+            <Button variant="ghost" onClick={() => setConfirmClear(false)}>
               {t("admin.oauth.clearNo")}
-            </button>
+            </Button>
           </>
         )}
       </div>

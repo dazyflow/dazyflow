@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { api, APIError } from "../api";
 import { useAuth } from "../auth";
+import { ButtonLink } from "../components/Button";
 import { CredentialsManager } from "../components/CredentialsManager";
 
 // Secrets is the tenant's credential store: hand-entered values your
@@ -115,9 +116,9 @@ function SetupIncompleteBanner({
       </h2>
       <p>{t("connections.setupIncompleteBody")}</p>
       {href ? (
-        <a className="primary" href={href}>
+        <ButtonLink variant="primary" href={href}>
           {t("connections.setupIncompleteContact")}
-        </a>
+        </ButtonLink>
       ) : (
         <p className="connections-setup-incomplete-fallback">
           {t("connections.setupIncompleteContactGeneric")}

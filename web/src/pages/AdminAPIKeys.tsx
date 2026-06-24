@@ -4,6 +4,7 @@ import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
 import type { APIKeySummary, IssuedAPIKey } from "../types";
+import { Button } from "../components/Button";
 import { IssueKeyModal } from "../components/IssueKeyModal";
 import { RevealSecretModal } from "../components/RevealSecretModal";
 import { formatDate } from "../lib/datetime";
@@ -90,10 +91,10 @@ export function AdminAPIKeys() {
           <div className="sub">{t("admin.apiKeys.subtitle")}</div>
         </div>
         {keys.length > 0 && (
-          <button className="primary" onClick={() => setCreating(true)}>
+          <Button variant="primary" onClick={() => setCreating(true)}>
             <Plus size={14} style={{ marginRight: 6 }} />
             {t("admin.apiKeys.issueKey")}
-          </button>
+          </Button>
         )}
       </div>
 
@@ -109,10 +110,10 @@ export function AdminAPIKeys() {
           <KeyRound size={28} />
           <h2>{t("admin.apiKeys.emptyTitle")}</h2>
           <p>{t("admin.apiKeys.emptyBody")}</p>
-          <button className="primary" onClick={() => setCreating(true)}>
+          <Button variant="primary" onClick={() => setCreating(true)}>
             <Plus size={14} style={{ marginRight: 6 }} />
             {t("admin.apiKeys.issueFirst")}
-          </button>
+          </Button>
         </div>
       )}
 
@@ -235,21 +236,21 @@ function APIKeyRow({
           (confirming ? (
             <span className="inline-confirm">
               {t("admin.apiKeys.revokeReally")}{" "}
-              <button className="danger" onClick={onRevoke}>
+              <Button variant="danger" onClick={onRevoke}>
                 {t("admin.apiKeys.revokeConfirmBtn")}
-              </button>
-              <button className="ghost" onClick={onCancelConfirm}>
+              </Button>
+              <Button variant="ghost" onClick={onCancelConfirm}>
                 {t("admin.apiKeys.cancel")}
-              </button>
+              </Button>
             </span>
           ) : (
-            <button
-              className="ghost"
+            <Button
+              variant="ghost"
               onClick={onConfirm}
               title={t("admin.apiKeys.revokeTitle")}
             >
               <Trash2 size={14} />
-            </button>
+            </Button>
           ))}
         {k.status === "revoked" && (
           <span style={{ color: "var(--muted)", fontSize: "var(--text-sm)" }}>

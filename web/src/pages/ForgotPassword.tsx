@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { Button } from "../components/Button";
 import { api } from "../api";
 
 // ForgotPassword is the "email me a reset link" form. The server is
@@ -60,9 +61,9 @@ export function ForgotPassword() {
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com"
         />
-        <button type="submit" className="primary" disabled={busy || !email.trim()}>
+        <Button type="submit" variant="primary" disabled={busy || !email.trim()}>
           {busy ? t("forgotPassword.submitting") : t("forgotPassword.submit")}
-        </button>
+        </Button>
         <div className="signin-alt">
           <Link to="/signin">{t("forgotPassword.backToSignin")}</Link>
         </div>

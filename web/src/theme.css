@@ -329,7 +329,28 @@ a.ghost:hover {
   text-decoration: none;
 }
 
-button {
+/* ============================================================
+   Buttons — the consolidated system. See components/Button.tsx
+   for the semantic vocabulary. Appearance derives from intent:
+
+     (default)  secondary — neutral, bordered. The plain look.
+     .primary   the one forward/affirmative action. Purple.
+     .ghost     low-emphasis: toolbars, inline row actions.
+     .danger    destructive — red text + red border (outlined).
+     .warning   reversible caution / paused state (amber; see app.css).
+     .link      reads as a text link, in-flow.
+
+   Sizes are density, not meaning: default, .sm (compact),
+   .icon (square icon-only). Modifiers: .btn-block (full width),
+   .icon-text-btn (label collapses to icon on mobile).
+
+   Native <button> gets this skin from the element selector; the
+   .btn class gives anchors (<ButtonLink>) the same chrome. Existing
+   contextual rules (.signin button.primary, …) still match because
+   the variant class names are unchanged.
+   ============================================================ */
+button,
+.btn {
   font-family: inherit;
   font-size: inherit;
   cursor: pointer;
@@ -347,38 +368,119 @@ button {
   padding: var(--space-2) var(--space-3);
   transition: background 120ms, border-color 120ms;
 }
-button:hover:not(:disabled) {
+.btn {
+  text-decoration: none;
+}
+button:hover:not(:disabled),
+.btn:hover {
   background: var(--surface-3);
   border-color: var(--border-strong);
 }
-button:disabled {
+button:disabled,
+.btn[aria-disabled="true"] {
   opacity: 0.55;
   cursor: not-allowed;
 }
-button.primary {
+button.primary,
+.btn.primary {
   background: var(--btn);
   color: #fff;
   border-color: transparent;
   box-shadow: var(--glow-accent);
 }
-button.primary:hover:not(:disabled) {
+button.primary:hover:not(:disabled),
+.btn.primary:hover {
   background: var(--btn-hover);
   box-shadow: var(--glow-accent-hover);
 }
-button.ghost {
+button.ghost,
+.btn.ghost {
   background: transparent;
   border-color: transparent;
 }
-button.ghost:hover:not(:disabled) {
+button.ghost:hover:not(:disabled),
+.btn.ghost:hover {
   background: var(--surface-2);
 }
-button.icon {
+/* Destructive default: red text + red border on a transparent fill. The
+   global rule that was missing — bare .danger buttons used to fall through
+   to the plain gray look. Filled-red is reserved for final confirms in
+   dialogs (.confirm-dialog .settings-foot button.danger, scoped in app.css);
+   .ghost.danger drops the border for quiet inline destructive actions. */
+button.danger,
+.btn.danger {
+  background: transparent;
+  color: var(--danger);
+  border-color: var(--danger);
+}
+button.danger:hover:not(:disabled),
+.btn.danger:hover {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  border-color: var(--danger);
+}
+/* Link variant: chromeless, reads as inline text. */
+button.link,
+.btn.link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  padding: 0;
+}
+button.link:hover:not(:disabled),
+.btn.link:hover {
+  background: none;
+  border-color: transparent;
+  opacity: 0.8;
+}
+button.icon,
+.btn.icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 36px;
   height: 36px;
   padding: 0;
+}
+/* Ghost icon button: muted glyph that lifts to ink on hover — the dense
+   toolbar / row-action affordance (absorbs the old .icon-button). */
+button.ghost.icon,
+.btn.ghost.icon {
+  color: var(--muted);
+}
+button.ghost.icon:hover:not(:disabled),
+.btn.ghost.icon:hover {
+  color: var(--ink);
+}
+/* Destructive ghost icon (trash/remove): muted at rest, red on hover, never a
+   persistent red box — the danger variant's border is suppressed here. */
+button.ghost.icon.danger,
+.btn.ghost.icon.danger {
+  color: var(--muted);
+  background: transparent;
+  border-color: transparent;
+}
+button.ghost.icon.danger:hover:not(:disabled),
+.btn.ghost.icon.danger:hover {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  border-color: transparent;
+}
+/* Compact size for dense rows, chips, and inline actions. */
+button.sm,
+.btn.sm {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-sm);
+}
+button.sm.icon,
+.btn.sm.icon {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+/* Full-width CTA (e.g. stacked under a description on narrow screens). */
+button.btn-block,
+.btn.btn-block {
+  width: 100%;
 }
 
 input,

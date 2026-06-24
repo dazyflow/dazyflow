@@ -4,6 +4,7 @@ import { Activity, ExternalLink, RotateCcw, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
+import { Button } from "../components/Button";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { shouldShowTenantID } from "../lib/visibleTenant";
 import { formatDateTime } from "../lib/datetime";
@@ -281,16 +282,15 @@ export function RunList() {
 
       <div className="run-history-filters" style={{ marginBottom: "var(--space-3)" }}>
         {STATUS_CHIPS.map((c) => (
-          <button
+          <Button
             key={c.labelKey}
-            type="button"
             className={
               "run-filter-chip" + (filter === c.value ? " active" : "")
             }
             onClick={() => setFilter(c.value)}
           >
             {t(c.labelKey)}
-          </button>
+          </Button>
         ))}
       </div>
 
@@ -342,18 +342,18 @@ export function RunList() {
           }}
         >
           <span>{t("runList.selectedCount", { count: selected.size })}</span>
-          <button
-            className="primary"
+          <Button
+            variant="primary"
             onClick={() => setConfirmBulk(true)}
             disabled={retrying}
             style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
           >
             <RotateCcw size={14} />
             {retrying ? t("runList.retrying") : t("runList.retrySelected")}
-          </button>
-          <button className="ghost" onClick={() => setSelected(new Set())} disabled={retrying}>
+          </Button>
+          <Button variant="ghost" onClick={() => setSelected(new Set())} disabled={retrying}>
             {t("runList.clearSelection")}
-          </button>
+          </Button>
         </div>
       )}
 
@@ -484,7 +484,7 @@ export function RunList() {
                   </td>
                   <td style={{ textAlign: "right", paddingRight: 12 }}>
                     {showInbox && (
-                      <button
+                      <Button
                         className="btn-ghost"
                         onClick={() => void retryOne(r.id)}
                         disabled={retrying}
@@ -493,7 +493,7 @@ export function RunList() {
                       >
                         <RotateCcw size={13} />
                         {t("runList.retry")}
-                      </button>
+                      </Button>
                     )}
                     <Link
                       to={`/runs/${encodeURIComponent(r.id)}`}
@@ -518,9 +518,9 @@ export function RunList() {
 
       {hasMore && (
         <div style={{ textAlign: "center", marginTop: "var(--space-4)" }}>
-          <button onClick={loadMore} disabled={loading}>
+          <Button onClick={loadMore} disabled={loading}>
             {loading ? t("common.loading") : t("runList.loadMore")}
-          </button>
+          </Button>
         </div>
       )}
 

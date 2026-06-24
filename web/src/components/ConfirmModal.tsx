@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { Button } from "./Button";
 
 // ConfirmModal is the app's reusable "are you sure?" dialog — a themed
 // replacement for window.confirm(). Use it for any destructive action
@@ -62,17 +63,16 @@ export function ConfirmModal({
         <div className="settings-foot">
           {/* Cancel is the safe default — autofocused so a reflexive
               Enter/Space dismisses rather than confirms a destructive act. */}
-          <button type="button" onClick={onCancel} autoFocus>
+          <Button onClick={onCancel} autoFocus>
             {cancelLabel ?? t("common.cancel")}
-          </button>
-          <button
-            type="button"
-            className={danger ? "danger" : "primary"}
+          </Button>
+          <Button
+            variant={danger ? "danger" : "primary"}
             onClick={onConfirm}
             disabled={confirmDisabled}
           >
             {confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </div>,

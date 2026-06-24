@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { api, APIError, type SecretScope } from "../api";
 import { useAuth } from "../auth";
 import { ConfirmModal } from "./ConfirmModal";
+import { Button } from "./Button";
 
 // CredentialsManager lists hand-entered secrets (DB URLs, API tokens) by name
 // — never value, the daemon has no read-back — with delete buttons and an add
@@ -114,15 +115,16 @@ export function CredentialsManager({
               <code>{n}</code>
               <span className="credentials-set">{t("connections.valueSet")}</span>
               {canWrite && (
-                <button
-                  type="button"
-                  className="icon-button danger"
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="danger"
                   aria-label={t("connections.deleteSecret", { name: n })}
                   title={t("connections.deleteSecret", { name: n })}
                   onClick={() => setPendingDelete(n)}
                 >
                   <Trash2 size={15} />
-                </button>
+                </Button>
               )}
             </li>
           ))}
@@ -153,13 +155,13 @@ export function CredentialsManager({
             autoComplete="off"
             spellCheck={false}
           />
-          <button
+          <Button
             type="submit"
-            className="primary"
+            variant="primary"
             disabled={busy || !name.trim() || !value}
           >
             <Plus size={15} /> {busy ? t("connections.saving") : t("connections.addSecret")}
-          </button>
+          </Button>
         </form>
       )}
       {pendingDelete && (

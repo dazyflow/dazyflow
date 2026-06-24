@@ -18,6 +18,7 @@ import { type TokenLabels, friendlyTokenText } from "./nodeCardShared";
 import { JsonEditor, isInvalidJSON } from "./JsonEditor";
 import { api, APIError } from "../api";
 import { useAuth } from "../auth";
+import { Button } from "./Button";
 
 // SchemaForm renders manifest.params_schema as a typed form. The
 // happy path: a top-level object whose properties resolve to one of
@@ -700,10 +701,9 @@ function OneOfControl({
     <div>
       <div className="sf-mode-toggle" role="tablist">
         {branches.map((b, i) => (
-          <button
+          <Button
             key={i}
-            type="button"
-            className={i === active ? "active" : ""}
+            className={i === active ? "active" : undefined}
             onClick={() => {
               setActive(i);
               // Re-default to match the new shape so the user isn't
@@ -712,7 +712,7 @@ function OneOfControl({
             }}
           >
             {branchLabel(b, i)}
-          </button>
+          </Button>
         ))}
       </div>
       <OneOfBranchInput schema={branch} value={value} onChange={onChange} />
@@ -1150,15 +1150,15 @@ function AccountResourceField({
           wiredName={resolvedName}
         />
       )}
-      <button
-        type="button"
-        className="link-button sf-picker-mode"
+      <Button
+        variant="link"
+        className="sf-picker-mode"
         onClick={() => setManual((m) => !m)}
       >
         {manual
           ? t("schemaForm.resourcePicker.usePicker", { noun: picker.noun })
           : t("schemaForm.resourcePicker.useExpression")}
-      </button>
+      </Button>
     </FieldWrap>
   );
 }
@@ -1299,13 +1299,13 @@ function ResourcePickerField({
             {err}
           </div>
         )}
-        <button
-          type="button"
-          className="ghost resource-picker-toggle"
+        <Button
+          variant="ghost"
+          className="resource-picker-toggle"
           onClick={() => setReloadKey((k) => k + 1)}
         >
           {t("schemaForm.resourcePicker.retry")}
-        </button>
+        </Button>
       </div>
     );
   }
@@ -1449,15 +1449,15 @@ function SuggestField({
           ))}
         </select>
       )}
-      <button
-        type="button"
-        className="link-button sf-picker-mode"
+      <Button
+        variant="link"
+        className="sf-picker-mode"
         onClick={() => setManual((m) => !m)}
       >
         {manual
           ? t("schemaForm.resourcePicker.chooseFromList")
           : t("schemaForm.resourcePicker.useExpression")}
-      </button>
+      </Button>
     </FieldWrap>
   );
 }
@@ -1549,9 +1549,8 @@ function PlainStringField({
           <Braces size={13} className="sf-credential-chip-glyph" />
           <span className="sf-credential-chip-label">{tokenText}</span>
           <span className="sf-credential-chip-actions">
-            <button
-              type="button"
-              className="link-button"
+            <Button
+              variant="link"
               onClick={() => {
                 // Same contract as the secret chip: Replace clears the
                 // value so the input opens empty (no raw ${…} confusion).
@@ -1560,7 +1559,7 @@ function PlainStringField({
               }}
             >
               {t("schemaForm.secretChipReplace")}
-            </button>
+            </Button>
           </span>
         </div>
       </FieldWrap>
@@ -1685,9 +1684,8 @@ function ReferenceMenu({
   // which is developer syntax a non-technical owner can't read. Clicking
   // still inserts the token; we just don't surface it.
   const renderRow = (key: string, label: string, token: string) => (
-    <button
+    <Button
       key={key}
-      type="button"
       role="menuitem"
       className="ref-pop-row"
       onClick={() => {
@@ -1696,14 +1694,14 @@ function ReferenceMenu({
       }}
     >
       <span className="ref-pop-desc">{label}</span>
-    </button>
+    </Button>
   );
 
   return (
     <div className="ref-menu">
-      <button
-        type="button"
-        className="ghost ref-insert-btn"
+      <Button
+        variant="ghost"
+        className="ref-insert-btn"
         onClick={() => {
           setQuery("");
           // Reset a previous transient error so reopening the menu refetches
@@ -1717,7 +1715,7 @@ function ReferenceMenu({
         aria-label={t("schemaForm.refPicker.insert")}
       >
         {"{ }"}
-      </button>
+      </Button>
       {open &&
         createPortal(
           // Portal to <body> so the fixed backdrop escapes the inspector's
@@ -1732,15 +1730,15 @@ function ReferenceMenu({
             >
               <div className="settings-head">
                 <h2>{t("schemaForm.refPicker.title")}</h2>
-                <button
-                  type="button"
-                  className="ghost icon"
+                <Button
+                  variant="ghost"
+                  size="icon"
                   onClick={() => setOpen(false)}
                   aria-label={t("common.close")}
                   title={t("common.close")}
                 >
                   <X size={16} />
-                </button>
+                </Button>
               </div>
               <div className="ref-dialog-search">
                 <input
@@ -1763,13 +1761,12 @@ function ReferenceMenu({
                 {error && (
                   <div className="ref-pop-msg ref-pop-error">
                     <span>{error}</span>{" "}
-                    <button
-                      type="button"
-                      className="link-button"
+                    <Button
+                      variant="link"
                       onClick={() => setError(null)}
                     >
                       {t("common.retry")}
-                    </button>
+                    </Button>
                   </div>
                 )}
                 {!groups && !error && !hasExtra && (
@@ -1836,9 +1833,9 @@ function TenantSecretChip({
         >
           {t("schemaForm.secretChipSetUp")}
         </Link>
-        <button type="button" className="link-button" onClick={onReplace}>
+        <Button variant="link" onClick={onReplace}>
           {t("schemaForm.secretChipReplace")}
-        </button>
+        </Button>
       </span>
     </div>
   );
@@ -1961,20 +1958,20 @@ function DictField({
             value={v}
             onChange={(nv) => updateAt(idx, k, nv)}
           />
-          <button
-            type="button"
-            className="ghost sf-remove"
+          <Button
+            variant="ghost"
+            className="sf-remove"
             onClick={() => removeAt(idx)}
             aria-label={t("schemaForm.remove")}
           >
             <X size={14} />
-          </button>
+          </Button>
         </div>
       ))}
-      <button type="button" className="sf-add" onClick={addEmpty}>
+      <Button size="sm" className="sf-add" onClick={addEmpty}>
         <Plus size={12} style={{ marginRight: 4 }} />
         {t("schemaForm.add")}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -2010,20 +2007,20 @@ function ArrayField({
             value={v}
             onChange={(nv) => updateAt(idx, nv)}
           />
-          <button
-            type="button"
-            className="ghost sf-remove"
+          <Button
+            variant="ghost"
+            className="sf-remove"
             onClick={() => removeAt(idx)}
             aria-label={t("schemaForm.remove")}
           >
             <X size={14} />
-          </button>
+          </Button>
         </div>
       ))}
-      <button type="button" className="sf-add" onClick={addEmpty}>
+      <Button size="sm" className="sf-add" onClick={addEmpty}>
         <Plus size={12} style={{ marginRight: 4 }} />
         {t("schemaForm.add")}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -2080,13 +2077,12 @@ function MultiSelectField({
           {customs.map((c) => (
             <span key={c} className="sf-multiselect-chip">
               {c}
-              <button
-                type="button"
+              <Button
                 onClick={() => toggle(c)}
                 aria-label={t("schemaForm.remove")}
               >
                 <X size={12} />
-              </button>
+              </Button>
             </span>
           ))}
         </div>
@@ -2104,10 +2100,10 @@ function MultiSelectField({
             }
           }}
         />
-        <button type="button" className="sf-add" onClick={addCustom}>
+        <Button size="sm" className="sf-add" onClick={addCustom}>
           <Plus size={12} style={{ marginRight: 4 }} />
           {t("schemaForm.add")}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -2286,33 +2282,33 @@ function MappingField({
               true,
             )
           )}
-          <button
-            type="button"
-            className="ghost sf-remove"
+          <Button
+            variant="ghost"
+            className="sf-remove"
             onClick={() => remove(i)}
             aria-label={t("schemaForm.remove")}
           >
             <X size={14} />
-          </button>
+          </Button>
         </div>
       ))}
       <div className="mapping-actions">
-        <button
-          type="button"
+        <Button
+          size="sm"
           className="sf-add"
           onClick={() => commit([...rows, { column: "", source: "" }])}
         >
           <Plus size={12} style={{ marginRight: 4 }} />
           {t("schemaForm.mapping.add")}
-        </button>
+        </Button>
         {autoPairs.length > 0 && (
-          <button
-            type="button"
+          <Button
+            size="sm"
             className="sf-add mapping-automap"
             onClick={() => commit([...rows, ...autoPairs])}
           >
             {t("schemaForm.mapping.autoMap", { count: autoPairs.length })}
-          </button>
+          </Button>
         )}
       </div>
       {/* Guidance for the empty-state gotchas: no sheet chosen, or the chosen
@@ -2614,8 +2610,7 @@ function RowConditionField({
           onChange={(e) => onChange(e.target.value)}
           style={{ resize: "vertical", width: "100%", fontFamily: "monospace" }}
         />
-        <button
-          type="button"
+        <Button
           className="sf-rowcond-toggle"
           onClick={() => {
             const p = parseRowCEL(value);
@@ -2631,7 +2626,7 @@ function RowConditionField({
           }}
         >
           {t("schemaForm.rowCond.useSimple")}
-        </button>
+        </Button>
         {tooAdvanced && (
           <div className="desc sf-rowcond-warn" role="status">
             {t("schemaForm.rowCond.tooAdvanced")}
@@ -2681,28 +2676,26 @@ function RowConditionField({
                 style={{ flex: "1 1 0" }}
               />
             )}
-            <button
-              type="button"
+            <Button
               aria-label={t("schemaForm.rowCond.removeCondition")}
               onClick={() => removeCond(i)}
               className="sf-rowcond-remove"
             >
               <X size={14} />
-            </button>
+            </Button>
           </div>
         );
       })}
       <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-        <button type="button" className="sf-rowcond-add" onClick={addCond}>
+        <Button className="sf-rowcond-add" onClick={addCond}>
           <Plus size={14} /> {t("schemaForm.rowCond.addCondition")}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
           className="sf-rowcond-toggle"
           onClick={() => setAdvanced(true)}
         >
           {t("schemaForm.rowCond.advanced")}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -2915,15 +2908,15 @@ function AccountField({
   if (options.length === 0) {
     return (
       <div>
-        <button
-          type="button"
-          className="primary sf-account-connect-cta"
+        <Button
+          variant="primary"
+          className="sf-account-connect-cta"
           onClick={onConnect}
         >
           {providerLabel
             ? t("schemaForm.accountConnectProvider", { provider: providerLabel })
             : t("schemaForm.accountConnect")}
-        </button>
+        </Button>
       </div>
     );
   }
@@ -2941,9 +2934,9 @@ function AccountField({
           </option>
         ))}
       </select>
-      <button type="button" className="link-button sf-account-connect" onClick={onConnect}>
+      <Button variant="link" className="sf-account-connect" onClick={onConnect}>
         {t("schemaForm.accountConnectAnother")}
-      </button>
+      </Button>
     </div>
   );
 }

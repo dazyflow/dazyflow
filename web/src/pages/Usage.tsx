@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AlertCircle, Gauge, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { Button } from "../components/Button";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
 import type { BillingInfo, UsageCounters } from "../types";
@@ -131,15 +132,15 @@ export function Usage() {
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               {billing.can_upgrade && (
-                <button className="primary" disabled={redirecting} onClick={() => void goToStripe("checkout")}>
+                <Button variant="primary" disabled={redirecting} onClick={() => void goToStripe("checkout")}>
                   <Sparkles size={14} style={{ marginRight: 6 }} />
                   {t("usage.upgrade")}
-                </button>
+                </Button>
               )}
               {billing.can_manage && (
-                <button className="ghost" disabled={redirecting} onClick={() => void goToStripe("portal")}>
+                <Button variant="ghost" disabled={redirecting} onClick={() => void goToStripe("portal")}>
                   {t("usage.manageBilling")}
-                </button>
+                </Button>
               )}
             </div>
           </div>

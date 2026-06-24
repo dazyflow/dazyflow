@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Trans, useTranslation } from "react-i18next";
 import { AlertCircle, Mail, ShieldCheck } from "lucide-react";
+import { Button } from "../components/Button";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import type { InvitationDetails } from "../types";
@@ -142,9 +143,9 @@ export function AcceptInvite() {
         )}
 
         {usable && signedInAsRight && (
-          <button className="primary" onClick={accept} disabled={accepting}>
+          <Button variant="primary" onClick={accept} disabled={accepting}>
             {accepting ? t("acceptInvite.accepting") : t("acceptInvite.accept")}
-          </button>
+          </Button>
         )}
         {usable && signedInAsOther && (
           <div className="card" style={{ color: "var(--danger)" }}>
@@ -156,13 +157,12 @@ export function AcceptInvite() {
             {/* Escape hatch: sign out so the recipient can sign in as the
                 invited address, instead of being stuck on this message. */}
             <div style={{ marginTop: "var(--space-3)" }}>
-              <button
-                type="button"
-                className="primary"
+              <Button
+                variant="primary"
                 onClick={() => void signOut()}
               >
                 {t("acceptInvite.signOutToSwitch")}
-              </button>
+              </Button>
             </div>
           </div>
         )}

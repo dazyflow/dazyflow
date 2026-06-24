@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
+import { Button } from "./Button";
 
 // ShortcutsModal is the keyboard-shortcuts reference behind the header's
 // help button and the "?" key — the discoverability surface pro tools have
@@ -58,14 +59,14 @@ export function ShortcutsModal({ onClose }: { onClose: () => void }) {
       >
         <div className="settings-head">
           <h2>{t("shortcuts.title")}</h2>
-          <button
-            type="button"
-            className="icon-button"
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={onClose}
             aria-label={t("common.close")}
           >
             <X size={16} />
-          </button>
+          </Button>
         </div>
         <div className="settings-body">
           <div className="shortcut-group-label">{t("shortcuts.general")}</div>

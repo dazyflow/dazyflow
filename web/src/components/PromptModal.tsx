@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { Button } from "./Button";
 
 // PromptModal is the app's themed replacement for window.prompt() — a
 // single-line text input in the standard settings-dialog chrome. Used for
@@ -82,12 +83,12 @@ export function PromptModal({
           </div>
         </div>
         <div className="settings-foot">
-          <button type="button" onClick={onCancel}>
+          <Button onClick={onCancel}>
             {t("common.cancel")}
-          </button>
-          <button type="submit" className="primary" disabled={!value.trim()}>
+          </Button>
+          <Button type="submit" variant="primary" disabled={!value.trim()}>
             {confirmLabel}
-          </button>
+          </Button>
         </div>
       </form>
     </div>,

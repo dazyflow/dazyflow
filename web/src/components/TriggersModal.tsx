@@ -18,6 +18,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { Switch } from "./Switch";
 import { ConfirmModal } from "./ConfirmModal";
+import { Button } from "./Button";
 import { webhookKeys } from "../flowStatus";
 import { formatDateTime } from "../lib/datetime";
 
@@ -41,10 +42,10 @@ function TriggerEmpty({
       <Icon size={28} className="trigger-empty-icon" />
       <div className="trigger-empty-title">{title}</div>
       <div className="desc">{desc}</div>
-      <button className="primary" onClick={onAdd} style={{ marginTop: 12 }}>
+      <Button variant="primary" onClick={onAdd} style={{ marginTop: 12 }}>
         <Plus size={14} style={{ marginRight: 6 }} />
         {cta}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -208,15 +209,14 @@ export function WebhookTab({
             in the node Inspector the trigger IS the node, so a trash button
             here would do nothing. */}
         {onRemove && (
-          <button
-            type="button"
-            className="ghost"
+          <Button
+            variant="ghost"
             onClick={onRemove}
             aria-label={t("settings.triggers.removeAria")}
             title={t("triggers.webhook.removeTitle")}
           >
             <Trash2 size={14} />
-          </button>
+          </Button>
         )}
       </div>
       {/* The address first — it's the one thing every caller needs and
@@ -405,15 +405,14 @@ function useCopyButton(value: string) {
     }
   };
   return (extraClass?: string) => (
-    <button
-      type="button"
+    <Button
       className={"dz-code-btn" + (extraClass ? " " + extraClass : "")}
       onClick={copy}
       title={t("settings.triggers.copyTitle")}
     >
       {copied ? <Check size={13} /> : <Copy size={13} />}
       <span>{copied ? t("settings.triggers.copied") : t("settings.triggers.copy")}</span>
-    </button>
+    </Button>
   );
 }
 
@@ -513,22 +512,22 @@ function WebhookKeys({
             key={i}
             value={k}
             trailing={
-              <button
-                type="button"
-                className="dz-code-btn dz-code-btn-danger"
+              <Button
+                variant="danger"
+                className="dz-code-btn"
                 onClick={() => setPendingRevoke(i)}
                 title={t("settings.triggers.revokeTitle")}
               >
                 <Trash2 size={13} />
                 <span>{t("settings.triggers.revoke")}</span>
-              </button>
+              </Button>
             }
           />
         ))}
       </div>
-      <button
-        type="button"
-        className="ghost webhook-keys-add"
+      <Button
+        variant="ghost"
+        className="webhook-keys-add"
         onClick={addKey}
         title={t("settings.triggers.generateTitle")}
       >
@@ -536,7 +535,7 @@ function WebhookKeys({
         {keys.length === 0
           ? t("settings.triggers.generate")
           : t("settings.triggers.generateAnother")}
-      </button>
+      </Button>
       <div className="desc">
         <Trans i18nKey="settings.triggers.bearerSecretDesc" components={[<code />]} />
       </div>

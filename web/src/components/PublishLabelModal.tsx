@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Rocket } from "lucide-react";
+import { Button } from "./Button";
 
 // PublishLabelModal confirms a publish / go-live and nudges the user to give
 // the release an optional name. The name field is always offered but never
@@ -71,13 +72,13 @@ export function PublishLabelModal({
           <p className="confirm-message">{message}</p>
         </div>
         <div className="settings-foot">
-          <button type="button" onClick={() => onPublish("")}>
+          <Button onClick={() => onPublish("")}>
             {t("editor.publishWithoutName")}
-          </button>
-          <button type="button" className="primary" onClick={() => onPublish(value.trim())}>
+          </Button>
+          <Button variant="primary" onClick={() => onPublish(value.trim())}>
             <Rocket size={14} style={{ marginRight: 5 }} />
             {confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </div>,

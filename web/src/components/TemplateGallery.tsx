@@ -9,6 +9,7 @@ import {
   oauthProviderForIntegration,
 } from "../integrationMeta";
 import { browserTimeZone } from "./TriggersModal";
+import { Button } from "./Button";
 import type { Graph, OAuthProviderStatus, TemplateSummary } from "../types";
 
 // TemplateGallery is the reusable card grid of pre-built workflows. It
@@ -208,9 +209,8 @@ export function TemplateGallery() {
                 })
               : t("templates.filteredBy", { category: categoryFilter })}
           </span>
-          <button
-            type="button"
-            className="ghost"
+          <Button
+            variant="ghost"
             onClick={() => {
               searchParams.delete("category");
               searchParams.delete("template");
@@ -218,7 +218,7 @@ export function TemplateGallery() {
             }}
           >
             {t("templates.showAll")}
-          </button>
+          </Button>
         </div>
       )}
       {error && <div className="card error" style={{ marginBottom: 12 }}>{error}</div>}
@@ -274,9 +274,9 @@ export function TemplateGallery() {
                       })}
                     </p>
                   )}
-                  <button
-                    type="button"
-                    className="primary template-cta"
+                  <Button
+                    variant="primary"
+                    className="template-cta"
                     onClick={() => useTemplate(tpl)}
                     disabled={busy !== null || adminBlocked || !canEdit}
                     title={
@@ -290,7 +290,7 @@ export function TemplateGallery() {
                     }
                   >
                     {busy === tpl.id ? t("templates.forking") : t("templates.useTemplate")}
-                  </button>
+                  </Button>
                 </div>
               );
             })}

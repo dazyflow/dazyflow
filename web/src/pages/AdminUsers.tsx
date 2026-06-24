@@ -17,6 +17,7 @@ import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
 import { ConfirmModal } from "../components/ConfirmModal";
+import { Button } from "../components/Button";
 import type {
   InvitationSummary,
   MemberSummary,
@@ -94,10 +95,10 @@ export function AdminUsers() {
           </h1>
           <div className="sub">{t("admin.users.subtitle")}</div>
         </div>
-        <button className="primary" onClick={() => setInviting(true)}>
+        <Button variant="primary" onClick={() => setInviting(true)}>
           <Plus size={14} style={{ marginRight: 6 }} />
           {t("admin.users.inviteButton")}
-        </button>
+        </Button>
       </div>
 
       {error && (
@@ -125,10 +126,10 @@ export function AdminUsers() {
           <Users size={28} />
           <h2>{t("admin.users.emptyTitle")}</h2>
           <p>{t("admin.users.emptyBody")}</p>
-          <button className="primary" onClick={() => setInviting(true)}>
+          <Button variant="primary" onClick={() => setInviting(true)}>
             <Plus size={14} style={{ marginRight: 6 }} />
             {t("admin.users.inviteFirst")}
-          </button>
+          </Button>
         </div>
       )}
       <div className="user-list">
@@ -328,10 +329,10 @@ function MemberCard({
           </select>
         )}
         {!member.home && (
-          <button onClick={remove} disabled={removing} title={t("admin.users.removeTitle")}>
+          <Button onClick={remove} disabled={removing} title={t("admin.users.removeTitle")}>
             <Trash2 size={12} style={{ marginRight: 4 }} />
             {removing ? t("admin.users.removing") : t("admin.users.remove")}
-          </button>
+          </Button>
         )}
       </div>
       {err && (
@@ -444,19 +445,19 @@ function InvitationCard({
         {inv.pending && (
           <div className="invite-link-row">
             <code className="invite-link">{absoluteInviteURL(inv.accept_url)}</code>
-            <button onClick={copy} title={t("admin.users.copyLink")}>
+            <Button onClick={copy} title={t("admin.users.copyLink")}>
               {copied ? <Check size={12} /> : <Copy size={12} />}
               {copied ? t("admin.users.copied") : t("admin.users.copy")}
-            </button>
+            </Button>
           </div>
         )}
       </div>
       <div className="user-card-actions">
         {inv.pending && (
-          <button onClick={() => setConfirmRevoke(true)} disabled={revoking}>
+          <Button onClick={() => setConfirmRevoke(true)} disabled={revoking}>
             <X size={12} style={{ marginRight: 4 }} />
             {revoking ? t("admin.users.revoking") : t("admin.users.revoke")}
-          </button>
+          </Button>
         )}
       </div>
       {confirmRevoke && (
@@ -510,16 +511,16 @@ function InviteIssuedCard({
             {t("admin.users.inviteCreatedBody", { email: inv.email })}
           </div>
         </div>
-        <button onClick={onDismiss} className="ghost" title={t("admin.users.dismiss")}>
+        <Button onClick={onDismiss} variant="ghost" title={t("admin.users.dismiss")}>
           <X size={14} />
-        </button>
+        </Button>
       </div>
       <div className="invite-link-row">
         <code className="invite-link">{link}</code>
-        <button onClick={copy} className="primary">
+        <Button onClick={copy} variant="primary">
           {copied ? <Check size={12} /> : <Copy size={12} />}
           {copied ? t("admin.users.copied") : t("admin.users.copyLink")}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -646,12 +647,12 @@ function InviteModal({
           </div>
         </div>
         <div className="settings-foot">
-          <button type="button" onClick={onCancel}>
+          <Button type="button" onClick={onCancel}>
             {t("admin.users.cancel")}
-          </button>
-          <button type="submit" className="primary" disabled={!canSubmit}>
+          </Button>
+          <Button type="submit" variant="primary" disabled={!canSubmit}>
             {submitting ? t("admin.users.sending") : t("admin.users.sendInvite")}
-          </button>
+          </Button>
         </div>
       </form>
     </div>

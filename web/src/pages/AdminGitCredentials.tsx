@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { KeyRound, Plus, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { Button } from "../components/Button";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import type { GitCredential } from "../types";
@@ -129,14 +130,14 @@ export function AdminGitCredentials() {
                       .join(" · ")}
                   </td>
                   <td style={{ textAlign: "right", paddingRight: 12 }}>
-                    <button
+                    <Button
                       className="btn-ghost"
                       onClick={() => void remove(c.account)}
                       title={t("gitCreds.delete")}
                       style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
                     >
                       <Trash2 size={14} />
-                    </button>
+                    </Button>
                   </td>
                 </tr>
               ))}
@@ -216,10 +217,10 @@ export function AdminGitCredentials() {
           <div className="desc">{t("gitCreds.knownHostsDesc")}</div>
         </div>
 
-        <button className="primary" disabled={!canSave} onClick={() => void save()}>
+        <Button variant="primary" disabled={!canSave} onClick={() => void save()}>
           <Plus size={15} style={{ marginRight: 4 }} />
           {saving ? t("gitCreds.saving") : t("gitCreds.saveBtn")}
-        </button>
+        </Button>
         <div className="desc" style={{ marginTop: 6 }}>{t("gitCreds.atLeastOne")}</div>
       </div>
     </div>

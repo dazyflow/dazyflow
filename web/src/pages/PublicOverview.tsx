@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Maximize, Minimize } from "lucide-react";
 import { api, isErrorCode } from "../api";
+import { Button } from "../components/Button";
 import { FlowIcon } from "../icons";
 import { formatRelative } from "../lib/datetime";
 import type { PublicOverview as PublicOverviewData } from "../types";
@@ -120,14 +121,13 @@ export function PublicOverview() {
             <span className="status-dot running" />
             {stale ? t("tv.reconnecting") : t("tv.live")}
           </span>
-          <button
-            type="button"
+          <Button
             className="tv-fs"
             onClick={toggleFullscreen}
             title={t("tv.fullscreen")}
           >
             {fullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
-          </button>
+          </Button>
         </div>
       </header>
 

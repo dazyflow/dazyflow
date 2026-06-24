@@ -15,6 +15,7 @@ import { useAuth } from "../auth";
 import { api } from "../api";
 import { formatRelative, formatDateTime } from "../lib/datetime";
 import { ShareOverviewModal } from "../components/ShareOverviewModal";
+import { Button } from "../components/Button";
 import type { FlowSummary, PendingApproval, RunSummary } from "../types";
 
 // Dashboard is the workspace overview — the "is everything healthy?" landing
@@ -102,15 +103,14 @@ export function Dashboard() {
           </div>
         </div>
         <div className="dash-title-actions">
-          <button
-            type="button"
+          <Button
             className="dash-share"
             onClick={() => setShareOpen(true)}
             title={t("share.title")}
           >
             <Share2 size={16} style={{ marginRight: 6 }} />
             {t("share.action")}
-          </button>
+          </Button>
           <Link to="/flows/new" className="primary dash-new">
             <Plus size={16} style={{ marginRight: 6 }} />
             {t("flowList.newFlow")}

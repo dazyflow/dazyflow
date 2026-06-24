@@ -3,6 +3,7 @@ import { Trans, useTranslation } from "react-i18next";
 import { Check, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
+import { Button } from "../components/Button";
 import type { GoogleAccountsResponse } from "../types";
 
 // AdminGoogle is the org-admin page for managing the organization's shared
@@ -138,16 +139,16 @@ export function AdminGoogle() {
           <p className="desc">{t("admin.google.subtitle")}</p>
         </div>
         {!notConfigured && (
-          <button
-            type="button"
-            className="primary icon-text-btn"
+          <Button
+            variant="primary"
+            className="icon-text-btn"
             onClick={() => setConnectOpen(true)}
             disabled={busy}
             title={t("admin.google.connectAnother")}
           >
             <Plus size={15} />
             <span className="btn-label">{t("admin.google.connectAnother")}</span>
-          </button>
+          </Button>
         )}
       </div>
 
@@ -176,26 +177,26 @@ export function AdminGoogle() {
               <div className="google-account-head">
                 <span className="google-account-name">{acc.account}</span>
                 <span className="google-account-actions">
-                  <button
-                    type="button"
-                    className="ghost icon-text-btn"
+                  <Button
+                    variant="ghost"
+                    className="icon-text-btn"
                     onClick={() => void authorize(acc.account)}
                     disabled={busy}
                     title={t("admin.google.reconnectHint")}
                   >
                     <RefreshCw size={14} />
                     <span className="btn-label">{t("admin.google.reconnect")}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="ghost danger icon-text-btn"
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="danger icon-text-btn"
                     onClick={() => setPendingDisconnect(acc.account)}
                     disabled={busy}
                     title={t("admin.google.disconnect")}
                   >
                     <Trash2 size={14} />
                     <span className="btn-label">{t("admin.google.disconnect")}</span>
-                  </button>
+                  </Button>
                 </span>
               </div>
               <div className="google-coverage">
@@ -211,14 +212,14 @@ export function AdminGoogle() {
                       </span>
                       <span className="google-coverage-svc">{svc}</span>
                       {!granted && (
-                        <button
-                          type="button"
-                          className="ghost google-add-perm"
+                        <Button
+                          variant="ghost"
+                          className="google-add-perm"
                           onClick={() => void authorize(acc.account, svc)}
                           disabled={busy}
                         >
                           {t("admin.google.addPermission")}
-                        </button>
+                        </Button>
                       )}
                     </div>
                   );
@@ -309,12 +310,12 @@ function ConnectAccountDialog({
           </div>
         </div>
         <div className="settings-foot">
-          <button type="button" onClick={onCancel}>
+          <Button onClick={onCancel}>
             {t("admin.google.cancel")}
-          </button>
-          <button type="submit" className="primary" disabled={busy}>
+          </Button>
+          <Button type="submit" variant="primary" disabled={busy}>
             {t("admin.google.connect")}
-          </button>
+          </Button>
         </div>
       </form>
     </div>
@@ -350,12 +351,12 @@ function ConfirmDisconnectDialog({
           <p className="desc">{t("admin.google.disconnectConfirm", { account })}</p>
         </div>
         <div className="settings-foot">
-          <button type="button" onClick={onCancel}>
+          <Button onClick={onCancel}>
             {t("admin.google.cancel")}
-          </button>
-          <button type="button" className="danger" disabled={busy} onClick={onConfirm}>
+          </Button>
+          <Button variant="danger" disabled={busy} onClick={onConfirm}>
             {t("admin.google.disconnect")}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

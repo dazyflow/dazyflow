@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import { Button } from "./Button";
 
 // ApprovalPanel is the inline approve/reject control shown in the Inspector
 // when the selected node is an await_approval step parked in "awaiting". It
@@ -70,12 +71,12 @@ export function ApprovalPanel({
         />
       </div>
       <div style={{ display: "flex", gap: 8 }}>
-        <button className="primary" disabled={!!busy || !token} onClick={resolve("approve")}>
+        <Button variant="primary" disabled={!!busy || !token} onClick={resolve("approve")}>
           {busy === "approve" ? t("inspector.approving") : t("inspector.approve")}
-        </button>
-        <button className="ghost" disabled={!!busy || !token} onClick={resolve("reject")}>
+        </Button>
+        <Button variant="ghost" disabled={!!busy || !token} onClick={resolve("reject")}>
           {busy === "reject" ? t("inspector.rejecting") : t("inspector.reject")}
-        </button>
+        </Button>
       </div>
       {error && (
         <div style={{ color: "var(--danger)", fontSize: "var(--text-sm)", marginTop: 6 }}>

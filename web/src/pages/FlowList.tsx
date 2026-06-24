@@ -4,6 +4,7 @@ import { Plus, Workflow, Lock, Clock, Pause, Play, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
+import { Button } from "../components/Button";
 import { FlowIcon, isBrandedIcon } from "../icons";
 import { FlowStatusChip } from "../components/FlowStatusChip";
 import { RunSparkline } from "../components/RunSparkline";
@@ -225,15 +226,15 @@ export function FlowList() {
           <h1>{t("flowList.title")}</h1>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button
-            className="primary"
+          <Button
+            variant="primary"
             onClick={() => navigate("/flows/new")}
             disabled={!canEdit}
             title={!canEdit ? t("flowList.needEdit") : undefined}
           >
             <Plus size={16} style={{ marginRight: 6 }} />
             {t("flowList.newFlow")}
-          </button>
+          </Button>
         </div>
       </div>
       {loading && <div className="card">{t("common.loading")}</div>}
@@ -244,15 +245,14 @@ export function FlowList() {
           <h2>{t("flowList.emptyTitle")}</h2>
           <p>{t("flowList.emptyBody")}</p>
           <div className="flow-empty-actions">
-            <button
-              type="button"
-              className="primary"
+            <Button
+              variant="primary"
               onClick={() => navigate("/flows/new")}
               disabled={!canEdit}
               title={!canEdit ? t("flowList.needEdit") : undefined}
             >
               {t("flowList.emptyCreateCta")}
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -445,8 +445,7 @@ function FlowScheduleChip({
       <Clock size={12} className="flow-schedule-icon" />
       <span className="flow-schedule-status">{statusText}</span>
       {showToggle && (
-        <button
-          type="button"
+        <Button
           className="flow-schedule-toggle"
           disabled={busy}
           title={resume ? t("schedules.resume") : t("schedules.pause")}
@@ -458,7 +457,7 @@ function FlowScheduleChip({
         >
           {resume ? <Play size={12} /> : <Pause size={12} />}
           {resume ? t("schedules.resume") : t("schedules.pause")}
-        </button>
+        </Button>
       )}
     </div>
   );

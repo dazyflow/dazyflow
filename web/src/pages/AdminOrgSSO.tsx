@@ -3,6 +3,7 @@ import { AlertCircle, Check, Copy, ShieldCheck } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
+import { Button } from "../components/Button";
 import { ServiceIcon, serviceLabel } from "../components/ServiceIcon";
 import type { OrgAuthConfig } from "../types";
 
@@ -38,14 +39,14 @@ function RedirectURIDisplay({ uri }: { uri: string }) {
   return (
     <div className="sso-readonly-row">
       <code className="sso-readonly">{uri}</code>
-      <button type="button" onClick={copy} className="sso-copy-btn">
+      <Button onClick={copy} className="sso-copy-btn">
         {copied ? (
           <Check size={12} style={{ marginRight: 6 }} />
         ) : (
           <Copy size={12} style={{ marginRight: 6 }} />
         )}
         {copied ? t("admin.sso.copyRedirectDone") : t("admin.sso.copyRedirect")}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -406,13 +407,13 @@ export function AdminOrgSSO() {
             </div>
             <div className="sso-foot-actions">
               {enabled && (
-                <button type="button" onClick={disable}>
+                <Button onClick={disable}>
                   {t("admin.sso.disable")}
-                </button>
+                </Button>
               )}
-              <button type="submit" className="primary" disabled={saving}>
+              <Button type="submit" variant="primary" disabled={saving}>
                 {saving ? t("admin.sso.saving") : t("admin.sso.save")}
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -427,9 +428,8 @@ export function AdminOrgSSO() {
                 />
               </div>
               <div className="sso-test-row">
-                <button
-                  type="button"
-                  className="primary"
+                <Button
+                  variant="primary"
                   onClick={() => {
                     // window.open returns null when the browser blocks
                     // the popup (common with strict popup-blocker
@@ -441,7 +441,7 @@ export function AdminOrgSSO() {
                   }}
                 >
                   {t("admin.sso.testButton")}
-                </button>
+                </Button>
                 <div className="desc">{t("admin.sso.testButtonDesc")}</div>
                 {popupBlocked && (
                   <div className="sso-popup-blocked">

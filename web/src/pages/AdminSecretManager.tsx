@@ -4,6 +4,7 @@ import { Trans, useTranslation } from "react-i18next";
 import { api, APIError } from "../api";
 import { useAuth } from "../auth";
 import { ConfirmModal } from "../components/ConfirmModal";
+import { Button } from "../components/Button";
 import type {
   AwsSecretManagerConfig,
   AwsSecretManagerStatus,
@@ -165,19 +166,20 @@ export function AdminSecretManager() {
           </div>
           {canWrite && (
             <div className="secret-manager-actions">
-              <button type="button" className="ghost" onClick={startEdit}>
+              <Button variant="ghost" onClick={startEdit}>
                 {t("connections.secretManager.edit")}
-              </button>
-              <button
-                type="button"
-                className="icon-button danger"
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="danger"
                 onClick={() => setConfirmRemove(true)}
                 disabled={removing}
                 aria-label={t("connections.secretManager.remove")}
                 title={t("connections.secretManager.remove")}
               >
                 <Trash2 size={15} />
-              </button>
+              </Button>
             </div>
           )}
         </div>
@@ -277,15 +279,15 @@ export function AdminSecretManager() {
             </div>
           )}
           <div className="secret-manager-form-actions">
-            <button type="submit" className="primary" disabled={busy || !canSave}>
+            <Button type="submit" variant="primary" disabled={busy || !canSave}>
               {busy
                 ? t("connections.secretManager.saving")
                 : t("connections.secretManager.save")}
-            </button>
+            </Button>
             {configured && (
-              <button type="button" className="ghost" onClick={() => setEditing(false)}>
+              <Button variant="ghost" onClick={() => setEditing(false)}>
                 {t("common.cancel")}
-              </button>
+              </Button>
             )}
           </div>
         </form>
@@ -427,26 +429,26 @@ function ProviderShell({
           <div className="secret-manager-status-info">{configuredSummary}</div>
           {canWrite && (
             <div className="secret-manager-actions">
-              <button
-                type="button"
-                className="ghost"
+              <Button
+                variant="ghost"
                 onClick={() => {
                   onStartEdit();
                   slot.startEdit();
                 }}
               >
                 {t("connections.secretManager.edit")}
-              </button>
-              <button
-                type="button"
-                className="icon-button danger"
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="danger"
                 onClick={() => slot.requestRemove()}
                 disabled={slot.removing}
                 aria-label={t("connections.secretManager.remove")}
                 title={t("connections.secretManager.remove")}
               >
                 <Trash2 size={15} />
-              </button>
+              </Button>
             </div>
           )}
         </div>
@@ -476,15 +478,15 @@ function ProviderShell({
         >
           {fields}
           <div className="secret-manager-form-actions">
-            <button type="submit" className="primary" disabled={slot.busy || !canSave}>
+            <Button type="submit" variant="primary" disabled={slot.busy || !canSave}>
               {slot.busy
                 ? t("connections.secretManager.saving")
                 : t("connections.secretManager.save")}
-            </button>
+            </Button>
             {configured && (
-              <button type="button" className="ghost" onClick={() => slot.setEditing(false)}>
+              <Button variant="ghost" onClick={() => slot.setEditing(false)}>
                 {t("common.cancel")}
-              </button>
+              </Button>
             )}
           </div>
         </form>

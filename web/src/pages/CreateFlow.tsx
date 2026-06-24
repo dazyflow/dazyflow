@@ -6,6 +6,7 @@ import { useAuth } from "../auth";
 import { api } from "../api";
 import { TemplateGallery } from "../components/TemplateGallery";
 import { Callout } from "../components/Callout";
+import { Button } from "../components/Button";
 import type { Graph, Manifest } from "../types";
 
 // GenIssue mirrors core.LintIssue — the heads-up findings the generator
@@ -322,10 +323,10 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
                   placeholder={t("createFlow.refinePlaceholder")}
                   onChange={(e) => setRefineText(e.target.value)}
                 />
-                <button type="submit" className="secondary" disabled={refineText.trim() === ""}>
+                <Button type="submit" disabled={refineText.trim() === ""}>
                   <Sparkles size={14} style={{ marginRight: 6 }} />
                   {t("createFlow.refineCta")}
-                </button>
+                </Button>
               </div>
             </form>
           )}
@@ -333,17 +334,16 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
           {err && <div className="card" style={{ color: "var(--danger)" }}>{err}</div>}
 
           <div className="create-flow-actions">
-            <button type="button" disabled={busy} onClick={() => setPendingDraft(null)}>
+            <Button disabled={busy} onClick={() => setPendingDraft(null)}>
               {t("common.back")}
-            </button>
-            <button
-              type="button"
-              className="primary"
+            </Button>
+            <Button
+              variant="primary"
               disabled={busy}
               onClick={() => createFromGraph(pendingDraft.graph)}
             >
               {t("createFlow.openDraft")}
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -381,14 +381,14 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
             <div className="card" style={{ color: "var(--danger)" }}>{err}</div>
           )}
           <div className="create-flow-actions">
-            <button
+            <Button
               type="submit"
-              className="primary"
+              variant="primary"
               disabled={busy || !name.trim() || !canEdit}
               title={!canEdit ? t("flowList.needEdit") : undefined}
             >
               {busy ? t("flowList.creating") : t("flowList.createCta")}
-            </button>
+            </Button>
           </div>
         </form>
       ) : (
@@ -407,9 +407,8 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
           {!busy && steps.length === 0 && aiDesc.trim() === "" && (
             <div className="ai-starters-list">
               {AI_STARTERS.map(({ Icon, text }) => (
-                <button
+                <Button
                   key={text}
-                  type="button"
                   className="ai-starter"
                   onClick={() => setAiDesc(text)}
                 >
@@ -417,7 +416,7 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
                     <Icon size={16} strokeWidth={2} />
                   </span>
                   <span className="ai-starter-text">{text}</span>
-                </button>
+                </Button>
               ))}
             </div>
           )}
@@ -480,25 +479,25 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
               // above; sending them to /apps would dead-end on a form they
               // can't use.
               canConnect && (
-                <button
-                  type="button"
-                  className="primary ai-connect-cta"
+                <Button
+                  variant="primary"
+                  className="ai-connect-cta"
                   onClick={() => navigate("/apps?category=ai")}
                 >
                   <Sparkles size={14} />
                   {t("createAI.connectCta")}
-                </button>
+                </Button>
               )
             ) : (
-              <button
+              <Button
                 type="submit"
-                className="primary"
+                variant="primary"
                 disabled={busy || aiDesc.trim() === "" || !canEdit}
                 title={!canEdit ? t("flowList.needEdit") : undefined}
               >
                 <Sparkles size={14} style={{ marginRight: 6 }} />
                 {busy ? t("createAI.generating") : t("createAI.generate")}
-              </button>
+              </Button>
             )}
           </div>
         </form>

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { Button } from "../components/Button";
 import { api, APIError } from "../api";
 
 // ResetPassword is the landing page for the emailed reset link
@@ -107,13 +108,13 @@ export function ResetPassword() {
           value={confirm}
           onChange={(e) => setConfirm(e.target.value)}
         />
-        <button
+        <Button
           type="submit"
-          className="primary"
+          variant="primary"
           disabled={busy || !password || !confirm || mismatch}
         >
           {busy ? t("resetPassword.submitting") : t("resetPassword.submit")}
-        </button>
+        </Button>
         {err && <div className="error">{err}</div>}
         <div className="signin-alt">
           <Link to="/signin">{t("resetPassword.backToSignin")}</Link>

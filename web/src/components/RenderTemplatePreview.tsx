@@ -4,6 +4,7 @@ import { Sparkles } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
+import { Button } from "./Button";
 
 // Ready-made starting points. Each sets a working template AND matching
 // sample data, so one click gives a non-technical user a rendering email to
@@ -224,14 +225,13 @@ export function RenderTemplatePreview({
               ))}
             </select>
           )}
-          <button
-            type="button"
+          <Button
             className="rtp-generate"
             disabled={assisting || desc.trim() === ""}
             onClick={() => void generate()}
           >
             {assisting ? t("renderPreview.generating") : t("renderPreview.generate")}
-          </button>
+          </Button>
         </div>
         {needConnect ? (
           <div className="rtp-warn">
@@ -245,9 +245,8 @@ export function RenderTemplatePreview({
       <div className="rtp-starters">
         <span className="rtp-label">{t("renderPreview.starters")}</span>
         {STARTERS.map((s) => (
-          <button
+          <Button
             key={s.key}
-            type="button"
             className="rtp-starter"
             onClick={() => {
               onInsertTemplate(s.template);
@@ -255,7 +254,7 @@ export function RenderTemplatePreview({
             }}
           >
             {t(`renderPreview.starter.${s.key}`)}
-          </button>
+          </Button>
         ))}
       </div>
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { CheckCircle2, XCircle, Workflow, Inbox } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
+import { Button } from "../components/Button";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
 import { shouldShowTenantID } from "../lib/visibleTenant";
@@ -159,21 +160,21 @@ export function Approvals() {
                   </div>
                 </div>
                 <div className="approval-actions">
-                  <button
+                  <Button
                     onClick={() => decide(item, "reject")}
                     disabled={!!inflight}
                   >
                     <XCircle size={14} style={{ marginRight: 6 }} />
                     {inflight === "reject" ? t("approvals.rejecting") : t("approvals.reject")}
-                  </button>
-                  <button
-                    className="primary"
+                  </Button>
+                  <Button
+                    variant="primary"
                     onClick={() => decide(item, "approve")}
                     disabled={!!inflight}
                   >
                     <CheckCircle2 size={14} style={{ marginRight: 6 }} />
                     {inflight === "approve" ? t("approvals.approving") : t("approvals.approve")}
-                  </button>
+                  </Button>
                 </div>
               </div>
               <textarea

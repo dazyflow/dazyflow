@@ -6,6 +6,7 @@ import { api, APIError } from "../api";
 import { useAuth } from "../auth";
 import { IconUpload } from "./IconUpload";
 import { CredentialsManager } from "./CredentialsManager";
+import { Button } from "./Button";
 import { FlowIcon } from "../icons";
 
 // SettingsModal hosts graph-level configuration that doesn't fit in
@@ -49,32 +50,32 @@ export function SettingsModal({ graph, onClose, onSave }: Props) {
       <div className="settings-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="settings-head">
           <h2>{t("settings.title")}</h2>
-          <button className="icon ghost" onClick={onClose} aria-label={t("settings.close")}>
+          <Button variant="ghost" size="icon" onClick={onClose} aria-label={t("settings.close")}>
             <X size={18} />
-          </button>
+          </Button>
         </div>
         <div className="settings-tabs">
-          <button
+          <Button
             type="button"
             className={tab === "notifications" ? "active" : ""}
             onClick={() => setTab("notifications")}
           >
             {t("settings.tabNotifications")}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             className={tab === "general" ? "active" : ""}
             onClick={() => setTab("general")}
           >
             {t("settings.tabGeneral")}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             className={tab === "secrets" ? "active" : ""}
             onClick={() => setTab("secrets")}
           >
             {t("settings.tabSecrets")}
-          </button>
+          </Button>
         </div>
         <div className="settings-body">
           {tab === "notifications" && (
@@ -272,16 +273,16 @@ export function SettingsModal({ graph, onClose, onSave }: Props) {
           {tab === "secrets" && <FlowSecretsTab graph={graph} />}
         </div>
         <div className="settings-foot">
-          <button onClick={onClose}>{t("settings.cancel")}</button>
-          <button
-            className="primary"
+          <Button onClick={onClose}>{t("settings.cancel")}</Button>
+          <Button
+            variant="primary"
             onClick={() => {
               onSave(draft);
               onClose();
             }}
           >
             {t("settings.save")}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

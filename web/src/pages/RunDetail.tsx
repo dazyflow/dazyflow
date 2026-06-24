@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import { api, APIError } from "../api";
 import { useAuth } from "../auth";
+import { Button } from "../components/Button";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { explainRunError } from "../lib/explainRunError";
 import type { Graph, JobRecord, JobStatus, Manifest, Ref, RunLogEntry } from "../types";
@@ -280,48 +281,44 @@ export function RunDetail() {
             to={`/flows/${encodeURIComponent(run.GraphID)}?run=${encodeURIComponent(run.ID)}`}
             className="secondary-link"
           >
-            <button type="button" className="secondary">{t("runDetail.openInEditor")}</button>
+            <Button>{t("runDetail.openInEditor")}</Button>
           </Link>
           {/* Stop an in-flight run. Only shown while the run can still be
               stopped (running, or parked awaiting an approval). */}
           {(run.Status === "running" || run.Status === "awaiting" || run.Status === "queued") && (
-            <button
-              type="button"
-              className="danger"
+            <Button
+              variant="danger"
               onClick={() => setConfirmCancel(true)}
               disabled={cancelling}
               title={t("runDetail.cancelTitle")}
             >
               <Square size={13} style={{ marginRight: 6 }} />
               {cancelling ? t("runDetail.cancelling") : t("runDetail.cancel")}
-            </button>
+            </Button>
           )}
           {(run.Status === "failed" || run.Status === "cancelled") && (
-            <button
-              type="button"
-              className="primary"
+            <Button
+              variant="primary"
               onClick={retry}
               disabled={retrying}
               title={t("runDetail.retryTitle")}
             >
               <RotateCcw size={14} style={{ marginRight: 6 }} />
               {retrying ? t("runDetail.retrying") : t("runDetail.retry")}
-            </button>
+            </Button>
           )}
           {/* Replay re-runs every step from scratch — including side effects
               (sending emails/messages). Distinct icon (↻ vs ↺ for Retry) and
               a confirm before firing so it isn't mistaken for the cheaper,
               resume-from-failure Retry. */}
-          <button
-            type="button"
-            className="secondary"
+          <Button
             onClick={() => setConfirmReplay(true)}
             disabled={replaying}
             title={t("runDetail.replayTitle")}
           >
             <RotateCw size={14} style={{ marginRight: 6 }} />
             {replaying ? t("runDetail.replaying") : t("runDetail.replay")}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -404,8 +401,7 @@ export function RunDetail() {
               key={n.ID}
               className={"node-row" + (n.Status === "failed" ? " failed" : "")}
             >
-              <button
-                type="button"
+              <Button
                 className="node-row-head"
                 onClick={() => toggle(n.NodeID)}
                 aria-expanded={isOpen}
@@ -418,7 +414,7 @@ export function RunDetail() {
                 {n.Result?.error?.code && (
                   <span className="node-err">{n.Result.error.code}</span>
                 )}
-              </button>
+              </Button>
               {isOpen && (
                 <div className="node-body">
                   {n.Result?.error && (

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
+import { Button } from "./Button";
 import { Switch } from "./Switch";
 import type { IssuedAPIKey, Permission, Role } from "../types";
 import { formatDate } from "../lib/datetime";
@@ -187,9 +188,8 @@ export function IssueKeyModal({
             </div>
             <div className="role-template-grid">
               {ROLE_TEMPLATES.map((tpl) => (
-                <button
+                <Button
                   key={tpl.id}
-                  type="button"
                   className={
                     "role-template" + (templateID === tpl.id ? " active" : "")
                   }
@@ -197,10 +197,9 @@ export function IssueKeyModal({
                 >
                   <div className="role-template-name">{t(tpl.nameKey)}</div>
                   <div className="role-template-desc">{t(tpl.descKey)}</div>
-                </button>
+                </Button>
               ))}
-              <button
-                type="button"
+              <Button
                 className={
                   "role-template" + (templateID === "custom" ? " active" : "")
                 }
@@ -210,7 +209,7 @@ export function IssueKeyModal({
                 <div className="role-template-desc">
                   {t("issueKey.templateCustomDesc")}
                 </div>
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -258,14 +257,13 @@ export function IssueKeyModal({
             </div>
             <div className="expiry-grid">
               {EXPIRY_CHOICES.map((c) => (
-                <button
+                <Button
                   key={c.id}
-                  type="button"
                   className={"expiry-choice" + (expiry === c.id ? " active" : "")}
                   onClick={() => setExpiry(c.id)}
                 >
                   {t(c.labelKey)}
-                </button>
+                </Button>
               ))}
             </div>
             <div className="desc">
@@ -278,12 +276,12 @@ export function IssueKeyModal({
           </div>
         </div>
         <div className="settings-foot">
-          <button type="button" onClick={onCancel}>
+          <Button onClick={onCancel}>
             {t("issueKey.cancel")}
-          </button>
-          <button type="submit" className="primary" disabled={submitting}>
+          </Button>
+          <Button type="submit" variant="primary" disabled={submitting}>
             {submitting ? t("issueKey.issuing") : t("issueKey.issue")}
-          </button>
+          </Button>
         </div>
       </form>
     </div>
