@@ -409,10 +409,12 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="spacer" />
         {me && (
           <div className="user">
-            {/* Help: keyboard-shortcuts reference (also on "?"). */}
+            {/* Help: keyboard-shortcuts reference (also on "?"). Hidden on
+                mobile — there's no physical keyboard there, so the shortcuts
+                reference is irrelevant. */}
             <button
               type="button"
-              className="icon ghost"
+              className="icon ghost shortcuts-help"
               onClick={() => setHelpOpen(true)}
               aria-label={t("shortcuts.title")}
               title={t("shortcuts.title")}

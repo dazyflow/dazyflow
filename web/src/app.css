@@ -141,6 +141,14 @@
   font-weight: 500;
   color: var(--ink);
 }
+/* Keyboard-shortcuts help button: only meaningful with a physical keyboard,
+   so it's hidden on mobile (the 768px cutoff mirrors AppShell's MOBILE_BREAK
+   and the hamburger's 769px complement). */
+@media (max-width: 768px) {
+  .topbar .shortcuts-help {
+    display: none;
+  }
+}
 /* The right-hand cluster (org switcher, flow menu) must shrink rather than
    push the topbar past the viewport. min-width:0 lets it compress, and the
    org-name label ellipsizes instead of forcing the bar wider. */
