@@ -36,4 +36,5 @@ import (
 	_ "git.sr.ht/~klahr/dazyflow/drops/trigger/gform"
 	_ "git.sr.ht/~klahr/dazyflow/drops/twilio"
 	_ "git.sr.ht/~klahr/dazyflow/drops/value"
+	_ "git.sr.ht/~klahr/dazyflow/drops/weather"
 )

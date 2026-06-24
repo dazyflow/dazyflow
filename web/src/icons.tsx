@@ -33,6 +33,7 @@ import {
   Ban,
   Split,
   House,
+  CloudSun,
   type LucideIcon,
 } from "lucide-react";
 import { GitIcon } from "./components/GitIcon";
@@ -84,6 +85,7 @@ const iconRegistry: Record<string, LucideIcon> = {
   ban: Ban,
   split: Split,
   house: House,
+  "cloud-sun": CloudSun,
 };
 
 // categoryFallback picks a sensible default icon when a manifest didn't

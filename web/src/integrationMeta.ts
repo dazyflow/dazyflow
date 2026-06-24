@@ -215,6 +215,15 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     docs_url: "https://docs.stripe.com/api",
     brand_logo: "/brands/stripe.svg",
   },
+  openweather: {
+    name: "OpenWeather",
+    description:
+      "Read the weather for any point on the map. Give a step a coordinate — typed in, or wired from a geocode, a form field, or a device's GPS — and get the current conditions (a one-line summary, the temperature, and a Clear/Rain/Snow word you can branch on) or a 5-day forecast. Build a 'text me if it'll rain tomorrow' flow, a morning briefing, or a frost alert for the greenhouse.",
+    technical_notes:
+      "Backed by OpenWeather's free endpoints — Current Weather (GET data/2.5/weather) and the 5-day/3-hour Forecast (GET data/2.5/forecast), which the forecast drop aggregates into per-day min/max + conditions. Works with any standard API key on the free plan — no paid 'One Call by Call' subscription needed. Authenticates with your API key (the appid), stored once on the integration page as a per-tenant connection and injected at run time — no key on the node. Units accept metric (°C, m/s), imperial (°F, mph), or standard (K, m/s).",
+    docs_url: "https://openweathermap.org/api",
+    brand_logo: "/brands/openweather.svg",
+  },
   webhook: {
     name: "Outgoing webhooks",
     description:
