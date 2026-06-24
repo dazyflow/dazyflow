@@ -1628,6 +1628,42 @@
     "flowSummary": "{{total}} flows · {{live}} live",
     "manageFlows": "Manage flows"
   },
+  "share": {
+    "action": "Share",
+    "title": "Share workspace overview",
+    "description": "Create a public link to a live, full-screen status board — ideal for a wall-mounted TV. It shows only flow names and run status; no payloads, errors, or other sensitive data.",
+    "create": "Create link",
+    "copy": "Copy link",
+    "copied": "Copied!",
+    "open": "Open board",
+    "regenerate": "Regenerate",
+    "disable": "Disable link",
+    "none": "No public link yet. Anyone with the link can view the status board, so only create one when you're ready to share.",
+    "warning": "Anyone with this link can view the board — no login required. Regenerate to invalidate the old link.",
+    "forbidden": "You need edit access to this workspace to create a share link."
+  },
+  "tv": {
+    "title": "Workspace status",
+    "live": "Live",
+    "reconnecting": "Reconnecting…",
+    "fullscreen": "Toggle full screen",
+    "running": "Running",
+    "noFlows": "No flows to show.",
+    "neverRun": "Never run",
+    "updated": "Updated {{when}}",
+    "historyLabel": "Last {{count}} runs",
+    "notFoundTitle": "Link not found",
+    "notFoundBody": "This status board link is invalid or has been disabled.",
+    "status": {
+      "succeeded": "Succeeded",
+      "failed": "Failed",
+      "running": "Running",
+      "queued": "Queued",
+      "cancelled": "Cancelled",
+      "skipped": "Skipped",
+      "awaiting": "Awaiting"
+    }
+  },
   "shortcuts": {
     "title": "Keyboard shortcuts",
     "general": "General",

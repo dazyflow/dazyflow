@@ -483,6 +483,46 @@ export type Ref = {
   data?: unknown; // serialized as Inline in Go
 };
 
+// ShareLink is the workspace's public overview (TV-dashboard) link. url is
+// the absolute, ready-to-open page; token is the cryptic credential embedded
+// in it. Mirrors daemon.shareResponse.
+export type ShareLink = {
+  token: string;
+  url: string;
+  created_at: string;
+  created_by?: string;
+};
+
+// PublicOverview is the sanitized, unauthenticated status snapshot the TV
+// page polls. No IDs, no error detail — only flow names, run status, and
+// aggregate counters. Mirrors daemon.PublicOverviewData.
+export type PublicOverview = {
+  // label is the org's display name, used to title the board. Absent when
+  // the org has no display name — the UI falls back to a generic title.
+  label?: string;
+  generated_at: string;
+  stats: {
+    runs_today: number;
+    success_rate?: number; // absent until there's a finished run
+    failed: number;
+    running: number;
+    live_flows: number;
+    total_flows: number;
+  };
+  flows: PublicFlowState[];
+};
+
+export type PublicFlowState = {
+  name: string;
+  icon?: string;
+  run_status?: "live" | "manual" | "paused" | "needs_publish";
+  last_status?: JobStatus;
+  last_run_at?: string;
+  // history is the flow's recent run outcomes, newest first — drawn as a
+  // small health strip on the card.
+  history?: JobStatus[];
+};
+
 // Mirrors core.LintIssue. severity is "warn" or "error"; the UI
 // treats both as non-blocking and surfaces them in a banner after
 // save — even "error" findings don't reject persistence today, since

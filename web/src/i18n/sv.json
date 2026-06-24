@@ -1621,6 +1621,42 @@
     "flowSummary": "{{total}} flöden · {{live}} live",
     "manageFlows": "Hantera flöden"
   },
+  "share": {
+    "action": "Dela",
+    "title": "Dela arbetsytans översikt",
+    "description": "Skapa en publik länk till en live-statustavla i helskärm — perfekt för en väggmonterad TV. Den visar endast flödesnamn och körstatus; inga nyttolaster, fel eller andra känsliga data.",
+    "create": "Skapa länk",
+    "copy": "Kopiera länk",
+    "copied": "Kopierad!",
+    "open": "Öppna tavlan",
+    "regenerate": "Förnya",
+    "disable": "Inaktivera länk",
+    "none": "Ingen publik länk ännu. Vem som helst med länken kan se statustavlan, så skapa en först när du är redo att dela.",
+    "warning": "Vem som helst med den här länken kan se tavlan — ingen inloggning krävs. Förnya för att ogiltigförklara den gamla länken.",
+    "forbidden": "Du behöver redigeringsåtkomst till den här arbetsytan för att skapa en delningslänk."
+  },
+  "tv": {
+    "title": "Arbetsytans status",
+    "live": "Live",
+    "reconnecting": "Återansluter…",
+    "fullscreen": "Växla helskärm",
+    "running": "Pågår",
+    "noFlows": "Inga flöden att visa.",
+    "neverRun": "Aldrig körd",
+    "updated": "Uppdaterad {{when}}",
+    "historyLabel": "Senaste {{count}} körningarna",
+    "notFoundTitle": "Länken hittades inte",
+    "notFoundBody": "Den här statustavlelänken är ogiltig eller har inaktiverats.",
+    "status": {
+      "succeeded": "Lyckades",
+      "failed": "Misslyckades",
+      "running": "Pågår",
+      "queued": "I kö",
+      "cancelled": "Avbruten",
+      "skipped": "Hoppade över",
+      "awaiting": "Väntar"
+    }
+  },
   "shortcuts": {
     "title": "Tangentbordsgenvägar",
     "general": "Allmänt",

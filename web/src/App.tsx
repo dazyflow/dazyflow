@@ -1,4 +1,10 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import {
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+  useParams,
+} from "react-router-dom";
 import { useAuth } from "./auth";
 import { userScope } from "./recentFlow";
 import { AppShell } from "./components/AppShell";
@@ -32,10 +38,22 @@ import { AdminGoogle } from "./pages/AdminGoogle";
 import { AdminSecrets } from "./pages/AdminSecrets";
 import { AdminGitCredentials } from "./pages/AdminGitCredentials";
 import { AcceptInvite } from "./pages/AcceptInvite";
+import { PublicOverview } from "./pages/PublicOverview";
 import { UploadsProvider } from "./uploads";
 
 export function App() {
   const { token } = useAuth();
+  const { pathname } = useLocation();
+  // Public TV-dashboard share page: cryptic link, no auth, no AppShell.
+  // Handled before the signed-in/out split so it renders identically whether
+  // or not a session exists (an operator previewing it, or a login-less TV).
+  if (pathname.startsWith("/tv/")) {
+    return (
+      <Routes>
+        <Route path="/tv/:token" element={<PublicOverview />} />
+      </Routes>
+    );
+  }
   if (!token) {
     // Render the unauthenticated routes even while auth is "loading". A
     // sign-in / sign-up / TOTP attempt sets loading=true with no token yet,
@@ -110,8 +128,6 @@ export function App() {
     </UploadsProvider>
   );
 }
-
-import { useLocation, useParams } from "react-router-dom";
 
 // HAS_FLOWS_KEY is FlowList's sticky "this user has built at least
 // one flow" hint. RootRedirect reads it (and only it — no API call)

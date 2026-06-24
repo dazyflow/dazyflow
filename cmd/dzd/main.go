@@ -539,6 +539,8 @@ func main() {
 		FreePollingDisabled: freePollingDisabled,
 		Mailer:              mailer,
 		RunLogs:             stores.runLogs,
+		// Shares backs the per-workspace public overview (TV-dashboard) links.
+		Shares: stores.shares,
 		// Users lets failure_notify resolve a flow owner's notification
 		// preferences (the account-level failure-email channel). Same
 		// store the gateway authenticates against.
@@ -624,6 +626,8 @@ func main() {
 			log.Fatalf("postgres org-profile store: %v", err)
 		}
 		memberships, invitations, orgAuthStore, orgProfileStore = pgMembers, pgInvites, pgOrgAuth, pgOrgProfile
+		// Let the public overview title the TV board with the org display name.
+		svc.OrgProfiles = orgProfileStore
 		log.Print("memberships + invitations + org-auth + org-profile stores: postgres-backed")
 
 		// One-time, idempotent: migrate pre-rename "tenant:admin" roles to
@@ -778,6 +782,7 @@ type coreStores struct {
 	usage    daemon.UsageStore
 	plans    daemon.PlanStore
 	runLogs  daemon.RunLogStore
+	shares   daemon.ShareStore
 }
 
 // openCoreStores connects the shared pgxpool and opens the key / user /
@@ -848,6 +853,10 @@ func openCoreStores(ctx context.Context, dsn string, maxConns, minConns int, ses
 	if err != nil {
 		log.Fatalf("postgres run-log store: %v", err)
 	}
+	pgShares, err := daemon.NewPgShareStore(ctx, pool)
+	if err != nil {
+		log.Fatalf("postgres share store: %v", err)
+	}
 	if sessionCacheTTL > 0 {
 		log.Printf("session lookup cache: ttl=%s", sessionCacheTTL)
 	}
@@ -862,6 +871,7 @@ func openCoreStores(ctx context.Context, dsn string, maxConns, minConns int, ses
 		usage:    pgUsage,
 		plans:    cachedPlans,
 		runLogs:  pgRunLogs,
+		shares:   pgShares,
 	}
 }
 

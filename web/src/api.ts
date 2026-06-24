@@ -6,6 +6,8 @@ import type {
   Graph,
   IssuedAPIKey,
   InvitationDetails,
+  ShareLink,
+  PublicOverview,
   AdminOAuthProvider,
   InvitationSummary,
   SignupInviteSummary,
@@ -1723,6 +1725,40 @@ export const api = {
     ),
   deleteOrgAuthConfig: (token: string) =>
     request<void>(token, "DELETE", "/admin/org/auth-config"),
+
+  // --- Workspace overview share link (TV dashboard) -------------------
+  // getShare returns the workspace's current public link, or throws a
+  // share_not_found APIError when none has been minted. createShare mints
+  // or rotates it (rotating invalidates the old link); deleteShare revokes.
+  getShare: (token: string, tenant?: string, workspace?: string) => {
+    const qs = new URLSearchParams();
+    if (tenant) qs.set("tenant", tenant);
+    if (workspace) qs.set("workspace", workspace);
+    const q = qs.toString();
+    return request<ShareLink>(token, "GET", `/me/share${q ? `?${q}` : ""}`);
+  },
+  createShare: (token: string, tenant?: string, workspace?: string) => {
+    const qs = new URLSearchParams();
+    if (tenant) qs.set("tenant", tenant);
+    if (workspace) qs.set("workspace", workspace);
+    const q = qs.toString();
+    return request<ShareLink>(token, "POST", `/me/share${q ? `?${q}` : ""}`);
+  },
+  deleteShare: (token: string, tenant?: string, workspace?: string) => {
+    const qs = new URLSearchParams();
+    if (tenant) qs.set("tenant", tenant);
+    if (workspace) qs.set("workspace", workspace);
+    const q = qs.toString();
+    return request<void>(token, "DELETE", `/me/share${q ? `?${q}` : ""}`);
+  },
+  // getPublicOverview is unauthenticated — the share token IS the credential.
+  // Backs the live TV page; returns a sanitized, sensitive-data-free snapshot.
+  getPublicOverview: (shareToken: string) =>
+    request<PublicOverview>(
+      null,
+      "GET",
+      `/public/overview/${encodeURIComponent(shareToken)}`,
+    ),
 
   getPublicSSOStatus: (tenant: string) =>
     request<{ google_enabled: boolean; google_workspace_domain?: string }>(

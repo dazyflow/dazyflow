@@ -58,6 +58,7 @@ type EraseReport struct {
 	AuditEvents    int      `json:"audit_events"`
 	Jobs           int      `json:"jobs_deleted"`
 	RunLogs        int      `json:"run_logs_deleted"`
+	Shares         int      `json:"shares_deleted"`
 	BusEvents      int      `json:"bus_events_deleted"`
 	WorkspaceWiped bool     `json:"workspace_wiped,omitempty"`
 	SandboxWiped   bool     `json:"sandbox_wiped,omitempty"`
@@ -197,6 +198,8 @@ func (h *HTTPGateway) deleteOrgData(ctx context.Context, tenant string) (EraseRe
 	rep.tallyByTenant(ctx, "api_keys", h.svc.AdminKeys, tenant, func(n int) { rep.APIKeys = n })
 	rep.tallyByTenant(ctx, "memberships", h.Memberships, tenant, func(n int) { rep.Memberships = n })
 	rep.tallyByTenant(ctx, "invitations", h.Invitations, tenant, func(n int) { rep.Invitations = n })
+	// Public overview share links for the tenant's workspaces.
+	rep.tallyByTenant(ctx, "shares", h.svc.Shares, tenant, func(n int) { rep.Shares = n })
 	// Org SSO config + display profile.
 	if h.OrgAuth != nil {
 		if err := h.OrgAuth.DeleteOrgAuth(ctx, tenant); err != nil {

@@ -9,10 +9,12 @@ import {
   Workflow,
   Plus,
   ArrowRight,
+  Share2,
 } from "lucide-react";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import { formatRelative, formatDateTime } from "../lib/datetime";
+import { ShareOverviewModal } from "../components/ShareOverviewModal";
 import type { FlowSummary, PendingApproval, RunSummary } from "../types";
 
 // Dashboard is the workspace overview — the "is everything healthy?" landing
@@ -37,6 +39,7 @@ export function Dashboard() {
   const [flows, setFlows] = useState<FlowSummary[]>([]);
   const [approvals, setApprovals] = useState<PendingApproval[]>([]);
   const [loading, setLoading] = useState(true);
+  const [shareOpen, setShareOpen] = useState(false);
 
   useEffect(() => {
     if (!token || !activeWorkspace) return;
@@ -98,11 +101,24 @@ export function Dashboard() {
               : t("dashboard.subtitle")}
           </div>
         </div>
-        <Link to="/flows/new" className="primary dash-new">
-          <Plus size={16} style={{ marginRight: 6 }} />
-          {t("flowList.newFlow")}
-        </Link>
+        <div className="dash-title-actions">
+          <button
+            type="button"
+            className="dash-share"
+            onClick={() => setShareOpen(true)}
+            title={t("share.title")}
+          >
+            <Share2 size={16} style={{ marginRight: 6 }} />
+            {t("share.action")}
+          </button>
+          <Link to="/flows/new" className="primary dash-new">
+            <Plus size={16} style={{ marginRight: 6 }} />
+            {t("flowList.newFlow")}
+          </Link>
+        </div>
       </div>
+
+      {shareOpen && <ShareOverviewModal onClose={() => setShareOpen(false)} />}
 
       <div className="dash-stats">
         <StatCard

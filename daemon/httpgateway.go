@@ -519,6 +519,13 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/me/runs/{run_id}/retry",
 		h.requireAuth(h.idempotencyMiddleware("/me/runs/{run_id}/retry", h.retryRunMe)))
 
+	// /me/share — the per-workspace public overview (TV-dashboard) link.
+	// GET reads the current link, POST mints/rotates it, DELETE revokes it.
+	// The public read of the snapshot is the unauthenticated route below.
+	mux.HandleFunc("GET /api/v1/me/share", h.requireAuth(h.getShareMe))
+	mux.HandleFunc("POST /api/v1/me/share", h.requireAuth(h.createShareMe))
+	mux.HandleFunc("DELETE /api/v1/me/share", h.requireAuth(h.deleteShareMe))
+
 	// /me/connections — LLM-friendly OAuth surface. List returns
 	// provider catalog + which accounts the caller has linked. Authorize
 	// returns JSON {authorize_url} (no 302) so an MCP/CLI client can
@@ -649,6 +656,13 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /trigger/", h.rateLimitWebhook(h.Webhook.handleTrigger))
 	mux.HandleFunc("GET /form/", h.Webhook.handleForm)
 	mux.HandleFunc("POST /form/", h.Webhook.handleForm)
+
+	// Public workspace-overview snapshot for the TV-dashboard page. The
+	// {token} in the path is the only credential — no requireAuth — so it's
+	// throttled by the same per-IP webhook limiter as the other anonymous
+	// surfaces. The token resolves to a (tenant, workspace) and returns a
+	// sanitized, sensitive-data-free status snapshot.
+	mux.HandleFunc("GET /api/v1/public/overview/{token}", h.rateLimitWebhook(h.publicOverview))
 
 	// HMAC-verified approval endpoint for email/Slack approvers. The
 	// token in the URL is the auth here, so no requireAuth wrapper —

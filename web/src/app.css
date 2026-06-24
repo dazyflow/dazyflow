@@ -9767,3 +9767,433 @@ button:active,
     scroll-behavior: auto !important;
   }
 }
+
+/* ───────────────────────────────────────────────────────────────────────
+   Workspace overview share button (Dashboard page-title) + the public
+   TV-dashboard status board (PublicOverview page).
+   ─────────────────────────────────────────────────────────────────────── */
+
+/* Share button sits beside "New flow" in the Overview page title. */
+.dash-title-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.dash-share {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* ── Public TV board ──────────────────────────────────────────────────── */
+/* Full-viewport, dark, large type for across-the-room legibility. A single
+   ambient accent (--tv-accent) is tinted by board health and threaded through
+   the background wash, the top hairline, and the live indicator so the whole
+   surface reads as one calm, coherent state at a glance. */
+.tv-view {
+  --tv-accent: var(--accent);
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(var(--space-4), 2.2vw, var(--space-6));
+  padding: clamp(var(--space-5), 3.2vw, 56px);
+  color: var(--text);
+  overflow: auto;
+  background:
+    radial-gradient(
+      1200px 560px at 12% -10%,
+      color-mix(in srgb, var(--tv-accent) 16%, transparent),
+      transparent 58%
+    ),
+    radial-gradient(
+      900px 620px at 110% -6%,
+      color-mix(in srgb, var(--accent-2) 9%, transparent),
+      transparent 55%
+    ),
+    var(--bg);
+  transition: background 0.8s ease;
+}
+/* A whisper-thin luminous rule across the very top, health-tinted. */
+.tv-view::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--tv-accent),
+    transparent
+  );
+  opacity: 0.7;
+}
+.tv-health-bad {
+  --tv-accent: var(--status-failed);
+}
+.tv-health-busy {
+  --tv-accent: var(--status-running);
+}
+.tv-health-good {
+  --tv-accent: var(--status-completed);
+}
+
+/* Centered message states (loading / invalid link). */
+.tv-message {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.tv-message h1 {
+  font-size: var(--text-3xl);
+  margin: 0 0 var(--space-3);
+}
+.tv-message p {
+  color: var(--muted);
+  font-size: var(--text-lg);
+}
+
+.tv-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex: 0 0 auto;
+}
+.tv-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+/* Small uppercase context line above the org name. */
+.tv-eyebrow {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: color-mix(in srgb, var(--tv-accent) 55%, var(--muted));
+}
+.tv-title {
+  margin: 0;
+  font-size: clamp(var(--text-2xl), 3.2vw, 46px);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tv-head-right {
+  display: inline-flex;
+  align-items: center;
+  gap: clamp(var(--space-3), 1.4vw, var(--space-5));
+}
+.tv-clock {
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(var(--text-xl), 2.2vw, 34px);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text);
+}
+/* Live / reconnecting indicator — a glassy pill tinted by the running hue. */
+.tv-pulse {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 7px 16px;
+  border-radius: var(--r-pill);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  background: color-mix(in srgb, var(--status-running) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--status-running) 32%, transparent);
+  color: color-mix(in srgb, var(--status-running) 55%, var(--text));
+}
+.tv-pulse.stale {
+  background: color-mix(in srgb, var(--status-awaiting) 14%, transparent);
+  border-color: color-mix(in srgb, var(--status-awaiting) 34%, transparent);
+  color: color-mix(in srgb, var(--status-awaiting) 60%, var(--text));
+}
+.tv-fs {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  width: 42px;
+  height: 42px;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+.tv-fs:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+
+/* Headline counters — four glass tiles, each with a health-toned accent
+   line and an oversized tabular number. */
+.tv-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: clamp(var(--space-3), 1.4vw, var(--space-5));
+  flex: 0 0 auto;
+}
+.tv-stat {
+  --tone: var(--accent);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: clamp(var(--space-4), 1.8vw, 28px);
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface) 88%, #fff 5%),
+      var(--surface)
+    );
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff 6%, transparent),
+    0 10px 30px -18px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+/* Tone accent: a soft bar pinned to the top edge of the card. */
+.tv-stat::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: linear-gradient(
+    90deg,
+    var(--tone),
+    color-mix(in srgb, var(--tone) 25%, transparent)
+  );
+  opacity: 0.85;
+}
+.tv-stat-value {
+  font-size: clamp(var(--text-3xl), 4.6vw, 60px);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.tv-stat-label {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+}
+.tv-stat-good {
+  --tone: var(--status-completed);
+}
+.tv-stat-good .tv-stat-value {
+  color: var(--status-completed);
+}
+.tv-stat-warn {
+  --tone: var(--status-awaiting);
+}
+.tv-stat-warn .tv-stat-value {
+  color: var(--status-awaiting);
+}
+.tv-stat-bad {
+  --tone: var(--status-failed);
+}
+.tv-stat-bad .tv-stat-value {
+  color: var(--status-failed);
+}
+.tv-stat-live {
+  --tone: var(--status-running);
+}
+.tv-stat-live .tv-stat-value {
+  color: var(--status-running);
+}
+
+/* The per-flow grid fills the remaining height; tiles stretch (auto-fit) so
+   a handful of flows fill the wall instead of huddling top-left, and dozens
+   wrap cleanly. Rows are centred vertically for a balanced board. */
+.tv-grid {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-auto-rows: minmax(92px, auto);
+  gap: clamp(var(--space-3), 1.2vw, var(--space-4));
+  align-content: safe center;
+}
+.tv-flow {
+  --tone: var(--border-strong);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: clamp(var(--space-4), 1.5vw, 24px);
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface) 88%, #fff 4%),
+      var(--surface)
+    );
+  box-shadow: 0 10px 30px -20px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+/* Left status rail with a soft outward glow. */
+.tv-flow::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--tone);
+  box-shadow: 0 0 18px -2px color-mix(in srgb, var(--tone) 70%, transparent);
+}
+.tv-flow-failed {
+  --tone: var(--status-failed);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--status-failed) 12%, var(--surface)),
+      color-mix(in srgb, var(--status-failed) 5%, var(--surface))
+    );
+}
+.tv-flow-running,
+.tv-flow-queued {
+  --tone: var(--status-running);
+}
+.tv-flow-succeeded {
+  --tone: var(--status-completed);
+}
+.tv-flow-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.tv-flow-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.tv-flow-name {
+  font-size: clamp(var(--text-lg), 1.5vw, 24px);
+  font-weight: 600;
+  line-height: 1.2;
+  /* Wrap to at most two lines instead of harshly clipping mid-word. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tv-flow-bottom {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+/* Status pill — tinted glass with a glowing dot, mirrors the rail colour. */
+.tv-pill {
+  --pill: var(--faint);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 5px 12px;
+  border-radius: var(--r-pill);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: color-mix(in srgb, var(--pill) 16%, transparent);
+  color: color-mix(in srgb, var(--pill) 50%, var(--text));
+}
+.tv-pill-failed {
+  --pill: var(--status-failed);
+}
+.tv-pill-succeeded {
+  --pill: var(--status-completed);
+}
+.tv-pill-running,
+.tv-pill-queued {
+  --pill: var(--status-running);
+}
+/* Right-hand cluster of a flow card's bottom row: the recent-run history
+   strip + the relative time, pushed to the far edge. */
+.tv-flow-meta {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: clamp(var(--space-2), 0.8vw, var(--space-3));
+}
+.tv-flow-time {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-sm);
+  color: var(--faint);
+}
+/* Recent-run health pipes: one thin vertical bar per run, oldest→newest,
+   coloured by outcome — the same green/red palette as the status dots. */
+.tv-spark {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+}
+.tv-spark-bar {
+  width: 5px;
+  height: 22px;
+  border-radius: 2px;
+  background: var(--faint); /* cancelled / skipped — present but quiet */
+}
+.tv-spark-bar.succeeded {
+  background: var(--status-completed);
+}
+.tv-spark-bar.failed,
+.tv-spark-bar.rejected {
+  background: var(--status-failed);
+}
+.tv-spark-bar.running,
+.tv-spark-bar.queued {
+  background: var(--status-running);
+}
+.tv-spark-bar.awaiting {
+  background: var(--status-awaiting);
+}
+.tv-empty {
+  flex: 1 1 auto;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: var(--text-lg);
+}
+
+.tv-foot {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  color: var(--faint);
+  font-size: var(--text-md);
+  letter-spacing: 0.02em;
+}
+.tv-updated {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 900px) {
+  .tv-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

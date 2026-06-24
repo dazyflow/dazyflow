@@ -1,0 +1,345 @@
+package daemon
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"sort"
+	"time"
+
+	"git.sr.ht/~klahr/dazyflow/core"
+)
+
+// Public workspace-overview share links.
+//
+// A share is a single, regenerable cryptic token per (tenant, workspace). It
+// backs a read-only public page — the TV-dashboard view of the workspace's run
+// health — without a login. The token IS the credential (same model as the
+// hosted-form / approval links), so the public endpoint takes no principal: it
+// looks the token up, recovers the (tenant, workspace), and serves a sanitized
+// status snapshot.
+//
+// The payload deliberately carries no IDs, error codes, payloads, owners, or
+// tenant/workspace identifiers — only flow names + run status + aggregate
+// counters. A leaked link reveals "is the workspace healthy", nothing it could
+// be used to act on. Private flows are excluded entirely.
+
+// Share is one workspace-overview share link.
+type Share struct {
+	Tenant    string    `json:"-"`
+	Workspace string    `json:"-"`
+	Token     string    `json:"token"`
+	CreatedAt time.Time `json:"created_at"`
+	CreatedBy string    `json:"created_by,omitempty"`
+}
+
+// ShareStore persists workspace-overview share links. One row per
+// (tenant, workspace); Upsert rotates the token in place so a workspace
+// always has at most one live link.
+type ShareStore interface {
+	// Get returns the workspace's current share, or core.ErrNotFound when
+	// none has been created.
+	Get(ctx context.Context, tenant, workspace string) (Share, error)
+	// Upsert creates or rotates (tenant, workspace)'s share to the given
+	// token, returning the stored row.
+	Upsert(ctx context.Context, tenant, workspace, token, createdBy string) (Share, error)
+	// Delete removes the workspace's share. Idempotent — a missing row is
+	// not an error.
+	Delete(ctx context.Context, tenant, workspace string) error
+	// Lookup resolves a token back to its share (the public path). Returns
+	// core.ErrNotFound for an unknown/rotated token.
+	Lookup(ctx context.Context, token string) (Share, error)
+	// DeleteByTenant erases every share for a tenant — the GDPR/org-erasure
+	// cascade hook (see gdpr.go's tenantEraser).
+	DeleteByTenant(ctx context.Context, tenant string) (int, error)
+}
+
+// newShareToken mints a 32-byte cryptic token, hex-encoded (64 chars). Same
+// generator the password-reset / email-verification flows use; unguessable and
+// URL-safe.
+func newShareToken() (string, error) {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", fmt.Errorf("mint share token: %w", err)
+	}
+	return hex.EncodeToString(raw), nil
+}
+
+// GetWorkspaceShare returns the workspace's current share link, or ok=false
+// when none exists. Read access is gated on workspace membership.
+func (s *Service) GetWorkspaceShare(ctx context.Context, p core.Principal, tenant, workspace string) (Share, bool, error) {
+	if err := core.RequireWorkspace(p, tenant, workspace); err != nil {
+		return Share{}, false, err
+	}
+	if s.Shares == nil {
+		return Share{}, false, fmt.Errorf("share store not configured")
+	}
+	sh, err := s.Shares.Get(ctx, tenant, workspace)
+	if err != nil {
+		if errors.Is(err, core.ErrNotFound) {
+			return Share{}, false, nil
+		}
+		return Share{}, false, err
+	}
+	return sh, true, nil
+}
+
+// CreateWorkspaceShare mints (or rotates) the workspace's share link and
+// returns it. Rotating invalidates any link handed out earlier. Minting a
+// public link is an edit-level action, so it takes graph:edit — a run-only
+// viewer can see an existing link but can't publish a new public surface.
+func (s *Service) CreateWorkspaceShare(ctx context.Context, p core.Principal, tenant, workspace string) (Share, error) {
+	if err := core.RequireWorkspace(p, tenant, workspace); err != nil {
+		return Share{}, err
+	}
+	if err := core.Require(p, core.PermGraphEdit); err != nil {
+		return Share{}, err
+	}
+	if s.Shares == nil {
+		return Share{}, fmt.Errorf("share store not configured")
+	}
+	token, err := newShareToken()
+	if err != nil {
+		return Share{}, err
+	}
+	return s.Shares.Upsert(ctx, tenant, workspace, token, p.Subject)
+}
+
+// DeleteWorkspaceShare revokes the workspace's share link. Idempotent. Same
+// edit-level gate as creating one.
+func (s *Service) DeleteWorkspaceShare(ctx context.Context, p core.Principal, tenant, workspace string) error {
+	if err := core.RequireWorkspace(p, tenant, workspace); err != nil {
+		return err
+	}
+	if err := core.Require(p, core.PermGraphEdit); err != nil {
+		return err
+	}
+	if s.Shares == nil {
+		return fmt.Errorf("share store not configured")
+	}
+	return s.Shares.Delete(ctx, tenant, workspace)
+}
+
+// PublicOverviewData is the sanitized snapshot the public TV page renders.
+// No IDs, no error detail, no tenant/workspace — only what's safe on a wall.
+type PublicOverviewData struct {
+	// Label is the org's human-facing display name, used to title the board.
+	// Empty when the org has no display name (and isn't worth showing a raw
+	// id for) — the UI then falls back to a generic title.
+	Label       string            `json:"label,omitempty"`
+	GeneratedAt time.Time         `json:"generated_at"`
+	Stats       PublicStats       `json:"stats"`
+	Flows       []PublicFlowState `json:"flows"`
+}
+
+// PublicStats are the headline counters across the workspace's recent runs.
+type PublicStats struct {
+	RunsToday   int  `json:"runs_today"`
+	SuccessRate *int `json:"success_rate,omitempty"` // nil = no finished runs yet
+	Failed      int  `json:"failed"`
+	Running     int  `json:"running"`
+	LiveFlows   int  `json:"live_flows"`
+	TotalFlows  int  `json:"total_flows"`
+}
+
+// PublicFlowState is one flow's tile on the TV grid.
+type PublicFlowState struct {
+	Name string `json:"name"`
+	Icon string `json:"icon,omitempty"`
+	// RunStatus is the flow's automation posture: live / manual / paused /
+	// needs_publish.
+	RunStatus core.FlowRunStatus `json:"run_status,omitempty"`
+	// LastStatus is the most recent run's status (succeeded / failed /
+	// running / queued / …), empty when the flow has never run.
+	LastStatus core.JobStatus `json:"last_status,omitempty"`
+	LastRunAt  *time.Time     `json:"last_run_at,omitempty"`
+	// History is the flow's recent run outcomes, newest first, capped at
+	// shareFlowHistory. Only the statuses — no ids or timing — so the board
+	// can draw an at-a-glance health strip without leaking anything.
+	History []core.JobStatus `json:"history,omitempty"`
+}
+
+// shareRunWindow is how many recent runs the public snapshot summarizes —
+// matches the Dashboard's own window so the numbers line up.
+const shareRunWindow = 200
+
+// shareFlowHistory caps the per-flow recent-run strip (the health pipes on
+// each card).
+const shareFlowHistory = 10
+
+// PublicWorkspaceOverview resolves a share token and builds the sanitized
+// status snapshot for it. No principal: the token is the authorization, so
+// this reads the workspace store and job store directly (the same pattern the
+// webhook-trigger path uses). Returns core.ErrNotFound for an unknown token.
+func (s *Service) PublicWorkspaceOverview(ctx context.Context, token string, now time.Time) (PublicOverviewData, error) {
+	if s.Shares == nil {
+		// No share store on this deployment → no link can exist. Report it
+		// as an unknown link (404) rather than a server error.
+		return PublicOverviewData{}, core.ErrNotFound
+	}
+	share, err := s.Shares.Lookup(ctx, token)
+	if err != nil {
+		return PublicOverviewData{}, err // core.ErrNotFound bubbles to a 404
+	}
+
+	// Latest run per flow + aggregate counters, from the recent-runs window.
+	runs, err := s.Jobs.ListGraphRuns(ctx, core.ListGraphRunsOpts{
+		Tenant:    share.Tenant,
+		Workspace: share.Workspace,
+		Limit:     shareRunWindow,
+	})
+	if err != nil {
+		return PublicOverviewData{}, err
+	}
+	type latest struct {
+		status core.JobStatus
+		at     time.Time
+	}
+	latestByGraph := map[string]latest{}
+	historyByGraph := map[string][]core.JobStatus{}
+	dayStart := startOfDay(now)
+	var runsToday, failed, running, finished, succeeded int
+	for _, r := range runs {
+		ref := runStartedOrEnqueued(r)
+		if !ref.IsZero() && !ref.Before(dayStart) {
+			runsToday++
+		}
+		switch r.Status {
+		case core.JobStatusFailed:
+			failed++
+			finished++
+		case core.JobStatusSucceeded:
+			succeeded++
+			finished++
+		case core.JobStatusRunning, core.JobStatusQueued:
+			running++
+		}
+		// Runs come newest-first, so the first one we see per graph is its latest.
+		if _, seen := latestByGraph[r.GraphID]; !seen {
+			latestByGraph[r.GraphID] = latest{status: r.Status, at: ref}
+		}
+		// Collect the recent-run strip per flow, newest first, capped.
+		if len(historyByGraph[r.GraphID]) < shareFlowHistory {
+			historyByGraph[r.GraphID] = append(historyByGraph[r.GraphID], r.Status)
+		}
+	}
+
+	data := PublicOverviewData{
+		Label:       s.workspaceLabel(ctx, share.Tenant),
+		GeneratedAt: now,
+		Stats: PublicStats{
+			RunsToday: runsToday,
+			Failed:    failed,
+			Running:   running,
+		},
+	}
+	if finished > 0 {
+		rate := int(float64(succeeded) / float64(finished) * 100)
+		data.Stats.SuccessRate = &rate
+	}
+
+	// Flow tiles — names + automation posture. Best-effort: if the workspace
+	// store is unavailable we still return the run-derived counters.
+	if store, werr := s.Workspaces.Open(share.Tenant, share.Workspace); werr == nil {
+		ids, _ := store.ListGraphs()
+		for _, id := range ids {
+			g, lerr := store.Load(id)
+			if lerr != nil {
+				continue
+			}
+			// Private flows never appear on a public wall — their very name
+			// could be sensitive and they're scoped to a single owner.
+			if g.EffectiveVisibility() == core.VisibilityPrivate {
+				continue
+			}
+			pub, _ := store.PublishedCommit(id)
+			st := PublicFlowState{
+				Name:      flowDisplayName(g, id),
+				Icon:      g.Icon,
+				RunStatus: core.FlowRunStatusPublished(g, pub != ""),
+			}
+			if st.RunStatus == core.FlowLive {
+				data.Stats.LiveFlows++
+			}
+			if lr, ok := latestByGraph[id]; ok {
+				st.LastStatus = lr.status
+				if !lr.at.IsZero() {
+					at := lr.at
+					st.LastRunAt = &at
+				}
+			}
+			st.History = historyByGraph[id]
+			data.Flows = append(data.Flows, st)
+		}
+		data.Stats.TotalFlows = len(data.Flows)
+		// Stable, friendly ordering: failing flows first (they're what a wall
+		// is for), then running, then by name.
+		sort.SliceStable(data.Flows, func(i, j int) bool {
+			pi, pj := flowSortRank(data.Flows[i]), flowSortRank(data.Flows[j])
+			if pi != pj {
+				return pi < pj
+			}
+			return data.Flows[i].Name < data.Flows[j].Name
+		})
+	}
+	if data.Flows == nil {
+		data.Flows = []PublicFlowState{}
+	}
+	return data, nil
+}
+
+// workspaceLabel is the friendly board title for a tenant: its org display
+// name when set. A bare personal-tenant id (usr_<hex>) is meaningless chrome,
+// so it's dropped (the UI falls back to its generic title); a named tenant id
+// is kept as a last resort. Best-effort — any store error yields "".
+func (s *Service) workspaceLabel(ctx context.Context, tenant string) string {
+	if s.OrgProfiles != nil {
+		if prof, err := s.OrgProfiles.GetOrgProfile(ctx, tenant); err == nil && prof.DisplayName != "" {
+			return prof.DisplayName
+		}
+	}
+	if looksPersonalTenant(tenant) {
+		return ""
+	}
+	return tenant
+}
+
+// flowDisplayName falls back to the flow id when a graph has no name set, so a
+// tile is never blank.
+func flowDisplayName(g core.Graph, id string) string {
+	if g.Name != "" {
+		return g.Name
+	}
+	return id
+}
+
+// flowSortRank orders tiles so the wall draws attention to trouble: failed
+// first, then running, then everything else.
+func flowSortRank(f PublicFlowState) int {
+	switch f.LastStatus {
+	case core.JobStatusFailed:
+		return 0
+	case core.JobStatusRunning, core.JobStatusQueued:
+		return 1
+	default:
+		return 2
+	}
+}
+
+// runStartedOrEnqueued is the run's effective wall-clock time: when it began
+// if known, else when it was enqueued. Mirrors the Dashboard's client-side
+// choice so "today" counts agree.
+func runStartedOrEnqueued(r core.JobRecord) time.Time {
+	if r.StartedAt != nil {
+		return *r.StartedAt
+	}
+	return r.EnqueuedAt
+}
+
+// startOfDay truncates to local midnight — the boundary "runs today" counts from.
+func startOfDay(now time.Time) time.Time {
+	y, m, d := now.Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, now.Location())
+}

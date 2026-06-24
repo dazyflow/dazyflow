@@ -343,6 +343,17 @@ type Service struct {
 	// = logs aren't persisted on this deployment.
 	RunLogs RunLogStore
 
+	// Shares, when set, persists the per-workspace public overview share
+	// links (the read-only TV-dashboard surface). Nil leaves the /me/share
+	// CRUD endpoints + the public overview endpoint disabled.
+	Shares ShareStore
+
+	// OrgProfiles, when set, resolves a tenant's human-facing org display
+	// name. The public overview uses it to title the TV board with the org
+	// name instead of a generic label. Nil = the board falls back to its
+	// generic title. Same store the gateway reads for org display names.
+	OrgProfiles auth.OrgProfileStore
+
 	// suggestMu guards suggestCache, the memo backing DropSuggestions.
 	// Keyed by (tenant, workspace, visibility-view); each entry remembers
 	// the workspace HEAD it was computed at, so a save (which moves HEAD)
