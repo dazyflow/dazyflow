@@ -4629,6 +4629,11 @@ function EditorInner() {
           nodeDisabled={inspectorSelected ? disabledNodes.has(inspectorSelected.id) : false}
           onToggleDisabled={toggleNodeDisabled}
           tokenLabels={tokenLabels}
+          runCoordinate={
+            inspectorSelected && typeof runOutputs[inspectorSelected.id]?.coordinate?.data === "string"
+              ? (runOutputs[inspectorSelected.id].coordinate.data as string)
+              : undefined
+          }
           missingKeys={
             inspectorSelected
               ? configErrorsByNode.get(inspectorSelected.id)?.map((e) => e.key)

@@ -99,6 +99,9 @@ type Props = {
   // red marker + border so jumping from an error lands the eye on what to
   // fill in.
   missingKeys?: Iterable<string>;
+  // The selected node's last-run coordinate ("lat,lon") — lets a geo-point map
+  // field recenter on the result after a run.
+  geoRunCoordinate?: string;
 };
 
 // FormCtx carries the form-wide context that every field needs but none of
@@ -119,6 +122,9 @@ type FormCtx = {
   // wired is the set of param keys fed by a connected input port — read by
   // fields (e.g. the geo-point map) that must react to a SIBLING being wired.
   wired?: Set<string>;
+  // geoRunCoordinate is the selected node's last-run coordinate ("lat,lon"),
+  // so the geo-point map can recenter on the result.
+  geoRunCoordinate?: string;
 };
 
 const FormContext = createContext<FormCtx>({});
@@ -137,11 +143,12 @@ export function SchemaForm({
   extraReferenceItems,
   tokenLabels,
   missingKeys,
+  geoRunCoordinate,
 }: Props) {
   const { t } = useTranslation();
   const wired = new Set(wiredKeys ?? []);
   const missing = new Set(missingKeys ?? []);
-  const formCtx: FormCtx = { workspace, accountPicker, references, extraReferenceItems, tokenLabels, missingKeys: missing, wired };
+  const formCtx: FormCtx = { workspace, accountPicker, references, extraReferenceItems, tokenLabels, missingKeys: missing, wired, geoRunCoordinate };
   if (schema.type !== "object" || !schema.properties) {
     return (
       <div className="sf-fallback-hint">
@@ -259,8 +266,15 @@ type FieldProps = {
 };
 
 function SchemaField({ name, schema, required, value, onChange, wired, resolvedName, wiredSource, siblings }: FieldProps) {
-  const { workspace, accountPicker, references, extraReferenceItems, tokenLabels, wired: wiredSiblings } =
-    useFormCtx();
+  const {
+    workspace,
+    accountPicker,
+    references,
+    extraReferenceItems,
+    tokenLabels,
+    wired: wiredSiblings,
+    geoRunCoordinate,
+  } = useFormCtx();
   const { t } = useTranslation();
   // A wired param is decided by the incoming wire, so the editor is read-only.
   // Resource pickers render their own richer disabled note (with the resolved
@@ -448,7 +462,8 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
               value={(value as string) ?? ""}
               onChange={(v) => onChange(v === "" && !required ? undefined : v)}
               place={typeof siblings?.place === "string" ? (siblings.place as string) : undefined}
-              placeWired={wiredSiblings?.has("place") ?? false}
+              placeWired={(wiredSiblings?.has("place") || wiredSiblings?.has("coordinate")) ?? false}
+              runCoordinate={geoRunCoordinate}
             />
           </FieldWrap>
         );

@@ -123,6 +123,9 @@ type Props = {
   // value (from the config check). The form marks those fields red so a jump
   // from the "N to configure" modal points straight at what to fill in.
   missingKeys?: string[];
+  // The coordinate the selected node emitted on its last run ("lat,lon"), so a
+  // geo-point map field can recenter on the result after running.
+  runCoordinate?: string;
 };
 
 type Mode = "form" | "json";
@@ -155,6 +158,7 @@ export function Inspector({
   onStopRun,
   graphMeta,
   missingKeys,
+  runCoordinate,
 }: Props) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -568,6 +572,7 @@ export function Inspector({
               extraReferenceItems={loopOwnerNodeId ? loopItemReferenceItems : undefined}
               tokenLabels={tokenLabels}
               missingKeys={missingKeys}
+              geoRunCoordinate={runCoordinate}
               onChange={(v) => onParamsChange(selected.id, v)}
             />
             {/* The render_template step asks for HTML template syntax — the
