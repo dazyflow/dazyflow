@@ -191,6 +191,9 @@ export type ConnectionField = {
   secret?: boolean;
   required?: boolean;
   placeholder?: string;
+  // When set, the field is an enum: the UI renders a dropdown of these
+  // values (plus a blank "default" choice) instead of a free-text input.
+  options?: string[];
 };
 
 export type Manifest = {

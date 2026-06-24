@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net/url"
-	"strconv"
 	"strings"
 
 	"git.sr.ht/~klahr/dazyflow/core"
@@ -40,8 +38,10 @@ func init() {
 					Notes:  "The 'Coordinate' input (\"lat,lon\") overrides the map pin — wire a Location step into it.",
 				},
 			},
-			ExecutionModel: core.ExecutionBatch,
-			ProcessModel:   core.ProcessLongLived,
+			// Per-tenant geocoding backend (shared with Location); all optional.
+			ConnectionFields: geoConnectionFields,
+			ExecutionModel:   core.ExecutionBatch,
+			ProcessModel:     core.ProcessLongLived,
 			Inputs: []core.Port{
 				// Coordinate (a "lat,lon") overrides the map pin when wired.
 				{Port: "coordinate", Label: "Coordinate", MIME: []string{"text/plain"}},
@@ -77,41 +77,26 @@ func executeReverse(ctx context.Context, job core.Job, _ chan<- core.Progress) (
 		return params.Err(job, "bad_param", err.Error()), nil
 	}
 
-	q := url.Values{}
-	q.Set("lat", strconv.FormatFloat(lat, 'f', -1, 64))
-	q.Set("lon", strconv.FormatFloat(lon, 'f', -1, 64))
-	q.Set("format", "jsonv2")
-
-	status, body, gerr := nominatimGet(ctx, job, "/reverse", q)
-	if f := httpFailure(job, status, body, gerr); f != nil {
-		return *f, nil
-	}
-
-	var place nominatimPlace
-	if uerr := json.Unmarshal(body, &place); uerr != nil {
-		return params.ErrDetails(job, "nominatim_error", "OpenStreetMap returned an unexpected response.", uerr.Error()), nil
-	}
-	if place.DisplayName == "" {
-		return params.Err(job, "no_match", "No place found at "+fmtCoord(lat, lon)), nil
+	place, errRes := geocoderFor(job).reverse(ctx, job, lat, lon)
+	if errRes != nil {
+		return *errRes, nil
 	}
 
 	addr := place.Address
-	if len(addr) == 0 {
-		addr = json.RawMessage(`{}`)
+	if addr == nil {
+		addr = map[string]any{}
 	}
-	var raw any
-	_ = json.Unmarshal(body, &raw)
-	var addrAny any
-	_ = json.Unmarshal(addr, &addrAny)
 
 	return core.Result{
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
+			// Echo the queried coordinate (not the backend's snapped one) so
+			// chaining stays faithful to what the user pointed at.
 			"place":      {MIME: "text/plain", Inline: place.DisplayName},
 			"coordinate": {MIME: "text/plain", Inline: fmtCoord(lat, lon)},
-			"address":    {MIME: "application/json", Inline: addrAny},
-			"result":     {MIME: "application/json", Inline: raw},
+			"address":    {MIME: "application/json", Inline: addr},
+			"result":     {MIME: "application/json", Inline: place.Raw},
 		},
 	}, nil
 }

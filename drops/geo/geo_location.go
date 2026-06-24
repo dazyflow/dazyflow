@@ -37,8 +37,12 @@ func init() {
 					Notes:  "When Place is set (typed here or wired into the Place input) it's geocoded and overrides the map pin.",
 				},
 			},
-			ExecutionModel: core.ExecutionBatch,
-			ProcessModel:   core.ProcessLongLived,
+			// Optional per-tenant geocoding backend. All fields optional —
+			// unset means the keyless OpenStreetMap default, so the drop works
+			// out of the box; configure to self-host or use LocationIQ.
+			ConnectionFields: geoConnectionFields,
+			ExecutionModel:   core.ExecutionBatch,
+			ProcessModel:     core.ProcessLongLived,
 			Inputs: []core.Port{
 				// Place (a city or address) overrides the map pin when set.
 				{Port: "place", Label: "Place", MIME: []string{"text/plain"}},
@@ -81,16 +85,13 @@ func executeLocation(ctx context.Context, job core.Job, _ chan<- core.Progress) 
 
 	var coord, placeName string
 	if place != "" {
-		// A Place is set → geocode it; it overrides the map pin.
-		hit, errRes := geocodeFirst(ctx, job, place)
+		// A Place is set → geocode it through the active backend; it
+		// overrides the map pin.
+		hit, errRes := geocoderFor(job).forward(ctx, job, place)
 		if errRes != nil {
 			return *errRes, nil
 		}
-		_, _, c, cerr := hit.coord()
-		if cerr != nil {
-			return params.ErrDetails(job, "nominatim_error", "OpenStreetMap returned a malformed coordinate.", cerr.Error()), nil
-		}
-		coord, placeName = c, hit.DisplayName
+		coord, placeName = hit.Coord, hit.DisplayName
 	} else {
 		// No Place → fall back to the map pin.
 		point := strings.TrimSpace(params.StringDefault(job.Params, "point", ""))

@@ -586,6 +586,7 @@
     "setupIncompleteContactGeneric": "Contact whoever set up this Dazyflow workspace for you and ask them to finish the apps + secrets setup.",
     "connect": "Connect",
     "connectAnother": "Connect another account",
+    "defaultOption": "Default",
     "unknownError": "unknown error",
     "noSecrets": "No secrets stored yet.",
     "valueSet": "set ✓",

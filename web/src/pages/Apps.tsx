@@ -1114,13 +1114,29 @@ function ConnectionFieldsCard({
                   <span className="connection-field-set-hint"> · {t("integrations.connection.fieldSet")}</span>
                 )}
               </span>
-              <input
-                type={f.secret ? "password" : "text"}
-                placeholder={f.placeholder ?? ""}
-                value={values[f.key] ?? ""}
-                onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
-                autoComplete="off"
-              />
+              {f.options?.length ? (
+                // Enum field → dropdown. The blank option means "leave at the
+                // default" (the drop's own fallback, e.g. Nominatim).
+                <select
+                  value={values[f.key] ?? ""}
+                  onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                >
+                  <option value="">{f.placeholder || t("connections.defaultOption")}</option>
+                  {f.options.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type={f.secret ? "password" : "text"}
+                  placeholder={f.placeholder ?? ""}
+                  value={values[f.key] ?? ""}
+                  onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                  autoComplete="off"
+                />
+              )}
             </label>
           ))}
           {err && <div className="card error">{err}</div>}

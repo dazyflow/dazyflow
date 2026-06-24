@@ -584,6 +584,7 @@
     "setupIncompleteContactGeneric": "Kontakta personen som satte upp det här Dazyflow-kontot åt dig och be dem slutföra konfigurationen av appar och hemligheter.",
     "connect": "Anslut",
     "connectAnother": "Anslut ett till konto",
+    "defaultOption": "Standard",
     "unknownError": "okänt fel",
     "noSecrets": "Inga hemligheter sparade ännu.",
     "valueSet": "satt ✓",

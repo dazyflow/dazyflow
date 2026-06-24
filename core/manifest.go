@@ -74,11 +74,12 @@ type ConnectionRequirement struct {
 // its auth shape: RequiresConnections for a single secret / OAuth
 // account, ConnectionFields for an endpoint-plus-credential bundle.
 type ConnectionField struct {
-	Key         string `json:"key"`                   // param name the drop reads (e.g. "server", "token")
-	Label       string `json:"label"`                 // human field label
-	Secret      bool   `json:"secret,omitempty"`      // mask + redact (token/password); false = plain (URL/host)
-	Required    bool   `json:"required,omitempty"`    // counts toward "fully connected"
-	Placeholder string `json:"placeholder,omitempty"` // example value shown in the field
+	Key         string   `json:"key"`                   // param name the drop reads (e.g. "server", "token")
+	Label       string   `json:"label"`                 // human field label
+	Secret      bool     `json:"secret,omitempty"`      // mask + redact (token/password); false = plain (URL/host)
+	Required    bool     `json:"required,omitempty"`    // counts toward "fully connected"
+	Placeholder string   `json:"placeholder,omitempty"` // example value shown in the field
+	Options     []string `json:"options,omitempty"`     // when set, the field is an enum — UI renders a dropdown of these values plus a blank "default"
 }
 
 // ParamsExample is one worked params example for a drop. Title is the
