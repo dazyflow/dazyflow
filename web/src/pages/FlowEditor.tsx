@@ -2002,6 +2002,24 @@ function EditorInner() {
     return m;
   }, [edges, tokenLabels]);
 
+  // wiredPlaceByNode: for a node whose "place" input is wired FROM a literal
+  // Text drop, the upstream text value — so the Location map can show the wired
+  // place at design time (geocode it) rather than a bare "set at run time".
+  // Only one-hop literals are resolvable; a dynamic source leaves it unset.
+  const wiredPlaceByNode = useMemo(() => {
+    const m = new Map<string, string>();
+    const byId = new Map(nodes.map((n) => [n.id, n]));
+    for (const e of edges) {
+      if (e.targetHandle !== "place" || !e.target || !e.source) continue;
+      const src = byId.get(e.source);
+      if (src?.data?.moduleID === "text") {
+        const v = paramsByID[e.source]?.text;
+        if (typeof v === "string" && v.trim() !== "") m.set(e.target, v);
+      }
+    }
+    return m;
+  }, [edges, nodes, paramsByID]);
+
   const displayNodes = useMemo<FlowNode<DazyNodeData>[]>(() => {
     // Inline fields show only for a single selection, so a multi-select
     // (e.g. for align/distribute) keeps every card collapsed.
@@ -2021,6 +2039,7 @@ function EditorInner() {
       const params = paramsByID[n.id];
       const connectedInputs = connectedInputsByNode.get(n.id) ?? EMPTY_PORTS;
       const connectedOutputs = connectedOutputsByNode.get(n.id) ?? EMPTY_PORTS;
+      const wiredPlace = wiredPlaceByNode.get(n.id);
       const inlineEditable = n.id === soleId;
       const outputs = runOutputs[n.id];
       const configErrors = configErrorsByNode.get(n.id);
@@ -2041,6 +2060,7 @@ function EditorInner() {
         params,
         connectedInputs,
         connectedOutputs,
+        wiredPlace,
         inlineEditable,
         outputs,
         configErrors,
@@ -2069,6 +2089,7 @@ function EditorInner() {
           setParam: (key: string, value: unknown) => setNodeParam(n.id, key, value),
           connectedInputs,
           connectedOutputs,
+          wiredPlace,
           inlineEditable,
           outputs,
           configErrors,

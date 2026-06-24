@@ -16,6 +16,7 @@ import {
 } from "./nodeCardShared";
 import { JsonEditor, isInvalidJSON } from "./JsonEditor";
 import { Button } from "./Button";
+import { GeoPointField } from "./GeoPointField";
 
 // PICKER_FORMATS are the string-param formats whose value is an opaque
 // resource ID chosen from a dropdown. On the card they render read-only as
@@ -180,6 +181,9 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
             (k) =>
               schemaProps[k]?.format === "cron" ||
               schemaProps[k]?.format === "duration-seconds" ||
+              // The map picker lives on the card itself (not just the
+              // inspector), so the geo-point field shows even when optional.
+              schemaProps[k]?.format === "geo-point" ||
               // A channel picker shows even when optional — for a trigger like
               // On mention, WHICH channel it reacts to is key info to read at
               // a glance (same reasoning as the Schedule card showing WHEN).
@@ -332,6 +336,32 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
         // like a normal input inside the canvas.
         <div className="dz-node-params nodrag nowheel">
           {visibleLiteralFields.map(({ key, label, schema: s }) => {
+            // The map picker renders live on the card (not only in the
+            // inspector): search/click/drag to set the point. A wired Place
+            // input overrides it at run time, so note that on the card.
+            if (s.format === "geo-point") {
+              const placeWired = connectedInputs.includes("place");
+              // When wired, show the resolved upstream literal (d.wiredPlace) if
+              // we could trace one; else the typed Place param.
+              const effectivePlace = placeWired
+                ? typeof d.wiredPlace === "string"
+                  ? d.wiredPlace
+                  : undefined
+                : typeof d.params?.place === "string"
+                  ? (d.params.place as string)
+                  : undefined;
+              return (
+                <div key={key} className="dz-param dz-param-geo">
+                  <span className="dz-param-label">{label}</span>
+                  <GeoPointField
+                    value={typeof d.params?.[key] === "string" ? (d.params[key] as string) : ""}
+                    onChange={(v) => d.setParam?.(key, v)}
+                    place={effectivePlace}
+                    placeWired={placeWired}
+                  />
+                </div>
+              );
+            }
             // Resource-picker params show read-only as the resolved resource
             // name — never the opaque id. Until the name resolves (it's
             // fetched + cached by the editor) a value shows a neutral "…"

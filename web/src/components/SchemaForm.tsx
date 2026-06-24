@@ -16,6 +16,7 @@ import { useTranslation } from "react-i18next";
 import type { JSONSchema, ReferenceGroups, ReferenceItem } from "../types";
 import { type TokenLabels, friendlyTokenText } from "./nodeCardShared";
 import { JsonEditor, isInvalidJSON } from "./JsonEditor";
+import { GeoPointField } from "./GeoPointField";
 import { api, APIError } from "../api";
 import { useAuth } from "../auth";
 import { Button } from "./Button";
@@ -115,6 +116,9 @@ type FormCtx = {
   // (read by FieldWrap). Carried in context so it doesn't prop-drill through
   // SchemaField into every per-type component.
   missingKeys?: Set<string>;
+  // wired is the set of param keys fed by a connected input port — read by
+  // fields (e.g. the geo-point map) that must react to a SIBLING being wired.
+  wired?: Set<string>;
 };
 
 const FormContext = createContext<FormCtx>({});
@@ -137,7 +141,7 @@ export function SchemaForm({
   const { t } = useTranslation();
   const wired = new Set(wiredKeys ?? []);
   const missing = new Set(missingKeys ?? []);
-  const formCtx: FormCtx = { workspace, accountPicker, references, extraReferenceItems, tokenLabels, missingKeys: missing };
+  const formCtx: FormCtx = { workspace, accountPicker, references, extraReferenceItems, tokenLabels, missingKeys: missing, wired };
   if (schema.type !== "object" || !schema.properties) {
     return (
       <div className="sf-fallback-hint">
@@ -255,7 +259,8 @@ type FieldProps = {
 };
 
 function SchemaField({ name, schema, required, value, onChange, wired, resolvedName, wiredSource, siblings }: FieldProps) {
-  const { workspace, accountPicker, references, extraReferenceItems, tokenLabels } = useFormCtx();
+  const { workspace, accountPicker, references, extraReferenceItems, tokenLabels, wired: wiredSiblings } =
+    useFormCtx();
   const { t } = useTranslation();
   // A wired param is decided by the incoming wire, so the editor is read-only.
   // Resource pickers render their own richer disabled note (with the resolved
@@ -429,6 +434,21 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
             <RowConditionField
               value={(value as string) ?? ""}
               onChange={(v) => onChange(v === "" && !required ? undefined : v)}
+            />
+          </FieldWrap>
+        );
+      }
+      // format:"geo-point" gets the OpenStreetMap map picker — search/click to
+      // set a "lat,lon" point, the string the Weather/geo Coordinate inputs
+      // accept. (The Location value source uses this.)
+      if (schema.format === "geo-point") {
+        return (
+          <FieldWrap name={name} schema={schema} required={required}>
+            <GeoPointField
+              value={(value as string) ?? ""}
+              onChange={(v) => onChange(v === "" && !required ? undefined : v)}
+              place={typeof siblings?.place === "string" ? (siblings.place as string) : undefined}
+              placeWired={wiredSiblings?.has("place") ?? false}
             />
           </FieldWrap>
         );

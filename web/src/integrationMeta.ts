@@ -224,6 +224,15 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     docs_url: "https://openweathermap.org/api",
     brand_logo: "/brands/openweather.svg",
   },
+  openstreetmap: {
+    name: "OpenStreetMap",
+    description:
+      "Work with places and coordinates. Pick a location on a map and emit its coordinate, turn an address or place name into a coordinate, or turn a coordinate back into a place name. Pairs naturally with OpenWeather — pick or look up a spot, then wire the coordinate into a weather lookup.",
+    technical_notes:
+      "The Location picker is a design-time value source — its map (OpenStreetMap tiles) and place search (Nominatim) run client-side in the editor; the node just stores a \"lat,lon\" string. The Geocode and Reverse geocode drops call OpenStreetMap's Nominatim service at run time through the SSRF-guarded HTTP client with an identifying User-Agent. No account or key needed. Nominatim's public service is rate-limited (~1 request/second); for heavier use, self-host and set DAZYFLOW_NOMINATIM_URL. © OpenStreetMap contributors.",
+    docs_url: "https://nominatim.org/release-docs/latest/api/Overview/",
+    brand_logo: "/brands/openstreetmap.svg",
+  },
   webhook: {
     name: "Outgoing webhooks",
     description:

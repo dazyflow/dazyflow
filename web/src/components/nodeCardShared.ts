@@ -84,6 +84,10 @@ export type DazyNodeData = {
   connectedInputs?: string[];
   // Output port ids that currently have a wire — drives the pin fill.
   connectedOutputs?: string[];
+  // For a geo_location node whose Place input is wired from a resolvable
+  // literal (a Text drop), the upstream literal value — so the map can show
+  // the wired place at design time instead of "set at run time".
+  wiredPlace?: string;
   // True only when this is the SOLE selected node. Inline fields show just
   // for a single selection, so a multi-select (e.g. for alignment) keeps
   // every card collapsed — and align/distribute use the deselected height.

@@ -10140,3 +10140,80 @@ button:active,
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* ----- Map picker (format:"geo-point", GeoPointField) ----- */
+.geo-point-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.geo-search {
+  display: flex;
+  gap: var(--space-2);
+}
+.geo-search input {
+  flex: 1 1 auto;
+}
+.geo-search-err {
+  font-size: var(--text-sm);
+  color: var(--danger);
+}
+.geo-map {
+  height: 240px;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  overflow: hidden;
+  /* Leaflet panes sit at high z-indexes; keep them under the app's modals. */
+  z-index: 0;
+}
+/* The emoji pin marker (divIcon) — center it on its anchor without a box. */
+.geo-pin {
+  font-size: 22px;
+  line-height: 22px;
+  text-align: center;
+  background: none;
+  border: none;
+}
+.geo-coord {
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+/* "Pin follows the Place" banner shown when a Place overrides the map pin. */
+.geo-following {
+  font-size: var(--text-sm);
+  color: var(--ink);
+  background: color-mix(in srgb, var(--warning, #d9822b) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warning, #d9822b) 40%, transparent);
+  border-radius: var(--r-1);
+  padding: var(--space-1) var(--space-2);
+}
+/* In follow mode the map is a read-only preview — no click-to-pick cursor. */
+.geo-map-readonly .leaflet-container {
+  cursor: default;
+}
+/* Leaflet's controls/attribution inherit the app font; keep the attribution
+   legible on the dark theme. */
+.geo-map .leaflet-control-attribution {
+  background: rgba(0, 0, 0, 0.6);
+  color: var(--muted);
+}
+.geo-map .leaflet-control-attribution a {
+  color: var(--accent);
+}
+/* The map picker rendered on the node card itself: a touch shorter than the
+   inspector's, with a minimum width so the canvas node is comfortable. */
+.dz-param-geo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 240px;
+}
+.dz-param-geo .geo-map {
+  height: 170px;
+}
+.dz-param-note {
+  font-size: var(--text-xs);
+  color: var(--warning, #d9822b);
+}
