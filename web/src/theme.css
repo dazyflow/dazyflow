@@ -314,8 +314,10 @@ a {
   color: var(--accent);
   text-decoration: none;
 }
+/* Links never underline — not at rest, not on hover. Hover is signalled by a
+   colour shift (per-component) instead. */
 a:hover {
-  text-decoration: underline;
+  text-decoration: none;
 }
 
 /* Links styled as buttons (.primary / .ghost on an <a>/<Link>) read as

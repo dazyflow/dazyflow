@@ -1269,7 +1269,7 @@
   text-decoration: none;
 }
 .signin-alt a:hover {
-  text-decoration: underline;
+  opacity: 0.8;
 }
 /* Button styled as an inline link — used for the "use a recovery code"
    toggle on the second-factor step, where a full button would read as
@@ -1284,7 +1284,7 @@
   text-decoration: none;
 }
 .linklike:hover {
-  text-decoration: underline;
+  opacity: 0.8;
 }
 
 /* Two-factor card (Settings). Enrolment shows a QR + the manual secret;
@@ -1607,7 +1607,6 @@
 }
 .welcome-goal-dev a:hover {
   color: var(--accent);
-  text-decoration: underline;
 }
 .welcome-or {
   color: var(--muted);
@@ -1905,7 +1904,7 @@
   cursor: pointer;
 }
 .integrations-filter-clear:hover {
-  text-decoration: underline;
+  opacity: 0.8;
   background: none;
 }
 .integration-grid {
@@ -2083,7 +2082,7 @@
   padding: 0;
 }
 .link-button:hover {
-  text-decoration: underline;
+  opacity: 0.8;
 }
 
 .provider-grid {
@@ -2710,7 +2709,7 @@ button.warning:hover:not(:disabled) {
   text-decoration: none;
 }
 .integration-hero-docs a:hover {
-  text-decoration: underline;
+  opacity: 0.8;
 }
 .integration-drops-head {
   margin: var(--space-5) 0 var(--space-3);
@@ -9048,7 +9047,7 @@ button.files-name {
   font: inherit;
 }
 button.files-name:hover {
-  text-decoration: underline;
+  opacity: 0.8;
 }
 .files-icon {
   color: var(--muted);

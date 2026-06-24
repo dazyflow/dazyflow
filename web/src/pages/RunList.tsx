@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Activity, ExternalLink, RotateCcw, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
@@ -45,10 +45,17 @@ export function RunList() {
   ];
   const { token, me, tenants, activeTenant, activeWorkspace } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<JobStatus | "">("");
+  // Seed the status filter from a ?status= query param so deep links (e.g. the
+  // dashboard's "Needs attention" card → ?status=failed) land pre-filtered.
+  // Only a value matching one of the chips is honoured; anything else = all.
+  const [filter, setFilter] = useState<JobStatus | "">(() => {
+    const s = searchParams.get("status");
+    return STATUS_CHIPS.some((c) => c.value === s) ? (s as JobStatus) : "";
+  });
   // Free-text filter over the loaded rows (run id + flow name). Client-side
   // by design: the runs API has no text-search param, so this narrows what's
   // already fetched rather than querying the server.

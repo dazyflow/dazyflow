@@ -136,7 +136,7 @@ export function Dashboard() {
           label={t("dashboard.needsAttention")}
           value={loading ? "—" : String(failedRuns.length)}
           tone={failedRuns.length > 0 ? "bad" : "good"}
-          to="/runs"
+          to="/runs?status=failed"
         />
         <StatCard
           icon={<Inbox size={18} />}
@@ -154,7 +154,7 @@ export function Dashboard() {
           <div className="dash-panel-head">
             <h2>{t("dashboard.needsAttention")}</h2>
             {failedRuns.length > 0 && (
-              <Link to="/runs" className="dash-panel-link">
+              <Link to="/runs?status=failed" className="dash-panel-link">
                 {t("dashboard.viewAll")} <ArrowRight size={13} />
               </Link>
             )}
