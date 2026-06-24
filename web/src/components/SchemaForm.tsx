@@ -710,6 +710,23 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
           </FieldWrap>
         );
       }
+      // format:"collection-columns" is a multiselect of the chosen collection's
+      // columns (sibling `table`) — the Save rows "Unique by" key. Free-text
+      // "add your own" covers a not-yet-created collection or a column not yet
+      // in it.
+      if (schema.format === "collection-columns") {
+        const collection = typeof siblings?.table === "string" ? (siblings.table as string) : "";
+        return (
+          <FieldWrap name={name} schema={schema} required={required}>
+            <CollectionColumnsField
+              value={(value as string[]) ?? []}
+              onChange={onChange}
+              collection={collection}
+              token={references?.token}
+            />
+          </FieldWrap>
+        );
+      }
       // format:"string-multiselect" turns an array-of-string into a
       // checklist of curated options (items.enum / enumNames) plus a
       // free-text "add your own" for the long tail — so a non-tech owner
@@ -3003,6 +3020,26 @@ function CollectionColumnField({
       </select>
     </FieldWrap>
   );
+}
+
+// CollectionColumnsField is a MULTI-column picker sourced from the chosen
+// collection's columns (the Save rows "Unique by" key). When the collection
+// doesn't exist yet (no columns to list), MultiSelectField's free-text
+// "add your own" still lets the user name the key column(s).
+function CollectionColumnsField({
+  value,
+  onChange,
+  collection,
+  token,
+}: {
+  value: string[];
+  onChange: (v: unknown) => void;
+  collection: string;
+  token?: string;
+}) {
+  const columns = useCollectionColumns(collection, token);
+  const options = columns.map((c) => ({ value: c, label: c }));
+  return <MultiSelectField value={value} onChange={onChange} options={options} />;
 }
 
 // and stores the returned path. Drag-and-drop uses native HTML5

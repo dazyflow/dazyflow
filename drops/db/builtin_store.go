@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/limits"
@@ -44,7 +45,7 @@ func init() {
 			// disturbing the deliberate ranking below SQLite Insert rows for
 			// those generic verbs (see SearchBoost note there).
 			Tags:        []string{"collection", "collections", "store", "database", "save", "append", "no-setup", "results", "dashboard", "report"},
-			Description: "Save rows to a collection — no database to set up and no connection string to paste. Pick a collection name and the rows land there; the collection is created automatically the first time. Each workspace has its own private Collections, and the saved rows show up under Collections so you can browse them in-app.",
+			Description: "Save rows to a collection — no database to set up and no connection string to paste. Pick a collection name and the rows land there; the collection is created automatically the first time. Each workspace has its own private Collections, and the saved rows show up under Collections so you can browse them in-app. By default every run appends; set “Unique by” to a key column (like date) and a row with a matching key is updated in place instead of piling up a duplicate — so re-running the flow stays idempotent.",
 			Summary:     "Append rows to a workspace-local collection with zero setup; auto-creates the collection, evolves columns on the fly, and surfaces the rows under Collections.",
 			Examples: []core.ParamsExample{
 				{
@@ -55,6 +56,11 @@ func init() {
 				{
 					Title:  "Save with a typed column",
 					Params: json.RawMessage(`{"table":"signups","column_types":{"age":"INTEGER"}}`),
+				},
+				{
+					Title:  "Idempotent save (no duplicates)",
+					Params: json.RawMessage(`{"table":"forecast","unique_by":["date"]}`),
+					Notes:  "Re-running updates each date's row in place instead of appending duplicates.",
 				},
 			},
 			ExecutionModel: core.ExecutionBatch,
@@ -69,6 +75,7 @@ func init() {
 				"type":"object",
 				"properties":{
 					"table":        {"type":"string","title":"Collection","description":"Name of the collection to save into, e.g. leads or signups. Created automatically the first time.","examples":["leads"]},
+					"unique_by":    {"type":"array","items":{"type":"string"},"format":"collection-columns","title":"Unique by","description":"Optional. Column(s) that identify a row, e.g. date. When set, re-saving a row with the same key updates it in place instead of adding a duplicate, so re-running the flow is idempotent. Leave empty to always append."},
 					"column_types": {"type":"object","additionalProperties":{"type":"string"},"description":"Optional: force a column's type (e.g. {\"age\":\"INTEGER\"}). Everything defaults to text, which is fine for most things."}
 				},
 				"required":["table"]
@@ -224,6 +231,11 @@ func executeBuiltinStoreAppend(ctx context.Context, job core.Job, _ chan<- core.
 		}
 	}
 
+	uniqueBy, keyErr := parseUniqueBy(job, headers)
+	if keyErr != nil {
+		return *keyErr, nil
+	}
+
 	db, errResult := openBuiltinStore(job, true)
 	if errResult != nil {
 		return *errResult, nil
@@ -257,6 +269,25 @@ func executeBuiltinStoreAppend(ctx context.Context, job core.Job, _ chan<- core.
 			Output: map[string]core.Ref{"inserted": {MIME: "application/json", Inline: 0}},
 		}, nil
 	}
+	// With a "Unique by" key, upsert on those columns so re-saving a row with
+	// the same key updates it in place (idempotent re-runs) rather than adding a
+	// duplicate. Without it, the historical append behaviour is unchanged.
+	if len(uniqueBy) > 0 {
+		if err := ensureUniqueIndex(db, table, uniqueBy); err != nil {
+			return params.Err(job, "not_unique", err.Error()), nil
+		}
+		stmt := insertSQL(sqliteDialect{}, quoteIdent(table), headers, sqliteDialect{}.upsertClause(uniqueBy, subtract(headers, uniqueBy)))
+		saved, err := sqlConn{db: db}.execBatch(ctx, stmt, headers, rows, "upsert")
+		if err != nil {
+			return params.Err(job, "db", err.Error()), nil
+		}
+		return core.Result{
+			JobID:  job.ID,
+			Status: core.StatusOK,
+			Output: map[string]core.Ref{"inserted": {MIME: "application/json", Inline: saved}},
+		}, nil
+	}
+
 	inserted, err := sqlConn{db: db}.execBatch(ctx, insertSQL(sqliteDialect{}, quoteIdent(table), headers, ""), headers, rows, "insert")
 	if err != nil {
 		return params.Err(job, "db", err.Error()), nil
@@ -266,6 +297,59 @@ func executeBuiltinStoreAppend(ctx context.Context, job core.Job, _ chan<- core.
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{"inserted": {MIME: "application/json", Inline: inserted}},
 	}, nil
+}
+
+// parseUniqueBy reads the optional "unique_by" key columns for an idempotent
+// upsert. Empty → plain append. Each key must be a valid identifier and (when
+// there are rows to write) one of the saved columns — there'd be no value to
+// match on otherwise.
+func parseUniqueBy(job core.Job, headers []string) ([]string, *core.Result) {
+	if raw, ok := job.Params["unique_by"]; !ok || raw == nil {
+		return nil, nil // optional — absent means plain append
+	}
+	keys, err := paramStringArray(job.Params, "unique_by")
+	if err != nil {
+		r := params.Err(job, "bad_param", err.Error())
+		return nil, &r
+	}
+	if len(keys) == 0 {
+		return nil, nil
+	}
+	headerSet := make(map[string]struct{}, len(headers))
+	for _, h := range headers {
+		headerSet[h] = struct{}{}
+	}
+	for _, k := range keys {
+		if err := validateIdent(k); err != nil {
+			r := params.Err(job, "bad_param", fmt.Sprintf("unique-by column %q: %v", k, err))
+			return nil, &r
+		}
+		if len(headers) > 0 {
+			if _, ok := headerSet[k]; !ok {
+				r := params.Err(job, "bad_param", fmt.Sprintf("unique-by column %q isn't one of the saved columns", k))
+				return nil, &r
+			}
+		}
+	}
+	return keys, nil
+}
+
+// ensureUniqueIndex creates a UNIQUE index on the key columns so the store can
+// upsert (ON CONFLICT) on them; IF NOT EXISTS makes it a no-op once present.
+// SQLite refuses to build the index when existing rows already collide on the
+// key — surfaced as a clear, fixable error rather than a silent no-op.
+func ensureUniqueIndex(db *sql.DB, table string, keys []string) error {
+	idx := "ux_" + table + "_" + strings.Join(keys, "_")
+	stmt := fmt.Sprintf("CREATE UNIQUE INDEX IF NOT EXISTS %s ON %s (%s)",
+		quoteIdent(idx), quoteIdent(table), strings.Join(quoteAll(sqliteDialect{}, keys), ", "))
+	if _, err := db.Exec(stmt); err != nil {
+		if msg := strings.ToLower(err.Error()); strings.Contains(msg, "unique") || strings.Contains(msg, "duplicate") {
+			cols := strings.Join(keys, ", ")
+			return fmt.Errorf("this collection already has duplicate rows for %s, so it can't be made unique on %s — remove the duplicates or choose a different key", cols, cols)
+		}
+		return fmt.Errorf("create unique index: %w", err)
+	}
+	return nil
 }
 
 // evolveBuiltinStoreColumns adds any header not already present on

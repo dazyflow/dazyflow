@@ -13,6 +13,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
+import { FLOWS_CHANGED_EVENT } from "../activeFlow";
 import { Button } from "../components/Button";
 import { DeleteFlowModal } from "../components/DeleteFlowModal";
 import { FlowIcon, isBrandedIcon } from "../icons";
@@ -256,6 +257,9 @@ export function FlowList() {
       return next;
     });
     setDeleteTarget(null);
+    // Tell the sidebar (and anything else listening) the flow set changed, so
+    // its own list drops the deleted flow without waiting for a navigation.
+    window.dispatchEvent(new Event(FLOWS_CHANGED_EVENT));
   };
 
   return (

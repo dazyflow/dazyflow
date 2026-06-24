@@ -153,6 +153,89 @@ func withInput(j core.Job, in map[string]core.Ref) core.Job {
 	return j
 }
 
+// TestBuiltinStore_AppendUniqueByUpsert verifies the opt-in idempotent path:
+// with unique_by set, re-saving a row with the same key updates it in place
+// instead of appending a duplicate.
+func TestBuiltinStore_AppendUniqueByUpsert(t *testing.T) {
+	root := t.TempDir()
+	base := core.Job{WorkspaceRoot: root, Params: map[string]any{"table": "forecast", "unique_by": []any{"date"}}}
+
+	first, err := executeBuiltinStoreAppend(t.Context(), withInput(base, map[string]core.Ref{
+		"rows": {Inline: []map[string]any{
+			{"date": "2026-06-24", "temp_max": "20"},
+			{"date": "2026-06-25", "temp_max": "22"},
+		}},
+		"headers": {Inline: []string{"date", "temp_max"}},
+	}), nil)
+	if err != nil || first.Status != core.StatusOK {
+		t.Fatalf("first save: status=%q err=%v %+v", first.Status, err, first.Error)
+	}
+
+	// Re-run: an overlapping date with a new value, plus a brand-new date.
+	second, err := executeBuiltinStoreAppend(t.Context(), withInput(base, map[string]core.Ref{
+		"rows": {Inline: []map[string]any{
+			{"date": "2026-06-25", "temp_max": "99"}, // updates the existing row
+			{"date": "2026-06-26", "temp_max": "18"}, // inserts a new one
+		}},
+		"headers": {Inline: []string{"date", "temp_max"}},
+	}), nil)
+	if err != nil || second.Status != core.StatusOK {
+		t.Fatalf("second save: status=%q err=%v %+v", second.Status, err, second.Error)
+	}
+
+	q, err := executeBuiltinStoreQuery(t.Context(), core.Job{
+		WorkspaceRoot: root,
+		Params:        map[string]any{"sql": "SELECT date, temp_max FROM forecast ORDER BY date"},
+	}, nil)
+	if err != nil || q.Status != core.StatusOK {
+		t.Fatalf("query: status=%q err=%v %+v", q.Status, err, q.Error)
+	}
+	rows, _ := q.Output["rows"].Inline.([]map[string]any)
+	if len(rows) != 3 {
+		t.Fatalf("got %d rows, want 3 (no duplicate date)", len(rows))
+	}
+	for _, r := range rows {
+		if r["date"] == "2026-06-25" && r["temp_max"] != "99" {
+			t.Errorf("2026-06-25 temp_max = %v, want 99 (updated in place)", r["temp_max"])
+		}
+	}
+}
+
+// TestBuiltinStore_AppendUniqueByRejectsExistingDuplicates verifies that
+// switching a collection that already holds duplicate keys to unique_by fails
+// loudly (can't build the unique index) instead of silently doing nothing.
+func TestBuiltinStore_AppendUniqueByRejectsExistingDuplicates(t *testing.T) {
+	root := t.TempDir()
+	// Plain append: two rows share a date — a duplicate on the would-be key.
+	if _, err := executeBuiltinStoreAppend(t.Context(), core.Job{
+		WorkspaceRoot: root,
+		Params:        map[string]any{"table": "forecast"},
+		Input: map[string]core.Ref{
+			"rows": {Inline: []map[string]any{
+				{"date": "2026-06-24", "temp_max": "20"},
+				{"date": "2026-06-24", "temp_max": "21"},
+			}},
+			"headers": {Inline: []string{"date", "temp_max"}},
+		},
+	}, nil); err != nil {
+		t.Fatalf("seed append: %v", err)
+	}
+	res, err := executeBuiltinStoreAppend(t.Context(), core.Job{
+		WorkspaceRoot: root,
+		Params:        map[string]any{"table": "forecast", "unique_by": []any{"date"}},
+		Input: map[string]core.Ref{
+			"rows":    {Inline: []map[string]any{{"date": "2026-06-24", "temp_max": "30"}}},
+			"headers": {Inline: []string{"date", "temp_max"}},
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if res.Status != core.StatusError || res.Error == nil || res.Error.Code != "not_unique" {
+		t.Fatalf("want not_unique error, got status=%q err=%+v", res.Status, res.Error)
+	}
+}
+
 // findRows runs the no-SQL reader and returns its rows, failing the test on
 // any error/non-OK status.
 func findRows(t *testing.T, root string, params map[string]any) []map[string]any {
