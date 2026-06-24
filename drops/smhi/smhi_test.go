@@ -1,0 +1,158 @@
+package smhi
+
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"git.sr.ht/~klahr/dazyflow/core"
+	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+)
+
+func init() { hfnet.SetAllowPrivateEgress(true) }
+
+// snow1g point response: a flat data map per step, symbol_code = Wsymb2.
+const sample = `{
+  "createdTime":"2026-06-24T12:59:00Z","referenceTime":"2026-06-24T12:45:00Z",
+  "geometry":{"type":"Point","coordinates":[18.077207,59.330360]},
+  "timeSeries":[
+    {"time":"2026-06-24T13:00:00Z","data":{"air_temperature":18.3,"relative_humidity":64,"wind_speed":3.4,"symbol_code":2}},
+    {"time":"2026-06-24T12:00:00Z","data":{"air_temperature":20.0,"symbol_code":5}},
+    {"time":"2026-06-25T12:00:00Z","data":{"air_temperature":15.0,"symbol_code":18}},
+    {"time":"2026-06-25T18:00:00Z","data":{"air_temperature":11.0,"symbol_code":6}},
+    {"time":"2026-06-26T12:00:00Z","data":{"air_temperature":9.0,"symbol_code":25}}
+  ]
+}`
+
+func stubSMHI(t *testing.T, status int, body string, gotReq **http.Request) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if gotReq != nil {
+			*gotReq = r
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	}))
+	prev := forecastBase
+	forecastBase = srv.URL
+	t.Cleanup(func() { forecastBase = prev; srv.Close() })
+}
+
+func textPin(t *testing.T, r core.Result, port string) string {
+	t.Helper()
+	ref, ok := r.Output[port]
+	if !ok {
+		t.Fatalf("missing output pin %q", port)
+	}
+	s, ok := ref.Inline.(string)
+	if !ok {
+		t.Fatalf("output pin %q is %T, want string", port, ref.Inline)
+	}
+	return s
+}
+
+func TestWsymbClass(t *testing.T) {
+	for code, want := range map[int]string{1: "Clear", 2: "Clear", 5: "Clouds", 7: "Fog", 11: "Thunder", 18: "Rain", 25: "Snow", 22: "Sleet"} {
+		if got := classFor(code); got != want {
+			t.Errorf("classFor(%d) = %q, want %q", code, got, want)
+		}
+	}
+}
+
+func TestExecuteCurrent_Success(t *testing.T) {
+	var req *http.Request
+	stubSMHI(t, 200, sample, &req)
+
+	job := core.Job{Params: map[string]any{"lat": 59.3293, "lon": 18.0686}}
+	r, err := executeCurrent(context.Background(), job, nil)
+	if err != nil || r.Status != core.StatusOK {
+		t.Fatalf("status=%v err=%v %+v", r.Status, err, r.Error)
+	}
+	if got := textPin(t, r, "summary"); got != "Nearly clear sky, 18.3°C, humidity 64%, wind 3.4 m/s" {
+		t.Errorf("summary = %q", got)
+	}
+	if got := textPin(t, r, "temperature"); got != "18.3" {
+		t.Errorf("temperature = %q", got)
+	}
+	if got := textPin(t, r, "conditions"); got != "Clear" {
+		t.Errorf("conditions = %q", got)
+	}
+	// lon BEFORE lat, 6 decimals; current asks for a single step.
+	if !strings.Contains(req.URL.Path, "/lon/18.068600/lat/59.329300/") {
+		t.Errorf("request path = %q", req.URL.Path)
+	}
+	if !strings.Contains(req.URL.RawQuery, "timeseries=1") {
+		t.Errorf("current should request timeseries=1, query = %q", req.URL.RawQuery)
+	}
+}
+
+func TestExecuteCurrent_CoordInputOverrides(t *testing.T) {
+	var req *http.Request
+	stubSMHI(t, 200, sample, &req)
+	job := core.Job{
+		Params: map[string]any{"lat": 1.0, "lon": 2.0},
+		Input:  map[string]core.Ref{"coordinate": {Inline: "59.3293,18.0686"}},
+	}
+	if r, _ := executeCurrent(context.Background(), job, nil); r.Status != core.StatusOK {
+		t.Fatalf("status %v %+v", r.Status, r.Error)
+	}
+	if !strings.Contains(req.URL.Path, "/lon/18.068600/lat/59.329300/") {
+		t.Errorf("Coordinate input should drive the request, path = %q", req.URL.Path)
+	}
+}
+
+func TestExecuteCurrent_BadParam_NoNetwork(t *testing.T) {
+	r, _ := executeCurrent(context.Background(), core.Job{Params: map[string]any{}}, nil)
+	if r.Error == nil || r.Error.Code != "bad_param" {
+		t.Fatalf("want bad_param, got %+v", r.Error)
+	}
+	r, _ = executeCurrent(context.Background(), core.Job{Params: map[string]any{"lat": "5", "lon": "5"}}, nil)
+	if r.Error == nil || r.Error.Code != "bad_param" {
+		t.Fatalf("string lat/lon: want bad_param, got %+v", r.Error)
+	}
+}
+
+func TestExecuteCurrent_OutOfDomain(t *testing.T) {
+	stubSMHI(t, 404, "Requested point is out of bounds", nil)
+	r, _ := executeCurrent(context.Background(), core.Job{Params: map[string]any{"lat": 0.0, "lon": 0.0}}, nil)
+	if r.Error == nil || r.Error.Code != "out_of_domain" {
+		t.Fatalf("404 → want out_of_domain, got %+v", r.Error)
+	}
+}
+
+func TestExecuteForecast_Success(t *testing.T) {
+	var req *http.Request
+	stubSMHI(t, 200, sample, &req)
+	job := core.Job{Params: map[string]any{"lat": 59.3293, "lon": 18.0686, "days": 2}}
+	r, err := executeForecast(context.Background(), job, nil)
+	if err != nil || r.Status != core.StatusOK {
+		t.Fatalf("status=%v err=%v %+v", r.Status, err, r.Error)
+	}
+	summary := textPin(t, r, "summary")
+	if strings.Count(summary, "\n") != 1 {
+		t.Errorf("want 2 day lines, got %q", summary)
+	}
+	if !strings.Contains(summary, "Cloudy sky, 18–20°C") {
+		t.Errorf("day-1 line off: %q", summary)
+	}
+	if !strings.Contains(summary, "Light rain, 11–15°C") {
+		t.Errorf("day-2 line off: %q", summary)
+	}
+	if strings.Contains(strings.ToLower(summary), "snow") {
+		t.Errorf("third day leaked past days=2: %q", summary)
+	}
+	daily, ok := r.Output["daily"].Inline.([]smhiDay)
+	if !ok || len(daily) != 2 {
+		t.Fatalf("daily pin = %T len %d, want 2", r.Output["daily"].Inline, len(daily))
+	}
+	if daily[0].Conditions != "Clouds" || daily[0].TempMin != 18.3 || daily[0].TempMax != 20.0 {
+		t.Errorf("day-0 aggregate wrong: %+v", daily[0])
+	}
+	// Forecast asks for the full series — no timeseries=1.
+	if strings.Contains(req.URL.RawQuery, "timeseries=1") {
+		t.Errorf("forecast should NOT limit to one step, query = %q", req.URL.RawQuery)
+	}
+}

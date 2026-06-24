@@ -232,11 +232,28 @@ func (s *Store) save(graph core.Graph, author string, coalesce bool) (string, er
 		Amend:             amend,
 	})
 	if err != nil {
-		// Re-saving identical content is a no-op, not a failure —
-		// callers (especially the AI chat's "apply" step after the
-		// agent already saved through MCP) hit this and shouldn't
-		// see an error. Surface the existing HEAD as the commit.
 		if errors.Is(err, git.ErrEmptyCommit) {
+			// ErrEmptyCommit means the staged tree equals the new commit's
+			// parent tree — but which parent that is depends on whether we
+			// amended, and the two cases need opposite handling:
+			//
+			//   - Plain commit: go-git's parent is HEAD, so identical content
+			//     is a true no-op. Re-saving unchanged content (e.g. the AI
+			//     chat's "apply" after the agent already saved via MCP) hits
+			//     this; surface the existing HEAD as the commit.
+			//
+			//   - Amend: go-git sets the new commit's parent to HEAD's *parent*
+			//     and compares against THAT (worktree_commit.go). So this fires
+			//     when an editing burst nets back to the pre-autosave state —
+			//     add a node then delete it, drag a wire then undo it. Here HEAD
+			//     (the autosave we're amending) still carries the change the user
+			//     reverted. Returning it would silently drop the revert: the node
+			//     reappears on the next load and stale graph runs. Instead drop
+			//     the now-empty autosave by moving the branch back to its parent,
+			//     so HEAD, index, and worktree all agree on the reverted state.
+			if amend {
+				return s.dropAmendedHead()
+			}
 			head, herr := s.repo.Head()
 			if herr != nil {
 				return "", fmt.Errorf("commit: %w (and head lookup: %v)", err, herr)
@@ -246,6 +263,35 @@ func (s *Store) save(graph core.Graph, author string, coalesce bool) (string, er
 		return "", fmt.Errorf("commit: %w", err)
 	}
 	return hash.String(), nil
+}
+
+// dropAmendedHead rewinds the current branch to HEAD's first parent. It's the
+// recovery path when amending an autosave produced an empty commit: the editing
+// burst netted back to the pre-autosave content, so the autosave commit we were
+// amending is now redundant and must be discarded — otherwise HEAD keeps the
+// change the user undid. The staged index and worktree already match the parent
+// (that's exactly why go-git reported the commit empty), so moving the ref
+// leaves a clean tree with no further index/worktree work. Caller holds s.mu.
+func (s *Store) dropAmendedHead() (string, error) {
+	head, err := s.repo.Head()
+	if err != nil {
+		return "", fmt.Errorf("amend-empty: head lookup: %w", err)
+	}
+	c, err := s.repo.CommitObject(head.Hash())
+	if err != nil {
+		return "", fmt.Errorf("amend-empty: head commit: %w", err)
+	}
+	// No parent means we'd be amending the root commit — there's nothing to
+	// rewind to. This can't happen in practice (the seed "init" commit is
+	// always the root), but guard rather than index out of range.
+	if len(c.ParentHashes) == 0 {
+		return head.Hash().String(), nil
+	}
+	parent := c.ParentHashes[0]
+	if err := s.repo.Storer.SetReference(plumbing.NewHashReference(head.Name(), parent)); err != nil {
+		return "", fmt.Errorf("amend-empty: rewind to parent: %w", err)
+	}
+	return parent.String(), nil
 }
 
 // Revision is one entry in a graph's commit history.

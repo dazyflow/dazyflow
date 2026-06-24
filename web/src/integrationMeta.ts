@@ -233,6 +233,15 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     docs_url: "https://nominatim.org/release-docs/latest/api/Overview/",
     brand_logo: "/brands/openstreetmap.svg",
   },
+  smhi: {
+    name: "SMHI",
+    description:
+      "Free Nordic weather from Sweden's meteorological institute — no account or API key. Give the SMHI Weather drops a coordinate (pick it with a Location step) and get the current conditions or a multi-day forecast for any point in the Nordic region and the surrounding area, in metric units.",
+    technical_notes:
+      "Backed by SMHI's Open Data forecast API (snow1g v1 point endpoint: GET …/geotype/point/lon/{lon}/lat/{lat}/data.json?parameters=…) — key-less. Always metric (°C, m/s); the symbol_code values (Wsymb2 1–27) map to descriptions, and the forecast drop aggregates the sub-daily steps into per-day min/max + conditions (UTC days). Coverage is SMHI's model domain — a point outside it returns 'out of bounds'.",
+    docs_url: "https://opendata.smhi.se/metfcst/",
+    brand_logo: "/brands/smhi.svg",
+  },
   webhook: {
     name: "Outgoing webhooks",
     description:

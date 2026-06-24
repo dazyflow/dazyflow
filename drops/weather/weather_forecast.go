@@ -64,8 +64,7 @@ func init() {
 					"units":{"type":"string","enum":["metric","imperial","standard"],"default":"metric","title":"Units","description":"metric = °C + m/s, imperial = °F + mph, standard = K + m/s."},
 					"lang":{"type":"string","title":"Language","description":"Optional ISO language code for the per-day conditions (e.g. sv, de, es). Defaults to English."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
-				},
-				"required":["lat","lon"]
+				}
 			}`),
 			Idempotent:  true,
 			RetryPolicy: core.RetryExponentialBackoff,

@@ -31,6 +31,7 @@ import (
 	_ "git.sr.ht/~klahr/dazyflow/drops/sheets"
 	_ "git.sr.ht/~klahr/dazyflow/drops/shell"
 	_ "git.sr.ht/~klahr/dazyflow/drops/slack"
+	_ "git.sr.ht/~klahr/dazyflow/drops/smhi"
 	_ "git.sr.ht/~klahr/dazyflow/drops/stripe"
 	_ "git.sr.ht/~klahr/dazyflow/drops/transform"
 	_ "git.sr.ht/~klahr/dazyflow/drops/trigger"
