@@ -53,6 +53,7 @@ func init() {
 				"type":"object",
 				"properties":{
 					"point":{"type":"string","format":"geo-point","title":"Location","description":"The map pin as \"lat,lon\". Use the map to set it. Overridden when a Place is provided."},
+					"show_map":{"type":"boolean","default":true,"title":"Show map on card","description":"Show the interactive map on the node card. Turn off for a compact card — you can still pick in the inspector or drive it with the Place input."},
 					"place":{"type":"string","title":"Place","description":"A city or address. When set, it's geocoded and overrides the map pin. The Place input overrides this typed value."},
 					"countrycodes":{"type":"string","title":"Country bias","description":"Optional comma-separated ISO country codes to bias geocoding of the Place (e.g. \"us\" or \"se,no\")."},
 					"language":{"type":"string","title":"Language","description":"Optional ISO language code for the returned place name (e.g. sv, de)."},

@@ -227,9 +227,9 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   openstreetmap: {
     name: "OpenStreetMap",
     description:
-      "Work with places and coordinates. Pick a location on a map and emit its coordinate, turn an address or place name into a coordinate, or turn a coordinate back into a place name. Pairs naturally with OpenWeather — pick or look up a spot, then wire the coordinate into a weather lookup.",
+      "Work with places and coordinates. The Location drop lets you pick a point on a map (or look up a city/address) and emit its coordinate; Reverse geocode turns a coordinate back into a place name. Pairs naturally with OpenWeather — pick or look up a spot, then wire the coordinate into a weather lookup.",
     technical_notes:
-      "The Location picker is a design-time value source — its map (OpenStreetMap tiles) and place search (Nominatim) run client-side in the editor; the node just stores a \"lat,lon\" string. The Geocode and Reverse geocode drops call OpenStreetMap's Nominatim service at run time through the SSRF-guarded HTTP client with an identifying User-Agent. No account or key needed. Nominatim's public service is rate-limited (~1 request/second); for heavier use, self-host and set DAZYFLOW_NOMINATIM_URL. © OpenStreetMap contributors.",
+      "Both drops show an OpenStreetMap map picker on the card (toggle it off with 'Show map on card' for a lean node). Location geocodes a typed or wired Place; Reverse geocode reverse-geocodes the picked or wired coordinate. Geocoding hits OpenStreetMap's Nominatim service at run time through the SSRF-guarded HTTP client with an identifying User-Agent — no account or key. Nominatim's public service is rate-limited (~1 request/second); for heavier use, self-host and set DAZYFLOW_NOMINATIM_URL. © OpenStreetMap contributors.",
     docs_url: "https://nominatim.org/release-docs/latest/api/Overview/",
     brand_logo: "/brands/openstreetmap.svg",
   },

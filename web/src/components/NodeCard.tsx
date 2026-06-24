@@ -340,9 +340,12 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
             // inspector): search/click/drag to set the point. A wired Place
             // input overrides it at run time, so note that on the card.
             if (s.format === "geo-point") {
+              // The override input is "place" (Location) or "coordinate"
+              // (Reverse geocode) — either supersedes the map pin.
               const placeWired = connectedInputs.includes("place");
-              // When wired, show the resolved upstream literal (d.wiredPlace) if
-              // we could trace one; else the typed Place param.
+              const overrideWired = placeWired || connectedInputs.includes("coordinate");
+              // When wired from a literal Text, show the resolved place
+              // (d.wiredPlace); else the typed Place param.
               const effectivePlace = placeWired
                 ? typeof d.wiredPlace === "string"
                   ? d.wiredPlace
@@ -350,14 +353,32 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
                 : typeof d.params?.place === "string"
                   ? (d.params.place as string)
                   : undefined;
+              const pointVal = typeof d.params?.[key] === "string" ? (d.params[key] as string) : "";
+              // show_map toggle (inspector): keep the canvas card light when off.
+              if (d.params?.show_map === false) {
+                const summary = overrideWired
+                  ? i18n.t("nodeCard.geoWired", { defaultValue: "Set by the wired input" })
+                  : effectivePlace || pointVal || i18n.t("nodeCard.geoUnset", { defaultValue: "No location set" });
+                return (
+                  <label key={key} className="dz-param">
+                    <span className="dz-param-label">{label}</span>
+                    <span className="dz-param-readonly">{summary}</span>
+                  </label>
+                );
+              }
               return (
                 <div key={key} className="dz-param dz-param-geo">
                   <span className="dz-param-label">{label}</span>
                   <GeoPointField
-                    value={typeof d.params?.[key] === "string" ? (d.params[key] as string) : ""}
+                    value={pointVal}
                     onChange={(v) => d.setParam?.(key, v)}
                     place={effectivePlace}
-                    placeWired={placeWired}
+                    placeWired={overrideWired}
+                    runCoordinate={
+                      typeof d.outputs?.coordinate?.data === "string"
+                        ? (d.outputs.coordinate.data as string)
+                        : undefined
+                    }
                   />
                 </div>
               );

@@ -19,46 +19,47 @@ func init() {
 			ID:          "geo_reverse",
 			Version:     "1.0",
 			Label:       "Reverse geocode",
-			Subtitle:    "Coordinate → place",
-			Summary:     "Turn a coordinate into a place name via OpenStreetMap.",
-			Description: "Name a point on the map. Give it a coordinate — type the Latitude and Longitude, or wire a \"lat,lon\" value in from another step (a Location pick, a Geocode, a device's GPS) — and it returns the human Place name (\"Stockholm, Södermanland, Sweden\") plus the structured Address. Handy for labelling an alert: 'Rain expected near <place>'. Uses OpenStreetMap's free Nominatim service — no account or key.",
+			Subtitle:    "Point → place name",
+			Summary:     "Pick a point on a map (or wire a coordinate) and get its place name.",
+			Description: "The inverse of Location: name a point on the map. Drop a pin on the OpenStreetMap map right on the card — or wire a \"lat,lon\" Coordinate in from another step (a Location pick, a device's GPS) to override it — and it returns the human Place name (\"Stockholm, Södermanland, Sweden\") plus the structured Address. Handy for labelling an alert: 'Rain expected near <place>'. Uses OpenStreetMap — no account or key.",
 			Integration: "OpenStreetMap",
 			Category:    "network",
 			Icon:        "map-pin",
 			BrandLogo:   "/brands/openstreetmap.svg",
 			Color:       "#7ebc6f",
 			Provider:    "internal",
-			Tags:        []string{"reverse geocode", "coordinate", "place", "address", "openstreetmap", "osm", "nominatim", "lat", "lon", "location"},
+			Tags:        []string{"reverse geocode", "coordinate", "place", "address", "openstreetmap", "osm", "nominatim", "map", "pin", "lat", "lon", "location"},
 			Examples: []core.ParamsExample{
 				{
-					Title:  "Name a coordinate",
-					Params: json.RawMessage(`{"lat":59.3293,"lon":18.0686}`),
+					Title:  "Name a point",
+					Params: json.RawMessage(`{"point":"59.3293,18.0686"}`),
 				},
 				{
 					Title:  "From a wired coordinate",
-					Params: json.RawMessage(`{"lat":40.7484,"lon":-73.9857}`),
-					Notes:  "The 'Coordinate' input (\"lat,lon\") overrides the lat/lon params — wire a Location or Geocode step into it.",
+					Params: json.RawMessage(`{"point":"40.7484,-73.9857"}`),
+					Notes:  "The 'Coordinate' input (\"lat,lon\") overrides the map pin — wire a Location step into it.",
 				},
 			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
+				// Coordinate (a "lat,lon") overrides the map pin when wired.
 				{Port: "coordinate", Label: "Coordinate", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
 				{Port: "place", Label: "Place", MIME: []string{"text/plain"}},
+				{Port: "coordinate", Label: "Coordinate", MIME: []string{"text/plain"}},
 				{Port: "address", Label: "Address", MIME: []string{"application/json"}},
 				{Port: "result", Label: "Full result", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"lat":{"type":"number","minimum":-90,"maximum":90,"title":"Latitude","description":"Latitude, -90..90. Overridden by a \"lat,lon\" value on the Coordinate input."},
-					"lon":{"type":"number","minimum":-180,"maximum":180,"title":"Longitude","description":"Longitude, -180..180. Overridden by the Coordinate input."},
+					"point":{"type":"string","format":"geo-point","title":"Location","description":"The map pin as \"lat,lon\". Use the map to set it. Overridden by the Coordinate input."},
+					"show_map":{"type":"boolean","default":true,"title":"Show map on card","description":"Show the interactive map on the node card. Turn off for a compact card — you can still pick in the inspector or drive it with the Coordinate input."},
 					"language":{"type":"string","title":"Language","description":"Optional ISO language code for the returned place name (e.g. sv, de)."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
-				},
-				"required":["lat","lon"]
+				}
 			}`),
 			Idempotent:  true,
 			RetryPolicy: core.RetryExponentialBackoff,
@@ -67,8 +68,9 @@ func init() {
 	})
 }
 
-// executeReverse resolves the coordinate (Coordinate input wins over lat/lon
-// params), reverse-geocodes it, and emits the place name + structured address.
+// executeReverse resolves the point (the Coordinate input overrides the map
+// pin), reverse-geocodes it, and emits the place name + structured address,
+// plus the normalized coordinate for chaining.
 func executeReverse(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	lat, lon, err := resolveCoord(job)
 	if err != nil {
@@ -106,15 +108,16 @@ func executeReverse(ctx context.Context, job core.Job, _ chan<- core.Progress) (
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
-			"place":   {MIME: "text/plain", Inline: place.DisplayName},
-			"address": {MIME: "application/json", Inline: addrAny},
-			"result":  {MIME: "application/json", Inline: raw},
+			"place":      {MIME: "text/plain", Inline: place.DisplayName},
+			"coordinate": {MIME: "text/plain", Inline: fmtCoord(lat, lon)},
+			"address":    {MIME: "application/json", Inline: addrAny},
+			"result":     {MIME: "application/json", Inline: raw},
 		},
 	}, nil
 }
 
-// resolveCoord determines the coordinate: the Coordinate input ("lat,lon")
-// wins when wired with text, otherwise the lat/lon params.
+// resolveCoord determines the point: the Coordinate input ("lat,lon") wins when
+// wired with text, otherwise the map pin (the `point` param).
 func resolveCoord(job core.Job) (lat, lon float64, err error) {
 	txt, ok := params.TextInputOr(job, "coordinate", "")
 	if !ok {
@@ -123,30 +126,9 @@ func resolveCoord(job core.Job) (lat, lon float64, err error) {
 	if s := strings.TrimSpace(txt); s != "" {
 		return parseLatLon(s)
 	}
-	la, laOK := numParam(job.Params, "lat")
-	lo, loOK := numParam(job.Params, "lon")
-	if !laOK || !loOK {
-		return 0, 0, errors.New(`set Latitude and Longitude, or wire a "lat,lon" value into the Coordinate input`)
+	point := strings.TrimSpace(params.StringDefault(job.Params, "point", ""))
+	if point == "" {
+		return 0, 0, errors.New(`pick a point on the map, or wire a "lat,lon" value into the Coordinate input`)
 	}
-	return parseLatLon(fmtCoord(la, lo))
-}
-
-// numParam reads a numeric param as float64 (JSON numbers / Go ints), never a
-// numeric string — so a stray text value isn't mistaken for a coordinate.
-func numParam(p map[string]any, key string) (float64, bool) {
-	switch n := p[key].(type) {
-	case float64:
-		return n, true
-	case float32:
-		return float64(n), true
-	case int:
-		return float64(n), true
-	case int64:
-		return float64(n), true
-	case json.Number:
-		if f, err := n.Float64(); err == nil {
-			return f, true
-		}
-	}
-	return 0, false
+	return parseLatLon(point)
 }

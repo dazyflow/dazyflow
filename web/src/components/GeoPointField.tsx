@@ -65,6 +65,7 @@ export function GeoPointField({
   onChange,
   place,
   placeWired,
+  runCoordinate,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -74,6 +75,10 @@ export function GeoPointField({
   // location is decided at run time, so we stop following the typed Place and
   // say so — neither the typed Place nor the map pin is used.
   placeWired?: boolean;
+  // The coordinate this node emitted on its last run ("lat,lon"). When set, the
+  // pin recenters on it — so after running, the map shows where it landed
+  // (especially useful when the location came from a wired input).
+  runCoordinate?: string;
 }) {
   const { t } = useTranslation();
   const mapEl = useRef<HTMLDivElement>(null);
@@ -189,6 +194,15 @@ export function GeoPointField({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [placeQuery, following]);
 
+  // After a run, recenter the pin on the coordinate the node actually emitted
+  // — the resolved location (a wired Place/Coordinate is only known now).
+  useEffect(() => {
+    if (!runCoordinate) return;
+    const p = parsePoint(runCoordinate);
+    if (p) setMarker(p.lat, p.lon, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runCoordinate]);
+
   async function search() {
     const q = query.trim();
     if (!q || searching) return;
@@ -225,8 +239,8 @@ export function GeoPointField({
       ) : placeWired ? (
         // Wired from a dynamic source we can't resolve at design time.
         <div className="geo-following">
-          {t("geo.wiredPlace", {
-            defaultValue: "Location comes from the wired Place — set at run time",
+          {t("geo.wiredInput", {
+            defaultValue: "Location comes from the wired input — set at run time",
           })}
         </div>
       ) : (
