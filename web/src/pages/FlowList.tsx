@@ -27,6 +27,7 @@ import {
   type FlowSchedule,
 } from "../lib/schedule";
 import { userScope } from "../recentFlow";
+import { explainApiError } from "../lib/explainApiError";
 import type { FlowRunStatus } from "../flowStatus";
 import type { FlowSummary, RunSummary, ScheduleEntry } from "../types";
 
@@ -107,7 +108,7 @@ export function FlowList() {
         }
       })
       .catch((e) => {
-        if (!cancelled) setError((e as Error).message);
+        if (!cancelled) setError(explainApiError(e, t));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -118,7 +119,7 @@ export function FlowList() {
     // activeTenant is read above (listGraphs) so it MUST be a dependency —
     // without it, switching to an org whose workspace has the same name never
     // re-runs this effect and the previous org's flows persist.
-  }, [token, me, activeTenant, activeWorkspace]);
+  }, [token, me, activeTenant, activeWorkspace, t]);
 
   // Load the workspace's schedules (cron/poll triggers + next-run preview)
   // and group them by flow. Non-blocking: a failure here just omits the

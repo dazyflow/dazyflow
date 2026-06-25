@@ -8,6 +8,7 @@ import { useAuth } from "../auth";
 import { Button } from "../components/Button";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { explainRunError } from "../lib/explainRunError";
+import { explainApiError } from "../lib/explainApiError";
 import type { Graph, JobRecord, JobStatus, Manifest, Ref, RunLogEntry } from "../types";
 import { formatDateTime } from "../lib/datetime";
 
@@ -38,12 +39,7 @@ import { formatDateTime } from "../lib/datetime";
 // failures to friendly guidance and otherwise surface the server's own
 // human message (without the leaked numeric status prefix).
 function actionErrorMessage(e: unknown, t: (key: string) => string): string {
-  if (e instanceof APIError) {
-    if (e.status === 0) return t("runDetail.errNetwork");
-    if (e.status >= 500) return t("runDetail.errServer");
-    return e.message;
-  }
-  return (e as Error).message;
+  return explainApiError(e, t);
 }
 
 export function RunDetail() {
@@ -124,8 +120,7 @@ export function RunDetail() {
       })
       .catch((e) => {
         if (!cancelled) {
-          const msg = e instanceof APIError ? `${e.status}: ${e.message}` : (e as Error).message;
-          setError(msg);
+          setError(explainApiError(e, t));
         }
       })
       .finally(() => {

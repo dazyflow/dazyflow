@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Copy, ExternalLink, RefreshCw, Tv } from "lucide-react";
 import { api, isErrorCode } from "../api";
+import { explainApiError } from "../lib/explainApiError";
 import { useAuth } from "../auth";
 import { Button } from "./Button";
 import type { ShareLink } from "../types";
@@ -44,7 +45,7 @@ export function ShareOverviewModal({ onClose }: { onClose: () => void }) {
         if (cancelled) return;
         // No link yet is the expected first-open state, not an error.
         if (!isErrorCode(e, "share_not_found")) {
-          setError(e instanceof Error ? e.message : String(e));
+          setError(explainApiError(e, t));
         }
       })
       .finally(() => {
@@ -53,7 +54,7 @@ export function ShareOverviewModal({ onClose }: { onClose: () => void }) {
     return () => {
       cancelled = true;
     };
-  }, [token, tenant, workspace]);
+  }, [token, tenant, workspace, t]);
 
   const create = useCallback(async () => {
     if (!token) return;
@@ -66,9 +67,7 @@ export function ShareOverviewModal({ onClose }: { onClose: () => void }) {
       setError(
         isErrorCode(e, "forbidden")
           ? t("share.forbidden")
-          : e instanceof Error
-            ? e.message
-            : String(e),
+          : explainApiError(e, t),
       );
     } finally {
       setBusy(false);
@@ -83,11 +82,11 @@ export function ShareOverviewModal({ onClose }: { onClose: () => void }) {
       await api.deleteShare(token, tenant, workspace);
       setLink(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(explainApiError(e, t));
     } finally {
       setBusy(false);
     }
-  }, [token, tenant, workspace]);
+  }, [token, tenant, workspace, t]);
 
   const copy = useCallback(async () => {
     if (!link) return;

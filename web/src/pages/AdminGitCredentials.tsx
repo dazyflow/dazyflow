@@ -5,6 +5,7 @@ import { Button } from "../components/Button";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import type { GitCredential } from "../types";
+import { explainApiError } from "../lib/explainApiError";
 
 // AdminGitCredentials manages the org's named Git credentials — what a
 // git_checkout node picks by `account` to clone private repos. Each
@@ -34,9 +35,9 @@ export function AdminGitCredentials() {
     api
       .listGitCredentials(token)
       .then((r) => setCreds(r.credentials ?? []))
-      .catch((e) => setError((e as Error).message))
+      .catch((e) => setError(explainApiError(e, t)))
       .finally(() => setLoading(false));
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     load();
@@ -62,7 +63,7 @@ export function AdminGitCredentials() {
       setUsername("");
       load();
     } catch (e) {
-      setError((e as Error).message);
+      setError(explainApiError(e, t));
     } finally {
       setSaving(false);
     }
@@ -76,7 +77,7 @@ export function AdminGitCredentials() {
       await api.deleteGitCredential(token, acct);
       load();
     } catch (e) {
-      setError((e as Error).message);
+      setError(explainApiError(e, t));
     }
   };
 

@@ -1,4 +1,18 @@
 {
+  "apiError": {
+    "generic": "Something went wrong. Please try again — if it keeps happening, contact support.",
+    "network": "We couldn't reach Dazyflow. Check your internet connection and try again.",
+    "server": "Dazyflow ran into a problem on our side. Please try again in a moment.",
+    "sessionExpired": "Your session has expired. Please sign in again.",
+    "forbidden": "You don't have permission to do that. Ask an admin if you think you should.",
+    "notFound": "We couldn't find that — it may have been moved or deleted.",
+    "conflict": "That couldn't be completed because it conflicts with something that already exists or is in use.",
+    "rateLimited": "You're going a bit fast — wait a moment, then try again.",
+    "signinInvalid": "That email or password isn't right. Please check and try again.",
+    "signupExists": "An account with that email already exists. Try signing in instead.",
+    "signupBad": "We couldn't create your account with those details. Please check them and try again.",
+    "totpInvalid": "That code isn't right or has expired. Enter a fresh code from your authenticator app."
+  },
   "flowStatus": {
     "live": {
       "label": "Live",

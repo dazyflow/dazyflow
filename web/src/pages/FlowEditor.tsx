@@ -82,6 +82,7 @@ import {
 } from "../lib/requiredConnections";
 import { mimeCompatible, pickPort, portsConnectable, connectionHint } from "../lib/ports";
 import { suggestNextDrops, topDropsByUsage } from "../lib/suggest";
+import { explainApiError } from "../lib/explainApiError";
 import type {
   DropAdjacency,
   Graph,
@@ -738,7 +739,7 @@ function EditorInner() {
         setManifests(dropRes.drops);
       })
       .catch((e) => {
-        if (!cancelled) setError((e as Error).message);
+        if (!cancelled) setError(explainApiError(e, t));
       });
 
     // Drop suggestions are advisory — a failure must never block the editor,
@@ -835,7 +836,7 @@ function EditorInner() {
         // the server graph. Surface the error AND latch loadFailed so the
         // autosave/save path can't PUT an empty graph over the real one
         // until a successful reload clears the flag.
-        setError(msg);
+        setError(explainApiError(e, t));
         setLoadFailed(true);
       })
       .finally(() => {
@@ -2165,9 +2166,9 @@ function EditorInner() {
     (step: boolean) => {
       if (!token || !currentRunID) return;
       setPausedAt(null);
-      api.resumeRun(token, currentRunID, step).catch((e) => setError((e as Error).message));
+      api.resumeRun(token, currentRunID, step).catch((e) => setError(explainApiError(e, t)));
     },
-    [token, currentRunID],
+    [token, currentRunID, t],
   );
   // Stop the active (possibly paused) run. Cancels lockedRunID if known,
   // else the run this editor started (currentRunID) — covers the brief
@@ -2184,11 +2185,11 @@ function EditorInner() {
       setRunning(false);
       setPausedAt(null);
     } catch (e) {
-      setError((e as Error).message);
+      setError(explainApiError(e, t));
     } finally {
       setCancelling(false);
     }
-  }, [token, lockedRunID, currentRunID]);
+  }, [token, lockedRunID, currentRunID, t]);
   // Clear every breakpoint in the graph.
   const clearBreakpoints = useCallback(() => {
     setBreakpoints((prev) => (prev.size === 0 ? prev : new Set()));
@@ -2448,7 +2449,7 @@ function EditorInner() {
         name: `${name ?? id} · group`,
       } as unknown as Graph);
     } catch (err) {
-      setError(`Could not create subgraph: ${(err as Error).message}`);
+      setError(explainApiError(err, t));
       return;
     }
 
@@ -2499,7 +2500,7 @@ function EditorInner() {
     });
     setSelectedID(sgId);
     setDirty(true);
-  }, [token, id, nodes, edges, paramsByID, activeTenant, activeWorkspace, name, manifestByID]);
+  }, [token, id, nodes, edges, paramsByID, activeTenant, activeWorkspace, name, manifestByID, t]);
 
   const onParamsChange = (id: string, params: Record<string, unknown>) => {
     setParamsByID((p) => ({ ...p, [id]: params }));
@@ -2583,7 +2584,7 @@ function EditorInner() {
       return true;
     } catch (e) {
       const msg = (e as Error).message;
-      setError(msg);
+      setError(explainApiError(e, t));
       // A 409 from the gateway means another run started between the
       // last lock check and this save. Re-pull so the UI catches up.
       if (
@@ -2791,11 +2792,11 @@ function EditorInner() {
       setRevisions(res.revisions ?? []);
       setPublishedCommit(res.published_commit ?? null);
     } catch (e) {
-      setError((e as Error).message);
+      setError(explainApiError(e, t));
     } finally {
       setHistoryLoading(false);
     }
-  }, [token, id, activeTenant, activeWorkspace]);
+  }, [token, id, activeTenant, activeWorkspace, t]);
 
   // loadPublishInfo refreshes the draft-vs-live status that drives the
   // toolbar publish control. Called on load and after every save/publish.
@@ -2833,12 +2834,12 @@ function EditorInner() {
         setJustPublished(true);
         window.setTimeout(() => setJustPublished(false), 1600);
       } catch (e) {
-        setError((e as Error).message);
+        setError(explainApiError(e, t));
       } finally {
         setPublishing(false);
       }
     },
-    [token, id, activeTenant, activeWorkspace, loadPublishInfo, showHistory],
+    [token, id, activeTenant, activeWorkspace, loadPublishInfo, showHistory, t],
   );
 
   // setLive is the single Live/Paused switch. "Live" means enabled AND
@@ -2879,8 +2880,7 @@ function EditorInner() {
           setPublishedCommit(res.published_commit ?? null);
         }
       } catch (e) {
-        const msg = e instanceof APIError ? e.message : (e as Error).message;
-        setError(e instanceof APIError && e.status === 404 ? t("editor.pauseSaveFirst") : msg);
+        setError(e instanceof APIError && e.status === 404 ? t("editor.pauseSaveFirst") : explainApiError(e, t));
       } finally {
         setPublishing(false);
       }
@@ -2901,12 +2901,12 @@ function EditorInner() {
       ]);
       setDiff(diffGraphs(published, draft));
     } catch (e) {
-      setError((e as Error).message);
+      setError(explainApiError(e, t));
       setDiffOpen(false);
     } finally {
       setDiffLoading(false);
     }
-  }, [token, id, activeTenant, activeWorkspace, publishInfo]);
+  }, [token, id, activeTenant, activeWorkspace, publishInfo, t]);
 
   // Load the publish status once the flow + scope are ready, so the
   // toolbar pill reflects draft-vs-live from first paint.
@@ -2924,10 +2924,10 @@ function EditorInner() {
         hydrateGraph(g);
         setPreviewRef(commit);
       } catch (e) {
-        setError((e as Error).message);
+        setError(explainApiError(e, t));
       }
     },
-    [token, id, activeTenant, activeWorkspace, hydrateGraph],
+    [token, id, activeTenant, activeWorkspace, hydrateGraph, t],
   );
 
   // exitPreview drops the preview and reloads the live HEAD.
@@ -2940,11 +2940,11 @@ function EditorInner() {
       const g = await api.loadGraph(token, activeTenant, activeWorkspace, id);
       hydrateGraph(g);
     } catch (e) {
-      setError((e as Error).message);
+      setError(explainApiError(e, t));
     } finally {
       setPreviewRef(null);
     }
-  }, [token, id, activeTenant, activeWorkspace, hydrateGraph]);
+  }, [token, id, activeTenant, activeWorkspace, hydrateGraph, t]);
 
   // restoreRevision makes a revision the new HEAD (a fresh commit on top),
   // then reloads HEAD and refreshes the history list. History is preserved.
@@ -2962,7 +2962,7 @@ function EditorInner() {
         setRevisions(res.revisions ?? []);
       } catch (e) {
         const msg = (e as Error).message;
-        setError(msg);
+        setError(explainApiError(e, t));
         if (
           isHTTPStatus(e, 409) ||
           isErrorCode(e, "conflict") ||
@@ -2974,7 +2974,7 @@ function EditorInner() {
         setRestoring(false);
       }
     },
-    [token, id, activeTenant, activeWorkspace, hydrateGraph],
+    [token, id, activeTenant, activeWorkspace, hydrateGraph, t],
   );
 
   // saveLabel names a revision (or clears its name when label is empty)
@@ -2992,10 +2992,10 @@ function EditorInner() {
         setRevisions(res.revisions ?? []);
         setPublishedCommit(res.published_commit ?? null);
       } catch (e) {
-        setError((e as Error).message);
+        setError(explainApiError(e, t));
       }
     },
-    [token, id, activeTenant, activeWorkspace],
+    [token, id, activeTenant, activeWorkspace, t],
   );
 
   // refreshLock asks the daemon whether any run of this flow is still
@@ -3273,7 +3273,7 @@ function EditorInner() {
       if (id) localStorage.setItem(`dazyflow.lastRun.${id}`, job_id);
       subscribeToRun(job_id);
     } catch (e) {
-      setError((e as Error).message);
+      setError(explainApiError(e, t));
       setRunning(false);
     }
   };
@@ -3336,7 +3336,7 @@ function EditorInner() {
       localStorage.setItem(`dazyflow.lastRun.${id}`, job_id);
       subscribeToRun(job_id);
     } catch (e) {
-      setError((e as Error).message);
+      setError(explainApiError(e, t));
       setRunning(false);
     }
   };
@@ -3515,7 +3515,7 @@ function EditorInner() {
       // refetch so it reflects the new icon/name without a navigation.
       window.dispatchEvent(new Event(FLOWS_CHANGED_EVENT));
     } catch (e) {
-      setError((e as Error).message);
+      setError(explainApiError(e, t));
     } finally {
       setSaving(false);
     }

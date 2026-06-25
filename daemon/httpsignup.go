@@ -63,7 +63,10 @@ func (h *HTTPGateway) signUp(rw http.ResponseWriter, r *http.Request) {
 	}
 	var body signupRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
+		// A malformed body shouldn't happen from the real UI; keep the message
+		// human in case it ever reaches a person (the web mapper also swallows
+		// the raw decode error, but non-web clients see this verbatim).
+		writeJSONError(rw, http.StatusBadRequest, "we couldn't read the sign-up details — please try again")
 		return
 	}
 	email := strings.ToLower(strings.TrimSpace(body.Email))

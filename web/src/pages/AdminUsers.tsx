@@ -24,6 +24,7 @@ import type {
   Role,
 } from "../types";
 import { formatDate } from "../lib/datetime";
+import { explainApiError } from "../lib/explainApiError";
 
 // isAdminMember reports whether a member's role set grants org admin —
 // either a catalog role named "admin" or any role carrying the
@@ -55,19 +56,18 @@ export function AdminUsers() {
     setLoading(true);
     try {
       const [m, i] = await Promise.all([
-        api.listMembers(token).catch((e: Error) => {
-          if (e instanceof APIError && e.status === 501) {
-            throw new Error(t("admin.users.notConfigured"));
-          }
-          throw e;
-        }),
+        api.listMembers(token),
         api.listInvitations(token).catch(() => ({ invitations: [] })),
       ]);
       setMembers(m.members ?? []);
       setInvites(i.invitations ?? []);
       setError(null);
     } catch (e) {
-      setError((e as Error).message);
+      if (e instanceof APIError && e.status === 501) {
+        setError(t("admin.users.notConfigured"));
+      } else {
+        setError(explainApiError(e, t));
+      }
     } finally {
       setLoading(false);
     }
@@ -223,7 +223,7 @@ function MemberCard({
       await api.removeMember(token, member.email);
       onChanged();
     } catch (e) {
-      setErr((e as Error).message);
+      setErr(explainApiError(e, t));
     } finally {
       setRemoving(false);
     }
@@ -249,7 +249,7 @@ function MemberCard({
       await api.updateMemberRoles(token, member.email, [{ name: next, permissions: [] }]);
       onChanged();
     } catch (e) {
-      setErr((e as Error).message);
+      setErr(explainApiError(e, t));
     } finally {
       setSavingRole(false);
     }
@@ -405,7 +405,7 @@ function InvitationCard({
       await api.revokeInvitation(token, inv.token);
       onChanged();
     } catch (e) {
-      setErr((e as Error).message);
+      setErr(explainApiError(e, t));
     } finally {
       setRevoking(false);
     }
@@ -570,7 +570,7 @@ function InviteModal({
       });
       onIssued(inv);
     } catch (e) {
-      onError((e as Error).message);
+      onError(explainApiError(e, t));
     } finally {
       setSubmitting(false);
     }

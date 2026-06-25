@@ -6,6 +6,7 @@ import { api, APIError } from "../api";
 import { Button } from "../components/Button";
 import { ServiceIcon, serviceLabel } from "../components/ServiceIcon";
 import type { OrgAuthConfig } from "../types";
+import { explainApiError } from "../lib/explainApiError";
 
 // ssoUpcoming lists identity providers we show as placeholders so the
 // surface reads as "SSO providers" rather than "Google" — the monogram
@@ -143,7 +144,7 @@ export function AdminOrgSSO() {
         if (e instanceof APIError && e.status === 501) {
           setError(t("admin.sso.notConfigured"));
         } else {
-          setError((e as Error).message);
+          setError(explainApiError(e, t));
         }
       } finally {
         if (!silent) setLoading(false);
@@ -189,7 +190,7 @@ export function AdminOrgSSO() {
       setClientSecret("");
       void refresh(true);
     } catch (e) {
-      setError((e as Error).message);
+      setError(explainApiError(e, t));
     } finally {
       setSaving(false);
     }
@@ -205,7 +206,7 @@ export function AdminOrgSSO() {
       setClientSecret("");
       setWorkspaceDomain("");
     } catch (e) {
-      setError((e as Error).message);
+      setError(explainApiError(e, t));
     }
   };
 

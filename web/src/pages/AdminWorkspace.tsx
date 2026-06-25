@@ -5,6 +5,7 @@ import { useAuth } from "../auth";
 import { api, APIError } from "../api";
 import { IconUpload } from "../components/IconUpload";
 import type { WorkspaceLimits } from "../types";
+import { explainApiError } from "../lib/explainApiError";
 
 // AdminWorkspace is a read-only view of the effective limits for the
 // caller's tenant: the per-tenant disk quota plus the daemon-wide graph
@@ -24,11 +25,11 @@ export function AdminWorkspace() {
       setLimits(await api.getWorkspaceLimits(token));
       setError(null);
     } catch (e) {
-      setError((e as APIError | Error).message);
+      setError(explainApiError(e, t));
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     void refresh();
@@ -153,7 +154,7 @@ function OrgProfileEditor() {
       if (e instanceof APIError && e.status === 501) {
         setError(t("admin.workspace.profileNotConfigured"));
       } else {
-        setError((e as Error).message);
+        setError(explainApiError(e, t));
       }
     } finally {
       setLoading(false);
@@ -176,11 +177,11 @@ function OrgProfileEditor() {
       // throwaway fetch). The session itself doesn't change, just labels.
       await refreshMe();
     } catch (e) {
-      setError((e as Error).message);
+      setError(explainApiError(e, t));
     } finally {
       setSaving(false);
     }
-  }, [token, displayName, icon, refreshMe]);
+  }, [token, displayName, icon, refreshMe, t]);
 
   // Autosave: debounce-persist a genuine change (skipped until the
   // initial load, and when the values already match what's stored).

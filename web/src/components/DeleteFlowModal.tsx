@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { APIError } from "../api";
+import { explainApiError } from "../lib/explainApiError";
 import { Button } from "./Button";
 
 // DeleteFlowModal is the password-gated confirm dialog for deleting a flow.
@@ -54,9 +55,7 @@ export function DeleteFlowModal({
           ? t("deleteFlow.wrongPassword")
           : status === 409
             ? t("deleteFlow.locked")
-            : e instanceof APIError
-              ? e.message
-              : (e as Error).message,
+            : explainApiError(e, t),
       );
       setBusy(false);
     }

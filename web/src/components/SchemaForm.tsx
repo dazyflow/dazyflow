@@ -17,7 +17,8 @@ import type { JSONSchema, ReferenceGroups, ReferenceItem } from "../types";
 import { type TokenLabels, friendlyTokenText } from "./nodeCardShared";
 import { JsonEditor, isInvalidJSON } from "./JsonEditor";
 import { GeoPointField } from "./GeoPointField";
-import { api, APIError } from "../api";
+import { api } from "../api";
+import { explainApiError } from "../lib/explainApiError";
 import { useAuth } from "../auth";
 import { Button } from "./Button";
 
@@ -1335,7 +1336,7 @@ function ResourcePickerField({
         }
         setOpts(r.resources);
       })
-      .catch((e) => live && setErr(e instanceof Error ? e.message : String(e)));
+      .catch((e) => live && setErr(explainApiError(e, t)));
     return () => {
       live = false;
     };
@@ -1814,7 +1815,7 @@ function ReferenceMenu({
         if (!cancelled) setGroups(r.groups);
       })
       .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+        if (!cancelled) setError(explainApiError(e, t));
       });
     return () => {
       cancelled = true;
@@ -3132,8 +3133,7 @@ function WorkspacePathField({
       const res = await api.uploadWorkspaceFile(ctx.token, ctx.tenant, ctx.workspace, file);
       onChange(res.path);
     } catch (e) {
-      const msg = e instanceof APIError ? `${e.status}: ${e.message}` : (e as Error).message;
-      setError(msg);
+      setError(explainApiError(e, t));
     } finally {
       setUploading(false);
     }

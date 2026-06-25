@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Cloud, Trash2 } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { api, APIError } from "../api";
+import i18n from "../i18n";
 import { useAuth } from "../auth";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { Button } from "../components/Button";
@@ -13,6 +14,7 @@ import type {
   SecretManagerConfig,
   SecretManagerStatus,
 } from "../types";
+import { explainApiError } from "../lib/explainApiError";
 
 // AdminSecretManager is the tenant-level "point the platform at your own
 // secret manager" config — set-once infrastructure that lives as the
@@ -62,7 +64,7 @@ export function AdminSecretManager() {
       })
       .catch((e) => {
         if (e instanceof APIError && featureUnavailable(e.status)) setOff(true);
-        else setErr(e instanceof APIError ? e.message : (e as Error).message);
+        else setErr(explainApiError(e, t));
       });
   };
   useEffect(load, [token]);
@@ -113,7 +115,7 @@ export function AdminSecretManager() {
       setEditing(false);
       load();
     } catch (e) {
-      setErr(e instanceof APIError ? e.message : (e as Error).message);
+      setErr(explainApiError(e, t));
     } finally {
       setBusy(false);
     }
@@ -132,7 +134,7 @@ export function AdminSecretManager() {
       setStatus({ configured: false });
       load();
     } catch (e) {
-      setErr(e instanceof APIError ? e.message : (e as Error).message);
+      setErr(explainApiError(e, t));
     } finally {
       setRemoving(false);
     }
@@ -324,7 +326,7 @@ function useProviderSlot<S extends { configured: boolean }, C>(
       .then(setStatus)
       .catch((e) => {
         if (!(e instanceof APIError && featureUnavailable(e.status))) {
-          setErr(e instanceof APIError ? e.message : (e as Error).message);
+          setErr(explainApiError(e, i18n.t));
         }
       });
   }, [token, get]);
@@ -340,7 +342,7 @@ function useProviderSlot<S extends { configured: boolean }, C>(
       setEditing(false);
       load();
     } catch (e) {
-      setErr(e instanceof APIError ? e.message : (e as Error).message);
+      setErr(explainApiError(e, i18n.t));
     } finally {
       setBusy(false);
     }
@@ -355,7 +357,7 @@ function useProviderSlot<S extends { configured: boolean }, C>(
       // Re-read authoritative status only after the delete confirms.
       load();
     } catch (e) {
-      setErr(e instanceof APIError ? e.message : (e as Error).message);
+      setErr(explainApiError(e, i18n.t));
     } finally {
       setRemoving(false);
     }

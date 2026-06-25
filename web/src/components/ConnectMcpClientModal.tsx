@@ -3,6 +3,7 @@ import { AlertCircle, Check, Copy, Terminal } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
+import { explainApiError } from "../lib/explainApiError";
 import { Button } from "./Button";
 import type { IssuedAPIKey } from "../types";
 
@@ -117,7 +118,7 @@ export function ConnectMcpClientModal({ onClose }: { onClose: () => void }) {
       setIssued(k);
       setStage("reveal");
     } catch (e) {
-      setError((e as Error).message);
+      setError(explainApiError(e, t));
     } finally {
       setSubmitting(false);
     }

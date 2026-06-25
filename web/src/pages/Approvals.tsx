@@ -5,6 +5,7 @@ import { Trans, useTranslation } from "react-i18next";
 import { Button } from "../components/Button";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
+import { explainApiError } from "../lib/explainApiError";
 import { shouldShowTenantID } from "../lib/visibleTenant";
 import { absoluteTime, formatDateTime } from "../lib/datetime";
 import type { PendingApproval } from "../types";
@@ -41,11 +42,11 @@ export function Approvals() {
       setItems(r.approvals ?? []);
       setError(null);
     } catch (e) {
-      setError((e as Error).message);
+      setError(explainApiError(e, t));
     } finally {
       setLoading(false);
     }
-  }, [token, activeTenant, activeWorkspace]);
+  }, [token, activeTenant, activeWorkspace, t]);
 
   useEffect(() => {
     void refresh();
@@ -81,7 +82,7 @@ export function Approvals() {
         await refresh();
         return;
       }
-      setError((e as Error).message);
+      setError(explainApiError(e, t));
     } finally {
       setActing((s) => {
         const next = { ...s };

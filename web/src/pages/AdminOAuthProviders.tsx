@@ -6,6 +6,7 @@ import { api, APIError } from "../api";
 import { Button } from "../components/Button";
 import { ServiceIcon } from "../components/ServiceIcon";
 import type { AdminOAuthProvider } from "../types";
+import { explainApiError } from "../lib/explainApiError";
 
 // AdminOAuthProviders is the paste-client-credentials surface that
 // replaces "edit env vars + restart the daemon" for an operator setting
@@ -32,7 +33,7 @@ export function AdminOAuthProviders() {
       if (err instanceof APIError && err.status === 501) {
         setError(t("admin.oauth.notConfigured"));
       } else {
-        setError(err.message);
+        setError(explainApiError(err, t));
       }
     } finally {
       setLoading(false);
@@ -118,7 +119,7 @@ function ProviderRow({
       setClientSecret("");
       onChanged();
     } catch (e) {
-      setError((e as Error).message);
+      setError(explainApiError(e, t));
     } finally {
       setSaving(false);
     }
@@ -133,7 +134,7 @@ function ProviderRow({
       setConfirmClear(false);
       onChanged();
     } catch (e) {
-      setError((e as Error).message);
+      setError(explainApiError(e, t));
     } finally {
       setClearing(false);
     }

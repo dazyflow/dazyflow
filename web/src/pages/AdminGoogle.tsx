@@ -5,6 +5,7 @@ import { useAuth } from "../auth";
 import { api, APIError } from "../api";
 import { Button } from "../components/Button";
 import type { GoogleAccountsResponse } from "../types";
+import { explainApiError } from "../lib/explainApiError";
 
 // AdminGoogle is the org-admin page for managing the organization's shared
 // Google connections. Google accounts are org-level credentials (not
@@ -52,12 +53,12 @@ export function AdminGoogle() {
       if (e instanceof APIError && (e.status === 501 || e.status === 404)) {
         setNotConfigured(true);
       } else {
-        setError((e as Error).message);
+        setError(explainApiError(e, t));
       }
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     void refresh();
@@ -79,11 +80,11 @@ export function AdminGoogle() {
         });
         window.location.assign(authorize_url);
       } catch (e) {
-        setError((e as Error).message);
+        setError(explainApiError(e, t));
         setBusy(false);
       }
     },
-    [token],
+    [token, t],
   );
 
   // The connect modal validates the name and hands it back here; we close
@@ -106,12 +107,12 @@ export function AdminGoogle() {
         setPendingDisconnect(null);
         await refresh();
       } catch (e) {
-        setError((e as Error).message);
+        setError(explainApiError(e, t));
       } finally {
         setBusy(false);
       }
     },
-    [token, refresh],
+    [token, refresh, t],
   );
 
   if (!hasPerm("organization:admin")) {

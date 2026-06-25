@@ -28,6 +28,7 @@ import { Switch } from "./Switch";
 import { Button } from "./Button";
 import { useAuth } from "../auth";
 import { api } from "../api";
+import { explainApiError } from "../lib/explainApiError";
 import { oauthProviderForIntegration } from "../integrationMeta";
 import type { SetupNeed } from "../lib/requiredConnections";
 import type { OAuthProviderStatus, Graph, GraphTrigger, Manifest } from "../types";
@@ -461,7 +462,7 @@ export function Inspector({
                   try {
                     await onSample(selected.id);
                   } catch (e) {
-                    setSampleError((e as Error).message);
+                    setSampleError(explainApiError(e, t));
                   } finally {
                     setSampling(false);
                   }

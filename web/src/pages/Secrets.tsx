@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { api, APIError } from "../api";
+import { explainApiError } from "../lib/explainApiError";
 import { useAuth } from "../auth";
 import { ButtonLink } from "../components/Button";
 import { CredentialsManager } from "../components/CredentialsManager";
@@ -53,7 +54,7 @@ export function Secrets() {
       .catch((e) => {
         if (e instanceof APIError && featureUnavailable(e.status))
           setSecretsOff(true);
-        else setError(e instanceof APIError ? e.message : (e as Error).message);
+        else setError(explainApiError(e, t));
       });
   };
 

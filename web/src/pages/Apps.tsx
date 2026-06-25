@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { Box } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, APIError } from "../api";
+import { explainApiError } from "../lib/explainApiError";
 import { useAuth } from "../auth";
 import { iconFor, isBrandedIcon, dropColor } from "../icons";
 import { Button } from "../components/Button";
@@ -51,8 +52,7 @@ export function Apps() {
       })
       .catch((e) => {
         if (cancelled) return;
-        const msg = e instanceof APIError ? `${e.status}: ${e.message}` : (e as Error).message;
-        setError(msg);
+        setError(explainApiError(e, t));
       });
     api
       .listSecrets(token, undefined, undefined, true)
@@ -316,8 +316,7 @@ export function AppDetail() {
       })
       .catch((e) => {
         if (cancelled) return;
-        const msg = e instanceof APIError ? `${e.status}: ${e.message}` : (e as Error).message;
-        setError(msg);
+        setError(explainApiError(e, t));
       });
     return () => {
       cancelled = true;
@@ -495,7 +494,7 @@ function IntegrationConnections({
           if (e instanceof APIError && featureUnavailable(e.status)) setSecretsOff(true);
           else {
             setSecretsErr(true);
-            setError(e instanceof APIError ? e.message : (e as Error).message);
+            setError(explainApiError(e, t));
           }
         });
     }
@@ -513,7 +512,7 @@ function IntegrationConnections({
           if (e instanceof APIError && featureUnavailable(e.status)) setProvidersOff(true);
           else {
             setProvidersErr(true);
-            setError(e instanceof APIError ? e.message : (e as Error).message);
+            setError(explainApiError(e, t));
           }
         });
     }
@@ -712,7 +711,7 @@ function SecretCard({
       setEditing(false);
       onChanged();
     } catch (e) {
-      setErr(e instanceof APIError ? e.message : (e as Error).message);
+      setErr(explainApiError(e, t));
     } finally {
       setBusy(false);
     }
@@ -725,7 +724,7 @@ function SecretCard({
     try {
       await api.deleteSecret(token, req.name);
     } catch (e) {
-      setErr(e instanceof APIError ? e.message : (e as Error).message);
+      setErr(explainApiError(e, t));
     } finally {
       setRemoving(false);
       // Always re-read from the server so the card reflects the real
@@ -984,7 +983,7 @@ function ConnectionFieldsCard({
       setEditing(false);
       onChanged();
     } catch (e) {
-      setErr(e instanceof APIError ? e.message : (e as Error).message);
+      setErr(explainApiError(e, t));
     } finally {
       setBusy(false);
     }
@@ -997,7 +996,7 @@ function ConnectionFieldsCard({
       const r = await api.verifyIntegration(token, slug);
       setTestState(r.ok ? { kind: "ok" } : { kind: "fail", message: r.error ?? "" });
     } catch (e) {
-      setTestState({ kind: "fail", message: e instanceof APIError ? e.message : (e as Error).message });
+      setTestState({ kind: "fail", message: explainApiError(e, t) });
     }
   };
 
@@ -1010,7 +1009,7 @@ function ConnectionFieldsCard({
         if (isSet(f)) await api.deleteSecret(token, keyFor(f));
       }
     } catch (e) {
-      setErr(e instanceof APIError ? e.message : (e as Error).message);
+      setErr(explainApiError(e, t));
     } finally {
       setRemoving(false);
       // Re-read from the server regardless: a partial failure (some fields

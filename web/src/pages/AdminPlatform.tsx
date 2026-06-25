@@ -12,6 +12,7 @@ import {
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
+import { explainApiError } from "../lib/explainApiError";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { Button } from "../components/Button";
 import type { SignupInviteSummary } from "../types";
@@ -75,7 +76,7 @@ function SmtpTestSection() {
       const r = await api.smtpTest(token, trimmed || undefined);
       setResult({ ok: true, msg: t("admin.smtpTest.sent", { to: r.to }) });
     } catch (e) {
-      setResult({ ok: false, msg: (e as Error).message });
+      setResult({ ok: false, msg: explainApiError(e, t) });
     } finally {
       setSending(false);
     }
@@ -186,7 +187,7 @@ function SignupInviteSection() {
       setEmail("");
       void refresh();
     } catch (e) {
-      setErr((e as Error).message);
+      setErr(explainApiError(e, t));
     } finally {
       setSubmitting(false);
     }
@@ -327,7 +328,7 @@ function SignupInviteCard({
       await api.revokeSignupInvite(token, inv.token);
       onChanged();
     } catch (e) {
-      setErr((e as Error).message);
+      setErr(explainApiError(e, t));
     } finally {
       setRevoking(false);
     }

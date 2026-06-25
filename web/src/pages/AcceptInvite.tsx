@@ -5,6 +5,7 @@ import { AlertCircle, Mail, ShieldCheck } from "lucide-react";
 import { Button } from "../components/Button";
 import { useAuth } from "../auth";
 import { api } from "../api";
+import { explainApiError } from "../lib/explainApiError";
 import type { InvitationDetails } from "../types";
 import { formatDateTime } from "../lib/datetime";
 
@@ -31,9 +32,9 @@ export function AcceptInvite() {
       setDetails(d);
       setError(null);
     } catch (e) {
-      setError((e as Error).message);
+      setError(explainApiError(e, t));
     }
-  }, [inviteToken]);
+  }, [inviteToken, t]);
 
   useEffect(() => {
     void load();
@@ -49,7 +50,7 @@ export function AcceptInvite() {
       setActiveTenant(r.tenant);
       navigate("/");
     } catch (e) {
-      setError((e as Error).message);
+      setError(explainApiError(e, t));
     } finally {
       setAccepting(false);
     }

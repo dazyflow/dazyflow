@@ -5,6 +5,7 @@ import { useAuth } from "../auth";
 import { api, type BoardSummary, type BoardPage } from "../api";
 import { Button } from "../components/Button";
 import { ConfirmModal } from "../components/ConfirmModal";
+import { explainApiError } from "../lib/explainApiError";
 
 // Results — the in-app view of Collections. Left: the workspace's
 // boards (tables) with row counts. Right: the selected board as a friendly
@@ -44,7 +45,7 @@ export function Results() {
             : list[0]?.name ?? null,
         );
       })
-      .catch((e) => setError((e as Error).message))
+      .catch((e) => setError(explainApiError(e, t)))
       .finally(() => setLoading(false));
   };
 
@@ -68,7 +69,7 @@ export function Results() {
         if (!cancelled) setPage(p);
       })
       .catch((e) => {
-        if (!cancelled) setError((e as Error).message);
+        if (!cancelled) setError(explainApiError(e, t));
       })
       .finally(() => {
         if (!cancelled) setTableLoading(false);
@@ -117,7 +118,7 @@ export function Results() {
       setPage(null);
       reloadBoards();
     } catch (e) {
-      setError((e as Error).message);
+      setError(explainApiError(e, t));
     } finally {
       setClearing(false);
     }

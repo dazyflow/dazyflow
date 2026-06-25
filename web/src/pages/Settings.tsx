@@ -4,6 +4,7 @@ import { Bell, Moon, ShieldCheck, Sun } from "lucide-react";
 import { applyTheme, getTheme, type ThemeMode } from "../theme";
 import { useAuth } from "../auth";
 import { api, APIError, type TOTPSetup, type TOTPStatus } from "../api";
+import { explainApiError } from "../lib/explainApiError";
 import { OtpInput } from "../components/OtpInput";
 import { Switch } from "../components/Switch";
 import { Button } from "../components/Button";
@@ -129,7 +130,7 @@ function NotificationsCard() {
         if (!cancelled) setEmailOnFailureState(p.email_on_flow_failure);
       })
       .catch((e) => {
-        if (!cancelled) setErr((e as Error).message);
+        if (!cancelled) setErr(explainApiError(e, t));
       });
     return () => {
       cancelled = true;
@@ -154,7 +155,7 @@ function NotificationsCard() {
       setEmailOnFailureState(saved.email_on_flow_failure);
     } catch (e) {
       setEmailOnFailureState(prev);
-      setErr((e as Error).message);
+      setErr(explainApiError(e, t));
     } finally {
       setBusy(false);
     }
@@ -252,7 +253,7 @@ function TwoFactorCard() {
       if (e instanceof APIError && e.status === 503) {
         setUnavailable(true);
       } else {
-        setErr((e as Error).message);
+        setErr(explainApiError(e, t));
       }
     } finally {
       setBusy(false);
@@ -271,7 +272,7 @@ function TwoFactorCard() {
       setConfirmCode("");
       await refresh();
     } catch (e) {
-      setErr((e as Error).message);
+      setErr(explainApiError(e, t));
     } finally {
       setBusy(false);
     }
@@ -284,7 +285,7 @@ function TwoFactorCard() {
       const r = await api.totpRegenerateRecoveryCodes(token);
       setRecoveryCodes(r.recovery_codes);
     } catch (e) {
-      setErr((e as Error).message);
+      setErr(explainApiError(e, t));
     } finally {
       setBusy(false);
     }
@@ -300,7 +301,7 @@ function TwoFactorCard() {
       setRecoveryCodes(null);
       await refresh();
     } catch (e) {
-      setErr((e as Error).message);
+      setErr(explainApiError(e, t));
     } finally {
       setBusy(false);
     }

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
+import { explainApiError } from "../lib/explainApiError";
 import { Button } from "./Button";
 import { Switch } from "./Switch";
 import type { IssuedAPIKey, Permission, Role } from "../types";
@@ -152,7 +153,7 @@ export function IssueKeyModal({
       });
       onIssued(issued);
     } catch (e) {
-      onError((e as Error).message);
+      onError(explainApiError(e, t));
     } finally {
       setSubmitting(false);
     }

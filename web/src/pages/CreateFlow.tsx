@@ -7,6 +7,7 @@ import { api } from "../api";
 import { TemplateGallery } from "../components/TemplateGallery";
 import { Callout } from "../components/Callout";
 import { Button } from "../components/Button";
+import { explainApiError } from "../lib/explainApiError";
 import type { Graph, Manifest } from "../types";
 
 // GenIssue mirrors core.LintIssue — the heads-up findings the generator
@@ -199,7 +200,7 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
     try {
       await createNew();
     } catch (e) {
-      setErr((e as Error).message);
+      setErr(explainApiError(e, t));
       setBusy(false);
     }
   };
@@ -247,7 +248,7 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
         setErr(t("createAI.empty"));
       }
     } catch (e) {
-      setErr((e as Error).message);
+      setErr(explainApiError(e, t));
     }
     setBusy(false);
   };

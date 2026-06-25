@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { api, APIError, type SecretScope } from "../api";
+import { api, type SecretScope } from "../api";
+import { explainApiError } from "../lib/explainApiError";
 import { useAuth } from "../auth";
 import { ConfirmModal } from "./ConfirmModal";
 import { Button } from "./Button";
@@ -76,7 +77,7 @@ export function CredentialsManager({
       setValue("");
       onChanged();
     } catch (e) {
-      setErr(e instanceof APIError ? e.message : (e as Error).message);
+      setErr(explainApiError(e, t));
     } finally {
       setBusy(false);
     }
@@ -88,7 +89,7 @@ export function CredentialsManager({
       await api.deleteSecret(token, n, scope, flow);
       onChanged();
     } catch (e) {
-      setErr(e instanceof APIError ? e.message : (e as Error).message);
+      setErr(explainApiError(e, t));
     }
   };
 

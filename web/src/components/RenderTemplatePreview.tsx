@@ -4,6 +4,7 @@ import { Sparkles } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
+import { explainApiError } from "../lib/explainApiError";
 import { Button } from "./Button";
 
 // Ready-made starting points. Each sets a working template AND matching
@@ -134,7 +135,7 @@ export function RenderTemplatePreview({
       else if (r.error) setAssistErr(r.error);
       else if (r.template) onInsertTemplate(r.template);
     } catch (e) {
-      setAssistErr((e as Error).message);
+      setAssistErr(explainApiError(e, t));
     } finally {
       setAssisting(false);
     }

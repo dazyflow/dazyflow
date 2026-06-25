@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState, ReactNode 
 import { useNavigate } from "react-router-dom";
 import { api, APIError, setUnauthorizedHandler } from "./api";
 import { pickActive } from "./lib/pickActive";
+import { explainApiError } from "./lib/explainApiError";
 import i18n from "./i18n";
 import { applyTheme } from "./theme";
 import type { Permission, WhoAmI } from "./types";
@@ -260,7 +261,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // of silently leaving the user in the wrong scope.
           setError(
             i18n.t("signIn.switchOrgFailed", {
-              error: e instanceof Error ? e.message : String(e),
+              error: explainApiError(e, i18n.t),
             }),
           );
         });
@@ -313,7 +314,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await applySession(r.token as string);
       return { totpRequired: false };
     } catch (e) {
-      setError((e as Error).message);
+      setError(explainApiError(e, i18n.t, "signin"));
       throw e;
     } finally {
       setLoading(false);
@@ -331,7 +332,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const r = await api.totpVerify(challenge, code, recoveryCode);
       await applySession(r.token as string);
     } catch (e) {
-      setError((e as Error).message);
+      setError(explainApiError(e, i18n.t, "totp"));
       throw e;
     } finally {
       setLoading(false);
@@ -352,7 +353,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const r = await api.signUp(email, password, signupInvite);
       await applySession(r.token as string);
     } catch (e) {
-      setError((e as Error).message);
+      setError(explainApiError(e, i18n.t, "signup"));
       throw e;
     } finally {
       setLoading(false);

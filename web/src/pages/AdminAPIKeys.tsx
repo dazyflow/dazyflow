@@ -8,6 +8,7 @@ import { Button } from "../components/Button";
 import { IssueKeyModal } from "../components/IssueKeyModal";
 import { RevealSecretModal } from "../components/RevealSecretModal";
 import { formatDate } from "../lib/datetime";
+import { explainApiError } from "../lib/explainApiError";
 
 export function AdminAPIKeys() {
   const { t } = useTranslation();
@@ -37,7 +38,7 @@ export function AdminAPIKeys() {
       if (err instanceof APIError && err.status === 501) {
         setError(t("admin.apiKeys.notConfigured"));
       } else {
-        setError(err.message);
+        setError(explainApiError(err, t));
       }
     } finally {
       setLoading(false);
@@ -76,7 +77,7 @@ export function AdminAPIKeys() {
       setConfirmRevoke(null);
       await refresh();
     } catch (e) {
-      setError((e as Error).message);
+      setError(explainApiError(e, t));
     }
   };
 

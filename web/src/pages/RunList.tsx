@@ -7,6 +7,7 @@ import { api } from "../api";
 import { Button } from "../components/Button";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { shouldShowTenantID } from "../lib/visibleTenant";
+import { explainApiError } from "../lib/explainApiError";
 import { formatDateTime } from "../lib/datetime";
 import type { RunSummary, JobStatus } from "../types";
 
@@ -141,7 +142,7 @@ export function RunList() {
         setHasMore(page.length === PAGE_SIZE);
       })
       .catch((e) => {
-        if (!cancelled) setError((e as Error).message);
+        if (!cancelled) setError(explainApiError(e, t));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -149,7 +150,7 @@ export function RunList() {
     return () => {
       cancelled = true;
     };
-  }, [token, fetchRunsPage]);
+  }, [token, fetchRunsPage, t]);
 
   // Live polling whenever anything is in-flight — refresh only the first
   // PAGE_SIZE rows so a long scrollback isn't repeatedly fetched.
@@ -207,7 +208,7 @@ export function RunList() {
       const { job_id } = await api.retryRun(token, id);
       navigate(`/runs/${encodeURIComponent(job_id)}`);
     } catch (e) {
-      setError((e as Error).message);
+      setError(explainApiError(e, t));
     } finally {
       setRetrying(false);
     }
@@ -228,7 +229,7 @@ export function RunList() {
       // Refresh so the new runs appear and the retried ones update.
       setRuns(await fetchRunsPage(0));
     } catch (e) {
-      setError((e as Error).message);
+      setError(explainApiError(e, t));
     } finally {
       setRetrying(false);
     }
@@ -242,7 +243,7 @@ export function RunList() {
       setRuns((prev) => [...prev, ...next]);
       setHasMore(next.length === PAGE_SIZE);
     } catch (e) {
-      setError((e as Error).message);
+      setError(explainApiError(e, t));
     } finally {
       setLoading(false);
     }

@@ -3,6 +3,7 @@ import { X } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import type { Graph } from "../types";
 import { api, APIError } from "../api";
+import { explainApiError } from "../lib/explainApiError";
 import { useAuth } from "../auth";
 import { IconUpload } from "./IconUpload";
 import { CredentialsManager } from "./CredentialsManager";
@@ -372,7 +373,7 @@ function FlowSecretsTab({ graph }: { graph: Graph }) {
         if (status === 501 || status === 401 || status === 403) {
           setOff(true);
         } else {
-          setErr(e instanceof APIError ? e.message : (e as Error).message);
+          setErr(explainApiError(e, t));
         }
       });
   };

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api";
+import { explainApiError } from "../lib/explainApiError";
 import { useAuth } from "../auth";
 import { Button } from "./Button";
 
@@ -37,7 +38,7 @@ export function ApprovalPanel({
       setComment("");
       // SSE delivers the status flip + downstream dispatch; no local refresh.
     } catch (e) {
-      setError((e as Error).message);
+      setError(explainApiError(e, t));
     } finally {
       setBusy(null);
     }

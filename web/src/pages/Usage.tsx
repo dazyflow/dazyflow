@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "../components/Button";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
+import { explainApiError } from "../lib/explainApiError";
 import type { BillingInfo, UsageCounters } from "../types";
 
 // Usage & billing (T3): how many flow runs and step executions this
@@ -47,7 +48,7 @@ export function Usage() {
       if (err instanceof APIError && err.status === 501) {
         setError(t("usage.notConfigured"));
       } else {
-        setError(err.message);
+        setError(explainApiError(e, t));
       }
     } finally {
       setLoading(false);
@@ -72,11 +73,11 @@ export function Usage() {
             : await api.createBillingPortal(token, tenant);
         window.location.href = url;
       } catch (e) {
-        setError((e as Error).message);
+        setError(explainApiError(e, t));
         setRedirecting(false);
       }
     },
-    [token, activeTenant],
+    [token, activeTenant, t],
   );
 
   const current = usage[0];

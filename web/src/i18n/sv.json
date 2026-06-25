@@ -1,4 +1,18 @@
 {
+  "apiError": {
+    "generic": "Något gick fel. Försök igen — om det fortsätter, kontakta supporten.",
+    "network": "Vi kunde inte nå Dazyflow. Kontrollera din internetanslutning och försök igen.",
+    "server": "Dazyflow stötte på ett problem hos oss. Försök igen om en stund.",
+    "sessionExpired": "Din session har gått ut. Logga in igen.",
+    "forbidden": "Du har inte behörighet att göra det. Fråga en administratör om du tror att du borde ha det.",
+    "notFound": "Vi kunde inte hitta det — det kan ha flyttats eller tagits bort.",
+    "conflict": "Det kunde inte slutföras eftersom det krockar med något som redan finns eller används.",
+    "rateLimited": "Det går lite för fort — vänta en stund och försök igen.",
+    "signinInvalid": "E-postadressen eller lösenordet stämmer inte. Kontrollera och försök igen.",
+    "signupExists": "Ett konto med den e-postadressen finns redan. Prova att logga in i stället.",
+    "signupBad": "Vi kunde inte skapa ditt konto med de uppgifterna. Kontrollera dem och försök igen.",
+    "totpInvalid": "Koden stämmer inte eller har gått ut. Ange en ny kod från din autentiseringsapp."
+  },
   "flowStatus": {
     "live": {
       "label": "Aktiv",

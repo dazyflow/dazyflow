@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { api, APIError } from "../api";
+import { api } from "../api";
+import { explainApiError } from "../lib/explainApiError";
 import { useAuth } from "../auth";
 import { iconFor } from "../icons";
 import {
@@ -60,7 +61,8 @@ export function TemplateGallery() {
     api
       .listTemplates()
       .then((r) => setTemplates(r.templates))
-      .catch((e: Error) => setError(e.message));
+      .catch((e) => setError(explainApiError(e, t)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Fetch OAuth providers in parallel — kept independent so a 501 or
@@ -158,7 +160,7 @@ export function TemplateGallery() {
       await api.saveGraph(token, cloned);
       navigate(`/flows/${encodeURIComponent(newID)}`);
     } catch (e) {
-      const msg = e instanceof APIError ? `${e.status}: ${e.message}` : (e as Error).message;
+      const msg = explainApiError(e, t);
       setError(t("templates.forkFailed", { title: tpl.title, error: msg }));
     } finally {
       setBusy(null);

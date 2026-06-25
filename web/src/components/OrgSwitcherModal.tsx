@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Check, Download, Plus, Trash2, X } from "lucide-react";
 import { ConfirmModal } from "./ConfirmModal";
 import { Button } from "./Button";
+import { explainApiError } from "../lib/explainApiError";
 
 // OrgSwitcherModal is the centered org switcher + create flow, mirroring the
 // ConfigChecklistModal shell (portal to <body>, settings-backdrop/dialog,
@@ -82,7 +83,7 @@ export function OrgSwitcherModal({
       await onCreate(trimmed);
       // Parent closes the modal on success; nothing more to do here.
     } catch (e) {
-      setError((e as Error).message);
+      setError(explainApiError(e, t));
       setBusy(false);
     }
   };
@@ -100,7 +101,7 @@ export function OrgSwitcherModal({
     setDeleteError(null);
     void onDelete(target, deletePassword)
       .then(() => setConfirmDelete(null)) // parent refreshes / closes
-      .catch((e: unknown) => setDeleteError((e as Error).message))
+      .catch((e: unknown) => setDeleteError(explainApiError(e, t)))
       .finally(() => setBusy(false));
   };
 
@@ -246,7 +247,7 @@ export function OrgSwitcherModal({
                     void onExport(confirmDelete.tenant)
                       .then(() => setExportState("done"))
                       .catch((e: unknown) => {
-                        setDeleteError((e as Error).message);
+                        setDeleteError(explainApiError(e, t));
                         setExportState("idle");
                       });
                   }}

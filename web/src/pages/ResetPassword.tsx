@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "../components/Button";
-import { api, APIError } from "../api";
+import { api } from "../api";
+import { explainApiError } from "../lib/explainApiError";
 
 // ResetPassword is the landing page for the emailed reset link
 // (/reset-password?email=…&token=…). The token in the link is the proof,
@@ -74,7 +75,7 @@ export function ResetPassword() {
             await api.resetPassword(email, resetToken, password);
             setDone(true);
           } catch (e) {
-            setErr(e instanceof APIError ? e.message : (e as Error).message);
+            setErr(explainApiError(e, t));
           } finally {
             setBusy(false);
           }

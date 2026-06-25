@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { ChevronRight, CornerLeftUp, Folder } from "lucide-react";
-import { api, APIError } from "../api";
+import { api } from "../api";
+import { explainApiError } from "../lib/explainApiError";
 import { Button } from "./Button";
 import type { FileEntry } from "../types";
 
@@ -48,10 +49,8 @@ export function MoveModal({
     api
       .listWorkspaceFiles(token, tenant, workspace, dir)
       .then((r) => setFolders((r.entries ?? []).filter((e) => e.is_dir)))
-      .catch((e) =>
-        setError(e instanceof APIError ? e.message : (e as Error).message),
-      );
-  }, [token, tenant, workspace, dir]);
+      .catch((e) => setError(explainApiError(e, t)));
+  }, [token, tenant, workspace, dir, t]);
   useEffect(load, [load]);
 
   useEffect(() => {
@@ -70,7 +69,7 @@ export function MoveModal({
       .renameWorkspaceFile(token, tenant, workspace, entry.path, to)
       .then(onMoved)
       .catch((e) => {
-        setError(e instanceof APIError ? e.message : (e as Error).message);
+        setError(explainApiError(e, t));
         setMoving(false);
       });
   };

@@ -11,7 +11,8 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { api, APIError } from "../api";
+import { api } from "../api";
+import { explainApiError } from "../lib/explainApiError";
 import { useAuth } from "../auth";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { Button } from "../components/Button";
@@ -109,7 +110,7 @@ export function Files() {
       .listWorkspaceFiles(token!, activeTenant, activeWorkspace, cwd)
       .then((r) => setEntries(r.entries ?? []))
       .catch((e) =>
-        setError(e instanceof APIError ? e.message : (e as Error).message),
+        setError(explainApiError(e, t)),
       );
     api
       .workspaceFileUsage(token!, activeTenant, activeWorkspace)
@@ -126,7 +127,7 @@ export function Files() {
       await fn();
       refresh();
     } catch (e) {
-      setError(e instanceof APIError ? e.message : (e as Error).message);
+      setError(explainApiError(e, t));
     } finally {
       setBusy(false);
     }
@@ -149,7 +150,7 @@ export function Files() {
       a.remove();
       URL.revokeObjectURL(url);
     } catch (e) {
-      setError(e instanceof APIError ? e.message : (e as Error).message);
+      setError(explainApiError(e, t));
     }
   };
 

@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { CheckCircle2, MailWarning } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { api, APIError } from "../api";
+import { api } from "../api";
+import { explainApiError } from "../lib/explainApiError";
 import { useAuth } from "../auth";
 
 // VerifyEmail is the landing page for the confirmation link
@@ -40,7 +41,7 @@ export function VerifyEmail() {
       })
       .catch((e) => {
         setState("failed");
-        setErrMsg(e instanceof APIError ? e.message : (e as Error).message);
+        setErrMsg(explainApiError(e, t));
       });
     // Run once for the link in the URL — re-running on auth changes
     // would double-post the token.
