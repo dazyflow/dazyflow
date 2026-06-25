@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+	"time"
 
 	"git.sr.ht/~klahr/dazyflow/core"
 )
@@ -83,6 +84,37 @@ func TestHTTPGateway_ListRunNodes_ReturnsAllNodesForRun(t *testing.T) {
 		if !got[want] {
 			t.Errorf("missing node %q", want)
 		}
+	}
+}
+
+func TestNewNodeRunView_RetrySignal(t *testing.T) {
+	future := time.Now().Add(30 * time.Second)
+	at := &future
+	// A node between attempts: queued, attempt>0, with a future horizon.
+	requeued := core.JobRecord{
+		NodeID:      "n",
+		Status:      core.JobStatusQueued,
+		Attempt:     2,
+		AvailableAt: at,
+	}
+	v := newNodeRunView(requeued)
+	if !v.WillRetry {
+		t.Error("requeued node should set will_retry")
+	}
+	if v.RetryAt == nil || !v.RetryAt.Equal(*at) {
+		t.Errorf("retry_at = %v, want %v", v.RetryAt, at)
+	}
+
+	// A terminally failed node must NOT advertise a retry — that's "needs you".
+	failed := core.JobRecord{NodeID: "n", Status: core.JobStatusFailed, Attempt: 3}
+	if fv := newNodeRunView(failed); fv.WillRetry || fv.RetryAt != nil {
+		t.Errorf("terminal failure must not set retry signal, got will_retry=%v retry_at=%v", fv.WillRetry, fv.RetryAt)
+	}
+
+	// A first-time queued node (attempt 0, no horizon) is not a retry.
+	fresh := core.JobRecord{NodeID: "n", Status: core.JobStatusQueued}
+	if fv := newNodeRunView(fresh); fv.WillRetry {
+		t.Error("a fresh queued node should not set will_retry")
 	}
 }
 

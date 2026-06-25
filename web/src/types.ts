@@ -607,6 +607,10 @@ export type JobRecord = {
   StartedAt?: string | null;
   FinishedAt?: string | null;
   Attempt?: number;
+  // WillRetry/RetryAt mirror the node view's auto-retry signal (see
+  // NodeRunView). Set only while a node is queued for a future retry.
+  WillRetry?: boolean;
+  RetryAt?: string | null;
   // Job is the per-node-record dispatch payload. Its `Input` map
   // carries the resolved input refs the worker passed to Execute —
   // the upstream values that flowed INTO this node. RunDetail uses
@@ -644,6 +648,11 @@ export type NodeRunView = {
   inputs?: Record<string, Ref>;
   outputs?: Record<string, Ref>;
   error?: JobError;
+  // will_retry + retry_at: the engine will automatically try this node
+  // again at retry_at (it's between attempts after a transient failure).
+  // Absent on a terminal failure — that one needs the user.
+  will_retry?: boolean;
+  retry_at?: string | null;
 };
 
 export type Role = {

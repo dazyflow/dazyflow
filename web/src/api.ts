@@ -240,6 +240,8 @@ function nodeViewToRecord(runID: string, n: NodeRunView): JobRecord {
     StartedAt: n.started_at ?? null,
     FinishedAt: n.finished_at ?? null,
     Attempt: n.attempts,
+    WillRetry: n.will_retry,
+    RetryAt: n.retry_at ?? null,
     Result:
       n.outputs || n.error
         ? { status: n.status, output: n.outputs, error: n.error }

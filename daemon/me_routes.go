@@ -1011,6 +1011,14 @@ type nodeRunView struct {
 	Inputs     map[string]core.Ref `json:"inputs,omitempty"`
 	Outputs    map[string]core.Ref `json:"outputs,omitempty"`
 	Error      *core.JobError      `json:"error,omitempty"`
+	// WillRetry + RetryAt expose the engine's auto-retry state so the run
+	// viewer can say "retrying — next attempt in Ns" instead of leaving a
+	// node that's between attempts looking stuck. Set only while a node is
+	// requeued for a future retry (an earlier attempt failed transiently);
+	// a terminally failed node leaves them unset, which the UI reads as
+	// "needs you". See newNodeRunView.
+	WillRetry bool       `json:"will_retry,omitempty"`
+	RetryAt   *time.Time `json:"retry_at,omitempty"`
 }
 
 // sseTerminalView is the clean payload of the `terminal` SSE frame on the
@@ -1079,6 +1087,15 @@ func newNodeRunView(rec core.JobRecord) nodeRunView {
 	}
 	if rec.Result != nil {
 		v.Outputs = rec.Result.Output
+	}
+	// A node between attempts is requeued: queued, with a future availability
+	// horizon and a non-zero attempt count (the worker's maybeScheduleRetry
+	// set AvailableAt = now + backoff). Surface that as an explicit auto-retry
+	// signal so the UI distinguishes "the engine will try again at T" from a
+	// terminal failure the user must act on.
+	if rec.Status == core.JobStatusQueued && rec.Attempt > 0 && rec.AvailableAt != nil {
+		v.WillRetry = true
+		v.RetryAt = rec.AvailableAt
 	}
 	return v
 }

@@ -115,6 +115,19 @@ describe("explainRunError", () => {
     }
   });
 
+  it("maps 5xx / gateway errors to the transient service-unavailable headline", () => {
+    for (const msg of [
+      "twilio returned 503: Service Unavailable",
+      "502 Bad Gateway",
+      "upstream: gateway timeout",
+    ]) {
+      const r = explainRunError("http", msg);
+      expect(r, msg).not.toBeNull();
+      expect(r!.headlineKey, msg).toBe("explain.serviceUnavailable");
+      expect(r!.action, msg).toBeUndefined(); // transient — no fix-it button
+    }
+  });
+
   it("leaves unmapped codes to the raw-detail fallback", () => {
     expect(explainRunError("io", "read: connection reset")).toBeNull();
     expect(explainRunError("node_failed", "node x failed")).toBeNull();

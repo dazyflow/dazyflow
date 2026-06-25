@@ -120,12 +120,24 @@ egress allowlist + SSRF guard, job-ID idempotency key for outbound writes.
 ## 10. Connector breadth & contract quality — ONGOING (the real content moat)
 - [ ] Track connector coverage vs. demand; the typed-port stance is sound, so
       this is a grind on count + output-shape quality, not an architecture risk.
-- [ ] Per-connector contract tests for output schema stability (examples_contract
-      harness already exists in drops/) extended to new connectors.
+      (Still ongoing — adding connectors is the perpetual content work.)
+- [x] Output-shape contract tests (drops/output_contract_test.go), the OUTPUT
+      twin of examples_contract: for ALL 108 built-ins at once — (a) ports are
+      well-formed (unique non-empty ids, a Label, non-empty MIMEs) and (b) a
+      drop never EMITS an output port it didn't declare (caught delay's
+      hand-rolled `pass` pin; the universal PassPort is allowed). Runs every
+      drop against the adversarial corpus and asserts on each StatusOK result.
 
-## 11. Plain-English failure UX — MEDIUM (trust)
-- [ ] Map raw transport errors (502 / timeout / 429 / auth-expired) to a
-      human cause + suggested action in the run viewer, not the cryptic status.
-      Run detail/timeline/retry UI already exists to hang this off.
-- [ ] Surface "will auto-retry in Ns" vs "needs you" distinctly, tied to the
-      retry policy and the #9 idempotency guarantee.
+## 11. Plain-English failure UX — DONE
+- [x] Map raw transport errors → human cause + action (web/src/lib/explainRunError.ts,
+      shown in RunDetail's failure banner + per-node expander). Already covered
+      429/timeout/auth-expired/network/404/permission/secret/oauth; ADDED a
+      transient 5xx headline (502/503/504/bad gateway/gateway timeout →
+      explain.serviceUnavailable, "their side, try again shortly"). +tests.
+- [x] Auto-retry vs needs-you, distinctly: the node view now exposes
+      `will_retry`/`retry_at` (from a requeued record's AvailableAt+Attempt);
+      RunDetail shows an "Auto-retrying — next attempt in Ns" pill on a node
+      between attempts, and the terminal-failure banner says "Failed after N
+      attempts" + "This step won't retry on its own — fix it, then Retry from
+      failure." (A still-retrying node leaves the run running, not failed, so
+      the two states never collide.)

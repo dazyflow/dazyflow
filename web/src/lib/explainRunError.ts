@@ -189,6 +189,20 @@ export function explainRunError(
     return { headlineKey: "explain.networkUnreachable" };
   }
 
+  // Remote temporarily unavailable — a 5xx gateway/overload from the service
+  // itself (not our side). Transient: the engine auto-retries idempotent
+  // steps, and a manual Retry usually clears it. No fix-it destination.
+  if (
+    lc.includes("502") ||
+    lc.includes("503") ||
+    lc.includes("504") ||
+    lc.includes("service unavailable") ||
+    lc.includes("bad gateway") ||
+    lc.includes("gateway timeout")
+  ) {
+    return { headlineKey: "explain.serviceUnavailable" };
+  }
+
   // Remote returned malformed/unexpected data — often an upstream error page
   // where JSON was expected. Points at the failing step's output for detail.
   if (

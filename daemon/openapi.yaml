@@ -1573,6 +1573,8 @@ components:
         inputs:      { type: object, additionalProperties: true }
         outputs:     { type: object, additionalProperties: true }
         error:       { $ref: "#/components/schemas/JobError" }
+        will_retry:  { type: boolean, description: "True while the node is queued for an automatic retry after a transient failure." }
+        retry_at:    { type: [string, "null"], format: date-time, description: "When the next automatic attempt is scheduled (set only when will_retry is true)." }
 
     RunRequest:
       type: object

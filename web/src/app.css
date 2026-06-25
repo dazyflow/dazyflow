@@ -2997,6 +2997,13 @@ button.warning:hover:not(:disabled) {
   flex: 1;
   min-width: 0;
 }
+/* "This step won't retry on its own" footnote under a terminal failure —
+   quieter than the message, it tells the user the ball is in their court. */
+.run-error-needsyou {
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
 /* The plain-English headline + next-action sit above the raw
    error code/message. Visually heavier than the technical layers
    so a non-tech reader's eye lands on the actionable line first.
@@ -3481,6 +3488,18 @@ button.warning:hover:not(:disabled) {
   color: var(--faint);
   font-size: var(--text-sm);
   font-family: var(--font-mono);
+}
+/* Auto-retry pill on a node that's between attempts — a calm "the engine is
+   handling it" cue, distinct from the red error pill. */
+.node-retry {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 12%, transparent);
+  padding: var(--space-0) var(--space-2);
+  border-radius: 999px;
 }
 .node-err {
   font-family: var(--font-mono);

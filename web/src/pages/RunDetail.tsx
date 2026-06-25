@@ -332,6 +332,7 @@ export function RunDetail() {
         <RunFailureBanner
           run={run}
           failedNodeLabel={failedNode ? nodeLabel(failedNode.NodeID) : undefined}
+          failedNodeAttempts={failedNode?.Attempt}
         />
       )}
 
@@ -410,6 +411,17 @@ export function RunDetail() {
                 <span className={"status-dot " + n.Status} />
                   <span className="node-id" title={n.NodeID}>{nodeLabel(n.NodeID)}</span>
                 <span className="node-status">{statusLabel(n.Status, t)}</span>
+                {/* Auto-retry: a node between attempts is queued with a future
+                    horizon — say the engine will try again (and roughly when)
+                    so it doesn't read as stuck. */}
+                {n.WillRetry && (
+                  <span className="node-retry" title={formatAbs(n.RetryAt ?? null)}>
+                    <RotateCw size={11} />
+                    {retryCountdown(n.RetryAt)
+                      ? t("runDetail.willRetry", { when: retryCountdown(n.RetryAt) })
+                      : t("runDetail.willRetrySoon")}
+                  </span>
+                )}
                 <span className="node-dur">{dur}</span>
                 {n.Result?.error?.code && (
                   <span className="node-err">{n.Result.error.code}</span>
@@ -694,9 +706,11 @@ function SummaryRow({ label, value }: { label: string; value: React.ReactNode })
 function RunFailureBanner({
   run,
   failedNodeLabel,
+  failedNodeAttempts,
 }: {
   run: JobRecord;
   failedNodeLabel: string | undefined;
+  failedNodeAttempts: number | undefined;
 }) {
   const { t } = useTranslation();
   const explanation = explainRunError(
@@ -705,6 +719,17 @@ function RunFailureBanner({
   );
   const action = explanation?.action;
   const isExternal = action?.href.startsWith("http") || false;
+  // A failed run is terminal — the engine already exhausted any automatic
+  // retries (a node that COULD still retry leaves the run "running", not
+  // "failed"). Say so, and name how many attempts it took, so the user knows
+  // this one is on them now rather than wondering if it'll fix itself.
+  const attempts = failedNodeAttempts ?? 0;
+  const title =
+    failedNodeLabel && attempts > 1
+      ? t("runDetail.failedAtAfter", { node: failedNodeLabel, count: attempts })
+      : failedNodeLabel
+      ? t("runDetail.failedAt", { node: failedNodeLabel })
+      : t("runDetail.failed");
   return (
     <div className="run-error-banner">
       <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 2 }} />
@@ -730,9 +755,7 @@ function RunFailureBanner({
           </div>
         )}
         <div className="run-error-title">
-          {failedNodeLabel
-            ? t("runDetail.failedAt", { node: failedNodeLabel })
-            : t("runDetail.failed")}
+          {title}
           {run.Result?.error?.code && (
             <span className="run-error-code"> · {run.Result.error.code}</span>
           )}
@@ -740,6 +763,7 @@ function RunFailureBanner({
         {run.Result?.error?.message && (
           <div className="run-error-msg">{run.Result.error.message}</div>
         )}
+        <div className="run-error-needsyou">{t("runDetail.needsYou")}</div>
       </div>
     </div>
   );
@@ -813,6 +837,18 @@ export function statusLabel(
 function formatAbs(iso: string | null): string {
   if (!iso) return "—";
   return formatDateTime(iso);
+}
+
+// retryCountdown renders the wait until a node's next scheduled auto-retry as
+// a short "12s" / "3m" string. Empty when the horizon is unknown or already
+// passed (the next poll will pick up the new attempt) — callers fall back to
+// a "shortly" label. Computed at render; the live run poll refreshes it.
+function retryCountdown(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const secs = Math.round((Date.parse(iso) - Date.now()) / 1000);
+  if (!Number.isFinite(secs) || secs <= 0) return "";
+  if (secs < 60) return `${secs}s`;
+  return `${Math.round(secs / 60)}m`;
 }
 
 function formatDuration(startedISO: string, finishedISO: string): string {
