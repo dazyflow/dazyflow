@@ -46,6 +46,29 @@ func TestLandingAuthGate(t *testing.T) {
 		}
 	})
 
+	t.Run("org subdomain root serves SPA, not landing", func(t *testing.T) {
+		// On a per-org subdomain the app is the front door — an anonymous
+		// visitor must get the SPA (which routes to sign-in with the org
+		// preselected), NOT the apex marketing page.
+		h.gw.WildcardDomain = "dazyflow.app"
+		defer func() { h.gw.WildcardDomain = "" }()
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Host = "klahr.dazyflow.app"
+		rw := httptest.NewRecorder()
+		ServeForTest(h.gw, rw, req)
+		if rw.Code != http.StatusOK || !strings.Contains(rw.Body.String(), "SPA-APP-SHELL") {
+			t.Fatalf("subdomain / = %d %q, want SPA shell", rw.Code, rw.Body.String())
+		}
+		// The apex still serves marketing for an anonymous visitor.
+		req = httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Host = "dazyflow.app"
+		rw = httptest.NewRecorder()
+		ServeForTest(h.gw, rw, req)
+		if !strings.Contains(rw.Body.String(), "MARKETING-HOME") {
+			t.Fatalf("apex / = %q, want landing", rw.Body.String())
+		}
+	})
+
 	t.Run("signed-in root serves SPA", func(t *testing.T) {
 		rw := get("/", true)
 		if rw.Code != http.StatusOK || !strings.Contains(rw.Body.String(), "SPA-APP-SHELL") {

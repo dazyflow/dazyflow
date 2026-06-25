@@ -723,8 +723,13 @@ func (h *HTTPGateway) landingDistHandler(landingDir, webDir string) http.Handler
 		// Root is auth-gated: the session cookie rides along on a
 		// top-level navigation (SameSite=Lax), so a valid one means a
 		// signed-in user who wants the app, not the marketing page.
+		//
+		// Marketing lives ONLY on the apex. On an org subdomain
+		// (klahr.dazyflow.app) the org's app is the front door, so an
+		// anonymous visitor gets the SPA — which routes them to sign-in with
+		// their org preselected — instead of the apex marketing page.
 		if r.URL.Path == "/" {
-			if h.hasValidSession(r) {
+			if h.hasValidSession(r) || h.isOrgSubdomainHost(r.Host) {
 				spa.ServeHTTP(rw, r)
 				return
 			}
@@ -1110,6 +1115,20 @@ func hostIsSubdomainOf(host, domain string) bool {
 	host = strings.ToLower(strings.TrimSuffix(host, "."))
 	domain = strings.ToLower(domain)
 	return domain != "" && strings.HasSuffix(host, "."+domain)
+}
+
+// isOrgSubdomainHost reports whether an inbound request's Host is a per-org
+// wildcard subdomain (anything under the configured apex), so the landing
+// handler can serve the app rather than the marketing page there. The port,
+// if any, is stripped first; false when the wildcard feature is off.
+func (h *HTTPGateway) isOrgSubdomainHost(host string) bool {
+	if h.WildcardDomain == "" {
+		return false
+	}
+	if i := strings.IndexByte(host, ':'); i >= 0 {
+		host = host[:i]
+	}
+	return hostIsSubdomainOf(host, h.WildcardDomain)
 }
 
 // IsValidWildcardDomain reports whether d is specific enough to use as a
