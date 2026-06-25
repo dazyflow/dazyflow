@@ -412,7 +412,12 @@ func (h *HTTPGateway) platformGetOrg(rw http.ResponseWriter, r *http.Request, p 
 		// minimal active profile so the detail page still resolves.
 		pr = auth.OrgProfile{Tenant: tenant, DisplayName: tenant, Status: auth.StatusActive}
 	}
-	resp := map[string]any{"org": h.toPlatformOrgDTO(r.Context(), pr)}
+	resp := map[string]any{
+		"org": h.toPlatformOrgDTO(r.Context(), pr),
+		// The resolved limits + plan in force right now, so the detail
+		// page can show what the org actually gets without recomputing.
+		"effective": h.svc.effectiveLimits(r.Context(), tenant),
+	}
 	if h.Memberships != nil {
 		if rows, err := h.Memberships.ListByTenant(r.Context(), tenant); err == nil {
 			members := make([]string, 0, len(rows))
@@ -659,4 +664,202 @@ func (h *HTTPGateway) platformEnableDrop(rw http.ResponseWriter, r *http.Request
 	}
 	h.audit(r.Context(), p, "platform.drop.enable", target, "")
 	rw.WriteHeader(http.StatusNoContent)
+}
+
+// ---- tiers ----------------------------------------------------------
+
+func (h *HTTPGateway) requirePlatformEntitlements(rw http.ResponseWriter, p core.Principal) bool {
+	if !isPlatformAdmin(p) {
+		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
+		return false
+	}
+	if h.svc.Entitlements == nil {
+		writeJSONError(rw, http.StatusNotImplemented, "entitlements not configured")
+		return false
+	}
+	return true
+}
+
+// platformListTiers returns every tier (built-in + custom).
+func (h *HTTPGateway) platformListTiers(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	if !h.requirePlatformEntitlements(rw, p) {
+		return
+	}
+	tiers, err := h.svc.Entitlements.ListTiers(r.Context())
+	if err != nil {
+		writeJSONError(rw, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{"tiers": tiers})
+}
+
+// platformPutTier creates or updates a tier. The id comes from the body
+// (slugified by the client) on create, or the path on update.
+func (h *HTTPGateway) platformPutTier(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	if !h.requirePlatformEntitlements(rw, p) {
+		return
+	}
+	var t Tier
+	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
+		writeJSONError(rw, http.StatusBadRequest, "decode tier: "+err.Error())
+		return
+	}
+	if id := strings.TrimSpace(r.PathValue("id")); id != "" {
+		t.ID = id
+	}
+	t.ID = strings.TrimSpace(t.ID)
+	if t.ID == "" {
+		writeJSONError(rw, http.StatusBadRequest, "tier id required")
+		return
+	}
+	// Don't let a client flip the built-in flag; preserve the stored value.
+	if existing, ok := h.svc.Entitlements.GetTier(r.Context(), t.ID); ok {
+		t.BuiltIn = existing.BuiltIn
+	} else {
+		t.BuiltIn = false
+	}
+	if err := h.svc.Entitlements.PutTier(r.Context(), t); err != nil {
+		writeJSONError(rw, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.audit(r.Context(), p, "platform.tier.put", t.ID, "")
+	writeJSON(rw, http.StatusOK, map[string]any{"tier": t})
+}
+
+// platformDeleteTier removes a custom tier (built-ins are protected).
+func (h *HTTPGateway) platformDeleteTier(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	if !h.requirePlatformEntitlements(rw, p) {
+		return
+	}
+	id := strings.TrimSpace(r.PathValue("id"))
+	if err := h.svc.Entitlements.DeleteTier(r.Context(), id); err != nil {
+		writeJSONError(rw, http.StatusBadRequest, err.Error())
+		return
+	}
+	h.audit(r.Context(), p, "platform.tier.delete", id, "")
+	rw.WriteHeader(http.StatusNoContent)
+}
+
+// ---- per-org entitlement -------------------------------------------
+
+// platformGetEntitlement returns an org's current assignment, the
+// resolved effective limits, and the tier catalog for the editor.
+func (h *HTTPGateway) platformGetEntitlement(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	if !h.requirePlatformEntitlements(rw, p) {
+		return
+	}
+	tenant := strings.TrimSpace(r.PathValue("tenant"))
+	if tenant == "" {
+		writeJSONError(rw, http.StatusBadRequest, "tenant required")
+		return
+	}
+	ent, _ := h.svc.Entitlements.GetEntitlement(r.Context(), tenant)
+	ent.Tenant = tenant
+	tiers, _ := h.svc.Entitlements.ListTiers(r.Context())
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"entitlement": ent,
+		"effective":   h.svc.effectiveLimits(r.Context(), tenant),
+		"tiers":       tiers,
+	})
+}
+
+// platformPutEntitlement sets an org's tier, plan grant, and per-limit
+// overrides in one call.
+func (h *HTTPGateway) platformPutEntitlement(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	if !h.requirePlatformEntitlements(rw, p) {
+		return
+	}
+	tenant := strings.TrimSpace(r.PathValue("tenant"))
+	if tenant == "" {
+		writeJSONError(rw, http.StatusBadRequest, "tenant required")
+		return
+	}
+	var ent TenantEntitlement
+	if err := json.NewDecoder(r.Body).Decode(&ent); err != nil {
+		writeJSONError(rw, http.StatusBadRequest, "decode entitlement: "+err.Error())
+		return
+	}
+	ent.Tenant = tenant
+	if ent.PlanOverride != "" && ent.PlanOverride != PlanFree && ent.PlanOverride != PlanPro {
+		writeJSONError(rw, http.StatusBadRequest, "plan_override must be empty, 'free', or 'pro'")
+		return
+	}
+	if err := h.svc.Entitlements.PutEntitlement(r.Context(), ent); err != nil {
+		writeJSONError(rw, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.audit(r.Context(), p, "platform.entitlement.put", tenant, ent.TierID)
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"entitlement": ent,
+		"effective":   h.svc.effectiveLimits(r.Context(), tenant),
+	})
+}
+
+// ---- cross-tenant invite -------------------------------------------
+
+// platformInviteMember mints an org invitation into any tenant — the
+// platform-admin counterpart to the org-admin invite (which is locked to
+// the caller's own org). Role caps don't apply: a platform admin is
+// omnipotent across tenants.
+func (h *HTTPGateway) platformInviteMember(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	if !isPlatformAdmin(p) {
+		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
+		return
+	}
+	if h.Invitations == nil {
+		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
+		return
+	}
+	tenant := strings.TrimSpace(r.PathValue("tenant"))
+	var body struct {
+		Email     string      `json:"email"`
+		Roles     []core.Role `json:"roles"`
+		Workspace string      `json:"workspace"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSONError(rw, http.StatusBadRequest, "decode body: "+err.Error())
+		return
+	}
+	email := strings.ToLower(strings.TrimSpace(body.Email))
+	if err := validSignupEmail(email); err != nil {
+		writeJSONError(rw, http.StatusBadRequest, err.Error())
+		return
+	}
+	roles := body.Roles
+	if len(roles) > 0 {
+		resolved, err := resolveCatalogRoles(roles)
+		if err != nil {
+			writeJSONError(rw, http.StatusBadRequest, err.Error())
+			return
+		}
+		roles = resolved
+	} else {
+		roles = []core.Role{core.TeamRoleEditor()}
+	}
+	ws := body.Workspace
+	if ws == "" {
+		ws = "main"
+	}
+	token, err := auth.MintInvitationToken()
+	if err != nil {
+		writeJSONError(rw, http.StatusInternalServerError, err.Error())
+		return
+	}
+	now := time.Now().UTC()
+	inv := auth.Invitation{
+		Token:     token,
+		Email:     email,
+		Tenant:    tenant,
+		Workspace: ws,
+		Roles:     roles,
+		InvitedBy: p.Subject,
+		CreatedAt: now,
+		ExpiresAt: now.Add(14 * 24 * time.Hour),
+	}
+	if err := h.Invitations.PutInvitation(r.Context(), inv); err != nil {
+		writeJSONError(rw, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.audit(r.Context(), p, "platform.member.invite", tenant, "email="+email)
+	writeJSON(rw, http.StatusCreated, map[string]any{"token": token, "email": email, "tenant": tenant})
 }

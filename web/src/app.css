@@ -6992,6 +6992,42 @@ a.pa-card:hover {
 .pa-action-row.is-danger .pa-action-info svg {
   color: var(--danger);
 }
+
+/* A section header row with a trailing action (e.g. "Plan & limits  [Edit]"). */
+.pa-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+/* The tier / entitlement editor form: a clean stacked label grid inside
+   the settings dialog. Each label owns its control on the next line. */
+.pa-tier-form {
+  display: grid;
+  gap: var(--space-3);
+}
+.pa-tier-form label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: 0.9em;
+  color: var(--muted);
+}
+.pa-tier-form label input,
+.pa-tier-form label select {
+  width: 100%;
+}
+/* Checkbox rows read horizontally, not stacked. */
+.pa-tier-form label.pa-tier-check {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text, inherit);
+}
+.pa-tier-form label.pa-tier-check input {
+  width: auto;
+}
 .count-pill {
   font-size: var(--text-xs);
   padding: var(--space-0) var(--space-2);

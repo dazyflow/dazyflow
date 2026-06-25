@@ -93,10 +93,11 @@ func (s *Service) SubmitGraphWithSeed(
 		return "", fmt.Errorf("invalid graph: %w", err)
 	}
 	// Resource-exhaustion guard: refuse a graph whose node count exceeds
-	// the operator's ceiling before allocating any run state.
-	if s.MaxGraphNodes > 0 && len(g.Nodes) > s.MaxGraphNodes {
+	// the tenant's effective ceiling (tier/override, falling back to the
+	// global MaxGraphNodes) before allocating any run state.
+	if maxNodes := s.effectiveLimits(ctx, g.Tenant).MaxGraphNodes; maxNodes > 0 && len(g.Nodes) > maxNodes {
 		return "", fmt.Errorf("%w: graph has %d nodes, limit is %d",
-			core.ErrGraphTooLarge, len(g.Nodes), s.MaxGraphNodes)
+			core.ErrGraphTooLarge, len(g.Nodes), maxNodes)
 	}
 	// Plan gate (T3): free-tier tenants get FreeRunsPerMonth runs per
 	// calendar month; over the cap the submission is refused with

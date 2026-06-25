@@ -242,6 +242,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("postgres blocklist store: %v", err)
 	}
+	// Per-org tiers + limit/plan entitlements. Read on the run/trigger/node
+	// hot paths via an in-memory snapshot; seeds built-in free/pro tiers.
+	entitlements, err := daemon.NewPgEntitlementStore(ctx, pgPool)
+	if err != nil {
+		log.Fatalf("postgres entitlement store: %v", err)
+	}
 
 	// One-time migration: import a JSON user file into the Postgres user
 	// store, then exit. Idempotent (existing accounts skipped). Lets a dev
@@ -546,6 +552,7 @@ func main() {
 		// from, so admin-issued keys are immediately recognized.
 		AdminKeys:              ks,
 		DropSwitches:           dropSwitches,
+		Entitlements:           entitlements,
 		MaxGraphTimeoutSeconds: int(maxGraphTimeout.Seconds()),
 		MaxGraphNodes:          maxGraphNodes,
 		// EncryptedSecrets is the per-tenant store integration drops
@@ -581,6 +588,13 @@ func main() {
 		// preferences (the account-level failure-email channel). Same
 		// store the gateway authenticates against.
 		Users: users,
+	}
+
+	// Per-org disk quota: let a tier/override raise (or set) a tenant's
+	// byte budget above the configured map. effectiveLimits reads the
+	// in-memory entitlement cache, so this stays cheap on the write path.
+	quota.LimitOverride = func(tenant string) int64 {
+		return svc.EffectiveLimitsFor(context.Background(), tenant).DiskQuotaBytes
 	}
 
 	// Approval-link flow: when DAZYFLOW_APPROVAL_HMAC_SECRET is set,

@@ -11,6 +11,7 @@ import {
   Lock,
   ServerCog,
   PowerOff,
+  Layers,
   CircleArrowUp,
   CheckCircle2,
   AlertTriangle,
@@ -123,6 +124,7 @@ export function Admin() {
             <AdminCard to="/admin/platform/users" icon={<Users size={18} />} title={t("admin.cardPlatformUsersTitle")} desc={t("admin.cardPlatformUsersDesc")} />
             <AdminCard to="/admin/platform/orgs" icon={<Building2 size={18} />} title={t("admin.cardPlatformOrgsTitle")} desc={t("admin.cardPlatformOrgsDesc")} />
             <AdminCard to="/admin/platform/drops" icon={<PowerOff size={18} />} title={t("admin.cardPlatformDropsTitle")} desc={t("admin.cardPlatformDropsDesc")} />
+            <AdminCard to="/admin/platform/tiers" icon={<Layers size={18} />} title={t("admin.cardPlatformTiersTitle")} desc={t("admin.cardPlatformTiersDesc")} />
           </div>
 
           <h2 className="admin-group-label">{t("admin.groupSystem")}</h2>

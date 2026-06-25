@@ -115,18 +115,27 @@ type BillingService struct {
 	freeRunsPerMonth    int
 	freePollingDisabled bool
 	logger              *log.Logger
+	// effective, when set, resolves per-org tier/override limits + the
+	// effective plan. The gates prefer it over the raw plan-store + global
+	// knobs; left nil (e.g. in unit tests that build a BillingService
+	// directly) the gates fall back to the pre-entitlement behaviour.
+	effective func(ctx context.Context, tenant string) EffectiveLimits
 }
 
 // billing builds the BillingService view over the Service's billing fields.
 // Cheap (a struct copy), so callers construct one per use rather than caching.
 func (s *Service) billing() *BillingService {
-	return &BillingService{
+	b := &BillingService{
 		plans:               s.Plans,
 		usage:               s.Usage,
 		freeRunsPerMonth:    s.FreeRunsPerMonth,
 		freePollingDisabled: s.FreePollingDisabled,
 		logger:              s.Logger,
 	}
+	if s.Entitlements != nil {
+		b.effective = s.effectiveLimits
+	}
+	return b
 }
 
 // Service-level delegations keep every existing caller (and test) working
@@ -145,6 +154,11 @@ func (s *Service) checkRunQuota(ctx context.Context, tenant string) error {
 // OPEN (reports pro) on plan-store errors: a billing-infrastructure
 // hiccup must degrade to "no gate" rather than "product down".
 func (b *BillingService) tenantIsFree(ctx context.Context, tenant, gate string) bool {
+	// Prefer the effective plan (it layers tier/comp/trial/force over
+	// Stripe) when the entitlement resolver is wired.
+	if b.effective != nil {
+		return b.effective(ctx, tenant).Plan != PlanPro
+	}
 	plan, err := b.plans.GetPlan(ctx, tenant)
 	if err != nil {
 		if b.logger != nil {
@@ -153,6 +167,28 @@ func (b *BillingService) tenantIsFree(ctx context.Context, tenant, gate string) 
 		return false
 	}
 	return plan.Plan != PlanPro
+}
+
+// runLimit is the tenant's effective monthly run cap: the per-org/tier
+// value when entitlements are wired, else the global free-tier default.
+func (b *BillingService) runLimit(ctx context.Context, tenant string) int {
+	if b.effective != nil {
+		return b.effective(ctx, tenant).RunsPerMonth
+	}
+	return b.freeRunsPerMonth
+}
+
+// pollingAllowed reports whether tenant may run scheduled/poll triggers.
+func (b *BillingService) pollingAllowed(ctx context.Context, tenant string) bool {
+	if b.effective != nil {
+		return b.effective(ctx, tenant).PollingAllowed
+	}
+	// Pre-entitlement: allowed unless the global gate is on and the tenant
+	// is free.
+	if !b.freePollingDisabled || b.plans == nil {
+		return true
+	}
+	return !b.tenantIsFree(ctx, tenant, "trigger gate")
 }
 
 // runsThisMonth reads the tenant's current-month run count from the
@@ -175,10 +211,7 @@ func (b *BillingService) runsThisMonth(ctx context.Context, tenant string) (int6
 // checkRunQuota: a billing-store hiccup must not silence everyone's
 // schedules.
 func (b *BillingService) checkTriggerQuota(ctx context.Context, tenant string) error {
-	if !b.freePollingDisabled || b.plans == nil {
-		return nil
-	}
-	if !b.tenantIsFree(ctx, tenant, "trigger gate") {
+	if b.pollingAllowed(ctx, tenant) {
 		return nil
 	}
 	return fmt.Errorf("%w: schedules and polling triggers are a Pro feature — manual runs still work", core.ErrPlanLimit)
@@ -188,11 +221,15 @@ func (b *BillingService) checkTriggerQuota(ctx context.Context, tenant string) e
 // before any run state is written. Pro tenants and deployments without
 // enforcement configured pass through; usage-store errors fail open too.
 func (b *BillingService) checkRunQuota(ctx context.Context, tenant string) error {
-	if b.freeRunsPerMonth <= 0 || b.plans == nil || b.usage == nil {
+	if b.usage == nil {
 		return nil
 	}
+	limit := b.runLimit(ctx, tenant)
+	if limit <= 0 {
+		return nil // 0 = no cap
+	}
 	if !b.tenantIsFree(ctx, tenant, "plan gate") {
-		return nil
+		return nil // pro / comped / trial: uncapped
 	}
 	used, err := b.runsThisMonth(ctx, tenant)
 	if err != nil {
@@ -201,9 +238,9 @@ func (b *BillingService) checkRunQuota(ctx context.Context, tenant string) error
 		}
 		return nil
 	}
-	if used >= int64(b.freeRunsPerMonth) {
-		return fmt.Errorf("%w: %d of %d free runs used this month — upgrade to keep your flows running",
-			core.ErrPlanLimit, used, b.freeRunsPerMonth)
+	if used >= int64(limit) {
+		return fmt.Errorf("%w: %d of %d runs used this month — upgrade to keep your flows running",
+			core.ErrPlanLimit, used, limit)
 	}
 	return nil
 }

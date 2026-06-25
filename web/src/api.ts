@@ -1924,6 +1924,78 @@ export const api = {
       `/admin/platform/drops/${encodeURIComponent(id)}/enable`,
       { tenant: tenant ?? "" },
     ),
+
+  // --- Tiers + per-org entitlements -----------------------------------
+  platformListTiers: (token: string) =>
+    request<{ tiers: PlatformTier[] }>(token, "GET", "/admin/platform/tiers"),
+  platformSaveTier: (token: string, tier: PlatformTier) =>
+    request<{ tier: PlatformTier }>(token, "POST", "/admin/platform/tiers", tier),
+  platformDeleteTier: (token: string, id: string) =>
+    request<void>(token, "DELETE", `/admin/platform/tiers/${encodeURIComponent(id)}`),
+  platformGetEntitlement: (token: string, tenant: string) =>
+    request<{ entitlement: TenantEntitlement; effective: EffectiveLimits; tiers: PlatformTier[] }>(
+      token,
+      "GET",
+      `/admin/platform/orgs/${encodeURIComponent(tenant)}/entitlement`,
+    ),
+  platformPutEntitlement: (token: string, tenant: string, ent: TenantEntitlement) =>
+    request<{ entitlement: TenantEntitlement; effective: EffectiveLimits }>(
+      token,
+      "PUT",
+      `/admin/platform/orgs/${encodeURIComponent(tenant)}/entitlement`,
+      ent,
+    ),
+  platformInviteMember: (token: string, tenant: string, email: string, roleName: string) =>
+    request<{ token: string; email: string; tenant: string }>(
+      token,
+      "POST",
+      `/admin/platform/orgs/${encodeURIComponent(tenant)}/invite`,
+      { email, roles: [{ name: roleName, permissions: [] }] },
+    ),
+};
+
+export type PlatformTier = {
+  id: string;
+  name: string;
+  plan: string; // "free" | "pro"
+  runs_per_month: number;
+  disk_quota_bytes: number;
+  max_graph_nodes: number;
+  max_flows: number;
+  max_timeout_seconds: number;
+  polling_allowed: boolean;
+  built_in: boolean;
+  updated_at?: string;
+};
+
+// TenantEntitlement mirrors the server: nulls/absent fields mean "inherit
+// the tier value". Limit overrides are nullable numbers.
+export type TenantEntitlement = {
+  tenant: string;
+  tier_id: string;
+  plan_override?: string; // "", "free", "pro"
+  comped?: boolean;
+  trial_ends_at?: string | null;
+  runs_per_month?: number | null;
+  disk_quota_bytes?: number | null;
+  max_graph_nodes?: number | null;
+  max_flows?: number | null;
+  max_timeout_seconds?: number | null;
+  polling_allowed?: boolean | null;
+  notes?: string;
+};
+
+export type EffectiveLimits = {
+  plan: string;
+  runs_per_month: number;
+  disk_quota_bytes: number;
+  max_graph_nodes: number;
+  max_flows: number;
+  max_timeout_seconds: number;
+  polling_allowed: boolean;
+  tier_id?: string;
+  trial_ends_at?: string | null;
+  comped?: boolean;
 };
 
 export type PlatformUser = {

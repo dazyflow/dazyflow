@@ -22,7 +22,11 @@ func (s *Service) effectiveGraphTimeout(g core.Graph) time.Duration {
 	// Hard ceiling: clamp even an explicit per-graph value so a tenant
 	// can't pin a worker for an unbounded duration. When the graph
 	// itself sets no timeout, the ceiling becomes the de-facto default.
-	if max := time.Duration(s.MaxGraphTimeoutSeconds) * time.Second; max > 0 && (d == 0 || d > max) {
+	// The ceiling is the tenant's effective limit (tier/override), which
+	// falls back to the global MaxGraphTimeoutSeconds. effectiveLimits
+	// reads the in-memory entitlement cache, so a background context is fine.
+	ceilingSecs := s.effectiveLimits(context.Background(), g.Tenant).MaxTimeoutSeconds
+	if max := time.Duration(ceilingSecs) * time.Second; max > 0 && (d == 0 || d > max) {
 		d = max
 	}
 	return d

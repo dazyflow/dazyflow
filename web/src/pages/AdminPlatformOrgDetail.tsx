@@ -9,6 +9,8 @@ import { Button } from "../components/Button";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { OrgAvatar } from "../components/PlatformAvatar";
 import { ActionsCard, ActionRow } from "../components/PlatformActions";
+import { PlanLimitsSection } from "../components/OrgPlanLimits";
+import { MembersSection } from "../components/OrgMembers";
 
 // AdminPlatformOrgDetail is one org's platform-admin moderation page:
 // suspend (halt all its flows + lock out members), ban (suspend +
@@ -23,7 +25,6 @@ export function AdminPlatformOrgDetail() {
   const tenant = decodeURIComponent(params.tenant ?? "");
 
   const [org, setOrg] = useState<PlatformOrg | null>(null);
-  const [members, setMembers] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -35,7 +36,6 @@ export function AdminPlatformOrgDetail() {
     try {
       const r = await api.platformGetOrg(token, tenant);
       setOrg(r.org);
-      setMembers(r.members ?? []);
       setError(null);
     } catch (e) {
       setError(explainApiError(e, t));
@@ -128,22 +128,6 @@ export function AdminPlatformOrgDetail() {
               )}
               <dt>{t("admin.platformOrgDetail.memberCount")}</dt>
               <dd>{org.member_count}</dd>
-              {members.length > 0 && (
-                <>
-                  <dt>{t("admin.platformOrgDetail.members")}</dt>
-                  <dd>
-                    {members.map((m) => (
-                      <Link
-                        key={m}
-                        to={`/admin/platform/users/${encodeURIComponent(m)}`}
-                        style={{ marginRight: 8 }}
-                      >
-                        {m}
-                      </Link>
-                    ))}
-                  </dd>
-                </>
-              )}
               {suspended && org.suspend_reason && (
                 <>
                   <dt>{t("admin.platformOrgDetail.reason")}</dt>
@@ -196,6 +180,9 @@ export function AdminPlatformOrgDetail() {
               </Button>
             </ActionRow>
           </ActionsCard>
+
+          <PlanLimitsSection tenant={tenant} />
+          <MembersSection tenant={tenant} />
         </>
       )}
 

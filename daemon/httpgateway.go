@@ -655,6 +655,15 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/admin/platform/drops", h.requireAuth(h.platformListDrops))
 	mux.HandleFunc("POST /api/v1/admin/platform/drops/{id}/disable", h.requireAuth(h.platformDisableDrop))
 	mux.HandleFunc("POST /api/v1/admin/platform/drops/{id}/enable", h.requireAuth(h.platformEnableDrop))
+	// Tiers (reusable limit bundles) + per-org entitlement (tier + plan
+	// grant + limit overrides) + cross-tenant member invite.
+	mux.HandleFunc("GET /api/v1/admin/platform/tiers", h.requireAuth(h.platformListTiers))
+	mux.HandleFunc("POST /api/v1/admin/platform/tiers", h.requireAuth(h.platformPutTier))
+	mux.HandleFunc("PUT /api/v1/admin/platform/tiers/{id}", h.requireAuth(h.platformPutTier))
+	mux.HandleFunc("DELETE /api/v1/admin/platform/tiers/{id}", h.requireAuth(h.platformDeleteTier))
+	mux.HandleFunc("GET /api/v1/admin/platform/orgs/{tenant}/entitlement", h.requireAuth(h.platformGetEntitlement))
+	mux.HandleFunc("PUT /api/v1/admin/platform/orgs/{tenant}/entitlement", h.requireAuth(h.platformPutEntitlement))
+	mux.HandleFunc("POST /api/v1/admin/platform/orgs/{tenant}/invite", h.requireAuth(h.platformInviteMember))
 
 	mux.HandleFunc("GET /api/v1/invitations/{token}", h.viewInvitation)
 	mux.HandleFunc("POST /api/v1/invitations/{token}/accept", h.requireAuth(h.acceptInvitation))

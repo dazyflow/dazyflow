@@ -360,6 +360,12 @@ type Service struct {
 	// palette. Nil = no drops are ever switched off.
 	DropSwitches DropSwitchStore
 
+	// Entitlements, when set, resolves per-org tiers + limit overrides +
+	// manual plan/trial/comp grants. The limit gates (runs, polling, node
+	// count, timeout, disk, flow count) read effective values through it;
+	// nil leaves every org on the global defaults + Stripe plan.
+	Entitlements EntitlementStore
+
 	// suggestMu guards suggestCache, the memo backing DropSuggestions.
 	// Keyed by (tenant, workspace, visibility-view); each entry remembers
 	// the workspace HEAD it was computed at, so a save (which moves HEAD)
@@ -406,6 +412,47 @@ func (s *Service) orgSuspended(ctx context.Context, tenant string) bool {
 	}
 	prof, err := s.OrgProfiles.GetOrgProfile(ctx, tenant)
 	return err == nil && prof.Suspended()
+}
+
+// effectiveLimits resolves a tenant's limits + plan from its entitlement,
+// its tier, the deployment-global defaults (the Service.* knobs), and the
+// Stripe plan. With no Entitlements store wired it reflects exactly the
+// pre-entitlement behaviour: global defaults + Stripe plan. Read on the
+// run/trigger/node hot paths, so it leans on the store's in-memory cache.
+func (s *Service) effectiveLimits(ctx context.Context, tenant string) EffectiveLimits {
+	def := LimitDefaults{
+		RunsPerMonth:      s.FreeRunsPerMonth,
+		MaxGraphNodes:     s.MaxGraphNodes,
+		MaxTimeoutSeconds: s.MaxGraphTimeoutSeconds,
+		PollingAllowed:    !s.FreePollingDisabled,
+	}
+	stripePlan := PlanFree
+	if s.Plans != nil {
+		if p, err := s.Plans.GetPlan(ctx, tenant); err == nil && p.Plan != "" {
+			stripePlan = p.Plan
+		}
+	}
+	var entP *TenantEntitlement
+	var tierP *Tier
+	if s.Entitlements != nil {
+		if e, ok := s.Entitlements.GetEntitlement(ctx, tenant); ok {
+			entP = &e
+		}
+		tierID := "free"
+		if entP != nil && entP.TierID != "" {
+			tierID = entP.TierID
+		}
+		if t, ok := s.Entitlements.GetTier(ctx, tierID); ok {
+			tierP = &t
+		}
+	}
+	return ResolveEffective(entP, tierP, def, stripePlan, time.Now())
+}
+
+// EffectiveLimitsFor is the exported accessor cmd/dzd uses to wire the
+// FSQuota disk-quota override to the entitlement resolver.
+func (s *Service) EffectiveLimitsFor(ctx context.Context, tenant string) EffectiveLimits {
+	return s.effectiveLimits(ctx, tenant)
 }
 
 // hasActiveRun reports whether any non-terminal graph-record exists
@@ -577,6 +624,15 @@ func (s *Service) saveGraph(ctx context.Context, p core.Principal, g core.Graph,
 		// principal as Owner so future updates can be authorized.
 		if err := core.Require(p, core.PermGraphEdit); err != nil {
 			return "", err
+		}
+		// Flow-count ceiling: a new flow can push the tenant past its
+		// effective MaxFlows. Only counts on the create path, and only
+		// when a limit is set, so the common edit path pays nothing.
+		if maxFlows := s.effectiveLimits(ctx, g.Tenant).MaxFlows; maxFlows > 0 {
+			if ids, err := store.ListGraphs(); err == nil && len(ids) >= maxFlows {
+				return "", fmt.Errorf("%w: flow limit of %d reached for this organization",
+					core.ErrPlanLimit, maxFlows)
+			}
 		}
 		if g.Owner == "" {
 			g.Owner = p.Subject

@@ -24,6 +24,13 @@ type FSQuota struct {
 	limits   map[string]int64
 	cacheTTL time.Duration
 
+	// LimitOverride, when set, supplies a per-tenant byte limit that takes
+	// precedence over the configured map (a non-positive return falls back
+	// to the map). The daemon wires it to the entitlement resolver so a
+	// platform admin's per-org/tier disk quota is honoured. Called outside
+	// q.mu, so it must not call back into FSQuota.
+	LimitOverride func(tenant string) int64
+
 	mu       sync.Mutex
 	cache    map[string]quotaEntry // tenant → cached usage
 	inflight map[string]int64      // tenant → bytes reserved but not yet committed
@@ -69,6 +76,11 @@ func (q *FSQuota) SetCacheTTL(d time.Duration) {
 }
 
 func (q *FSQuota) Limit(tenant string) int64 {
+	if q.LimitOverride != nil {
+		if v := q.LimitOverride(tenant); v > 0 {
+			return v
+		}
+	}
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	return q.limits[tenant]
@@ -128,8 +140,17 @@ func (q *FSQuota) usedLocked(tenant string) (int64, error) {
 // re-walks and sees the bytes this write committed (avoiding a window
 // where stale-cached used + reduced inflight would under-count).
 func (q *FSQuota) Reserve(tenant string, n int64) (func(), error) {
+	// Resolve the override before taking the lock (it may call into the
+	// entitlement store, which has its own lock).
+	override := int64(0)
+	if q.LimitOverride != nil {
+		override = q.LimitOverride(tenant)
+	}
 	q.mu.Lock()
 	limit := q.limits[tenant]
+	if override > 0 {
+		limit = override
+	}
 	if limit <= 0 { // unlimited tenant — nothing to enforce
 		q.mu.Unlock()
 		return func() {}, nil
