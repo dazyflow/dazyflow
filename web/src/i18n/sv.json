@@ -286,6 +286,7 @@
   },
   "signIn": {
     "title": "Logga in",
+    "titleOrg": "Logga in på {{org}}",
     "email": "E-post",
     "password": "Lösenord",
     "submit": "Logga in",

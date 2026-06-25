@@ -1646,6 +1646,9 @@ func (h *HTTPGateway) resolveSubdomain(rw http.ResponseWriter, r *http.Request) 
 	writeJSON(rw, http.StatusOK, map[string]any{
 		"tenant":       pr.Tenant,
 		"display_name": pr.DisplayName,
+		// The org logo (data: URL or glyph name), so the sign-in page can
+		// brand itself for the org behind the subdomain. Already public.
+		"icon": pr.Icon,
 	})
 }
 

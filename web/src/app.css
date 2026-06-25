@@ -1232,6 +1232,26 @@
   font-size: var(--text-2xl);
   letter-spacing: -0.02em;
 }
+/* Org-branded sign-in header (klahr.dazyflow.app): the org logo centered
+   above a "Sign in to <Org>" title, so a member sees they're in the right
+   place. The h1 here drops its default bottom margin — the block owns it. */
+.signin-org {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+.signin-org h1 {
+  margin: 0;
+}
+.signin-org-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--r-2, 12px);
+  object-fit: cover;
+}
 .signin-tabs {
   display: flex;
   gap: var(--space-1);

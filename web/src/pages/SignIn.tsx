@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import { orgFromHost } from "../lib/orgFromHost";
+import { isImageIcon } from "../lib/iconImage";
 import { Button, ButtonLink } from "../components/Button";
 import { OtpInput } from "../components/OtpInput";
 
@@ -42,6 +43,12 @@ export function SignIn() {
   // (e.g. acme.dazyflow.app → "acme"), resolved once the public auth
   // config tells us the wildcard domain.
   const [org, setOrg] = useState(queryOrg);
+  // When the org is resolved from the host subdomain, its display name + icon
+  // brand the sign-in page ("Sign in to Klahr" with the org logo), so a member
+  // arriving at klahr.dazyflow.app sees they're in the right place.
+  const [orgBrand, setOrgBrand] = useState<{ name: string; icon?: string } | null>(
+    null,
+  );
 
   // Clear any error left over from the sign-up page (or a prior visit) so a
   // stale message doesn't greet a fresh arrival on the sign-in form.
@@ -74,7 +81,11 @@ export function SignIn() {
             api
               .resolveSubdomain(fromHost)
               .then((res) => {
-                if (!cancelled) setOrg(res.tenant || fromHost);
+                if (cancelled) return;
+                setOrg(res.tenant || fromHost);
+                if (res.display_name) {
+                  setOrgBrand({ name: res.display_name, icon: res.icon });
+                }
               })
               .catch(() => {
                 if (!cancelled) setOrg(fromHost);
@@ -255,7 +266,23 @@ export function SignIn() {
           }
         }}
       >
-        <h1>{t("signIn.title")}</h1>
+        {orgBrand ? (
+          <div className="signin-org">
+            {isImageIcon(orgBrand.icon) && (
+              <img
+                src={orgBrand.icon}
+                alt=""
+                className="signin-org-icon"
+                width={56}
+                height={56}
+                draggable={false}
+              />
+            )}
+            <h1>{t("signIn.titleOrg", { org: orgBrand.name })}</h1>
+          </div>
+        ) : (
+          <h1>{t("signIn.title")}</h1>
+        )}
 
         {googleEnabled && (
           <>

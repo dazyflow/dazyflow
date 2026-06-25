@@ -1828,7 +1828,7 @@ export const api = {
   // resolveSubdomain is the PUBLIC sign-in lookup mapping a host label to a
   // tenant. Rejects (404) when unclaimed. No token needed.
   resolveSubdomain: (label: string) =>
-    request<{ tenant: string; display_name: string }>(
+    request<{ tenant: string; display_name: string; icon?: string }>(
       null,
       "GET",
       `/auth/resolve-subdomain?label=${encodeURIComponent(label)}`,

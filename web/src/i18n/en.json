@@ -285,6 +285,7 @@
   },
   "signIn": {
     "title": "Sign in",
+    "titleOrg": "Sign in to {{org}}",
     "email": "Email",
     "password": "Password",
     "submit": "Sign in",
