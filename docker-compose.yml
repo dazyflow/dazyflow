@@ -100,7 +100,8 @@ services:
       DAZYFLOW_POSTGRES_DSN: ${DAZYFLOW_POSTGRES_DSN:-postgres://${POSTGRES_USER:-dazyflow}:${POSTGRES_PASSWORD:-dazyflow}@postgres:5432/${POSTGRES_DB:-dazyflow}?sslmode=disable}
       # First-boot defaults. .env values override these.
       DAZYFLOW_WEB_ORIGIN:           ${DAZYFLOW_WEB_ORIGIN:-http://localhost:8080}
-      DAZYFLOW_SESSION_TTL:          ${DAZYFLOW_SESSION_TTL:-24h}
+      DAZYFLOW_SESSION_TTL:          ${DAZYFLOW_SESSION_TTL:-168h}
+      DAZYFLOW_SESSION_MAX_AGE:      ${DAZYFLOW_SESSION_MAX_AGE:-720h}
       # Marketing landing: DAZYFLOW_LANDING_DIR in .env is the *host*
       # path of your built dazyflow-landing checkout; the volume below
       # mounts it to the fixed in-container path /srv/landing, and dzd

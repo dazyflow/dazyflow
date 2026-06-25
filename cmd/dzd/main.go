@@ -125,7 +125,13 @@ func main() {
 	const authRateBurst = 10
 	httpEgressAllow := envStr("DAZYFLOW_HTTP_EGRESS_ALLOW", "")
 	trustProxyHeaders := envBool("DAZYFLOW_TRUST_PROXY_HEADERS", false)
-	sessionTTL := envDuration("DAZYFLOW_SESSION_TTL", 24*time.Hour)
+	// Session lifetime is a sliding window: SESSION_TTL is the idle timeout
+	// (each authenticated request slides expiry forward by it), and
+	// SESSION_MAX_AGE caps total lifetime from sign-in even under constant
+	// use, forcing a periodic fresh login. Active users stay signed in;
+	// idle and very-old sessions still lapse.
+	sessionTTL := envDuration("DAZYFLOW_SESSION_TTL", 7*24*time.Hour)
+	sessionMaxAge := envDuration("DAZYFLOW_SESSION_MAX_AGE", 30*24*time.Hour)
 	// Session-lookup cache TTL. Every cookie/bearer-authenticated request
 	// validates its session token; with Postgres that's a DB round-trip
 	// each time. A short in-process cache collapses that to ~1 query per
@@ -647,6 +653,7 @@ func main() {
 			users:            users,
 			sessions:         sessions,
 			sessionTTL:       sessionTTL,
+			sessionMaxAge:    sessionMaxAge,
 			memberships:      memberships,
 			invitations:      invitations,
 			orgAuth:          orgAuthStore,
@@ -1046,6 +1053,7 @@ type gatewayDeps struct {
 	users            auth.UserStore
 	sessions         auth.SessionStore
 	sessionTTL       time.Duration
+	sessionMaxAge    time.Duration
 	memberships      auth.MembershipStore
 	invitations      auth.InvitationStore
 	orgAuth          auth.OrgAuthStore
@@ -1080,6 +1088,7 @@ func buildGateway(ctx context.Context, d gatewayDeps) {
 	gw.Users = d.users
 	gw.Sessions = d.sessions
 	gw.SessionTTL = d.sessionTTL
+	gw.MaxSessionAge = d.sessionMaxAge
 	// TOTP 2FA: enabled only when DAZYFLOW_TOTP_KEY decodes to a 32-byte AES
 	// key. Absent/malformed → 2FA stays off (the /totp endpoints 503 and
 	// sign-in never asks for a second factor). The in-memory challenge store

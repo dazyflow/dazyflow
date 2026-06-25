@@ -67,7 +67,16 @@ type HTTPGateway struct {
 	// without breaking API-key auth.
 	Sessions   auth.SessionStore
 	Users      auth.UserStore
-	SessionTTL time.Duration // default 24h when zero
+	// SessionTTL is the sliding idle window: a session is issued for this
+	// long and, while in use, slid forward by it on each request (see
+	// maybeRenewSession), so an active user is never forced to re-sign-in.
+	// Defaults to 7d when zero.
+	SessionTTL time.Duration
+	// MaxSessionAge caps how long a session can live from CreatedAt even
+	// under continuous use, forcing a periodic fresh sign-in regardless of
+	// activity. Zero disables the cap (sessions can slide forever); the
+	// daemon wires a 30d default.
+	MaxSessionAge time.Duration
 
 	// TOTPKey is the 32-byte AES key that encrypts users' TOTP secrets
 	// at rest (decoded from DAZYFLOW_TOTP_KEY by cmd/dzd). When it's not
@@ -876,20 +885,72 @@ func (h *HTTPGateway) requireAuth(next func(rw http.ResponseWriter, r *http.Requ
 			writeJSONError(rw, http.StatusUnauthorized, fmt.Sprintf("auth: %v", err))
 			return
 		}
+		// Slide the session forward on activity so an active user isn't
+		// bounced at the idle-TTL boundary. Must run before next() writes
+		// the response body, since it sets a Set-Cookie header.
+		h.maybeRenewSession(rw, r, token)
 		next(rw, r, p)
 	}
 }
 
 const sessionCookieName = "dazyflow_session"
 
-// sessionTTL is the session lifetime, defaulting to 24h when SessionTTL is
-// unset (or non-positive). Centralizes the `ttl := h.SessionTTL; if ttl <= 0
-// { ttl = 24h }` default repeated at every session-issue site.
+// sessionTTL is the sliding idle window, defaulting to 7d when SessionTTL
+// is unset (or non-positive). Centralizes the `ttl := h.SessionTTL; if ttl
+// <= 0 { ttl = … }` default repeated at every session-issue site and in
+// maybeRenewSession.
 func (h *HTTPGateway) sessionTTL() time.Duration {
 	if h.SessionTTL <= 0 {
-		return 24 * time.Hour
+		return 7 * 24 * time.Hour
 	}
 	return h.SessionTTL
+}
+
+// maxSessionAge is the absolute ceiling a session can reach from CreatedAt,
+// defaulting to 30d when unset. A non-positive MaxSessionAge keeps the
+// default rather than disabling the cap, so the gateway always has a
+// backstop even if the daemon forgets to wire it; an operator who truly
+// wants unbounded sliding sets it explicitly to a very large value.
+func (h *HTTPGateway) maxSessionAge() time.Duration {
+	if h.MaxSessionAge <= 0 {
+		return 30 * 24 * time.Hour
+	}
+	return h.MaxSessionAge
+}
+
+// maybeRenewSession slides a cookie-backed session's expiry forward so an
+// active user isn't logged out at the idle-TTL boundary. It runs after a
+// successful authentication on every request, but only writes the store
+// (and re-issues the cookie) once the session has passed its renewal
+// threshold — see auth.NextSessionExpiry — so steady traffic stays
+// write-free. Bearer callers manage their own credential lifetime and are
+// skipped; only the browser cookie needs its Expires refreshed to match
+// the slid server-side expiry. Best-effort: any error leaves the existing
+// (still-valid) session untouched.
+func (h *HTTPGateway) maybeRenewSession(rw http.ResponseWriter, r *http.Request, token string) {
+	if h.Sessions == nil || !strings.HasPrefix(token, auth.SessionTokenPrefix) {
+		return
+	}
+	// Only refresh the cookie for cookie-authenticated requests; a bearer
+	// session token has no cookie to update.
+	if c, err := r.Cookie(sessionCookieName); err != nil || c.Value != token {
+		return
+	}
+	key := auth.SessionLookupKey(token)
+	sess, err := h.Sessions.GetSession(r.Context(), key)
+	if err != nil {
+		return
+	}
+	next, renew := auth.NextSessionExpiry(sess, h.sessionTTL(), h.maxSessionAge(), time.Now())
+	if !renew {
+		return
+	}
+	sess.ExpiresAt = next
+	if err := h.Sessions.PutSession(r.Context(), sess); err != nil {
+		h.logger.Printf("session renew: %v", err)
+		return
+	}
+	h.setSessionCookie(rw, r, token, next)
 }
 
 // setSessionCookie installs the host-only session cookie for token, expiring
