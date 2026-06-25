@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   Navigate,
   Route,
@@ -6,6 +7,7 @@ import {
   useParams,
 } from "react-router-dom";
 import { useAuth } from "./auth";
+import { api } from "./api";
 import { userScope } from "./recentFlow";
 import { AppShell } from "./components/AppShell";
 import { SignIn } from "./pages/SignIn";
@@ -147,25 +149,66 @@ const HAS_FLOWS_KEY = "dazyflow.hasFlows";
 //     wizard is the right surface for someone with no flows yet.
 function RootRedirect() {
   const loc = useLocation();
-  const { me } = useAuth();
-  if (loc.search) {
-    return <Navigate to={{ pathname: "/flows", search: loc.search }} replace />;
-  }
-  // The flag is per-account (see userScope), so we need `me` before we
-  // can read it. whoami resolves moments after the token gate above —
-  // render nothing for that beat instead of misrouting.
-  if (!me) return <div />;
-  let hasFlows = false;
-  try {
-    hasFlows =
-      localStorage.getItem(`${HAS_FLOWS_KEY}.${userScope(me)}`) === "1";
-  } catch {
-    /* private mode / strict iframe — treat as first-time */
-  }
-  // Returning users (already have flows) land on the workspace overview —
-  // the "is everything healthy?" dashboard. First-timers still get the
-  // onboarding wizard.
-  return <Navigate to={hasFlows ? "/overview" : "/welcome"} replace />;
+  const { me, token, activeTenant, activeWorkspace } = useAuth();
+  const [dest, setDest] = useState<string | null>(null);
+
+  useEffect(() => {
+    // A query string means "intentional deep-link" → /flows (preserves ?run=…).
+    if (loc.search) {
+      setDest(`/flows${loc.search}`);
+      return;
+    }
+    // The flag is per-account (see userScope), so we need `me` first.
+    if (!me) return;
+    // Fast path: a sticky hint from a previous session on THIS origin says the
+    // user already has flows → overview, no API call.
+    let hasFlows = false;
+    try {
+      hasFlows =
+        localStorage.getItem(`${HAS_FLOWS_KEY}.${userScope(me)}`) === "1";
+    } catch {
+      /* private mode / strict iframe — fall through to the API check */
+    }
+    if (hasFlows) {
+      setDest("/overview");
+      return;
+    }
+    // No hint. localStorage is PER-ORIGIN, so a returning user arriving on a
+    // fresh origin (their org subdomain, a new browser/device) has no flag and
+    // must NOT be mistaken for a first-timer. Ask the server whether they
+    // actually have flows, and only show the onboarding wizard when they truly
+    // have none. (Seeds the hint so the next load is instant.)
+    if (!token) return;
+    const tenant = activeTenant || me.tenant || "";
+    const workspace = activeWorkspace || me.workspace || "";
+    let cancelled = false;
+    api
+      .listGraphs(token, tenant, workspace)
+      .then((r) => {
+        if (cancelled) return;
+        const has = (r.graphs?.length ?? 0) > 0;
+        if (has) {
+          try {
+            localStorage.setItem(`${HAS_FLOWS_KEY}.${userScope(me)}`, "1");
+          } catch {
+            /* ignore */
+          }
+        }
+        setDest(has ? "/overview" : "/welcome");
+      })
+      .catch(() => {
+        // On a lookup failure, prefer the app over re-running onboarding for
+        // someone who may well have flows.
+        if (!cancelled) setDest("/overview");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [loc.search, me, token, activeTenant, activeWorkspace]);
+
+  // Render nothing until we've decided — avoids a wrong-destination flash.
+  if (!dest) return <div />;
+  return <Navigate to={dest} replace />;
 }
 
 // KeyedFlowEditor remounts FlowEditor whenever the :id changes. Without
