@@ -6464,6 +6464,24 @@ button.warning:hover:not(:disabled) {
 .run-table tbody tr:hover {
   background: var(--surface-2);
 }
+/* Lets the runs table scroll horizontally inside its card on narrow
+   screens instead of overflowing the viewport. */
+.run-table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+@media (max-width: 640px) {
+  /* Floor the width so columns stay readable and the wrapper scrolls,
+     rather than crushing the flow name / timestamp into each other. Tighter
+     cell padding reclaims space at this size. */
+  .run-table {
+    min-width: 520px;
+  }
+  .run-table th,
+  .run-table td {
+    padding: var(--space-2) var(--space-3);
+  }
+}
 
 /* Output preview (Inspector → recent run output for selected node) */
 .output-preview {

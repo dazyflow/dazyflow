@@ -1053,7 +1053,6 @@
     "statusFailed": "Failed",
     "statusCancelled": "Cancelled",
     "empty": "No runs match this filter.",
-    "colRun": "Run",
     "colFlow": "Flow",
     "colStarted": "Started",
     "colDuration": "Duration",

@@ -1051,7 +1051,6 @@
     "statusFailed": "Misslyckad",
     "statusCancelled": "Avbruten",
     "empty": "Inga körningar matchar det här filtret.",
-    "colRun": "Körning",
     "colFlow": "Flöde",
     "colStarted": "Startad",
     "colDuration": "Varaktighet",

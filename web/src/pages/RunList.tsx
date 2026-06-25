@@ -376,6 +376,11 @@ export function RunList() {
 
       {visibleRuns.length > 0 && (
         <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+          {/* Horizontal-scroll wrapper: on a narrow screen the table keeps a
+              readable minimum width and scrolls inside the card rather than
+              overflowing the viewport. The card's overflow:hidden still clips
+              it to the rounded corners. */}
+          <div className="run-table-scroll">
           <table className="run-table">
             <thead>
               <tr>
@@ -399,7 +404,6 @@ export function RunList() {
                   </th>
                 )}
                 <th style={{ width: 28 }}></th>
-                <th>{t("runList.colRun")}</th>
                 <th>{t("runList.colFlow")}</th>
                 <th>{t("runList.colStarted")}</th>
                 <th>{t("runList.colDuration")}</th>
@@ -420,46 +424,50 @@ export function RunList() {
                     </td>
                   )}
                   <td>
-                    {/* Status is not color-only: a text label rides next to
-                        the dot so a color-blind user (or anyone) can tell a
-                        run apart — especially "Waiting for approval", which
-                        means the run is parked on the viewer. */}
+                    {/* Colored dot only — the green/red outcome reads at a
+                        glance and the status word beside it was redundant.
+                        The label is kept on aria-label + title so the meaning
+                        stays available to screen readers and on hover (so a
+                        color-blind user can still disambiguate — notably
+                        "Waiting for approval", which parks on the viewer). */}
                     <span
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 6,
-                      }}
-                    >
-                      <span className={"status-dot " + r.status} />
-                      <span style={{ fontSize: "var(--text-sm)" }}>
-                        {runStatusLabel(r.status, t)}
-                      </span>
-                    </span>
-                  </td>
-                  <td style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-sm)" }}>
-                    {/* Primary action: open the run-detail page, the
-                        "what happened" surface (T2). The graph-name
-                        link below still goes to the editor for
-                        "make changes" flows. */}
-                    <Link
-                      to={`/runs/${encodeURIComponent(r.id)}`}
-                      style={{ textDecoration: "none" }}
-                    >
-                      {r.id.slice(0, 12)}
-                    </Link>
+                      className={"status-dot " + r.status}
+                      role="img"
+                      aria-label={runStatusLabel(r.status, t)}
+                      title={runStatusLabel(r.status, t)}
+                    />
                   </td>
                   <td>
+                    {/* Flow name is the primary identifier — it's how a user
+                        thinks about a run ("the order-alert flow"), not the
+                        opaque id. The bold name links to the editor ("make
+                        changes"); the muted run id beneath links to the
+                        run-detail "what happened" surface (T2), so both
+                        destinations stay reachable. */}
                     <Link
                       to={`/flows/${encodeURIComponent(r.graph_id)}?run=${encodeURIComponent(r.id)}`}
                       style={{
                         display: "inline-flex",
                         alignItems: "center",
                         gap: 4,
+                        fontWeight: 600,
                       }}
                     >
                       <Activity size={12} />
                       {flowNames[r.graph_id] ?? r.graph_id}
+                    </Link>
+                    <Link
+                      to={`/runs/${encodeURIComponent(r.id)}`}
+                      style={{
+                        display: "block",
+                        marginTop: 2,
+                        fontFamily: "var(--font-mono)",
+                        fontSize: "var(--text-xs)",
+                        color: "var(--muted)",
+                        textDecoration: "none",
+                      }}
+                    >
+                      {r.id.slice(0, 12)}
                     </Link>
                   </td>
                   <td style={{ color: "var(--muted)", fontSize: "var(--text-sm)" }}>
@@ -508,6 +516,7 @@ export function RunList() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
