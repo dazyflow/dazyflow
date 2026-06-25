@@ -21,10 +21,10 @@ type GenIssue = { code: string; severity: string; message: string; node_ids?: st
 // and carries a glyph so the suggestion list reads as polished rows, not raw
 // pills. Clicking a row drops its text straight into the describe box.
 const AI_STARTERS = [
-  { Icon: Mail, text: "Every weekday at 8am, email me a summary of my Google Sheet" },
-  { Icon: MessageSquare, text: "Post new contact form submissions to my Slack #leads channel" },
-  { Icon: Sheet, text: "Save new Gmail emails to a Google Sheet" },
-  { Icon: Bell, text: "Text me when a Stripe payment fails" },
+  { Icon: Mail, key: "createAI.starterSheetSummary" },
+  { Icon: MessageSquare, key: "createAI.starterFormToSlack" },
+  { Icon: Sheet, key: "createAI.starterGmailToSheet" },
+  { Icon: Bell, key: "createAI.starterStripeFail" },
 ];
 
 type CreateTab = "ai" | "blank" | "template";
@@ -406,18 +406,21 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
               typed something or generation has started; clicking fills the box. */}
           {!busy && steps.length === 0 && aiDesc.trim() === "" && (
             <div className="ai-starters-list">
-              {AI_STARTERS.map(({ Icon, text }) => (
-                <Button
-                  key={text}
-                  className="ai-starter"
-                  onClick={() => setAiDesc(text)}
-                >
-                  <span className="ai-starter-icon">
-                    <Icon size={16} strokeWidth={2} />
-                  </span>
-                  <span className="ai-starter-text">{text}</span>
-                </Button>
-              ))}
+              {AI_STARTERS.map(({ Icon, key }) => {
+                const text = t(key);
+                return (
+                  <Button
+                    key={key}
+                    className="ai-starter"
+                    onClick={() => setAiDesc(text)}
+                  >
+                    <span className="ai-starter-icon">
+                      <Icon size={16} strokeWidth={2} />
+                    </span>
+                    <span className="ai-starter-text">{text}</span>
+                  </Button>
+                );
+              })}
             </div>
           )}
           {providers.length > 1 && (

@@ -1376,7 +1376,11 @@
     "connectCta": "Connect Claude or ChatGPT",
     "connectHint": "AI flow building needs a connected AI provider.",
     "connectHintNoPerm": "AI flow building needs a connected AI provider — ask an admin to connect Claude or ChatGPT.",
-    "empty": "AI couldn't build a flow from that — try describing it differently."
+    "empty": "AI couldn't build a flow from that — try describing it differently.",
+    "starterSheetSummary": "Every weekday at 8am, email me a summary of my Google Sheet",
+    "starterFormToSlack": "Post new contact form submissions to my Slack #leads channel",
+    "starterGmailToSheet": "Save new Gmail emails to a Google Sheet",
+    "starterStripeFail": "Text me when a Stripe payment fails"
   },
   "createFlow": {
     "title": "Create a flow",

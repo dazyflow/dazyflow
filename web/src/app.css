@@ -5137,6 +5137,16 @@ button.warning:hover:not(:disabled) {
   object-fit: contain;
   display: block;
 }
+/* Single-colour brand marks loaded as <img> can't inherit currentColor,
+   so they disappear against the theme whose background matches their one
+   ink colour: github.svg is pure white (invisible in light mode) and
+   smhi.svg is pure black (invisible in dark mode). Invert just those two
+   marks on the offending theme so the silhouette stays legible. Any future
+   monochrome mark with the same problem can be added to the matching list. */
+:root[data-theme="light"] img[src$="/brands/github.svg"],
+:root[data-theme="dark"] img[src$="/brands/smhi.svg"] {
+  filter: invert(1);
+}
 /* Integration-header logos in the catalog tree sit inside the 20px
    header icon slot. object-fit keeps them readable when the source
    isn't square. */

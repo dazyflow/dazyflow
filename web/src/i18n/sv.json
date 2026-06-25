@@ -1368,14 +1368,18 @@
     "generating": "Bygger ditt flöde…",
     "connectCta": "Anslut Claude eller ChatGPT",
     "connectHint": "AI-flödesbygge kräver en ansluten AI-leverantör.",
-    "empty": "AI kunde inte bygga ett flöde av det — prova att beskriva det annorlunda."
+    "connectHintNoPerm": "AI-flödesbygge kräver en ansluten AI-leverantör — be en administratör ansluta Claude eller ChatGPT.",
+    "empty": "AI kunde inte bygga ett flöde av det — prova att beskriva det annorlunda.",
+    "starterSheetSummary": "Varje vardag kl. 8, mejla mig en sammanfattning av mitt Google-kalkylark",
+    "starterFormToSlack": "Posta nya formulärsvar till min Slack-kanal #leads",
+    "starterGmailToSheet": "Spara nya Gmail-mejl i ett Google-kalkylark",
+    "starterStripeFail": "Sms:a mig när en Stripe-betalning misslyckas"
   },
   "createFlow": {
     "title": "Skapa ett flöde",
-    "tabScratch": "Från grunden",
+    "tabAI": "AI-assisterad",
+    "tabBlank": "Tomt",
     "tabTemplate": "Från en mall",
-    "modeBlank": "Bygg det själv",
-    "modeAI": "Beskriv med AI",
     "draftReadyTitle": "Ditt utkast är klart",
     "draftReadyBody": "Kolla punkterna nedan, öppna det sedan — inget körs än.",
     "whatItDoes": "Vad det här flödet gör",
