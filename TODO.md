@@ -52,6 +52,10 @@ inspector, Ctrl+K step palette, run detail (timeline/log/retry), a11y labels.
       (snapshot/coalesce, autosave interplay). Substantial feature, not polish.
       History (version snapshots) already exists for coarse rollback.
 
+## 7. UX
+- [ ] Go through app and trigger all kinds of errors you can come up with, and then ensure that the error messages are non-techie friendly so they can solve issues without a coder
+- [ ] Add UI to set a subdomain, such as "klahr.dazyflow.app"
+
 ---
 
 # Platform / iPaaS hardening TODO
@@ -64,37 +68,54 @@ severity, not theoretical. Already strong: typed ports + explicit
 `${upstream...}` mapping (no doomed "universal schema" attempt), per-drop
 egress allowlist + SSRF guard, job-ID idempotency key for outbound writes.
 
-## 7. Per-external-API rate limiting & 429 handling — HIGH (shared egress)
-- [ ] Per-(tenant, external host) token-bucket limiter in the engine, applied
-      to outbound calls in `drops/net/do.go` — today only `daemon/ratelimit.go`
-      (auth IP buckets) and a jobstore fairness cap exist; nothing paces
-      third-party calls.
-- [ ] Honor `429` + `Retry-After` / `RateLimit-*` headers on the connector
-      retry path — grep shows ZERO handling today; a retried call just re-hits
-      the ceiling. Feed Retry-After into the engine's backoff.
-- [ ] Bound fan-out by RATE, not just count — `maxAutoFanItems = 1000`
-      (engine/autofan.go) is a blunt count cap; a 1000-item for_each still
-      bursts a 100/min API. Queue/drip per the limiter above.
-- [ ] Shared-IP reputation risk: per-host concurrency caps so one tenant's
-      burst can't get the platform's egress IP blacklisted for everyone.
+## 7. Per-external-API rate limiting & 429 handling — DONE
+- [x] Per-(tenant, external host) token-bucket limiter (`drops/net/ratelimit.go`)
+      applied to EVERY outbound call: net.Do, http_request, and webhook_send all
+      Acquire a slot before dialing. Tunable via DAZYFLOW_EGRESS_RATE_PER_MIN /
+      _BURST / _CONCURRENCY (cmd/dzd); safe non-zero defaults, =0 disables.
+- [x] Honor `429`/`503` + `Retry-After` / `RateLimit-Reset` (delta + epoch) +
+      `RateLimit-Remaining: 0` — ObserveEgressResponse sets a per-host cooldown
+      AND feeds Retry-After to the engine backoff via a ctx RetryHint
+      (core/retryhint.go); maybeScheduleRetry takes max(backoff, Retry-After).
+- [x] Bound fan-out by RATE — a fanned step issues one Acquire per item, so the
+      token bucket drip-paces it; the count cap (maxAutoFanItems) stays as the
+      hard ceiling.
+- [x] Per-(tenant,host) concurrency cap bounds simultaneous in-flight calls so
+      one tenant's burst can't get the shared egress IP throttled for everyone.
 
-## 8. Polling at scale — HIGH (shared fleet, was a non-issue when self-hosted)
-- [ ] Poll jitter / spread: interval-anchored poll triggers (core/graph.go:192)
-      will align thousands of tenants onto the same tick → thundering herd on
-      both the scheduler and target APIs. Add per-flow jitter to the enrollment.
-- [ ] Conditional-request caching (ETag / If-Modified-Since / cursor) so a poll
-      that finds no new data costs ~0 against the target's rate budget — the
-      core cost driver the analysis flags.
-- [ ] Adaptive poll backoff: widen interval for consistently-empty pollers,
-      tighten for active ones, to cut wasted calls across the fleet.
+## 8. Polling at scale — DONE
+- [x] Poll jitter / spread: deterministic per-(tenant,ws,flow,node) jitter
+      (hash-based, ≤ interval/4, capped 60s) pulls each poll's FIRST fire
+      EARLIER within its interval at enrollment (scheduler.go), so a mass
+      enrollment doesn't align thousands of flows onto the same tick. Stable
+      across rescans + leader failover; never adds latency.
+- [x] Conditional-request caching: opt-in `cache_key` on http_request stores
+      the server's ETag/Last-Modified (drops/net/httpcache.go) and sends
+      If-None-Match / If-Modified-Since on GET/HEAD. A 304 short-circuits to a
+      bodyless result (status 304) downstream can branch on — a no-new-data
+      poll costs ~0. Validators persist per (tenant,flow,node,cache_key).
+- [x] Adaptive poll backoff: fetcher nodes (gform, homeassistant_state_changed,
+      conditional http_request) write a per-flow "found data?" marker
+      (pollstate package); the scheduler folds it into an empty-streak and
+      widens the effective interval (2×/4×/8× after a 3-fire grace, capped 8×
+      and at the 1-year ceiling), snapping back to base the moment data
+      returns. Graph-scoped so a downstream fetcher can speak for the run.
 
-## 9. Idempotency for APIs without an idempotency header — MEDIUM
-- [ ] Engine-side dedupe (store + check job/step key) for connectors whose
-      upstream API has NO idempotency key — currently documented-but-unguarded
-      in twilio_send_sms, gmail_send_email, discord_send_message,
-      sheets_append_row, homeassistant_call_service. A retry there CAN double-fire.
-- [ ] Decide+document the at-least-once vs at-most-once contract per such drop
-      so the failure UI (#11) can tell the user which guarantee they have.
+## 9. Idempotency for APIs without an idempotency header — DONE
+- [x] Engine-side dedupe: a new `Manifest.DedupeWrites` flag + `core.WriteDedupeStore`
+      interface (in-memory TTL/bounded impl `engine.NewMemoryWriteDedupe`, wired
+      onto the shared engine in cmd/dzd). buildAndExecute records a node's
+      successful result keyed by its job ID; an expired-lease reclaim / crash
+      re-running the SAME job ID returns the recorded result instead of re-firing.
+      Opted in: twilio_send_sms, gmail_send_email, discord_send_message,
+      sheets_append_row, homeassistant_call_service.
+- [x] Contract = AT-LEAST-ONCE for all five (documented on the flag + interface):
+      Put happens AFTER the write succeeds, so a crash in the tiny window
+      between the API returning and the result being recorded can still
+      re-fire; recording before would risk at-most-once (silently dropping a
+      message), the worse failure for these connectors. Scope note: in-memory
+      store is single-node (one shared engine); multi-node cross-process
+      reclaim needs a shared store behind the same interface (follow-up).
 
 ## 10. Connector breadth & contract quality — ONGOING (the real content moat)
 - [ ] Track connector coverage vs. demand; the typed-port stance is sound, so

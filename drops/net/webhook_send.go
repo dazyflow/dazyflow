@@ -125,11 +125,20 @@ func executeWebhookSend(ctx context.Context, job core.Job, _ chan<- core.Progres
 	// per-request flag this stays guarded even where the operator enabled
 	// private egress (e.g. for Home Assistant) — matching http_request.
 	reqAllowPrivate, _ := params.Bool(job.Params, "allow_private_networks")
+	// Per-(tenant, host) pacing: a webhook fan-out shares the platform's
+	// egress budget with every other tenant, so bound rate + concurrency and
+	// honor any prior 429 cooldown before dialing.
+	release, lerr := AcquireEgress(ctx, url)
+	if lerr != nil {
+		return params.Err(job, "cancelled", lerr.Error()), lerr
+	}
+	defer release()
 	resp, err := buildClient(timeout, reqAllowPrivate && PrivateEgressAllowed()).Do(req)
 	if err != nil {
 		return params.Err(job, "webhook_http_error", err.Error()), nil
 	}
 	defer resp.Body.Close()
+	ObserveEgressResponse(ctx, url, resp.StatusCode, resp.Header)
 	// Cap the buffered response (success + error-detail paths) like
 	// http_request does, so a huge/streaming body can't exhaust memory.
 	text, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))

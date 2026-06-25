@@ -245,6 +245,58 @@ func TestRetry_HonorsBackoffDelay(t *testing.T) {
 	}
 }
 
+// retryAfterNode fails the first call after stamping a server Retry-After on
+// its ctx — exactly what drops/net does when an upstream returns 429 — then
+// succeeds. Used to prove the worker delays the requeue by the server-asked
+// interval rather than the (tiny) configured backoff.
+func retryAfterNode(failCount *atomic.Int32, retryAfter time.Duration) engine.NativeDrop {
+	return engine.NativeDrop{
+		Manifest: flakyManifest,
+		Execute: func(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
+			calls := failCount.Add(-1)
+			if calls >= 0 {
+				core.SetRetryAfter(ctx, retryAfter)
+				return core.Result{
+					JobID:  job.ID,
+					Status: core.StatusError,
+					Error:  &core.JobError{Code: "rate_limited", Message: "simulated 429"},
+				}, nil
+			}
+			return core.Result{JobID: job.ID, Status: core.StatusOK, Output: map[string]core.Ref{"out": {Ref: "ok"}}}, nil
+		},
+	}
+}
+
+func TestRetry_HonorsServerRetryAfterOverBackoff(t *testing.T) {
+	failCount := atomic.Int32{}
+	failCount.Store(1) // fail once (with Retry-After), then succeed
+
+	retryAfter := 600 * time.Millisecond
+	// Backoff is near-zero, so any delay near retryAfter proves the hint won.
+	h := newRetryHarness(t, retryAfterNode(&failCount, retryAfter), daemon.WorkerConfig{
+		MaxRetries:   3,
+		RetryBackoff: func(int) time.Duration { return time.Millisecond },
+	})
+
+	g := core.Graph{
+		ID: "retry-after", Tenant: "t", Workspace: "ws",
+		Nodes: []core.Node{{ID: "n", Module: "flaky"}},
+	}
+	start := time.Now()
+	graphRunID, err := h.svc.SubmitGraph(t.Context(), h.principal, g)
+	if err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	terminal := waitForTerminalEvent(t, h.bus, h.jobs, graphRunID, 5*time.Second)
+	elapsed := time.Since(start)
+	if terminal.Status != core.JobStatusSucceeded {
+		t.Fatalf("status = %q, want succeeded", terminal.Status)
+	}
+	if elapsed < retryAfter {
+		t.Errorf("completed in %v, expected at least the Retry-After %v", elapsed, retryAfter)
+	}
+}
+
 func TestRetry_NoRetryEdgeMeansNoRetry(t *testing.T) {
 	// Even with a retryable manifest, no edge requesting retry means a
 	// failure is terminal. We compose a graph where node "n" feeds "sink"

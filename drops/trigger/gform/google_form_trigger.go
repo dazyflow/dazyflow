@@ -11,6 +11,7 @@ import (
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 	"git.sr.ht/~klahr/dazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/pollstate"
 )
 
 func init() {
@@ -111,6 +112,11 @@ func executeGoogleFormTrigger(ctx context.Context, job core.Job, _ chan<- core.P
 	for _, r := range fresh {
 		out = append(out, mapAnswers(r, titles))
 	}
+
+	// Tell the scheduler whether this fire found new data so it can adapt the
+	// poll cadence — widening a form that's quiet for a stretch, snapping back
+	// the moment a response arrives. Keyed by the flow (graph), see pollstate.
+	pollstate.Report(ctx, job, len(out) > 0)
 
 	// Advance the cursor only when it actually moved. A best-effort write:
 	// a failure means at worst the next fire re-emits this batch (the

@@ -53,11 +53,24 @@ func Do(ctx context.Context, method, url string, headers map[string]string, body
 	if err := EgressAllowedFor(ctx, url); err != nil {
 		return 0, nil, nil, err
 	}
+	// Pace + bound the call per (tenant, host): a shared egress fleet must
+	// not let one tenant's burst exhaust a third-party API's budget or get
+	// the platform's egress IP throttled for everyone. Blocks (honoring ctx)
+	// until a token + concurrency slot is free and any prior 429 cooldown for
+	// this host has elapsed.
+	release, lerr := AcquireEgress(ctx, url)
+	if lerr != nil {
+		return 0, nil, nil, lerr
+	}
+	defer release()
 	resp, err := SafeHTTPClient(timeout, PrivateEgressAllowed()).Do(req)
 	if err != nil {
 		return 0, nil, nil, err
 	}
 	defer resp.Body.Close()
+	// Record rate-limit signals (429/Retry-After/RateLimit-*) so the next
+	// call to this host self-paces and the worker's retry honors Retry-After.
+	ObserveEgressResponse(ctx, url, resp.StatusCode, resp.Header)
 
 	if maxBytes <= 0 {
 		maxBytes = defaultMaxResponseBytes

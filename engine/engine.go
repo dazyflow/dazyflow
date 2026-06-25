@@ -63,6 +63,13 @@ type Engine struct {
 	// its output. Without a signer, awaiting-style modules still run
 	// but receive an empty ApprovalURL.
 	ApprovalSigner core.ApprovalSigner
+	// WriteDedupe is optional. When set, modules whose manifest opts in via
+	// DedupeWrites (non-idempotent external writes with no upstream
+	// idempotency key) are guarded: the engine returns a node-record's
+	// previously recorded successful result instead of re-firing the write
+	// when that same job runs again (an expired-lease reclaim or crash
+	// recovery). Nil disables dedupe — every execution calls the drop.
+	WriteDedupe core.WriteDedupeStore
 }
 
 // Run validates the graph, computes parallel execution layers, and executes
@@ -373,7 +380,27 @@ func (e *Engine) buildAndExecute(
 	// Many→one: if a single-value input received a list, run the node once per
 	// item and aggregate (the simplified data model's "run for each"). Falls
 	// straight through to a single exec when there's no fan-out.
-	result, execErr := runMaybeFanned(ctx, manifest, job, secrets, transport, exec)
+	//
+	// Write dedupe: for a non-idempotent external write (DedupeWrites) whose
+	// SAME node-record already fired successfully (an expired-lease reclaim or
+	// crash re-running this job ID), return the recorded result instead of
+	// sending the SMS/email/message a second time. Recorded AFTER a successful
+	// run, so the guarantee is at-least-once.
+	dedupe := manifest.DedupeWrites && e.WriteDedupe != nil && job.ID != ""
+	var result core.Result
+	var execErr error
+	if dedupe {
+		if prior, ok := e.WriteDedupe.Get(ctx, job.ID); ok {
+			result = prior
+		} else {
+			result, execErr = runMaybeFanned(ctx, manifest, job, secrets, transport, exec)
+			if execErr == nil && result.Status == core.StatusOK {
+				e.WriteDedupe.Put(ctx, job.ID, result)
+			}
+		}
+	} else {
+		result, execErr = runMaybeFanned(ctx, manifest, job, secrets, transport, exec)
+	}
 
 	if result.JobID == "" {
 		result.JobID = job.ID

@@ -184,6 +184,11 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 	// cancel() below.
 	execCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	defer cancel()
+	// Attach a retry hint the outbound HTTP choke point (drops/net) writes a
+	// server Retry-After / RateLimit-Reset into on a 429, so maybeScheduleRetry
+	// can delay the requeue by the interval the API actually asked for rather
+	// than the blind exponential backoff.
+	execCtx, retryHint := core.WithRetryHint(execCtx)
 	var leaseLost atomic.Bool
 	var leaseWg sync.WaitGroup
 	leaseWg.Add(1)
@@ -315,7 +320,7 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 	skipRetry := result.Error != nil && result.Error.Code == "timeout"
 
 	if status == core.JobStatusFailed && !skipRetry {
-		if when, reason := w.maybeScheduleRetry(graph, rec); !when.IsZero() {
+		if when, reason := w.maybeScheduleRetry(graph, rec, retryHint.After()); !when.IsZero() {
 			if err := w.store.Requeue(context.WithoutCancel(ctx), rec.ID, when); err == nil {
 				meterExecution() // this attempt ran under our lease and is being retried
 				w.cfg.Logger.Printf("[%s] retrying %s (attempt %d → next at %v)", w.cfg.ID, rec.ID, rec.Attempt, when.Format(time.RFC3339Nano))
@@ -371,7 +376,7 @@ func (w *Worker) completeNode(ctx context.Context, jobID string, status core.Job
 //   - at least one outgoing edge with on_error=retry (or no outgoing
 //     edges at all — leaf nodes get retry on manifest alone)
 //   - the cap from WorkerConfig.MaxRetries against rec.Attempt
-func (w *Worker) maybeScheduleRetry(graph core.Graph, rec core.JobRecord) (time.Time, string) {
+func (w *Worker) maybeScheduleRetry(graph core.Graph, rec core.JobRecord, serverRetryAfter time.Duration) (time.Time, string) {
 	node, ok := graph.Node(rec.NodeID)
 	if !ok {
 		return time.Time{}, "node missing from graph"
@@ -426,7 +431,16 @@ func (w *Worker) maybeScheduleRetry(graph core.Graph, rec core.JobRecord) (time.
 		return time.Time{}, fmt.Sprintf("max retries (%d) reached", attemptCap)
 	}
 
-	return time.Now().Add(w.cfg.RetryBackoff(rec.Attempt)), ""
+	// Honor a downstream API's Retry-After / RateLimit-Reset: when the failed
+	// attempt recorded a server-requested wait (a 429 seen by the outbound
+	// HTTP choke point), use whichever is LONGER — the server's interval or
+	// our exponential backoff. Retrying before the window resets would just
+	// earn another 429 and waste the attempt.
+	delay := w.cfg.RetryBackoff(rec.Attempt)
+	if serverRetryAfter > delay {
+		delay = serverRetryAfter
+	}
+	return time.Now().Add(delay), ""
 }
 
 func (w *Worker) runNode(ctx context.Context, graph core.Graph, rec core.JobRecord, prior map[string]core.Result) (core.Result, error) {

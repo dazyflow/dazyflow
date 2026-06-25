@@ -11,6 +11,7 @@ import (
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 	"git.sr.ht/~klahr/dazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/pollstate"
 )
 
 func init() {
@@ -123,17 +124,20 @@ func executeStateChanged(ctx context.Context, job core.Job, _ chan<- core.Progre
 	// First observation: remember the current state, fire nothing.
 	if prev == nil {
 		_ = writeStoredCursor(ctx, job.Tenant, cursorName, now)
+		pollstate.Report(ctx, job, false) // no change to act on yet
 		return noChange(job), nil
 	}
 
 	// No change: same last_changed (and, defensively, same state value).
 	if prev.LastChanged == cur.LastChanged && prev.State == cur.State {
+		pollstate.Report(ctx, job, false) // empty poll — let the scheduler back off
 		return noChange(job), nil
 	}
 
 	// Changed — advance the watermark, then fire. A failed write is at-least-
 	// once: at worst the next poll re-fires this same change.
 	_ = writeStoredCursor(ctx, job.Tenant, cursorName, now)
+	pollstate.Report(ctx, job, true) // active — keep polling at the base cadence
 
 	attrs := cur.Attributes
 	if attrs == nil {

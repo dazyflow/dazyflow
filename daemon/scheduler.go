@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
 	"log"
 	"strings"
 	"sync"
@@ -11,6 +12,7 @@ import (
 	"github.com/robfig/cron/v3"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/pollstate"
 )
 
 // Scheduler reads graphs from the configured workspaces, finds those with
@@ -42,6 +44,12 @@ type Scheduler struct {
 	// real deployment would give the system a dedicated identity with
 	// tenant-scoped graph:run only.
 	systemPrincipal func(tenant, workspace string) core.Principal
+
+	// pollState reads a flow's poll-outcome marker (pollstate.Read) so the
+	// scheduler can widen the interval for consistently-empty pollers. nil
+	// disables adaptive backoff — every poll fires at its base interval.
+	// cmd/dzd wires this to the encrypted secret store.
+	pollState func(ctx context.Context, tenant, graphID string) *pollstate.Marker
 }
 
 // scheduledGraph represents one tracked trigger. Discriminated by
@@ -58,7 +66,16 @@ type scheduledGraph struct {
 	workspace  string
 	scheduleAt time.Time
 	scheduleFn cron.Schedule // for cron triggers
-	interval   time.Duration // for poll triggers (zero when not used)
+	interval   time.Duration // BASE poll interval (zero when not poll-driven)
+
+	// Adaptive-backoff state for poll entries (interval > 0). The scheduler
+	// owns the empty STREAK in memory (single writer), reading the flow's
+	// pollstate marker to learn each run's outcome. emptyStreak widens the
+	// EFFECTIVE interval (see effectiveInterval); lastMarkerAt dedupes a
+	// fresh outcome from one already counted. Both are carried across
+	// rescans so a workspace edit doesn't reset a flow's learned cadence.
+	emptyStreak  int
+	lastMarkerAt time.Time
 }
 
 // parseCronInTZ parses a 5-field cron expression as evaluated in the
@@ -109,13 +126,72 @@ func triggerNodeDisabled(node core.Node) bool {
 
 // nextFireFrom returns the next time this entry should fire, given
 // the current time. Cron entries delegate to the cron parser; poll
-// entries add their interval to now (interval-anchored — see the
-// GraphTrigger doc comment).
+// entries add their EFFECTIVE interval to now (interval-anchored — see the
+// GraphTrigger doc comment — widened by any empty-streak backoff).
 func (e *scheduledGraph) nextFireFrom(now time.Time) time.Time {
 	if e.scheduleFn != nil {
 		return e.scheduleFn.Next(now)
 	}
-	return now.Add(e.interval)
+	return now.Add(e.effectiveInterval())
+}
+
+const (
+	// maxPollJitter caps the deterministic spread added to a poll trigger's
+	// first fire. A fraction of the interval de-aligns flows that share a
+	// cadence; the absolute cap keeps even a daily poll from drifting wildly.
+	maxPollJitter = 60 * time.Second
+
+	// maxPollBackoffMultiplier caps how far a consistently-empty poller's
+	// interval widens — an "every 5 min" poll that keeps finding nothing
+	// settles at 8× (every 40 min), never further, so it still reacts within
+	// a bounded delay once data reappears.
+	maxPollBackoffMultiplier = 8
+
+	// pollBackoffGrace is how many consecutive empty fires a poller gets
+	// before its interval starts widening. A poll that's empty once or twice
+	// then active shouldn't slow down — only a sustained dry spell should.
+	pollBackoffGrace = 3
+)
+
+// pollJitter returns a deterministic offset in [0, min(interval/4,
+// maxPollJitter)) derived from key. Anchoring the spread to the entry key
+// (not an RNG) keeps a flow's fire time stable across rescans and leader
+// failover, while flows that share an interval land on different ticks — so a
+// mass enrollment (post-deploy, or thousands of tenants on "every 5 min")
+// doesn't hammer the scheduler and the target API on the same instant.
+func pollJitter(key string, interval time.Duration) time.Duration {
+	if interval <= 0 {
+		return 0
+	}
+	span := min(interval/4, maxPollJitter)
+	if span <= 0 {
+		return 0
+	}
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(key))
+	return time.Duration(h.Sum64() % uint64(span))
+}
+
+// effectiveInterval is the poll interval after empty-streak backoff: the base
+// interval until pollBackoffGrace consecutive empty fires, then doubling per
+// additional empty up to maxPollBackoffMultiplier, and never past the
+// scheduler's absolute poll ceiling. A non-poll entry returns its base.
+func (e *scheduledGraph) effectiveInterval() time.Duration {
+	if e.interval <= 0 {
+		return e.interval
+	}
+	mult := 1
+	if e.emptyStreak >= pollBackoffGrace {
+		// Cap the shift before it can overflow int on a long dry spell; the
+		// multiplier is clamped to maxPollBackoffMultiplier anyway.
+		shift := min(e.emptyStreak-pollBackoffGrace+1, 16)
+		mult = min(1<<uint(shift), maxPollBackoffMultiplier) // 2, 4, 8, …
+	}
+	eff := e.interval * time.Duration(mult)
+	if ceiling := time.Duration(core.MaxPollIntervalSeconds) * time.Second; eff > ceiling {
+		eff = ceiling
+	}
+	return eff
 }
 
 // NewScheduler wires a scheduler around the daemon Service. interval is
@@ -149,6 +225,14 @@ func (s *Scheduler) SetLeader(fn func() bool) {
 	if fn != nil {
 		s.leader = fn
 	}
+}
+
+// SetPollStateReader wires the adaptive-backoff feedback source: a reader of
+// the per-flow poll-outcome marker fetcher nodes write via pollstate.Report.
+// Without it, adaptive backoff is off and every poll fires at its base
+// interval. cmd/dzd points it at the encrypted secret store.
+func (s *Scheduler) SetPollStateReader(fn func(ctx context.Context, tenant, graphID string) *pollstate.Marker) {
+	s.pollState = fn
 }
 
 // Run blocks until ctx is cancelled. It alternates between scheduling
@@ -336,9 +420,19 @@ func (s *Scheduler) rescan(ctx context.Context) error {
 				}
 				k := fmt.Sprintf("%s/%s/%s@%s", tenant, workspace, gid, node.ID)
 				if existing, ok := s.tracked[k]; ok && !existing.scheduleAt.IsZero() {
+					// Preserve timing AND learned cadence across rescans so a
+					// workspace edit doesn't reset jitter or empty-streak backoff.
 					entry.scheduleAt = existing.scheduleAt
+					entry.emptyStreak = existing.emptyStreak
+					entry.lastMarkerAt = existing.lastMarkerAt
 				} else {
-					entry.scheduleAt = entry.nextFireFrom(now)
+					// First enrollment: pull the initial fire EARLIER by a
+					// deterministic per-entry jitter so flows sharing an interval
+					// (a post-deploy mass enrollment) don't all fire on the same
+					// tick. Subtracting (not adding) keeps the first fire within
+					// one interval — it never adds latency, and steady-state
+					// cadence stays the base interval from the staggered first fire.
+					entry.scheduleAt = entry.nextFireFrom(now).Add(-pollJitter(k, entry.interval))
 				}
 				next[k] = entry
 			}
@@ -371,9 +465,40 @@ func (s *Scheduler) fireDue(ctx context.Context) {
 		if !e.scheduleAt.After(now) {
 			s.fireGraph(ctx, e)
 			s.mu.Lock()
+			// Adaptive backoff: fold the latest poll outcome into the empty
+			// streak BEFORE computing the next fire, so a consistently-empty
+			// poller widens (and an active one snaps back). The marker reflects
+			// the PREVIOUS fire's run (this fire's run hasn't finished yet),
+			// which is exactly the signal we want for the next interval.
+			s.refreshEmptyStreakLocked(ctx, e)
 			e.scheduleAt = e.nextFireFrom(now)
 			s.mu.Unlock()
 		}
+	}
+}
+
+// refreshEmptyStreakLocked updates a poll entry's empty streak from its flow's
+// pollstate marker. It only acts on a marker NEWER than the last one folded in
+// (markers are stamped per run), so re-reading the same outcome doesn't inflate
+// the streak. An empty outcome increments; an active one resets to zero,
+// tightening the cadence back to the base interval. Caller holds s.mu.
+func (s *Scheduler) refreshEmptyStreakLocked(ctx context.Context, e *scheduledGraph) {
+	if e.interval <= 0 || s.pollState == nil {
+		return
+	}
+	m := s.pollState(ctx, e.tenant, e.graphID)
+	if m == nil {
+		return
+	}
+	at := m.ParseAt()
+	if !at.After(e.lastMarkerAt) {
+		return // already counted this run's outcome (or unparseable timestamp)
+	}
+	e.lastMarkerAt = at
+	if m.Empty {
+		e.emptyStreak++
+	} else {
+		e.emptyStreak = 0
 	}
 }
 

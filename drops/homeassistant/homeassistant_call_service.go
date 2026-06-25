@@ -88,6 +88,10 @@ func init() {
 			// explicit on_error edge for the services they know are safe.
 			Idempotent:  false,
 			RetryPolicy: core.RetryNever,
+			// …and the engine dedupes a same-job re-execution (expired-lease
+			// reclaim / crash recovery) so a recovered run doesn't re-invoke
+			// the service.
+			DedupeWrites: true,
 		},
 		Execute: executeCallService,
 	})

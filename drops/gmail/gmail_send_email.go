@@ -79,6 +79,9 @@ func init() {
 			// leaf the engine auto-retries on backoff, so retries must be
 			// off here.
 			RetryPolicy: core.RetryNever,
+			// …and the engine dedupes a same-job re-execution (expired-lease
+			// reclaim / crash recovery) so a recovered run doesn't re-send.
+			DedupeWrites: true,
 		},
 		Execute: executeGmailSend,
 	})

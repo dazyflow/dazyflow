@@ -59,6 +59,7 @@ import (
 	"git.sr.ht/~klahr/dazyflow/engine"
 	"git.sr.ht/~klahr/dazyflow/engine/jobstore"
 	"git.sr.ht/~klahr/dazyflow/engine/mcp"
+	"git.sr.ht/~klahr/dazyflow/pollstate"
 )
 
 func main() {
@@ -453,6 +454,12 @@ func main() {
 		Sandbox: sandbox,
 		Quota:   quota,
 		Secrets: secrets,
+		// Process-local dedupe of non-idempotent external writes (Twilio SMS,
+		// Gmail/Discord/Sheets/Home Assistant) so an expired-lease reclaim or
+		// crash recovery doesn't re-fire a side effect the first attempt
+		// already completed. Single-node scope (one shared engine); multi-node
+		// cross-process reclaim needs a shared store behind this interface.
+		WriteDedupe: engine.NewMemoryWriteDedupe(),
 	}
 	// Flow resources: ${resource.NAME} resolves to live external content at
 	// template-resolution time. Wired only when the encrypted store exists
@@ -777,6 +784,25 @@ func applyNetworkPolicy(httpEgressAllow string, devMode bool) {
 	// SSRF-guarded client (blocks private/loopback/link-local at dial, e.g.
 	// cloud metadata), so a clone URL can't be used to reach internal services.
 	gitdrop.InstallGuardedHTTPTransport(hfnet.SafeHTTPClient(60*time.Second, false))
+
+	// Outbound per-(tenant, host) rate limiter. On a shared-egress hosted
+	// deployment this paces connector calls so one tenant's burst can't
+	// exhaust a third-party API's budget or get the egress IP throttled for
+	// everyone (and honors upstream 429/Retry-After). Defaults are safe;
+	// operators tune via env. Set DAZYFLOW_EGRESS_RATE_PER_MIN=0 to disable.
+	egressRate := envInt("DAZYFLOW_EGRESS_RATE_PER_MIN", -1)
+	if egressRate >= 0 {
+		hfnet.SetEgressRateLimit(
+			egressRate,
+			envInt("DAZYFLOW_EGRESS_BURST", 0),
+			envInt("DAZYFLOW_EGRESS_CONCURRENCY", 0),
+		)
+		if egressRate == 0 {
+			log.Print("WARNING: DAZYFLOW_EGRESS_RATE_PER_MIN=0 — outbound connector rate limiting disabled")
+		} else {
+			log.Printf("outbound egress rate limit active: %d/min per (tenant, host)", egressRate)
+		}
+	}
 }
 
 // coreStores bundles the durable control-plane stores that share one pool.
@@ -923,6 +949,10 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 
 	// Cron scheduler fires graphs that declare cron triggers. Always on.
 	sched := daemon.NewScheduler(d.svc)
+	// Adaptive poll backoff reads the per-flow poll-outcome marker fetcher
+	// nodes write (pollstate.Report). pollstate.Read is a no-op until the
+	// store is wired (setupEncryptedSecrets), so this is safe unconditionally.
+	sched.SetPollStateReader(pollstate.Read)
 	// Multi-node: gate firing on a Postgres advisory-lock leader so only one
 	// dzd fires each schedule. Single-node stays the default always-leader.
 	if d.pgPool != nil {
@@ -1542,6 +1572,26 @@ func setupEncryptedSecrets(ctx context.Context, masterKeyB64 string, secrets map
 			return es.Put(ctx, tenant, name, value)
 		},
 	)
+	// Reusable read/write pair on the same store for the two poll-scaling
+	// markers below (reserved "pollstate." / "httpcache." prefixes, hidden
+	// from the Credentials UI). ErrSecretNotFound surfaces as the empty
+	// string so a never-written marker reads as "no signal yet".
+	exactRead := func(ctx context.Context, tenant, name string) (string, error) {
+		v, err := es.GetExact(ctx, tenant, name)
+		if errors.Is(err, daemon.ErrSecretNotFound) {
+			return "", nil
+		}
+		return v, err
+	}
+	exactWrite := func(ctx context.Context, tenant, name, value string) error {
+		return es.Put(ctx, tenant, name, value)
+	}
+	// Adaptive poll backoff: fetcher nodes write a per-flow "found data?"
+	// marker the scheduler reads to widen/tighten the poll cadence.
+	pollstate.SetStore(exactRead, exactWrite)
+	// Conditional-request caching: http_request persists per-node ETag /
+	// Last-Modified validators so a polled GET can answer 304 with no body.
+	hfnet.SetHTTPCacheStore(exactRead, exactWrite)
 	return es
 }
 

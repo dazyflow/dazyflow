@@ -83,6 +83,9 @@ func init() {
 			// POST appends the row twice. This drop is a terminal leaf the
 			// engine auto-retries on backoff, so retries must be off here.
 			RetryPolicy: core.RetryNever,
+			// …and the engine dedupes a same-job re-execution (expired-lease
+			// reclaim / crash recovery) so a recovered run doesn't re-append.
+			DedupeWrites: true,
 		},
 		Execute: executeSheetsAppend,
 	})

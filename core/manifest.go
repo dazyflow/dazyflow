@@ -202,6 +202,19 @@ type Manifest struct {
 	// RetryPolicy already opts the module into retries.
 	MaxRetries int `json:"max_retries,omitempty"`
 
+	// DedupeWrites opts a NON-idempotent external write (one whose upstream
+	// API has no idempotency key — Twilio SMS, Gmail send, Discord webhook,
+	// Sheets append, Home Assistant call_service) into engine-side dedupe.
+	// When set, the engine records a node's successful result keyed by its
+	// stable job ID; if that exact node-record runs AGAIN (a worker reclaims
+	// an expired lease after the first attempt already fired the write, or a
+	// crash re-runs it) the engine returns the recorded result WITHOUT calling
+	// the drop again — so the SMS/email/message isn't sent twice. The
+	// guarantee is at-least-once: a crash in the small window between the API
+	// succeeding and the result being recorded can still re-fire. Has no
+	// effect unless the engine has a WriteDedupe store wired (cmd/dzd).
+	DedupeWrites bool `json:"dedupe_writes,omitempty"`
+
 	CompatibleWith []string `json:"compatible_with"`
 
 	// --- Discovery metadata (introduced for search + categorization) ---

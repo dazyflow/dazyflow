@@ -20,6 +20,7 @@ import (
 	"git.sr.ht/~klahr/dazyflow/drops/internal/mimetype"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 	"git.sr.ht/~klahr/dazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/pollstate"
 )
 
 func init() {
@@ -83,6 +84,7 @@ func init() {
 						"timeout_ms":{"type":"integer","default":30000,"minimum":1,"description":"Hard deadline for the full request, in milliseconds."},
 						"expect_status":{"type":"array","title":"Accepted status codes","items":{"type":"integer"},"x_advanced":true,"description":"Status codes treated as success. Empty defaults to 2xx."},
 						"max_body_bytes":{"type":"integer","title":"Max response bytes","default":10485760,"minimum":0,"x_advanced":true,"description":"Fail responses larger than this. Default 10 MiB."},
+						"cache_key":{"type":"string","title":"Cache key","x_advanced":true,"description":"Set this on a GET you poll repeatedly to skip re-downloading unchanged data: the step remembers the server's ETag/Last-Modified and sends them next time. When nothing changed the server replies fast with status 304 and an empty Response — branch on status to skip work. Use a unique name per polled URL."},
 						"allow_private_networks":{"type":"boolean","title":"Allow private networks","default":false,"x_advanced":true,"description":"Disable the private-address guard. Only enable when calling a local service intentionally."}
 					},
 					"required":["url"]
@@ -160,7 +162,28 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 		}
 	}
 
+	// Conditional-request caching (opt-in via cache_key). For safe re-fetches
+	// (GET/HEAD) we send the validators the server last gave us so it can
+	// answer 304 Not Modified with no body — the dominant cost saver for
+	// polling. Only active when a store is wired (cmd/dzd); off in tests.
+	cacheKey := strings.TrimSpace(params.StringDefault(job.Params, "cache_key", ""))
+	conditional := cacheKey != "" && httpCacheEnabled() && (method == http.MethodGet || method == http.MethodHead)
+	cacheName := httpCacheName(job.GraphID, job.NodeID, cacheKey)
+	if conditional {
+		applyConditionalHeaders(req, readCacheValidators(ctx, job.Tenant, cacheName))
+	}
+
 	params.EmitProgress(progress, job, 0.1, fmt.Sprintf("%s %s", method, url))
+
+	// Per-(tenant, host) pacing before dialing: bound rate + concurrency and
+	// wait out any prior 429 cooldown for this host so one tenant's burst
+	// can't exhaust a shared third-party API budget or the egress IP's
+	// reputation. Honors ctx (node timeout / cancel).
+	release, lerr := AcquireEgress(ctx, url)
+	if lerr != nil {
+		return params.Err(job, "cancelled", lerr.Error()), lerr
+	}
+	defer release()
 
 	client := buildClient(time.Duration(timeoutMs)*time.Millisecond, allowPrivate)
 	resp, err := client.Do(req)
@@ -177,12 +200,41 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 		return params.Err(job, "http", err.Error()), nil
 	}
 	defer resp.Body.Close()
+	// Record rate-limit signals so the next call to this host self-paces and
+	// a 429 lengthens the worker's retry backoff to the server-asked interval.
+	ObserveEgressResponse(ctx, url, resp.StatusCode, resp.Header)
 
 	params.EmitProgress(progress, job, 0.7, fmt.Sprintf("received %d", resp.StatusCode))
+
+	// 304 Not Modified (only reachable when we sent conditional headers): the
+	// resource is unchanged, so there's no body to read — emit an explicit
+	// "not modified" result a downstream Branch can skip on, and tell the
+	// scheduler this poll was empty so it can widen the interval. Validators
+	// are unchanged, so nothing to re-store.
+	if conditional && resp.StatusCode == http.StatusNotModified {
+		pollstate.Report(ctx, job, false)
+		return core.Result{
+			JobID:  job.ID,
+			Status: core.StatusOK,
+			Output: map[string]core.Ref{
+				"response_body": {MIME: "application/json", Inline: nil},
+				"status":        {MIME: "application/json", Inline: http.StatusNotModified},
+				"headers":       {MIME: "application/json", Inline: flattenHeaders(resp.Header)},
+			},
+		}, nil
+	}
 
 	if !statusAccepted(resp.StatusCode, expectStatus) {
 		return params.Err(job, "unexpected_status",
 			fmt.Sprintf("got %d, expected %s", resp.StatusCode, formatExpectStatus(expectStatus))), nil
+	}
+
+	// A fresh, accepted response: remember its validators so the next fetch
+	// can be conditional, and mark the poll active (data delivered) so the
+	// scheduler keeps the base cadence.
+	if conditional {
+		writeCacheValidators(ctx, job.Tenant, cacheName, validatorsFromResponse(resp.Header))
+		pollstate.Report(ctx, job, true)
 	}
 
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes+1))
