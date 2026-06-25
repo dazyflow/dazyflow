@@ -485,11 +485,11 @@ export function RunList() {
                       ? /* not finished — parked on the viewer; "—" would read
                            as "done with no duration" */ t("runList.statusAwaiting")
                       : "—"}
-                    {r.error_code && (
-                      <span style={{ color: "var(--danger)", marginLeft: 6 }}>
-                        · {r.error_code}
-                      </span>
-                    )}
+                    {/* The raw error_code (e.g. "egress_blocked") is a
+                        technical token that means nothing to most users — the
+                        failed status is already shown, and opening the run
+                        gives a plain-English explanation. So don't surface the
+                        code here. */}
                   </td>
                   <td style={{ textAlign: "right", paddingRight: 12 }}>
                     {showInbox && (

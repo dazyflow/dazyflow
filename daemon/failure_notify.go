@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/internal/emailtheme"
 )
 
 // Failure-notification dispatcher. Listens on the bus for a single
@@ -243,24 +244,44 @@ func (s *Service) fireFailureEmail(ctx context.Context, graph core.Graph, payloa
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "Your flow %q failed.\n\n", name)
+	var facts []emailtheme.Fact
 	if payload.FailedNode != "" {
 		fmt.Fprintf(&b, "Failed step:  %s\n", payload.FailedNode)
+		facts = append(facts, emailtheme.Fact{Label: "Failed step", Value: payload.FailedNode})
 	}
 	if payload.ErrorMessage != "" {
 		fmt.Fprintf(&b, "Error:        %s", payload.ErrorMessage)
+		errVal := payload.ErrorMessage
 		if payload.ErrorCode != "" {
 			fmt.Fprintf(&b, " (%s)", payload.ErrorCode)
+			errVal += " (" + payload.ErrorCode + ")"
 		}
 		b.WriteString("\n")
+		facts = append(facts, emailtheme.Fact{Label: "Error", Value: errVal})
 	}
 	if payload.FinishedAt != "" {
 		fmt.Fprintf(&b, "Finished at:  %s\n", payload.FinishedAt)
+		facts = append(facts, emailtheme.Fact{Label: "Finished at", Value: payload.FinishedAt})
 	}
 	if payload.RunURL != "" {
 		fmt.Fprintf(&b, "\nRun details:  %s\n", payload.RunURL)
 	}
 	subject := fmt.Sprintf("Flow %q failed", name)
-	if err := s.Mailer.Send(ctx, to, subject, b.String()); err != nil {
+	content := emailtheme.Content{
+		Subject:   subject,
+		Preheader: "A run of your flow failed and needs your attention.",
+		Eyebrow:   "Run failed",
+		Heading:   "A flow run needs your attention",
+		Tone:      "danger",
+		Intro:     []string{fmt.Sprintf("Your flow “%s” failed on its last run. Here's what happened:", name)},
+		Facts:     facts,
+		Outro:     []string{"This run won't retry on its own. Open it to see the full log and fix the cause."},
+		LogoURL:   emailLogoURL(s.PublicBaseURL),
+	}
+	if payload.RunURL != "" {
+		content.Button = &emailtheme.Button{Label: "View run details", URL: payload.RunURL}
+	}
+	if err := s.Mailer.SendThemed(ctx, to, b.String(), content); err != nil {
 		s.logFailureNotifyError(graph, fmt.Errorf("email: %w", err))
 	}
 }

@@ -79,7 +79,18 @@ export function SignUp() {
     };
   }, [signupInvite]);
 
-  if (signupAllowed === null) return <div />;
+  // Still probing whether signup is open. Show a quiet loading state in the
+  // same frame as the form — a bare empty <div> read as a broken/blank page
+  // on a slow connection.
+  if (signupAllowed === null) {
+    return (
+      <div className="signin-wrap">
+        <div className="signin" style={{ textAlign: "center", color: "var(--muted)" }}>
+          {t("common.loading")}
+        </div>
+      </div>
+    );
+  }
   if (!signupAllowed) {
     // Invite-only deployment. Preserve any deep-link query params so a
     // sign-in followed by /invite/<token> still works.

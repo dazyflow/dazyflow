@@ -97,30 +97,10 @@ export function SettingsModal({ graph, onClose, onSave, onDelete }: Props) {
               <p className="settings-help">
                 {t("settings.notifications.help")}
               </p>
-              <div className="sf-field">
-                <div className="label-row">
-                  <label>{t("settings.notifications.webhookLabel")}</label>
-                </div>
-                <input
-                  type="url"
-                  placeholder="https://hooks.slack.com/services/…"
-                  value={draft.failure_notify?.webhook ?? ""}
-                  onChange={(e) => {
-                    const v = e.target.value.trim();
-                    const next = { ...draft.failure_notify, webhook: v || undefined };
-                    setDraft({
-                      ...draft,
-                      failure_notify: next.webhook || next.email ? next : undefined,
-                    });
-                  }}
-                />
-                <div className="desc">
-                  <Trans
-                    i18nKey="settings.notifications.webhookDesc"
-                    components={[<code />]}
-                  />
-                </div>
-              </div>
+              {/* Email is the option most people want — lead with it. The
+                  webhook (a developer integration with a JSON payload) is
+                  tucked into an "Advanced" disclosure below so it doesn't
+                  greet a non-technical user with a payload-field dump. */}
               <div className="sf-field">
                 <div className="label-row">
                   <label>{t("settings.notifications.emailLabel")}</label>
@@ -140,6 +120,38 @@ export function SettingsModal({ graph, onClose, onSave, onDelete }: Props) {
                 />
                 <div className="desc">{t("settings.notifications.emailDesc")}</div>
               </div>
+              <details
+                className="settings-advanced"
+                /* Open by default if a webhook is already set, so an existing
+                   integration isn't hidden from the person who configured it. */
+                open={!!draft.failure_notify?.webhook}
+              >
+                <summary>{t("settings.notifications.webhookAdvanced")}</summary>
+                <div className="sf-field">
+                  <div className="label-row">
+                    <label>{t("settings.notifications.webhookLabel")}</label>
+                  </div>
+                  <input
+                    type="url"
+                    placeholder="https://hooks.slack.com/services/…"
+                    value={draft.failure_notify?.webhook ?? ""}
+                    onChange={(e) => {
+                      const v = e.target.value.trim();
+                      const next = { ...draft.failure_notify, webhook: v || undefined };
+                      setDraft({
+                        ...draft,
+                        failure_notify: next.webhook || next.email ? next : undefined,
+                      });
+                    }}
+                  />
+                  <div className="desc">
+                    <Trans
+                      i18nKey="settings.notifications.webhookDesc"
+                      components={[<code />]}
+                    />
+                  </div>
+                </div>
+              </details>
             </div>
           )}
           {tab === "general" && (

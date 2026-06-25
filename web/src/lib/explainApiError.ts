@@ -72,6 +72,14 @@ export function explainApiError(
   if (status === 404) return t("apiError.notFound");
   if (status === 409) return t("apiError.conflict");
   if (status === 429) return t("apiError.rateLimited");
+  // Payload too large (an oversized upload, or a body that trips the global
+  // request-size guard). Prefer the server's own message when it's clean and
+  // human (the upload route names the actual limit, e.g. "the file is too
+  // large — the upload limit is 200 MB"); fall back to a localized generic
+  // when it's a raw "request body exceeds N bytes" guard string.
+  if (status === 413) {
+    return msg && !looksTechnical(lc) ? msg : t("apiError.tooLarge");
+  }
 
   // A leaked Go/OS/stdlib string the user can't act on — hide it.
   if (looksTechnical(lc) || !msg) return t("apiError.generic");
@@ -100,6 +108,8 @@ function looksTechnical(lc: string): boolean {
     lc.includes("runtime error") ||
     lc.includes("nil pointer") ||
     lc.includes("no tenant in context") ||
+    lc.includes("request body too large") ||
+    (lc.includes("exceeds") && lc.includes("bytes")) || // "request body exceeds N bytes"
     lc.includes("cross-device link") ||
     lc.includes("decode body") ||
     lc.startsWith("auth:") // lowercase internal "auth: …" phrasing
@@ -115,6 +125,7 @@ const CODE_MESSAGES: Record<string, string> = {
   not_found: "apiError.notFound",
   conflict: "apiError.conflict",
   rate_limited: "apiError.rateLimited",
+  storage_full: "apiError.storageFull",
   unauthorized: "apiError.sessionExpired",
   internal_error: "apiError.server",
   store_failed: "apiError.server",

@@ -11,6 +11,7 @@ import (
 
 	"git.sr.ht/~klahr/dazyflow/auth"
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/internal/emailtheme"
 )
 
 // Platform signup-invites. On a deployment with self-serve signup
@@ -127,12 +128,26 @@ func (h *HTTPGateway) createSignupInvite(rw http.ResponseWriter, r *http.Request
 	signupURL := h.signupInviteURL(email, token)
 	emailSent := false
 	if h.svc.Mailer != nil && strings.HasPrefix(signupURL, "http") {
+		expFmt := inv.ExpiresAt.Format("2 January 2006")
 		msg := fmt.Sprintf(
 			"You've been invited to create an account on Dazyflow.\n\n"+
 				"Set your password and finish signing up:\n%s\n\n"+
 				"The link expires %s. If you weren't expecting this, ignore this email.",
-			signupURL, inv.ExpiresAt.Format("2006-01-02"))
-		if err := h.svc.Mailer.Send(r.Context(), email, "You're invited to Dazyflow", msg); err != nil {
+			signupURL, expFmt)
+		content := emailtheme.Content{
+			Subject:    "You're invited to Dazyflow",
+			Preheader:  "Create your account to get started.",
+			Eyebrow:    "Invitation",
+			Heading:    "Create your Dazyflow account",
+			Intro:      []string{"You've been invited to create an account on Dazyflow. Set a password and you're in."},
+			Button:     &emailtheme.Button{Label: "Set your password", URL: signupURL},
+			Outro: []string{fmt.Sprintf(
+				"This link expires %s. If you weren't expecting it, you can ignore this email.",
+				expFmt)},
+			FooterNote: "You're receiving this because someone invited you to Dazyflow.",
+			LogoURL:    emailLogoURL(h.svc.PublicBaseURL),
+		}
+		if err := h.svc.Mailer.SendThemed(r.Context(), email, msg, content); err != nil {
 			h.logger.Printf("signup-invite email to %s: %v", email, err)
 		} else {
 			emailSent = true

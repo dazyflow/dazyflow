@@ -59,7 +59,7 @@ func signupAndExtractLink(t *testing.T, h *gatewayHarness, srv *fakeSMTP, email 
 	deadline := time.Now().Add(2 * time.Second)
 	for {
 		_, _, data, _ := srv.snapshot()
-		if m := verifyLinkRE.FindStringSubmatch(data); m != nil {
+		if m := verifyLinkRE.FindStringSubmatch(qpDecode(data)); m != nil {
 			// The frontend reads the query param via URLSearchParams,
 			// which percent-decodes — mirror that here.
 			email, err := url.QueryUnescape(m[1])
@@ -251,7 +251,7 @@ func TestEmailVerification_Resend(t *testing.T) {
 		// verify link (the resend) rather than the first (the original
 		// signup, whose token is oldToken).
 		_, _, data, _ := srv.snapshot()
-		ms := verifyLinkRE.FindAllStringSubmatch(data, -1)
+		ms := verifyLinkRE.FindAllStringSubmatch(qpDecode(data), -1)
 		if len(ms) > 0 {
 			if last := ms[len(ms)-1]; last[2] != oldToken {
 				newToken = last[2]

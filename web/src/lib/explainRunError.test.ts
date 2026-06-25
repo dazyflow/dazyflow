@@ -128,6 +128,43 @@ describe("explainRunError", () => {
     }
   });
 
+  it("matches email-delivery rejections", () => {
+    for (const msg of [
+      "smtp: 550 5.1.1 mailbox unavailable",
+      "send email: 552 message too large",
+      "relay access denied for recipient",
+    ]) {
+      const r = explainRunError("", msg);
+      expect(r, msg).not.toBeNull();
+      expect(r!.headlineKey, msg).toBe("explain.emailSendFailed");
+    }
+  });
+
+  it("matches remote input-validation rejections", () => {
+    for (const msg of [
+      '"email" is required',
+      "field address cannot be empty",
+      "400 Bad Request: validation failed",
+      "422 Unprocessable Entity",
+    ]) {
+      const r = explainRunError("", msg);
+      expect(r, msg).not.toBeNull();
+      expect(r!.headlineKey, msg).toBe("explain.remoteRejectedInput");
+    }
+  });
+
+  it("matches TLS / certificate failures and prefers them over network", () => {
+    for (const msg of [
+      "x509: certificate signed by unknown authority",
+      "tls: handshake failure",
+      "x509: certificate has expired or is not yet valid: dial tcp",
+    ]) {
+      const r = explainRunError("", msg);
+      expect(r, msg).not.toBeNull();
+      expect(r!.headlineKey, msg).toBe("explain.tlsError");
+    }
+  });
+
   it("leaves unmapped codes to the raw-detail fallback", () => {
     expect(explainRunError("io", "read: connection reset")).toBeNull();
     expect(explainRunError("node_failed", "node x failed")).toBeNull();

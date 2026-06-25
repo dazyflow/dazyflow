@@ -92,6 +92,7 @@ func TestCodeForStatus(t *testing.T) {
 		http.StatusConflict:              "conflict",
 		http.StatusRequestEntityTooLarge: "payload_too_large",
 		http.StatusTooManyRequests:       "rate_limited",
+		http.StatusInsufficientStorage:   "storage_full",
 		http.StatusNotImplemented:        "not_implemented",
 		http.StatusServiceUnavailable:    "unavailable",
 		http.StatusInternalServerError:   "internal_error",

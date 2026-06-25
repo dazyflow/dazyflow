@@ -5,6 +5,7 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -108,6 +109,29 @@ func (f *fakeSMTP) snapshot() (auth, from, data string, to []string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.authLine, f.from, f.data, append([]string(nil), f.to...)
+}
+
+// qpDecode leniently reverses quoted-printable so a test can match the human
+// content of a themed email (multipart, QP-encoded) the way a mail client
+// would: it drops soft line breaks and decodes valid =XX escapes, but leaves
+// anything that isn't a valid escape (e.g. a header's "charset=UTF-8" or a
+// MIME-word "=?utf-8?q?") untouched. Good enough for asserting on links and
+// body text without pulling in a full MIME parser.
+func qpDecode(s string) string {
+	s = strings.ReplaceAll(s, "=\r\n", "")
+	s = strings.ReplaceAll(s, "=\n", "")
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == '=' && i+3 <= len(s) {
+			if v, err := strconv.ParseUint(s[i+1:i+3], 16, 8); err == nil {
+				b.WriteByte(byte(v))
+				i += 2
+				continue
+			}
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
 }
 
 func TestNewMailerFromURL(t *testing.T) {

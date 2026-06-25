@@ -92,6 +92,11 @@ func codeForStatus(status int) string {
 		return "payload_too_large"
 	case http.StatusTooManyRequests:
 		return "rate_limited"
+	case http.StatusInsufficientStorage:
+		// 507 is user-actionable (their storage quota), NOT an "our side"
+		// outage — give it a distinct code so the web UI can show friendly,
+		// correct guidance instead of the generic 5xx "try again" message.
+		return "storage_full"
 	case http.StatusNotImplemented:
 		return "not_implemented"
 	case http.StatusServiceUnavailable:

@@ -30,7 +30,7 @@ func requestResetAndExtract(t *testing.T, h *gatewayHarness, srv *fakeSMTP, emai
 		// Most recent reset link (the account may also have a verification
 		// + welcome mail in the captured stream).
 		_, _, data, _ := srv.snapshot()
-		ms := resetLinkRE.FindAllStringSubmatch(data, -1)
+		ms := resetLinkRE.FindAllStringSubmatch(qpDecode(data), -1)
 		if len(ms) > 0 {
 			last := ms[len(ms)-1]
 			got, err := url.QueryUnescape(last[1])
@@ -116,7 +116,7 @@ func TestPasswordReset_NonEnumerating(t *testing.T) {
 	}
 	// Give a stray send a moment, then confirm nothing was mailed.
 	time.Sleep(150 * time.Millisecond)
-	if _, _, data, _ := srv.snapshot(); resetLinkRE.MatchString(data) {
+	if _, _, data, _ := srv.snapshot(); resetLinkRE.MatchString(qpDecode(data)) {
 		t.Fatalf("a reset link was emailed for a non-existent account:\n%s", data)
 	}
 }
@@ -220,7 +220,7 @@ func TestPasswordReset_SSOAccountNoEmail(t *testing.T) {
 		t.Fatalf("forgot for sso: want 200, got %d", rw.Code)
 	}
 	time.Sleep(200 * time.Millisecond) // let any (erroneous) async send run
-	if _, _, data, _ := srv.snapshot(); resetLinkRE.MatchString(data) {
+	if _, _, data, _ := srv.snapshot(); resetLinkRE.MatchString(qpDecode(data)) {
 		t.Fatalf("a reset link was emailed to an SSO-only account:\n%s", data)
 	}
 }

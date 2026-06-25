@@ -70,6 +70,18 @@ export function VerifyEmail() {
             <h1 style={{ marginTop: "var(--space-3)" }}>{t("verifyEmail.failedTitle")}</h1>
             <p className="sub">{errMsg}</p>
             <p className="sub">{t("verifyEmail.failedHint")}</p>
+            {/* The failed state used to dead-end here: the hint says "sign in
+                and resend" but offered no way to get there. A user arriving
+                from an expired email link is signed out, so give them the
+                clickable path. */}
+            <p>
+              <Link
+                to={sessionToken ? "/welcome" : "/signin"}
+                className="primary-link"
+              >
+                {sessionToken ? t("verifyEmail.toApp") : t("verifyEmail.toSignin")}
+              </Link>
+            </p>
           </>
         )}
       </div>

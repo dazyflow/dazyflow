@@ -189,9 +189,9 @@ export function Dashboard() {
                   <Link to={`/runs/${encodeURIComponent(r.id)}`}>
                     <span className="status-dot failed" />
                     <span className="dash-run-flow">{flowName(r.graph_id)}</span>
-                    {r.error_code && (
-                      <span className="dash-run-error">{r.error_code}</span>
-                    )}
+                    {/* The raw error_code is a technical token; on the
+                        overview the failed dot + flow name say enough, and the
+                        run detail explains the cause in plain language. */}
                     <span
                       className="dash-run-time"
                       title={formatDateTime(r.started_at || r.enqueued_at)}

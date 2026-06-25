@@ -7,6 +7,7 @@ import { api, APIError } from "../api";
 import { useAuth } from "../auth";
 import { Button } from "../components/Button";
 import { ConfirmModal } from "../components/ConfirmModal";
+import { Callout } from "../components/Callout";
 import { explainRunError } from "../lib/explainRunError";
 import { explainApiError } from "../lib/explainApiError";
 import type { Graph, JobRecord, JobStatus, Manifest, Ref, RunLogEntry } from "../types";
@@ -331,6 +332,14 @@ export function RunDetail() {
         />
       )}
 
+      {/* A stopped run isn't a failure — it ended because someone (or the
+          system) cancelled it. Without this, a cancelled run showed the bare
+          word "cancelled" and the same emphatic Retry as a crash, reading as
+          "something broke". Say plainly what happened instead. */}
+      {run.Status === "cancelled" && (
+        <Callout variant="info">{t("runDetail.cancelledNote")}</Callout>
+      )}
+
       {/* Run-level summary card. */}
       <div className="run-summary card">
         <SummaryRow label={t("runDetail.summaryStatus")} value={<StatusChip status={run.Status} />} />
@@ -425,22 +434,7 @@ export function RunDetail() {
               {isOpen && (
                 <div className="node-body">
                   {n.Result?.error && (
-                    <div className="node-err-block">
-                      <NodeErrorExplanation
-                        code={n.Result.error.code}
-                        message={n.Result.error.message}
-                      />
-                      <div className="node-err-code">{n.Result.error.code}</div>
-                      <div>{n.Result.error.message}</div>
-                      {n.Result.error.details && (
-                        <details className="node-err-details">
-                          <summary>{t("runDetail.details")}</summary>
-                          <pre className="node-err-pre">
-                            {n.Result.error.details}
-                          </pre>
-                        </details>
-                      )}
-                    </div>
+                    <NodeError error={n.Result.error} />
                   )}
                   {n.Job?.Input && Object.keys(n.Job.Input).length > 0 && (
                     <div className="node-output">
@@ -751,12 +745,29 @@ function RunFailureBanner({
         )}
         <div className="run-error-title">
           {title}
-          {run.Result?.error?.code && (
+          {/* The raw error code is a technical token; only show it inline
+              when we had no friendly headline to lead with. */}
+          {!explanation && run.Result?.error?.code && (
             <span className="run-error-code"> · {run.Result.error.code}</span>
           )}
         </div>
-        {run.Result?.error?.message && (
+        {/* When a friendly headline matched, the raw daemon string adds
+            nothing a non-techie can act on and reads as alarming — tuck it
+            into a disclosure a developer can still open. Show it inline only
+            when there was no explanation to offer. */}
+        {!explanation && run.Result?.error?.message && (
           <div className="run-error-msg">{run.Result.error.message}</div>
+        )}
+        {explanation && (run.Result?.error?.message || run.Result?.error?.code) && (
+          <details className="run-error-tech">
+            <summary>{t("runDetail.technicalDetails")}</summary>
+            {run.Result?.error?.code && (
+              <div className="run-error-code">{run.Result.error.code}</div>
+            )}
+            {run.Result?.error?.message && (
+              <div className="run-error-msg">{run.Result.error.message}</div>
+            )}
+          </details>
         )}
         <div className="run-error-needsyou">{t("runDetail.needsYou")}</div>
       </div>
@@ -764,43 +775,76 @@ function RunFailureBanner({
   );
 }
 
-// NodeErrorExplanation renders the same plain-English headline + next-action
-// that RunFailureBanner shows, but for an INDIVIDUAL failed/awaiting node the
-// user expands in the timeline. Without it, expanding a failed node showed
-// only the raw daemon string (e.g. `secret "postgres_dsn" not found`) with no
-// guidance — exactly where a non-technical user looks for "what do I do?".
-// Renders nothing when explainRunError can't match (the raw code/message
-// below still shows).
-function NodeErrorExplanation({
-  code,
-  message,
+// NodeError renders the error of an INDIVIDUAL failed/awaiting node the user
+// expands in the timeline: the same plain-English headline + next-action that
+// RunFailureBanner shows, plus the raw daemon code/message.
+//
+// When explainRunError matches, the raw string (e.g. `secret "postgres_dsn"
+// not found`, a Go error, `dial tcp …`) is tucked behind a "Technical
+// details" disclosure so the friendly headline is what a non-technical user
+// reads first — the scary string used to sit inline as primary content and
+// made people think the product was broken. When nothing matches, the raw
+// code/message stays inline (it's all we have to show).
+function NodeError({
+  error,
 }: {
-  code?: string;
-  message?: string;
+  error: { code?: string; message?: string; details?: string };
 }) {
   const { t } = useTranslation();
-  const explanation = explainRunError(code, message);
-  if (!explanation) return null;
-  const action = explanation.action;
+  const explanation = explainRunError(error.code, error.message);
+  const action = explanation?.action;
   const isExternal = action?.href.startsWith("http") || false;
+  const hasRaw = !!(error.code || error.message);
   return (
-    <div className="run-error-headline">
-      <span>{t(explanation.headlineKey, explanation.headlineValues ?? {})}</span>
-      {action &&
-        (isExternal ? (
-          <a
-            className="primary run-error-action"
-            href={action.href}
-            target="_blank"
-            rel="noreferrer noopener"
-          >
-            {t(action.labelKey)}
-          </a>
-        ) : (
-          <Link className="primary run-error-action" to={action.href}>
-            {t(action.labelKey)}
-          </Link>
-        ))}
+    <div className="node-err-block">
+      {explanation && (
+        <div className="run-error-headline">
+          <span>
+            {t(explanation.headlineKey, explanation.headlineValues ?? {})}
+          </span>
+          {action &&
+            (isExternal ? (
+              <a
+                className="primary run-error-action"
+                href={action.href}
+                target="_blank"
+                rel="noreferrer noopener"
+              >
+                {t(action.labelKey)}
+              </a>
+            ) : (
+              <Link className="primary run-error-action" to={action.href}>
+                {t(action.labelKey)}
+              </Link>
+            ))}
+        </div>
+      )}
+      {/* No friendly explanation — show the raw code/message inline, it's all
+          we can offer. */}
+      {!explanation && error.code && (
+        <div className="node-err-code">{error.code}</div>
+      )}
+      {!explanation && error.message && <div>{error.message}</div>}
+      {/* Friendly explanation present — raw code/message (and any extra
+          details) go behind a disclosure. */}
+      {explanation && (hasRaw || error.details) && (
+        <details className="node-err-details">
+          <summary>{t("runDetail.technicalDetails")}</summary>
+          {error.code && <div className="node-err-code">{error.code}</div>}
+          {error.message && <div>{error.message}</div>}
+          {error.details && (
+            <pre className="node-err-pre">{error.details}</pre>
+          )}
+        </details>
+      )}
+      {/* Unmatched error that still carries extra details — keep its own
+          disclosure (the inline code/message above is the headline here). */}
+      {!explanation && error.details && (
+        <details className="node-err-details">
+          <summary>{t("runDetail.details")}</summary>
+          <pre className="node-err-pre">{error.details}</pre>
+        </details>
+      )}
     </div>
   );
 }
@@ -826,6 +870,9 @@ export function statusLabel(
   t: (key: string) => string,
 ): string {
   if (status === "awaiting") return t("runDetail.statusAwaiting");
+  // "cancelled" reads as a machine value and looks like a failure; a run in
+  // this state was deliberately stopped, so say "stopped".
+  if (status === "cancelled") return t("runDetail.statusCancelled");
   return status;
 }
 

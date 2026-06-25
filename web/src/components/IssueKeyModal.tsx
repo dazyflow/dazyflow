@@ -57,6 +57,21 @@ export const ALL_PERMISSIONS: Permission[] = [
   "organization:admin",
 ];
 
+// Plain-language label for each permission. The raw "graph:run"-style grant
+// is a colon-namespaced token that reads like code; a non-technical admin
+// reaching the custom grid needs to know what each one actually lets a key
+// do. The raw token is still shown as a sublabel for anyone who wants it.
+const PERMISSION_LABEL_KEYS: Record<Permission, string> = {
+  "graph:run": "issueKey.perm.graphRun",
+  "graph:edit": "issueKey.perm.graphEdit",
+  "graph:admin": "issueKey.perm.graphAdmin",
+  "module:register": "issueKey.perm.moduleRegister",
+  "secret:read": "issueKey.perm.secretRead",
+  "secret:write": "issueKey.perm.secretWrite",
+  "organization:admin": "issueKey.perm.orgAdmin",
+  "platform:admin": "issueKey.perm.platformAdmin",
+};
+
 type ExpiryChoice = "never" | "30d" | "90d" | "1y";
 
 const EXPIRY_CHOICES: { id: ExpiryChoice; labelKey: string; days?: number }[] = [
@@ -240,8 +255,11 @@ export function IssueKeyModal({
                   checked={perms.has(p)}
                   onChange={() => togglePerm(p)}
                   label={
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>
-                      {p}
+                    <span className="perm-label">
+                      <span className="perm-label-name">
+                        {t(PERMISSION_LABEL_KEYS[p])}
+                      </span>
+                      <span className="perm-label-code">{p}</span>
                     </span>
                   }
                 />

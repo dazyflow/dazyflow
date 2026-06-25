@@ -175,6 +175,20 @@ export function explainRunError(
     };
   }
 
+  // TLS / certificate failures — the remote service answered but its
+  // security certificate couldn't be validated (self-signed, expired, wrong
+  // host). Checked BEFORE the network branch because these often also carry
+  // a "dial"/connection phrase, and the cert cause is the more useful one.
+  // Usually a wrong/internal URL rather than something a Retry fixes.
+  if (
+    lc.includes("x509") ||
+    lc.includes("certificate") ||
+    lc.includes("tls handshake") ||
+    lc.includes("tls: handshake")
+  ) {
+    return { headlineKey: "explain.tlsError" };
+  }
+
   // Network-reachability failures — the remote host couldn't be reached
   // (DNS, refused connection, dropped socket). Usually transient or a
   // wrong URL; a Retry often clears it, so no destination.
@@ -212,6 +226,43 @@ export function explainRunError(
     lc.includes("invalid json")
   ) {
     return { headlineKey: "explain.badResponse" };
+  }
+
+  // Email delivery failures — the mail service rejected the send (bad
+  // recipient, mailbox full, relay refused). Email is a flagship use case,
+  // so a raw "smtp: 550 …" string is a common and confusing dead-end. The
+  // network branch above already caught "couldn't connect" cases; what's
+  // left here is the server actively rejecting the message.
+  if (
+    lc.includes("smtp") ||
+    lc.includes("550") ||
+    lc.includes("552") ||
+    lc.includes("553") ||
+    lc.includes("mailbox") ||
+    lc.includes("recipient") ||
+    lc.includes("relay")
+  ) {
+    return { headlineKey: "explain.emailSendFailed" };
+  }
+
+  // The remote service rejected the data this step sent — a required field
+  // is missing or in the wrong shape (a 400 / validation error). One of the
+  // most common real failures; the message alone ("\"email\" is required")
+  // reads like an internal error to a non-techie. Points them back at the
+  // step's fields. Checked before the 404 block so a 400 isn't mistaken for
+  // a missing resource.
+  if (
+    lc.includes("bad request") ||
+    lc.includes("is required") ||
+    lc.includes("required field") ||
+    lc.includes("missing required") ||
+    lc.includes("cannot be empty") ||
+    lc.includes("must not be empty") ||
+    lc.includes("validation") ||
+    lc.includes("invalid value") ||
+    lc.includes("422")
+  ) {
+    return { headlineKey: "explain.remoteRejectedInput" };
   }
 
   // Remote resource not found (404 from the service) — a wrong id/path in a

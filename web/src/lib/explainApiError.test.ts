@@ -89,6 +89,37 @@ describe("explainApiError", () => {
     expect(explainApiError(new APIError(429, ""), t)).toBe("apiError.rateLimited");
   });
 
+  it("keeps a clean 413 upload message verbatim", () => {
+    expect(
+      explainApiError(
+        new APIError(413, "the file is too large — the upload limit is 200 MB"),
+        t,
+      ),
+    ).toBe("the file is too large — the upload limit is 200 MB");
+  });
+
+  it("falls back to a friendly message for a raw 413 guard string", () => {
+    expect(
+      explainApiError(new APIError(413, "request body exceeds 10485760 bytes"), t),
+    ).toBe("apiError.tooLarge");
+    expect(
+      explainApiError(new APIError(413, "http: request body too large"), t),
+    ).toBe("apiError.tooLarge");
+  });
+
+  it("maps a bare 413 with no message to the friendly too-large message", () => {
+    expect(explainApiError(new APIError(413, ""), t)).toBe("apiError.tooLarge");
+  });
+
+  it("maps the storage_full code (507) to actionable guidance, not a 5xx outage", () => {
+    expect(
+      explainApiError(
+        new APIError(507, "upload of 12345 bytes would exceed the tenant storage limit", "storage_full"),
+        t,
+      ),
+    ).toBe("apiError.storageFull");
+  });
+
   it("never trusts a non-APIError's text", () => {
     expect(explainApiError(new Error("kernel panic in component X"), t)).toBe(
       "apiError.generic",

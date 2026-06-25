@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"git.sr.ht/~klahr/dazyflow/auth"
+	"git.sr.ht/~klahr/dazyflow/internal/emailtheme"
 )
 
 // Password reset. Active only where a transactional mailer AND a public
@@ -109,12 +110,25 @@ func (h *HTTPGateway) sendPasswordResetEmail(ctx context.Context, user auth.User
 	}
 	link := strings.TrimRight(h.svc.PublicBaseURL, "/") + "/reset-password?email=" +
 		url.QueryEscape(user.Email) + "&token=" + token
+	expFmt := exp.Format("2 January 2006, 15:04 MST")
 	body := fmt.Sprintf(
 		"We received a request to reset your Dazyflow password.\n\n"+
 			"Choose a new password:\n%s\n\n"+
 			"The link expires %s. If you didn't request this, ignore this email — your password is unchanged.",
-		link, exp.Format("2006-01-02 15:04 MST"))
-	if err := h.svc.Mailer.Send(ctx, user.Email, "Reset your Dazyflow password", body); err != nil {
+		link, expFmt)
+	content := emailtheme.Content{
+		Subject:   "Reset your Dazyflow password",
+		Preheader: "Choose a new password for your account.",
+		Eyebrow:   "Password reset",
+		Heading:   "Reset your password",
+		Intro:     []string{"We received a request to reset the password for your Dazyflow account."},
+		Button:    &emailtheme.Button{Label: "Choose a new password", URL: link},
+		Outro: []string{fmt.Sprintf(
+			"This link expires %s. If you didn't request this, ignore this email — your password is unchanged.",
+			expFmt)},
+		LogoURL: emailLogoURL(h.svc.PublicBaseURL),
+	}
+	if err := h.svc.Mailer.SendThemed(ctx, user.Email, body, content); err != nil {
 		h.logger.Printf("password reset for %s: send: %v", user.Email, err)
 		return false
 	}

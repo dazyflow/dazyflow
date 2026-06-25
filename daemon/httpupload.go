@@ -41,6 +41,17 @@ func (h *HTTPGateway) uploadWorkspaceFile(rw http.ResponseWriter, r *http.Reques
 
 	r.Body = http.MaxBytesReader(rw, r.Body, maxUploadBytes)
 	if err := r.ParseMultipartForm(8 << 20); err != nil {
+		// An oversized upload trips MaxBytesReader, which surfaces here as a
+		// raw "http: request body too large" string. Translate it into a
+		// clean 413 (code payload_too_large) with a human, size-naming
+		// message — otherwise the web UI would show the Go internals verbatim
+		// to a non-technical user staging a file.
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			writeJSONError(rw, http.StatusRequestEntityTooLarge,
+				fmt.Sprintf("the file is too large — the upload limit is %d MB", maxUploadBytes>>20))
+			return
+		}
 		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("parse multipart: %v", err))
 		return
 	}

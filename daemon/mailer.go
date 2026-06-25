@@ -1,11 +1,14 @@
 package daemon
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"mime"
+	"mime/quotedprintable"
 	"net"
 	"net/mail"
 	"net/smtp"
@@ -13,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"git.sr.ht/~klahr/dazyflow/internal/emailtheme"
 	"git.sr.ht/~klahr/dazyflow/internal/smtputil"
 )
 
@@ -131,6 +135,113 @@ func (m *Mailer) Send(ctx context.Context, to, subject, body string) error {
 	}
 	return smtputil.Send(ctx, net.JoinHostPort(m.host, m.port), m.host, m.tlsMode,
 		auth, m.addr, []string{to}, mailerMessage(m.From, m.addr, to, subject, body))
+}
+
+// emailLogoURL returns the absolute URL of the hosted brand mark for the
+// email header ({PublicBaseURL}/logo.png), or "" when the deployment's public
+// base URL is unknown — the theme then falls back to the inline SVG mark.
+// Email clients require absolute image URLs, so a relative path is useless.
+func emailLogoURL(publicBaseURL string) string {
+	base := strings.TrimRight(publicBaseURL, "/")
+	if base == "" {
+		return ""
+	}
+	return base + "/logo.png"
+}
+
+// SendThemed renders c through the shared transactional theme and sends it as
+// a multipart text+HTML message, using textBody as the plain-text
+// alternative. The subject comes from c so the HTML <title> and the real
+// Subject header stay in sync. Same best-effort contract as Send: callers
+// log and move on.
+func (m *Mailer) SendThemed(ctx context.Context, to, textBody string, c emailtheme.Content) error {
+	htmlBody, err := emailtheme.Render(c)
+	if err != nil {
+		return err
+	}
+	return m.SendHTML(ctx, to, c.Subject, textBody, htmlBody)
+}
+
+// SendHTML delivers one multipart/alternative message: a text/plain part (for
+// text-only clients and better deliverability) followed by a text/html part.
+// Same transport + best-effort contract as Send.
+func (m *Mailer) SendHTML(ctx context.Context, to, subject, text, htmlBody string) error {
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, m.timeout)
+		defer cancel()
+	}
+	var auth smtp.Auth
+	if m.username != "" {
+		auth = smtp.PlainAuth("", m.username, m.password, m.host)
+	}
+	msg, err := multipartMessage(m.From, m.addr, to, subject, text, htmlBody)
+	if err != nil {
+		return err
+	}
+	return smtputil.Send(ctx, net.JoinHostPort(m.host, m.port), m.host, m.tlsMode,
+		auth, m.addr, []string{to}, msg)
+}
+
+// multipartMessage assembles a multipart/alternative RFC 822 message: the
+// text/plain part first, the text/html part last (clients render the last
+// part they understand). Both parts are quoted-printable encoded so HTML's
+// long lines stay within SMTP's 998-octet line limit. Headers match
+// mailerMessage — CRLF-stripped addresses (header-injection defense), a
+// MIME-encoded subject, and a stable Date + Message-ID for dedup.
+func multipartMessage(fromHeader, fromAddr, to, subject, text, htmlBody string) ([]byte, error) {
+	strip := strings.NewReplacer("\r", "", "\n", "")
+	boundary, err := randomBoundary()
+	if err != nil {
+		return nil, err
+	}
+	var sb bytes.Buffer
+	fmt.Fprintf(&sb, "From: %s\r\n", strip.Replace(fromHeader))
+	fmt.Fprintf(&sb, "To: %s\r\n", strip.Replace(to))
+	fmt.Fprintf(&sb, "Subject: %s\r\n", mime.QEncoding.Encode("utf-8", subject))
+	fmt.Fprintf(&sb, "Date: %s\r\n", time.Now().UTC().Format(time.RFC1123Z))
+	fmt.Fprintf(&sb, "Message-ID: %s\r\n", newMessageID(fromAddr))
+	sb.WriteString("MIME-Version: 1.0\r\n")
+	fmt.Fprintf(&sb, "Content-Type: multipart/alternative; boundary=%q\r\n\r\n", boundary)
+
+	fmt.Fprintf(&sb, "--%s\r\n", boundary)
+	sb.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
+	sb.WriteString("Content-Transfer-Encoding: quoted-printable\r\n\r\n")
+	if err := writeQuotedPrintable(&sb, text); err != nil {
+		return nil, err
+	}
+	sb.WriteString("\r\n")
+
+	fmt.Fprintf(&sb, "--%s\r\n", boundary)
+	sb.WriteString("Content-Type: text/html; charset=UTF-8\r\n")
+	sb.WriteString("Content-Transfer-Encoding: quoted-printable\r\n\r\n")
+	if err := writeQuotedPrintable(&sb, htmlBody); err != nil {
+		return nil, err
+	}
+	sb.WriteString("\r\n")
+
+	fmt.Fprintf(&sb, "--%s--\r\n", boundary)
+	return sb.Bytes(), nil
+}
+
+// writeQuotedPrintable QP-encodes s into w. The encoder wraps lines with soft
+// breaks (=CRLF) at 76 columns, keeping every line well under the SMTP limit.
+func writeQuotedPrintable(w io.Writer, s string) error {
+	qp := quotedprintable.NewWriter(w)
+	if _, err := qp.Write([]byte(s)); err != nil {
+		return err
+	}
+	return qp.Close()
+}
+
+// randomBoundary mints a MIME multipart boundary unlikely to collide with any
+// byte sequence in the parts (128 random bits behind a fixed prefix).
+func randomBoundary() (string, error) {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return "dzf_" + hex.EncodeToString(b[:]), nil
 }
 
 // mailerMessage assembles a plain-text RFC 822 message. fromHeader is the

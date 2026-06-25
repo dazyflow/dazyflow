@@ -182,9 +182,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Show a plain-language message rather than the raw backend
           // "auth: invalid credential" string — most users hitting this
           // are non-technical and just need to know to sign in again.
-          // Other failures (network, 5xx) keep their original message.
+          // Other failures (network, 5xx) go through explainApiError so the
+          // user never sees a raw "Failed to fetch" / Go error string here
+          // either — this is the very first screen they hit.
           const expired = e instanceof APIError && e.status === 401;
-          setError(expired ? i18n.t("signIn.sessionExpired") : (e as Error).message);
+          setError(expired ? i18n.t("signIn.sessionExpired") : explainApiError(e, i18n.t));
           setMe(null);
           localStorage.removeItem(STORAGE_KEY);
           setToken(null);

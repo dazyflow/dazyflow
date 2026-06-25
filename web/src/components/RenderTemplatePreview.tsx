@@ -177,9 +177,12 @@ export function RenderTemplatePreview({
           setServerErr(r.error ?? null);
           setHtml(r.error ? "" : (r.html ?? ""));
         })
-        .catch((e: Error) => {
+        .catch((e: unknown) => {
           if (id !== seq.current) return;
-          setServerErr(e.message);
+          // r.error above is the template engine's own message (a syntax hint
+          // the author needs, kept raw). This catch is the preview REQUEST
+          // failing — network/5xx — so show plain guidance, not a Go string.
+          setServerErr(explainApiError(e, t));
         })
         .finally(() => {
           if (id === seq.current) setBusy(false);

@@ -37,7 +37,10 @@ export function SignIn() {
   const [recoveryCode, setRecoveryCode] = useState("");
   const [useRecovery, setUseRecovery] = useState(false);
   const [googleEnabled, setGoogleEnabled] = useState(false);
-  const [signupEnabled, setSignupEnabled] = useState(false);
+  // null = still probing; true/false = the deployment's answer. Tri-state so
+  // we can show an explicit "invitation only" note when signup is off without
+  // flashing it during the probe on a signup-enabled deployment.
+  const [signupEnabled, setSignupEnabled] = useState<boolean | null>(null);
   // The org whose SSO we offer. Prefer an explicit ?org=, otherwise fall
   // back to the org encoded in the host on a wildcard-subdomain deploy
   // (e.g. acme.dazyflow.app → "acme"), resolved once the public auth
@@ -331,7 +334,7 @@ export function SignIn() {
             {t("signIn.forgotPassword")}
           </Link>
         </div>
-        {signupEnabled && (
+        {signupEnabled === true && (
           <div className="signin-alt">
             {t("signIn.newHere")}{" "}
             <Link
@@ -345,6 +348,12 @@ export function SignIn() {
               {t("signIn.createAccount")}
             </Link>
           </div>
+        )}
+        {/* Invite-only deployment: say so, rather than silently omitting the
+            link — otherwise a user told to "sign up" sees no way to and
+            assumes the page is broken. */}
+        {signupEnabled === false && (
+          <div className="signin-alt">{t("signIn.inviteOnly")}</div>
         )}
       </form>
     </div>

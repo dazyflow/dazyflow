@@ -14,6 +14,7 @@ import (
 
 	"git.sr.ht/~klahr/dazyflow/auth"
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/internal/emailtheme"
 )
 
 // Email verification. Active only on deployments with a transactional
@@ -62,12 +63,25 @@ func (h *HTTPGateway) sendVerificationEmail(r *http.Request, user auth.User) boo
 	// Keep this strictly about confirming the address — the separate
 	// welcome email (welcome_email.go) does the greeting. Leading both
 	// with "Welcome to Dazyflow" made the pair read as one mail sent twice.
+	expFmt := exp.Format("2 January 2006")
 	body := fmt.Sprintf(
 		"Confirm your email address to finish setting up your Dazyflow account.\n\n"+
 			"Verify this address:\n%s\n\n"+
 			"The link expires %s. If you didn't create this account, ignore this email.",
-		link, exp.Format("2006-01-02"))
-	if err := h.svc.Mailer.Send(r.Context(), user.Email, "Confirm your email", body); err != nil {
+		link, expFmt)
+	content := emailtheme.Content{
+		Subject:   "Confirm your email",
+		Preheader: "Confirm your address to finish setting up your account.",
+		Eyebrow:   "Confirm your email",
+		Heading:   "One quick step to finish",
+		Intro:     []string{"Confirm your email address to finish setting up your Dazyflow account."},
+		Button:    &emailtheme.Button{Label: "Verify email address", URL: link},
+		Outro: []string{fmt.Sprintf(
+			"This link expires %s. If you didn't create a Dazyflow account, you can ignore this email.",
+			expFmt)},
+		LogoURL: emailLogoURL(h.svc.PublicBaseURL),
+	}
+	if err := h.svc.Mailer.SendThemed(r.Context(), user.Email, body, content); err != nil {
 		h.logger.Printf("verification email for %s: send: %v", user.Email, err)
 		return false
 	}

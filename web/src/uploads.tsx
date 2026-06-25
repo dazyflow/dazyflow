@@ -9,8 +9,10 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertCircle, Check, Upload as UploadIcon, X } from "lucide-react";
-import { api, APIError } from "./api";
+import { api } from "./api";
 import { Button } from "./components/Button";
+import i18n from "./i18n";
+import { explainApiError } from "./lib/explainApiError";
 
 // Uploads lifts file-upload state above the router so an upload keeps
 // running — and keeps showing progress — while the user navigates between
@@ -115,9 +117,14 @@ export function UploadsProvider({ children }: { children: ReactNode }) {
           update(next.id, { status: "canceled" });
           window.setTimeout(() => dismiss(next.id), 2500);
         } else {
+          // Run through explainApiError so a failed upload shows plain
+          // guidance ("the file is too large", "your session expired")
+          // instead of a raw Go/HTTP string. The pump callback has no React
+          // `t` in scope, so use the i18n singleton's `t` (same instance the
+          // UI renders with, so it tracks the active language).
           update(next.id, {
             status: "error",
-            error: e instanceof APIError ? e.message : String((e as Error)?.message ?? e),
+            error: explainApiError(e, i18n.t),
           });
         }
       })
