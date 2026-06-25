@@ -135,7 +135,17 @@ export function AdminPlatformUserDetail() {
               {memberships.length > 0 && (
                 <>
                   <dt>{t("admin.platformUserDetail.memberOf")}</dt>
-                  <dd>{memberships.map((m) => <code key={m} style={{ marginRight: 6 }}>{m}</code>)}</dd>
+                  <dd>
+                    {memberships.map((m) => (
+                      <Link
+                        key={m}
+                        to={`/admin/platform/orgs/${encodeURIComponent(m)}`}
+                        style={{ marginRight: 8 }}
+                      >
+                        <code>{m}</code>
+                      </Link>
+                    ))}
+                  </dd>
                 </>
               )}
               {suspended && user.suspend_reason && (
