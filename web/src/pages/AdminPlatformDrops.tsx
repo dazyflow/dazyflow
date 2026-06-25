@@ -6,6 +6,7 @@ import { api, type PlatformDrop } from "../api";
 import { explainApiError } from "../lib/explainApiError";
 import { Button } from "../components/Button";
 import { ConfirmModal } from "../components/ConfirmModal";
+import { DropGlyph } from "../components/PlatformAvatar";
 
 // AdminPlatformDrops is the platform-operator killswitch for individual
 // drops. A drop switched off here is refused by the engine on every run
@@ -125,30 +126,38 @@ export function AdminPlatformDrops() {
       ) : (
         <div className="user-list">
           {filtered.map((d) => (
-            <div className="user-card" key={d.id}>
-              <div style={{ minWidth: 0 }}>
-                <div className="subject">
-                  {d.label || d.id}
-                  {d.globally_disabled && (
-                    <span
-                      className="count-pill"
-                      style={{ marginLeft: 8, color: "var(--danger)" }}
-                    >
-                      {t("admin.platformDrops.off")}
-                    </span>
-                  )}
-                  {(d.disabled_tenants?.length ?? 0) > 0 && (
-                    <span className="count-pill" style={{ marginLeft: 8 }}>
-                      {t("admin.platformDrops.perOrgCount", {
-                        count: d.disabled_tenants?.length ?? 0,
-                      })}
-                    </span>
-                  )}
-                </div>
-                <div className="meta">
-                  <code>{d.id}</code>
-                  {d.integration ? ` · ${d.integration}` : ""}
-                  {d.globally_disabled && d.reason ? ` · ${d.reason}` : ""}
+            <div className={"user-card" + (d.globally_disabled ? " pa-drop-off" : "")} key={d.id}>
+              <div className="pa-row-main">
+                <DropGlyph
+                  icon={d.icon}
+                  category={d.category}
+                  color={d.color}
+                  brandLogo={d.brand_logo}
+                />
+                <div style={{ minWidth: 0 }}>
+                  <div className="subject">
+                    {d.label || d.id}
+                    {d.globally_disabled && (
+                      <span
+                        className="count-pill"
+                        style={{ marginLeft: 8, color: "var(--danger)" }}
+                      >
+                        {t("admin.platformDrops.off")}
+                      </span>
+                    )}
+                    {(d.disabled_tenants?.length ?? 0) > 0 && (
+                      <span className="count-pill" style={{ marginLeft: 8 }}>
+                        {t("admin.platformDrops.perOrgCount", {
+                          count: d.disabled_tenants?.length ?? 0,
+                        })}
+                      </span>
+                    )}
+                  </div>
+                  <div className="meta">
+                    <code>{d.id}</code>
+                    {d.integration ? ` · ${d.integration}` : ""}
+                    {d.globally_disabled && d.reason ? ` · ${d.reason}` : ""}
+                  </div>
                 </div>
               </div>
               <div className="user-card-actions">

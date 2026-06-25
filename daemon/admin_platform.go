@@ -56,6 +56,12 @@ type platformDropDTO struct {
 	ID          string `json:"id"`
 	Label       string `json:"label"`
 	Integration string `json:"integration,omitempty"`
+	// Icon / Category / Color / BrandLogo mirror the manifest so the page
+	// can render the exact same glyph treatment as the build palette.
+	Icon      string `json:"icon,omitempty"`
+	Category  string `json:"category,omitempty"`
+	Color     string `json:"color,omitempty"`
+	BrandLogo string `json:"brand_logo,omitempty"`
 	// GloballyDisabled is set when a switch with empty tenant exists.
 	GloballyDisabled bool `json:"globally_disabled"`
 	// DisabledTenants lists the tenants this drop is switched off for
@@ -583,6 +589,10 @@ func (h *HTTPGateway) platformListDrops(rw http.ResponseWriter, r *http.Request,
 			ID:               id,
 			Label:            m.Label,
 			Integration:      m.Integration,
+			Icon:             m.Icon,
+			Category:         m.Category,
+			Color:            m.Color,
+			BrandLogo:        m.BrandLogo,
 			GloballyDisabled: isGlobal,
 			DisabledTenants:  perTenant[id],
 			Reason:           reason,

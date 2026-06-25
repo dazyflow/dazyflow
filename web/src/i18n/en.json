@@ -1083,7 +1083,12 @@
       "banDomain": "Block the entire email domain, not just this address",
       "deleteTitle": "Delete {{email}}?",
       "deleteWarning": "Permanently erases the account and, if it's a personal org with no other members, all of its data. This can't be undone.",
-      "reasonPlaceholder": "Reason (recorded in the audit log)"
+      "reasonPlaceholder": "Reason (recorded in the audit log)",
+      "actionsHead": "Actions",
+      "suspendDesc": "Sign the user out and block sign-in and API keys until reversed. Data is kept.",
+      "unsuspendDesc": "Restore the account's access.",
+      "banDesc": "Suspend and block this email from registering again.",
+      "deleteDesc": "Permanently erase the account. This can't be undone."
     },
     "platformOrgs": {
       "title": "Organizations",
@@ -1115,7 +1120,12 @@
       "deleteWarning": "Permanently erases the org and all its data (flows, runs, secrets). Member accounts survive — they may belong to other orgs. This can't be undone.",
       "deleteConfirmPlaceholder": "Type {{tenant}} to confirm",
       "passwordPlaceholder": "Your password",
-      "reasonPlaceholder": "Reason (recorded in the audit log)"
+      "reasonPlaceholder": "Reason (recorded in the audit log)",
+      "actionsHead": "Actions",
+      "suspendDesc": "Halt all of the org's flows and lock out its members. Data is kept.",
+      "unsuspendDesc": "Restore the org's access and let its flows run again.",
+      "banDesc": "Suspend and block every current member's email from registering again.",
+      "deleteDesc": "Permanently erase the org and all its data. This can't be undone."
     },
     "cardPlatformUsersTitle": "Users",
     "cardPlatformUsersDesc": "Suspend, ban, or delete any account across the platform.",

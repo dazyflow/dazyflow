@@ -6888,6 +6888,15 @@ button.warning:hover:not(:disabled) {
   line-height: 1;
   letter-spacing: 0.01em;
 }
+/* Tile for brand-logo / branded drop glyphs: a neutral surface so the
+   vendor mark sits on its own colours, not a gradient. */
+.pa-drop-glyph-plain {
+  background: var(--surface-2, var(--surface));
+  border: 1px solid var(--border);
+}
+.pa-drop-glyph-plain img {
+  object-fit: contain;
+}
 /* Left side of a list row: avatar + the name/meta text block. */
 .pa-row-main {
   display: flex;
@@ -6915,6 +6924,73 @@ a.pa-card:hover {
 .pa-subtext {
   color: var(--muted);
   font-size: 0.85em;
+}
+
+/* A globally-disabled drop row reads as inactive: dim the glyph + text so
+   the "Off" pill and the live rows stand apart at a glance. */
+.pa-drop-off .pa-avatar,
+.pa-drop-off .subject {
+  opacity: 0.55;
+}
+
+/* Actions section on the user/org detail pages — a framed list where each
+   moderation action is its own row (icon + title + description on the
+   left, the button on the right), instead of a cramped strip of buttons.
+   Modelled on the GitHub-style "danger zone". */
+.pa-actions {
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 10px);
+  overflow: hidden;
+}
+.pa-actions-head {
+  padding: var(--space-2) var(--space-3);
+  font-size: 0.8em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2, var(--surface));
+}
+.pa-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+}
+.pa-action-row + .pa-action-row {
+  border-top: 1px solid var(--border);
+}
+.pa-action-info {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2h, var(--space-2));
+  min-width: 0;
+}
+.pa-action-info svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--muted);
+}
+.pa-action-text {
+  min-width: 0;
+}
+.pa-action-title {
+  font-weight: 600;
+}
+.pa-action-desc {
+  color: var(--muted);
+  font-size: 0.88em;
+  margin-top: 1px;
+}
+.pa-action-row .btn,
+.pa-action-row button {
+  flex: 0 0 auto;
+}
+/* The destructive rows (ban/delete) get a danger-tinted accent bar. */
+.pa-action-row.is-danger .pa-action-info svg {
+  color: var(--danger);
 }
 .count-pill {
   font-size: var(--text-xs);

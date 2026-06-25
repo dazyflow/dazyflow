@@ -1,4 +1,5 @@
 import { isImageIcon } from "../lib/iconImage";
+import { iconFor, dropColor, isBrandedIcon } from "../icons";
 
 // PlatformAvatar renders the identity tiles used across the platform-admin
 // moderation pages: a rounded-square OrgAvatar (uploaded logo or a tinted
@@ -68,6 +69,58 @@ export function OrgAvatar({
       aria-hidden="true"
     >
       {monogram(name || seed)}
+    </span>
+  );
+}
+
+// DropGlyph renders a drop's icon exactly as the build palette does: the
+// vendor brand logo when present, a branded lucide glyph, or a lucide
+// glyph on a gradient tile tinted by the drop's category/colour.
+export function DropGlyph({
+  icon,
+  category,
+  color,
+  brandLogo,
+  size = 36,
+}: {
+  icon?: string;
+  category?: string;
+  color?: string;
+  brandLogo?: string;
+  size?: number;
+}) {
+  const Icon = iconFor(icon, category);
+  const tint = dropColor(category, color);
+  if (brandLogo) {
+    return (
+      <span
+        className="pa-avatar pa-avatar-org pa-drop-glyph-plain"
+        style={{ width: size, height: size }}
+      >
+        <img src={brandLogo} alt="" width={size * 0.66} height={size * 0.66} draggable={false} />
+      </span>
+    );
+  }
+  if (isBrandedIcon(icon)) {
+    return (
+      <span
+        className="pa-avatar pa-avatar-org pa-drop-glyph-plain"
+        style={{ width: size, height: size }}
+      >
+        <Icon size={size * 0.55} strokeWidth={2.2} />
+      </span>
+    );
+  }
+  return (
+    <span
+      className="pa-avatar pa-avatar-org"
+      style={{
+        width: size,
+        height: size,
+        background: `linear-gradient(135deg, ${tint}, color-mix(in srgb, ${tint} 70%, #fff))`,
+      }}
+    >
+      <Icon size={size * 0.5} color="#140d30" strokeWidth={2.2} />
     </span>
   );
 }

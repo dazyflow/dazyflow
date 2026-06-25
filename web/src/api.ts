@@ -1954,6 +1954,10 @@ export type PlatformDrop = {
   id: string;
   label: string;
   integration?: string;
+  icon?: string;
+  category?: string;
+  color?: string;
+  brand_logo?: string;
   globally_disabled: boolean;
   disabled_tenants?: string[];
   reason?: string;

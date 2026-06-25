@@ -8,6 +8,7 @@ import { explainApiError } from "../lib/explainApiError";
 import { Button } from "../components/Button";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { UserAvatar } from "../components/PlatformAvatar";
+import { ActionsCard, ActionRow } from "../components/PlatformActions";
 import { formatDate } from "../lib/datetime";
 
 // AdminPlatformUserDetail is one account's platform-admin moderation
@@ -151,27 +152,49 @@ export function AdminPlatformUserDetail() {
               {t("admin.platformUserDetail.adminProtected")}
             </div>
           ) : (
-            <div className="user-card-actions" style={{ gap: "var(--space-2)", flexWrap: "wrap" }}>
+            <ActionsCard title={t("admin.platformUserDetail.actionsHead")}>
               {suspended ? (
-                <Button variant="primary" disabled={busy} onClick={() => void run(() => api.platformUnsuspendUser(token!, email))}>
-                  <UserCheck size={14} style={{ marginRight: 4 }} />
-                  {t("admin.platformUserDetail.unsuspend")}
-                </Button>
+                <ActionRow
+                  icon={<UserCheck size={17} />}
+                  title={t("admin.platformUserDetail.unsuspend")}
+                  description={t("admin.platformUserDetail.unsuspendDesc")}
+                >
+                  <Button variant="primary" disabled={busy} onClick={() => void run(() => api.platformUnsuspendUser(token!, email))}>
+                    {t("admin.platformUserDetail.unsuspend")}
+                  </Button>
+                </ActionRow>
               ) : (
-                <Button variant="warning" disabled={busy} onClick={() => setDialog("suspend")}>
-                  <ShieldOff size={14} style={{ marginRight: 4 }} />
-                  {t("admin.platformUserDetail.suspend")}
-                </Button>
+                <ActionRow
+                  icon={<ShieldOff size={17} />}
+                  title={t("admin.platformUserDetail.suspend")}
+                  description={t("admin.platformUserDetail.suspendDesc")}
+                >
+                  <Button variant="warning" disabled={busy} onClick={() => setDialog("suspend")}>
+                    {t("admin.platformUserDetail.suspend")}
+                  </Button>
+                </ActionRow>
               )}
-              <Button variant="danger" disabled={busy} onClick={() => setDialog("ban")}>
-                <Ban size={14} style={{ marginRight: 4 }} />
-                {t("admin.platformUserDetail.ban")}
-              </Button>
-              <Button variant="danger" disabled={busy} onClick={() => setDialog("delete")}>
-                <Trash2 size={14} style={{ marginRight: 4 }} />
-                {t("admin.platformUserDetail.delete")}
-              </Button>
-            </div>
+              <ActionRow
+                danger
+                icon={<Ban size={17} />}
+                title={t("admin.platformUserDetail.ban")}
+                description={t("admin.platformUserDetail.banDesc")}
+              >
+                <Button variant="danger" disabled={busy} onClick={() => setDialog("ban")}>
+                  {t("admin.platformUserDetail.ban")}
+                </Button>
+              </ActionRow>
+              <ActionRow
+                danger
+                icon={<Trash2 size={17} />}
+                title={t("admin.platformUserDetail.delete")}
+                description={t("admin.platformUserDetail.deleteDesc")}
+              >
+                <Button variant="danger" disabled={busy} onClick={() => setDialog("delete")}>
+                  {t("admin.platformUserDetail.delete")}
+                </Button>
+              </ActionRow>
+            </ActionsCard>
           )}
         </>
       )}

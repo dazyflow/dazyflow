@@ -1081,7 +1081,12 @@
       "banDomain": "Blockera hela e-postdomänen, inte bara den här adressen",
       "deleteTitle": "Radera {{email}}?",
       "deleteWarning": "Raderar permanent kontot och, om det är en personlig org utan andra medlemmar, all dess data. Detta kan inte ångras.",
-      "reasonPlaceholder": "Orsak (loggas i granskningsloggen)"
+      "reasonPlaceholder": "Orsak (loggas i granskningsloggen)",
+      "actionsHead": "Åtgärder",
+      "suspendDesc": "Logga ut användaren och blockera inloggning och API-nycklar tills det återställs. Datan behålls.",
+      "unsuspendDesc": "Återställ kontots åtkomst.",
+      "banDesc": "Stäng av och blockera denna e-post från att registrera sig igen.",
+      "deleteDesc": "Radera kontot permanent. Detta kan inte ångras."
     },
     "platformOrgs": {
       "title": "Organisationer",
@@ -1113,7 +1118,12 @@
       "deleteWarning": "Raderar permanent organisationen och all dess data (flöden, körningar, hemligheter). Medlemskonton överlever — de kan tillhöra andra organisationer. Detta kan inte ångras.",
       "deleteConfirmPlaceholder": "Skriv {{tenant}} för att bekräfta",
       "passwordPlaceholder": "Ditt lösenord",
-      "reasonPlaceholder": "Orsak (loggas i granskningsloggen)"
+      "reasonPlaceholder": "Orsak (loggas i granskningsloggen)",
+      "actionsHead": "Åtgärder",
+      "suspendDesc": "Stoppa alla organisationens flöden och lås ute dess medlemmar. Datan behålls.",
+      "unsuspendDesc": "Återställ organisationens åtkomst och låt dess flöden köra igen.",
+      "banDesc": "Stäng av och blockera alla nuvarande medlemmars e-post från att registrera sig igen.",
+      "deleteDesc": "Radera organisationen och all dess data permanent. Detta kan inte ångras."
     },
     "cardPlatformUsersTitle": "Användare",
     "cardPlatformUsersDesc": "Stäng av, bannlys eller radera valfritt konto i plattformen.",
