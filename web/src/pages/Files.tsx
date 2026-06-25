@@ -15,6 +15,7 @@ import { api, APIError } from "../api";
 import { useAuth } from "../auth";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { Button } from "../components/Button";
+import { Switch } from "../components/Switch";
 import { PromptModal } from "../components/PromptModal";
 import { MoveModal } from "../components/MoveModal";
 import { useUploads } from "../uploads";
@@ -42,6 +43,18 @@ function joinPath(dir: string, name: string): string {
   return dir ? `${dir}/${name}` : name;
 }
 
+// isHidden marks dotfiles/dot-directories — including the workspace's
+// internal .dazyflow-store (the drops/results DB) — which clutter the
+// listing and are rarely edited by hand. They stay in the response but are
+// filtered out of the view unless the user opts in via the toggle.
+function isHidden(entry: FileEntry): boolean {
+  return entry.name.startsWith(".");
+}
+
+// Remember the show-hidden choice across navigation and reloads, like the
+// theme/language settings — it's a per-browser view preference, not data.
+const SHOW_HIDDEN_KEY = "dz.files.showHidden";
+
 export function Files() {
   const { t } = useTranslation();
   const { token, activeTenant, activeWorkspace, hasPerm } = useAuth();
@@ -55,6 +68,16 @@ export function Files() {
   const [usage, setUsage] = useState<{ used: number; limit: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+
+  // showHidden reveals dotfiles (off by default so .dazyflow-store et al.
+  // don't clutter the listing). Persisted per-browser.
+  const [showHidden, setShowHidden] = useState(
+    () => localStorage.getItem(SHOW_HIDDEN_KEY) === "1",
+  );
+  const toggleHidden = (v: boolean) => {
+    setShowHidden(v);
+    localStorage.setItem(SHOW_HIDDEN_KEY, v ? "1" : "0");
+  };
 
   // Pending modal actions (themed replacements for prompt/confirm).
   const [creatingFolder, setCreatingFolder] = useState(false);
@@ -269,6 +292,12 @@ export function Files() {
   // Breadcrumb segments from cwd; clicking one navigates up to it.
   const segments = cwd ? cwd.split("/") : [];
 
+  // The rows actually shown: dotfiles are filtered out unless showHidden is
+  // on. hiddenCount drives the "only hidden files here" hint so an
+  // all-dotfile folder doesn't look misleadingly empty. null while loading.
+  const visible = entries?.filter((e) => showHidden || !isHidden(e)) ?? null;
+  const hiddenCount = entries ? entries.length - (visible?.length ?? 0) : 0;
+
   const quotaPct =
     usage && usage.limit > 0 ? Math.min(100, (usage.used / usage.limit) * 100) : 0;
 
@@ -372,6 +401,12 @@ export function Files() {
 
         {canWrite && (
           <div className="files-actions">
+            <Switch
+              checked={showHidden}
+              onChange={toggleHidden}
+              label={t("files.showHidden")}
+              compact
+            />
             <Button
               variant="ghost"
               onClick={() => setCreatingFolder(true)}
@@ -411,10 +446,12 @@ export function Files() {
       // only onto subfolder rows. Subfolder rows stopPropagation, so they
       // win when hovered; the surrounding area resolves to the current dir.
       <div className="card files-list" {...dropProps(cwd)}>
-        {entries === null ? (
+        {visible === null ? (
           <div className="files-empty">{t("files.loading")}</div>
-        ) : entries.length === 0 ? (
-          <div className="files-empty">{t("files.empty")}</div>
+        ) : visible.length === 0 ? (
+          <div className="files-empty">
+            {hiddenCount > 0 ? t("files.emptyHiddenOnly") : t("files.empty")}
+          </div>
         ) : (
           <table className="files-table">
             <thead>
@@ -425,7 +462,7 @@ export function Files() {
               </tr>
             </thead>
             <tbody>
-              {entries.map((entry) => (
+              {visible.map((entry) => (
                 <tr
                   key={entry.path}
                   draggable={canWrite}

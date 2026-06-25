@@ -178,8 +178,10 @@
     "colName": "Name",
     "colSize": "Size",
     "colActions": "Actions",
+    "showHidden": "Show hidden files",
     "loading": "Loading…",
     "empty": "This folder is empty.",
+    "emptyHiddenOnly": "Only hidden files here. Turn on \"Show hidden files\" to see them.",
     "quota": "{{used}} of {{limit}} used",
     "quotaUnlimited": "Storage used: {{used}}"
   },

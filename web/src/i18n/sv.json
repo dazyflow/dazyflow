@@ -179,8 +179,10 @@
     "colName": "Namn",
     "colSize": "Storlek",
     "colActions": "Åtgärder",
+    "showHidden": "Visa dolda filer",
     "loading": "Laddar…",
     "empty": "Mappen är tom.",
+    "emptyHiddenOnly": "Bara dolda filer här. Slå på \"Visa dolda filer\" för att se dem.",
     "quota": "{{used}} av {{limit}} använt",
     "quotaUnlimited": "Lagring använd: {{used}}"
   },
