@@ -386,6 +386,11 @@ func (h *HTTPGateway) googleSignInCallback(rw http.ResponseWriter, r *http.Reque
 	sessUser.Tenant = activeTenant
 	sessUser.Workspace = activeWorkspace
 	sessUser.Roles = activeRoles
+	// Same moderation lockout as the password/TOTP legs.
+	if _, locked := h.signInLockout(r.Context(), sessUser); locked {
+		h.signInError(rw, r, st, "suspended", http.StatusForbidden, "your account or organization has been suspended")
+		return
+	}
 	sess, token, err := auth.IssueSession(r.Context(), h.Sessions, h.elevatePlatformAdmin(r.Context(), sessUser), h.sessionTTL())
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("issue session: %v", err))

@@ -56,6 +56,12 @@ var ErrGraphTooLarge = errors.New("graph exceeds node limit")
 // generic bad-request error.
 var ErrPlanLimit = errors.New("plan limit reached")
 
+// ErrOrgSuspended is returned when a run is refused because a platform
+// admin has suspended the org. Callers match it with errors.Is to
+// surface a 403 lockout rather than a generic error; the scheduler logs
+// and skips it.
+var ErrOrgSuspended = errors.New("organization suspended")
+
 // QuotaReserver is an optional extension of QuotaProvider for providers
 // that can atomically reserve bytes against a tenant's budget. It closes
 // the TOCTOU race the bare Used() snapshot can't: two concurrent writes

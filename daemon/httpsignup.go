@@ -111,6 +111,18 @@ func (h *HTTPGateway) signUp(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Ban enforcement: a platform admin may have blocklisted this email
+	// (or its whole domain) so a banned operator can't just re-register a
+	// fresh account. Checked after the cheap validations. The message is
+	// deliberately generic — it doesn't confirm a ban, only that this
+	// address is unusable, which is all a legitimate user needs.
+	if h.Blocklist != nil {
+		if blocked, _, err := h.Blocklist.IsBlocked(r.Context(), email); err == nil && blocked {
+			writeJSONError(rw, http.StatusForbidden, "this email address can't be used to sign up")
+			return
+		}
+	}
+
 	tenant, err := mintTenantID()
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("mint tenant: %v", err))

@@ -54,30 +54,58 @@ type NodeResolver struct {
 	Native *Registry
 	Remote *RemoteCatalog
 	MCP    *mcp.Catalog
+
+	// DropGate, when set, is the platform-admin killswitch. It's consulted
+	// after a transport is found but before it's returned, receiving the
+	// resolved drop id and the executing tenant (from core.TenantFromContext,
+	// set by the engine before Resolve). A non-nil error refuses the drop —
+	// the node fails to resolve and never executes. A nil Gate (the default)
+	// means no gating. Kept as a hook rather than a store dependency so the
+	// engine package doesn't import the daemon's persistence layer.
+	DropGate func(ctx context.Context, dropID, tenant string) error
 }
 
-func (r *NodeResolver) Resolve(_ context.Context, moduleID string) (core.Transport, error) {
+func (r *NodeResolver) Resolve(ctx context.Context, moduleID string) (core.Transport, error) {
 	id, _ := splitModuleVersion(moduleID)
 
 	// Native / local / remote / MCP drops are version-blind: they live in the
 	// bare-id world, so resolve them by id and ignore any pin (a built-in's
 	// behavior doesn't fork per version).
+	t, ok := r.lookup(id)
+	if !ok {
+		return nil, fmt.Errorf("no transport registered for module %q", moduleID)
+	}
+	// Killswitch: a platform admin may have disabled this drop globally or
+	// for the executing tenant. Check after lookup so an unknown id still
+	// reports "no transport" rather than a confusing "disabled".
+	if r.DropGate != nil {
+		tenant, _ := core.TenantFromContext(ctx)
+		if err := r.DropGate(ctx, id, tenant); err != nil {
+			return nil, err
+		}
+	}
+	return t, nil
+}
+
+// lookup returns the first transport for id across the catalogs, in
+// priority order (native → remote → MCP).
+func (r *NodeResolver) lookup(id string) (core.Transport, bool) {
 	if r.Native != nil {
 		if t, ok := r.Native.Get(id); ok {
-			return t, nil
+			return t, true
 		}
 	}
 	if r.Remote != nil {
 		if t, ok := r.Remote.Get(id); ok {
-			return t, nil
+			return t, true
 		}
 	}
 	if r.MCP != nil {
 		if t, ok := r.MCP.Get(id); ok {
-			return t, nil
+			return t, true
 		}
 	}
-	return nil, fmt.Errorf("no transport registered for module %q", moduleID)
+	return nil, false
 }
 
 // ManifestsForTenant gathers every manifest visible to the tenant, for

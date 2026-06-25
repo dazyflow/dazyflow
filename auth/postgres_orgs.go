@@ -58,11 +58,18 @@ CREATE TABLE IF NOT EXISTS org_profiles (
     display_name TEXT NOT NULL,
     icon         TEXT NOT NULL DEFAULT '',
     subdomain    TEXT NOT NULL DEFAULT '',
-    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- Platform-admin moderation, mirroring users.status.
+    status         TEXT NOT NULL DEFAULT 'active',
+    suspended_at   TIMESTAMPTZ,
+    suspend_reason TEXT NOT NULL DEFAULT ''
 );
 -- Backfill columns for databases created before they existed.
 ALTER TABLE org_profiles ADD COLUMN IF NOT EXISTS icon TEXT NOT NULL DEFAULT '';
 ALTER TABLE org_profiles ADD COLUMN IF NOT EXISTS subdomain TEXT NOT NULL DEFAULT '';
+ALTER TABLE org_profiles ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
+ALTER TABLE org_profiles ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMPTZ;
+ALTER TABLE org_profiles ADD COLUMN IF NOT EXISTS suspend_reason TEXT NOT NULL DEFAULT '';
 -- One org per subdomain: a partial unique index on the lowercased label,
 -- skipping the empty (unclaimed) default so any number of orgs can have no
 -- subdomain. lower() makes the uniqueness case-insensitive.
@@ -401,11 +408,25 @@ func NewPgOrgProfileStore(ctx context.Context, pool *pgxpool.Pool) (*PgOrgProfil
 	return &PgOrgProfileStore{pool: pool}, nil
 }
 
-func (s *PgOrgProfileStore) GetOrgProfile(ctx context.Context, tenant string) (OrgProfile, error) {
-	row := s.pool.QueryRow(ctx,
-		`SELECT tenant, display_name, icon, subdomain, updated_at FROM org_profiles WHERE tenant=$1`, tenant)
+// orgProfileColumns is the org_profiles SELECT/Scan column list, shared
+// by every read path and (positionally) the PutOrgProfile INSERT so a new
+// column stays in lockstep across all of them. Mirrors userColumns.
+const orgProfileColumns = `tenant, display_name, icon, subdomain, updated_at,
+	status, suspended_at, suspend_reason`
+
+// scanOrgProfile scans one org_profiles row (in orgProfileColumns order).
+func scanOrgProfile(row rowScanner) (OrgProfile, error) {
 	var p OrgProfile
-	err := row.Scan(&p.Tenant, &p.DisplayName, &p.Icon, &p.Subdomain, &p.UpdatedAt)
+	if err := row.Scan(&p.Tenant, &p.DisplayName, &p.Icon, &p.Subdomain, &p.UpdatedAt,
+		&p.Status, &p.SuspendedAt, &p.SuspendReason); err != nil {
+		return OrgProfile{}, err
+	}
+	return p, nil
+}
+
+func (s *PgOrgProfileStore) GetOrgProfile(ctx context.Context, tenant string) (OrgProfile, error) {
+	p, err := scanOrgProfile(s.pool.QueryRow(ctx,
+		`SELECT `+orgProfileColumns+` FROM org_profiles WHERE tenant=$1`, tenant))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return OrgProfile{}, ErrUnknownOrgProfile
 	}
@@ -417,11 +438,8 @@ func (s *PgOrgProfileStore) GetOrgProfileBySubdomain(ctx context.Context, subdom
 	if subdomain == "" {
 		return OrgProfile{}, ErrUnknownOrgProfile
 	}
-	row := s.pool.QueryRow(ctx,
-		`SELECT tenant, display_name, icon, subdomain, updated_at
-         FROM org_profiles WHERE lower(subdomain)=$1`, subdomain)
-	var p OrgProfile
-	err := row.Scan(&p.Tenant, &p.DisplayName, &p.Icon, &p.Subdomain, &p.UpdatedAt)
+	p, err := scanOrgProfile(s.pool.QueryRow(ctx,
+		`SELECT `+orgProfileColumns+` FROM org_profiles WHERE lower(subdomain)=$1`, subdomain))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return OrgProfile{}, ErrUnknownOrgProfile
 	}
@@ -436,15 +454,23 @@ func (s *PgOrgProfileStore) PutOrgProfile(ctx context.Context, p OrgProfile) err
 	if updated.IsZero() {
 		updated = time.Now().UTC()
 	}
+	status := p.Status
+	if status == "" {
+		status = StatusActive
+	}
 	const q = `
-        INSERT INTO org_profiles (tenant, display_name, icon, subdomain, updated_at)
-        VALUES ($1,$2,$3,$4,$5)
+        INSERT INTO org_profiles (` + orgProfileColumns + `)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
         ON CONFLICT (tenant) DO UPDATE SET
-            display_name = EXCLUDED.display_name,
-            icon         = EXCLUDED.icon,
-            subdomain    = EXCLUDED.subdomain,
-            updated_at   = EXCLUDED.updated_at`
-	_, err := s.pool.Exec(ctx, q, p.Tenant, p.DisplayName, p.Icon, p.Subdomain, updated)
+            display_name   = EXCLUDED.display_name,
+            icon           = EXCLUDED.icon,
+            subdomain      = EXCLUDED.subdomain,
+            updated_at     = EXCLUDED.updated_at,
+            status         = EXCLUDED.status,
+            suspended_at   = EXCLUDED.suspended_at,
+            suspend_reason = EXCLUDED.suspend_reason`
+	_, err := s.pool.Exec(ctx, q, p.Tenant, p.DisplayName, p.Icon, p.Subdomain, updated,
+		status, p.SuspendedAt, p.SuspendReason)
 	// A unique-index violation means another org already claimed this
 	// subdomain — surface a typed error the handler maps to 409.
 	var pgErr *pgconn.PgError
@@ -459,20 +485,23 @@ func (s *PgOrgProfileStore) ListOrgProfiles(ctx context.Context, tenants []strin
 	if len(tenants) == 0 {
 		return out, nil
 	}
-	rows, err := s.pool.Query(ctx,
-		`SELECT tenant, display_name, icon, subdomain, updated_at FROM org_profiles WHERE tenant = ANY($1)`, tenants)
+	profiles, err := queryRows(ctx, s.pool, scanOrgProfile,
+		`SELECT `+orgProfileColumns+` FROM org_profiles WHERE tenant = ANY($1)`, tenants)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var p OrgProfile
-		if err := rows.Scan(&p.Tenant, &p.DisplayName, &p.Icon, &p.Subdomain, &p.UpdatedAt); err != nil {
-			return nil, err
-		}
+	for _, p := range profiles {
 		out[p.Tenant] = p
 	}
-	return out, rows.Err()
+	return out, nil
+}
+
+// ListAllOrgProfiles returns every org profile, newest-updated first —
+// the platform-admin org roster. Unlike ListOrgProfiles it isn't scoped
+// to a tenant set, so it's gated to platform admins at the handler.
+func (s *PgOrgProfileStore) ListAllOrgProfiles(ctx context.Context) ([]OrgProfile, error) {
+	return queryRows(ctx, s.pool, scanOrgProfile,
+		`SELECT `+orgProfileColumns+` FROM org_profiles ORDER BY updated_at DESC`)
 }
 
 // DeleteOrgProfile removes an org's display profile (org deletion).

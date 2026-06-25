@@ -260,6 +260,13 @@ func (h *HTTPGateway) totpVerify(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Lockout check, mirroring the password leg: a suspension that landed
+	// between the two sign-in steps must still bar the session.
+	if msg, locked := h.signInLockout(r.Context(), res.User); locked {
+		h.auditAuth(r.Context(), r, res.User.Tenant, res.User.Email, "auth.signin_suspended", "stage=mfa")
+		writeAPIError(rw, http.StatusForbidden, "suspended", msg)
+		return
+	}
 	ttl := h.SessionTTL
 	if ttl <= 0 {
 		ttl = 24 * time.Hour

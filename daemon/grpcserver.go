@@ -92,6 +92,11 @@ func authenticate(ctx context.Context, authn auth.Authenticator) (context.Contex
 	}
 	p, err := authn.Authenticate(ctx, token)
 	if err != nil {
+		// A suspended user/org has a valid credential but is locked out —
+		// PermissionDenied, not Unauthenticated.
+		if errors.Is(err, auth.ErrAccountSuspended) {
+			return ctx, status.Error(codes.PermissionDenied, "account suspended")
+		}
 		return ctx, status.Error(codes.Unauthenticated, err.Error())
 	}
 	return context.WithValue(ctx, principalKey, p), nil

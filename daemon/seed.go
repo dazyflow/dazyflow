@@ -109,6 +109,15 @@ func (s *Service) SubmitGraphWithSeed(
 	if err := s.checkRunQuota(ctx, g.Tenant); err != nil {
 		return "", err
 	}
+	// Platform-admin killswitch: a suspended org runs nothing. This is the
+	// authoritative halt — every run entry point (manual, scheduler,
+	// webhook/form trigger) funnels through here, including the inbound
+	// trigger paths that don't carry a user principal the auth gate could
+	// reject. Nested sub-graph runs bypass it for the same reason the plan
+	// gate does (the parent was already admitted).
+	if s.orgSuspended(ctx, g.Tenant) {
+		return "", core.ErrOrgSuspended
+	}
 	// Validate seed targets exist in the graph before any state writes.
 	for nodeID := range seeds {
 		if _, ok := g.Node(nodeID); !ok {

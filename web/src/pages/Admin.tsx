@@ -10,6 +10,7 @@ import {
   UserPlus,
   Lock,
   ServerCog,
+  PowerOff,
   CircleArrowUp,
   CheckCircle2,
   AlertTriangle,
@@ -119,6 +120,9 @@ export function Admin() {
           <div className="admin-grid">
             <AdminCard to="/admin/oauth" icon={<Plug size={18} />} title={t("admin.cardOAuthTitle")} desc={t("admin.cardOAuthDesc")} />
             <AdminCard to="/admin/platform" icon={<UserPlus size={18} />} title={t("admin.cardPlatformTitle")} desc={t("admin.cardPlatformDesc")} />
+            <AdminCard to="/admin/platform/users" icon={<Users size={18} />} title={t("admin.cardPlatformUsersTitle")} desc={t("admin.cardPlatformUsersDesc")} />
+            <AdminCard to="/admin/platform/orgs" icon={<Building2 size={18} />} title={t("admin.cardPlatformOrgsTitle")} desc={t("admin.cardPlatformOrgsDesc")} />
+            <AdminCard to="/admin/platform/drops" icon={<PowerOff size={18} />} title={t("admin.cardPlatformDropsTitle")} desc={t("admin.cardPlatformDropsDesc")} />
           </div>
 
           <h2 className="admin-group-label">{t("admin.groupSystem")}</h2>

@@ -192,6 +192,18 @@ type HTTPGateway struct {
 	// display name.
 	Profiles auth.OrgProfileStore
 
+	// Blocklist is the platform-admin ban list. The signup path checks it
+	// to refuse a banned email/domain re-registering, and the platform
+	// admin endpoints manage it. Nil = nothing is banned (and bans can't
+	// be created — dev deployments without the Postgres backend).
+	Blocklist auth.BlocklistStore
+
+	// DropSwitches is the platform-admin drop killswitch store. The
+	// platform admin endpoints list + toggle it here; the engine resolver
+	// (wired separately) is what actually blocks a disabled drop from
+	// running. Nil disables the management endpoints (501).
+	DropSwitches DropSwitchStore
+
 	// Webhook serves /trigger/ and /form/ on the main HTTP listener so
 	// a default HTTP-only deploy can fire webhook-triggered flows and
 	// serve hosted intake forms without a separate listener. The
@@ -626,6 +638,24 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/v1/admin/users/{email}", h.requireAuth(h.adminDeleteUserHandler))
 	mux.HandleFunc("GET /api/v1/admin/orgs/{tenant}/export", h.requireAuth(h.exportOrgHandler))
 	mux.HandleFunc("DELETE /api/v1/admin/orgs/{tenant}", h.requireAuth(h.adminDeleteOrgHandler))
+
+	// Platform-admin moderation surface (platform:admin only; see
+	// admin_platform.go). User/org suspend-ban-list, and the drop
+	// killswitch. Delete reuses the GDPR erase routes above.
+	mux.HandleFunc("GET /api/v1/admin/platform/users", h.requireAuth(h.platformListUsers))
+	mux.HandleFunc("GET /api/v1/admin/platform/users/{email}", h.requireAuth(h.platformGetUser))
+	mux.HandleFunc("POST /api/v1/admin/platform/users/{email}/suspend", h.requireAuth(h.platformSuspendUser))
+	mux.HandleFunc("POST /api/v1/admin/platform/users/{email}/unsuspend", h.requireAuth(h.platformUnsuspendUser))
+	mux.HandleFunc("POST /api/v1/admin/platform/users/{email}/ban", h.requireAuth(h.platformBanUser))
+	mux.HandleFunc("GET /api/v1/admin/platform/orgs", h.requireAuth(h.platformListOrgs))
+	mux.HandleFunc("GET /api/v1/admin/platform/orgs/{tenant}", h.requireAuth(h.platformGetOrg))
+	mux.HandleFunc("POST /api/v1/admin/platform/orgs/{tenant}/suspend", h.requireAuth(h.platformSuspendOrg))
+	mux.HandleFunc("POST /api/v1/admin/platform/orgs/{tenant}/unsuspend", h.requireAuth(h.platformUnsuspendOrg))
+	mux.HandleFunc("POST /api/v1/admin/platform/orgs/{tenant}/ban", h.requireAuth(h.platformBanOrg))
+	mux.HandleFunc("GET /api/v1/admin/platform/drops", h.requireAuth(h.platformListDrops))
+	mux.HandleFunc("POST /api/v1/admin/platform/drops/{id}/disable", h.requireAuth(h.platformDisableDrop))
+	mux.HandleFunc("POST /api/v1/admin/platform/drops/{id}/enable", h.requireAuth(h.platformEnableDrop))
+
 	mux.HandleFunc("GET /api/v1/invitations/{token}", h.viewInvitation)
 	mux.HandleFunc("POST /api/v1/invitations/{token}/accept", h.requireAuth(h.acceptInvitation))
 
@@ -893,6 +923,14 @@ func (h *HTTPGateway) requireAuth(next func(rw http.ResponseWriter, r *http.Requ
 		}
 		p, err := h.svc.Authenticate(r.Context(), token)
 		if err != nil {
+			// A valid credential behind a suspended user/org is a lockout,
+			// not an identity failure — answer 403 so the web client can
+			// show "your account is suspended" rather than bouncing to
+			// sign-in (where the credential would just be rejected again).
+			if errors.Is(err, auth.ErrAccountSuspended) {
+				writeJSONError(rw, http.StatusForbidden, "account suspended")
+				return
+			}
 			writeJSONError(rw, http.StatusUnauthorized, fmt.Sprintf("auth: %v", err))
 			return
 		}
@@ -1180,6 +1218,15 @@ func (h *HTTPGateway) signIn(rw http.ResponseWriter, r *http.Request) {
 		// deliberately hides.
 		h.auditAuth(r.Context(), r, "", strings.ToLower(strings.TrimSpace(body.Email)), "auth.signin_failed", "method=password")
 		writeJSONError(rw, http.StatusUnauthorized, "invalid email or password")
+		return
+	}
+	// Locked out? A suspended user — or a member of a suspended org — has a
+	// valid password but no access. Refuse at sign-in with a clear reason
+	// rather than issuing a session (or a TOTP challenge) the auth
+	// ModerationGate would just reject on the next request.
+	if msg, locked := h.signInLockout(r.Context(), user); locked {
+		h.auditAuth(r.Context(), r, user.Tenant, user.Email, "auth.signin_suspended", "method=password")
+		writeJSONError(rw, http.StatusForbidden, msg)
 		return
 	}
 	// Second factor: if this user has TOTP enabled (and the install has
@@ -2050,6 +2097,11 @@ func (h *HTTPGateway) runGraph(rw http.ResponseWriter, r *http.Request, p core.P
 		// upgrade prompt instead of a generic error toast.
 		if errors.Is(err, core.ErrPlanLimit) {
 			writeJSONError(rw, http.StatusPaymentRequired, err.Error())
+			return
+		}
+		// A suspended org is locked out — 403, not a generic 400.
+		if errors.Is(err, core.ErrOrgSuspended) {
+			writeJSONError(rw, http.StatusForbidden, err.Error())
 			return
 		}
 		writeJSONError(rw, http.StatusBadRequest, err.Error())

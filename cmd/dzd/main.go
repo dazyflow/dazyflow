@@ -230,6 +230,19 @@ func main() {
 	ks, users, sessions, jobs, pgPool := stores.keys, stores.users, stores.sessions, stores.jobs, stores.pool
 	defer pgPool.Close()
 
+	// Platform-admin moderation stores. dropSwitches is the drop killswitch
+	// the engine resolver consults on every node execution (global or
+	// per-org off); blocklist is the ban list the signup path checks to
+	// stop a banned email/domain from re-registering. Both Postgres-backed.
+	dropSwitches, err := daemon.NewPgDropSwitchStore(ctx, pgPool)
+	if err != nil {
+		log.Fatalf("postgres drop-switch store: %v", err)
+	}
+	blocklist, err := auth.NewPgBlocklistStore(ctx, pgPool)
+	if err != nil {
+		log.Fatalf("postgres blocklist store: %v", err)
+	}
+
 	// One-time migration: import a JSON user file into the Postgres user
 	// store, then exit. Idempotent (existing accounts skipped). Lets a dev
 	// deployment move to DAZYFLOW_POSTGRES_DSN without stranding accounts created
@@ -450,6 +463,15 @@ func main() {
 			Native: engine.Default,
 			Remote: remoteCatalog,
 			MCP:    mcpCatalog,
+			// Platform-admin killswitch: refuse a drop a platform admin has
+			// switched off, globally or for the executing tenant. Checked
+			// per node, lock-free from the store's in-memory snapshot.
+			DropGate: func(_ context.Context, dropID, tenant string) error {
+				if dropSwitches.Disabled(dropID, tenant) {
+					return fmt.Errorf("drop %q is disabled by platform policy", dropID)
+				}
+				return nil
+			},
 		},
 		Sandbox: sandbox,
 		Quota:   quota,
@@ -523,6 +545,7 @@ func main() {
 		// AdminKeys uses the same MemKeyStore the Authenticator reads
 		// from, so admin-issued keys are immediately recognized.
 		AdminKeys:              ks,
+		DropSwitches:           dropSwitches,
 		MaxGraphTimeoutSeconds: int(maxGraphTimeout.Seconds()),
 		MaxGraphNodes:          maxGraphNodes,
 		// EncryptedSecrets is the per-tenant store integration drops
@@ -641,6 +664,12 @@ func main() {
 		memberships, invitations, orgAuthStore, orgProfileStore = pgMembers, pgInvites, pgOrgAuth, pgOrgProfile
 		// Let the public overview title the TV board with the org display name.
 		svc.OrgProfiles = orgProfileStore
+		// Wrap the auth chain with the platform-admin lockout gate now that
+		// the user + org-profile stores exist: every authenticated request
+		// (session, API key, OIDC) is refused once its user or org is
+		// suspended. svc.Auth feeds both the gRPC interceptors and the HTTP
+		// gateway, so this one wrap covers the whole surface.
+		svc.Auth = &auth.ModerationGate{Inner: authChain, Users: users, Orgs: orgProfileStore}
 		log.Print("memberships + invitations + org-auth + org-profile stores: postgres-backed")
 
 		// One-time, idempotent: migrate pre-rename "tenant:admin" roles to
@@ -665,6 +694,8 @@ func main() {
 			invitations:      invitations,
 			orgAuth:          orgAuthStore,
 			profiles:         orgProfileStore,
+			blocklist:        blocklist,
+			dropSwitches:     dropSwitches,
 			encryptedSecrets: encryptedSecrets,
 			oauth:            oauthRegistry,
 			approval:         approvalListener,
@@ -1088,6 +1119,8 @@ type gatewayDeps struct {
 	invitations      auth.InvitationStore
 	orgAuth          auth.OrgAuthStore
 	profiles         auth.OrgProfileStore
+	blocklist        auth.BlocklistStore
+	dropSwitches     daemon.DropSwitchStore
 	encryptedSecrets *daemon.EncryptedSecrets
 	oauth            *daemon.OAuthRegistry
 	approval         *daemon.ApprovalListener
@@ -1136,6 +1169,8 @@ func buildGateway(ctx context.Context, d gatewayDeps) {
 	gw.Invitations = d.invitations
 	gw.OrgAuth = d.orgAuth
 	gw.Profiles = d.profiles
+	gw.Blocklist = d.blocklist               // nil = nothing banned (bans unavailable)
+	gw.DropSwitches = d.dropSwitches         // nil disables drop-killswitch endpoints
 	gw.EncryptedSecrets = d.encryptedSecrets // nil disables /api/v1/secrets endpoints
 	gw.OAuth = d.oauth                       // nil disables /api/v1/oauth/* endpoints
 	gw.Approval = d.approval                 // nil leaves POST /approve/ unregistered

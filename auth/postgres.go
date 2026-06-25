@@ -74,7 +74,13 @@ CREATE TABLE IF NOT EXISTS users (
     notify_prefs     JSONB NOT NULL DEFAULT '{}',
     -- Account-roaming interface preferences (theme, language). Same
     -- JSONB rationale; '{}' means "no explicit choice" — see auth.UIPrefs.
-    ui_prefs         JSONB NOT NULL DEFAULT '{}'
+    ui_prefs         JSONB NOT NULL DEFAULT '{}',
+    -- Platform-admin moderation. status is 'active' or 'suspended'; a
+    -- suspended account can't authenticate. suspend_reason is the
+    -- operator's note (no secrets — it surfaces in audit + lockout UI).
+    status           TEXT NOT NULL DEFAULT 'active',
+    suspended_at     TIMESTAMPTZ,
+    suspend_reason   TEXT NOT NULL DEFAULT ''
 );
 -- Idempotent migrations for users tables created before 2FA landed.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret_enc  BYTEA;
@@ -89,6 +95,9 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_hash  BYTEA;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_expires_at  TIMESTAMPTZ;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS notify_prefs      JSONB NOT NULL DEFAULT '{}';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS ui_prefs          JSONB NOT NULL DEFAULT '{}';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS status            TEXT NOT NULL DEFAULT 'active';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_at      TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS suspend_reason    TEXT NOT NULL DEFAULT '';
 `
 
 // EnsurePgAuthSchema creates the api_keys / sessions / users tables if
@@ -402,7 +411,8 @@ func unmarshalUIPrefs(b []byte) (UIPrefs, error) {
 const userColumns = `email, password_hash, subject, tenant, workspace, roles, created_at,
 	totp_secret_enc, totp_enabled, totp_enrolled_at, recovery_codes,
 	verified_at, verify_token_hash, verify_expires_at, totp_last_step,
-	reset_token_hash, reset_expires_at, notify_prefs, ui_prefs`
+	reset_token_hash, reset_expires_at, notify_prefs, ui_prefs,
+	status, suspended_at, suspend_reason`
 
 // scanUser scans one users row (in userColumns order) into a User,
 // decoding the roles and recovery-codes JSONB columns. Used by both
@@ -420,6 +430,7 @@ func scanUser(row rowScanner) (User, error) {
 		&u.TOTPSecretEnc, &u.TOTPEnabled, &u.TOTPEnrolledAt, &recoveryRaw,
 		&u.VerifiedAt, &u.VerifyTokenHash, &u.VerifyExpiresAt, &u.TOTPLastStep,
 		&u.ResetTokenHash, &u.ResetExpiresAt, &notifyRaw, &uiRaw,
+		&u.Status, &u.SuspendedAt, &u.SuspendReason,
 	); err != nil {
 		return User{}, err
 	}
@@ -484,9 +495,13 @@ func (s *PgUserStore) PutUser(ctx context.Context, u User) error {
 	if created.IsZero() {
 		created = time.Now()
 	}
+	status := u.Status
+	if status == "" {
+		status = StatusActive
+	}
 	const q = `
 		INSERT INTO users (` + userColumns + `)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
 		ON CONFLICT (email) DO UPDATE SET
 		  password_hash=EXCLUDED.password_hash, subject=EXCLUDED.subject,
 		  tenant=EXCLUDED.tenant, workspace=EXCLUDED.workspace, roles=EXCLUDED.roles,
@@ -495,12 +510,15 @@ func (s *PgUserStore) PutUser(ctx context.Context, u User) error {
 		  verified_at=EXCLUDED.verified_at, verify_token_hash=EXCLUDED.verify_token_hash,
 		  verify_expires_at=EXCLUDED.verify_expires_at, totp_last_step=EXCLUDED.totp_last_step,
 		  reset_token_hash=EXCLUDED.reset_token_hash, reset_expires_at=EXCLUDED.reset_expires_at,
-		  notify_prefs=EXCLUDED.notify_prefs, ui_prefs=EXCLUDED.ui_prefs
+		  notify_prefs=EXCLUDED.notify_prefs, ui_prefs=EXCLUDED.ui_prefs,
+		  status=EXCLUDED.status, suspended_at=EXCLUDED.suspended_at,
+		  suspend_reason=EXCLUDED.suspend_reason
 	`
 	_, err = s.pool.Exec(ctx, q, u.Email, u.PasswordHash, u.Subject, u.Tenant, u.Workspace, roles, created,
 		u.TOTPSecretEnc, u.TOTPEnabled, u.TOTPEnrolledAt, recovery,
 		u.VerifiedAt, u.VerifyTokenHash, u.VerifyExpiresAt, u.TOTPLastStep,
-		u.ResetTokenHash, u.ResetExpiresAt, notify, ui)
+		u.ResetTokenHash, u.ResetExpiresAt, notify, ui,
+		status, u.SuspendedAt, u.SuspendReason)
 	return err
 }
 

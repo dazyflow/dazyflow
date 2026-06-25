@@ -33,7 +33,23 @@ type OrgProfile struct {
 	// tenant ID — see ValidateSubdomain + OrgProfileStore.GetOrgProfileBySubdomain.
 	Subdomain string    `json:"subdomain,omitempty"`
 	UpdatedAt time.Time `json:"updated_at"`
+
+	// Platform-admin moderation, mirroring auth.User: Status is "active"
+	// or "suspended". A suspended org keeps its data but its scheduled and
+	// triggered flows stop firing (the scheduler and inbound webhook/form
+	// paths skip suspended tenants) and its members are locked out at
+	// auth. SuspendedAt / SuspendReason feed the audit trail and the
+	// operator UI. A ban additionally blocklists the org's members'
+	// re-signup; the profile row only tracks the suspension. omitempty
+	// keeps existing stores byte-compatible.
+	Status        string     `json:"status,omitempty"`
+	SuspendedAt   *time.Time `json:"suspended_at,omitempty"`
+	SuspendReason string     `json:"suspend_reason,omitempty"`
 }
+
+// Suspended reports whether a platform admin has locked this org. Empty
+// status reads as active, so pre-moderation rows need no backfill.
+func (p OrgProfile) Suspended() bool { return p.Status == StatusSuspended }
 
 // OrgProfileStore is the lookup boundary. Tenants with no profile
 // row return ErrUnknownOrgProfile; the UI falls back to the raw

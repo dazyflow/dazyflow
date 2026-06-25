@@ -1833,4 +1833,126 @@ export const api = {
       "GET",
       `/auth/resolve-subdomain?label=${encodeURIComponent(label)}`,
     ),
+
+  // --- Platform admin: moderation (platform:admin only) ---------------
+  // Cross-tenant operator tools — suspend/ban/delete users and orgs, and
+  // the global/per-org drop killswitch. See daemon/admin_platform.go.
+
+  platformListUsers: (token: string) =>
+    request<{ users: PlatformUser[] }>(token, "GET", "/admin/platform/users"),
+  platformGetUser: (token: string, email: string) =>
+    request<{ user: PlatformUser; memberships?: string[] }>(
+      token,
+      "GET",
+      `/admin/platform/users/${encodeURIComponent(email)}`,
+    ),
+  platformSuspendUser: (token: string, email: string, reason: string) =>
+    request<{ user: PlatformUser }>(
+      token,
+      "POST",
+      `/admin/platform/users/${encodeURIComponent(email)}/suspend`,
+      { reason },
+    ),
+  platformUnsuspendUser: (token: string, email: string) =>
+    request<{ user: PlatformUser }>(
+      token,
+      "POST",
+      `/admin/platform/users/${encodeURIComponent(email)}/unsuspend`,
+    ),
+  // platformBanUser suspends + blocklists the email (or whole domain) so
+  // it can't re-register. Account data is kept — use platformDeleteUser to erase.
+  platformBanUser: (token: string, email: string, reason: string, domain: boolean) =>
+    request<{ user: PlatformUser; blocked: string }>(
+      token,
+      "POST",
+      `/admin/platform/users/${encodeURIComponent(email)}/ban`,
+      { reason, domain },
+    ),
+  // platformDeleteUser is the GDPR erase (DELETE /admin/users/{email}); the
+  // ?confirm guard must echo the email.
+  platformDeleteUser: (token: string, email: string) =>
+    request<Record<string, unknown>>(
+      token,
+      "DELETE",
+      `/admin/users/${encodeURIComponent(email)}?confirm=${encodeURIComponent(email)}`,
+    ),
+
+  platformListOrgs: (token: string) =>
+    request<{ orgs: PlatformOrg[] }>(token, "GET", "/admin/platform/orgs"),
+  platformGetOrg: (token: string, tenant: string) =>
+    request<{ org: PlatformOrg; members?: string[] }>(
+      token,
+      "GET",
+      `/admin/platform/orgs/${encodeURIComponent(tenant)}`,
+    ),
+  platformSuspendOrg: (token: string, tenant: string, reason: string) =>
+    request<{ org: PlatformOrg }>(
+      token,
+      "POST",
+      `/admin/platform/orgs/${encodeURIComponent(tenant)}/suspend`,
+      { reason },
+    ),
+  platformUnsuspendOrg: (token: string, tenant: string) =>
+    request<{ org: PlatformOrg }>(
+      token,
+      "POST",
+      `/admin/platform/orgs/${encodeURIComponent(tenant)}/unsuspend`,
+    ),
+  platformBanOrg: (token: string, tenant: string, reason: string) =>
+    request<{ org: PlatformOrg }>(
+      token,
+      "POST",
+      `/admin/platform/orgs/${encodeURIComponent(tenant)}/ban`,
+      { reason },
+    ),
+
+  platformListDrops: (token: string) =>
+    request<{ drops: PlatformDrop[] }>(token, "GET", "/admin/platform/drops"),
+  // platformDisableDrop switches a drop off globally (tenant omitted) or
+  // for one org; platformEnableDrop clears the switch.
+  platformDisableDrop: (token: string, id: string, reason: string, tenant?: string) =>
+    request<void>(
+      token,
+      "POST",
+      `/admin/platform/drops/${encodeURIComponent(id)}/disable`,
+      { reason, tenant: tenant ?? "" },
+    ),
+  platformEnableDrop: (token: string, id: string, tenant?: string) =>
+    request<void>(
+      token,
+      "POST",
+      `/admin/platform/drops/${encodeURIComponent(id)}/enable`,
+      { tenant: tenant ?? "" },
+    ),
+};
+
+export type PlatformUser = {
+  email: string;
+  subject: string;
+  tenant: string;
+  status: string; // "active" | "suspended"
+  suspended_at?: string;
+  suspend_reason?: string;
+  created_at: string;
+  verified: boolean;
+  platform_admin: boolean;
+};
+
+export type PlatformOrg = {
+  tenant: string;
+  display_name: string;
+  subdomain?: string;
+  status: string; // "active" | "suspended"
+  suspended_at?: string;
+  suspend_reason?: string;
+  member_count: number;
+};
+
+export type PlatformDrop = {
+  id: string;
+  label: string;
+  integration?: string;
+  globally_disabled: boolean;
+  disabled_tenants?: string[];
+  reason?: string;
 };

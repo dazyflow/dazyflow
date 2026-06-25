@@ -354,6 +354,12 @@ type Service struct {
 	// generic title. Same store the gateway reads for org display names.
 	OrgProfiles auth.OrgProfileStore
 
+	// DropSwitches, when set, is the platform-admin drop killswitch. The
+	// engine resolver consults it per node (the actual enforcement); the
+	// catalog (ListDrops) reads it to hide globally-disabled drops from the
+	// palette. Nil = no drops are ever switched off.
+	DropSwitches DropSwitchStore
+
 	// suggestMu guards suggestCache, the memo backing DropSuggestions.
 	// Keyed by (tenant, workspace, visibility-view); each entry remembers
 	// the workspace HEAD it was computed at, so a save (which moves HEAD)
@@ -388,6 +394,18 @@ func (s *Service) Authenticate(ctx context.Context, credential string) (core.Pri
 		return core.Principal{}, fmt.Errorf("authenticator not configured")
 	}
 	return s.Auth.Authenticate(ctx, credential)
+}
+
+// orgSuspended reports whether a platform admin has suspended the tenant.
+// Best-effort: a nil profile store, an empty tenant, a missing profile,
+// or a lookup error all read as "not suspended" so a transient DB blip
+// can't silently halt every flow on the deployment.
+func (s *Service) orgSuspended(ctx context.Context, tenant string) bool {
+	if s.OrgProfiles == nil || tenant == "" {
+		return false
+	}
+	prof, err := s.OrgProfiles.GetOrgProfile(ctx, tenant)
+	return err == nil && prof.Suspended()
 }
 
 // hasActiveRun reports whether any non-terminal graph-record exists
@@ -1420,6 +1438,17 @@ func (s *Service) ListDrops(ctx context.Context, p core.Principal) (map[string]c
 			if _, verifiable := engine.ConnectionVerifierFor(core.ConnectionSlug(m.Integration)); verifiable {
 				m.ConnectionVerifiable = true
 				out[id] = m
+			}
+		}
+	}
+	// Hide drops a platform admin has switched off — globally or for this
+	// tenant — so they don't surface in the palette or search. The engine
+	// resolver still hard-blocks execution if one is referenced anyway;
+	// this just keeps the build-time UI consistent with the killswitch.
+	if s.DropSwitches != nil {
+		for id := range out {
+			if s.DropSwitches.Disabled(id, p.Tenant) {
+				delete(out, id)
 			}
 		}
 	}

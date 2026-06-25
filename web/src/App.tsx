@@ -36,6 +36,11 @@ import { AdminWorkspace } from "./pages/AdminWorkspace";
 import { AdminOrgSSO } from "./pages/AdminOrgSSO";
 import { AdminOAuthProviders } from "./pages/AdminOAuthProviders";
 import { AdminPlatform } from "./pages/AdminPlatform";
+import { AdminPlatformDrops } from "./pages/AdminPlatformDrops";
+import { AdminPlatformUsers } from "./pages/AdminPlatformUsers";
+import { AdminPlatformUserDetail } from "./pages/AdminPlatformUserDetail";
+import { AdminPlatformOrgs } from "./pages/AdminPlatformOrgs";
+import { AdminPlatformOrgDetail } from "./pages/AdminPlatformOrgDetail";
 import { AdminGoogle } from "./pages/AdminGoogle";
 import { AdminSecrets } from "./pages/AdminSecrets";
 import { AdminGitCredentials } from "./pages/AdminGitCredentials";
@@ -120,6 +125,11 @@ export function App() {
         <Route path="/admin/sso" element={<AdminOrgSSO />} />
         <Route path="/admin/oauth" element={<AdminOAuthProviders />} />
         <Route path="/admin/platform" element={<AdminPlatform />} />
+        <Route path="/admin/platform/drops" element={<AdminPlatformDrops />} />
+        <Route path="/admin/platform/users" element={<AdminPlatformUsers />} />
+        <Route path="/admin/platform/users/:email" element={<AdminPlatformUserDetail />} />
+        <Route path="/admin/platform/orgs" element={<AdminPlatformOrgs />} />
+        <Route path="/admin/platform/orgs/:tenant" element={<AdminPlatformOrgDetail />} />
         <Route path="/admin/google" element={<AdminGoogle />} />
         <Route path="/admin/secrets" element={<AdminSecrets />} />
         <Route path="/admin/git-credentials" element={<AdminGitCredentials />} />

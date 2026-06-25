@@ -78,7 +78,34 @@ type User struct {
 	// "no explicit choice" — the client falls back to its device/browser
 	// default. See UIPrefs.
 	UI UIPrefs `json:"ui,omitempty"`
+
+	// Platform-admin moderation state. Status is "" / "active" for a
+	// normal account and "suspended" once a platform admin locks it. A
+	// suspended user cannot authenticate (sessions and API keys are both
+	// refused — see VerifyPassword's callers and the auth chain) and the
+	// account's home org keeps running only until separately suspended.
+	// SuspendedAt / SuspendReason record who-cares-when and the operator's
+	// note for the audit trail and the user-facing lockout message. A ban
+	// is a suspension plus a blocklist entry that blocks re-signup (see
+	// BlocklistStore); the User row itself only tracks the suspension.
+	// omitempty keeps existing stores byte-compatible.
+	Status        string     `json:"status,omitempty"`
+	SuspendedAt   *time.Time `json:"suspended_at,omitempty"`
+	SuspendReason string     `json:"suspend_reason,omitempty"`
 }
+
+// StatusActive is the implicit status of a normal account: an empty
+// string (never moderated) is treated as active, so accounts that
+// predate the moderation columns need no backfill.
+const (
+	StatusActive    = "active"
+	StatusSuspended = "suspended"
+)
+
+// Suspended reports whether a platform admin has locked this account.
+// Empty status means active, so pre-moderation rows read as not
+// suspended without a migration.
+func (u User) Suspended() bool { return u.Status == StatusSuspended }
 
 // UIPrefs is a user's account-level interface preferences. Both fields
 // are empty-string-means-unset (no tri-state pointer needed): unlike the
