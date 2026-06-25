@@ -5,6 +5,7 @@ import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, type PlatformUser } from "../api";
 import { explainApiError } from "../lib/explainApiError";
+import { UserAvatar } from "../components/PlatformAvatar";
 
 // AdminPlatformUsers is the cross-tenant account roster. Each row links
 // to that user's own moderation page (suspend / ban / delete). The list
@@ -105,29 +106,32 @@ export function AdminPlatformUsers() {
             <Link
               key={u.email}
               to={`/admin/platform/users/${encodeURIComponent(u.email)}`}
-              className="user-card"
+              className="user-card pa-card"
               style={{ textDecoration: "none", color: "inherit" }}
             >
-              <div style={{ minWidth: 0 }}>
-                <div className="subject">
-                  {u.email}
-                  {u.status === "suspended" && (
-                    <span
-                      className="count-pill"
-                      style={{ marginLeft: 8, color: "var(--danger)" }}
-                    >
-                      {t("admin.platformUsers.suspended")}
-                    </span>
-                  )}
-                  {u.platform_admin && (
-                    <span className="count-pill" style={{ marginLeft: 8 }}>
-                      {t("admin.platformUsers.platformAdmin")}
-                    </span>
-                  )}
-                </div>
-                <div className="meta">
-                  <code>{u.tenant}</code>
-                  {u.suspend_reason ? ` · ${u.suspend_reason}` : ""}
+              <div className="pa-row-main">
+                <UserAvatar email={u.email} />
+                <div style={{ minWidth: 0 }}>
+                  <div className="subject">
+                    {u.email}
+                    {u.status === "suspended" && (
+                      <span
+                        className="count-pill"
+                        style={{ marginLeft: 8, color: "var(--danger)" }}
+                      >
+                        {t("admin.platformUsers.suspended")}
+                      </span>
+                    )}
+                    {u.platform_admin && (
+                      <span className="count-pill" style={{ marginLeft: 8 }}>
+                        {t("admin.platformUsers.platformAdmin")}
+                      </span>
+                    )}
+                  </div>
+                  <div className="meta">
+                    {u.tenant_name || u.tenant}
+                    {u.suspend_reason ? ` · ${u.suspend_reason}` : ""}
+                  </div>
                 </div>
               </div>
             </Link>

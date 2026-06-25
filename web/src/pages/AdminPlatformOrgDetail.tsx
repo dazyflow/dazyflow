@@ -7,6 +7,7 @@ import { api, type PlatformOrg } from "../api";
 import { explainApiError } from "../lib/explainApiError";
 import { Button } from "../components/Button";
 import { ConfirmModal } from "../components/ConfirmModal";
+import { OrgAvatar } from "../components/PlatformAvatar";
 
 // AdminPlatformOrgDetail is one org's platform-admin moderation page:
 // suspend (halt all its flows + lock out members), ban (suspend +
@@ -81,9 +82,12 @@ export function AdminPlatformOrgDetail() {
         <ArrowLeft size={14} /> {t("admin.platformOrgs.title")}
       </Link>
       <div className="page-title">
-        <div>
-          <h1>{org?.display_name || tenant}</h1>
-          <div className="sub">{t("admin.platformOrgDetail.subtitle")}</div>
+        <div className="pa-detail-head">
+          <OrgAvatar name={org?.display_name || tenant} icon={org?.icon} seed={tenant} size={48} />
+          <div>
+            <h1>{org?.display_name || tenant}</h1>
+            <div className="sub">{t("admin.platformOrgDetail.subtitle")}</div>
+          </div>
         </div>
       </div>
 

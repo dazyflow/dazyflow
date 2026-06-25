@@ -6864,6 +6864,58 @@ button.warning:hover:not(:disabled) {
   min-width: 0;
   word-break: break-word;
 }
+
+/* Platform-admin identity avatars (org tiles + user monograms) and the
+   row/header layouts that frame them. Shared by the user/org list and
+   detail pages so the moderation surface reads as one polished set. */
+.pa-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  overflow: hidden;
+  user-select: none;
+}
+.pa-avatar-org {
+  border-radius: 9px;
+}
+.pa-avatar-user {
+  border-radius: 50%;
+}
+.pa-avatar-mono {
+  color: #fff;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
+/* Left side of a list row: avatar + the name/meta text block. */
+.pa-row-main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+/* The whole row reads as a clickable card; lift slightly on hover. */
+.pa-card {
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease;
+}
+a.pa-card:hover {
+  border-color: var(--accent);
+  background: var(--surface-2, var(--surface));
+}
+/* Detail-page header: a larger avatar beside the title block. */
+.pa-detail-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+/* Muted monospace id shown under a resolved name. */
+.pa-subtext {
+  color: var(--muted);
+  font-size: 0.85em;
+}
 .count-pill {
   font-size: var(--text-xs);
   padding: var(--space-0) var(--space-2);

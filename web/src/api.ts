@@ -1930,6 +1930,7 @@ export type PlatformUser = {
   email: string;
   subject: string;
   tenant: string;
+  tenant_name?: string; // resolved home-org display name ("" → use id)
   status: string; // "active" | "suspended"
   suspended_at?: string;
   suspend_reason?: string;
@@ -1941,6 +1942,7 @@ export type PlatformUser = {
 export type PlatformOrg = {
   tenant: string;
   display_name: string;
+  icon?: string; // data: URL logo, or empty
   subdomain?: string;
   status: string; // "active" | "suspended"
   suspended_at?: string;

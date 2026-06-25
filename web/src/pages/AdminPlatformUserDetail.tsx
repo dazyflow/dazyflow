@@ -7,6 +7,7 @@ import { api, type PlatformUser } from "../api";
 import { explainApiError } from "../lib/explainApiError";
 import { Button } from "../components/Button";
 import { ConfirmModal } from "../components/ConfirmModal";
+import { UserAvatar } from "../components/PlatformAvatar";
 import { formatDate } from "../lib/datetime";
 
 // AdminPlatformUserDetail is one account's platform-admin moderation
@@ -82,9 +83,12 @@ export function AdminPlatformUserDetail() {
         <ArrowLeft size={14} /> {t("admin.platformUsers.title")}
       </Link>
       <div className="page-title">
-        <div>
-          <h1>{email}</h1>
-          <div className="sub">{t("admin.platformUserDetail.subtitle")}</div>
+        <div className="pa-detail-head">
+          <UserAvatar email={email} size={48} />
+          <div>
+            <h1>{email}</h1>
+            <div className="sub">{t("admin.platformUserDetail.subtitle")}</div>
+          </div>
         </div>
       </div>
 
@@ -117,8 +121,11 @@ export function AdminPlatformUserDetail() {
               <dt>{t("admin.platformUserDetail.homeOrg")}</dt>
               <dd>
                 <Link to={`/admin/platform/orgs/${encodeURIComponent(user.tenant)}`}>
-                  <code>{user.tenant}</code>
+                  {user.tenant_name || user.tenant}
                 </Link>
+                {user.tenant_name && (
+                  <span className="pa-subtext"> · <code>{user.tenant}</code></span>
+                )}
               </dd>
               <dt>{t("admin.platformUserDetail.created")}</dt>
               <dd>{formatDate(user.created_at)}</dd>

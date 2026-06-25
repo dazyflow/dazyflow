@@ -5,6 +5,7 @@ import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, type PlatformOrg } from "../api";
 import { explainApiError } from "../lib/explainApiError";
+import { OrgAvatar } from "../components/PlatformAvatar";
 
 // AdminPlatformOrgs is the cross-tenant org roster. Each row links to
 // that org's moderation page (suspend / ban / delete). Read-only list;
@@ -107,26 +108,29 @@ export function AdminPlatformOrgs() {
             <Link
               key={o.tenant}
               to={`/admin/platform/orgs/${encodeURIComponent(o.tenant)}`}
-              className="user-card"
+              className="user-card pa-card"
               style={{ textDecoration: "none", color: "inherit" }}
             >
-              <div style={{ minWidth: 0 }}>
-                <div className="subject">
-                  {o.display_name || o.tenant}
-                  {o.status === "suspended" && (
-                    <span
-                      className="count-pill"
-                      style={{ marginLeft: 8, color: "var(--danger)" }}
-                    >
-                      {t("admin.platformOrgs.suspended")}
-                    </span>
-                  )}
-                </div>
-                <div className="meta">
-                  <code>{o.tenant}</code>
-                  {o.subdomain ? ` · ${o.subdomain}` : ""}
-                  {" · "}
-                  {t("admin.platformOrgs.members", { count: o.member_count })}
+              <div className="pa-row-main">
+                <OrgAvatar name={o.display_name || o.tenant} icon={o.icon} seed={o.tenant} />
+                <div style={{ minWidth: 0 }}>
+                  <div className="subject">
+                    {o.display_name || o.tenant}
+                    {o.status === "suspended" && (
+                      <span
+                        className="count-pill"
+                        style={{ marginLeft: 8, color: "var(--danger)" }}
+                      >
+                        {t("admin.platformOrgs.suspended")}
+                      </span>
+                    )}
+                  </div>
+                  <div className="meta">
+                    <code>{o.tenant}</code>
+                    {o.subdomain ? ` · ${o.subdomain}` : ""}
+                    {" · "}
+                    {t("admin.platformOrgs.members", { count: o.member_count })}
+                  </div>
                 </div>
               </div>
             </Link>

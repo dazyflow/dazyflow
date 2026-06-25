@@ -23,9 +23,14 @@ import (
 // ---- request/response shapes ---------------------------------------
 
 type platformUserDTO struct {
-	Email         string     `json:"email"`
-	Subject       string     `json:"subject"`
-	Tenant        string     `json:"tenant"`
+	Email   string `json:"email"`
+	Subject string `json:"subject"`
+	Tenant  string `json:"tenant"`
+	// TenantName is the home org's human-facing display name, resolved
+	// from the profile store so the UI can show "Brightleaf" instead of
+	// the opaque "usr_38f4657c". Empty when the org has no profile — the
+	// client falls back to the raw id.
+	TenantName    string     `json:"tenant_name,omitempty"`
 	Status        string     `json:"status"`
 	SuspendedAt   *time.Time `json:"suspended_at,omitempty"`
 	SuspendReason string     `json:"suspend_reason,omitempty"`
@@ -35,8 +40,11 @@ type platformUserDTO struct {
 }
 
 type platformOrgDTO struct {
-	Tenant        string     `json:"tenant"`
-	DisplayName   string     `json:"display_name"`
+	Tenant      string `json:"tenant"`
+	DisplayName string `json:"display_name"`
+	// Icon is the org's uploaded logo (a data: URL) or empty — the UI
+	// renders an <img> when present, a monogram tile otherwise.
+	Icon          string     `json:"icon,omitempty"`
 	Subdomain     string     `json:"subdomain,omitempty"`
 	Status        string     `json:"status"`
 	SuspendedAt   *time.Time `json:"suspended_at,omitempty"`
@@ -105,15 +113,22 @@ func (h *HTTPGateway) platformListUsers(rw http.ResponseWriter, r *http.Request,
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
+	// Resolve every home-org id to its display name in one batch so the
+	// roster shows real names, not opaque tenant ids.
+	tenants := make([]string, 0, len(users))
+	for _, u := range users {
+		tenants = append(tenants, u.Tenant)
+	}
+	names := h.tenantNames(r.Context(), tenants)
 	out := make([]platformUserDTO, 0, len(users))
 	for _, u := range users {
-		out = append(out, h.toPlatformUserDTO(u))
+		out = append(out, h.toPlatformUserDTO(u, names[u.Tenant]))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Email < out[j].Email })
 	writeJSON(rw, http.StatusOK, map[string]any{"users": out})
 }
 
-func (h *HTTPGateway) toPlatformUserDTO(u auth.User) platformUserDTO {
+func (h *HTTPGateway) toPlatformUserDTO(u auth.User, tenantName string) platformUserDTO {
 	status := u.Status
 	if status == "" {
 		status = auth.StatusActive
@@ -122,6 +137,7 @@ func (h *HTTPGateway) toPlatformUserDTO(u auth.User) platformUserDTO {
 		Email:         u.Email,
 		Subject:       u.Subject,
 		Tenant:        u.Tenant,
+		TenantName:    tenantName,
 		Status:        status,
 		SuspendedAt:   u.SuspendedAt,
 		SuspendReason: u.SuspendReason,
@@ -129,6 +145,26 @@ func (h *HTTPGateway) toPlatformUserDTO(u auth.User) platformUserDTO {
 		Verified:      u.EmailVerified(),
 		PlatformAdmin: h.isPlatformAdminEmail(u.Email),
 	}
+}
+
+// tenantNames batch-resolves tenant ids to org display names via the
+// profile store. Missing profiles / a nil store simply yield no entry —
+// callers fall back to the raw id.
+func (h *HTTPGateway) tenantNames(ctx context.Context, tenants []string) map[string]string {
+	out := map[string]string{}
+	if h.Profiles == nil || len(tenants) == 0 {
+		return out
+	}
+	profs, err := h.Profiles.ListOrgProfiles(ctx, tenants)
+	if err != nil {
+		return out
+	}
+	for tn, p := range profs {
+		if p.DisplayName != "" {
+			out[tn] = p.DisplayName
+		}
+	}
+	return out
 }
 
 // platformGetUser returns one account plus the orgs it belongs to.
@@ -142,7 +178,7 @@ func (h *HTTPGateway) platformGetUser(rw http.ResponseWriter, r *http.Request, p
 		writeJSONError(rw, http.StatusNotFound, "no such account")
 		return
 	}
-	resp := map[string]any{"user": h.toPlatformUserDTO(u)}
+	resp := map[string]any{"user": h.toPlatformUserDTO(u, h.tenantNames(r.Context(), []string{u.Tenant})[u.Tenant])}
 	// Org memberships, if the multi-org store is wired.
 	if h.Memberships != nil {
 		if rows, err := h.Memberships.ListByEmail(r.Context(), email); err == nil {
@@ -179,7 +215,7 @@ func (h *HTTPGateway) platformSuspendUser(rw http.ResponseWriter, r *http.Reques
 	}
 	h.revokeSubjectSessions(r.Context(), u.Subject)
 	h.audit(r.Context(), p, "platform.user.suspend", email, body.Reason)
-	writeJSON(rw, http.StatusOK, map[string]any{"user": h.toPlatformUserDTO(u)})
+	writeJSON(rw, http.StatusOK, map[string]any{"user": h.toPlatformUserDTO(u, h.tenantNames(r.Context(), []string{u.Tenant})[u.Tenant])})
 }
 
 // platformUnsuspendUser reverses a suspension, restoring access.
@@ -201,7 +237,7 @@ func (h *HTTPGateway) platformUnsuspendUser(rw http.ResponseWriter, r *http.Requ
 		return
 	}
 	h.audit(r.Context(), p, "platform.user.unsuspend", email, "")
-	writeJSON(rw, http.StatusOK, map[string]any{"user": h.toPlatformUserDTO(u)})
+	writeJSON(rw, http.StatusOK, map[string]any{"user": h.toPlatformUserDTO(u, h.tenantNames(r.Context(), []string{u.Tenant})[u.Tenant])})
 }
 
 // platformBanUser suspends the account AND blocklists the email (or its
@@ -243,7 +279,7 @@ func (h *HTTPGateway) platformBanUser(rw http.ResponseWriter, r *http.Request, p
 		return
 	}
 	h.audit(r.Context(), p, "platform.user.ban", email, body.Reason)
-	writeJSON(rw, http.StatusOK, map[string]any{"user": h.toPlatformUserDTO(u), "blocked": value})
+	writeJSON(rw, http.StatusOK, map[string]any{"user": h.toPlatformUserDTO(u, h.tenantNames(r.Context(), []string{u.Tenant})[u.Tenant]), "blocked": value})
 }
 
 // guardUserModeration loads the target user and refuses the foot-guns:
@@ -344,6 +380,7 @@ func (h *HTTPGateway) toPlatformOrgDTO(ctx context.Context, pr auth.OrgProfile) 
 	return platformOrgDTO{
 		Tenant:        pr.Tenant,
 		DisplayName:   pr.DisplayName,
+		Icon:          pr.Icon,
 		Subdomain:     pr.Subdomain,
 		Status:        status,
 		SuspendedAt:   pr.SuspendedAt,
