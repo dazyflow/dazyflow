@@ -1017,7 +1017,17 @@
       "saving": "Saving…",
       "saved": "Saved",
       "profileNotConfigured": "Organization profiles aren't enabled on this dzd instance.",
-      "orgIconLabel": "Logo"
+      "orgIconLabel": "Logo",
+      "subdomainLabel": "Custom web address",
+      "subdomainDesc": "Give your organization its own sign-in address. Members can then go straight to your address instead of picking the org from a list.",
+      "subdomainPlaceholder": "your-org",
+      "subdomainChecking": "Checking availability…",
+      "subdomainAvailable": "Available",
+      "subdomainTaken": "That address is already taken — try another.",
+      "subdomainInvalid": "Use only lowercase letters, numbers and hyphens (and not a reserved word like “www” or “app”).",
+      "subdomainCurrent": "Your address: <0>{{url}}</0>",
+      "subdomainSave": "Set address",
+      "subdomainRelease": "Remove address"
     }
   },
   "results": {

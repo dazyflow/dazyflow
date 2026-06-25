@@ -20,7 +20,17 @@ detail lives in the code and commit history).
       friendlied at source. Deliberately left client-side parse/validation
       catches (JSON.parse, image-upload checks) on their own actionable
       messages. (Remaining is a manual walk-the-app QA pass — not a code task.)
-- [ ] **Subdomain UI** — let a tenant set a subdomain (e.g. `klahr.dazyflow.app`).
+- [x] **Subdomain UI** — orgs claim a custom web address (`klahr.dazyflow.app`).
+      Completed the half-built feature end to end: a unique, validated
+      `subdomain` slug on the org profile (Postgres column + partial unique
+      index; `auth.ValidateSubdomain` mirrors the web's reserved/DNS-label
+      rules); owner-only PUT + live availability check (409 on conflict);
+      public label→tenant resolver wired into sign-in; Admin → Workspace UI
+      with availability + URL preview + friendly errors; Caddy on-demand TLS
+      (`*.apex` with an `ask` gate hitting `/auth/tls-allow` so only CLAIMED
+      orgs get certs — no wildcard cert / DNS plugin); DEPLOY.md + dazyflow-infra
+      README updated (one-time `*` A record is the only ops step). Tests across
+      auth/daemon/web.
 
 ### Web polish — blocked / deferred
 - [ ] Per-card flow actions (duplicate / rename / delete) — BACKEND-BLOCKED: no

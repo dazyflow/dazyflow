@@ -5659,6 +5659,38 @@ button.warning:hover:not(:disabled) {
 .sf-field {
   margin-bottom: var(--space-3);
 }
+/* Subdomain editor: an input with the apex domain pinned to its right as a
+   non-editable suffix, so "your-org" reads as "your-org.dazyflow.app". */
+.subdomain-row {
+  display: flex;
+  align-items: stretch;
+  max-width: 420px;
+}
+.subdomain-input {
+  flex: 1;
+  min-width: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  font-family: var(--font-mono);
+}
+.subdomain-suffix {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border);
+  border-left: none;
+  border-top-right-radius: var(--radius);
+  border-bottom-right-radius: var(--radius);
+  background: var(--surface-2, color-mix(in srgb, var(--ink) 5%, transparent));
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+.subdomain-status {
+  min-height: 18px;
+  margin-top: var(--space-1);
+}
 /* Danger zone: the delete-flow section in Settings → General. A red-tinted
    rule and label set it apart from the routine fields above so a destructive
    action isn't mistaken for one more editable setting. */

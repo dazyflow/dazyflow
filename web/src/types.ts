@@ -405,6 +405,13 @@ export type OrgProfile = {
   // icon is an optional org logo — a data: URL (uploaded SVG/PNG) or a
   // logical icon name. Rendered as an image when it looks like one.
   icon?: string;
+  // subdomain is the org's chosen DNS label ("klahr" → klahr.dazyflow.app).
+  // Empty when unclaimed. Set via the dedicated putOrgSubdomain endpoint.
+  subdomain?: string;
+  // wildcard_domain is the deployment's apex (e.g. "dazyflow.app") the
+  // subdomain hangs off, or "" when per-org subdomains aren't enabled. The
+  // editor only shows the subdomain field when this is set.
+  wildcard_domain?: string;
   updated_at?: string;
 };
 

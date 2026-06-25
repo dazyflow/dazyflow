@@ -1,11 +1,35 @@
-# Apex-only HTTPS. Caddy auto-provisions + renews the cert via Let's Encrypt
-# (HTTP-01). ACME_EMAIL comes from .env. Caddy forwards X-Forwarded-Proto and
-# upgrades WebSocket/SSE automatically, so dzd just needs
+# HTTPS for the apex + (optionally) per-org subdomains. Caddy auto-provisions +
+# renews certs via Let's Encrypt. ACME_EMAIL comes from .env. Caddy forwards
+# X-Forwarded-Proto and upgrades WebSocket/SSE automatically, so dzd just needs
 # DAZYFLOW_TRUST_PROXY_HEADERS=1 (set in .env).
+#
+# Per-org subdomains (klahr.dazyflow.app) use ON-DEMAND TLS: rather than a
+# wildcard certificate (which would need a DNS-01 challenge + a DNS-provider
+# plugin baked into a custom Caddy image), Caddy mints a normal HTTP-01 cert
+# the first time each org host is requested. The `ask` endpoint gates issuance
+# on dzd: it returns 2xx only for subdomains an org has actually CLAIMED, so a
+# stranger pointing random hosts at our IP can't make us burn Let's Encrypt
+# rate limits on certs for non-existent orgs. Requires the wildcard DNS record
+# `*.<apex>` (set at the registrar — see dazyflow-infra/README.md).
 {
 	email {$ACME_EMAIL}
+	on_demand_tls {
+		ask http://dzd:8080/api/v1/auth/tls-allow
+	}
 }
 
+# Apex — a normal managed certificate (HTTP-01), provisioned up front.
 dazyflow.app {
+	reverse_proxy dzd:8080
+}
+
+# Per-org subdomains — one on-demand cert per claimed org host, authorized by
+# the `ask` endpoint above. Same dzd upstream; the sign-in handoff state is
+# in-process, so every *.apex host MUST reach the same dzd (one upstream here
+# satisfies that).
+*.dazyflow.app {
+	tls {
+		on_demand
+	}
 	reverse_proxy dzd:8080
 }

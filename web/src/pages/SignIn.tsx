@@ -65,7 +65,21 @@ export function SignIn() {
             window.location.hostname,
             r.wildcard_domain,
           );
-          if (fromHost) setOrg(fromHost);
+          if (fromHost) {
+            // The host label is a user-chosen alias, not the tenant ID — resolve
+            // it to the real tenant so the SSO probe + Google start target the
+            // right org. If the label isn't claimed (or resolution fails), fall
+            // back to using it verbatim — back-compat for deploys where the
+            // tenant ID itself is the label.
+            api
+              .resolveSubdomain(fromHost)
+              .then((res) => {
+                if (!cancelled) setOrg(res.tenant || fromHost);
+              })
+              .catch(() => {
+                if (!cancelled) setOrg(fromHost);
+              });
+          }
         }
       })
       .catch(() => {

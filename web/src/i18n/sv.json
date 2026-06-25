@@ -1015,7 +1015,17 @@
       "saving": "Sparar…",
       "saved": "Sparat",
       "profileNotConfigured": "Organisationsprofiler är inte aktiverade på den här dzd-instansen.",
-      "orgIconLabel": "Logotyp"
+      "orgIconLabel": "Logotyp",
+      "subdomainLabel": "Egen webbadress",
+      "subdomainDesc": "Ge din organisation en egen inloggningsadress. Medlemmar kan då gå direkt till er adress i stället för att välja organisation i en lista.",
+      "subdomainPlaceholder": "din-org",
+      "subdomainChecking": "Kontrollerar tillgänglighet…",
+      "subdomainAvailable": "Tillgänglig",
+      "subdomainTaken": "Den adressen är redan tagen — prova en annan.",
+      "subdomainInvalid": "Använd endast små bokstäver, siffror och bindestreck (och inte ett reserverat ord som ”www” eller ”app”).",
+      "subdomainCurrent": "Din adress: <0>{{url}}</0>",
+      "subdomainSave": "Ange adress",
+      "subdomainRelease": "Ta bort adress"
     }
   },
   "results": {

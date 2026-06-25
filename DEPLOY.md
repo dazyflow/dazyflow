@@ -199,10 +199,14 @@ Prometheus scrape the in-cluster Service directly.
 ## Per-org subdomains (optional)
 
 Set `DAZYFLOW_WILDCARD_DOMAIN=<apex>` (e.g. `dazyflow.app`) to give each
-org its own subdomain. A visit to `acme.dazyflow.app` lands on the
-sign-in page with `org=acme` preselected, so that org's "Sign in with
-Google" button shows without a `?org=` query param. Leave it empty and
-the daemon behaves exactly as a single-host deploy.
+org its own subdomain. An org owner claims a label under **Admin →
+Workspace → Custom web address** (stored on the org profile, unique,
+validated as a DNS label, reserved names blocked). A visit to
+`acme.dazyflow.app` then resolves that label back to the org and lands on
+the sign-in page with it preselected, so that org's "Sign in with Google"
+button shows without a `?org=` query param. Leave the env var empty and
+the daemon behaves exactly as a single-host deploy (and the UI hides the
+field).
 
 What it changes when set:
 
@@ -225,20 +229,29 @@ What it changes when set:
 
 Infrastructure prerequisites:
 
-- A wildcard DNS record `*.<apex>` pointing at the proxy.
-- A wildcard TLS certificate (`*.<apex>`) at the proxy. Let's Encrypt
-  issues these via the DNS-01 challenge.
+- A wildcard DNS record `*.<apex>` pointing at the proxy. (One-time, at the
+  registrar — every org subdomain rides this; nothing per-org to create.)
 - `DAZYFLOW_PUBLIC_BASE_URL` set to the apex (`https://<apex>`).
 - The proxy must route every `*.<apex>` host to the same dzd upstream
-  (the sign-in handoff state is held in-process). An nginx `server_name`
-  of `<apex> *.<apex>` with the same `proxy_pass` covers both.
+  (the sign-in handoff state is held in-process).
+
+**TLS — on-demand, no wildcard cert needed.** The bundled `Caddyfile`
+serves the apex with a normal managed (HTTP-01) certificate and serves
+`*.<apex>` with **on-demand TLS**: Caddy mints an ordinary HTTP-01 cert the
+first time each org host is requested, gated by an authorization endpoint
+(`on_demand_tls { ask … }` → `GET /api/v1/auth/tls-allow?domain=<host>`).
+That endpoint returns 2xx only for subdomains an org has actually claimed,
+so a stranger pointing arbitrary hosts at the IP can't make Caddy burn
+Let's Encrypt rate limits. This avoids a wildcard certificate (which would
+need a DNS-01 challenge and a DNS-provider plugin baked into a custom Caddy
+image). Ports 80/443 must be reachable (the DO firewall already allows them).
 
 Org slugs become DNS labels: only single-label, DNS-valid slugs resolve
 to an org, and reserved labels (`www`, `api`, `app`, `admin`, `auth`,
 `docs`, `status`, …) never map to one, so those hosts can serve
-infrastructure or marketing without colliding with a tenant. There is no
-automatic DNS provisioning — adding an org's subdomain is an ops step
-(the wildcard record + cert already cover it; nothing per-org to create).
+infrastructure or marketing without colliding with a tenant. Claiming a
+subdomain is self-serve in the UI; the only ops step is the one-time
+wildcard DNS record above.
 
 ## Durability
 

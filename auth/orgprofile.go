@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"regexp"
 	"strings"
 	"time"
 	"unicode"
@@ -23,7 +24,14 @@ type OrgProfile struct {
 	// Icon is an optional org logo: a data: URL (uploaded SVG/PNG) or a
 	// logical icon name. The UI renders an image when it's a data:/URL/
 	// path and a glyph otherwise. Stored inline — kept small client-side.
-	Icon      string    `json:"icon,omitempty"`
+	Icon string `json:"icon,omitempty"`
+	// Subdomain is the org's chosen DNS label on a wildcard-domain deploy
+	// ("klahr" → klahr.dazyflow.app). Unique across orgs (case-insensitive),
+	// a valid DNS label, and never a reserved infrastructure name. Empty when
+	// the org hasn't claimed one (or the deploy has no wildcard domain). It's
+	// the user-facing alias the sign-in page resolves back to the immutable
+	// tenant ID — see ValidateSubdomain + OrgProfileStore.GetOrgProfileBySubdomain.
+	Subdomain string    `json:"subdomain,omitempty"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
@@ -34,9 +42,54 @@ type OrgProfileStore interface {
 	GetOrgProfile(ctx context.Context, tenant string) (OrgProfile, error)
 	PutOrgProfile(ctx context.Context, p OrgProfile) error
 	ListOrgProfiles(ctx context.Context, tenants []string) (map[string]OrgProfile, error)
+	// GetOrgProfileBySubdomain resolves a claimed subdomain label back to its
+	// org profile (and thus tenant). Returns ErrUnknownOrgProfile when no org
+	// has claimed that label. The lookup is case-insensitive on the label.
+	GetOrgProfileBySubdomain(ctx context.Context, subdomain string) (OrgProfile, error)
 }
 
-var ErrUnknownOrgProfile = errors.New("no profile for tenant")
+var (
+	ErrUnknownOrgProfile = errors.New("no profile for tenant")
+	// ErrSubdomainTaken is returned by PutOrgProfile when the requested
+	// subdomain is already claimed by a DIFFERENT org. The handler maps it to
+	// a 409 so the UI can say "that subdomain is taken" rather than a 500.
+	ErrSubdomainTaken = errors.New("subdomain already taken")
+	// ErrInvalidSubdomain is returned by ValidateSubdomain for a label that
+	// isn't a usable DNS label or is reserved.
+	ErrInvalidSubdomain = errors.New("invalid subdomain")
+)
+
+// subdomainLabel is a conservative DNS label: 1–63 chars, lowercase
+// alphanumerics and internal hyphens, no leading/trailing hyphen. Mirrors the
+// web's orgFromHost LABEL so what the UI accepts and what a host can carry
+// agree exactly.
+var subdomainLabel = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
+
+// reservedSubdomains are infrastructure/marketing hosts a wildcard record
+// captures; they must never map to an org. Kept in lockstep with the web's
+// orgFromHost RESERVED set.
+var reservedSubdomains = map[string]bool{
+	"www": true, "app": true, "api": true, "admin": true, "auth": true,
+	"static": true, "assets": true, "cdn": true, "mail": true, "smtp": true,
+	"ftp": true, "ns": true, "ns1": true, "ns2": true, "blog": true,
+	"docs": true, "status": true, "help": true, "support": true,
+}
+
+// ValidateSubdomain normalizes and validates a requested subdomain label.
+// Empty input is valid and normalizes to "" (clearing the subdomain). A
+// non-empty label is lowercased and trimmed, then must be a valid DNS label
+// (subdomainLabel) and not reserved (reservedSubdomains); otherwise it returns
+// ErrInvalidSubdomain. Returns the normalized value to store.
+func ValidateSubdomain(s string) (string, error) {
+	s = strings.ToLower(strings.TrimSpace(s))
+	if s == "" {
+		return "", nil
+	}
+	if !subdomainLabel.MatchString(s) || reservedSubdomains[s] {
+		return "", ErrInvalidSubdomain
+	}
+	return s, nil
+}
 
 // DefaultOrgDisplayName picks a sensible initial name for the org an
 // account is signing up into. Logic:

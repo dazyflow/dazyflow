@@ -90,7 +90,7 @@ func (f *fakeOrgAuth) GetOrgAuth(context.Context, string) (auth.OrgAuthConfig, e
 	return auth.OrgAuthConfig{}, nil
 }
 func (f *fakeOrgAuth) PutOrgAuth(context.Context, auth.OrgAuthConfig) error { return nil }
-func (f *fakeOrgAuth) DeleteOrgAuth(context.Context, string) error         { f.deleted = true; return nil }
+func (f *fakeOrgAuth) DeleteOrgAuth(context.Context, string) error          { f.deleted = true; return nil }
 
 type fakeOrgProfiles struct{ deleted bool }
 
@@ -98,10 +98,16 @@ func (f *fakeOrgProfiles) GetOrgProfile(context.Context, string) (auth.OrgProfil
 	return auth.OrgProfile{}, nil
 }
 func (f *fakeOrgProfiles) PutOrgProfile(context.Context, auth.OrgProfile) error { return nil }
+func (f *fakeOrgProfiles) GetOrgProfileBySubdomain(context.Context, string) (auth.OrgProfile, error) {
+	return auth.OrgProfile{}, auth.ErrUnknownOrgProfile
+}
 func (f *fakeOrgProfiles) ListOrgProfiles(context.Context, []string) (map[string]auth.OrgProfile, error) {
 	return map[string]auth.OrgProfile{}, nil
 }
-func (f *fakeOrgProfiles) DeleteOrgProfile(context.Context, string) error { f.deleted = true; return nil }
+func (f *fakeOrgProfiles) DeleteOrgProfile(context.Context, string) error {
+	f.deleted = true
+	return nil
+}
 
 // ---- tests ------------------------------------------------------------
 

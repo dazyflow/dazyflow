@@ -31,6 +31,15 @@ func (r *recordingOrgProfiles) GetOrgProfile(_ context.Context, tenant string) (
 	return auth.OrgProfile{}, auth.ErrUnknownOrgProfile
 }
 func (r *recordingOrgProfiles) PutOrgProfile(_ context.Context, p auth.OrgProfile) error {
+	// Mirror the Postgres unique index on subdomain: a non-empty label held by
+	// a DIFFERENT tenant is a conflict.
+	if p.Subdomain != "" {
+		for tid, ex := range r.saved {
+			if tid != p.Tenant && strings.EqualFold(ex.Subdomain, p.Subdomain) {
+				return auth.ErrSubdomainTaken
+			}
+		}
+	}
 	r.saved[p.Tenant] = p
 	return nil
 }
@@ -42,6 +51,14 @@ func (r *recordingOrgProfiles) ListOrgProfiles(_ context.Context, tenants []stri
 		}
 	}
 	return out, nil
+}
+func (r *recordingOrgProfiles) GetOrgProfileBySubdomain(_ context.Context, subdomain string) (auth.OrgProfile, error) {
+	for _, p := range r.saved {
+		if p.Subdomain != "" && strings.EqualFold(p.Subdomain, subdomain) {
+			return p, nil
+		}
+	}
+	return auth.OrgProfile{}, auth.ErrUnknownOrgProfile
 }
 func (r *recordingOrgProfiles) DeleteOrgProfile(_ context.Context, tenant string) error {
 	delete(r.saved, tenant)

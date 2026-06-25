@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertCircle, Building2, Check, Settings2 } from "lucide-react";
+import { AlertCircle, Building2, Check, Globe, Settings2 } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
 import { IconUpload } from "../components/IconUpload";
+import { Button } from "../components/Button";
 import type { WorkspaceLimits } from "../types";
 import { explainApiError } from "../lib/explainApiError";
 
@@ -134,6 +135,19 @@ function OrgProfileEditor() {
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Subdomain (per-org wildcard host) state. wildcardDomain is empty unless the
+  // deploy enabled the feature, in which case the section renders. savedSub is
+  // the persisted label; sub is the current input. avail tracks the live
+  // availability probe so the user learns "taken"/"invalid" before saving.
+  const [wildcardDomain, setWildcardDomain] = useState("");
+  const [sub, setSub] = useState("");
+  const [savedSub, setSavedSub] = useState("");
+  const [savingSub, setSavingSub] = useState(false);
+  const [subSavedAt, setSubSavedAt] = useState<Date | null>(null);
+  const [subError, setSubError] = useState<string | null>(null);
+  const [avail, setAvail] = useState<
+    "idle" | "checking" | "ok" | "taken" | "invalid" | "current"
+  >("idle");
   // loadedRef gates autosave until the initial GET completes; savedRef
   // holds the last-persisted values so the autosave effect only fires on
   // a genuine user edit (not the load itself).
@@ -147,6 +161,9 @@ function OrgProfileEditor() {
       const p = await api.getOrgProfile(token);
       setDisplayName(p.display_name ?? "");
       setIcon(p.icon || undefined);
+      setWildcardDomain(p.wildcard_domain ?? "");
+      setSub(p.subdomain ?? "");
+      setSavedSub(p.subdomain ?? "");
       savedRef.current = { name: (p.display_name ?? "").trim(), icon: p.icon || undefined };
       loadedRef.current = true;
       setError(null);
@@ -182,6 +199,60 @@ function OrgProfileEditor() {
       setSaving(false);
     }
   }, [token, displayName, icon, refreshMe, t]);
+
+  // Live subdomain availability: debounce a probe as the user types so they
+  // learn "taken"/"invalid" before saving. An unchanged value reads as the
+  // current claim (no probe needed); an empty value is the "clear it" case.
+  useEffect(() => {
+    if (!token || !wildcardDomain) return;
+    const label = sub.trim().toLowerCase();
+    if (label === savedSub) {
+      setAvail("current");
+      return;
+    }
+    if (label === "") {
+      setAvail("idle");
+      return;
+    }
+    setAvail("checking");
+    let cancelled = false;
+    const h = window.setTimeout(() => {
+      api
+        .checkSubdomainAvailable(token, label)
+        .then((r) => {
+          if (cancelled) return;
+          if (r.available) setAvail("ok");
+          else setAvail(r.reason === "invalid" ? "invalid" : "taken");
+        })
+        .catch(() => {
+          if (!cancelled) setAvail("idle");
+        });
+    }, 400);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(h);
+    };
+  }, [sub, savedSub, token, wildcardDomain]);
+
+  const saveSubdomain = useCallback(async () => {
+    if (!token) return;
+    const label = sub.trim().toLowerCase();
+    setSavingSub(true);
+    setSubError(null);
+    try {
+      const r = await api.putOrgSubdomain(token, label);
+      setSavedSub(r.subdomain);
+      setSub(r.subdomain);
+      setSubSavedAt(new Date());
+      setAvail("current");
+    } catch (e) {
+      // 409 taken / 400 invalid carry friendly server messages; the generic
+      // mapper handles everything else.
+      setSubError(explainApiError(e, t));
+    } finally {
+      setSavingSub(false);
+    }
+  }, [token, sub, t]);
 
   // Autosave: debounce-persist a genuine change (skipped until the
   // initial load, and when the values already match what's stored).
@@ -238,6 +309,94 @@ function OrgProfileEditor() {
           />
         </div>
       </div>
+
+      {/* Subdomain — only when the deployment enabled per-org wildcard hosts. */}
+      {wildcardDomain && (
+        <div className="sf-field" style={{ marginTop: "var(--space-4)" }}>
+          <label>
+            <Globe size={13} style={{ verticalAlign: -2 }} />{" "}
+            {t("admin.workspace.subdomainLabel")}
+          </label>
+          <p className="desc">{t("admin.workspace.subdomainDesc")}</p>
+          <div className="subdomain-row">
+            <input
+              type="text"
+              className="subdomain-input"
+              value={sub}
+              onChange={(e) =>
+                setSub(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))
+              }
+              placeholder={t("admin.workspace.subdomainPlaceholder")}
+              maxLength={63}
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+            />
+            <span className="subdomain-suffix">.{wildcardDomain}</span>
+          </div>
+          {/* Live availability + the resulting URL. */}
+          <div className="subdomain-status">
+            {avail === "checking" && (
+              <span className="desc">{t("admin.workspace.subdomainChecking")}</span>
+            )}
+            {avail === "ok" && (
+              <span className="desc" style={{ color: "var(--success)" }}>
+                <Check size={12} style={{ verticalAlign: -1 }} />{" "}
+                {t("admin.workspace.subdomainAvailable")}
+              </span>
+            )}
+            {avail === "taken" && (
+              <span className="desc" style={{ color: "var(--danger)" }}>
+                {t("admin.workspace.subdomainTaken")}
+              </span>
+            )}
+            {avail === "invalid" && (
+              <span className="desc" style={{ color: "var(--danger)" }}>
+                {t("admin.workspace.subdomainInvalid")}
+              </span>
+            )}
+            {avail === "current" && savedSub && (
+              <span className="desc">
+                <Trans
+                  i18nKey="admin.workspace.subdomainCurrent"
+                  values={{ url: `${savedSub}.${wildcardDomain}` }}
+                  components={[<code />]}
+                />
+              </span>
+            )}
+          </div>
+          <div style={{ marginTop: "var(--space-2)", display: "flex", gap: "var(--space-2)", alignItems: "center" }}>
+            <Button
+              className="primary"
+              onClick={() => void saveSubdomain()}
+              disabled={
+                savingSub ||
+                sub.trim().toLowerCase() === savedSub ||
+                avail === "checking" ||
+                avail === "taken" ||
+                avail === "invalid"
+              }
+            >
+              {savingSub
+                ? t("admin.workspace.saving")
+                : sub.trim() === "" && savedSub
+                ? t("admin.workspace.subdomainRelease")
+                : t("admin.workspace.subdomainSave")}
+            </Button>
+            {subSavedAt && !subError && (
+              <span className="desc" style={{ color: "var(--success)" }}>
+                <Check size={12} style={{ verticalAlign: -1 }} /> {t("admin.workspace.saved")}
+              </span>
+            )}
+          </div>
+          {subError && (
+            <div className="error" style={{ marginTop: 8 }}>
+              <AlertCircle size={14} style={{ verticalAlign: -2 }} /> {subError}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="settings-foot" style={{ borderTop: "none", padding: 0, minHeight: 18 }}>
         {saving ? (
           <span className="desc">{t("admin.workspace.saving")}</span>

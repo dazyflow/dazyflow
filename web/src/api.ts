@@ -1808,4 +1808,29 @@ export const api = {
       display_name,
       icon: icon ?? "",
     }),
+  // putOrgSubdomain claims (or clears, with "") the org's subdomain label.
+  // Throws APIError 409 (code "subdomain_taken") / 400 ("invalid_subdomain").
+  putOrgSubdomain: (token: string, subdomain: string) =>
+    request<{ tenant: string; subdomain: string; wildcard_domain: string }>(
+      token,
+      "PUT",
+      "/admin/org/subdomain",
+      { subdomain },
+    ),
+  // checkSubdomainAvailable is the owner-only pre-save probe the editor calls
+  // as the user types. reason ∈ "invalid" | "taken" | "current" | "disabled".
+  checkSubdomainAvailable: (token: string, label: string) =>
+    request<{ available: boolean; reason?: string }>(
+      token,
+      "GET",
+      `/admin/org/subdomain/available?label=${encodeURIComponent(label)}`,
+    ),
+  // resolveSubdomain is the PUBLIC sign-in lookup mapping a host label to a
+  // tenant. Rejects (404) when unclaimed. No token needed.
+  resolveSubdomain: (label: string) =>
+    request<{ tenant: string; display_name: string }>(
+      null,
+      "GET",
+      `/auth/resolve-subdomain?label=${encodeURIComponent(label)}`,
+    ),
 };

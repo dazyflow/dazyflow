@@ -65,8 +65,8 @@ type HTTPGateway struct {
 	// Sessions and Users power the email+password sign-in flow. Both
 	// are optional — leaving them nil disables the /auth endpoints
 	// without breaking API-key auth.
-	Sessions   auth.SessionStore
-	Users      auth.UserStore
+	Sessions auth.SessionStore
+	Users    auth.UserStore
 	// SessionTTL is the sliding idle window: a session is issued for this
 	// long and, while in use, slid forward by it on each request (see
 	// maybeRenewSession), so an active user is never forced to re-sign-in.
@@ -635,8 +635,14 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/v1/admin/org/auth-config", h.requireAuth(h.deleteOrgAuthConfig))
 	mux.HandleFunc("GET /api/v1/auth/sso/{tenant}", h.getPublicSSOStatus)
 	mux.HandleFunc("GET /api/v1/auth/config", h.getPublicAuthConfig)
+	// Public (pre-auth): map a wildcard host label to a tenant for sign-in.
+	mux.HandleFunc("GET /api/v1/auth/resolve-subdomain", h.resolveSubdomain)
+	// Public (pre-auth): Caddy on-demand-TLS authorization for org subdomains.
+	mux.HandleFunc("GET /api/v1/auth/tls-allow", h.tlsAllow)
 	mux.HandleFunc("GET /api/v1/admin/org/profile", h.requireAuth(h.getOrgProfile))
 	mux.HandleFunc("PUT /api/v1/admin/org/profile", h.requireAuth(h.putOrgProfile))
+	mux.HandleFunc("PUT /api/v1/admin/org/subdomain", h.requireAuth(h.putOrgSubdomain))
+	mux.HandleFunc("GET /api/v1/admin/org/subdomain/available", h.requireAuth(h.orgSubdomainAvailable))
 	mux.HandleFunc("GET /api/v1/auth/google/start", h.googleSignInStart)
 	mux.HandleFunc("GET /api/v1/auth/google/callback", h.googleSignInCallback)
 	// One-time handoff: the apex SSO callback bounces the session to the
@@ -1438,8 +1444,9 @@ func (h *HTTPGateway) getOrgProfile(rw http.ResponseWriter, r *http.Request, p c
 	if err != nil {
 		// Empty row is the right shape — the UI fills in a default.
 		writeJSON(rw, http.StatusOK, map[string]any{
-			"tenant":       tenant,
-			"display_name": "",
+			"tenant":          tenant,
+			"display_name":    "",
+			"wildcard_domain": h.WildcardDomain,
 		})
 		return
 	}
@@ -1447,7 +1454,12 @@ func (h *HTTPGateway) getOrgProfile(rw http.ResponseWriter, r *http.Request, p c
 		"tenant":       pr.Tenant,
 		"display_name": pr.DisplayName,
 		"icon":         pr.Icon,
+		"subdomain":    pr.Subdomain,
 		"updated_at":   pr.UpdatedAt,
+		// The apex the subdomain hangs off (e.g. "dazyflow.app"), so the
+		// editor renders "<label>.<domain>" and only shows the field when the
+		// deploy supports per-org subdomains. Empty = feature off.
+		"wildcard_domain": h.WildcardDomain,
 	})
 }
 
@@ -1486,6 +1498,12 @@ func (h *HTTPGateway) putOrgProfile(rw http.ResponseWriter, r *http.Request, p c
 		Icon:        body.Icon,
 		UpdatedAt:   time.Now().UTC(),
 	}
+	// Preserve the subdomain: it's a full-row upsert, and the subdomain is
+	// owned by the dedicated endpoint below (putOrgSubdomain). Without this
+	// carry-over a name/icon save would silently clear a claimed subdomain.
+	if existing, err := h.Profiles.GetOrgProfile(r.Context(), p.Tenant); err == nil {
+		pr.Subdomain = existing.Subdomain
+	}
 	if err := h.Profiles.PutOrgProfile(r.Context(), pr); err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
@@ -1495,8 +1513,151 @@ func (h *HTTPGateway) putOrgProfile(rw http.ResponseWriter, r *http.Request, p c
 		"tenant":       pr.Tenant,
 		"display_name": pr.DisplayName,
 		"icon":         pr.Icon,
+		"subdomain":    pr.Subdomain,
 		"updated_at":   pr.UpdatedAt,
 	})
+}
+
+// putOrgSubdomain claims (or clears) the org's subdomain label — the dedicated
+// owner-only endpoint that owns the subdomain column, separate from the
+// name/icon PUT so neither clobbers the other. Validates the label (DNS shape
+// + reserved-name check), then upserts; a label already claimed by another org
+// surfaces as 409 so the UI can say "taken" rather than 500. An empty label
+// clears the subdomain.
+func (h *HTTPGateway) putOrgSubdomain(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	if h.Profiles == nil {
+		writeJSONError(rw, http.StatusNotImplemented, "org profiles not configured")
+		return
+	}
+	if !requireOrgAdmin(rw, p) {
+		return
+	}
+	if h.WildcardDomain == "" {
+		writeAPIError(rw, http.StatusNotImplemented, "subdomains_disabled",
+			"this deployment doesn't have per-org subdomains enabled")
+		return
+	}
+	body, ok := decodeRequestJSON[struct {
+		Subdomain string `json:"subdomain"`
+	}](rw, r)
+	if !ok {
+		return
+	}
+	label, err := auth.ValidateSubdomain(body.Subdomain)
+	if err != nil {
+		writeAPIError(rw, http.StatusBadRequest, "invalid_subdomain",
+			"a subdomain may only use lowercase letters, numbers and hyphens (and can't be a reserved name)")
+		return
+	}
+	// Load-merge-write so the name/icon already on the profile survive.
+	pr := auth.OrgProfile{Tenant: p.Tenant, UpdatedAt: time.Now().UTC()}
+	if existing, gerr := h.Profiles.GetOrgProfile(r.Context(), p.Tenant); gerr == nil {
+		pr.DisplayName = existing.DisplayName
+		pr.Icon = existing.Icon
+	}
+	pr.Subdomain = label
+	if err := h.Profiles.PutOrgProfile(r.Context(), pr); err != nil {
+		if errors.Is(err, auth.ErrSubdomainTaken) {
+			writeAPIError(rw, http.StatusConflict, "subdomain_taken",
+				"that subdomain is already taken — try another")
+			return
+		}
+		writeJSONError(rw, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.audit(r.Context(), p, "org_subdomain.update", p.Tenant, "subdomain="+label)
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"tenant":          pr.Tenant,
+		"subdomain":       pr.Subdomain,
+		"wildcard_domain": h.WildcardDomain,
+	})
+}
+
+// orgSubdomainAvailable is the owner-only pre-check the editor calls as the
+// user types, so they learn a label is taken/invalid before saving. Returns
+// {available, reason}. The caller's OWN current label reads as available (so
+// re-saving an unchanged value isn't flagged as a conflict).
+func (h *HTTPGateway) orgSubdomainAvailable(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	if h.Profiles == nil || h.WildcardDomain == "" {
+		writeJSON(rw, http.StatusOK, map[string]any{"available": false, "reason": "disabled"})
+		return
+	}
+	if !requireOrgAdmin(rw, p) {
+		return
+	}
+	label, err := auth.ValidateSubdomain(r.URL.Query().Get("label"))
+	if err != nil || label == "" {
+		writeJSON(rw, http.StatusOK, map[string]any{"available": false, "reason": "invalid"})
+		return
+	}
+	owner, err := h.Profiles.GetOrgProfileBySubdomain(r.Context(), label)
+	if err != nil {
+		// No org holds it → free.
+		writeJSON(rw, http.StatusOK, map[string]any{"available": true})
+		return
+	}
+	if owner.Tenant == p.Tenant {
+		writeJSON(rw, http.StatusOK, map[string]any{"available": true, "reason": "current"})
+		return
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{"available": false, "reason": "taken"})
+}
+
+// resolveSubdomain is the PUBLIC (pre-auth) lookup the sign-in page uses to map
+// a wildcard host label ("klahr" from klahr.dazyflow.app) back to the org's
+// real tenant ID, so the SSO probe + Google start target the right org. Only
+// the tenant + display name are returned (both already public on the sign-in
+// surface); 404 when the label isn't claimed. No auth: a subdomain is public
+// by nature, and this leaks nothing a visit to the host wouldn't.
+func (h *HTTPGateway) resolveSubdomain(rw http.ResponseWriter, r *http.Request) {
+	if h.Profiles == nil || h.WildcardDomain == "" {
+		writeAPIError(rw, http.StatusNotFound, "not_found", "no such organization")
+		return
+	}
+	label, err := auth.ValidateSubdomain(r.URL.Query().Get("label"))
+	if err != nil || label == "" {
+		writeAPIError(rw, http.StatusNotFound, "not_found", "no such organization")
+		return
+	}
+	pr, err := h.Profiles.GetOrgProfileBySubdomain(r.Context(), label)
+	if err != nil {
+		writeAPIError(rw, http.StatusNotFound, "not_found", "no such organization")
+		return
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"tenant":       pr.Tenant,
+		"display_name": pr.DisplayName,
+	})
+}
+
+// tlsAllow is the Caddy on-demand-TLS authorization endpoint ("ask"): Caddy
+// calls GET /api/v1/auth/tls-allow?domain=<host> before issuing a certificate
+// for a wildcard-subdomain host, and only issues when this returns 2xx. We
+// allow exactly the org subdomains that have been CLAIMED — so an attacker
+// pointing arbitrary <random>.<apex> hosts at our IP can't make us mint certs
+// (Let's Encrypt rate-limit abuse) for hosts that map to no org. The apex
+// itself is served by its own managed-cert site block and never reaches here.
+func (h *HTTPGateway) tlsAllow(rw http.ResponseWriter, r *http.Request) {
+	if h.Profiles == nil || h.WildcardDomain == "" {
+		http.Error(rw, "subdomains disabled", http.StatusForbidden)
+		return
+	}
+	host := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("domain")))
+	suffix := "." + strings.ToLower(h.WildcardDomain)
+	if host == "" || !strings.HasSuffix(host, suffix) {
+		http.Error(rw, "not a managed host", http.StatusForbidden)
+		return
+	}
+	label, err := auth.ValidateSubdomain(strings.TrimSuffix(host, suffix))
+	if err != nil || label == "" {
+		http.Error(rw, "invalid label", http.StatusForbidden)
+		return
+	}
+	if _, err := h.Profiles.GetOrgProfileBySubdomain(r.Context(), label); err != nil {
+		http.Error(rw, "no such organization", http.StatusForbidden)
+		return
+	}
+	rw.WriteHeader(http.StatusOK) // claimed → Caddy may issue the cert
 }
 
 func (h *HTTPGateway) listModules(rw http.ResponseWriter, r *http.Request, p core.Principal) {
