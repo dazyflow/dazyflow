@@ -180,6 +180,15 @@ func main() {
 	if freePollingDisabled {
 		log.Print("plan gate enabled: schedules/polling triggers are Pro-only (free tenants run manually)")
 	}
+	// Three-tier free-plan caps (0 = disabled, the self-host default). Pro/
+	// comped/trial tenants bypass all three; see Service.Free* docs.
+	freeRetentionDays := envInt("DAZYFLOW_FREE_RETENTION_DAYS", 0)
+	freeMaxConcurrency := envInt("DAZYFLOW_FREE_MAX_CONCURRENCY", 0)
+	freeMaxMembers := envInt("DAZYFLOW_FREE_MAX_MEMBERS", 0)
+	if freeRetentionDays > 0 || freeMaxConcurrency > 0 || freeMaxMembers > 0 {
+		log.Printf("plan gate enabled: free tier retention=%dd concurrency=%d members=%d (0 = unlimited; pro bypasses)",
+			freeRetentionDays, freeMaxConcurrency, freeMaxMembers)
+	}
 	// Transactional mailer (invitation links, failure-notification email).
 	// Off without DAZYFLOW_SMTP_URL; everything degrades to links/webhooks.
 	mailer, err := daemon.NewMailerFromURL(envStr("DAZYFLOW_SMTP_URL", ""), envStr("DAZYFLOW_SMTP_FROM", ""))
@@ -580,6 +589,9 @@ func main() {
 		Plans:               stores.plans,
 		FreeRunsPerMonth:    freeRunsPerMonth,
 		FreePollingDisabled: freePollingDisabled,
+		FreeRetentionDays:   freeRetentionDays,
+		FreeMaxConcurrency:  freeMaxConcurrency,
+		FreeMaxMembers:      freeMaxMembers,
 		Mailer:              mailer,
 		RunLogs:             stores.runLogs,
 		// Shares backs the per-workspace public overview (TV-dashboard) links.
@@ -1047,7 +1059,7 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 		}
 	}()
 
-	startRetentionSweeps(ctx, d.jobs, d.runLogs, d.pgPool, bgWg)
+	startRetentionSweeps(ctx, d.svc, d.jobs, d.runLogs, d.pgPool, bgWg)
 }
 
 // startRetentionSweeps prunes the jobs table, audit_events, and run_logs
@@ -1055,13 +1067,16 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 // DAZYFLOW_JOB_RETENTION / DAZYFLOW_AUDIT_RETENTION /
 // DAZYFLOW_RUN_LOG_RETENTION. A retention <= 0 disables that sweep; when
 // all are off no goroutine is started.
-func startRetentionSweeps(ctx context.Context, jobs core.JobStore, runLogs daemon.RunLogStore, pgPool *pgxpool.Pool, bgWg *sync.WaitGroup) {
+func startRetentionSweeps(ctx context.Context, svc *daemon.Service, jobs core.JobStore, runLogs daemon.RunLogStore, pgPool *pgxpool.Pool, bgWg *sync.WaitGroup) {
 	jobRetention := envDuration("DAZYFLOW_JOB_RETENTION", 30*24*time.Hour)
 	auditRetention := envDuration("DAZYFLOW_AUDIT_RETENTION", 90*24*time.Hour)
 	// Run logs default to the JOB retention: a run's log should outlive
 	// neither the run record it narrates nor the operator's expectations.
 	runLogRetention := envDuration("DAZYFLOW_RUN_LOG_RETENTION", jobRetention)
-	if jobRetention <= 0 && auditRetention <= 0 && runLogRetention <= 0 {
+	// A free-tier per-tenant retention window keeps the sweep alive even when
+	// every global window is disabled (the per-tenant pass below still runs).
+	perTenantRetention := svc != nil && svc.FreeRetentionDays > 0
+	if jobRetention <= 0 && auditRetention <= 0 && runLogRetention <= 0 && !perTenantRetention {
 		return
 	}
 	retentionAudit, err := daemon.NewPgAuditLog(ctx, pgPool)
@@ -1073,6 +1088,12 @@ func startRetentionSweeps(ctx context.Context, jobs core.JobStore, runLogs daemo
 	})
 	logPruner, _ := runLogs.(interface {
 		Prune(context.Context, time.Duration, int) (int, error)
+	})
+	// Per-tenant run-log retention: free tenants keep a shorter window than
+	// the global cap above. Optional (only the Pg store implements it).
+	perTenantLogPruner, _ := runLogs.(interface {
+		PruneTenant(context.Context, string, time.Duration, int) (int, error)
+		RunLogTenants(context.Context) ([]string, error)
 	})
 	bgWg.Add(1)
 	go func() {
@@ -1103,6 +1124,34 @@ func startRetentionSweeps(ctx context.Context, jobs core.JobStore, runLogs daemo
 					}
 				} else if n > 0 {
 					log.Printf("retention: pruned %d run-log row(s)", n)
+				}
+			}
+			// Per-tenant pass: prune free tenants on their shorter effective
+			// window (the global sweep above is the outer cap). Pro/comped/
+			// trial resolve to 0 (no per-tenant cap) and are skipped.
+			if svc != nil && perTenantLogPruner != nil {
+				tenants, err := perTenantLogPruner.RunLogTenants(ctx)
+				if err != nil {
+					if ctx.Err() == nil {
+						log.Printf("retention: list tenants for run-log sweep: %v", err)
+					}
+				}
+				for _, tenant := range tenants {
+					days := svc.RunLogRetentionDays(ctx, tenant)
+					if days <= 0 {
+						continue // uncapped — global sweep is the only bound
+					}
+					win := time.Duration(days) * 24 * time.Hour
+					if runLogRetention > 0 && win >= runLogRetention {
+						continue // global sweep already covers this window
+					}
+					if n, err := perTenantLogPruner.PruneTenant(ctx, tenant, win, 5000); err != nil {
+						if ctx.Err() == nil {
+							log.Printf("retention: prune run logs for %s: %v", tenant, err)
+						}
+					} else if n > 0 {
+						log.Printf("retention: pruned %d run-log row(s) for %s (%dd)", n, tenant, days)
+					}
 				}
 			}
 		}

@@ -33,6 +33,13 @@ type Tier struct {
 	MaxGraphNodes     int       `json:"max_graph_nodes"`
 	MaxFlows          int       `json:"max_flows"`
 	MaxTimeoutSeconds int       `json:"max_timeout_seconds"`
+	// RetentionDays caps how long run history (run logs/results) is kept for orgs
+	// on this tier. MaxConcurrency caps simultaneously-running graph runs.
+	// MaxMembers caps org membership (seats). All three use the 0 = inherit /
+	// unlimited convention of the numeric limits above.
+	RetentionDays  int `json:"retention_days"`
+	MaxConcurrency int `json:"max_concurrency"`
+	MaxMembers     int `json:"max_members"`
 	// PollingAllowed gates scheduled / poll triggers for orgs on this tier.
 	// nil = inherit the deployment-global default (Service.FreePollingDisabled,
 	// i.e. the DAZYFLOW_FREE_POLLING_TRIGGERS knob) — matching the 0 = inherit
@@ -62,6 +69,9 @@ type TenantEntitlement struct {
 	MaxGraphNodes     *int   `json:"max_graph_nodes,omitempty"`
 	MaxFlows          *int   `json:"max_flows,omitempty"`
 	MaxTimeoutSeconds *int   `json:"max_timeout_seconds,omitempty"`
+	RetentionDays     *int   `json:"retention_days,omitempty"`
+	MaxConcurrency    *int   `json:"max_concurrency,omitempty"`
+	MaxMembers        *int   `json:"max_members,omitempty"`
 	PollingAllowed    *bool  `json:"polling_allowed,omitempty"`
 
 	Notes     string    `json:"notes,omitempty"`
@@ -76,6 +86,9 @@ type LimitDefaults struct {
 	MaxGraphNodes     int
 	MaxFlows          int
 	MaxTimeoutSeconds int
+	RetentionDays     int
+	MaxConcurrency    int
+	MaxMembers        int
 	PollingAllowed    bool
 }
 
@@ -88,6 +101,9 @@ type EffectiveLimits struct {
 	MaxGraphNodes     int        `json:"max_graph_nodes"`
 	MaxFlows          int        `json:"max_flows"`
 	MaxTimeoutSeconds int        `json:"max_timeout_seconds"`
+	RetentionDays     int        `json:"retention_days"`
+	MaxConcurrency    int        `json:"max_concurrency"`
+	MaxMembers        int        `json:"max_members"`
 	PollingAllowed    bool       `json:"polling_allowed"`
 	TierID            string     `json:"tier_id,omitempty"`
 	TrialEndsAt       *time.Time `json:"trial_ends_at,omitempty"`
@@ -106,6 +122,9 @@ func ResolveEffective(ent *TenantEntitlement, tier *Tier, def LimitDefaults, str
 		MaxGraphNodes:     def.MaxGraphNodes,
 		MaxFlows:          def.MaxFlows,
 		MaxTimeoutSeconds: def.MaxTimeoutSeconds,
+		RetentionDays:     def.RetentionDays,
+		MaxConcurrency:    def.MaxConcurrency,
+		MaxMembers:        def.MaxMembers,
 		PollingAllowed:    def.PollingAllowed,
 	}
 	// Tier layer: a non-zero tier value replaces the global default.
@@ -125,6 +144,15 @@ func ResolveEffective(ent *TenantEntitlement, tier *Tier, def LimitDefaults, str
 		}
 		if tier.MaxTimeoutSeconds != 0 {
 			eff.MaxTimeoutSeconds = tier.MaxTimeoutSeconds
+		}
+		if tier.RetentionDays != 0 {
+			eff.RetentionDays = tier.RetentionDays
+		}
+		if tier.MaxConcurrency != 0 {
+			eff.MaxConcurrency = tier.MaxConcurrency
+		}
+		if tier.MaxMembers != 0 {
+			eff.MaxMembers = tier.MaxMembers
 		}
 		// nil = inherit the global default (same convention as the numeric
 		// limits above). A bool has no "unset" value, so a plain false here
@@ -150,6 +178,15 @@ func ResolveEffective(ent *TenantEntitlement, tier *Tier, def LimitDefaults, str
 		}
 		if ent.MaxTimeoutSeconds != nil {
 			eff.MaxTimeoutSeconds = *ent.MaxTimeoutSeconds
+		}
+		if ent.RetentionDays != nil {
+			eff.RetentionDays = *ent.RetentionDays
+		}
+		if ent.MaxConcurrency != nil {
+			eff.MaxConcurrency = *ent.MaxConcurrency
+		}
+		if ent.MaxMembers != nil {
+			eff.MaxMembers = *ent.MaxMembers
 		}
 		if ent.PollingAllowed != nil {
 			eff.PollingAllowed = *ent.PollingAllowed
@@ -211,11 +248,19 @@ CREATE TABLE IF NOT EXISTS tiers (
     max_graph_nodes     BIGINT NOT NULL DEFAULT 0,
     max_flows           BIGINT NOT NULL DEFAULT 0,
     max_timeout_seconds BIGINT NOT NULL DEFAULT 0,
+    retention_days      BIGINT NOT NULL DEFAULT 0,
+    max_concurrency     BIGINT NOT NULL DEFAULT 0,
+    max_members         BIGINT NOT NULL DEFAULT 0,
     -- NULL = inherit the deployment-global default (see Tier.PollingAllowed).
     polling_allowed     BOOLEAN,
     built_in            BOOLEAN NOT NULL DEFAULT FALSE,
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Columns added after the original tiers table shipped. ADD COLUMN IF NOT EXISTS
+-- is idempotent, so re-running the schema on an upgraded deployment is a no-op.
+ALTER TABLE tiers ADD COLUMN IF NOT EXISTS retention_days  BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE tiers ADD COLUMN IF NOT EXISTS max_concurrency BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE tiers ADD COLUMN IF NOT EXISTS max_members     BIGINT NOT NULL DEFAULT 0;
 CREATE TABLE IF NOT EXISTS tenant_entitlements (
     tenant     TEXT PRIMARY KEY,
     tier_id    TEXT NOT NULL DEFAULT '',
@@ -359,15 +404,19 @@ func (s *PgEntitlementStore) PutTier(ctx context.Context, t Tier) error {
 	}
 	const q = `
 		INSERT INTO tiers (id, name, plan, runs_per_month, disk_quota_bytes, max_graph_nodes,
-			max_flows, max_timeout_seconds, polling_allowed, built_in, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, now())
+			max_flows, max_timeout_seconds, retention_days, max_concurrency, max_members,
+			polling_allowed, built_in, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13, now())
 		ON CONFLICT (id) DO UPDATE SET
 			name=EXCLUDED.name, plan=EXCLUDED.plan, runs_per_month=EXCLUDED.runs_per_month,
 			disk_quota_bytes=EXCLUDED.disk_quota_bytes, max_graph_nodes=EXCLUDED.max_graph_nodes,
 			max_flows=EXCLUDED.max_flows, max_timeout_seconds=EXCLUDED.max_timeout_seconds,
+			retention_days=EXCLUDED.retention_days, max_concurrency=EXCLUDED.max_concurrency,
+			max_members=EXCLUDED.max_members,
 			polling_allowed=EXCLUDED.polling_allowed, updated_at=now()`
 	if _, err := s.pool.Exec(ctx, q, t.ID, t.Name, t.Plan, t.RunsPerMonth, t.DiskQuotaBytes,
-		t.MaxGraphNodes, t.MaxFlows, t.MaxTimeoutSeconds, t.PollingAllowed, t.BuiltIn); err != nil {
+		t.MaxGraphNodes, t.MaxFlows, t.MaxTimeoutSeconds, t.RetentionDays, t.MaxConcurrency,
+		t.MaxMembers, t.PollingAllowed, t.BuiltIn); err != nil {
 		return err
 	}
 	return s.reload(ctx)
@@ -386,7 +435,8 @@ func (s *PgEntitlementStore) DeleteTier(ctx context.Context, id string) error {
 
 func (s *PgEntitlementStore) listTiersDB(ctx context.Context) ([]Tier, error) {
 	rows, err := s.pool.Query(ctx, `SELECT id, name, plan, runs_per_month, disk_quota_bytes,
-		max_graph_nodes, max_flows, max_timeout_seconds, polling_allowed, built_in, updated_at
+		max_graph_nodes, max_flows, max_timeout_seconds, retention_days, max_concurrency, max_members,
+		polling_allowed, built_in, updated_at
 		FROM tiers ORDER BY built_in DESC, name`)
 	if err != nil {
 		return nil, err
@@ -396,7 +446,8 @@ func (s *PgEntitlementStore) listTiersDB(ctx context.Context) ([]Tier, error) {
 	for rows.Next() {
 		var t Tier
 		if err := rows.Scan(&t.ID, &t.Name, &t.Plan, &t.RunsPerMonth, &t.DiskQuotaBytes,
-			&t.MaxGraphNodes, &t.MaxFlows, &t.MaxTimeoutSeconds, &t.PollingAllowed, &t.BuiltIn, &t.UpdatedAt); err != nil {
+			&t.MaxGraphNodes, &t.MaxFlows, &t.MaxTimeoutSeconds, &t.RetentionDays, &t.MaxConcurrency,
+			&t.MaxMembers, &t.PollingAllowed, &t.BuiltIn, &t.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, t)
@@ -415,6 +466,9 @@ type entGrant struct {
 	MaxGraphNodes     *int       `json:"max_graph_nodes,omitempty"`
 	MaxFlows          *int       `json:"max_flows,omitempty"`
 	MaxTimeoutSeconds *int       `json:"max_timeout_seconds,omitempty"`
+	RetentionDays     *int       `json:"retention_days,omitempty"`
+	MaxConcurrency    *int       `json:"max_concurrency,omitempty"`
+	MaxMembers        *int       `json:"max_members,omitempty"`
 	PollingAllowed    *bool      `json:"polling_allowed,omitempty"`
 }
 
@@ -432,7 +486,9 @@ func (s *PgEntitlementStore) PutEntitlement(ctx context.Context, e TenantEntitle
 	grant := entGrant{
 		PlanOverride: e.PlanOverride, Comped: e.Comped, TrialEndsAt: e.TrialEndsAt,
 		RunsPerMonth: e.RunsPerMonth, DiskQuotaBytes: e.DiskQuotaBytes, MaxGraphNodes: e.MaxGraphNodes,
-		MaxFlows: e.MaxFlows, MaxTimeoutSeconds: e.MaxTimeoutSeconds, PollingAllowed: e.PollingAllowed,
+		MaxFlows: e.MaxFlows, MaxTimeoutSeconds: e.MaxTimeoutSeconds,
+		RetentionDays: e.RetentionDays, MaxConcurrency: e.MaxConcurrency, MaxMembers: e.MaxMembers,
+		PollingAllowed: e.PollingAllowed,
 	}
 	blob, err := json.Marshal(grant)
 	if err != nil {
@@ -475,6 +531,7 @@ func (s *PgEntitlementStore) ListEntitlements(ctx context.Context) ([]TenantEnti
 		e.PlanOverride, e.Comped, e.TrialEndsAt = g.PlanOverride, g.Comped, g.TrialEndsAt
 		e.RunsPerMonth, e.DiskQuotaBytes, e.MaxGraphNodes = g.RunsPerMonth, g.DiskQuotaBytes, g.MaxGraphNodes
 		e.MaxFlows, e.MaxTimeoutSeconds, e.PollingAllowed = g.MaxFlows, g.MaxTimeoutSeconds, g.PollingAllowed
+		e.RetentionDays, e.MaxConcurrency, e.MaxMembers = g.RetentionDays, g.MaxConcurrency, g.MaxMembers
 		out = append(out, e)
 	}
 	return out, rows.Err()

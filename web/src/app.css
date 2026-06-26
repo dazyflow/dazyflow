@@ -486,18 +486,51 @@
    feature list diffed against the current plan. */
 .plans-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: 1fr;
   gap: var(--space-4);
   align-items: stretch;
+}
+/* Two-up once there's room, three-up on a desktop-width content column — so
+   Free / Pro / Enterprise sit side by side like a typical pricing table. */
+@media (min-width: 560px) {
+  .plans-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (min-width: 880px) {
+  .plans-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 .plan-card {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
+  position: relative;
+  overflow: hidden;
 }
 .plan-card-current {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+/* The headline (Pro) tier: accent border, a faint accent wash, and a corner
+   ribbon — the one card the eye lands on first. */
+.plan-card-featured {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent),
+    0 8px 28px -16px color-mix(in srgb, var(--accent) 70%, transparent);
+  background:
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--accent) 7%, transparent),
+      transparent 140px
+    ),
+    var(--surface, transparent);
+}
+/* Filled accent variant of the badge — marks the "Most popular" tier. */
+.plan-badge-solid {
+  background: var(--accent);
+  color: var(--accent-ink, #fff);
 }
 .plan-card-head {
   display: flex;
@@ -519,10 +552,28 @@
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   color: var(--accent);
 }
+.plan-tagline {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--muted);
+  min-height: 2.6em; /* keep taglines (1–2 lines) from misaligning the cards */
+}
+.plan-price {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--text);
+}
+/* The CTA sits high (under the price) like a typical pricing table; a fixed
+   min-height keeps action-less cards aligned with the ones that have a button. */
+.plan-card-cta {
+  min-height: 38px;
+  margin: var(--space-2) 0 var(--space-3);
+}
 .plan-feats {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: var(--space-3) 0 0;
+  border-top: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -537,7 +588,7 @@
 .plan-feat-ico {
   display: inline-flex;
   flex: 0 0 auto;
-  color: var(--muted);
+  color: color-mix(in srgb, var(--success, #2ea043) 90%, var(--muted));
 }
 .plan-feat-label {
   flex: 1 1 auto;
@@ -555,10 +606,6 @@
 .plan-feat-up .plan-feat-ico,
 .plan-feat-up .plan-feat-val {
   color: var(--accent);
-}
-.plan-card-foot {
-  margin-top: auto;
-  padding-top: var(--space-2);
 }
 .plan-contact {
   font-size: var(--text-sm);

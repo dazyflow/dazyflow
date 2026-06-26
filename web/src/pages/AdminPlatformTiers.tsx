@@ -56,6 +56,9 @@ export function AdminPlatformTiers() {
     max_graph_nodes: 0,
     max_flows: 0,
     max_timeout_seconds: 0,
+    retention_days: 0,
+    max_concurrency: 0,
+    max_members: 0,
     polling_allowed: null, // inherit the global default, like the 0-valued limits
     built_in: false,
   });
@@ -167,6 +170,9 @@ function limitSummary(tier: PlatformTier, t: (k: string) => string): string {
   const mb = tier.disk_quota_bytes > 0 ? `${Math.round(tier.disk_quota_bytes / (1024 * 1024))} MB` : "—";
   return [
     `${t("admin.platformTiers.runs")}: ${n(tier.runs_per_month)}`,
+    `${t("admin.platformTiers.members")}: ${n(tier.max_members)}`,
+    `${t("admin.platformTiers.concurrency")}: ${n(tier.max_concurrency)}`,
+    `${t("admin.platformTiers.retention")}: ${tier.retention_days > 0 ? `${tier.retention_days}d` : "—"}`,
     `${t("admin.platformTiers.nodes")}: ${n(tier.max_graph_nodes)}`,
     `${t("admin.platformTiers.flows")}: ${n(tier.max_flows)}`,
     `${t("admin.platformTiers.disk")}: ${mb}`,
@@ -260,6 +266,18 @@ function TierEditor({
           <label>
             {t("admin.platformTiers.runs")} <span className="pa-subtext">({t("admin.platformTiers.zeroInherit")})</span>
             {num("runs_per_month")}
+          </label>
+          <label>
+            {t("admin.platformTiers.members")} <span className="pa-subtext">({t("admin.platformTiers.zeroInherit")})</span>
+            {num("max_members")}
+          </label>
+          <label>
+            {t("admin.platformTiers.concurrency")} <span className="pa-subtext">({t("admin.platformTiers.zeroInherit")})</span>
+            {num("max_concurrency")}
+          </label>
+          <label>
+            {t("admin.platformTiers.retention")} <span className="pa-subtext">({t("admin.platformTiers.zeroInherit")})</span>
+            {num("retention_days")}
           </label>
           <label>
             {t("admin.platformTiers.nodes")} <span className="pa-subtext">({t("admin.platformTiers.zeroInherit")})</span>

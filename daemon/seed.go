@@ -110,6 +110,12 @@ func (s *Service) SubmitGraphWithSeed(
 	if err := s.checkRunQuota(ctx, g.Tenant); err != nil {
 		return "", err
 	}
+	// Concurrency gate: cap a free tenant's simultaneously in-flight runs
+	// (queued + running) so they can't flood the queue. Pro/comped/trial
+	// bypass; same fail-open, top-level-only policy as the run gate above.
+	if err := s.checkConcurrencyQuota(ctx, g.Tenant); err != nil {
+		return "", err
+	}
 	// Platform-admin killswitch: a suspended org runs nothing. This is the
 	// authoritative halt — every run entry point (manual, scheduler,
 	// webhook/form trigger) funnels through here, including the inbound

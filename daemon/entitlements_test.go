@@ -115,11 +115,53 @@ func TestResolveEffective_AllOverrideKinds(t *testing.T) {
 		MaxGraphNodes:     ptrInt(3),
 		MaxFlows:          ptrInt(9),
 		MaxTimeoutSeconds: ptrInt(42),
+		RetentionDays:     ptrInt(14),
+		MaxConcurrency:    ptrInt(4),
+		MaxMembers:        ptrInt(6),
 		PollingAllowed:    ptrBool(true),
 	}
 	eff := ResolveEffective(ent, nil, testDefaults, PlanFree, time.Unix(0, 0))
 	if eff.RunsPerMonth != 7 || eff.DiskQuotaBytes != 1<<30 || eff.MaxGraphNodes != 3 ||
 		eff.MaxFlows != 9 || eff.MaxTimeoutSeconds != 42 || !eff.PollingAllowed {
 		t.Fatalf("overrides not all applied: %+v", eff)
+	}
+	if eff.RetentionDays != 14 || eff.MaxConcurrency != 4 || eff.MaxMembers != 6 {
+		t.Fatalf("new-dimension overrides not applied: %+v", eff)
+	}
+}
+
+// TestResolveEffective_NewDimsPrecedence verifies the three three-tier
+// dimensions (retention, concurrency, seats) resolve override → tier → default
+// like the original numeric limits, and that 0 means inherit.
+func TestResolveEffective_NewDimsPrecedence(t *testing.T) {
+	def := testDefaults
+	def.RetentionDays = 7
+	def.MaxConcurrency = 2
+	def.MaxMembers = 2
+
+	// No tier, no override → global free defaults.
+	eff := ResolveEffective(nil, nil, def, PlanFree, time.Unix(0, 0))
+	if eff.RetentionDays != 7 || eff.MaxConcurrency != 2 || eff.MaxMembers != 2 {
+		t.Fatalf("expected free defaults, got %+v", eff)
+	}
+
+	// Tier raises them; a 0 tier field still inherits the default.
+	tier := &Tier{ID: "team", Plan: PlanFree, RetentionDays: 90, MaxMembers: 25} // MaxConcurrency 0 = inherit
+	eff = ResolveEffective(nil, tier, def, PlanFree, time.Unix(0, 0))
+	if eff.RetentionDays != 90 {
+		t.Errorf("retention = %d, want tier 90", eff.RetentionDays)
+	}
+	if eff.MaxConcurrency != 2 {
+		t.Errorf("concurrency = %d, want inherited default 2 (tier left it 0)", eff.MaxConcurrency)
+	}
+	if eff.MaxMembers != 25 {
+		t.Errorf("members = %d, want tier 25", eff.MaxMembers)
+	}
+
+	// Override beats the tier.
+	ent := &TenantEntitlement{TierID: "team", MaxMembers: ptrInt(3)}
+	eff = ResolveEffective(ent, tier, def, PlanFree, time.Unix(0, 0))
+	if eff.MaxMembers != 3 {
+		t.Errorf("members = %d, want override 3", eff.MaxMembers)
 	}
 }

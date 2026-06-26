@@ -109,6 +109,9 @@ type planLimits struct {
 	MaxGraphNodes     int   `json:"max_graph_nodes"`
 	DiskQuotaBytes    int64 `json:"disk_quota_bytes"`
 	MaxTimeoutSeconds int   `json:"max_timeout_seconds"`
+	RetentionDays     int   `json:"retention_days"`
+	MaxConcurrency    int   `json:"max_concurrency"`
+	MaxMembers        int   `json:"max_members"`
 	PollingAllowed    bool  `json:"polling_allowed"`
 }
 
@@ -120,6 +123,11 @@ type planOption struct {
 	Name      string     `json:"name"`
 	Plan      string     `json:"plan"`
 	IsCurrent bool       `json:"is_current"`
+	// IsContact marks a sales-led plan (Enterprise) that isn't self-serve:
+	// the client shows a "Contact sales" CTA instead of an upgrade button.
+	// Its limits are all-unlimited (0) — the real numbers are set per-customer
+	// via a comp/custom tier.
+	IsContact bool       `json:"is_contact,omitempty"`
 	Limits    planLimits `json:"limits"`
 }
 
@@ -135,9 +143,13 @@ type plansResponse struct {
 // planLimitsFrom projects resolved EffectiveLimits onto the display shape,
 // applying the "pro = unlimited runs" normalization.
 func planLimitsFrom(e EffectiveLimits) planLimits {
-	runs := e.RunsPerMonth
+	runs, concurrency, members, retention := e.RunsPerMonth, e.MaxConcurrency, e.MaxMembers, e.RetentionDays
 	if e.Plan == PlanPro {
-		runs = 0 // uncapped — matches checkRunQuota's plan bypass
+		// Pro/comped/trial bypass the free-only gates, so report the dims they
+		// don't enforce as 0 (= unlimited), matching the enforcement reality:
+		// runs (checkRunQuota), concurrency (checkConcurrencyQuota), seats
+		// (seatQuotaExceeded), and retention (RunLogRetentionDays → global cap).
+		runs, concurrency, members, retention = 0, 0, 0, 0
 	}
 	return planLimits{
 		RunsPerMonth:      runs,
@@ -145,6 +157,9 @@ func planLimitsFrom(e EffectiveLimits) planLimits {
 		MaxGraphNodes:     e.MaxGraphNodes,
 		DiskQuotaBytes:    e.DiskQuotaBytes,
 		MaxTimeoutSeconds: e.MaxTimeoutSeconds,
+		RetentionDays:     retention,
+		MaxConcurrency:    concurrency,
+		MaxMembers:        members,
 		PollingAllowed:    e.PollingAllowed,
 	}
 }
@@ -221,6 +236,23 @@ func (h *HTTPGateway) plansMe(rw http.ResponseWriter, r *http.Request, p core.Pr
 			planOption{ID: PlanPro, Name: "Pro", Plan: pro.Plan, Limits: planLimitsFrom(pro)},
 		)
 	}
+	// Enterprise is sales-led, not a self-serve Stripe plan: a hosted tier for
+	// larger orgs whose real limits are provisioned per-customer via a comp/
+	// custom tier. Surface it as a contact-only card (all limits unlimited) so
+	// the comparison renders three columns. Skip it when the org is already on
+	// a custom (non-built-in) tier — that tier IS their enterprise plan and is
+	// already listed above as current.
+	if cur.TierID == "" || isBuiltinTierID(cur.TierID) {
+		plans = append(plans, planOption{
+			ID:        "enterprise",
+			Name:      "Enterprise",
+			Plan:      PlanPro,
+			IsContact: true,
+			// All numeric limits 0 = unlimited; polling included.
+			Limits: planLimits{PollingAllowed: true},
+		})
+	}
+
 	for i := range plans {
 		if plans[i].ID == currentKey {
 			plans[i].IsCurrent = true

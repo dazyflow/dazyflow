@@ -1970,6 +1970,9 @@ export type PlatformTier = {
   max_graph_nodes: number;
   max_flows: number;
   max_timeout_seconds: number;
+  retention_days: number;
+  max_concurrency: number;
+  max_members: number;
   // null / absent = inherit the deployment-global default (the
   // DAZYFLOW_FREE_POLLING_TRIGGERS knob); true / false is an explicit choice.
   polling_allowed?: boolean | null;
@@ -1990,6 +1993,9 @@ export type TenantEntitlement = {
   max_graph_nodes?: number | null;
   max_flows?: number | null;
   max_timeout_seconds?: number | null;
+  retention_days?: number | null;
+  max_concurrency?: number | null;
+  max_members?: number | null;
   polling_allowed?: boolean | null;
   notes?: string;
 };
@@ -2001,6 +2007,9 @@ export type EffectiveLimits = {
   max_graph_nodes: number;
   max_flows: number;
   max_timeout_seconds: number;
+  retention_days: number;
+  max_concurrency: number;
+  max_members: number;
   polling_allowed: boolean;
   tier_id?: string;
   trial_ends_at?: string | null;
@@ -2016,6 +2025,9 @@ export type PlanLimits = {
   max_graph_nodes: number;
   disk_quota_bytes: number;
   max_timeout_seconds: number;
+  retention_days: number;
+  max_concurrency: number;
+  max_members: number;
   polling_allowed: boolean;
 };
 
@@ -2024,6 +2036,7 @@ export type PlanOption = {
   name: string;
   plan: string; // "free" | "pro"
   is_current: boolean;
+  is_contact?: boolean; // sales-led (Enterprise): "Contact sales", not self-serve upgrade
   limits: PlanLimits;
 };
 

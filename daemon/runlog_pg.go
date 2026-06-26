@@ -117,3 +117,53 @@ func (s *PgRunLogStore) Prune(ctx context.Context, olderThan time.Duration, batc
 		}
 	}
 }
+
+// PruneTenant deletes a single tenant's run-log entries older than the cutoff,
+// in batches. run_logs has no tenant column, so it scopes through the jobs
+// join (same as DeleteByTenant). The retention sweep uses it to apply a
+// shorter per-tenant window than the global cap (free tenants keep less
+// history than paying ones).
+func (s *PgRunLogStore) PruneTenant(ctx context.Context, tenant string, olderThan time.Duration, batch int) (int, error) {
+	if olderThan <= 0 || tenant == "" {
+		return 0, nil
+	}
+	if batch <= 0 {
+		batch = 5000
+	}
+	cutoff := time.Now().Add(-olderThan)
+	total := 0
+	for {
+		tag, err := s.pool.Exec(ctx,
+			`DELETE FROM run_logs WHERE seq IN (
+			     SELECT rl.seq FROM run_logs rl JOIN jobs j ON j.id = rl.run_id
+			     WHERE rl.ts < $1 AND j.tenant = $2 LIMIT $3)`, cutoff, tenant, batch)
+		if err != nil {
+			return total, err
+		}
+		n := int(tag.RowsAffected())
+		total += n
+		if n < batch {
+			return total, nil
+		}
+	}
+}
+
+// RunLogTenants lists the distinct tenants that own jobs (and therefore may
+// own run logs). The per-tenant retention sweep iterates it; a tenant with no
+// old logs simply prunes nothing.
+func (s *PgRunLogStore) RunLogTenants(ctx context.Context) ([]string, error) {
+	rows, err := s.pool.Query(ctx, `SELECT DISTINCT tenant FROM jobs WHERE tenant <> ''`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var t string
+		if err := rows.Scan(&t); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}

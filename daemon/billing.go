@@ -114,6 +114,7 @@ type BillingService struct {
 	usage               UsageStore
 	freeRunsPerMonth    int
 	freePollingDisabled bool
+	freeMaxConcurrency  int
 	logger              *log.Logger
 	// effective, when set, resolves per-org tier/override limits + the
 	// effective plan. The gates prefer it over the raw plan-store + global
@@ -130,6 +131,7 @@ func (s *Service) billing() *BillingService {
 		usage:               s.Usage,
 		freeRunsPerMonth:    s.FreeRunsPerMonth,
 		freePollingDisabled: s.FreePollingDisabled,
+		freeMaxConcurrency:  s.FreeMaxConcurrency,
 		logger:              s.Logger,
 	}
 	if s.Entitlements != nil {
@@ -148,6 +150,57 @@ func (s *Service) checkTriggerQuota(ctx context.Context, tenant string) error {
 }
 func (s *Service) checkRunQuota(ctx context.Context, tenant string) error {
 	return s.billing().checkRunQuota(ctx, tenant)
+}
+
+// checkConcurrencyQuota caps a free-tenant's simultaneously in-flight graph
+// runs (queued + running). Pro/comped/trial bypass; a 0 limit means no cap;
+// counting errors fail open — a job-store hiccup must not block runs. Called
+// by SubmitGraphWithSeed for top-level submissions only; nested sub-graph runs
+// bypass it for the same reason the run gate does (the parent was admitted).
+func (s *Service) checkConcurrencyQuota(ctx context.Context, tenant string) error {
+	if s.Jobs == nil {
+		return nil
+	}
+	b := s.billing()
+	limit := b.concurrencyLimit(ctx, tenant)
+	if limit <= 0 {
+		return nil
+	}
+	if !b.tenantIsFree(ctx, tenant, "concurrency gate") {
+		return nil // pro / comped / trial: uncapped
+	}
+	inflight, err := s.countInflightRuns(ctx, tenant, limit)
+	if err != nil {
+		if s.Logger != nil {
+			s.Logger.Printf("concurrency gate [%s]: count in-flight (failing open): %v", tenant, err)
+		}
+		return nil
+	}
+	if inflight >= limit {
+		return fmt.Errorf("%w: %d runs already in flight, limit is %d — upgrade for higher concurrency",
+			core.ErrPlanLimit, inflight, limit)
+	}
+	return nil
+}
+
+// countInflightRuns counts a tenant's non-terminal graph runs (queued +
+// running). It stops as soon as the running total reaches limit — the gate
+// only needs to know whether the cap is hit, not the exact backlog.
+func (s *Service) countInflightRuns(ctx context.Context, tenant string, limit int) (int, error) {
+	total := 0
+	for _, st := range []core.JobStatus{core.JobStatusRunning, core.JobStatusQueued} {
+		recs, err := s.Jobs.ListGraphRuns(ctx, core.ListGraphRunsOpts{
+			Tenant: tenant, Status: st, Limit: limit + 1,
+		})
+		if err != nil {
+			return 0, err
+		}
+		total += len(recs)
+		if total >= limit {
+			return total, nil
+		}
+	}
+	return total, nil
 }
 
 // tenantIsFree resolves whether the plan gates apply to tenant. Fails
@@ -243,6 +296,16 @@ func (b *BillingService) checkRunQuota(ctx context.Context, tenant string) error
 			core.ErrPlanLimit, used, limit)
 	}
 	return nil
+}
+
+// concurrencyLimit is the tenant's effective cap on simultaneously in-flight
+// runs: the per-org/tier value when entitlements are wired, else the global
+// free-tier default. 0 = no cap.
+func (b *BillingService) concurrencyLimit(ctx context.Context, tenant string) int {
+	if b.effective != nil {
+		return b.effective(ctx, tenant).MaxConcurrency
+	}
+	return b.freeMaxConcurrency
 }
 
 // CachedPlanStore fronts a PlanStore with a short-TTL read cache. Plans

@@ -326,6 +326,17 @@ type Service struct {
 	// DAZYFLOW_FREE_POLLING_TRIGGERS=0; requires Plans to enforce.
 	FreePollingDisabled bool
 
+	// Free-plan caps for the entitlement dimensions added with the
+	// three-tier model. Each is the deployment-global default a free-plan
+	// tenant resolves against (a tier/override can raise it); pro/comped/
+	// trial tenants bypass these gates entirely, mirroring FreeRunsPerMonth.
+	// Zero = no enforcement (self-hosted deployments without billing never
+	// gate). Configured by DAZYFLOW_FREE_RETENTION_DAYS /
+	// DAZYFLOW_FREE_MAX_CONCURRENCY / DAZYFLOW_FREE_MAX_MEMBERS.
+	FreeRetentionDays  int
+	FreeMaxConcurrency int
+	FreeMaxMembers     int
+
 	// Mailer, when set, delivers the platform's transactional email
 	// (invitation links, failure-notification emails). Nil = those
 	// channels are off; everything degrades to its link/webhook form.
@@ -423,6 +434,9 @@ func (s *Service) limitDefaults() LimitDefaults {
 		RunsPerMonth:      s.FreeRunsPerMonth,
 		MaxGraphNodes:     s.MaxGraphNodes,
 		MaxTimeoutSeconds: s.MaxGraphTimeoutSeconds,
+		RetentionDays:     s.FreeRetentionDays,
+		MaxConcurrency:    s.FreeMaxConcurrency,
+		MaxMembers:        s.FreeMaxMembers,
 		PollingAllowed:    !s.FreePollingDisabled,
 	}
 }
@@ -455,6 +469,18 @@ func (s *Service) effectiveLimits(ctx context.Context, tenant string) EffectiveL
 		}
 	}
 	return ResolveEffective(entP, tierP, def, stripePlan, time.Now())
+}
+
+// RunLogRetentionDays is the run-log retention window (in days) for a tenant:
+// the effective per-tier value for a free tenant, or 0 (keep to the global
+// cap) for pro/comped/trial. The retention sweep uses it to prune free
+// tenants on a shorter window than paying ones. 0 = no per-tenant cap.
+func (s *Service) RunLogRetentionDays(ctx context.Context, tenant string) int {
+	eff := s.effectiveLimits(ctx, tenant)
+	if eff.Plan == PlanPro {
+		return 0 // uncapped — the global sweep is the only bound
+	}
+	return eff.RetentionDays
 }
 
 // EffectiveLimitsFor is the exported accessor cmd/dzd uses to wire the

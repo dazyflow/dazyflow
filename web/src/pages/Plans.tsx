@@ -8,7 +8,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { Button } from "../components/Button";
+import { Button, ButtonLink } from "../components/Button";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
 import { explainApiError } from "../lib/explainApiError";
@@ -21,7 +21,7 @@ import type { PlanLimits, PlanOption, PlansInfo } from "../api";
 // what's shown here automatically; only a brand-new limit field needs a new
 // row in FEATURES below.
 
-type FeatureKind = "capacity" | "bytes" | "duration" | "bool";
+type FeatureKind = "capacity" | "bytes" | "duration" | "days" | "bool";
 
 type Feature = {
   key: keyof PlanLimits;
@@ -34,6 +34,9 @@ type Feature = {
 const FEATURES: Feature[] = [
   { key: "runs_per_month", labelKey: "plans.feat.runs", kind: "capacity" },
   { key: "polling_allowed", labelKey: "plans.feat.polling", kind: "bool" },
+  { key: "max_members", labelKey: "plans.feat.members", kind: "capacity" },
+  { key: "max_concurrency", labelKey: "plans.feat.concurrency", kind: "capacity" },
+  { key: "retention_days", labelKey: "plans.feat.retention", kind: "days" },
   { key: "max_flows", labelKey: "plans.feat.flows", kind: "capacity" },
   { key: "max_graph_nodes", labelKey: "plans.feat.nodes", kind: "capacity" },
   { key: "disk_quota_bytes", labelKey: "plans.feat.disk", kind: "bytes" },
@@ -128,6 +131,10 @@ export function Plans() {
         return s % 60 === 0
           ? t("plans.minutes", { n: s / 60 })
           : t("plans.seconds", { n: fmt.format(s) });
+      }
+      case "days": {
+        const d = v as number;
+        return d === 0 ? t("plans.unlimited") : t("plans.days", { n: fmt.format(d) });
       }
       case "capacity":
       default: {
@@ -227,16 +234,68 @@ function PlanCard({
 }) {
   const isCurrent = plan.is_current;
   // An upgrade target: a higher (pro) plan the org isn't already on. Stripe
-  // self-serve only handles Pro; custom comp tiers are admin-assigned.
+  // self-serve only handles Pro; custom comp tiers are admin-assigned, and the
+  // sales-led Enterprise card (is_contact) gets its own "Contact sales" CTA.
   const isUpgradeTarget =
-    !isCurrent && plan.plan === "pro" && current.plan !== "pro";
+    !isCurrent && !plan.is_contact && plan.plan === "pro" && current.plan !== "pro";
+  // The built-in Pro plan is the headline tier — flag it "Most popular" and
+  // give it the featured treatment (unless it's already the current plan).
+  const isPopular = plan.id === "pro" && !isCurrent;
+  // Short marketing line per plan; falls back to nothing for custom comp tiers.
+  const tagline = t(`plans.tagline.${plan.id}`, { defaultValue: "" });
+  // Price line: only Free has a public figure in-app; paid tiers point to the
+  // CTA / sales rather than committing a number here.
+  const priceLine =
+    plan.id === "free"
+      ? t("plans.priceFree")
+      : plan.is_contact
+        ? t("plans.priceCustom")
+        : t("plans.pricePaid");
+
+  const cardClass =
+    "card plan-card" +
+    (isCurrent ? " plan-card-current" : "") +
+    (isPopular ? " plan-card-featured" : "");
+
+  const cta = plan.is_contact ? (
+    <ButtonLink variant="secondary" block href={t("plans.contactSalesHref")}>
+      {t("plans.contactSales")}
+    </ButtonLink>
+  ) : isCurrent ? (
+    info.can_manage ? (
+      <Button variant="secondary" block disabled={redirecting} onClick={onManage}>
+        {t("plans.manageBilling")}
+      </Button>
+    ) : (
+      <Button variant="secondary" block disabled>
+        {t("plans.currentPlan")}
+      </Button>
+    )
+  ) : isUpgradeTarget ? (
+    info.can_upgrade ? (
+      <Button variant="primary" block disabled={redirecting} onClick={onUpgrade}>
+        <Sparkles size={14} style={{ marginRight: 6 }} />
+        {t("plans.upgradeTo", { plan: plan.name })}
+      </Button>
+    ) : (
+      <div className="sub plan-contact">{t("plans.contactAdmin")}</div>
+    )
+  ) : null; // e.g. Free when you're on Pro — no action; the CTA row keeps its height
 
   return (
-    <div className={"card plan-card" + (isCurrent ? " plan-card-current" : "")}>
+    <div className={cardClass}>
       <div className="plan-card-head">
         <h2>{plan.name}</h2>
-        {isCurrent && <span className="plan-badge">{t("plans.yourPlan")}</span>}
+        {isCurrent ? (
+          <span className="plan-badge">{t("plans.yourPlan")}</span>
+        ) : isPopular ? (
+          <span className="plan-badge plan-badge-solid">{t("plans.mostPopular")}</span>
+        ) : null}
       </div>
+      {tagline && <p className="plan-tagline">{tagline}</p>}
+      <div className="plan-price">{priceLine}</div>
+
+      <div className="plan-card-cta">{cta}</div>
 
       <ul className="plan-feats">
         {FEATURES.map((f) => {
@@ -244,10 +303,7 @@ function PlanCard({
           const cur = current.limits[f.key];
           const up = !isCurrent && betterThan(f, v, cur);
           return (
-            <li
-              key={f.key}
-              className={"plan-feat" + (up ? " plan-feat-up" : "")}
-            >
+            <li key={f.key} className={"plan-feat" + (up ? " plan-feat-up" : "")}>
               <span className="plan-feat-ico">
                 {f.kind === "bool" ? (
                   v ? (
@@ -267,29 +323,6 @@ function PlanCard({
           );
         })}
       </ul>
-
-      <div className="plan-card-foot">
-        {isCurrent ? (
-          info.can_manage ? (
-            <Button variant="ghost" disabled={redirecting} onClick={onManage}>
-              {t("plans.manageBilling")}
-            </Button>
-          ) : (
-            <Button variant="ghost" disabled>
-              {t("plans.currentPlan")}
-            </Button>
-          )
-        ) : isUpgradeTarget ? (
-          info.can_upgrade ? (
-            <Button variant="primary" disabled={redirecting} onClick={onUpgrade}>
-              <Sparkles size={14} style={{ marginRight: 6 }} />
-              {t("plans.upgradeTo", { plan: plan.name })}
-            </Button>
-          ) : (
-            <div className="sub plan-contact">{t("plans.contactAdmin")}</div>
-          )
-        ) : null}
-      </div>
     </div>
   );
 }

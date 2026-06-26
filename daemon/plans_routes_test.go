@@ -87,8 +87,12 @@ func TestPlansMe_FreeTenant(t *testing.T) {
 	if out.CurrentPlan != PlanFree {
 		t.Fatalf("current_plan = %q, want free", out.CurrentPlan)
 	}
-	if len(out.Plans) != 2 {
-		t.Fatalf("want free+pro, got %d plans", len(out.Plans))
+	if len(out.Plans) != 3 {
+		t.Fatalf("want free+pro+enterprise, got %d plans", len(out.Plans))
+	}
+	ent, ok := findPlan(out.Plans, "enterprise")
+	if !ok || !ent.IsContact || ent.IsCurrent {
+		t.Fatalf("enterprise should be a non-current contact plan: %+v", ent)
 	}
 	free, ok := findPlan(out.Plans, "free")
 	if !ok || !free.IsCurrent {

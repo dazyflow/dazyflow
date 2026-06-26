@@ -542,6 +542,27 @@ func (h *HTTPGateway) updateMemberRoles(rw http.ResponseWriter, r *http.Request,
 // URL. When the operator wired a mailer the link is also emailed; the
 // response always carries the URL so the admin can copy/paste it into
 // their channel of choice either way.
+// seatQuotaExceeded reports whether tenant has reached its plan's member
+// (seat) cap, and the cap itself. Free-tier only — pro/comped/trial are
+// uncapped, mirroring the run gate. Fails OPEN on a resolver/store error so a
+// billing or DB hiccup never blocks legitimate team growth. A 0 cap (the
+// default on deployments without billing) means no enforcement.
+func (h *HTTPGateway) seatQuotaExceeded(ctx context.Context, tenant string) (bool, int) {
+	eff := h.svc.effectiveLimits(ctx, tenant)
+	if eff.Plan == PlanPro {
+		return false, 0
+	}
+	limit := eff.MaxMembers
+	if limit <= 0 || h.Memberships == nil {
+		return false, limit
+	}
+	members, err := h.Memberships.ListByTenant(ctx, tenant)
+	if err != nil {
+		return false, limit // fail open
+	}
+	return len(members) >= limit, limit
+}
+
 func (h *HTTPGateway) createInvitation(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Invitations == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
@@ -554,6 +575,15 @@ func (h *HTTPGateway) createInvitation(rw http.ResponseWriter, r *http.Request, 
 	// Anti-abuse: on verification-active deployments an unverified
 	// signup can't use the operator's mailer to send invitations.
 	if !h.requireVerifiedInviter(rw, r, p) {
+		return
+	}
+	// Seat gate (free tier): refuse new invitations once the org is at its
+	// member cap. Early feedback for the admin; the hard enforcement is at
+	// accept time (acceptInvitation), which also counts pending invites that
+	// land together. Pro/comped/trial orgs are uncapped.
+	if exceeded, limit := h.seatQuotaExceeded(r.Context(), p.Tenant); exceeded {
+		writeJSONError(rw, http.StatusPaymentRequired,
+			fmt.Sprintf("your plan includes %d members — upgrade to add more", limit))
 		return
 	}
 	var body struct {
@@ -831,6 +861,15 @@ func (h *HTTPGateway) acceptInvitation(rw http.ResponseWriter, r *http.Request, 
 	if !strings.EqualFold(strings.TrimSpace(p.Subject), strings.TrimSpace(inv.Email)) {
 		writeJSONError(rw, http.StatusForbidden,
 			"this invitation was sent to a different email — sign in with the email it was sent to")
+		return
+	}
+	// Seat gate (free tier): the hard enforcement point — refuse to seat a
+	// new member once the org is at its cap, even if the invite was created
+	// while there was room (several invites can be issued, then accepted
+	// together). Pro/comped/trial orgs are uncapped.
+	if exceeded, limit := h.seatQuotaExceeded(r.Context(), inv.Tenant); exceeded {
+		writeJSONError(rw, http.StatusPaymentRequired,
+			fmt.Sprintf("this organization has reached its %d-member limit — ask an admin to upgrade", limit))
 		return
 	}
 	m := auth.Membership{
