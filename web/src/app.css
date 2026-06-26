@@ -610,6 +610,14 @@
   color: var(--text);
   white-space: nowrap;
 }
+/* The ∞ glyph for an unlimited value — a touch larger and centered on the
+   text baseline so it reads as a deliberate symbol, not a stray character. */
+.plan-unlimited {
+  display: inline-block;
+  font-size: 1.25em;
+  line-height: 1;
+  vertical-align: -0.05em;
+}
 /* A feature that's an upgrade over the current plan — the "what differs" cue. */
 .plan-feat-up {
   color: var(--text);

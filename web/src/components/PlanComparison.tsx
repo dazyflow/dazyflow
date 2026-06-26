@@ -1,7 +1,19 @@
+import type { ReactNode } from "react";
 import { ArrowUp, Check, CreditCard, Minus, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button, ButtonLink } from "./Button";
 import type { PlanLimits, PlanOption, PlansInfo } from "../api";
+
+// Unlimited renders the ∞ glyph for a no-limit value, keeping the localized
+// "Unlimited" as the accessible label (tooltip + screen reader) so the symbol
+// stays clear and translatable.
+function Unlimited({ label }: { label: string }) {
+  return (
+    <span className="plan-unlimited" title={label} aria-label={label}>
+      ∞
+    </span>
+  );
+}
 
 // The plan-comparison grid, lifted out of the old Plans page so the merged
 // Plan & usage page can render it inline below the usage counters. Limits are
@@ -75,27 +87,28 @@ export function PlanComparison({
   const current = plans.find((p) => p.is_current) ?? plans[0];
   if (!current) return null;
 
-  const formatValue = (f: Feature, v: number | boolean): string => {
+  const unlimited = <Unlimited label={t("plans.unlimited")} />;
+  const formatValue = (f: Feature, v: number | boolean): ReactNode => {
     switch (f.kind) {
       case "bool":
         return v ? t("plans.included") : t("plans.notIncluded");
       case "bytes":
-        return v === 0 ? t("plans.unlimited") : formatBytes(v as number);
+        return v === 0 ? unlimited : formatBytes(v as number);
       case "duration": {
         const s = v as number;
-        if (s === 0) return t("plans.unlimited");
+        if (s === 0) return unlimited;
         return s % 60 === 0
           ? t("plans.minutes", { n: s / 60 })
           : t("plans.seconds", { n: fmt.format(s) });
       }
       case "days": {
         const d = v as number;
-        return d === 0 ? t("plans.unlimited") : t("plans.days", { n: fmt.format(d) });
+        return d === 0 ? unlimited : t("plans.days", { n: fmt.format(d) });
       }
       case "capacity":
       default: {
         const n = v as number;
-        if (n === 0) return t("plans.unlimited");
+        if (n === 0) return unlimited;
         return f.key === "runs_per_month"
           ? t("plans.perMonth", { n: fmt.format(n) })
           : fmt.format(n);
@@ -145,7 +158,7 @@ function PlanCard({
   info: PlansInfo;
   redirecting: boolean;
   t: (k: string, o?: Record<string, unknown>) => string;
-  formatValue: (f: Feature, v: number | boolean) => string;
+  formatValue: (f: Feature, v: number | boolean) => ReactNode;
   onUpgrade: () => void;
   onManage: () => void;
 }) {
