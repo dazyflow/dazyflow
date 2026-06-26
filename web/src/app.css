@@ -489,6 +489,9 @@
   grid-template-columns: 1fr;
   gap: var(--space-4);
   align-items: stretch;
+  /* Cap the table so the three cards keep a readable width and don't stretch
+     edge-to-edge on wide screens. Left-aligned to match the page heading. */
+  max-width: 1040px;
 }
 /* Two-up once there's room, three-up on a desktop-width content column — so
    Free / Pro / Enterprise sit side by side like a typical pricing table. */
