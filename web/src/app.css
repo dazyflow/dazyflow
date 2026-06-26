@@ -10876,6 +10876,24 @@ button:active,
   background: #fff;
 }
 
+/* "Send test" block in the email-template manager. */
+.template-test-send {
+  border-top: 1px solid var(--border, #e9ebf3);
+  margin-top: var(--space-3, 12px);
+  padding-top: var(--space-3, 12px);
+}
+.template-test-send-row {
+  display: flex;
+  gap: var(--space-2, 8px);
+  align-items: center;
+}
+.template-test-send-row input {
+  flex: 1;
+}
+.template-test-send .field-ok {
+  color: var(--success, #2e7d4f);
+}
+
 /* Monospace HTML editor in the email-template manager. */
 .template-html-input {
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace);

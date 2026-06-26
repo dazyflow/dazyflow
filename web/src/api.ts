@@ -1653,6 +1653,16 @@ export const api = {
     args: { html?: string; id?: string; body?: string; subject?: string },
   ) => request<{ html: string }>(token, "POST", "/email-templates/preview", args),
 
+  // sendTestEmail wraps the sample body in a template shell and delivers it to
+  // one recipient through the tenant's own Email (SMTP) connection — a real
+  // send so the editor can confirm the layout in an inbox. Pass `html` for the
+  // editor's unsaved edits (or `id` for a saved/built-in template); an empty
+  // `to` defaults to the caller server-side. Requires secret:write.
+  sendTestEmail: (
+    token: string,
+    args: { to?: string; html?: string; id?: string; subject?: string },
+  ) => request<{ ok: boolean; to: string; from: string }>(token, "POST", "/email-templates/send-test", args),
+
   // Bring-your-own secret manager (OpenBao/Vault) connection for this tenant.
   // getSecretManager returns a redacted view (no credentials); setSecretManager
   // connection-tests before saving (a 502 means "could not reach the manager").

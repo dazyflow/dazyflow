@@ -4,12 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
+	"net/smtp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 	"git.sr.ht/~klahr/dazyflow/internal/emailtmpl"
+	"git.sr.ht/~klahr/dazyflow/internal/smtputil"
 )
 
 // Email templates are reusable HTML layout shells the email-sending drops wrap
@@ -26,6 +31,13 @@ import (
 // appear in the list and cannot be written or deleted.
 
 const maxEmailTemplateBytes = 256 * 1024 // 256 KiB — HTML shells are larger than secrets
+
+// emailTemplateSampleBody is the placeholder message the preview and the
+// "send test" both wrap, so a test email lands looking exactly like the
+// editor preview.
+const emailTemplateSampleBody = `<h1 style="margin:0 0 14px;font-size:22px;">Hello there 👋</h1>` +
+	`<p style="margin:0 0 14px;">This is a preview of your email template with some sample body content so you can see how the layout wraps a real message.</p>` +
+	`<p style="margin:0;">Best,<br>The team</p>`
 
 type putEmailTemplateBody struct {
 	Name string `json:"name"`
@@ -191,10 +203,6 @@ func (h *HTTPGateway) previewEmailTemplate(rw http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	const sampleBody = `<h1 style="margin:0 0 14px;font-size:22px;">Hello there 👋</h1>` +
-		`<p style="margin:0 0 14px;">This is a preview of your email template with some sample body content so you can see how the layout wraps a real message.</p>` +
-		`<p style="margin:0;">Best,<br>The team</p>`
-
 	// Resolve the shell: explicit HTML wins; else resolve the template id the
 	// same way the runtime does (built-ins ∪ this tenant's templates); else a
 	// bare passthrough so a no-template preview still shows the body.
@@ -219,7 +227,7 @@ func (h *HTTPGateway) previewEmailTemplate(rw http.ResponseWriter, r *http.Reque
 
 	body := req.Body
 	if strings.TrimSpace(body) == "" {
-		body = sampleBody
+		body = emailTemplateSampleBody
 	}
 	rendered, err := emailtmpl.WrapBody(shell, body, req.Subject, logo)
 	if err != nil {
@@ -240,6 +248,161 @@ func (h *HTTPGateway) previewLogo(r *http.Request, p core.Principal) string {
 		return ""
 	}
 	return emailtmpl.NormalizeLogo(prof.Icon)
+}
+
+type sendTestEmailBody struct {
+	// To is the recipient. The editor pre-fills it with the caller's own
+	// address; an empty value falls back to the caller server-side.
+	To string `json:"to"`
+	// HTML is the shell to test (the editor's unsaved edits); takes precedence
+	// over ID. ID resolves a saved/built-in template instead.
+	HTML string `json:"html"`
+	ID   string `json:"id"`
+	// Subject overrides the default test subject line.
+	Subject string `json:"subject"`
+}
+
+// sendTestEmail renders a template shell around the sample body and delivers it
+// to one recipient through the TENANT's own Email (SMTP) connection — the same
+// transport the email_send drop uses at run time — so an editor can confirm a
+// template lands correctly in a real inbox before wiring it into a flow.
+//
+//	POST /api/v1/email-templates/send-test  {to?, html?, id?, subject?}
+//
+// Reading the decrypted SMTP credentials and actually sending makes this a
+// secret:write action (like the connection "Test" button), a step up from the
+// secret:read needed to list/preview. The recipient defaults to the caller, so
+// the usual click is a zero-input "send the template to me".
+func (h *HTTPGateway) sendTestEmail(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	if h.EncryptedSecrets == nil {
+		writeJSONError(rw, http.StatusNotImplemented, "encrypted secret store is not configured")
+		return
+	}
+	if p.Tenant == "" {
+		writeJSONError(rw, http.StatusForbidden, "principal has no tenant")
+		return
+	}
+	if err := core.Require(p, core.PermSecretWrite); err != nil {
+		writeJSONError(rw, http.StatusForbidden, err.Error())
+		return
+	}
+
+	r.Body = http.MaxBytesReader(rw, r.Body, maxEmailTemplateBytes)
+	var body sendTestEmailBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
+		return
+	}
+	to := strings.TrimSpace(body.To)
+	if to == "" {
+		to = p.Subject // mirror the editor's prefill: default to the caller
+	}
+	if !strings.Contains(to, "@") || strings.ContainsAny(to, " \r\n") {
+		writeJSONError(rw, http.StatusBadRequest, "a valid recipient address is required")
+		return
+	}
+
+	// Load the tenant's Email connection — the same host/login/sender the
+	// email_send drop runs on. Without it there's nothing to send through.
+	integration, fields, err := h.connectionFieldsForSlug(r.Context(), p, "email")
+	if err != nil {
+		writeJSONError(rw, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if len(fields) == 0 {
+		writeJSONError(rw, http.StatusNotImplemented, "the Email integration is unavailable on this install")
+		return
+	}
+	conn, _ := h.candidateConnection(r.Context(), p.Tenant, integration, fields, nil)
+	if label := missingRequired(fields, conn); label != "" {
+		writeJSONError(rw, http.StatusConflict,
+			fmt.Sprintf("connect Email first — %s is not set on the Email integration page", label))
+		return
+	}
+
+	host := strings.TrimSpace(conn["host"])
+	from := strings.TrimSpace(conn["from"])
+	if from == "" {
+		from = strings.TrimSpace(conn["username"]) // SMTP login is usually the sender
+	}
+	port := 587
+	if s := strings.TrimSpace(conn["port"]); s != "" {
+		n, perr := strconv.Atoi(s)
+		if perr != nil || n <= 0 {
+			writeJSONError(rw, http.StatusBadRequest, "the configured port is not a number — fix it on the Email integration page")
+			return
+		}
+		port = n
+	}
+	mode := strings.TrimSpace(conn["tls"])
+	if mode == "" {
+		mode = "starttls"
+	}
+
+	// Resolve the shell exactly like the preview: explicit HTML wins (unsaved
+	// edits), else the saved/built-in template id, else a bare passthrough.
+	shell := strings.TrimSpace(body.HTML)
+	logo := h.previewLogo(r, p)
+	if shell == "" && strings.TrimSpace(body.ID) != "" {
+		provider := &EmailTemplateProvider{Secrets: h.EncryptedSecrets, Profiles: h.Profiles}
+		resolved, orgLogo, ok, terr := provider.TemplateHTML(r.Context(), p.Tenant, strings.TrimSpace(body.ID))
+		if terr != nil {
+			writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("resolve template: %v", terr))
+			return
+		}
+		if !ok {
+			writeJSONError(rw, http.StatusNotFound, "template not found")
+			return
+		}
+		shell, logo = resolved, orgLogo
+	}
+	if shell == "" {
+		shell = "{{.Body}}"
+	}
+
+	subject := strings.TrimSpace(body.Subject)
+	if subject == "" {
+		subject = "Dazyflow email template test"
+	}
+	htmlBody, err := emailtmpl.WrapBody(shell, emailTemplateSampleBody, subject, logo)
+	if err != nil {
+		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("render template: %v", err))
+		return
+	}
+
+	addr := net.JoinHostPort(host, strconv.Itoa(port))
+	// The SMTP host is tenant-supplied (and may have been set via the raw
+	// secrets path, which skips the connect-time verifier's guard), so refuse
+	// private/loopback targets unless the operator opted into private egress —
+	// the same SSRF guard the email_send drop applies.
+	if err := hfnet.CheckDialHost(addr); err != nil {
+		writeJSONError(rw, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	var auth smtp.Auth
+	if u := strings.TrimSpace(conn["username"]); u != "" {
+		auth = smtp.PlainAuth("", u, conn["password"], host)
+	}
+
+	const textAlt = "This is a test of your Dazyflow email template. " +
+		"Open it in an HTML-capable client to see the rendered layout."
+	msg, err := multipartMessage(from, from, to, subject, textAlt, htmlBody)
+	if err != nil {
+		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("build message: %v", err))
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), connectionVerifyTimeout)
+	defer cancel()
+	if err := smtputil.Send(ctx, addr, host, mode, auth, from, []string{to}, msg); err != nil {
+		h.audit(r.Context(), p, "email_template.test_send", to, "error="+err.Error())
+		// 502: the daemon is fine; the tenant's SMTP server rejected the send.
+		writeJSONError(rw, http.StatusBadGateway, fmt.Sprintf("send failed: %v", err))
+		return
+	}
+	h.audit(r.Context(), p, "email_template.test_send", to, "ok")
+	writeJSON(rw, http.StatusOK, map[string]any{"ok": true, "to": to, "from": from})
 }
 
 // deleteEmailTemplate removes an org template. Idempotent. Built-in IDs are
