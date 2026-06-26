@@ -10144,6 +10144,29 @@ button:active,
   gap: var(--space-4);
   flex: 0 0 auto;
 }
+/* Left cluster: optional org logo + the title stack. min-width:0 lets the
+   title ellipsize instead of pushing the head-right controls off-screen. */
+.tv-head-left {
+  display: flex;
+  align-items: center;
+  gap: clamp(var(--space-3), 1.4vw, var(--space-5));
+  min-width: 0;
+}
+/* Org logo beside the board title — sized to roughly match the title's cap
+   height and never shrinks. FlowIcon renders an <img> for uploaded logos or a
+   glyph for a logical icon name. */
+.tv-org-ico {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+}
+.tv-org-ico .flow-icon-img {
+  width: clamp(40px, 4vw, 56px);
+  height: clamp(40px, 4vw, 56px);
+  border-radius: var(--r-2);
+  object-fit: contain;
+}
 .tv-titles {
   display: flex;
   flex-direction: column;

@@ -128,7 +128,12 @@ type PublicOverviewData struct {
 	// Label is the org's human-facing display name, used to title the board.
 	// Empty when the org has no display name (and isn't worth showing a raw
 	// id for) — the UI then falls back to a generic title.
-	Label       string            `json:"label,omitempty"`
+	Label string `json:"label,omitempty"`
+	// Icon is the org's logo — a data: URL / image reference or a logical
+	// icon name — shown beside the board title. Empty when the org has no
+	// icon set, in which case the UI shows just the title. Already public on
+	// the sign-in page, so safe on a wall.
+	Icon        string            `json:"icon,omitempty"`
 	GeneratedAt time.Time         `json:"generated_at"`
 	Stats       PublicStats       `json:"stats"`
 	Flows       []PublicFlowState `json:"flows"`
@@ -226,8 +231,10 @@ func (s *Service) PublicWorkspaceOverview(ctx context.Context, token string, now
 		}
 	}
 
+	label, icon := s.workspaceBrand(ctx, share.Tenant)
 	data := PublicOverviewData{
-		Label:       s.workspaceLabel(ctx, share.Tenant),
+		Label:       label,
+		Icon:        icon,
 		GeneratedAt: now,
 		Stats: PublicStats{
 			RunsToday: runsToday,
@@ -290,20 +297,25 @@ func (s *Service) PublicWorkspaceOverview(ctx context.Context, token string, now
 	return data, nil
 }
 
-// workspaceLabel is the friendly board title for a tenant: its org display
-// name when set. A bare personal-tenant id (usr_<hex>) is meaningless chrome,
-// so it's dropped (the UI falls back to its generic title); a named tenant id
-// is kept as a last resort. Best-effort — any store error yields "".
-func (s *Service) workspaceLabel(ctx context.Context, tenant string) string {
+// workspaceBrand is the friendly board identity for a tenant: its org display
+// name and icon when set. The label falls back to a bare personal-tenant id
+// (usr_<hex>) being dropped — it's meaningless chrome, so the UI shows its
+// generic title; a named tenant id is kept as a last resort. The icon is
+// whatever the org profile carries (empty when none). Best-effort — any store
+// error yields the fallback label and an empty icon.
+func (s *Service) workspaceBrand(ctx context.Context, tenant string) (label, icon string) {
 	if s.OrgProfiles != nil {
-		if prof, err := s.OrgProfiles.GetOrgProfile(ctx, tenant); err == nil && prof.DisplayName != "" {
-			return prof.DisplayName
+		if prof, err := s.OrgProfiles.GetOrgProfile(ctx, tenant); err == nil {
+			icon = prof.Icon
+			if prof.DisplayName != "" {
+				return prof.DisplayName, icon
+			}
 		}
 	}
 	if looksPersonalTenant(tenant) {
-		return ""
+		return "", icon
 	}
-	return tenant
+	return tenant, icon
 }
 
 // flowDisplayName falls back to the flow id when a graph has no name set, so a

@@ -105,15 +105,22 @@ export function PublicOverview() {
   return (
     <div className={"tv-view tv-health-" + health}>
       <header className="tv-head">
-        <div className="tv-titles">
-          {data?.label ? (
-            <>
-              <span className="tv-eyebrow">{t("tv.title")}</span>
-              <h1 className="tv-title">{data.label}</h1>
-            </>
-          ) : (
-            <h1 className="tv-title">{t("tv.title")}</h1>
+        <div className="tv-head-left">
+          {data?.icon && (
+            <span className="tv-org-ico">
+              <FlowIcon icon={data.icon} size={48} />
+            </span>
           )}
+          <div className="tv-titles">
+            {data?.label ? (
+              <>
+                <span className="tv-eyebrow">{t("tv.title")}</span>
+                <h1 className="tv-title">{data.label}</h1>
+              </>
+            ) : (
+              <h1 className="tv-title">{t("tv.title")}</h1>
+            )}
+          </div>
         </div>
         <div className="tv-head-right">
           <span className="tv-clock">{clock}</span>

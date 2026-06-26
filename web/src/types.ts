@@ -515,6 +515,9 @@ export type PublicOverview = {
   // label is the org's display name, used to title the board. Absent when
   // the org has no display name — the UI falls back to a generic title.
   label?: string;
+  // icon is the org's logo — a data: URL / image reference or a logical icon
+  // name — shown beside the title. Absent when the org has no icon set.
+  icon?: string;
   generated_at: string;
   stats: {
     runs_today: number;
