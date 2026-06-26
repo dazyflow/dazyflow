@@ -63,6 +63,30 @@ func TestBillingMe(t *testing.T) {
 	}
 }
 
+// An admin-granted entitlement (comp/trial/override/pro tier) makes a tenant
+// effectively pro with no Stripe subscription, so the raw plan record stays
+// free. /me/billing must report the effective plan and hide the upgrade CTA —
+// otherwise a comped tenant is told to "Upgrade to Pro". Regression for the
+// divergence between this endpoint and /me/plans.
+func TestBillingMeCompedEntitlement(t *testing.T) {
+	h, _, _ := billingHarness(t)
+	ents := builtinTierStore()
+	ents.ents["t"] = TenantEntitlement{Tenant: "t", Comped: true}
+	h.svc.Entitlements = ents
+
+	rw := h.do(t, "GET", "/api/v1/me/billing", nil)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rw.Code, rw.Body.String())
+	}
+	var got map[string]any
+	_ = json.Unmarshal(rw.Body.Bytes(), &got)
+	// Plan store has no Stripe sub (no SetPlan), but the comp grant makes the
+	// tenant effectively pro: plan reads pro and upgrade is not offered.
+	if got["plan"] != "pro" || got["can_upgrade"] != false {
+		t.Errorf("comped tenant: got %+v, want plan=pro can_upgrade=false", got)
+	}
+}
+
 func TestBillingCheckout(t *testing.T) {
 	h, _, _ := billingHarness(t)
 	rw := h.do(t, "POST", "/api/v1/me/billing/checkout", nil)

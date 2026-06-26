@@ -79,22 +79,30 @@ func (h *HTTPGateway) billingMe(rw http.ResponseWriter, r *http.Request, p core.
 			return
 		}
 	}
+	// The effective plan is the source of truth for "are you on pro": an
+	// admin-granted comp/trial/override or a pro tier makes a tenant pro with
+	// no Stripe subscription, so plan.Plan (the raw Stripe record) stays free.
+	// Reporting and the upgrade CTA must follow the effective plan the way the
+	// /me/plans comparison does, or a comped tenant is told to "Upgrade to Pro".
+	// The Stripe-only fields (customer/sub status/period end) still come from
+	// the plan record above.
+	effPlan := h.svc.effectiveLimits(r.Context(), tenant).Plan
 	var runsThisMonth int64
 	if h.svc.Usage != nil {
 		runsThisMonth, _ = h.svc.runsThisMonth(r.Context(), tenant)
 	}
 	resp := map[string]any{
-		"plan":                 plan.Plan,
+		"plan":                 effPlan,
 		"subscription_status":  plan.SubscriptionStatus,
 		"cancel_at_period_end": plan.CancelAtPeriodEnd,
 		"free_runs_per_month":  h.svc.FreeRunsPerMonth,
 		"runs_this_month":      runsThisMonth,
 		// polling_allowed tells the Usage page why a free tenant's
 		// schedules aren't firing on gated deployments.
-		"polling_allowed": !h.svc.FreePollingDisabled || plan.Plan == PlanPro,
+		"polling_allowed": !h.svc.FreePollingDisabled || effPlan == PlanPro,
 		// Upgrade is offered only when Stripe is actually configured;
 		// manage (portal) additionally needs an existing customer.
-		"can_upgrade": h.Billing != nil && h.Billing.Stripe != nil && plan.Plan != PlanPro,
+		"can_upgrade": h.Billing != nil && h.Billing.Stripe != nil && effPlan != PlanPro,
 		"can_manage":  h.Billing != nil && h.Billing.Stripe != nil && plan.StripeCustomerID != "",
 	}
 	// current_period_end is the renewal-or-cancellation date the UI dates
