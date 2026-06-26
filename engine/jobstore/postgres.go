@@ -428,6 +428,20 @@ func (s *Postgres) Get(ctx context.Context, jobID string) (core.JobRecord, error
 	return rec, err
 }
 
+// MarkGraphRunning implements core.GraphRunStarter: flip a pending (queued)
+// graph record to running. The WHERE status='queued' is the admission guard —
+// only one promoter's UPDATE affects a row, so concurrent sweeps on multiple
+// nodes can't double-start a run. Returns true when this call did the flip.
+func (s *Postgres) MarkGraphRunning(ctx context.Context, jobID string) (bool, error) {
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE jobs SET status = 'running', started_at = COALESCE(started_at, now())
+		   WHERE id = $1 AND kind = 'graph' AND status = 'queued'`, jobID)
+	if err != nil {
+		return false, wrapPgErr(err)
+	}
+	return tag.RowsAffected() == 1, nil
+}
+
 func (s *Postgres) ListByGraph(ctx context.Context, graphID string) ([]core.JobRecord, error) {
 	const q = `
 		SELECT id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result,

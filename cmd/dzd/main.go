@@ -1059,6 +1059,28 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 		}
 	}()
 
+	// Concurrency admission promoter. Runs over-cap free-tenant runs as
+	// PENDING (queued) at submit; this sweep starts them as slots free up
+	// (a run finishing, failing, being cancelled, or reaped). Short interval
+	// so a freed slot is filled promptly; the MarkGraphRunning conditional
+	// flip keeps it safe to run on every replica. Skipped when nothing is
+	// capped (the sweep is a cheap "any pending?" query when idle).
+	promoteInterval := envDuration("DAZYFLOW_PROMOTE_INTERVAL", 2*time.Second)
+	bgWg.Add(1)
+	go func() {
+		defer bgWg.Done()
+		t := time.NewTicker(promoteInterval)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				d.svc.SweepPromotePending(ctx)
+			}
+		}
+	}()
+
 	startRetentionSweeps(ctx, d.svc, d.jobs, d.runLogs, d.pgPool, bgWg)
 }
 

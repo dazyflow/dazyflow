@@ -541,6 +541,14 @@ func (h *HTTPGateway) resolveActiveOrg(r *http.Request, cfg auth.OrgAuthConfig, 
 		return "", "", nil, "not_invited", http.StatusForbidden,
 			"your account isn't a member of this organization — ask an admin to invite you"
 	}
+	// Seat gate: an SSO join consumes a seat just like accepting an invitation,
+	// so enforce the org's member cap here too — otherwise a Workspace-domain
+	// org could grow past max_members through SSO, bypassing acceptInvitation's
+	// gate. Free-tier only; pro/comped/trial resolve to no cap.
+	if exceeded, limit := h.seatQuotaExceeded(r.Context(), st.Tenant); exceeded {
+		return "", "", nil, "org_full", http.StatusPaymentRequired,
+			fmt.Sprintf("this organization has reached its %d-member limit — ask an admin to upgrade", limit)
+	}
 	// Domain-authorized joiners get a minimal default role (editor — no org
 	// administration); an invitation carries its own scoped roles, which we
 	// honor exactly (mirrors acceptInvitation in orgs.go).

@@ -272,7 +272,7 @@
       "polling": "Schemalagda & polling-triggers",
       "members": "Teammedlemmar",
       "concurrency": "Samtidiga körningar",
-      "retention": "Körhistorik",
+      "retention": "Loggretention",
       "flows": "Flöden",
       "nodes": "Steg per flöde",
       "disk": "Fillagring",

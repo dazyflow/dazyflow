@@ -146,6 +146,17 @@ type JobCounter interface {
 	CountsByStatus(ctx context.Context) (map[JobStatus]int, error)
 }
 
+// GraphRunStarter is an optional JobStore extension: flip a graph-kind record
+// from queued (held pending by the per-tenant concurrency admission queue) to
+// running. Returns true only when THIS call performed the transition (the row
+// was queued); false means it was already running/terminal — another promoter
+// won the race. The conditional update is the concurrency control, so the
+// promoter needs no external lock. Implemented by the Memory and Postgres
+// stores.
+type GraphRunStarter interface {
+	MarkGraphRunning(ctx context.Context, jobID string) (bool, error)
+}
+
 // ListNodeRecordsOpts scopes a ListNodeRecords call. Same shape as
 // ListGraphRunsOpts but for the node-kind half of the table.
 //

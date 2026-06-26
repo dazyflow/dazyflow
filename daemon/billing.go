@@ -152,55 +152,60 @@ func (s *Service) checkRunQuota(ctx context.Context, tenant string) error {
 	return s.billing().checkRunQuota(ctx, tenant)
 }
 
-// checkConcurrencyQuota caps a free-tenant's simultaneously in-flight graph
-// runs (queued + running). Pro/comped/trial bypass; a 0 limit means no cap;
-// counting errors fail open — a job-store hiccup must not block runs. Called
-// by SubmitGraphWithSeed for top-level submissions only; nested sub-graph runs
-// bypass it for the same reason the run gate does (the parent was admitted).
-func (s *Service) checkConcurrencyQuota(ctx context.Context, tenant string) error {
-	if s.Jobs == nil {
-		return nil
-	}
+// concurrencyCapped reports the tenant's effective simultaneous-run limit when
+// it actually applies (free plan, limit > 0), and false otherwise (pro/comped/
+// trial or no limit → unlimited). Shared by the submit-time admission decision
+// and the promotion sweep so both agree on who is capped and at what number.
+func (s *Service) concurrencyCapped(ctx context.Context, tenant string) (limit int, capped bool) {
 	b := s.billing()
-	limit := b.concurrencyLimit(ctx, tenant)
+	limit = b.concurrencyLimit(ctx, tenant)
 	if limit <= 0 {
-		return nil
+		return 0, false
 	}
 	if !b.tenantIsFree(ctx, tenant, "concurrency gate") {
-		return nil // pro / comped / trial: uncapped
+		return 0, false // pro / comped / trial: uncapped
 	}
-	inflight, err := s.countInflightRuns(ctx, tenant, limit)
-	if err != nil {
-		if s.Logger != nil {
-			s.Logger.Printf("concurrency gate [%s]: count in-flight (failing open): %v", tenant, err)
-		}
-		return nil
-	}
-	if inflight >= limit {
-		return fmt.Errorf("%w: %d runs already in flight, limit is %d — upgrade for higher concurrency",
-			core.ErrPlanLimit, inflight, limit)
-	}
-	return nil
+	return limit, true
 }
 
-// countInflightRuns counts a tenant's non-terminal graph runs (queued +
-// running). It stops as soon as the running total reaches limit — the gate
-// only needs to know whether the cap is hit, not the exact backlog.
-func (s *Service) countInflightRuns(ctx context.Context, tenant string, limit int) (int, error) {
-	total := 0
-	for _, st := range []core.JobStatus{core.JobStatusRunning, core.JobStatusQueued} {
-		recs, err := s.Jobs.ListGraphRuns(ctx, core.ListGraphRunsOpts{
-			Tenant: tenant, Status: st, Limit: limit + 1,
-		})
-		if err != nil {
-			return 0, err
-		}
-		total += len(recs)
-		if total >= limit {
-			return total, nil
-		}
+// runningGraphRuns counts a tenant's currently-running top-level graph runs. It
+// stops counting once it reaches limit — the admission decision only needs to
+// know whether the cap is hit. limit <= 0 means "no early stop" (count up to a
+// generous page).
+func (s *Service) runningGraphRuns(ctx context.Context, tenant string, limit int) (int, error) {
+	page := limit + 1
+	if page <= 1 {
+		page = 200
 	}
-	return total, nil
+	recs, err := s.Jobs.ListGraphRuns(ctx, core.ListGraphRunsOpts{
+		Tenant: tenant, Status: core.JobStatusRunning, Limit: page,
+	})
+	if err != nil {
+		return 0, err
+	}
+	return len(recs), nil
+}
+
+// admitGraphRun reports whether a new top-level run for tenant may START now
+// (true) or must wait as pending/queued (false). Free-tier only; pro/comped/
+// trial and a 0 limit always admit. Fails OPEN (admit) on a job-store hiccup —
+// a counting error must never strand a run in the pending queue.
+func (s *Service) admitGraphRun(ctx context.Context, tenant string) bool {
+	if s.Jobs == nil {
+		return true
+	}
+	limit, capped := s.concurrencyCapped(ctx, tenant)
+	if !capped {
+		return true
+	}
+	running, err := s.runningGraphRuns(ctx, tenant, limit)
+	if err != nil {
+		if s.Logger != nil {
+			s.Logger.Printf("concurrency admission [%s]: count running (admitting): %v", tenant, err)
+		}
+		return true
+	}
+	return running < limit
 }
 
 // tenantIsFree resolves whether the plan gates apply to tenant. Fails

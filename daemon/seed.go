@@ -110,12 +110,9 @@ func (s *Service) SubmitGraphWithSeed(
 	if err := s.checkRunQuota(ctx, g.Tenant); err != nil {
 		return "", err
 	}
-	// Concurrency gate: cap a free tenant's simultaneously in-flight runs
-	// (queued + running) so they can't flood the queue. Pro/comped/trial
-	// bypass; same fail-open, top-level-only policy as the run gate above.
-	if err := s.checkConcurrencyQuota(ctx, g.Tenant); err != nil {
-		return "", err
-	}
+	// Concurrency admission is decided AFTER the record is created (below): a
+	// free tenant over its max_concurrency starts the run as pending (queued)
+	// rather than running, and the promotion sweep starts it when a slot frees.
 	// Platform-admin killswitch: a suspended org runs nothing. This is the
 	// authoritative halt — every run entry point (manual, scheduler,
 	// webhook/form trigger) funnels through here, including the inbound
@@ -141,6 +138,17 @@ func (s *Service) SubmitGraphWithSeed(
 		return "", fmt.Errorf("marshal graph: %w", err)
 	}
 
+	// Concurrency admission: a free tenant already at its max_concurrency
+	// running graph runs starts this one PENDING (queued) instead of running;
+	// the promotion sweep starts it when a slot frees. An empty graph completes
+	// instantly, so always admit it rather than stranding it in the queue.
+	// Pro/comped/trial and a 0 limit always admit.
+	admit := len(g.Nodes) == 0 || s.admitGraphRun(ctx, g.Tenant)
+	initialStatus := core.JobStatusQueued
+	if admit {
+		initialStatus = core.JobStatusRunning
+	}
+
 	graphRec := core.JobRecord{
 		ID:           graphRunID,
 		Kind:         core.JobKindGraph,
@@ -148,7 +156,7 @@ func (s *Service) SubmitGraphWithSeed(
 		NodeID:       "*",
 		Tenant:       g.Tenant,
 		Workspace:    g.Workspace,
-		Status:       core.JobStatusRunning,
+		Status:       initialStatus,
 		GraphPayload: payload,
 		Job:          core.Job{ID: graphRunID, GraphID: g.ID},
 	}
@@ -158,14 +166,30 @@ func (s *Service) SubmitGraphWithSeed(
 
 	// Usage metering (T3): one billable run per accepted submission, from
 	// every entry point (manual Run, scheduler, webhook/form/Slack/GitHub
-	// triggers) since they all funnel through here. Nested sub-graph runs
-	// go through submitGraphWithParent and are deliberately NOT counted —
-	// their nodes still meter as node executions, and counting the child
-	// run too would double-bill one user action. Best-effort by contract.
+	// triggers) since they all funnel through here. Counted even when the run
+	// starts pending — the submission is accepted. Nested sub-graph runs go
+	// through submitGraphWithParent and are deliberately NOT counted — their
+	// nodes still meter as node executions, and counting the child run too
+	// would double-bill one user action. Best-effort by contract.
 	if s.Usage != nil {
 		if uerr := s.Usage.AddRun(ctx, g.Tenant, time.Now()); uerr != nil && s.Logger != nil {
 			s.Logger.Printf("usage metering [%s]: count run: %v", g.Tenant, uerr)
 		}
+	}
+
+	// Pending (admission-deferred) run: persist its seeds now so the promoter
+	// can dispatch from them later, but enqueue no runnable work and arm no
+	// watchdog until it's promoted to running.
+	if !admit {
+		if errs := persistSeedsOnly(ctx, s.Jobs, g, graphRunID, seeds); len(errs) > 0 {
+			merged := errors.Join(errs...)
+			_ = s.Jobs.Complete(ctx, graphRunID, core.JobStatusFailed, &core.Result{
+				Status: core.StatusError,
+				Error:  &core.JobError{Code: "enqueue_failed", Message: merged.Error()},
+			})
+			return graphRunID, fmt.Errorf("persist seeds: %w", merged)
+		}
+		return graphRunID, nil
 	}
 
 	if len(g.Nodes) == 0 {
@@ -226,16 +250,18 @@ func (s *Service) SubmitGraphWithSeed(
 //
 // Used by both the webhook path (SubmitGraphWithSeed) and the subgraph
 // path (submitGraphWithParent) so they stay behavior-identical.
-func populateSeededRun(
+// persistSeedsOnly writes the pre-completed node-records for every seeded node
+// and returns the set of node IDs it seeded. It enqueues NO runnable (root)
+// work — that's dispatchRoots. The split lets the concurrency admission queue
+// persist a pending run's seeds at submit and defer dispatch until promotion.
+func persistSeedsOnly(
 	ctx context.Context,
 	store core.JobStore,
 	g core.Graph,
 	graphRunID string,
 	seeds map[string]core.Result,
 ) []error {
-	seededSet := make(map[string]struct{}, len(seeds))
 	var enqueueErrs []error
-
 	for nodeID, result := range seeds {
 		resultCopy := result
 		resultCopy.JobID = NodeJobID(graphRunID, nodeID)
@@ -256,11 +282,24 @@ func populateSeededRun(
 		}
 		if err := store.Enqueue(ctx, seedRec); err != nil {
 			enqueueErrs = append(enqueueErrs, fmt.Errorf("seed %q: %w", nodeID, err))
-			continue
 		}
-		seededSet[nodeID] = struct{}{}
 	}
+	return enqueueErrs
+}
 
+// dispatchRoots enqueues the runnable root node-records (no incoming edge, not
+// already seeded) and fans out from each already-seeded node. Call exactly once
+// when a run actually starts (immediately for admitted runs, or at promotion
+// for a pending one). seededNodeIDs reports which nodes carry pre-completed
+// seed records.
+func dispatchRoots(
+	ctx context.Context,
+	store core.JobStore,
+	g core.Graph,
+	graphRunID string,
+	seededNodeIDs map[string]struct{},
+) []error {
+	var enqueueErrs []error
 	hasIncoming := make(map[string]bool, len(g.Nodes))
 	for _, e := range g.Edges {
 		hasIncoming[e.To] = true
@@ -269,7 +308,7 @@ func populateSeededRun(
 		if hasIncoming[node.ID] {
 			continue
 		}
-		if _, isSeed := seededSet[node.ID]; isSeed {
+		if _, isSeed := seededNodeIDs[node.ID]; isSeed {
 			continue
 		}
 		nodeRec := core.JobRecord{
@@ -286,11 +325,27 @@ func populateSeededRun(
 			enqueueErrs = append(enqueueErrs, fmt.Errorf("root %q: %w", node.ID, err))
 		}
 	}
-
-	for seedID := range seededSet {
+	for seedID := range seededNodeIDs {
 		enqueueReadyDependents(ctx, store, g, graphRunID, seedID)
 	}
 	return enqueueErrs
+}
+
+// populateSeededRun persists seeds and dispatches roots in one step — the
+// immediate-start path used by admitted top-level runs and subgraph children.
+func populateSeededRun(
+	ctx context.Context,
+	store core.JobStore,
+	g core.Graph,
+	graphRunID string,
+	seeds map[string]core.Result,
+) []error {
+	errs := persistSeedsOnly(ctx, store, g, graphRunID, seeds)
+	seededSet := make(map[string]struct{}, len(seeds))
+	for nodeID := range seeds {
+		seededSet[nodeID] = struct{}{}
+	}
+	return append(errs, dispatchRoots(ctx, store, g, graphRunID, seededSet)...)
 }
 
 // allNodesAccountedFor returns true when every node in the graph has

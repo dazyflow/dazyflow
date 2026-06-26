@@ -271,7 +271,7 @@
       "polling": "Scheduled & polling triggers",
       "members": "Team members",
       "concurrency": "Concurrent runs",
-      "retention": "Run history",
+      "retention": "Log retention",
       "flows": "Flows",
       "nodes": "Steps per flow",
       "disk": "File storage",

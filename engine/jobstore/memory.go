@@ -247,6 +247,27 @@ func (m *Memory) complete(jobID, worker string, status core.JobStatus, result *c
 	return nil
 }
 
+// MarkGraphRunning implements core.GraphRunStarter: flip a pending (queued)
+// graph record to running. Returns true only when this call performed the
+// transition (mirrors the Postgres conditional UPDATE).
+func (m *Memory) MarkGraphRunning(_ context.Context, jobID string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	r, ok := m.records[jobID]
+	if !ok {
+		return false, core.ErrNotFound
+	}
+	if r.Kind != core.JobKindGraph || r.Status != core.JobStatusQueued {
+		return false, nil
+	}
+	r.Status = core.JobStatusRunning
+	if r.StartedAt == nil {
+		now := m.clock()
+		r.StartedAt = &now
+	}
+	return true, nil
+}
+
 func (m *Memory) Get(_ context.Context, jobID string) (core.JobRecord, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
