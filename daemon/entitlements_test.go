@@ -34,7 +34,7 @@ func TestResolveEffective_DefaultsWhenEmpty(t *testing.T) {
 func TestResolveEffective_TierThenOverride(t *testing.T) {
 	tier := &Tier{
 		ID: "pro", Plan: PlanPro, RunsPerMonth: 10000,
-		MaxGraphNodes: 500, PollingAllowed: true,
+		MaxGraphNodes: 500, PollingAllowed: ptrBool(true),
 	}
 	ent := &TenantEntitlement{
 		Tenant: "org_x", TierID: "pro",
@@ -82,6 +82,29 @@ func TestResolveEffective_PlanResolution(t *testing.T) {
 				t.Fatalf("plan = %q, want %q", eff.Plan, c.want)
 			}
 		})
+	}
+}
+
+// TestResolveEffective_TierPollingInherits is the regression guard for the
+// bug that silently disabled scheduling for every free org: a built-in tier
+// with PollingAllowed unset (nil) must INHERIT the deployment-global default,
+// not force it false. A non-nil tier value still wins.
+func TestResolveEffective_TierPollingInherits(t *testing.T) {
+	allowDefaults := testDefaults
+	allowDefaults.PollingAllowed = true // deployment allows free polling
+
+	// Built-in free tier, polling unset → inherit the (allow) default.
+	freeTier := &Tier{ID: "free", Plan: PlanFree} // PollingAllowed nil
+	eff := ResolveEffective(nil, freeTier, allowDefaults, PlanFree, time.Unix(0, 0))
+	if !eff.PollingAllowed {
+		t.Fatal("free tier with nil polling must inherit the allow-by-default global default")
+	}
+
+	// An explicit tier value still overrides the default.
+	denyTier := &Tier{ID: "free", Plan: PlanFree, PollingAllowed: ptrBool(false)}
+	eff = ResolveEffective(nil, denyTier, allowDefaults, PlanFree, time.Unix(0, 0))
+	if eff.PollingAllowed {
+		t.Fatal("explicit tier polling=false must override the global default")
 	}
 }
 

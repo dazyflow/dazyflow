@@ -33,8 +33,15 @@ type Tier struct {
 	MaxGraphNodes     int       `json:"max_graph_nodes"`
 	MaxFlows          int       `json:"max_flows"`
 	MaxTimeoutSeconds int       `json:"max_timeout_seconds"`
-	PollingAllowed    bool      `json:"polling_allowed"`
-	BuiltIn           bool      `json:"built_in"` // seeded free/pro — can't be deleted
+	// PollingAllowed gates scheduled / poll triggers for orgs on this tier.
+	// nil = inherit the deployment-global default (Service.FreePollingDisabled,
+	// i.e. the DAZYFLOW_FREE_POLLING_TRIGGERS knob) — matching the 0 = inherit
+	// convention the numeric limits above use, and the *bool override on
+	// TenantEntitlement. The built-in free/pro tiers seed this nil so they don't
+	// silently override the global default; a non-nil value is an explicit
+	// operator choice that wins.
+	PollingAllowed *bool `json:"polling_allowed,omitempty"`
+	BuiltIn        bool  `json:"built_in"` // seeded free/pro — can't be deleted
 	UpdatedAt         time.Time `json:"updated_at"`
 }
 
@@ -119,7 +126,13 @@ func ResolveEffective(ent *TenantEntitlement, tier *Tier, def LimitDefaults, str
 		if tier.MaxTimeoutSeconds != 0 {
 			eff.MaxTimeoutSeconds = tier.MaxTimeoutSeconds
 		}
-		eff.PollingAllowed = tier.PollingAllowed
+		// nil = inherit the global default (same convention as the numeric
+		// limits above). A bool has no "unset" value, so a plain false here
+		// would silently clobber an allow-by-default deployment — which is
+		// exactly the bug that disabled scheduling for every free tenant.
+		if tier.PollingAllowed != nil {
+			eff.PollingAllowed = *tier.PollingAllowed
+		}
 	}
 	// Override layer: a set (non-nil) override wins over the tier.
 	if ent != nil {
@@ -198,7 +211,8 @@ CREATE TABLE IF NOT EXISTS tiers (
     max_graph_nodes     BIGINT NOT NULL DEFAULT 0,
     max_flows           BIGINT NOT NULL DEFAULT 0,
     max_timeout_seconds BIGINT NOT NULL DEFAULT 0,
-    polling_allowed     BOOLEAN NOT NULL DEFAULT TRUE,
+    -- NULL = inherit the deployment-global default (see Tier.PollingAllowed).
+    polling_allowed     BOOLEAN,
     built_in            BOOLEAN NOT NULL DEFAULT FALSE,
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -211,6 +225,21 @@ CREATE TABLE IF NOT EXISTS tenant_entitlements (
     notes      TEXT NOT NULL DEFAULT '',
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Migrate deployments created before polling_allowed was nullable: the column
+-- was BOOLEAN NOT NULL DEFAULT TRUE and the built-in free tier was seeded
+-- FALSE, which unconditionally overrode the (allow-by-default) global default
+-- and silently disabled scheduling for every free org. Drop the NOT NULL /
+-- DEFAULT and reset the built-in tiers to NULL (inherit). Scoped to built_in
+-- so operator-customized tiers keep their explicit choice. The UPDATE matches
+-- only the original buggy seed values (free=FALSE, pro=TRUE) so it's a no-op
+-- once corrected and won't clobber a later explicit operator choice on re-run.
+-- To disable free polling, set DAZYFLOW_FREE_POLLING_TRIGGERS=false rather than
+-- editing the built-in tier.
+ALTER TABLE tiers ALTER COLUMN polling_allowed DROP DEFAULT;
+ALTER TABLE tiers ALTER COLUMN polling_allowed DROP NOT NULL;
+UPDATE tiers SET polling_allowed = NULL
+  WHERE (id = 'free' AND built_in = TRUE AND polling_allowed = FALSE)
+     OR (id = 'pro'  AND built_in = TRUE AND polling_allowed = TRUE);
 `
 
 // EnsurePgEntitlementSchema creates the tiers + tenant_entitlements tables.
@@ -249,16 +278,18 @@ func NewPgEntitlementStore(ctx context.Context, pool *pgxpool.Pool) (*PgEntitlem
 	return s, nil
 }
 
-// seedBuiltins inserts the Free and Pro tiers once. They carry only a
-// plan level and leave limits at 0 (inherit the global defaults), so an
-// existing deployment behaves identically until an operator edits them.
+// seedBuiltins inserts the Free and Pro tiers once. They carry only a plan
+// level and leave every limit unset — numeric limits at 0 and polling_allowed
+// NULL — so they inherit the deployment-global defaults and behave identically
+// until an operator edits them. (Seeding polling_allowed explicitly was the bug
+// that disabled scheduling for every free org; see the schema migration.)
 func (s *PgEntitlementStore) seedBuiltins(ctx context.Context) error {
-	const q = `INSERT INTO tiers (id, name, plan, polling_allowed, built_in)
-		VALUES ($1,$2,$3,$4,TRUE) ON CONFLICT (id) DO NOTHING`
-	if _, err := s.pool.Exec(ctx, q, "free", "Free", PlanFree, false); err != nil {
+	const q = `INSERT INTO tiers (id, name, plan, built_in)
+		VALUES ($1,$2,$3,TRUE) ON CONFLICT (id) DO NOTHING`
+	if _, err := s.pool.Exec(ctx, q, "free", "Free", PlanFree); err != nil {
 		return err
 	}
-	if _, err := s.pool.Exec(ctx, q, "pro", "Pro", PlanPro, true); err != nil {
+	if _, err := s.pool.Exec(ctx, q, "pro", "Pro", PlanPro); err != nil {
 		return err
 	}
 	return nil

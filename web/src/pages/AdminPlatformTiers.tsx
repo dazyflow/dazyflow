@@ -56,7 +56,7 @@ export function AdminPlatformTiers() {
     max_graph_nodes: 0,
     max_flows: 0,
     max_timeout_seconds: 0,
-    polling_allowed: true,
+    polling_allowed: null, // inherit the global default, like the 0-valued limits
     built_in: false,
   });
 
@@ -170,7 +170,13 @@ function limitSummary(tier: PlatformTier, t: (k: string) => string): string {
     `${t("admin.platformTiers.nodes")}: ${n(tier.max_graph_nodes)}`,
     `${t("admin.platformTiers.flows")}: ${n(tier.max_flows)}`,
     `${t("admin.platformTiers.disk")}: ${mb}`,
-    `${t("admin.platformTiers.polling")}: ${tier.polling_allowed ? t("common.yes") : t("common.no")}`,
+    `${t("admin.platformTiers.polling")}: ${
+      tier.polling_allowed == null
+        ? "—"
+        : tier.polling_allowed
+          ? t("common.yes")
+          : t("common.no")
+    }`,
   ].join(" · ");
 }
 
@@ -276,13 +282,29 @@ function TierEditor({
               onChange={(e) => setDiskMB(Math.max(0, Number(e.target.value) || 0))}
             />
           </label>
-          <label className="pa-tier-check">
-            <input
-              type="checkbox"
-              checked={draft.polling_allowed}
-              onChange={(e) => setDraft({ ...draft, polling_allowed: e.target.checked })}
-            />
-            {t("admin.platformTiers.pollingAllowed")}
+          <label>
+            {t("admin.platformTiers.pollingAllowed")}{" "}
+            <span className="pa-subtext">({t("admin.platformTiers.zeroInherit")})</span>
+            <select
+              value={
+                draft.polling_allowed == null
+                  ? "default"
+                  : draft.polling_allowed
+                    ? "yes"
+                    : "no"
+              }
+              onChange={(e) =>
+                setDraft({
+                  ...draft,
+                  polling_allowed:
+                    e.target.value === "default" ? null : e.target.value === "yes",
+                })
+              }
+            >
+              <option value="default">{t("admin.platformTiers.pollingDefault")}</option>
+              <option value="yes">{t("admin.platformTiers.pollingYes")}</option>
+              <option value="no">{t("admin.platformTiers.pollingNo")}</option>
+            </select>
           </label>
         </div>
         <div className="settings-foot">

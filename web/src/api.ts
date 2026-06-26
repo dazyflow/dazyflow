@@ -1963,7 +1963,9 @@ export type PlatformTier = {
   max_graph_nodes: number;
   max_flows: number;
   max_timeout_seconds: number;
-  polling_allowed: boolean;
+  // null / absent = inherit the deployment-global default (the
+  // DAZYFLOW_FREE_POLLING_TRIGGERS knob); true / false is an explicit choice.
+  polling_allowed?: boolean | null;
   built_in: boolean;
   updated_at?: string;
 };

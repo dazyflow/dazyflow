@@ -1153,7 +1153,10 @@
       "plan": "Plannivå",
       "zeroInherit": "0 = ärv standard",
       "diskMB": "Diskkvot (MB)",
-      "pollingAllowed": "Tillåt schemalagda / pollande utlösare",
+      "pollingAllowed": "Schemalagda / pollande utlösare",
+      "pollingDefault": "Ärv standard",
+      "pollingYes": "Tillåtna",
+      "pollingNo": "Avstängda",
       "saving": "Sparar…",
       "save": "Spara nivå",
       "nameRequired": "Ett namn krävs"

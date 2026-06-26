@@ -1155,7 +1155,10 @@
       "plan": "Plan level",
       "zeroInherit": "0 = inherit default",
       "diskMB": "Disk quota (MB)",
-      "pollingAllowed": "Allow scheduled / polling triggers",
+      "pollingAllowed": "Scheduled / polling triggers",
+      "pollingDefault": "Inherit default",
+      "pollingYes": "Allowed",
+      "pollingNo": "Disabled",
       "saving": "Saving…",
       "save": "Save tier",
       "nameRequired": "A name is required"
