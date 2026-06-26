@@ -1,13 +1,34 @@
 package daemon
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"git.sr.ht/~klahr/dazyflow/auth"
+	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/internal/emailtmpl"
 )
+
+// newEmailAdminHarness is newSecretsHarness with the token swapped for an
+// organization:admin one — managing email templates is admin-only, and the
+// admin role also carries secret:read so the same token drives reads. Returns
+// the harness plus the original (secret:write-only, non-admin) editor token so
+// a test can assert the admin gate.
+func newEmailAdminHarness(t *testing.T) (*gatewayHarness, string) {
+	t.Helper()
+	h := newSecretsHarness(t)
+	editorTok := h.token
+	_, adminTok, err := auth.IssueAPIKey(h.ks, t.Context(), "tmpl-admin", "t", "ws", "admin@t", []core.Role{core.TeamRoleAdmin()}, nil)
+	if err != nil {
+		t.Fatalf("issue admin token: %v", err)
+	}
+	h.token = adminTok
+	return h, editorTok
+}
 
 func putTemplateBody(displayName, html string) []byte {
 	b, _ := json.Marshal(map[string]any{"name": displayName, "html": html})
@@ -38,7 +59,7 @@ func listTemplates(t *testing.T, h *gatewayHarness) templateListResp {
 }
 
 func TestEmailTemplates_CRUDRoundTrip(t *testing.T) {
-	h := newSecretsHarness(t)
+	h, _ := newEmailAdminHarness(t)
 	const html = `<div>{{.Body}}</div>`
 	if rw := h.do(t, "PUT", "/api/v1/email-templates/welcome",
 		json.RawMessage(putTemplateBody("Welcome email", html))); rw.Code != http.StatusNoContent {
@@ -77,7 +98,7 @@ func TestEmailTemplates_CRUDRoundTrip(t *testing.T) {
 }
 
 func TestEmailTemplates_BuiltinsAlwaysListedAndReadOnly(t *testing.T) {
-	h := newSecretsHarness(t)
+	h, _ := newEmailAdminHarness(t)
 	resp := listTemplates(t, h)
 	builtins := emailtmpl.BuiltinTemplates()
 	if len(resp.Templates) < len(builtins) {
@@ -100,7 +121,7 @@ func TestEmailTemplates_BuiltinsAlwaysListedAndReadOnly(t *testing.T) {
 }
 
 func TestEmailTemplates_RejectsBadInput(t *testing.T) {
-	h := newSecretsHarness(t)
+	h, _ := newEmailAdminHarness(t)
 	// Empty HTML.
 	if rw := h.do(t, "PUT", "/api/v1/email-templates/x",
 		json.RawMessage(putTemplateBody("X", "  "))); rw.Code != http.StatusBadRequest {
@@ -118,8 +139,47 @@ func TestEmailTemplates_RejectsBadInput(t *testing.T) {
 	}
 }
 
+// doAsToken sends a request with an explicit bearer token (h.do is fixed to
+// h.token) and returns the status code.
+func doAsToken(t *testing.T, h *gatewayHarness, token, method, path string, body []byte) int {
+	t.Helper()
+	var br *bytes.Buffer
+	if body != nil {
+		br = bytes.NewBuffer(body)
+	} else {
+		br = bytes.NewBuffer(nil)
+	}
+	req := httptest.NewRequest(method, path, br)
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	rw := httptest.NewRecorder()
+	ServeForTest(h.gw, rw, req)
+	return rw.Code
+}
+
+func TestEmailTemplates_WriteRequiresAdmin(t *testing.T) {
+	h, editorTok := newEmailAdminHarness(t)
+	// A non-admin editor (secret:write but not organization:admin) can LIST,
+	// but cannot create or delete.
+	if code := doAsToken(t, h, editorTok, "GET", "/api/v1/email-templates", nil); code != http.StatusOK {
+		t.Errorf("editor list status=%d, want 200", code)
+	}
+	if code := doAsToken(t, h, editorTok, "PUT", "/api/v1/email-templates/welcome",
+		putTemplateBody("Welcome", "<div>{{.Body}}</div>")); code != http.StatusForbidden {
+		t.Errorf("editor PUT status=%d, want 403", code)
+	}
+	if code := doAsToken(t, h, editorTok, "DELETE", "/api/v1/email-templates/welcome", nil); code != http.StatusForbidden {
+		t.Errorf("editor DELETE status=%d, want 403", code)
+	}
+	// The admin token (h.token) can write.
+	if rw := h.do(t, "PUT", "/api/v1/email-templates/welcome",
+		json.RawMessage(putTemplateBody("Welcome", "<div>{{.Body}}</div>"))); rw.Code != http.StatusNoContent {
+		t.Errorf("admin PUT status=%d, want 204", rw.Code)
+	}
+}
+
 func TestEmailTemplates_DeleteBuiltinRejected(t *testing.T) {
-	h := newSecretsHarness(t)
+	h, _ := newEmailAdminHarness(t)
 	rw := h.do(t, "DELETE", "/api/v1/email-templates/builtin:plain", nil)
 	if rw.Code != http.StatusConflict {
 		t.Errorf("delete built-in: status=%d, want 409", rw.Code)
@@ -127,7 +187,7 @@ func TestEmailTemplates_DeleteBuiltinRejected(t *testing.T) {
 }
 
 func TestEmailTemplates_HiddenFromSecretsListing(t *testing.T) {
-	h := newSecretsHarness(t)
+	h, _ := newEmailAdminHarness(t)
 	h.do(t, "PUT", "/api/v1/email-templates/welcome",
 		json.RawMessage(putTemplateBody("Welcome", "<div>{{.Body}}</div>")))
 	rw := h.do(t, "GET", "/api/v1/secrets", nil)
@@ -159,7 +219,7 @@ func TestEmailTemplates_Preview(t *testing.T) {
 }
 
 func TestEmailTemplates_PreviewByID(t *testing.T) {
-	h := newSecretsHarness(t)
+	h, _ := newEmailAdminHarness(t)
 	h.do(t, "PUT", "/api/v1/email-templates/welcome",
 		json.RawMessage(putTemplateBody("Welcome", `<main>{{.Body}}</main>`)))
 

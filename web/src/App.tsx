@@ -46,6 +46,7 @@ import { AdminPlatformTiers } from "./pages/AdminPlatformTiers";
 import { AdminSystemLog } from "./pages/AdminSystemLog";
 import { AdminGoogle } from "./pages/AdminGoogle";
 import { AdminSecrets } from "./pages/AdminSecrets";
+import { EmailTemplates } from "./pages/EmailTemplates";
 import { AdminGitCredentials } from "./pages/AdminGitCredentials";
 import { AcceptInvite } from "./pages/AcceptInvite";
 import { PublicOverview } from "./pages/PublicOverview";
@@ -138,6 +139,7 @@ export function App() {
         <Route path="/admin/system/log" element={<AdminSystemLog />} />
         <Route path="/admin/google" element={<AdminGoogle />} />
         <Route path="/admin/secrets" element={<AdminSecrets />} />
+        <Route path="/admin/email-templates" element={<EmailTemplates />} />
         <Route path="/admin/git-credentials" element={<AdminGitCredentials />} />
         <Route path="/invite/:token" element={<AcceptInvite />} />
         <Route path="*" element={<Navigate to="/flows" replace />} />

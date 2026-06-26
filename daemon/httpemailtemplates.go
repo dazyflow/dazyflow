@@ -41,10 +41,13 @@ type emailTemplateView struct {
 }
 
 // emailTemplateGate is the shared preamble for the template CRUD handlers:
-// encrypted store present, tenant-bound principal, and org-scope authorization
-// (secret:read for reads, secret:write for writes). Templates have no flow
-// tier, so there is no scope query param. Returns ok=false (after writing the
-// error) when the handler should stop.
+// encrypted store present, tenant-bound principal, and authorization. The
+// template library is org-wide branding with a live-reference blast radius (a
+// change affects every flow that uses it), so MANAGEMENT (create/edit/delete)
+// is admin-only (organization:admin). READS (list/preview) only need
+// secret:read, so any editor can pick and preview a template when building a
+// flow. Templates have no flow tier, so there is no scope query param. Returns
+// ok=false (after writing the error) when the handler should stop.
 func (h *HTTPGateway) emailTemplateGate(rw http.ResponseWriter, p core.Principal, write bool) bool {
 	if h.EncryptedSecrets == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "encrypted secret store is not configured")
@@ -54,11 +57,14 @@ func (h *HTTPGateway) emailTemplateGate(rw http.ResponseWriter, p core.Principal
 		writeJSONError(rw, http.StatusForbidden, "principal has no tenant")
 		return false
 	}
-	perm := core.PermSecretRead
 	if write {
-		perm = core.PermSecretWrite
+		if !core.CanAdminOrg(p) {
+			writeJSONError(rw, http.StatusForbidden, "managing email templates requires organization admin")
+			return false
+		}
+		return true
 	}
-	if err := core.Require(p, perm); err != nil {
+	if err := core.Require(p, core.PermSecretRead); err != nil {
 		writeJSONError(rw, http.StatusForbidden, err.Error())
 		return false
 	}

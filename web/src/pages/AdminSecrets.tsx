@@ -2,7 +2,6 @@ import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Secrets } from "./Secrets";
 import { AdminSecretManager } from "./AdminSecretManager";
-import { EmailTemplates } from "./EmailTemplates";
 
 // AdminSecrets is the org's credential home, reached from Admin → Secrets.
 // It groups the two closely-related surfaces under one destination using
@@ -19,11 +18,9 @@ import { EmailTemplates } from "./EmailTemplates";
 export function AdminSecrets() {
   const { t } = useTranslation();
   const [params, setParams] = useSearchParams();
-  const raw = params.get("tab");
-  const tab: "values" | "manager" | "templates" =
-    raw === "manager" ? "manager" : raw === "templates" ? "templates" : "values";
+  const tab = params.get("tab") === "manager" ? "manager" : "values";
 
-  const setTab = (next: "values" | "manager" | "templates") => {
+  const setTab = (next: "values" | "manager") => {
     const p = new URLSearchParams(params);
     p.set("tab", next);
     // `focus` only applies to the Values tab; drop it when leaving so a
@@ -56,19 +53,10 @@ export function AdminSecrets() {
         >
           {t("admin.secrets.tabManager")}
         </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "templates"}
-          className={tab === "templates" ? "active" : ""}
-          onClick={() => setTab("templates")}
-        >
-          {t("admin.secrets.tabEmailTemplates", "Email templates")}
-        </button>
       </div>
 
       <div className="admin-secrets-body">
-        {tab === "values" ? <Secrets /> : tab === "manager" ? <AdminSecretManager /> : <EmailTemplates />}
+        {tab === "values" ? <Secrets /> : <AdminSecretManager />}
       </div>
     </div>
   );
