@@ -266,8 +266,8 @@
       "enterprise": "Scale, security and compliance for larger orgs."
     },
     "unlimited": "Unlimited",
-    "included": "Included",
-    "notIncluded": "Not included",
+    "included": "Yes",
+    "notIncluded": "No",
     "perMonth": "{{n}} / month",
     "minutes": "{{n}} min",
     "seconds": "{{n}}s",

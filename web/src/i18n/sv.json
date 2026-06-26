@@ -267,8 +267,8 @@
       "enterprise": "Skala, säkerhet och efterlevnad för större organisationer."
     },
     "unlimited": "Obegränsat",
-    "included": "Ingår",
-    "notIncluded": "Ingår inte",
+    "included": "Ja",
+    "notIncluded": "Nej",
     "perMonth": "{{n}} / månad",
     "minutes": "{{n}} min",
     "seconds": "{{n}}s",
