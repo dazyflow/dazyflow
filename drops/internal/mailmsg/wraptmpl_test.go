@@ -2,6 +2,7 @@ package mailmsg
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -70,5 +71,22 @@ func TestWrapWithTemplate_NoProviderErrors(t *testing.T) {
 	_, err := WrapWithTemplate(context.Background(), jobWithTemplate("welcome"), "<p>hi</p>", "s")
 	if err == nil || !strings.Contains(err.Error(), "unavailable") {
 		t.Fatalf("want unavailable error, got %v", err)
+	}
+}
+
+func TestWrapWithTemplate_ProviderErrorPropagates(t *testing.T) {
+	ctx := ctxWith(fakeProvider{err: errors.New("db down")})
+	_, err := WrapWithTemplate(ctx, jobWithTemplate("welcome"), "<p>hi</p>", "s")
+	if err == nil || !strings.Contains(err.Error(), "resolve email template") {
+		t.Fatalf("want resolve error, got %v", err)
+	}
+}
+
+func TestWrapWithTemplate_RenderErrorPropagates(t *testing.T) {
+	// A shell with a broken template action fails at render time.
+	ctx := ctxWith(fakeProvider{id: "welcome", html: `<main>{{.Nope</main>`})
+	_, err := WrapWithTemplate(ctx, jobWithTemplate("welcome"), "<p>hi</p>", "s")
+	if err == nil || !strings.Contains(err.Error(), "render email template") {
+		t.Fatalf("want render error, got %v", err)
 	}
 }

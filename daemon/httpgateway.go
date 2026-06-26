@@ -2315,6 +2315,19 @@ func (h *HTTPGateway) jobEvents(rw http.ResponseWriter, r *http.Request, p core.
 		writeJSONError(rw, http.StatusInternalServerError, "streaming unsupported")
 		return
 	}
+
+	// Subscribe BEFORE deciding whether the run is already terminal. A short
+	// run can reach its terminal state in the gap between the GetJob above and
+	// the subscription taking effect; if we checked the snapshot's status and
+	// only subscribed afterwards, the terminal bus event published in that gap
+	// would reach no subscriber and the stream would hang until the client's
+	// deadline (a flaky 30s stall in tests; a wedged "Upgrade…"-style spinner
+	// for a UI that reconnects to a just-finished run). Subscribing first means
+	// any such event is buffered on our channel, and the status re-read below
+	// catches a run that finished at or before subscribe time.
+	events, cancel := h.svc.bus().Subscribe(jobID)
+	defer cancel()
+
 	rw.Header().Set("Content-Type", "text/event-stream")
 	rw.Header().Set("Cache-Control", "no-cache")
 	rw.Header().Set("X-Accel-Buffering", "no") // for nginx
@@ -2329,6 +2342,13 @@ func (h *HTTPGateway) jobEvents(rw http.ResponseWriter, r *http.Request, p core.
 	// already happened.
 	h.emitNodeSnapshots(rw, r.Context(), rec)
 	flusher.Flush()
+
+	// Re-read the status now that we're subscribed. If the run reached a
+	// terminal state at or before subscribe time, emit terminal and stop; a
+	// terminal that lands after this point instead arrives on `events`.
+	if cur, err := h.svc.GetJob(r.Context(), p, jobID); err == nil {
+		rec = cur
+	}
 	if core.IsTerminalStatus(rec.Status) {
 		writeSSE(rw, "terminal", sseTerminalView{
 			RunID:  rec.ID,
@@ -2338,9 +2358,6 @@ func (h *HTTPGateway) jobEvents(rw http.ResponseWriter, r *http.Request, p core.
 		flusher.Flush()
 		return
 	}
-
-	events, cancel := h.svc.bus().Subscribe(jobID)
-	defer cancel()
 
 	// Keep-alive ping every 25s — proxies time out idle SSE streams
 	// faster than that without a heartbeat.

@@ -174,3 +174,98 @@ func TestPostgres_CompleteOwned_FencesNonOwner(t *testing.T) {
 		t.Fatalf("owner CompleteOwned: %v", err)
 	}
 }
+
+// openPG opens the Postgres store with a clean jobs table, skipping when
+// DAZYFLOW_TEST_DB is unset. Returns the store and a live context.
+func openPG(t *testing.T) (*Postgres, context.Context) {
+	t.Helper()
+	url := os.Getenv("DAZYFLOW_TEST_DB")
+	if url == "" {
+		t.Skip("set DAZYFLOW_TEST_DB to run Postgres integration tests")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	t.Cleanup(cancel)
+	store, err := OpenPostgres(ctx, url)
+	if err != nil {
+		t.Fatalf("OpenPostgres: %v", err)
+	}
+	t.Cleanup(store.Close)
+	if _, err := store.pool.Exec(ctx, "TRUNCATE jobs"); err != nil {
+		t.Fatalf("TRUNCATE: %v", err)
+	}
+	return store, ctx
+}
+
+// TestPostgres_PruneTerminal exercises the retention sweep: only terminal,
+// old-enough rows are removed, in batches.
+func TestPostgres_PruneTerminal(t *testing.T) {
+	store, ctx := openPG(t)
+
+	// olderThan <= 0 is a guarded no-op.
+	if n, err := store.PruneTerminal(ctx, 0, 100); err != nil || n != 0 {
+		t.Errorf("PruneTerminal(0) = %d, %v; want 0, nil", n, err)
+	}
+
+	// Two terminal rows + one still-running row.
+	for _, id := range []string{"t1", "t2"} {
+		if err := store.Enqueue(ctx, core.JobRecord{ID: id, Kind: core.JobKindNode, Tenant: "t"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.Complete(ctx, id, core.JobStatusSucceeded, &core.Result{Status: core.StatusOK}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := store.Enqueue(ctx, core.JobRecord{ID: "live", Kind: core.JobKindNode, Tenant: "t"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// batch=1 forces the multi-iteration loop; both terminal rows go,
+	// the running row stays.
+	n, err := store.PruneTerminal(ctx, time.Nanosecond, 1)
+	if err != nil {
+		t.Fatalf("PruneTerminal: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("pruned = %d, want 2", n)
+	}
+	if _, err := store.Get(ctx, "live"); err != nil {
+		t.Errorf("running row should survive prune: %v", err)
+	}
+	if _, err := store.Get(ctx, "t1"); !errors.Is(err, core.ErrNotFound) {
+		t.Errorf("t1 should be pruned: %v", err)
+	}
+}
+
+// TestPostgres_OldestQueuedEnqueuedAt covers the queue-latency probe.
+func TestPostgres_OldestQueuedEnqueuedAt(t *testing.T) {
+	store, ctx := openPG(t)
+
+	// Empty queue reports no row.
+	if _, ok, err := store.OldestQueuedEnqueuedAt(ctx); err != nil || ok {
+		t.Errorf("empty queue = ok %v, err %v; want false, nil", ok, err)
+	}
+
+	// A future-available row must not count as claimable. Enqueue stores no
+	// available_at (only Requeue sets it), so requeue the row into the future.
+	if err := store.Enqueue(ctx, core.JobRecord{ID: "later", Kind: core.JobKindNode, Tenant: "t"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Requeue(ctx, "later", time.Now().Add(time.Hour)); err != nil {
+		t.Fatalf("Requeue: %v", err)
+	}
+	if _, ok, _ := store.OldestQueuedEnqueuedAt(ctx); ok {
+		t.Errorf("future-available row counted as queued")
+	}
+
+	// An immediately-claimable row is reported.
+	if err := store.Enqueue(ctx, core.JobRecord{ID: "now", Kind: core.JobKindNode, Tenant: "t"}); err != nil {
+		t.Fatal(err)
+	}
+	at, ok, err := store.OldestQueuedEnqueuedAt(ctx)
+	if err != nil || !ok {
+		t.Fatalf("OldestQueuedEnqueuedAt = ok %v, err %v; want true, nil", ok, err)
+	}
+	if at.IsZero() {
+		t.Error("enqueued_at is zero")
+	}
+}

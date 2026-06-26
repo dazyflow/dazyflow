@@ -439,6 +439,81 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 			}
 		}
 	})
+
+	t.Run("DeleteByTenant", func(t *testing.T) {
+		s := mk(t)
+		ctx := t.Context()
+		d, ok := s.(interface {
+			DeleteByTenant(context.Context, string) (int, error)
+		})
+		if !ok {
+			t.Skip("store does not implement DeleteByTenant")
+		}
+		// Two tenants; deletion of one leaves the other intact.
+		mustEnqueue(t, s, ctx, core.JobRecord{ID: "a1", Kind: core.JobKindNode, Tenant: "acme"})
+		mustEnqueue(t, s, ctx, core.JobRecord{ID: "a2", Kind: core.JobKindGraph, Tenant: "acme"})
+		mustEnqueue(t, s, ctx, core.JobRecord{ID: "g1", Kind: core.JobKindNode, Tenant: "globex"})
+
+		n, err := d.DeleteByTenant(ctx, "acme")
+		if err != nil {
+			t.Fatalf("DeleteByTenant: %v", err)
+		}
+		if n != 2 {
+			t.Errorf("deleted = %d, want 2", n)
+		}
+		if _, err := s.Get(ctx, "a1"); !errors.Is(err, core.ErrNotFound) {
+			t.Errorf("a1 still present after delete: %v", err)
+		}
+		if _, err := s.Get(ctx, "g1"); err != nil {
+			t.Errorf("globex row should survive: %v", err)
+		}
+		// Deleting a tenant with no rows is a no-op, not an error.
+		if n, err := d.DeleteByTenant(ctx, "nobody"); err != nil || n != 0 {
+			t.Errorf("DeleteByTenant(empty) = %d, %v; want 0, nil", n, err)
+		}
+	})
+
+	t.Run("MarkGraphRunning", func(t *testing.T) {
+		s := mk(t)
+		ctx := t.Context()
+		starter, ok := s.(core.GraphRunStarter)
+		if !ok {
+			t.Skip("store does not implement GraphRunStarter")
+		}
+		// A queued graph row flips to running exactly once.
+		mustEnqueue(t, s, ctx, core.JobRecord{ID: "gr", Kind: core.JobKindGraph, Status: core.JobStatusQueued, Tenant: "t"})
+		did, err := starter.MarkGraphRunning(ctx, "gr")
+		if err != nil || !did {
+			t.Fatalf("first MarkGraphRunning = %v, %v; want true, nil", did, err)
+		}
+		got, _ := s.Get(ctx, "gr")
+		if got.Status != core.JobStatusRunning {
+			t.Errorf("status = %q, want running", got.Status)
+		}
+		if got.StartedAt == nil {
+			t.Error("StartedAt should be set after MarkGraphRunning")
+		}
+		// A second call is a no-op (already running): returns false.
+		if did, err := starter.MarkGraphRunning(ctx, "gr"); err != nil || did {
+			t.Errorf("second MarkGraphRunning = %v, %v; want false, nil", did, err)
+		}
+		// A node-kind row is never promoted.
+		mustEnqueue(t, s, ctx, core.JobRecord{ID: "nd", Kind: core.JobKindNode, Status: core.JobStatusQueued, Tenant: "t"})
+		if did, err := starter.MarkGraphRunning(ctx, "nd"); err != nil || did {
+			t.Errorf("MarkGraphRunning(node) = %v, %v; want false, nil", did, err)
+		}
+		// A missing row is not promoted. Memory returns ErrNotFound;
+		// Postgres conflates missing with already-running via a conditional
+		// UPDATE (RowsAffected 0 → false, nil). Either is acceptable, but
+		// it must never report a successful transition.
+		did, err = starter.MarkGraphRunning(ctx, "ghost")
+		if did {
+			t.Error("MarkGraphRunning(missing) reported a transition")
+		}
+		if err != nil && !errors.Is(err, core.ErrNotFound) {
+			t.Errorf("MarkGraphRunning(missing) = %v, want nil or ErrNotFound", err)
+		}
+	})
 }
 
 func mustEnqueue(t *testing.T, s core.JobStore, ctx context.Context, rec core.JobRecord) {
