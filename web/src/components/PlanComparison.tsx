@@ -1,25 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
-import {
-  AlertCircle,
-  ArrowUp,
-  Check,
-  CreditCard,
-  Minus,
-  Sparkles,
-} from "lucide-react";
+import { ArrowUp, Check, CreditCard, Minus, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { Button, ButtonLink } from "../components/Button";
-import { useAuth } from "../auth";
-import { api, APIError } from "../api";
-import { explainApiError } from "../lib/explainApiError";
+import { Button, ButtonLink } from "./Button";
 import type { PlanLimits, PlanOption, PlansInfo } from "../api";
 
-// Plans is the data-driven plan-comparison / change-tier page. Each plan's
-// limits are resolved server-side (the same resolver the gates use), so this
-// page only formats and *diffs* the numbers against the current plan — there is
-// no per-tier marketing copy to keep in sync. Editing a tier's limits changes
-// what's shown here automatically; only a brand-new limit field needs a new
-// row in FEATURES below.
+// The plan-comparison grid, lifted out of the old Plans page so the merged
+// Plan & usage page can render it inline below the usage counters. Limits are
+// resolved server-side (the same resolver the gates use), so this only formats
+// and *diffs* the numbers against the current plan — there is no per-tier
+// marketing copy to keep in sync. Editing a tier's limits changes what's shown
+// here automatically; only a brand-new limit field needs a new row in FEATURES.
 
 type FeatureKind = "capacity" | "bytes" | "duration" | "days" | "bool";
 
@@ -68,56 +57,23 @@ function betterThan(f: Feature, a: number | boolean, b: number | boolean): boole
   return score(a as number) > score(b as number);
 }
 
-export function Plans() {
+export function PlanComparison({
+  info,
+  redirecting,
+  onUpgrade,
+  onManage,
+}: {
+  info: PlansInfo;
+  redirecting: boolean;
+  onUpgrade: () => void;
+  onManage: () => void;
+}) {
   const { t, i18n } = useTranslation();
-  const { token, activeTenant } = useAuth();
-  const [info, setInfo] = useState<PlansInfo | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [redirecting, setRedirecting] = useState(false);
   const fmt = new Intl.NumberFormat(i18n.language);
 
-  const refresh = useCallback(async () => {
-    if (!token) return;
-    setLoading(true);
-    try {
-      const data = await api.getPlans(token, activeTenant || undefined);
-      setInfo(data);
-      setError(null);
-    } catch (e) {
-      const err = e as APIError | Error;
-      if (err instanceof APIError && err.status === 501) {
-        setError(t("usage.notConfigured"));
-      } else {
-        setError(explainApiError(e, t));
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [token, activeTenant, t]);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
-  const goToStripe = useCallback(
-    async (kind: "checkout" | "portal") => {
-      if (!token) return;
-      setRedirecting(true);
-      try {
-        const tenant = activeTenant || undefined;
-        const { url } =
-          kind === "checkout"
-            ? await api.createCheckout(token, tenant)
-            : await api.createBillingPortal(token, tenant);
-        window.location.href = url;
-      } catch (e) {
-        setError(explainApiError(e, t));
-        setRedirecting(false);
-      }
-    },
-    [token, activeTenant, t],
-  );
+  const plans = info.plans ?? [];
+  const current = plans.find((p) => p.is_current) ?? plans[0];
+  if (!current) return null;
 
   const formatValue = (f: Feature, v: number | boolean): string => {
     switch (f.kind) {
@@ -147,66 +103,30 @@ export function Plans() {
     }
   };
 
-  if (!loading && error) {
-    return (
-      <div>
-        <PlansHeader t={t} />
-        <div className="card" style={{ color: "var(--danger)" }}>
-          <AlertCircle size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-          {error}
-        </div>
-      </div>
-    );
-  }
-
-  const plans = info?.plans ?? [];
-  const current = plans.find((p) => p.is_current) ?? plans[0];
-
   return (
-    <div>
-      <PlansHeader t={t} />
-
-      {!loading && info && current && (
-        <>
-          <div className="sub" style={{ marginBottom: "var(--space-4)" }}>
-            {t("plans.currentLine", {
-              plan: current.name,
-              used: fmt.format(info.runs_this_month),
-            })}
-          </div>
-
-          <div className="plans-grid">
-            {plans.map((p) => (
-              <PlanCard
-                key={p.id}
-                plan={p}
-                current={current}
-                info={info}
-                redirecting={redirecting}
-                t={t}
-                betterThan={betterThan}
-                formatValue={formatValue}
-                onUpgrade={() => void goToStripe("checkout")}
-                onManage={() => void goToStripe("portal")}
-              />
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-function PlansHeader({ t }: { t: (k: string) => string }) {
-  return (
-    <div className="page-title">
-      <div>
-        <h1>
-          <CreditCard size={20} style={{ marginRight: 8, verticalAlign: -3 }} />
-          {t("plans.title")}
-        </h1>
+    <section className="card dash-panel" style={{ marginTop: "var(--space-4)" }}>
+      <div className="dash-panel-head">
+        <h2>
+          <CreditCard size={18} style={{ marginRight: 8, verticalAlign: -3 }} />
+          {t("plans.compareTitle")}
+        </h2>
       </div>
-    </div>
+      <div className="plans-grid">
+        {plans.map((p) => (
+          <PlanCard
+            key={p.id}
+            plan={p}
+            current={current}
+            info={info}
+            redirecting={redirecting}
+            t={t}
+            formatValue={formatValue}
+            onUpgrade={onUpgrade}
+            onManage={onManage}
+          />
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -216,7 +136,6 @@ function PlanCard({
   info,
   redirecting,
   t,
-  betterThan,
   formatValue,
   onUpgrade,
   onManage,
@@ -226,7 +145,6 @@ function PlanCard({
   info: PlansInfo;
   redirecting: boolean;
   t: (k: string, o?: Record<string, unknown>) => string;
-  betterThan: (f: Feature, a: number | boolean, b: number | boolean) => boolean;
   formatValue: (f: Feature, v: number | boolean) => string;
   onUpgrade: () => void;
   onManage: () => void;

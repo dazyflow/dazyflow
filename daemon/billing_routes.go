@@ -83,11 +83,12 @@ func (h *HTTPGateway) billingMe(rw http.ResponseWriter, r *http.Request, p core.
 	if h.svc.Usage != nil {
 		runsThisMonth, _ = h.svc.runsThisMonth(r.Context(), tenant)
 	}
-	writeJSON(rw, http.StatusOK, map[string]any{
-		"plan":                plan.Plan,
-		"subscription_status": plan.SubscriptionStatus,
-		"free_runs_per_month": h.svc.FreeRunsPerMonth,
-		"runs_this_month":     runsThisMonth,
+	resp := map[string]any{
+		"plan":                 plan.Plan,
+		"subscription_status":  plan.SubscriptionStatus,
+		"cancel_at_period_end": plan.CancelAtPeriodEnd,
+		"free_runs_per_month":  h.svc.FreeRunsPerMonth,
+		"runs_this_month":      runsThisMonth,
 		// polling_allowed tells the Usage page why a free tenant's
 		// schedules aren't firing on gated deployments.
 		"polling_allowed": !h.svc.FreePollingDisabled || plan.Plan == PlanPro,
@@ -95,7 +96,13 @@ func (h *HTTPGateway) billingMe(rw http.ResponseWriter, r *http.Request, p core.
 		// manage (portal) additionally needs an existing customer.
 		"can_upgrade": h.Billing != nil && h.Billing.Stripe != nil && plan.Plan != PlanPro,
 		"can_manage":  h.Billing != nil && h.Billing.Stripe != nil && plan.StripeCustomerID != "",
-	})
+	}
+	// current_period_end is the renewal-or-cancellation date the UI dates
+	// its chip from; omit when unset so the client can distinguish "no date".
+	if !plan.CurrentPeriodEnd.IsZero() {
+		resp["current_period_end"] = plan.CurrentPeriodEnd.UTC().Format(time.RFC3339)
+	}
+	writeJSON(rw, http.StatusOK, resp)
 }
 
 // planLimits is the display-resolved limit set for one plan on the /me/plans
@@ -119,10 +126,10 @@ type planLimits struct {
 // server-side so the client never re-implements ResolveEffective; the client
 // only formats and diffs the numbers.
 type planOption struct {
-	ID        string     `json:"id"`
-	Name      string     `json:"name"`
-	Plan      string     `json:"plan"`
-	IsCurrent bool       `json:"is_current"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Plan      string `json:"plan"`
+	IsCurrent bool   `json:"is_current"`
 	// IsContact marks a sales-led plan (Enterprise) that isn't self-serve:
 	// the client shows a "Contact sales" CTA instead of an upgrade button.
 	// Its limits are all-unlimited (0) — the real numbers are set per-customer
@@ -348,7 +355,17 @@ type stripeEvent struct {
 			ClientReferenceID string            `json:"client_reference_id"`
 			Status            string            `json:"status"`
 			Metadata          map[string]string `json:"metadata"`
+			CancelAtPeriodEnd bool              `json:"cancel_at_period_end"`
 			CurrentPeriodEnd  int64             `json:"current_period_end"`
+			// Stripe API version 2025-03-31 moved current_period_end off the
+			// subscription object onto each line item; on that version (and
+			// the recent defaults) the top-level field is absent, so we read
+			// it from items too (see applyStripeEvent).
+			Items struct {
+				Data []struct {
+					CurrentPeriodEnd int64 `json:"current_period_end"`
+				} `json:"data"`
+			} `json:"items"`
 		} `json:"object"`
 	} `json:"data"`
 }
@@ -443,9 +460,19 @@ func (h *HTTPGateway) applyStripeEvent(r *http.Request, ev stripeEvent) error {
 			StripeCustomerID:     obj.Customer,
 			StripeSubscriptionID: obj.ID,
 			SubscriptionStatus:   obj.Status,
+			CancelAtPeriodEnd:    obj.CancelAtPeriodEnd,
 		}
-		if obj.CurrentPeriodEnd > 0 {
-			tp.CurrentPeriodEnd = time.Unix(obj.CurrentPeriodEnd, 0).UTC()
+		// current_period_end is top-level pre-2025-03-31 and per line item
+		// from 2025-03-31 on; take whichever is present, and the latest
+		// across items as the subscription's renewal boundary.
+		periodEnd := obj.CurrentPeriodEnd
+		for _, it := range obj.Items.Data {
+			if it.CurrentPeriodEnd > periodEnd {
+				periodEnd = it.CurrentPeriodEnd
+			}
+		}
+		if periodEnd > 0 {
+			tp.CurrentPeriodEnd = time.Unix(periodEnd, 0).UTC()
 		}
 		return h.svc.Plans.SetPlan(r.Context(), tp)
 	default:

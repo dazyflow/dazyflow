@@ -42,6 +42,12 @@ type TenantPlan struct {
 
 	// CurrentPeriodEnd is when the paid period lapses (informational).
 	CurrentPeriodEnd time.Time `json:"current_period_end,omitzero"`
+
+	// CancelAtPeriodEnd is true once the subscription is set to cancel at
+	// the period boundary: Stripe keeps status "active" (access continues)
+	// but won't renew, so the UI shows "cancels on <CurrentPeriodEnd>"
+	// rather than implying an open-ended plan.
+	CancelAtPeriodEnd bool `json:"cancel_at_period_end,omitempty"`
 }
 
 // PlanStore persists tenant plans. Implementations must be safe for

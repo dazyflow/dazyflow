@@ -22,8 +22,12 @@ CREATE TABLE IF NOT EXISTS tenant_plans (
     stripe_subscription_id TEXT NOT NULL DEFAULT '',
     subscription_status    TEXT NOT NULL DEFAULT '',
     current_period_end     TIMESTAMPTZ,
+    cancel_at_period_end   BOOLEAN NOT NULL DEFAULT false,
     updated_at             TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Backfill the column on tables created before it existed.
+ALTER TABLE tenant_plans
+    ADD COLUMN IF NOT EXISTS cancel_at_period_end BOOLEAN NOT NULL DEFAULT false;
 CREATE TABLE IF NOT EXISTS stripe_webhook_events (
     id          TEXT PRIMARY KEY,
     received_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -42,10 +46,11 @@ func (s *PgPlanStore) GetPlan(ctx context.Context, tenant string) (TenantPlan, e
 	var periodEnd *time.Time
 	err := s.pool.QueryRow(ctx, `
 		SELECT tenant, plan, stripe_customer_id, stripe_subscription_id,
-		       subscription_status, current_period_end
+		       subscription_status, current_period_end, cancel_at_period_end
 		FROM tenant_plans WHERE tenant = $1`,
 		tenant).Scan(&p.Tenant, &p.Plan, &p.StripeCustomerID,
-		&p.StripeSubscriptionID, &p.SubscriptionStatus, &periodEnd)
+		&p.StripeSubscriptionID, &p.SubscriptionStatus, &periodEnd,
+		&p.CancelAtPeriodEnd)
 	if err != nil {
 		// No row = free plan, same contract as the memory store.
 		if isPgNoRows(err) {
@@ -81,16 +86,18 @@ func (s *PgPlanStore) SetPlan(ctx context.Context, p TenantPlan) error {
 	}
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO tenant_plans (tenant, plan, stripe_customer_id,
-			stripe_subscription_id, subscription_status, current_period_end)
-		VALUES ($1, $2, $3, $4, $5, $6)
+			stripe_subscription_id, subscription_status, current_period_end,
+			cancel_at_period_end)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT (tenant) DO UPDATE SET
 			plan                   = EXCLUDED.plan,
 			stripe_customer_id     = EXCLUDED.stripe_customer_id,
 			stripe_subscription_id = EXCLUDED.stripe_subscription_id,
 			subscription_status    = EXCLUDED.subscription_status,
 			current_period_end     = EXCLUDED.current_period_end,
+			cancel_at_period_end   = EXCLUDED.cancel_at_period_end,
 			updated_at             = now()`,
 		p.Tenant, p.Plan, p.StripeCustomerID, p.StripeSubscriptionID,
-		p.SubscriptionStatus, periodEnd)
+		p.SubscriptionStatus, periodEnd, p.CancelAtPeriodEnd)
 	return err
 }

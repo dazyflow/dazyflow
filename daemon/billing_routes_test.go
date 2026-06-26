@@ -165,6 +165,33 @@ func TestStripeWebhook_PastDueStaysPro(t *testing.T) {
 	}
 }
 
+func TestStripeWebhook_PeriodEndFromLineItems(t *testing.T) {
+	// Stripe API 2025-03-31+ (incl. recent default versions) drops the
+	// top-level current_period_end and carries it per line item instead;
+	// the latest across items becomes the renewal boundary.
+	h, plans, _ := billingHarness(t)
+	_ = plans.SetPlan(t.Context(), TenantPlan{Tenant: "t", Plan: PlanPro, StripeCustomerID: "cus_9"})
+
+	postStripeEvent(t, h, `{
+		"type": "customer.subscription.updated",
+		"data": {"object": {
+			"id": "sub_9", "customer": "cus_9", "status": "active",
+			"metadata": {"tenant": "t"},
+			"items": {"data": [
+				{"current_period_end": 1781000000},
+				{"current_period_end": 1781500000}
+			]}
+		}}
+	}`)
+	p, _ := plans.GetPlan(t.Context(), "t")
+	if p.Plan != PlanPro || p.SubscriptionStatus != "active" {
+		t.Fatalf("plan after update = %+v", p)
+	}
+	if got := p.CurrentPeriodEnd.Unix(); got != 1781500000 {
+		t.Errorf("current_period_end = %d, want latest item 1781500000", got)
+	}
+}
+
 func TestStripeWebhook_BadSignatureRejected(t *testing.T) {
 	h, plans, _ := billingHarness(t)
 

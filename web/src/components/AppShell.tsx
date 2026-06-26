@@ -822,7 +822,7 @@ function AccountMenu({
                   className="workspace-pop-row account-pop-row account-pop-upgrade"
                   onClick={() => {
                     setOpen(false);
-                    navigate("/plans");
+                    navigate("/usage");
                   }}
                 >
                   <Sparkles size={14} />
@@ -858,8 +858,8 @@ function AccountMenu({
               <Plug size={14} />
               {t("account.connectMcp")}
             </Button>
-            {/* Usage (plan + consumption) moved out of the primary sidebar
-                into the account menu — it's billing/account info, not a
+            {/* Plan & usage (plan, billing, consumption) — one account-menu
+                entry for the merged page. It's billing/account info, not a
                 workspace surface a first-time user needs in their face. */}
             <Button
               role="menuitem"
@@ -867,17 +867,6 @@ function AccountMenu({
               onClick={() => {
                 setOpen(false);
                 navigate("/usage");
-              }}
-            >
-              <Gauge size={14} />
-              {t("nav.usage")}
-            </Button>
-            <Button
-              role="menuitem"
-              className="workspace-pop-row account-pop-row"
-              onClick={() => {
-                setOpen(false);
-                navigate("/plans");
               }}
             >
               <CreditCard size={14} />

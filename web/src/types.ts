@@ -874,6 +874,12 @@ export type UsageCounters = {
 export type BillingInfo = {
   plan: "free" | "pro";
   subscription_status?: string;
+  // True when the subscription is set to cancel at period end: still
+  // "active" in Stripe, but won't renew — drives the "cancels on …" chip.
+  cancel_at_period_end?: boolean;
+  // RFC3339; renewal date, or cancellation date when cancel_at_period_end.
+  // Omitted when there's no Stripe subscription.
+  current_period_end?: string;
   free_runs_per_month: number;
   runs_this_month: number;
   // False when this deployment keeps schedules/polling triggers off the

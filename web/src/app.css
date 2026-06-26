@@ -5878,6 +5878,10 @@ button.warning:hover:not(:disabled) {
   background: var(--surface-2);
   color: var(--muted);
 }
+.badge.warn {
+  background: color-mix(in srgb, var(--warning, #d97706) 18%, transparent);
+  color: var(--warning, #d97706);
+}
 /* Quiet inline destructive action: red glyph, no border or fill. Overrides
    the global .danger border that the consolidated button system applies. */
 .ghost.danger {
