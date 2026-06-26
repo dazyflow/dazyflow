@@ -31,6 +31,47 @@ func TestResolveEffective_DefaultsWhenEmpty(t *testing.T) {
 	}
 }
 
+func TestResolveEffective_ProCapsHonoredElseUnlimited(t *testing.T) {
+	now := time.Unix(0, 0)
+
+	// Pro with no explicit caps: the free-only dims do NOT inherit the FREE
+	// defaults (they're unlimited), but global ceilings still apply.
+	eff := ResolveEffective(nil, nil, testDefaults, PlanPro, now)
+	if eff.Plan != PlanPro {
+		t.Fatalf("plan = %q, want pro", eff.Plan)
+	}
+	if eff.RunsPerMonth != 0 || eff.MaxConcurrency != 0 || eff.MaxMembers != 0 || eff.RetentionDays != 0 {
+		t.Errorf("pro default free-only dims = runs %d conc %d members %d ret %d, want all 0 (unlimited)",
+			eff.RunsPerMonth, eff.MaxConcurrency, eff.MaxMembers, eff.RetentionDays)
+	}
+	if eff.MaxGraphNodes != 50 || eff.MaxTimeoutSeconds != 300 {
+		t.Errorf("global ceilings should still apply to pro: %+v", eff)
+	}
+
+	// Pro tier with an explicit fair-use cap: honored, not zeroed.
+	proTier := &Tier{ID: "pro", Plan: PlanPro, RunsPerMonth: 10000, MaxConcurrency: 10}
+	eff = ResolveEffective(nil, proTier, testDefaults, PlanPro, now)
+	if eff.RunsPerMonth != 10000 || eff.MaxConcurrency != 10 {
+		t.Errorf("explicit pro caps = runs %d conc %d, want 10000/10", eff.RunsPerMonth, eff.MaxConcurrency)
+	}
+	if eff.MaxMembers != 0 || eff.RetentionDays != 0 {
+		t.Errorf("unset pro dims should stay unlimited, got members %d ret %d", eff.MaxMembers, eff.RetentionDays)
+	}
+
+	// A per-org override also sticks on Pro.
+	ent := &TenantEntitlement{MaxMembers: ptrInt(25)}
+	eff = ResolveEffective(ent, proTier, testDefaults, PlanPro, now)
+	if eff.MaxMembers != 25 {
+		t.Errorf("pro override members = %d, want 25", eff.MaxMembers)
+	}
+
+	// Free is unaffected: still inherits the free defaults.
+	eff = ResolveEffective(nil, nil, testDefaults, PlanFree, now)
+	if eff.RunsPerMonth != 100 {
+		t.Errorf("free runs = %d, want the default 100", eff.RunsPerMonth)
+	}
+}
+
 func TestResolveEffective_TierThenOverride(t *testing.T) {
 	tier := &Tier{
 		ID: "pro", Plan: PlanPro, RunsPerMonth: 10000,

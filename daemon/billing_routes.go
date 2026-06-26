@@ -147,26 +147,21 @@ type plansResponse struct {
 	Plans         []planOption `json:"plans"`
 }
 
-// planLimitsFrom projects resolved EffectiveLimits onto the display shape,
-// applying the "pro = unlimited runs" normalization.
+// planLimitsFrom projects resolved EffectiveLimits onto the display shape. The
+// resolver already encodes the plan — Pro defaults the free-only dims (runs,
+// concurrency, members, retention) to 0 = unlimited but keeps an explicit
+// fair-use cap — so the display is a straight projection that matches what the
+// gates enforce. 0 renders as "Unlimited" on the client.
 func planLimitsFrom(e EffectiveLimits) planLimits {
-	runs, concurrency, members, retention := e.RunsPerMonth, e.MaxConcurrency, e.MaxMembers, e.RetentionDays
-	if e.Plan == PlanPro {
-		// Pro/comped/trial bypass the free-only gates, so report the dims they
-		// don't enforce as 0 (= unlimited), matching the enforcement reality:
-		// runs (checkRunQuota), concurrency (checkConcurrencyQuota), seats
-		// (seatQuotaExceeded), and retention (RunLogRetentionDays → global cap).
-		runs, concurrency, members, retention = 0, 0, 0, 0
-	}
 	return planLimits{
-		RunsPerMonth:      runs,
+		RunsPerMonth:      e.RunsPerMonth,
 		MaxFlows:          e.MaxFlows,
 		MaxGraphNodes:     e.MaxGraphNodes,
 		DiskQuotaBytes:    e.DiskQuotaBytes,
 		MaxTimeoutSeconds: e.MaxTimeoutSeconds,
-		RetentionDays:     retention,
-		MaxConcurrency:    concurrency,
-		MaxMembers:        members,
+		RetentionDays:     e.RetentionDays,
+		MaxConcurrency:    e.MaxConcurrency,
+		MaxMembers:        e.MaxMembers,
 		PollingAllowed:    e.PollingAllowed,
 	}
 }

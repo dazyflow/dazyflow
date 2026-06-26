@@ -25,14 +25,14 @@ import (
 
 // Tier is a reusable bundle of limits a platform admin assigns to orgs.
 type Tier struct {
-	ID                string    `json:"id"`
-	Name              string    `json:"name"`
-	Plan              string    `json:"plan"` // "free" | "pro" — the plan level this tier grants
-	RunsPerMonth      int       `json:"runs_per_month"`
-	DiskQuotaBytes    int64     `json:"disk_quota_bytes"`
-	MaxGraphNodes     int       `json:"max_graph_nodes"`
-	MaxFlows          int       `json:"max_flows"`
-	MaxTimeoutSeconds int       `json:"max_timeout_seconds"`
+	ID                string `json:"id"`
+	Name              string `json:"name"`
+	Plan              string `json:"plan"` // "free" | "pro" — the plan level this tier grants
+	RunsPerMonth      int    `json:"runs_per_month"`
+	DiskQuotaBytes    int64  `json:"disk_quota_bytes"`
+	MaxGraphNodes     int    `json:"max_graph_nodes"`
+	MaxFlows          int    `json:"max_flows"`
+	MaxTimeoutSeconds int    `json:"max_timeout_seconds"`
 	// RetentionDays caps how long run history (run logs/results) is kept for orgs
 	// on this tier. MaxConcurrency caps simultaneously-running graph runs.
 	// MaxMembers caps org membership (seats). All three use the 0 = inherit /
@@ -47,9 +47,9 @@ type Tier struct {
 	// TenantEntitlement. The built-in free/pro tiers seed this nil so they don't
 	// silently override the global default; a non-nil value is an explicit
 	// operator choice that wins.
-	PollingAllowed *bool `json:"polling_allowed,omitempty"`
-	BuiltIn        bool  `json:"built_in"` // seeded free/pro — can't be deleted
-	UpdatedAt         time.Time `json:"updated_at"`
+	PollingAllowed *bool     `json:"polling_allowed,omitempty"`
+	BuiltIn        bool      `json:"built_in"` // seeded free/pro — can't be deleted
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 // TenantEntitlement is one org's assignment: a tier plus optional
@@ -195,9 +195,36 @@ func ResolveEffective(ent *TenantEntitlement, tier *Tier, def LimitDefaults, str
 		eff.TrialEndsAt = ent.TrialEndsAt
 	}
 	eff.Plan = resolvePlan(ent, tier, stripePlan, now)
-	// A pro plan implies polling is allowed regardless of the gate.
 	if eff.Plan == PlanPro {
+		// Pro implies polling is allowed regardless of the gate.
 		eff.PollingAllowed = true
+		// The free-only gates (runs, concurrency, members, retention) take
+		// their global DEFAULT from the FREE tier's env values, which a Pro
+		// plan must NOT inherit — Pro is unlimited on these unless its tier or
+		// per-org override sets an explicit fair-use cap. Drop a value that
+		// came only from the default; keep an explicitly-set one so it both
+		// enforces and displays. (Disk/flows/nodes/timeout are global ceilings
+		// that legitimately apply to every plan, so they're left alone.)
+		tRuns, tConc, tMembers, tRet := 0, 0, 0, 0
+		if tier != nil {
+			tRuns, tConc, tMembers, tRet = tier.RunsPerMonth, tier.MaxConcurrency, tier.MaxMembers, tier.RetentionDays
+		}
+		var eRuns, eConc, eMembers, eRet *int
+		if ent != nil {
+			eRuns, eConc, eMembers, eRet = ent.RunsPerMonth, ent.MaxConcurrency, ent.MaxMembers, ent.RetentionDays
+		}
+		if tRuns == 0 && eRuns == nil {
+			eff.RunsPerMonth = 0
+		}
+		if tConc == 0 && eConc == nil {
+			eff.MaxConcurrency = 0
+		}
+		if tMembers == 0 && eMembers == nil {
+			eff.MaxMembers = 0
+		}
+		if tRet == 0 && eRet == nil {
+			eff.RetentionDays = 0
+		}
 	}
 	return eff
 }

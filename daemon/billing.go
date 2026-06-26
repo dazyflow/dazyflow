@@ -224,17 +224,16 @@ func (s *Service) recordSkippedFire(ctx context.Context, tenant, workspace, grap
 }
 
 // concurrencyCapped reports the tenant's effective simultaneous-run limit when
-// it actually applies (free plan, limit > 0), and false otherwise (pro/comped/
-// trial or no limit → unlimited). Shared by the submit-time admission decision
-// and the promotion sweep so both agree on who is capped and at what number.
+// it applies (limit > 0), and false otherwise (no limit → unlimited). The
+// effective limit already encodes the plan — Pro defaults to 0 (uncapped) but
+// honors an explicit fair-use cap from its tier/override. Shared by the
+// submit-time admission decision and the promotion sweep so both agree on who
+// is capped and at what number.
 func (s *Service) concurrencyCapped(ctx context.Context, tenant string) (limit int, capped bool) {
 	b := s.billing()
 	limit = b.concurrencyLimit(ctx, tenant)
 	if limit <= 0 {
 		return 0, false
-	}
-	if !b.tenantIsFree(ctx, tenant, "concurrency gate") {
-		return 0, false // pro / comped / trial: uncapped
 	}
 	return limit, true
 }
@@ -288,6 +287,9 @@ func (b *BillingService) tenantIsFree(ctx context.Context, tenant, gate string) 
 	if b.effective != nil {
 		return b.effective(ctx, tenant).Plan != PlanPro
 	}
+	if b.plans == nil {
+		return false // no plan store → no pro signal; fail open (no gate)
+	}
 	plan, err := b.plans.GetPlan(ctx, tenant)
 	if err != nil {
 		if b.logger != nil {
@@ -303,6 +305,11 @@ func (b *BillingService) tenantIsFree(ctx context.Context, tenant, gate string) 
 func (b *BillingService) runLimit(ctx context.Context, tenant string) int {
 	if b.effective != nil {
 		return b.effective(ctx, tenant).RunsPerMonth
+	}
+	// Pre-entitlements: the free default caps free tenants only; pro/comped/
+	// trial are uncapped (the free env value isn't a global ceiling).
+	if !b.tenantIsFree(ctx, tenant, "plan gate") {
+		return 0
 	}
 	return b.freeRunsPerMonth
 }
@@ -353,12 +360,12 @@ func (b *BillingService) checkRunQuota(ctx context.Context, tenant string) error
 	if b.usage == nil {
 		return nil
 	}
+	// The effective limit already encodes the plan: 0 = uncapped (Pro's
+	// default, and any plan with no cap), N > 0 = enforce — so a Pro tier with
+	// an explicit fair-use cap is honored, not bypassed.
 	limit := b.runLimit(ctx, tenant)
 	if limit <= 0 {
 		return nil // 0 = no cap
-	}
-	if !b.tenantIsFree(ctx, tenant, "plan gate") {
-		return nil // pro / comped / trial: uncapped
 	}
 	used, err := b.runsThisMonth(ctx, tenant)
 	if err != nil {
@@ -380,6 +387,11 @@ func (b *BillingService) checkRunQuota(ctx context.Context, tenant string) error
 func (b *BillingService) concurrencyLimit(ctx context.Context, tenant string) int {
 	if b.effective != nil {
 		return b.effective(ctx, tenant).MaxConcurrency
+	}
+	// Pre-entitlements: the free default caps free tenants only; pro/comped/
+	// trial are uncapped.
+	if !b.tenantIsFree(ctx, tenant, "concurrency gate") {
+		return 0
 	}
 	return b.freeMaxConcurrency
 }

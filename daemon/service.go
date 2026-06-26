@@ -471,16 +471,13 @@ func (s *Service) effectiveLimits(ctx context.Context, tenant string) EffectiveL
 	return ResolveEffective(entP, tierP, def, stripePlan, time.Now())
 }
 
-// RunLogRetentionDays is the run-log retention window (in days) for a tenant:
-// the effective per-tier value for a free tenant, or 0 (keep to the global
-// cap) for pro/comped/trial. The retention sweep uses it to prune free
-// tenants on a shorter window than paying ones. 0 = no per-tenant cap.
+// RunLogRetentionDays is the run-log retention window (in days) for a tenant.
+// The effective value already encodes the plan: a free tenant gets its tier/
+// default window, and Pro defaults to 0 (uncapped — only the global sweep
+// bounds it) but honors an explicit retention cap set on its tier/override.
+// 0 = no per-tenant cap.
 func (s *Service) RunLogRetentionDays(ctx context.Context, tenant string) int {
-	eff := s.effectiveLimits(ctx, tenant)
-	if eff.Plan == PlanPro {
-		return 0 // uncapped — the global sweep is the only bound
-	}
-	return eff.RetentionDays
+	return s.effectiveLimits(ctx, tenant).RetentionDays
 }
 
 // EffectiveLimitsFor is the exported accessor cmd/dzd uses to wire the

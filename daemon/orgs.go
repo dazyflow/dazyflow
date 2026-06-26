@@ -543,15 +543,14 @@ func (h *HTTPGateway) updateMemberRoles(rw http.ResponseWriter, r *http.Request,
 // response always carries the URL so the admin can copy/paste it into
 // their channel of choice either way.
 // seatQuotaExceeded reports whether tenant has reached its plan's member
-// (seat) cap, and the cap itself. Free-tier only — pro/comped/trial are
-// uncapped, mirroring the run gate. Fails OPEN on a resolver/store error so a
-// billing or DB hiccup never blocks legitimate team growth. A 0 cap (the
-// default on deployments without billing) means no enforcement.
+// (seat) cap, and the cap itself. The effective limit encodes the plan — Pro
+// defaults to 0 (uncapped) but honors an explicit fair-use cap from its
+// tier/override, mirroring the run gate. Fails OPEN on a resolver/store error
+// so a billing or DB hiccup never blocks legitimate team growth. A 0 cap (the
+// default on deployments without billing, and Pro's default) means no
+// enforcement.
 func (h *HTTPGateway) seatQuotaExceeded(ctx context.Context, tenant string) (bool, int) {
 	eff := h.svc.effectiveLimits(ctx, tenant)
-	if eff.Plan == PlanPro {
-		return false, 0
-	}
 	limit := eff.MaxMembers
 	if limit <= 0 || h.Memberships == nil {
 		return false, limit
