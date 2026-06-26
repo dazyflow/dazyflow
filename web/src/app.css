@@ -5450,6 +5450,90 @@ button.warning:hover:not(:disabled) {
   background: transparent !important;
 }
 
+/* System log viewer (platform admin). The terminal fills the remaining
+   viewport height under the toolbar so the live tail gets as much room as
+   possible; the page itself doesn't scroll — xterm owns the scrollback. */
+.system-log {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.system-log-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3);
+}
+.system-log-search {
+  position: relative;
+  flex: 1 1 240px;
+  min-width: 180px;
+}
+.system-log-search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
+}
+.system-log-search input {
+  width: 100%;
+  padding-left: 30px;
+  font-family: var(--font-mono), Menlo, monospace;
+  font-size: var(--text-sm);
+}
+.system-log-search input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+.system-log-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-sm);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.system-log-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.system-log-status.is-live .system-log-dot {
+  background: var(--success, #3fb950);
+  box-shadow: 0 0 0 3px rgba(63, 185, 80, 0.18);
+}
+.system-log-status.is-down .system-log-dot {
+  background: var(--warning, #d29922);
+  animation: dz-fade-in var(--dur-3) var(--ease-out) infinite alternate;
+}
+.system-log-count {
+  white-space: nowrap;
+}
+.system-log-hint {
+  margin-bottom: var(--space-3);
+  font-size: var(--text-sm);
+}
+.system-log-hint.is-error {
+  color: var(--danger);
+}
+.system-log-term {
+  flex: 1 1 auto;
+  min-height: 320px;
+  height: calc(100vh - 230px);
+  background: #0a0918;
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  padding: var(--space-1);
+  overflow: hidden;
+}
+.system-log-term .xterm,
+.system-log-term .xterm-viewport {
+  background: transparent !important;
+}
+
 /* Pipeline log: sits as a flex sibling at the bottom of the canvas so
    the React Flow area gets `height: 100% - log height` instead of
    being silently covered by the bar. The earlier absolute-positioned

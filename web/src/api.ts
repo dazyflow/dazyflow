@@ -1336,6 +1336,55 @@ export const api = {
       }
     });
   },
+  // streamSystemLog opens the platform-admin live tail of the daemon's own
+  // log stream: GET /admin/system/log (SSE). The server backfills the recent
+  // ring buffer then forwards each new line as an `event: line` frame whose
+  // data is the raw line encoded as a JSON string. `tail` caps the backfill
+  // (0 = live only). onLine receives each decoded line. Read off a fetch body
+  // like streamJob — EventSource can't send the Authorization header.
+  streamSystemLog(
+    token: string,
+    onLine: (line: string) => void,
+    signal: AbortSignal,
+    tail = 500,
+  ): Promise<void> {
+    const qs = tail !== 500 ? `?tail=${encodeURIComponent(String(tail))}` : "";
+    return fetch(API_BASE + `/admin/system/log` + qs, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+      signal,
+    }).then(async (res) => {
+      if (!res.ok || !res.body) {
+        if (res.status === 401) notifyUnauthorized();
+        throw new APIError(res.status, await res.text());
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) return;
+        buffer += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = buffer.indexOf("\n\n")) >= 0) {
+          const frame = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 2);
+          if (frame.startsWith(":")) continue; // keep-alive
+          let dataLine = "";
+          for (const line of frame.split("\n")) {
+            if (line.startsWith("data: ")) dataLine = line.slice(6);
+          }
+          if (dataLine) {
+            try {
+              onLine(JSON.parse(dataLine) as string);
+            } catch {
+              onLine(dataLine);
+            }
+          }
+        }
+      }
+    });
+  },
   // watchFlow opens an SSE stream that emits a `flow_updated` frame each
   // time this flow's graph is saved — by anyone (the web editor, the MCP
   // server, a direct API call). The editor uses it to live-reflect external

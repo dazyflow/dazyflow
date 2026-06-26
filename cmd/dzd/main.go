@@ -11,6 +11,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	stdio "io"
 	"log"
 	"net"
 	"net/http"
@@ -72,6 +73,15 @@ func main() {
 	rotateKeyB64 := flag.String("rotate-master-key", "", "rotate the encrypted-secret store's KEK: re-wrap every tenant DEK from DAZYFLOW_MASTER_KEY (the CURRENT key) to this new base64-encoded 32-byte key, print a report, and EXIT without serving. Re-runnable. After it succeeds, restart dzd with DAZYFLOW_MASTER_KEY set to the new key. No secret values are re-entered.")
 	importUsersFrom := flag.String("import-users-from-json", "", "one-time migration: import users from this JSON user file into the Postgres user store (requires DAZYFLOW_POSTGRES_DSN), then exit. Idempotent — accounts already in Postgres are skipped, never overwritten.")
 	flag.Parse()
+
+	// Install the system-log tee as early as possible so the platform-admin
+	// "System log" viewer can tail everything the daemon emits from here on.
+	// dzd logs to stderr only (no log file) and the prod container runs
+	// unprivileged (can't read journald/the docker socket), so teeing the
+	// standard logger is the deployment-agnostic way to expose the real log.
+	// See daemon.LogTail and GET /api/v1/admin/system/log.
+	logTail := daemon.NewLogTail(2000)
+	log.SetOutput(stdio.MultiWriter(os.Stderr, logTail))
 
 	listen := envStr("DAZYFLOW_LISTEN", ":50050")
 	devKey := envBool("DAZYFLOW_DEV_KEY", false)
@@ -712,6 +722,7 @@ func main() {
 	if httpListen != "" {
 		buildGateway(ctx, gatewayDeps{
 			svc:              svc,
+			logTail:          logTail,
 			users:            users,
 			sessions:         sessions,
 			sessionTTL:       sessionTTL,
@@ -1032,7 +1043,7 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 	// re-runs the completion check for running graph runs and finalizes the
 	// ones that are actually done — once at startup (recovering runs orphaned
 	// by a prior crash) and then on an interval. Idempotent across replicas.
-	reaperDispatcher := daemon.NewDispatcher(d.jobs, d.bus, d.eng, log.New(os.Stderr, "reaper: ", log.LstdFlags))
+	reaperDispatcher := daemon.NewDispatcher(d.jobs, d.bus, d.eng, log.New(log.Writer(), "reaper: ", log.LstdFlags))
 	reapInterval := envDuration("DAZYFLOW_REAP_INTERVAL", time.Minute)
 	bgWg.Add(1)
 	go func() {
@@ -1196,6 +1207,7 @@ func startRetentionSweeps(ctx context.Context, svc *daemon.Service, jobs core.Jo
 // gateway is wired from.
 type gatewayDeps struct {
 	svc              *daemon.Service
+	logTail          *daemon.LogTail
 	users            auth.UserStore
 	sessions         auth.SessionStore
 	sessionTTL       time.Duration
@@ -1233,6 +1245,7 @@ type gatewayDeps struct {
 // a set-but-broken TOTP / audit configuration.
 func buildGateway(ctx context.Context, d gatewayDeps) {
 	gw := daemon.NewHTTPGateway(d.svc)
+	gw.LogTail = d.logTail // nil leaves GET /admin/system/log returning 501
 	gw.Users = d.users
 	gw.Sessions = d.sessions
 	gw.SessionTTL = d.sessionTTL

@@ -45,6 +45,12 @@ type HTTPGateway struct {
 	logger         *log.Logger
 	AllowedOrigins []string // empty = "*"
 
+	// LogTail, when set, captures the daemon's log stream for the
+	// platform-admin "System log" viewer (GET /api/v1/admin/system/log).
+	// Nil leaves that endpoint returning 501 — the feature is simply off.
+	// cmd/dzd installs it as a tee behind the standard logger at startup.
+	LogTail *LogTail
+
 	// WildcardDomain, when set (e.g. "dazyflow.app"), treats every
 	// subdomain "<org>.dazyflow.app" as an allowed browser origin for
 	// the CORS allowlist + the CSRF origin check, on top of the exact
@@ -593,6 +599,9 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// the running build against the newest upstream release tag. Platform
 	// admins only (the answer is instance-wide, not per-org).
 	mux.HandleFunc("GET /api/v1/admin/version", h.requireAuth(h.adminVersion))
+	// Live tail of the daemon's own log stream as SSE — the System-section
+	// "System log" viewer. platform:admin only; see admin_systemlog.go.
+	mux.HandleFunc("GET /api/v1/admin/system/log", h.requireAuth(h.systemLogTail))
 	// OAuth provider configuration: paste client_id + client_secret in
 	// the admin UI instead of DAZYFLOW_OAUTH_*_CLIENT_ID env vars + a
 	// restart. Persisted creds win over env on the next boot.

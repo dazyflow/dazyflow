@@ -43,6 +43,7 @@ import { AdminPlatformUserDetail } from "./pages/AdminPlatformUserDetail";
 import { AdminPlatformOrgs } from "./pages/AdminPlatformOrgs";
 import { AdminPlatformOrgDetail } from "./pages/AdminPlatformOrgDetail";
 import { AdminPlatformTiers } from "./pages/AdminPlatformTiers";
+import { AdminSystemLog } from "./pages/AdminSystemLog";
 import { AdminGoogle } from "./pages/AdminGoogle";
 import { AdminSecrets } from "./pages/AdminSecrets";
 import { AdminGitCredentials } from "./pages/AdminGitCredentials";
@@ -134,6 +135,7 @@ export function App() {
         <Route path="/admin/platform/orgs" element={<AdminPlatformOrgs />} />
         <Route path="/admin/platform/orgs/:tenant" element={<AdminPlatformOrgDetail />} />
         <Route path="/admin/platform/tiers" element={<AdminPlatformTiers />} />
+        <Route path="/admin/system/log" element={<AdminSystemLog />} />
         <Route path="/admin/google" element={<AdminGoogle />} />
         <Route path="/admin/secrets" element={<AdminSecrets />} />
         <Route path="/admin/git-credentials" element={<AdminGitCredentials />} />
