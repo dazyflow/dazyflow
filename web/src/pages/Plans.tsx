@@ -205,7 +205,6 @@ function PlansHeader({ t }: { t: (k: string) => string }) {
           <CreditCard size={20} style={{ marginRight: 8, verticalAlign: -3 }} />
           {t("plans.title")}
         </h1>
-        <div className="sub">{t("plans.subtitle")}</div>
       </div>
     </div>
   );
@@ -286,11 +285,7 @@ function PlanCard({
     <div className={cardClass}>
       <div className="plan-card-head">
         <h2>{plan.name}</h2>
-        {isCurrent ? (
-          <span className="plan-badge">{t("plans.yourPlan")}</span>
-        ) : isPopular ? (
-          <span className="plan-badge plan-badge-solid">{t("plans.mostPopular")}</span>
-        ) : null}
+        {isCurrent && <span className="plan-badge">{t("plans.yourPlan")}</span>}
       </div>
       {tagline && <p className="plan-tagline">{tagline}</p>}
       <div className="plan-price">{priceLine}</div>

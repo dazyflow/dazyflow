@@ -243,10 +243,8 @@
   },
   "plans": {
     "title": "Plans",
-    "subtitle": "Compare plans and see exactly what changes when you upgrade.",
     "currentLine": "You're on the {{plan}} plan · {{used}} flow runs this month.",
     "yourPlan": "Your plan",
-    "mostPopular": "Most popular",
     "currentPlan": "Current plan",
     "upgradeTo": "Upgrade to {{plan}}",
     "manageBilling": "Manage billing",

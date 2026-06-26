@@ -244,10 +244,8 @@
   },
   "plans": {
     "title": "Planer",
-    "subtitle": "Jämför planer och se exakt vad som ändras när du uppgraderar.",
     "currentLine": "Du har {{plan}}-planen · {{used}} flödeskörningar den här månaden.",
     "yourPlan": "Din plan",
-    "mostPopular": "Populärast",
     "currentPlan": "Nuvarande plan",
     "upgradeTo": "Uppgradera till {{plan}}",
     "manageBilling": "Hantera fakturering",

@@ -527,11 +527,6 @@
     ),
     var(--surface, transparent);
 }
-/* Filled accent variant of the badge — marks the "Most popular" tier. */
-.plan-badge-solid {
-  background: var(--accent);
-  color: var(--accent-ink, #fff);
-}
 .plan-card-head {
   display: flex;
   align-items: center;
