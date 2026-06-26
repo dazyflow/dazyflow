@@ -91,7 +91,8 @@ func init() {
 						"bcc":{"type":"string","title":"BCC","description":"Blind-copy recipient(s), comma-separated. Hidden from the other recipients."},
 						"subject":{"type":"string","title":"Subject","description":"The email's subject line — e.g. \"Re: your submission\". Leave blank and it sends as \"(no subject)\". Overridden by the 'Subject' input."},
 						"body":{"type":"string","title":"Body","format":"multiline","description":"Email body text. Overridden by the 'Body' input."},
-						"format":{"type":"string","title":"Body format","enum":["text","html"],"enumNames":["Text","HTML"],"default":"html","description":"How the body is sent. HTML renders formatting and links; Text sends it exactly as typed."}
+						"format":{"type":"string","title":"Body format","enum":["text","html"],"enumNames":["Text","HTML"],"default":"html","description":"How the body is sent. HTML renders formatting and links; Text sends it exactly as typed."},
+						"template":{"type":"string","title":"Template","format":"email-template","description":"Optional reusable HTML template to wrap the body in (logo, header, footer). HTML format only. Leave blank to send the body as-is."}
 					},
 					"required":["to"]
 				}`,
@@ -235,8 +236,19 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 	// Body format: HTML by default (matches the schema and gmail send), so an
 	// unset format renders markup; "text" sends the body verbatim as plain text.
 	bodyContentType := `text/html; charset="utf-8"`
-	if params.StringDefault(job.Params, "format", "html") == "text" {
+	isHTML := params.StringDefault(job.Params, "format", "html") != "text"
+	if !isHTML {
 		bodyContentType = `text/plain; charset="utf-8"`
+	}
+
+	// Wrap the body in the referenced email template (HTML sends only). A
+	// missing/unresolvable template fails the node rather than sending unwrapped.
+	if isHTML {
+		wrapped, werr := mailmsg.WrapWithTemplate(ctx, job, body, subject)
+		if werr != nil {
+			return params.Err(job, "email_template", werr.Error()), nil
+		}
+		body = wrapped
 	}
 
 	atts, jerr := mailmsg.LoadAttachments(job)

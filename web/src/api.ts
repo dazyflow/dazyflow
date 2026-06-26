@@ -34,6 +34,7 @@ import type {
   GitCredential,
   ReferenceGroups,
   ResourceDef,
+  EmailTemplateSummary,
   SecretManagerStatus,
   SecretManagerConfig,
   AwsSecretManagerStatus,
@@ -1628,6 +1629,25 @@ export const api = {
     }),
   deleteResource: (token: string, name: string, scope?: SecretScope, flow?: string) =>
     request<void>(token, "DELETE", `/resources/${encodeURIComponent(name)}` + secretQuery(scope, flow)),
+
+  // Email templates — reusable HTML layout shells the email drops wrap a body
+  // in. The list merges global built-ins with this org's templates; HTML is
+  // returned for the editor/preview. PUT/DELETE manage org templates only
+  // (built-ins are read-only); both need secret:write.
+  listEmailTemplates: (token: string) =>
+    request<{ templates: EmailTemplateSummary[] }>(token, "GET", "/email-templates"),
+  putEmailTemplate: (token: string, name: string, html: string, displayName?: string) =>
+    request<void>(token, "PUT", `/email-templates/${encodeURIComponent(name)}`, {
+      name: displayName ?? name,
+      html,
+    }),
+  deleteEmailTemplate: (token: string, name: string) =>
+    request<void>(token, "DELETE", `/email-templates/${encodeURIComponent(name)}`),
+  // previewEmailTemplate renders the shell with a sample body server-side
+  // (faithful to {{if .Logo}} etc., which a browser can't execute) so the
+  // editor can preview unsaved edits.
+  previewEmailTemplate: (token: string, html: string) =>
+    request<{ html: string }>(token, "POST", "/email-templates/preview", { html }),
 
   // Bring-your-own secret manager (OpenBao/Vault) connection for this tenant.
   // getSecretManager returns a redacted view (no credentials); setSecretManager

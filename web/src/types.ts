@@ -350,6 +350,17 @@ export type ResourceDef = {
   config: Record<string, unknown>;
 };
 
+// An email-template library entry: a reusable HTML layout shell the email
+// drops wrap a body in. Built-ins are global and read-only; org templates are
+// tenant-private and editable. The drop stores `id` in its params.
+export type EmailTemplateSummary = {
+  id: string;
+  name: string;
+  html: string;
+  builtin: boolean;
+  readOnly: boolean;
+};
+
 export type ReferenceGroups = {
   secrets: ReferenceItem[];
   upstream: ReferenceItem[];

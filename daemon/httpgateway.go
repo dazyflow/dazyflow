@@ -390,6 +390,10 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/resources", h.requireAuth(h.listResources))
 	mux.HandleFunc("PUT /api/v1/resources/{name}", h.requireAuth(h.putResource))
 	mux.HandleFunc("DELETE /api/v1/resources/{name}", h.requireAuth(h.deleteResource))
+	mux.HandleFunc("GET /api/v1/email-templates", h.requireAuth(h.listEmailTemplates))
+	mux.HandleFunc("PUT /api/v1/email-templates/{name}", h.requireAuth(h.putEmailTemplate))
+	mux.HandleFunc("DELETE /api/v1/email-templates/{name}", h.requireAuth(h.deleteEmailTemplate))
+	mux.HandleFunc("POST /api/v1/email-templates/preview", h.requireAuth(h.previewEmailTemplate))
 
 	// Bring-your-own secret manager (OpenBao/Vault): per-tenant connection
 	// config behind the same secret-permission gate. Flows then resolve

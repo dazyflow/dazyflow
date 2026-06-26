@@ -4,6 +4,7 @@
 package mailmsg
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
@@ -14,12 +15,48 @@ import (
 
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/sandbox"
+	"git.sr.ht/~klahr/dazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/internal/emailtmpl"
 )
 
 type Attachment struct {
 	Filename string
 	MIME     string
 	Data     []byte
+}
+
+// WrapWithTemplate wraps an HTML body in the email template referenced by the
+// job's "template" param, resolving the template ID to its layout shell at run
+// time (a live reference — re-read every run). It returns body unchanged when
+// no template is referenced. Both email drops call this just before assembling
+// the message, and only for HTML sends (an HTML shell can't wrap plain text).
+//
+// Errors are the caller's to turn into a node failure (code "email_template"):
+// a referenced template that is missing, or no provider wired at all, fails the
+// node rather than silently sending an unwrapped body — so a deleted template
+// surfaces instead of changing what recipients see.
+func WrapWithTemplate(ctx context.Context, job core.Job, body, subject string) (string, error) {
+	id, _ := job.Params["template"].(string)
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return body, nil
+	}
+	provider, ok := engine.EmailTemplateProviderFromContext(ctx)
+	if !ok || provider == nil {
+		return "", fmt.Errorf("email templates are unavailable")
+	}
+	shell, logo, found, err := provider.TemplateHTML(ctx, job.Tenant, id)
+	if err != nil {
+		return "", fmt.Errorf("resolve email template %q: %w", id, err)
+	}
+	if !found {
+		return "", fmt.Errorf("email template %q not found", id)
+	}
+	wrapped, err := emailtmpl.WrapBody(shell, body, subject, logo)
+	if err != nil {
+		return "", fmt.Errorf("render email template %q: %w", id, err)
+	}
+	return wrapped, nil
 }
 
 // LoadAttachments collects every ref wired into the variadic 'attachments'

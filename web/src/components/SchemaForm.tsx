@@ -13,7 +13,7 @@ import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { Braces, Info, Lock, Plus, Upload, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { JSONSchema, ReferenceGroups, ReferenceItem } from "../types";
+import type { EmailTemplateSummary, JSONSchema, ReferenceGroups, ReferenceItem } from "../types";
 import { type TokenLabels, friendlyTokenText } from "./nodeCardShared";
 import { JsonEditor, isInvalidJSON } from "./JsonEditor";
 import { GeoPointField } from "./GeoPointField";
@@ -528,6 +528,20 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
               rows={10}
               placeholder={schema.default ? String(schema.default) : undefined}
               invalid={isInvalidJSON(text)}
+            />
+          </FieldWrap>
+        );
+      }
+      // format:"email-template" picks a reusable HTML layout shell (built-ins
+      // ∪ this org's templates) for the email drops to wrap the body in. The
+      // stored value is the template id; empty = send the body as-is.
+      if (schema.format === "email-template" && schema.type === "string") {
+        return (
+          <FieldWrap name={name} schema={schema} required={required} value={value}>
+            <EmailTemplatePicker
+              value={(value as string) ?? ""}
+              onChange={(v) => onChange(v === "" ? undefined : v)}
+              token={references?.token}
             />
           </FieldWrap>
         );
@@ -1138,6 +1152,74 @@ const resourceCacheKey = (provider: string, kind: string, id: string) =>
 // reference, not a picked id. Defaults to the text box when the stored value
 // is already a ${…} expression (a loop body, an imported graph) so it's
 // visible and editable; otherwise the dropdown, the everyday path.
+// EmailTemplatePicker is a dropdown of email templates (global built-ins ∪ the
+// org's own) for the email drops' optional `template` param. The stored value
+// is the template id; the blank option clears it (send the body as-is). It's a
+// live reference — the drop re-reads the chosen template's HTML on every run.
+function EmailTemplatePicker({
+  value,
+  onChange,
+  token,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  token?: string;
+}) {
+  const { t } = useTranslation();
+  const [opts, setOpts] = useState<EmailTemplateSummary[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
+    let live = true;
+    setErr(null);
+    api
+      .listEmailTemplates(token)
+      .then((r) => live && setOpts(r.templates))
+      .catch((e) => live && setErr(explainApiError(e, t)));
+    return () => {
+      live = false;
+    };
+  }, [token, t]);
+
+  const builtins = (opts ?? []).filter((o) => o.builtin);
+  const custom = (opts ?? []).filter((o) => !o.builtin);
+  // A previously-chosen id that's no longer in the list (e.g. a deleted org
+  // template) still needs to render as the selected option so the user sees it
+  // — and isn't silently switched to "none".
+  const known = (opts ?? []).some((o) => o.id === value);
+
+  return (
+    <>
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">{t("emailTemplate.none", "None — send body as-is")}</option>
+        {value !== "" && !known && (
+          <option value={value}>{t("emailTemplate.missing", "{{id}} (not found)", { id: value })}</option>
+        )}
+        {builtins.length > 0 && (
+          <optgroup label={t("emailTemplate.builtins", "Built-in")}>
+            {builtins.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
+              </option>
+            ))}
+          </optgroup>
+        )}
+        {custom.length > 0 && (
+          <optgroup label={t("emailTemplate.yours", "Your templates")}>
+            {custom.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
+              </option>
+            ))}
+          </optgroup>
+        )}
+      </select>
+      {err && <p className="field-error">{err}</p>}
+    </>
+  );
+}
+
 function AccountResourceField({
   picker,
   name,

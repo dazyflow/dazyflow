@@ -57,6 +57,12 @@ type Engine struct {
 	// structured value, an inline one the stringified form. A fetch
 	// failure fails the node with code "resource".
 	Resources map[string]core.ResourceProvider
+	// EmailTemplates is optional. When set, the engine carries it onto each
+	// node's Execute context so the email-sending drops can resolve a
+	// referenced email-template ID to its layout shell HTML at run time (a
+	// live reference). Nil means templates are unavailable — a drop that
+	// references one then fails cleanly.
+	EmailTemplates EmailTemplateProvider
 	// ApprovalSigner is optional. When set and the resolved module's
 	// manifest has AwaitsApproval=true, the engine populates
 	// Job.ApprovalURL pre-Execute so the module can emit the URL on
@@ -372,6 +378,9 @@ func (e *Engine) buildAndExecute(
 	// (OAuth GetOAuthToken) can resolve the per-tenant account.
 	ctx = core.WithTenant(ctx, job.Tenant)
 	ctx = WithResolver(ctx, e.Resolver)
+	// Email-sending drops resolve a referenced email-template ID to its layout
+	// shell here, keyed by the job's tenant — a live reference, re-read each run.
+	ctx = WithEmailTemplateProvider(ctx, e.EmailTemplates)
 	// Those same connector lookups resolve OAuth tokens *inside* Execute,
 	// outside the secret-provider path that populated `secrets`. Expose a
 	// sink so they register the resolved token for redaction too.

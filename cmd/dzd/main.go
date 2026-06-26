@@ -700,6 +700,18 @@ func main() {
 		memberships, invitations, orgAuthStore, orgProfileStore = pgMembers, pgInvites, pgOrgAuth, pgOrgProfile
 		// Let the public overview title the TV board with the org display name.
 		svc.OrgProfiles = orgProfileStore
+		// Email-sending drops resolve a referenced email-template ID to its
+		// layout shell at run time via this provider (built-ins ∪ the tenant's
+		// stored templates), surfacing the org logo for {{.Logo}} shells. eng is
+		// the same pointer the service holds, so setting it here takes effect for
+		// every run. Nil store leaves it unset — referencing a template then
+		// fails cleanly.
+		if encryptedSecrets != nil {
+			eng.EmailTemplates = &daemon.EmailTemplateProvider{
+				Secrets:  encryptedSecrets,
+				Profiles: orgProfileStore,
+			}
+		}
 		// Wrap the auth chain with the platform-admin lockout gate now that
 		// the user + org-profile stores exist: every authenticated request
 		// (session, API key, OIDC) is refused once its user or org is

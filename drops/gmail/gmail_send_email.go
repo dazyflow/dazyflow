@@ -67,6 +67,7 @@ func init() {
 					"subject":{"type":"string","title":"Subject","description":"The email's subject line — e.g. \"Re: your submission\". Leave blank and it sends as \"(no subject)\". Overridden by the 'Subject' input."},
 					"body":{"type":"string","format":"multiline","description":"Body text. Overridden by the 'Body' input."},
 					"format":{"type":"string","enum":["text","html"],"enumNames":["Text","HTML"],"default":"html"},
+					"template":{"type":"string","title":"Template","format":"email-template","description":"Optional reusable HTML template to wrap the body in (logo, header, footer). HTML format only. Leave blank to send the body as-is."},
 					"reply_to":{"type":"string"},
 					"thread_id":{"type":"string","description":"Gmail thread ID to reply within."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
@@ -118,8 +119,19 @@ func executeGmailSend(ctx context.Context, job core.Job, _ chan<- core.Progress)
 	// sent as plain text when the form shows HTML selected. Explicit "text"
 	// still sends text/plain.
 	bodyContentType := `text/html; charset="utf-8"`
-	if params.StringDefault(job.Params, "format", "html") == "text" {
+	isHTML := params.StringDefault(job.Params, "format", "html") != "text"
+	if !isHTML {
 		bodyContentType = `text/plain; charset="utf-8"`
+	}
+
+	// Wrap the body in the referenced email template (HTML sends only). A
+	// missing/unresolvable template fails the node rather than sending unwrapped.
+	if isHTML {
+		wrapped, werr := mailmsg.WrapWithTemplate(ctx, job, body, subject)
+		if werr != nil {
+			return params.Err(job, "email_template", werr.Error()), nil
+		}
+		body = wrapped
 	}
 
 	atts, jerr := mailmsg.LoadAttachments(job)

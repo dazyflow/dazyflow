@@ -33,6 +33,12 @@ const (
 	// are config (a sheet pointer), not credentials, but they live in the
 	// same store and are hidden from the Credentials listing.
 	secretResourcePrefix = "res."
+	// secretEmailTmplPrefix namespaces org-created email templates (the HTML
+	// layout shells the email drops wrap a body in). Stored as
+	// "emailtmpl.<name>" at organization scope — templates are tenant-wide,
+	// with no flow tier. The HTML is not a credential but lives in the same
+	// store and is hidden from the Credentials listing.
+	secretEmailTmplPrefix = "emailtmpl."
 )
 
 // scopedSecretName maps (scope, flow, name) to the storage name. Organization
@@ -63,6 +69,7 @@ func isReservedSecretName(name string) bool {
 		strings.HasPrefix(name, "httpcache.") ||
 		strings.HasPrefix(name, secretGitCredPrefix) ||
 		strings.HasPrefix(name, secretResourcePrefix) ||
+		strings.HasPrefix(name, secretEmailTmplPrefix) ||
 		strings.HasPrefix(name, "cfg:")
 }
 
