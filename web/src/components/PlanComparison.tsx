@@ -125,11 +125,16 @@ export function PlanComparison({
         </h2>
       </div>
       <div className="plans-grid">
-        {plans.map((p) => (
+        {plans.map((p, i) => (
           <PlanCard
             key={p.id}
             plan={p}
             current={current}
+            // Diff each tier against the one below it in the ladder (Free has
+            // none, Pro vs Free, Enterprise vs Pro) rather than the viewer's
+            // current plan — so the "what this tier adds" cues show each step's
+            // incremental value, not Enterprise's gap over Free.
+            baseline={plans[i - 1]}
             info={info}
             redirecting={redirecting}
             t={t}
@@ -146,6 +151,7 @@ export function PlanComparison({
 function PlanCard({
   plan,
   current,
+  baseline,
   info,
   redirecting,
   t,
@@ -155,6 +161,9 @@ function PlanCard({
 }: {
   plan: PlanOption;
   current: PlanOption;
+  // The tier directly below this one in the ladder; undefined for the lowest
+  // card. The feature diff highlights what this tier adds over it.
+  baseline?: PlanOption;
   info: PlansInfo;
   redirecting: boolean;
   t: (k: string, o?: Record<string, unknown>) => string;
@@ -226,8 +235,11 @@ function PlanCard({
       <ul className="plan-feats">
         {FEATURES.map((f) => {
           const v = plan.limits[f.key];
-          const cur = current.limits[f.key];
-          const up = !isCurrent && betterThan(f, v, cur);
+          // Highlight a feature as an upgrade when this tier beats the one
+          // below it (the baseline). The current plan and the lowest tier
+          // (no baseline) show no upgrade cues.
+          const up =
+            !isCurrent && baseline != null && betterThan(f, v, baseline.limits[f.key]);
           return (
             <li key={f.key} className={"plan-feat" + (up ? " plan-feat-up" : "")}>
               <span className="plan-feat-ico">
