@@ -19,6 +19,12 @@ type DropSearch struct {
 	Categories []string
 	Providers  []string
 	Tags       []string
+	// IncludeDisabled keeps platform-disabled drops in the result, each
+	// stamped Manifest.Disabled=true, instead of hiding them. Only the
+	// editor-facing catalog endpoints set it; everything else (flow
+	// generation, the control API) leaves it false so disabled drops stay
+	// hidden.
+	IncludeDisabled bool
 }
 
 // searchManifests applies filters + query to a manifest list. Results

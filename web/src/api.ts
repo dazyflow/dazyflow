@@ -646,14 +646,25 @@ export const api = {
   // upstream release. Platform-admin only (403 otherwise).
   adminVersion: (token: string) =>
     request<VersionStatus>(token, "GET", "/admin/version"),
-  listDrops: async (token: string, query?: string) => {
+  listDrops: async (
+    token: string,
+    query?: string,
+    // includeDisabled asks the daemon to keep platform-disabled drops in the
+    // result (flagged `disabled`) instead of hiding them — the flow editor
+    // sets it so they stay visible (greyed-out) in the palette.
+    includeDisabled?: boolean,
+  ) => {
     // Daemon emits both "drops" (canonical) and "modules" (legacy alias)
     // during the rename transition; accept either so older daemons keep
     // working until we ship the final cutover.
+    const params = new URLSearchParams();
+    if (query) params.set("q", query);
+    if (includeDisabled) params.set("include_disabled", "1");
+    const qs = params.toString();
     const r = await request<{ drops?: Manifest[]; modules?: Manifest[] }>(
       token,
       "GET",
-      "/drops" + (query ? `?q=${encodeURIComponent(query)}` : ""),
+      "/drops" + (qs ? `?${qs}` : ""),
     );
     return { drops: r.drops ?? r.modules ?? [] };
   },

@@ -231,6 +231,10 @@ export type Manifest = {
   // has a live connection check — the Apps page then verifies credentials
   // before saving them and offers a "Test connection" button.
   connection_verifiable?: boolean;
+  // disabled is set by the daemon (editor catalog only) when a platform admin
+  // has switched this drop off. The editor shows it greyed-out and un-pickable
+  // rather than hiding it; it can't be added to a flow.
+  disabled?: boolean;
 };
 
 // JSONSchema is a relaxed subset of the JSON Schema spec — enough to

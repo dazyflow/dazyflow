@@ -303,6 +303,16 @@ type Manifest struct {
 	// connection" affordance and to verify credentials before saving them.
 	ConnectionVerifiable bool `json:"connection_verifiable,omitempty"`
 
+	// Disabled reports that a platform admin has switched this drop off (a
+	// killswitch, globally or for the caller's tenant). Like
+	// ConnectionVerifiable it is NOT set at registration — the daemon computes
+	// it on the way out, and only for editor-facing listings that opt in
+	// (DropSearch.IncludeDisabled). Other surfaces hide disabled drops
+	// entirely. The editor uses it to show the drop greyed-out and un-pickable
+	// instead of having it silently vanish from the palette. The engine
+	// resolver still hard-blocks execution if a disabled drop is referenced.
+	Disabled bool `json:"disabled,omitempty"`
+
 	// Egress is the allowlist of external hosts a sandboxed (out-of-process)
 	// drop may reach via the broker's guarded fetch — the drop's *declared*
 	// network surface, enforced on top of the global SSRF guard + egress policy.

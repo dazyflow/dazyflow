@@ -1512,6 +1512,21 @@ func (s *Service) ListPendingApprovals(ctx context.Context, p core.Principal, na
 // Module visibility is not currently filtered per tenant; that's a future
 // improvement once tenant-scoped module catalogs land.
 func (s *Service) ListDrops(ctx context.Context, p core.Principal) (map[string]core.Manifest, error) {
+	return s.listDrops(ctx, p, false)
+}
+
+// listDrops is the shared body of ListDrops/SearchDrops. includeDisabled
+// controls what happens to drops a platform admin has switched off:
+//   - false (the default everywhere except the editor): they're hidden,
+//     deleted from the returned map so they don't surface in the palette,
+//     search, flow generation, or the control API.
+//   - true (editor catalog endpoints only): they're kept and stamped
+//     Disabled=true, so the editor can show them greyed-out and un-pickable
+//     instead of having them silently vanish.
+//
+// Either way the engine resolver still hard-blocks execution if a disabled
+// drop is referenced; this only shapes the build-time UI.
+func (s *Service) listDrops(ctx context.Context, p core.Principal, includeDisabled bool) (map[string]core.Manifest, error) {
 	mp, ok := s.Engine.Resolver.(interface {
 		Manifests() map[string]core.Manifest
 	})
@@ -1531,13 +1546,15 @@ func (s *Service) ListDrops(ctx context.Context, p core.Principal) (map[string]c
 			}
 		}
 	}
-	// Hide drops a platform admin has switched off — globally or for this
-	// tenant — so they don't surface in the palette or search. The engine
-	// resolver still hard-blocks execution if one is referenced anyway;
-	// this just keeps the build-time UI consistent with the killswitch.
 	if s.DropSwitches != nil {
-		for id := range out {
-			if s.DropSwitches.Disabled(id, p.Tenant) {
+		for id, m := range out {
+			if !s.DropSwitches.Disabled(id, p.Tenant) {
+				continue
+			}
+			if includeDisabled {
+				m.Disabled = true
+				out[id] = m
+			} else {
 				delete(out, id)
 			}
 		}
@@ -1550,7 +1567,7 @@ func (s *Service) ListDrops(ctx context.Context, p core.Principal) (map[string]c
 // alphabetical when query is empty). Same tenant-visibility caveat as
 // ListModules.
 func (s *Service) SearchDrops(ctx context.Context, p core.Principal, q DropSearch) ([]core.Manifest, error) {
-	manifests, err := s.ListDrops(ctx, p)
+	manifests, err := s.listDrops(ctx, p, q.IncludeDisabled)
 	if err != nil {
 		return nil, err
 	}

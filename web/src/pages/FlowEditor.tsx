@@ -733,7 +733,10 @@ function EditorInner() {
     const requestedID = id;
 
     api
-      .listDrops(token)
+      // include_disabled: keep platform-disabled drops in the catalog so the
+      // palette can show them greyed-out (and placed nodes still resolve their
+      // manifest) instead of having them silently disappear.
+      .listDrops(token, undefined, true)
       .then((dropRes) => {
         if (cancelled) return;
         setManifests(dropRes.drops);

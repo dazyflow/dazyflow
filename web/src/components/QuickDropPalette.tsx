@@ -168,6 +168,7 @@ export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAl
       // alphabetised list opens on those operators, which reads as cryptic
       // jargon to anyone who isn't a developer.
       const tier = (d: Manifest) => {
+        if (d.disabled) return 9; // platform-disabled — sink to the bottom
         if (!d.integration) return d.category === "logic" ? 3 : 2;
         return 1; // a real connector
       };
@@ -267,7 +268,8 @@ export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAl
       if (e.key === "Enter") {
         e.preventDefault();
         const hit = matches[active];
-        if (hit) onPick(hit.drop);
+        // A platform-disabled drop is shown for awareness but can't be added.
+        if (hit && !hit.drop.disabled) onPick(hit.drop);
         return;
       }
     };
@@ -388,9 +390,16 @@ function QuickRow({
   const Icon = iconFor(drop.icon, drop.category);
   const color = dropColor(drop.category, drop.color);
   const branded = isBrandedIcon(drop.icon);
+  // A platform admin has switched this drop off: it stays in the list for
+  // awareness (greyed-out) but can't be picked into a flow.
+  const disabled = !!drop.disabled;
   return (
     <div
-      className={"quick-palette-row" + (active ? " active" : "")}
+      className={
+        "quick-palette-row" +
+        (active ? " active" : "") +
+        (disabled ? " disabled" : "")
+      }
       data-qp-index={index}
       onMouseMove={onHover}
       onMouseDown={(e) => {
@@ -398,10 +407,11 @@ function QuickRow({
         // which can race the backdrop's mousedown-to-close handler when
         // a drag selection ends inside the row.
         e.preventDefault();
-        onPick();
+        if (!disabled) onPick();
       }}
       role="option"
       aria-selected={active}
+      aria-disabled={disabled}
     >
       {drop.brand_logo ? (
         <div className="icon brand-logo">
@@ -443,8 +453,12 @@ function QuickRow({
           )}
         </div>
       </div>
-      {drop.category && (
-        <span className="cat-pill">{drop.category}</span>
+      {disabled ? (
+        <span className="quick-palette-row-disabled">
+          {t("quickPalette.disabled", "Disabled")}
+        </span>
+      ) : (
+        drop.category && <span className="cat-pill">{drop.category}</span>
       )}
     </div>
   );

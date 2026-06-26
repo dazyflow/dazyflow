@@ -308,6 +308,9 @@ func (h *HTTPGateway) listDropsHandler(rw http.ResponseWriter, r *http.Request, 
 	if t := r.URL.Query()["tag"]; len(t) > 0 {
 		search.Tags = t
 	}
+	// The editor opts in to seeing platform-disabled drops (rendered greyed-out
+	// and un-pickable) rather than having them vanish from the palette.
+	search.IncludeDisabled = isTruthyQuery(r.URL.Query().Get("include_disabled"))
 	// Integration filter is not part of DropSearch (legacy), so apply
 	// it here as a post-filter.
 	integration := strings.TrimSpace(r.URL.Query().Get("integration"))

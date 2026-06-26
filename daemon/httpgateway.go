@@ -1753,6 +1753,16 @@ func (h *HTTPGateway) tlsAllow(rw http.ResponseWriter, r *http.Request) {
 	rw.WriteHeader(http.StatusOK) // claimed → Caddy may issue the cert
 }
 
+// isTruthyQuery reports whether a query-param value means "on" — accepting
+// "1"/"true"/"yes"/"on" and treating empty, absent, or garbage as false.
+func isTruthyQuery(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "yes", "on":
+		return true
+	}
+	return false
+}
+
 func (h *HTTPGateway) listModules(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	q := DropSearch{
 		Query: r.URL.Query().Get("q"),
@@ -1766,6 +1776,10 @@ func (h *HTTPGateway) listModules(rw http.ResponseWriter, r *http.Request, p cor
 	if t := r.URL.Query()["tag"]; len(t) > 0 {
 		q.Tags = t
 	}
+	// The editor opts into seeing platform-disabled drops (shown greyed-out,
+	// un-pickable) so they don't silently vanish from the palette; every other
+	// caller of this endpoint leaves them hidden.
+	q.IncludeDisabled = isTruthyQuery(r.URL.Query().Get("include_disabled"))
 	mans, err := h.svc.SearchDrops(r.Context(), p, q)
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())

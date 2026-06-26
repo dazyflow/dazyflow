@@ -225,6 +225,59 @@ func TestListDrops_AndGetDrop(t *testing.T) {
 	}
 }
 
+// TestListDrops_DisabledVisibility confirms a platform-disabled drop is hidden
+// from the default catalog but kept (flagged Disabled) when the editor opts in
+// with include_disabled — so the palette can show it greyed-out rather than
+// having it silently vanish.
+func TestListDrops_DisabledVisibility(t *testing.T) {
+	h := newGatewayHarness(t)
+
+	drops := func(path string) []core.Manifest {
+		rw := h.do(t, "GET", path, nil)
+		if rw.Code != http.StatusOK {
+			t.Fatalf("GET %s: code=%d body=%s", path, rw.Code, rw.Body.String())
+		}
+		var resp struct {
+			Drops []core.Manifest `json:"drops"`
+		}
+		decodeJSON(t, rw, &resp)
+		return resp.Drops
+	}
+
+	all := drops("/api/v1/drops")
+	if len(all) == 0 {
+		t.Fatal("no drops registered in harness")
+	}
+	target := all[0].ID
+
+	// Switch the drop off globally (tenant "" hits every tenant).
+	h.svc.DropSwitches = &PgDropSwitchStore{cache: map[string]bool{
+		dropSwitchKey(target, ""): true,
+	}}
+
+	// Default listing hides it.
+	for _, d := range drops("/api/v1/drops") {
+		if d.ID == target {
+			t.Fatalf("disabled drop %q should be hidden without include_disabled", target)
+		}
+	}
+
+	// Editor opt-in keeps it, flagged disabled.
+	var got *core.Manifest
+	shown := drops("/api/v1/drops?include_disabled=1")
+	for i := range shown {
+		if shown[i].ID == target {
+			got = &shown[i]
+		}
+	}
+	if got == nil {
+		t.Fatalf("disabled drop %q should be present with include_disabled", target)
+	}
+	if !got.Disabled {
+		t.Errorf("drop %q should be flagged Disabled=true", target)
+	}
+}
+
 // TestListDrops_Filters exercises the query-param filter branches (q,
 // category, provider, tag, and the integration post-filter). The harness
 // data is fixed, so we assert the response stays well-formed and the filter
