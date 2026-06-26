@@ -24,6 +24,7 @@ import { RunDetail } from "./pages/RunDetail";
 import { Results } from "./pages/Results";
 import { Approvals } from "./pages/Approvals";
 import { Usage } from "./pages/Usage";
+import { Plans } from "./pages/Plans";
 import { VerifyEmail } from "./pages/VerifyEmail";
 import { ForgotPassword } from "./pages/ForgotPassword";
 import { ResetPassword } from "./pages/ResetPassword";
@@ -115,6 +116,7 @@ export function App() {
         <Route path="/runs/:runID" element={<RunDetail />} />
         <Route path="/approvals" element={<Approvals />} />
         <Route path="/usage" element={<Usage />} />
+        <Route path="/plans" element={<Plans />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/settings" element={<Settings />} />

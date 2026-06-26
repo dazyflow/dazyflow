@@ -37,3 +37,4 @@ hazy-key
 /.mcp.json
 /docker-compose.override.yml
 /bin
+/memory

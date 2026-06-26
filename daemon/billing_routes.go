@@ -98,6 +98,147 @@ func (h *HTTPGateway) billingMe(rw http.ResponseWriter, r *http.Request, p core.
 	})
 }
 
+// planLimits is the display-resolved limit set for one plan on the /me/plans
+// comparison. Mirrors EffectiveLimits but normalized for presentation: a
+// pro-granting plan reports runs_per_month 0 (= unlimited) because the run gate
+// bypasses the cap for any non-free plan (see checkRunQuota), regardless of the
+// numeric value the tier happens to inherit.
+type planLimits struct {
+	RunsPerMonth      int   `json:"runs_per_month"`
+	MaxFlows          int   `json:"max_flows"`
+	MaxGraphNodes     int   `json:"max_graph_nodes"`
+	DiskQuotaBytes    int64 `json:"disk_quota_bytes"`
+	MaxTimeoutSeconds int   `json:"max_timeout_seconds"`
+	PollingAllowed    bool  `json:"polling_allowed"`
+}
+
+// planOption is one selectable plan in the comparison. Limits are resolved
+// server-side so the client never re-implements ResolveEffective; the client
+// only formats and diffs the numbers.
+type planOption struct {
+	ID        string     `json:"id"`
+	Name      string     `json:"name"`
+	Plan      string     `json:"plan"`
+	IsCurrent bool       `json:"is_current"`
+	Limits    planLimits `json:"limits"`
+}
+
+type plansResponse struct {
+	CurrentPlan   string       `json:"current_plan"`
+	CurrentTierID string       `json:"current_tier_id"`
+	RunsThisMonth int64        `json:"runs_this_month"`
+	CanUpgrade    bool         `json:"can_upgrade"`
+	CanManage     bool         `json:"can_manage"`
+	Plans         []planOption `json:"plans"`
+}
+
+// planLimitsFrom projects resolved EffectiveLimits onto the display shape,
+// applying the "pro = unlimited runs" normalization.
+func planLimitsFrom(e EffectiveLimits) planLimits {
+	runs := e.RunsPerMonth
+	if e.Plan == PlanPro {
+		runs = 0 // uncapped — matches checkRunQuota's plan bypass
+	}
+	return planLimits{
+		RunsPerMonth:      runs,
+		MaxFlows:          e.MaxFlows,
+		MaxGraphNodes:     e.MaxGraphNodes,
+		DiskQuotaBytes:    e.DiskQuotaBytes,
+		MaxTimeoutSeconds: e.MaxTimeoutSeconds,
+		PollingAllowed:    e.PollingAllowed,
+	}
+}
+
+// isBuiltinTierID reports the two seeded tier ids the comparison offers as
+// self-serve options. Anything else is an admin-assigned custom (comp) tier.
+func isBuiltinTierID(id string) bool { return id == "free" || id == PlanPro }
+
+// GET /api/v1/me/plans — the data-driven plan comparison the Plans page
+// renders. Returns the resolved limits for each self-serve plan (built-in free
+// + pro, plus the org's own tier when it's a custom comp) so the client can
+// show what differs from the current plan without any per-tier copy. Limits are
+// resolved through the same ResolveEffective the enforcement paths use, so the
+// catalog and reality agree.
+func (h *HTTPGateway) plansMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	tenant, ok := resolveTenantScope(rw, r, p)
+	if !ok {
+		return
+	}
+	ctx := r.Context()
+	cur := h.svc.effectiveLimits(ctx, tenant)
+
+	// Stripe customer id drives the "manage billing" affordance; the plan
+	// store also gives the customer record. Best-effort — absent store leaves
+	// can_manage false.
+	var customerID string
+	if h.svc.Plans != nil {
+		if tp, err := h.svc.Plans.GetPlan(ctx, tenant); err == nil {
+			customerID = tp.StripeCustomerID
+		}
+	}
+	var runsThisMonth int64
+	if h.svc.Usage != nil {
+		runsThisMonth, _ = h.svc.runsThisMonth(ctx, tenant)
+	}
+
+	// Which built-in/custom option represents the org's current standing. The
+	// effective PLAN is the source of truth (a Stripe-pro org keeps the default
+	// "free" tier id but is really on pro); a custom comp tier is keyed by its
+	// own id so it, not the generic pro card, reads as current.
+	currentKey := cur.Plan // "free" | "pro"
+	if cur.TierID != "" && !isBuiltinTierID(cur.TierID) {
+		currentKey = cur.TierID
+	}
+
+	def := h.svc.limitDefaults()
+	now := time.Now()
+	resolveTier := func(t Tier) planOption {
+		e := ResolveEffective(nil, &t, def, t.Plan, now)
+		return planOption{ID: t.ID, Name: t.Name, Plan: e.Plan, Limits: planLimitsFrom(e)}
+	}
+
+	var plans []planOption
+	if h.svc.Entitlements != nil {
+		for _, id := range []string{"free", PlanPro} {
+			if t, ok := h.svc.Entitlements.GetTier(ctx, id); ok {
+				plans = append(plans, resolveTier(t))
+			}
+		}
+		// Surface a custom comp tier as the org's own option so it reads as
+		// "your plan" rather than silently mapping onto free/pro.
+		if cur.TierID != "" && !isBuiltinTierID(cur.TierID) {
+			if t, ok := h.svc.Entitlements.GetTier(ctx, cur.TierID); ok {
+				plans = append(plans, resolveTier(t))
+			}
+		}
+	} else {
+		// Pre-entitlement deploys have no tier store: synthesize the two plans
+		// straight from the global defaults + plan semantics.
+		free := ResolveEffective(nil, nil, def, PlanFree, now)
+		pro := ResolveEffective(nil, nil, def, PlanPro, now)
+		plans = append(plans,
+			planOption{ID: "free", Name: "Free", Plan: free.Plan, Limits: planLimitsFrom(free)},
+			planOption{ID: PlanPro, Name: "Pro", Plan: pro.Plan, Limits: planLimitsFrom(pro)},
+		)
+	}
+	for i := range plans {
+		if plans[i].ID == currentKey {
+			plans[i].IsCurrent = true
+		}
+	}
+
+	writeJSON(rw, http.StatusOK, plansResponse{
+		CurrentPlan:   cur.Plan,
+		CurrentTierID: cur.TierID,
+		RunsThisMonth: runsThisMonth,
+		// Offer upgrade only when Stripe is configured and the org isn't
+		// already effectively pro (comp/trial included, via cur.Plan).
+		CanUpgrade: h.Billing != nil && h.Billing.Stripe != nil && cur.Plan != PlanPro,
+		CanManage:  h.Billing != nil && h.Billing.Stripe != nil && customerID != "",
+		Plans:      plans,
+	})
+}
+
 // POST /api/v1/me/billing/checkout — mint a Stripe Checkout session for
 // the pro plan and return its hosted URL; the web client redirects there.
 func (h *HTTPGateway) billingCheckout(rw http.ResponseWriter, r *http.Request, p core.Principal) {

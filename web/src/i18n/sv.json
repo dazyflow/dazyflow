@@ -98,6 +98,8 @@
     "runs": "Körningar",
     "results": "Samlingar",
     "usage": "Förbrukning",
+    "plans": "Planer & fakturering",
+    "upgrade": "Uppgradera till Pro",
     "files": "Filer",
     "approvals": "Godkännanden",
     "apps": "Appar",
@@ -235,9 +237,34 @@
     "runsUsed": "{{used}} av {{limit}} gratis körningar använda den här månaden",
     "subscriptionStatus": "Prenumerationsstatus: {{status}}",
     "upgrade": "Uppgradera till Pro",
+    "comparePlans": "Jämför planer",
     "manageBilling": "Hantera fakturering",
     "proPitch": "Pro tar bort månadstaket för körningar och låser upp schemalagda triggers.",
     "pollingGated": "Scheman och polling-triggers är pausade på gratisplanen — uppgradera för att aktivera dem. Manuella körningar fungerar fortfarande."
+  },
+  "plans": {
+    "title": "Planer",
+    "subtitle": "Jämför planer och se exakt vad som ändras när du uppgraderar.",
+    "currentLine": "Du har {{plan}}-planen · {{used}} flödeskörningar den här månaden.",
+    "yourPlan": "Din plan",
+    "currentPlan": "Nuvarande plan",
+    "upgradeTo": "Uppgradera till {{plan}}",
+    "manageBilling": "Hantera fakturering",
+    "contactAdmin": "Kontakta din administratör för att byta plan.",
+    "unlimited": "Obegränsat",
+    "included": "Ingår",
+    "notIncluded": "Ingår inte",
+    "perMonth": "{{n}} / månad",
+    "minutes": "{{n}} min",
+    "seconds": "{{n}}s",
+    "feat": {
+      "runs": "Flödeskörningar",
+      "polling": "Schemalagda & polling-triggers",
+      "flows": "Flöden",
+      "nodes": "Steg per flöde",
+      "disk": "Fillagring",
+      "timeout": "Max körtid"
+    }
   },
   "account": {
     "menu": "Kontomeny",

@@ -97,6 +97,8 @@
     "runs": "Runs",
     "results": "Collections",
     "usage": "Usage",
+    "plans": "Plans & billing",
+    "upgrade": "Upgrade to Pro",
     "files": "Files",
     "approvals": "Approvals",
     "apps": "Apps",
@@ -234,9 +236,34 @@
     "runsUsed": "{{used}} of {{limit}} free runs used this month",
     "subscriptionStatus": "Subscription status: {{status}}",
     "upgrade": "Upgrade to Pro",
+    "comparePlans": "Compare plans",
     "manageBilling": "Manage billing",
     "proPitch": "Pro removes the monthly run cap and unlocks scheduled & polling triggers.",
     "pollingGated": "Schedules and polling triggers are paused on the Free plan — upgrade to enable them. Manual runs still work."
+  },
+  "plans": {
+    "title": "Plans",
+    "subtitle": "Compare plans and see exactly what changes when you upgrade.",
+    "currentLine": "You're on the {{plan}} plan · {{used}} flow runs this month.",
+    "yourPlan": "Your plan",
+    "currentPlan": "Current plan",
+    "upgradeTo": "Upgrade to {{plan}}",
+    "manageBilling": "Manage billing",
+    "contactAdmin": "Contact your administrator to change plan.",
+    "unlimited": "Unlimited",
+    "included": "Included",
+    "notIncluded": "Not included",
+    "perMonth": "{{n}} / month",
+    "minutes": "{{n}} min",
+    "seconds": "{{n}}s",
+    "feat": {
+      "runs": "Flow runs",
+      "polling": "Scheduled & polling triggers",
+      "flows": "Flows",
+      "nodes": "Steps per flow",
+      "disk": "File storage",
+      "timeout": "Max run time"
+    }
   },
   "account": {
     "menu": "Account menu",

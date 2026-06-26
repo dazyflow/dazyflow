@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AlertCircle, Gauge, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import { Button } from "../components/Button";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
@@ -22,6 +23,7 @@ function periodLabel(period: string): string {
 
 export function Usage() {
   const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
   const { token, activeTenant } = useAuth();
   const [usage, setUsage] = useState<UsageCounters[]>([]);
   const [billing, setBilling] = useState<BillingInfo | null>(null);
@@ -138,6 +140,9 @@ export function Usage() {
                   {t("usage.upgrade")}
                 </Button>
               )}
+              <Button variant="ghost" onClick={() => navigate("/plans")}>
+                {t("usage.comparePlans")}
+              </Button>
               {billing.can_manage && (
                 <Button variant="ghost" disabled={redirecting} onClick={() => void goToStripe("portal")}>
                   {t("usage.manageBilling")}

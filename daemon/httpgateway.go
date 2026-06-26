@@ -469,6 +469,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// routes honor Idempotency-Key for replay-safe retries.
 	mux.HandleFunc("GET /api/v1/me/usage", h.requireAuth(h.usageMe))
 	mux.HandleFunc("GET /api/v1/me/billing", h.requireAuth(h.billingMe))
+	mux.HandleFunc("GET /api/v1/me/plans", h.requireAuth(h.plansMe))
 	mux.HandleFunc("POST /api/v1/me/billing/checkout", h.requireAuth(h.billingCheckout))
 	mux.HandleFunc("POST /api/v1/me/billing/portal", h.requireAuth(h.billingPortal))
 	mux.HandleFunc("GET /api/v1/me/flows", h.requireAuth(h.listFlowsMe))

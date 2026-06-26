@@ -1152,6 +1152,13 @@ export const api = {
     const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
     return request<{ url: string }>(token, "POST", "/me/billing/portal" + qs);
   },
+  // Plan comparison for the Plans page: each selectable plan's resolved
+  // limits (server-side, via the same resolver the gates use) so the client
+  // can show what differs from the current plan without any per-tier copy.
+  getPlans: (token: string, tenant?: string) => {
+    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
+    return request<PlansInfo>(token, "GET", "/me/plans" + qs);
+  },
   // Usage metering: the tenant's graph-run + node-execution counts,
   // one bucket per month, newest first (current month always present).
   getUsage: (token: string, opts: { tenant?: string; months?: number } = {}) => {
@@ -1998,6 +2005,38 @@ export type EffectiveLimits = {
   tier_id?: string;
   trial_ends_at?: string | null;
   comped?: boolean;
+};
+
+// PlanLimits are one plan's display-resolved limits. Capacity fields use
+// 0 = unlimited (runs_per_month is 0 for any pro plan — the run gate bypasses
+// the cap). Mirrors daemon.planLimits.
+export type PlanLimits = {
+  runs_per_month: number;
+  max_flows: number;
+  max_graph_nodes: number;
+  disk_quota_bytes: number;
+  max_timeout_seconds: number;
+  polling_allowed: boolean;
+};
+
+export type PlanOption = {
+  id: string;
+  name: string;
+  plan: string; // "free" | "pro"
+  is_current: boolean;
+  limits: PlanLimits;
+};
+
+// PlansInfo is the /me/plans comparison model: the current standing plus each
+// selectable plan's resolved limits. The Plans page diffs each plan against the
+// current one to show what differs — no per-tier copy. Mirrors daemon.plansResponse.
+export type PlansInfo = {
+  current_plan: string;
+  current_tier_id: string;
+  runs_this_month: number;
+  can_upgrade: boolean;
+  can_manage: boolean;
+  plans: PlanOption[];
 };
 
 export type PlatformUser = {

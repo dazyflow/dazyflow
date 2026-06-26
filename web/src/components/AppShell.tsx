@@ -22,6 +22,8 @@ import {
   Settings as SettingsIcon,
   MoreVertical,
   HelpCircle,
+  CreditCard,
+  Sparkles,
   X,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -725,7 +727,12 @@ function AccountMenu({
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { token, activeTenant } = useAuth();
   const [open, setOpen] = useState(false);
+  // Whether to show the "Upgrade to Pro" CTA: true only on a free plan where
+  // Stripe upgrades are configured. Best-effort and server-cached; a failed or
+  // unconfigured billing lookup simply hides the CTA.
+  const [canUpgrade, setCanUpgrade] = useState(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   // The pop is rendered in a portal at document.body (see below) so the
   // sidebar's overflow clip + stacking context can't hide it behind the
@@ -737,6 +744,22 @@ function AccountMenu({
     if (!r) return;
     setPos({ left: r.left, bottom: window.innerHeight - r.top + 6 });
   };
+  useEffect(() => {
+    if (!token) return;
+    let live = true;
+    api
+      .getBilling(token, activeTenant || undefined)
+      .then((b) => {
+        if (live) setCanUpgrade(!!b?.can_upgrade);
+      })
+      .catch(() => {
+        if (live) setCanUpgrade(false);
+      });
+    return () => {
+      live = false;
+    };
+  }, [token, activeTenant]);
+
   useEffect(() => {
     if (!open) return;
     place();
@@ -790,6 +813,24 @@ function AccountMenu({
               right: "auto",
             }}
           >
+            {/* Upgrade CTA — only on a free plan with Stripe configured. Sits
+                at the top, accented, as the menu's most prominent action. */}
+            {canUpgrade && (
+              <>
+                <Button
+                  role="menuitem"
+                  className="workspace-pop-row account-pop-row account-pop-upgrade"
+                  onClick={() => {
+                    setOpen(false);
+                    navigate("/plans");
+                  }}
+                >
+                  <Sparkles size={14} />
+                  {t("nav.upgrade")}
+                </Button>
+                <div className="workspace-pop-sep" role="separator" />
+              </>
+            )}
             <Button
               role="menuitem"
               className="workspace-pop-row account-pop-row"
@@ -830,6 +871,17 @@ function AccountMenu({
             >
               <Gauge size={14} />
               {t("nav.usage")}
+            </Button>
+            <Button
+              role="menuitem"
+              className="workspace-pop-row account-pop-row"
+              onClick={() => {
+                setOpen(false);
+                navigate("/plans");
+              }}
+            >
+              <CreditCard size={14} />
+              {t("nav.plans")}
             </Button>
             {showAdmin && (
               <Button

@@ -414,18 +414,26 @@ func (s *Service) orgSuspended(ctx context.Context, tenant string) bool {
 	return err == nil && prof.Suspended()
 }
 
+// limitDefaults are the deployment-global fallbacks every limit resolves
+// against when neither a tier nor an override sets a value — built from the
+// Service.* knobs. Shared by effectiveLimits and the /me/plans handler so the
+// catalog the user sees and the limits actually enforced agree exactly.
+func (s *Service) limitDefaults() LimitDefaults {
+	return LimitDefaults{
+		RunsPerMonth:      s.FreeRunsPerMonth,
+		MaxGraphNodes:     s.MaxGraphNodes,
+		MaxTimeoutSeconds: s.MaxGraphTimeoutSeconds,
+		PollingAllowed:    !s.FreePollingDisabled,
+	}
+}
+
 // effectiveLimits resolves a tenant's limits + plan from its entitlement,
 // its tier, the deployment-global defaults (the Service.* knobs), and the
 // Stripe plan. With no Entitlements store wired it reflects exactly the
 // pre-entitlement behaviour: global defaults + Stripe plan. Read on the
 // run/trigger/node hot paths, so it leans on the store's in-memory cache.
 func (s *Service) effectiveLimits(ctx context.Context, tenant string) EffectiveLimits {
-	def := LimitDefaults{
-		RunsPerMonth:      s.FreeRunsPerMonth,
-		MaxGraphNodes:     s.MaxGraphNodes,
-		MaxTimeoutSeconds: s.MaxGraphTimeoutSeconds,
-		PollingAllowed:    !s.FreePollingDisabled,
-	}
+	def := s.limitDefaults()
 	stripePlan := PlanFree
 	if s.Plans != nil {
 		if p, err := s.Plans.GetPlan(ctx, tenant); err == nil && p.Plan != "" {

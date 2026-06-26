@@ -481,6 +481,88 @@
   font-size: var(--text-md);
   margin-top: var(--space-0);
 }
+
+/* Plans / change-tier page — a responsive grid of plan cards, each with a
+   feature list diffed against the current plan. */
+.plans-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-4);
+  align-items: stretch;
+}
+.plan-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.plan-card-current {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.plan-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.plan-card-head h2 {
+  margin: 0;
+  font-size: var(--text-xl);
+}
+.plan-badge {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+}
+.plan-feats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.plan-feat {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-md);
+  color: var(--muted);
+}
+.plan-feat-ico {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+.plan-feat-label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.plan-feat-val {
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+/* A feature that's an upgrade over the current plan — the "what differs" cue. */
+.plan-feat-up {
+  color: var(--text);
+}
+.plan-feat-up .plan-feat-ico,
+.plan-feat-up .plan-feat-val {
+  color: var(--accent);
+}
+.plan-card-foot {
+  margin-top: auto;
+  padding-top: var(--space-2);
+}
+.plan-contact {
+  font-size: var(--text-sm);
+}
 /* Pages that put a bare <h1> straight under .page (Integrations,
    Settings, Templates) should match the .page-title h1 size used by
    the list pages — without this they fall back to the browser default
@@ -1080,6 +1162,15 @@
 }
 .account-pop-row.danger:hover {
   background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+/* Upgrade CTA at the top of the account menu — accent so it reads as the
+   primary action, not just another link. */
+.account-pop-upgrade {
+  color: var(--accent);
+  font-weight: 600;
+}
+.account-pop-upgrade:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 /* Version footer in the account pop — muted, non-interactive, monospace
    so the version reads as an identifier. */
