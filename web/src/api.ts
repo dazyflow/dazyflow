@@ -1643,11 +1643,15 @@ export const api = {
     }),
   deleteEmailTemplate: (token: string, name: string) =>
     request<void>(token, "DELETE", `/email-templates/${encodeURIComponent(name)}`),
-  // previewEmailTemplate renders the shell with a sample body server-side
-  // (faithful to {{if .Logo}} etc., which a browser can't execute) so the
-  // editor can preview unsaved edits.
-  previewEmailTemplate: (token: string, html: string) =>
-    request<{ html: string }>(token, "POST", "/email-templates/preview", { html }),
+  // previewEmailTemplate renders a shell server-side (faithful to {{if .Logo}}
+  // etc., which a browser can't execute). Pass `html` to preview an unsaved
+  // shell (management editor) or `id` to resolve a saved/built-in template (the
+  // drop's "Preview email" button); `body`/`subject` supply the real message
+  // content (body falls back to sample text when empty).
+  previewEmailTemplate: (
+    token: string,
+    args: { html?: string; id?: string; body?: string; subject?: string },
+  ) => request<{ html: string }>(token, "POST", "/email-templates/preview", args),
 
   // Bring-your-own secret manager (OpenBao/Vault) connection for this tenant.
   // getSecretManager returns a redacted view (no credentials); setSecretManager

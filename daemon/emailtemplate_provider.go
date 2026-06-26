@@ -66,5 +66,6 @@ func (p *EmailTemplateProvider) orgLogo(ctx context.Context, tenant string) stri
 	if err != nil {
 		return ""
 	}
-	return prof.Icon
+	// Normalize so a raw-SVG icon becomes a data: URL the <img src> can render.
+	return emailtmpl.NormalizeLogo(prof.Icon)
 }

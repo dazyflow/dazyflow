@@ -157,3 +157,44 @@ func TestEmailTemplates_Preview(t *testing.T) {
 		t.Errorf("preview did not render sample body: %q", resp.HTML)
 	}
 }
+
+func TestEmailTemplates_PreviewByID(t *testing.T) {
+	h := newSecretsHarness(t)
+	h.do(t, "PUT", "/api/v1/email-templates/welcome",
+		json.RawMessage(putTemplateBody("Welcome", `<main>{{.Body}}</main>`)))
+
+	preview := func(payload map[string]any) (int, string) {
+		b, _ := json.Marshal(payload)
+		rw := h.do(t, "POST", "/api/v1/email-templates/preview", json.RawMessage(b))
+		var resp struct {
+			HTML string `json:"html"`
+		}
+		_ = json.Unmarshal(rw.Body.Bytes(), &resp)
+		return rw.Code, resp.HTML
+	}
+
+	// Resolve a saved template by id and wrap the REAL body (no sample fallback).
+	code, html := preview(map[string]any{"id": "welcome", "body": "<p>real</p>"})
+	if code != http.StatusOK {
+		t.Fatalf("preview by id status=%d", code)
+	}
+	if !strings.Contains(html, "<main>") || !strings.Contains(html, "<p>real</p>") {
+		t.Errorf("preview by id did not wrap the real body: %q", html)
+	}
+	if strings.Contains(html, "preview of your email template") {
+		t.Error("real body should not fall back to the sample body")
+	}
+
+	// A built-in id resolves too.
+	if code, _ := preview(map[string]any{"id": "builtin:plain", "body": "<p>x</p>"}); code != http.StatusOK {
+		t.Errorf("preview builtin status=%d, want 200", code)
+	}
+	// Unknown id → 404.
+	if code, _ := preview(map[string]any{"id": "nope", "body": "x"}); code != http.StatusNotFound {
+		t.Errorf("preview unknown id status=%d, want 404", code)
+	}
+	// No template + empty body still renders the body bare.
+	if code, html := preview(map[string]any{"body": "<p>bare</p>"}); code != http.StatusOK || !strings.Contains(html, "<p>bare</p>") {
+		t.Errorf("bare preview status=%d html=%q", code, html)
+	}
+}

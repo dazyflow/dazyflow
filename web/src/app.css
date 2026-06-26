@@ -10815,3 +10815,74 @@ button:active,
   font-size: var(--text-xs);
   color: var(--warning, #d9822b);
 }
+
+/* Email-template picker: action row + the "Preview email" modal iframe, plus
+   the template-management editor's side-by-side editor/preview. */
+.email-template-picker-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
+  margin-top: var(--space-2, 8px);
+}
+.email-preview-dialog {
+  width: min(720px, 92vw);
+  max-width: 92vw;
+}
+.email-preview-frame {
+  width: 100%;
+  height: min(70vh, 640px);
+  border: 1px solid var(--border, #e9ebf3);
+  border-radius: 8px;
+  background: #fff;
+}
+.email-templates-layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: var(--space-4, 16px);
+}
+.email-templates-list ul {
+  list-style: none;
+  margin: var(--space-2, 8px) 0 0;
+  padding: 0;
+}
+.email-templates-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2, 8px);
+}
+.email-templates-list li > button:first-child {
+  flex: 1;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2, 8px);
+  background: none;
+  border: 0;
+  padding: var(--space-2, 8px);
+  border-radius: 6px;
+  cursor: pointer;
+  color: inherit;
+}
+.email-templates-list li > button:first-child.active {
+  background: var(--surface-2, #f4f5fa);
+}
+.template-editor .template-preview iframe {
+  width: 100%;
+  height: 360px;
+  border: 1px solid var(--border, #e9ebf3);
+  border-radius: 8px;
+  background: #fff;
+}
+
+/* Monospace HTML editor in the email-template manager. */
+.template-html-input {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace);
+  font-size: var(--text-sm, 13px);
+  line-height: 1.5;
+  tab-size: 2;
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow-x: auto;
+}

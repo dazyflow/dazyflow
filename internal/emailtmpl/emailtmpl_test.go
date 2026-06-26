@@ -86,6 +86,46 @@ func TestBuiltinsHaveBodyPlaceholderAndAreNamespaced(t *testing.T) {
 	}
 }
 
+func TestNormalizeLogo(t *testing.T) {
+	cases := []struct {
+		in       string
+		wantData bool   // expect a base64 SVG data URL
+		want     string // exact expected (when wantData is false); "" skips
+	}{
+		{"", false, ""},
+		{"https://example.com/logo.png", false, "https://example.com/logo.png"},
+		{"data:image/png;base64,AAAA", false, "data:image/png;base64,AAAA"},
+		{"/assets/logo.svg", false, "/assets/logo.svg"},
+		{`<svg xmlns="http://www.w3.org/2000/svg"><circle/></svg>`, true, ""},
+		{`  <SVG><rect/></SVG>  `, true, ""},
+		{"acme-icon", false, "acme-icon"},
+	}
+	for _, c := range cases {
+		got := NormalizeLogo(c.in)
+		if c.wantData {
+			if !strings.HasPrefix(got, "data:image/svg+xml;base64,") {
+				t.Errorf("NormalizeLogo(%q) = %q, want an svg data URL", c.in, got)
+			}
+			continue
+		}
+		if got != c.want {
+			t.Errorf("NormalizeLogo(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+	// A normalized SVG must actually render as an <img src> (no escaped markup).
+	svg := NormalizeLogo(`<svg><rect/></svg>`)
+	out, err := WrapBody(`<img src="{{safeURL .Logo}}">{{.Body}}`, "b", "", svg)
+	if err != nil {
+		t.Fatalf("WrapBody: %v", err)
+	}
+	// No escaped SVG markup leaks into the output, and the src is a data URL.
+	// (html/template entity-encodes '+' as &#43; in the attribute — the client
+	// decodes it back, so match on the stable "data:image/svg" prefix.)
+	if strings.Contains(out, "&lt;svg") || !strings.Contains(out, `src="data:image/svg`) {
+		t.Errorf("normalized SVG logo did not render as an image src: %q", out)
+	}
+}
+
 func TestIsBuiltinID(t *testing.T) {
 	if !IsBuiltinID("builtin:plain") {
 		t.Error("builtin:plain should be a built-in id")

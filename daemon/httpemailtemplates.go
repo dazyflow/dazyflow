@@ -167,17 +167,55 @@ func (h *HTTPGateway) previewEmailTemplate(rw http.ResponseWriter, r *http.Reque
 		return
 	}
 	r.Body = http.MaxBytesReader(rw, r.Body, maxEmailTemplateBytes)
-	var body struct {
+	var req struct {
+		// HTML is a shell to preview directly (the management editor's unsaved
+		// edits). Takes precedence over ID.
 		HTML string `json:"html"`
+		// ID resolves a saved/built-in template's shell — the drop's "Preview
+		// email" button passes the selected template id here.
+		ID string `json:"id"`
+		// Body/Subject are the actual message content to wrap (the drop's typed
+		// body). Body falls back to sample content when empty so an empty-body
+		// preview still shows the layout.
+		Body    string `json:"body"`
+		Subject string `json:"subject"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
 		return
 	}
+
 	const sampleBody = `<h1 style="margin:0 0 14px;font-size:22px;">Hello there 👋</h1>` +
 		`<p style="margin:0 0 14px;">This is a preview of your email template with some sample body content so you can see how the layout wraps a real message.</p>` +
 		`<p style="margin:0;">Best,<br>The team</p>`
-	rendered, err := emailtmpl.WrapBody(body.HTML, sampleBody, "Sample subject", h.previewLogo(r, p))
+
+	// Resolve the shell: explicit HTML wins; else resolve the template id the
+	// same way the runtime does (built-ins ∪ this tenant's templates); else a
+	// bare passthrough so a no-template preview still shows the body.
+	shell := strings.TrimSpace(req.HTML)
+	logo := h.previewLogo(r, p)
+	if shell == "" && strings.TrimSpace(req.ID) != "" {
+		provider := &EmailTemplateProvider{Secrets: h.EncryptedSecrets, Profiles: h.Profiles}
+		resolved, orgLogo, ok, err := provider.TemplateHTML(r.Context(), p.Tenant, strings.TrimSpace(req.ID))
+		if err != nil {
+			writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("resolve template: %v", err))
+			return
+		}
+		if !ok {
+			writeJSONError(rw, http.StatusNotFound, "template not found")
+			return
+		}
+		shell, logo = resolved, orgLogo
+	}
+	if shell == "" {
+		shell = "{{.Body}}"
+	}
+
+	body := req.Body
+	if strings.TrimSpace(body) == "" {
+		body = sampleBody
+	}
+	rendered, err := emailtmpl.WrapBody(shell, body, req.Subject, logo)
 	if err != nil {
 		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("render template: %v", err))
 		return
@@ -195,7 +233,7 @@ func (h *HTTPGateway) previewLogo(r *http.Request, p core.Principal) string {
 	if err != nil {
 		return ""
 	}
-	return prof.Icon
+	return emailtmpl.NormalizeLogo(prof.Icon)
 }
 
 // deleteEmailTemplate removes an org template. Idempotent. Built-in IDs are

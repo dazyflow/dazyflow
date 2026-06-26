@@ -542,6 +542,9 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
               value={(value as string) ?? ""}
               onChange={(v) => onChange(v === "" ? undefined : v)}
               token={references?.token}
+              body={typeof siblings?.body === "string" ? (siblings.body as string) : undefined}
+              subject={typeof siblings?.subject === "string" ? (siblings.subject as string) : undefined}
+              format={typeof siblings?.format === "string" ? (siblings.format as string) : undefined}
             />
           </FieldWrap>
         );
@@ -1160,14 +1163,25 @@ function EmailTemplatePicker({
   value,
   onChange,
   token,
+  body,
+  subject,
+  format,
 }: {
   value: string;
   onChange: (v: string) => void;
   token?: string;
+  // body/subject are the email drop's sibling params — previewed as the real
+  // message content. format gates the preview (templates wrap HTML sends only).
+  body?: string;
+  subject?: string;
+  format?: string;
 }) {
   const { t } = useTranslation();
   const [opts, setOpts] = useState<EmailTemplateSummary[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  // preview holds the rendered HTML shown in the modal; null = modal closed.
+  const [preview, setPreview] = useState<string | null>(null);
+  const [previewing, setPreviewing] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -1188,6 +1202,21 @@ function EmailTemplatePicker({
   // template) still needs to render as the selected option so the user sees it
   // — and isn't silently switched to "none".
   const known = (opts ?? []).some((o) => o.id === value);
+  // Templates only wrap HTML sends; a text send ignores them, so don't imply
+  // otherwise. Preview is still allowed for the no-template (id="") case — it
+  // shows the body on its own.
+  const isText = format === "text";
+
+  const openPreview = () => {
+    if (!token) return;
+    setErr(null);
+    setPreviewing(true);
+    api
+      .previewEmailTemplate(token, { id: value || undefined, body, subject })
+      .then((r) => setPreview(r.html))
+      .catch((e) => setErr(explainApiError(e, t)))
+      .finally(() => setPreviewing(false));
+  };
 
   return (
     <>
@@ -1215,8 +1244,58 @@ function EmailTemplatePicker({
           </optgroup>
         )}
       </select>
+      <div className="email-template-picker-actions">
+        <Button variant="primary" onClick={openPreview} disabled={previewing || !token}>
+          {previewing ? t("emailTemplate.previewing", "Rendering…") : t("emailTemplate.previewEmail", "Preview email")}
+        </Button>
+        {isText && value !== "" && (
+          <span className="muted">{t("emailTemplate.htmlOnly", "Templates apply to HTML sends only")}</span>
+        )}
+      </div>
       {err && <p className="field-error">{err}</p>}
+      {preview !== null && (
+        <EmailPreviewModal html={preview} onClose={() => setPreview(null)} />
+      )}
     </>
+  );
+}
+
+// EmailPreviewModal shows the server-rendered email HTML in a sandboxed iframe,
+// so the markup renders exactly as a client would see it without its scripts
+// touching the app.
+function EmailPreviewModal({ html, onClose }: { html: string; onClose: () => void }) {
+  const { t } = useTranslation();
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return createPortal(
+    <div className="settings-backdrop" onClick={onClose}>
+      <div
+        className="settings-dialog email-preview-dialog"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+      >
+        <div className="settings-head">
+          <h2>{t("emailTemplate.previewTitle", "Email preview")}</h2>
+          <button type="button" className="icon-button" aria-label={t("common.close", "Close")} onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+        <div className="settings-body">
+          <iframe
+            className="email-preview-frame"
+            title={t("emailTemplate.previewTitle", "Email preview")}
+            srcDoc={html}
+            sandbox=""
+          />
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 
