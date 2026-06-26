@@ -37,6 +37,11 @@ func usageStoreContract(t *testing.T, store UsageStore) {
 	if err := store.AddNodeExecutions(ctx, "acme", 7, usageNow); err != nil {
 		t.Fatalf("AddNodeExecutions: %v", err)
 	}
+	for i := 0; i < 2; i++ {
+		if err := store.AddSkippedRun(ctx, "acme", usageNow); err != nil {
+			t.Fatalf("AddSkippedRun: %v", err)
+		}
+	}
 	// A different month gets its own bucket…
 	prev := usageNow.AddDate(0, -1, 0)
 	if err := store.AddRun(ctx, "acme", prev); err != nil {
@@ -54,8 +59,8 @@ func usageStoreContract(t *testing.T, store UsageStore) {
 	if len(got) != 2 {
 		t.Fatalf("got %d buckets, want 2: %+v", len(got), got)
 	}
-	if got[0].Period != "2026-06" || got[0].GraphRuns != 3 || got[0].NodeExecutions != 7 {
-		t.Errorf("current bucket = %+v, want 2026-06/3/7", got[0])
+	if got[0].Period != "2026-06" || got[0].GraphRuns != 3 || got[0].NodeExecutions != 7 || got[0].SkippedRuns != 2 {
+		t.Errorf("current bucket = %+v, want 2026-06/3/7 skipped=2", got[0])
 	}
 	if got[1].Period != "2026-05" || got[1].GraphRuns != 1 || got[1].NodeExecutions != 0 {
 		t.Errorf("previous bucket = %+v, want 2026-05/1/0", got[1])

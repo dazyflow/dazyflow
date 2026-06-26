@@ -296,7 +296,28 @@ func (h *HTTPGateway) billingCheckout(rw http.ResponseWriter, r *http.Request, p
 			"DAZYFLOW_PUBLIC_BASE_URL must be set for Checkout redirects")
 		return
 	}
-	u, err := h.Billing.Stripe.CreateCheckoutSession(r.Context(), tenant,
+	// Double-subscription guard: the UI hides "Upgrade" once a tenant is Pro,
+	// but a stale page, a double-submit, a second tab, or a direct call could
+	// still reach here and mint a SECOND subscription (on a new customer,
+	// silently double-billing). Refuse when a live subscription already
+	// exists; resuming/changing goes through the billing portal instead. The
+	// customer id (when present) is reused so a genuine re-subscribe after a
+	// real lapse attaches to the same Stripe customer.
+	var customerID string
+	if h.svc.Plans != nil {
+		plan, err := h.svc.Plans.GetPlan(r.Context(), tenant)
+		if err != nil {
+			writeAPIError(rw, http.StatusInternalServerError, "internal_error", err.Error())
+			return
+		}
+		if liveSubscription(plan) {
+			writeAPIError(rw, http.StatusConflict, "already_subscribed",
+				"this organization already has an active subscription — manage it from billing")
+			return
+		}
+		customerID = plan.StripeCustomerID
+	}
+	u, err := h.Billing.Stripe.CreateCheckoutSession(r.Context(), tenant, customerID,
 		base+"/usage?checkout=success", base+"/usage?checkout=cancelled")
 	if err != nil {
 		writeAPIError(rw, http.StatusBadGateway, "stripe_error", err.Error())

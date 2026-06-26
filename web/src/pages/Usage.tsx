@@ -82,9 +82,14 @@ export function Usage() {
       } catch (e) {
         setError(explainApiError(e, t));
         setRedirecting(false);
+        // 409 = already subscribed (stale page / double-submit). Re-sync so
+        // the Upgrade button disappears and the real plan state shows.
+        if (e instanceof APIError && e.status === 409) {
+          void refresh();
+        }
       }
     },
-    [token, activeTenant, t],
+    [token, activeTenant, t, refresh],
   );
 
   const current = usage[0];
@@ -104,6 +109,9 @@ export function Usage() {
         ? "warn"
         : "neutral"
     : "neutral";
+  // Scheduled fires the run cap refused this month — otherwise an invisible
+  // log-only event. Drives the "N runs skipped" banner.
+  const skippedThisMonth = current?.skipped_runs ?? 0;
 
   // Plan card sub + tone. A subscription set to cancel at period end stays
   // "active" in Stripe, so we surface the end date as a warn chip rather than
@@ -200,24 +208,34 @@ export function Usage() {
         </div>
       )}
 
-      {/* Plan-state notes that don't fit a stat card: paused triggers on a
-          gated free tier, and the pitch to upgrade. */}
-      {!loading && !error && billing && (!billing.polling_allowed || billing.can_upgrade) && (
-        <div className="card dash-panel" style={{ marginBottom: "var(--space-4)" }}>
-          {!billing.polling_allowed && (
-            <p className="dash-empty" style={{ color: "var(--warning, #d97706)" }}>
-              <AlertCircle size={16} />
-              {t("usage.pollingGated")}
-            </p>
-          )}
-          {billing.can_upgrade && (
-            <p className="dash-empty">
-              <Sparkles size={16} />
-              {t("usage.proPitch")}
-            </p>
-          )}
-        </div>
-      )}
+      {/* Plan-state notes that don't fit a stat card: scheduled runs the cap
+          skipped this month, paused triggers on a gated free tier, and the
+          pitch to upgrade. */}
+      {!loading &&
+        !error &&
+        billing &&
+        (skippedThisMonth > 0 || !billing.polling_allowed || billing.can_upgrade) && (
+          <div className="card dash-panel" style={{ marginBottom: "var(--space-4)" }}>
+            {skippedThisMonth > 0 && (
+              <p className="dash-empty" style={{ color: "var(--warning, #d97706)" }}>
+                <AlertCircle size={16} />
+                {t("usage.skippedRuns", { count: skippedThisMonth })}
+              </p>
+            )}
+            {!billing.polling_allowed && (
+              <p className="dash-empty" style={{ color: "var(--warning, #d97706)" }}>
+                <AlertCircle size={16} />
+                {t("usage.pollingGated")}
+              </p>
+            )}
+            {billing.can_upgrade && (
+              <p className="dash-empty">
+                <Sparkles size={16} />
+                {t("usage.proPitch")}
+              </p>
+            )}
+          </div>
+        )}
 
       {!loading && !error && usage.length > 1 && (
         <section className="card dash-panel">

@@ -20,9 +20,13 @@ CREATE TABLE IF NOT EXISTS usage_counters (
     period          TEXT NOT NULL, -- UTC calendar month, "YYYY-MM"
     graph_runs      BIGINT NOT NULL DEFAULT 0,
     node_executions BIGINT NOT NULL DEFAULT 0,
+    skipped_runs    BIGINT NOT NULL DEFAULT 0,
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant, period)
 );
+-- Backfill the column on tables created before it existed.
+ALTER TABLE usage_counters
+    ADD COLUMN IF NOT EXISTS skipped_runs BIGINT NOT NULL DEFAULT 0;
 `
 
 func NewPgUsageStore(ctx context.Context, pool *pgxpool.Pool) (*PgUsageStore, error) {
@@ -32,29 +36,34 @@ func NewPgUsageStore(ctx context.Context, pool *pgxpool.Pool) (*PgUsageStore, er
 	return &PgUsageStore{pool: pool}, nil
 }
 
-func (s *PgUsageStore) add(ctx context.Context, tenant string, runs, nodes int, now time.Time) error {
+func (s *PgUsageStore) add(ctx context.Context, tenant string, runs, nodes, skipped int, now time.Time) error {
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO usage_counters (tenant, period, graph_runs, node_executions)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO usage_counters (tenant, period, graph_runs, node_executions, skipped_runs)
+		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (tenant, period) DO UPDATE SET
 			graph_runs      = usage_counters.graph_runs + EXCLUDED.graph_runs,
 			node_executions = usage_counters.node_executions + EXCLUDED.node_executions,
+			skipped_runs    = usage_counters.skipped_runs + EXCLUDED.skipped_runs,
 			updated_at      = now()`,
-		tenant, usagePeriod(now), runs, nodes)
+		tenant, usagePeriod(now), runs, nodes, skipped)
 	return err
 }
 
 func (s *PgUsageStore) AddRun(ctx context.Context, tenant string, now time.Time) error {
-	return s.add(ctx, tenant, 1, 0, now)
+	return s.add(ctx, tenant, 1, 0, 0, now)
 }
 
 func (s *PgUsageStore) AddNodeExecutions(ctx context.Context, tenant string, n int, now time.Time) error {
-	return s.add(ctx, tenant, 0, n, now)
+	return s.add(ctx, tenant, 0, n, 0, now)
+}
+
+func (s *PgUsageStore) AddSkippedRun(ctx context.Context, tenant string, now time.Time) error {
+	return s.add(ctx, tenant, 0, 0, 1, now)
 }
 
 func (s *PgUsageStore) Usage(ctx context.Context, tenant string, months int) ([]UsageCounters, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT period, graph_runs, node_executions
+		SELECT period, graph_runs, node_executions, skipped_runs
 		FROM usage_counters
 		WHERE tenant = $1
 		ORDER BY period DESC
@@ -67,7 +76,7 @@ func (s *PgUsageStore) Usage(ctx context.Context, tenant string, months int) ([]
 	var out []UsageCounters
 	for rows.Next() {
 		var c UsageCounters
-		if err := rows.Scan(&c.Period, &c.GraphRuns, &c.NodeExecutions); err != nil {
+		if err := rows.Scan(&c.Period, &c.GraphRuns, &c.NodeExecutions, &c.SkippedRuns); err != nil {
 			return nil, err
 		}
 		out = append(out, c)

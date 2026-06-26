@@ -866,6 +866,8 @@ export type UsageCounters = {
   period: string; // "2026-06"
   graph_runs: number;
   node_executions: number;
+  // Scheduled fires the run-cap gate refused this month (0 when uncapped).
+  skipped_runs: number;
 };
 
 // GET /api/v1/me/billing — plan state for the Usage page. free_runs_per_month

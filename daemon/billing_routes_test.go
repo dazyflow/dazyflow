@@ -74,6 +74,34 @@ func TestBillingCheckout(t *testing.T) {
 	}
 }
 
+func TestBillingCheckout_AlreadySubscribedRejected(t *testing.T) {
+	// A live subscription must not be able to mint a second Checkout
+	// session (which would double-bill on a fresh customer).
+	h, plans, _ := billingHarness(t)
+	_ = plans.SetPlan(t.Context(), TenantPlan{
+		Tenant: "t", Plan: PlanPro, StripeCustomerID: "cus_1",
+		StripeSubscriptionID: "sub_1", SubscriptionStatus: "active",
+	})
+	rw := h.do(t, "POST", "/api/v1/me/billing/checkout", nil)
+	if rw.Code != http.StatusConflict {
+		t.Fatalf("status = %d (%s), want 409", rw.Code, rw.Body.String())
+	}
+	if !strings.Contains(rw.Body.String(), "already_subscribed") {
+		t.Errorf("body %s, want already_subscribed code", rw.Body.String())
+	}
+
+	// A lapsed subscription (canceled) may re-checkout — and reuses the
+	// stored customer rather than spawning a new one.
+	_ = plans.SetPlan(t.Context(), TenantPlan{
+		Tenant: "t", Plan: PlanFree, StripeCustomerID: "cus_1",
+		StripeSubscriptionID: "sub_1", SubscriptionStatus: "canceled",
+	})
+	rw = h.do(t, "POST", "/api/v1/me/billing/checkout", nil)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("re-checkout after lapse: status = %d (%s), want 200", rw.Code, rw.Body.String())
+	}
+}
+
 func TestBillingCheckout_NotConfigured(t *testing.T) {
 	h := newGatewayHarness(t)
 	rw := h.do(t, "POST", "/api/v1/me/billing/checkout", nil)

@@ -94,7 +94,12 @@ func (c *StripeClient) post(ctx context.Context, path string, form url.Values) (
 // client_reference_id on the session (read by checkout.session.completed)
 // and as subscription metadata (read by customer.subscription.* events),
 // so every webhook event maps back to the tenant without a reverse index.
-func (c *StripeClient) CreateCheckoutSession(ctx context.Context, tenant, successURL, cancelURL string) (string, error) {
+//
+// customerID, when non-empty, pins the session to an existing Stripe
+// customer so a re-subscribe (after a real lapse) reuses the same customer
+// record instead of spawning a duplicate — keeps the portal and history
+// complete. Empty lets Stripe create the customer (first-time upgrade).
+func (c *StripeClient) CreateCheckoutSession(ctx context.Context, tenant, customerID, successURL, cancelURL string) (string, error) {
 	form := url.Values{}
 	form.Set("mode", "subscription")
 	form.Set("line_items[0][price]", c.PriceID)
@@ -103,6 +108,9 @@ func (c *StripeClient) CreateCheckoutSession(ctx context.Context, tenant, succes
 	form.Set("cancel_url", cancelURL)
 	form.Set("client_reference_id", tenant)
 	form.Set("subscription_data[metadata][tenant]", tenant)
+	if customerID != "" {
+		form.Set("customer", customerID)
+	}
 	body, err := c.post(ctx, "/v1/checkout/sessions", form)
 	if err != nil {
 		return "", err

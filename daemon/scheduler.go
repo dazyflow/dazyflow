@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"log"
@@ -32,6 +33,14 @@ type Scheduler struct {
 	mu          sync.Mutex
 	tracked     map[string]*scheduledGraph // key = tenant/workspace/graphID
 	rescanEvery time.Duration
+
+	// skipMarked coalesces the Runs-list "skipped" markers: key
+	// tenant/workspace/graphID → last marker time. A per-minute cron at
+	// the cap would otherwise write a marker every tick; we emit at most
+	// one per skipMarkerWindow. The exact skip count lives in the usage
+	// counter, not here. Guarded by mu; resets on restart (at worst one
+	// extra marker after a restart).
+	skipMarked map[string]time.Time
 
 	// leader reports whether THIS instance may fire triggers. Default
 	// always-true (single node). In a multi-node cluster, cmd/dzd wires
@@ -542,10 +551,43 @@ func (s *Scheduler) fireGraph(ctx context.Context, e *scheduledGraph) {
 	p := s.systemPrincipal(e.tenant, e.workspace)
 	runID, err := s.svc.SubmitGraph(ctx, p, g)
 	if err != nil {
+		// Over the monthly run cap, the fire is refused (ErrPlanLimit). Count
+		// every skip for the usage banner, and write a Runs-list marker —
+		// coalesced to one per flow per window so a frequent cron doesn't
+		// flood the list. Other errors (load/publish) aren't plan skips.
+		if errors.Is(err, core.ErrPlanLimit) {
+			if s.svc.Usage != nil {
+				_ = s.svc.Usage.AddSkippedRun(ctx, e.tenant, s.clock())
+			}
+			if s.markSkip(e.tenant, e.workspace, e.graphID) {
+				s.svc.recordSkippedFire(ctx, e.tenant, e.workspace, e.graphID)
+			}
+		}
 		s.logger.Printf("fire %s/%s/%s: %v", e.tenant, e.workspace, e.graphID, err)
 		return
 	}
 	s.logger.Printf("fired %s/%s/%s → %s", e.tenant, e.workspace, e.graphID, runID)
+}
+
+// skipMarkerWindow bounds how often a cap-skipped flow writes a Runs-list
+// marker — see Scheduler.skipMarked.
+const skipMarkerWindow = time.Hour
+
+// markSkip reports whether to write a skip marker for this flow now,
+// coalescing to one per skipMarkerWindow.
+func (s *Scheduler) markSkip(tenant, workspace, graphID string) bool {
+	key := tenant + "/" + workspace + "/" + graphID
+	now := s.clock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.skipMarked == nil {
+		s.skipMarked = map[string]time.Time{}
+	}
+	if last, ok := s.skipMarked[key]; ok && now.Sub(last) < skipMarkerWindow {
+		return false
+	}
+	s.skipMarked[key] = now
+	return true
 }
 
 func splitKey(key string) (tenant, workspace string, ok bool) {

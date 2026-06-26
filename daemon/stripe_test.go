@@ -26,7 +26,7 @@ func TestStripeClient_CreateCheckoutSession(t *testing.T) {
 
 	c := NewStripeClient("sk_test_abc", "price_pro")
 	c.BaseURL = srv.URL
-	u, err := c.CreateCheckoutSession(t.Context(), "acme",
+	u, err := c.CreateCheckoutSession(t.Context(), "acme", "",
 		"https://app.example/usage?upgraded=1", "https://app.example/usage")
 	if err != nil {
 		t.Fatalf("CreateCheckoutSession: %v", err)
@@ -60,7 +60,7 @@ func TestStripeClient_ErrorSurfacesMessage(t *testing.T) {
 
 	c := NewStripeClient("sk_test_abc", "price_pro")
 	c.BaseURL = srv.URL
-	_, err := c.CreateCheckoutSession(t.Context(), "acme", "https://x/ok", "https://x/no")
+	_, err := c.CreateCheckoutSession(t.Context(), "acme", "", "https://x/ok", "https://x/no")
 	if err == nil || !strings.Contains(err.Error(), "No such price") {
 		t.Fatalf("err = %v, want Stripe's message surfaced", err)
 	}

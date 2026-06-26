@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"sync"
@@ -22,6 +23,25 @@ const (
 	PlanFree = "free"
 	PlanPro  = "pro"
 )
+
+// liveSubscription reports whether the tenant already has a Stripe
+// subscription that is billing (or about to): minting a second Checkout
+// session in this state would create a duplicate subscription on a new
+// customer and double-bill. "active"/"trialing"/"past_due" all count —
+// past_due is still mid-retry, and a cancel-at-period-end subscription is
+// still "active" (resume via the portal, not a fresh checkout). A lapsed
+// one (canceled/unpaid/incomplete_expired/empty) is fair game to re-checkout.
+func liveSubscription(p TenantPlan) bool {
+	if p.StripeSubscriptionID == "" {
+		return false
+	}
+	switch p.SubscriptionStatus {
+	case "active", "trialing", "past_due":
+		return true
+	default:
+		return false
+	}
+}
 
 // TenantPlan is a tenant's billing state. The Stripe fields are empty
 // for tenants that never went through Checkout.
@@ -156,6 +176,51 @@ func (s *Service) checkTriggerQuota(ctx context.Context, tenant string) error {
 }
 func (s *Service) checkRunQuota(ctx context.Context, tenant string) error {
 	return s.billing().checkRunQuota(ctx, tenant)
+}
+
+// recordSkippedFire writes a terminal "skipped" graph run so a cap-blocked
+// scheduled fire is visible in the Runs list, not just the server log. It
+// enqueues a bare graph record (no node work, so nothing dispatches) and
+// immediately completes it skipped with the reason. Best-effort: a write
+// failure is logged, never propagated — the fire already wasn't going to run.
+// The scheduler coalesces calls (one per flow per window); the precise count
+// lives in the usage counter.
+func (s *Service) recordSkippedFire(ctx context.Context, tenant, workspace, graphID string) {
+	if s.Jobs == nil {
+		return
+	}
+	id, err := newID()
+	if err != nil {
+		return
+	}
+	// A minimal (node-less) graph payload so the run-detail view renders
+	// safely rather than choking on an empty payload.
+	payload, _ := json.Marshal(core.Graph{ID: graphID, Tenant: tenant, Workspace: workspace})
+	rec := core.JobRecord{
+		ID:           id,
+		Kind:         core.JobKindGraph,
+		GraphID:      graphID,
+		NodeID:       "*",
+		Tenant:       tenant,
+		Workspace:    workspace,
+		Status:       core.JobStatusRunning,
+		GraphPayload: payload,
+		Job:          core.Job{ID: id, GraphID: graphID},
+	}
+	if err := s.Jobs.Enqueue(ctx, rec); err != nil {
+		if s.Logger != nil {
+			s.Logger.Printf("skipped-run marker [%s/%s/%s]: enqueue: %v", tenant, workspace, graphID, err)
+		}
+		return
+	}
+	_ = s.Jobs.Complete(ctx, id, core.JobStatusSkipped, &core.Result{
+		JobID:  id,
+		Status: core.StatusError,
+		Error: &core.JobError{
+			Code:    "plan_run_cap",
+			Message: "Scheduled run skipped — over the plan's monthly run limit.",
+		},
+	})
 }
 
 // concurrencyCapped reports the tenant's effective simultaneous-run limit when

@@ -26,6 +26,10 @@ type UsageCounters struct {
 	Period         string `json:"period"` // "2026-06" (UTC month)
 	GraphRuns      int64  `json:"graph_runs"`
 	NodeExecutions int64  `json:"node_executions"`
+	// SkippedRuns counts scheduled fires the run-cap gate refused this
+	// month — otherwise an invisible, log-only event. Surfaced so a capped
+	// tenant learns why their schedules stopped.
+	SkippedRuns int64 `json:"skipped_runs"`
 }
 
 // UsageStore records and reads per-tenant usage. Implementations must be
@@ -39,6 +43,9 @@ type UsageStore interface {
 	// AddNodeExecutions counts n executed node attempts for the tenant,
 	// in the month bucket containing now.
 	AddNodeExecutions(ctx context.Context, tenant string, n int, now time.Time) error
+	// AddSkippedRun counts one scheduled fire refused by the run-cap gate,
+	// in the month bucket containing now.
+	AddSkippedRun(ctx context.Context, tenant string, now time.Time) error
 	// Usage returns the tenant's most recent buckets, newest first, at
 	// most months entries. Months with no activity have no bucket; the
 	// caller synthesizes zeros where it wants them.
@@ -92,6 +99,13 @@ func (m *MemUsageStore) AddNodeExecutions(_ context.Context, tenant string, n in
 	return nil
 }
 
+func (m *MemUsageStore) AddSkippedRun(_ context.Context, tenant string, now time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.bucket(tenant, now).SkippedRuns++
+	return nil
+}
+
 func (m *MemUsageStore) Usage(_ context.Context, tenant string, months int) ([]UsageCounters, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -129,6 +143,12 @@ func NewBufferedUsage(inner UsageStore) *BufferedUsage {
 
 func (b *BufferedUsage) AddRun(ctx context.Context, tenant string, now time.Time) error {
 	return b.inner.AddRun(ctx, tenant, now)
+}
+
+// AddSkippedRun passes through unbatched — skips only happen at the cap,
+// far rarer than node executions, and the gate doesn't read them.
+func (b *BufferedUsage) AddSkippedRun(ctx context.Context, tenant string, now time.Time) error {
+	return b.inner.AddSkippedRun(ctx, tenant, now)
 }
 
 func (b *BufferedUsage) AddNodeExecutions(_ context.Context, tenant string, n int, now time.Time) error {
