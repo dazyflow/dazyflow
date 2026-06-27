@@ -283,6 +283,12 @@ type Service struct {
 	// graphs. Zero = unlimited. Configured by `-max-graph-nodes`.
 	MaxGraphNodes int
 
+	// subtreeBudget caps total descendant runs per root run-tree, bounding
+	// subgraph fan-out (see subgraph_budget.go). Lazily initialized via
+	// subtreeBudgetInst so a zero-value Service literal works.
+	subtreeOnce    sync.Once
+	subtreeBudgetV *subtreeBudget
+
 	// EncryptedSecrets is the per-tenant encrypted secret store that
 	// integration drops (Gmail OAuth, Claude API key, etc.) read from.
 	// Nil leaves the store CRUD endpoints + any drop that depends on
