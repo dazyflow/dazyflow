@@ -17,6 +17,8 @@ Releasing: move the entries below from `[Unreleased]` under a new
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-27
+
 ### Added
 
 - **Flow duplicate.** `POST /api/v1/me/flows/{flow_id}/duplicate` copies a
