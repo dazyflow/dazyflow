@@ -1945,6 +1945,7 @@
     "running": "Running",
     "noFlows": "No flows to show.",
     "neverRun": "Never run",
+    "nextRun": "Next {{when}}",
     "updated": "Updated {{when}}",
     "historyLabel": "Last {{count}} runs",
     "notFoundTitle": "Link not found",

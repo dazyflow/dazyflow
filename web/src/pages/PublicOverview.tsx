@@ -6,6 +6,7 @@ import { api, isErrorCode } from "../api";
 import { Button } from "../components/Button";
 import { FlowIcon } from "../icons";
 import { formatRelative } from "../lib/datetime";
+import { formatNextRun } from "../lib/schedule";
 import type { PublicOverview as PublicOverviewData } from "../types";
 
 // PublicOverview is the login-free, full-screen workspace status board behind
@@ -214,6 +215,18 @@ export function PublicOverview() {
                   {f.last_run_at && (
                     <span className="tv-flow-time">
                       {formatRelative(f.last_run_at)}
+                    </span>
+                  )}
+                  {f.next_run_at && (
+                    <span
+                      className="tv-flow-next"
+                      title={t("tv.nextRun", {
+                        when: formatNextRun(f.next_run_at, t),
+                      })}
+                    >
+                      {t("tv.nextRun", {
+                        when: formatNextRun(f.next_run_at, t),
+                      })}
                     </span>
                   )}
                 </div>

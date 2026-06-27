@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"git.sr.ht/~klahr/dazyflow/core"
@@ -160,6 +161,13 @@ type PublicFlowState struct {
 	// running / queued / …), empty when the flow has never run.
 	LastStatus core.JobStatus `json:"last_status,omitempty"`
 	LastRunAt  *time.Time     `json:"last_run_at,omitempty"`
+	// NextRunAt is the next automatic fire time (RFC3339 UTC), set only for
+	// flows that are actually live on a scheduler trigger (cron / poll / form
+	// interval) — so the board can show "next run" alongside the last one.
+	// nil for manual, paused, needs-publish, or webhook-only flows (nothing
+	// the scheduler will fire on a clock). Computed with the same cron parser
+	// the scheduler fires on, so it matches what will really run.
+	NextRunAt *time.Time `json:"next_run_at,omitempty"`
 	// History is the flow's recent run outcomes, newest first, capped at
 	// shareFlowHistory. Only the statuses — no ids or timing — so the board
 	// can draw an at-a-glance health strip without leaking anything.
@@ -277,6 +285,13 @@ func (s *Service) PublicWorkspaceOverview(ctx context.Context, token string, now
 					st.LastRunAt = &at
 				}
 			}
+			// Next scheduled fire — only meaningful for a flow the scheduler
+			// will actually start (live: published + enabled + a scheduler
+			// trigger). A needs-publish or paused flow won't fire on a clock,
+			// so it gets no next-run.
+			if st.RunStatus == core.FlowLive {
+				st.NextRunAt = nextScheduledFire(g, now)
+			}
 			st.History = historyByGraph[id]
 			data.Flows = append(data.Flows, st)
 		}
@@ -354,4 +369,77 @@ func runStartedOrEnqueued(r core.JobRecord) time.Time {
 func startOfDay(now time.Time) time.Time {
 	y, m, d := now.Date()
 	return time.Date(y, m, d, 0, 0, 0, 0, now.Location())
+}
+
+// nextScheduledFire returns the earliest upcoming automatic fire after `now`
+// across a flow's enabled scheduler triggers — graph-level cron, cron_trigger
+// nodes, and poll_trigger/google_form_trigger nodes — or nil when the flow has
+// no active schedule. It mirrors the scheduler's firing rules (and reuses the
+// same cron parser as the Schedules page) so the time shown matches reality:
+//   - a whole-flow pause (g.Disabled) suppresses everything;
+//   - a per-trigger pause (node `disabled`) skips that node;
+//   - poll intervals are projected from now (interval-anchored, like the
+//     scheduler's own preview).
+//
+// Webhook triggers are excluded — they fire from an HTTP request, not a clock,
+// so they have no "next run". The caller gates on FlowLive, so this is only
+// invoked for published, enabled flows.
+func nextScheduledFire(g core.Graph, now time.Time) *time.Time {
+	if g.Disabled {
+		return nil
+	}
+	var best time.Time
+	consider := func(t time.Time) {
+		if t.IsZero() {
+			return
+		}
+		if best.IsZero() || t.Before(best) {
+			best = t
+		}
+	}
+
+	// Graph-level cron triggers (no per-trigger pause flag at this level).
+	for _, tr := range g.Triggers {
+		if tr.Type != "cron" {
+			continue
+		}
+		expr := strings.TrimSpace(tr.Cron)
+		if expr == "" {
+			continue
+		}
+		if sched, err := parseCronInTZ(cronValidator, expr, tr.TZ); err == nil {
+			consider(sched.Next(now))
+		}
+	}
+
+	// Trigger nodes.
+	for _, node := range g.Nodes {
+		if triggerNodeDisabled(node) {
+			continue
+		}
+		switch node.Module {
+		case "cron_trigger":
+			expr, _ := node.Params["cron"].(string)
+			expr = strings.TrimSpace(expr)
+			if expr == "" {
+				continue
+			}
+			tz, _ := node.Params["tz"].(string)
+			if sched, err := parseCronInTZ(cronValidator, expr, tz); err == nil {
+				consider(sched.Next(now))
+			}
+		case "poll_trigger", "google_form_trigger":
+			secs := paramSeconds(node.Params, "interval_seconds")
+			if secs <= 0 || secs > core.MaxPollIntervalSeconds {
+				continue
+			}
+			consider(now.Add(time.Duration(secs) * time.Second))
+		}
+	}
+
+	if best.IsZero() {
+		return nil
+	}
+	utc := best.UTC()
+	return &utc
 }

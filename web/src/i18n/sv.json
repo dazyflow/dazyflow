@@ -1918,6 +1918,7 @@
     "running": "Pågår",
     "noFlows": "Inga flöden att visa.",
     "neverRun": "Aldrig körd",
+    "nextRun": "Nästa {{when}}",
     "updated": "Uppdaterad {{when}}",
     "historyLabel": "Senaste {{count}} körningarna",
     "notFoundTitle": "Länken hittades inte",

@@ -551,6 +551,10 @@ export type PublicFlowState = {
   run_status?: "live" | "manual" | "paused" | "needs_publish";
   last_status?: JobStatus;
   last_run_at?: string;
+  // next_run_at is the next scheduled fire (RFC3339 UTC), present only for
+  // flows that are live on a scheduler trigger. Absent for manual/paused/
+  // needs-publish/webhook-only flows.
+  next_run_at?: string;
   // history is the flow's recent run outcomes, newest first — drawn as a
   // small health strip on the card.
   history?: JobStatus[];

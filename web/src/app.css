@@ -10715,6 +10715,16 @@ button:active,
   font-size: var(--text-sm);
   color: var(--faint);
 }
+/* Next scheduled fire — accented (vs the muted last-run time beside it) so a
+   glance separates "ran 5m ago" from "runs again in 5m". Only shown for live,
+   scheduler-driven flows; absent flows just don't render it. */
+.tv-flow-next {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: color-mix(in srgb, var(--status-running) 60%, var(--text));
+  white-space: nowrap;
+}
 /* Recent-run health pipes: one thin vertical bar per run, oldest→newest,
    coloured by outcome — the same green/red palette as the status dots. */
 .tv-spark {
