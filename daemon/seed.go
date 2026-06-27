@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 
 	"git.sr.ht/~klahr/dazyflow/core"
 )
@@ -152,6 +151,23 @@ func (s *Service) SubmitGraphWithSeed(
 		initialStatus = core.JobStatusRunning
 	}
 
+	// Authoritative run-cap gate + metering, atomic and JUST before enqueue:
+	// reserveRun counts one run iff the tenant is under its monthly cap. The
+	// earlier checkRunQuota is a fast read-path reject; this closes the
+	// check-then-increment race where concurrent submissions at the limit all
+	// passed the read. admitted=false → refuse before any state is written; a
+	// store error fails open (proceed). This REPLACES the old post-enqueue
+	// AddRun — reserveRun already metered the accepted run.
+	if s.Usage != nil {
+		if admitted, rerr := s.reserveRun(ctx, g.Tenant); rerr != nil {
+			if s.Logger != nil {
+				s.Logger.Printf("usage metering [%s]: reserve run (failing open): %v", g.Tenant, rerr)
+			}
+		} else if !admitted {
+			return "", fmt.Errorf("%w: monthly run limit reached — upgrade to keep your flows running", core.ErrPlanLimit)
+		}
+	}
+
 	graphRec := core.JobRecord{
 		ID:           graphRunID,
 		Kind:         core.JobKindGraph,
@@ -167,18 +183,11 @@ func (s *Service) SubmitGraphWithSeed(
 		return "", fmt.Errorf("enqueue graph: %w", err)
 	}
 
-	// Usage metering (T3): one billable run per accepted submission, from
-	// every entry point (manual Run, scheduler, webhook/form/Slack/GitHub
-	// triggers) since they all funnel through here. Counted even when the run
-	// starts pending — the submission is accepted. Nested sub-graph runs go
+	// (Run metering happens in reserveRun above, before enqueue, so the cap
+	// gate and the count are a single atomic step. Nested sub-graph runs go
 	// through submitGraphWithParent and are deliberately NOT counted — their
 	// nodes still meter as node executions, and counting the child run too
-	// would double-bill one user action. Best-effort by contract.
-	if s.Usage != nil {
-		if uerr := s.Usage.AddRun(ctx, g.Tenant, time.Now()); uerr != nil && s.Logger != nil {
-			s.Logger.Printf("usage metering [%s]: count run: %v", g.Tenant, uerr)
-		}
-	}
+	// would double-bill one user action.)
 
 	// Pending (admission-deferred) run: persist its seeds now so the promoter
 	// can dispatch from them later, but enqueue no runnable work and arm no

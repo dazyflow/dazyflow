@@ -79,6 +79,14 @@ func (s *PgPlanStore) MarkStripeEvent(ctx context.Context, id string) (bool, err
 	return tag.RowsAffected() == 1, nil
 }
 
+// StripeEventProcessed reports whether the event id was already recorded.
+func (s *PgPlanStore) StripeEventProcessed(ctx context.Context, id string) (bool, error) {
+	var exists bool
+	err := s.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM stripe_webhook_events WHERE id=$1)`, id).Scan(&exists)
+	return exists, err
+}
+
 func (s *PgPlanStore) SetPlan(ctx context.Context, p TenantPlan) error {
 	if p.Plan == "" {
 		p.Plan = PlanFree

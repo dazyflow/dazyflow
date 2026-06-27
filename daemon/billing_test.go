@@ -71,6 +71,26 @@ func TestMemPlanStore(t *testing.T) {
 	planStoreContract(t, NewMemPlanStore())
 }
 
+// TestStripeEventDedupe_ProcessedReadVsMark covers the read/mark split that
+// lets the webhook handler mark an event only AFTER a successful apply:
+// StripeEventProcessed must report false until MarkStripeEvent records it.
+func TestStripeEventDedupe_ProcessedReadVsMark(t *testing.T) {
+	store := NewMemPlanStore()
+	ctx := context.Background()
+	// Unseen event reads as not-processed (so the handler applies it).
+	if seen, _ := store.StripeEventProcessed(ctx, "evt_1"); seen {
+		t.Fatal("unseen event reported processed")
+	}
+	// Mark only after a (hypothetical) successful apply.
+	if first, _ := store.MarkStripeEvent(ctx, "evt_1"); !first {
+		t.Fatal("first mark should report first=true")
+	}
+	// Now a replay sees it as processed and is skipped without re-applying.
+	if seen, _ := store.StripeEventProcessed(ctx, "evt_1"); !seen {
+		t.Fatal("marked event should read as processed")
+	}
+}
+
 // Gated on DAZYFLOW_TEST_DB (a real Postgres), like the jobstore/auth
 // integration tests.
 func TestPgPlanStore(t *testing.T) {

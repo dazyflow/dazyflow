@@ -33,7 +33,19 @@ export function SignIn() {
   // challenge token (it can't return JSON like the password leg). When present
   // we open directly on the code step and, on success, land them at return_to.
   const ssoChallenge = searchParams.get("totp_challenge") ?? "";
-  const ssoReturnTo = searchParams.get("return_to") ?? "";
+  // return_to comes straight from the URL, so validate it before navigate():
+  // the server's safeReturnPath only guards the links IT mints, not a link an
+  // attacker hands the victim directly. Require a single-slash rooted path
+  // (reject "//evil.com" and "/\evil.com", which browsers treat as absolute)
+  // so a crafted /signin?return_to=//evil.com can't bounce a freshly
+  // authenticated user off-origin. Mirrors daemon/google_signin.go safeReturnPath.
+  const rawReturnTo = searchParams.get("return_to") ?? "";
+  const ssoReturnTo =
+    rawReturnTo.startsWith("/") &&
+    !rawReturnTo.startsWith("//") &&
+    !rawReturnTo.startsWith("/\\")
+      ? rawReturnTo
+      : "";
   const [email, setEmail] = useState(presetEmail);
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);

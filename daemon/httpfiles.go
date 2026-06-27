@@ -191,6 +191,13 @@ func (h *HTTPGateway) downloadWorkspaceFile(rw http.ResponseWriter, r *http.Requ
 		writeJSONError(rw, http.StatusBadRequest, "path is required")
 		return
 	}
+	// The per-run scratch tree is internal plumbing, hidden from listings and
+	// blocked on every other file op — block download too, so a same-tenant
+	// user can't read another in-flight run's ephemeral bytes.
+	if isScratch(rel) {
+		writeJSONError(rw, http.StatusBadRequest, "the scratch directory is managed automatically")
+		return
+	}
 	f, err := rootFS.Open(rel)
 	if err != nil {
 		writeJSONError(rw, http.StatusNotFound, fmt.Sprintf("open %q: %v", rel, err))

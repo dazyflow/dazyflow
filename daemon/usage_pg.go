@@ -5,8 +5,10 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -54,6 +56,32 @@ func (s *PgUsageStore) add(ctx context.Context, tenant string, runs, nodes, skip
 
 func (s *PgUsageStore) AddRun(ctx context.Context, tenant string, now time.Time) error {
 	return s.add(ctx, tenant, 1, 0, 0, now)
+}
+
+// AddRunIfUnder atomically increments graph_runs for the month iff it is still
+// below limit, in a single statement so concurrent submissions can't all read
+// an under-limit count and over-admit. A brand-new month-row inserts count=1
+// (limit is always >= 1 here). When the row exists and is already at the cap,
+// the DO UPDATE … WHERE matches nothing, RETURNING yields no row (ErrNoRows),
+// and we report not-admitted without counting.
+func (s *PgUsageStore) AddRunIfUnder(ctx context.Context, tenant string, now time.Time, limit int) (bool, error) {
+	var n int64
+	err := s.pool.QueryRow(ctx, `
+		INSERT INTO usage_counters (tenant, period, graph_runs)
+		VALUES ($1, $2, 1)
+		ON CONFLICT (tenant, period) DO UPDATE SET
+			graph_runs = usage_counters.graph_runs + 1,
+			updated_at = now()
+		WHERE usage_counters.graph_runs < $3
+		RETURNING graph_runs`,
+		tenant, usagePeriod(now), limit).Scan(&n)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil // at/over the cap — nothing updated
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (s *PgUsageStore) AddNodeExecutions(ctx context.Context, tenant string, n int, now time.Time) error {

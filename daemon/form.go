@@ -77,6 +77,10 @@ func (w *WebhookListener) handleForm(rw http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		renderForm(rw, formView{Title: title, Fields: fields, Submitted: false})
 	case http.MethodPost:
+		// Cap the urlencoded body before ParseForm materializes it all into
+		// url.Values — the global 200 MiB limit is far too loose for a public,
+		// unauthenticated form (mirrors the 1 MiB webhook cap).
+		r.Body = http.MaxBytesReader(rw, r.Body, 1<<20)
 		if err := r.ParseForm(); err != nil {
 			http.Error(rw, "could not read form", http.StatusBadRequest)
 			return

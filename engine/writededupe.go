@@ -34,6 +34,12 @@ const (
 	writeDedupeMaxItems = 50_000
 )
 
+// dedupePutTimeout bounds the post-success dedupe record write. The engine
+// detaches it from the (possibly already-cancelled) execution context so a lost
+// lease can't suppress the record, but a shared/Postgres store must still not
+// block the worker forever if its backend hangs.
+const dedupePutTimeout = 5 * time.Second
+
 type dedupeEntry struct {
 	result   core.Result
 	storedAt time.Time
@@ -70,12 +76,17 @@ func (m *memoryWriteDedupe) Get(_ context.Context, key string) (core.Result, boo
 		return core.Result{}, false
 	}
 	// Return a deep copy, NOT the stored value: the caller (engine) mutates the
-	// result's Output map in place via ApplyPassthrough/redactResult after a
-	// dedupe hit, which would otherwise corrupt this stored entry and race other
-	// readers of the same key. A JSON round-trip mirrors what the Postgres store
-	// does on every Get (it unmarshals a fresh Result), so behaviour is uniform
-	// across stores. Results are already JSON-serialisable — they persist to the
-	// job store as JSON — so the round-trip is lossless for any real result.
+	// result after a dedupe hit (ApplyPassthrough adds a port, redactResult
+	// reassigns ports AND mutates some slice shapes in place), which would
+	// otherwise corrupt this stored entry and race other readers of the same
+	// key. A JSON round-trip is a guaranteed-safe deep copy and mirrors exactly
+	// what the Postgres store does on every Get (it unmarshals a fresh Result),
+	// so replay behaviour is uniform across stores. Caveat: the round-trip is
+	// lossless for JSON VALUES but coerces Go TYPES on replay (int→float64,
+	// []byte→base64 string) — same as the Postgres path. Dedupe-eligible drops
+	// (external writes: SMS/email/HTTP send) emit JSON-native status outputs, so
+	// this doesn't bite in practice; a drop emitting a non-JSON-native Output
+	// that a downstream node type-asserts should not opt into DedupeWrites.
 	clone, err := cloneResult(e.result)
 	if err != nil {
 		// A result that won't round-trip can't have been persisted either;

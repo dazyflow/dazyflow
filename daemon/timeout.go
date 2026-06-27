@@ -8,20 +8,38 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"time"
 
 	"git.sr.ht/~klahr/dazyflow/core"
 )
+
+// maxDurationSeconds is the largest second count that fits in an int64-ns
+// time.Duration without overflow.
+const maxDurationSeconds = int64(math.MaxInt64 / int64(time.Second))
+
+// secondsToDuration converts a (possibly hostile) seconds count to a Duration,
+// guarding the overflow that wraps a huge value to a NEGATIVE duration. A
+// negative duration is neither 0 nor > the ceiling, so it slips past the ">0"
+// timeout guards and silently disables the very watchdog/deadline it was meant
+// to set. Clamp instead: <=0 → 0 (no timeout from this value), and an
+// over-large value → the max representable so the ceiling clamp still applies.
+func secondsToDuration(secs int) time.Duration {
+	if secs <= 0 {
+		return 0
+	}
+	if int64(secs) > maxDurationSeconds {
+		return time.Duration(maxDurationSeconds) * time.Second
+	}
+	return time.Duration(secs) * time.Second
+}
 
 // effectiveGraphTimeout picks the timeout that applies to a run:
 // per-graph if set, otherwise the operator ceiling, otherwise zero
 // (no cap). Caller checks for zero before starting a watchdog so we
 // don't spawn idle goroutines.
 func (s *Service) effectiveGraphTimeout(g core.Graph) time.Duration {
-	var d time.Duration
-	if g.TimeoutSeconds > 0 {
-		d = time.Duration(g.TimeoutSeconds) * time.Second
-	}
+	d := secondsToDuration(g.TimeoutSeconds)
 	// Hard ceiling: clamp even an explicit per-graph value so a tenant
 	// can't pin a worker for an unbounded duration. When the graph
 	// itself sets no timeout, the ceiling becomes the de-facto default.

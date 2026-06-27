@@ -415,6 +415,11 @@ type TOTPChallengeStore interface {
 	Put(ctx context.Context, token string, c TOTPChallenge) error
 	Get(ctx context.Context, token string) (TOTPChallenge, error)
 	Delete(ctx context.Context, token string) error
+	// IncrAttempts atomically increments and returns the challenge's failed-
+	// guess count. Must be a single atomic read-modify-write so concurrent
+	// wrong guesses against one token can't all read the same count and lose
+	// increments (which would weaken the per-challenge brute-force cap).
+	IncrAttempts(ctx context.Context, token string) (int, error)
 }
 
 // MemTOTPChallengeStore keeps challenges in process memory. It sweeps
@@ -452,6 +457,20 @@ func (s *MemTOTPChallengeStore) Delete(_ context.Context, token string) error {
 	defer s.mu.Unlock()
 	delete(s.challenges, token)
 	return nil
+}
+
+// IncrAttempts increments the challenge's failed-guess count under the store
+// lock (atomic read-modify-write) and returns the new count.
+func (s *MemTOTPChallengeStore) IncrAttempts(_ context.Context, token string) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, ok := s.challenges[token]
+	if !ok {
+		return 0, ErrChallengeUnknown
+	}
+	c.Attempts++
+	s.challenges[token] = c
+	return c.Attempts, nil
 }
 
 func (s *MemTOTPChallengeStore) sweepLocked() {
@@ -532,12 +551,13 @@ func ConsumeTOTPChallenge(ctx context.Context, challenges TOTPChallengeStore, us
 	// is dropped so further guesses get ErrChallengeUnknown — the attacker must
 	// redo the (rate-limited, password/SSO-gated) first leg to get a new one.
 	recordWrongGuess := func() {
-		c.Attempts++
-		if c.Attempts >= maxTOTPChallengeAttempts {
+		// Atomic increment so concurrent wrong guesses can't all read the same
+		// count and lose increments. At the cap the challenge is dropped, so
+		// further guesses get ErrChallengeUnknown and the user must re-auth.
+		n, err := challenges.IncrAttempts(ctx, token)
+		if err == nil && n >= maxTOTPChallengeAttempts {
 			_ = challenges.Delete(ctx, token)
-			return
 		}
-		_ = challenges.Put(ctx, token, c)
 	}
 
 	var factor Factor

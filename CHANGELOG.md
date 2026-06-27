@@ -34,6 +34,36 @@ Releasing: move the entries below from `[Unreleased]` under a new
   `workspace`, `tenant`); it had drifted to aspirational `from`/`to` plus
   `PageToken`/`PageSize`/`Sort` that were never implemented.
 
+### Security
+
+- Run quota is now enforced atomically. The monthly run-cap gate was a
+  read-then-increment, so concurrent submissions at the limit could all pass
+  and exceed the cap; it now reserves a slot in a single atomic step
+  (`AddRunIfUnder`) before the run is enqueued.
+- Stripe webhook events are recorded as processed only AFTER the plan change is
+  applied (was: before), so a transient apply failure can no longer ack a
+  retried delivery without ever applying the subscription state change.
+- The sign-in page now validates the `return_to` parameter before navigating,
+  closing an open-redirect reachable via a crafted `/signin?return_to=` link.
+- The public `/form/` endpoints are rate-limited and cap their request body,
+  matching the `/trigger/` surface.
+- Workspace file download now refuses the internal `.scratch` tree, like the
+  other file operations.
+
+### Fixed
+
+- Graph/node `timeout_seconds` is clamped against int64 overflow — a hostile
+  huge value previously wrapped negative and silently disabled the run/node
+  timeout instead of capping it.
+- Per-item write dedupe (engine) no longer aliases or re-fires across an
+  auto-fanned node; the in-memory dedupe store returns isolated copies; the
+  TOTP challenge attempt-counter increments atomically.
+- Run-list pagination orders by `(enqueued_at, id)` so rows that share a
+  timestamp can't duplicate or vanish across pages; added a `jobs(tenant,
+  status)` index for the tenant-scoped hot paths.
+- A `ListJobsForGraph` scope check no longer admits records with an empty
+  tenant.
+
 ## [0.2.0] - 2026-06-27
 
 ### Added

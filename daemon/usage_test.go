@@ -7,6 +7,7 @@ import (
 	"context"
 	"os"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -104,6 +105,36 @@ func TestMemUsageStore_Concurrent(t *testing.T) {
 	got, _ := store.Usage(context.Background(), "acme", 1)
 	if len(got) != 1 || got[0].GraphRuns != 50 || got[0].NodeExecutions != 100 {
 		t.Errorf("got %+v, want 50 runs / 100 node executions", got)
+	}
+}
+
+// TestMemUsageStore_AddRunIfUnderAtomic is the regression test for the run-cap
+// bypass race: N concurrent reserve attempts against a cap of K must admit
+// EXACTLY K, never more. The old read-then-add gate let many concurrent
+// submissions at the boundary all pass.
+func TestMemUsageStore_AddRunIfUnderAtomic(t *testing.T) {
+	store := NewMemUsageStore()
+	const limit = 10
+	const attempts = 100
+	var admitted int64
+	var wg sync.WaitGroup
+	for i := 0; i < attempts; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ok, _ := store.AddRunIfUnder(context.Background(), "acme", usageNow, limit)
+			if ok {
+				atomic.AddInt64(&admitted, 1)
+			}
+		}()
+	}
+	wg.Wait()
+	if admitted != limit {
+		t.Errorf("admitted %d of %d concurrent attempts, want exactly %d (cap)", admitted, attempts, limit)
+	}
+	got, _ := store.Usage(context.Background(), "acme", 1)
+	if len(got) != 1 || got[0].GraphRuns != int64(limit) {
+		t.Errorf("counted %+v, want exactly %d runs (no over-count)", got, limit)
 	}
 }
 

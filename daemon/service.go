@@ -1492,7 +1492,10 @@ func (s *Service) ListJobsForGraph(ctx context.Context, p core.Principal, graphI
 		// check: it scopes consistently with the rest of the run surface and lets
 		// a platform admin (whose principal carries no tenant, so r.Tenant ==
 		// p.Tenant would match nothing) see records across tenants as intended.
-		if core.RequireWorkspace(p, r.Tenant, r.Workspace) == nil {
+		// Guard r.Tenant != "" explicitly: RequireTenant skips its tenant-match
+		// check for an empty target tenant, which would otherwise expose a
+		// (malformed, tenant-less) record to any authenticated principal.
+		if r.Tenant != "" && core.RequireWorkspace(p, r.Tenant, r.Workspace) == nil {
 			out = append(out, r)
 		}
 	}

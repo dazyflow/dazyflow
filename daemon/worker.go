@@ -483,7 +483,10 @@ func (w *Worker) runNode(ctx context.Context, graph core.Graph, rec core.JobReco
 	// failure-propagation rules react cleanly.
 	timeout := w.cfg.DefaultNodeTimeout
 	if node, ok := graph.Node(rec.NodeID); ok && node.TimeoutSeconds > 0 {
-		timeout = time.Duration(node.TimeoutSeconds) * time.Second
+		// secondsToDuration guards the int64-ns overflow: a hostile huge
+		// TimeoutSeconds would otherwise wrap negative, fail the timeout>0
+		// check below, and run the node with NO deadline.
+		timeout = secondsToDuration(node.TimeoutSeconds)
 	}
 	execCtx := ctx
 	var cancelDeadline context.CancelFunc

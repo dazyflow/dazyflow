@@ -89,6 +89,12 @@ type PlanStore interface {
 // anything heavier tomorrow).
 type StripeEventDeduper interface {
 	MarkStripeEvent(ctx context.Context, id string) (first bool, err error)
+	// StripeEventProcessed reports whether this event id was already recorded.
+	// The webhook handler marks an event ONLY after a successful apply, so a
+	// recorded id means the side effect completed — letting a replay skip
+	// re-applying without the mark-before-apply hazard (a failed apply that was
+	// already marked would never be retried).
+	StripeEventProcessed(ctx context.Context, id string) (bool, error)
 }
 
 // MemPlanStore is the in-process PlanStore for dev/tests.
@@ -110,6 +116,12 @@ func (m *MemPlanStore) MarkStripeEvent(_ context.Context, id string) (bool, erro
 	}
 	m.seen[id] = true
 	return true, nil
+}
+
+func (m *MemPlanStore) StripeEventProcessed(_ context.Context, id string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.seen[id], nil
 }
 
 func (m *MemPlanStore) GetPlan(_ context.Context, tenant string) (TenantPlan, error) {
@@ -179,6 +191,9 @@ func (s *Service) checkTriggerQuota(ctx context.Context, tenant string) error {
 }
 func (s *Service) checkRunQuota(ctx context.Context, tenant string) error {
 	return s.billing().checkRunQuota(ctx, tenant)
+}
+func (s *Service) reserveRun(ctx context.Context, tenant string) (bool, error) {
+	return s.billing().reserveRun(ctx, tenant)
 }
 
 // recordSkippedFire writes a terminal "skipped" graph run so a cap-blocked
@@ -384,6 +399,37 @@ func (b *BillingService) checkRunQuota(ctx context.Context, tenant string) error
 	return nil
 }
 
+// reserveRun is the AUTHORITATIVE run-cap gate: it atomically counts one run
+// iff the tenant is under its monthly cap, closing the check-then-increment
+// race that checkRunQuota (a read) leaves open. Returns admitted=false (without
+// counting) when at the cap, admitted=true (having counted) otherwise. A
+// store/limit error fails OPEN (admitted=true, counted best-effort) — same
+// posture as checkRunQuota: a billing hiccup must not halt runs. The caller
+// must NOT separately AddRun — reserveRun already metered the accepted run.
+func (b *BillingService) reserveRun(ctx context.Context, tenant string) (admitted bool, err error) {
+	if b.usage == nil {
+		return true, nil
+	}
+	limit := b.runLimit(ctx, tenant)
+	if limit <= 0 {
+		// Uncapped: meter the run, always admit.
+		return true, b.usage.AddRun(ctx, tenant, time.Now())
+	}
+	if rr, ok := b.usage.(runReserver); ok {
+		return rr.AddRunIfUnder(ctx, tenant, time.Now(), limit)
+	}
+	// Fallback for a store without atomic reserve (no shipping store): the
+	// pre-fix racy read-then-add.
+	used, err := b.runsThisMonth(ctx, tenant)
+	if err != nil {
+		return true, err
+	}
+	if used >= int64(limit) {
+		return false, nil
+	}
+	return true, b.usage.AddRun(ctx, tenant, time.Now())
+}
+
 // concurrencyLimit is the tenant's effective cap on simultaneously in-flight
 // runs: the per-org/tier value when entitlements are wired, else the global
 // free-tier default. 0 = no cap.
@@ -447,4 +493,12 @@ func (c *CachedPlanStore) MarkStripeEvent(ctx context.Context, id string) (bool,
 		return dd.MarkStripeEvent(ctx, id)
 	}
 	return true, nil
+}
+
+// StripeEventProcessed passes the replay read through to the inner store.
+func (c *CachedPlanStore) StripeEventProcessed(ctx context.Context, id string) (bool, error) {
+	if dd, ok := c.inner.(StripeEventDeduper); ok {
+		return dd.StripeEventProcessed(ctx, id)
+	}
+	return false, nil
 }

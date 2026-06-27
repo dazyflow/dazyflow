@@ -55,6 +55,18 @@ type UsageStore interface {
 	Usage(ctx context.Context, tenant string, months int) ([]UsageCounters, error)
 }
 
+// runReserver is an optional UsageStore extension: atomically count a run only
+// if the tenant is still under its monthly cap. The real stores (Mem, Pg)
+// implement it so the run-cap gate is a single atomic check-and-increment
+// rather than a racy read-then-add that lets concurrent submissions at the
+// limit all pass. A store without it falls back to the racy path in reserveRun.
+type runReserver interface {
+	// AddRunIfUnder atomically increments the run count for the month of `now`
+	// iff the current count is < limit, reporting whether it counted. limit is
+	// always > 0 here (uncapped tenants skip this path).
+	AddRunIfUnder(ctx context.Context, tenant string, now time.Time, limit int) (admitted bool, err error)
+}
+
 // usagePeriod buckets a timestamp into its UTC calendar month.
 func usagePeriod(t time.Time) string {
 	return t.UTC().Format("2006-01")
@@ -93,6 +105,17 @@ func (m *MemUsageStore) AddRun(_ context.Context, tenant string, now time.Time) 
 	defer m.mu.Unlock()
 	m.bucket(tenant, now).GraphRuns++
 	return nil
+}
+
+func (m *MemUsageStore) AddRunIfUnder(_ context.Context, tenant string, now time.Time, limit int) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	b := m.bucket(tenant, now)
+	if limit > 0 && b.GraphRuns >= int64(limit) {
+		return false, nil
+	}
+	b.GraphRuns++
+	return true, nil
 }
 
 func (m *MemUsageStore) AddNodeExecutions(_ context.Context, tenant string, n int, now time.Time) error {
@@ -146,6 +169,23 @@ func NewBufferedUsage(inner UsageStore) *BufferedUsage {
 
 func (b *BufferedUsage) AddRun(ctx context.Context, tenant string, now time.Time) error {
 	return b.inner.AddRun(ctx, tenant, now)
+}
+
+// AddRunIfUnder forwards to the inner store's atomic reserve. Runs are never
+// buffered (the comment above: they're rare and the gate reads them), so this
+// is a straight passthrough; a non-reserver inner falls back to read-then-add.
+func (b *BufferedUsage) AddRunIfUnder(ctx context.Context, tenant string, now time.Time, limit int) (bool, error) {
+	if rr, ok := b.inner.(runReserver); ok {
+		return rr.AddRunIfUnder(ctx, tenant, now, limit)
+	}
+	buckets, err := b.inner.Usage(ctx, tenant, 1)
+	if err != nil {
+		return false, err
+	}
+	if len(buckets) > 0 && buckets[0].Period == usagePeriod(now) && buckets[0].GraphRuns >= int64(limit) {
+		return false, nil
+	}
+	return true, b.inner.AddRun(ctx, tenant, now)
 }
 
 // AddSkippedRun passes through unbatched — skips only happen at the cap,

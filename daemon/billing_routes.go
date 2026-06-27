@@ -436,11 +436,18 @@ func (h *HTTPGateway) stripeEvents(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, "bad event payload", http.StatusBadRequest)
 		return
 	}
-	// Stripe retries deliveries; the event id dedupes them so a replay
-	// acks without re-applying. Fails OPEN on store errors — the plan
-	// upserts are idempotent, so processing twice beats dropping one.
-	if dd, ok := h.svc.Plans.(StripeEventDeduper); ok && ev.ID != "" {
-		if first, err := dd.MarkStripeEvent(r.Context(), ev.ID); err == nil && !first {
+	// Stripe retries deliveries; the event id dedupes them. The order is
+	// CHECK → apply → MARK (not mark → apply): a delivery is recorded only
+	// AFTER its side effect succeeds, so a transient apply failure (which
+	// returns 500 → Stripe retries) is never left marked-but-unapplied —
+	// that would ack the retry and permanently drop the plan flip. The plan
+	// upserts are idempotent, so the narrow window where two concurrent first
+	// deliveries both pass the check and both apply is harmless. Fails OPEN on
+	// store errors — processing twice beats dropping one.
+	dd, dedupeOK := h.svc.Plans.(StripeEventDeduper)
+	dedupeOK = dedupeOK && ev.ID != ""
+	if dedupeOK {
+		if processed, err := dd.StripeEventProcessed(r.Context(), ev.ID); err == nil && processed {
 			h.Billing.logger.Printf("replayed event %s (%s) — already processed, acking", ev.ID, ev.Type)
 			rw.WriteHeader(http.StatusOK)
 			return
@@ -448,10 +455,18 @@ func (h *HTTPGateway) stripeEvents(rw http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.applyStripeEvent(r, ev); err != nil {
 		// 500 so Stripe retries — plan flips must not be lost to a
-		// transient store error.
+		// transient store error. The event is NOT marked, so the retry
+		// re-applies.
 		h.Billing.logger.Printf("apply %s: %v", ev.Type, err)
 		http.Error(rw, "apply failed", http.StatusInternalServerError)
 		return
+	}
+	if dedupeOK {
+		// Record only now that apply succeeded; best-effort (a failed mark just
+		// means a future replay re-applies, which is idempotent).
+		if _, err := dd.MarkStripeEvent(r.Context(), ev.ID); err != nil {
+			h.Billing.logger.Printf("mark event %s: %v", ev.ID, err)
+		}
 	}
 	rw.WriteHeader(http.StatusOK)
 }

@@ -735,8 +735,10 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 		h.Webhook = NewWebhookListener(h.svc)
 	}
 	mux.HandleFunc("POST /trigger/", h.rateLimitWebhook(h.Webhook.handleTrigger))
-	mux.HandleFunc("GET /form/", h.Webhook.handleForm)
-	mux.HandleFunc("POST /form/", h.Webhook.handleForm)
+	// /form/ is unauthenticated (public forms submit real runs), so it needs the
+	// same per-IP throttle as /trigger/ to bound a flood of submissions.
+	mux.HandleFunc("GET /form/", h.rateLimitWebhook(h.Webhook.handleForm))
+	mux.HandleFunc("POST /form/", h.rateLimitWebhook(h.Webhook.handleForm))
 
 	// Public workspace-overview snapshot for the TV-dashboard page. The
 	// {token} in the path is the only credential — no requireAuth — so it's

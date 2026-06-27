@@ -934,6 +934,17 @@ func openCoreStores(ctx context.Context, dsn string, maxConns, minConns int, ses
 	} else {
 		poolCfg.MaxConns = 20
 	}
+	// PgBus's LISTEN loop and PgLeader's advisory-lock session each hold ONE
+	// pooled connection for the whole process lifetime, so the effective query
+	// budget is MaxConns-2. Refuse a MaxConns so low those two permanent holders
+	// would starve the workqueue/gateway/scheduler entirely (a self-inflicted
+	// connection deadlock).
+	const reservedConns = 2
+	if poolCfg.MaxConns < reservedConns+2 {
+		log.Printf("WARNING: postgres pool max_conns=%d leaves too few connections after the bus+leader reserve %d; raising to %d",
+			poolCfg.MaxConns, reservedConns, reservedConns+2)
+		poolCfg.MaxConns = reservedConns + 2
+	}
 	if minConns > 0 {
 		poolCfg.MinConns = int32(minConns)
 	} else if poolCfg.MinConns < 2 {

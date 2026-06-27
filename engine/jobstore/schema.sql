@@ -45,3 +45,10 @@ CREATE INDEX IF NOT EXISTS jobs_graph_run_idx ON jobs (graph_run_id);
 
 -- Per-graph history index for the timeline view in dzctl.
 CREATE INDEX IF NOT EXISTS jobs_graph_idx ON jobs (graph_id, enqueued_at DESC);
+
+-- Tenant-scoped index. Backs the capped-claim correlated subquery
+-- (r.tenant = jobs.tenant AND r.status = 'running' — on the hot claim path),
+-- the tenant/workspace-filtered ListGraphRuns/ListNodeRecords, per-tenant
+-- retention + GDPR-erasure sweeps, and DeleteByTenant. Without it every one of
+-- those full-scans the jobs table.
+CREATE INDEX IF NOT EXISTS jobs_tenant_status_idx ON jobs (tenant, status);

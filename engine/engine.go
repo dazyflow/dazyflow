@@ -420,11 +420,16 @@ func (e *Engine) buildAndExecute(
 			}
 			res, err := baseExec(ctx, transport, j, secrets)
 			if err == nil && res.Status == core.StatusOK {
-				// Record with a detached context: the side effect already
-				// succeeded, so a lost lease / tripped node deadline cancelling
-				// ctx must not also suppress the dedupe record (which would let
-				// the reclaim re-fire it).
-				store.Put(context.WithoutCancel(ctx), key, res)
+				// Record with a context detached from cancellation but with a
+				// fresh bounded deadline: the side effect already succeeded, so a
+				// lost lease / tripped node deadline cancelling ctx must not
+				// suppress the dedupe record (that would let a reclaim re-fire it)
+				// — but a shared/Postgres store must still not block the worker
+				// forever if its backend hangs. WithoutCancel alone also strips the
+				// deadline, so re-impose a budget.
+				putCtx, cancelPut := context.WithTimeout(context.WithoutCancel(ctx), dedupePutTimeout)
+				store.Put(putCtx, key, res)
+				cancelPut()
 			}
 			return res, err
 		}
