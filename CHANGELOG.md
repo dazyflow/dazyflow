@@ -19,6 +19,11 @@ Releasing: move the entries below from `[Unreleased]` under a new
 
 ### Added
 
+- **Flow duplicate.** `POST /api/v1/me/flows/{flow_id}/duplicate` copies a
+  flow under a fresh ID (new trigger URLs, empty run history) and starts it as
+  a disabled draft owned by the caller, so a copied cron/webhook can't fire
+  before it's reviewed. Exposed as a per-card "Duplicate" action in the flow
+  list that opens the copy in the editor.
 - Licensed the project under the GNU Affero General Public License v3.0 or
   later (AGPL-3.0-or-later); added `LICENSE` and a README license section.
 - SPDX license headers across all Go and TypeScript source files.

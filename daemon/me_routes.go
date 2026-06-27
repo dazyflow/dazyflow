@@ -369,6 +369,39 @@ func (h *HTTPGateway) restoreFlowMe(rw http.ResponseWriter, r *http.Request, p c
 	writeJSON(rw, http.StatusOK, h.flowMutationResponse(r, commit, g))
 }
 
+// duplicateFlowMe is POST /me/flows/{flow_id}/duplicate {name?} — create an
+// independent copy of a flow. The copy gets a fresh ID (so fresh trigger URLs
+// and an empty run history) and starts as a DISABLED draft owned by the
+// caller; they review and enable it when ready. See Service.DuplicateGraph.
+func (h *HTTPGateway) duplicateFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	tenant, workspace, id, ok := h.readFlowID(rw, r, p)
+	if !ok {
+		return
+	}
+	body, ok := decodeRequestJSONOptional[struct {
+		Name string `json:"name"`
+	}](rw, r)
+	if !ok {
+		return
+	}
+	newID, g, commit, err := h.svc.DuplicateGraph(r.Context(), p, tenant, workspace, id, strings.TrimSpace(body.Name))
+	if err != nil {
+		switch {
+		case errors.Is(err, core.ErrNotFound):
+			writeAPIError(rw, http.StatusNotFound, "flow_not_found", flowNotFoundMessage(tenant, workspace, id))
+		case errors.Is(err, core.ErrPlanLimit):
+			writeAPIError(rw, http.StatusForbidden, "plan_limit", err.Error())
+		case errors.Is(err, core.ErrUnauthorized):
+			writeAPIError(rw, http.StatusForbidden, "forbidden", err.Error())
+		default:
+			writeAPIError(rw, http.StatusBadRequest, "duplicate_failed", err.Error())
+		}
+		return
+	}
+	h.audit(r.Context(), p, "graph.duplicate", newID, "from="+id+" commit="+commit)
+	writeJSON(rw, http.StatusCreated, h.flowMutationResponse(r, commit, g))
+}
+
 // labelRevisionMe is POST /me/flows/{flow_id}/label {ref?, label} — name a
 // revision without publishing it. ref defaults to HEAD ("name my draft"); an
 // older commit hash names that revision. An empty label clears the existing

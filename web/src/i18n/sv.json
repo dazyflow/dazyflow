@@ -488,7 +488,8 @@
     "lastRun": "Senaste körning {{when}}",
     "neverRun": "Aldrig körd",
     "sparkSummary": "{{ok}} av senaste {{total}} körningarna lyckades",
-    "deleteFlow": "Ta bort flöde"
+    "deleteFlow": "Ta bort flöde",
+    "duplicateFlow": "Duplicera flöde"
   },
   "settings": {
     "title": "Flödesinställningar",
@@ -1966,5 +1967,14 @@
     "deleting": "Tar bort…",
     "wrongPassword": "Lösenordet är felaktigt.",
     "locked": "Flödet har en pågående körning. Stoppa körningen och försök ta bort igen."
+  },
+  "duplicateFlow": {
+    "title": "Duplicera det här flödet?",
+    "body": "Skapar en fristående kopia av ”{{name}}” med egna webhook-URL:er. Kopian börjar pausad så att du kan granska den innan den aktiveras.",
+    "defaultName": "Kopia av {{name}}",
+    "nameLabel": "Namn på kopian",
+    "namePlaceholder": "Flödesnamn",
+    "confirm": "Duplicera flöde",
+    "duplicating": "Duplicerar…"
   }
 }

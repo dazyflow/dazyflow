@@ -12,6 +12,7 @@ import {
   Play,
   Search,
   Trash2,
+  Copy,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
@@ -19,6 +20,7 @@ import { api } from "../api";
 import { FLOWS_CHANGED_EVENT } from "../activeFlow";
 import { Button } from "../components/Button";
 import { DeleteFlowModal } from "../components/DeleteFlowModal";
+import { DuplicateFlowModal } from "../components/DuplicateFlowModal";
 import { FlowIcon, isBrandedIcon } from "../icons";
 import { FlowStatusChip } from "../components/FlowStatusChip";
 import { RunSparkline } from "../components/RunSparkline";
@@ -80,6 +82,8 @@ export function FlowList() {
   const [statusFilter, setStatusFilter] = useState<FlowRunStatus | "all">("all");
   // The flow whose password-gated delete confirm is open (null = none).
   const [deleteTarget, setDeleteTarget] = useState<FlowSummary | null>(null);
+  // The flow whose duplicate name-prompt is open (null = none).
+  const [dupTarget, setDupTarget] = useState<FlowSummary | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -266,6 +270,21 @@ export function FlowList() {
     window.dispatchEvent(new Event(FLOWS_CHANGED_EVENT));
   };
 
+  // duplicateFlow creates an independent copy under the chosen name and opens
+  // it in the editor. The copy is a DISABLED draft (the daemon's contract), so
+  // the user lands on something safe to review before enabling. A thrown error
+  // propagates to DuplicateFlowModal, which shows it and stays open.
+  const duplicateFlow = async (target: FlowSummary, name: string) => {
+    if (!token) return;
+    const tn = activeTenant || me?.tenant || "";
+    const ws = activeWorkspace || "";
+    const newID = await api.duplicateFlow(token, tn, ws, target.id, name);
+    setDupTarget(null);
+    // The flow set changed; let the sidebar refresh in the background.
+    window.dispatchEvent(new Event(FLOWS_CHANGED_EVENT));
+    navigate(`/flows/${encodeURIComponent(newID)}`);
+  };
+
   return (
     <div>
       <div className="page-title">
@@ -409,6 +428,22 @@ export function FlowList() {
                     <Button
                       variant="ghost"
                       size="icon"
+                      className="graph-card-duplicate"
+                      title={t("flowList.duplicateFlow")}
+                      aria-label={t("flowList.duplicateFlow")}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setDupTarget(f);
+                      }}
+                    >
+                      <Copy size={14} />
+                    </Button>
+                  )}
+                  {canEdit && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       className="graph-card-delete"
                       title={t("flowList.deleteFlow")}
                       aria-label={t("flowList.deleteFlow")}
@@ -476,6 +511,16 @@ export function FlowList() {
           flowName={deleteTarget.name || deleteTarget.id}
           onConfirm={(password) => deleteFlow(deleteTarget, password)}
           onClose={() => setDeleteTarget(null)}
+        />
+      )}
+      {dupTarget && (
+        <DuplicateFlowModal
+          sourceName={dupTarget.name || dupTarget.id}
+          defaultName={t("duplicateFlow.defaultName", {
+            name: dupTarget.name || dupTarget.id,
+          })}
+          onConfirm={(name) => duplicateFlow(dupTarget, name)}
+          onClose={() => setDupTarget(null)}
         />
       )}
     </div>

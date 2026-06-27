@@ -486,7 +486,8 @@
     "lastRun": "Last run {{when}}",
     "neverRun": "Never run",
     "sparkSummary": "{{ok}} of last {{total}} runs succeeded",
-    "deleteFlow": "Delete flow"
+    "deleteFlow": "Delete flow",
+    "duplicateFlow": "Duplicate flow"
   },
   "settings": {
     "title": "Flow settings",
@@ -1993,5 +1994,14 @@
     "deleting": "Deleting…",
     "wrongPassword": "That password is incorrect.",
     "locked": "This flow has a run in progress. Stop the run, then try deleting again."
+  },
+  "duplicateFlow": {
+    "title": "Duplicate this flow?",
+    "body": "Makes an independent copy of “{{name}}” with its own trigger URLs. The copy starts paused so you can review it before it goes live.",
+    "defaultName": "Copy of {{name}}",
+    "nameLabel": "Name for the copy",
+    "namePlaceholder": "Flow name",
+    "confirm": "Duplicate flow",
+    "duplicating": "Duplicating…"
   }
 }

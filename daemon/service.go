@@ -597,6 +597,88 @@ func (s *Service) removeGitCache(tenant, ws, id string) {
 	}
 }
 
+// DuplicateGraph creates an independent copy of an existing flow under a
+// fresh, immutable ID. The copy carries over the source's nodes, edges,
+// triggers, frames, and display metadata, but starts as a DISABLED draft
+// owned by the duplicating principal. Returns the new flow's ID, the saved
+// graph, and the commit hash.
+//
+// Why a new ID and why disabled — both fall out of the data model:
+//   - Graph.ID is the handle webhook/trigger URLs and run history key off,
+//     so the copy MUST get its own. It then gets fresh trigger URLs and an
+//     empty run history for free (both are keyed by ID).
+//   - Unpublished flows still fire their triggers at HEAD (the scheduler and
+//     webhook paths fall back to HEAD via Store.LoadPublishedOrHead), so a
+//     copied cron/webhook would start firing the instant it is saved.
+//     Starting Disabled — the scheduler skips it and webhook/form endpoints
+//     reject it — makes "duplicate, then review before it goes live" the
+//     default. The user flips it on from the editor when ready.
+//
+// Permission: view on the source (enforced by LoadGraph — a source the
+// caller can't see comes back as ErrNotFound, never 403, so private flows
+// don't leak) plus graph:edit to create (enforced by SaveGraph).
+func (s *Service) DuplicateGraph(ctx context.Context, p core.Principal, tenant, ws, srcID, newName string) (string, core.Graph, string, error) {
+	src, err := s.LoadGraph(ctx, p, tenant, ws, srcID, "")
+	if err != nil {
+		// Any load failure — an authz miss (already ErrNotFound), a missing
+		// graph file, or an unborn HEAD in an empty workspace — is "no such
+		// source" from the caller's view. Collapse to ErrNotFound so the
+		// handler 404s, mirroring loadFlowForRequest.
+		return "", core.Graph{}, "", fmt.Errorf("%w: %v", core.ErrNotFound, err)
+	}
+	store, err := s.Workspaces.Open(tenant, ws)
+	if err != nil {
+		return "", core.Graph{}, "", err
+	}
+	existing, err := store.ListGraphs()
+	if err != nil {
+		return "", core.Graph{}, "", err
+	}
+
+	dup := src
+	dup.ID = uniqueGraphID(existing, srcID)
+	// Clear Owner so SaveGraph's create path stamps the duplicating principal
+	// as the new owner — a private source stays private, now owned by the
+	// copier.
+	dup.Owner = ""
+	dup.Disabled = true
+	if newName != "" {
+		dup.Name = newName
+	} else {
+		base := src.Name
+		if base == "" {
+			base = srcID
+		}
+		dup.Name = "Copy of " + base
+	}
+
+	// Reuse SaveGraph's create path rather than re-implementing its guards:
+	// it enforces graph:edit, the per-tenant MaxFlows ceiling, validation,
+	// and the owner stamp.
+	commit, err := s.SaveGraph(ctx, p, dup)
+	if err != nil {
+		return "", core.Graph{}, "", err
+	}
+	dup.Owner = p.Subject // reflect the stamp SaveGraph applied, for the caller
+	return dup.ID, dup, commit, nil
+}
+
+// uniqueGraphID derives a fresh flow ID from base that doesn't collide with
+// any existing ID in the workspace. It suffixes "-copy" (then "-copy-2",
+// "-copy-3", …) so the duplicate's webhook/trigger URLs stay human-readable
+// rather than an opaque hash.
+func uniqueGraphID(existing []string, base string) string {
+	taken := make(map[string]bool, len(existing))
+	for _, id := range existing {
+		taken[id] = true
+	}
+	candidate := base + "-copy"
+	for n := 2; taken[candidate]; n++ {
+		candidate = fmt.Sprintf("%s-copy-%d", base, n)
+	}
+	return candidate
+}
+
 // SaveGraph persists a graph as principal. Tenant/workspace on the graph
 // must match the principal's scope. Returns the new commit hash.
 // SaveGraph persists an explicit save — its own commit (checkpoint).

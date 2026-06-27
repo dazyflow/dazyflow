@@ -756,6 +756,27 @@ export const api = {
       `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/restore`,
       { ref },
     ),
+  // duplicateFlow creates an independent copy of a flow under a fresh ID.
+  // The copy starts as a DISABLED draft owned by the caller (fresh trigger
+  // URLs, empty run history) so it can be reviewed before going live.
+  // Resolves to the new flow's bare graph ID.
+  duplicateFlow: async (
+    token: string,
+    tenant: string,
+    workspace: string,
+    id: string,
+    name?: string,
+  ): Promise<string> => {
+    const res = await request<{ flow_id: string }>(
+      token,
+      "POST",
+      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/duplicate`,
+      name ? { name } : undefined,
+    );
+    // flow_id is the "tenant/workspace/id" composite; the editor route wants
+    // the bare graph ID. IDs never contain a slash, so it's the last segment.
+    return res.flow_id.split("/").slice(2).join("/");
+  },
   // labelRevision names a revision (ref) without publishing it. An empty
   // label clears the existing one. The label is keyed to the commit, so it
   // survives publishes and rollbacks. Gated on graph:admin by the daemon.

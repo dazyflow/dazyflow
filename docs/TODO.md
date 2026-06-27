@@ -33,8 +33,6 @@ detail lives in the code and commit history).
       auth/daemon/web.
 
 ### Web polish — blocked / deferred
-- [ ] Per-card flow actions (duplicate / rename / delete) — BACKEND-BLOCKED: no
-      flow delete/rename/duplicate API in client or daemon.
 - [ ] Runs date-range filter — BACKEND-BLOCKED: runs API has no date params;
       a client-only filter over loaded rows would mislead.
 - [ ] Breadcrumbs — DEFERRED: the IA is flat (sidebar + page title); low value.
@@ -55,6 +53,15 @@ detail lives in the code and commit history).
 ## Done
 
 ### Web UI/UX polish
+- [x] **Per-card flow actions (duplicate / rename / delete)** — delete (password-
+      gated, run-locked, audited) and rename (Name is editable metadata; ID is
+      the immutable handle) already shipped. Added flow **duplicate**:
+      `POST /me/flows/{flow_id}/duplicate` → `Service.DuplicateGraph` copies the
+      source under a fresh unique ID (so fresh trigger URLs + empty run history),
+      starts it as a DISABLED draft owned by the duplicator (unpublished flows
+      still fire at HEAD, so a copy must not auto-fire pre-review), and reuses
+      SaveGraph's create-path guards (graph:edit, MaxFlows, validation, owner
+      stamp). Wired a per-card Duplicate button that opens the copy in the editor.
 - [x] **Flows overview cards** — equal-height layout, per-card operational
       signal (last-run dot + recent-runs sparkline), search / sort / status
       filter.

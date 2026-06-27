@@ -262,3 +262,36 @@ func TestHistoryFlowMe_NotFound(t *testing.T) {
 		t.Fatalf("history missing = %d (%s), want 404", rw.Code, rw.Body.String())
 	}
 }
+
+// --- duplicateFlowMe --------------------------------------------------
+
+func TestDuplicateFlowMe_OK(t *testing.T) {
+	h := newGatewayHarness(t)
+	covSeedFlow(t, h, "f1")
+	rw := h.do(t, "POST", "/api/v1/me/flows/"+cov3FlowID+"/duplicate", map[string]any{"name": "My copy"})
+	if rw.Code != http.StatusCreated {
+		t.Fatalf("duplicate = %d (%s), want 201", rw.Code, rw.Body.String())
+	}
+	if !strings.Contains(rw.Body.String(), "t/ws/f1-copy") {
+		t.Errorf("body %s, want new flow_id t/ws/f1-copy", rw.Body.String())
+	}
+	// The copy is persisted as a disabled draft.
+	g, err := h.ws.Load("f1-copy")
+	if err != nil {
+		t.Fatalf("load copy: %v", err)
+	}
+	if !g.Disabled {
+		t.Error("duplicated flow should be persisted disabled")
+	}
+}
+
+func TestDuplicateFlowMe_MissingSource(t *testing.T) {
+	h := newGatewayHarness(t)
+	rw := h.do(t, "POST", "/api/v1/me/flows/t%2Fws%2Fghost/duplicate", nil)
+	if rw.Code != http.StatusNotFound {
+		t.Fatalf("duplicate missing = %d (%s), want 404", rw.Code, rw.Body.String())
+	}
+	if !strings.Contains(rw.Body.String(), "flow_not_found") {
+		t.Errorf("body %s, want flow_not_found", rw.Body.String())
+	}
+}

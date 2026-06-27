@@ -507,6 +507,8 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/me/flows/{flow_id}/input-fields", h.requireAuth(h.listInputFields))
 	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/restore",
 		h.requireAuth(h.idempotencyMiddleware("/me/flows/{flow_id}/restore", h.restoreFlowMe)))
+	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/duplicate",
+		h.requireAuth(h.idempotencyMiddleware("/me/flows/{flow_id}/duplicate", h.duplicateFlowMe)))
 	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/label",
 		h.requireAuth(h.idempotencyMiddleware("/me/flows/{flow_id}/label", h.labelRevisionMe)))
 	mux.HandleFunc("PUT /api/v1/me/flows/{flow_id}",
