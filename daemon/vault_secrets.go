@@ -7,11 +7,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	stdnet "net"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 	openbao "github.com/openbao/openbao/api/v2"
 )
 
@@ -196,6 +199,20 @@ func (c *vaultAPIClient) newClient(cfg VaultConfig) (*openbao.Client, error) {
 	conf.Address = cfg.Address
 	if c.timeout > 0 {
 		conf.Timeout = c.timeout
+	}
+	// cfg.Address is tenant-supplied, so dial it through the shared SSRF guard
+	// (post-DNS, rebinding-resistant; no-op when the operator opted into private
+	// egress). A DEDICATED client, not the shared SafeHTTPClient cache: the
+	// openbao SDK mutates the HttpClient it's handed (e.g. sets CheckRedirect),
+	// which would corrupt the cached client every other drop shares.
+	conf.HttpClient = &http.Client{
+		Timeout: c.timeout,
+		Transport: &http.Transport{
+			DialContext:         (&stdnet.Dialer{Control: hfnet.SSRFDialControl()}).DialContext,
+			TLSHandshakeTimeout: c.timeout,
+			MaxIdleConns:        10,
+			IdleConnTimeout:     30 * time.Second,
+		},
 	}
 	cl, err := openbao.NewClient(conf)
 	if err != nil {

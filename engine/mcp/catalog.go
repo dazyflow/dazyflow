@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -48,6 +49,21 @@ func NewCatalog() *Catalog {
 	}
 }
 
+// scrubbedEnviron returns the process environment with every DAZYFLOW_* variable
+// removed, so the daemon's own secrets (master key, Postgres DSN, signing keys)
+// never reach a spawned MCP server. Mirrors drops/shell's env floor.
+func scrubbedEnviron() []string {
+	src := os.Environ()
+	out := make([]string, 0, len(src))
+	for _, kv := range src {
+		if k, _, ok := strings.Cut(kv, "="); ok && strings.HasPrefix(k, "DAZYFLOW_") {
+			continue
+		}
+		out = append(out, kv)
+	}
+	return out
+}
+
 // RegisterStdio spawns the descriptor's subprocess, runs the MCP
 // handshake, lists the server's tools, and synthesizes a manifest per
 // tool. The subprocess stays running until Close.
@@ -60,7 +76,12 @@ func (c *Catalog) RegisterStdio(desc StdioDescriptor) error {
 	}
 
 	cmd := exec.Command(desc.Command, desc.Args...)
-	cmd.Env = os.Environ()
+	// Withhold the daemon's own secrets from the MCP subprocess: a compromised
+	// or malicious server binary must not be able to read DAZYFLOW_MASTER_KEY
+	// (which decrypts every tenant's secrets), the Postgres DSN, webhook signing
+	// keys, etc. Strip every DAZYFLOW_* var (the same floor drops/shell applies);
+	// the server still inherits PATH/HOME and gets its explicit desc.Env on top.
+	cmd.Env = scrubbedEnviron()
 	for k, v := range desc.Env {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}

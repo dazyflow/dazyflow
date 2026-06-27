@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 )
 
 // fakeWebhook captures everything a failure-notify POST sends so
@@ -76,6 +77,44 @@ func newFailureNotifyHarness(t *testing.T) *Service {
 	// to the fakeWebhook server rather than the wild internet.
 	h.svc.PublicBaseURL = "https://app.example.com"
 	return h.svc
+}
+
+// TestFailureNotify_BlocksPrivateWebhook pins the SSRF guard: with private
+// egress off (the production default), a webhook pointed at a loopback/private
+// address must NOT be dialed — so a tenant can't use a failure webhook to probe
+// the host's internal network. The fake server is on loopback, so an unblocked
+// notifier would POST to it; the guard must stop that.
+func TestFailureNotify_BlocksPrivateWebhook(t *testing.T) {
+	hfnet.SetAllowPrivateEgress(false)              // production default
+	defer hfnet.SetAllowPrivateEgress(true)         // restore the package default
+	fw := newFakeWebhook(t)                          // listens on 127.0.0.1
+	svc := newFailureNotifyHarness(t)
+
+	graph := core.Graph{
+		ID: "g", Tenant: "t", Workspace: "ws",
+		FailureNotify: &core.FailureNotify{Webhook: fw.server.URL},
+	}
+	runID := "run-ssrf"
+	_ = svc.Jobs.Enqueue(t.Context(), core.JobRecord{
+		ID: runID, Kind: core.JobKindGraph, GraphID: "g", Tenant: "t", Workspace: "ws",
+		Status: core.JobStatusRunning,
+	})
+
+	svc.startFailureNotifier(graph, runID)
+	svc.bus().Publish(runID, BusEvent{Terminal: &TerminalEvent{
+		JobID:  runID,
+		Status: core.JobStatusFailed,
+		Error:  &core.JobError{Code: "timeout", Message: "boom"},
+	}})
+
+	// The dial guard rejects the loopback address synchronously and fast; give
+	// the notifier goroutine ample time to (not) deliver.
+	time.Sleep(300 * time.Millisecond)
+	fw.mu.Lock()
+	defer fw.mu.Unlock()
+	if len(fw.received) != 0 {
+		t.Fatalf("SSRF-blocked webhook still received %d POST(s)", len(fw.received))
+	}
 }
 
 func TestFailureNotify_FiresOnFailedTerminal(t *testing.T) {

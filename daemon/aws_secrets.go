@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 )
 
 // AwsSecretsProvider is the AWS flavour of the BYO secret manager (see
@@ -115,9 +116,13 @@ func (c AwsSecretsConfig) endpointURL() string {
 const awsConfigSecretName = "cfg:secret-manager-aws"
 
 // awsAPIClient speaks Secrets Manager's JSON-RPC ("x-amz-json-1.1") protocol
-// with hand-rolled SigV4 request signing. Like the Vault client it does NOT
-// route through the flow-egress SSRF guard: the endpoint is admin-configured
-// per tenant, not attacker-controlled flow input.
+// with hand-rolled SigV4 request signing. The endpoint is tenant-supplied, so
+// like every other outbound path that dials a tenant-controlled host it routes
+// through the shared SSRF guard (post-DNS, rebinding-resistant; a no-op when the
+// operator opted into private egress). Defense in depth even though configuring
+// the endpoint now requires organization:admin — it stops an org admin from
+// turning the verify/fetch call into a probe of the host's internal network or
+// cloud metadata endpoint.
 type awsAPIClient struct {
 	httpc *http.Client
 }
@@ -126,7 +131,7 @@ func newAwsAPIClient(timeout time.Duration) *awsAPIClient {
 	if timeout <= 0 {
 		timeout = 10 * time.Second
 	}
-	return &awsAPIClient{httpc: &http.Client{Timeout: timeout}}
+	return &awsAPIClient{httpc: hfnet.SafeHTTPClient(timeout, hfnet.PrivateEgressAllowed())}
 }
 
 // awsAPIError is Secrets Manager's error envelope.

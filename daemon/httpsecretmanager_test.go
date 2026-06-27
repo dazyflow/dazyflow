@@ -9,7 +9,28 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"git.sr.ht/~klahr/dazyflow/auth"
+	"git.sr.ht/~klahr/dazyflow/core"
 )
+
+// newSecretManagerHarness is newSecretsHarness with the token swapped for an
+// organization:admin one: configuring a BYO secret-manager backend (Vault/AWS/
+// GCP) is an infrastructure action gated on organization:admin, not secret:write
+// — the PUT connection-tests a tenant-supplied address, so an editor must not be
+// able to point the org at, or probe via, an arbitrary host. (The fake provider
+// servers run on loopback; the package TestMain allows private egress so the
+// secret-manager clients' SSRF guard doesn't refuse them.)
+func newSecretManagerHarness(t *testing.T) *gatewayHarness {
+	t.Helper()
+	h := newSecretsHarness(t)
+	_, tok, err := auth.IssueAPIKey(h.ks, t.Context(), "sm-admin", "t", "ws", "admin@t", []core.Role{core.TeamRoleAdmin()}, nil)
+	if err != nil {
+		t.Fatalf("issue admin token: %v", err)
+	}
+	h.token = tok
+	return h
+}
 
 // fakeVaultServer stands in for OpenBao/Vault: it accepts a token-self lookup
 // from one known token and 403s anything else, so the verify-on-save path is
@@ -43,7 +64,7 @@ func smBody(addr, token string) json.RawMessage {
 }
 
 func TestSecretManager_SetGetDelete(t *testing.T) {
-	h := newSecretsHarness(t)
+	h := newSecretManagerHarness(t)
 	srv := fakeVaultServer(t, "good-token")
 
 	// Save a valid config → verified, then stored.
@@ -88,7 +109,7 @@ func TestSecretManager_SetGetDelete(t *testing.T) {
 
 // A config that fails the connection test is rejected (502) and not persisted.
 func TestSecretManager_RejectsUnreachable(t *testing.T) {
-	h := newSecretsHarness(t)
+	h := newSecretManagerHarness(t)
 	srv := fakeVaultServer(t, "good-token")
 
 	if rw := h.do(t, "PUT", "/api/v1/secret-manager", smBody(srv.URL, "WRONG-token")); rw.Code != http.StatusBadGateway {
@@ -105,7 +126,7 @@ func TestSecretManager_RejectsUnreachable(t *testing.T) {
 
 // An invalid config (bad auth method) is a 400 before any network call.
 func TestSecretManager_ValidatesBody(t *testing.T) {
-	h := newSecretsHarness(t)
+	h := newSecretManagerHarness(t)
 	bad, _ := json.Marshal(map[string]any{"address": "https://v", "mount": "secret", "auth": map[string]any{"method": "psychic"}})
 	if rw := h.do(t, "PUT", "/api/v1/secret-manager", json.RawMessage(bad)); rw.Code != http.StatusBadRequest {
 		t.Fatalf("PUT invalid status=%d, want 400", rw.Code)
@@ -136,6 +157,34 @@ func TestSecretManager_ForbiddenWithoutPerm(t *testing.T) {
 		rw := h.do(t, c.method, c.path, map[string]any{})
 		if rw.Code != http.StatusForbidden {
 			t.Errorf("%s %s = %d (%s), want 403", c.method, c.path, rw.Code, rw.Body.String())
+		}
+	}
+}
+
+// TestSecretManagerConfig_RequiresOrgAdmin pins the privilege boundary: an
+// editor with secret:read/write can read which backend is configured (GET) but
+// cannot point the org at a new secret-manager backend or remove it (PUT/DELETE)
+// — those are organization:admin. The PUT is rejected at the gate, before the
+// tenant-supplied address is ever dialed.
+func TestSecretManagerConfig_RequiresOrgAdmin(t *testing.T) {
+	h := newSecretsHarness(t) // editor token: secret:read/write, NOT organization:admin
+	write := []struct{ method, path string }{
+		{"PUT", "/api/v1/secret-manager"},
+		{"DELETE", "/api/v1/secret-manager"},
+		{"PUT", "/api/v1/secret-manager/aws"},
+		{"DELETE", "/api/v1/secret-manager/aws"},
+		{"PUT", "/api/v1/secret-manager/gcp"},
+		{"DELETE", "/api/v1/secret-manager/gcp"},
+	}
+	for _, c := range write {
+		if rw := h.do(t, c.method, c.path, map[string]any{}); rw.Code != http.StatusForbidden {
+			t.Errorf("%s %s as editor = %d (%s), want 403", c.method, c.path, rw.Code, rw.Body.String())
+		}
+	}
+	// GET stays at secret:read, so the editor can still see the backend status.
+	for _, path := range []string{"/api/v1/secret-manager", "/api/v1/secret-manager/aws", "/api/v1/secret-manager/gcp"} {
+		if rw := h.do(t, "GET", path, nil); rw.Code != http.StatusOK {
+			t.Errorf("GET %s as editor = %d (%s), want 200", path, rw.Code, rw.Body.String())
 		}
 	}
 }

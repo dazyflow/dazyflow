@@ -116,13 +116,28 @@ func TestRegisterMCPServers_ParseErrors(t *testing.T) {
 
 func TestRegisterRemotes_ParseErrors(t *testing.T) {
 	cat := engine.NewRemoteCatalog()
-	// Whitespace-only / empty-segment specs register nothing.
-	if err := registerRemotes(cat, " , , "); err != nil {
+	// Whitespace-only / empty-segment specs register nothing (dev or not).
+	if err := registerRemotes(cat, " , , ", true); err != nil {
 		t.Errorf("registerRemotes(whitespace) = %v, want nil", err)
 	}
-	// Missing '=' is a parse error caught before any dial.
-	if err := registerRemotes(cat, "no-equals"); err == nil {
+	// Missing '=' is a parse error caught before any dial (dev mode, so the
+	// cleartext guard doesn't short-circuit it first).
+	if err := registerRemotes(cat, "no-equals", true); err == nil {
 		t.Error("registerRemotes(no-equals) should error")
+	}
+}
+
+// TestRegisterRemotes_RefusesCleartextInProd pins the fail-closed guard: the
+// flag-based remote spec is plaintext gRPC, so outside dev mode a non-empty
+// spec must be refused before anything is dialed (no secrets on the wire).
+func TestRegisterRemotes_RefusesCleartextInProd(t *testing.T) {
+	cat := engine.NewRemoteCatalog()
+	if err := registerRemotes(cat, "mod=10.0.0.5:9000", false); err == nil {
+		t.Error("registerRemotes(prod, non-empty) = nil, want cleartext refusal")
+	}
+	// An empty spec is always fine — nothing to dial.
+	if err := registerRemotes(cat, "", false); err != nil {
+		t.Errorf("registerRemotes(prod, empty) = %v, want nil", err)
 	}
 }
 

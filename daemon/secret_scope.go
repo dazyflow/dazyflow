@@ -76,6 +76,18 @@ func isReservedSecretName(name string) bool {
 		strings.HasPrefix(name, "cfg:")
 }
 
+// orgAuthoritativeSecretName reports whether a name lives in a namespace that
+// must resolve ONLY at organization scope: connection (conn.) and OAuth
+// (oauth.) credentials. The ${secret.} flow→organization cascade is skipped for
+// these in EncryptedSecrets.Get so a flow-scoped value can never shadow — and so
+// silently override — the org's authoritative credential. Distinct from
+// isReservedSecretName (which also covers flow-scopable namespaces like res./
+// emailtmpl. and daemon bookkeeping that legitimately read at their own scope).
+func orgAuthoritativeSecretName(name string) bool {
+	return strings.HasPrefix(name, secretConnPrefix) ||
+		strings.HasPrefix(name, "oauth.")
+}
+
 // ListConnectionNames returns the connection secret names (the
 // conn.<slug>.<key> namespace) for a tenant, with the conn. prefix intact.
 // ListScoped hides these from the organization listing so the Credentials page

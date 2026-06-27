@@ -348,7 +348,7 @@ func main() {
 	// per-job snapshot can't (mirrors the SetTokenLookup wiring below).
 	io.SetQuotaReserver(quota.Reserve)
 	remoteCatalog := engine.NewRemoteCatalog()
-	if err := registerRemotes(remoteCatalog, remotes); err != nil {
+	if err := registerRemotes(remoteCatalog, remotes, devMode); err != nil {
 		log.Fatalf("DAZYFLOW_REMOTE_MODULES: %v", err)
 	}
 	// Secret schemes. The secret:// encrypted store (per-tenant, write-only
@@ -1497,13 +1497,22 @@ func registerMCPServers(cat *mcp.Catalog, spec string) error {
 }
 
 // registerRemotes parses "id1=host:port,id2=host:port" and registers
-// each remote module against the catalog over an insecure dial.
-// Demo-only; production deployments would extend this to per-remote
-// TLS via a config file rather than a flag string.
-func registerRemotes(cat *engine.RemoteCatalog, spec string) error {
+// each remote module against the catalog over an insecure (cleartext) dial.
+// The flag string carries no TLS material, so it can only describe a
+// PLAINTEXT connection — fine for local development, but in a multi-tenant
+// host it would put resolved secrets (Authorization headers, API keys, DB
+// DSNs in Job.Params/Job.Env) on the wire in the clear. So it is gated on
+// DAZYFLOW_DEV and refused otherwise; production deployments configure
+// per-remote TLS via a config file rather than this flag.
+func registerRemotes(cat *engine.RemoteCatalog, spec string, devMode bool) error {
 	spec = strings.TrimSpace(spec)
 	if spec == "" {
 		return nil
+	}
+	if !devMode {
+		return fmt.Errorf("DAZYFLOW_REMOTE_MODULES describes cleartext gRPC remotes and is " +
+			"development-only; a production deployment must configure per-remote TLS " +
+			"(set DAZYFLOW_DEV=1 to allow plaintext remotes for local development)")
 	}
 	for _, pair := range strings.Split(spec, ",") {
 		pair = strings.TrimSpace(pair)
@@ -1519,7 +1528,7 @@ func registerRemotes(cat *engine.RemoteCatalog, spec string) error {
 		desc := engine.RemoteDescriptor{
 			ID:       id,
 			Endpoint: endpoint,
-			Insecure: true,
+			Insecure: true, // safe: dev-only, guarded above
 		}
 		if err := cat.Register(desc); err != nil {
 			return fmt.Errorf("register %q at %q: %w", id, endpoint, err)

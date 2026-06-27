@@ -11,7 +11,7 @@ import (
 )
 
 func TestSecretManagerAws_SetGetDelete(t *testing.T) {
-	h := newSecretsHarness(t)
+	h := newSecretManagerHarness(t)
 	srv := fakeSecretsManager(t, map[string]string{}) // probe → ResourceNotFound = creds OK
 	defer srv.Close()
 
@@ -58,7 +58,7 @@ func TestSecretManagerAws_SetGetDelete(t *testing.T) {
 }
 
 func TestSecretManagerAws_RejectsBadCredentials(t *testing.T) {
-	h := newSecretsHarness(t)
+	h := newSecretManagerHarness(t)
 	body, _ := json.Marshal(AwsSecretsConfig{
 		Region: "eu-north-1", AccessKeyID: "AKIA_TEST", SecretAccessKey: "supersecret",
 		Endpoint: "http://127.0.0.1:1", // nothing listens — connection-test must fail
@@ -77,7 +77,7 @@ func TestSecretManagerAws_RejectsBadCredentials(t *testing.T) {
 }
 
 func TestSecretManagerGcp_SetGetDelete(t *testing.T) {
-	h := newSecretsHarness(t)
+	h := newSecretManagerHarness(t)
 	gh := newGcpHarness(t, map[string]string{}, nil) // probe → 404 = reachable
 
 	body, _ := json.Marshal(gh.cfg)
@@ -112,7 +112,7 @@ func TestSecretManagerGcp_SetGetDelete(t *testing.T) {
 }
 
 func TestSecretManagerGcp_RejectsBadKey(t *testing.T) {
-	h := newSecretsHarness(t)
+	h := newSecretManagerHarness(t)
 	rw := h.do(t, "PUT", "/api/v1/secret-manager/gcp",
 		json.RawMessage(`{"project_id":"proj","service_account_key":"not json"}`))
 	if rw.Code != http.StatusBadRequest {

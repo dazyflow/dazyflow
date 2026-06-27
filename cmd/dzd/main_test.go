@@ -58,10 +58,10 @@ func TestEnvInt(t *testing.T) {
 
 func TestRegisterRemotes_Errors(t *testing.T) {
 	cat := engine.NewRemoteCatalog()
-	if err := registerRemotes(cat, "  "); err != nil {
+	if err := registerRemotes(cat, "  ", true); err != nil {
 		t.Errorf("empty spec: %v", err)
 	}
-	if err := registerRemotes(cat, "no-equals-sign"); err == nil {
+	if err := registerRemotes(cat, "no-equals-sign", true); err == nil {
 		t.Error("malformed remote spec: want error")
 	}
 }

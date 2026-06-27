@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 	"git.sr.ht/~klahr/dazyflow/internal/emailtheme"
 )
 
@@ -35,17 +36,27 @@ import (
 //     The next phase upgrades this to fire through the existing
 //     webhook_send drop so retry policy is shared.
 //
-//   - HTTP only: SSRF risk is non-zero (user-supplied URL), but
-//     since the user configures it on their own graph that's an
-//     accepted shape — they're not tricking another tenant into
-//     POSTing to their internal services. A deployment-wide
-//     allowlist (matching the http_request drop's SSRF blocks)
-//     would be a future hardening.
+//   - SSRF guarded: the webhook URL is tenant-supplied, so even though the
+//     user configures it on their own graph, in a multi-tenant host a tenant
+//     could point it at the host's internal network or cloud metadata
+//     endpoint. The send goes through the shared SSRF-guarded client (blocks
+//     loopback/private/link-local unless the operator opted into private
+//     egress) and the operator egress allowlist is checked on the URL first —
+//     the same posture as the http_request / webhook_send drops.
 
-// failureNotifyClient is the HTTP client the notifier uses.
-// Variable rather than a const so tests can swap in an httptest
-// server's client without injecting it through five layers.
-var failureNotifyClient = &http.Client{Timeout: 10 * time.Second}
+// failureNotifyClient, when non-nil, overrides the HTTP client the notifier
+// uses (so a test can inject an httptest client). Production leaves it nil and
+// resolves the shared SSRF-guarded client per send via failureNotifyHTTPClient
+// — the guard's allow-private flag must be read at call time, not at package
+// init (the operator opt-in is wired during daemon startup).
+var failureNotifyClient *http.Client
+
+func failureNotifyHTTPClient() *http.Client {
+	if failureNotifyClient != nil {
+		return failureNotifyClient
+	}
+	return hfnet.SafeHTTPClient(10*time.Second, hfnet.PrivateEgressAllowed())
+}
 
 // FailurePayload is the JSON shape POSTed to the configured
 // webhook URL. Compact on purpose — receivers (Slack, PagerDuty,
@@ -184,6 +195,14 @@ func (s *Service) fireFailureNotification(ctx context.Context, graph core.Graph,
 		return
 	}
 	url := graph.FailureNotify.Webhook
+	// The URL is tenant-supplied. Enforce the operator egress allowlist on it
+	// before dialing (the SSRF-guarded client below independently blocks
+	// loopback/private/link-local at dial time, anti-rebinding), so the webhook
+	// can't be used to probe the host's internal network or metadata endpoint.
+	if err := hfnet.EgressAllowedFor(ctx, url); err != nil {
+		s.logFailureNotifyError(graph, fmt.Errorf("webhook blocked: %w", err))
+		return
+	}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		s.logFailureNotifyError(graph, fmt.Errorf("marshal: %w", err))
@@ -196,7 +215,7 @@ func (s *Service) fireFailureNotification(ctx context.Context, graph core.Graph,
 	}
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	req.Header.Set("User-Agent", "dazyflow-failure-notify/1.0")
-	resp, err := failureNotifyClient.Do(req)
+	resp, err := failureNotifyHTTPClient().Do(req)
 	if err != nil {
 		s.logFailureNotifyError(graph, fmt.Errorf("post: %w", err))
 		return

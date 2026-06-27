@@ -205,13 +205,21 @@ func resolveTable(job core.Job) (string, error) {
 	if !ok {
 		return "", errors.New(`'Collection' input must be text (a collection name)`)
 	}
-	if s := strings.TrimSpace(txt); s != "" {
-		return s, nil
+	name := strings.TrimSpace(txt)
+	if name == "" {
+		name = strings.TrimSpace(params.StringDefault(job.Params, "table", ""))
 	}
-	if t := strings.TrimSpace(params.StringDefault(job.Params, "table", "")); t != "" {
-		return t, nil
+	if name == "" {
+		return "", errors.New("pick a collection to read from, or wire a collection name into the Collection input")
 	}
-	return "", errors.New("pick a collection to read from, or wire a collection name into the Collection input")
+	// Validate the identifier on the read path too — the write path already does
+	// (executeBuiltinStoreAppend). quoteIdent makes injection impossible either
+	// way, but rejecting a NUL/oversized name here gives a clear error instead of
+	// a confusing driver failure, and keeps the read and write paths consistent.
+	if err := validateIdent(name); err != nil {
+		return "", err
+	}
+	return name, nil
 }
 
 // missingCollectionMsg builds a "collection X doesn't exist" message, listing

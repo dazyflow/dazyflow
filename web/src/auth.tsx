@@ -3,14 +3,23 @@
 
 import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, APIError, setUnauthorizedHandler } from "./api";
+import { api, APIError, setUnauthorizedHandler, COOKIE_SESSION } from "./api";
 import { pickActive } from "./lib/pickActive";
 import { explainApiError } from "./lib/explainApiError";
 import i18n from "./i18n";
 import { applyTheme } from "./theme";
 import type { Permission, WhoAmI } from "./types";
 
-const STORAGE_KEY = "dazyflow.token";
+// SESSION_MARKER is a NON-SECRET "a session exists in this browser" hint. The
+// session credential itself is the HttpOnly `dazyflow_session` cookie and never
+// touches JS-readable storage — so XSS can't exfiltrate it. The marker only lets
+// a cold boot know to render the app and re-validate the cookie (instead of
+// flashing the sign-in screen) for a returning user.
+const SESSION_MARKER = "dazyflow.session";
+// LEGACY_TOKEN_KEY is where older builds persisted the raw bearer token. It's
+// scrubbed on boot so an upgrade removes the XSS-exfiltratable secret; the
+// matching session cookie re-establishes the session via the boot probe.
+const LEGACY_TOKEN_KEY = "dazyflow.token";
 const TENANT_STORAGE_KEY = "dazyflow.activeTenant";
 
 // Every org has exactly one workspace. The concept is no longer
@@ -87,8 +96,14 @@ type AuthCtx = {
 const Ctx = createContext<AuthCtx | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  // `token` holds the COOKIE_SESSION sentinel for a live session (never the real
+  // bearer — that's in the HttpOnly cookie). It stays truthy so the app's many
+  // `if (!token)` gates work, and api.request() reads the sentinel as
+  // "authenticate via the cookie". Initialized from the non-secret marker so a
+  // returning user renders the app immediately; the bootstrap effect then
+  // re-validates the cookie.
   const [token, setToken] = useState<string | null>(() =>
-    localStorage.getItem(STORAGE_KEY),
+    localStorage.getItem(SESSION_MARKER) ? COOKIE_SESSION : null,
   );
   const [me, setMe] = useState<WhoAmI | null>(null);
   // Bumped by reloadTenants() to re-run the bootstrap effect on demand (e.g.
@@ -111,7 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // navigate is stable across renders, so this runs once.
   useEffect(() => {
     setUnauthorizedHandler(() => {
-      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(SESSION_MARKER);
       setToken(null);
       setMe(null);
       setError(i18n.t("signIn.sessionExpired"));
@@ -119,6 +134,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     return () => setUnauthorizedHandler(null);
   }, [navigate]);
+
+  // Cold-boot cookie adoption. Two cases land here with a valid session cookie
+  // but no in-browser marker: (1) an SSO / subdomain-handoff sign-in, where the
+  // server set the cookie on a redirect and could not write localStorage; and
+  // (2) an upgrade from an older build whose raw token we scrub below. Probe the
+  // cookie once: if it authenticates, adopt the session (which kicks off the
+  // identity bootstrap); a 401 is swallowed (probe variant) so an anonymous
+  // visitor just stays on the sign-in screen with no "session expired" toast.
+  useEffect(() => {
+    // Scrub any raw bearer a previous build left in storage — the cookie is the
+    // credential now, and a persisted token is XSS-exfiltratable.
+    localStorage.removeItem(LEGACY_TOKEN_KEY);
+    if (token) return; // marker already adopted the session
+    let cancelled = false;
+    api
+      .whoamiProbe()
+      .then(() => {
+        if (cancelled) return;
+        localStorage.setItem(SESSION_MARKER, "1");
+        setToken(COOKIE_SESSION); // triggers the identity bootstrap effect
+      })
+      .catch(() => {
+        /* no live cookie session — remain signed out */
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Mount-only: a deliberate one-shot probe, not re-run when token changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!token) {
@@ -191,7 +236,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const expired = e instanceof APIError && e.status === 401;
           setError(expired ? i18n.t("signIn.sessionExpired") : explainApiError(e, i18n.t));
           setMe(null);
-          localStorage.removeItem(STORAGE_KEY);
+          localStorage.removeItem(SESSION_MARKER);
           setToken(null);
         }
       })
@@ -290,13 +335,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // a newly created org appears in the switcher without a page reload.
   const reloadTenants = useCallback(() => setReloadKey((k) => k + 1), []);
 
-  // applySession mirrors a freshly-issued session token into localStorage
-  // (so the app keeps using its bearer-header path) and resolves identity.
-  // Shared by the password, TOTP-second-leg, and signup flows.
-  const applySession = async (token: string) => {
-    localStorage.setItem(STORAGE_KEY, token);
-    setToken(token);
-    const who = await api.whoami(token);
+  // applySession adopts the session the server just established. The sign-in /
+  // TOTP / signup responses each set the HttpOnly `dazyflow_session` cookie; we
+  // keep ONLY the non-secret marker and use the cookie sentinel in memory, so
+  // the returned bearer token is never persisted in JS-readable storage. Shared
+  // by the password, TOTP-second-leg, and signup flows.
+  const applySession = async () => {
+    localStorage.setItem(SESSION_MARKER, "1");
+    setToken(COOKIE_SESSION);
+    const who = await api.whoami(COOKIE_SESSION);
     setMe(who);
   };
 
@@ -313,10 +360,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
         return { totpRequired: true, challenge: r.challenge };
       }
-      // The signin endpoint also sets an HttpOnly session cookie, but we
-      // mirror the token in localStorage so the rest of the app keeps
-      // using its bearer-header code path unchanged.
-      await applySession(r.token as string);
+      // The signin endpoint sets the HttpOnly session cookie; we adopt it
+      // (the returned r.token is intentionally not stored — the cookie is the
+      // credential).
+      await applySession();
       return { totpRequired: false };
     } catch (e) {
       setError(explainApiError(e, i18n.t, "signin"));
@@ -334,8 +381,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError(null);
     try {
-      const r = await api.totpVerify(challenge, code, recoveryCode);
-      await applySession(r.token as string);
+      await api.totpVerify(challenge, code, recoveryCode);
+      await applySession();
     } catch (e) {
       setError(explainApiError(e, i18n.t, "totp"));
       throw e;
@@ -355,8 +402,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError(null);
     try {
-      const r = await api.signUp(email, password, signupInvite);
-      await applySession(r.token as string);
+      await api.signUp(email, password, signupInvite);
+      await applySession();
     } catch (e) {
       setError(explainApiError(e, i18n.t, "signup"));
       throw e;
@@ -379,7 +426,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         /* ignored — local state still gets cleared below */
       }
     }
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(SESSION_MARKER);
+    localStorage.removeItem(LEGACY_TOKEN_KEY);
     localStorage.removeItem(TENANT_STORAGE_KEY);
     setToken(null);
     setMe(null);

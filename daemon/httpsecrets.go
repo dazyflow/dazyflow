@@ -52,6 +52,30 @@ func validSecretName(name string) error {
 	return nil
 }
 
+// checkReservedSecretWrite rejects user secret writes that would land in a
+// system-managed namespace. validSecretName permits dots, so without this a
+// member could craft reserved names:
+//
+//   - The "flow." prefix is the internal flow-scope address. A user-supplied
+//     name must never start with it: at tenant scope "flow.<otherflow>.x" would
+//     forge another flow's secret, and the server already adds the prefix itself
+//     for scope=flow.
+//   - conn./oauth. are organization-authoritative connection namespaces. Writing
+//     them at FLOW scope only makes sense as a shadow attempt — it would store
+//     "flow.<flow>.conn.<x>", which a graph:edit member could use to override the
+//     org's connection credential. (EncryptedSecrets.Get also resolves these
+//     org-only, so such a value is dead on read; this rejects it at the source.)
+//     Tenant-scope conn. writes remain the legitimate "Connect" path.
+func checkReservedSecretWrite(scope SecretScope, name string) error {
+	if strings.HasPrefix(name, secretFlowPrefix) {
+		return fmt.Errorf("name %q uses the reserved %q prefix", name, secretFlowPrefix)
+	}
+	if scope == ScopeFlow && orgAuthoritativeSecretName(name) {
+		return fmt.Errorf("name %q is organization-scoped and cannot be set per-flow", name)
+	}
+	return nil
+}
+
 // putSecretBody is the request shape for PUT /secrets/{name}.
 type putSecretBody struct {
 	Value string `json:"value"`
@@ -198,6 +222,10 @@ func (h *HTTPGateway) putSecret(rw http.ResponseWriter, r *http.Request, p core.
 	if !ok {
 		return
 	}
+	if err := checkReservedSecretWrite(scope, name); err != nil {
+		writeJSONError(rw, http.StatusBadRequest, err.Error())
+		return
+	}
 	r.Body = http.MaxBytesReader(rw, r.Body, maxSecretValueBytes)
 	body, ok := decodeRequestJSON[putSecretBody](rw, r)
 	if !ok {
@@ -259,6 +287,10 @@ func (h *HTTPGateway) listSecrets(rw http.ResponseWriter, r *http.Request, p cor
 func (h *HTTPGateway) deleteSecret(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	name, scope, flow, ok := h.secretCRUDGate(rw, r, p, validSecretName, true)
 	if !ok {
+		return
+	}
+	if err := checkReservedSecretWrite(scope, name); err != nil {
+		writeJSONError(rw, http.StatusBadRequest, err.Error())
 		return
 	}
 	if err := h.EncryptedSecrets.DeleteScoped(r.Context(), p.Tenant, flow, scope, name); err != nil {

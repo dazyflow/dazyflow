@@ -363,10 +363,19 @@ func (e *Engine) buildAndExecute(
 	secrets, err := resolveTemplatesCollecting(sctx, e.Secrets, e.Resources, prior, &job)
 	if err != nil {
 		recordErr(err)
-		return core.Result{
+		// resolveTemplatesCollecting returns the partially-collected secret set
+		// even on error, and the error string can embed an already-resolved
+		// secret value (e.g. a secret spliced into a DSN that then fails to
+		// parse). This is the only early-return that can carry resolved secret
+		// material — the resolve_failed/sandbox paths above run before any value
+		// is resolved — so scrub it with the same redactor the success path uses
+		// before it lands in the persisted Result / run-detail UI.
+		res := core.Result{
 			Status: core.StatusError,
 			Error:  &core.JobError{Code: templateErrCode(err), Message: err.Error()},
-		}, err
+		}
+		redactResult(&res, secrets)
+		return res, err
 	}
 	// Sign the approval URL for await_approval modules. The in-process Run
 	// path has no signer (ApprovalSigner is nil), so this is naturally a

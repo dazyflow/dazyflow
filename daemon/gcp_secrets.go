@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 )
 
 // GcpSecretsProvider is the Google Cloud flavour of the BYO secret manager
@@ -135,8 +136,10 @@ const gcpConfigSecretName = "cfg:secret-manager-gcp"
 // gcpAPIClient speaks Secret Manager's REST API with service-account JWT →
 // OAuth token auth. Tokens are cached per (token_uri, client_email) until
 // shortly before expiry — same pattern as the Vault client's AppRole cache.
-// Like the other BYO clients it does NOT route through the flow-egress SSRF
-// guard: the endpoint is admin-configured per tenant.
+// Both the API endpoint and token_uri are tenant-supplied, so the client routes
+// through the shared SSRF guard (post-DNS, rebinding-resistant; a no-op when the
+// operator opted into private egress) — defense in depth so the verify/fetch
+// call can't be turned into an internal-network or metadata probe.
 type gcpAPIClient struct {
 	httpc *http.Client
 
@@ -148,7 +151,7 @@ func newGcpAPIClient(timeout time.Duration) *gcpAPIClient {
 	if timeout <= 0 {
 		timeout = 10 * time.Second
 	}
-	return &gcpAPIClient{httpc: &http.Client{Timeout: timeout}, tokens: map[string]appRoleToken{}}
+	return &gcpAPIClient{httpc: hfnet.SafeHTTPClient(timeout, hfnet.PrivateEgressAllowed()), tokens: map[string]appRoleToken{}}
 }
 
 func (c *gcpAPIClient) accessSecret(ctx context.Context, cfg GcpSecretsConfig, name string) (string, error) {

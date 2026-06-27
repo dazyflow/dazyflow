@@ -57,6 +57,25 @@ import type {
 // daemon); prod builds can hardcode an absolute URL via VITE_API_BASE.
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "") + "/api/v1";
 
+// COOKIE_SESSION is the in-memory marker the web app uses for `token` once a
+// session is live. The real bearer is never held in JS (it would be XSS-
+// exfiltratable) — it lives only in the HttpOnly `dazyflow_session` cookie the
+// server sets at sign-in. The sentinel keeps the app's many `if (!token)` gates
+// working while telling the fetch layer "authenticate via the cookie, send no
+// Authorization header". Real bearer tokens (e.g. API keys in non-browser use)
+// still flow through unchanged.
+export const COOKIE_SESSION = "cookie-session";
+
+// authHeader builds the Authorization header for a request: a real bearer for a
+// genuine token, or nothing for the COOKIE_SESSION sentinel / null — in which
+// case the caller MUST send credentials:"include" so the session cookie carries
+// the auth instead.
+function authHeader(token: string | null): Record<string, string> {
+  return token && token !== COOKIE_SESSION
+    ? { Authorization: `Bearer ${token}` }
+    : {};
+}
+
 export class APIError extends Error {
   status: number;
   // code is the snake_case enum from the new ErrorEnvelope (e.g.
@@ -139,8 +158,7 @@ async function request<T>(
   // intended end state, not an event to surface as "session expired".
   opts?: { signalUnauthorized?: boolean },
 ): Promise<T> {
-  const headers: Record<string, string> = {};
-  if (token) headers.Authorization = `Bearer ${token}`;
+  const headers: Record<string, string> = { ...authHeader(token) };
   if (body) headers["Content-Type"] = "application/json";
   const res = await fetch(API_BASE + path, {
     method,
@@ -288,7 +306,7 @@ export const api = {
       API_BASE + `/workspaces/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/files`,
       {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { ...authHeader(token) },
         credentials: "include",
         body: form,
       },
@@ -440,7 +458,7 @@ export const api = {
         `/workspaces/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/files/download?path=${encodeURIComponent(path)}`,
       {
         method: "GET",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { ...authHeader(token) },
         credentials: "include",
       },
     );
@@ -513,6 +531,14 @@ export const api = {
       signalUnauthorized: false,
     }),
   whoami: (token: string | null) => request<WhoAmI>(token, "GET", "/me"),
+
+  // whoamiProbe is whoami for the cold-boot cookie check: a 401 here just means
+  // "no live session in the cookie" (anonymous visitor / SSO not completed), not
+  // an expired session, so it must NOT trip the global session-expired handler.
+  whoamiProbe: () =>
+    request<WhoAmI>(COOKIE_SESSION, "GET", "/me", undefined, {
+      signalUnauthorized: false,
+    }),
 
   // listReferences returns everything a param on `node` can reference in a
   // flow — secrets, upstream node outputs, trigger/form fields, resources —
@@ -995,7 +1021,8 @@ export const api = {
   ): Promise<void> {
     return fetch(API_BASE + "/tools/flow/generate/stream", {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      headers: { ...authHeader(token), "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify(body),
       signal,
     }).then(async (res) => {
@@ -1347,7 +1374,8 @@ export const api = {
   ): Promise<void> {
     return fetch(API_BASE + `/me/runs/${encodeURIComponent(jobID)}/events`, {
       method: "GET",
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { ...authHeader(token) },
+      credentials: "include",
       signal,
     }).then(async (res) => {
       if (!res.ok || !res.body) {
@@ -1399,7 +1427,8 @@ export const api = {
     const qs = tail !== 500 ? `?tail=${encodeURIComponent(String(tail))}` : "";
     return fetch(API_BASE + `/admin/system/log` + qs, {
       method: "GET",
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { ...authHeader(token) },
+      credentials: "include",
       signal,
     }).then(async (res) => {
       if (!res.ok || !res.body) {
@@ -1456,7 +1485,7 @@ export const api = {
     return fetch(
       API_BASE +
         `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/watch`,
-      { method: "GET", headers: { Authorization: `Bearer ${token}` }, signal },
+      { method: "GET", headers: { ...authHeader(token) }, credentials: "include", signal },
     ).then(async (res) => {
       if (!res.ok || !res.body) {
         if (res.status === 401) notifyUnauthorized();

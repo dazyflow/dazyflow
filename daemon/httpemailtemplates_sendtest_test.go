@@ -12,7 +12,6 @@ import (
 
 	"git.sr.ht/~klahr/dazyflow/auth"
 	"git.sr.ht/~klahr/dazyflow/core"
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 	_ "git.sr.ht/~klahr/dazyflow/drops/notify" // register the email_send manifest so its connection fields resolve
 )
 
@@ -65,9 +64,8 @@ func TestSendTestEmail_NotConnected(t *testing.T) {
 // Happy path: the rendered template actually reaches the (fake) SMTP server
 // with the requested recipient and the connection's From address.
 func TestSendTestEmail_Sends(t *testing.T) {
-	hfnet.SetAllowPrivateEgress(true) // the fake server is on loopback
-	t.Cleanup(func() { hfnet.SetAllowPrivateEgress(false) })
-
+	// The fake SMTP server is on loopback; the package TestMain allows private
+	// egress so the mailer's SSRF guard doesn't refuse it.
 	h := newSecretsHarness(t)
 	srv := newFakeSMTP(t)
 	host, port, err := net.SplitHostPort(srv.addr)

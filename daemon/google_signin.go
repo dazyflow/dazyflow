@@ -355,13 +355,13 @@ func (h *HTTPGateway) googleSignInCallback(rw http.ResponseWriter, r *http.Reque
 	// Verify the ID token's signature, issuer, audience, and expiry against
 	// Google's JWKS. Without this, identity rested entirely on the userinfo
 	// response, which the signed token must corroborate before we trust it.
-	verifiedEmail, reason, status, msg := h.verifyGoogleIDToken(r.Context(), cfg, idToken, info)
+	vc, reason, status, msg := h.verifyGoogleIDToken(r.Context(), cfg, idToken, info)
 	if reason != "" {
 		h.signInError(rw, r, st, reason, status, msg)
 		return
 	}
-	email := verifiedEmail
-	if reason, status, msg := validateGoogleClaims(info, email, cfg); reason != "" {
+	email := vc.Email
+	if reason, status, msg := validateGoogleClaims(vc, cfg); reason != "" {
 		h.signInError(rw, r, st, reason, status, msg)
 		return
 	}
@@ -469,53 +469,83 @@ func (h *HTTPGateway) signInError(rw http.ResponseWriter, r *http.Request, st go
 // signed token and requires it to match the userinfo response, so a tampered
 // userinfo body can't substitute a different identity. Returns the verified
 // (lower-cased) email, or a (reason, status, msg) triple on failure.
-func (h *HTTPGateway) verifyGoogleIDToken(ctx context.Context, cfg auth.OrgAuthConfig, idToken string, info googleUserInfo) (email, reason string, status int, msg string) {
+func (h *HTTPGateway) verifyGoogleIDToken(ctx context.Context, cfg auth.OrgAuthConfig, idToken string, info googleUserInfo) (claimsOut verifiedGoogleClaims, reason string, status int, msg string) {
 	if idToken == "" {
-		return "", "no_id_token", http.StatusBadGateway, "google didn't return an id_token"
+		return verifiedGoogleClaims{}, "no_id_token", http.StatusBadGateway, "google didn't return an id_token"
 	}
 	verifier, err := googleIDTokenVerifier(ctx, cfg.GoogleClientID)
 	if err != nil {
-		return "", "verifier_init_failed", http.StatusBadGateway,
+		return verifiedGoogleClaims{}, "verifier_init_failed", http.StatusBadGateway,
 			"could not initialize Google token verification: " + err.Error()
 	}
 	claims, err := verifier.Verify(ctx, idToken)
 	if err != nil {
-		return "", "id_token_invalid", http.StatusForbidden,
+		return verifiedGoogleClaims{}, "id_token_invalid", http.StatusForbidden,
 			"google id_token failed verification: " + err.Error()
 	}
 	// Pull the email out of the signed claims (go-oidc surfaces extra
 	// claims via Extras). This is the trusted identity; userinfo is only a
 	// corroborating display source.
-	signedEmail := ""
+	vc := verifiedGoogleClaims{}
 	if claims.Extras != nil {
 		if e, ok := claims.Extras["email"].(string); ok {
-			signedEmail = strings.ToLower(strings.TrimSpace(e))
+			vc.Email = strings.ToLower(strings.TrimSpace(e))
+		}
+		// The security-critical gates (email_verified, hd/Workspace-domain) are
+		// read from the SIGNED token, not the unsigned userinfo response, so they
+		// can't be tampered with independently of the JWKS-verified signature.
+		vc.EmailVerified = googleClaimBool(claims.Extras["email_verified"])
+		if hd, ok := claims.Extras["hd"].(string); ok {
+			vc.HD = strings.TrimSpace(hd)
 		}
 	}
-	if signedEmail == "" {
-		return "", "no_email", http.StatusBadGateway, "google id_token carried no email claim"
+	if vc.Email == "" {
+		return verifiedGoogleClaims{}, "no_email", http.StatusBadGateway, "google id_token carried no email claim"
 	}
 	uiEmail := strings.ToLower(strings.TrimSpace(info.Email))
-	if uiEmail != "" && uiEmail != signedEmail {
-		return "", "email_mismatch", http.StatusForbidden,
+	if uiEmail != "" && uiEmail != vc.Email {
+		return verifiedGoogleClaims{}, "email_mismatch", http.StatusForbidden,
 			"google id_token email does not match the userinfo email"
 	}
-	return signedEmail, "", 0, ""
+	return vc, "", 0, ""
 }
 
-// validateGoogleClaims enforces the three sign-in preconditions on Google's
-// returned profile: a non-empty email, a verified email, and (when the org
+// verifiedGoogleClaims holds the trusted claims extracted from the SIGNED Google
+// ID token (JWKS-verified), as opposed to the unsigned userinfo HTTP response.
+// The sign-in gates are enforced on these.
+type verifiedGoogleClaims struct {
+	Email         string
+	EmailVerified bool
+	HD            string // Google Workspace "hosted domain"
+}
+
+// googleClaimBool coerces a JSON claim to a bool. Google sends email_verified as
+// a JSON boolean, but some IdPs/serializers surface it as the string "true";
+// accept both so a string-typed claim isn't silently treated as unverified.
+func googleClaimBool(v any) bool {
+	switch t := v.(type) {
+	case bool:
+		return t
+	case string:
+		return strings.EqualFold(strings.TrimSpace(t), "true")
+	default:
+		return false
+	}
+}
+
+// validateGoogleClaims enforces the three sign-in preconditions on the SIGNED
+// Google claims: a non-empty email, a verified email, and (when the org
 // restricts to a Workspace domain) a matching hd= claim. It returns the
 // test-error reason, HTTP status, and user-facing message for the first
 // failure, or ("", 0, "") when the claims pass.
-func validateGoogleClaims(info googleUserInfo, email string, cfg auth.OrgAuthConfig) (reason string, status int, msg string) {
-	if email == "" {
+func validateGoogleClaims(vc verifiedGoogleClaims, cfg auth.OrgAuthConfig) (reason string, status int, msg string) {
+	if vc.Email == "" {
 		return "no_email", http.StatusBadGateway, "google didn't return an email"
 	}
-	if !info.EmailVerified {
+	if !vc.EmailVerified {
 		return "not_verified", http.StatusForbidden, "google didn't verify this email"
 	}
-	if cfg.GoogleWorkspaceDomain != "" && !strings.EqualFold(info.HD, cfg.GoogleWorkspaceDomain) {
+	if cfg.GoogleWorkspaceDomain != "" && !strings.EqualFold(vc.HD, cfg.GoogleWorkspaceDomain) {
 		return "domain_mismatch", http.StatusForbidden,
 			fmt.Sprintf("only %s users can sign into this organization via Google", cfg.GoogleWorkspaceDomain)
 	}

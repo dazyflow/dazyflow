@@ -252,7 +252,12 @@ func putSecretManagerConfig[T providerConfig](
 	verify func(context.Context, T, time.Duration) error,
 	audit func(T) (action, target, detail string),
 ) {
-	if !h.secretManagerGate(rw, p, core.PermSecretWrite) {
+	// organization:admin, not secret:write: configuring the org's BYO
+	// secret-manager backend (its address/endpoint) is an infrastructure
+	// action, and the PUT connection-tests that tenant-supplied address. An
+	// editor must not be able to point the org at — or probe via — an arbitrary
+	// host. The SSRF guard on the verify client is the second layer.
+	if !h.secretManagerGate(rw, p, core.PermOrganizationAdmin) {
 		return
 	}
 	r.Body = http.MaxBytesReader(rw, r.Body, maxSecretValueBytes)
@@ -313,7 +318,9 @@ func deleteSecretManagerConfig(
 	h *HTTPGateway, rw http.ResponseWriter, r *http.Request, p core.Principal,
 	label, secretName, auditAction string,
 ) {
-	if !h.secretManagerGate(rw, p, core.PermSecretWrite) {
+	// organization:admin, not secret:write — see putSecretManagerConfig:
+	// removing the org's secret-manager backend is an infrastructure action.
+	if !h.secretManagerGate(rw, p, core.PermOrganizationAdmin) {
 		return
 	}
 	if err := deleteProviderConfig(r.Context(), h.EncryptedSecrets, p.Tenant, secretName); err != nil && !errors.Is(err, ErrSecretNotFound) {

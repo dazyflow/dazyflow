@@ -17,56 +17,47 @@ import (
 )
 
 func TestValidateGoogleClaims(t *testing.T) {
-	verified := googleUserInfo{Email: "a@acme.test", EmailVerified: true, HD: "acme.test"}
-
 	cases := []struct {
 		name       string
-		info       googleUserInfo
-		email      string
+		vc         verifiedGoogleClaims
 		cfg        auth.OrgAuthConfig
 		wantReason string
 		wantStatus int
 	}{
 		{
-			name:  "ok, no domain restriction",
-			info:  googleUserInfo{Email: "a@gmail.com", EmailVerified: true},
-			email: "a@gmail.com",
-			cfg:   auth.OrgAuthConfig{},
+			name: "ok, no domain restriction",
+			vc:   verifiedGoogleClaims{Email: "a@gmail.com", EmailVerified: true},
+			cfg:  auth.OrgAuthConfig{},
 		},
 		{
-			name:  "ok, domain matches (case-insensitive)",
-			info:  googleUserInfo{Email: "a@acme.test", EmailVerified: true, HD: "ACME.test"},
-			email: "a@acme.test",
-			cfg:   auth.OrgAuthConfig{GoogleWorkspaceDomain: "acme.test"},
+			name: "ok, domain matches (case-insensitive)",
+			vc:   verifiedGoogleClaims{Email: "a@acme.test", EmailVerified: true, HD: "ACME.test"},
+			cfg:  auth.OrgAuthConfig{GoogleWorkspaceDomain: "acme.test"},
 		},
 		{
 			name:       "empty email",
-			info:       verified,
-			email:      "",
+			vc:         verifiedGoogleClaims{Email: "", EmailVerified: true, HD: "acme.test"},
 			cfg:        auth.OrgAuthConfig{},
 			wantReason: "no_email",
 			wantStatus: http.StatusBadGateway,
 		},
 		{
 			name:       "unverified email",
-			info:       googleUserInfo{Email: "a@acme.test", EmailVerified: false},
-			email:      "a@acme.test",
+			vc:         verifiedGoogleClaims{Email: "a@acme.test", EmailVerified: false},
 			cfg:        auth.OrgAuthConfig{},
 			wantReason: "not_verified",
 			wantStatus: http.StatusForbidden,
 		},
 		{
 			name:       "domain mismatch",
-			info:       googleUserInfo{Email: "a@gmail.com", EmailVerified: true, HD: "gmail.com"},
-			email:      "a@gmail.com",
+			vc:         verifiedGoogleClaims{Email: "a@gmail.com", EmailVerified: true, HD: "gmail.com"},
 			cfg:        auth.OrgAuthConfig{GoogleWorkspaceDomain: "acme.test"},
 			wantReason: "domain_mismatch",
 			wantStatus: http.StatusForbidden,
 		},
 		{
 			name:       "domain restricted but hd empty (personal account)",
-			info:       googleUserInfo{Email: "a@gmail.com", EmailVerified: true, HD: ""},
-			email:      "a@gmail.com",
+			vc:         verifiedGoogleClaims{Email: "a@gmail.com", EmailVerified: true, HD: ""},
 			cfg:        auth.OrgAuthConfig{GoogleWorkspaceDomain: "acme.test"},
 			wantReason: "domain_mismatch",
 			wantStatus: http.StatusForbidden,
@@ -74,7 +65,7 @@ func TestValidateGoogleClaims(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			reason, status, msg := validateGoogleClaims(c.info, c.email, c.cfg)
+			reason, status, msg := validateGoogleClaims(c.vc, c.cfg)
 			if reason != c.wantReason || status != c.wantStatus {
 				t.Fatalf("validateGoogleClaims = (%q, %d), want (%q, %d)", reason, status, c.wantReason, c.wantStatus)
 			}
@@ -147,16 +138,23 @@ func TestVerifyGoogleIDToken_Cov(t *testing.T) {
 	}
 
 	// Happy path: signed email is lower-cased and returned; userinfo agrees.
-	installGoogleVerifier(t, clientID, stubGoogleVerifier{claims: auth.Claims{Extras: map[string]any{"email": "User@Acme.test"}}})
-	email, reason, _, _ := h.gw.verifyGoogleIDToken(ctx, cfg, "tok", googleUserInfo{Email: "user@acme.test"})
-	if reason != "" || email != "user@acme.test" {
-		t.Fatalf("happy path email=%q reason=%q", email, reason)
+	// email_verified + hd come from the SIGNED claims, not userinfo, and must be
+	// surfaced for validateGoogleClaims to gate on.
+	installGoogleVerifier(t, clientID, stubGoogleVerifier{claims: auth.Claims{Extras: map[string]any{
+		"email": "User@Acme.test", "email_verified": true, "hd": "acme.test",
+	}}})
+	vc, reason, _, _ := h.gw.verifyGoogleIDToken(ctx, cfg, "tok", googleUserInfo{Email: "user@acme.test"})
+	if reason != "" || vc.Email != "user@acme.test" {
+		t.Fatalf("happy path email=%q reason=%q", vc.Email, reason)
+	}
+	if !vc.EmailVerified || vc.HD != "acme.test" {
+		t.Fatalf("signed claims not extracted: %+v", vc)
 	}
 
 	// Userinfo email omitted is allowed (signed token is authoritative).
-	email, reason, _, _ = h.gw.verifyGoogleIDToken(ctx, cfg, "tok", googleUserInfo{})
-	if reason != "" || email != "user@acme.test" {
-		t.Fatalf("empty-userinfo email=%q reason=%q", email, reason)
+	vc, reason, _, _ = h.gw.verifyGoogleIDToken(ctx, cfg, "tok", googleUserInfo{})
+	if reason != "" || vc.Email != "user@acme.test" {
+		t.Fatalf("empty-userinfo email=%q reason=%q", vc.Email, reason)
 	}
 }
 
@@ -413,8 +411,14 @@ func googleCallbackEnv(t *testing.T, signedEmail, hd string, emailVerified bool)
 	t.Cleanup(uiSrv.Close)
 	withGoogleEndpoints(t, tokenSrv.URL, uiSrv.URL)
 
+	// email_verified + hd are now read from the SIGNED token (not userinfo), so
+	// the stub must carry them the way Google's id_token does.
+	extras := map[string]any{"email": signedEmail, "email_verified": emailVerified}
+	if hd != "" {
+		extras["hd"] = hd
+	}
 	installGoogleVerifier(t, clientID, stubGoogleVerifier{
-		claims: auth.Claims{Extras: map[string]any{"email": signedEmail}},
+		claims: auth.Claims{Extras: extras},
 	})
 	return h
 }

@@ -244,7 +244,12 @@ func (e *EncryptedSecrets) Get(ctx context.Context, name string) (string, error)
 	flow, _ := core.FlowFromContext(ctx)
 
 	candidates := make([]string, 0, 2)
-	if flow != "" {
+	// Connection/OAuth namespaces are organization-authoritative: skip the
+	// flow tier so a flow-scoped value can't shadow (and silently override) the
+	// org credential. Genuine user secrets still get flow→org precedence. This
+	// is defense in depth alongside validUserSecretName, which already blocks
+	// writing a reserved-prefix name through the secret CRUD endpoint.
+	if flow != "" && !orgAuthoritativeSecretName(name) {
 		candidates = append(candidates, secretFlowPrefix+flow+"."+name)
 	}
 	candidates = append(candidates, name) // organization scope (bare name)
