@@ -91,19 +91,28 @@ func (h *HTTPGateway) billingMe(rw http.ResponseWriter, r *http.Request, p core.
 	if h.svc.Usage != nil {
 		runsThisMonth, _ = h.svc.runsThisMonth(r.Context(), tenant)
 	}
+	// billingEnabled reports whether this deployment runs paid billing at all
+	// (Stripe wired up). It's distinct from can_upgrade, which is additionally
+	// false once a tenant is already pro — so the client can't infer "this is a
+	// billing deployment" from can_upgrade alone. A self-hosted instance with no
+	// Stripe leaves the whole plan/billing UI hidden via this flag.
+	billingEnabled := h.Billing != nil && h.Billing.Stripe != nil
 	resp := map[string]any{
 		"plan":                 effPlan,
 		"subscription_status":  plan.SubscriptionStatus,
 		"cancel_at_period_end": plan.CancelAtPeriodEnd,
 		"free_runs_per_month":  h.svc.FreeRunsPerMonth,
 		"runs_this_month":      runsThisMonth,
+		// billing_enabled gates the plan/upgrade surface in the web UI; on a
+		// self-host without Stripe the client shows usage only.
+		"billing_enabled": billingEnabled,
 		// polling_allowed tells the Usage page why a free tenant's
 		// schedules aren't firing on gated deployments.
 		"polling_allowed": !h.svc.FreePollingDisabled || effPlan == PlanPro,
 		// Upgrade is offered only when Stripe is actually configured;
 		// manage (portal) additionally needs an existing customer.
-		"can_upgrade": h.Billing != nil && h.Billing.Stripe != nil && effPlan != PlanPro,
-		"can_manage":  h.Billing != nil && h.Billing.Stripe != nil && plan.StripeCustomerID != "",
+		"can_upgrade": billingEnabled && effPlan != PlanPro,
+		"can_manage":  billingEnabled && plan.StripeCustomerID != "",
 	}
 	// current_period_end is the renewal-or-cancellation date the UI dates
 	// its chip from; omit when unset so the client can distinguish "no date".

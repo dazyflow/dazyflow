@@ -94,6 +94,11 @@ export function Usage() {
 
   const current = usage[0];
   const fmt = new Intl.NumberFormat(i18n.language);
+  // Whether this deployment runs paid billing at all. When false (a self-host
+  // without Stripe), the plan card, plan comparison, and billing framing are
+  // all hidden — the page is pure usage metering. A failed billing fetch (null)
+  // also reads as not-a-billing-deployment.
+  const billingEnabled = !!billing?.billing_enabled;
 
   // Free-tier run-cap proximity drives the runs-card tone, the way the
   // Dashboard's success-rate / failure cards colour themselves.
@@ -143,9 +148,9 @@ export function Usage() {
         <div>
           <h1>
             <CreditCard size={20} style={{ marginRight: 8, verticalAlign: -3 }} />
-            {t("usage.title")}
+            {billingEnabled ? t("usage.title") : t("usage.titlePlain")}
           </h1>
-          <div className="sub">{t("usage.subtitle")}</div>
+          <div className="sub">{billingEnabled ? t("usage.subtitle") : t("usage.subtitlePlain")}</div>
         </div>
         {billing && (billing.can_upgrade || billing.can_manage) && (
           <div className="dash-title-actions">
@@ -173,7 +178,7 @@ export function Usage() {
 
       {!loading && !error && (
         <div className="dash-stats">
-          {billing && (
+          {billing && billingEnabled && (
             <StatCard
               icon={<CreditCard size={18} />}
               label={t("usage.planLabel")}
@@ -263,8 +268,10 @@ export function Usage() {
         </section>
       )}
 
-      {/* Plan comparison — the old /plans grid, inline below usage. */}
-      {!loading && !error && plans && (
+      {/* Plan comparison — the old /plans grid, inline below usage. Hidden on
+          deployments without paid billing (a self-host has one unlimited plan,
+          so a Free/Pro/Enterprise comparison is noise). */}
+      {!loading && !error && plans && billingEnabled && (
         <PlanComparison
           info={plans}
           redirecting={redirecting}

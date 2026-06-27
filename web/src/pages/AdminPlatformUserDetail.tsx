@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { AlertCircle, ArrowLeft, Ban, ShieldOff, Trash2, UserCheck } from "lucide-react";
+import { AlertCircle, ArrowLeft, Ban, ShieldCheck, ShieldOff, ShieldPlus, Trash2, UserCheck } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, type PlatformUser } from "../api";
@@ -27,7 +27,7 @@ export function AdminPlatformUserDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [dialog, setDialog] = useState<"suspend" | "ban" | "delete" | null>(null);
+  const [dialog, setDialog] = useState<"suspend" | "ban" | "delete" | "grant" | "revoke" | null>(null);
 
   const refresh = useCallback(async () => {
     if (!token) return;
@@ -77,6 +77,9 @@ export function AdminPlatformUserDetail() {
 
   const suspended = user?.status === "suspended";
   const isAdmin = user?.platform_admin ?? false;
+  const isEnvAdmin = user?.platform_admin_env ?? false;
+  // A runtime grant (revocable here); an env admin is immutable.
+  const isGrantedAdmin = isAdmin && !isEnvAdmin;
 
   return (
     <div>
@@ -206,6 +209,43 @@ export function AdminPlatformUserDetail() {
               </ActionRow>
             </ActionsCard>
           )}
+
+          {/* Platform role: grant or revoke the cross-tenant super-admin.
+              Separate from moderation so a runtime-granted admin stays
+              revocable here. An env-allowlist admin is immutable. */}
+          <ActionsCard title={t("admin.platformUserDetail.platformRoleHead")}>
+            {isEnvAdmin ? (
+              <ActionRow
+                icon={<ShieldCheck size={17} />}
+                title={t("admin.platformUserDetail.platformAdminEnv")}
+                description={t("admin.platformUserDetail.platformAdminEnvDesc")}
+              >
+                <span className="count-pill">
+                  {t("admin.platformUserDetail.platformAdminBadge")}
+                </span>
+              </ActionRow>
+            ) : isGrantedAdmin ? (
+              <ActionRow
+                icon={<ShieldCheck size={17} />}
+                title={t("admin.platformUserDetail.revokeAdmin")}
+                description={t("admin.platformUserDetail.revokeAdminDesc")}
+              >
+                <Button variant="warning" disabled={busy} onClick={() => setDialog("revoke")}>
+                  {t("admin.platformUserDetail.revokeAdmin")}
+                </Button>
+              </ActionRow>
+            ) : (
+              <ActionRow
+                icon={<ShieldPlus size={17} />}
+                title={t("admin.platformUserDetail.grantAdmin")}
+                description={t("admin.platformUserDetail.grantAdminDesc")}
+              >
+                <Button variant="primary" disabled={busy} onClick={() => setDialog("grant")}>
+                  {t("admin.platformUserDetail.grantAdmin")}
+                </Button>
+              </ActionRow>
+            )}
+          </ActionsCard>
         </>
       )}
 
@@ -232,6 +272,25 @@ export function AdminPlatformUserDetail() {
           confirmLabel={t("admin.platformUserDetail.delete")}
           danger
           onConfirm={() => void run(() => api.platformDeleteUser(token!, email), true)}
+          onCancel={() => setDialog(null)}
+        />
+      )}
+      {dialog === "grant" && (
+        <ConfirmModal
+          title={t("admin.platformUserDetail.grantAdminTitle", { email })}
+          message={t("admin.platformUserDetail.grantAdminWarning")}
+          confirmLabel={t("admin.platformUserDetail.grantAdmin")}
+          onConfirm={() => void run(() => api.platformGrantAdmin(token!, email))}
+          onCancel={() => setDialog(null)}
+        />
+      )}
+      {dialog === "revoke" && (
+        <ConfirmModal
+          title={t("admin.platformUserDetail.revokeAdminTitle", { email })}
+          message={t("admin.platformUserDetail.revokeAdminWarning")}
+          confirmLabel={t("admin.platformUserDetail.revokeAdmin")}
+          danger
+          onConfirm={() => void run(() => api.platformRevokeAdmin(token!, email))}
           onCancel={() => setDialog(null)}
         />
       )}

@@ -125,6 +125,51 @@ func TestPgEntitlementStore_CRUD(t *testing.T) {
 	}
 }
 
+// TestPgWriteDedupeStore exercises the shared write-dedupe store: a miss, a
+// recorded result round-tripping back, first-writer-wins on conflict, and a
+// stale row reading as absent.
+func TestPgWriteDedupeStore(t *testing.T) {
+	pool, ctx := covPGPool(t)
+	if _, err := pool.Exec(ctx, "DROP TABLE IF EXISTS write_dedupe"); err != nil {
+		t.Fatalf("drop: %v", err)
+	}
+	store, err := NewPgWriteDedupeStore(ctx, pool)
+	if err != nil {
+		t.Fatalf("NewPgWriteDedupeStore: %v", err)
+	}
+
+	// Miss on an unknown key.
+	if _, ok := store.Get(ctx, "job-1"); ok {
+		t.Fatal("Get(unknown) = ok, want miss")
+	}
+
+	// Put then Get round-trips the result.
+	want := core.Result{JobID: "job-1", Status: core.StatusOK,
+		Output: map[string]core.Ref{"sid": {Inline: "SM123"}}}
+	store.Put(ctx, "job-1", want)
+	got, ok := store.Get(ctx, "job-1")
+	if !ok || got.JobID != "job-1" || got.Status != core.StatusOK || got.Output["sid"].Inline != "SM123" {
+		t.Fatalf("Get after Put = %+v ok=%v, want %+v", got, ok, want)
+	}
+
+	// First-writer-wins: a second Put for the same key must not overwrite.
+	store.Put(ctx, "job-1", core.Result{JobID: "job-1", Status: core.StatusOK,
+		Output: map[string]core.Ref{"sid": {Inline: "SM999"}}})
+	if got, _ := store.Get(ctx, "job-1"); got.Output["sid"].Inline != "SM123" {
+		t.Fatalf("second Put overwrote: sid=%q, want SM123", got.Output["sid"].Inline)
+	}
+
+	// A stale row reads as absent (and is dropped). Backdate past the TTL.
+	if _, err := pool.Exec(ctx,
+		`UPDATE write_dedupe SET stored_at = now() - $1::interval WHERE key='job-1'`,
+		(pgWriteDedupeTTL + time.Minute).String()); err != nil {
+		t.Fatalf("backdate: %v", err)
+	}
+	if _, ok := store.Get(ctx, "job-1"); ok {
+		t.Fatal("Get(stale) = ok, want miss")
+	}
+}
+
 // TestPgDropSwitchStore_Lifecycle exercises the killswitch store: schema,
 // disable/enable, global vs per-tenant precedence, the in-memory Disabled
 // fast path, and List.

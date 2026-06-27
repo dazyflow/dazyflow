@@ -483,6 +483,19 @@ func main() {
 		log.Fatalf("DAZYFLOW_MCP_SERVERS: %v", err)
 	}
 
+	// Write dedupe for non-idempotent external writes. Prefer the shared
+	// Postgres store so a lease reclaim by ANOTHER node sees the recorded write
+	// (multi-replica safety); fall back to the process-local store only if the
+	// table can't be created.
+	var writeDedupe core.WriteDedupeStore = engine.NewMemoryWriteDedupe()
+	if pgPool != nil {
+		if pgDedupe, err := daemon.NewPgWriteDedupeStore(ctx, pgPool); err != nil {
+			log.Printf("write dedupe: Postgres store unavailable (%v); using process-local store", err)
+		} else {
+			writeDedupe = pgDedupe
+		}
+	}
+
 	eng := &engine.Engine{
 		Resolver: &engine.NodeResolver{
 			Native: engine.Default,
@@ -501,12 +514,12 @@ func main() {
 		Sandbox: sandbox,
 		Quota:   quota,
 		Secrets: secrets,
-		// Process-local dedupe of non-idempotent external writes (Twilio SMS,
-		// Gmail/Discord/Sheets/Home Assistant) so an expired-lease reclaim or
-		// crash recovery doesn't re-fire a side effect the first attempt
-		// already completed. Single-node scope (one shared engine); multi-node
-		// cross-process reclaim needs a shared store behind this interface.
-		WriteDedupe: engine.NewMemoryWriteDedupe(),
+		// Dedupe of non-idempotent external writes (Twilio SMS, Gmail/Discord/
+		// Sheets/Home Assistant) so an expired-lease reclaim or crash recovery
+		// doesn't re-fire a side effect the first attempt already completed.
+		// Postgres-backed when available so a reclaim by another node sees the
+		// record; see writeDedupe above.
+		WriteDedupe: writeDedupe,
 	}
 	// Flow resources: ${resource.NAME} resolves to live external content at
 	// template-resolution time. Wired only when the encrypted store exists
@@ -1307,6 +1320,15 @@ func buildGateway(ctx context.Context, d gatewayDeps) {
 		log.Fatalf("postgres audit log: %v", err)
 	}
 	gw.Audit = auditLog
+	// Runtime platform-admin grants: the mutable layer over the env allowlist,
+	// so a platform admin can grant/revoke the role from the UI without a
+	// restart. Nil leaves the grant/revoke endpoints at 501 (env allowlist
+	// still works).
+	if grants, err := daemon.NewPgPlatformAdminStore(ctx, d.pgPool); err != nil {
+		log.Fatalf("postgres platform-admin store: %v", err)
+	} else {
+		gw.PlatformAdminGrants = grants
+	}
 	// Opt-in (compliance) auditing of secret *reads*. Off by default because
 	// secret resolution runs on every node execution — high volume. When on,
 	// each successful Get emits a "secret.read" event (name + actor, no value).

@@ -177,19 +177,24 @@ The steps:
    `DAZYFLOW_WEB_ORIGIN` / `DAZYFLOW_PUBLIC_BASE_URL` to the same https origin,
    add `DAZYFLOW_TRUST_PROXY_HEADERS=1`, uncomment `ingress.yaml` in
    `kustomization.yaml`, and re-apply.
-2. **Raise `replicas`** on the Deployment. Switch the `/data` volume from the
-   RWO PVC to a `ReadWriteMany` volume (block storage can't be shared across
+2. **Switch `/data` to `ReadWriteMany`.** Block storage can't be shared across
    pods — on DO that means storing workspace/`file_write` artifacts in object
-   storage / DO Spaces instead) and drop the `Recreate` strategy back to a
-   rolling update. Set the same `DAZYFLOW_APPROVAL_HMAC_SECRET` on every pod
-   if you use unauthenticated approval links.
-3. **Add the operational resources** as needed: a `PodDisruptionBudget`
-   (`minAvailable: 1`), a CPU `HorizontalPodAutoscaler` (DOKS ships
-   metrics-server; for backlog-aware scaling use the Prometheus metric
-   `dazyflow_jobs_oldest_queued_seconds` via prometheus-adapter), and a
-   default-deny `NetworkPolicy` (DOKS enforces it via Cilium). Note a
+   storage / DO Spaces, or using an RWX StorageClass — then patch the PVC's
+   `accessModes` to `[ReadWriteMany]`. Set the same
+   `DAZYFLOW_APPROVAL_HMAC_SECRET` on every pod if you use unauthenticated
+   approval links.
+3. **Add the scale-up resources.** `deploy/k8s/scale-up.yaml` ships a
+   `PodDisruptionBudget` (`minAvailable: 1`), a CPU `HorizontalPodAutoscaler`
+   (`minReplicas: 2`; DOKS ships metrics-server — for backlog-aware scaling
+   swap in the Prometheus metric `dazyflow_jobs_oldest_queued_seconds` via
+   prometheus-adapter), and a default-deny `NetworkPolicy` (DOKS enforces it
+   via Cilium). Uncomment `- scale-up.yaml` **and** the multi-replica `patches:`
+   block in `kustomization.yaml` — the patch drops the static `replicas` (the
+   HPA owns it) and flips `Recreate` to `RollingUpdate`. The
    `PodDisruptionBudget` is *not* useful at one replica — `minAvailable: 1`
-   there blocks node drains entirely.
+   there blocks node drains entirely — which is why it lives in this overlay,
+   not the single-pod base. The `NetworkPolicy` is the one piece worth adopting
+   even on a single pod.
 
 `/metrics` is off by default. If you enable it (`DAZYFLOW_ENABLE_METRICS=1`)
 note it shares port 8080 with the API, so it can't be isolated by
@@ -285,6 +290,41 @@ your team as the platform admin.
 (With Google SSO configured, the first sign-in by a listed email
 auto-provisions the account and elevates it the same way — no signup
 toggle involved at all.)
+
+### Managing tenants, tiers & entitlements
+
+Everything a multi-tenant operator needs is in the web UI under **Admin →
+Platform** (visible to `platform:admin` accounts) — no SQL required:
+
+- **Orgs** (`/admin/platform/orgs`) — every tenant on the instance; open one
+  to suspend/resume it or adjust its plan.
+- **Users** (`/admin/platform/users`) — every account across all orgs;
+  suspend/unsuspend, inspect roles, and **grant or revoke `platform:admin`**
+  (User detail → Platform role). This is the runtime counterpart to the
+  `DAZYFLOW_PLATFORM_ADMINS` env allowlist: it adds/removes the cross-tenant
+  super-admin role without a restart. A grant takes effect on the target's next
+  sign-in; a revoke drops their live sessions so it applies immediately. Admins
+  granted via the env allowlist show a non-revocable badge — to remove one,
+  edit `DAZYFLOW_PLATFORM_ADMINS` and restart (a UI revoke would be undone at
+  their next login).
+- **Tiers** (`/admin/platform/tiers`) — reusable bundles of limits (runs/month,
+  disk, concurrency, members, retention, max flows/nodes/timeout, polling). The
+  built-in **Free** and **Pro** tiers ship with every limit unset, so they
+  inherit the deployment-global defaults (the `DAZYFLOW_FREE_*` knobs) and a
+  self-host with those unset is effectively unlimited. Create custom tiers
+  (e.g. an Enterprise tier) here.
+- **Org detail → Plan & limits** — assign a tier to an org, pin its plan
+  (`free`/`pro`), grant a comp or trial, or override any single limit. The
+  effective value resolves *override → tier → global default*, where `0 =
+  unlimited/inherit`.
+- **Drops** (`/admin/platform/drops`) — enable/disable connectors globally or
+  per-tenant.
+
+Plans/tiers are **independent of Stripe**: a `platform:admin` can comp an org to
+Pro or assign a custom tier with no billing configured at all. Stripe only adds
+the self-serve Checkout/portal buttons (see *Billing / plan gates* in
+`.env.example`); leave it unset and the whole plan/billing surface stays hidden
+in the UI while you still manage entitlements from Admin → Platform.
 
 ### Fail-closed config guard
 

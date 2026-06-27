@@ -1,0 +1,102 @@
+# Multi-replica scale-up resources for Dazyflow — PodDisruptionBudget,
+# HorizontalPodAutoscaler, and NetworkPolicy. OPTIONAL: the base
+# (dazyflow.yaml) is a single pod and runs fine without any of this.
+#
+# Enable by uncommenting `- scale-up.yaml` in kustomization.yaml. The app
+# coordinates across replicas via Postgres (event bus + advisory-lock
+# scheduler leader, so schedules don't double-fire), so horizontal scaling is
+# safe — BUT two base assumptions must change first or replicas will fight:
+#
+#   1. STORAGE. The base /data PVC is ReadWriteOnce — only one node can mount
+#      it. Multiple replicas need ReadWriteMany (RWX) storage (e.g. a managed
+#      NFS/Filestore/EFS StorageClass) so every pod shares the flow-graph git
+#      repos. Patch the PVC's accessModes to [ReadWriteMany] and set an RWX
+#      storageClassName.
+#   2. ROLLOUTS. The base uses `strategy: Recreate` (forced by RWO). With RWX
+#      you can switch to RollingUpdate and drop the static `replicas: 1` so the
+#      HPA owns the replica count. Both are done by the kustomize patch shown
+#      (commented) at the bottom of kustomization.yaml.
+#
+# The NetworkPolicy below is useful on its own (single pod too) — it locks
+# inbound to the ingress controller and is the one piece worth adopting early.
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: dazyflow
+  labels: { app: dazyflow }
+spec:
+  # Keep at least one pod serving through voluntary disruptions (node drains,
+  # cluster upgrades). Meaningful only with >1 replica; on a single pod it
+  # would block drains, which is why this lives in the scale-up overlay.
+  minAvailable: 1
+  selector:
+    matchLabels: { app: dazyflow }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: dazyflow
+  labels: { app: dazyflow }
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: dazyflow
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    # CPU-based to start. Flow execution is the CPU consumer; raise maxReplicas
+    # as your run volume grows. For backlog-aware scaling, export
+    # dazyflow_jobs_oldest_queued_seconds (DAZYFLOW_ENABLE_METRICS=1) via
+    # Prometheus Adapter and add an External/Pods metric here instead.
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+  behavior:
+    scaleDown:
+      # Flow runs are bursty; a slow scale-down avoids flapping mid-run.
+      stabilizationWindowSeconds: 300
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: dazyflow
+  labels: { app: dazyflow }
+spec:
+  podSelector:
+    matchLabels: { app: dazyflow }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # Inbound HTTP only from the ingress controller. Replace the namespace
+    # label selector with your controller's namespace (ingress-nginx, traefik,
+    # etc.). Drop the from: block entirely to allow any in-cluster source
+    # (e.g. when reaching the pod only via `kubectl port-forward`).
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - { protocol: TCP, port: 8080 }
+  egress:
+    # DNS resolution.
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    # Postgres (managed/external) and outbound HTTPS for connectors + OAuth +
+    # SMTP. This is permissive on purpose — flows call arbitrary third-party
+    # APIs. Tighten with DAZYFLOW_HTTP_EGRESS_ALLOW at the app layer rather
+    # than here, where you can't enumerate every connector host. Narrow the
+    # Postgres CIDR to your DB's address if it's static.
+    - to:
+        - ipBlock: { cidr: 0.0.0.0/0 }
+      ports:
+        - { protocol: TCP, port: 5432 }
+        - { protocol: TCP, port: 443 }
+        - { protocol: TCP, port: 587 }
+        - { protocol: TCP, port: 465 }

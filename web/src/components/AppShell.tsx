@@ -733,6 +733,9 @@ function AccountMenu({
   // Stripe upgrades are configured. Best-effort and server-cached; a failed or
   // unconfigured billing lookup simply hides the CTA.
   const [canUpgrade, setCanUpgrade] = useState(false);
+  // Whether this deployment runs paid billing at all. When false (a self-host
+  // without Stripe), the account entry reads "Usage" not "Plan & usage".
+  const [billingEnabled, setBillingEnabled] = useState(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   // The pop is rendered in a portal at document.body (see below) so the
   // sidebar's overflow clip + stacking context can't hide it behind the
@@ -750,10 +753,14 @@ function AccountMenu({
     api
       .getBilling(token, activeTenant || undefined)
       .then((b) => {
-        if (live) setCanUpgrade(!!b?.can_upgrade);
+        if (!live) return;
+        setCanUpgrade(!!b?.can_upgrade);
+        setBillingEnabled(!!b?.billing_enabled);
       })
       .catch(() => {
-        if (live) setCanUpgrade(false);
+        if (!live) return;
+        setCanUpgrade(false);
+        setBillingEnabled(false);
       });
     return () => {
       live = false;
@@ -860,7 +867,9 @@ function AccountMenu({
             </Button>
             {/* Plan & usage (plan, billing, consumption) — one account-menu
                 entry for the merged page. It's billing/account info, not a
-                workspace surface a first-time user needs in their face. */}
+                workspace surface a first-time user needs in their face. On a
+                self-host without billing it's pure usage metering, so the label
+                drops the "Plan &" framing. */}
             <Button
               role="menuitem"
               className="workspace-pop-row account-pop-row"
@@ -870,7 +879,7 @@ function AccountMenu({
               }}
             >
               <CreditCard size={14} />
-              {t("nav.plans")}
+              {billingEnabled ? t("nav.plans") : t("nav.usage")}
             </Button>
             {showAdmin && (
               <Button

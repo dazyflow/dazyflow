@@ -15,6 +15,10 @@ resources:
   # Single-pod start has no public ingress. When you front it with a hostname
   # + TLS, uncomment this (see ingress.yaml and DEPLOY.md "Scaling up").
   # - ingress.yaml
+  # Multi-replica scale-up (PodDisruptionBudget + HPA + NetworkPolicy). Read
+  # scale-up.yaml's header first — it needs RWX storage for /data and the
+  # RollingUpdate patch below before replicas are safe.
+  # - scale-up.yaml
 
 # Pin the image here instead of editing dazyflow.yaml, so the same base
 # serves every environment. Set newName to your DO Container Registry path
@@ -41,3 +45,14 @@ resources:
 #       - dazyflow.env           # KEY=VALUE lines, git-ignored
 # generatorOptions:
 #   disableNameSuffixHash: true  # keep the name `dazyflow-secrets` stable
+
+# Multi-replica patch (pair with `- scale-up.yaml` above). Switches the base
+# from single-pod Recreate to RollingUpdate and hands replica count to the HPA.
+# Requires RWX /data storage first (see scale-up.yaml). The null replicas
+# removes the static count so the HPA owns it.
+#
+# patches:
+#   - target: { kind: Deployment, name: dazyflow }
+#     patch: |
+#       - { op: remove, path: /spec/replicas }
+#       - { op: replace, path: /spec/strategy, value: { type: RollingUpdate, rollingUpdate: { maxUnavailable: 0, maxSurge: 1 } } }

@@ -50,7 +50,8 @@ func TestBillingMe(t *testing.T) {
 	var got map[string]any
 	_ = json.Unmarshal(rw.Body.Bytes(), &got)
 	if got["plan"] != "free" || got["free_runs_per_month"] != float64(100) ||
-		got["runs_this_month"] != float64(1) || got["can_upgrade"] != true || got["can_manage"] != false {
+		got["runs_this_month"] != float64(1) || got["can_upgrade"] != true ||
+		got["can_manage"] != false || got["billing_enabled"] != true {
 		t.Errorf("got %+v", got)
 	}
 
@@ -60,6 +61,24 @@ func TestBillingMe(t *testing.T) {
 	_ = json.Unmarshal(rw.Body.Bytes(), &got)
 	if got["plan"] != "pro" || got["can_upgrade"] != false || got["can_manage"] != true {
 		t.Errorf("after upgrade: %+v", got)
+	}
+}
+
+// A self-hosted deployment with no Stripe wired up reports billing_enabled
+// false (and can_upgrade/can_manage false), so the web client hides the whole
+// plan/billing surface and shows usage only.
+func TestBillingMeNoStripe(t *testing.T) {
+	h, _, _ := billingHarness(t)
+	h.gw.Billing = nil // no Stripe configured
+
+	rw := h.do(t, "GET", "/api/v1/me/billing", nil)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rw.Code, rw.Body.String())
+	}
+	var got map[string]any
+	_ = json.Unmarshal(rw.Body.Bytes(), &got)
+	if got["billing_enabled"] != false || got["can_upgrade"] != false || got["can_manage"] != false {
+		t.Errorf("self-host: got %+v, want billing_enabled/can_upgrade/can_manage all false", got)
 	}
 }
 

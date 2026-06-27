@@ -888,6 +888,10 @@ export type BillingInfo = {
   current_period_end?: string;
   free_runs_per_month: number;
   runs_this_month: number;
+  // True when this deployment runs paid billing (Stripe configured). Distinct
+  // from can_upgrade (which is also false once already pro): gates the whole
+  // plan/upgrade UI so a self-host without Stripe shows usage only.
+  billing_enabled: boolean;
   // False when this deployment keeps schedules/polling triggers off the
   // free plan and the tenant is free.
   polling_allowed: boolean;

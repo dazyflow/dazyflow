@@ -23,6 +23,14 @@ type Role struct {
 	Permissions []Permission `json:"permissions"`
 }
 
+// PlatformAdminRole is the cross-tenant super-admin role stamped onto a session
+// for an email in the DAZYFLOW_PLATFORM_ADMINS allowlist or carrying a runtime
+// platform-admin grant. Kept here as one source of truth so the env-allowlist
+// elevation and the grant store construct the identical role.
+func PlatformAdminRole() Role {
+	return Role{Name: "platform_admin", Permissions: []Permission{PermPlatformAdmin}}
+}
+
 func (r Role) Has(p Permission) bool {
 	for _, have := range r.Permissions {
 		if have == p {

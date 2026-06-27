@@ -88,6 +88,21 @@ secrets (built-in store + OpenBao/Vault),
 security knobs, observability, and multi-node Kubernetes
 (`deploy/k8s/dazyflow.yaml`).
 
+### Self-hosting notes
+
+Dazyflow is **multi-tenant by design** but self-hosts cleanly as a single
+team too — one org, signup closed, invite the rest. A self-hosted instance
+needs only Postgres + a master key (the four mandatory values above); it is
+effectively **unlimited** because every quota knob defaults to off.
+
+**Billing is optional and SaaS-only.** Leave Stripe unset (the default) and
+the web UI hides the entire plan/upgrade/billing surface — the Usage page
+shows run/step metering only. You can still comp an org to Pro or assign
+custom limit tiers from **Admin → Platform** with no billing configured at
+all (see DEPLOY.md, "Managing tenants, tiers & entitlements"). Set the
+`DAZYFLOW_FREE_*` / `DAZYFLOW_STRIPE_*` knobs only if you intend to run a
+paid SaaS that charges its tenants.
+
 ## Run locally for development
 
 `dzd` requires Postgres — there is no in-memory mode. For local dev,

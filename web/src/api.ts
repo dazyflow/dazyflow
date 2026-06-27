@@ -1969,6 +1969,22 @@ export const api = {
       `/admin/platform/users/${encodeURIComponent(email)}/ban`,
       { reason, domain },
     ),
+  // platformGrantAdmin / platformRevokeAdmin manage the runtime platform:admin
+  // grant (the mutable layer over the DAZYFLOW_PLATFORM_ADMINS env allowlist).
+  // The role applies on the target's next sign-in; the server drops their live
+  // sessions so the change takes effect promptly.
+  platformGrantAdmin: (token: string, email: string) =>
+    request<{ user: PlatformUser }>(
+      token,
+      "POST",
+      `/admin/platform/users/${encodeURIComponent(email)}/platform-admin`,
+    ),
+  platformRevokeAdmin: (token: string, email: string) =>
+    request<{ user?: PlatformUser; email?: string; platform_admin?: boolean }>(
+      token,
+      "DELETE",
+      `/admin/platform/users/${encodeURIComponent(email)}/platform-admin`,
+    ),
   // platformDeleteUser is the GDPR erase (DELETE /admin/users/{email}); the
   // ?confirm guard must echo the email.
   platformDeleteUser: (token: string, email: string) =>
@@ -2156,7 +2172,11 @@ export type PlatformUser = {
   suspend_reason?: string;
   created_at: string;
   verified: boolean;
+  // Effective platform-admin status (env allowlist OR runtime grant).
   platform_admin: boolean;
+  // True when the status comes from the immutable DAZYFLOW_PLATFORM_ADMINS env
+  // allowlist: the UI shows a non-revocable badge (edit the env var to change).
+  platform_admin_env: boolean;
 };
 
 export type PlatformOrg = {

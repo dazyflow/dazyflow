@@ -303,6 +303,91 @@ func TestPlatformUsers_ListGetModerate(t *testing.T) {
 	}
 }
 
+// memPlatformAdmins is an in-memory PlatformAdminStore for handler tests.
+type memPlatformAdmins struct{ set map[string]string }
+
+func newMemPlatformAdmins() *memPlatformAdmins { return &memPlatformAdmins{set: map[string]string{}} }
+func (m *memPlatformAdmins) Granted(email string) bool {
+	_, ok := m.set[normalizeEmail(email)]
+	return ok
+}
+func (m *memPlatformAdmins) Grant(_ context.Context, email, by string) error {
+	m.set[normalizeEmail(email)] = by
+	return nil
+}
+func (m *memPlatformAdmins) Revoke(_ context.Context, email string) error {
+	delete(m.set, normalizeEmail(email))
+	return nil
+}
+func (m *memPlatformAdmins) List(_ context.Context) ([]PlatformAdminGrant, error) {
+	out := make([]PlatformAdminGrant, 0, len(m.set))
+	for e, by := range m.set {
+		out = append(out, PlatformAdminGrant{Email: e, GrantedBy: by})
+	}
+	return out, nil
+}
+
+func TestPlatformAdminGrantRevoke(t *testing.T) {
+	h, _, _, _, _, _ := platformHarness(t)
+	ctx := context.Background()
+	grants := newMemPlatformAdmins()
+	h.gw.PlatformAdminGrants = grants
+	_ = h.gw.Users.PutUser(ctx, auth.User{Email: "carol@example.com", Subject: "carol@example.com", Tenant: "acme"})
+
+	// Grant the runtime role.
+	rw := h.platformDo(t, "POST", "/api/v1/admin/platform/users/carol@example.com/platform-admin", nil)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("grant = %d: %s", rw.Code, rw.Body.String())
+	}
+	if !grants.Granted("carol@example.com") {
+		t.Fatal("grant did not record carol")
+	}
+	// DTO now reflects effective-but-not-env admin.
+	var gr struct {
+		User platformUserDTO `json:"user"`
+	}
+	_ = json.Unmarshal(rw.Body.Bytes(), &gr)
+	if !gr.User.PlatformAdmin || gr.User.PlatformAdminEnv {
+		t.Fatalf("carol DTO = %+v, want platform_admin=true env=false", gr.User)
+	}
+
+	// Revoke it.
+	rw = h.platformDo(t, "DELETE", "/api/v1/admin/platform/users/carol@example.com/platform-admin", nil)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("revoke = %d: %s", rw.Code, rw.Body.String())
+	}
+	if grants.Granted("carol@example.com") {
+		t.Fatal("revoke did not remove carol")
+	}
+
+	// Can't revoke an env-allowlist admin — must edit the env var instead.
+	h.gw.PlatformAdmins = []string{"envadmin@example.com"}
+	_ = h.gw.Users.PutUser(ctx, auth.User{Email: "envadmin@example.com", Subject: "envadmin@example.com"})
+	if rw := h.platformDo(t, "DELETE", "/api/v1/admin/platform/users/envadmin@example.com/platform-admin", nil); rw.Code != http.StatusConflict {
+		t.Fatalf("revoke env admin = %d, want 409", rw.Code)
+	}
+
+	// Can't revoke yourself (platform token subject is "op").
+	if rw := h.platformDo(t, "DELETE", "/api/v1/admin/platform/users/op/platform-admin", nil); rw.Code != http.StatusBadRequest {
+		t.Fatalf("self revoke = %d, want 400", rw.Code)
+	}
+
+	// Granting an unknown account is a 404.
+	if rw := h.platformDo(t, "POST", "/api/v1/admin/platform/users/ghost@example.com/platform-admin", nil); rw.Code != http.StatusNotFound {
+		t.Fatalf("grant ghost = %d, want 404", rw.Code)
+	}
+}
+
+// With no grant store wired, the runtime grant/revoke endpoints return 501
+// (the env allowlist still works).
+func TestPlatformAdminGrant_NoStore(t *testing.T) {
+	h, _, _, _, _, _ := platformHarness(t)
+	_ = h.gw.Users.PutUser(context.Background(), auth.User{Email: "dave@example.com", Subject: "dave@example.com"})
+	if rw := h.platformDo(t, "POST", "/api/v1/admin/platform/users/dave@example.com/platform-admin", nil); rw.Code != http.StatusNotImplemented {
+		t.Fatalf("grant without store = %d, want 501", rw.Code)
+	}
+}
+
 func TestPlatformUsers_ModerationGuards(t *testing.T) {
 	h, _, _, _, _, _ := platformHarness(t)
 	ctx := context.Background()

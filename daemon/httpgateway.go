@@ -117,14 +117,19 @@ type HTTPGateway struct {
 	EnableSignup bool
 
 	// PlatformAdmins is the lowercased email allowlist that bootstraps the
-	// platform:admin super-admin role (e.g. to reach /admin/oauth). There's
-	// no other grant path — only a platform admin can mint a platform-admin
-	// key — so this env-driven list breaks the chicken-and-egg. Matching
-	// users get the role stamped onto their session at sign-in/signup/SSO
-	// (see elevatePlatformAdmin); the list is the single source of truth,
-	// so removing an email + re-login revokes it. Wired from
-	// $DAZYFLOW_PLATFORM_ADMINS.
+	// platform:admin super-admin role (e.g. to reach /admin/oauth). It's the
+	// immutable layer that breaks the chicken-and-egg: matching users get the
+	// role stamped onto their session at sign-in/signup/SSO (see
+	// elevatePlatformAdmin), so it can't be edited without a restart. Wired
+	// from $DAZYFLOW_PLATFORM_ADMINS. The mutable layer is PlatformAdminGrants.
 	PlatformAdmins []string
+
+	// PlatformAdminGrants is the runtime grant store — the mutable counterpart
+	// to the env allowlist, letting a platform admin grant/revoke the role from
+	// the UI without a redeploy. Feeds the same elevatePlatformAdmin chokepoint.
+	// Nil leaves grant/revoke endpoints returning 501 (env allowlist still
+	// works). See platformadmin.go.
+	PlatformAdminGrants PlatformAdminStore
 
 	// platformAdminGranted remembers which allowlisted emails have already
 	// had a "platform_admin.granted" audit event emitted this process, so the
@@ -662,6 +667,8 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/admin/platform/users/{email}/suspend", h.requireAuth(h.platformSuspendUser))
 	mux.HandleFunc("POST /api/v1/admin/platform/users/{email}/unsuspend", h.requireAuth(h.platformUnsuspendUser))
 	mux.HandleFunc("POST /api/v1/admin/platform/users/{email}/ban", h.requireAuth(h.platformBanUser))
+	mux.HandleFunc("POST /api/v1/admin/platform/users/{email}/platform-admin", h.requireAuth(h.platformGrantAdmin))
+	mux.HandleFunc("DELETE /api/v1/admin/platform/users/{email}/platform-admin", h.requireAuth(h.platformRevokeAdmin))
 	mux.HandleFunc("GET /api/v1/admin/platform/orgs", h.requireAuth(h.platformListOrgs))
 	mux.HandleFunc("GET /api/v1/admin/platform/orgs/{tenant}", h.requireAuth(h.platformGetOrg))
 	mux.HandleFunc("POST /api/v1/admin/platform/orgs/{tenant}/suspend", h.requireAuth(h.platformSuspendOrg))
@@ -1295,7 +1302,8 @@ func (h *HTTPGateway) signIn(rw http.ResponseWriter, r *http.Request) {
 // session must re-authenticate to pick up an allowlist change. No-op when
 // the email isn't listed or the role is already present.
 func (h *HTTPGateway) elevatePlatformAdmin(ctx context.Context, u auth.User) auth.User {
-	if !h.isPlatformAdminEmail(u.Email) {
+	env := h.isPlatformAdminEmail(u.Email)
+	if !env && !h.isPlatformAdminGranted(u.Email) {
 		return u
 	}
 	for _, r := range u.Roles {
@@ -1305,21 +1313,36 @@ func (h *HTTPGateway) elevatePlatformAdmin(ctx context.Context, u auth.User) aut
 	}
 	// Copy before appending: u.Roles may alias a slice held by the user
 	// store, and we must not mutate that shared backing array.
-	u.Roles = append(append([]core.Role(nil), u.Roles...), core.Role{
-		Name:        "platform_admin",
-		Permissions: []core.Permission{core.PermPlatformAdmin},
-	})
+	u.Roles = append(append([]core.Role(nil), u.Roles...), core.PlatformAdminRole())
 	// Record the escalation on first apply (per email, per process): a
-	// platform-admin grant from the env allowlist is a privileged-access
-	// event worth a durable audit record (ISO 27001 A.5.16/A.8.2). Emitting
-	// only once avoids a per-sign-in flood, since elevation runs at every
-	// session issue.
+	// platform-admin grant is a privileged-access event worth a durable audit
+	// record (ISO 27001 A.5.16/A.8.2). Emitting only once avoids a per-sign-in
+	// flood, since elevation runs at every session issue.
+	source := "runtime_grant"
+	if env {
+		source = "DAZYFLOW_PLATFORM_ADMINS"
+	}
 	key := strings.ToLower(strings.TrimSpace(u.Email))
 	if _, seen := h.platformAdminGranted.LoadOrStore(key, struct{}{}); !seen {
 		h.audit(ctx, core.Principal{Tenant: u.Tenant, Subject: u.Email},
-			"platform_admin.granted", u.Email, "source=DAZYFLOW_PLATFORM_ADMINS")
+			"platform_admin.granted", u.Email, "source="+source)
 	}
 	return u
+}
+
+// isPlatformAdminGranted reports whether email holds a runtime platform-admin
+// grant (the mutable layer). Cheap — reads the store's cached snapshot. Nil
+// store (not wired) means no runtime grants exist.
+func (h *HTTPGateway) isPlatformAdminGranted(email string) bool {
+	return h.PlatformAdminGrants != nil && h.PlatformAdminGrants.Granted(email)
+}
+
+// isPlatformAdmin reports whether email is a platform admin by EITHER layer —
+// the immutable env allowlist or a runtime grant. Used for display/effective
+// status; the env-only isPlatformAdminEmail still guards immutability (you
+// can't revoke an env admin).
+func (h *HTTPGateway) isPlatformAdmin(email string) bool {
+	return h.isPlatformAdminEmail(email) || h.isPlatformAdminGranted(email)
 }
 
 // isPlatformAdminEmail reports whether email is in the allowlist. The

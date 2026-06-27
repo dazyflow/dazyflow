@@ -36,7 +36,13 @@ type platformUserDTO struct {
 	SuspendReason string     `json:"suspend_reason,omitempty"`
 	CreatedAt     time.Time  `json:"created_at"`
 	Verified      bool       `json:"verified"`
-	PlatformAdmin bool       `json:"platform_admin"`
+	// PlatformAdmin is the effective status (env allowlist OR runtime grant).
+	// PlatformAdminEnv flags the immutable env-allowlist source: the UI shows
+	// a non-revocable badge and hides the revoke control for it (revoking a
+	// runtime grant for such a user is futile — they'd be re-elevated on next
+	// login).
+	PlatformAdmin    bool `json:"platform_admin"`
+	PlatformAdminEnv bool `json:"platform_admin_env"`
 }
 
 type platformOrgDTO struct {
@@ -140,16 +146,17 @@ func (h *HTTPGateway) toPlatformUserDTO(u auth.User, tenantName string) platform
 		status = auth.StatusActive
 	}
 	return platformUserDTO{
-		Email:         u.Email,
-		Subject:       u.Subject,
-		Tenant:        u.Tenant,
-		TenantName:    tenantName,
-		Status:        status,
-		SuspendedAt:   u.SuspendedAt,
-		SuspendReason: u.SuspendReason,
-		CreatedAt:     u.CreatedAt,
-		Verified:      u.EmailVerified(),
-		PlatformAdmin: h.isPlatformAdminEmail(u.Email),
+		Email:            u.Email,
+		Subject:          u.Subject,
+		Tenant:           u.Tenant,
+		TenantName:       tenantName,
+		Status:           status,
+		SuspendedAt:      u.SuspendedAt,
+		SuspendReason:    u.SuspendReason,
+		CreatedAt:        u.CreatedAt,
+		Verified:         u.EmailVerified(),
+		PlatformAdmin:    h.isPlatformAdmin(u.Email),
+		PlatformAdminEnv: h.isPlatformAdminEmail(u.Email),
 	}
 }
 
@@ -246,6 +253,91 @@ func (h *HTTPGateway) platformUnsuspendUser(rw http.ResponseWriter, r *http.Requ
 	writeJSON(rw, http.StatusOK, map[string]any{"user": h.toPlatformUserDTO(u, h.tenantNames(r.Context(), []string{u.Tenant})[u.Tenant])})
 }
 
+// platformGrantAdmin grants the cross-tenant platform:admin role to an existing
+// account via the runtime grant store (the mutable counterpart to the
+// DAZYFLOW_PLATFORM_ADMINS env allowlist). The role is stamped at session issue,
+// so we drop the target's live sessions to force a re-auth that picks it up.
+func (h *HTTPGateway) platformGrantAdmin(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	if !h.requirePlatform(rw, p) {
+		return
+	}
+	if h.PlatformAdminGrants == nil {
+		writeJSONError(rw, http.StatusNotImplemented, "platform-admin grant store not configured")
+		return
+	}
+	email := strings.ToLower(strings.TrimSpace(r.PathValue("email")))
+	if email == "" {
+		writeJSONError(rw, http.StatusBadRequest, "email required")
+		return
+	}
+	u, err := h.Users.GetByEmail(r.Context(), email)
+	if err != nil {
+		writeJSONError(rw, http.StatusNotFound, "no such account")
+		return
+	}
+	// Env-allowlist admins are already platform admins, immutably — granting is
+	// a no-op, so report success without writing a redundant row.
+	if h.isPlatformAdminEmail(email) {
+		writeJSON(rw, http.StatusOK, map[string]any{"user": h.toPlatformUserDTO(u, h.tenantNames(r.Context(), []string{u.Tenant})[u.Tenant])})
+		return
+	}
+	if err := h.PlatformAdminGrants.Grant(r.Context(), email, p.Subject); err != nil {
+		writeJSONError(rw, http.StatusInternalServerError, err.Error())
+		return
+	}
+	// Drop live sessions so the next request re-issues with the new role.
+	h.revokeSubjectSessions(r.Context(), u.Subject)
+	h.audit(r.Context(), p, "platform.user.grant_admin", email, "")
+	writeJSON(rw, http.StatusOK, map[string]any{"user": h.toPlatformUserDTO(u, h.tenantNames(r.Context(), []string{u.Tenant})[u.Tenant])})
+}
+
+// platformRevokeAdmin removes a runtime platform:admin grant. It refuses an
+// env-allowlist admin (elevatePlatformAdmin would re-grant them on next login —
+// remove the email from DAZYFLOW_PLATFORM_ADMINS and restart instead) and
+// refuses self-revoke (lockout foot-gun). Dropping the target's sessions makes
+// the revoke take effect on their next request rather than at session expiry.
+func (h *HTTPGateway) platformRevokeAdmin(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	if !h.requirePlatform(rw, p) {
+		return
+	}
+	if h.PlatformAdminGrants == nil {
+		writeJSONError(rw, http.StatusNotImplemented, "platform-admin grant store not configured")
+		return
+	}
+	email := strings.ToLower(strings.TrimSpace(r.PathValue("email")))
+	if email == "" {
+		writeJSONError(rw, http.StatusBadRequest, "email required")
+		return
+	}
+	if email == strings.ToLower(strings.TrimSpace(p.Subject)) {
+		writeJSONError(rw, http.StatusBadRequest, "you can't revoke your own platform-admin role")
+		return
+	}
+	if h.isPlatformAdminEmail(email) {
+		writeJSONError(rw, http.StatusConflict,
+			"this admin is granted by DAZYFLOW_PLATFORM_ADMINS — remove the email there and restart to revoke")
+		return
+	}
+	if err := h.PlatformAdminGrants.Revoke(r.Context(), email); err != nil {
+		writeJSONError(rw, http.StatusInternalServerError, err.Error())
+		return
+	}
+	// Best-effort session drop so the role is gone on their next request, not
+	// only when the session expires. No account row is fine (grant to a
+	// not-yet-signed-in email) — there are no sessions to drop.
+	if u, err := h.Users.GetByEmail(r.Context(), email); err == nil {
+		h.revokeSubjectSessions(r.Context(), u.Subject)
+	}
+	h.audit(r.Context(), p, "platform.user.revoke_admin", email, "")
+	// Return the refreshed view (best-effort; the account may not exist).
+	u, err := h.Users.GetByEmail(r.Context(), email)
+	if err != nil {
+		writeJSON(rw, http.StatusOK, map[string]any{"email": email, "platform_admin": false})
+		return
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{"user": h.toPlatformUserDTO(u, h.tenantNames(r.Context(), []string{u.Tenant})[u.Tenant])})
+}
+
 // platformBanUser suspends the account AND blocklists the email (or its
 // whole domain) so the person can't simply re-register. The account data
 // is kept — use delete (the GDPR erase endpoint) to remove it entirely.
@@ -301,7 +393,11 @@ func (h *HTTPGateway) guardUserModeration(rw http.ResponseWriter, ctx context.Co
 		writeJSONError(rw, http.StatusBadRequest, "you can't moderate your own account")
 		return auth.User{}, false
 	}
-	if h.isPlatformAdminEmail(email) {
+	// Block moderating a platform admin by EITHER layer (env allowlist or
+	// runtime grant) — they're a fellow operator. To suspend/ban/delete a
+	// runtime-granted admin, revoke the grant first; an env admin needs the
+	// env var edited and a restart.
+	if h.isPlatformAdmin(email) {
 		writeJSONError(rw, http.StatusForbidden, "can't moderate a platform admin")
 		return auth.User{}, false
 	}
