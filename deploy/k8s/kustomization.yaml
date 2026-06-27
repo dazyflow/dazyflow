@@ -13,7 +13,7 @@ kind: Kustomization
 resources:
   - dazyflow.yaml
   # Single-pod start has no public ingress. When you front it with a hostname
-  # + TLS, uncomment this (see ingress.yaml and DEPLOY.md "Scaling up").
+  # + TLS, uncomment this (see ingress.yaml and docs/DEPLOY.md "Scaling up").
   # - ingress.yaml
   # Multi-replica scale-up (PodDisruptionBudget + HPA + NetworkPolicy). Read
   # scale-up.yaml's header first — it needs RWX storage for /data and the

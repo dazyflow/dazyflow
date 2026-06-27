@@ -240,7 +240,7 @@ Infrastructure prerequisites:
 - The proxy must route every `*.<apex>` host to the same dzd upstream
   (the sign-in handoff state is held in-process).
 
-**TLS — on-demand, no wildcard cert needed.** The bundled `Caddyfile`
+**TLS — on-demand, no wildcard cert needed.** The bundled `deploy/Caddyfile`
 serves the apex with a normal managed (HTTP-01) certificate and serves
 `*.<apex>` with **on-demand TLS**: Caddy mints an ordinary HTTP-01 cert the
 first time each org host is requested, gated by an authorization endpoint
@@ -601,7 +601,7 @@ reference them as `${secret.NAME}` (the `tenant://` provider), values are
 AES-256-GCM encrypted under a per-tenant key wrapped by `DAZYFLOW_MASTER_KEY`,
 and the UI is write-only (you never read a value back). That's the zero-infra
 default; no external dependency. For master-key handling and rotation, see
-**[SECURITY.md](SECURITY.md)**.
+**[SECURITY.md](../SECURITY.md)**.
 
 ### Bring your own secret manager (OpenBao / Vault)
 

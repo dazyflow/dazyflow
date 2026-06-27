@@ -96,7 +96,7 @@ schedule), re-wrapping is not enough — also rotate the underlying
 credentials (Slack/GitHub/DB tokens) themselves, since their plaintext
 may already have leaked.
 
-## Related hardening (see DEPLOY.md for the full list)
+## Related hardening (see docs/DEPLOY.md for the full list)
 
 All these are env vars set via the same `.env` (see `.env.example`):
 

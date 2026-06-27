@@ -4,7 +4,7 @@ This document describes how `dzd` (the dazyflow daemon) **processes personal
 data**, which technical data-protection measures it implements, and what an
 operator must do to run it in line with the EU General Data Protection
 Regulation (GDPR) and related EU rules. It complements the
-[ISO 27001 control mapping](COMPLIANCE.md) and [SECURITY.md](SECURITY.md);
+[ISO 27001 control mapping](COMPLIANCE.md) and [SECURITY.md](../SECURITY.md);
 deployment specifics are in [DEPLOY.md](DEPLOY.md).
 
 **Last reviewed:** 2026-06-15 · **Scope:** the dazyflow product. Not legal
@@ -142,7 +142,7 @@ you decide otherwise.
 
 ## Security of processing (Art. 32)
 
-Implemented by the product; see [SECURITY.md](SECURITY.md) and
+Implemented by the product; see [SECURITY.md](../SECURITY.md) and
 [COMPLIANCE.md](COMPLIANCE.md) for detail.
 
 - **At rest:** AES-256-GCM envelope encryption for secrets/OAuth tokens/TOTP

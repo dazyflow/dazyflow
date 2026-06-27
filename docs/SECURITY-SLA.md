@@ -52,7 +52,7 @@ calling code changes.
 ## Reporting a vulnerability
 
 Report suspected vulnerabilities privately — **do not** open a public issue.
-See [SECURITY.md](SECURITY.md) for the operational contact and the master-key
+See [SECURITY.md](../SECURITY.md) for the operational contact and the master-key
 / incident guidance. Include affected version/commit, a reproduction, and the
 impact you observed; we acknowledge within the triage window above.
 

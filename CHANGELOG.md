@@ -29,6 +29,11 @@ Releasing: move the entries below from `[Unreleased]` under a new
   `*_cov2-4_test.go`, `*_coverage_test.go`, `*_extra_test.go`) into their
   per-subject `_test.go` files. No test functions were removed (3306 before
   and after); only the file layout changed.
+- Decluttered the repository root: moved reference docs (`DEPLOY.md`,
+  `COMPLIANCE.md`, `PRIVACY.md`, `SECURITY-SLA.md`, `TODO.md`) into `docs/`
+  and the `Caddyfile` into `deploy/`, updating all cross-references.
+  `README.md`, `LICENSE`, `CHANGELOG.md`, and `SECURITY.md` stay at the root
+  by convention.
 
 ### Removed
 

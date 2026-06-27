@@ -33,7 +33,7 @@ services:
     # in production against a DSN that doesn't enforce TLS (the DB link carries
     # personal data + wrapped DEKs). A self-signed cert is enough: `require`
     # demands an encrypted channel but does not verify the cert, so no CA is
-    # needed for this same-host sibling. Generate ./certs once (see DEPLOY.md):
+    # needed for this same-host sibling. Generate ./certs once (see docs/DEPLOY.md):
     #   openssl req -new -x509 -days 3650 -nodes -subj /CN=postgres \
     #     -out certs/server.crt -keyout certs/server.key
     #   chown 70:70 certs/server.key && chmod 600 certs/server.key

@@ -16,7 +16,7 @@
 # When you outgrow one pod, deploy/k8s/ingress.yaml adds a public ingress +
 # TLS, and you can scale the Deployment up — the app coordinates across
 # replicas via Postgres (event bus + advisory-lock scheduler leader). See
-# DEPLOY.md for the scale-up path and the extra resources (PDB/HPA/NetworkPolicy).
+# docs/DEPLOY.md for the scale-up path and the extra resources (PDB/HPA/NetworkPolicy).
 ---
 apiVersion: v1
 kind: Secret

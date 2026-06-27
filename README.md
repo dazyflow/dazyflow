@@ -4,7 +4,7 @@ A workflow automation engine. `dzd` is a Go daemon that runs graph based
 flows (connectors, transforms, AI steps, branching, schedules and
 webhooks) and serves a web UI for building and watching them.
 
-This README gets you running. **[DEPLOY.md](DEPLOY.md)** is the full
+This README gets you running. **[docs/DEPLOY.md](docs/DEPLOY.md)** is the full
 reference (TLS, backups, secrets, observability);
 **[SECURITY.md](SECURITY.md)** covers the master key.
 
@@ -82,7 +82,7 @@ proxy (nginx, Caddy, Traefik, an ingress) and set, in `.env`:
 `DAZYFLOW_TRUST_PROXY_HEADERS=1`, `DAZYFLOW_WEB_ORIGIN=https://your.domain`,
 and `DAZYFLOW_PUBLIC_BASE_URL=https://your.domain`.
 
-See **[DEPLOY.md](DEPLOY.md)** for the reverse-proxy contract and nginx
+See **[docs/DEPLOY.md](docs/DEPLOY.md)** for the reverse-proxy contract and nginx
 example, backup/restore, the master key, per-org subdomains,
 secrets (built-in store + OpenBao/Vault),
 security knobs, observability, and multi-node Kubernetes
@@ -99,7 +99,7 @@ effectively **unlimited** because every quota knob defaults to off.
 the web UI hides the entire plan/upgrade/billing surface — the Usage page
 shows run/step metering only. You can still comp an org to Pro or assign
 custom limit tiers from **Admin → Platform** with no billing configured at
-all (see DEPLOY.md, "Managing tenants, tiers & entitlements"). Set the
+all (see docs/DEPLOY.md, "Managing tenants, tiers & entitlements"). Set the
 `DAZYFLOW_FREE_*` / `DAZYFLOW_STRIPE_*` knobs only if you intend to run a
 paid SaaS that charges its tenants.
 

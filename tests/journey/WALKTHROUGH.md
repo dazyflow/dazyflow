@@ -58,7 +58,7 @@ was a stale local build. Worth knowing so we don't mis-file them.
 - **CSRF origin must be set for self-host.** Running `dzd` without
   `DAZYFLOW_WEB_ORIGIN` made signup fail once a session cookie was present
   with "cookie-authenticated request from disallowed origin … (CSRF
-  defense)". This is by design and documented in DEPLOY.md; the fix is to
+  defense)". This is by design and documented in docs/DEPLOY.md; the fix is to
   set `DAZYFLOW_WEB_ORIGIN` to the public origin. The app surfaces the
   error inline rather than failing silently, which is good, but the
   message is operator-speak a non-technical user can't act on alone.

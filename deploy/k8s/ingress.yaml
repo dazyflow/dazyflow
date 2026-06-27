@@ -33,7 +33,7 @@ metadata:
     # SSE must not be buffered or the client sees events in bursts at flush
     # time instead of as they happen.
     nginx.ingress.kubernetes.io/proxy-buffering: "off"
-    # --- Reverse-proxy contract dzd requires (see DEPLOY.md): X-Forwarded-Proto
+    # --- Reverse-proxy contract dzd requires (see docs/DEPLOY.md): X-Forwarded-Proto
     # so it marks cookies Secure + sends HSTS, and Host/Origin passed through
     # for the CSRF origin check + CORS allowlist. ingress-nginx forwards
     # Host and Origin unchanged by default; it sets X-Forwarded-Proto from

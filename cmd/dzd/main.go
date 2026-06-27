@@ -864,8 +864,8 @@ func applyNetworkPolicy(httpEgressAllow string, devMode bool) {
 		// Non-fatal advisory: allow-all egress is valid, but for a GDPR/EU
 		// deployment outbound connector traffic should be pinned to approved
 		// (ideally EU) endpoints so a flow can't exfiltrate to an arbitrary
-		// host. See PRIVACY.md § International transfers.
-		log.Print("ADVISORY: DAZYFLOW_HTTP_EGRESS_ALLOW is unset — outbound connector egress is unrestricted; pin it to approved endpoints for EU/GDPR deployments (PRIVACY.md § Transfers)")
+		// host. See docs/PRIVACY.md § International transfers.
+		log.Print("ADVISORY: DAZYFLOW_HTTP_EGRESS_ALLOW is unset — outbound connector egress is unrestricted; pin it to approved endpoints for EU/GDPR deployments (docs/PRIVACY.md § Transfers)")
 	}
 	// The http_* drops expose an `allow_private_networks` param that disables
 	// the SSRF guard (reaching loopback/private/link-local incl. cloud
@@ -1638,7 +1638,7 @@ func envDuration(key string, def time.Duration) time.Duration {
 // It is gated on dev mode (DAZYFLOW_DEV / DAZYFLOW_DEV_KEY): a durable
 // production deploy must NOT get a publicly-known admin credential. There,
 // bootstrap the first account with DAZYFLOW_ENABLE_SIGNUP=1 (then grant it
-// platform:admin via DAZYFLOW_PLATFORM_ADMINS) — see DEPLOY.md.
+// platform:admin via DAZYFLOW_PLATFORM_ADMINS) — see docs/DEPLOY.md.
 func seedDefaultUser(ctx context.Context, users auth.UserStore, dev bool) {
 	if !dev {
 		return
