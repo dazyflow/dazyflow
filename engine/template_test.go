@@ -114,35 +114,3 @@ func TestSubstituteString_PropagatesSubstituterError(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
-
-func TestSubstituteValue_RecursesIntoMapsAndSlices(t *testing.T) {
-	sub := makeSub(map[string]string{
-		"secret:A": "1",
-		"secret:B": "2",
-	})
-	tree := map[string]any{
-		"top": "${secret.A}",
-		"nested": map[string]any{
-			"x": "${secret.B}",
-		},
-		"list":   []any{"${secret.A}", "literal"},
-		"number": 42,
-	}
-	out, err := SubstituteValue(t.Context(), tree, sub)
-	if err != nil {
-		t.Fatalf("substitute: %v", err)
-	}
-	got := out.(map[string]any)
-	if got["top"] != "1" {
-		t.Errorf("top = %v", got["top"])
-	}
-	if got["nested"].(map[string]any)["x"] != "2" {
-		t.Errorf("nested.x = %v", got["nested"])
-	}
-	if got["list"].([]any)[0] != "1" {
-		t.Errorf("list[0] = %v", got["list"].([]any)[0])
-	}
-	if got["number"] != 42 {
-		t.Errorf("number = %v", got["number"])
-	}
-}

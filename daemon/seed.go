@@ -246,13 +246,6 @@ func (s *Service) SubmitGraphWithSeed(
 	return graphRunID, nil
 }
 
-// populateSeededRun writes pre-completed records for every seeded node,
-// enqueues every non-seeded root, then kicks dependents whose
-// predecessors are already all done. Returns the list of enqueue
-// errors so the caller can decide to fail the whole submission.
-//
-// Used by both the webhook path (SubmitGraphWithSeed) and the subgraph
-// path (submitGraphWithParent) so they stay behavior-identical.
 // persistSeedsOnly writes the pre-completed node-records for every seeded node
 // and returns the set of node IDs it seeded. It enqueues NO runnable (root)
 // work — that's dispatchRoots. The split lets the concurrency admission queue

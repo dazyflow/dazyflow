@@ -238,15 +238,15 @@ func (h *HTTPGateway) idempotencyMiddleware(routePattern string, next func(rw ht
 				h.idempotency.abort(cacheKey)
 			}
 		}()
-		cap := &captureWriter{ResponseWriter: rw, headers: http.Header{}}
-		next(cap, r, p)
+		cw := &captureWriter{ResponseWriter: rw, headers: http.Header{}}
+		next(cw, r, p)
 		// Only cache 2xx — caching errors would lock the client out of
 		// retrying after fixing a transient problem.
-		if cap.status >= 200 && cap.status < 300 {
+		if cw.status >= 200 && cw.status < 300 {
 			h.idempotency.commit(cacheKey, &idempotentResponse{
-				status:   cap.status,
-				headers:  cap.headers,
-				body:     cap.body.Bytes(),
+				status:   cw.status,
+				headers:  cw.headers,
+				body:     cw.body.Bytes(),
 				storedAt: time.Now(),
 			})
 			committed = true
@@ -291,12 +291,9 @@ type captureWriter struct {
 	wroteHeader bool
 }
 
+// Header delegates to the real writer; the capture snapshot is taken in
+// WriteHeader, when net/http freezes the headers.
 func (w *captureWriter) Header() http.Header {
-	// Mirror writes to both maps: the underlying writer (so the
-	// response goes out) and our capture (so we can replay).
-	if w.headers == nil {
-		w.headers = http.Header{}
-	}
 	return w.ResponseWriter.Header()
 }
 

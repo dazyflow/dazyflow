@@ -761,57 +761,6 @@ func TestSubstituteString_PassThroughWhenNoPlaceholder(t *testing.T) {
 	}
 }
 
-func TestSubstituteValue_RecursesIntoSliceAndMap(t *testing.T) {
-	sub := func(_ context.Context, scheme, path string) (string, bool, error) {
-		if scheme == "secret" {
-			return "RESOLVED-" + path, true, nil
-		}
-		return "", false, nil
-	}
-	value := map[string]any{
-		"top":   "${secret.TOP}",
-		"inner": []any{"${secret.A}", "literal", map[string]any{"deep": "${secret.DEEP}"}},
-		"num":   42, // non-string scalar passes through default branch
-	}
-	out, err := SubstituteValue(t.Context(), value, sub)
-	if err != nil {
-		t.Fatalf("SubstituteValue: %v", err)
-	}
-	m := out.(map[string]any)
-	if m["top"] != "RESOLVED-TOP" {
-		t.Errorf("top = %v", m["top"])
-	}
-	slice := m["inner"].([]any)
-	if slice[0] != "RESOLVED-A" {
-		t.Errorf("inner[0] = %v", slice[0])
-	}
-	if slice[1] != "literal" {
-		t.Errorf("inner[1] mutated: %v", slice[1])
-	}
-	deep := slice[2].(map[string]any)
-	if deep["deep"] != "RESOLVED-DEEP" {
-		t.Errorf("deep = %v", deep["deep"])
-	}
-	if m["num"] != 42 {
-		t.Errorf("num mutated: %v", m["num"])
-	}
-}
-
-func TestSubstituteValue_ErrorAtNestedKeyIsAnnotated(t *testing.T) {
-	sub := func(_ context.Context, scheme, _ string) (string, bool, error) {
-		return "", true, errors.New("boom")
-	}
-	value := map[string]any{
-		"outer": map[string]any{
-			"inner": []any{"${secret.X}"},
-		},
-	}
-	_, err := SubstituteValue(t.Context(), value, sub)
-	if err == nil || !strings.Contains(err.Error(), "outer") {
-		t.Errorf("err = %v, want one mentioning 'outer'", err)
-	}
-}
-
 // ----------------------------------------------------------------------
 // resolveSlice — direct exercise of the slice walk
 // ----------------------------------------------------------------------

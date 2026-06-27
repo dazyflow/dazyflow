@@ -6,6 +6,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -47,11 +48,10 @@ func loadProviderCreds(ctx context.Context, secrets *EncryptedSecrets, name stri
 	}
 	raw, err := secrets.Get(core.WithTenant(ctx, providerStoreTenant), providerStorePrefix+name)
 	if err != nil {
-		// Missing-secret errors come back wrapped — keep the "not
-		// configured" branch quiet by checking for the substring. The
-		// store doesn't yet expose a sentinel for "not found", so this
-		// matches the pattern listFlow uses elsewhere.
-		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "no rows") {
+		// "Never written" is a normal state on a fresh install, not an
+		// error — Get wraps ErrSecretNotFound for it. A decryption or
+		// store failure is real and propagates.
+		if errors.Is(err, ErrSecretNotFound) {
 			return nil, nil
 		}
 		return nil, err

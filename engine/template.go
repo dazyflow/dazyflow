@@ -56,35 +56,6 @@ func SubstituteString(ctx context.Context, s string, substituter Substituter) (s
 	return out, nil
 }
 
-// SubstituteValue walks v in-place (maps and slices) substituting every
-// string it encounters. Non-string scalars are returned unchanged.
-func SubstituteValue(ctx context.Context, v any, substituter Substituter) (any, error) {
-	switch tv := v.(type) {
-	case string:
-		return SubstituteString(ctx, tv, substituter)
-	case map[string]any:
-		for k, val := range tv {
-			nv, err := SubstituteValue(ctx, val, substituter)
-			if err != nil {
-				return nil, fmt.Errorf("%s: %w", k, err)
-			}
-			tv[k] = nv
-		}
-		return tv, nil
-	case []any:
-		for i, val := range tv {
-			nv, err := SubstituteValue(ctx, val, substituter)
-			if err != nil {
-				return nil, fmt.Errorf("[%d]: %w", i, err)
-			}
-			tv[i] = nv
-		}
-		return tv, nil
-	default:
-		return v, nil
-	}
-}
-
 // secretSubstituter dispatches placeholders to the registered secret
 // providers. Returns ok=false for any scheme the registry doesn't know.
 func secretSubstituter(providers map[string]core.SecretProvider) Substituter {

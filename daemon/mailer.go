@@ -123,19 +123,27 @@ func NewMailerFromURL(rawURL, from string) (*Mailer, error) {
 	return m, nil
 }
 
-// Send delivers one plain-text message. Best-effort by contract: every
-// caller treats a returned error as "log and move on" — transactional
-// email must never fail the action that triggered it.
-func (m *Mailer) Send(ctx context.Context, to, subject, body string) error {
+// prepare applies the default send timeout (when the caller's ctx has no
+// deadline) and builds the SMTP auth — the shared preamble of Send and
+// sendHTML. The caller must defer the returned cancel.
+func (m *Mailer) prepare(ctx context.Context) (context.Context, context.CancelFunc, smtp.Auth) {
+	cancel := context.CancelFunc(func() {})
 	if _, ok := ctx.Deadline(); !ok {
-		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, m.timeout)
-		defer cancel()
 	}
 	var auth smtp.Auth
 	if m.username != "" {
 		auth = smtp.PlainAuth("", m.username, m.password, m.host)
 	}
+	return ctx, cancel, auth
+}
+
+// Send delivers one plain-text message. Best-effort by contract: every
+// caller treats a returned error as "log and move on" — transactional
+// email must never fail the action that triggered it.
+func (m *Mailer) Send(ctx context.Context, to, subject, body string) error {
+	ctx, cancel, auth := m.prepare(ctx)
+	defer cancel()
 	return smtputil.Send(ctx, net.JoinHostPort(m.host, m.port), m.host, m.tlsMode,
 		auth, m.addr, []string{to}, mailerMessage(m.From, m.addr, to, subject, body))
 }
@@ -162,22 +170,15 @@ func (m *Mailer) SendThemed(ctx context.Context, to, textBody string, c emailthe
 	if err != nil {
 		return err
 	}
-	return m.SendHTML(ctx, to, c.Subject, textBody, htmlBody)
+	return m.sendHTML(ctx, to, c.Subject, textBody, htmlBody)
 }
 
-// SendHTML delivers one multipart/alternative message: a text/plain part (for
+// sendHTML delivers one multipart/alternative message: a text/plain part (for
 // text-only clients and better deliverability) followed by a text/html part.
 // Same transport + best-effort contract as Send.
-func (m *Mailer) SendHTML(ctx context.Context, to, subject, text, htmlBody string) error {
-	if _, ok := ctx.Deadline(); !ok {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, m.timeout)
-		defer cancel()
-	}
-	var auth smtp.Auth
-	if m.username != "" {
-		auth = smtp.PlainAuth("", m.username, m.password, m.host)
-	}
+func (m *Mailer) sendHTML(ctx context.Context, to, subject, text, htmlBody string) error {
+	ctx, cancel, auth := m.prepare(ctx)
+	defer cancel()
 	msg, err := multipartMessage(m.From, m.addr, to, subject, text, htmlBody)
 	if err != nil {
 		return err

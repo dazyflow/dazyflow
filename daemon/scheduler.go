@@ -453,7 +453,6 @@ func (s *Scheduler) rescan(ctx context.Context) error {
 	s.mu.Lock()
 	s.tracked = next
 	s.mu.Unlock()
-	_ = ctx // reserved for future cancellation hooks
 	return nil
 }
 

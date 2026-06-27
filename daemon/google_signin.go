@@ -727,7 +727,3 @@ func exchangeGoogleCode(ctx context.Context, cfg auth.OrgAuthConfig, code, redir
 	}
 	return tok.AccessToken, tok.IDToken, info, nil
 }
-
-// Compile-time check that defaultSignupRoles still exists where this
-// file expects it (avoids breakage from an unrelated rename).
-var _ = func() []core.Role { return defaultSignupRoles() }
