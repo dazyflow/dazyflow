@@ -7,7 +7,6 @@
 /transformer
 /dz-drops
 /dz-drophost
-/ha_loadtest
 /.dazyflow/
 # Legacy runtime data dir (pre-rename). Was accidentally committed; held nested
 # git repos recorded as gitlinks with no .gitmodules, which broke CI checkout's
@@ -25,8 +24,6 @@ web/.vite/
 # Generated SBOM artifacts (produced by the CI `sbom` task; attached to releases)
 /sbom.spdx.json
 /sbom.cdx.json
-# Generated email preview (rebuild with `go run ./cmd/email-preview`)
-/email-preview.html
 # Local key material (legacy dz-drops signing keys) — never commit
 .keys/
 # Dazy personal API key used by the complete-dazyflow-tasks skill — never commit

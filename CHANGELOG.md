@@ -40,8 +40,12 @@ Releasing: move the entries below from `[Unreleased]` under a new
 - Stale planning docs `GDPR_FIXES.md` and `manual.md` (history retained in
   git); fixed the dangling links in `PRIVACY.md` and `COMPLIANCE.md`.
 - Orphaned root `package-lock.json` stub (no root `package.json` exists).
-- Untracked the generated `email-preview.html` artifact (now in `.gitignore`;
-  regenerate with `go run ./cmd/email-preview`).
+- The dev-only `cmd/email-preview` template-preview generator and its
+  generated `email-preview.html` artifact — unreferenced by the build, CI,
+  and docs. Email templates are still previewable in the web UI.
+- The `scripts/ha_loadtest` multi-node HA load-test harness — never wired
+  into CI or the Makefile; leader-election and failover are covered by
+  `daemon/leader_test.go`.
 
 ## [0.1.0] - 2026-06-08
 
