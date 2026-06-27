@@ -4,9 +4,7 @@
 package daemon
 
 import (
-	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"regexp"
 
@@ -96,9 +94,8 @@ func (h *HTTPGateway) putPreferences(rw http.ResponseWriter, r *http.Request, p 
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "password auth not configured")
 		return
 	}
-	var body preferencesUpdate
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
-		writeAPIError(rw, http.StatusBadRequest, "decode_failed", "decode body: "+err.Error())
+	body, ok := decodeRequestJSONOptional[preferencesUpdate](rw, r)
+	if !ok {
 		return
 	}
 	if body.Theme != nil && *body.Theme != "" && *body.Theme != "dark" && *body.Theme != "light" {

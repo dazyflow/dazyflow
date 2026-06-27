@@ -151,19 +151,17 @@ func walkPath(value any, path string) (any, error) {
 func getField(value any, field string) (any, error) {
 	switch m := value.(type) {
 	case map[string]any:
-		v, ok := m[field]
-		if !ok {
-			return nil, fmt.Errorf("upstream path: field %q not present", field)
+		if v, ok := m[field]; ok {
+			return v, nil
 		}
-		return v, nil
 	case map[string]string:
-		v, ok := m[field]
-		if !ok {
-			return nil, fmt.Errorf("upstream path: field %q not present", field)
+		if v, ok := m[field]; ok {
+			return v, nil
 		}
-		return v, nil
+	default:
+		return nil, fmt.Errorf("upstream path: expected object for field %q, got %T", field, value)
 	}
-	return nil, fmt.Errorf("upstream path: expected object for field %q, got %T", field, value)
+	return nil, fmt.Errorf("upstream path: field %q not present", field)
 }
 
 // indexValue reads `idx` from a value that should be a slice. Handles

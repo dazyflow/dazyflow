@@ -9,7 +9,6 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -53,11 +52,10 @@ func (h *HTTPGateway) passwordResetActive() bool {
 // identical whether or not the address has an account, whether or not a
 // mailer is configured, and whether or not the send succeeds.
 func (h *HTTPGateway) requestPasswordReset(rw http.ResponseWriter, r *http.Request) {
-	var body struct {
+	body, ok := decodeRequestJSON[struct {
 		Email string `json:"email"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
+	}](rw, r)
+	if !ok {
 		return
 	}
 	email := strings.ToLower(strings.TrimSpace(body.Email))
@@ -148,13 +146,12 @@ func (h *HTTPGateway) resetPassword(rw http.ResponseWriter, r *http.Request) {
 		writeJSONError(rw, http.StatusNotImplemented, "users not configured")
 		return
 	}
-	var body struct {
+	body, ok := decodeRequestJSON[struct {
 		Email    string `json:"email"`
 		Token    string `json:"token"`
 		Password string `json:"password"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
+	}](rw, r)
+	if !ok {
 		return
 	}
 	email := strings.ToLower(strings.TrimSpace(body.Email))

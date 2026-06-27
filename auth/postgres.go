@@ -121,15 +121,15 @@ func marshalRoles(roles []core.Role) ([]byte, error) {
 	return json.Marshal(roles)
 }
 
-func unmarshalRoles(b []byte) ([]core.Role, error) {
+// jsonOrZero unmarshals a JSONB column into T, returning T's zero value
+// for an empty/unset column rather than an error.
+func jsonOrZero[T any](b []byte) (T, error) {
+	var v T
 	if len(b) == 0 {
-		return nil, nil
+		return v, nil
 	}
-	var roles []core.Role
-	if err := json.Unmarshal(b, &roles); err != nil {
-		return nil, err
-	}
-	return roles, nil
+	err := json.Unmarshal(b, &v)
+	return v, err
 }
 
 // ---- API keys -------------------------------------------------------
@@ -273,7 +273,7 @@ func scanKey(row rowScanner) (APIKey, error) {
 	if err := row.Scan(&k.ID, &k.Tenant, &k.Workspace, &k.Subject, &rolesRaw, &k.Salt, &k.Hash, &k.ExpiresAt, &k.RevokedAt); err != nil {
 		return APIKey{}, err
 	}
-	roles, err := unmarshalRoles(rolesRaw)
+	roles, err := jsonOrZero[[]core.Role](rolesRaw)
 	if err != nil {
 		return APIKey{}, err
 	}
@@ -309,7 +309,7 @@ func (s *PgSessionStore) GetSession(ctx context.Context, id string) (Session, er
 		}
 		return Session{}, err
 	}
-	roles, err := unmarshalRoles(rolesRaw)
+	roles, err := jsonOrZero[[]core.Role](rolesRaw)
 	if err != nil {
 		return Session{}, err
 	}
@@ -360,51 +360,14 @@ func NewPgUserStore(ctx context.Context, pool *pgxpool.Pool) (*PgUserStore, erro
 	return &PgUserStore{pool: pool}, nil
 }
 
-// marshalRecoveryCodes / unmarshalRecoveryCodes move the bcrypt-hash
-// array in and out of the recovery_codes JSONB column. nil → "[]" so the
-// NOT NULL column always gets a value.
+// marshalRecoveryCodes serializes the bcrypt-hash array into the
+// recovery_codes JSONB column. nil → "[]" so the NOT NULL column always
+// gets a value (the read side uses jsonOrZero).
 func marshalRecoveryCodes(codes []string) ([]byte, error) {
 	if codes == nil {
 		return []byte("[]"), nil
 	}
 	return json.Marshal(codes)
-}
-
-func unmarshalRecoveryCodes(b []byte) ([]string, error) {
-	if len(b) == 0 {
-		return nil, nil
-	}
-	var codes []string
-	if err := json.Unmarshal(b, &codes); err != nil {
-		return nil, err
-	}
-	return codes, nil
-}
-
-func marshalNotifyPrefs(p NotifyPrefs) ([]byte, error) { return json.Marshal(p) }
-
-func unmarshalNotifyPrefs(b []byte) (NotifyPrefs, error) {
-	if len(b) == 0 {
-		return NotifyPrefs{}, nil
-	}
-	var p NotifyPrefs
-	if err := json.Unmarshal(b, &p); err != nil {
-		return NotifyPrefs{}, err
-	}
-	return p, nil
-}
-
-func marshalUIPrefs(p UIPrefs) ([]byte, error) { return json.Marshal(p) }
-
-func unmarshalUIPrefs(b []byte) (UIPrefs, error) {
-	if len(b) == 0 {
-		return UIPrefs{}, nil
-	}
-	var p UIPrefs
-	if err := json.Unmarshal(b, &p); err != nil {
-		return UIPrefs{}, err
-	}
-	return p, nil
 }
 
 // userColumns is the users SELECT/Scan column list, shared by GetByEmail,
@@ -437,22 +400,22 @@ func scanUser(row rowScanner) (User, error) {
 	); err != nil {
 		return User{}, err
 	}
-	roles, err := unmarshalRoles(rolesRaw)
+	roles, err := jsonOrZero[[]core.Role](rolesRaw)
 	if err != nil {
 		return User{}, err
 	}
 	u.Roles = roles
-	codes, err := unmarshalRecoveryCodes(recoveryRaw)
+	codes, err := jsonOrZero[[]string](recoveryRaw)
 	if err != nil {
 		return User{}, err
 	}
 	u.RecoveryCodeHashes = codes
-	notify, err := unmarshalNotifyPrefs(notifyRaw)
+	notify, err := jsonOrZero[NotifyPrefs](notifyRaw)
 	if err != nil {
 		return User{}, err
 	}
 	u.Notify = notify
-	ui, err := unmarshalUIPrefs(uiRaw)
+	ui, err := jsonOrZero[UIPrefs](uiRaw)
 	if err != nil {
 		return User{}, err
 	}
@@ -486,11 +449,11 @@ func (s *PgUserStore) PutUser(ctx context.Context, u User) error {
 	if err != nil {
 		return err
 	}
-	notify, err := marshalNotifyPrefs(u.Notify)
+	notify, err := json.Marshal(u.Notify)
 	if err != nil {
 		return err
 	}
-	ui, err := marshalUIPrefs(u.UI)
+	ui, err := json.Marshal(u.UI)
 	if err != nil {
 		return err
 	}

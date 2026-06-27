@@ -910,13 +910,12 @@ func (h *HTTPGateway) platformInviteMember(rw http.ResponseWriter, r *http.Reque
 		return
 	}
 	tenant := strings.TrimSpace(r.PathValue("tenant"))
-	var body struct {
+	body, ok := decodeRequestJSON[struct {
 		Email     string      `json:"email"`
 		Roles     []core.Role `json:"roles"`
 		Workspace string      `json:"workspace"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, "decode body: "+err.Error())
+	}](rw, r)
+	if !ok {
 		return
 	}
 	email := strings.ToLower(strings.TrimSpace(body.Email))

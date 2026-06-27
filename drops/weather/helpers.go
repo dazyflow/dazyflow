@@ -187,10 +187,7 @@ func owmGet(ctx context.Context, job core.Job, endpoint string, lat, lon float64
 		q.Set("lang", lang)
 	}
 
-	timeoutMS := params.IntDefault(job.Params, "timeout_ms", 15000)
-	if timeoutMS <= 0 {
-		timeoutMS = 15000
-	}
+	timeoutMS := params.TimeoutMS(job, 15000)
 	status, body, _, err := hfnet.Do(ctx, "GET", endpoint+"?"+q.Encode(), nil, nil, timeoutMS, maxResponseBytes)
 	return status, body, err
 }
@@ -199,17 +196,7 @@ func owmGet(ctx context.Context, job core.Job, endpoint string, lat, lon float64
 // ({"cod":401,"message":"Invalid API key. ..."}) so the real reason reaches
 // the user instead of a bare status. Falls back to a truncated raw body.
 func extractOWMError(body []byte) string {
-	var e struct {
-		Message string `json:"message"`
-	}
-	if err := json.Unmarshal(body, &e); err == nil && e.Message != "" {
-		return e.Message
-	}
-	s := strings.TrimSpace(string(body))
-	if len(s) > 300 {
-		return s[:300]
-	}
-	return s
+	return params.JSONFieldMessage(body, "message", 300)
 }
 
 // httpFailure maps a transport error or non-2xx response to an error Result,

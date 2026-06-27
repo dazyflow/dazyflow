@@ -5,7 +5,6 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -33,11 +32,10 @@ func (h *HTTPGateway) switchOrg(rw http.ResponseWriter, r *http.Request, p core.
 		writeJSONError(rw, http.StatusNotImplemented, "sessions/users not configured")
 		return
 	}
-	var body struct {
+	body, ok := decodeRequestJSON[struct {
 		Tenant string `json:"tenant"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
+	}](rw, r)
+	if !ok {
 		return
 	}
 	target := strings.TrimSpace(body.Tenant)
@@ -164,11 +162,10 @@ func (h *HTTPGateway) createOrg(rw http.ResponseWriter, r *http.Request, p core.
 			fmt.Sprintf("you've reached the limit of %d organizations per account — ask an admin if you need more", maxSelfServeOrgsPerUser))
 		return
 	}
-	var body struct {
+	body, ok := decodeRequestJSON[struct {
 		DisplayName string `json:"display_name"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
+	}](rw, r)
+	if !ok {
 		return
 	}
 	name := strings.TrimSpace(body.DisplayName)
@@ -475,11 +472,10 @@ func (h *HTTPGateway) updateMemberRoles(rw http.ResponseWriter, r *http.Request,
 		writeJSONError(rw, http.StatusForbidden, "cannot modify another tenant")
 		return
 	}
-	var body struct {
+	body, ok := decodeRequestJSON[struct {
 		Roles []core.Role `json:"roles"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
+	}](rw, r)
+	if !ok {
 		return
 	}
 	if len(body.Roles) == 0 {
@@ -588,13 +584,12 @@ func (h *HTTPGateway) createInvitation(rw http.ResponseWriter, r *http.Request, 
 			fmt.Sprintf("your plan includes %d members — upgrade to add more", limit))
 		return
 	}
-	var body struct {
+	body, ok := decodeRequestJSON[struct {
 		Email     string      `json:"email"`
 		Roles     []core.Role `json:"roles"`
 		Workspace string      `json:"workspace"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
+	}](rw, r)
+	if !ok {
 		return
 	}
 	email := strings.ToLower(strings.TrimSpace(body.Email))
@@ -951,13 +946,12 @@ func (h *HTTPGateway) putOrgAuthConfig(rw http.ResponseWriter, r *http.Request, 
 		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}
-	var body struct {
+	body, ok := decodeRequestJSON[struct {
 		GoogleClientID        string `json:"google_client_id"`
 		GoogleClientSecret    string `json:"google_client_secret"`
 		GoogleWorkspaceDomain string `json:"google_workspace_domain"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
+	}](rw, r)
+	if !ok {
 		return
 	}
 	cfg := auth.OrgAuthConfig{

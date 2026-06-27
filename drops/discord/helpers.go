@@ -29,10 +29,7 @@ const maxContentLen = 2000
 // auth token, so no Authorization header). Returns status + body; the caller
 // maps non-2xx via extractDiscordError.
 func discordDo(ctx context.Context, job core.Job, url string, body []byte) (int, []byte, error) {
-	timeoutMS := params.IntDefault(job.Params, "timeout_ms", 15000)
-	if timeoutMS <= 0 {
-		timeoutMS = 15000
-	}
+	timeoutMS := params.TimeoutMS(job, 15000)
 	headers := map[string]string{"Content-Type": "application/json"}
 	// The webhook URL is tenant-supplied (from a secret), so net.Do guards the
 	// dial: the SSRF client blocks loopback/private/link-local targets and the

@@ -5,7 +5,6 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -301,9 +300,8 @@ func (h *HTTPGateway) putGitCredMe(rw http.ResponseWriter, r *http.Request, p co
 	}
 	account := r.PathValue("account")
 	r.Body = http.MaxBytesReader(rw, r.Body, maxSecretValueBytes)
-	var body putGitCredBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeAPIError(rw, http.StatusBadRequest, "decode_failed", "decode body: "+err.Error())
+	body, ok := decodeRequestJSON[putGitCredBody](rw, r)
+	if !ok {
 		return
 	}
 	in := gitCredInput{

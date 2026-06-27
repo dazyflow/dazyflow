@@ -126,17 +126,22 @@ func (c *Catalog) RegisterStdio(desc StdioDescriptor) error {
 		killSubprocess(cmd, stdin)
 		return fmt.Errorf("mcp server %q already registered", desc.Name)
 	}
-	c.servers[desc.Name] = conn
+	c.addServerLocked(desc.Name, conn, tools)
+	return nil
+}
+
+// addServerLocked registers conn under name and indexes its tools. The
+// caller holds c.mu and has verified name is not already registered.
+func (c *Catalog) addServerLocked(name string, conn *serverConn, tools []Tool) {
+	c.servers[name] = conn
 	for _, tool := range tools {
-		toolID := "mcp:" + desc.Name + ":" + tool.Name
-		c.tools[toolID] = &Transport{
-			serverName: desc.Name,
+		c.tools["mcp:"+name+":"+tool.Name] = &Transport{
+			serverName: name,
 			toolName:   tool.Name,
-			manifest:   synthesizeManifest(desc.Name, tool),
+			manifest:   synthesizeManifest(name, tool),
 			server:     conn,
 		}
 	}
-	return nil
 }
 
 // RegisterStream wires a Client built over the supplied reader/writer
@@ -155,16 +160,7 @@ func (c *Catalog) RegisterStream(name string, client *Client, info ServerInfo, t
 		info:   info,
 		closer: closer,
 	}
-	c.servers[name] = conn
-	for _, tool := range tools {
-		toolID := "mcp:" + name + ":" + tool.Name
-		c.tools[toolID] = &Transport{
-			serverName: name,
-			toolName:   tool.Name,
-			manifest:   synthesizeManifest(name, tool),
-			server:     conn,
-		}
-	}
+	c.addServerLocked(name, conn, tools)
 	return nil
 }
 

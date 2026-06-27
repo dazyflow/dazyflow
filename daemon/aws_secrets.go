@@ -74,27 +74,7 @@ func (p *AwsSecretsProvider) Scheme() string { return "aws" }
 // JSON object and the named key is returned. The tenant comes from context —
 // a BYO secret is always tenant-scoped, never global.
 func (p *AwsSecretsProvider) Get(ctx context.Context, ref string) (string, error) {
-	type parsed struct{ name, field string }
-	return resolveCachedSecret(ctx, "aws", ref, p.cache,
-		func(tenant, ref string) (string, parsed, error) {
-			name, field := splitCloudSecretRef(ref)
-			if name == "" {
-				return "", parsed{}, fmt.Errorf("aws reference %q must be NAME or NAME#field", ref)
-			}
-			return tenant + "\x00" + ref, parsed{name: name, field: field}, nil
-		},
-		p.loadConfig,
-		func(ctx context.Context, cfg AwsSecretsConfig, pr parsed) (string, error) {
-			raw, err := p.client.getSecretValue(ctx, cfg, pr.name)
-			if err != nil {
-				return "", fmt.Errorf("aws: reading %q: %w", pr.name, err)
-			}
-			val, err := pluckJSONField(raw, pr.field)
-			if err != nil {
-				return "", fmt.Errorf("aws: secret %q: %w", pr.name, err)
-			}
-			return val, nil
-		})
+	return getCloudSecret(ctx, "aws", ref, p.cache, p.loadConfig, p.client.getSecretValue)
 }
 
 // AwsSecretsConfig is one tenant's connection to AWS Secrets Manager. Static

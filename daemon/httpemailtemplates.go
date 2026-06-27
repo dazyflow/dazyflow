@@ -111,9 +111,8 @@ func (h *HTTPGateway) putEmailTemplate(rw http.ResponseWriter, r *http.Request, 
 		return
 	}
 	r.Body = http.MaxBytesReader(rw, r.Body, maxEmailTemplateBytes)
-	var body putEmailTemplateBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
+	body, ok := decodeRequestJSON[putEmailTemplateBody](rw, r)
+	if !ok {
 		return
 	}
 	html := strings.TrimSpace(body.HTML)
@@ -188,7 +187,7 @@ func (h *HTTPGateway) previewEmailTemplate(rw http.ResponseWriter, r *http.Reque
 		return
 	}
 	r.Body = http.MaxBytesReader(rw, r.Body, maxEmailTemplateBytes)
-	var req struct {
+	req, ok := decodeRequestJSON[struct {
 		// HTML is a shell to preview directly (the management editor's unsaved
 		// edits). Takes precedence over ID.
 		HTML string `json:"html"`
@@ -200,9 +199,8 @@ func (h *HTTPGateway) previewEmailTemplate(rw http.ResponseWriter, r *http.Reque
 		// preview still shows the layout.
 		Body    string `json:"body"`
 		Subject string `json:"subject"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
+	}](rw, r)
+	if !ok {
 		return
 	}
 
@@ -291,9 +289,8 @@ func (h *HTTPGateway) sendTestEmail(rw http.ResponseWriter, r *http.Request, p c
 	}
 
 	r.Body = http.MaxBytesReader(rw, r.Body, maxEmailTemplateBytes)
-	var body sendTestEmailBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
+	body, ok := decodeRequestJSON[sendTestEmailBody](rw, r)
+	if !ok {
 		return
 	}
 	to := strings.TrimSpace(body.To)

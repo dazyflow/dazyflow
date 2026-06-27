@@ -201,10 +201,7 @@ func geoFetch(ctx context.Context, job core.Job, fullURL string) (int, []byte, e
 	if lang := acceptLanguage(job); lang != "" {
 		headers["Accept-Language"] = lang
 	}
-	timeoutMS := params.IntDefault(job.Params, "timeout_ms", 15000)
-	if timeoutMS <= 0 {
-		timeoutMS = 15000
-	}
+	timeoutMS := params.TimeoutMS(job, 15000)
 	status, body, _, err := hfnet.Do(ctx, "GET", fullURL, headers, nil, timeoutMS, maxResponseBytes)
 	return status, body, err
 }
@@ -229,11 +226,7 @@ func geoHTTPFailure(job core.Job, svc, rateHint string, status int, body []byte,
 		return &r
 	}
 	if status < 200 || status >= 300 {
-		s := strings.TrimSpace(string(body))
-		if len(s) > 200 {
-			s = s[:200]
-		}
-		r := params.Err(job, "geocoder_error", fmt.Sprintf("%s returned %d: %s", svc, status, s))
+		r := params.Err(job, "geocoder_error", fmt.Sprintf("%s returned %d: %s", svc, status, params.Truncate(string(body), 200)))
 		return &r
 	}
 	return nil

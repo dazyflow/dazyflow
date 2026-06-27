@@ -319,11 +319,7 @@ UPDATE tiers SET polling_allowed = NULL
 
 // EnsurePgEntitlementSchema creates the tiers + tenant_entitlements tables.
 func EnsurePgEntitlementSchema(ctx context.Context, pool *pgxpool.Pool) error {
-	if pool == nil {
-		return fmt.Errorf("nil pool")
-	}
-	_, err := pool.Exec(ctx, pgEntitlementSchema)
-	return err
+	return applyPgSchema(ctx, pool, pgEntitlementSchema)
 }
 
 // PgEntitlementStore is the Postgres EntitlementStore. Like the drop
@@ -371,18 +367,7 @@ func (s *PgEntitlementStore) seedBuiltins(ctx context.Context) error {
 }
 
 func (s *PgEntitlementStore) refreshLoop(ctx context.Context) {
-	t := time.NewTicker(refreshInterval)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-			if err := s.reload(ctx); err != nil {
-				log.Printf("entitlement refresh: %v", err)
-			}
-		}
-	}
+	pollReload(ctx, s.reload, log.Printf, "entitlement refresh: %v")
 }
 
 func (s *PgEntitlementStore) reload(ctx context.Context) error {

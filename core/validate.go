@@ -6,6 +6,7 @@ package core
 import (
 	"errors"
 	"fmt"
+	"slices"
 )
 
 // Validate runs structural checks that do not require module manifests:
@@ -225,7 +226,7 @@ func structuredIntoTextWarnings(g Graph, manifests map[string]Manifest) []LintIs
 		// beginner wires straight into a message/email body. Including triggers
 		// here is what catches that case the typed checks miss.
 		structuredSource := op.List ||
-			mimeContains(op.MIME, "application/json") ||
+			slices.Contains(op.MIME, "application/json") ||
 			(src.ExecutionModel == ExecutionTrigger && !mimeIsTextOnly(op.MIME))
 		if structuredSource && mimeIsTextOnly(ip.MIME) {
 			out = append(out, LintIssue{
@@ -284,15 +285,6 @@ func cardinalityMismatchWarnings(g Graph, manifests map[string]Manifest) []LintI
 		}
 	}
 	return out
-}
-
-func mimeContains(mimes []string, want string) bool {
-	for _, m := range mimes {
-		if m == want {
-			return true
-		}
-	}
-	return false
 }
 
 // mimeIsTextOnly reports whether a port accepts text/plain and nothing else —

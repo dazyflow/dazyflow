@@ -54,9 +54,8 @@ func (h *HTTPGateway) putResource(rw http.ResponseWriter, r *http.Request, p cor
 		return
 	}
 	r.Body = http.MaxBytesReader(rw, r.Body, maxSecretValueBytes)
-	var body putResourceBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
+	body, ok := decodeRequestJSON[putResourceBody](rw, r)
+	if !ok {
 		return
 	}
 	if strings.TrimSpace(body.Type) == "" {

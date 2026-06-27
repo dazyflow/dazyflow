@@ -453,18 +453,6 @@ func TestCardinalityMismatchWarnings_Cov(t *testing.T) {
 	}
 }
 
-func TestMimeContains(t *testing.T) {
-	if !mimeContains([]string{"a", "application/json"}, "application/json") {
-		t.Error("should find present mime")
-	}
-	if mimeContains([]string{"a"}, "b") {
-		t.Error("should not find absent mime")
-	}
-	if mimeContains(nil, "x") {
-		t.Error("nil set contains nothing")
-	}
-}
-
 func TestMimeIsTextOnly(t *testing.T) {
 	if !mimeIsTextOnly([]string{"text/plain"}) {
 		t.Error("single text/plain is text-only")

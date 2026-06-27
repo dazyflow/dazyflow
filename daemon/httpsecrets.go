@@ -5,7 +5,6 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -200,9 +199,8 @@ func (h *HTTPGateway) putSecret(rw http.ResponseWriter, r *http.Request, p core.
 		return
 	}
 	r.Body = http.MaxBytesReader(rw, r.Body, maxSecretValueBytes)
-	var body putSecretBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
+	body, ok := decodeRequestJSON[putSecretBody](rw, r)
+	if !ok {
 		return
 	}
 	body.Value = strings.TrimRight(body.Value, "\n")

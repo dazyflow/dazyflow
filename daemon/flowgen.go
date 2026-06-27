@@ -171,14 +171,13 @@ func flowGenSystemPrompt(catalog string) string {
 // renderFlowGenerate is POST /api/v1/tools/flow/generate — the non-streaming
 // variant (single JSON response). The editor uses the streaming sibling.
 func (h *HTTPGateway) renderFlowGenerate(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	var body struct {
+	body, ok := decodeRequestJSON[struct {
 		Description string          `json:"description"`
 		Provider    string          `json:"provider"`
 		TZ          string          `json:"tz"`
 		Base        json.RawMessage `json:"base"` // optional: refine this existing flow
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
+	}](rw, r)
+	if !ok {
 		return
 	}
 	desc := strings.TrimSpace(body.Description)
@@ -215,14 +214,13 @@ func (h *HTTPGateway) renderFlowGenerate(rw http.ResponseWriter, r *http.Request
 // or "error" frame. Streaming the validate-and-repair phases is what makes
 // the feature feel alive instead of a long spinner.
 func (h *HTTPGateway) renderFlowGenerateStream(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	var body struct {
+	body, ok := decodeRequestJSON[struct {
 		Description string          `json:"description"`
 		Provider    string          `json:"provider"`
 		TZ          string          `json:"tz"`
 		Base        json.RawMessage `json:"base"` // optional: refine this existing flow
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
+	}](rw, r)
+	if !ok {
 		return
 	}
 	desc := strings.TrimSpace(body.Description)

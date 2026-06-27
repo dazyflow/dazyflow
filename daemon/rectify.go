@@ -4,7 +4,6 @@
 package daemon
 
 import (
-	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -28,12 +27,11 @@ func (h *HTTPGateway) changePasswordHandler(rw http.ResponseWriter, r *http.Requ
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "password auth not configured")
 		return
 	}
-	var body struct {
+	body, ok := decodeRequestJSON[struct {
 		CurrentPassword string `json:"current_password"`
 		NewPassword     string `json:"new_password"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeAPIError(rw, http.StatusBadRequest, "decode_failed", "decode body: "+err.Error())
+	}](rw, r)
+	if !ok {
 		return
 	}
 	if len(body.NewPassword) < minPasswordLen {
@@ -82,12 +80,11 @@ func (h *HTTPGateway) changeEmailHandler(rw http.ResponseWriter, r *http.Request
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "password auth not configured")
 		return
 	}
-	var body struct {
+	body, ok := decodeRequestJSON[struct {
 		NewEmail string `json:"new_email"`
 		Password string `json:"password"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeAPIError(rw, http.StatusBadRequest, "decode_failed", "decode body: "+err.Error())
+	}](rw, r)
+	if !ok {
 		return
 	}
 	oldEmail := strings.ToLower(strings.TrimSpace(p.Subject))

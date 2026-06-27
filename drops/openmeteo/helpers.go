@@ -201,10 +201,7 @@ func omGet(ctx context.Context, job core.Job, q url.Values) (int, []byte, error)
 	if key != "" {
 		q.Set("apikey", key)
 	}
-	timeoutMS := params.IntDefault(job.Params, "timeout_ms", 15000)
-	if timeoutMS <= 0 {
-		timeoutMS = 15000
-	}
+	timeoutMS := params.TimeoutMS(job, 15000)
 	status, body, _, err := hfnet.Do(ctx, "GET", base+"?"+q.Encode(), nil, nil, timeoutMS, maxResponseBytes)
 	return status, body, err
 }
@@ -213,17 +210,7 @@ func omGet(ctx context.Context, job core.Job, q url.Values) (int, []byte, error)
 // ({"error":true,"reason":"Latitude must be in range …"}) so the real reason
 // reaches the user instead of a bare status. Falls back to a truncated raw body.
 func extractOMError(body []byte) string {
-	var e struct {
-		Reason string `json:"reason"`
-	}
-	if err := json.Unmarshal(body, &e); err == nil && e.Reason != "" {
-		return e.Reason
-	}
-	s := strings.TrimSpace(string(body))
-	if len(s) > 300 {
-		return s[:300]
-	}
-	return s
+	return params.JSONFieldMessage(body, "reason", 300)
 }
 
 // httpFailure maps a transport error or non-2xx response to an error Result,

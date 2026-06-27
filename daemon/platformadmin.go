@@ -58,11 +58,7 @@ CREATE TABLE IF NOT EXISTS platform_admins (
 
 // EnsurePgPlatformAdminSchema creates the platform_admins table. Idempotent.
 func EnsurePgPlatformAdminSchema(ctx context.Context, pool *pgxpool.Pool) error {
-	if pool == nil {
-		return fmt.Errorf("nil pool")
-	}
-	_, err := pool.Exec(ctx, pgPlatformAdminSchema)
-	return err
+	return applyPgSchema(ctx, pool, pgPlatformAdminSchema)
 }
 
 // PgPlatformAdminStore is the Postgres PlatformAdminStore with a cached snapshot.
@@ -168,16 +164,5 @@ func (s *PgPlatformAdminStore) reload(ctx context.Context) error {
 }
 
 func (s *PgPlatformAdminStore) refreshLoop(ctx context.Context) {
-	t := time.NewTicker(refreshInterval)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-			if err := s.reload(ctx); err != nil {
-				s.logger.Printf("refresh: %v", err)
-			}
-		}
-	}
+	pollReload(ctx, s.reload, s.logger.Printf, "refresh: %v")
 }

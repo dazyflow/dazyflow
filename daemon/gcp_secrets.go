@@ -72,27 +72,7 @@ func (p *GcpSecretsProvider) Scheme() string { return "gcp" }
 // project. The tenant comes from context — a BYO secret is always
 // tenant-scoped, never global.
 func (p *GcpSecretsProvider) Get(ctx context.Context, ref string) (string, error) {
-	type parsed struct{ name, field string }
-	return resolveCachedSecret(ctx, "gcp", ref, p.cache,
-		func(tenant, ref string) (string, parsed, error) {
-			name, field := splitCloudSecretRef(ref)
-			if name == "" {
-				return "", parsed{}, fmt.Errorf("gcp reference %q must be NAME or NAME#field", ref)
-			}
-			return tenant + "\x00" + ref, parsed{name: name, field: field}, nil
-		},
-		p.loadConfig,
-		func(ctx context.Context, cfg GcpSecretsConfig, pr parsed) (string, error) {
-			raw, err := p.client.accessSecret(ctx, cfg, pr.name)
-			if err != nil {
-				return "", fmt.Errorf("gcp: reading %q: %w", pr.name, err)
-			}
-			val, err := pluckJSONField(raw, pr.field)
-			if err != nil {
-				return "", fmt.Errorf("gcp: secret %q: %w", pr.name, err)
-			}
-			return val, nil
-		})
+	return getCloudSecret(ctx, "gcp", ref, p.cache, p.loadConfig, p.client.accessSecret)
 }
 
 // GcpSecretsConfig is one tenant's connection to GCP Secret Manager: the

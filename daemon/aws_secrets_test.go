@@ -204,8 +204,8 @@ func TestAwsConfig_StorageRoundTrip(t *testing.T) {
 	}
 	// The reserved cfg: key stays out of user-facing listings.
 	names, _ := es.List(ctx, "acme")
-	for _, n := range filterReservedSecretNames(names) {
-		if strings.HasPrefix(n, "cfg:") {
+	for _, n := range names {
+		if !isReservedSecretName(n) && strings.HasPrefix(n, "cfg:") {
 			t.Errorf("reserved name leaked into listing: %q", n)
 		}
 	}

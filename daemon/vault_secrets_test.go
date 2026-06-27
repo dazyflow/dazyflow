@@ -188,8 +188,8 @@ func TestVaultConfig_StorageRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, n := range filterReservedSecretNames(names) {
-		if n == vaultConfigSecretName {
+	for _, n := range names {
+		if !isReservedSecretName(n) && n == vaultConfigSecretName {
 			t.Errorf("reserved config name leaked into the user listing")
 		}
 	}

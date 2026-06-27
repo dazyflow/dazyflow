@@ -135,59 +135,56 @@ func (s *JSONInvitationStore) GetByToken(_ context.Context, token string) (Invit
 	return inv, nil
 }
 
-func (s *JSONInvitationStore) ListByTenant(_ context.Context, tenant string) ([]Invitation, error) {
+// filter returns every invitation matching pred (read-locked).
+func (s *JSONInvitationStore) filter(pred func(Invitation) bool) []Invitation {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := []Invitation{}
 	for _, i := range s.items {
-		if i.Tenant == tenant {
+		if pred(i) {
 			out = append(out, i)
 		}
 	}
-	return out, nil
+	return out
+}
+
+// deleteWhere hard-deletes every invitation matching pred and flushes
+// (write-locked), returning the number removed.
+func (s *JSONInvitationStore) deleteWhere(pred func(Invitation) bool) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for token, i := range s.items {
+		if pred(i) {
+			delete(s.items, token)
+			n++
+		}
+	}
+	return n, s.flushLocked()
+}
+
+func emailMatches(email string) func(Invitation) bool {
+	email = strings.ToLower(strings.TrimSpace(email))
+	return func(i Invitation) bool { return strings.ToLower(i.Email) == email }
+}
+
+func (s *JSONInvitationStore) ListByTenant(_ context.Context, tenant string) ([]Invitation, error) {
+	return s.filter(func(i Invitation) bool { return i.Tenant == tenant }), nil
 }
 
 // ListByEmail returns every invitation addressed to an email (export).
 func (s *JSONInvitationStore) ListByEmail(_ context.Context, email string) ([]Invitation, error) {
-	email = strings.ToLower(strings.TrimSpace(email))
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	out := []Invitation{}
-	for _, i := range s.items {
-		if strings.ToLower(i.Email) == email {
-			out = append(out, i)
-		}
-	}
-	return out, nil
+	return s.filter(emailMatches(email)), nil
 }
 
 // DeleteByEmail hard-deletes every invitation to an email (erasure).
 func (s *JSONInvitationStore) DeleteByEmail(_ context.Context, email string) (int, error) {
-	email = strings.ToLower(strings.TrimSpace(email))
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	n := 0
-	for token, i := range s.items {
-		if strings.ToLower(i.Email) == email {
-			delete(s.items, token)
-			n++
-		}
-	}
-	return n, s.flushLocked()
+	return s.deleteWhere(emailMatches(email))
 }
 
 // DeleteByTenant hard-deletes every invitation in a tenant (org deletion).
 func (s *JSONInvitationStore) DeleteByTenant(_ context.Context, tenant string) (int, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	n := 0
-	for token, i := range s.items {
-		if i.Tenant == tenant {
-			delete(s.items, token)
-			n++
-		}
-	}
-	return n, s.flushLocked()
+	return s.deleteWhere(func(i Invitation) bool { return i.Tenant == tenant })
 }
 
 func (s *JSONInvitationStore) MarkAccepted(_ context.Context, token string, at time.Time) error {

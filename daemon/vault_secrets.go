@@ -164,21 +164,8 @@ type vaultClient interface {
 
 // vaultConfigSecretName is the reserved name under which a tenant's secret-
 // manager config is stored in its own encrypted store. The "cfg:" prefix is
-// filtered out of the user-facing secret listing (see filterReservedSecretNames).
+// filtered out of the user-facing secret listing (see isReservedSecretName).
 const vaultConfigSecretName = "cfg:secret-manager"
-
-// filterReservedSecretNames drops internal "cfg:" entries (e.g. the secret-
-// manager config) from a user-facing secret listing.
-func filterReservedSecretNames(names []string) []string {
-	out := names[:0:0]
-	for _, n := range names {
-		if strings.HasPrefix(n, "cfg:") {
-			continue
-		}
-		out = append(out, n)
-	}
-	return out
-}
 
 // vaultAPIClient talks to OpenBao/Vault through OpenBao's official Go SDK
 // (github.com/openbao/openbao/api/v2) — so token handling, KV-v2 path munging,

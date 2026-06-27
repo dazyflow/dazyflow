@@ -3,6 +3,8 @@
 
 package core
 
+import "slices"
+
 type Permission string
 
 const (
@@ -35,12 +37,7 @@ func PlatformAdminRole() Role {
 }
 
 func (r Role) Has(p Permission) bool {
-	for _, have := range r.Permissions {
-		if have == p {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(r.Permissions, p)
 }
 
 // Team role catalog — the canonical viewer / editor / admin split used

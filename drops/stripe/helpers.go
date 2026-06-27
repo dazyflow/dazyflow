@@ -72,10 +72,7 @@ func stripeDo(ctx context.Context, job core.Job, method, url string, form string
 // after a partial failure replays completed steps as Stripe-side no-ops
 // instead of duplicating them.
 func stripeDoIdem(ctx context.Context, job core.Job, method, url, form, idemKey string) (int, []byte, error) {
-	timeoutMS := params.IntDefault(job.Params, "timeout_ms", 15000)
-	if timeoutMS <= 0 {
-		timeoutMS = 15000
-	}
+	timeoutMS := params.TimeoutMS(job, 15000)
 	apiKey, err := resolveAPIKey(job)
 	if err != nil {
 		return 0, nil, err

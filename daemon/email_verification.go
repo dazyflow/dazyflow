@@ -8,7 +8,6 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -101,12 +100,11 @@ func (h *HTTPGateway) verifyEmail(rw http.ResponseWriter, r *http.Request) {
 		writeJSONError(rw, http.StatusNotImplemented, "users not configured")
 		return
 	}
-	var body struct {
+	body, ok := decodeRequestJSON[struct {
 		Email string `json:"email"`
 		Token string `json:"token"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
+	}](rw, r)
+	if !ok {
 		return
 	}
 	email := strings.ToLower(strings.TrimSpace(body.Email))

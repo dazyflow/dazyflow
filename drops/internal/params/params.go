@@ -16,6 +16,7 @@ package params
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"git.sr.ht/~klahr/dazyflow/core"
 )
@@ -240,6 +241,40 @@ func EmitProgress(ch chan<- core.Progress, job core.Job, pct float64, msg string
 	case ch <- core.Progress{JobID: job.ID, NodeID: job.NodeID, Percent: &pct, Message: msg}:
 	default:
 	}
+}
+
+// TimeoutMS returns the "timeout_ms" param clamped to a positive value,
+// falling back to def when it is missing or non-positive — the clamp every
+// HTTP drop applied before handing the value to net.Do.
+func TimeoutMS(job core.Job, def int) int {
+	ms := IntDefault(job.Params, "timeout_ms", def)
+	if ms <= 0 {
+		ms = def
+	}
+	return ms
+}
+
+// Truncate trims surrounding whitespace from s and caps it at limit bytes —
+// the raw-body fallback the error extractors share.
+func Truncate(s string, limit int) string {
+	s = strings.TrimSpace(s)
+	if len(s) > limit {
+		return s[:limit]
+	}
+	return s
+}
+
+// JSONFieldMessage pulls a human message out of an error body that carries it
+// under a single named string field ({"message":…}, {"reason":…}), falling
+// back to Truncate(rawBody, limit) when the field is absent or empty.
+func JSONFieldMessage(body []byte, field string, limit int) string {
+	var m map[string]any
+	if json.Unmarshal(body, &m) == nil {
+		if s, ok := m[field].(string); ok && s != "" {
+			return s
+		}
+	}
+	return Truncate(string(body), limit)
 }
 
 // APIErrorMessage pulls a human message out of a flat {message, code} error

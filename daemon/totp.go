@@ -4,9 +4,7 @@
 package daemon
 
 import (
-	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"time"
 
@@ -107,11 +105,10 @@ func (h *HTTPGateway) totpConfirm(rw http.ResponseWriter, r *http.Request, p cor
 	if !h.requireTOTP(rw) {
 		return
 	}
-	var body struct {
+	body, ok := decodeRequestJSONOptional[struct {
 		Code string `json:"code"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
-		writeAPIError(rw, http.StatusBadRequest, "decode_failed", "decode body: "+err.Error())
+	}](rw, r)
+	if !ok {
 		return
 	}
 	if body.Code == "" {
@@ -147,11 +144,10 @@ func (h *HTTPGateway) totpDisable(rw http.ResponseWriter, r *http.Request, p cor
 	if !h.requireTOTP(rw) {
 		return
 	}
-	var body struct {
+	body, ok := decodeRequestJSONOptional[struct {
 		Password string `json:"password"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
-		writeAPIError(rw, http.StatusBadRequest, "decode_failed", "decode body: "+err.Error())
+	}](rw, r)
+	if !ok {
 		return
 	}
 	if body.Password == "" {
@@ -212,13 +208,12 @@ func (h *HTTPGateway) totpVerify(rw http.ResponseWriter, r *http.Request) {
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "password sign-in not configured")
 		return
 	}
-	var body struct {
+	body, ok := decodeRequestJSON[struct {
 		Challenge    string `json:"challenge"`
 		Code         string `json:"code"`
 		RecoveryCode string `json:"recovery_code"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeAPIError(rw, http.StatusBadRequest, "decode_failed", "decode body: "+err.Error())
+	}](rw, r)
+	if !ok {
 		return
 	}
 	if body.Challenge == "" {

@@ -6,6 +6,7 @@ package daemon
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"sync"
 
@@ -305,6 +306,9 @@ func (p *PgSecretsStore) setWrappedDEK(ctx context.Context, tenant string, wrapp
 // construction time. Every Pg*Store constructor opens the same way, so
 // this keeps the "ensure schema, bail on error" step in one place.
 func applyPgSchema(ctx context.Context, pool *pgxpool.Pool, schema string) error {
+	if pool == nil {
+		return fmt.Errorf("nil pool")
+	}
 	_, err := pool.Exec(ctx, schema)
 	return err
 }

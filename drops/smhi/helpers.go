@@ -120,10 +120,7 @@ func smhiGet(ctx context.Context, job core.Job, lat, lon float64, currentOnly bo
 		q += "&timeseries=1"
 	}
 	url := fmt.Sprintf("%s/lon/%s/lat/%s/data.json%s", forecastBase, fmtCoord6(lon), fmtCoord6(lat), q)
-	timeoutMS := params.IntDefault(job.Params, "timeout_ms", 15000)
-	if timeoutMS <= 0 {
-		timeoutMS = 15000
-	}
+	timeoutMS := params.TimeoutMS(job, 15000)
 	status, body, _, err := hfnet.Do(ctx, "GET", url, nil, nil, timeoutMS, maxResponseBytes)
 	return status, body, err
 }
@@ -147,11 +144,7 @@ func httpFailure(job core.Job, status int, body []byte, err error) *core.Result 
 		return &r
 	}
 	if status < 200 || status >= 300 {
-		s := strings.TrimSpace(string(body))
-		if len(s) > 200 {
-			s = s[:200]
-		}
-		r := params.Err(job, "smhi_error", fmt.Sprintf("SMHI returned %d: %s", status, s))
+		r := params.Err(job, "smhi_error", fmt.Sprintf("SMHI returned %d: %s", status, params.Truncate(string(body), 200)))
 		return &r
 	}
 	return nil

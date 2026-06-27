@@ -1237,12 +1237,11 @@ func (h *HTTPGateway) signIn(rw http.ResponseWriter, r *http.Request) {
 		writeJSONError(rw, http.StatusNotImplemented, "password sign-in not configured")
 		return
 	}
-	var body struct {
+	body, ok := decodeRequestJSON[struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
+	}](rw, r)
+	if !ok {
 		return
 	}
 	user, err := auth.VerifyPassword(r.Context(), h.Users, body.Email, body.Password)
@@ -1942,9 +1941,8 @@ func (h *HTTPGateway) listTenants(rw http.ResponseWriter, r *http.Request, p cor
 }
 
 func (h *HTTPGateway) issueAPIKey(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	var params IssueAPIKeyParams
-	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
+	params, ok := decodeRequestJSON[IssueAPIKeyParams](rw, r)
+	if !ok {
 		return
 	}
 	issued, err := h.svc.IssueAPIKey(r.Context(), p, params)

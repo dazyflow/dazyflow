@@ -49,10 +49,7 @@ func resolveCreds(job core.Job) (sid, token string, err error) {
 // with the Account SID + Auth Token). Returns status + body; the caller maps
 // non-2xx via extractTwilioError.
 func twilioDo(ctx context.Context, job core.Job, method, url, form string) (int, []byte, error) {
-	timeoutMS := params.IntDefault(job.Params, "timeout_ms", 15000)
-	if timeoutMS <= 0 {
-		timeoutMS = 15000
-	}
+	timeoutMS := params.TimeoutMS(job, 15000)
 	sid, token, err := resolveCreds(job)
 	if err != nil {
 		return 0, nil, err

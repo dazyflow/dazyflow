@@ -29,7 +29,6 @@ package homeassistant
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -71,10 +70,7 @@ func haDo(ctx context.Context, job core.Job, method, path string, body []byte) (
 	}
 	url := base + path
 
-	timeoutMS := params.IntDefault(job.Params, "timeout_ms", 15000)
-	if timeoutMS <= 0 {
-		timeoutMS = 15000
-	}
+	timeoutMS := params.TimeoutMS(job, 15000)
 	headers := map[string]string{"Authorization": "Bearer " + token}
 	if body != nil {
 		headers["Content-Type"] = "application/json"
@@ -87,17 +83,7 @@ func haDo(ctx context.Context, job core.Job, method, path string, body []byte) (
 // ({"message":"..."}), so "Entity not found." reaches the user instead of a
 // bare HTTP status. Falls back to a truncated raw body.
 func extractError(body []byte) string {
-	var e struct {
-		Message string `json:"message"`
-	}
-	if err := json.Unmarshal(body, &e); err == nil && e.Message != "" {
-		return e.Message
-	}
-	s := strings.TrimSpace(string(body))
-	if len(s) > 300 {
-		return s[:300]
-	}
-	return s
+	return params.JSONFieldMessage(body, "message", 300)
 }
 
 // httpFailure maps a transport error or a non-2xx response to an error

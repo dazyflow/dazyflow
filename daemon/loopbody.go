@@ -55,13 +55,6 @@ func loopBodyOwners(graph core.Graph) map[string]string {
 	return owners
 }
 
-// isLoopBody reports whether nodeID is owned by some for_each loop body in
-// the graph. Thin wrapper for dispatch sites that only need a yes/no.
-func isLoopBody(graph core.Graph, nodeID string) bool {
-	_, ok := loopBodyOwners(graph)[nodeID]
-	return ok
-}
-
 // validateLoopBodies rejects loop-body configurations the engine can't run
 // correctly yet, so a bad graph fails clearly at submit time instead of
 // producing silently-wrong output. The single v1 rule: a for_each may not

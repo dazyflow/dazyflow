@@ -13,6 +13,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // Postgres-backed implementations of the four org-level stores that
@@ -214,7 +216,7 @@ func scanMembership(row rowScanner) (Membership, error) {
 	if err := row.Scan(&m.UserEmail, &m.Tenant, &m.Workspace, &rolesRaw, &m.InvitedBy, &m.CreatedAt); err != nil {
 		return Membership{}, err
 	}
-	roles, err := unmarshalRoles(rolesRaw)
+	roles, err := jsonOrZero[[]core.Role](rolesRaw)
 	if err != nil {
 		return Membership{}, err
 	}
@@ -339,7 +341,7 @@ func scanInvitation(row rowScanner) (Invitation, error) {
 	); err != nil {
 		return Invitation{}, err
 	}
-	roles, err := unmarshalRoles(rolesRaw)
+	roles, err := jsonOrZero[[]core.Role](rolesRaw)
 	if err != nil {
 		return Invitation{}, err
 	}

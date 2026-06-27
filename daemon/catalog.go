@@ -14,7 +14,6 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
-	"io"
 	"net/http"
 	"sort"
 	"strings"
@@ -519,9 +518,8 @@ func (h *HTTPGateway) listMyAPIKeysHandler(rw http.ResponseWriter, r *http.Reque
 // service caps requested permissions to a subset of the caller's
 // own. Returns the secret exactly once.
 func (h *HTTPGateway) issueMyAPIKeyHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	var params SelfIssueAPIKeyParams
-	if err := json.NewDecoder(r.Body).Decode(&params); err != nil && err != io.EOF {
-		writeAPIError(rw, http.StatusBadRequest, "decode_failed", "decode body: "+err.Error())
+	params, ok := decodeRequestJSONOptional[SelfIssueAPIKeyParams](rw, r)
+	if !ok {
 		return
 	}
 	issued, err := h.svc.IssueOwnAPIKey(r.Context(), p, params)

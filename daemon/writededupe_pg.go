@@ -6,7 +6,6 @@ package daemon
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"time"
 
@@ -55,11 +54,7 @@ CREATE INDEX IF NOT EXISTS write_dedupe_stored_at_idx ON write_dedupe (stored_at
 
 // EnsurePgWriteDedupeSchema creates the write_dedupe table. Idempotent.
 func EnsurePgWriteDedupeSchema(ctx context.Context, pool *pgxpool.Pool) error {
-	if pool == nil {
-		return fmt.Errorf("nil pool")
-	}
-	_, err := pool.Exec(ctx, pgWriteDedupeSchema)
-	return err
+	return applyPgSchema(ctx, pool, pgWriteDedupeSchema)
 }
 
 // NewPgWriteDedupeStore creates the schema and starts the background TTL sweep.

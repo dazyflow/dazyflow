@@ -5,7 +5,6 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -91,11 +90,10 @@ func (h *HTTPGateway) createSignupInvite(rw http.ResponseWriter, r *http.Request
 	if !h.requireVerifiedInviter(rw, r, p) {
 		return
 	}
-	var body struct {
+	body, ok := decodeRequestJSON[struct {
 		Email string `json:"email"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
+	}](rw, r)
+	if !ok {
 		return
 	}
 	email := strings.ToLower(strings.TrimSpace(body.Email))

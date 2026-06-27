@@ -36,9 +36,6 @@ func TestLoopBodyOwners(t *testing.T) {
 			t.Errorf("%s should not be loop-owned; got %v", n, owners)
 		}
 	}
-	if !isLoopBody(g, "mail") || isLoopBody(g, "after") {
-		t.Errorf("isLoopBody wrong: mail=%v after=%v", isLoopBody(g, "mail"), isLoopBody(g, "after"))
-	}
 }
 
 // A loop inside another loop's body is rejected at submit time (the body

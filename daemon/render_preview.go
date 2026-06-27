@@ -4,9 +4,7 @@
 package daemon
 
 import (
-	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 
 	"git.sr.ht/~klahr/dazyflow/core"
@@ -27,12 +25,11 @@ const previewMaxBytes = 512 * 1024 // 512 KiB
 // the user is mid-typing, so they come back as a 200 with an `error` field
 // the UI renders inline, never an HTTP error.
 func (h *HTTPGateway) renderTemplatePreview(rw http.ResponseWriter, r *http.Request, _ core.Principal) {
-	var body struct {
+	body, ok := decodeRequestJSON[struct {
 		Template string `json:"template"`
 		Data     any    `json:"data"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
+	}](rw, r)
+	if !ok {
 		return
 	}
 	data := body.Data

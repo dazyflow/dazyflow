@@ -5,7 +5,6 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -76,13 +75,12 @@ func (h *HTTPGateway) renderTemplateLLMProviders(rw http.ResponseWriter, r *http
 
 // renderTemplateAssist is POST /api/v1/tools/render-template/assist.
 func (h *HTTPGateway) renderTemplateAssist(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	var body struct {
+	body, ok := decodeRequestJSON[struct {
 		Description string   `json:"description"`
 		Fields      []string `json:"fields"`
 		Provider    string   `json:"provider"` // optional: which connected provider to use
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
+	}](rw, r)
+	if !ok {
 		return
 	}
 	desc := strings.TrimSpace(body.Description)

@@ -5,6 +5,7 @@ package core
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 )
 
@@ -150,14 +151,7 @@ func (p Port) Kind() PortKind {
 	if len(p.MIME) == 0 {
 		return KindAny
 	}
-	has := func(m string) bool {
-		for _, x := range p.MIME {
-			if x == m {
-				return true
-			}
-		}
-		return false
-	}
+	has := func(m string) bool { return slices.Contains(p.MIME, m) }
 	switch {
 	case has("application/json"), has("application/x-dazyflow-list+json"):
 		return KindItem

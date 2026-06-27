@@ -6,6 +6,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -69,7 +70,7 @@ func (v *oidcVerifier) Verify(ctx context.Context, rawIDToken string) (Claims, e
 	// specific Dazyflow tenant. When the operator pins an allowlist, fail
 	// closed on any tenant outside it; when unset, accept whatever the
 	// issuer asserts (unchanged behavior for single-trusted-issuer setups).
-	if len(v.cfg.AllowedTenants) > 0 && !containsString(v.cfg.AllowedTenants, tenant) {
+	if len(v.cfg.AllowedTenants) > 0 && !slices.Contains(v.cfg.AllowedTenants, tenant) {
 		return Claims{}, fmt.Errorf("oidc: tenant %q is not in the issuer's allowed-tenants list", tenant)
 	}
 
@@ -83,16 +84,6 @@ func (v *oidcVerifier) Verify(ctx context.Context, rawIDToken string) (Claims, e
 		Roles:   stringList(all[rolesClaim]),
 		Extras:  all,
 	}, nil
-}
-
-// containsString reports whether s is exactly one of the list elements.
-func containsString(list []string, s string) bool {
-	for _, e := range list {
-		if e == s {
-			return true
-		}
-	}
-	return false
 }
 
 // stringList renders a roles claim however the IdP shapes it: a JSON

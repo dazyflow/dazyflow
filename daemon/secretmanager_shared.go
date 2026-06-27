@@ -166,6 +166,41 @@ func pluckJSONField(raw, field string) (string, error) {
 	return stringifyVaultValue(v), nil
 }
 
+// getCloudSecret implements the aws/gcp SecretProvider.Get: parse a
+// "NAME" / "NAME#field" ref, fetch NAME from the tenant's cloud secret
+// manager (with caching via resolveCachedSecret), then pluck #field. The
+// per-provider parts are the scheme label, the config loader, and fetch —
+// the single client call that reads NAME's raw value.
+func getCloudSecret[C any](
+	ctx context.Context,
+	scheme, ref string,
+	cache *tenantSecretCache,
+	load func(ctx context.Context, tenant string) (C, bool, error),
+	fetch func(ctx context.Context, cfg C, name string) (string, error),
+) (string, error) {
+	type parsed struct{ name, field string }
+	return resolveCachedSecret(ctx, scheme, ref, cache,
+		func(tenant, ref string) (string, parsed, error) {
+			name, field := splitCloudSecretRef(ref)
+			if name == "" {
+				return "", parsed{}, fmt.Errorf("%s reference %q must be NAME or NAME#field", scheme, ref)
+			}
+			return tenant + "\x00" + ref, parsed{name: name, field: field}, nil
+		},
+		load,
+		func(ctx context.Context, cfg C, pr parsed) (string, error) {
+			raw, err := fetch(ctx, cfg, pr.name)
+			if err != nil {
+				return "", fmt.Errorf("%s: reading %q: %w", scheme, pr.name, err)
+			}
+			val, err := pluckJSONField(raw, pr.field)
+			if err != nil {
+				return "", fmt.Errorf("%s: secret %q: %w", scheme, pr.name, err)
+			}
+			return val, nil
+		})
+}
+
 // providerConfig is what every per-tenant connection config can do:
 // validate itself before it's persisted or used.
 type providerConfig interface {
@@ -221,9 +256,8 @@ func putSecretManagerConfig[T providerConfig](
 		return
 	}
 	r.Body = http.MaxBytesReader(rw, r.Body, maxSecretValueBytes)
-	var cfg T
-	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
+	cfg, ok := decodeRequestJSON[T](rw, r)
+	if !ok {
 		return
 	}
 	if err := cfg.validate(); err != nil {
