@@ -4,13 +4,22 @@ packages:
   - nodejs
   - npm
   - postgresql
+  - mariadb
   - podman
 secrets:
   - 6a3daa36-3866-48d4-8846-ecfa57a0d0dd
 sources:
   - git@git.sr.ht:~klahr/dazyflow
+# Test databases. The bulk of the suite's integration tests skip unless these
+# are set (Postgres-gated tests check DAZYFLOW_TEST_DB; the drops/db MySQL
+# tests check DAZYFLOW_TEST_MYSQL; the live-DSN verify check uses DZ_TEST_PG_DSN).
+# The postgres/mysql tasks below stand up local servers these point at, so CI
+# runs the same tests a developer gets with both databases available — nothing
+# silently skips.
 environment:
   DAZYFLOW_TEST_DB: postgres://dazyflow:dazyflow@localhost:5432/dazyflow_test
+  DAZYFLOW_TEST_MYSQL: dazyflow:dazyflow@tcp(localhost:3306)/dazyflow_test?parseTime=true
+  DZ_TEST_PG_DSN: postgres://dazyflow:dazyflow@localhost:5432/dazyflow_test?sslmode=disable
 tasks:
   - postgres: |
       sudo -iu postgres initdb -D /var/lib/postgres/data
@@ -20,6 +29,29 @@ tasks:
       for i in $(seq 1 30); do pg_isready -h localhost -p 5432 && break; sleep 1; done
       sudo -iu postgres psql -c "CREATE USER dazyflow WITH PASSWORD 'dazyflow';"
       sudo -iu postgres psql -c "CREATE DATABASE dazyflow_test OWNER dazyflow;"
+  # MariaDB for the drops/db MySQL-gated tests (DAZYFLOW_TEST_MYSQL). Mirrors
+  # the postgres task: init a data dir, start the server on 127.0.0.1:3306, wait
+  # for it, then create the dazyflow user + dazyflow_test database. The CREATE
+  # statements run as the root@localhost unix_socket account (sudo mariadb over
+  # the socket); the app connects as dazyflow over TCP with a password.
+  - mysql: |
+      sudo install -d -o mysql -g mysql /run/mysqld
+      sudo mariadb-install-db --user=mysql --basedir=/usr --datadir=/var/lib/mysql >/tmp/mysql-install.log 2>&1 \
+        || { echo "=== mysql-install.log ==="; cat /tmp/mysql-install.log; exit 1; }
+      # setsid + nohup so the daemon detaches from this task's shell and
+      # survives into the later build/test tasks (a bare `&` job can be reaped
+      # at task boundaries; postgres above gets this for free via pg_ctl).
+      # --skip-name-resolve is REQUIRED: a fresh MariaDB creates anonymous
+      # ''@'localhost' rows, and without it a TCP connection to 127.0.0.1
+      # reverse-resolves to "localhost" and matches that anonymous row instead
+      # of 'dazyflow'@'%' → "Access denied". Skipping name resolution keeps the
+      # peer as 127.0.0.1, which matches '%'. (Also faster, no DNS dependency.)
+      sudo -u mysql setsid nohup /usr/bin/mariadbd --datadir=/var/lib/mysql --socket=/run/mysqld/mysqld.sock \
+        --bind-address=127.0.0.1 --port=3306 --skip-name-resolve >/tmp/mysqld.log 2>&1 &
+      for i in $(seq 1 30); do sudo mariadb --socket=/run/mysqld/mysqld.sock -e "SELECT 1" >/dev/null 2>&1 && break; sleep 1; done
+      sudo mariadb --socket=/run/mysqld/mysqld.sock -e \
+        "CREATE DATABASE dazyflow_test; CREATE USER 'dazyflow'@'%' IDENTIFIED BY 'dazyflow'; GRANT ALL PRIVILEGES ON dazyflow_test.* TO 'dazyflow'@'%'; FLUSH PRIVILEGES;" \
+        || { echo "=== mysqld.log ==="; cat /tmp/mysqld.log; exit 1; }
   - build: |
       cd dazyflow
       go build ./...

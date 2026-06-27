@@ -14,11 +14,17 @@ import (
 	"git.sr.ht/~klahr/dazyflow/daemon"
 )
 
-// daemonConn dials dzd. Address comes from --server (default localhost:50050)
-// and the bearer token from DZCTL_TOKEN. TLS is enabled when DZCTL_TLS_CA
-// is set; client cert/key for mTLS come from DZCTL_TLS_CERT / DZCTL_TLS_KEY.
-// DZCTL_TLS_SERVER_NAME overrides the SNI/hostname when needed.
-func daemonConn(server string) (*grpc.ClientConn, error) {
+// daemonConn dials dzd. It is a package-level var rather than a plain func
+// purely so tests can swap in a bufconn-backed dialer that points the
+// networked commands at an in-process gRPC server (production never reassigns
+// it). The default implementation is daemonConnReal.
+var daemonConn = daemonConnReal
+
+// daemonConnReal dials dzd. Address comes from --server (default
+// localhost:50050) and the bearer token from DZCTL_TOKEN. TLS is enabled when
+// DZCTL_TLS_CA is set; client cert/key for mTLS come from DZCTL_TLS_CERT /
+// DZCTL_TLS_KEY. DZCTL_TLS_SERVER_NAME overrides the SNI/hostname when needed.
+func daemonConnReal(server string) (*grpc.ClientConn, error) {
 	if server == "" {
 		server = "localhost:50050"
 	}

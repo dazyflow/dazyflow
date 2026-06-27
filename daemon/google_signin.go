@@ -30,15 +30,21 @@ import (
 // Slack / etc. — this flow is for *signing in to Dazyflow itself*.
 
 const (
-	googleAuthURL     = "https://accounts.google.com/o/oauth2/v2/auth"
-	googleTokenURL    = "https://oauth2.googleapis.com/token"
-	googleUserinfoURL = "https://www.googleapis.com/oauth2/v3/userinfo"
-	googleScopes      = "openid email profile"
+	googleAuthURL = "https://accounts.google.com/o/oauth2/v2/auth"
+	googleScopes  = "openid email profile"
 	// googleOIDCIssuer is the issuer Google asserts in its ID tokens. The
 	// scheme-less form "accounts.google.com" also appears in the wild, but
 	// go-oidc discovery uses the canonical https form; we accept both when
 	// checking the iss claim below.
 	googleOIDCIssuer = "https://accounts.google.com"
+)
+
+// The token-exchange and userinfo endpoints are vars (not consts) solely so
+// tests can point exchangeGoogleCode at an httptest server; production always
+// uses Google's real endpoints. They are never reassigned outside tests.
+var (
+	googleTokenURL    = "https://oauth2.googleapis.com/token"
+	googleUserinfoURL = "https://www.googleapis.com/oauth2/v3/userinfo"
 )
 
 // googleVerifierCache memoizes one OIDC verifier per client_id. Each

@@ -1,0 +1,256 @@
+package gcal
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"git.sr.ht/~klahr/dazyflow/core"
+)
+
+func TestCovCalBaseURLOverride(t *testing.T) {
+	job := core.Job{Params: map[string]any{"base_url": "http://override.example"}}
+	if got := calBaseURL(job); got != "http://override.example" {
+		t.Fatalf("base_url param should win, got %q", got)
+	}
+	// Empty base_url falls back to the configured root.
+	if got := calBaseURL(core.Job{Params: map[string]any{}}); got != calBase.Get() {
+		t.Fatalf("blank base_url should fall back, got %q", got)
+	}
+}
+
+func TestCovResolveSummary(t *testing.T) {
+	// String input wins.
+	if got := resolveSummary(core.Job{Input: map[string]core.Ref{"summary": {Inline: "  Hello  "}}}); got != "Hello" {
+		t.Fatalf("string input = %q", got)
+	}
+	// []byte input wins.
+	if got := resolveSummary(core.Job{Input: map[string]core.Ref{"summary": {Inline: []byte("Bytes")}}}); got != "Bytes" {
+		t.Fatalf("byte input = %q", got)
+	}
+	// Blank string input falls through to param.
+	job := core.Job{
+		Input:  map[string]core.Ref{"summary": {Inline: "   "}},
+		Params: map[string]any{"summary": "Param"},
+	}
+	if got := resolveSummary(job); got != "Param" {
+		t.Fatalf("blank input should fall back to param, got %q", got)
+	}
+	// Non-string/byte input ignored → param.
+	job2 := core.Job{
+		Input:  map[string]core.Ref{"summary": {Inline: 42}},
+		Params: map[string]any{"summary": "Fallback"},
+	}
+	if got := resolveSummary(job2); got != "Fallback" {
+		t.Fatalf("non-text input should fall back, got %q", got)
+	}
+}
+
+func TestCovResolveCalendarID(t *testing.T) {
+	if got := resolveCalendarID(core.Job{Input: map[string]core.Ref{"calendar_id": {Inline: " cal@x "}}}); got != "cal@x" {
+		t.Fatalf("string input = %q", got)
+	}
+	if got := resolveCalendarID(core.Job{Input: map[string]core.Ref{"calendar_id": {Inline: []byte("cal2")}}}); got != "cal2" {
+		t.Fatalf("byte input = %q", got)
+	}
+	// Blank input → param default "primary".
+	if got := resolveCalendarID(core.Job{Input: map[string]core.Ref{"calendar_id": {Inline: ""}}}); got != "primary" {
+		t.Fatalf("blank input should default to primary, got %q", got)
+	}
+	// Non-text input ignored → configured calendar_id.
+	job := core.Job{Input: map[string]core.Ref{"calendar_id": {Inline: 9}}, Params: map[string]any{"calendar_id": "c3"}}
+	if got := resolveCalendarID(job); got != "c3" {
+		t.Fatalf("non-text input should fall back, got %q", got)
+	}
+}
+
+func TestCovCreateEventBadParams(t *testing.T) {
+	// Missing summary.
+	r, _ := executeCreateEvent(context.Background(), core.Job{Params: map[string]any{}}, nil)
+	if r.Error == nil || r.Error.Code != "bad_param" {
+		t.Fatalf("missing summary → bad_param, got %+v", r.Error)
+	}
+	// Missing start/end.
+	r, _ = executeCreateEvent(context.Background(), core.Job{Params: map[string]any{"summary": "S"}}, nil)
+	if r.Error == nil || r.Error.Code != "bad_param" {
+		t.Fatalf("missing start/end → bad_param, got %+v", r.Error)
+	}
+}
+
+func TestCovCreateEventTokenError(t *testing.T) {
+	SetTokenLookup(nil)
+	t.Cleanup(func() { SetTokenLookup(nil) })
+	job := core.Job{Params: map[string]any{"summary": "S", "start": "2026-06-26T10:00:00Z", "end": "2026-06-26T11:00:00Z"}}
+	r, _ := executeCreateEvent(context.Background(), job, nil)
+	if r.Error == nil || r.Error.Code != "gcal_error" {
+		t.Fatalf("token error → gcal_error, got %+v", r.Error)
+	}
+}
+
+func TestCovCreateEventNon2xx(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(403)
+		_, _ = w.Write([]byte(`{"error":{"message":"forbidden"}}`))
+	}))
+	defer srv.Close()
+	withCalEnv(t, srv.URL)
+	job := core.Job{Params: map[string]any{
+		"summary": "S", "start": "2026-06-26", "end": "2026-06-27",
+		"description": "d", "location": "loc", "attendees": "a@x, b@y",
+	}}
+	r, _ := executeCreateEvent(context.Background(), job, nil)
+	if r.Error == nil || r.Error.Code != "gcal_error" {
+		t.Fatalf("403 → gcal_error, got %+v", r.Error)
+	}
+}
+
+func TestCovCreateEventBadJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("not json"))
+	}))
+	defer srv.Close()
+	withCalEnv(t, srv.URL)
+	job := core.Job{Params: map[string]any{
+		"summary": "S", "start": "2026-06-26T10:00:00Z", "end": "2026-06-26T11:00:00Z", "time_zone": "Europe/Stockholm",
+	}}
+	r, _ := executeCreateEvent(context.Background(), job, nil)
+	if r.Error == nil || r.Error.Code != "gcal_error" {
+		t.Fatalf("bad json → gcal_error, got %+v", r.Error)
+	}
+}
+
+func TestCovCreateEventSuccess(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": "ev99", "htmlLink": "https://cal/ev99", "summary": "S"})
+	}))
+	defer srv.Close()
+	withCalEnv(t, srv.URL)
+	job := core.Job{Params: map[string]any{"summary": "S", "start": "2026-06-26", "end": "2026-06-27"}}
+	r, _ := executeCreateEvent(context.Background(), job, nil)
+	if r.Status != core.StatusOK {
+		t.Fatalf("status %v %+v", r.Status, r.Error)
+	}
+	if r.Output["event_id"].Inline != "ev99" {
+		t.Fatalf("event_id = %v", r.Output["event_id"].Inline)
+	}
+}
+
+func TestCovListEventsTokenError(t *testing.T) {
+	SetTokenLookup(nil)
+	t.Cleanup(func() { SetTokenLookup(nil) })
+	if _, err := ListEvents(context.Background(), core.Job{Params: map[string]any{}}); err == nil {
+		t.Fatal("token error should propagate")
+	}
+}
+
+func TestCovListEventsNon2xx(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(500)
+		_, _ = w.Write([]byte(`{"error":{"message":"boom"}}`))
+	}))
+	defer srv.Close()
+	withCalEnv(t, srv.URL)
+	if _, err := ListEvents(context.Background(), core.Job{Params: map[string]any{}}); err == nil {
+		t.Fatal("500 should error")
+	}
+}
+
+func TestCovListEventsBadJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("not json"))
+	}))
+	defer srv.Close()
+	withCalEnv(t, srv.URL)
+	if _, err := ListEvents(context.Background(), core.Job{Params: map[string]any{}}); err == nil {
+		t.Fatal("bad json should error")
+	}
+}
+
+func TestCovListEventsNonSingle(t *testing.T) {
+	// single_events=false drops orderBy=startTime; also exercises the
+	// time_max branch.
+	var gotQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		_, _ = w.Write([]byte(`{"items":[]}`))
+	}))
+	defer srv.Close()
+	withCalEnv(t, srv.URL)
+	job := core.Job{Params: map[string]any{"single_events": false, "time_max": "2026-07-01T00:00:00Z"}}
+	if _, err := ListEvents(context.Background(), job); err != nil {
+		t.Fatal(err)
+	}
+	if want := "singleEvents=false"; !strings.Contains(gotQuery, want) {
+		t.Fatalf("query %q missing %q", gotQuery, want)
+	}
+	if strings.Contains(gotQuery, "orderBy=startTime") {
+		t.Fatalf("non-single query should omit orderBy, got %q", gotQuery)
+	}
+}
+
+func TestCovListCalendars(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"items": []map[string]any{
+				{"id": "primary", "summary": "Me", "primary": true},
+				{"id": "team@x", "summaryOverride": "Team (mine)", "summary": "Team"},
+				{"id": "plain@x", "summary": "Plain"},
+				{"id": "noname@x"},
+			},
+		})
+	}))
+	defer srv.Close()
+	withCalEnv(t, srv.URL)
+	out, err := ListCalendars(context.Background(), core.Job{Params: map[string]any{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Synthetic "primary" first; the real primary skipped; override and
+	// id-fallback names applied.
+	if len(out) != 4 || out[0].ID != "primary" || out[0].Name != "Primary calendar" {
+		t.Fatalf("calendars = %+v", out)
+	}
+	byID := map[string]string{}
+	for _, c := range out {
+		byID[c.ID] = c.Name
+	}
+	if byID["team@x"] != "Team (mine)" {
+		t.Fatalf("summaryOverride should win: %q", byID["team@x"])
+	}
+	if byID["plain@x"] != "Plain" {
+		t.Fatalf("summary fallback: %q", byID["plain@x"])
+	}
+	if byID["noname@x"] != "noname@x" {
+		t.Fatalf("id fallback: %q", byID["noname@x"])
+	}
+}
+
+func TestCovListCalendarsErrors(t *testing.T) {
+	SetTokenLookup(nil)
+	if _, err := ListCalendars(context.Background(), core.Job{Params: map[string]any{}}); err == nil {
+		t.Fatal("token error should propagate")
+	}
+	SetTokenLookup(nil)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(401)
+		_, _ = w.Write([]byte(`{"error":{"message":"unauthorized"}}`))
+	}))
+	defer srv.Close()
+	withCalEnv(t, srv.URL)
+	if _, err := ListCalendars(context.Background(), core.Job{Params: map[string]any{}}); err == nil {
+		t.Fatal("401 should error")
+	}
+
+	srv2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("not json"))
+	}))
+	defer srv2.Close()
+	withCalEnv(t, srv2.URL)
+	if _, err := ListCalendars(context.Background(), core.Job{Params: map[string]any{}}); err == nil {
+		t.Fatal("bad json should error")
+	}
+}

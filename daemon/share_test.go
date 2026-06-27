@@ -180,7 +180,12 @@ func TestPublicWorkspaceOverview_SanitizedAndScoped(t *testing.T) {
 		}
 	}
 
-	now := time.Now()
+	// Fixed midday timestamp so the -2h/-30m/-5m runs below all fall on the
+	// same UTC calendar day as `now`. Using time.Now() here made the test
+	// flaky near UTC midnight: a run "2h ago" crosses into the previous day,
+	// so RunsToday (counted from startOfDay) drops to 2. PublicWorkspaceOverview
+	// takes `now` explicitly, so pinning it keeps the day boundary deterministic.
+	now := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
 	// alpha: latest is a failure (older success first, newer failure second).
 	h.enqueueRun(t, ctx, "a1", "alpha", core.JobStatusSucceeded, now.Add(-2*time.Hour))
 	h.enqueueRun(t, ctx, "a2", "alpha", core.JobStatusFailed, now.Add(-30*time.Minute))

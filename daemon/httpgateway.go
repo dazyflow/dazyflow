@@ -2423,6 +2423,15 @@ func (h *HTTPGateway) watchFlowMe(rw http.ResponseWriter, r *http.Request, p cor
 		writeJSONError(rw, http.StatusInternalServerError, "streaming unsupported")
 		return
 	}
+	// Subscribe BEFORE writing the ": watching" comment that signals the
+	// stream is live. If we opened the stream first and subscribed after, an
+	// edit landing in that gap would be published to no subscriber and missed;
+	// a client that treats ": watching" as "I'm now receiving updates" (and
+	// any test that publishes right after it) would then lose the event.
+	// Subscribing first makes ": watching" a truthful readiness signal.
+	events, cancel := h.svc.bus().Subscribe(flowBusKey(tenant, workspace, id))
+	defer cancel()
+
 	rw.Header().Set("Content-Type", "text/event-stream")
 	rw.Header().Set("Cache-Control", "no-cache")
 	rw.Header().Set("X-Accel-Buffering", "no") // for nginx
@@ -2431,9 +2440,6 @@ func (h *HTTPGateway) watchFlowMe(rw http.ResponseWriter, r *http.Request, p cor
 	// response promptly even before the first edit lands.
 	_, _ = fmt.Fprintf(rw, ": watching\n\n")
 	flusher.Flush()
-
-	events, cancel := h.svc.bus().Subscribe(flowBusKey(tenant, workspace, id))
-	defer cancel()
 
 	ping := time.NewTicker(25 * time.Second)
 	defer ping.Stop()
