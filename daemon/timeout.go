@@ -47,7 +47,10 @@ func (s *Service) effectiveGraphTimeout(g core.Graph) time.Duration {
 	// falls back to the global MaxGraphTimeoutSeconds. effectiveLimits
 	// reads the in-memory entitlement cache, so a background context is fine.
 	ceilingSecs := s.effectiveLimits(context.Background(), g.Tenant).MaxTimeoutSeconds
-	if max := time.Duration(ceilingSecs) * time.Second; max > 0 && (d == 0 || d > max) {
+	// Route the ceiling through secondsToDuration too: a misconfigured huge
+	// operator/tier value would otherwise overflow negative and silently
+	// disable the ceiling rather than capping the run.
+	if max := secondsToDuration(ceilingSecs); max > 0 && (d == 0 || d > max) {
 		d = max
 	}
 	return d

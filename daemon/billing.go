@@ -416,7 +416,13 @@ func (b *BillingService) reserveRun(ctx context.Context, tenant string) (admitte
 		return true, b.usage.AddRun(ctx, tenant, time.Now())
 	}
 	if rr, ok := b.usage.(runReserver); ok {
-		return rr.AddRunIfUnder(ctx, tenant, time.Now(), limit)
+		admitted, rerr := rr.AddRunIfUnder(ctx, tenant, time.Now(), limit)
+		if rerr != nil {
+			// Fail open, matching the documented contract: a store error must
+			// not block runs, and admitted is only meaningful when err == nil.
+			return true, rerr
+		}
+		return admitted, nil
 	}
 	// Fallback for a store without atomic reserve (no shipping store): the
 	// pre-fix racy read-then-add.

@@ -47,8 +47,25 @@ type PgBus struct {
 
 	local localSubscribers
 
+	// lastSeen and seen are touched ONLY by the single listener goroutine
+	// (drainNew); no lock needed. lastSeen is the high-water id fanned out.
+	// seen dedupes the trailing re-scan window so an event whose row committed
+	// out of BIGSERIAL order (a lower id committing after we advanced past it)
+	// is still delivered, without re-delivering rows we already fanned. Bounded
+	// to ~pgBusReScanWindow ids.
 	lastSeen int64
+	seen     map[int64]struct{}
 }
+
+// pgBusReScanWindow is how far below the high-water mark drainNew re-scans each
+// pass. A BIGSERIAL id is assigned at INSERT but only visible at COMMIT, so a
+// row can commit with a lower id than one already drained; re-scanning a
+// trailing window (deduped via `seen`) catches it. Publishes are single-
+// statement (microsecond) transactions, so the number of ids that can commit
+// between one publish's INSERT and COMMIT is tiny — 256 is generous headroom.
+// Beyond the window the JobStore re-read self-heal is the backstop (terminal/
+// node state is durable), so this strictly improves on never re-scanning.
+const pgBusReScanWindow = 256
 
 const pgBusSchema = `
 CREATE TABLE IF NOT EXISTS bus_events (
@@ -72,6 +89,7 @@ func NewPgBus(ctx context.Context, pool *pgxpool.Pool) (*PgBus, error) {
 		pool:      pool,
 		logger:    log.New(log.Writer(), "bus-pg: ", log.LstdFlags),
 		retention: time.Hour,
+		seen:      make(map[int64]struct{}),
 	}
 	var maxID *int64
 	if err := pool.QueryRow(ctx, `SELECT max(id) FROM bus_events`).Scan(&maxID); err != nil {
@@ -79,6 +97,26 @@ func NewPgBus(ctx context.Context, pool *pgxpool.Pool) (*PgBus, error) {
 	}
 	if maxID != nil {
 		b.lastSeen = *maxID
+		// drainNew re-scans a trailing window below lastSeen; seed `seen` with
+		// the pre-existing ids in that window so the first drain treats them as
+		// already-delivered (new subscribers don't replay history) rather than
+		// fanning out stale events. Bounded to pgBusReScanWindow rows.
+		rows, err := pool.Query(ctx,
+			`SELECT id FROM bus_events WHERE id > $1`, b.lastSeen-pgBusReScanWindow)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id int64
+			if err := rows.Scan(&id); err != nil {
+				return nil, err
+			}
+			b.seen[id] = struct{}{}
+		}
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
 	}
 	go b.listen(ctx)
 	go b.sweep(ctx)
@@ -156,19 +194,33 @@ func (b *PgBus) listenOnce(ctx context.Context) error {
 	}
 }
 
-// drainNew reads every spool row newer than lastSeen and fans each out.
+// drainNew reads spool rows and fans each out exactly once. It re-scans a
+// trailing window below lastSeen (not just `id > lastSeen`) so an event whose
+// row committed out of BIGSERIAL order is still caught; `seen` dedupes rows
+// already fanned out in a prior pass so the re-scan never re-delivers.
 func (b *PgBus) drainNew(ctx context.Context) {
+	floor := b.lastSeen - pgBusReScanWindow
+	if floor < 0 {
+		floor = 0
+	}
 	rows, err := b.pool.Query(ctx,
-		`SELECT id, job_id, payload FROM bus_events WHERE id > $1 ORDER BY id`, b.lastSeen)
+		`SELECT id, job_id, payload FROM bus_events WHERE id > $1 ORDER BY id`, floor)
 	if err != nil {
 		b.logger.Printf("drain: %v", err)
 		return
 	}
 	defer rows.Close()
 	type pending struct {
-		jobID string
-		ev    BusEvent
+		id        int64
+		jobID     string
+		ev        BusEvent
+		malformed bool // count toward `seen` (don't re-scan) but don't fan out
 	}
+	// Collect the whole pass into a local batch and commit shared state
+	// (seen/lastSeen/fan-out) only AFTER the row loop fully succeeds. A
+	// mid-loop scan/query error then discards the pass cleanly — nothing is
+	// marked seen and lastSeen doesn't advance, so the next wake re-scans and
+	// re-delivers (dedupe keeps that safe).
 	batch := make([]pending, 0)
 	maxID := b.lastSeen
 	for rows.Next() {
@@ -181,25 +233,42 @@ func (b *PgBus) drainNew(ctx context.Context) {
 			b.logger.Printf("drain scan: %v", err)
 			return
 		}
+		if _, dup := b.seen[id]; dup {
+			continue // already fanned out in a previous pass
+		}
 		if id > maxID {
 			maxID = id
 		}
 		var ev BusEvent
 		if err := json.Unmarshal(payload, &ev); err != nil {
 			b.logger.Printf("drain unmarshal (id %d): %v", id, err)
+			batch = append(batch, pending{id: id, malformed: true})
 			continue
 		}
-		batch = append(batch, pending{jobID: jobID, ev: ev})
+		batch = append(batch, pending{id: id, jobID: jobID, ev: ev})
 	}
 	if err := rows.Err(); err != nil {
 		b.logger.Printf("drain rows: %v", err)
 		return
 	}
-	// Advance the cursor before fanning out so a slow subscriber can't
-	// stall the drain loop.
-	b.lastSeen = maxID
+	// Commit: mark every scanned id seen, advance the cursor, then prune `seen`
+	// of ids now below the re-scan window (never queried again) so it stays
+	// bounded. Advance before fanning out so a slow subscriber can't stall the
+	// loop.
 	for _, p := range batch {
-		b.local.fanout(p.jobID, p.ev)
+		b.seen[p.id] = struct{}{}
+	}
+	b.lastSeen = maxID
+	newFloor := b.lastSeen - pgBusReScanWindow
+	for id := range b.seen {
+		if id <= newFloor {
+			delete(b.seen, id)
+		}
+	}
+	for _, p := range batch {
+		if !p.malformed {
+			b.local.fanout(p.jobID, p.ev)
+		}
 	}
 }
 

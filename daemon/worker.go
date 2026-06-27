@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -168,6 +169,30 @@ func sleepOrDone(ctx context.Context, d time.Duration) bool {
 
 // processNodeJob runs a single node job end-to-end.
 func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
+	// A panic anywhere in node processing — resolve, template rendering over
+	// untrusted graph data, sandbox setup, connection injection, or a drop —
+	// must NOT crash the whole multi-tenant daemon (only the drop's own Execute
+	// is recover-wrapped in engine; everything before it is not). Recover here,
+	// log with stack, and force-complete the node as a TERMINAL failure: this
+	// propagates the failure so the run doesn't hang, and — because we complete
+	// it directly as Failed rather than scheduling a retry — a deterministically
+	// panicking node isn't reclaimed and re-panicked in a loop.
+	defer func() {
+		if r := recover(); r != nil {
+			w.cfg.Logger.Printf("[%s] PANIC processing node %s (run %s): %v\n%s",
+				w.cfg.ID, rec.ID, rec.GraphRunID, r, debug.Stack())
+			jerr := &core.JobError{Code: "panic", Message: "internal error processing this step"}
+			fail := &core.Result{Status: core.StatusError, Error: jerr}
+			recCtx := context.WithoutCancel(ctx)
+			if cerr := w.store.Complete(recCtx, rec.ID, core.JobStatusFailed, fail); cerr != nil {
+				w.cfg.Logger.Printf("[%s] panic-complete node %s: %v", w.cfg.ID, rec.ID, cerr)
+			}
+			if g, gerr := w.fetchGraph(recCtx, rec.GraphRunID); gerr == nil {
+				w.dispatcher.AdvanceAfterCompletion(recCtx, g, rec.GraphRunID, rec.NodeID, core.JobStatusFailed, jerr)
+			}
+		}
+	}()
+
 	// Announce the transition into "running" right after the claim so the
 	// UI's per-node dot lights up before Execute returns.
 	w.dispatcher.PublishNodeStatus(rec.GraphRunID, rec.NodeID, core.JobStatusRunning, nil)

@@ -6,6 +6,7 @@ package daemon
 import (
 	"context"
 	"log"
+	"runtime/debug"
 	"strings"
 
 	"git.sr.ht/~klahr/dazyflow/core"
@@ -53,6 +54,16 @@ func fanoutSeed(
 	seed core.Result,
 	match func(core.Node) bool,
 ) {
+	// Every webhook/event source spawns this in a detached `go fanoutSeed(...)`
+	// over untrusted external input, so a panic here would otherwise crash the
+	// whole daemon with no request to absorb it. Recover and log — losing one
+	// trigger fan-out is far better than taking down every tenant's runs.
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Printf("PANIC in %s seed fan-out for tenant %s: %v\n%s",
+				seedLabel, tenant, r, debug.Stack())
+		}
+	}()
 	workspaces, err := svc.Workspaces.List(tenant)
 	if err != nil {
 		logger.Printf("list workspaces for %s: %v", tenant, err)

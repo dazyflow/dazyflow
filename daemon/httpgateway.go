@@ -692,30 +692,32 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/v1/admin/platform/orgs/{tenant}/entitlement", h.requireAuth(h.platformPutEntitlement))
 	mux.HandleFunc("POST /api/v1/admin/platform/orgs/{tenant}/invite", h.requireAuth(h.platformInviteMember))
 
-	mux.HandleFunc("GET /api/v1/invitations/{token}", h.viewInvitation)
+	// Unauthenticated, DB-touching public reads get the per-IP webhook limiter
+	// so a stranger can't flood them into Postgres/connection-pool pressure.
+	mux.HandleFunc("GET /api/v1/invitations/{token}", h.rateLimitWebhook(h.viewInvitation))
 	mux.HandleFunc("POST /api/v1/invitations/{token}/accept", h.requireAuth(h.acceptInvitation))
 
 	// Per-org SSO settings + Google sign-in round-trip.
 	mux.HandleFunc("GET /api/v1/admin/org/auth-config", h.requireAuth(h.getOrgAuthConfig))
 	mux.HandleFunc("PUT /api/v1/admin/org/auth-config", h.requireAuth(h.putOrgAuthConfig))
 	mux.HandleFunc("DELETE /api/v1/admin/org/auth-config", h.requireAuth(h.deleteOrgAuthConfig))
-	mux.HandleFunc("GET /api/v1/auth/sso/{tenant}", h.getPublicSSOStatus)
-	mux.HandleFunc("GET /api/v1/auth/config", h.getPublicAuthConfig)
+	mux.HandleFunc("GET /api/v1/auth/sso/{tenant}", h.rateLimitWebhook(h.getPublicSSOStatus))
+	mux.HandleFunc("GET /api/v1/auth/config", h.rateLimitWebhook(h.getPublicAuthConfig))
 	// Public (pre-auth): map a wildcard host label to a tenant for sign-in.
-	mux.HandleFunc("GET /api/v1/auth/resolve-subdomain", h.resolveSubdomain)
+	mux.HandleFunc("GET /api/v1/auth/resolve-subdomain", h.rateLimitWebhook(h.resolveSubdomain))
 	// Public (pre-auth): Caddy on-demand-TLS authorization for org subdomains.
-	mux.HandleFunc("GET /api/v1/auth/tls-allow", h.tlsAllow)
+	mux.HandleFunc("GET /api/v1/auth/tls-allow", h.rateLimitWebhook(h.tlsAllow))
 	mux.HandleFunc("GET /api/v1/admin/org/profile", h.requireAuth(h.getOrgProfile))
 	mux.HandleFunc("PUT /api/v1/admin/org/profile", h.requireAuth(h.putOrgProfile))
 	mux.HandleFunc("PUT /api/v1/admin/org/subdomain", h.requireAuth(h.putOrgSubdomain))
 	mux.HandleFunc("GET /api/v1/admin/org/subdomain/available", h.requireAuth(h.orgSubdomainAvailable))
-	mux.HandleFunc("GET /api/v1/auth/google/start", h.googleSignInStart)
-	mux.HandleFunc("GET /api/v1/auth/google/callback", h.googleSignInCallback)
+	mux.HandleFunc("GET /api/v1/auth/google/start", h.rateLimitWebhook(h.googleSignInStart))
+	mux.HandleFunc("GET /api/v1/auth/google/callback", h.rateLimitWebhook(h.googleSignInCallback))
 	// One-time handoff: the apex SSO callback bounces the session to the
 	// org subdomain here so the cookie is set host-only on that origin
 	// (per-org subdomains, Option B). Unauthenticated — the one-time code
 	// in the query is the credential.
-	mux.HandleFunc("GET /api/v1/auth/handoff", h.authHandoff)
+	mux.HandleFunc("GET /api/v1/auth/handoff", h.rateLimitWebhook(h.authHandoff))
 
 	// Webhook trigger + hosted-form endpoints. Authenticated per-graph
 	// (per-trigger bearer secret for /trigger; opt-in public_form for
@@ -1130,6 +1132,13 @@ func (h *HTTPGateway) withCORSAndLogging(next http.Handler) http.Handler {
 		}
 		// Conservative content-type hardening for the API surface.
 		rw.Header().Set("X-Content-Type-Options", "nosniff")
+		// Clickjacking + referrer hardening for the authenticated app surface.
+		// The /form/ surface is deliberately embeddable (it sets its own
+		// permissive CSP), so don't frame-deny it.
+		if !strings.HasPrefix(r.URL.Path, "/form/") {
+			rw.Header().Set("X-Frame-Options", "DENY")
+			rw.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		}
 		if r.Method == http.MethodOptions {
 			rw.WriteHeader(http.StatusNoContent)
 			return

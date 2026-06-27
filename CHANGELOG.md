@@ -49,6 +49,15 @@ Releasing: move the entries below from `[Unreleased]` under a new
   matching the `/trigger/` surface.
 - Workspace file download now refuses the internal `.scratch` tree, like the
   other file operations.
+- A panic while processing a node (resolve, template rendering over untrusted
+  graph data, sandbox setup) or while fanning out a webhook/event trigger no
+  longer crashes the whole multi-tenant daemon: the worker recovers and
+  force-fails the node, and the detached trigger fan-out recovers and logs.
+- Added `X-Frame-Options: DENY` and `Referrer-Policy` to the app surface
+  (clickjacking hardening); the embeddable `/form/` surface is exempt.
+- Unauthenticated, DB-touching public endpoints (invitation view, SSO/auth
+  config, subdomain resolve, TLS-allow, Google sign-in, handoff) are now
+  per-IP rate-limited, matching the rest of the public surface.
 
 ### Fixed
 
@@ -63,6 +72,14 @@ Releasing: move the entries below from `[Unreleased]` under a new
   status)` index for the tenant-scoped hot paths.
 - A `ListJobsForGraph` scope check no longer admits records with an empty
   tenant.
+- The Postgres event bus no longer permanently drops an event whose row
+  committed out of `BIGSERIAL` order (a lower id committing after the listener
+  advanced past it): the listener re-scans a bounded trailing window and
+  dedupes, so live run/node/progress UI events aren't skipped under multi-node
+  load. (Run correctness was never affected — the job store is authoritative.)
+- The Postgres pool now reserves headroom for the two permanently-held
+  connections (event-bus listener + leader lock) so a low `max_conns` can't
+  starve the workqueue.
 
 ## [0.2.0] - 2026-06-27
 
