@@ -220,3 +220,92 @@ func TestFlowGenerate_EmptyDescription(t *testing.T) {
 		t.Fatalf("empty description: want 400, got %d", rw.Code)
 	}
 }
+
+// TestPickProvider_Cov covers pickProvider: no connected providers, the
+// default-to-first choice, and an explicit want that matches a connected one.
+func TestPickProvider_Cov(t *testing.T) {
+	h := newSecretsHarness(t)
+	ctx := core.WithTenant(context.Background(), "t")
+
+	// No providers connected yet -> empty.
+	if chosen, conn := h.gw.pickProvider(ctx, ""); conn != nil || chosen.info.Name != "" {
+		t.Fatalf("no-connection pick = %+v / %v, want empty", chosen, conn)
+	}
+
+	// Register two test providers and store an api_key for each so both count
+	// as connected.
+	llm.Register(llm.ProviderInfo{Name: "testprov_a", Integration: "TestProvA"})
+	llm.Register(llm.ProviderInfo{Name: "testprov_b", Integration: "TestProvB"})
+	for _, p := range []struct{ integ, key string }{
+		{"TestProvA", "key-a"}, {"TestProvB", "key-b"},
+	} {
+		if err := h.gw.EncryptedSecrets.PutScoped(ctx, "t", "", ScopeTenant,
+			core.ConnectionSecretKey(p.integ, "api_key"), p.key); err != nil {
+			t.Fatalf("seed %s: %v", p.integ, err)
+		}
+	}
+
+	// At least our two providers are connected; default picks the first
+	// connected one in registration order.
+	chosen, conn := h.gw.pickProvider(ctx, "")
+	if len(conn) < 2 {
+		t.Fatalf("connected providers = %d, want >=2", len(conn))
+	}
+	if chosen.info.Name == "" || chosen.key == "" {
+		t.Fatalf("default pick is empty: %+v", chosen)
+	}
+
+	// Explicit want selects the matching provider.
+	want, _ := h.gw.pickProvider(ctx, "testprov_b")
+	if want.info.Name != "testprov_b" || want.key != "key-b" {
+		t.Fatalf("want=testprov_b pick = %+v", want)
+	}
+}
+
+func TestGeneratedFromGraph_Cov(t *testing.T) {
+	g := core.Graph{
+		Name:  "My Flow",
+		Nodes: []core.Node{{ID: "a", Module: "noop", Params: map[string]any{"x": 1}}, {ID: "b", Module: "noop"}},
+		Edges: []core.Edge{{From: "a", FromPort: "out", To: "b", ToPort: "in"}},
+		Triggers: []core.GraphTrigger{
+			{Type: "cron", Cron: "0 9 * * *"},
+		},
+	}
+	out := generatedFromGraph(g)
+	if out.Name != "My Flow" || len(out.Nodes) != 2 || len(out.Edges) != 1 {
+		t.Fatalf("generated = %+v", out)
+	}
+	if out.Edges[0].From != "a" || out.Edges[0].ToPort != "in" {
+		t.Fatalf("edge = %+v", out.Edges[0])
+	}
+	if out.Trigger == nil || out.Trigger.Type != "cron" || out.Trigger.Cron != "0 9 * * *" {
+		t.Fatalf("trigger = %+v", out.Trigger)
+	}
+
+	// No cron trigger -> nil trigger.
+	g2 := core.Graph{Name: "n", Triggers: []core.GraphTrigger{{Type: "webhook"}}}
+	if out := generatedFromGraph(g2); out.Trigger != nil {
+		t.Fatalf("webhook graph trigger = %+v, want nil", out.Trigger)
+	}
+}
+
+func TestStampGraph_Cov(t *testing.T) {
+	g := core.Graph{Nodes: []core.Node{{Module: "noop"}, {ID: "named", Module: "noop"}}}
+	stampGraph(&g, "tenantX", "wsX")
+	if g.Tenant != "tenantX" || g.Workspace != "wsX" {
+		t.Fatalf("stamp tenant/ws = %q/%q", g.Tenant, g.Workspace)
+	}
+	if g.Name != "AI-generated flow" {
+		t.Fatalf("default name = %q", g.Name)
+	}
+	if g.Nodes[0].ID != "step_1" || g.Nodes[1].ID != "named" {
+		t.Fatalf("node ids = %q, %q", g.Nodes[0].ID, g.Nodes[1].ID)
+	}
+
+	// Existing name is kept.
+	g2 := core.Graph{Name: "Keep Me"}
+	stampGraph(&g2, "t", "w")
+	if g2.Name != "Keep Me" {
+		t.Fatalf("name = %q, want kept", g2.Name)
+	}
+}

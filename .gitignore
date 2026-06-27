@@ -25,6 +25,8 @@ web/.vite/
 # Generated SBOM artifacts (produced by the CI `sbom` task; attached to releases)
 /sbom.spdx.json
 /sbom.cdx.json
+# Generated email preview (rebuild with `go run ./cmd/email-preview`)
+/email-preview.html
 # Local key material (legacy dz-drops signing keys) — never commit
 .keys/
 # Dazy personal API key used by the complete-dazyflow-tasks skill — never commit

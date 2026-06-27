@@ -5,6 +5,7 @@ package smhi
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -157,5 +158,221 @@ func TestExecuteForecast_Success(t *testing.T) {
 	// Forecast asks for the full series — no timeseries=1.
 	if strings.Contains(req.URL.RawQuery, "timeseries=1") {
 		t.Errorf("forecast should NOT limit to one step, query = %q", req.URL.RawQuery)
+	}
+}
+
+func TestCovParseLatLon(t *testing.T) {
+	cases := []struct {
+		name    string
+		in      string
+		wantErr bool
+	}{
+		{"ok", "59.33,18.07", false},
+		{"spaces", "  59.33 , 18.07 ", false},
+		{"too few parts", "59.33", true},
+		{"too many parts", "1,2,3", true},
+		{"bad lat", "x,18.07", true},
+		{"bad lon", "59.33,y", true},
+		{"lat out of range", "91,18", true},
+		{"lon out of range", "59,181", true},
+		{"lat neg out", "-91,18", true},
+		{"lon neg out", "59,-181", true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, _, err := parseLatLon(c.in)
+			if (err != nil) != c.wantErr {
+				t.Fatalf("parseLatLon(%q) err=%v wantErr=%v", c.in, err, c.wantErr)
+			}
+		})
+	}
+}
+
+func TestCovNumParam(t *testing.T) {
+	cases := []struct {
+		name string
+		val  any
+		ok   bool
+		want float64
+	}{
+		{"float64", float64(1.5), true, 1.5},
+		{"float32", float32(2), true, 2},
+		{"int", int(3), true, 3},
+		{"int64", int64(4), true, 4},
+		{"jsonNumber", json.Number("5.5"), true, 5.5},
+		{"badJsonNumber", json.Number("nope"), false, 0},
+		{"string", "6", false, 0},
+		{"missing", nil, false, 0},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			m := map[string]any{}
+			if c.val != nil {
+				m["k"] = c.val
+			}
+			got, ok := numParam(m, "k")
+			if ok != c.ok || (ok && got != c.want) {
+				t.Fatalf("numParam=%v,%v want %v,%v", got, ok, c.want, c.ok)
+			}
+		})
+	}
+}
+
+func TestCovResolveCoord(t *testing.T) {
+	// Non-text coordinate input → error.
+	job := core.Job{Input: map[string]core.Ref{"coordinate": {Inline: 123}}}
+	if _, _, err := resolveCoord(job); err == nil {
+		t.Fatal("non-text coordinate should error")
+	}
+	// Missing lat/lon, blank coordinate → error.
+	if _, _, err := resolveCoord(core.Job{Params: map[string]any{}}); err == nil {
+		t.Fatal("missing lat/lon should error")
+	}
+	// lat out of range param path.
+	if _, _, err := resolveCoord(core.Job{Params: map[string]any{"lat": 99.0, "lon": 1.0}}); err == nil {
+		t.Fatal("lat out of range should error")
+	}
+	// lon out of range param path.
+	if _, _, err := resolveCoord(core.Job{Params: map[string]any{"lat": 1.0, "lon": 999.0}}); err == nil {
+		t.Fatal("lon out of range should error")
+	}
+	// Coordinate text wins.
+	lat, lon, err := resolveCoord(core.Job{Input: map[string]core.Ref{"coordinate": {Inline: "10,20"}}})
+	if err != nil || lat != 10 || lon != 20 {
+		t.Fatalf("coordinate text path: %v %v %v", lat, lon, err)
+	}
+}
+
+func TestCovHTTPFailureSSRF(t *testing.T) {
+	// Plain transport error → smhi_http_error.
+	f := httpFailure(core.Job{}, 0, nil, context.DeadlineExceeded)
+	if f == nil || f.Error.Code != "smhi_http_error" {
+		t.Fatalf("want smhi_http_error, got %+v", f)
+	}
+	// Non-2xx, non-404, with long body truncation.
+	long := strings.Repeat("x", 500)
+	f = httpFailure(core.Job{}, 500, []byte(long), nil)
+	if f == nil || f.Error.Code != "smhi_error" {
+		t.Fatalf("want smhi_error, got %+v", f)
+	}
+	// Success returns nil.
+	if httpFailure(core.Job{}, 200, []byte("{}"), nil) != nil {
+		t.Fatal("200 should yield nil failure")
+	}
+}
+
+func TestCovEntryNumJSONNumber(t *testing.T) {
+	e := smhiEntry{Data: map[string]any{"a": json.Number("3.2"), "b": json.Number("bad"), "c": "str"}}
+	if v, ok := e.num("a"); !ok || v != 3.2 {
+		t.Fatalf("json.Number: %v %v", v, ok)
+	}
+	if _, ok := e.num("b"); ok {
+		t.Fatal("bad json.Number should be !ok")
+	}
+	if _, ok := e.num("c"); ok {
+		t.Fatal("string should be !ok")
+	}
+}
+
+func TestCovCapitalizeFirst(t *testing.T) {
+	if capitalizeFirst("") != "" {
+		t.Fatal("empty")
+	}
+	if capitalizeFirst("rain") != "Rain" {
+		t.Fatal("lower")
+	}
+	if capitalizeFirst("Rain") != "Rain" {
+		t.Fatal("already upper")
+	}
+	if capitalizeFirst("123") != "123" {
+		t.Fatal("non-letter")
+	}
+}
+
+func TestCovCurrentSummaryNoSymbol(t *testing.T) {
+	e := smhiEntry{Data: map[string]any{"air_temperature": 5.0, "relative_humidity": 50.0, "wind_speed": 2.0}}
+	got := currentSummary(e)
+	if strings.Contains(got, ",") && strings.HasPrefix(got, "5.0") == false {
+		// Without a symbol the line begins with the temperature.
+		t.Fatalf("no-symbol summary = %q", got)
+	}
+	if !strings.HasPrefix(got, "5.0°C") {
+		t.Fatalf("no-symbol summary should start with temp, got %q", got)
+	}
+}
+
+func TestCovExecuteCurrentBadJSON(t *testing.T) {
+	var req any
+	_ = req
+	stubSMHI(t, 200, "not json", nil)
+	r, _ := executeCurrent(context.Background(), core.Job{Params: map[string]any{"lat": 59.0, "lon": 18.0}}, nil)
+	if r.Error == nil || r.Error.Code != "smhi_error" {
+		t.Fatalf("bad json → want smhi_error, got %+v", r.Error)
+	}
+}
+
+func TestCovExecuteCurrentEmptySeries(t *testing.T) {
+	stubSMHI(t, 200, `{"timeSeries":[]}`, nil)
+	r, _ := executeCurrent(context.Background(), core.Job{Params: map[string]any{"lat": 59.0, "lon": 18.0}}, nil)
+	if r.Error == nil || r.Error.Code != "smhi_error" {
+		t.Fatalf("empty series → want smhi_error, got %+v", r.Error)
+	}
+}
+
+func TestCovExecuteForecastBadParam(t *testing.T) {
+	r, _ := executeForecast(context.Background(), core.Job{Params: map[string]any{}}, nil)
+	if r.Error == nil || r.Error.Code != "bad_param" {
+		t.Fatalf("want bad_param, got %+v", r.Error)
+	}
+}
+
+func TestCovExecuteForecastBadJSON(t *testing.T) {
+	stubSMHI(t, 200, "{{{", nil)
+	r, _ := executeForecast(context.Background(), core.Job{Params: map[string]any{"lat": 59.0, "lon": 18.0}}, nil)
+	if r.Error == nil || r.Error.Code != "smhi_error" {
+		t.Fatalf("bad json → want smhi_error, got %+v", r.Error)
+	}
+}
+
+func TestCovExecuteForecastEmptySeries(t *testing.T) {
+	stubSMHI(t, 200, `{"timeSeries":[]}`, nil)
+	r, _ := executeForecast(context.Background(), core.Job{Params: map[string]any{"lat": 59.0, "lon": 18.0}}, nil)
+	if r.Error == nil || r.Error.Code != "smhi_error" {
+		t.Fatalf("empty series → want smhi_error, got %+v", r.Error)
+	}
+}
+
+func TestCovAggregateDaysEdge(t *testing.T) {
+	// Short time string skipped; entry with no temperature leaves Inf→0.
+	ts := []smhiEntry{
+		{Time: "short", Data: map[string]any{"air_temperature": 5.0}},
+		{Time: "2026-06-24T12:00:00Z", Data: map[string]any{"symbol_code": float64(1)}},
+	}
+	out := aggregateDays(ts, 5)
+	if len(out) != 1 {
+		t.Fatalf("want 1 day, got %d", len(out))
+	}
+	if out[0].TempMin != 0 || out[0].TempMax != 0 {
+		t.Fatalf("no-temp day should clamp Inf to 0, got %+v", out[0])
+	}
+}
+
+func TestCovForecastSummaryEmpty(t *testing.T) {
+	if forecastSummary(nil) != "No forecast available." {
+		t.Fatal("empty forecast summary")
+	}
+	// Bad date label falls through to raw string.
+	got := forecastSummary([]smhiDay{{Date: "bogus", TempMin: 1, TempMax: 2}})
+	if !strings.Contains(got, "bogus") {
+		t.Fatalf("bad date should pass through, got %q", got)
+	}
+}
+
+func TestCovExecuteForecastTimeoutClamp(t *testing.T) {
+	// Non-positive timeout_ms exercises the clamp branch in smhiGet.
+	stubSMHI(t, 200, sample, nil)
+	r, _ := executeForecast(context.Background(), core.Job{Params: map[string]any{"lat": 59.0, "lon": 18.0, "timeout_ms": 0}}, nil)
+	if r.Status != core.StatusOK {
+		t.Fatalf("status %v %+v", r.Status, r.Error)
 	}
 }

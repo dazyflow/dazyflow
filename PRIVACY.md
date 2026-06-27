@@ -106,8 +106,7 @@ any prompt that may carry personal data.
 
 ## Data-subject rights
 
-Each right now has a supported endpoint (built 2026-06-15); see
-[GDPR_FIXES.md](GDPR_FIXES.md) for the implementation detail.
+Each right now has a supported endpoint (built 2026-06-15).
 
 | Right (Article) | Product support | How to service it |
 |---|---|---|
@@ -202,11 +201,11 @@ else is the flows you build.
 Tracked here and in [COMPLIANCE.md § Known gaps](COMPLIANCE.md):
 
 - **International transfers** still need the *organisational* mechanism per
-  connector (DPA + DPF/SCCs + TIA) and LLM zero-retention enabled — see
-  [GDPR_FIXES.md](GDPR_FIXES.md) P0.2. The product side (egress allowlist +
-  startup advisory, configurable LLM base URLs) is in place.
+  connector (DPA + DPF/SCCs + TIA) and LLM zero-retention enabled. The product
+  side (egress allowlist + startup advisory, configurable LLM base URLs) is in
+  place.
 - **EU residency** of Postgres/backups/registry/tracing is an operator
-  verification task (GDPR_FIXES.md P1.4) — `sslmode=require` is enforced and an
+  verification task — `sslmode=require` is enforced and an
   advisory fires on unconstrained egress, but residency itself can't be proven
   in code.
 - **Personal data in run logs/payloads is not redacted by default** — only

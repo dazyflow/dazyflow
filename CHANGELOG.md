@@ -21,6 +21,22 @@ Releasing: move the entries below from `[Unreleased]` under a new
 
 - Licensed the project under the GNU Affero General Public License v3.0 or
   later (AGPL-3.0-or-later); added `LICENSE` and a README license section.
+- SPDX license headers across all Go and TypeScript source files.
+
+### Changed
+
+- Consolidated 167 scattered coverage test files (`*_cov_test.go`,
+  `*_cov2-4_test.go`, `*_coverage_test.go`, `*_extra_test.go`) into their
+  per-subject `_test.go` files. No test functions were removed (3306 before
+  and after); only the file layout changed.
+
+### Removed
+
+- Stale planning docs `GDPR_FIXES.md` and `manual.md` (history retained in
+  git); fixed the dangling links in `PRIVACY.md` and `COMPLIANCE.md`.
+- Orphaned root `package-lock.json` stub (no root `package.json` exists).
+- Untracked the generated `email-preview.html` artifact (now in `.gitignore`;
+  regenerate with `go run ./cmd/email-preview`).
 
 ## [0.1.0] - 2026-06-08
 
