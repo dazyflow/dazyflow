@@ -44,9 +44,6 @@ detail lives in the code and commit history).
 - [ ] **Connector breadth** (ONGOING) — grow connector count + output-shape
       quality. The typed-port architecture is sound; this is perpetual content
       work, not a structural risk. (Output-shape contract tests are in place.)
-- [ ] Multi-node write dedupe (follow-up to #9) — the engine dedupe store is
-      in-memory / single-node; a cross-process reclaim can still double-fire.
-      A shared (Postgres-backed) impl behind `core.WriteDedupeStore` closes it.
 
 ---
 
@@ -87,6 +84,18 @@ detail lives in the code and commit history).
 - [x] **Idempotency without an upstream key** — engine-side write dedupe
       (`Manifest.DedupeWrites` + `core.WriteDedupeStore`) for twilio/gmail/
       discord/sheets/homeassistant; at-least-once contract documented.
+- [x] **Multi-node write dedupe** — shared, Postgres-backed `core.WriteDedupeStore`
+      (`daemon.PgWriteDedupeStore`: keyed by job ID, first-writer-wins
+      `ON CONFLICT DO NOTHING`, TTL + background sweep) so a lease reclaim by
+      ANOTHER dzd replica sees the recorded write instead of re-firing it. Wired
+      as the only dedupe store in `cmd/dzd` (fatal-on-error like every other
+      Postgres store); `engine.NewMemoryWriteDedupe` stays the single-node/test
+      impl. The residual non-atomic Get→write→Put window (two replicas that both
+      miss before either records) is inherent to at-least-once without an upstream
+      idempotency key and is deliberately accepted — a pre-write claim would risk
+      at-most-once (dropping a message that never sent), the worse failure here.
+      Tests in `daemon/pgstores_test.go` (miss, round-trip, first-writer-wins,
+      stale TTL).
 - [x] **Output-shape contract tests** — all built-ins checked for well-formed
       ports + no undeclared emitted ports. (`drops/output_contract_test.go`)
 - [x] **Plain-English failure UX** — transport errors → human cause + action in

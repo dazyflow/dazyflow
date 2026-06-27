@@ -162,9 +162,18 @@ mechanism you choose — losing it makes every stored flow secret undecryptable.
 ## Scaling up — load balancer, TLS, multi-replica
 
 When one pod isn't enough, the app scales out without code changes: the
-Postgres event bus lets any pod stream a run's events (`PgBus`) and a Postgres
-advisory-lock leader ensures only one pod fires each schedule (`PgLeader`).
-The steps:
+Postgres event bus lets any pod stream a run's events (`PgBus`), a Postgres
+advisory-lock leader ensures only one pod fires each schedule (`PgLeader`), and
+a shared `write_dedupe` table (`PgWriteDedupeStore`) means a job reclaimed from a
+dead pod's expired lease won't re-fire a non-idempotent external write (Twilio
+SMS, Gmail/Discord/Sheets/Home Assistant) the original pod already sent. That
+last guarantee is **at-least-once, not exactly-once**: the dedupe record is
+written only *after* the send succeeds, so a pod that crashes in the narrow
+window between the API returning and the record committing can still send twice.
+This is deliberate — recording before the send would instead risk silently
+dropping a message that never went out, the worse failure for these connectors.
+No configuration is needed; the table is created on boot and `dzd` refuses to
+start if it can't be (same as every other Postgres-backed store). The steps:
 
 1. **Front it with an ingress + TLS.** `deploy/k8s/ingress.yaml` is an
    ingress-nginx + cert-manager setup (WebSocket/SSE-friendly timeouts,

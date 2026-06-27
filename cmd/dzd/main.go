@@ -486,17 +486,17 @@ func main() {
 		log.Fatalf("DAZYFLOW_MCP_SERVERS: %v", err)
 	}
 
-	// Write dedupe for non-idempotent external writes. Prefer the shared
-	// Postgres store so a lease reclaim by ANOTHER node sees the recorded write
-	// (multi-replica safety); fall back to the process-local store only if the
-	// table can't be created.
-	var writeDedupe core.WriteDedupeStore = engine.NewMemoryWriteDedupe()
-	if pgPool != nil {
-		if pgDedupe, err := daemon.NewPgWriteDedupeStore(ctx, pgPool); err != nil {
-			log.Printf("write dedupe: Postgres store unavailable (%v); using process-local store", err)
-		} else {
-			writeDedupe = pgDedupe
-		}
+	// Write dedupe for non-idempotent external writes (Twilio SMS, Gmail/
+	// Discord/Sheets/Home Assistant). Postgres-backed and shared so a lease
+	// reclaim by ANOTHER dzd replica sees the recorded write instead of
+	// re-firing the side effect. Fatal on failure like every other Postgres
+	// store above: silently falling back to the process-local store would give
+	// one replica no cross-node dedupe while its peers have it — a split-brain
+	// regression that's worse than refusing to boot. (engine.NewMemoryWriteDedupe
+	// remains the single-node/test implementation of the same interface.)
+	writeDedupe, err := daemon.NewPgWriteDedupeStore(ctx, pgPool)
+	if err != nil {
+		log.Fatalf("postgres write-dedupe store: %v", err)
 	}
 
 	eng := &engine.Engine{

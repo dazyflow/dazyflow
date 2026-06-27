@@ -30,6 +30,15 @@ Releasing: move the entries below from `[Unreleased]` under a new
 
 ### Changed
 
+- **Write dedupe is now Postgres-backed in multi-node deployments.** The
+  engine's write-dedupe store (which suppresses a re-fire of a non-idempotent
+  external write — Twilio SMS, Gmail/Discord/Sheets/Home Assistant — when a
+  lease reclaim or crash recovery re-runs the same job) is now the shared
+  `write_dedupe` table instead of a process-local map, so a reclaim by a
+  *different* `dzd` replica sees the recorded result instead of sending the
+  message twice. `dzd` fails to boot if the table can't be created, matching
+  every other Postgres-backed store; the in-memory store remains the
+  single-node/test implementation. The contract is unchanged (at-least-once).
 - Consolidated 167 scattered coverage test files (`*_cov_test.go`,
   `*_cov2-4_test.go`, `*_coverage_test.go`, `*_extra_test.go`) into their
   per-subject `_test.go` files. No test functions were removed (3306 before
