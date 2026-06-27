@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { isImageIcon } from "../lib/iconImage";
 import { iconFor, dropColor, isBrandedIcon } from "../icons";
 

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package limits centralizes the resource ceilings that keep a single drop
 // from exhausting the daemon's memory when a flow author hands it (or a join
 // amplifies it into) an unbounded amount of data.

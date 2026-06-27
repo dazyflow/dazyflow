@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { useEffect, useMemo, useState } from "react";
 import { Table2, Download, Search, Trash2, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";

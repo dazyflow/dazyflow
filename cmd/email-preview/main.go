@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Command email-preview renders every Dazyflow system email through the
 // shared emailtheme and writes a single self-contained gallery HTML file you
 // can open in a browser to review the design. It sends nothing.

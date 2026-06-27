@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package-internal handlers for the /api/v1/catalog/* and /api/v1
 // discovery surface — the self-describing entry points an LLM agent
 // (or a curl-wielding human) hits before composing flows. They wrap

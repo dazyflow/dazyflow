@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Command dzctl is the Dazyflow CLI. Commands fall into two groups:
 //
 //   - "offline" — work against a local workspace Git repo (lint).

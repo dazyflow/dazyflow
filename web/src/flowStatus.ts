@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Mirror of core.FlowRunStatusOf (core/flowstatus.go). Keep the two in
 // lockstep: this drives the editor/Triggers-modal status chip, while the
 // flow list reads the server-computed `run_status` from the same Go logic.

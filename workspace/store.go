@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package workspace stores graphs in a Git repository owned by the
 // customer. Every save commits with the author's identity in the message
 // and trailers, giving teams full history/audit/diff without bespoke

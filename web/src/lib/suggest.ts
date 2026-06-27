@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import type { DropAdjacency, Manifest } from "../types";
 
 // rank turns a module-id → score map into ranked manifests: highest score

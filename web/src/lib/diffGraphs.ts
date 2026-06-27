@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import type { Graph, Node, Edge } from "../types";
 
 // GraphDiff summarizes how a draft graph differs from a baseline (the

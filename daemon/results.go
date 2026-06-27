@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Results boards — an in-app, read-only view of the Collections.
 //
 // The Collections drops (drops/db/builtin_store.go) let a non-technical

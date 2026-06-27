@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { useCallback, useEffect, useState } from "react";
 // useEffect already imported above; no separate hooks needed.
 import { Link } from "react-router-dom";

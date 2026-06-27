@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package github hosts the GitHub launch connector — fourth T1
 // stop after Slack, Gmail, and Sheets. Three action drops cover
 // the common Zapier-shape patterns:

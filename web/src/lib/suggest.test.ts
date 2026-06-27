@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { describe, it, expect } from "vitest";
 import type { DropAdjacency, Manifest } from "../types";
 import { suggestNextDrops, topDropsByUsage } from "./suggest";

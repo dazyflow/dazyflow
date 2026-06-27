@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package e2e wires the whole stack together — auth, workspace storage,
 // JobStore, engine, native modules — and exercises real user flows
 // against it. These tests are the only ones that would catch

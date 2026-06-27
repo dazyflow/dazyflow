@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package smtputil holds the SMTP client dance shared by the Email drop
 // (drops/notify, sends through the TENANT's mail server as a flow step)
 // and the daemon's transactional Mailer (one OPERATOR account for

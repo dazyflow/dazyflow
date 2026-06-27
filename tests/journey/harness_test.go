@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package journey runs the scenarios in tests/scenarios.md as
 // experience tests, from the perspective of a brand-new, non-technical
 // user. Instead of poking the engine internals, each test boots the

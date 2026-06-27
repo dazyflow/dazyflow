@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { memo } from "react";
 import { Handle, Position, useStore, type NodeProps } from "@xyflow/react";
 import { AlertTriangle, ChevronRight, Repeat } from "lucide-react";

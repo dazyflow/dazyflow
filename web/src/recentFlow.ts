@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Tracks the most-recently-opened flow so the start/welcome screen can
 // offer a "continue where you left off" link — same idea as the sibling
 // `dazy` app's last-active-project. Stored client-side only (one

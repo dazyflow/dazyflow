@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package openai is the ChatGPT (OpenAI Chat Completions API) provider for the
 // shared llmtask core — the sibling of drops/claude. It implements one
 // Provider (the OpenAI API call + response parsing) and registers the five

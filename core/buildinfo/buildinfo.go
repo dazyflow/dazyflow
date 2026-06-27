@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package buildinfo holds the version metadata stamped into the binary
 // at build time. The three vars are set via the linker
 // (-ldflags "-X git.sr.ht/~klahr/dazyflow/core/buildinfo.Version=...")

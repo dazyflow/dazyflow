@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package gmail hosts the native Gmail connectors (gmail_search_messages,
 // gmail_get_message, gmail_send_email), migrated from the scripted TS
 // drops. They authenticate with Google OAuth (the "google" provider),

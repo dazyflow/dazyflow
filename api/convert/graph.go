@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package convert holds the shared core.Graph <-> controlpb.Graph
 // translation used by both the daemon's gRPC handlers and the dzctl
 // client. Keeping a single copy avoids the drift that previously dropped

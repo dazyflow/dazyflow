@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // idempotency.go implements the Idempotency-Key contract from the
 // OpenAPI spec: a mutating request that carries the same key within
 // the cache window returns the original response verbatim.

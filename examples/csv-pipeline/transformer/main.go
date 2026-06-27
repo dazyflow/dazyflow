@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Command transformer is a standalone gRPC NodeService that uppercases
 // the text content of its input ref and emits the result on its "out"
 // port. It exists to demonstrate the end-to-end flow of building a

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package twilio hosts the native Twilio connector (twilio_send_sms). Auth is
 // Twilio's HTTP Basic scheme — Account SID as the username, Auth Token as the
 // password — resolved from the `account_sid` / `auth_token` params, which

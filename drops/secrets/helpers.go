@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package secrets contains drops that interact with the encrypted
 // secret store. The companion read path is template substitution —
 // anywhere a string param accepts `${secret.name}`,

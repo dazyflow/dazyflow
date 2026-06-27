@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Shared timestamp formatting. The daemon emits RFC3339 (UTC, e.g.
 // "2026-06-07T20:00:00Z"); the UI renders everything in the viewer's LOCAL
 // timezone, in a single standard format — "YYYY-MM-DD HH:MM" (24-hour). Using

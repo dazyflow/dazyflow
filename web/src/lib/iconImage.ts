@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Shared support for "real" icons (uploaded SVG / PNG) on flows and
 // orgs. Both store the image inline as a data: URL in their existing
 // string field (Graph.Icon / OrgProfile.icon) — no separate asset

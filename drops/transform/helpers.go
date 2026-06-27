@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package transform hosts data-shaping drops — nodes that don't talk
 // to anything external, they just rearrange the rows that flow between
 // other drops: map_rows, compute_rows, route_rows, split_rows,

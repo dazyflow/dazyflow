@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { createContext, useContext, type Dispatch, type SetStateAction } from "react";
 
 // ActiveFlow bridges the open flow (the editor, deep in the tree) and

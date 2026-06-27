@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package pollstate lets poll-driven fetcher nodes report whether their last
 // fire found new data, so the scheduler can adapt a flow's poll cadence —
 // widening the interval for a poller that keeps coming up empty and snapping

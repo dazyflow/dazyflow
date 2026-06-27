@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package drops_test exercises every registered drop against an adversarial
 // input corpus and a Go fuzzer. The contract these tests enforce is the
 // system-safety promise: no drop may PANIC, HANG (ignore context and run

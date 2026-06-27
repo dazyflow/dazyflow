@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Command dzd is the Dazyflow daemon. It serves the control gRPC API
 // backed by a daemon.Service. Control-plane state (jobs, api-keys,
 // sessions, users, encrypted secrets, org metadata) is Postgres-backed

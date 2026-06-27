@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package grpc_test stands up the daemon's gRPC server in-process and drives
 // every control-plane RPC through the generated controlpb client, plus a
 // purpose-built NodeService server driven through the generated nodepb client.

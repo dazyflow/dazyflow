@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package git provides nodes that clone repositories and run builds
 // against the resulting working tree. Output is workspace-relative so
 // downstream nodes (file_read, shell, ...) can pick it up via the

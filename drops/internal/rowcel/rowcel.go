@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package rowcel is the shared CEL surface for row-level expressions: the
 // environment, the cost ceiling, and compile/eval helpers that every consumer
 // of the no-code condition builder agrees on.

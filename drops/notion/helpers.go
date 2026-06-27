@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package notion hosts the native Notion connectors (notion_query_database,
 // notion_create_page), migrated from the scripted TS drops. Token
 // resolution mirrors the other connectors: an explicit `token` param wins

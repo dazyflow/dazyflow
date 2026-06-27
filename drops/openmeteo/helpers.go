@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package openmeteo hosts the Open-Meteo connector: read the current
 // conditions or a multi-day daily forecast for a latitude/longitude from
 // Open-Meteo's Forecast API.

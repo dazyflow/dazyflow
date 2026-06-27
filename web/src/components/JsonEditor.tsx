@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 
 // JsonEditor is a dependency-free, syntax-highlighted JSON editor. It layers a

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package discord hosts the native Discord connector (discord_send_message).
 // It posts to a Discord channel webhook — the lowest-setup path (no bot or
 // OAuth app: create a webhook under Server Settings → Integrations → Webhooks

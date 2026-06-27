@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package value contains literal/constant source drops — nodes that
 // take no input and emit a graph-author-supplied value on their
 // output port. Useful for inline prompts, templates, snippets, and

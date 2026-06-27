@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package llmtask is the shared core behind the per-provider LLM drops
 // (Claude, ChatGPT, …). It owns the task-shaped UX — Ask, Summarize, Extract
 // fields, Classify, Draft reply — as a SINGLE implementation; each provider

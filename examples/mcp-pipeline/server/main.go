@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Command server is a tiny MCP stdio server that exposes a couple of
 // tools — enough to demonstrate the Dazyflow ↔ MCP integration without
 // pulling in a real ecosystem server (the npm-published filesystem

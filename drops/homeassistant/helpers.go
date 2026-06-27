@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package homeassistant hosts the native Home Assistant connector: call a
 // service (turn a light on, run a script, set a thermostat), read an entity's
 // current state, and a poll-driven trigger that fires when a watched entity

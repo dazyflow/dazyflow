@@ -123,3 +123,13 @@ on signup and mints a throwaway API key on every boot
 against your own database instead, `make env`, set `DAZYFLOW_POSTGRES_DSN`
 in `.env`, and `make dev` will source it. (`make pg` / `make pg-down` start
 and stop the bundled dev Postgres on their own.)
+
+## License
+
+Dazyflow is free software, licensed under the **GNU Affero General Public
+License v3.0 or later** (AGPL-3.0-or-later). See [LICENSE](LICENSE) for the
+full text.
+
+The AGPL's network clause (section 13) applies: if you run a modified
+version of `dzd` as a network service, you must offer its users the
+corresponding source of your modified version.

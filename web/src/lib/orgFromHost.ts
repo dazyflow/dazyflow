@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // orgFromHost derives the org slug encoded in a per-org subdomain host.
 // When the deployment sets a wildcard domain (e.g. "dazyflow.app"), a
 // visit to "acme.dazyflow.app" should preselect org=acme on the sign-in

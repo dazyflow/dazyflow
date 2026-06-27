@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package mailmsg holds the MIME assembly shared by the email-sending
 // drops (gmail_send_email, email_send): loading attachments from the
 // variadic 'attachments' input and the multipart/mixed encoding helpers.

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package params hosts the tiny param-extraction + error-result
 // helpers every integration drop reaches for. Lives under
 // drops/internal/ so only sibling integration packages can

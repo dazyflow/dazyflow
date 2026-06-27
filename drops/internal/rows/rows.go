@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package rows holds the row/header normalization shared by the
 // database-connector drops (drops/db) and the data-shaping drops
 // (drops/transform). Both consume the same external shapes — native

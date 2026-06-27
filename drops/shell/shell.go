@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package shell hosts the `shell` drop — runs a command in a
 // workspace-relative directory and streams its output. Used as the
 // build/test step in CI-shaped pipelines and as a generic escape hatch

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package sheets hosts the native Google Sheets connectors
 // (sheets_read_range, sheets_append_row, sheets_export_pdf), migrated from
 // the scripted TS drops. They authenticate with Google OAuth (the "google"

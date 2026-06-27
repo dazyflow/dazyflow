@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import type { SVGProps } from "react";
 
 // NtfyIcon renders the ntfy logo (https://ntfy.sh) — a teal chat bubble

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Command seed writes a single node-less poll-trigger graph into a
 // git-backed workspace store, for the multi-node HA load test
 // (scripts/ha_loadtest.sh).

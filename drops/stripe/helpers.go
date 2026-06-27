@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package stripe hosts the native Stripe connectors: customers (create,
 // search), payments (payment link, refund, send invoice), subscriptions
 // (list, cancel), webhook triggers (on payment / payment failed /

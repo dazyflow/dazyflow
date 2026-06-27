@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { describe, it, expect } from "vitest";
 import { looksPersonalTenant, tenantDisplayName } from "./orgDisplayName";
 import type { WhoAmI } from "../types";

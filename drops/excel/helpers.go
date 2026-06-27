@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package excel hosts the native Excel connectors (excel_read,
 // excel_write), migrated from the scripted SheetJS drops back to Go using
 // github.com/xuri/excelize/v2. Same ids, ports and params, so existing

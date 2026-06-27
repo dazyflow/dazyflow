@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 package core
 
 // EmailTemplate is a reusable HTML layout shell that the email-sending drops

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package e2e — exercises multiple policy features in a single graph and
 // verifies they cohere. Each subtest builds an isolated harness; failures
 // in one don't leak state into others.

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package scenarios validates the reference automation scenarios in
 // scenarios.md against the real native catalog. Each NN-*.json is a graph
 // that implements one scenario; the test asserts every graph composes from

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package jobstore contains JobStore implementations. The Memory store is
 // fully tested and suitable for single-node deployments and tests. The
 // Postgres store is the production target — see postgres.go for the

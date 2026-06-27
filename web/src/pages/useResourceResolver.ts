@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Node as FlowNode, Edge as FlowEdge } from "@xyflow/react";
 import { api } from "../api";

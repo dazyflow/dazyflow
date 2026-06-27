@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package htmltmpl is the single HTML-template render engine shared by the
 // render_template drop (drops/transform) and the editor's live-preview
 // endpoint (daemon). Keeping the parse + safe FuncMap + output cap in one

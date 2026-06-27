@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package mimetype centralizes the "is this content text?" decision the
 // drops use to choose between emitting a Go string (text) or a []byte
 // (binary) on an output port. It previously lived as two slightly

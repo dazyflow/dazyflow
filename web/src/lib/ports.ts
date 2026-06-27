@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import type { Port } from "../types";
 
 // Port-matching helpers for auto-wiring when a drag-create spawns a new

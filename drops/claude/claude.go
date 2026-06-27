@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package claude is the Claude (Anthropic Messages API) provider for the
 // shared llmtask core. It implements one Provider — the vendor API call +
 // response parsing — and registers the five task-shaped drops (Ask,

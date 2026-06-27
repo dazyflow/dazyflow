@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package llm is the shared LLM provider layer: the provider-neutral
 // request/response types plus a process-global registry of backends
 // (Claude, ChatGPT, …). Both the flow drops and editor/platform features

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Sparkles,

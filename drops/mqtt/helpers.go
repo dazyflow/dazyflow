@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package mqtt hosts the native MQTT connector (mqtt_publish). It speaks the
 // MQTT protocol via the standard eclipse/paho.mqtt.golang client — MQTT is a
 // TCP pub/sub protocol, not HTTP, so unlike the other connectors it needs a

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package apibase holds the tiny "API root" test seam every HTTP connector
 // carried as copy-pasted boilerplate: a mutex-guarded default base URL, a
 // Set to swap it (tests point it at an httptest server), a Get to read it,

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Theme mode: dark (default, the synthwave editor look) or light (the
 // designed-fresh professional palette). Persisted per browser in
 // localStorage and applied as data-theme on <html>, which every CSS

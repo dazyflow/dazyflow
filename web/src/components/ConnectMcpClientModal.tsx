@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { useState, type ReactNode } from "react";
 import { AlertCircle, Check, Copy, Terminal } from "lucide-react";
 import { useTranslation } from "react-i18next";

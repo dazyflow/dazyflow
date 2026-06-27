@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package gcal hosts the native Google Calendar connectors (gcal_list_events,
 // gcal_create_event). They authenticate with Google OAuth (the "google"
 // provider) via the SetTokenLookup hook the daemon wires at startup — the same

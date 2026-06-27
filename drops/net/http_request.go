@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package net houses modules that reach outside the daemon's host.
 // http_request is the workhorse — most real workflows need to call an
 // external API at some point.

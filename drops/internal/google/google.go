@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package google centralizes the plumbing shared by every native Google
 // connector — gmail, sheets, gcal, drive, and the gform trigger. They all ride
 // a single OAuth provider ("google"), so the token lookup, the guarded HTTP

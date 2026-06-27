@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // dz-mcp is the Dazyflow MCP (Model Context Protocol) server. It
 // runs as a stdio subprocess of an MCP client (Claude Desktop /
 // Claude Code) and exposes pipeline-management operations as tools.

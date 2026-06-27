@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package trigger contains modules whose execution depends on an
 // external trigger event. They register normal Execute handlers that
 // produce a clear error when run without their corresponding trigger,

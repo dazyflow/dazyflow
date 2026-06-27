@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package drops is an umbrella import: depending on this package pulls in
 // every built-in drop via side-effect init() registration. Every drop is
 // native Go (compiled into the binary) — including the connectors

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package geo hosts the OpenStreetMap connector: pick a location on a map and
 // emit its coordinate (a design-time value source), turn a place name into a
 // coordinate (forward geocode), and turn a coordinate back into a place name

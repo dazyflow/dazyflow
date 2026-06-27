@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package db hosts database-connector drops. Today: SQLite. Postgres
 // and friends slot in alongside as separate drops sharing the same
 // row-input shape (a list of {column: value} records, as emitted by

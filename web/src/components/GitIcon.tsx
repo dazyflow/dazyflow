@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import type { SVGProps } from "react";
 
 // GitIcon renders the official Git logo (CC-BY 3.0, Jason Long /

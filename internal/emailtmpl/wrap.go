@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package emailtmpl holds the email-template library shared by the daemon
 // (storage + HTTP CRUD + runtime resolution) and the email-sending drops
 // (body wrapping). A template is a reusable HTML layout shell with a

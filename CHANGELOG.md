@@ -17,6 +17,11 @@ Releasing: move the entries below from `[Unreleased]` under a new
 
 ## [Unreleased]
 
+### Added
+
+- Licensed the project under the GNU Affero General Public License v3.0 or
+  later (AGPL-3.0-or-later); added `LICENSE` and a README license section.
+
 ## [0.1.0] - 2026-06-08
 
 Initial release.

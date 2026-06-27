@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package sandbox resolves a job's persistent-workspace and per-run
 // scratch trees down to os.Root handles that confine file access to
 // the chosen tree. Drops that read or write files share this helper so

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package oauthtok holds the per-account OAuth token plumbing shared by the
 // connectors that each ride their own OAuth provider (slack, github, notion).
 // The mutex-guarded lookup hook and the resolve sequence — honor an explicit

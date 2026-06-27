@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import type { ReactNode, SVGProps } from "react";
 
 // ServiceIcon renders a third-party service's icon (sign-in providers,

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import type { ReactNode } from "react";
 
 // Switch is the app's on/off toggle. A real <input type="checkbox"

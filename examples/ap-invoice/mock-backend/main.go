@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Command mock-backend stands in for the third-party services a real AP
 // pipeline would call: an invoice lookup API, an OCR extractor, a Slack
 // CFO-approval channel, and an auto-approve endpoint. Each route logs

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package slack hosts the Slack launch connector — the first T1
 // drops on the path to a Zapier-shape product. Two action drops
 // (slack_send_message, slack_list_channels) for v1; the

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // pickActive resolves which entry to surface as "current" when the
 // auth context loads workspaces or tenants. Selection priority:
 //

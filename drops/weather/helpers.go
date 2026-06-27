@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package weather hosts the OpenWeather connector: read the current
 // conditions or a multi-day forecast for a latitude/longitude.
 //

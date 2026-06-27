@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package auth handles principal authentication. Two providers ship today:
 // API keys (fully implemented and tested) and OIDC (scaffold — depends on
 // coreos/go-oidc for production use; the spec wires Microsoft Entra, Okta,

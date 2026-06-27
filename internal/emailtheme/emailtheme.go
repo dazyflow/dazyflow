@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package emailtheme renders Dazyflow's transactional ("system") email into
 // one professional, brand-consistent HTML layout: the welcome, email
 // verification, password reset, organization invitation, signup invitation,

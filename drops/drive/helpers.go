@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package drive hosts the native Google Drive connectors (drive_list_files,
 // drive_download, drive_upload). They authenticate with Google OAuth (the
 // "google" provider) via the SetTokenLookup hook the daemon wires at startup —

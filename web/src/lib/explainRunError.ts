@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // explainRunError turns a daemon-emitted error message into a
 // plain-language headline + optional next-action button, so a
 // non-technical user reading the Run detail page has a path

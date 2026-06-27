@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package gform hosts the google_form_trigger connector: a poll-driven
 // trigger that fires a flow on new Google Form responses, emitting each
 // response keyed by its question title so downstream nodes (typically

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import type { ReactNode } from "react";
 import { ArrowUp, Check, CreditCard, Minus, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";

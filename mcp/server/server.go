@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package server implements an MCP (Model Context Protocol) server
 // that exposes Dazyflow's pipeline-management operations as tools. It
 // is the server-side counterpart to engine/mcp (which is the client we

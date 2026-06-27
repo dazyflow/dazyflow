@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // explainApiError turns any failed API call into one plain-language sentence
 // a non-technical user can act on — the general-purpose companion to
 // explainRunError (which is specific to flow-run failures).

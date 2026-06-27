@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package daemon contains the orchestration layer that ties auth, workspace
 // storage, job persistence, and the execution engine together. Both the
 // gRPC server in cmd/dzd and the integration tests in tests/e2e depend on

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package smhi hosts the SMHI connector: current conditions and a daily
 // forecast for a coordinate, from SMHI's free Open Data Meteorological
 // Forecasts API — no account or API key.

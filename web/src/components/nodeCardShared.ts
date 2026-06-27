@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Shared, non-component exports for the node card. They live here rather
 // than in NodeCard.tsx so that file exports ONLY its component — a mixed
 // component/value module breaks React Fast Refresh, which silently leaves

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Per-integration prose for the /apps/:slug pages. Slugs
 // are the lowercased Manifest.integration string with spaces
 // replaced by hyphens (e.g. "Google Sheets" → "google-sheets").
