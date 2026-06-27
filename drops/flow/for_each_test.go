@@ -180,6 +180,44 @@ func TestForEach_RespectsConcurrencyCap(t *testing.T) {
 	}
 }
 
+// TestForEach_ClampsExcessiveConcurrency guards the DoS fix: an author-set
+// concurrency far above maxForEachConcurrency must not spawn one goroutine per
+// item (each iteration runs a full body subgraph). Peak in-flight must stay at
+// or below the hard ceiling.
+func TestForEach_ClampsExcessiveConcurrency(t *testing.T) {
+	var inflight, peak atomic.Int32
+	runner := func(ctx context.Context, item core.Ref) (engine.GraphResult, error) {
+		n := inflight.Add(1)
+		for {
+			p := peak.Load()
+			if n <= p || peak.CompareAndSwap(p, n) {
+				break
+			}
+		}
+		defer inflight.Add(-1)
+		select {
+		case <-time.After(20 * time.Millisecond):
+		case <-ctx.Done():
+		}
+		return echoRunner(ctx, item)
+	}
+	items := make([]any, 500)
+	for i := range items {
+		items[i] = fmt.Sprintf("v%d", i)
+	}
+	job := core.Job{
+		Input:  map[string]core.Ref{"items": {Inline: items}},
+		Params: map[string]any{"concurrency": 1_000_000},
+	}
+	res, err := executeForEach(withRunner(runner), job, nil)
+	if err != nil || res.Status != core.StatusOK {
+		t.Fatalf("status = %q, err = %v", res.Status, err)
+	}
+	if got := peak.Load(); got > maxForEachConcurrency {
+		t.Errorf("peak in-flight = %d, want <= %d (concurrency must be clamped)", got, maxForEachConcurrency)
+	}
+}
+
 func TestForEach_AcceptsRefList(t *testing.T) {
 	job := core.Job{
 		Input: map[string]core.Ref{

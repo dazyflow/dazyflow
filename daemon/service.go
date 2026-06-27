@@ -699,6 +699,15 @@ func (s *Service) saveGraph(ctx context.Context, p core.Principal, g core.Graph,
 	if err := core.Validate(g); err != nil {
 		return "", fmt.Errorf("invalid graph: %w", err)
 	}
+	// Resource-exhaustion guard at the persistence boundary, mirroring the
+	// run-path check in submitGraphWithSeed: refuse to STORE a graph whose
+	// node count exceeds the tenant's effective ceiling. Without this a tenant
+	// could persist arbitrarily large graphs (storage + per-job unmarshal
+	// pressure) even if they never reach the run gate.
+	if maxNodes := s.effectiveLimits(ctx, g.Tenant).MaxGraphNodes; maxNodes > 0 && len(g.Nodes) > maxNodes {
+		return "", fmt.Errorf("%w: graph has %d nodes, limit is %d",
+			core.ErrGraphTooLarge, len(g.Nodes), maxNodes)
+	}
 	store, err := s.Workspaces.Open(g.Tenant, g.Workspace)
 	if err != nil {
 		return "", err

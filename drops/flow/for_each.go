@@ -119,6 +119,16 @@ func executeForEach(ctx context.Context, job core.Job, progress chan<- core.Prog
 // overlap. Authors who want more set the concurrency param explicitly.
 const defaultForEachConcurrency = 8
 
+// maxForEachConcurrency is the hard ceiling on parallel iterations regardless
+// of what the author requests. Each iteration runs a full in-process body
+// subgraph (its own goroutine, ctx, and a JSON deep-copy of the body graph),
+// so an unclamped explicit concurrency over a large items list (items is
+// capped at limits.MaxRows = 1,000,000) would spawn up to that many concurrent
+// subgraph runs and exhaust the shared daemon's goroutines/heap from a single
+// run. 64 keeps a generous amount of real parallelism while bounding the blast
+// radius on the multi-tenant daemon.
+const maxForEachConcurrency = 64
+
 // itemFunc runs one iteration. It returns the Ref to record at results[idx]
 // and, when the iteration failed, a JSON-serializable error entry to record
 // under errors[idx] (nil on success).
@@ -165,10 +175,14 @@ func runForEachItems(
 	// runs a full in-process body subgraph, so an unset concurrency on a
 	// large items list (items is itself capped at limits.MaxRows) would
 	// otherwise spawn up to that many concurrent subgraph runs and exhaust
-	// the daemon. An explicit concurrency is honored as-is.
+	// the daemon. An explicit concurrency is clamped to maxForEachConcurrency
+	// so a malicious/careless author can't request a million-wide fan-out.
 	gate := concurrency
 	if gate == 0 {
 		gate = defaultForEachConcurrency
+	}
+	if gate > maxForEachConcurrency {
+		gate = maxForEachConcurrency
 	}
 	if gate > len(items) {
 		gate = len(items)

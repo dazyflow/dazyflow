@@ -110,6 +110,13 @@ func init() {
 const (
 	defaultTimeoutMs    = 30000
 	defaultMaxBodyBytes = 10 * 1024 * 1024 // 10 MiB
+	// maxMaxBodyBytes is the hard ceiling on the author-settable
+	// max_body_bytes. http_request buffers the whole response in memory
+	// (io.ReadAll below), so without a cap an author could set max_body_bytes
+	// to gigabytes, point at a large/attacker-controlled URL, and OOM the
+	// shared daemon. Large transfers should use http_download, which streams
+	// to disk under the workspace quota.
+	maxMaxBodyBytes = 100 * 1024 * 1024 // 100 MiB
 )
 
 func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
@@ -127,6 +134,9 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 	method = strings.ToUpper(method)
 	timeoutMs := params.IntDefault(job.Params, "timeout_ms", defaultTimeoutMs)
 	maxBodyBytes := int64(params.IntDefault(job.Params, "max_body_bytes", defaultMaxBodyBytes))
+	if maxBodyBytes > maxMaxBodyBytes {
+		maxBodyBytes = maxMaxBodyBytes
+	}
 	// allow_private_networks disables the SSRF guard; only honor it when the
 	// operator has opted in (DAZYFLOW_ALLOW_PRIVATE_EGRESS). Otherwise it's a
 	// tenant-controllable SSRF bypass to metadata/localhost/internal hosts.

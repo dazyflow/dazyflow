@@ -109,7 +109,13 @@ func executeExcelWrite(_ context.Context, job core.Job, _ chan<- core.Progress) 
 		if err != nil {
 			return params.Err(job, "bad_input", err.Error()), nil
 		}
-		f, err = excelize.OpenReader(bytes.NewReader(data))
+		// Bound decompression like excel_read does: readSandboxFile only caps
+		// the COMPRESSED bytes, so without an unzip limit a crafted .xlsx
+		// (zip-bomb) inflates to many GB inside OpenReader and OOMs the daemon.
+		f, err = excelize.OpenReader(bytes.NewReader(data), excelize.Options{
+			UnzipSizeLimit:    maxSandboxFileBytes,
+			UnzipXMLSizeLimit: maxSandboxFileBytes,
+		})
 		if err != nil {
 			return params.Err(job, "bad_input", "could not read existing .xlsx: "+err.Error()), nil
 		}
