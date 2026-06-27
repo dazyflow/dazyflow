@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"git.sr.ht/~klahr/dazyflow/auth"
 	"git.sr.ht/~klahr/dazyflow/core"
@@ -1649,5 +1650,52 @@ func TestHTTPGateway_ValidateCron_AgreesWithSchedulerParser(t *testing.T) {
 	_ = json.Unmarshal(rw.Body.Bytes(), &out)
 	if out.Valid {
 		t.Errorf("@yearly accepted but scheduler's 5-field parser doesn't allow descriptors")
+	}
+}
+
+func TestParseRunListTime(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		ok   bool
+		want time.Time
+	}{
+		{"empty", "", false, time.Time{}},
+		{"rfc3339", "2026-06-27T13:30:00Z", true, time.Date(2026, 6, 27, 13, 30, 0, 0, time.UTC)},
+		{"date_only", "2026-06-27", true, time.Date(2026, 6, 27, 0, 0, 0, 0, time.UTC)},
+		{"garbage", "not-a-date", false, time.Time{}},
+		{"epoch_millis_not_accepted", "1750000000000", false, time.Time{}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, ok := parseRunListTime(c.in)
+			if ok != c.ok {
+				t.Fatalf("ok = %v, want %v", ok, c.ok)
+			}
+			if ok && !got.Equal(c.want) {
+				t.Errorf("got %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+// TestParseRunListOpts_DateRange confirms the ?since=/?until= query params land
+// on ListGraphRunsOpts, and that a malformed value leaves that bound unset
+// rather than erroring the request.
+func TestParseRunListOpts_DateRange(t *testing.T) {
+	req := httptest.NewRequest("GET",
+		"/api/v1/me/runs?since=2026-06-01&until=2026-06-27T00:00:00Z&junk=x", nil)
+	opts := parseRunListOpts(req)
+	if want := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC); !opts.Since.Equal(want) {
+		t.Errorf("Since = %v, want %v", opts.Since, want)
+	}
+	if want := time.Date(2026, 6, 27, 0, 0, 0, 0, time.UTC); !opts.Until.Equal(want) {
+		t.Errorf("Until = %v, want %v", opts.Until, want)
+	}
+
+	// A malformed since is ignored (zero), not an error.
+	bad := parseRunListOpts(httptest.NewRequest("GET", "/api/v1/me/runs?since=nonsense", nil))
+	if !bad.Since.IsZero() {
+		t.Errorf("malformed since = %v, want zero", bad.Since)
 	}
 }

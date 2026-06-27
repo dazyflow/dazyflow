@@ -17,6 +17,23 @@ Releasing: move the entries below from `[Unreleased]` under a new
 
 ## [Unreleased]
 
+### Added
+
+- **Runs date-range filter.** `GET /api/v1/me/runs` and
+  `GET /api/v1/me/flows/{flow_id}/runs` accept `since` and `until` query params
+  (RFC3339 timestamp or bare `YYYY-MM-DD`) bounding a run's enqueue time —
+  `since` inclusive, `until` exclusive. The Runs page gains a From/To date
+  picker that resolves a selected day to local-midnight instants, so filtering
+  is server-side and paginates correctly instead of narrowing only the rows
+  already loaded.
+
+### Changed
+
+- Realigned the OpenAPI definition of `GET /api/v1/me/runs` to the parameters
+  the endpoint actually accepts (`status`, `since`, `until`, `limit`, `offset`,
+  `workspace`, `tenant`); it had drifted to aspirational `from`/`to` plus
+  `PageToken`/`PageSize`/`Sort` that were never implemented.
+
 ## [0.2.0] - 2026-06-27
 
 ### Added

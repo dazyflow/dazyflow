@@ -184,8 +184,15 @@ type ListGraphRunsOpts struct {
 	Workspace string
 	GraphID   string
 	Status    JobStatus
-	Limit     int
-	Offset    int
+	// Since and Until bound a run's enqueue time (EnqueuedAt). Since is
+	// inclusive (enqueued_at >= Since) and Until is exclusive (enqueued_at <
+	// Until), so a caller passing one day's midnight as Since and the next
+	// day's midnight as Until gets exactly that day with no boundary
+	// double-count. A zero value leaves that side of the range unbounded.
+	Since  time.Time
+	Until  time.Time
+	Limit  int
+	Offset int
 }
 
 var (

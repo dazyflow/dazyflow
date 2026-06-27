@@ -204,6 +204,35 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 		if len(gotEmpty) != 0 {
 			t.Errorf("offset-past-end len = %d, want 0", len(gotEmpty))
 		}
+
+		// Date range over EnqueuedAt. acme/ws-prod rows sit at now-3m (g1),
+		// now-2m (g2), now-1m (g3). Since is inclusive, Until exclusive.
+		// [now-2m30s, now-90s) selects exactly g2 (now-2m).
+		got, _ = s.ListGraphRuns(ctx, core.ListGraphRunsOpts{
+			Tenant: "acme", Workspace: "ws-prod",
+			Since: now.Add(-150 * time.Second),
+			Until: now.Add(-90 * time.Second),
+		})
+		if len(got) != 1 || got[0].ID != "g2" {
+			t.Errorf("date range = %v, want [g2]", ids(got))
+		}
+		// Since alone (inclusive) keeps g2 and g3, drops the older g1.
+		got, _ = s.ListGraphRuns(ctx, core.ListGraphRunsOpts{
+			Tenant: "acme", Workspace: "ws-prod",
+			Since: now.Add(-2 * time.Minute),
+		})
+		if len(got) != 2 {
+			t.Errorf("since-only = %v, want [g3 g2]", ids(got))
+		}
+		// Until is exclusive: an upper bound exactly at g1's enqueue time
+		// excludes g1, leaving nothing older.
+		got, _ = s.ListGraphRuns(ctx, core.ListGraphRunsOpts{
+			Tenant: "acme", Workspace: "ws-prod",
+			Until: now.Add(-3 * time.Minute),
+		})
+		if len(got) != 0 {
+			t.Errorf("until-exclusive at g1 = %v, want []", ids(got))
+		}
 	})
 
 	t.Run("ListNodeRecords_filters_and_pagination", func(t *testing.T) {

@@ -1313,6 +1313,9 @@
     "searchPlaceholder": "Sök på körnings-ID eller flöde…",
     "filterFlow": "Flöde",
     "allFlows": "Alla flöden",
+    "filterFrom": "Från",
+    "filterTo": "Till",
+    "clearDates": "Rensa datum",
     "resultCount": "{{count}}{{more}} körningar",
     "noMatches": "Inga körningar matchar din sökning."
   },

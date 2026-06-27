@@ -1335,6 +1335,9 @@
     "searchPlaceholder": "Search by run ID or flow…",
     "filterFlow": "Flow",
     "allFlows": "All flows",
+    "filterFrom": "From",
+    "filterTo": "To",
+    "clearDates": "Clear dates",
     "resultCount": "{{count}}{{more}} runs",
     "noMatches": "No runs match your search."
   },

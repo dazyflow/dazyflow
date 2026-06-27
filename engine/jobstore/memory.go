@@ -301,6 +301,14 @@ func (m *Memory) ListGraphRuns(_ context.Context, opts core.ListGraphRunsOpts) (
 		if opts.Status != "" && r.Status != opts.Status {
 			continue
 		}
+		// Since is inclusive, Until exclusive — mirrors the Postgres store's
+		// enqueued_at >= Since AND enqueued_at < Until predicates.
+		if !opts.Since.IsZero() && r.EnqueuedAt.Before(opts.Since) {
+			continue
+		}
+		if !opts.Until.IsZero() && !r.EnqueuedAt.Before(opts.Until) {
+			continue
+		}
 		out = append(out, *r)
 	}
 	sort.Slice(out, func(i, j int) bool {

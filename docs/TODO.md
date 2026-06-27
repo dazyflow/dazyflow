@@ -33,8 +33,6 @@ detail lives in the code and commit history).
       auth/daemon/web.
 
 ### Web polish — blocked / deferred
-- [ ] Runs date-range filter — BACKEND-BLOCKED: runs API has no date params;
-      a client-only filter over loaded rows would mislead.
 - [ ] Breadcrumbs — DEFERRED: the IA is flat (sidebar + page title); low value.
 - [ ] Editor undo/redo — DEFERRED: needs a real graph history stack
       (snapshot/coalesce + autosave interplay). Version snapshots already cover
@@ -66,6 +64,15 @@ detail lives in the code and commit history).
       dependency-depth auto-arrange.
 - [x] **Runs filtering** — text search, server-side per-flow filter, result
       count + load-more.
+- [x] **Runs date-range filter** — was backend-blocked; added `since`/`until`
+      params on `ListGraphRunsOpts` (inclusive lower / exclusive upper bound on
+      enqueue time) through both job stores, parsed from `?since=&until=`
+      (RFC3339 or YYYY-MM-DD) on `/me/runs` + `/me/flows/{id}/runs`, and a
+      From/To date picker on the Runs page that resolves a picked day to
+      local-midnight instants so it's server-side and paginates. OpenAPI for the
+      `/me/runs` endpoint also realigned to the actual params (it had drifted to
+      aspirational `from`/`to`/PageToken/PageSize/Sort). Tests: store conformance
+      date-range cases + handler parse unit tests.
 - [x] **Global ⌘K command bar** — jump to any page or flow (step palette keeps
       ⌘K inside the editor).
 - [x] **Overview dashboard** (`/overview`) — stat cards, needs-attention list,

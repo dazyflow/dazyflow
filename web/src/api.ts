@@ -1093,12 +1093,20 @@ export const api = {
     tenant: string,
     workspace: string,
     id: string,
-    opts: { limit?: number; offset?: number; status?: JobStatus } = {},
+    opts: {
+      limit?: number;
+      offset?: number;
+      status?: JobStatus;
+      since?: string;
+      until?: string;
+    } = {},
   ) => {
     const qs = new URLSearchParams();
     qs.set("limit", String(opts.limit ?? 20));
     if (opts.offset) qs.set("offset", String(opts.offset));
     if (opts.status) qs.set("status", opts.status);
+    if (opts.since) qs.set("since", opts.since);
+    if (opts.until) qs.set("until", opts.until);
     return request<{ runs: RunSummary[] }>(
       token,
       "GET",
@@ -1113,6 +1121,8 @@ export const api = {
       status?: JobStatus;
       workspace?: string;
       tenant?: string;
+      since?: string;
+      until?: string;
     } = {},
   ) => {
     const qs = new URLSearchParams();
@@ -1121,6 +1131,8 @@ export const api = {
     if (opts.status) qs.set("status", opts.status);
     if (opts.workspace) qs.set("workspace", opts.workspace);
     if (opts.tenant) qs.set("tenant", opts.tenant);
+    if (opts.since) qs.set("since", opts.since);
+    if (opts.until) qs.set("until", opts.until);
     return request<{ runs: RunSummary[] }>(
       token,
       "GET",

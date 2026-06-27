@@ -495,6 +495,14 @@ func (s *Postgres) ListGraphRuns(ctx context.Context, opts core.ListGraphRunsOpt
 		args = append(args, string(opts.Status))
 		q += fmt.Sprintf(" AND status = $%d", len(args))
 	}
+	if !opts.Since.IsZero() {
+		args = append(args, opts.Since)
+		q += fmt.Sprintf(" AND enqueued_at >= $%d", len(args))
+	}
+	if !opts.Until.IsZero() {
+		args = append(args, opts.Until)
+		q += fmt.Sprintf(" AND enqueued_at < $%d", len(args))
+	}
 	args = append(args, limit)
 	q += fmt.Sprintf(" ORDER BY enqueued_at DESC LIMIT $%d", len(args))
 	if opts.Offset > 0 {

@@ -1862,6 +1862,16 @@ func parseRunListOpts(r *http.Request) core.ListGraphRunsOpts {
 	if s := r.URL.Query().Get("status"); s != "" {
 		opts.Status = core.JobStatus(s)
 	}
+	// Date range over a run's enqueue time. ?since= is an inclusive lower
+	// bound, ?until= an exclusive upper bound (so a UI day-picker passing
+	// midnight→next-midnight selects exactly that day). An unparseable value
+	// is ignored rather than erroring — it just leaves that bound open.
+	if ts, ok := parseRunListTime(r.URL.Query().Get("since")); ok {
+		opts.Since = ts
+	}
+	if ts, ok := parseRunListTime(r.URL.Query().Get("until")); ok {
+		opts.Until = ts
+	}
 	// Optional ?workspace= and ?tenant= narrow admin views. Service
 	// layer enforces the actual scope: a scoped principal can't widen
 	// past their binding (their tenant/workspace overrides whatever
@@ -1874,6 +1884,24 @@ func parseRunListOpts(r *http.Request) core.ListGraphRunsOpts {
 		opts.Tenant = s
 	}
 	return opts
+}
+
+// parseRunListTime parses a run-list ?since=/?until= bound. It accepts a full
+// RFC3339 timestamp (what the web UI sends, having resolved a picked day to the
+// user's local-midnight instant) or a bare YYYY-MM-DD date interpreted as UTC
+// midnight (convenient for hand-rolled API calls). An empty or malformed value
+// returns ok=false so the caller leaves that bound unset.
+func parseRunListTime(s string) (time.Time, bool) {
+	if s == "" {
+		return time.Time{}, false
+	}
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t, true
+	}
+	if t, err := time.Parse("2006-01-02", s); err == nil {
+		return t, true
+	}
+	return time.Time{}, false
 }
 
 func (h *HTTPGateway) writeRunList(rw http.ResponseWriter, r *http.Request, p core.Principal, opts core.ListGraphRunsOpts) {

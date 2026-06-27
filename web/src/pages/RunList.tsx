@@ -69,6 +69,12 @@ export function RunList() {
   // fetch to that flow's own run history (listRuns), so it's server-side and
   // paginates correctly past the first page.
   const [flowFilter, setFlowFilter] = useState("");
+  // Date-range filter over a run's enqueue time. Both are "YYYY-MM-DD" from
+  // <input type="date">; they're resolved to local-midnight ISO instants
+  // before the fetch (see dayStartISO/dayEndExclusiveISO). Server-side and
+  // paginated — unlike the text `query`, which only narrows loaded rows.
+  const [since, setSince] = useState("");
+  const [until, setUntil] = useState("");
   const [hasMore, setHasMore] = useState(false);
   // Failed-runs inbox: ids the user has checked for bulk retry. Only
   // populated/shown in the Failed filter, where retrying makes sense.
@@ -108,6 +114,8 @@ export function RunList() {
   const fetchRunsPage = useCallback(
     (offset: number, limit: number = PAGE_SIZE) => {
       const tok = token!;
+      const sinceISO = dayStartISO(since);
+      const untilISO = dayEndExclusiveISO(until);
       if (flowFilter) {
         return api
           .listRuns(
@@ -115,7 +123,7 @@ export function RunList() {
             activeTenant || me?.tenant || "",
             activeWorkspace || me?.workspace || "",
             flowFilter,
-            { limit, offset, status: filter || undefined },
+            { limit, offset, status: filter || undefined, since: sinceISO, until: untilISO },
           )
           .then((r) => r.runs ?? []);
       }
@@ -126,10 +134,12 @@ export function RunList() {
           status: filter || undefined,
           workspace: activeWorkspace || undefined,
           tenant: activeTenant || undefined,
+          since: sinceISO,
+          until: untilISO,
         })
         .then((r) => r.runs ?? []);
     },
-    [token, flowFilter, filter, activeTenant, activeWorkspace, me],
+    [token, flowFilter, filter, since, until, activeTenant, activeWorkspace, me],
   );
 
   useEffect(() => {
@@ -323,6 +333,37 @@ export function RunList() {
             ))}
           </select>
         </label>
+        <label className="flow-filter">
+          <span className="flow-filter-label">{t("runList.filterFrom")}</span>
+          <input
+            type="date"
+            value={since}
+            max={until || undefined}
+            onChange={(e) => setSince(e.target.value)}
+            aria-label={t("runList.filterFrom")}
+          />
+        </label>
+        <label className="flow-filter">
+          <span className="flow-filter-label">{t("runList.filterTo")}</span>
+          <input
+            type="date"
+            value={until}
+            min={since || undefined}
+            onChange={(e) => setUntil(e.target.value)}
+            aria-label={t("runList.filterTo")}
+          />
+        </label>
+        {(since || until) && (
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setSince("");
+              setUntil("");
+            }}
+          >
+            {t("runList.clearDates")}
+          </Button>
+        )}
         <span className="run-count">
           {t("runList.resultCount", {
             count: visibleRuns.length,
@@ -560,6 +601,25 @@ export function RunList() {
 // Standard local "YYYY-MM-DD HH:MM" everywhere — no relative "ago" strings.
 function formatTime(iso: string): string {
   return formatDateTime(iso);
+}
+
+// dayStartISO turns a "YYYY-MM-DD" date (from <input type="date">) into the
+// RFC3339 instant for that day's LOCAL midnight — the inclusive ?since= bound.
+// Built from numeric parts so it's the user's local day, not UTC (new
+// Date("2026-06-27") would parse as UTC midnight and skew the boundary).
+function dayStartISO(d: string): string | undefined {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d);
+  if (!m) return undefined;
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).toISOString();
+}
+
+// dayEndExclusiveISO turns a "YYYY-MM-DD" end date into local midnight of the
+// FOLLOWING day — the exclusive ?until= bound — so the selected end day is
+// included in full. Day+1 via the Date constructor handles month/year rollover.
+function dayEndExclusiveISO(d: string): string | undefined {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d);
+  if (!m) return undefined;
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + 1).toISOString();
 }
 
 function formatDuration(startedISO: string, finishedISO: string): string {
