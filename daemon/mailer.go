@@ -144,7 +144,7 @@ func (m *Mailer) prepare(ctx context.Context) (context.Context, context.CancelFu
 func (m *Mailer) Send(ctx context.Context, to, subject, body string) error {
 	ctx, cancel, auth := m.prepare(ctx)
 	defer cancel()
-	return smtputil.Send(ctx, net.JoinHostPort(m.host, m.port), m.host, m.tlsMode,
+	return smtputil.SendTrusted(ctx, net.JoinHostPort(m.host, m.port), m.host, m.tlsMode,
 		auth, m.addr, []string{to}, mailerMessage(m.From, m.addr, to, subject, body))
 }
 
@@ -183,7 +183,7 @@ func (m *Mailer) sendHTML(ctx context.Context, to, subject, text, htmlBody strin
 	if err != nil {
 		return err
 	}
-	return smtputil.Send(ctx, net.JoinHostPort(m.host, m.port), m.host, m.tlsMode,
+	return smtputil.SendTrusted(ctx, net.JoinHostPort(m.host, m.port), m.host, m.tlsMode,
 		auth, m.addr, []string{to}, msg)
 }
 

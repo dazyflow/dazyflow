@@ -11,7 +11,20 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 )
+
+// allowLoopbackEgress lets a test's Send/Verify reach the loopback scripted
+// servers below. The tenant-facing SMTP path now carries the SSRF dial guard,
+// which blocks loopback/private targets unless the operator has opted into
+// private egress — exactly the toggle these protocol-level tests need. Reset
+// on cleanup so the guard tests still see the default (guarded) policy.
+func allowLoopbackEgress(t *testing.T) {
+	t.Helper()
+	hfnet.SetAllowPrivateEgress(true)
+	t.Cleanup(func() { hfnet.SetAllowPrivateEgress(false) })
+}
 
 // smtpScript configures the scripted server's behavior.
 type smtpScript struct {
@@ -93,6 +106,7 @@ func scriptedSMTP(t *testing.T, sc smtpScript) string {
 }
 
 func TestSend_PlainHappyPath(t *testing.T) {
+	allowLoopbackEgress(t)
 	addr := scriptedSMTP(t, smtpScript{})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -103,6 +117,7 @@ func TestSend_PlainHappyPath(t *testing.T) {
 }
 
 func TestSend_WithAuth(t *testing.T) {
+	allowLoopbackEgress(t)
 	addr := scriptedSMTP(t, smtpScript{withAuth: true})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -114,6 +129,7 @@ func TestSend_WithAuth(t *testing.T) {
 }
 
 func TestSend_AuthRejected(t *testing.T) {
+	allowLoopbackEgress(t)
 	addr := scriptedSMTP(t, smtpScript{withAuth: true, authFail: true})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -125,6 +141,7 @@ func TestSend_AuthRejected(t *testing.T) {
 }
 
 func TestSend_MailFromRejected(t *testing.T) {
+	allowLoopbackEgress(t)
 	addr := scriptedSMTP(t, smtpScript{rejectCmd: "MAIL"})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -135,6 +152,7 @@ func TestSend_MailFromRejected(t *testing.T) {
 }
 
 func TestSend_RcptRejected(t *testing.T) {
+	allowLoopbackEgress(t)
 	addr := scriptedSMTP(t, smtpScript{rejectCmd: "RCPT"})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -145,6 +163,7 @@ func TestSend_RcptRejected(t *testing.T) {
 }
 
 func TestVerify_HappyPath(t *testing.T) {
+	allowLoopbackEgress(t)
 	// mode "starttls" against a server that does NOT advertise STARTTLS
 	// exercises the starttls branch's skip path (extension absent → no
 	// upgrade attempted).
@@ -157,6 +176,7 @@ func TestVerify_HappyPath(t *testing.T) {
 }
 
 func TestVerify_NoDeadlineFallback(t *testing.T) {
+	allowLoopbackEgress(t)
 	// A context without a deadline exercises dial's 30s fallback branch.
 	addr := scriptedSMTP(t, smtpScript{})
 	if err := Verify(context.Background(), addr, "127.0.0.1", "none", nil); err != nil {

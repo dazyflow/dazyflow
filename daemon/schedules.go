@@ -212,6 +212,20 @@ func (h *HTTPGateway) listSchedulesMe(rw http.ResponseWriter, r *http.Request, p
 			"tenant and workspace required (no principal binding)")
 		return
 	}
+	// Reject a cross-tenant/workspace scope up front with a clean 403, like the
+	// sibling /me handlers (boards, flows). The service layer's RequireTenant
+	// also rejects it, but as an ErrUnauthorized that maps to a 500 with the
+	// internal error echoed — both a status and an info-leak inconsistency.
+	if tenant != p.Tenant && !isPlatformAdmin(p) {
+		writeAPIError(rw, http.StatusForbidden, "forbidden_scope",
+			fmt.Sprintf("cannot act on tenant %q (principal is bound to %q)", tenant, p.Tenant))
+		return
+	}
+	if workspace != p.Workspace && !isPlatformAdmin(p) {
+		writeAPIError(rw, http.StatusForbidden, "forbidden_scope",
+			fmt.Sprintf("cannot act on workspace %q (principal is bound to %q)", workspace, p.Workspace))
+		return
+	}
 	entries, err := h.svc.ListSchedules(r.Context(), p, tenant, workspace)
 	if err != nil {
 		writeAPIError(rw, http.StatusInternalServerError, "internal_error", err.Error())

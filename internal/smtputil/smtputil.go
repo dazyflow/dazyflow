@@ -16,6 +16,8 @@ import (
 	"net"
 	"net/smtp"
 	"time"
+
+	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 )
 
 // dial runs the shared front of the SMTP dance: dial addr (implicit-TLS or
@@ -23,10 +25,27 @@ import (
 // opportunistic STARTTLS, and optional AUTH. Both Send and Verify build on it
 // so the handshake can't drift between sending a message and testing a
 // connection. The caller owns Close()/Quit() of the returned client.
-func dial(ctx context.Context, addr, host, mode string, auth smtp.Auth) (*smtp.Client, error) {
+//
+// When guard is true the dialer carries the shared SSRF Control hook, so the
+// IP we actually connect to is re-checked at dial time, on the resolved
+// address — not just in the caller's pre-flight CheckDialHost. Without it, an
+// attacker-controlled DNS name passes the pre-flight (public IP) and then
+// re-resolves to loopback/private/link-local/metadata at connect time (DNS
+// rebinding / TOCTOU), which would also exfiltrate the configured SMTP AUTH
+// credentials to the rebind target. Tenant-supplied SMTP servers (the
+// email_send drop and the "Test connection" button) MUST pass guard=true;
+// this matches the dial guard already on the DB (drops/db), MQTT (drops/mqtt)
+// and Vault paths. The operator's own transactional Mailer passes guard=false
+// via SendTrusted because its host comes from trusted instance config and
+// legitimately points at an internal/sidecar relay. When the operator has
+// opted into private egress the hook no-ops anyway, same as the HTTP drops.
+func dial(ctx context.Context, addr, host, mode string, auth smtp.Auth, guard bool) (*smtp.Client, error) {
 	var conn net.Conn
 	var err error
 	dialer := &net.Dialer{}
+	if guard {
+		dialer.Control = hfnet.SSRFDialControl()
+	}
 	if mode == "implicit" {
 		conn, err = (&tls.Dialer{NetDialer: dialer, Config: &tls.Config{ServerName: host}}).DialContext(ctx, "tcp", addr)
 	} else {
@@ -66,8 +85,9 @@ func dial(ctx context.Context, addr, host, mode string, auth smtp.Auth) (*smtp.C
 // Verify confirms a mail server is reachable and (when auth is set) the login
 // is accepted, by running the dial/STARTTLS/AUTH handshake and then QUIT — no
 // message is sent. Drives the Email integration's "Test connection" button.
+// The target is tenant-supplied, so the SSRF dial guard is always applied.
 func Verify(ctx context.Context, addr, host, mode string, auth smtp.Auth) error {
-	c, err := dial(ctx, addr, host, mode, auth)
+	c, err := dial(ctx, addr, host, mode, auth, true)
 	if err != nil {
 		return err
 	}
@@ -79,9 +99,23 @@ func Verify(ctx context.Context, addr, host, mode string, auth smtp.Auth) error 
 // ("implicit" / "starttls" / "none"), opportunistic STARTTLS, optional
 // AUTH, then MAIL/RCPT/DATA/QUIT. The connection inherits ctx's
 // deadline (fallback 30s) so a black-holed server can't wedge the
-// caller for the OS dial timeout.
+// caller for the OS dial timeout. The target is tenant-supplied (the
+// email_send drop), so the SSRF dial guard is always applied; the operator's
+// own Mailer uses SendTrusted instead.
 func Send(ctx context.Context, addr, host, mode string, auth smtp.Auth, from string, to []string, msg []byte) error {
-	c, err := dial(ctx, addr, host, mode, auth)
+	return send(ctx, addr, host, mode, auth, from, to, msg, true)
+}
+
+// SendTrusted is Send for the operator's own transactional Mailer, whose SMTP
+// host comes from trusted instance configuration (not tenant input) and may
+// legitimately be an internal/sidecar relay. It skips the SSRF dial guard for
+// that reason; never call it with a tenant-supplied host.
+func SendTrusted(ctx context.Context, addr, host, mode string, auth smtp.Auth, from string, to []string, msg []byte) error {
+	return send(ctx, addr, host, mode, auth, from, to, msg, false)
+}
+
+func send(ctx context.Context, addr, host, mode string, auth smtp.Auth, from string, to []string, msg []byte, guard bool) error {
+	c, err := dial(ctx, addr, host, mode, auth, guard)
 	if err != nil {
 		return err
 	}
