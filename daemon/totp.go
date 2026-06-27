@@ -6,7 +6,6 @@ package daemon
 import (
 	"errors"
 	"net/http"
-	"time"
 
 	"git.sr.ht/~klahr/dazyflow/auth"
 	"git.sr.ht/~klahr/dazyflow/core"
@@ -265,11 +264,7 @@ func (h *HTTPGateway) totpVerify(rw http.ResponseWriter, r *http.Request) {
 		writeAPIError(rw, http.StatusForbidden, "suspended", msg)
 		return
 	}
-	ttl := h.SessionTTL
-	if ttl <= 0 {
-		ttl = 24 * time.Hour
-	}
-	sess, token, err := auth.IssueSession(r.Context(), h.Sessions, h.elevatePlatformAdmin(r.Context(), res.User), ttl)
+	sess, token, err := auth.IssueSession(r.Context(), h.Sessions, h.elevatePlatformAdmin(r.Context(), res.User), h.sessionTTL())
 	if err != nil {
 		writeAPIError(rw, http.StatusInternalServerError, "internal_error", "could not create session")
 		return

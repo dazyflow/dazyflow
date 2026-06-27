@@ -29,13 +29,18 @@ export function SignIn() {
   const presetEmail = searchParams.get("email") ?? "";
   const inviteToken = searchParams.get("invite") ?? "";
   const queryOrg = searchParams.get("org") ?? "";
+  // SSO second factor: the Google callback bounces a 2FA user here with a
+  // challenge token (it can't return JSON like the password leg). When present
+  // we open directly on the code step and, on success, land them at return_to.
+  const ssoChallenge = searchParams.get("totp_challenge") ?? "";
+  const ssoReturnTo = searchParams.get("return_to") ?? "";
   const [email, setEmail] = useState(presetEmail);
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   // Second-factor step. When the password step returns a challenge we
   // swap the form to a code prompt rather than navigating — the
   // challenge is short-lived and single-use, so it lives only in state.
-  const [challenge, setChallenge] = useState<string | null>(null);
+  const [challenge, setChallenge] = useState<string | null>(ssoChallenge || null);
   const [totpCode, setTotpCode] = useState("");
   const [recoveryCode, setRecoveryCode] = useState("");
   const [useRecovery, setUseRecovery] = useState(false);
@@ -152,6 +157,8 @@ export function SignIn() {
         await verifyTOTP(challenge, code, recovery);
         if (inviteToken) {
           navigate(`/invite/${inviteToken}`);
+        } else if (ssoReturnTo) {
+          navigate(ssoReturnTo);
         }
       } catch {
         /* error already set on context */

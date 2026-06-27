@@ -192,12 +192,9 @@ func (h *HTTPGateway) signUp(rw http.ResponseWriter, r *http.Request) {
 
 	// Auto sign-in: issue a session immediately so the UI can land
 	// the user on the welcome page without an extra round trip
-	// through the sign-in form.
-	ttl := h.SessionTTL
-	if ttl <= 0 {
-		ttl = 24 * time.Hour
-	}
-	sess, token, err := auth.IssueSession(r.Context(), h.Sessions, h.elevatePlatformAdmin(r.Context(), user), ttl)
+	// through the sign-in form. Use the shared sessionTTL() so signup
+	// matches the sign-in/SSO/TOTP legs (one source of the default).
+	sess, token, err := auth.IssueSession(r.Context(), h.Sessions, h.elevatePlatformAdmin(r.Context(), user), h.sessionTTL())
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("issue session: %v", err))
 		return

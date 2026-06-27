@@ -504,7 +504,12 @@ func (s *Postgres) ListGraphRuns(ctx context.Context, opts core.ListGraphRunsOpt
 		q += fmt.Sprintf(" AND enqueued_at < $%d", len(args))
 	}
 	args = append(args, limit)
-	q += fmt.Sprintf(" ORDER BY enqueued_at DESC LIMIT $%d", len(args))
+	// id DESC is a deterministic tiebreaker: enqueued_at ties are common (a
+	// scheduler/webhook fan-out submits many runs in the same instant), and
+	// without a unique secondary key LIMIT/OFFSET pagination can repeat or skip
+	// a row across page boundaries. id is random, not chronological, but it
+	// gives a stable total order, which is all pagination needs.
+	q += fmt.Sprintf(" ORDER BY enqueued_at DESC, id DESC LIMIT $%d", len(args))
 	if opts.Offset > 0 {
 		args = append(args, opts.Offset)
 		q += fmt.Sprintf(" OFFSET $%d", len(args))
@@ -551,7 +556,12 @@ func (s *Postgres) ListNodeRecords(ctx context.Context, opts core.ListNodeRecord
 		q += fmt.Sprintf(" AND graph_run_id = $%d", len(args))
 	}
 	args = append(args, limit)
-	q += fmt.Sprintf(" ORDER BY enqueued_at DESC LIMIT $%d", len(args))
+	// id DESC is a deterministic tiebreaker: enqueued_at ties are common (a
+	// scheduler/webhook fan-out submits many runs in the same instant), and
+	// without a unique secondary key LIMIT/OFFSET pagination can repeat or skip
+	// a row across page boundaries. id is random, not chronological, but it
+	// gives a stable total order, which is all pagination needs.
+	q += fmt.Sprintf(" ORDER BY enqueued_at DESC, id DESC LIMIT $%d", len(args))
 	if opts.Offset > 0 {
 		args = append(args, opts.Offset)
 		q += fmt.Sprintf(" OFFSET $%d", len(args))

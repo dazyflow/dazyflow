@@ -79,11 +79,11 @@ func secretScopeFromRequest(r *http.Request) (scope SecretScope, flow string, er
 // need secret:read and writes secret:write. Flow scope needs graph:edit.
 //
 // NOTE: this tenant-wide form does NOT bind the authorization to a specific
-// flow id — it's retained only for callers that don't yet pass through the
-// per-flow gate (see httpresources.go, which has the same cross-flow gap and
-// should migrate to authorizeFlowSecretScope). New secret CRUD paths must use
-// (*HTTPGateway).authorizeFlowSecretScope so flow scope is authorized against
-// the specific ?flow=<id>. Returns (status, message); status 0 = authorized.
+// flow id. New secret CRUD paths must use (*HTTPGateway).authorizeFlowSecretScope
+// (via secretCRUDGate) so flow scope is authorized against the specific
+// ?flow=<id> — as the secret and resource handlers already do. This form is
+// retained only for any caller operating at tenant scope without a flow id.
+// Returns (status, message); status 0 = authorized.
 func authorizeSecretScope(p core.Principal, scope SecretScope, write bool) (int, string) {
 	if scope == ScopeFlow {
 		if err := core.Require(p, core.PermGraphEdit); err != nil {

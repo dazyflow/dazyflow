@@ -103,19 +103,39 @@ func writeCacheValidators(ctx context.Context, tenant, name string, v cacheValid
 	_ = w(ctx, tenant, name, string(b))
 }
 
+// clearCacheValidators overwrites any stored validators for (tenant, name) with
+// empty ones, so the next fetch is unconditional. Used when a fresh 2xx drops
+// the ETag/Last-Modified it previously sent (upstream change, CDN swap) —
+// otherwise we'd keep conditioning on a validator the server no longer honours.
+func clearCacheValidators(ctx context.Context, tenant, name string) {
+	cacheMu.RLock()
+	w := cacheWriter
+	cacheMu.RUnlock()
+	if w == nil || tenant == "" {
+		return
+	}
+	_ = w(ctx, tenant, name, "{}")
+}
+
 // applyConditionalHeaders sets If-None-Match / If-Modified-Since from stored
 // validators (without clobbering ones the caller already set), so the server
-// can short-circuit with a 304. No-op when nothing is stored.
-func applyConditionalHeaders(req *http.Request, v *cacheValidators) {
+// can short-circuit with a 304. It reports whether at least one conditional
+// header was attached, so the caller only treats a 304 as authoritative when
+// it actually asked a conditional question (a server returning 304 unsolicited
+// must not be read as "not modified"). No-op when nothing is stored.
+func applyConditionalHeaders(req *http.Request, v *cacheValidators) (sent bool) {
 	if v == nil {
-		return
+		return false
 	}
 	if v.ETag != "" && req.Header.Get("If-None-Match") == "" {
 		req.Header.Set("If-None-Match", v.ETag)
+		sent = true
 	}
 	if v.LastModified != "" && req.Header.Get("If-Modified-Since") == "" {
 		req.Header.Set("If-Modified-Since", v.LastModified)
+		sent = true
 	}
+	return sent
 }
 
 // validatorsFromResponse extracts the ETag / Last-Modified a 2xx response

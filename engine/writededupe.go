@@ -5,6 +5,7 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"time"
 
@@ -68,7 +69,35 @@ func (m *memoryWriteDedupe) Get(_ context.Context, key string) (core.Result, boo
 		m.removeFromOrderLocked(key)
 		return core.Result{}, false
 	}
-	return e.result, true
+	// Return a deep copy, NOT the stored value: the caller (engine) mutates the
+	// result's Output map in place via ApplyPassthrough/redactResult after a
+	// dedupe hit, which would otherwise corrupt this stored entry and race other
+	// readers of the same key. A JSON round-trip mirrors what the Postgres store
+	// does on every Get (it unmarshals a fresh Result), so behaviour is uniform
+	// across stores. Results are already JSON-serialisable — they persist to the
+	// job store as JSON — so the round-trip is lossless for any real result.
+	clone, err := cloneResult(e.result)
+	if err != nil {
+		// A result that won't round-trip can't have been persisted either;
+		// treat the entry as absent so the caller re-runs rather than replaying
+		// a corrupt value.
+		return core.Result{}, false
+	}
+	return clone, true
+}
+
+// cloneResult deep-copies a Result by JSON round-trip so a dedupe replay can't
+// alias the stored entry's maps. Matches the Postgres store's marshal/unmarshal.
+func cloneResult(r core.Result) (core.Result, error) {
+	blob, err := json.Marshal(r)
+	if err != nil {
+		return core.Result{}, err
+	}
+	var out core.Result
+	if err := json.Unmarshal(blob, &out); err != nil {
+		return core.Result{}, err
+	}
+	return out, nil
 }
 
 func (m *memoryWriteDedupe) Put(_ context.Context, key string, result core.Result) {
@@ -76,6 +105,14 @@ func (m *memoryWriteDedupe) Put(_ context.Context, key string, result core.Resul
 	defer m.mu.Unlock()
 	if _, exists := m.entries[key]; !exists {
 		m.order = append(m.order, key)
+	}
+	// Store a deep copy so a later mutation of the caller's `result` (it still
+	// holds the same Output map we'd otherwise share) can't reach back into the
+	// stored entry. Get also clones on the way out; cloning on both edges makes
+	// the entry fully isolated. A clone failure falls back to storing as-is —
+	// no worse than before, and Get's clone still protects readers.
+	if clone, err := cloneResult(result); err == nil {
+		result = clone
 	}
 	m.entries[key] = dedupeEntry{result: result, storedAt: m.now()}
 	for len(m.entries) > writeDedupeMaxItems {

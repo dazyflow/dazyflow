@@ -160,3 +160,79 @@ func TestFireGraph_HappyPath(t *testing.T) {
 		t.Fatal("published fire produced no run")
 	}
 }
+
+// TestRescan_CronEditRecomputesScheduleAt is the regression test for the
+// cron-edit-takes-effect bug: editing a published flow's cron must recompute
+// the next fire on the next rescan, not keep the stale next-fire from the old
+// expression. Previously rescan preserved scheduleAt whenever the entry key
+// still existed, so tightening a yearly schedule to every-minute idled until
+// the old yearly fire elapsed.
+func TestRescan_CronEditRecomputesScheduleAt(t *testing.T) {
+	svc, ws, _ := fireGraphSvc(t)
+	now := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
+
+	// Publish a flow that fires yearly (next fire: 2027-01-01).
+	g := core.Graph{
+		ID: "edit", Tenant: "acme", Workspace: "ws1",
+		Nodes:    []core.Node{{ID: "n", Module: "delay", Params: map[string]any{"ms": 1}}},
+		Triggers: []core.GraphTrigger{{Type: "cron", Cron: "0 0 1 1 *"}},
+	}
+	commit, _ := ws.Save(g, "u")
+	_ = ws.PromoteToEnvironment(g.ID, workspace.PublishedEnv, commit)
+
+	sched := NewScheduler(svc)
+	sched.SetClock(func() time.Time { return now })
+	if err := sched.rescan(context.Background()); err != nil {
+		t.Fatalf("rescan 1: %v", err)
+	}
+	const key = "acme/ws1/edit#0"
+	before := sched.tracked[key]
+	if before == nil {
+		t.Fatalf("entry %q not enrolled", key)
+	}
+	if before.scheduleAt.Year() != 2027 {
+		t.Fatalf("yearly first fire = %v, want 2027", before.scheduleAt)
+	}
+
+	// Tighten the schedule to every minute and rescan: the next fire must be
+	// recomputed (about a minute out), not the stale 2027 value.
+	g.Triggers[0].Cron = "* * * * *"
+	commit2, _ := ws.Save(g, "u")
+	_ = ws.PromoteToEnvironment(g.ID, workspace.PublishedEnv, commit2)
+	if err := sched.rescan(context.Background()); err != nil {
+		t.Fatalf("rescan 2: %v", err)
+	}
+	after := sched.tracked[key]
+	if after == nil {
+		t.Fatalf("entry %q dropped after edit", key)
+	}
+	if !after.scheduleAt.Before(before.scheduleAt) {
+		t.Errorf("scheduleAt not recomputed after cron edit: before=%v after=%v", before.scheduleAt, after.scheduleAt)
+	}
+	if after.scheduleAt.After(now.Add(2 * time.Minute)) {
+		t.Errorf("every-minute fire = %v, want within ~1 min of %v", after.scheduleAt, now)
+	}
+}
+
+// TestReanchor_AdvancesStaleScheduleAt is the regression test for the leader-
+// failover re-fire bug: a follower inherits a frozen scheduleAt that is never
+// advanced, so on takeover a stale (past) value would fire a tick the old
+// leader already handled. reanchor must push it to the next fire after now.
+func TestReanchor_AdvancesStaleScheduleAt(t *testing.T) {
+	svc, _, _ := fireGraphSvc(t)
+	sched := NewScheduler(svc)
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+
+	stale := now.Add(-time.Hour) // a tick the "old leader" already fired
+	sched.tracked = map[string]*scheduledGraph{
+		"acme/ws1/g@poll": {
+			graphID: "g", tenant: "acme", workspace: "ws1",
+			interval: time.Minute, scheduleAt: stale,
+		},
+	}
+	sched.reanchor(now)
+	got := sched.tracked["acme/ws1/g@poll"].scheduleAt
+	if !got.After(now) {
+		t.Errorf("reanchor left a non-future fire: %v (now %v)", got, now)
+	}
+}

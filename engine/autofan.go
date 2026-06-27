@@ -29,6 +29,14 @@ const maxAutoFanItems = 1000
 //
 // Returns the port to iterate, the items, and ok.
 func detectAutoFan(manifest core.Manifest, input map[string]core.Ref) (fanPort string, items []any, ok bool) {
+	// Flow-control drops (routers/predicates like Branch — NoPassthrough) must
+	// never auto-fan: "route this payload" is a single decision, not a per-item
+	// loop. A list arriving on such a drop's typed scalar input (e.g. Branch's
+	// bool `condition`) would otherwise silently turn the router into an
+	// aggregating loop. They take the whole value as-is.
+	if manifest.NoPassthrough {
+		return "", nil, false
+	}
 	found := 0
 	for _, p := range manifest.Inputs {
 		if p.Variadic || p.Cardinality() != core.One || p.Kind() == core.KindAny {

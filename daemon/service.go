@@ -1488,7 +1488,11 @@ func (s *Service) ListJobsForGraph(ctx context.Context, p core.Principal, graphI
 	}
 	out := make([]core.JobRecord, 0, len(all))
 	for _, r := range all {
-		if r.Tenant == p.Tenant {
+		// Mirror GetJob's gate (RequireWorkspace) instead of a bare tenant-equals
+		// check: it scopes consistently with the rest of the run surface and lets
+		// a platform admin (whose principal carries no tenant, so r.Tenant ==
+		// p.Tenant would match nothing) see records across tenants as intended.
+		if core.RequireWorkspace(p, r.Tenant, r.Workspace) == nil {
 			out = append(out, r)
 		}
 	}

@@ -311,7 +311,14 @@ func (m *Memory) ListGraphRuns(_ context.Context, opts core.ListGraphRunsOpts) (
 		}
 		out = append(out, *r)
 	}
+	// Match the Postgres store's "enqueued_at DESC, id DESC": id breaks
+	// enqueued_at ties so pagination is a stable total order (plain sort.Slice
+	// isn't even stable), and a tie on a page boundary can't repeat or drop a
+	// row across LIMIT/OFFSET pages.
 	sort.Slice(out, func(i, j int) bool {
+		if out[i].EnqueuedAt.Equal(out[j].EnqueuedAt) {
+			return out[i].ID > out[j].ID
+		}
 		return out[i].EnqueuedAt.After(out[j].EnqueuedAt)
 	})
 	if opts.Offset > 0 {
@@ -352,7 +359,14 @@ func (m *Memory) ListNodeRecords(_ context.Context, opts core.ListNodeRecordsOpt
 		}
 		out = append(out, *r)
 	}
+	// Match the Postgres store's "enqueued_at DESC, id DESC": id breaks
+	// enqueued_at ties so pagination is a stable total order (plain sort.Slice
+	// isn't even stable), and a tie on a page boundary can't repeat or drop a
+	// row across LIMIT/OFFSET pages.
 	sort.Slice(out, func(i, j int) bool {
+		if out[i].EnqueuedAt.Equal(out[j].EnqueuedAt) {
+			return out[i].ID > out[j].ID
+		}
 		return out[i].EnqueuedAt.After(out[j].EnqueuedAt)
 	})
 	if opts.Offset > 0 {
@@ -380,7 +394,14 @@ func (m *Memory) ListByGraph(_ context.Context, graphID string) ([]core.JobRecor
 			out = append(out, *r)
 		}
 	}
+	// Match the Postgres store's "enqueued_at DESC, id DESC": id breaks
+	// enqueued_at ties so pagination is a stable total order (plain sort.Slice
+	// isn't even stable), and a tie on a page boundary can't repeat or drop a
+	// row across LIMIT/OFFSET pages.
 	sort.Slice(out, func(i, j int) bool {
+		if out[i].EnqueuedAt.Equal(out[j].EnqueuedAt) {
+			return out[i].ID > out[j].ID
+		}
 		return out[i].EnqueuedAt.After(out[j].EnqueuedAt)
 	})
 	return out, nil

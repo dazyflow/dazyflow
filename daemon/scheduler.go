@@ -80,6 +80,12 @@ type scheduledGraph struct {
 	scheduleFn cron.Schedule // for cron triggers
 	interval   time.Duration // BASE poll interval (zero when not poll-driven)
 
+	// specKey identifies the schedule spec (cron expr+tz, or poll interval).
+	// rescan preserves scheduleAt across rescans ONLY when this is unchanged;
+	// an edited cron/interval gets a freshly recomputed next-fire so a timing
+	// change takes effect immediately instead of waiting out the old schedule.
+	specKey string
+
 	// Adaptive-backoff state for poll entries (interval > 0). The scheduler
 	// owns the empty STREAK in memory (single writer), reading the flow's
 	// pollstate marker to learn each run's outcome. emptyStreak widens the
@@ -258,6 +264,10 @@ func (s *Scheduler) Run(ctx context.Context) error {
 	rescanT := time.NewTicker(s.rescanEvery)
 	defer tickT.Stop()
 	defer rescanT.Stop()
+	// Track leadership so we can re-anchor on takeover. A single-node deploy
+	// (s.leader == nil) is always leader and never transitions, so seed it true
+	// to skip the (harmless) startup re-anchor there.
+	wasLeader := s.leader == nil
 	for {
 		select {
 		case <-ctx.Done():
@@ -266,7 +276,20 @@ func (s *Scheduler) Run(ctx context.Context) error {
 		case <-tickT.C:
 			// Only the leader fires; followers stay warm via rescan and
 			// take over instantly if the leader dies.
-			if s.leader == nil || s.leader() {
+			isLeader := s.leader == nil || s.leader()
+			if isLeader && !wasLeader {
+				// Just took over from a dead leader. A follower's scheduleAt is
+				// frozen at whatever rescan last computed and was never advanced
+				// (only the leader's fireDue advances it), so a stale value
+				// <= now would fire a tick the old leader already fired. Re-anchor
+				// every entry to its next fire after now: a tick that fell inside
+				// the leaderless gap is skipped (matching the documented
+				// at-most-one-catch-up semantics) rather than duplicated — the
+				// safer choice for non-idempotent flows.
+				s.reanchor(s.clock())
+			}
+			wasLeader = isLeader
+			if isLeader {
 				s.fireDue(ctx)
 			}
 		case <-rescanT.C:
@@ -335,6 +358,7 @@ func (s *Scheduler) rescan(ctx context.Context) error {
 						tenant:     tenant,
 						workspace:  workspace,
 						scheduleFn: sched,
+						specKey:    "cron:" + t.Cron + "|" + t.TZ,
 					}
 				default:
 					// "webhook" and any other type aren't scheduler-driven.
@@ -349,7 +373,7 @@ func (s *Scheduler) rescan(ctx context.Context) error {
 				// cron AND a poll trigger gets two scheduler entries (one
 				// per trigger) instead of clobbering one with the other.
 				k := fmt.Sprintf("%s/%s/%s#%d", tenant, workspace, gid, triggerIdx)
-				if existing, ok := s.tracked[k]; ok && !existing.scheduleAt.IsZero() {
+				if existing, ok := s.tracked[k]; ok && !existing.scheduleAt.IsZero() && existing.specKey == entry.specKey {
 					entry.scheduleAt = existing.scheduleAt
 				} else {
 					entry.scheduleAt = entry.nextFireFrom(now)
@@ -387,9 +411,10 @@ func (s *Scheduler) rescan(ctx context.Context) error {
 					tenant:     tenant,
 					workspace:  workspace,
 					scheduleFn: sched,
+					specKey:    "cron:" + expr + "|" + tz,
 				}
 				k := fmt.Sprintf("%s/%s/%s@%s", tenant, workspace, gid, node.ID)
-				if existing, ok := s.tracked[k]; ok && !existing.scheduleAt.IsZero() {
+				if existing, ok := s.tracked[k]; ok && !existing.scheduleAt.IsZero() && existing.specKey == entry.specKey {
 					entry.scheduleAt = existing.scheduleAt
 				} else {
 					entry.scheduleAt = entry.nextFireFrom(now)
@@ -429,11 +454,14 @@ func (s *Scheduler) rescan(ctx context.Context) error {
 					tenant:    tenant,
 					workspace: workspace,
 					interval:  time.Duration(secs) * time.Second,
+					specKey:   fmt.Sprintf("poll:%d", secs),
 				}
 				k := fmt.Sprintf("%s/%s/%s@%s", tenant, workspace, gid, node.ID)
-				if existing, ok := s.tracked[k]; ok && !existing.scheduleAt.IsZero() {
+				if existing, ok := s.tracked[k]; ok && !existing.scheduleAt.IsZero() && existing.specKey == entry.specKey {
 					// Preserve timing AND learned cadence across rescans so a
 					// workspace edit doesn't reset jitter or empty-streak backoff.
+					// A changed interval (specKey differs) falls through to a fresh
+					// staggered first fire so the new cadence takes effect now.
 					entry.scheduleAt = existing.scheduleAt
 					entry.emptyStreak = existing.emptyStreak
 					entry.lastMarkerAt = existing.lastMarkerAt
@@ -454,6 +482,18 @@ func (s *Scheduler) rescan(ctx context.Context) error {
 	s.tracked = next
 	s.mu.Unlock()
 	return nil
+}
+
+// reanchor resets every tracked entry's next-fire to nextFireFrom(now),
+// discarding a stale frozen scheduleAt inherited as a follower. Called once on
+// leadership takeover so a newly-promoted leader doesn't immediately re-fire a
+// tick the dead leader already handled.
+func (s *Scheduler) reanchor(now time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, e := range s.tracked {
+		e.scheduleAt = e.nextFireFrom(now)
+	}
 }
 
 func (s *Scheduler) fireDue(ctx context.Context) {

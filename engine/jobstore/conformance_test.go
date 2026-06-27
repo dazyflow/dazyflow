@@ -233,6 +233,46 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 		if len(got) != 0 {
 			t.Errorf("until-exclusive at g1 = %v, want []", ids(got))
 		}
+
+		// Pagination tiebreaker: rows that share an enqueued_at must order
+		// deterministically (by id DESC) so a page boundary can't drop or repeat
+		// a row. Seed 5 runs at the SAME instant, page through with limit=2, and
+		// assert the concatenated pages are the full set with no dup/gap.
+		tie := now.Add(-10 * time.Minute)
+		for _, id := range []string{"tie-1", "tie-3", "tie-2", "tie-5", "tie-4"} {
+			mustEnqueue(t, s, ctx, core.JobRecord{
+				ID: id, Kind: core.JobKindGraph, Status: core.JobStatusSucceeded,
+				Tenant: "tieco", Workspace: "ws", GraphID: "g", EnqueuedAt: tie,
+			})
+		}
+		var paged []string
+		for off := 0; off < 6; off += 2 {
+			page, err := s.ListGraphRuns(ctx, core.ListGraphRunsOpts{Tenant: "tieco", Limit: 2, Offset: off})
+			if err != nil {
+				t.Fatalf("tie page off=%d: %v", off, err)
+			}
+			paged = append(paged, ids(page)...)
+		}
+		seen := map[string]int{}
+		for _, id := range paged {
+			seen[id]++
+		}
+		if len(seen) != 5 {
+			t.Errorf("paginated tied rows = %v, want 5 distinct (no dup/gap across pages)", paged)
+		}
+		for id, n := range seen {
+			if n != 1 {
+				t.Errorf("row %q appeared %d times across pages, want 1", id, n)
+			}
+		}
+		// And the order must be stable id-DESC within the tie.
+		first, _ := s.ListGraphRuns(ctx, core.ListGraphRunsOpts{Tenant: "tieco", Limit: 5})
+		want := []string{"tie-5", "tie-4", "tie-3", "tie-2", "tie-1"}
+		for i, w := range want {
+			if i < len(first) && first[i].ID != w {
+				t.Errorf("tie order[%d] = %q, want %q (id DESC)", i, first[i].ID, w)
+			}
+		}
 	})
 
 	t.Run("ListNodeRecords_filters_and_pagination", func(t *testing.T) {

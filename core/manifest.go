@@ -206,10 +206,20 @@ type Manifest struct {
 	// stable job ID; if that exact node-record runs AGAIN (a worker reclaims
 	// an expired lease after the first attempt already fired the write, or a
 	// crash re-runs it) the engine returns the recorded result WITHOUT calling
-	// the drop again — so the SMS/email/message isn't sent twice. The
-	// guarantee is at-least-once: a crash in the small window between the API
-	// succeeding and the result being recorded can still re-fire. Has no
-	// effect unless the engine has a WriteDedupe store wired (cmd/dzd).
+	// the drop again — so the SMS/email/message isn't sent twice. When a list
+	// auto-fans the node (one send per item), each item is deduped
+	// independently, so a crash mid-fan replays only the items not yet
+	// recorded. The guarantee is at-least-once: a crash in the small window
+	// between the API succeeding and the result being recorded can still
+	// re-fire. Has no effect unless the engine has a WriteDedupe store wired
+	// (cmd/dzd).
+	//
+	// LIMITATION: dedupe keys off the node's stable job-record ID, which only
+	// the top-level run assigns. A drop placed inside a for_each LOOP BODY runs
+	// under a per-iteration ID that isn't persisted as a reclaimable record, so
+	// DedupeWrites does not protect writes there — a body re-run can re-fire
+	// them. Keep non-idempotent sends at the top level (auto-fan covers the
+	// common "send to each of a list" case) rather than inside a loop body.
 	DedupeWrites bool `json:"dedupe_writes,omitempty"`
 
 	CompatibleWith []string `json:"compatible_with"`

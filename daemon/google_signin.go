@@ -400,6 +400,23 @@ func (h *HTTPGateway) googleSignInCallback(rw http.ResponseWriter, r *http.Reque
 		h.signInError(rw, r, st, "suspended", http.StatusForbidden, "your account or organization has been suspended")
 		return
 	}
+	// Second factor: a verified Google identity is NOT sufficient on its own
+	// for a user who enrolled TOTP — otherwise enabling SSO would silently
+	// downgrade their 2FA. Mint a challenge carrying the resolved active org
+	// (so the second factor lands them in the org they signed into, like the
+	// non-2FA path) and bounce to the sign-in page's code step. Fail closed:
+	// an enrolled user can't complete sign-in without the second factor.
+	if sessUser.TOTPEnabled && h.totpConfigured() {
+		challenge, cerr := auth.IssueTOTPChallengeWithOrg(
+			r.Context(), h.TOTPChallenges, sessUser.Email, activeTenant, activeWorkspace, activeRoles)
+		if cerr != nil {
+			h.signInError(rw, r, st, "totp", http.StatusInternalServerError, fmt.Sprintf("issue challenge: %v", cerr))
+			return
+		}
+		h.auditAuth(r.Context(), r, activeTenant, sessUser.Email, "auth.mfa_challenge", "method=google")
+		h.redirectToTOTP(rw, r, st, challenge)
+		return
+	}
 	sess, token, err := auth.IssueSession(r.Context(), h.Sessions, h.elevatePlatformAdmin(r.Context(), sessUser), h.sessionTTL())
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("issue session: %v", err))
@@ -407,6 +424,29 @@ func (h *HTTPGateway) googleSignInCallback(rw http.ResponseWriter, r *http.Reque
 	}
 	h.auditAuth(r.Context(), r, sess.Tenant, sess.Subject, "auth.signin", "method=google")
 	h.completeSignIn(rw, r, st, sess, token)
+}
+
+// redirectToTOTP bounces an SSO sign-in that owes a second factor to the
+// sign-in page's code step, passing the (single-use, short-lived) challenge
+// token and the post-verify return target. Mirrors completeSignIn's host
+// handling: a cross-host (per-org subdomain) sign-in redirects to that host's
+// /signin so the SPA there posts /auth/totp and gets its cookie on the right
+// origin; same-host stays relative. The challenge in the URL has the same
+// exposure model as the handoff token (single-use, minutes-long TTL).
+func (h *HTTPGateway) redirectToTOTP(rw http.ResponseWriter, r *http.Request, st googleSignInState, challenge string) {
+	target := st.ReturnTo
+	if !safeReturnPath(target) {
+		target = "/"
+	}
+	dest := "/signin?totp_challenge=" + url.QueryEscape(challenge) + "&return_to=" + url.QueryEscape(target)
+	if st.Host != "" && !sameHost(st.Host, r.Host) {
+		scheme := "https"
+		if !h.requestIsHTTPS(r) {
+			scheme = "http"
+		}
+		dest = scheme + "://" + st.Host + dest
+	}
+	http.Redirect(rw, r, dest, http.StatusFound)
 }
 
 // signInError ends a Google sign-in attempt. An admin "Test" attempt (st.Test)

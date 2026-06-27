@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"git.sr.ht/~klahr/dazyflow/core"
 	"github.com/pquerna/otp/totp"
 )
 
@@ -317,5 +318,71 @@ func TestDecryptTOTPSecret_Corrupt(t *testing.T) {
 	blob[len(blob)-1] ^= 0xFF // tamper
 	if _, err := decryptTOTPSecret(key, blob); !errors.Is(err, ErrTOTPSecretCorrupt) {
 		t.Errorf("tampered blob err = %v, want ErrTOTPSecretCorrupt", err)
+	}
+}
+
+// TestTOTPChallenge_BruteForceCap verifies the per-challenge guess limit: after
+// maxTOTPChallengeAttempts wrong codes the challenge is invalidated, so even a
+// correct code can't redeem it (the attacker must redo the rate-limited first
+// leg). Closes the "challenge survives failed guesses" brute-force gap.
+func TestTOTPChallenge_BruteForceCap(t *testing.T) {
+	ctx := context.Background()
+	key := testTOTPKey(t)
+	const email = "brute@example.com"
+	users := newUserStoreWithUser(t, email)
+	setup, _ := EnrolStart(ctx, users, key, email)
+	if _, err := EnrolConfirm(ctx, users, key, email, codeFor(t, setup.SecretBase32)); err != nil {
+		t.Fatalf("EnrolConfirm: %v", err)
+	}
+
+	valid := codeFor(t, setup.SecretBase32)
+	wrong := "000000"
+	if wrong == valid {
+		wrong = "111111"
+	}
+	challenges := NewMemTOTPChallengeStore()
+	tok, _ := IssueTOTPChallenge(ctx, challenges, email)
+
+	// Each wrong guess up to the cap returns ErrTOTPInvalid.
+	for i := 0; i < maxTOTPChallengeAttempts; i++ {
+		if _, err := ConsumeTOTPChallenge(ctx, challenges, users, key, tok, wrong, ""); err != ErrTOTPInvalid {
+			t.Fatalf("guess %d err = %v, want ErrTOTPInvalid", i+1, err)
+		}
+	}
+	// The challenge is now gone — a further attempt (even with the right code)
+	// is rejected as unknown, forcing a fresh sign-in.
+	if _, err := ConsumeTOTPChallenge(ctx, challenges, users, key, tok, valid, ""); err != ErrChallengeUnknown {
+		t.Fatalf("post-cap valid code err = %v, want ErrChallengeUnknown", err)
+	}
+}
+
+// TestTOTPChallenge_OrgOverride verifies the SSO leg's resolved-org override is
+// applied to the redeemed user, so a 2FA SSO sign-in lands in the org the user
+// signed into (with its membership roles), not their home org.
+func TestTOTPChallenge_OrgOverride(t *testing.T) {
+	ctx := context.Background()
+	key := testTOTPKey(t)
+	const email = "sso@example.com"
+	users := newUserStoreWithUser(t, email)
+	setup, _ := EnrolStart(ctx, users, key, email)
+	if _, err := EnrolConfirm(ctx, users, key, email, codeFor(t, setup.SecretBase32)); err != nil {
+		t.Fatalf("EnrolConfirm: %v", err)
+	}
+
+	roles := []core.Role{{Name: "editor"}}
+	challenges := NewMemTOTPChallengeStore()
+	tok, err := IssueTOTPChallengeWithOrg(ctx, challenges, email, "acme", "ws-prod", roles)
+	if err != nil {
+		t.Fatalf("IssueTOTPChallengeWithOrg: %v", err)
+	}
+	res, err := ConsumeTOTPChallenge(ctx, challenges, users, key, tok, codeFor(t, setup.SecretBase32), "")
+	if err != nil {
+		t.Fatalf("ConsumeTOTPChallenge: %v", err)
+	}
+	if res.User.Tenant != "acme" || res.User.Workspace != "ws-prod" {
+		t.Errorf("org override not applied: tenant=%q workspace=%q", res.User.Tenant, res.User.Workspace)
+	}
+	if len(res.User.Roles) != 1 || res.User.Roles[0].Name != "editor" {
+		t.Errorf("role override not applied: %+v", res.User.Roles)
 	}
 }

@@ -293,14 +293,18 @@ func (h *HTTPGateway) effectiveBaseURL(r *http.Request) string {
 		return ""
 	}
 	scheme := "http"
-	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
-		scheme = proto
-	} else if r.TLS != nil {
+	if h.requestIsHTTPS(r) {
 		scheme = "https"
 	}
-	host := r.Header.Get("X-Forwarded-Host")
-	if host == "" {
-		host = r.Host
+	// Only trust X-Forwarded-Host when the operator has opted into proxy
+	// headers (DAZYFLOW_TRUST_PROXY_HEADERS), mirroring requestIsHTTPS. Without
+	// the gate a client could set X-Forwarded-Host to reflect an attacker origin
+	// back into the convenience URLs (canvas/trigger/share links) it receives.
+	host := r.Host
+	if h.TrustProxyHeaders {
+		if fwd := r.Header.Get("X-Forwarded-Host"); fwd != "" {
+			host = fwd
+		}
 	}
 	if host == "" {
 		return ""

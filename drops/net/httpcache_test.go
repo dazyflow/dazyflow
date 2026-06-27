@@ -79,3 +79,36 @@ func TestValidatorsFromResponse(t *testing.T) {
 		t.Fatalf("unexpected validators: %+v", v)
 	}
 }
+
+// TestApplyConditionalHeaders_SentFlag covers the sent-validator signal used to
+// gate the 304 fast-path: it's true only when a validator was actually
+// attached, so an unsolicited 304 (nothing stored) isn't read as "not modified".
+func TestApplyConditionalHeaders_SentFlag(t *testing.T) {
+	req, _ := http.NewRequest("GET", "https://example.com", nil)
+	if applyConditionalHeaders(req, nil) {
+		t.Error("nil validators must report sent=false")
+	}
+	if applyConditionalHeaders(req, &cacheValidators{}) {
+		t.Error("empty validators must report sent=false")
+	}
+	req2, _ := http.NewRequest("GET", "https://example.com", nil)
+	if !applyConditionalHeaders(req2, &cacheValidators{ETag: `"e1"`}) {
+		t.Error("a stored ETag must report sent=true")
+	}
+}
+
+// TestClearCacheValidators verifies a stored validator is cleared (reads back
+// nil) so a fresh 2xx that dropped its ETag stops us sending a stale one.
+func TestClearCacheValidators(t *testing.T) {
+	_, cleanup := memCacheStore()
+	defer cleanup()
+	name := httpCacheName("g", "n", "k")
+	writeCacheValidators(context.Background(), "t", name, cacheValidators{ETag: `"abc"`})
+	if v := readCacheValidators(context.Background(), "t", name); v == nil {
+		t.Fatal("precondition: validator should be stored")
+	}
+	clearCacheValidators(context.Background(), "t", name)
+	if v := readCacheValidators(context.Background(), "t", name); v != nil {
+		t.Errorf("validator not cleared: %+v", v)
+	}
+}

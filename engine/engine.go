@@ -398,21 +398,38 @@ func (e *Engine) buildAndExecute(
 	// crash re-running this job ID), return the recorded result instead of
 	// sending the SMS/email/message a second time. Recorded AFTER a successful
 	// run, so the guarantee is at-least-once.
-	dedupe := manifest.DedupeWrites && e.WriteDedupe != nil && job.ID != ""
-	var result core.Result
-	var execErr error
-	if dedupe {
-		if prior, ok := e.WriteDedupe.Get(ctx, job.ID); ok {
-			result = prior
-		} else {
-			result, execErr = runMaybeFanned(ctx, manifest, job, secrets, transport, exec)
-			if execErr == nil && result.Status == core.StatusOK {
-				e.WriteDedupe.Put(ctx, job.ID, result)
+	//
+	// Dedupe is applied PER EXECUTION, not per node: when a list fans this node
+	// (one SMS per recipient), runMaybeFanned calls exec once per item in a
+	// stable order, so keying each call as job.ID#<idx> dedupes every send
+	// independently. A crash after sending items 0..2 of 5 then replays only
+	// items 3..4 on reclaim — a whole-node key would have re-sent 0..2, the very
+	// double-fire DedupeWrites exists to prevent. The non-fanned node is just
+	// the one-item case (key job.ID#0). idx is incremented from a single
+	// goroutine (runMaybeFanned's loop and the no-fan path are sequential), so
+	// no lock is needed.
+	if manifest.DedupeWrites && e.WriteDedupe != nil && job.ID != "" {
+		store := e.WriteDedupe
+		baseExec := exec
+		idx := 0
+		exec = func(ctx context.Context, transport core.Transport, j core.Job, secrets *secretSet) (core.Result, error) {
+			key := fmt.Sprintf("%s#%d", job.ID, idx)
+			idx++
+			if prior, ok := store.Get(ctx, key); ok {
+				return prior, nil
 			}
+			res, err := baseExec(ctx, transport, j, secrets)
+			if err == nil && res.Status == core.StatusOK {
+				// Record with a detached context: the side effect already
+				// succeeded, so a lost lease / tripped node deadline cancelling
+				// ctx must not also suppress the dedupe record (which would let
+				// the reclaim re-fire it).
+				store.Put(context.WithoutCancel(ctx), key, res)
+			}
+			return res, err
 		}
-	} else {
-		result, execErr = runMaybeFanned(ctx, manifest, job, secrets, transport, exec)
 	}
+	result, execErr := runMaybeFanned(ctx, manifest, job, secrets, transport, exec)
 
 	if result.JobID == "" {
 		result.JobID = job.ID

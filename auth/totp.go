@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"git.sr.ht/~klahr/dazyflow/core"
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 	qrcode "github.com/skip2/go-qrcode"
@@ -378,12 +379,32 @@ const (
 	FactorRecoveryCode Factor = "recovery_code"
 )
 
-// TOTPChallenge is the server-side record bridging the password step to
-// the second-factor step. It carries only the subject email — the
-// principal is rebuilt from the (verified) user record at consume time.
+// maxTOTPChallengeAttempts caps wrong second-factor guesses against a single
+// challenge before it is invalidated. Without it a challenge lives the full
+// TOTPChallengeTTL and accepts unlimited guesses, so the only brake on a
+// brute-force pass is the per-IP rate limit — which a distributed attacker
+// sidesteps. Five is generous for a human fat-fingering a 6-digit code while
+// keeping the per-challenge guess budget far below the 10^6 space.
+const maxTOTPChallengeAttempts = 5
+
+// TOTPChallenge is the server-side record bridging the first sign-in step
+// (password OR verified SSO) to the second-factor step. It carries the subject
+// email — the principal is rebuilt from the (verified) user record at consume
+// time — plus a failed-attempt counter, and an OPTIONAL resolved-org override
+// used by the SSO leg so the second factor lands the user in the org they were
+// signing into rather than their home org.
 type TOTPChallenge struct {
 	Email     string
 	ExpiresAt time.Time
+	// Attempts counts wrong code/recovery guesses; at maxTOTPChallengeAttempts
+	// the challenge is dropped (the user must re-authenticate).
+	Attempts int
+	// Tenant/Workspace/Roles, when Tenant != "", override the redeemed user's
+	// home org at session-issue time (set by the SSO leg via
+	// IssueTOTPChallengeWithOrg). Empty for the password leg.
+	Tenant    string
+	Workspace string
+	Roles     []core.Role
 }
 
 // TOTPChallengeStore is the lookup boundary for login challenges. The
@@ -446,11 +467,25 @@ func (s *MemTOTPChallengeStore) sweepLocked() {
 // the password step but still owes a second factor. The token is handed
 // to the client in the sign-in response; ConsumeTOTPChallenge redeems it.
 func IssueTOTPChallenge(ctx context.Context, store TOTPChallengeStore, email string) (string, error) {
+	return IssueTOTPChallengeWithOrg(ctx, store, email, "", "", nil)
+}
+
+// IssueTOTPChallengeWithOrg is IssueTOTPChallenge plus a resolved-org override
+// to carry through the second factor. The SSO leg uses it so a 2FA user lands
+// in the org they signed into (its membership roles), not their home org; pass
+// empty tenant for the password leg (equivalent to IssueTOTPChallenge).
+func IssueTOTPChallengeWithOrg(ctx context.Context, store TOTPChallengeStore, email, tenant, workspace string, roles []core.Role) (string, error) {
 	tok, err := newChallengeToken()
 	if err != nil {
 		return "", err
 	}
-	c := TOTPChallenge{Email: email, ExpiresAt: time.Now().Add(TOTPChallengeTTL)}
+	c := TOTPChallenge{
+		Email:     email,
+		ExpiresAt: time.Now().Add(TOTPChallengeTTL),
+		Tenant:    tenant,
+		Workspace: workspace,
+		Roles:     roles,
+	}
 	if err := store.Put(ctx, tok, c); err != nil {
 		return "", err
 	}
@@ -492,6 +527,19 @@ func ConsumeTOTPChallenge(ctx context.Context, challenges TOTPChallengeStore, us
 		return TOTPChallengeResult{}, ErrTOTPNotEnrolled
 	}
 
+	// recordWrongGuess bounds brute force against this challenge: each wrong
+	// code/recovery guess increments the counter, and at the cap the challenge
+	// is dropped so further guesses get ErrChallengeUnknown — the attacker must
+	// redo the (rate-limited, password/SSO-gated) first leg to get a new one.
+	recordWrongGuess := func() {
+		c.Attempts++
+		if c.Attempts >= maxTOTPChallengeAttempts {
+			_ = challenges.Delete(ctx, token)
+			return
+		}
+		_ = challenges.Put(ctx, token, c)
+	}
+
 	var factor Factor
 	switch {
 	case strings.TrimSpace(code) != "":
@@ -501,6 +549,7 @@ func ConsumeTOTPChallenge(ctx context.Context, challenges TOTPChallengeStore, us
 		}
 		step, ok := validateTOTPStep(code, secret, time.Now())
 		if !ok {
+			recordWrongGuess()
 			return TOTPChallengeResult{}, ErrTOTPInvalid
 		}
 		// Replay protection: a TOTP code stays valid for ~90s. Reject a
@@ -508,6 +557,7 @@ func ConsumeTOTPChallenge(ctx context.Context, challenges TOTPChallengeStore, us
 		// an observed/sniffed code can't be redeemed a second time inside
 		// its window. Persist the consumed step before completing login.
 		if u.TOTPLastStep != 0 && step <= u.TOTPLastStep {
+			recordWrongGuess()
 			return TOTPChallengeResult{}, ErrTOTPInvalid
 		}
 		u.TOTPLastStep = step
@@ -518,6 +568,7 @@ func ConsumeTOTPChallenge(ctx context.Context, challenges TOTPChallengeStore, us
 	case strings.TrimSpace(recoveryCode) != "":
 		remaining, ok := consumeRecoveryCode(u.RecoveryCodeHashes, recoveryCode)
 		if !ok {
+			recordWrongGuess()
 			return TOTPChallengeResult{}, ErrRecoveryCodeInvalid
 		}
 		// Persist the burned code before completing login so a replay of
@@ -533,6 +584,14 @@ func ConsumeTOTPChallenge(ctx context.Context, challenges TOTPChallengeStore, us
 
 	// Single-use: drop the challenge so it can't be redeemed twice.
 	_ = challenges.Delete(ctx, token)
+	// Apply the SSO leg's resolved-org override (if any) so the session is
+	// issued against the org the user signed into, matching the non-2FA SSO
+	// path. The password leg leaves these empty → the user's home org stands.
+	if c.Tenant != "" {
+		u.Tenant = c.Tenant
+		u.Workspace = c.Workspace
+		u.Roles = c.Roles
+	}
 	return TOTPChallengeResult{User: u, Factor: factor}, nil
 }
 

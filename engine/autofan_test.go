@@ -116,3 +116,18 @@ func TestRunMaybeFanned(t *testing.T) {
 		}
 	})
 }
+
+// TestDetectAutoFan_SkipsFlowControl locks in that a flow-control drop
+// (NoPassthrough — a router/predicate like Branch) never auto-fans, even when a
+// list lands on its typed scalar input. Otherwise a list of bools into Branch's
+// `condition` would silently turn the router into an aggregating loop.
+func TestDetectAutoFan_SkipsFlowControl(t *testing.T) {
+	list := core.Ref{Inline: []any{true, false}}
+	m := core.Manifest{
+		NoPassthrough: true,
+		Inputs:        []core.Port{{Port: "condition", MIME: []string{"application/json"}}},
+	}
+	if _, _, ok := detectAutoFan(m, map[string]core.Ref{"condition": list}); ok {
+		t.Fatal("a NoPassthrough flow-control drop must not auto-fan")
+	}
+}

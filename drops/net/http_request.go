@@ -172,8 +172,14 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 	cacheKey := strings.TrimSpace(params.StringDefault(job.Params, "cache_key", ""))
 	conditional := cacheKey != "" && httpCacheEnabled() && (method == http.MethodGet || method == http.MethodHead)
 	cacheName := httpCacheName(job.GraphID, job.NodeID, cacheKey)
+	// sentConditional is true only once we've actually attached an
+	// If-None-Match/If-Modified-Since — i.e. there were stored validators to
+	// send. A 304 is only meaningful in answer to such a header, so this gates
+	// the 304 fast-path below (an unsolicited 304 — e.g. on the very first poll
+	// with nothing stored — must fall through to normal handling).
+	sentConditional := false
 	if conditional {
-		applyConditionalHeaders(req, readCacheValidators(ctx, job.Tenant, cacheName))
+		sentConditional = applyConditionalHeaders(req, readCacheValidators(ctx, job.Tenant, cacheName))
 	}
 
 	params.EmitProgress(progress, job, 0.1, fmt.Sprintf("%s %s", method, url))
@@ -214,7 +220,7 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 	// "not modified" result a downstream Branch can skip on, and tell the
 	// scheduler this poll was empty so it can widen the interval. Validators
 	// are unchanged, so nothing to re-store.
-	if conditional && resp.StatusCode == http.StatusNotModified {
+	if sentConditional && resp.StatusCode == http.StatusNotModified {
 		pollstate.Report(ctx, job, false)
 		return core.Result{
 			JobID:  job.ID,
@@ -236,7 +242,17 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 	// can be conditional, and mark the poll active (data delivered) so the
 	// scheduler keeps the base cadence.
 	if conditional {
-		writeCacheValidators(ctx, job.Tenant, cacheName, validatorsFromResponse(resp.Header))
+		v := validatorsFromResponse(resp.Header)
+		switch {
+		case v.ETag != "" || v.LastModified != "":
+			writeCacheValidators(ctx, job.Tenant, cacheName, v)
+		case sentConditional:
+			// We sent a validator but this fresh response carries none — the
+			// upstream dropped it. Clear the stale one so we stop conditioning
+			// on a validator the server no longer recognises. (When we sent
+			// nothing, there's nothing stored to clear.)
+			clearCacheValidators(ctx, job.Tenant, cacheName)
+		}
 		pollstate.Report(ctx, job, true)
 	}
 
