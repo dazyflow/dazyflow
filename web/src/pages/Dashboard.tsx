@@ -84,10 +84,22 @@ export function Dashboard() {
     return { runsToday, successRate, finishedCount: finished.length, liveFlows };
   }, [runs, flows]);
 
-  const failedRuns = useMemo(
-    () => runs.filter((r) => r.status === "failed").slice(0, ATTENTION_MAX),
-    [runs],
-  );
+  // A flow needs attention when its MOST RECENT run failed — not every
+  // historical failure. Runs arrive newest-first (ORDER BY enqueued_at DESC),
+  // so the first run we see for a graph is its latest; once that flow runs
+  // again — succeeds, or is back to running/pending — it drops off this list.
+  // One entry per flow so a flaky flow doesn't flood the panel.
+  const attentionRuns = useMemo(() => {
+    const seen = new Set<string>();
+    const out: RunSummary[] = [];
+    for (const r of runs) {
+      if (seen.has(r.graph_id)) continue; // already saw this flow's latest run
+      seen.add(r.graph_id);
+      if (r.status === "failed") out.push(r);
+      if (out.length >= ATTENTION_MAX) break;
+    }
+    return out;
+  }, [runs]);
   const recentRuns = useMemo(() => runs.slice(0, RECENT_MAX), [runs]);
   const flowName = (id: string) =>
     flows.find((f) => f.id === id)?.name || id;
@@ -153,8 +165,8 @@ export function Dashboard() {
         <StatCard
           icon={<AlertTriangle size={18} />}
           label={t("dashboard.needsAttention")}
-          value={loading ? "—" : String(failedRuns.length)}
-          tone={failedRuns.length > 0 ? "bad" : "good"}
+          value={loading ? "—" : String(attentionRuns.length)}
+          tone={attentionRuns.length > 0 ? "bad" : "good"}
           to="/runs?status=failed"
         />
         <StatCard
@@ -172,7 +184,7 @@ export function Dashboard() {
         <section className="card dash-panel">
           <div className="dash-panel-head">
             <h2>{t("dashboard.needsAttention")}</h2>
-            {failedRuns.length > 0 && (
+            {attentionRuns.length > 0 && (
               <Link to="/runs?status=failed" className="dash-panel-link">
                 {t("dashboard.viewAll")} <ArrowRight size={13} />
               </Link>
@@ -180,14 +192,14 @@ export function Dashboard() {
           </div>
           {loading ? (
             <p className="dash-empty">{t("common.loading")}</p>
-          ) : failedRuns.length === 0 ? (
+          ) : attentionRuns.length === 0 ? (
             <p className="dash-empty dash-empty-good">
               <CheckCircle2 size={16} />
               {t("dashboard.noFailures")}
             </p>
           ) : (
             <ul className="dash-runlist">
-              {failedRuns.map((r) => (
+              {attentionRuns.map((r) => (
                 <li key={r.id}>
                   <Link to={`/runs/${encodeURIComponent(r.id)}`}>
                     <span className="status-dot failed" />
