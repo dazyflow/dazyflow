@@ -9,7 +9,6 @@ import { Button } from "../components/Button";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
 import { explainApiError } from "../lib/explainApiError";
-import { shouldShowTenantID } from "../lib/visibleTenant";
 import { absoluteTime, formatDateTime } from "../lib/datetime";
 import type { PendingApproval } from "../types";
 
@@ -19,7 +18,7 @@ import type { PendingApproval } from "../types";
 // which Service.Approve services (same code path as the HMAC endpoint).
 export function Approvals() {
   const { t } = useTranslation();
-  const { token, me, tenants, activeTenant, activeWorkspace } = useAuth();
+  const { token, me, activeTenant, activeWorkspace } = useAuth();
   const [items, setItems] = useState<PendingApproval[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -123,21 +122,15 @@ export function Approvals() {
       <div className="page-title">
         <div>
           <h1>{t("approvals.title")}</h1>
-          <div className="sub">
-            {shouldShowTenantID(me, tenants.length)
-              ? t("approvals.subtitle", { tenant: activeTenant || me?.tenant })
-              : t("approvals.subtitleWorkspaceOnly")}
-            {items.length > 0 && (
-              <>
-                {" · "}
-                <Trans
-                  i18nKey="approvals.waitingSuffix"
-                  values={{ count: items.length }}
-                  components={[<strong />]}
-                />
-              </>
-            )}
-          </div>
+          {items.length > 0 && (
+            <div className="sub">
+              <Trans
+                i18nKey="approvals.waitingSuffix"
+                values={{ count: items.length }}
+                components={[<strong />]}
+              />
+            </div>
+          )}
         </div>
       </div>
 

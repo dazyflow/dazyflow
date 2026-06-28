@@ -733,8 +733,6 @@
   },
   "approvals": {
     "title": "Godkännanden",
-    "subtitle": "Pågående i {{tenant}}",
-    "subtitleWorkspaceOnly": "Pågående",
     "waitingSuffix": "<0>{{count}}</0> väntande",
     "inboxZero": "Inbox zero — inget väntar på ditt beslut.",
     "commentPlaceholder": "Lägg till en kommentar (valfritt) — skickas med ditt beslut",

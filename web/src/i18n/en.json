@@ -735,8 +735,6 @@
   },
   "approvals": {
     "title": "Approvals",
-    "subtitle": "Pending in {{tenant}}",
-    "subtitleWorkspaceOnly": "Pending",
     "waitingSuffix": "<0>{{count}}</0> waiting",
     "inboxZero": "Inbox zero — nothing waiting on your decision.",
     "commentPlaceholder": "Add a comment (optional) — sent with your decision",
