@@ -114,7 +114,7 @@ export function Dashboard() {
             <Share2 size={16} style={{ marginRight: 6 }} />
             {t("share.action")}
           </Button>
-          <Link to="/flows/new" className="primary dash-new">
+          <Link to="/flows/new" className="btn primary dash-new">
             <Plus size={16} style={{ marginRight: 6 }} />
             {t("flowList.newFlow")}
           </Link>
