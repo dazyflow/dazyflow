@@ -25,7 +25,9 @@ import type { FlowSummary, PendingApproval, RunSummary } from "../types";
 // pro automation tools open to. It answers four questions at a glance (runs
 // today, success rate, failures needing attention, approvals waiting), then
 // lists the failed runs to act on and the most recent activity. All derived
-// client-side from three cheap list calls; no new backend.
+// client-side from three cheap list calls; no new backend. Private and
+// unpublished (needs_publish) flows — and their runs — are excluded so
+// owner-scoped test-mode activity doesn't skew the workspace health numbers.
 const RUN_WINDOW = 200; // recent runs to summarize
 const ATTENTION_MAX = 5;
 const RECENT_MAX = 8;
@@ -67,22 +69,39 @@ export function Dashboard() {
     };
   }, [token, activeTenant, activeWorkspace]);
 
+  // Only "real" flows count toward the overview. Private flows are scoped to
+  // a single owner (the public board hides them too), and needs_publish flows
+  // are configured-but-unpublished drafts the scheduler won't run yet — both
+  // are effectively in test mode, so their runs would skew the health stats.
+  // We exclude both the flows and any run belonging to them.
+  const countedFlows = useMemo(
+    () =>
+      flows.filter(
+        (f) => f.visibility !== "private" && f.run_status !== "needs_publish",
+      ),
+    [flows],
+  );
+  const countedRuns = useMemo(() => {
+    const ids = new Set(countedFlows.map((f) => f.id));
+    return runs.filter((r) => ids.has(r.graph_id));
+  }, [runs, countedFlows]);
+
   const stats = useMemo(() => {
     const today = startOfToday();
-    const runsToday = runs.filter((r) => {
+    const runsToday = countedRuns.filter((r) => {
       const ts = Date.parse(r.started_at || r.enqueued_at || "");
       return Number.isFinite(ts) && ts >= today;
     }).length;
-    const finished = runs.filter(
+    const finished = countedRuns.filter(
       (r) => r.status === "succeeded" || r.status === "failed",
     );
     const succeeded = finished.filter((r) => r.status === "succeeded").length;
     const successRate = finished.length
       ? Math.round((succeeded / finished.length) * 100)
       : null;
-    const liveFlows = flows.filter((f) => f.run_status === "live").length;
+    const liveFlows = countedFlows.filter((f) => f.run_status === "live").length;
     return { runsToday, successRate, finishedCount: finished.length, liveFlows };
-  }, [runs, flows]);
+  }, [countedRuns, countedFlows]);
 
   // A flow needs attention when its MOST RECENT run failed — not every
   // historical failure. Runs arrive newest-first (ORDER BY enqueued_at DESC),
@@ -92,15 +111,18 @@ export function Dashboard() {
   const attentionRuns = useMemo(() => {
     const seen = new Set<string>();
     const out: RunSummary[] = [];
-    for (const r of runs) {
+    for (const r of countedRuns) {
       if (seen.has(r.graph_id)) continue; // already saw this flow's latest run
       seen.add(r.graph_id);
       if (r.status === "failed") out.push(r);
       if (out.length >= ATTENTION_MAX) break;
     }
     return out;
-  }, [runs]);
-  const recentRuns = useMemo(() => runs.slice(0, RECENT_MAX), [runs]);
+  }, [countedRuns]);
+  const recentRuns = useMemo(
+    () => countedRuns.slice(0, RECENT_MAX),
+    [countedRuns],
+  );
   const flowName = (id: string) =>
     flows.find((f) => f.id === id)?.name || id;
 
@@ -257,7 +279,7 @@ export function Dashboard() {
       <div className="dash-foot">
         <Workflow size={15} />
         {t("dashboard.flowSummary", {
-          total: flows.length,
+          total: countedFlows.length,
           live: stats.liveFlows,
         })}
         <Link to="/flows" className="dash-panel-link">
