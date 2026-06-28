@@ -9,7 +9,6 @@ import { useAuth } from "../auth";
 import { api } from "../api";
 import { Button } from "../components/Button";
 import { ConfirmModal } from "../components/ConfirmModal";
-import { shouldShowTenantID } from "../lib/visibleTenant";
 import { explainApiError } from "../lib/explainApiError";
 import { formatDateTime } from "../lib/datetime";
 import type { RunSummary, JobStatus } from "../types";
@@ -48,7 +47,7 @@ export function RunList() {
     { labelKey: "runList.filterFailed", value: "failed" },
     { labelKey: "runList.filterSucceeded", value: "succeeded" },
   ];
-  const { token, me, tenants, activeTenant, activeWorkspace } = useAuth();
+  const { token, me, activeTenant, activeWorkspace } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [runs, setRuns] = useState<RunSummary[]>([]);
@@ -286,11 +285,6 @@ export function RunList() {
       <div className="page-title">
         <div>
           <h1>{t("runList.title")}</h1>
-          <div className="sub">
-            {shouldShowTenantID(me, tenants.length)
-              ? t("runList.subtitle", { tenant: activeTenant || me?.tenant })
-              : t("runList.subtitleWorkspaceOnly")}
-          </div>
         </div>
       </div>
 

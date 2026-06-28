@@ -1301,8 +1301,6 @@
   },
   "runList": {
     "title": "Runs",
-    "subtitle": "All runs in {{tenant}}",
-    "subtitleWorkspaceOnly": "All runs",
     "filterAll": "All",
     "filterRunning": "Running",
     "filterAwaiting": "Waiting for approval",
