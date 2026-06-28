@@ -308,6 +308,35 @@ func TestPublicWorkspaceOverview_NeedsAttentionByFlow(t *testing.T) {
 	}
 }
 
+// TestPublicWorkspaceOverview_SuccessRateRounds guards the success-rate
+// rounding: 2 of 3 finished = 66.67%, which must round to 67 (matching the
+// Dashboard's Math.round), not truncate to 66.
+func TestPublicWorkspaceOverview_SuccessRateRounds(t *testing.T) {
+	h := newShareHarness(t)
+	ctx := context.Background()
+
+	if _, err := h.svc.SaveGraph(ctx, h.editor,
+		core.Graph{ID: "g", Tenant: "t", Workspace: "ws", Name: "G"}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	now := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
+	h.enqueueRun(t, ctx, "s1", "g", core.JobStatusSucceeded, now.Add(-3*time.Hour))
+	h.enqueueRun(t, ctx, "s2", "g", core.JobStatusSucceeded, now.Add(-2*time.Hour))
+	h.enqueueRun(t, ctx, "x1", "g", core.JobStatusFailed, now.Add(-1*time.Hour))
+
+	sh, err := h.svc.CreateWorkspaceShare(ctx, h.editor, "t", "ws")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := h.svc.PublicWorkspaceOverview(ctx, sh.Token, now)
+	if err != nil {
+		t.Fatalf("overview: %v", err)
+	}
+	if data.Stats.SuccessRate == nil || *data.Stats.SuccessRate != 67 {
+		t.Errorf("success_rate = %v, want 67 (2/3 rounded)", data.Stats.SuccessRate)
+	}
+}
+
 func TestPublicWorkspaceOverview_UnknownToken(t *testing.T) {
 	h := newShareHarness(t)
 	if _, err := h.svc.PublicWorkspaceOverview(context.Background(), "nope", time.Now()); err == nil {

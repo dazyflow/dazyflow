@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -320,7 +321,9 @@ func (s *Service) PublicWorkspaceOverview(ctx context.Context, token string, now
 	data.Stats.Failed = needsAttention
 	data.Stats.Running = running
 	if finished > 0 {
-		rate := int(float64(succeeded) / float64(finished) * 100)
+		// Round (not truncate) so this matches the Dashboard's Math.round — a
+		// truncating int() here showed 76% where the overview showed 77%.
+		rate := int(math.Round(float64(succeeded) / float64(finished) * 100))
 		data.Stats.SuccessRate = &rate
 	}
 	if data.Flows == nil {
