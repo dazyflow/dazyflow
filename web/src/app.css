@@ -5353,7 +5353,18 @@ button.warning:hover:not(:disabled) {
    ink colour: github.svg is pure white (invisible in light mode) and
    smhi.svg is pure black (invisible in dark mode). Invert just those two
    marks on the offending theme so the silhouette stays legible. Any future
-   monochrome mark with the same problem can be added to the matching list. */
+   monochrome mark with the same problem can be added to the matching list.
+
+   `filter` recolours the element's WHOLE box, backdrop included — so any
+   logo chip behind the mark (e.g. the Apps card's --surface-2 tile) flips
+   along with it, turning near-black in light mode and swallowing the now
+   black silhouette. Strip the chip from these marks so the invert only
+   touches the silhouette; it then sits on the card surface, legible in
+   both themes. */
+img[src$="/brands/github.svg"],
+img[src$="/brands/smhi.svg"] {
+  background: transparent !important;
+}
 :root[data-theme="light"] img[src$="/brands/github.svg"],
 :root[data-theme="dark"] img[src$="/brands/smhi.svg"] {
   filter: invert(1);
