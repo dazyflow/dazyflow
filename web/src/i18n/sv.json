@@ -1357,7 +1357,18 @@
     "never": "körs aldrig",
     "everyHours": "var {{count}}:e timme",
     "everyMinutes": "var {{count}}:e minut",
-    "everySeconds": "var {{count}}:e sekund"
+    "everySeconds": "var {{count}}:e sekund",
+    "relToday": "Idag {{time}}",
+    "relTomorrow": "Imorgon {{time}}",
+    "relSoon": "om mindre än en minut",
+    "relInMinutes_one": "om {{count}} minut",
+    "relInMinutes_other": "om {{count}} minuter"
+  },
+  "relative": {
+    "justNow": "nu",
+    "minutesAgo": "{{count}} min sedan",
+    "hoursAgo": "{{count}} h sedan",
+    "daysAgo": "{{count}} dagar sedan"
   },
   "runDetail": {
     "loading": "Laddar körning…",

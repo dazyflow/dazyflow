@@ -199,7 +199,7 @@ export function Dashboard() {
                       className="dash-run-time"
                       title={formatDateTime(r.started_at || r.enqueued_at)}
                     >
-                      {formatRelative(r.started_at || r.enqueued_at)}
+                      {formatRelative(r.started_at || r.enqueued_at, t)}
                     </span>
                   </Link>
                 </li>
@@ -231,7 +231,7 @@ export function Dashboard() {
                       className="dash-run-time"
                       title={formatDateTime(r.started_at || r.enqueued_at)}
                     >
-                      {formatRelative(r.started_at || r.enqueued_at)}
+                      {formatRelative(r.started_at || r.enqueued_at, t)}
                     </span>
                   </Link>
                 </li>

@@ -491,6 +491,7 @@ export function FlowList() {
                       {t("flowList.lastRun", {
                         when: formatRelative(
                           lastRun.started_at || lastRun.enqueued_at,
+                          t,
                         ),
                       })}
                     </span>

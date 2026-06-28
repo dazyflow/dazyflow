@@ -217,7 +217,7 @@ export function PublicOverview() {
                   )}
                   {f.last_run_at && (
                     <span className="tv-flow-time">
-                      {formatRelative(f.last_run_at)}
+                      {formatRelative(f.last_run_at, t)}
                     </span>
                   )}
                   {f.next_run_at && (
@@ -248,7 +248,7 @@ export function PublicOverview() {
         </span>
         {data && (
           <span className="tv-updated">
-            {t("tv.updated", { when: formatRelative(data.generated_at) })}
+            {t("tv.updated", { when: formatRelative(data.generated_at, t) })}
           </span>
         )}
       </footer>

@@ -1386,6 +1386,12 @@
     "relInMinutes_one": "in {{count}} minute",
     "relInMinutes_other": "in {{count}} minutes"
   },
+  "relative": {
+    "justNow": "just now",
+    "minutesAgo": "{{count}}m ago",
+    "hoursAgo": "{{count}}h ago",
+    "daysAgo": "{{count}}d ago"
+  },
   "runDetail": {
     "loading": "Loading run…",
     "backToRuns": "Back to runs",
