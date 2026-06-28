@@ -14,8 +14,9 @@ import (
 )
 
 // TestPublicWorkspaceOverview_NextRun checks the TV-board wiring: a published,
-// cron-triggered flow is "live" and surfaces next_run_at; an unpublished one is
-// "needs publish" (the scheduler won't fire it) and surfaces nothing.
+// cron-triggered flow is "live" and surfaces next_run_at; an unpublished one
+// ("needs publish") is an effectively test-mode draft and is kept off the board
+// entirely, so it never appears as a tile.
 func TestPublicWorkspaceOverview_NextRun(t *testing.T) {
 	h := newShareHarness(t)
 	ctx := context.Background()
@@ -56,8 +57,11 @@ func TestPublicWorkspaceOverview_NextRun(t *testing.T) {
 			np = &data.Flows[i]
 		}
 	}
-	if live == nil || np == nil {
-		t.Fatalf("expected both tiles, got %+v", data.Flows)
+	if live == nil {
+		t.Fatalf("expected the live tile, got %+v", data.Flows)
+	}
+	if np != nil {
+		t.Errorf("unpublished (needs_publish) flow should be kept off the board, got %+v", np)
 	}
 	if live.RunStatus != core.FlowLive {
 		t.Errorf("published cron flow run_status = %q, want live", live.RunStatus)
@@ -66,11 +70,5 @@ func TestPublicWorkspaceOverview_NextRun(t *testing.T) {
 		t.Error("live cron flow should surface next_run_at")
 	} else if !live.NextRunAt.After(time.Now()) {
 		t.Errorf("next_run_at = %v, want a future time", live.NextRunAt)
-	}
-	if np.RunStatus != core.FlowNeedsPublish {
-		t.Errorf("unpublished cron flow run_status = %q, want needs_publish", np.RunStatus)
-	}
-	if np.NextRunAt != nil {
-		t.Errorf("unpublished flow should have no next_run_at, got %v", np.NextRunAt)
 	}
 }

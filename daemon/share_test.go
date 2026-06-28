@@ -244,6 +244,70 @@ func TestPublicWorkspaceOverview_SanitizedAndScoped(t *testing.T) {
 	}
 }
 
+// TestPublicWorkspaceOverview_NeedsAttentionByFlow pins the "needs attention"
+// semantics so the board matches the authenticated Dashboard: it counts FLOWS
+// whose latest run failed (one per flow, not per failed run), a flow that has
+// since recovered drops off, and an unpublished (needs_publish) draft is kept
+// off the board entirely — no tile, and out of every counter.
+func TestPublicWorkspaceOverview_NeedsAttentionByFlow(t *testing.T) {
+	h := newShareHarness(t)
+	ctx := context.Background()
+
+	cron := []core.Node{{ID: "c", Module: "cron_trigger", Params: map[string]any{"cron": "*/5 * * * *"}}}
+	for _, g := range []core.Graph{
+		{ID: "flaky", Tenant: "t", Workspace: "ws", Name: "Flaky"},
+		{ID: "recovered", Tenant: "t", Workspace: "ws", Name: "Recovered"},
+		{ID: "draft", Tenant: "t", Workspace: "ws", Name: "Draft", Nodes: cron}, // unpublished → needs_publish
+	} {
+		if _, err := h.svc.SaveGraph(ctx, h.editor, g); err != nil {
+			t.Fatalf("save %s: %v", g.ID, err)
+		}
+	}
+
+	now := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
+	// flaky: two failures, latest also a failure → counts ONCE.
+	h.enqueueRun(t, ctx, "f1", "flaky", core.JobStatusFailed, now.Add(-2*time.Hour))
+	h.enqueueRun(t, ctx, "f2", "flaky", core.JobStatusFailed, now.Add(-30*time.Minute))
+	// recovered: failed then succeeded (succeeded is latest) → not counted.
+	h.enqueueRun(t, ctx, "r1", "recovered", core.JobStatusFailed, now.Add(-2*time.Hour))
+	h.enqueueRun(t, ctx, "r2", "recovered", core.JobStatusSucceeded, now.Add(-20*time.Minute))
+	// draft is needs_publish: its failed run must not reach the stats at all.
+	h.enqueueRun(t, ctx, "d1", "draft", core.JobStatusFailed, now.Add(-10*time.Minute))
+
+	sh, err := h.svc.CreateWorkspaceShare(ctx, h.editor, "t", "ws")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := h.svc.PublicWorkspaceOverview(ctx, sh.Token, now)
+	if err != nil {
+		t.Fatalf("overview: %v", err)
+	}
+
+	// Only "flaky" needs attention: one entry per flow, "recovered" cleared
+	// itself, and the unpublished "draft" is excluded.
+	if data.Stats.Failed != 1 {
+		t.Errorf("failed = %d, want 1 (flaky only)", data.Stats.Failed)
+	}
+	// Counted runs are flaky+recovered's only (draft excluded): 4 runs today,
+	// 4 finished (3 failed / 1 ok) → 25%.
+	if data.Stats.RunsToday != 4 {
+		t.Errorf("runs_today = %d, want 4 (draft's run excluded)", data.Stats.RunsToday)
+	}
+	if data.Stats.SuccessRate == nil || *data.Stats.SuccessRate != 25 {
+		t.Errorf("success_rate = %v, want 25", data.Stats.SuccessRate)
+	}
+	// The unpublished draft is kept off the board entirely, so total_flows
+	// counts only the two real flows.
+	for i := range data.Flows {
+		if data.Flows[i].Name == "Draft" {
+			t.Errorf("unpublished draft should not appear on the board, got %+v", data.Flows[i])
+		}
+	}
+	if data.Stats.TotalFlows != 2 {
+		t.Errorf("total_flows = %d, want 2 (draft excluded)", data.Stats.TotalFlows)
+	}
+}
+
 func TestPublicWorkspaceOverview_UnknownToken(t *testing.T) {
 	h := newShareHarness(t)
 	if _, err := h.svc.PublicWorkspaceOverview(context.Background(), "nope", time.Now()); err == nil {

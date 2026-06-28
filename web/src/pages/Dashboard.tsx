@@ -107,7 +107,9 @@ export function Dashboard() {
   // historical failure. Runs arrive newest-first (ORDER BY enqueued_at DESC),
   // so the first run we see for a graph is its latest; once that flow runs
   // again — succeeds, or is back to running/pending — it drops off this list.
-  // One entry per flow so a flaky flow doesn't flood the panel.
+  // One entry per flow so a flaky flow doesn't flood the count. Uncapped: the
+  // stat card shows the true total (and must match the public board, which
+  // counts the same way); the panel below renders only the first ATTENTION_MAX.
   const attentionRuns = useMemo(() => {
     const seen = new Set<string>();
     const out: RunSummary[] = [];
@@ -115,7 +117,6 @@ export function Dashboard() {
       if (seen.has(r.graph_id)) continue; // already saw this flow's latest run
       seen.add(r.graph_id);
       if (r.status === "failed") out.push(r);
-      if (out.length >= ATTENTION_MAX) break;
     }
     return out;
   }, [countedRuns]);
@@ -221,7 +222,7 @@ export function Dashboard() {
             </p>
           ) : (
             <ul className="dash-runlist">
-              {attentionRuns.map((r) => (
+              {attentionRuns.slice(0, ATTENTION_MAX).map((r) => (
                 <li key={r.id}>
                   <Link to={`/runs/${encodeURIComponent(r.id)}`}>
                     <span className="status-dot failed" />

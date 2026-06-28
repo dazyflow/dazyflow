@@ -200,7 +200,7 @@ func (s *Service) PublicWorkspaceOverview(ctx context.Context, token string, now
 		return PublicOverviewData{}, err // core.ErrNotFound bubbles to a 404
 	}
 
-	// Latest run per flow + aggregate counters, from the recent-runs window.
+	// Recent-run window — matches the Dashboard's so the two surfaces agree.
 	runs, err := s.Jobs.ListGraphRuns(ctx, core.ListGraphRunsOpts{
 		Tenant:    share.Tenant,
 		Workspace: share.Workspace,
@@ -209,57 +209,35 @@ func (s *Service) PublicWorkspaceOverview(ctx context.Context, token string, now
 	if err != nil {
 		return PublicOverviewData{}, err
 	}
+	// First pass: latest run + recent-run strip per graph. Runs come
+	// newest-first, so the first one we see for a graph is its latest.
 	type latest struct {
 		status core.JobStatus
 		at     time.Time
 	}
 	latestByGraph := map[string]latest{}
 	historyByGraph := map[string][]core.JobStatus{}
-	dayStart := startOfDay(now)
-	var runsToday, failed, running, finished, succeeded int
 	for _, r := range runs {
-		ref := runStartedOrEnqueued(r)
-		if !ref.IsZero() && !ref.Before(dayStart) {
-			runsToday++
-		}
-		switch r.Status {
-		case core.JobStatusFailed:
-			failed++
-			finished++
-		case core.JobStatusSucceeded:
-			succeeded++
-			finished++
-		case core.JobStatusRunning, core.JobStatusQueued:
-			running++
-		}
-		// Runs come newest-first, so the first one we see per graph is its latest.
 		if _, seen := latestByGraph[r.GraphID]; !seen {
-			latestByGraph[r.GraphID] = latest{status: r.Status, at: ref}
+			latestByGraph[r.GraphID] = latest{status: r.Status, at: runStartedOrEnqueued(r)}
 		}
-		// Collect the recent-run strip per flow, newest first, capped.
 		if len(historyByGraph[r.GraphID]) < shareFlowHistory {
 			historyByGraph[r.GraphID] = append(historyByGraph[r.GraphID], r.Status)
 		}
 	}
 
 	label, icon := s.workspaceBrand(ctx, share.Tenant)
-	data := PublicOverviewData{
-		Label:       label,
-		Icon:        icon,
-		GeneratedAt: now,
-		Stats: PublicStats{
-			RunsToday: runsToday,
-			Failed:    failed,
-			Running:   running,
-		},
-	}
-	if finished > 0 {
-		rate := int(float64(succeeded) / float64(finished) * 100)
-		data.Stats.SuccessRate = &rate
-	}
+	data := PublicOverviewData{Label: label, Icon: icon, GeneratedAt: now}
 
-	// Flow tiles — names + automation posture. Best-effort: if the workspace
-	// store is unavailable we still return the run-derived counters.
+	// Flow tiles + the "counted" set the stats are scoped to — one and the
+	// same, so the board and the authenticated Dashboard show identical
+	// numbers. Excluded entirely (no tile, no count): private flows
+	// (owner-scoped, names could be sensitive) and needs_publish flows
+	// (configured-but-unpublished drafts the scheduler won't run — effectively
+	// test mode, and their runs would skew the numbers). Best-effort: an
+	// unavailable store yields an empty board rather than unscoped counters.
+	counted := map[string]bool{}
+	var needsAttention int
 	if store, werr := s.Workspaces.Open(share.Tenant, share.Workspace); werr == nil {
 		ids, _ := store.ListGraphs()
 		for _, id := range ids {
@@ -267,33 +245,39 @@ func (s *Service) PublicWorkspaceOverview(ctx context.Context, token string, now
 			if lerr != nil {
 				continue
 			}
-			// Private flows never appear on a public wall — their very name
-			// could be sensitive and they're scoped to a single owner.
 			if g.EffectiveVisibility() == core.VisibilityPrivate {
 				continue
 			}
 			pub, _ := store.PublishedCommit(id)
+			runStatus := core.FlowRunStatusPublished(g, pub != "")
+			if runStatus == core.FlowNeedsPublish {
+				continue
+			}
+			counted[id] = true
 			st := PublicFlowState{
 				Name:      flowDisplayName(g, id),
 				Icon:      g.Icon,
-				RunStatus: core.FlowRunStatusPublished(g, pub != ""),
+				RunStatus: runStatus,
 			}
-			if st.RunStatus == core.FlowLive {
+			// Next scheduled fire — only meaningful for a live flow (published +
+			// enabled + a scheduler trigger). A paused flow won't fire on a
+			// clock, so it gets no next-run.
+			if runStatus == core.FlowLive {
 				data.Stats.LiveFlows++
+				st.NextRunAt = nextScheduledFire(g, now)
 			}
-			if lr, ok := latestByGraph[id]; ok {
+			lr, hasLatest := latestByGraph[id]
+			if hasLatest {
 				st.LastStatus = lr.status
 				if !lr.at.IsZero() {
 					at := lr.at
 					st.LastRunAt = &at
 				}
-			}
-			// Next scheduled fire — only meaningful for a flow the scheduler
-			// will actually start (live: published + enabled + a scheduler
-			// trigger). A needs-publish or paused flow won't fire on a clock,
-			// so it gets no next-run.
-			if st.RunStatus == core.FlowLive {
-				st.NextRunAt = nextScheduledFire(g, now)
+				// "Needs attention" = the flow's latest run failed (one per
+				// flow), the same rule the Dashboard counts by.
+				if lr.status == core.JobStatusFailed {
+					needsAttention++
+				}
 			}
 			st.History = historyByGraph[id]
 			data.Flows = append(data.Flows, st)
@@ -308,6 +292,36 @@ func (s *Service) PublicWorkspaceOverview(ctx context.Context, token string, now
 			}
 			return data.Flows[i].Name < data.Flows[j].Name
 		})
+	}
+
+	// Headline counters over the runs of counted flows only, so owner/test-mode
+	// activity stays out of them (mirrors the Dashboard's exclusion).
+	dayStart := startOfDay(now)
+	var runsToday, running, finished, succeeded int
+	for _, r := range runs {
+		if !counted[r.GraphID] {
+			continue
+		}
+		ref := runStartedOrEnqueued(r)
+		if !ref.IsZero() && !ref.Before(dayStart) {
+			runsToday++
+		}
+		switch r.Status {
+		case core.JobStatusSucceeded:
+			succeeded++
+			finished++
+		case core.JobStatusFailed:
+			finished++
+		case core.JobStatusRunning, core.JobStatusQueued:
+			running++
+		}
+	}
+	data.Stats.RunsToday = runsToday
+	data.Stats.Failed = needsAttention
+	data.Stats.Running = running
+	if finished > 0 {
+		rate := int(float64(succeeded) / float64(finished) * 100)
+		data.Stats.SuccessRate = &rate
 	}
 	if data.Flows == nil {
 		data.Flows = []PublicFlowState{}
