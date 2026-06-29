@@ -295,6 +295,38 @@ func TestValidateWithManifests(t *testing.T) {
 				Edges: []Edge{{From: "s", FromPort: "out", To: "w", ToPort: "in"}},
 			},
 		},
+		{
+			// A switched-off step is skipped at run time, so its unwired
+			// required input must NOT block the flow — don't require it.
+			name: "disabled node with unwired required input is ignored",
+			g: Graph{
+				Nodes: []Node{{ID: "k", Module: "sink", Disabled: true}},
+			},
+		},
+		{
+			// A live node fed ONLY by a disabled upstream is still "wired":
+			// the edge counts toward its fan-in even though the source is off.
+			name: "live node fed only by disabled upstream is satisfied",
+			g: Graph{
+				Nodes: []Node{
+					{ID: "s", Module: "src", Disabled: true},
+					{ID: "k", Module: "sink"},
+				},
+				Edges: []Edge{{From: "s", FromPort: "out", To: "k", ToPort: "in"}},
+			},
+		},
+		{
+			// A MIME mismatch on an edge into a disabled node is irrelevant —
+			// the edge carries no data — so it must not be flagged.
+			name: "MIME mismatch into disabled node is ignored",
+			g: Graph{
+				Nodes: []Node{
+					{ID: "s", Module: "src"},
+					{ID: "k", Module: "bin-sink", Disabled: true},
+				},
+				Edges: []Edge{{From: "s", FromPort: "out", To: "k", ToPort: "in"}},
+			},
+		},
 	}
 
 	binSink := Manifest{

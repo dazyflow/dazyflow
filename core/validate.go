@@ -77,6 +77,21 @@ func ValidateWithManifests(g Graph, manifests map[string]Manifest) error {
 		nodeManifest[n.ID] = m
 	}
 
+	// A switched-off node never executes: at run time the worker records it as
+	// skipped and the skip cascade prunes everything downstream. So whether it
+	// is "wired up correctly" is irrelevant to whether the flow can run —
+	// exclude disabled nodes (and the edges touching them, which carry no data)
+	// from the required-input / port-shape / MIME checks below. This mirrors the
+	// editor, which never nags about a switched-off step's config. Edges INTO a
+	// live node are still counted toward its fan-in, so a live node fed only by
+	// a disabled upstream isn't spuriously flagged "required input unconnected".
+	disabled := make(map[string]bool, len(g.Nodes))
+	for _, n := range g.Nodes {
+		if n.Disabled {
+			disabled[n.ID] = true
+		}
+	}
+
 	type inputKey struct{ node, port string }
 	incoming := make(map[inputKey]int)
 
@@ -84,6 +99,14 @@ func ValidateWithManifests(g Graph, manifests map[string]Manifest) error {
 		src, srcOK := nodeManifest[e.From]
 		dst, dstOK := nodeManifest[e.To]
 		if !srcOK || !dstOK {
+			continue
+		}
+		// An edge touching a switched-off node carries no data, so skip the
+		// port-shape and MIME checks on it — but still count the wire toward the
+		// destination's fan-in so a live node fed by a disabled upstream doesn't
+		// read as "unconnected".
+		if disabled[e.From] || disabled[e.To] {
+			incoming[inputKey{e.To, e.ToPort}]++
 			continue
 		}
 		outPort, hasOut := src.Output(e.FromPort)
@@ -114,6 +137,9 @@ func ValidateWithManifests(g Graph, manifests map[string]Manifest) error {
 		if e.OnError != OnErrorRetry {
 			continue
 		}
+		if disabled[e.From] || disabled[e.To] {
+			continue
+		}
 		src, ok := nodeManifest[e.From]
 		if !ok {
 			continue
@@ -128,6 +154,10 @@ func ValidateWithManifests(g Graph, manifests map[string]Manifest) error {
 	for _, n := range g.Nodes {
 		m, ok := nodeManifest[n.ID]
 		if !ok {
+			continue
+		}
+		// A switched-off step never runs; don't require its inputs be wired.
+		if disabled[n.ID] {
 			continue
 		}
 		for _, p := range m.Inputs {
