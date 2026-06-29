@@ -162,7 +162,10 @@ func flowGenSystemPrompt(catalog string) string {
 		"port — wire that straight into map_rows / render_text. Only reach for gmail_get_message + a for_each when " +
 		"you have a bare message id from somewhere else.\n" +
 		"- Before sending rows to Slack / SMS / email, turn them into a string with render_text (rows→text). " +
-		"Don't wire raw rows or JSON straight into a text/message field.\n\n" +
+		"Don't wire raw rows or JSON straight into a text/message field.\n" +
+		"- To show rows AS A TABLE in an email, use render_table (rows→html): zero config, the columns become " +
+		"the header row. Wire its `html` output into the email body. Prefer it over a render_text CEL template " +
+		"whenever the user wants a table.\n\n" +
 		"MARKERS — params: NAME(type)* = required param. Ports: name[] = a list/table of rows, " +
 		"name* = variadic (accepts multiple wires), name! = a required input you must satisfy.\n\n" +
 		"CATALOG (id [category]: what it does | params | in→out ports | e.g. example params):\n" + catalog
