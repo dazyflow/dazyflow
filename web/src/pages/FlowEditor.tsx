@@ -880,11 +880,22 @@ function EditorInner() {
     // look for conn.<slug>.<field> keys — so include the conn. namespace here,
     // the way the Apps page does. Without it a connected ConnectionFields app
     // with required fields (e.g. Home Assistant) always reads as "needs setup".
-    // Same can't-tell-so-don't-block semantics on error (disabled / 403).
-    api
-      .listSecrets(token, undefined, undefined, true)
-      .then((r) => {
-        if (!cancelled) setSecrets(r.secrets);
+    //
+    // Resolve the engine's flow → tenant cascade: ${secret.NAME} matches a
+    // flow-scoped secret too, so fetch both and union the names — otherwise a
+    // secret saved at flow scope reads as missing and the run gate nags. Tenant
+    // scope carries the conn.* namespace; flow scope is fetched only once the
+    // flow has an id (a new, unsaved flow has none — nothing flow-scoped can
+    // exist yet). Same can't-tell-so-don't-block semantics on error (disabled
+    // / 403).
+    Promise.all([
+      api.listSecrets(token, undefined, undefined, true),
+      id ? api.listSecrets(token, "flow", id) : Promise.resolve({ secrets: [] }),
+    ])
+      .then(([tenant, flow]) => {
+        if (!cancelled) {
+          setSecrets([...new Set([...tenant.secrets, ...flow.secrets])]);
+        }
       })
       .catch(() => {
         if (!cancelled) setSecrets(null);
@@ -892,7 +903,7 @@ function EditorInner() {
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, id]);
 
   // Re-attach manifests to nodes whenever the drops catalog arrives or
   // changes. The graph load and drops fetch race; if the graph wins,
