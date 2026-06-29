@@ -187,7 +187,9 @@ function RootRedirect() {
     let hasFlows = false;
     try {
       hasFlows =
-        localStorage.getItem(`${HAS_FLOWS_KEY}.${userScope(me)}`) === "1";
+        localStorage.getItem(
+          `${HAS_FLOWS_KEY}.${userScope(activeTenant || me.tenant, me.subject)}`,
+        ) === "1";
     } catch {
       /* private mode / strict iframe — fall through to the API check */
     }
@@ -211,7 +213,10 @@ function RootRedirect() {
         const has = (r.graphs?.length ?? 0) > 0;
         if (has) {
           try {
-            localStorage.setItem(`${HAS_FLOWS_KEY}.${userScope(me)}`, "1");
+            localStorage.setItem(
+              `${HAS_FLOWS_KEY}.${userScope(activeTenant || me.tenant, me.subject)}`,
+              "1",
+            );
           } catch {
             /* ignore */
           }

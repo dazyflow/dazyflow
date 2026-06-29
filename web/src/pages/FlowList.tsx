@@ -104,10 +104,11 @@ export function FlowList() {
         // in try/catch — localStorage might be blocked in a strict
         // iframe and a thrown error here would blank the page.
         try {
-          // Per-account key — see userScope: the hint must not follow
-          // a different user signing in on the same browser.
+          // Per-(account, active org) key — see userScope: the hint must
+          // not follow a different user signing in on the same browser, nor
+          // carry one org's "has flows" state into another after a switch.
           localStorage.setItem(
-            `${HAS_FLOWS_KEY}.${userScope(me)}`,
+            `${HAS_FLOWS_KEY}.${userScope(activeTenant || me?.tenant, me?.subject)}`,
             graphs.length > 0 ? "1" : "0",
           );
         } catch {
@@ -255,7 +256,7 @@ export function FlowList() {
       try {
         if (me) {
           localStorage.setItem(
-            `${HAS_FLOWS_KEY}.${userScope(me)}`,
+            `${HAS_FLOWS_KEY}.${userScope(activeTenant || me?.tenant, me?.subject)}`,
             next.length > 0 ? "1" : "0",
           );
         }

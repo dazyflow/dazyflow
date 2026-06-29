@@ -26,9 +26,11 @@ const HAS_FLOWS_KEY = "dazyflow.hasFlows";
 export function Welcome() {
   const { t } = useTranslation();
   const { me, token, activeTenant, activeWorkspace } = useAuth();
-  // Scoped to the signed-in account — an unscoped read offered another
-  // user's flow on a shared browser. Recomputed when `me` resolves.
-  const recent = loadRecentFlow(userScope(me));
+  // Scoped to the signed-in account AND the active org — an unscoped read
+  // offered another user's flow on a shared browser, and keying on the home
+  // tenant surfaced the previous org's flow after a switch. Recomputed when
+  // `me` / activeTenant resolve.
+  const recent = loadRecentFlow(userScope(activeTenant || me?.tenant, me?.subject));
   // The cached recent flow only carries whatever icon/name was stored
   // when it was last opened. Resolve the current icon + name from the
   // live flow list so a renamed flow / freshly-set icon shows correctly
@@ -61,7 +63,9 @@ export function Welcome() {
     // Per-account key: a brand-new account on a browser where someone
     // else had flows must read "Welcome", not "Welcome back".
     isReturning =
-      localStorage.getItem(`${HAS_FLOWS_KEY}.${userScope(me)}`) === "1";
+      localStorage.getItem(
+        `${HAS_FLOWS_KEY}.${userScope(activeTenant || me?.tenant, me?.subject)}`,
+      ) === "1";
   } catch {
     /* private mode / strict iframe — treat as first-time */
   }

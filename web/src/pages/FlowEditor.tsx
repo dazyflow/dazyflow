@@ -979,11 +979,16 @@ function EditorInner() {
 
   // Remember this as the most-recently-opened flow so the start screen
   // can offer a "continue working" link. Falls back to the id until
-  // the display name loads. Scoped per account so the welcome page
-  // never offers another user's flow on a shared browser.
+  // the display name loads. Scoped per (account, active org) so the
+  // welcome page never offers another user's — or another org's — flow.
   useEffect(() => {
-    if (id) saveRecentFlow(userScope(me), { id, name: name || id, icon });
-  }, [id, name, icon, me]);
+    if (id)
+      saveRecentFlow(userScope(activeTenant || me?.tenant, me?.subject), {
+        id,
+        name: name || id,
+        icon,
+      });
+  }, [id, name, icon, me, activeTenant]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
