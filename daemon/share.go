@@ -254,6 +254,13 @@ func (s *Service) PublicWorkspaceOverview(ctx context.Context, token string, now
 			if runStatus == core.FlowNeedsPublish {
 				continue
 			}
+			// A disabled flow is intentionally off — like an unpublished draft,
+			// keep it off the public wall and out of every counter (it must not
+			// show as "needs attention" just because its last run failed before
+			// it was paused, nor drag down the success rate).
+			if runStatus == core.FlowPaused {
+				continue
+			}
 			counted[id] = true
 			st := PublicFlowState{
 				Name:      flowDisplayName(g, id),

@@ -57,7 +57,7 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"columns": {"type":"array","items":{"type":"string"},"description":"Which columns to include, in order. Leave empty to use every column the data has, in its natural order."},
+					"columns": {"type":"array","items":{"type":"string"},"x_advanced":true,"description":"Which columns to include, in order. Leave empty to use every column the data has, in its natural order. The inspector's drag-to-reorder editor writes this for you."},
 					"empty":   {"type":"string","description":"HTML (or text) emitted when there are zero input rows. Defaults to an empty string."}
 				}
 			}`),

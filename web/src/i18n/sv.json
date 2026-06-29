@@ -1703,6 +1703,12 @@
     "rendering": "uppdaterar…",
     "typeToPreview": "Lägg till en mall ovan — eller välj en layout — för att se den här."
   },
+  "renderTableColumns": {
+    "title": "Kolumnordning",
+    "drag": "Dra för att ändra ordning",
+    "help": "Dra i handtaget för att ändra ordning — tabellen visar kolumnerna från vänster till höger i den här ordningen.",
+    "empty": "Kolumner visas här när steget känner sin indata. Kör det en gång, eller koppla ett steg vars kolumner är kända."
+  },
   "renderTextPreview": {
     "presets": "Skapa en:",
     "layout": "Layout",

@@ -19,6 +19,7 @@ import { ConfirmModal } from "./ConfirmModal";
 import { ApprovalPanel } from "./ApprovalPanel";
 import { RenderTemplatePreview } from "./RenderTemplatePreview";
 import { RenderTextPreview } from "./RenderTextPreview";
+import { RenderTableColumns } from "./RenderTableColumns";
 import { ForEachEditor } from "./ForEachEditor";
 import {
   TriggerScheduleField,
@@ -586,6 +587,16 @@ export function Inspector({
             {d.moduleID === "render_text" && (
               <RenderTextPreview
                 params={currentParams}
+                onApply={(patch) =>
+                  onParamsChange(selected.id, { ...currentParams, ...patch })
+                }
+              />
+            )}
+            {d.moduleID === "render_table" && (
+              <RenderTableColumns
+                params={currentParams}
+                references={refCtx}
+                currentRunID={currentRunID}
                 onApply={(patch) =>
                   onParamsChange(selected.id, { ...currentParams, ...patch })
                 }

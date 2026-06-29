@@ -308,6 +308,53 @@ func TestPublicWorkspaceOverview_NeedsAttentionByFlow(t *testing.T) {
 	}
 }
 
+// TestPublicWorkspaceOverview_DisabledFlowExcluded pins that a disabled
+// (paused) flow is kept off the public board and out of every counter — its
+// last run failing before it was paused must not register as "needs attention"
+// nor drag down the success rate.
+func TestPublicWorkspaceOverview_DisabledFlowExcluded(t *testing.T) {
+	h := newShareHarness(t)
+	ctx := context.Background()
+
+	for _, g := range []core.Graph{
+		{ID: "active", Tenant: "t", Workspace: "ws", Name: "Active"},
+		{ID: "off", Tenant: "t", Workspace: "ws", Name: "Off", Disabled: true},
+	} {
+		if _, err := h.svc.SaveGraph(ctx, h.editor, g); err != nil {
+			t.Fatalf("save %s: %v", g.ID, err)
+		}
+	}
+
+	now := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
+	// Both flows' latest run failed — but the disabled one is intentionally off.
+	h.enqueueRun(t, ctx, "a1", "active", core.JobStatusFailed, now.Add(-30*time.Minute))
+	h.enqueueRun(t, ctx, "o1", "off", core.JobStatusFailed, now.Add(-10*time.Minute))
+
+	sh, err := h.svc.CreateWorkspaceShare(ctx, h.editor, "t", "ws")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := h.svc.PublicWorkspaceOverview(ctx, sh.Token, now)
+	if err != nil {
+		t.Fatalf("overview: %v", err)
+	}
+
+	if data.Stats.Failed != 1 {
+		t.Errorf("failed = %d, want 1 (disabled flow excluded)", data.Stats.Failed)
+	}
+	if data.Stats.RunsToday != 1 {
+		t.Errorf("runs_today = %d, want 1 (disabled flow's run excluded)", data.Stats.RunsToday)
+	}
+	for i := range data.Flows {
+		if data.Flows[i].Name == "Off" {
+			t.Errorf("disabled flow should not appear on the board, got %+v", data.Flows[i])
+		}
+	}
+	if data.Stats.TotalFlows != 1 {
+		t.Errorf("total_flows = %d, want 1 (disabled excluded)", data.Stats.TotalFlows)
+	}
+}
+
 // TestPublicWorkspaceOverview_SuccessRateRounds guards the success-rate
 // rounding: 2 of 3 finished = 66.67%, which must round to 67 (matching the
 // Dashboard's Math.round), not truncate to 66.
