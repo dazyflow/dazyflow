@@ -1579,6 +1579,9 @@
     "secretChipUses": "Använder hemlighet {{name}}",
     "secretChipSetUp": "Lägg till",
     "secretChipReplace": "Ersätt",
+    "tokenInput": {
+      "remove": "Ta bort referens"
+    },
     "mapping": {
       "columnPlaceholder": "Kalkylarkskolumn…",
       "sourcePlaceholder": "Från fält…",

@@ -1601,6 +1601,9 @@
     "secretChipUses": "Uses secret {{name}}",
     "secretChipSetUp": "Set up",
     "secretChipReplace": "Replace",
+    "tokenInput": {
+      "remove": "Remove reference"
+    },
     "mapping": {
       "columnPlaceholder": "Sheet column…",
       "sourcePlaceholder": "From field…",

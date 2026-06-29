@@ -14,7 +14,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
-import { Braces, Info, Lock, Plus, Upload, X } from "lucide-react";
+import { Info, Plus, Upload, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { EmailTemplateSummary, JSONSchema, ReferenceGroups, ReferenceItem } from "../types";
 import { type TokenLabels, friendlyTokenText } from "./nodeCardShared";
@@ -352,6 +352,7 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
         onChange={onChange}
         references={references}
         extraReferenceItems={extraReferenceItems}
+        tokenLabels={tokenLabels}
       />
     );
   }
@@ -413,6 +414,7 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
             wired={wired}
             resolvedName={resolvedName}
             extraReferenceItems={extraReferenceItems}
+            tokenLabels={tokenLabels}
           />
         );
       }
@@ -1316,6 +1318,7 @@ function AccountResourceField({
   wired,
   resolvedName,
   extraReferenceItems,
+  tokenLabels,
 }: {
   picker: { provider: string; kind: string; noun: string; dependsOn?: string[] };
   name: string;
@@ -1330,11 +1333,11 @@ function AccountResourceField({
   wired?: boolean;
   resolvedName?: string;
   extraReferenceItems?: { label: string; token: string }[];
+  tokenLabels?: TokenLabels;
 }) {
   const { t } = useTranslation();
   const isExpr = typeof value === "string" && value.includes("${");
   const [manual, setManual] = useState(isExpr);
-  const inputRef = useRef<HTMLInputElement | null>(null);
 
   // A wired input port decides the value — show the picker's read-only note,
   // no toggle (the wire wins regardless of mode).
@@ -1359,45 +1362,19 @@ function AccountResourceField({
     );
   }
 
-  // insertRef splices a ${…} token at the cursor (or appends), mirroring
-  // PlainStringField so the {} menu works the same in manual mode.
-  const insertRef = (token: string) => {
-    const el = inputRef.current;
-    const cur = typeof value === "string" ? value : "";
-    if (!el) {
-      onChange(cur + token || undefined);
-      return;
-    }
-    const start = el.selectionStart ?? cur.length;
-    const end = el.selectionEnd ?? cur.length;
-    const next = cur.slice(0, start) + token + cur.slice(end);
-    onChange(next === "" && !required ? undefined : next);
-    requestAnimationFrame(() => {
-      el.focus();
-      const pos = start + token.length;
-      el.setSelectionRange(pos, pos);
-    });
-  };
-
   return (
     <FieldWrap name={name} schema={schema} required={required} value={value}>
       {manual ? (
-        <div className="field-with-ref">
-          <input
-            ref={inputRef}
-            type="text"
-            value={typeof value === "string" ? value : ""}
-            placeholder={t("schemaForm.resourcePicker.exprPlaceholder")}
-            onChange={(e) =>
-              onChange(e.target.value === "" && !required ? undefined : e.target.value)
-            }
-          />
-          <ReferenceMenu
-            ctx={references}
-            onInsert={insertRef}
-            extraItems={extraReferenceItems}
-          />
-        </div>
+        <TokenInput
+          value={value}
+          onChange={onChange}
+          references={references}
+          extraReferenceItems={extraReferenceItems}
+          tokenLabels={tokenLabels}
+          required={required}
+          placeholder={t("schemaForm.resourcePicker.exprPlaceholder")}
+          ariaLabel={schema.title ?? humanize(name)}
+        />
       ) : (
         <ResourcePickerField
           provider={picker.provider}
@@ -1639,6 +1616,7 @@ function SuggestField({
   onChange,
   references,
   extraReferenceItems,
+  tokenLabels,
 }: {
   name: string;
   schema: JSONSchema;
@@ -1647,9 +1625,9 @@ function SuggestField({
   onChange: (v: unknown) => void;
   references?: ReferenceCtx;
   extraReferenceItems?: { label: string; token: string }[];
+  tokenLabels?: TokenLabels;
 }) {
   const { t } = useTranslation();
-  const inputRef = useRef<HTMLInputElement | null>(null);
   const opts = (schema.enum ?? []).map((v, i) => ({
     value: String(v),
     label: schema.enumNames?.[i] ?? String(v),
@@ -1661,44 +1639,19 @@ function SuggestField({
   // the dropdown is the default, everyday path.
   const [manual, setManual] = useState(cur.includes("${") || (cur !== "" && !inList));
 
-  const insertRef = (token: string) => {
-    const el = inputRef.current;
-    if (!el) {
-      onChange(cur + token || undefined);
-      return;
-    }
-    const start = el.selectionStart ?? cur.length;
-    const end = el.selectionEnd ?? cur.length;
-    const next = cur.slice(0, start) + token + cur.slice(end);
-    onChange(next === "" && !required ? undefined : next);
-    requestAnimationFrame(() => {
-      el.focus();
-      const pos = start + token.length;
-      el.setSelectionRange(pos, pos);
-    });
-  };
-
   return (
     <FieldWrap name={name} schema={schema} required={required} value={value}>
       {manual ? (
-        <div className="field-with-ref">
-          <input
-            ref={inputRef}
-            type="text"
-            value={cur}
-            placeholder={schema.default ? String(schema.default) : undefined}
-            onChange={(e) =>
-              onChange(e.target.value === "" && !required ? undefined : e.target.value)
-            }
-          />
-          {references && (
-            <ReferenceMenu
-              ctx={references}
-              onInsert={insertRef}
-              extraItems={extraReferenceItems}
-            />
-          )}
-        </div>
+        <TokenInput
+          value={value}
+          onChange={onChange}
+          references={references}
+          extraReferenceItems={extraReferenceItems}
+          tokenLabels={tokenLabels}
+          required={required}
+          placeholder={schema.default ? String(schema.default) : undefined}
+          ariaLabel={schema.title ?? humanize(name)}
+        />
       ) : (
         <select
           value={inList ? cur : ((schema.default as string | undefined) ?? "")}
@@ -1843,103 +1796,18 @@ function PlainStringField({
   extraReferenceItems?: { label: string; token: string }[];
   tokenLabels?: TokenLabels;
 }) {
-  const { t } = useTranslation();
-  const raw = typeof value === "string" ? value : "";
-  const credMatch = SECRET_FULL_REF.exec(raw);
-  // Any other whole-value ${…} reference renders as a friendly chip too —
-  // worded like the {} menu ("Gmail · Matching emails → first → id").
-  const tokenText = credMatch ? null : friendlyTokenText(raw, tokenLabels);
-  const [forceEdit, setForceEdit] = useState(false);
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  // insertRef splices a ${…} token at the input's cursor (or appends when
-  // unfocused), then fires onChange so the value round-trips like a keystroke.
-  const insertRef = (token: string) => {
-    const el = inputRef.current;
-    const cur = (value as string) ?? "";
-    if (!el) {
-      onChange((cur + token) || undefined);
-      return;
-    }
-    const start = el.selectionStart ?? cur.length;
-    const end = el.selectionEnd ?? cur.length;
-    const next = cur.slice(0, start) + token + cur.slice(end);
-    onChange(next === "" && !required ? undefined : next);
-    // Restore focus + place the caret after the inserted token.
-    requestAnimationFrame(() => {
-      el.focus();
-      const pos = start + token.length;
-      el.setSelectionRange(pos, pos);
-    });
-  };
-  // Reset the override whenever the underlying value transitions back
-  // to (or stays) a single reference — e.g. a re-render after load.
-  // Keeps the chip the default state across navigation.
-  useEffect(() => {
-    if (credMatch || tokenText) setForceEdit(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [raw]);
-  if (credMatch && !forceEdit) {
-    return (
-      <FieldWrap name={name} schema={schema} required={required}>
-        <TenantSecretChip
-          credName={credMatch[1]}
-          onReplace={() => {
-            // Clear the placeholder so the input opens empty rather
-            // than pre-filled with the ${secret....} string — the
-            // user clicked Replace, meaning "I want to type something
-            // else", and seeing the chip's syntax mirrored in the
-            // input would be confusing.
-            onChange(undefined);
-            setForceEdit(true);
-          }}
-        />
-      </FieldWrap>
-    );
-  }
-  if (tokenText && !forceEdit) {
-    return (
-      <FieldWrap name={name} schema={schema} required={required}>
-        <div className="sf-credential-chip">
-          <Braces size={13} className="sf-credential-chip-glyph" />
-          <span className="sf-credential-chip-label">{tokenText}</span>
-          <span className="sf-credential-chip-actions">
-            <Button
-              variant="link"
-              onClick={() => {
-                // Same contract as the secret chip: Replace clears the
-                // value so the input opens empty (no raw ${…} confusion).
-                onChange(undefined);
-                setForceEdit(true);
-              }}
-            >
-              {t("schemaForm.secretChipReplace")}
-            </Button>
-          </span>
-        </div>
-      </FieldWrap>
-    );
-  }
   return (
     <FieldWrap name={name} schema={schema} required={required} value={value}>
-      <div className="field-with-ref">
-        <input
-          ref={inputRef}
-          type="text"
-          value={(value as string) ?? (schema.default as string | undefined) ?? ""}
-          placeholder={schema.default ? String(schema.default) : undefined}
-          onChange={(e) => {
-            const v = e.target.value;
-            onChange(v === "" && !required ? undefined : v);
-          }}
-        />
-        {references && (
-          <ReferenceMenu
-            ctx={references}
-            onInsert={insertRef}
-            extraItems={extraReferenceItems}
-          />
-        )}
-      </div>
+      <TokenInput
+        value={value}
+        onChange={onChange}
+        references={references}
+        extraReferenceItems={extraReferenceItems}
+        tokenLabels={tokenLabels}
+        required={required}
+        placeholder={schema.default ? String(schema.default) : undefined}
+        ariaLabel={schema.title ?? humanize(name)}
+      />
     </FieldWrap>
   );
 }
@@ -2159,38 +2027,221 @@ function ReferenceMenu({
   );
 }
 
-// TenantSecretChip is the read-only chip rendered in place of a
-// plain string input when the field's value is a single
-// ${secret.NAME} reference. Mirrors the visual weight of the
-// account-picker dropdown rather than a free-text box so the user
-// doesn't try to click into it to type. The Replace button flips the
-// containing component back to plain-input mode for the rare case
-// where the user genuinely wants to overwrite the credential ref.
-function TenantSecretChip({
-  credName,
-  onReplace,
+// ───────────────────────── inline token editor ─────────────────────────
+// TokenInput is the shared field for any string param that can embed ${…}
+// template tokens (secrets, upstream outputs, trigger fields, resources). It
+// renders each token as an inline chip *within* the editable text — so a value
+// like `Bearer ${secret.API_KEY}` shows literal "Bearer " then a chip, and the
+// user edits the text and the reference together. This replaces the old
+// input-or-chip split (whole-value → chip, anything else → raw ${…} text) that
+// made mixed values impossible to read or build in the UI.
+//
+// contentEditable is intentionally UNCONTROLLED: React owns none of the
+// editable div's children. We sync value→DOM only when the incoming value
+// differs from what the DOM already serialises to (an external change), so
+// typing and token inserts never trigger a re-render that resets the caret.
+// DOM→value flows through onInput/insert via serializeEditable.
+
+// TOKEN_SCAN finds every ${scheme.path} token in a string (scheme = letters,
+// path = anything up to the closing brace). Like FULL_TOKEN but unanchored.
+const TOKEN_SCAN = /\$\{[A-Za-z]+\.[^}]*\}/g;
+
+export type TokenSegment =
+  | { kind: "text"; text: string }
+  | { kind: "token"; token: string };
+
+// tokenizeValue splits a raw value into ordered text/token segments — the
+// model the editor renders from. Exported for unit tests.
+export function tokenizeValue(value: string): TokenSegment[] {
+  const segs: TokenSegment[] = [];
+  let last = 0;
+  for (const m of value.matchAll(TOKEN_SCAN)) {
+    const i = m.index ?? 0;
+    if (i > last) segs.push({ kind: "text", text: value.slice(last, i) });
+    segs.push({ kind: "token", token: m[0] });
+    last = i + m[0].length;
+  }
+  if (last < value.length) segs.push({ kind: "text", text: value.slice(last) });
+  return segs;
+}
+
+// serializeEditable walks the editable DOM back into the raw string: text
+// nodes contribute their text, token chips contribute their data-token, and a
+// browser-inserted wrapper is recursed into. Inverse of renderInto. Exported
+// for unit tests.
+export function serializeEditable(root: Node): string {
+  let out = "";
+  root.childNodes.forEach((node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      out += node.textContent ?? "";
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const el = node as HTMLElement;
+    const tok = el.getAttribute("data-token");
+    if (tok !== null) out += tok;
+    else if (el.tagName !== "BR") out += serializeEditable(el);
+  });
+  return out;
+}
+
+// tokenChipLabel is the human text inside a chip — the secret name for
+// ${secret.X}, otherwise the {} menu's friendly description, falling back to
+// the raw token when unparseable.
+function tokenChipLabel(token: string, labels?: TokenLabels): string {
+  const sec = SECRET_FULL_REF.exec(token);
+  if (sec) return sec[1];
+  return friendlyTokenText(token, labels) ?? token;
+}
+
+function buildChip(
+  token: string,
+  labels: TokenLabels | undefined,
+  removeLabel: string,
+): HTMLSpanElement {
+  const chip = document.createElement("span");
+  chip.className =
+    "token-chip" + (SECRET_FULL_REF.test(token) ? " token-chip--secret" : "");
+  chip.setAttribute("contenteditable", "false");
+  chip.setAttribute("data-token", token);
+  const label = document.createElement("span");
+  label.className = "token-chip-label";
+  label.textContent = tokenChipLabel(token, labels);
+  chip.appendChild(label);
+  const x = document.createElement("button");
+  x.type = "button";
+  x.className = "token-chip-x";
+  x.setAttribute("aria-label", removeLabel);
+  x.textContent = "×";
+  chip.appendChild(x);
+  return chip;
+}
+
+function renderInto(
+  root: HTMLElement,
+  value: string,
+  labels: TokenLabels | undefined,
+  removeLabel: string,
+): void {
+  root.textContent = "";
+  for (const seg of tokenizeValue(value)) {
+    if (seg.kind === "text") root.appendChild(document.createTextNode(seg.text));
+    else root.appendChild(buildChip(seg.token, labels, removeLabel));
+  }
+}
+
+function TokenInput({
+  value,
+  onChange,
+  references,
+  extraReferenceItems,
+  tokenLabels,
+  required,
+  placeholder,
+  ariaLabel,
 }: {
-  credName: string;
-  onReplace: () => void;
+  value: unknown;
+  onChange: (v: unknown) => void;
+  references?: ReferenceCtx;
+  extraReferenceItems?: { label: string; token: string }[];
+  tokenLabels?: TokenLabels;
+  required?: boolean;
+  placeholder?: string;
+  ariaLabel?: string;
 }) {
   const { t } = useTranslation();
+  const editRef = useRef<HTMLDivElement | null>(null);
+  // The caret position last seen inside the editor, remembered so the {} menu
+  // can insert at the cursor even after focus moves to the menu button.
+  const savedRange = useRef<Range | null>(null);
+  const raw = typeof value === "string" ? value : "";
+  const removeLabel = t("schemaForm.tokenInput.remove");
+
+  // value → DOM, but only on an external change (DOM doesn't already match) so
+  // our own keystrokes/inserts don't reset the caret.
+  useEffect(() => {
+    const root = editRef.current;
+    if (!root) return;
+    if (serializeEditable(root) === raw) return;
+    renderInto(root, raw, tokenLabels, removeLabel);
+  }, [raw, tokenLabels, removeLabel]);
+
+  const emitChange = () => {
+    const root = editRef.current;
+    if (!root) return;
+    const s = serializeEditable(root);
+    onChange(s === "" && !required ? undefined : s);
+  };
+
+  const rememberSelection = () => {
+    const root = editRef.current;
+    const sel = window.getSelection();
+    if (!root || !sel || sel.rangeCount === 0) return;
+    const r = sel.getRangeAt(0);
+    if (root.contains(r.commonAncestorContainer)) {
+      savedRange.current = r.cloneRange();
+    }
+  };
+
+  const insertToken = (token: string) => {
+    const root = editRef.current;
+    if (!root) return;
+    const chip = buildChip(token, tokenLabels, removeLabel);
+    const sel = window.getSelection();
+    const range = savedRange.current;
+    if (sel && range && root.contains(range.commonAncestorContainer)) {
+      range.deleteContents();
+      range.insertNode(chip);
+      range.setStartAfter(chip);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } else {
+      // No remembered caret (menu opened without focusing the field) — append.
+      root.appendChild(chip);
+    }
+    savedRange.current = null;
+    emitChange();
+    root.focus();
+  };
+
+  // Clicking a chip's × removes just that chip; everything else falls through
+  // to normal caret placement.
+  const onClick = (e: React.MouseEvent) => {
+    const x = (e.target as HTMLElement).closest(".token-chip-x");
+    if (!x) return;
+    e.preventDefault();
+    x.closest(".token-chip")?.remove();
+    emitChange();
+  };
+
   return (
-    <div className="sf-credential-chip">
-      <Lock size={13} className="sf-credential-chip-glyph" />
-      <span className="sf-credential-chip-label">
-        {t("schemaForm.secretChipUses", { name: credName })}
-      </span>
-      <span className="sf-credential-chip-actions">
-        <Link
-          to={`/admin/secrets?focus=${encodeURIComponent(credName)}`}
-          className="link-button"
-        >
-          {t("schemaForm.secretChipSetUp")}
-        </Link>
-        <Button variant="link" onClick={onReplace}>
-          {t("schemaForm.secretChipReplace")}
-        </Button>
-      </span>
+    <div className="field-with-ref">
+      <div
+        ref={editRef}
+        className="token-input"
+        contentEditable
+        suppressContentEditableWarning
+        role="textbox"
+        aria-label={ariaLabel}
+        data-placeholder={placeholder ?? ""}
+        onInput={emitChange}
+        onBlur={rememberSelection}
+        onKeyUp={rememberSelection}
+        onMouseUp={rememberSelection}
+        onClick={onClick}
+        onKeyDown={(e) => {
+          // Single-line: Enter never inserts a newline.
+          if (e.key === "Enter") e.preventDefault();
+        }}
+      />
+      {references && (
+        <ReferenceMenu
+          ctx={references}
+          onInsert={insertToken}
+          extraItems={extraReferenceItems}
+        />
+      )}
     </div>
   );
 }
@@ -2752,14 +2803,11 @@ function ScalarValue({
   }
 }
 
-// DictValueCell renders the value side of a dict row. For string values it
-// adds the same "{}" reference picker the top-level string fields get, so a
-// header value can pull in ${secret.NAME} (or upstream/trigger tokens) without
-// the user typing the syntax by hand. A whole-value reference collapses into a
-// chip — a Lock chip for ${secret.NAME}, a braces chip for other ${…} tokens —
-// matching how PlainStringField presents the same values. Non-string values
-// fall through to the plain ScalarValue editor. References and tokenLabels come
-// from FormContext, so DictField itself doesn't thread them through.
+// DictValueCell renders the value side of a dict row. String values use the
+// shared inline TokenInput (so a header value like `Bearer ${secret.NAME}`
+// shows the literal text and the reference chip together, with the {} picker);
+// non-string values fall through to the plain ScalarValue editor. References
+// and tokenLabels come from FormContext, so DictField doesn't thread them.
 function DictValueCell({
   schema,
   value,
@@ -2769,83 +2817,20 @@ function DictValueCell({
   value: unknown;
   onChange: (v: unknown) => void;
 }) {
-  const { t } = useTranslation();
   const { references, extraReferenceItems, tokenLabels } = useFormCtx();
-  const inputRef = useRef<HTMLInputElement | null>(null);
   const isString =
     !schema.enum && (schema.type === "string" || schema.type == null);
-  const raw = typeof value === "string" ? value : "";
-  const credMatch = isString && references ? SECRET_FULL_REF.exec(raw) : null;
-  const tokenText =
-    isString && references && !credMatch
-      ? friendlyTokenText(raw, tokenLabels)
-      : null;
-  // forceEdit lets "Replace" drop from the chip back to the raw input. Reset
-  // whenever the value settles back to a single reference (e.g. after reload),
-  // so the chip stays the default presentation across navigation.
-  const [forceEdit, setForceEdit] = useState(false);
-  useEffect(() => {
-    if (credMatch || tokenText) setForceEdit(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [raw]);
   if (!isString || !references) {
     return <ScalarValue schema={schema} value={value} onChange={onChange} />;
   }
-  // Replace clears the value so the input opens empty rather than pre-filled
-  // with the ${…} syntax — the user asked to type something else.
-  const onReplace = () => {
-    onChange("");
-    setForceEdit(true);
-  };
-  if (credMatch && !forceEdit) {
-    return <TenantSecretChip credName={credMatch[1]} onReplace={onReplace} />;
-  }
-  if (tokenText && !forceEdit) {
-    return (
-      <div className="sf-credential-chip">
-        <Braces size={13} className="sf-credential-chip-glyph" />
-        <span className="sf-credential-chip-label">{tokenText}</span>
-        <span className="sf-credential-chip-actions">
-          <Button variant="link" onClick={onReplace}>
-            {t("schemaForm.secretChipReplace")}
-          </Button>
-        </span>
-      </div>
-    );
-  }
-  // insertRef splices a ${…} token at the cursor (or appends when unfocused),
-  // mirroring PlainStringField so the value round-trips like a keystroke.
-  const insertRef = (token: string) => {
-    const el = inputRef.current;
-    const cur = (value as string) ?? "";
-    if (!el) {
-      onChange(cur + token);
-      return;
-    }
-    const start = el.selectionStart ?? cur.length;
-    const end = el.selectionEnd ?? cur.length;
-    const next = cur.slice(0, start) + token + cur.slice(end);
-    onChange(next);
-    requestAnimationFrame(() => {
-      el.focus();
-      const pos = start + token.length;
-      el.setSelectionRange(pos, pos);
-    });
-  };
   return (
-    <div className="field-with-ref">
-      <input
-        ref={inputRef}
-        type="text"
-        value={(value as string) ?? ""}
-        onChange={(e) => onChange(e.target.value)}
-      />
-      <ReferenceMenu
-        ctx={references}
-        onInsert={insertRef}
-        extraItems={extraReferenceItems}
-      />
-    </div>
+    <TokenInput
+      value={value}
+      onChange={onChange}
+      references={references}
+      extraReferenceItems={extraReferenceItems}
+      tokenLabels={tokenLabels}
+    />
   );
 }
 
