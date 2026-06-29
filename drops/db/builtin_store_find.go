@@ -19,7 +19,7 @@ import (
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/limits"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/rowcel"
+	"git.sr.ht/~klahr/dazyflow/internal/rowcel"
 	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
@@ -77,7 +77,7 @@ func init() {
 
 // executeBuiltinStoreFind is the no-SQL reader: pick one collection, apply the
 // no-code row-condition filter (the same column/operator/value builder Split
-// rows and Route rows use, compiled to CEL via drops/internal/rowcel), then
+// rows and Route rows use, compiled to CEL via internal/rowcel), then
 // sort and cap in memory. It reads the whole collection and filters in
 // process — fine for the Collections store's modest sizes, and bounded by the
 // shared row ceiling so a runaway collection can't OOM the daemon.

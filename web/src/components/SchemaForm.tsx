@@ -182,22 +182,34 @@ export function SchemaForm({
     />
   );
 
-  // Only everyday params render. Advanced/developer-flavored fields
-  // (timeouts, raw overrides, connection plumbing) and hidden knobs are
-  // never shown — this audience shouldn't have to reason about them. A
-  // value set via a template/API is still preserved in params; we just
-  // don't surface a control for it.
+  // Everyday params render directly. Advanced/developer-flavored fields
+  // (timeouts, raw overrides, the render_text expression/separators) are
+  // tucked into a collapsed "Advanced" disclosure rather than dropped — a
+  // non-techie never opens it, but a power user can still reach every knob.
+  // HIDDEN_FIELD_KEYS are pure plumbing and never render at all (the backend
+  // applies their defaults; a value set via template/API is still preserved).
   const basic: [string, JSONSchema][] = [];
+  const advanced: [string, JSONSchema][] = [];
   for (const [key, propSchema] of Object.entries(props)) {
     if (HIDDEN_FIELD_KEYS.has(key)) continue;
-    if (isAdvancedField(key, propSchema, props)) continue;
-    basic.push([key, propSchema]);
+    if (isAdvancedField(key, propSchema, props)) advanced.push([key, propSchema]);
+    else basic.push([key, propSchema]);
   }
 
   return (
     <FormContext.Provider value={formCtx}>
       <div>
         {basic.map(([key, propSchema]) => renderField(key, propSchema))}
+        {advanced.length > 0 && (
+          <details className="sf-advanced">
+            <summary className="sf-advanced-summary">
+              {t("schemaForm.advanced")}
+            </summary>
+            <div className="sf-advanced-body">
+              {advanced.map(([key, propSchema]) => renderField(key, propSchema))}
+            </div>
+          </details>
+        )}
       </div>
     </FormContext.Provider>
   );
@@ -579,6 +591,7 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
         return (
           <FieldWrap name={name} schema={schema} required={required} value={value}>
             <textarea
+              className={schema.x_mono ? "sf-mono" : undefined}
               rows={4}
               value={(value as string) ?? (schema.default as string | undefined) ?? ""}
               placeholder={schema.default ? String(schema.default) : undefined}

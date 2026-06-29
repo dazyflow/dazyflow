@@ -1562,6 +1562,7 @@
     "dropOrBrowse": "Släpp en fil här eller klicka för att bläddra",
     "workspacePathPlaceholder": "sökväg relativt arbetsytan",
     "fallbackHint": "Top-level-schemat är inte en property-bag; använder JSON-editor istället.",
+    "advanced": "Avancerat",
     "accountChoose": "(välj ett anslutet konto)",
     "accountNotConnected": "{{account}} (ej ansluten)",
     "accountConnect": "Anslut ett konto",
@@ -1689,7 +1690,8 @@
     "generating": "Skriver…",
     "providerLabel": "AI-leverantör",
     "needConnect": "Anslut Claude eller ChatGPT på <0>Appar-sidan</0> för att använda detta.",
-    "starters": "Börja med:",
+    "starters": "Börja med",
+    "choose": "Välj en startpunkt…",
     "starter": {
       "greeting": "Hälsning",
       "receipt": "Kvitto",
@@ -1700,6 +1702,21 @@
     "preview": "Live-förhandsvisning",
     "rendering": "uppdaterar…",
     "typeToPreview": "Lägg till en mall ovan — eller välj en layout — för att se den här."
+  },
+  "renderTextPreview": {
+    "presets": "Skapa en:",
+    "layout": "Layout",
+    "choose": "Välj en layout…",
+    "preset": {
+      "table": "Tabell",
+      "bullets": "Punktlista",
+      "commas": "Kommaseparerad"
+    },
+    "sampleRows": "Exempelrader (endast för förhandsvisning)",
+    "badJson": "Exempelrader måste vara en JSON-lista, t.ex. [ {…}, {…} ].",
+    "preview": "Live-förhandsvisning",
+    "rendering": "uppdaterar…",
+    "pickPreset": "Välj en layout ovan för att bygga den från dina kolumner och se den här."
   },
   "approval": {
     "notifyNtfy": "Avisera mig på ntfy med godkännandelänken",

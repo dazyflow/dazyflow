@@ -581,6 +581,9 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// Live preview for the render_template step's editor — renders {template,
 	// data} through the same engine the drop uses. See render_preview.go.
 	mux.HandleFunc("POST /api/v1/tools/render-template/preview", h.requireAuth(h.renderTemplatePreview))
+	// Live preview for the render_text step's editor — renders sample rows
+	// through the same engine the drop uses. See render_text_preview.go.
+	mux.HandleFunc("POST /api/v1/tools/render-text/preview", h.requireAuth(h.renderTextPreview))
 	// AI assist: plain-English description → HTML email template, using the
 	// tenant's connected Claude/ChatGPT key. See render_assist.go.
 	mux.HandleFunc("POST /api/v1/tools/render-template/assist", h.requireAuth(h.renderTemplateAssist))

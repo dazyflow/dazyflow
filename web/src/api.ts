@@ -979,6 +979,22 @@ export const api = {
       { template, data },
     ),
 
+  // previewRenderText renders a render_text step's params (template/column,
+  // separator, prefix, suffix, empty) over sample rows using the SAME engine
+  // the drop uses at run time. Returns the joined text, or an `error` string
+  // for a CEL mistake (expected while editing — an inline error, not a throw).
+  previewRenderText: (
+    token: string,
+    params: Record<string, unknown>,
+    rows: unknown,
+  ) =>
+    request<{ text?: string; error?: string }>(
+      token,
+      "POST",
+      "/tools/render-text/preview",
+      { ...params, rows },
+    ),
+
   // assistRenderTemplate turns a plain-English description into an HTML email
   // template using the tenant's connected Claude/ChatGPT key. `fields` are
   // the merge-field names available (from the sample data) so the model uses

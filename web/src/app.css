@@ -6732,6 +6732,19 @@ img[src$="/brands/smhi.svg"] {
 .sf-advanced-body {
   margin-top: var(--space-3);
 }
+/* Code/markup multiline fields (x_mono) — e.g. render_template's HTML
+   template. Matches the code-box look used by the render_text / render_template
+   editors' sample fields (.rtp-sample): same monospace stack, --text-xs,
+   line-height, and code background, so a template and its sample read as the
+   same kind of "code" field. Prose multiline fields (an email body) keep the
+   default proportional style. */
+.sf-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  background: var(--code-bg, var(--surface));
+  tab-size: 2;
+}
 
 .sf-fallback-hint {
   font-size: var(--text-xs);
@@ -9993,6 +10006,16 @@ a.pa-card:hover {
   letter-spacing: 0.03em;
 }
 .rtp-starters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
+/* Layout type picker (render_text) — a compact dropdown of presets. */
+.rtp-type {
+  max-width: 18rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: var(--text-sm);
+  padding: 6px var(--space-2);
+}
+.rtp-type:focus { outline: none; border-color: var(--accent); }
 .rtp-starter {
   font-size: var(--text-xs);
   padding: 3px 10px;
@@ -10030,6 +10053,21 @@ a.pa-card:hover {
 }
 .rtp-hint { color: var(--muted); background: var(--surface); }
 .rtp-warn { color: var(--danger); }
+/* Plain-text preview (bulleted / comma presets): show the joined string as-is
+   with wrapping, rather than in the HTML iframe used for table output. */
+.rtp-pre {
+  margin: 0;
+  max-height: 280px;
+  overflow: auto;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: var(--text-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .rtp-error {
   color: var(--danger);
   background: color-mix(in srgb, var(--danger) 8%, transparent);
@@ -10039,38 +10077,6 @@ a.pa-card:hover {
 }
 
 /* render_template AI assist row (top of the preview pane). */
-.rtp-assist { display: flex; flex-direction: column; gap: var(--space-1); }
-.rtp-assist-row { display: flex; gap: var(--space-2); }
-.rtp-desc {
-  flex: 1;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 6px var(--space-2);
-  font-size: var(--text-sm);
-  background: var(--surface);
-}
-.rtp-desc:focus { outline: none; border-color: var(--accent); }
-.rtp-generate {
-  white-space: nowrap;
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: var(--accent-ink, #fff);
-  border-radius: var(--radius);
-  padding: 6px 14px;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  cursor: pointer;
-}
-.rtp-generate:disabled { opacity: 0.5; cursor: default; }
-.rtp-provider {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-  font-size: var(--text-sm);
-  padding: 6px var(--space-1);
-  max-width: 9rem;
-}
-
 /* AI flow-generation progress checklist (CreateWithAIModal). */
 .ai-steps { list-style: none; margin: var(--space-2) 0 0; padding: 0; }
 .ai-step {

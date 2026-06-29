@@ -244,8 +244,15 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 	}
 
 	if !statusAccepted(resp.StatusCode, expectStatus) {
-		return params.Err(job, "unexpected_status",
-			fmt.Sprintf("got %d, expected %s", resp.StatusCode, formatExpectStatus(expectStatus))), nil
+		// Fold a bounded snippet of the response body into the error. APIs
+		// almost always explain a 4xx/5xx there (which param is missing, why
+		// auth failed, a rate-limit note); without it the error is just
+		// "got 422" with no way to tell why from the inspector.
+		msg := fmt.Sprintf("got %d, expected %s", resp.StatusCode, formatExpectStatus(expectStatus))
+		if snippet := readErrorSnippet(resp.Body); snippet != "" {
+			msg += ": " + snippet
+		}
+		return params.Err(job, "unexpected_status", msg), nil
 	}
 
 	// A fresh, accepted response: remember its validators so the next fetch
@@ -363,6 +370,24 @@ func formatExpectStatus(expect []int) string {
 		parts[i] = fmt.Sprintf("%d", e)
 	}
 	return strings.Join(parts, ",")
+}
+
+// errorSnippetBytes bounds how much of a failed response body we fold into the
+// error message — enough to carry an API's validation detail, not so much it
+// floods the run log or leaks a large payload.
+const errorSnippetBytes = 512
+
+// readErrorSnippet reads a short, single-line snippet of a failed response
+// body for the error message. Best-effort: whitespace is collapsed to keep the
+// message on one line, and the result is truncated with an ellipsis. Returns
+// "" when the body is empty or unreadable.
+func readErrorSnippet(body io.Reader) string {
+	raw, _ := io.ReadAll(io.LimitReader(body, errorSnippetBytes+1))
+	s := strings.Join(strings.Fields(string(raw)), " ")
+	if len(s) > errorSnippetBytes {
+		s = s[:errorSnippetBytes] + "…"
+	}
+	return s
 }
 
 func flattenHeaders(h http.Header) map[string]string {

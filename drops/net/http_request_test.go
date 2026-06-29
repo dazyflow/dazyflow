@@ -165,6 +165,34 @@ func TestHTTP_UnexpectedStatusFails(t *testing.T) {
 	}
 }
 
+func TestHTTP_UnexpectedStatusIncludesBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(422)
+		// Multi-line body — the snippet should collapse it onto one line.
+		_, _ = w.Write([]byte("{\n  \"detail\": \"category is required\"\n}"))
+	}))
+	defer srv.Close()
+
+	res, _ := executeHTTPRequest(t.Context(), core.Job{
+		Params: map[string]any{
+			"url":                    srv.URL,
+			"allow_private_networks": true,
+		},
+	}, nil)
+	if res.Error == nil || res.Error.Code != "unexpected_status" {
+		t.Fatalf("code = %+v, want unexpected_status", res.Error)
+	}
+	if !strings.Contains(res.Error.Message, "got 422") {
+		t.Errorf("message %q should report the status", res.Error.Message)
+	}
+	if !strings.Contains(res.Error.Message, "category is required") {
+		t.Errorf("message %q should include the response body snippet", res.Error.Message)
+	}
+	if strings.Contains(res.Error.Message, "\n") {
+		t.Errorf("message %q should be single-line", res.Error.Message)
+	}
+}
+
 func TestHTTP_ExpectStatusOverride(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(404)

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/internal/rendertext"
 )
 
 // ===== helpers.go normalizers =========================================
@@ -319,8 +320,8 @@ func TestCov_StringifyCell(t *testing.T) {
 		{[]any{float64(1), float64(2)}, `[1,2]`},
 	}
 	for _, c := range cases {
-		if got := stringifyCell(c.in); got != c.want {
-			t.Errorf("stringifyCell(%#v) = %q, want %q", c.in, got, c.want)
+		if got := rendertext.StringifyCell(c.in); got != c.want {
+			t.Errorf("StringifyCell(%#v) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }

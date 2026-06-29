@@ -18,6 +18,7 @@ import { LiveConsole } from "./LiveConsole";
 import { ConfirmModal } from "./ConfirmModal";
 import { ApprovalPanel } from "./ApprovalPanel";
 import { RenderTemplatePreview } from "./RenderTemplatePreview";
+import { RenderTextPreview } from "./RenderTextPreview";
 import { ForEachEditor } from "./ForEachEditor";
 import {
   TriggerScheduleField,
@@ -563,6 +564,33 @@ export function Inspector({
                 {t("loopBody.runsPerRow")}
               </div>
             )}
+            {/* render_template / render_text lead with their friendly editor
+                (starter/layout dropdown + sample + live preview); their raw
+                fields are marked advanced, so the SchemaForm below renders only
+                the collapsed "Advanced" disclosure — keeping it at the bottom,
+                beneath the preview. The render_template step turns "write Go
+                template code" into "pick a layout and watch it update"; the
+                render_text step does the same for a list → one string. */}
+            {d.moduleID === "render_template" && (
+              <RenderTemplatePreview
+                template={
+                  typeof currentParams.template === "string"
+                    ? currentParams.template
+                    : ""
+                }
+                onInsertTemplate={(tmpl) =>
+                  onParamsChange(selected.id, { ...currentParams, template: tmpl })
+                }
+              />
+            )}
+            {d.moduleID === "render_text" && (
+              <RenderTextPreview
+                params={currentParams}
+                onApply={(patch) =>
+                  onParamsChange(selected.id, { ...currentParams, ...patch })
+                }
+              />
+            )}
             <SchemaForm
               key={selected.id}
               schema={schema}
@@ -579,22 +607,6 @@ export function Inspector({
               geoRunCoordinate={runCoordinate}
               onChange={(v) => onParamsChange(selected.id, v)}
             />
-            {/* The render_template step asks for HTML template syntax — the
-                scariest field for a non-technical user. A live preview +
-                starter layouts turns "write Go template code" into "tweak and
-                watch it update". */}
-            {d.moduleID === "render_template" && (
-              <RenderTemplatePreview
-                template={
-                  typeof currentParams.template === "string"
-                    ? currentParams.template
-                    : ""
-                }
-                onInsertTemplate={(tmpl) =>
-                  onParamsChange(selected.id, { ...currentParams, template: tmpl })
-                }
-              />
-            )}
           </>
         )}
 

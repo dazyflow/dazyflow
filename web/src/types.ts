@@ -287,6 +287,10 @@ export type JSONSchema = {
   // either spelling and the UI accepts both.
   x_advanced?: boolean;
   "x-advanced"?: boolean;
+  // x_mono renders a multiline field in a monospace (code) font — for fields
+  // whose value is code/markup (e.g. render_template's HTML template) rather
+  // than prose (an email body), so the markup reads correctly.
+  x_mono?: boolean;
   // x_columns_source marks a row-condition filter whose column field should be
   // a dropdown populated from a data source rather than typed free-hand.
   // "collection" lists the columns of the collection named by the sibling

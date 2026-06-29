@@ -71,11 +71,14 @@ func init() {
 						"type":"string",
 						"format":"multiline",
 						"title":"Template",
+						"x_advanced":true,
+						"x_mono":true,
 						"description":"HTML template (Go html/template). {{.field}} inserts a value from the data, {{range .items}}…{{end}} loops, {{if .x}}…{{end}} branches. Helpers: default, upper, lower, join. Values are auto-escaped. Overridden by the 'Template' input."
 					},
 					"data": {
 						"type":"object",
 						"title":"Data",
+						"x_advanced":true,
 						"description":"Merge data the template sees as the root context, so {{.name}} reads data.name. Usually wired in via the 'Data' input (which overrides this); set here for fixed or test content."
 					}
 				}

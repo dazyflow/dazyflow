@@ -18,7 +18,7 @@ import (
 
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/limits"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/rowcel"
+	"git.sr.ht/~klahr/dazyflow/internal/rowcel"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/rows"
 )
 
@@ -35,7 +35,7 @@ func capRows(n int) error {
 
 // newRowCELEnv builds the row/now CEL environment shared by the filtering and
 // computing drops (compute_rows, route_rows, split_rows). The environment, the
-// cost ceiling, and the compile helper all live in drops/internal/rowcel so
+// cost ceiling, and the compile helper all live in internal/rowcel so
 // the no-code condition builder and every engine that runs its CEL stay in
 // lockstep — see compileRowExpr / celVars below, which delegate there.
 func newRowCELEnv(extra ...cel.EnvOption) (*cel.Env, error) {

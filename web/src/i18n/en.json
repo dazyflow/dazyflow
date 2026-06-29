@@ -1584,6 +1584,7 @@
     "dropOrBrowse": "Drop a file here or click to browse",
     "workspacePathPlaceholder": "workspace-relative path",
     "fallbackHint": "Top-level schema isn't a property bag; using JSON editor instead.",
+    "advanced": "Advanced",
     "accountChoose": "(choose a connected account)",
     "accountNotConnected": "{{account}} (not connected)",
     "accountConnect": "Connect an account",
@@ -1711,7 +1712,8 @@
     "generating": "Writing…",
     "providerLabel": "AI provider",
     "needConnect": "Connect Claude or ChatGPT on the <0>Apps page</0> to use this.",
-    "starters": "Start from:",
+    "starters": "Start from",
+    "choose": "Choose a starting point…",
     "starter": {
       "greeting": "Greeting",
       "receipt": "Receipt",
@@ -1722,6 +1724,21 @@
     "preview": "Live preview",
     "rendering": "updating…",
     "typeToPreview": "Add a template above — or pick a layout — to see it here."
+  },
+  "renderTextPreview": {
+    "presets": "Make a:",
+    "layout": "Layout",
+    "choose": "Choose a layout…",
+    "preset": {
+      "table": "Table",
+      "bullets": "Bulleted list",
+      "commas": "Comma-separated"
+    },
+    "sampleRows": "Sample rows (for preview only)",
+    "badJson": "Sample rows must be a JSON list, e.g. [ {…}, {…} ].",
+    "preview": "Live preview",
+    "rendering": "updating…",
+    "pickPreset": "Pick a layout above to build it from your columns and see it here."
   },
   "approval": {
     "notifyNtfy": "Notify me on ntfy with the approval link",

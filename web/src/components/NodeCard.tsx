@@ -173,6 +173,10 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
       // box. Skipping it here (without PICKER_FORMATS) also keeps it out of
       // the read-only literal section, so the card shows just the pin.
       if (s?.format === "workspace-dir") continue;
+      // Multiline strings (e.g. render_template's HTML `template`) are long
+      // blobs that don't read as a card preview — they're edited in the
+      // Inspector (with its live preview), so the card shows just the pin.
+      if (s?.format === "multiline") continue;
       if (inlineEligible(s)) inlineByPort[p.port] = s;
     }
   }

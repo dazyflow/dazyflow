@@ -6,13 +6,11 @@ package transform
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"strings"
-
-	"github.com/google/cel-go/cel"
+	"errors"
 
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/internal/rendertext"
 )
 
 func init() {
@@ -56,20 +54,23 @@ func init() {
 				"properties":{
 					"template": {
 						"type":"string",
+						"x_advanced":true,
 						"description":"CEL expression rendering one line per row. Sees the row as 'row' and the current time as 'now'. Non-string results are stringified. Takes precedence over 'column'."
 					},
 					"column": {
 						"type":"string",
+						"x_advanced":true,
 						"description":"Name of a single column to take each line from. Used when 'template' is absent."
 					},
 					"separator": {
 						"type":"string",
 						"default":"\n",
+						"x_advanced":true,
 						"description":"String placed between rendered lines. Defaults to a newline."
 					},
-					"prefix": {"type":"string","description":"Prepended to the joined text when at least one row is rendered."},
-					"suffix": {"type":"string","description":"Appended to the joined text when at least one row is rendered."},
-					"empty": {"type":"string","description":"Text emitted when there are zero input rows. Defaults to the empty string."}
+					"prefix": {"type":"string","x_advanced":true,"description":"Prepended to the joined text when at least one row is rendered."},
+					"suffix": {"type":"string","x_advanced":true,"description":"Appended to the joined text when at least one row is rendered."},
+					"empty": {"type":"string","x_advanced":true,"description":"Text emitted when there are zero input rows. Defaults to the empty string."}
 				}
 			}`),
 			Idempotent: true,
@@ -96,6 +97,11 @@ func init() {
 // the `empty` string verbatim, so an empty result set yields a chosen
 // fallback ("Nothing to report.") instead of an empty message the sink
 // would reject.
+// executeRenderText reads the `rows` input, then defers the actual rendering
+// (CEL compile, per-row eval, join, prefix/suffix, empty fallback) to the
+// shared internal/rendertext package — the SAME code the editor's live-preview
+// endpoint runs, so a previewed template renders byte-identically at run time.
+// maxBytes is 0 (no ceiling) at run time; the preview imposes a small cap.
 func executeRenderText(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	rowsRef, ok := job.Input["rows"]
 	if !ok {
@@ -106,49 +112,22 @@ func executeRenderText(ctx context.Context, job core.Job, _ chan<- core.Progress
 		return errResult(job, "bad_input", err.Error()), nil
 	}
 
-	separator := paramStringOr(job.Params, "separator", "\n")
-	prefix := paramStringOr(job.Params, "prefix", "")
-	suffix := paramStringOr(job.Params, "suffix", "")
-	empty := paramStringOr(job.Params, "empty", "")
-
-	if len(rows) == 0 {
-		return renderTextResult(job, empty), nil
-	}
-
-	template := paramStringOr(job.Params, "template", "")
-	column := paramStringOr(job.Params, "column", "")
-	if template == "" && column == "" {
-		return errResult(job, "bad_param", "render_text needs either a 'template' expression or a 'column' name"), nil
-	}
-
-	var prog cel.Program
-	if template != "" {
-		env, err := newRowCELEnv()
-		if err != nil {
-			return errResult(job, "internal", fmt.Sprintf("cel env: %v", err)), nil
-		}
-		prog, err = compileRowExpr(env, template, "template")
-		if err != nil {
+	text, err := rendertext.Render(ctx, rendertext.SpecFromParams(job.Params), rows, 0)
+	if err != nil {
+		var pe *rendertext.ParseError
+		var ee *rendertext.EvalError
+		switch {
+		case errors.Is(err, rendertext.ErrNoRenderer), errors.As(err, &pe):
+			// No renderer configured, or the CEL template doesn't compile —
+			// both are author mistakes in the step's params.
 			return errResult(job, "bad_param", err.Error()), nil
+		case errors.As(err, &ee):
+			return errResult(job, "eval", err.Error()), nil
+		default:
+			return errResult(job, "internal", err.Error()), nil
 		}
 	}
-
-	lines := make([]string, 0, len(rows))
-	for i, row := range rows {
-		var line string
-		if prog != nil {
-			v, err := evalExpression(ctx, prog, row)
-			if err != nil {
-				return errResult(job, "eval", fmt.Sprintf("template row %d: %v", i, err)), nil
-			}
-			line = stringifyCell(v)
-		} else {
-			line = stringifyCell(row[column])
-		}
-		lines = append(lines, line)
-	}
-
-	return renderTextResult(job, prefix+strings.Join(lines, separator)+suffix), nil
+	return renderTextResult(job, text), nil
 }
 
 func renderTextResult(job core.Job, text string) core.Result {
@@ -158,27 +137,6 @@ func renderTextResult(job core.Job, text string) core.Result {
 		Output: map[string]core.Ref{
 			"text": {MIME: "text/plain", Inline: text},
 		},
-	}
-}
-
-// stringifyCell renders a single cell value as the text that lands in a
-// line. Strings pass through unquoted; everything else uses its natural
-// Go formatting, with composite values (a map/list cell) JSON-encoded so
-// they don't surface as Go's `map[...]` debug form.
-func stringifyCell(v any) string {
-	switch t := v.(type) {
-	case nil:
-		return ""
-	case string:
-		return t
-	case bool, int, int8, int16, int32, int64,
-		uint, uint8, uint16, uint32, uint64, float32, float64:
-		return fmt.Sprintf("%v", t)
-	default:
-		if b, err := json.Marshal(v); err == nil {
-			return string(b)
-		}
-		return fmt.Sprintf("%v", v)
 	}
 }
 

@@ -2,13 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
-import { Sparkles } from "lucide-react";
-import { Trans, useTranslation } from "react-i18next";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import { explainApiError } from "../lib/explainApiError";
-import { Button } from "./Button";
 
 // Ready-made starting points. Each sets a working template AND matching
 // sample data, so one click gives a non-technical user a rendering email to
@@ -73,76 +70,12 @@ export function RenderTemplatePreview({
 }) {
   const { t } = useTranslation();
   const { token } = useAuth();
+  const [starter, setStarter] = useState<string>("");
   const [sample, setSample] = useState<string>(STARTERS[0].sample);
   const [html, setHtml] = useState<string>("");
   const [serverErr, setServerErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const seq = useRef(0);
-
-  // AI assist: describe → generate template.
-  const [desc, setDesc] = useState("");
-  const [assisting, setAssisting] = useState(false);
-  const [assistErr, setAssistErr] = useState<string | null>(null);
-  const [needConnect, setNeedConnect] = useState(false);
-  // Connected AI providers + the chosen one (remembered per browser, so a
-  // user who prefers OpenAI doesn't re-pick every time).
-  const [providers, setProviders] = useState<{ name: string; label: string }[]>([]);
-  const [provider, setProvider] = useState<string>(
-    () => localStorage.getItem("dazyflow.aiProvider") ?? "",
-  );
-
-  useEffect(() => {
-    if (!token) return;
-    let live = true;
-    api
-      .listLLMProviders(token)
-      .then((r) => {
-        if (!live) return;
-        const list = r.providers ?? [];
-        setProviders(list);
-        // Keep the remembered choice if it's still connected; else default to
-        // the first connected provider.
-        setProvider((cur) =>
-          list.some((p) => p.name === cur) ? cur : (list[0]?.name ?? ""),
-        );
-      })
-      .catch(() => {
-        /* leave empty — generate() will surface need_connect */
-      });
-    return () => {
-      live = false;
-    };
-  }, [token]);
-
-  // Merge-field names the model may use, taken from the sample data's
-  // top-level keys, so generated templates reference fields that exist.
-  const fields = useMemo<string[]>(() => {
-    try {
-      const obj = JSON.parse(sample);
-      return obj && typeof obj === "object" && !Array.isArray(obj)
-        ? Object.keys(obj)
-        : [];
-    } catch {
-      return [];
-    }
-  }, [sample]);
-
-  const generate = async () => {
-    if (!token || desc.trim() === "" || assisting) return;
-    setAssisting(true);
-    setAssistErr(null);
-    setNeedConnect(false);
-    try {
-      const r = await api.assistRenderTemplate(token, desc.trim(), fields, provider || undefined);
-      if (r.need_connect) setNeedConnect(true);
-      else if (r.error) setAssistErr(r.error);
-      else if (r.template) onInsertTemplate(r.template);
-    } catch (e) {
-      setAssistErr(explainApiError(e, t));
-    } finally {
-      setAssisting(false);
-    }
-  };
 
   // Local JSON validity — caught client-side so a half-typed sample doesn't
   // spam the server or look like a template error.
@@ -192,78 +125,34 @@ export function RenderTemplatePreview({
         });
     }, 350);
     return () => clearTimeout(handle);
-  }, [template, sample, jsonError, empty, token]);
+  }, [template, sample, jsonError, empty, token, t]);
 
   return (
     <div className="rtp">
-      <div className="rtp-assist">
-        <label className="rtp-label" htmlFor="rtp-desc">
-          <Sparkles size={13} style={{ verticalAlign: -2, marginRight: 4 }} />
-          {t("renderPreview.assistLabel")}
-        </label>
-        <div className="rtp-assist-row">
-          <input
-            id="rtp-desc"
-            className="rtp-desc"
-            value={desc}
-            placeholder={t("renderPreview.assistPlaceholder")}
-            onChange={(e) => setDesc(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                void generate();
-              }
-            }}
-          />
-          {providers.length > 1 && (
-            <select
-              className="rtp-provider"
-              value={provider}
-              aria-label={t("renderPreview.providerLabel")}
-              onChange={(e) => {
-                setProvider(e.target.value);
-                localStorage.setItem("dazyflow.aiProvider", e.target.value);
-              }}
-            >
-              {providers.map((p) => (
-                <option key={p.name} value={p.name}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          )}
-          <Button
-            className="rtp-generate"
-            disabled={assisting || desc.trim() === ""}
-            onClick={() => void generate()}
-          >
-            {assisting ? t("renderPreview.generating") : t("renderPreview.generate")}
-          </Button>
-        </div>
-        {needConnect ? (
-          <div className="rtp-warn">
-            <Trans i18nKey="renderPreview.needConnect" components={[<Link to="/apps?category=ai" />]} />
-          </div>
-        ) : assistErr ? (
-          <div className="rtp-warn">{assistErr}</div>
-        ) : null}
-      </div>
-
-      <div className="rtp-starters">
-        <span className="rtp-label">{t("renderPreview.starters")}</span>
+      <label className="rtp-label" htmlFor="rtp-starter">
+        {t("renderPreview.starters")}
+      </label>
+      <select
+        id="rtp-starter"
+        className="rtp-type"
+        value={starter}
+        onChange={(e) => {
+          const key = e.target.value;
+          setStarter(key);
+          const s = STARTERS.find((x) => x.key === key);
+          if (s) {
+            onInsertTemplate(s.template);
+            setSample(s.sample);
+          }
+        }}
+      >
+        <option value="">{t("renderPreview.choose")}</option>
         {STARTERS.map((s) => (
-          <Button
-            key={s.key}
-            className="rtp-starter"
-            onClick={() => {
-              onInsertTemplate(s.template);
-              setSample(s.sample);
-            }}
-          >
+          <option key={s.key} value={s.key}>
             {t(`renderPreview.starter.${s.key}`)}
-          </Button>
+          </option>
         ))}
-      </div>
+      </select>
 
       <label className="rtp-label" htmlFor="rtp-sample">
         {t("renderPreview.sampleData")}
