@@ -2755,9 +2755,11 @@ function ScalarValue({
 // DictValueCell renders the value side of a dict row. For string values it
 // adds the same "{}" reference picker the top-level string fields get, so a
 // header value can pull in ${secret.NAME} (or upstream/trigger tokens) without
-// the user typing the syntax by hand. Non-string values fall through to the
-// plain ScalarValue editor. References come from FormContext, so DictField
-// itself doesn't need to thread them through.
+// the user typing the syntax by hand. A whole-value reference collapses into a
+// chip — a Lock chip for ${secret.NAME}, a braces chip for other ${…} tokens —
+// matching how PlainStringField presents the same values. Non-string values
+// fall through to the plain ScalarValue editor. References and tokenLabels come
+// from FormContext, so DictField itself doesn't thread them through.
 function DictValueCell({
   schema,
   value,
@@ -2767,12 +2769,49 @@ function DictValueCell({
   value: unknown;
   onChange: (v: unknown) => void;
 }) {
-  const { references, extraReferenceItems } = useFormCtx();
+  const { t } = useTranslation();
+  const { references, extraReferenceItems, tokenLabels } = useFormCtx();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const isString =
     !schema.enum && (schema.type === "string" || schema.type == null);
+  const raw = typeof value === "string" ? value : "";
+  const credMatch = isString && references ? SECRET_FULL_REF.exec(raw) : null;
+  const tokenText =
+    isString && references && !credMatch
+      ? friendlyTokenText(raw, tokenLabels)
+      : null;
+  // forceEdit lets "Replace" drop from the chip back to the raw input. Reset
+  // whenever the value settles back to a single reference (e.g. after reload),
+  // so the chip stays the default presentation across navigation.
+  const [forceEdit, setForceEdit] = useState(false);
+  useEffect(() => {
+    if (credMatch || tokenText) setForceEdit(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [raw]);
   if (!isString || !references) {
     return <ScalarValue schema={schema} value={value} onChange={onChange} />;
+  }
+  // Replace clears the value so the input opens empty rather than pre-filled
+  // with the ${…} syntax — the user asked to type something else.
+  const onReplace = () => {
+    onChange("");
+    setForceEdit(true);
+  };
+  if (credMatch && !forceEdit) {
+    return <TenantSecretChip credName={credMatch[1]} onReplace={onReplace} />;
+  }
+  if (tokenText && !forceEdit) {
+    return (
+      <div className="sf-credential-chip">
+        <Braces size={13} className="sf-credential-chip-glyph" />
+        <span className="sf-credential-chip-label">{tokenText}</span>
+        <span className="sf-credential-chip-actions">
+          <Button variant="link" onClick={onReplace}>
+            {t("schemaForm.secretChipReplace")}
+          </Button>
+        </span>
+      </div>
+    );
   }
   // insertRef splices a ${…} token at the cursor (or appends when unfocused),
   // mirroring PlainStringField so the value round-trips like a keystroke.
