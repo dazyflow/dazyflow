@@ -80,7 +80,9 @@ type AuthCtx = {
   // singleton of their own tenant and the switcher hides.
   tenants: string[];
   activeTenant: string;
-  setActiveTenant: (t: string) => void;
+  // opts.reload forces a full-page reload (to "/") after the switch lands so
+  // no page keeps the previous org's data on screen; the org switcher sets it.
+  setActiveTenant: (t: string, opts?: { reload?: boolean }) => void;
 
   // refreshMe re-fetches the current identity (whoami) and updates `me`,
   // so chrome bound to it — the top bar's org name/logo, the tenant
@@ -285,10 +287,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setActiveWorkspaceState(token ? me?.workspace || DEFAULT_WORKSPACE : "");
   }, [token, me]);
 
-  const setActiveTenant = (t: string) => {
+  const setActiveTenant = (t: string, opts?: { reload?: boolean }) => {
     setActiveTenantState(t);
     if (t) localStorage.setItem(TENANT_STORAGE_KEY, t);
     else localStorage.removeItem(TENANT_STORAGE_KEY);
+    // A deep reload (opts.reload, used by the org switcher) re-bootstraps the
+    // whole SPA so no page keeps the previous org's in-memory data on screen:
+    // the cold boot re-reads the active tenant from localStorage and refetches
+    // everything in the new scope. We navigate to "/" rather than reload the
+    // current URL because org-specific routes (e.g. a flow editor for a flow id
+    // that only exists in the old org) wouldn't resolve in the new org.
+    const deepReload = () => {
+      if (opts?.reload) window.location.assign("/");
+    };
     // The new org's workspace is re-derived from whoami below (and by the
     // me-driven effect above), so no explicit workspace reset is needed.
     // For password-auth users, also tell the server to re-issue the
@@ -303,18 +314,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       void api
         .switchOrg(token, t)
         .then(() => api.whoami(token))
-        .then((w) => setMe(w))
+        .then((w) => {
+          setMe(w);
+          // Reload only after the session is re-scoped server-side — reloading
+          // mid-switch would cold-boot against the OLD tenant's scope.
+          deepReload();
+        })
         .catch((e) => {
           // The server refused to re-scope the session, so subsequent calls
           // would still hit the OLD tenant — claiming we switched would be a
           // lie. Surface it (the chrome banner reads context `error`) instead
-          // of silently leaving the user in the wrong scope.
+          // of silently leaving the user in the wrong scope. Skip the reload
+          // so the error banner stays on screen.
           setError(
             i18n.t("signIn.switchOrgFailed", {
               error: explainApiError(e, i18n.t),
             }),
           );
         });
+    } else {
+      // Platform admins / non-password sessions aren't tenant-bound, so there's
+      // nothing to re-scope server-side — reload straight away.
+      deepReload();
     }
   };
 

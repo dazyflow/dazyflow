@@ -488,17 +488,20 @@ export function AppShell({ children }: { children: ReactNode }) {
               activeTenant={active}
               showId={shouldShowTenantID(me, tenants.length)}
               onPick={(tid) => {
-                setActiveTenant(tid);
                 setOrgModalOpen(false);
+                // Switching org deep-reloads the app so the active page can't
+                // keep showing the previous org's data. No-op if it's already
+                // the active org.
+                if (tid !== active) setActiveTenant(tid, { reload: true });
               }}
               onCreate={async (displayName) => {
                 if (!token) return;
                 const res = await api.createOrg(token, displayName);
-                // Rebuild the tenant catalogue (so it appears) and switch into
-                // the new org, then close.
-                reloadTenants();
-                setActiveTenant(res.tenant);
+                // Switch into the new org with a deep reload: the cold boot
+                // rebuilds the tenant catalogue (so it appears) and refetches
+                // in the new scope, so no page keeps the previous org's data.
                 setOrgModalOpen(false);
+                setActiveTenant(res.tenant, { reload: true });
               }}
               onExport={async (tid) => {
                 if (!token) return;
