@@ -38,6 +38,46 @@ func TestSortRows_AscendingString(t *testing.T) {
 	}
 }
 
+func TestSortRows_CommaStringSingle(t *testing.T) {
+	// The documented shape: a bare comma-string, one column, ascending.
+	got := runSort(t,
+		map[string]any{"by": "name"},
+		[]map[string]any{{"name": "Carol"}, {"name": "Alice"}, {"name": "Bob"}},
+		nil)
+	if got[0]["name"] != "Alice" || got[1]["name"] != "Bob" || got[2]["name"] != "Carol" {
+		t.Errorf("got %+v", got)
+	}
+}
+
+func TestSortRows_CommaStringMinusDescending(t *testing.T) {
+	got := runSort(t,
+		map[string]any{"by": "-score"},
+		[]map[string]any{
+			{"name": "A", "score": int64(50)},
+			{"name": "B", "score": int64(90)},
+			{"name": "C", "score": int64(70)},
+		},
+		nil)
+	if got[0]["name"] != "B" || got[1]["name"] != "C" || got[2]["name"] != "A" {
+		t.Errorf("got %+v", got)
+	}
+}
+
+func TestSortRows_CommaStringMultiKeyWithWhitespace(t *testing.T) {
+	// "country, -age" — primary ascending, tie-break descending, spaces trimmed.
+	got := runSort(t,
+		map[string]any{"by": "country, -age"},
+		[]map[string]any{
+			{"name": "SE-young", "country": "SE", "age": int64(20)},
+			{"name": "NO-old", "country": "NO", "age": int64(60)},
+			{"name": "SE-old", "country": "SE", "age": int64(50)},
+		},
+		nil)
+	if got[0]["name"] != "NO-old" || got[1]["name"] != "SE-old" || got[2]["name"] != "SE-young" {
+		t.Errorf("got %+v", got)
+	}
+}
+
 func TestSortRows_DescendingViaObject(t *testing.T) {
 	got := runSort(t,
 		map[string]any{"by": []any{map[string]any{"column": "score", "desc": true}}},

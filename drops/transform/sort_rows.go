@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/engine"
@@ -24,17 +25,17 @@ func init() {
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"transform", "sort", "order", "etl"},
-			Description: "Sort rows by one or more columns. The 'by' param accepts a list of column names (ascending) or {column, desc:true} objects for descending. Multi-column sorts are stable in the order listed — earlier keys win, later keys break ties.",
-			Summary:     "Stably sort rows by one or more columns, ascending or descending per key.",
+			Description: "Sort rows by one or more columns. The 'by' param is a comma-separated list of column names in priority order — earlier names win, later ones break ties. Prefix a name with '-' for descending: \"revenue,-created_at\" is revenue ascending, then newest first. (A legacy array of names / {column,desc:true} objects is still accepted for older flows.)",
+			Summary:     "Stably sort rows by one or more columns, ascending or '-descending' per key.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Sort by created_at ascending",
-					Params: json.RawMessage(`{"by":["created_at"]}`),
+					Params: json.RawMessage(`{"by":"created_at"}`),
 				},
 				{
 					Title:  "Highest revenue first, then alphabetical name",
-					Params: json.RawMessage(`{"by":[{"column":"revenue","desc":true},"name"]}`),
-					Notes:  "Multi-key sort is stable: rows with equal revenue keep their name-order tiebreak.",
+					Params: json.RawMessage(`{"by":"-revenue,name"}`),
+					Notes:  "Prefix '-' for descending. Multi-key sort is stable: rows with equal revenue keep their name-order tiebreak.",
 				},
 			},
 			ExecutionModel: core.ExecutionBatch,
@@ -49,14 +50,9 @@ func init() {
 				"type":"object",
 				"properties":{
 					"by":{
-						"type":"array",
-						"items":{
-							"oneOf":[
-								{"type":"string"},
-								{"type":"object","properties":{"column":{"type":"string"},"desc":{"type":"boolean"}},"required":["column"]}
-							]
-						},
-						"description":"Sort keys in priority order. A bare string means ascending; {column,desc:true} flips that column to descending."
+						"type":"string",
+						"title":"Sort by",
+						"description":"Comma-separated column names in priority order; earlier names win ties. Prefix a name with '-' for descending. E.g. \"revenue,-created_at\"."
 					}
 				},
 				"required":["by"]
@@ -108,48 +104,93 @@ func executeSortRows(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 	return resultRows(job, out, headers), nil
 }
 
-// parseSortKeys accepts the loose JSON shape the schema documents:
-// bare strings ("name" → ascending) and objects ({column,desc}). One
-// pass through the list, no auto-detect of column types — that
-// happens lazily inside the comparator.
+// parseSortKeys reads the `by` param. The documented shape is a single
+// comma-separated string ("id,name,-age" → id asc, name asc, age desc); a
+// leading '-' on a name flips it to descending. The legacy array form (bare
+// strings and {column,desc} objects) is still accepted so older flows keep
+// working. No column-type auto-detect here — that happens lazily in the
+// comparator.
 func parseSortKeys(params map[string]any) ([]sortKey, error) {
 	raw, ok := params["by"]
 	if !ok || raw == nil {
 		return nil, fmt.Errorf("by: required")
 	}
-	arr, ok := raw.([]any)
-	if !ok {
-		// Native callers (tests) may pass []string or []sortKey-like
-		// shapes; accept the common ones.
-		if ss, ok := raw.([]string); ok {
-			out := make([]sortKey, len(ss))
-			for i, s := range ss {
-				out[i] = sortKey{column: s}
+	switch v := raw.(type) {
+	case string:
+		return parseSortString(v)
+	case []string:
+		// Native callers (tests) may pass []string directly.
+		keys := make([]sortKey, 0, len(v))
+		for _, s := range v {
+			if k, ok := sortTokenKey(s); ok {
+				keys = append(keys, k)
 			}
-			return out, nil
 		}
-		return nil, fmt.Errorf("by: expected array, got %T", raw)
-	}
-	if len(arr) == 0 {
-		return nil, fmt.Errorf("by: must list at least one key")
-	}
-	keys := make([]sortKey, 0, len(arr))
-	for i, item := range arr {
-		switch v := item.(type) {
-		case string:
-			keys = append(keys, sortKey{column: v})
-		case map[string]any:
-			col, _ := v["column"].(string)
-			if col == "" {
-				return nil, fmt.Errorf("by[%d]: 'column' missing", i)
+		if len(keys) == 0 {
+			return nil, fmt.Errorf("by: must list at least one column")
+		}
+		return keys, nil
+	case []any:
+		if len(v) == 0 {
+			return nil, fmt.Errorf("by: must list at least one key")
+		}
+		keys := make([]sortKey, 0, len(v))
+		for i, item := range v {
+			switch it := item.(type) {
+			case string:
+				if k, ok := sortTokenKey(it); ok {
+					keys = append(keys, k)
+				}
+			case map[string]any:
+				col, _ := it["column"].(string)
+				if col == "" {
+					return nil, fmt.Errorf("by[%d]: 'column' missing", i)
+				}
+				desc, _ := it["desc"].(bool)
+				keys = append(keys, sortKey{column: col, desc: desc})
+			default:
+				return nil, fmt.Errorf("by[%d]: expected string or {column,desc}, got %T", i, item)
 			}
-			desc, _ := v["desc"].(bool)
-			keys = append(keys, sortKey{column: col, desc: desc})
-		default:
-			return nil, fmt.Errorf("by[%d]: expected string or {column,desc}, got %T", i, item)
 		}
+		if len(keys) == 0 {
+			return nil, fmt.Errorf("by: must list at least one column")
+		}
+		return keys, nil
+	default:
+		return nil, fmt.Errorf("by: expected a comma-separated string or array, got %T", raw)
+	}
+}
+
+// parseSortString splits "id,name,-age" into ordered keys. Empty tokens (a
+// stray comma) are skipped.
+func parseSortString(s string) ([]sortKey, error) {
+	keys := make([]sortKey, 0)
+	for _, part := range strings.Split(s, ",") {
+		if k, ok := sortTokenKey(part); ok {
+			keys = append(keys, k)
+		}
+	}
+	if len(keys) == 0 {
+		return nil, fmt.Errorf("by: must list at least one column")
 	}
 	return keys, nil
+}
+
+// sortTokenKey turns one token into a key: a leading '-' marks descending
+// ("-age"), otherwise ascending. Whitespace is trimmed so "id, -age" splits
+// cleanly. Returns ok=false for an empty token. A column literally named with
+// a leading '-' must use the legacy {column,desc} object form.
+func sortTokenKey(tok string) (sortKey, bool) {
+	tok = strings.TrimSpace(tok)
+	desc := false
+	if strings.HasPrefix(tok, "-") {
+		desc = true
+		tok = strings.TrimSpace(tok[1:])
+	}
+	if tok == "" {
+		return sortKey{}, false
+	}
+	return sortKey{column: tok, desc: desc}, true
 }
 
 // compareCells orders two cell values: -1 if a < b, 0 if equal,
