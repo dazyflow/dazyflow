@@ -83,7 +83,7 @@ func init() {
 						"url":{"type":"string","title":"URL","description":"The web address to call. The URL input overrides this when connected."},
 						"method":{"type":"string","title":"Method","default":"GET","enum":["GET","POST","PUT","PATCH","DELETE","HEAD","OPTIONS"],"description":"What kind of request to make. GET fetches data; POST/PUT/PATCH send the Body along."},
 						"body":{"type":"string","title":"Body","description":"Text to send with the request (POST/PUT/PATCH). The Body input overrides this when connected."},
-						"headers":{"type":"object","title":"Headers","additionalProperties":{"type":"string"},"x_advanced":true,"description":"Extra request headers (one per key). Values may include ${secret.NAME} placeholders that resolve to stored secrets."},
+						"headers":{"type":"object","title":"Headers","additionalProperties":{"type":"string"},"description":"Extra request headers (one per key). Values may include ${secret.NAME} placeholders that resolve to stored secrets."},
 						"timeout_ms":{"type":"integer","default":30000,"minimum":1,"description":"Hard deadline for the full request, in milliseconds."},
 						"expect_status":{"type":"array","title":"Accepted status codes","items":{"type":"integer"},"x_advanced":true,"description":"Status codes treated as success. Empty defaults to 2xx."},
 						"max_body_bytes":{"type":"integer","title":"Max response bytes","default":10485760,"minimum":0,"x_advanced":true,"description":"Fail responses larger than this. Default 10 MiB."},
