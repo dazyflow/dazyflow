@@ -2307,7 +2307,7 @@ function DictField({
             placeholder={t("schemaForm.keyPlaceholder")}
             style={{ fontFamily: "var(--font-mono)" }}
           />
-          <ScalarValue
+          <DictValueCell
             schema={valueSchema}
             value={v}
             onChange={(nv) => updateAt(idx, k, nv)}
@@ -2750,6 +2750,64 @@ function ScalarValue({
         />
       );
   }
+}
+
+// DictValueCell renders the value side of a dict row. For string values it
+// adds the same "{}" reference picker the top-level string fields get, so a
+// header value can pull in ${secret.NAME} (or upstream/trigger tokens) without
+// the user typing the syntax by hand. Non-string values fall through to the
+// plain ScalarValue editor. References come from FormContext, so DictField
+// itself doesn't need to thread them through.
+function DictValueCell({
+  schema,
+  value,
+  onChange,
+}: {
+  schema: JSONSchema;
+  value: unknown;
+  onChange: (v: unknown) => void;
+}) {
+  const { references, extraReferenceItems } = useFormCtx();
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const isString =
+    !schema.enum && (schema.type === "string" || schema.type == null);
+  if (!isString || !references) {
+    return <ScalarValue schema={schema} value={value} onChange={onChange} />;
+  }
+  // insertRef splices a ${…} token at the cursor (or appends when unfocused),
+  // mirroring PlainStringField so the value round-trips like a keystroke.
+  const insertRef = (token: string) => {
+    const el = inputRef.current;
+    const cur = (value as string) ?? "";
+    if (!el) {
+      onChange(cur + token);
+      return;
+    }
+    const start = el.selectionStart ?? cur.length;
+    const end = el.selectionEnd ?? cur.length;
+    const next = cur.slice(0, start) + token + cur.slice(end);
+    onChange(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      const pos = start + token.length;
+      el.setSelectionRange(pos, pos);
+    });
+  };
+  return (
+    <div className="field-with-ref">
+      <input
+        ref={inputRef}
+        type="text"
+        value={(value as string) ?? ""}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <ReferenceMenu
+        ctx={references}
+        onInsert={insertRef}
+        extraItems={extraReferenceItems}
+      />
+    </div>
+  );
 }
 
 function JSONField({
