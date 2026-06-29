@@ -8172,7 +8172,7 @@ a.pa-card:hover {
 }
 .history-preview-banner.with-panel {
   /* Stop short of the open history panel so the Restore action stays visible. */
-  right: 300px;
+  right: var(--inspector-w);
 }
 .history-preview-msg {
   display: inline-flex;
@@ -8189,8 +8189,12 @@ a.pa-card:hover {
   top: 0;
   right: 0;
   bottom: 0;
-  z-index: 6;
-  width: 300px;
+  /* Above the inspector (z-index 6): both are right-edge absolute panels, so
+     when a node is selected and history is opened the list must sit on top
+     rather than behind the inspector. Match the inspector width so it covers
+     it cleanly with no sliver showing through. */
+  z-index: 7;
+  width: var(--inspector-w);
   display: flex;
   flex-direction: column;
   background: var(--surface);
