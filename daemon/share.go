@@ -250,14 +250,17 @@ func (s *Service) PublicWorkspaceOverview(ctx context.Context, token string, now
 				continue
 			}
 			pub, _ := store.PublishedCommit(id)
-			runStatus := core.FlowRunStatusPublished(g, pub != "")
-			if runStatus == core.FlowNeedsPublish {
+			// An unpublished flow is a draft, whatever its trigger — its runs are
+			// test runs, so keep it off the public wall and out of every counter.
+			// (Subsumes the old needs_publish-only skip: those are unpublished
+			// too.)
+			if pub == "" {
 				continue
 			}
-			// A disabled flow is intentionally off — like an unpublished draft,
-			// keep it off the public wall and out of every counter (it must not
-			// show as "needs attention" just because its last run failed before
-			// it was paused, nor drag down the success rate).
+			runStatus := core.FlowRunStatusPublished(g, true)
+			// A disabled flow is intentionally off — same treatment: not shown,
+			// not counted, so a pre-pause failure can't read as "needs attention"
+			// nor drag down the success rate.
 			if runStatus == core.FlowPaused {
 				continue
 			}

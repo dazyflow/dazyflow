@@ -933,6 +933,11 @@ type FlowSummary struct {
 	// status chip. "needs_publish" means it has a scheduler trigger but hasn't
 	// been published yet (the scheduler only runs published flows).
 	RunStatus core.FlowRunStatus `json:"run_status,omitempty"`
+	// Published is true once the flow has a published revision. An unpublished
+	// flow is a draft regardless of trigger type — its (test) runs are kept out
+	// of the overview/TV health + attention stats. No omitempty: the explicit
+	// false is meaningful to the UI's "counts toward health" filter.
+	Published bool `json:"published"`
 }
 
 // ListFlowSummaries is the HTTP-list flavor of ListGraphs — same
@@ -974,6 +979,7 @@ func (s *Service) ListFlowSummaries(ctx context.Context, p core.Principal, tenan
 			Owner:       g.Owner,
 			Visibility:  g.EffectiveVisibility(),
 			RunStatus:   core.FlowRunStatusPublished(g, pub != ""),
+			Published:   pub != "",
 		})
 	}
 	return out, nil

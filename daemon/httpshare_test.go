@@ -85,6 +85,10 @@ func TestHTTPGateway_ShareLifecycle(t *testing.T) {
 	}); rw.Code != http.StatusOK {
 		t.Fatalf("create flow: code=%d body=%s", rw.Code, rw.Body.String())
 	}
+	// Only published flows surface on the board now, so publish it.
+	if rw := h.do(t, "POST", "/api/v1/me/flows/t%2Fws%2Fgreet/publish", nil); rw.Code != http.StatusOK {
+		t.Fatalf("publish flow: code=%d body=%s", rw.Code, rw.Body.String())
+	}
 
 	// Mint the share link.
 	rw := h.do(t, "POST", "/api/v1/me/share?tenant=t&workspace=ws", nil)

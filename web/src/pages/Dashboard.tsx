@@ -69,18 +69,20 @@ export function Dashboard() {
     };
   }, [token, activeTenant, activeWorkspace]);
 
-  // Only "real" flows count toward the overview. Private flows are scoped to
-  // a single owner (the public board hides them too); needs_publish flows are
-  // configured-but-unpublished drafts the scheduler won't run yet; and paused
+  // Only "real" flows count toward the overview. Private flows are scoped to a
+  // single owner (the public board hides them too); UNPUBLISHED flows are
+  // drafts whatever their trigger (their runs are test runs); and paused
   // (disabled) flows are intentionally off. None should skew the health stats
-  // or show as "needs attention" — a disabled flow's last failure isn't
-  // actionable. We exclude both the flows and any run belonging to them.
+  // or show as "needs attention" — a draft's or a disabled flow's last failure
+  // isn't actionable. We exclude both the flows and any run belonging to them.
+  // `published` may be undefined on older daemons — treat only an explicit
+  // false as unpublished so the stats don't empty out against a stale backend.
   const countedFlows = useMemo(
     () =>
       flows.filter(
         (f) =>
           f.visibility !== "private" &&
-          f.run_status !== "needs_publish" &&
+          f.published !== false &&
           f.run_status !== "paused",
       ),
     [flows],

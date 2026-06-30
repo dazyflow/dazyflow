@@ -99,6 +99,10 @@ export type FlowSummary = {
   // not yet published (e.g. a freshly AI-generated scheduled flow), so it
   // won't fire until the user publishes. Optional: older daemons omit it.
   run_status?: "live" | "manual" | "paused" | "needs_publish";
+  // published is true once the flow has a published revision. Unpublished
+  // flows are drafts (whatever the trigger) and are kept out of the overview's
+  // health + attention stats. Optional: older daemons omit it.
+  published?: boolean;
 };
 
 // DropAdjacency is one directed port-to-port co-occurrence mined from the

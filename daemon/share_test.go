@@ -83,6 +83,7 @@ type shareHarness struct {
 	shares *memShareStore
 	editor core.Principal
 	viewer core.Principal
+	admin  core.Principal
 }
 
 func newShareHarness(t *testing.T) *shareHarness {
@@ -99,11 +100,22 @@ func newShareHarness(t *testing.T) *shareHarness {
 	}
 	editor := core.Role{Name: "editor", Permissions: []core.Permission{core.PermGraphRun, core.PermGraphEdit}}
 	viewer := core.Role{Name: "viewer", Permissions: []core.Permission{core.PermGraphRun}}
+	admin := core.Role{Name: "admin", Permissions: []core.Permission{core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin}}
 	return &shareHarness{
 		svc:    svc,
 		shares: shares,
 		editor: core.Principal{Subject: "ed", Tenant: "t", Workspace: "ws", Roles: []core.Role{editor}},
 		viewer: core.Principal{Subject: "vi", Tenant: "t", Workspace: "ws", Roles: []core.Role{viewer}},
+		admin:  core.Principal{Subject: "ad", Tenant: "t", Workspace: "ws", Roles: []core.Role{admin}},
+	}
+}
+
+// publish promotes a flow's HEAD to the published environment, so it counts
+// toward the overview/TV stats (only published flows do). Saves must precede.
+func (h *shareHarness) publish(t *testing.T, ctx context.Context, id string) {
+	t.Helper()
+	if _, err := h.svc.PublishFlow(ctx, h.admin, "t", "ws", id, "", ""); err != nil {
+		t.Fatalf("publish %s: %v", id, err)
 	}
 }
 
@@ -182,6 +194,10 @@ func TestPublicWorkspaceOverview_SanitizedAndScoped(t *testing.T) {
 			t.Fatalf("save %s: %v", g.ID, err)
 		}
 	}
+	// Only published flows count; publish the two visible ones (the private
+	// "hidden" is excluded by visibility regardless).
+	h.publish(t, ctx, "alpha")
+	h.publish(t, ctx, "beta")
 
 	// Fixed midday timestamp so the -2h/-30m/-5m runs below all fall on the
 	// same UTC calendar day as `now`. Using time.Now() here made the test
@@ -257,12 +273,16 @@ func TestPublicWorkspaceOverview_NeedsAttentionByFlow(t *testing.T) {
 	for _, g := range []core.Graph{
 		{ID: "flaky", Tenant: "t", Workspace: "ws", Name: "Flaky"},
 		{ID: "recovered", Tenant: "t", Workspace: "ws", Name: "Recovered"},
-		{ID: "draft", Tenant: "t", Workspace: "ws", Name: "Draft", Nodes: cron}, // unpublished → needs_publish
+		{ID: "draft", Tenant: "t", Workspace: "ws", Name: "Draft", Nodes: cron}, // left unpublished → excluded
 	} {
 		if _, err := h.svc.SaveGraph(ctx, h.editor, g); err != nil {
 			t.Fatalf("save %s: %v", g.ID, err)
 		}
 	}
+	// flaky + recovered are real (published) flows; "draft" stays unpublished
+	// and must drop out of every counter.
+	h.publish(t, ctx, "flaky")
+	h.publish(t, ctx, "recovered")
 
 	now := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
 	// flaky: two failures, latest also a failure → counts ONCE.
@@ -324,6 +344,10 @@ func TestPublicWorkspaceOverview_DisabledFlowExcluded(t *testing.T) {
 			t.Fatalf("save %s: %v", g.ID, err)
 		}
 	}
+	// Publish both so "off" is excluded specifically for being DISABLED, not
+	// merely for being unpublished — keeps this test pinned to the paused path.
+	h.publish(t, ctx, "active")
+	h.publish(t, ctx, "off")
 
 	now := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
 	// Both flows' latest run failed — but the disabled one is intentionally off.
@@ -355,6 +379,49 @@ func TestPublicWorkspaceOverview_DisabledFlowExcluded(t *testing.T) {
 	}
 }
 
+// TestPublicWorkspaceOverview_UnpublishedExcluded pins that an unpublished
+// flow is a draft whatever its trigger — a MANUAL unpublished flow (which is
+// not "needs_publish") must still be kept off the board and out of the
+// counters, so its test-run failures don't read as "needs attention".
+func TestPublicWorkspaceOverview_UnpublishedExcluded(t *testing.T) {
+	h := newShareHarness(t)
+	ctx := context.Background()
+
+	for _, g := range []core.Graph{
+		{ID: "live", Tenant: "t", Workspace: "ws", Name: "Live"},
+		{ID: "draft", Tenant: "t", Workspace: "ws", Name: "Draft"}, // manual, never published
+	} {
+		if _, err := h.svc.SaveGraph(ctx, h.editor, g); err != nil {
+			t.Fatalf("save %s: %v", g.ID, err)
+		}
+	}
+	h.publish(t, ctx, "live") // "draft" stays unpublished
+
+	now := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
+	h.enqueueRun(t, ctx, "l1", "live", core.JobStatusFailed, now.Add(-30*time.Minute))
+	h.enqueueRun(t, ctx, "d1", "draft", core.JobStatusFailed, now.Add(-10*time.Minute))
+
+	sh, err := h.svc.CreateWorkspaceShare(ctx, h.editor, "t", "ws")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := h.svc.PublicWorkspaceOverview(ctx, sh.Token, now)
+	if err != nil {
+		t.Fatalf("overview: %v", err)
+	}
+	if data.Stats.Failed != 1 {
+		t.Errorf("failed = %d, want 1 (unpublished draft excluded)", data.Stats.Failed)
+	}
+	if data.Stats.TotalFlows != 1 {
+		t.Errorf("total_flows = %d, want 1 (only the published flow)", data.Stats.TotalFlows)
+	}
+	for i := range data.Flows {
+		if data.Flows[i].Name == "Draft" {
+			t.Errorf("unpublished draft should not appear on the board, got %+v", data.Flows[i])
+		}
+	}
+}
+
 // TestPublicWorkspaceOverview_SuccessRateRounds guards the success-rate
 // rounding: 2 of 3 finished = 66.67%, which must round to 67 (matching the
 // Dashboard's Math.round), not truncate to 66.
@@ -366,6 +433,7 @@ func TestPublicWorkspaceOverview_SuccessRateRounds(t *testing.T) {
 		core.Graph{ID: "g", Tenant: "t", Workspace: "ws", Name: "G"}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
+	h.publish(t, ctx, "g")
 	now := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
 	h.enqueueRun(t, ctx, "s1", "g", core.JobStatusSucceeded, now.Add(-3*time.Hour))
 	h.enqueueRun(t, ctx, "s2", "g", core.JobStatusSucceeded, now.Add(-2*time.Hour))
