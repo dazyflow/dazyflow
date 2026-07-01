@@ -82,7 +82,8 @@
     "back": "Tillbaka",
     "yes": "Ja",
     "no": "Nej",
-    "edit": "Redigera"
+    "edit": "Redigera",
+    "save": "Spara"
   },
   "commentNode": {
     "delete": "Ta bort kommentar",
@@ -658,7 +659,11 @@
       "testing": "Testar…",
       "testOk": "Anslutningen fungerar.",
       "testFailed": "Kunde inte ansluta: {{error}}"
-    }
+    },
+    "categoryAi": "AI",
+    "filterClear": "Visa alla",
+    "filterEmpty": "Inga {{label}}-appar är tillgängliga.",
+    "filterShowing": "Visar {{label}}-appar"
   },
   "connections": {
     "scopeHelp": "För att ansluta en app som Slack eller Gmail, använd sidan Appar — de flesta behöver aldrig den här sidan. Hemligheter är till för att lagra ett lösenord eller en nyckel som ett flöde behöver direkt. De är tillgängliga för alla flöden i din organisation; ett enskilt flöde kan åsidosätta en med sin egen under flödets Inställningar → Hemligheter.",
@@ -1257,6 +1262,28 @@
       "invited": "Inbjudan skapad.",
       "removeTitle": "Ta bort {{email}}?",
       "removeWarning": "De förlorar åtkomst till organisationen. Deras konto raderas inte."
+    },
+    "cardEmailTemplatesTitle": "E-postmallar",
+    "cardEmailTemplatesDesc": "Återanvändbara HTML-layouter som e-postdroppar sveper in meddelanden i.",
+    "cardSystemLogTitle": "Systemlogg",
+    "cardSystemLogDesc": "Live-flöde av daemonens logg, med regex-filtrering.",
+    "systemLog": {
+      "title": "Systemlogg",
+      "subtitle": "Live-flöde av daemonens loggutdata. Filtrera med ett reguljärt uttryck; strömmen fortsätter medan du läser.",
+      "needPlatformAdmin": "Du behöver <0>platform:admin</0> för att se systemloggen.",
+      "notEnabled": "Systemloggfångst är inte aktiverat på den här dzd-instansen.",
+      "filterPlaceholder": "Filtrera (regex, skiftlägesokänsligt)…",
+      "filterAria": "Filtrera loggrader med reguljärt uttryck",
+      "badRegex": "Ogiltigt regex: {{error}}",
+      "follow": "Följ",
+      "pause": "Pausa",
+      "followHint": "Pausa eller återuppta automatisk rullning när nya rader kommer in (strömmen fortsätter att buffra oavsett).",
+      "clear": "Rensa",
+      "clearHint": "Rensa vyn och bufferten i minnet.",
+      "live": "Live",
+      "reconnecting": "Återansluter…",
+      "lineCount_one": "{{count}} rad",
+      "lineCount_other": "{{count}} rader"
     }
   },
   "results": {
@@ -1464,7 +1491,9 @@
       "hours_other": "Var {{count}}:e timme",
       "days_one": "Varje dag",
       "days_other": "Var {{count}}:e dag"
-    }
+    },
+    "geoWired": "Anges av den kopplade indatan",
+    "geoUnset": "Ingen plats angiven"
   },
   "issueKey": {
     "title": "Skapa API-nyckel",
@@ -1529,7 +1558,8 @@
     "hintInsert": "lägg till",
     "hintClose": "stäng",
     "enter": "Retur",
-    "builtIn": "Inbyggd"
+    "builtIn": "Inbyggd",
+    "disabled": "Avstängd"
   },
   "schemaForm": {
     "required": "obligatoriskt",
@@ -1926,7 +1956,9 @@
     "adminBlockedCta": "Visa konfigurationsstatus",
     "tidy": "Städa",
     "tidyTitle": "Ordna flödet automatiskt i tydliga kolumner",
-    "minimap": "Flödesöversikt"
+    "minimap": "Flödesöversikt",
+    "addDrop": "Lägg till drop",
+    "addDropTitle": "Sök och infoga en drop (Ctrl/Cmd+K)"
   },
   "iconUpload": {
     "upload": "Ladda upp bild",
@@ -2021,5 +2053,53 @@
     "namePlaceholder": "Flödesnamn",
     "confirm": "Duplicera flöde",
     "duplicating": "Duplicerar…"
+  },
+  "emailTemplate": {
+    "builtins": "Inbyggda",
+    "htmlOnly": "Mallar gäller endast HTML-utskick",
+    "missing": "{{id}} (hittades inte)",
+    "none": "Ingen – skicka innehållet som det är",
+    "previewEmail": "Förhandsgranska e-post",
+    "previewTitle": "Förhandsgranskning av e-post",
+    "previewing": "Renderar…",
+    "yours": "Dina mallar"
+  },
+  "emailTemplates": {
+    "title": "E-postmallar",
+    "intro": "Återanvändbara HTML-layouter som e-postdroppar sveper meddelandetexten in i – din profilering, sidhuvud och sidfot på ett ställe. Inbyggda mallar är skrivskyddade; ändringar i dina egna slår igenom i alla flöden som använder dem.",
+    "off": "E-postmallar är inte tillgängliga i den här installationen.",
+    "new": "Ny mall",
+    "builtin": "Inbyggd",
+    "pick": "Välj en mall, eller skapa en ny.",
+    "deleteTitle": "Ta bort mall?",
+    "deleteBody": "Flöden som refererar till ”{{name}}” kommer att misslyckas tills de pekas om till en annan mall.",
+    "name": "Namn",
+    "displayName": "Visningsnamn",
+    "displayNamePlaceholder": "Välkomstmejl",
+    "html": "Mall-HTML",
+    "bodyHint": "Använd {{.Body}} där e-postinnehållet ska in. {{.Subject}} och {{.Logo}} är också tillgängliga.",
+    "preview": "Förhandsgranskning",
+    "testTo": "Skicka ett test till",
+    "testToPlaceholder": "du@example.com",
+    "sendTest": "Skicka test",
+    "testHint": "Skickar exempelinnehåll inslaget i den här mallen via din e-postanslutning, så att du kan se hur det landar i en riktig inkorg.",
+    "testSubject": "Test: {{name}}",
+    "testSent": "Skickat till {{to}}."
+  },
+  "geo": {
+    "search": "Sök",
+    "searching": "Söker…",
+    "searchPlaceholder": "Sök en plats…",
+    "searchFailed": "Sökningen misslyckades – försök igen",
+    "noMatch": "Ingen plats hittades",
+    "placeNotFound": "Kunde inte hitta den platsen",
+    "locating": "Letar upp {{q}}…",
+    "followingPlace": "Visar plats: {{name}}",
+    "followingWired": "Visar kopplad plats: {{name}}",
+    "wiredInput": "Platsen kommer från den kopplade indatan – bestäms vid körning",
+    "wiredHint": "Den kopplade platsen bestämmer platsen vid körning",
+    "wiredFollowHint": "Visar den kopplade platsen – den bestämmer platsen vid körning",
+    "placeWins": "Nålen följer platsen – rensa den för att välja på kartan",
+    "hint": "Sök, eller klicka på kartan för att placera en nål"
   }
 }

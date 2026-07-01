@@ -81,7 +81,8 @@
     "back": "Back",
     "yes": "Yes",
     "no": "No",
-    "edit": "Edit"
+    "edit": "Edit",
+    "save": "Save"
   },
   "commentNode": {
     "delete": "Delete comment",
@@ -1279,7 +1280,9 @@
       "invited": "Invitation created.",
       "removeTitle": "Remove {{email}}?",
       "removeWarning": "They lose access to this organization. Their account is not deleted."
-    }
+    },
+    "cardEmailTemplatesTitle": "Email templates",
+    "cardEmailTemplatesDesc": "Reusable HTML layouts the email drops wrap messages in."
   },
   "results": {
     "title": "Collections",
@@ -1486,7 +1489,9 @@
       "hours_other": "Every {{count}} hours",
       "days_one": "Every day",
       "days_other": "Every {{count}} days"
-    }
+    },
+    "geoWired": "Set by the wired input",
+    "geoUnset": "No location set"
   },
   "issueKey": {
     "title": "Issue API key",
@@ -1551,7 +1556,8 @@
     "hintInsert": "insert",
     "hintClose": "close",
     "enter": "Enter",
-    "builtIn": "Built-in"
+    "builtIn": "Built-in",
+    "disabled": "Disabled"
   },
   "schemaForm": {
     "required": "required",
@@ -2043,5 +2049,53 @@
     "namePlaceholder": "Flow name",
     "confirm": "Duplicate flow",
     "duplicating": "Duplicating…"
+  },
+  "emailTemplate": {
+    "builtins": "Built-in",
+    "htmlOnly": "Templates apply to HTML sends only",
+    "missing": "{{id}} (not found)",
+    "none": "None — send body as-is",
+    "previewEmail": "Preview email",
+    "previewTitle": "Email preview",
+    "previewing": "Rendering…",
+    "yours": "Your templates"
+  },
+  "emailTemplates": {
+    "title": "Email templates",
+    "intro": "Reusable HTML layouts the email drops wrap a message body in — your branding, header and footer in one place. Built-in templates are read-only; edits to your own apply to every flow that uses them.",
+    "off": "Email templates are unavailable on this install.",
+    "new": "New template",
+    "builtin": "Built-in",
+    "pick": "Select a template, or create a new one.",
+    "deleteTitle": "Delete template?",
+    "deleteBody": "Flows referencing “{{name}}” will fail until pointed at another template.",
+    "name": "Name",
+    "displayName": "Display name",
+    "displayNamePlaceholder": "Welcome email",
+    "html": "Template HTML",
+    "bodyHint": "Use {{.Body}} where the email body goes. {{.Subject}} and {{.Logo}} are also available.",
+    "preview": "Preview",
+    "testTo": "Send a test to",
+    "testToPlaceholder": "you@example.com",
+    "sendTest": "Send test",
+    "testHint": "Sends sample content wrapped in this template through your Email connection, so you can see how it lands in a real inbox.",
+    "testSubject": "Test: {{name}}",
+    "testSent": "Sent to {{to}}."
+  },
+  "geo": {
+    "search": "Search",
+    "searching": "Searching…",
+    "searchPlaceholder": "Search a place…",
+    "searchFailed": "Search failed — try again",
+    "noMatch": "No place found",
+    "placeNotFound": "Couldn't locate that place",
+    "locating": "Locating {{q}}…",
+    "followingPlace": "Showing Place: {{name}}",
+    "followingWired": "Showing wired Place: {{name}}",
+    "wiredInput": "Location comes from the wired input — set at run time",
+    "wiredHint": "The wired Place sets the location at run time",
+    "wiredFollowHint": "Showing the wired Place — it sets the location at run time",
+    "placeWins": "Pin follows the Place — clear it to pick on the map",
+    "hint": "Search, or click the map to drop a pin"
   }
 }
