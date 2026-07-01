@@ -25,7 +25,7 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "unwrap_results",
 			Version:     "1.0",
-			Label:       "Unwrap results",
+			Label:       "Collect loop results",
 			Icon:        "package-open",
 			Category:    "transformation",
 			Provider:    "internal",

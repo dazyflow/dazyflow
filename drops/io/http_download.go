@@ -28,8 +28,8 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "http_download",
 			Version:     "1.0",
-			Label:       "HTTP",
-			Subtitle:    "Download file",
+			Label:       "Download a file",
+			Subtitle:    "Save a file from a URL",
 			Color:       "#5599ee",
 			Icon:        "download",
 			Category:    "io",

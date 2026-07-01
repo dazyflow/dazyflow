@@ -19,7 +19,7 @@ func init() {
 			ID:          "geo_location",
 			Version:     "1.0",
 			Label:       "Location",
-			Subtitle:    "Map or place → coordinate",
+			Subtitle:    "Place → map coordinate",
 			Summary:     "Pick a point on a map, or look up a place, and emit its coordinate.",
 			Description: "Choose a location and emit its Coordinate (\"lat,lon\") for a Weather lookup. Drop a pin on the OpenStreetMap map right on the card (search, click, or drag). Or give it a Place — a city or address — typed in or wired from another step (a form field, a message): when a Place is set it's geocoded and OVERRIDES the map pin. So the map is the default, and the Place input wins when present. Uses OpenStreetMap — no account or key.",
 			Integration: "OpenStreetMap",

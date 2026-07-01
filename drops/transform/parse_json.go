@@ -18,7 +18,7 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "parse_json",
 			Version:     "1.0",
-			Label:       "Parse JSON",
+			Label:       "Read JSON",
 			Subtitle:    "Read fields from text",
 			Icon:        "braces",
 			Category:    "transformation",

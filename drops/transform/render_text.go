@@ -19,7 +19,7 @@ func init() {
 			ID:          "render_text",
 			Version:     "1.0",
 			Label:       "Make text",
-			Subtitle:    "Make text from items",
+			Subtitle:    "Text from a list",
 			Icon:        "text",
 			Category:    "transformation",
 			Provider:    "internal",

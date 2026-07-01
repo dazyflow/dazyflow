@@ -17,7 +17,7 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "dedupe_rows",
 			Version:     "1.0",
-			Label:       "Dedupe rows",
+			Label:       "Remove duplicates",
 			Icon:        "cpu",
 			Category:    "transformation",
 			Provider:    "internal",

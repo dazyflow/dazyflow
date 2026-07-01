@@ -92,7 +92,7 @@ func init() {
 			ID:          "builtin_store_query",
 			Version:     "1.0",
 			Label:       "Collections",
-			Subtitle:    "Query rows",
+			Subtitle:    "Query with SQL",
 			Color:       "#0a6abf",
 			Icon:        "database",
 			Category:    "io",

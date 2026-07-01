@@ -22,7 +22,7 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "compute_rows",
 			Version:     "1.0",
-			Label:       "Compute rows",
+			Label:       "Add a calculated column",
 			Icon:        "cpu",
 			Category:    "transformation",
 			Provider:    "internal",

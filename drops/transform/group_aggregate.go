@@ -34,7 +34,7 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "group_aggregate",
 			Version:     "1.0",
-			Label:       "Group + aggregate",
+			Label:       "Group & summarize",
 			Icon:        "square-stack",
 			Category:    "transformation",
 			Provider:    "internal",

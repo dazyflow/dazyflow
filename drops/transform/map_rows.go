@@ -17,7 +17,7 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "map_rows",
 			Version:     "1.0",
-			Label:       "Map rows",
+			Label:       "Choose & rename columns",
 			Icon:        "cpu",
 			Category:    "transformation",
 			Provider:    "internal",

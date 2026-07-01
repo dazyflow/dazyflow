@@ -23,7 +23,7 @@ func init() {
 			ID:          "webhook_send",
 			Version:     "1.0",
 			Label:       "Webhook",
-			Subtitle:    "Send",
+			Subtitle:    "Send to a URL",
 			Summary:     "Send data to a webhook URL — tell another service that something happened.",
 			Description: "Send data to a webhook URL — the outbound counterpart to the webhook trigger. The URL and Body can be typed on the step or wired in from upstream (the matching input overrides the param); text is sent as-is, an object or list is sent as JSON. Private-network addresses are blocked by default.",
 			Integration: "Webhook",

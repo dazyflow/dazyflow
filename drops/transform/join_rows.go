@@ -36,7 +36,7 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "join_rows",
 			Version:     "1.0",
-			Label:       "Join rows",
+			Label:       "Combine two lists",
 			Icon:        "git-merge",
 			Category:    "transformation",
 			Provider:    "internal",

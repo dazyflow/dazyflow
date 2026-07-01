@@ -21,7 +21,7 @@ func init() {
 			ID:          "render_template",
 			Version:     "1.0",
 			Label:       "Fill a template",
-			Subtitle:    "Fill an HTML template",
+			Subtitle:    "For rich HTML emails",
 			Color:       "#a78bfa",
 			Icon:        "code",
 			Category:    "transformation",

@@ -2488,7 +2488,7 @@ function EditorInner() {
         position: { x: cx, y: cy },
         selected: true,
         data: {
-          label: sgManifest?.label ?? "Subgraph",
+          label: sgManifest?.label ?? "Reusable flow",
           moduleID: "subgraph",
           manifest: sgManifest,
         },

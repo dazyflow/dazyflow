@@ -18,7 +18,7 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "subgraph",
 			Version:     "1.0",
-			Label:       "Subgraph",
+			Label:       "Reusable flow",
 			Icon:        "square-stack",
 			Category:    "flow_control",
 			Provider:    "internal",

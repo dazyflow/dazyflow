@@ -26,8 +26,8 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "http_upload",
 			Version:     "1.0",
-			Label:       "HTTP",
-			Subtitle:    "Upload file",
+			Label:       "Upload a file",
+			Subtitle:    "Send a file to a URL",
 			Color:       "#5599ee",
 			Icon:        "upload",
 			Category:    "io",

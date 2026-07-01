@@ -16,7 +16,7 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "await_approval",
 			Version:     "1.0",
-			Label:       "Await approval",
+			Label:       "Wait for approval",
 			Icon:        "user-check",
 			Category:    "flow_control",
 			Provider:    "internal",

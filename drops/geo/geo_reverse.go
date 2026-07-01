@@ -19,8 +19,8 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "geo_reverse",
 			Version:     "1.0",
-			Label:       "Reverse geocode",
-			Subtitle:    "Point → place name",
+			Label:       "Look up a place",
+			Subtitle:    "Map coordinate → place",
 			Summary:     "Pick a point on a map (or wire a coordinate) and get its place name.",
 			Description: "The inverse of Location: name a point on the map. Drop a pin on the OpenStreetMap map right on the card — or wire a \"lat,lon\" Coordinate in from another step (a Location pick, a device's GPS) to override it — and it returns the human Place name (\"Stockholm, Södermanland, Sweden\") plus the structured Address. Handy for labelling an alert: 'Rain expected near <place>'. Uses OpenStreetMap — no account or key.",
 			Integration: "OpenStreetMap",

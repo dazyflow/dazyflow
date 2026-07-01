@@ -20,7 +20,7 @@ func init() {
 			ID:          "render_table",
 			Version:     "1.0",
 			Label:       "Make a table",
-			Subtitle:    "Make an HTML table from rows",
+			Subtitle:    "HTML table from rows",
 			Icon:        "table",
 			Category:    "transformation",
 			Provider:    "internal",

@@ -31,8 +31,8 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "http_request",
 			Version:     "1.0",
-			Label:       "HTTP",
-			Subtitle:    "Request",
+			Label:       "Web request",
+			Subtitle:    "Call a URL or API",
 			Color:       "#5599ee",
 			Icon:        "globe",
 			Category:    "network",
