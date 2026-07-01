@@ -1710,7 +1710,9 @@
   "renderTableColumns": {
     "title": "Kolumnordning",
     "drag": "Dra för att ändra ordning",
-    "help": "Dra i handtaget för att ändra ordning — tabellen visar kolumnerna från vänster till höger i den här ordningen.",
+    "help": "Dra i handtaget för att ändra ordning; svep en kolumn i sidled för att dölja den. Tabellen visar kolumnerna från vänster till höger i den här ordningen.",
+    "hiddenTitle": "Dolda kolumner",
+    "restore": "Tryck för att visa kolumnen igen",
     "empty": "Kolumner visas här när steget känner sin indata. Kör det en gång, eller koppla ett steg vars kolumner är kända."
   },
   "renderTextPreview": {

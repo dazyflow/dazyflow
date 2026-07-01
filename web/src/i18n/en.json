@@ -1732,7 +1732,9 @@
   "renderTableColumns": {
     "title": "Column order",
     "drag": "Drag to reorder",
-    "help": "Drag the handle to reorder columns — the table shows them left to right in this order.",
+    "help": "Drag the handle to reorder columns; swipe a column sideways to hide it. The table shows them left to right in this order.",
+    "hiddenTitle": "Hidden columns",
+    "restore": "Tap to show this column again",
     "empty": "Columns show up here once this step knows its input. Run it once, or connect a step whose columns are known."
   },
   "renderTextPreview": {

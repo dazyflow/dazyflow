@@ -10079,7 +10079,9 @@ a.pa-card:hover {
   letter-spacing: 0.03em;
   margin-bottom: var(--space-1);
 }
-.rtc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+/* overflow-hidden clips the swipe-to-hide translate to the list; the drag
+   clone lives on <body> (fallbackOnBody) so it's never clipped by this. */
+.rtc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); overflow: hidden; }
 .rtc-item {
   display: flex;
   align-items: center;
@@ -10089,6 +10091,18 @@ a.pa-card:hover {
   border-radius: var(--radius);
   background: var(--surface);
   font-size: var(--text-sm);
+  /* pan-y lets a vertical drag scroll the inspector while we own horizontal
+     swipes; the transition animates the snap-back when a swipe is released. */
+  touch-action: pan-y;
+  transition: transform 0.18s ease, opacity 0.18s ease, background 0.12s, border-color 0.12s;
+}
+/* While a finger is actively dragging the row sideways, follow it 1:1 with no
+   transition lag. */
+.rtc-item.rtc-swiping { transition: background 0.12s, border-color 0.12s; }
+/* Past the delete threshold: the row reads as "release to remove". */
+.rtc-item.rtc-will-delete {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 14%, var(--surface));
 }
 .rtc-item.rtc-dragging {
   box-shadow: var(--shadow-pop);
@@ -10117,6 +10131,42 @@ a.pa-card:hover {
 .rtc-item:hover .rtc-grip { color: var(--muted); }
 .rtc-grip:active { cursor: grabbing; color: var(--accent); }
 .rtc-col { overflow-wrap: anywhere; }
+/* Hidden-columns tray: swiped-away columns (plus any discovered after the set
+   was curated) as tap-to-restore chips. */
+.rtc-sublabel {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin: var(--space-2) 0 var(--space-1);
+}
+.rtc-hidden-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+.rtc-hidden-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px var(--space-2);
+  border: 1px dashed var(--border-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+.rtc-hidden-item:hover {
+  color: var(--text);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
 .rtc-hint, .rtc-help {
   font-size: var(--text-xs);
   color: var(--muted);
