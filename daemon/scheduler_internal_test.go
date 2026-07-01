@@ -70,7 +70,10 @@ func TestFireGraph_RunCapSkip(t *testing.T) {
 	usage := NewMemUsageStore()
 	svc.Usage = usage
 
-	now := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
+	// Must be the CURRENT month: the run cap (BillingService.runsThisMonth)
+	// reads the real-time current-month bucket via usagePeriod(time.Now()), so a
+	// hardcoded month would stop matching once the calendar rolls past it.
+	now := time.Now().UTC()
 	_ = usage.AddRun(t.Context(), "acme", now) // consume the only allowed run
 
 	g := core.Graph{
