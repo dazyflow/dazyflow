@@ -94,6 +94,7 @@
     "workspaceGroup": "Workspace",
     "templates": "Templates",
     "flows": "Flows",
+    "draft": "Draft — not published",
     "runs": "Runs",
     "results": "Collections",
     "usage": "Usage",

@@ -442,6 +442,15 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Draft marker on a sidebar flow: an unpublished flow gets a quiet pencil at
+   the right edge (the name flexes to fill). Muted, not accent — it flags the
+   exception ("not live yet") without shouting. */
+.nav-flow-draft {
+  flex: 0 0 auto;
+  margin-left: var(--space-1);
+  color: var(--muted);
+  opacity: 0.8;
+}
 .nav-badge {
   display: inline-block;
   min-width: 18px;

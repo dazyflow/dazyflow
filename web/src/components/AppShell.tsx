@@ -10,6 +10,7 @@ import {
   Workflow,
   ShieldCheck,
   Activity,
+  PencilLine,
   Table2,
   Gauge,
   Inbox,
@@ -563,6 +564,13 @@ export function AppShell({ children }: { children: ReactNode }) {
                 >
                   <FlowIcon icon={f.icon} size={15} className="nav-flow-icon" />
                   <span className="nav-label nav-flow-name">{f.name || f.id}</span>
+                  {f.published === false && (
+                    <PencilLine
+                      size={13}
+                      className="nav-flow-draft"
+                      aria-label={t("nav.draft")}
+                    />
+                  )}
                 </NavLink>
               ))}
             </div>
